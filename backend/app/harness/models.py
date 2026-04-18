@@ -107,6 +107,8 @@ class HarnessVerificationRequest(BaseModel):
     model: str | None = None
     test_message: str = "Hello from ForgeGate harness"
     include_preview: bool = True
+    live_probe: bool = False
+    check_stream: bool = True
 
 
 class HarnessPreviewRequest(BaseModel):

@@ -99,3 +99,35 @@ def test_generic_harness_adapter_stream_mapping(tmp_path: Path) -> None:
 
     assert events[0].event == "delta"
     assert events[-1].event == "done"
+
+
+
+def test_harness_store_recovers_from_corrupt_file(tmp_path: Path) -> None:
+    profiles_path = tmp_path / "profiles.json"
+    runs_path = tmp_path / "runs.json"
+    profiles_path.write_text("{broken", encoding="utf-8")
+    runs_path.write_text("[]", encoding="utf-8")
+    store = HarnessStore(paths=HarnessStoragePaths(profiles_path=profiles_path, runs_path=runs_path))
+    assert store.list_profiles() == []
+    assert profiles_path.with_suffix(".json.corrupt").exists()
+
+
+def test_verify_with_live_probe_records_step(tmp_path: Path) -> None:
+    service = build_service(tmp_path)
+    service.upsert_profile(
+        HarnessProviderProfile(
+            provider_key="probeable",
+            label="Probeable",
+            integration_class="templated_http",
+            endpoint_base_url="https://example.invalid/api",
+            auth_scheme="none",
+            models=["m1"],
+        )
+    )
+
+    def fake_probe(payload):
+        return {"status_code": 200}
+
+    service.probe = fake_probe  # type: ignore[method-assign]
+    result = service.verify_profile(HarnessVerificationRequest(provider_key="probeable", live_probe=True))
+    assert any(step["step"] == "live_probe" for step in result.steps)

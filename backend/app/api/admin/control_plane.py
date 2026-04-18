@@ -258,10 +258,21 @@ class ControlPlaneService:
                             client_id="control_plane",
                             profile_key=profile.provider_key,
                         )
+                    existing_map = {m.id: m for m in provider.managed_models}
+                    profile_model_ids = {item.model for item in sync_state.model_inventory}
                     for item in sync_state.model_inventory:
                         model_id = item.model
-                        if model_id not in {m.id for m in provider.managed_models}:
+                        if model_id in existing_map:
+                            existing_map[model_id].source = item.source
+                            existing_map[model_id].discovery_status = sync_state.last_sync_status
+                            existing_map[model_id].active = item.active
+                        else:
                             provider.managed_models.append(ManagedModelRecord(id=model_id, source=item.source, discovery_status=sync_state.last_sync_status, active=item.active))
+                    for model_id in [m.id for m in provider.managed_models if m.source in {"manual", "templated", "discovered", "static"} and m.id not in profile_model_ids and m.id != "no_models_configured"]:
+                        existing_map = {m.id: m for m in provider.managed_models}
+                        if model_id in existing_map:
+                            existing_map[model_id].active = False
+                            existing_map[model_id].discovery_status = "stale"
                 if profile_failures:
                     provider.last_sync_error = f"{profile_failures} harness profile sync issues"
                     provider.last_sync_status = "warning"
@@ -276,8 +287,13 @@ class ControlPlaneService:
     def harness_snapshot(self) -> dict[str, object]:
         return {"status": "ok", "snapshot": self._harness.export_snapshot()}
 
-    def harness_runs(self, provider_key: str | None = None) -> dict[str, object]:
-        return {"status": "ok", "runs": [item.model_dump() for item in self._harness.list_runs(provider_key)]}
+    def harness_runs(self, provider_key: str | None = None, mode: str | None = None, status: str | None = None) -> dict[str, object]:
+        runs = self._harness.list_runs(provider_key)
+        if mode:
+            runs = [item for item in runs if item.mode == mode]
+        if status:
+            runs = [item for item in runs if item.status == status]
+        return {"status": "ok", "runs": [item.model_dump() for item in runs], "summary": self._harness.runs_summary()}
 
     def get_health_config(self) -> HealthConfig:
         return self._health_config

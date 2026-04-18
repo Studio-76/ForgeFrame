@@ -242,9 +242,13 @@ export function fetchHarnessSnapshot() {
   return fetchJson<{ status: string; snapshot: Record<string, unknown> }>("/admin/providers/harness/snapshot");
 }
 
-export function fetchHarnessRuns(providerKey?: string) {
-  const suffix = providerKey ? `?provider_key=${encodeURIComponent(providerKey)}` : "";
-  return fetchJson<{ status: string; runs: Array<Record<string, unknown>> }>(`/admin/providers/harness/runs${suffix}`);
+export function fetchHarnessRuns(providerKey?: string, mode?: string, status?: string) {
+  const params = new URLSearchParams();
+  if (providerKey) params.set("provider_key", providerKey);
+  if (mode) params.set("mode", mode);
+  if (status) params.set("status", status);
+  const suffix = params.size ? `?${params.toString()}` : "";
+  return fetchJson<{ status: string; runs: Array<Record<string, unknown>>; summary: Record<string, number> }>(`/admin/providers/harness/runs${suffix}`);
 }
 
 

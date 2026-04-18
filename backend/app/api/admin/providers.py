@@ -183,5 +183,5 @@ def harness_snapshot(service: ControlPlaneService = Depends(get_control_plane_se
 
 
 @router.get("/harness/runs")
-def harness_runs(provider_key: str | None = None, service: ControlPlaneService = Depends(get_control_plane_service)) -> object:
-    return service.harness_runs(provider_key)
+def harness_runs(provider_key: str | None = None, mode: str | None = None, status: str | None = None, service: ControlPlaneService = Depends(get_control_plane_service)) -> object:
+    return service.harness_runs(provider_key, mode, status)

@@ -73,6 +73,16 @@ class HarnessService:
     def list_runs(self, provider_key: str | None = None) -> list[HarnessVerificationRun]:
         return self._store.list_runs(provider_key)
 
+    def runs_summary(self) -> dict[str, int]:
+        runs = self._store.list_runs()
+        return {
+            "total": len(runs),
+            "failed": len([r for r in runs if not r.success]),
+            "verify": len([r for r in runs if r.mode == "verify"]),
+            "probe": len([r for r in runs if r.mode == "probe"]),
+            "sync": len([r for r in runs if r.mode == "sync"]),
+        }
+
     def build_request_preview(self, payload: HarnessPreviewRequest) -> dict[str, Any]:
         profile = self.get_profile(payload.provider_key)
         request_payload = self._render_template(
@@ -146,7 +156,15 @@ class HarnessService:
         steps.append({"step": "test_discovery", "status": "ok" if profile.discovery_enabled else "skipped"})
         steps.append({"step": "request_rendering", "status": "ok"})
         steps.append({"step": "response_mapping", "status": "ok"})
-        steps.append({"step": "stream_readiness", "status": "ok" if profile.stream_mapping.enabled else "skipped"})
+        steps.append({"step": "stream_readiness", "status": "ok" if (request.check_stream and profile.stream_mapping.enabled) else "skipped"})
+
+        if request.live_probe:
+            try:
+                probe_result = self.probe(HarnessPreviewRequest(provider_key=profile.provider_key, model=model, message=request.test_message, stream=False))
+                probe_status = "ok" if int(probe_result["status_code"]) < 400 else "failed"
+                steps.append({"step": "live_probe", "status": probe_status, "status_code": int(probe_result["status_code"])})
+            except RuntimeError as exc:
+                steps.append({"step": "live_probe", "status": "failed", "error": str(exc)})
 
         result = HarnessVerificationResult(
             provider_key=profile.provider_key,
@@ -225,7 +243,17 @@ class HarnessService:
         return updated
 
     def export_snapshot(self) -> dict[str, Any]:
-        return self._store.export_snapshot()
+        snapshot = self._store.export_snapshot()
+        profiles = snapshot.get("profiles", [])
+        runs = snapshot.get("runs", [])
+        snapshot["summary"] = {
+            "profile_count": len(profiles),
+            "active_profile_count": len([item for item in profiles if item.get("enabled")]),
+            "degraded_profile_count": len([item for item in profiles if item.get("lifecycle_status") in {"degraded", "error"}]),
+            "run_count": len(runs),
+            "failed_run_count": len([item for item in runs if not item.get("success")]),
+        }
+        return snapshot
 
     def execute_non_stream(self, provider_key: str, *, model: str, messages: list[dict[str, Any]]) -> dict[str, Any]:
         profile = self.get_profile(provider_key)

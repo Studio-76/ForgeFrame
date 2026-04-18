@@ -18,3 +18,9 @@
 - keine vollständige DB-Migrationsschicht
 - keine komplette Workflow-Engine
 - keine Multi-Tenant/IAM-Plattform
+
+
+## Phase 10 Brutal Turbo Ergänzung
+- Run-Filter (`mode`, `status`) und Run-Summary im Control Plane API/UI.
+- Verify kann optional einen Live-Probe-Schritt ausführen (`live_probe`).
+- Snapshot enthält operative Summary-Werte (active/degraded/failed counts).

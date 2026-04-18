@@ -36,6 +36,9 @@ export function ProvidersPage() {
   const [templates, setTemplates] = useState<HarnessTemplate[]>([]);
   const [profiles, setProfiles] = useState<HarnessProfile[]>([]);
   const [runs, setRuns] = useState<Array<Record<string, unknown>>>([]);
+  const [runSummary, setRunSummary] = useState<Record<string, number>>({});
+  const [runModeFilter, setRunModeFilter] = useState<string>("all");
+  const [runStatusFilter, setRunStatusFilter] = useState<string>("all");
   const [operationResult, setOperationResult] = useState<string>("");
   const [syncNote, setSyncNote] = useState<string>("");
   const [healthConfig, setHealthConfig] = useState<HealthConfig | null>(null);
@@ -65,12 +68,13 @@ export function ProvidersPage() {
         fetchUsageSummary(),
         fetchHarnessTemplates(),
         fetchHarnessProfiles(),
-        fetchHarnessRuns(),
+        fetchHarnessRuns(undefined, runModeFilter === "all" ? undefined : runModeFilter, runStatusFilter === "all" ? undefined : runStatusFilter),
       ]);
       setProviders(payload.providers);
       setTemplates(harnessTemplates.templates);
       setProfiles(harnessProfiles.profiles);
-      setRuns(harnessRuns.runs.slice(0, 12));
+      setRuns(harnessRuns.runs.slice(0, 20));
+      setRunSummary(harnessRuns.summary ?? {});
       setSyncNote(String(payload.notes.sync_action));
       setHealthConfig(payload.health_config);
       setProviderErrors(Object.fromEntries(usage.aggregations.errors_by_provider.map((item) => [String(item.provider), Number(item.errors)])));
@@ -86,7 +90,7 @@ export function ProvidersPage() {
 
   useEffect(() => {
     void load();
-  }, []);
+  }, [runModeFilter, runStatusFilter]);
 
   const runHarnessAction = async (providerKey: string, model?: string) => {
     const targetModel = model ?? profiles.find((item) => item.provider_key === providerKey)?.models[0] ?? "model-1";
@@ -179,7 +183,12 @@ export function ProvidersPage() {
 
       <div className="fg-card" style={{ marginBottom: "0.75rem" }}>
         <h3>Recent harness runs</h3>
-        <ul>{runs.map((run, idx) => <li key={`${String(run.provider_key)}-${idx}`}>{String(run.executed_at)} · {String(run.provider_key)} · {String(run.mode)} · success={String(run.success)}</li>)}</ul>
+        <div className="fg-row" style={{ marginBottom: "0.5rem" }}>
+          <label>mode:<select value={runModeFilter} onChange={(event) => setRunModeFilter(event.target.value)}><option value="all">all</option><option value="verify">verify</option><option value="probe">probe</option><option value="sync">sync</option></select></label>
+          <label>status:<select value={runStatusFilter} onChange={(event) => setRunStatusFilter(event.target.value)}><option value="all">all</option><option value="ok">ok</option><option value="warning">warning</option><option value="failed">failed</option></select></label>
+          <span>summary total={String(runSummary.total ?? 0)} failed={String(runSummary.failed ?? 0)} verify={String(runSummary.verify ?? 0)} probe={String(runSummary.probe ?? 0)} sync={String(runSummary.sync ?? 0)}</span>
+        </div>
+        <ul>{runs.map((run, idx) => <li key={`${String(run.provider_key)}-${idx}`}>{String(run.executed_at)} · {String(run.provider_key)} · {String(run.mode)} · status={String(run.status)} · success={String(run.success)}</li>)}</ul>
       </div>
 
       <div className="fg-card" style={{ marginBottom: "0.75rem" }}>
