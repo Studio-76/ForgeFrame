@@ -33,3 +33,6 @@ def test_model_registry_includes_discovered_codex_models_when_enabled() -> None:
     )
     registry = ModelRegistry(settings)
     assert registry.has_model("gpt-5.3-codex-preview")
+    discovered = registry.get_model("gpt-5.3-codex-preview")
+    assert discovered is not None
+    assert discovered.source == "discovered"

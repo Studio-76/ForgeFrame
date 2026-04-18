@@ -30,6 +30,8 @@ class ModelRegistry:
                         provider="openai_codex",
                         owned_by="OpenAI Codex",
                         display_name=model_id,
+                        source="discovered",
+                        discovery_status="synced",
                     ),
                 )
 

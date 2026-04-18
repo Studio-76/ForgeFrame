@@ -37,9 +37,10 @@ class OpenAICodexAdapter:
         if not auth_state.ready:
             if auth_state.auth_mode == "oauth":
                 return (
-                    "OpenAI Codex requires OAuth access token. "
+                    "OpenAI Codex requires OAuth access token for mode "
+                    f"'{auth_state.oauth_mode}'. "
                     "Supported mode naming: browser callback, manual redirect completion, device/hosted code. "
-                    "Only token presence is implemented in phase 5."
+                    "Only credential presence + readiness semantics are implemented in phase 5."
                 )
             return "OpenAI Codex API-key mode selected but FORGEGATE_OPENAI_CODEX_API_KEY is missing."
 

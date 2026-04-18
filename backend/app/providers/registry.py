@@ -12,7 +12,7 @@ from app.settings.config import Settings
 class ProviderRegistry:
     def __init__(self, settings: Settings):
         candidate_adapters: dict[str, ProviderAdapter] = {
-            "forgegate_baseline": ForgeGateBaselineAdapter(),
+            "forgegate_baseline": ForgeGateBaselineAdapter(settings),
             "openai_api": OpenAIAPIAdapter(settings),
             "openai_codex": OpenAICodexAdapter(settings),
             "gemini": GeminiAdapter(),
@@ -36,8 +36,11 @@ class ProviderRegistry:
 
     def get_provider_status(self, provider_name: str) -> dict[str, object]:
         adapter = self.get(provider_name)
+        capabilities = adapter.capabilities.model_dump()
         return {
             "ready": adapter.is_ready(),
             "readiness_reason": adapter.readiness_reason(),
-            "capabilities": adapter.capabilities.model_dump(),
+            "capabilities": capabilities,
+            "discovery_supported": capabilities.get("discovery_support", False),
+            "oauth_required": capabilities.get("oauth_required", False),
         }

@@ -19,6 +19,8 @@ from app.providers.base import (
     ProviderUpstreamError,
 )
 from app.settings.config import Settings
+from app.usage.models import TokenUsage
+from app.usage.service import UsageAccountingService
 
 
 class OpenAIAPIAdapter:
@@ -27,6 +29,7 @@ class OpenAIAPIAdapter:
 
     def __init__(self, settings: Settings):
         self._settings = settings
+        self._usage_accounting = UsageAccountingService(settings)
 
     def is_ready(self) -> bool:
         return bool(self._settings.openai_api_key.strip())
@@ -57,11 +60,18 @@ class OpenAIAPIAdapter:
         except (KeyError, IndexError, TypeError) as exc:
             raise ProviderUpstreamError(self.provider_name, f"Malformed response from OpenAI API: {response_payload}") from exc
 
+        usage = self._usage_from_response(response_payload, request.messages, content)
+        cost = self._usage_accounting.costs_for_provider(provider=self.provider_name, usage=usage)
+
         return ChatDispatchResult(
             model=response_payload.get("model", request.model),
             provider=self.provider_name,
             content=content if isinstance(content, str) else str(content),
             finish_reason=finish_reason,
+            usage=usage,
+            cost=cost,
+            credential_type="api_key",
+            auth_source="openai_api_key",
         )
 
     def stream_chat_completion(self, request: ChatDispatchRequest) -> Iterator[ProviderStreamEvent]:
@@ -75,9 +85,10 @@ class OpenAIAPIAdapter:
             "model": request.model,
             "messages": request.messages,
             "stream": True,
+            "stream_options": {"include_usage": True},
         }
 
-        yield from self._stream_chat_completion(payload)
+        yield from self._stream_chat_completion(payload, request.messages)
 
     def _endpoint_and_headers(self) -> tuple[str, dict[str, str]]:
         base_url = self._settings.openai_api_base_url.rstrip("/")
@@ -104,8 +115,12 @@ class OpenAIAPIAdapter:
         self._raise_for_status(response)
         return response.json()
 
-    def _stream_chat_completion(self, payload: dict) -> Iterator[ProviderStreamEvent]:
+    def _stream_chat_completion(self, payload: dict, messages: list[dict]) -> Iterator[ProviderStreamEvent]:
         endpoint, headers = self._endpoint_and_headers()
+
+        collected_text: list[str] = []
+        final_usage: TokenUsage | None = None
+        final_finish_reason: str | None = None
 
         try:
             with httpx.stream(
@@ -129,32 +144,62 @@ class OpenAIAPIAdapter:
                         break
 
                     try:
-                        payload = json.loads(line)
-                        choice = payload.get("choices", [{}])[0]
-                        delta = choice.get("delta", {})
-                    except (json.JSONDecodeError, IndexError, TypeError) as exc:
+                        parsed_payload = json.loads(line)
+                    except json.JSONDecodeError as exc:
                         raise ProviderStreamInterruptedError(
                             self.provider_name,
                             f"Failed to decode OpenAI stream chunk: {line}",
                         ) from exc
 
+                    usage_payload = parsed_payload.get("usage")
+                    if usage_payload:
+                        final_usage = self._usage_from_payload(usage_payload)
+
+                    choice = parsed_payload.get("choices", [{}])[0]
+                    delta = choice.get("delta", {})
+
                     content_piece = delta.get("content", "")
                     if content_piece:
+                        collected_text.append(content_piece)
                         yield ProviderStreamEvent(event="delta", delta=content_piece)
 
                     finish_reason = choice.get("finish_reason")
                     if finish_reason:
-                        saw_done = True
-                        yield ProviderStreamEvent(event="done", finish_reason=finish_reason)
-                        break
+                        final_finish_reason = finish_reason
 
-                if not saw_done:
+                if not saw_done and final_finish_reason is None:
                     raise ProviderStreamInterruptedError(
                         self.provider_name,
                         "OpenAI stream ended without explicit completion signal.",
                     )
+
+                usage = final_usage or self._usage_accounting.usage_from_prompt_completion(messages, "".join(collected_text))
+                cost = self._usage_accounting.costs_for_provider(provider=self.provider_name, usage=usage)
+                yield ProviderStreamEvent(
+                    event="done",
+                    finish_reason=final_finish_reason or "stop",
+                    usage=usage,
+                    cost=cost,
+                )
         except httpx.RequestError as exc:
             raise ProviderStreamInterruptedError(self.provider_name, f"Network error while streaming OpenAI API: {exc}") from exc
+
+    def _usage_from_response(self, payload: dict, messages: list[dict], content: str) -> TokenUsage:
+        usage_payload = payload.get("usage")
+        if usage_payload:
+            return self._usage_from_payload(usage_payload)
+        return self._usage_accounting.usage_from_prompt_completion(messages, content)
+
+    @staticmethod
+    def _usage_from_payload(usage_payload: dict) -> TokenUsage:
+        input_tokens = usage_payload.get("prompt_tokens", usage_payload.get("input_tokens", 0))
+        output_tokens = usage_payload.get("completion_tokens", usage_payload.get("output_tokens", 0))
+        total_tokens = usage_payload.get("total_tokens", input_tokens + output_tokens)
+        return TokenUsage(
+            input_tokens=int(input_tokens),
+            output_tokens=int(output_tokens),
+            total_tokens=int(total_tokens),
+        )
 
     def _raise_for_status(self, response: httpx.Response) -> None:
         if response.status_code in (401, 403):

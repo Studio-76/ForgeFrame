@@ -132,6 +132,8 @@ def create_chat_completion(
         "object": "chat.completion",
         "model": result.model,
         "provider": result.provider,
+        "credential_type": result.credential_type,
+        "auth_source": result.auth_source,
         "choices": [
             {
                 "index": 0,
@@ -139,4 +141,6 @@ def create_chat_completion(
                 "finish_reason": result.finish_reason,
             }
         ],
+        "usage": result.usage.model_dump(),
+        "cost": result.cost.model_dump(),
     }

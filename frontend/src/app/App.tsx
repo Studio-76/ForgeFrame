@@ -15,7 +15,7 @@ export function App() {
   return (
     <div style={{ fontFamily: "sans-serif", padding: "1rem" }}>
       <h1>ForgeGate — Smart AI Gateway</h1>
-      <p>Phase-2 scaffold UI. Product features are not implemented yet.</p>
+      <p>UI-first Control Plane Vorstufe: Providerbetrieb, Modellpflege und Usage-/Kosten-Basis werden schrittweise ausgebaut.</p>
 
       <nav aria-label="Main navigation" style={{ marginBottom: "1rem" }}>
         {navItems.map((item) => (

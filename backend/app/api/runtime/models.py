@@ -27,9 +27,13 @@ def list_models(
                 "display_name": model.display_name,
                 "active": model.active,
                 "category": model.category,
+                "source": model.source,
+                "discovery_status": model.discovery_status,
                 "ready": status["ready"],
                 "readiness_reason": status["readiness_reason"],
                 "capabilities": status["capabilities"],
+                "oauth_required": status["oauth_required"],
+                "discovery_supported": status["discovery_supported"],
             }
         )
 

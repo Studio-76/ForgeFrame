@@ -23,10 +23,17 @@ class OpenAICodexAuthState(BaseModel):
     def ready(self) -> bool:
         return self.has_access_token if self.auth_mode == "oauth" else self.has_api_key
 
+    @property
+    def credential_type(self) -> str:
+        if self.auth_mode == "oauth":
+            return "oauth_access_token"
+        return "api_key"
+
 
 def resolve_codex_auth_state(settings: Settings) -> OpenAICodexAuthState:
     return OpenAICodexAuthState(
         auth_mode=settings.openai_codex_auth_mode,
+        oauth_mode=settings.openai_codex_oauth_mode,
         has_access_token=bool(settings.openai_codex_oauth_access_token.strip()),
         has_api_key=bool(settings.openai_codex_api_key.strip()),
     )

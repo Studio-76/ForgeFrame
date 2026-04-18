@@ -8,11 +8,17 @@ from app.providers.base import (
     ProviderCapabilities,
     ProviderStreamEvent,
 )
+from app.settings.config import Settings
+from app.usage.service import UsageAccountingService
 
 
 class ForgeGateBaselineAdapter:
     provider_name = "forgegate_baseline"
     capabilities = ProviderCapabilities(streaming=True, tool_calling=False, vision=False, external=False)
+
+    def __init__(self, settings: Settings | None = None):
+        self._settings = settings or Settings()
+        self._usage_accounting = UsageAccountingService(self._settings)
 
     def is_ready(self) -> bool:
         return True
@@ -37,15 +43,25 @@ class ForgeGateBaselineAdapter:
         return f"ForgeGate baseline response: {last_user_text}"
 
     def create_chat_completion(self, request: ChatDispatchRequest) -> ChatDispatchResult:
+        completion_text = self._build_response_text(request)
+        usage = self._usage_accounting.usage_from_prompt_completion(request.messages, completion_text)
+        cost = self._usage_accounting.costs_for_provider(provider=self.provider_name, usage=usage)
         return ChatDispatchResult(
             model=request.model,
             provider=self.provider_name,
-            content=self._build_response_text(request),
+            content=completion_text,
             finish_reason="stop",
+            usage=usage,
+            cost=cost,
+            credential_type="internal",
+            auth_source="internal",
         )
 
     def stream_chat_completion(self, request: ChatDispatchRequest) -> Iterator[ProviderStreamEvent]:
         text = self._build_response_text(request)
+        usage = self._usage_accounting.usage_from_prompt_completion(request.messages, text)
+        cost = self._usage_accounting.costs_for_provider(provider=self.provider_name, usage=usage)
+
         for token in text.split(" "):
             yield ProviderStreamEvent(event="delta", delta=f"{token} ")
-        yield ProviderStreamEvent(event="done", finish_reason="stop")
+        yield ProviderStreamEvent(event="done", finish_reason="stop", usage=usage, cost=cost)

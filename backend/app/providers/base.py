@@ -5,7 +5,9 @@ from __future__ import annotations
 from collections.abc import Iterator
 from typing import Literal, Protocol
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
+
+from app.usage.models import CostBreakdown, TokenUsage
 
 
 class ProviderCapabilities(BaseModel):
@@ -21,6 +23,7 @@ class ChatDispatchRequest(BaseModel):
     model: str
     messages: list[dict]
     stream: bool = False
+    request_metadata: dict[str, str] = Field(default_factory=dict)
 
 
 class ChatDispatchResult(BaseModel):
@@ -28,6 +31,10 @@ class ChatDispatchResult(BaseModel):
     provider: str
     content: str
     finish_reason: str = "stop"
+    usage: TokenUsage = Field(default_factory=TokenUsage)
+    cost: CostBreakdown = Field(default_factory=CostBreakdown)
+    credential_type: str = "internal"
+    auth_source: str = "internal"
 
 
 class ProviderStreamEvent(BaseModel):
@@ -36,6 +43,8 @@ class ProviderStreamEvent(BaseModel):
     finish_reason: str | None = None
     error_type: str | None = None
     error_message: str | None = None
+    usage: TokenUsage | None = None
+    cost: CostBreakdown | None = None
 
 
 class ProviderAdapter(Protocol):

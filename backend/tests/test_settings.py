@@ -28,3 +28,10 @@ def test_default_model_is_baseline_phase5() -> None:
 def test_codex_auth_mode_defaults_to_oauth() -> None:
     settings = Settings()
     assert settings.openai_codex_auth_mode == "oauth"
+    assert settings.openai_codex_oauth_mode == "manual_redirect_completion"
+
+
+def test_pricing_settings_are_operationalized() -> None:
+    settings = Settings()
+    assert settings.pricing_openai_input_per_1m_tokens > 0
+    assert settings.pricing_internal_hypothetical_output_per_1m_tokens > 0

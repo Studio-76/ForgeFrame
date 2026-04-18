@@ -46,6 +46,8 @@ def provider_events_to_sse(
                             "index": 0,
                             "delta": {},
                             "finish_reason": event.finish_reason or "stop",
+                            "usage": event.usage.model_dump() if event.usage else None,
+                            "cost": event.cost.model_dump() if event.cost else None,
                         }
                     ],
                 }

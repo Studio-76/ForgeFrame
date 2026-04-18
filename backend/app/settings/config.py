@@ -33,11 +33,19 @@ class Settings(BaseSettings):
     openai_timeout_seconds: int = 30
 
     openai_codex_auth_mode: Literal["oauth", "api_key"] = "oauth"
+    openai_codex_oauth_mode: Literal["browser_callback", "manual_redirect_completion", "device_hosted_code"] = "manual_redirect_completion"
     openai_codex_oauth_access_token: str = ""
     openai_codex_api_key: str = ""
     openai_codex_discovery_enabled: bool = False
     openai_codex_discovery_required: bool = False
     openai_codex_discovered_models: tuple[str, ...] = ()
+
+    pricing_openai_input_per_1m_tokens: float = 0.4
+    pricing_openai_output_per_1m_tokens: float = 1.6
+    pricing_codex_hypothetical_input_per_1m_tokens: float = 1.5
+    pricing_codex_hypothetical_output_per_1m_tokens: float = 6.0
+    pricing_internal_hypothetical_input_per_1m_tokens: float = 0.2
+    pricing_internal_hypothetical_output_per_1m_tokens: float = 0.8
 
     model_catalog: tuple[tuple[str, str, str], ...] = Field(
         default=(

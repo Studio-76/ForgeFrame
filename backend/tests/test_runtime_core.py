@@ -21,7 +21,16 @@ def test_models_endpoint_returns_structured_list() -> None:
     assert body["object"] == "list"
     assert isinstance(body["data"], list)
     assert len(body["data"]) >= 1
-    assert {"id", "provider", "owned_by", "ready", "capabilities", "readiness_reason"}.issubset(body["data"][0].keys())
+    assert {
+        "id",
+        "provider",
+        "owned_by",
+        "ready",
+        "capabilities",
+        "readiness_reason",
+        "source",
+        "discovery_status",
+    }.issubset(body["data"][0].keys())
 
 
 def test_chat_endpoint_success_path_uses_baseline_provider_chain() -> None:
@@ -37,6 +46,8 @@ def test_chat_endpoint_success_path_uses_baseline_provider_chain() -> None:
     assert body["provider"] == "forgegate_baseline"
     assert body["model"] == "forgegate-baseline-chat-v1"
     assert "ForgeGate baseline response" in body["choices"][0]["message"]["content"]
+    assert body["usage"]["total_tokens"] > 0
+    assert body["cost"]["avoided_cost"] >= 0.0
 
 
 def test_chat_endpoint_stream_success_path_uses_baseline_provider_chain() -> None:
@@ -53,6 +64,7 @@ def test_chat_endpoint_stream_success_path_uses_baseline_provider_chain() -> Non
 
     assert "chat.completion.chunk" in raw
     assert "forgegate_baseline" in raw
+    assert '"usage": {' in raw
     assert "[DONE]" in raw
 
 
