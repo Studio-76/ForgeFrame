@@ -1,14 +1,28 @@
-"""Runtime models API scaffold endpoints (no provider/model logic)."""
+"""Runtime models endpoint on target path `/v1/models`."""
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 
-router = APIRouter(prefix="/models", tags=["runtime-models"])
+from app.api.runtime.dependencies import get_model_registry
+from app.core.model_registry import ModelRegistry
+
+router = APIRouter(tags=["runtime-models"])
 
 
-@router.get("/")
-def list_models_placeholder() -> dict[str, object]:
+@router.get("/v1/models")
+def list_models(registry: ModelRegistry = Depends(get_model_registry)) -> dict[str, object]:
+    models = registry.list_active_models()
     return {
-        "status": "scaffold",
-        "message": "runtime models endpoint not implemented yet",
-        "models": [],
+        "object": "list",
+        "data": [
+            {
+                "id": model.id,
+                "object": "model",
+                "owned_by": model.owned_by,
+                "provider": model.provider,
+                "display_name": model.display_name,
+                "active": model.active,
+                "category": model.category,
+            }
+            for model in models
+        ],
     }

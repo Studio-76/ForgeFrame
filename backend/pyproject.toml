@@ -4,13 +4,14 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "forgegate-backend"
-version = "0.2.0"
-description = "Phase-2 minimal runnable backend scaffold for ForgeGate"
+version = "0.3.0"
+description = "Phase-3 core baseline backend for ForgeGate"
 requires-python = ">=3.11"
 dependencies = [
   "fastapi>=0.116,<1.0",
   "uvicorn>=0.35,<1.0",
   "pydantic>=2.11,<3.0",
+  "pydantic-settings>=2.10,<3.0",
 ]
 
 [project.optional-dependencies]

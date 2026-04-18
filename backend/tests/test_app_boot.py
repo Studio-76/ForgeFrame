@@ -3,21 +3,23 @@ from fastapi.testclient import TestClient
 from app.main import app
 
 
-def test_app_boots_and_root_endpoint_returns_scaffold_status() -> None:
+def test_app_boots_and_root_endpoint_returns_core_baseline_status() -> None:
     client = TestClient(app)
     response = client.get("/")
 
     assert response.status_code == 200
     payload = response.json()
-    assert payload["status"] == "scaffold"
-    assert "core implementation pending" in payload["message"]
+    assert payload["status"] == "core-baseline"
+    assert "Runtime target paths enabled" in payload["message"]
 
 
-def test_runtime_and_admin_routes_are_registered() -> None:
+def test_target_routes_are_registered() -> None:
     client = TestClient(app)
 
-    runtime_response = client.get("/runtime/health/")
+    health_response = client.get("/health")
+    models_response = client.get("/v1/models")
     admin_response = client.get("/admin/settings/")
 
-    assert runtime_response.status_code == 200
+    assert health_response.status_code == 200
+    assert models_response.status_code == 200
     assert admin_response.status_code == 200

@@ -44,3 +44,10 @@ ForgeGate wird als modularer Neuaufbau erstellt: klare Schichten, klare Verantwo
 - Modulweise Erweiterung ohne Core-Refactoring als Ziel.
 - Zusätzliche Provider und Features durch isolierte Module.
 - Observability- und Governance-Bausteine als durchgängige Querschnittsthemen.
+
+## Phase-3 Runtime-Zielpfade
+- `GET /health`
+- `GET /v1/models`
+- `POST /v1/chat/completions`
+
+Diese Pfade bilden den ersten produktiven Runtime-Kern und ersetzen das frühere reine Scaffold-Routing.

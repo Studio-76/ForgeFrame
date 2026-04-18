@@ -1,26 +1,29 @@
-"""ForgeGate backend application (phase-2 scaffold only).
-
-This service is intentionally minimal and only provides startable placeholder
-endpoints. Runtime core, provider orchestration, OAuth flows, streaming,
-tool-calling, fallback, and business logic are not implemented in this phase.
-"""
+"""ForgeGate backend application bootstrap (phase-3 core baseline)."""
 
 from fastapi import FastAPI
 
 from app.api.admin import router as admin_router
 from app.api.runtime import router as runtime_router
+from app.settings.config import get_settings
 
 
 def create_app() -> FastAPI:
-    app = FastAPI(title="ForgeGate — Smart AI Gateway")
+    settings = get_settings()
+
+    app = FastAPI(
+        title=settings.app_name,
+        version=settings.app_version,
+        debug=settings.debug,
+        description="ForgeGate runtime/admin gateway with phase-3 core baseline.",
+    )
 
     @app.get("/")
     def root_info() -> dict[str, str]:
         return {
-            "name": "ForgeGate — Smart AI Gateway",
-            "status": "scaffold",
-            "phase": "phase-2 minimal runnable foundation",
-            "message": "core implementation pending",
+            "name": settings.app_name,
+            "version": settings.app_version,
+            "status": "core-baseline",
+            "message": "Runtime target paths enabled; advanced features pending.",
         }
 
     app.include_router(runtime_router)

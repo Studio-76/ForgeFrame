@@ -4,21 +4,24 @@ ForgeGate ist ein **neu aufgebautes Smart AI Gateway** mit klarer Trennung zwisc
 
 ## Projektziel
 
-Dieses Repository liefert ein **architecture-first Fundament**. In Phase 2 ist das Projekt nun minimal startbar (Backend + Frontend), ohne produktive Core-Implementierung.
+Dieses Repository liefert ein architecture-first Fundament mit kontrolliertem Kernaufbau. In **Phase 3** ist der erste produktive Backend-Core-Unterbau vorhanden, während erweiterte Features bewusst noch ausstehen.
 
 ## Entwicklungsstatus
 
-- Status: **Phase 2 scaffold, minimal runnable**
-- Backend: **startbar (FastAPI placeholder endpoints)**
-- Frontend: **startbar (React/Vite placeholder routing)**
-- Core-Implementierung: **pending**
+- Status: **Phase 3 core baseline**
+- Backend:
+  - `GET /health`
+  - `GET /v1/models`
+  - `POST /v1/chat/completions` (strukturierter Einstieg, noch ohne vollständigen Provider-Flow)
+- Frontend: minimal startbar (Phase-2-Basis)
+- Erweiterte Core-Features: pending
 
 ## Harte Leitlinien
 
 - ForgeGate wird **from scratch** aufgebaut.
 - `reference/` ist ausschließlich Referenzmaterial.
 - Es gibt **keine produktiven Imports** aus `reference/`.
-- Keine Business-Logik, keine Provider-/OAuth-/Streaming-/Tool-Calling-/Fallback-Implementierung in diesem Stand.
+- Semantik aus Referenz wird neu umgesetzt, nicht 1:1 portiert.
 
 ## Repository-Überblick
 
@@ -26,10 +29,10 @@ Dieses Repository liefert ein **architecture-first Fundament**. In Phase 2 ist d
 forgegate/
   docs/        # Architektur-, Scope- und Migrationsdokumentation
   reference/   # Referenzmaterial (nicht produktiv)
-  backend/     # Minimal startbares Backend-Scaffold
+  backend/     # ForgeGate-Backend inkl. Phase-3-Core-Baseline
   frontend/    # Minimal startbares Frontend-Scaffold
   scripts/     # Dev-/Test-Skripte
-  docker/      # Minimales Container-Scaffold
+  docker/      # Container-Scaffold
 ```
 
 ## Lokale Entwicklung

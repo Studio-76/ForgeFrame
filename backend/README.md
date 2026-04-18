@@ -1,11 +1,19 @@
-# Backend (Phase 2 Scaffold)
+# Backend (Phase 3 Core Baseline)
 
-Dieses Backend ist in Phase 2 **minimal startbar** gemacht.
+Dieses Backend enthält jetzt den ersten **echten ForgeGate-Core-Unterbau**.
 
 ## Aktueller Stand
-- FastAPI-App startet und registriert Runtime-/Admin-Router.
-- Endpunkte liefern nur ehrliche Scaffold-Antworten.
-- Keine Core-, Provider-, OAuth-, Streaming-, Tool-Calling- oder Fallback-Logik implementiert.
+- FastAPI-App mit Runtime-Zielpfaden: `GET /health`, `GET /v1/models`, `POST /v1/chat/completions`.
+- Model-Registry-Basis und Routing-/Dispatch-Basis sind produktiv verdrahtet.
+- Provider-Adapter sind architektonisch angebunden, aber absichtlich noch nicht vollständig implementiert.
+- Admin-API bleibt minimal scaffolded.
+
+## Bewusst noch nicht vollständig
+- OAuth-Flows
+- Streaming-Engine
+- Tool-Calling-Engine
+- Fallback-Engine
+- Vollständige Provider-Integration
 
 ## Start (Dev)
 ```bash
