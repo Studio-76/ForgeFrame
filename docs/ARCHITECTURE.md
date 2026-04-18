@@ -3,10 +3,17 @@
 ## Architekturziel
 ForgeGate wird als modularer Neuaufbau erstellt: klare Schichten, klare Verantwortlichkeiten, keine implizite Referenzkopplung.
 
+## Produktleitlinie (verbindlich)
+- ForgeGate entwickelt sich zur **UI-first Control Plane**.
+- Regelbetrieb soll über UI + Admin-API erfolgen.
+- Shell ist für Dev/Infra/Recovery/Migration vorgesehen, nicht als primärer Produktbedienweg.
+
 ## Backend-Schichten
 
 ### Core
 - Routing, Klassifizierung, Streaming, Fallback, Tool Calling, Kontextoptimierung, Modell-Registry.
+- Runtime-Dispatch-Vertrag für non-stream + stream.
+- Usage-/Token-/Kosten-Grundlagen (actual, hypothetical, avoided cost) als vorbereitende Kernsemantik.
 - Nur forgegate-native Implementierungen.
 
 ### Platform
@@ -18,7 +25,8 @@ ForgeGate wird als modularer Neuaufbau erstellt: klare Schichten, klare Verantwo
 - `api/admin`: Betriebs-/Admin-Endpunkte.
 
 ## Frontend
-- Admin-Frontend zur Verwaltung von Providern, Konten, API-Keys, Logs und Settings.
+- Admin-Frontend als Control Plane zur Verwaltung von Providern, Konten, API-Keys, Logs und Settings.
+- Vorbereitung für Provider-Readiness, Discovery-Sync, Modellsichtbarkeit, Usage- und Kostenanalysen.
 - Klare Trennung zu Backend-Implementierungsdetails.
 
 ## Runtime API vs Admin API
@@ -45,18 +53,36 @@ ForgeGate wird als modularer Neuaufbau erstellt: klare Schichten, klare Verantwo
 - Zusätzliche Provider und Features durch isolierte Module.
 - Observability- und Governance-Bausteine als durchgängige Querschnittsthemen.
 
-## Phase-3 Runtime-Zielpfade
+## Runtime-Zielpfade (Stand Phase 6)
 - `GET /health`
 - `GET /v1/models`
-- `POST /v1/chat/completions`
+- `POST /v1/chat/completions` (non-stream + stream)
 
-Diese Pfade bilden den ersten produktiven Runtime-Kern und ersetzen das frühere reine Scaffold-Routing.
+## Providerpfade (Stand Phase 6)
+- Interner Baseline-Provider (`forgegate_baseline`): non-stream + stream.
+- Externer OpenAI-API-Provider (`openai_api`): non-stream + stream.
+- OpenAI-Codex: ehrliche Auth-/Readiness-/Discovery-Vorstufe, kein Fake-Success-Path.
 
-## Phase-3-Fixlauf Hinweis
-- `POST /v1/chat/completions` besitzt einen echten internen Baseline-Success-Path (`forgegate_baseline`).
-- Externe Provider bleiben bewusst unvollständig und liefern strukturierte Not-Implemented-Fehler.
+## Control-Plane-Achsen (Phase 6)
+- Provider/Model/Health werden über Admin-API + UI steuerbar ausgebaut.
+- Health wird explizit getrennt betrachtet:
+  - Provider-Health
+  - Modell-Health
+- Health-Traffic und Runtime-Traffic sind als getrennte Analytics-Achsen modelliert.
+- Error-Observability wird als eigene Achse geführt:
+  - Fehler pro Provider
+  - Fehler pro Modell
+  - Fehler pro API-Client/Consumer
+  - Fehler nach Traffic-Typ (runtime vs health_check)
 
-## Phase-4 Providerpfade
-- Interner Baseline-Provider (`forgegate_baseline`) bleibt als deterministischer Kernpfad aktiv.
-- Erster externer Providerpfad über `openai_api` ist angebunden (key-basiert).
-- Weitere externe Provider sind strukturell vorbereitet, aber noch nicht voll integriert.
+## Observability-Basis (Phase 7)
+- Usage-/Error-/Health-Events werden persistent als Event-Log gespeichert.
+- Admin-Analytics liefert zeitfensterbasierte Aggregationen (`1h`, `24h`, `7d`, `all`).
+- Zusätzlich gibt es eine 24h-Timeline (Buckets) für Requests, Errors und Kosten.
+- Alert-Indikatoren markieren auffällige Zustände (Fehlerrate, Health-Failures, Health-Kostendruck).
+
+
+## UI-Theming (Control Plane)
+- Heller und dunkler Modus sind vorgesehen.
+- Dark Mode ist der Default im aktuellen Ausbau.
+- Theme-Umschaltung erfolgt im UI und wird clientseitig persistiert.

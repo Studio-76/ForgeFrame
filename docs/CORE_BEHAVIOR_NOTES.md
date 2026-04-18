@@ -1,6 +1,6 @@
 # CORE_BEHAVIOR_NOTES
 
-Diese Notizen beschreiben Core-Semantik, die später neu rekonstruiert werden muss.
+Diese Notizen beschreiben Core-Semantik für den modularen ForgeGate-Runtime-Kern.
 
 ## Routing
 - Modell-/Provider-Auswahl über deterministische Regeln.
@@ -9,14 +9,21 @@ Diese Notizen beschreiben Core-Semantik, die später neu rekonstruiert werden mu
 ## Streaming
 - Unterschiedliche Fehlerpfade vor und nach erstem Content-Chunk.
 - Keine versteckte Stream-Neustartlogik nach Content-Beginn.
-
-## Fallback
-- Endpoint-Fallback und Modell-Fallback getrennt behandeln.
-- Zustandsabhängige, nachvollziehbare Entscheidungspfade.
+- Stream-Ende erfordert explizites Done-Signal oder klaren Interrupt-Fehler.
 
 ## Provider Dispatch
 - Einheitliche Adapter-Grenze für alle Provider.
 - Normierte Fehlerabbildung Richtung API/Core.
+- Non-stream und stream laufen durch denselben Routing→Dispatch→Provider-Kanal.
+
+## Usage / Token / Kosten-Grundlagen
+- Runtime-Responses können Usage-Daten tragen (`input/output/total tokens`).
+- Kosten werden als actual/hypothetical/avoided vorbereitet.
+- Ziel: Kostenanalyse ohne erzwungene Komplett-Billing-Plattform in dieser Phase.
+
+## Fallback
+- Endpoint-Fallback und Modell-Fallback getrennt behandeln.
+- Zustandsabhängige, nachvollziehbare Entscheidungspfade.
 
 ## Rate Limits
 - Limits als systemische Querschnittsfunktion.

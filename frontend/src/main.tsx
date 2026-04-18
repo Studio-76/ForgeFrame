@@ -3,6 +3,8 @@ import ReactDOM from "react-dom/client";
 import { Navigate, RouterProvider, createBrowserRouter } from "react-router-dom";
 
 import { App } from "./app/App";
+import "./styles/theme.css";
+import { ThemeProvider } from "./theme/ThemeProvider";
 import { AccountsPage } from "./pages/AccountsPage";
 import { ApiKeysPage } from "./pages/ApiKeysPage";
 import { DashboardPage } from "./pages/DashboardPage";
@@ -32,6 +34,8 @@ const router = createBrowserRouter([
 
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
-    <RouterProvider router={router} />
+    <ThemeProvider>
+      <RouterProvider router={router} />
+    </ThemeProvider>
   </React.StrictMode>,
 );

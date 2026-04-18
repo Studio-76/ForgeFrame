@@ -3,14 +3,14 @@ from fastapi.testclient import TestClient
 from app.main import app
 
 
-def test_app_boots_and_root_endpoint_returns_core_baseline_status() -> None:
+def test_app_boots_and_root_endpoint_returns_phase5_runtime_status() -> None:
     client = TestClient(app)
     response = client.get("/")
 
     assert response.status_code == 200
     payload = response.json()
-    assert payload["status"] == "core-baseline"
-    assert "Runtime target paths enabled" in payload["message"]
+    assert payload["status"] == "phase-5-runtime"
+    assert "Runtime paths enabled" in payload["message"]
 
 
 def test_target_routes_are_registered() -> None:

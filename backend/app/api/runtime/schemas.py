@@ -14,6 +14,7 @@ class ChatCompletionsRequest(BaseModel):
     model: str | None = None
     messages: list[ChatMessage] = Field(min_length=1)
     stream: bool = False
+    client: dict[str, str] = Field(default_factory=dict)
 
 
 class ErrorEnvelope(BaseModel):

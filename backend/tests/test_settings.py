@@ -20,6 +20,18 @@ def test_provider_enabled_flag_filters_catalog() -> None:
     assert not registry.has_model("gpt-4.1-mini")
 
 
-def test_default_model_is_baseline_phase4() -> None:
+def test_default_model_is_baseline_phase5() -> None:
     settings = Settings()
     assert settings.default_model == "forgegate-baseline-chat-v1"
+
+
+def test_codex_auth_mode_defaults_to_oauth() -> None:
+    settings = Settings()
+    assert settings.openai_codex_auth_mode == "oauth"
+    assert settings.openai_codex_oauth_mode == "manual_redirect_completion"
+
+
+def test_pricing_settings_are_operationalized() -> None:
+    settings = Settings()
+    assert settings.pricing_openai_input_per_1m_tokens > 0
+    assert settings.pricing_internal_hypothetical_output_per_1m_tokens > 0

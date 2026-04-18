@@ -3,7 +3,7 @@
 ## Harte Migrationsregeln
 
 1. Referenzcode ist nur Referenz.
-2. Kein 1:1-Port von NadirClaw-Dateien.
+2. Kein 1:1-Port von historischen Referenzdateien.
 3. Keine Imports aus `reference/` in produktiven Code.
 4. Semantik bewahren, Struktur neu aufbauen.
 5. Implementierungen ForgeGate-nativ entwerfen.
