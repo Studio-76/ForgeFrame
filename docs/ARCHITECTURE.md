@@ -62,3 +62,9 @@ ForgeGate wird als modularer Neuaufbau erstellt: klare Schichten, klare Verantwo
 - Interner Baseline-Provider (`forgegate_baseline`): non-stream + stream.
 - Externer OpenAI-API-Provider (`openai_api`): non-stream + stream.
 - OpenAI-Codex: ehrliche Auth-/Readiness-/Discovery-Vorstufe, kein Fake-Success-Path.
+
+
+## UI-Theming (Control Plane)
+- Heller und dunkler Modus sind vorgesehen.
+- Dark Mode ist der Default im aktuellen Ausbau.
+- Theme-Umschaltung erfolgt im UI und wird clientseitig persistiert.

@@ -102,3 +102,17 @@ def test_admin_usage_summary_endpoint_available() -> None:
     assert payload["status"] == "ok"
     assert payload["object"] == "usage_summary"
     assert "pricing_snapshot" in payload
+    assert "aggregations" in payload
+
+
+def test_admin_usage_summary_records_runtime_requests() -> None:
+    chat_response = client.post(
+        "/v1/chat/completions",
+        json={"messages": [{"role": "user", "content": "Track me"}]},
+    )
+    assert chat_response.status_code == 200
+
+    usage_response = client.get("/admin/usage/")
+    assert usage_response.status_code == 200
+    payload = usage_response.json()
+    assert payload["metrics"]["recorded_request_count"] >= 1

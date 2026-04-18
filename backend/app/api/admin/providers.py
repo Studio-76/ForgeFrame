@@ -1,53 +1,88 @@
 """Admin provider control-plane endpoints."""
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, status
+from fastapi.responses import JSONResponse
 
-from app.api.runtime.dependencies import get_model_registry, get_provider_registry
-from app.core.model_registry import ModelRegistry
-from app.providers import ProviderRegistry
+from app.api.admin.control_plane import (
+    ProviderCreateRequest,
+    ProviderSyncRequest,
+    ProviderUpdateRequest,
+    get_control_plane_service,
+)
+from app.api.admin.control_plane import ControlPlaneService
 
 router = APIRouter(prefix="/providers", tags=["admin-providers"])
 
 
+def _admin_error(status_code: int, error_type: str, message: str) -> JSONResponse:
+    return JSONResponse(status_code=status_code, content={"error": {"type": error_type, "message": message}})
+
+
 @router.get("/")
-def list_provider_control_plane(
-    registry: ModelRegistry = Depends(get_model_registry),
-    providers: ProviderRegistry = Depends(get_provider_registry),
-) -> dict[str, object]:
-    models = registry.list_active_models()
-    provider_names = sorted({model.provider for model in models})
-
-    provider_items: list[dict[str, object]] = []
-    for provider_name in provider_names:
-        status = providers.get_provider_status(provider_name)
-        provider_models = [model for model in models if model.provider == provider_name]
-        provider_items.append(
-            {
-                "provider": provider_name,
-                "ready": status["ready"],
-                "readiness_reason": status["readiness_reason"],
-                "capabilities": status["capabilities"],
-                "oauth_required": status["oauth_required"],
-                "discovery_supported": status["discovery_supported"],
-                "model_count": len(provider_models),
-                "models": [
-                    {
-                        "id": model.id,
-                        "source": model.source,
-                        "discovery_status": model.discovery_status,
-                        "active": model.active,
-                    }
-                    for model in provider_models
-                ],
-            }
-        )
-
+def list_provider_control_plane(service: ControlPlaneService = Depends(get_control_plane_service)) -> dict[str, object]:
     return {
         "status": "ok",
         "object": "provider_control_plane",
-        "providers": provider_items,
+        "providers": service.provider_control_snapshot(),
         "notes": {
-            "sync_action": "Model discovery sync orchestration is a planned next increment.",
+            "sync_action": "Model sync can be triggered via POST /admin/providers/sync.",
             "ui_first": True,
+            "persistence": "in_memory_phase5",
         },
     }
+
+
+@router.post("/", status_code=status.HTTP_201_CREATED, response_model=None)
+def create_provider(
+    payload: ProviderCreateRequest,
+    service: ControlPlaneService = Depends(get_control_plane_service),
+) -> object:
+    try:
+        provider = service.create_provider(payload)
+    except ValueError as exc:
+        return _admin_error(status.HTTP_409_CONFLICT, "provider_conflict", str(exc))
+
+    return {"status": "ok", "provider": provider.model_dump()}
+
+
+@router.patch("/{provider_name}" , response_model=None)
+def update_provider(
+    provider_name: str,
+    payload: ProviderUpdateRequest,
+    service: ControlPlaneService = Depends(get_control_plane_service),
+) -> object:
+    try:
+        provider = service.update_provider(provider_name, payload)
+    except ValueError as exc:
+        return _admin_error(status.HTTP_404_NOT_FOUND, "provider_not_found", str(exc))
+
+    return {"status": "ok", "provider": provider.model_dump()}
+
+
+@router.post("/{provider_name}/activate" , response_model=None)
+def activate_provider(provider_name: str, service: ControlPlaneService = Depends(get_control_plane_service)) -> object:
+    try:
+        provider = service.set_provider_enabled(provider_name, True)
+    except ValueError as exc:
+        return _admin_error(status.HTTP_404_NOT_FOUND, "provider_not_found", str(exc))
+    return {"status": "ok", "provider": provider.model_dump()}
+
+
+@router.post("/{provider_name}/deactivate" , response_model=None)
+def deactivate_provider(provider_name: str, service: ControlPlaneService = Depends(get_control_plane_service)) -> object:
+    try:
+        provider = service.set_provider_enabled(provider_name, False)
+    except ValueError as exc:
+        return _admin_error(status.HTTP_404_NOT_FOUND, "provider_not_found", str(exc))
+    return {"status": "ok", "provider": provider.model_dump()}
+
+
+@router.post("/sync" , response_model=None)
+def sync_provider_models(
+    payload: ProviderSyncRequest,
+    service: ControlPlaneService = Depends(get_control_plane_service),
+) -> object:
+    try:
+        return service.run_sync(payload.provider)
+    except ValueError as exc:
+        return _admin_error(status.HTTP_404_NOT_FOUND, "provider_not_found", str(exc))

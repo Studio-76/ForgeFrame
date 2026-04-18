@@ -2,14 +2,14 @@ export function DashboardPage() {
   return (
     <section>
       <h2>ForgeGate Control Plane Dashboard</h2>
-      <p>
-        ForgeGate wird UI-first ausgebaut: Providerbetrieb, Modellpflege, OAuth/Keys, Discovery-Sync und
-        Runtime-Auswertung sollen im Regelbetrieb über die UI erfolgen.
+      <p className="fg-muted">
+        Fokus dieses Ausbaus: Provider-Verwaltung, Model-Sync-Vorstufe und Usage/Kosten-Aggregationen über echte
+        Admin-Endpunkte.
       </p>
       <ul>
-        <li>Provider-Readiness und Modellstatus unter „Providers“</li>
-        <li>Usage-/Kosten-Grundlagen unter „Usage“</li>
-        <li>Shell bleibt Dev/Infra/Recovery-Werkzeug, nicht Primär-UX</li>
+        <li>Provider-Verwaltung und Sync-Aktionen unter „Providers“</li>
+        <li>Usage-/Kosten-Aggregationen unter „Usage“</li>
+        <li>Theme-System mit Dark-Default und Light-Option im Header</li>
       </ul>
     </section>
   );

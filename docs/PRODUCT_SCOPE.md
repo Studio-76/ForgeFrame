@@ -52,3 +52,8 @@ ForgeGate ist ein Smart AI Gateway, das Runtime-Ausführung, Provider-Anbindung 
 - Erweiterte OAuth-Flows und Discovery-Sync-Orchestrierung.
 - Vertiefte Usage-/Kostenanalytik und Preis-Kataloge.
 - Ausgebautes Monitoring, Policies und Betriebsautomatisierung.
+
+
+## UI-Bedienbarkeit
+- Control-Plane-UI mit Theme-System (Dark Default, Light optional).
+- Providerverwaltung und Sync-Aktionen werden schrittweise UI-gestützt ausgebaut.

@@ -23,6 +23,7 @@ from app.providers import (
     ProviderUpstreamError,
 )
 from app.settings.config import Settings
+from app.usage.analytics import get_usage_analytics_store
 
 router = APIRouter(tags=["runtime-chat"])
 
@@ -105,6 +106,7 @@ def create_chat_completion(
     dispatch: DispatchService = Depends(get_dispatch_service),
     settings: Settings = Depends(get_settings),
 ) -> object:
+    analytics = get_usage_analytics_store()
     requested_model = payload.model
     if requested_model and not registry.has_model(requested_model) and not settings.runtime_allow_unknown_models:
         return _error_response(
@@ -123,7 +125,13 @@ def create_chat_completion(
 
             def _sse_body() -> Iterator[str]:
                 try:
-                    yield from provider_events_to_sse(events, model=model, provider=provider)
+                    def _event_iterator() -> Iterator[ProviderStreamEvent]:
+                        for event in events:
+                            if event.event == "done":
+                                analytics.record_stream_done_event(provider=provider, model=model, event=event)
+                            yield event
+
+                    yield from provider_events_to_sse(_event_iterator(), model=model, provider=provider)
                 except ProviderStreamInterruptedError as exc:
                     yield from provider_events_to_sse(
                         [
@@ -146,6 +154,8 @@ def create_chat_completion(
         )
     except Exception as exc:  # intentionally centralized mapping
         return _provider_exception_to_http(exc)
+
+    analytics.record_non_stream_result(result)
 
     return {
         "id": "chatcmpl-forgegate",
