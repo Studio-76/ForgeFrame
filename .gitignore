@@ -1,0 +1,140 @@
+# --------------------------------------------------
+# ForgeGate — Smart AI Gateway
+# Global .gitignore
+# --------------------------------------------------
+
+# -------------------------
+# OS / Editor
+# -------------------------
+.DS_Store
+Thumbs.db
+
+.vscode/
+.idea/
+
+# -------------------------
+# Environment / Secrets
+# -------------------------
+.env
+.env.*
+!.env.example
+
+*.pem
+*.key
+*.crt
+*.p12
+*.pfx
+
+# -------------------------
+# Python
+# -------------------------
+__pycache__/
+*.py[cod]
+*$py.class
+
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.pyre/
+.hypothesis/
+.tox/
+.nox/
+
+.coverage
+.coverage.*
+htmlcov/
+
+dist/
+build/
+site/
+.eggs/
+*.egg
+*.egg-info/
+pip-wheel-metadata/
+
+.venv/
+venv/
+ENV/
+env/
+
+# -------------------------
+# Python tooling
+# -------------------------
+.python-version
+
+# -------------------------
+# Backend local data
+# -------------------------
+*.db
+*.sqlite
+*.sqlite3
+
+backend/.pytest_cache/
+backend/.mypy_cache/
+backend/.ruff_cache/
+backend/.coverage
+backend/htmlcov/
+backend/dist/
+backend/build/
+backend/.venv/
+backend/venv/
+backend/.python-version
+
+# -------------------------
+# Node / Frontend
+# -------------------------
+node_modules/
+.npm/
+.pnpm-store/
+.yarn/
+.yarn/cache/
+.yarn/unplugged/
+.yarn/build-state.yml
+.yarn/install-state.gz
+
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+frontend/coverage/
+frontend/.cache/
+
+# -------------------------
+# Frontend build artifacts
+# -------------------------
+*.tsbuildinfo
+
+# -------------------------
+# Logs / temp files
+# -------------------------
+*.log
+logs/
+tmp/
+temp/
+
+# -------------------------
+# Docker / local runtime leftovers
+# -------------------------
+*.pid
+*.sock
+
+# -------------------------
+# Test / coverage artifacts
+# -------------------------
+coverage/
+.coverage-reports/
+junit.xml
+pytest.xml
+
+# -------------------------
+# ForgeGate reference area
+# Keep reference files in git.
+# Do NOT ignore reference/ by default.
+# -------------------------
+
+# -------------------------
+# Optional local upload / export dirs
+# Uncomment later if needed
+# -------------------------
+# uploads/
+# exports/
+# data/
