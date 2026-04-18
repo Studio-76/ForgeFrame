@@ -1,2 +1,2 @@
-# forgegate
+# ForgeGate
 ForgeGate — Smart AI Gateway
