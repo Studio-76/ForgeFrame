@@ -1,0 +1,12 @@
+{
+  "name": "forgegate-frontend",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Initial frontend scaffold for ForgeGate",
+  "type": "module",
+  "scripts": {
+    "dev": "echo 'TODO: frontend dev server setup pending'",
+    "build": "echo 'TODO: frontend build setup pending'",
+    "test": "echo 'TODO: frontend test setup pending'"
+  }
+}

@@ -1,0 +1,1 @@
+"""Telemetry metrics placeholder."""

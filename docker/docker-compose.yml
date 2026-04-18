@@ -1,0 +1,3 @@
+# ForgeGate compose placeholder.
+# TODO: Add service orchestration once backend/frontend runtimes are defined.
+services: {}
