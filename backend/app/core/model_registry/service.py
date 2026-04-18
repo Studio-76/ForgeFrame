@@ -1,4 +1,4 @@
-"""In-memory model registry baseline for ForgeGate phase 4."""
+"""In-memory model registry baseline for ForgeGate phase 5."""
 
 from app.core.model_registry.models import RuntimeModel
 from app.settings.config import Settings
@@ -20,6 +20,19 @@ class ModelRegistry:
                 owned_by=owned_by,
                 display_name=model_id,
             )
+
+        if self._settings.openai_codex_enabled and self._settings.openai_codex_discovery_enabled:
+            for model_id in self._settings.openai_codex_discovered_models:
+                models.setdefault(
+                    model_id,
+                    RuntimeModel(
+                        id=model_id,
+                        provider="openai_codex",
+                        owned_by="OpenAI Codex",
+                        display_name=model_id,
+                    ),
+                )
+
         return models
 
     def list_active_models(self) -> list[RuntimeModel]:

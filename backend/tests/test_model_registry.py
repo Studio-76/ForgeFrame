@@ -24,3 +24,12 @@ def test_model_registry_prefers_default_provider_when_default_model_missing() ->
     settings = Settings(default_model="missing-model", default_provider="openai_api")
     registry = ModelRegistry(settings)
     assert registry.default_model().provider == "openai_api"
+
+
+def test_model_registry_includes_discovered_codex_models_when_enabled() -> None:
+    settings = Settings(
+        openai_codex_discovery_enabled=True,
+        openai_codex_discovered_models=("gpt-5.3-codex-preview",),
+    )
+    registry = ModelRegistry(settings)
+    assert registry.has_model("gpt-5.3-codex-preview")

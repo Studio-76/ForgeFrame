@@ -1,6 +1,7 @@
-"""Central ForgeGate runtime configuration (phase-4 baseline)."""
+"""Central ForgeGate runtime configuration (phase-5 streaming/codex baseline)."""
 
 from functools import lru_cache
+from typing import Literal
 
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -10,7 +11,7 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="FORGEGATE_", env_file=".env", extra="ignore")
 
     app_name: str = "ForgeGate — Smart AI Gateway"
-    app_version: str = "0.4.0"
+    app_version: str = "0.5.0"
     debug: bool = False
 
     host: str = "0.0.0.0"
@@ -30,6 +31,13 @@ class Settings(BaseSettings):
     openai_api_key: str = ""
     openai_api_base_url: str = "https://api.openai.com/v1"
     openai_timeout_seconds: int = 30
+
+    openai_codex_auth_mode: Literal["oauth", "api_key"] = "oauth"
+    openai_codex_oauth_access_token: str = ""
+    openai_codex_api_key: str = ""
+    openai_codex_discovery_enabled: bool = False
+    openai_codex_discovery_required: bool = False
+    openai_codex_discovered_models: tuple[str, ...] = ()
 
     model_catalog: tuple[tuple[str, str, str], ...] = Field(
         default=(

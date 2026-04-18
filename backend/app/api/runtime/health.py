@@ -13,5 +13,5 @@ def health(settings: Settings = Depends(get_settings)) -> dict[str, str]:
         "status": "ok",
         "app": settings.app_name,
         "version": settings.app_version,
-        "phase": "phase-3 core baseline",
+        "phase": "phase-5 streaming/codex baseline",
     }

@@ -1,6 +1,9 @@
-"""OpenAI API adapter with first real external success path for phase 4."""
+"""OpenAI API adapter with non-stream and stream runtime support."""
 
 from __future__ import annotations
+
+import json
+from collections.abc import Iterator
 
 import httpx
 
@@ -11,6 +14,8 @@ from app.providers.base import (
     ProviderBadRequestError,
     ProviderCapabilities,
     ProviderConfigurationError,
+    ProviderStreamEvent,
+    ProviderStreamInterruptedError,
     ProviderUpstreamError,
 )
 from app.settings.config import Settings
@@ -18,13 +23,18 @@ from app.settings.config import Settings
 
 class OpenAIAPIAdapter:
     provider_name = "openai_api"
-    capabilities = ProviderCapabilities(streaming=False, tool_calling=False, vision=True, external=True)
+    capabilities = ProviderCapabilities(streaming=True, tool_calling=False, vision=True, external=True)
 
     def __init__(self, settings: Settings):
         self._settings = settings
 
     def is_ready(self) -> bool:
         return bool(self._settings.openai_api_key.strip())
+
+    def readiness_reason(self) -> str | None:
+        if self.is_ready():
+            return None
+        return "FORGEGATE_OPENAI_API_KEY is required."
 
     def create_chat_completion(self, request: ChatDispatchRequest) -> ChatDispatchResult:
         if not self.is_ready():
@@ -54,13 +64,32 @@ class OpenAIAPIAdapter:
             finish_reason=finish_reason,
         )
 
-    def _post_chat_completion(self, payload: dict) -> dict:
+    def stream_chat_completion(self, request: ChatDispatchRequest) -> Iterator[ProviderStreamEvent]:
+        if not self.is_ready():
+            raise ProviderConfigurationError(
+                self.provider_name,
+                "FORGEGATE_OPENAI_API_KEY is required for OpenAI API usage.",
+            )
+
+        payload = {
+            "model": request.model,
+            "messages": request.messages,
+            "stream": True,
+        }
+
+        yield from self._stream_chat_completion(payload)
+
+    def _endpoint_and_headers(self) -> tuple[str, dict[str, str]]:
         base_url = self._settings.openai_api_base_url.rstrip("/")
         endpoint = f"{base_url}/chat/completions"
         headers = {
             "Authorization": f"Bearer {self._settings.openai_api_key}",
             "Content-Type": "application/json",
         }
+        return endpoint, headers
+
+    def _post_chat_completion(self, payload: dict) -> dict:
+        endpoint, headers = self._endpoint_and_headers()
 
         try:
             response = httpx.post(
@@ -72,6 +101,62 @@ class OpenAIAPIAdapter:
         except httpx.RequestError as exc:
             raise ProviderUpstreamError(self.provider_name, f"Network error while calling OpenAI API: {exc}") from exc
 
+        self._raise_for_status(response)
+        return response.json()
+
+    def _stream_chat_completion(self, payload: dict) -> Iterator[ProviderStreamEvent]:
+        endpoint, headers = self._endpoint_and_headers()
+
+        try:
+            with httpx.stream(
+                "POST",
+                endpoint,
+                json=payload,
+                headers=headers,
+                timeout=self._settings.openai_timeout_seconds,
+            ) as response:
+                self._raise_for_status(response)
+                saw_done = False
+                for raw_line in response.iter_lines():
+                    if not raw_line:
+                        continue
+                    if not raw_line.startswith("data:"):
+                        continue
+
+                    line = raw_line.removeprefix("data:").strip()
+                    if line == "[DONE]":
+                        saw_done = True
+                        break
+
+                    try:
+                        payload = json.loads(line)
+                        choice = payload.get("choices", [{}])[0]
+                        delta = choice.get("delta", {})
+                    except (json.JSONDecodeError, IndexError, TypeError) as exc:
+                        raise ProviderStreamInterruptedError(
+                            self.provider_name,
+                            f"Failed to decode OpenAI stream chunk: {line}",
+                        ) from exc
+
+                    content_piece = delta.get("content", "")
+                    if content_piece:
+                        yield ProviderStreamEvent(event="delta", delta=content_piece)
+
+                    finish_reason = choice.get("finish_reason")
+                    if finish_reason:
+                        saw_done = True
+                        yield ProviderStreamEvent(event="done", finish_reason=finish_reason)
+                        break
+
+                if not saw_done:
+                    raise ProviderStreamInterruptedError(
+                        self.provider_name,
+                        "OpenAI stream ended without explicit completion signal.",
+                    )
+        except httpx.RequestError as exc:
+            raise ProviderStreamInterruptedError(self.provider_name, f"Network error while streaming OpenAI API: {exc}") from exc
+
+    def _raise_for_status(self, response: httpx.Response) -> None:
         if response.status_code in (401, 403):
             raise ProviderAuthenticationError(self.provider_name, f"OpenAI authentication failed ({response.status_code}).")
 
@@ -83,5 +168,3 @@ class OpenAIAPIAdapter:
 
         if response.status_code >= 300:
             raise ProviderUpstreamError(self.provider_name, f"Unexpected OpenAI response ({response.status_code}): {response.text[:500]}")
-
-        return response.json()

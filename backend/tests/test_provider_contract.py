@@ -1,23 +1,29 @@
+from app.auth.oauth.openai import resolve_codex_auth_state
 from app.providers.base import (
     ProviderCapabilities,
     ProviderConfigurationError,
     ProviderNotImplementedError,
+    ProviderNotReadyError,
+    ProviderStreamInterruptedError,
+    ProviderUnsupportedFeatureError,
 )
 from app.providers.forgegate_baseline import ForgeGateBaselineAdapter
 from app.providers.openai_api.adapter import OpenAIAPIAdapter
+from app.providers.openai_codex.adapter import OpenAICodexAdapter
 from app.settings.config import Settings
 
 
 def test_baseline_provider_capabilities_are_declared() -> None:
     adapter = ForgeGateBaselineAdapter()
     assert isinstance(adapter.capabilities, ProviderCapabilities)
-    assert adapter.capabilities.streaming is False
+    assert adapter.capabilities.streaming is True
     assert adapter.capabilities.external is False
 
 
 def test_openai_provider_capabilities_and_readiness() -> None:
     adapter = OpenAIAPIAdapter(Settings(openai_api_key="abc"))
     assert adapter.capabilities.external is True
+    assert adapter.capabilities.streaming is True
     assert adapter.is_ready() is True
 
 
@@ -25,6 +31,25 @@ def test_not_implemented_error_has_structured_metadata() -> None:
     error = ProviderNotImplementedError("openai_api")
     assert error.provider == "openai_api"
     assert error.error_type == "provider_not_implemented"
+
+
+def test_provider_error_types_for_new_semantics() -> None:
+    assert ProviderUnsupportedFeatureError("openai", "stream").error_type == "provider_unsupported_feature"
+    assert ProviderNotReadyError("openai").error_type == "provider_not_ready"
+    assert ProviderStreamInterruptedError("openai", "boom").error_type == "provider_stream_interrupted"
+
+
+def test_codex_auth_state_resolution() -> None:
+    settings = Settings(openai_codex_auth_mode="oauth", openai_codex_oauth_access_token="token")
+    state = resolve_codex_auth_state(settings)
+    assert state.auth_mode == "oauth"
+    assert state.ready is True
+
+
+def test_codex_adapter_reports_not_ready_without_credentials() -> None:
+    adapter = OpenAICodexAdapter(Settings(openai_codex_auth_mode="oauth", openai_codex_oauth_access_token=""))
+    assert adapter.is_ready() is False
+    assert "requires OAuth access token" in (adapter.readiness_reason() or "")
 
 
 def test_provider_configuration_error_type() -> None:

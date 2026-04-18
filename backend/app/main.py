@@ -1,4 +1,4 @@
-"""ForgeGate backend application bootstrap (phase-3 core baseline)."""
+"""ForgeGate backend application bootstrap (phase-5 runtime)."""
 
 from fastapi import FastAPI
 
@@ -14,7 +14,7 @@ def create_app() -> FastAPI:
         title=settings.app_name,
         version=settings.app_version,
         debug=settings.debug,
-        description="ForgeGate runtime/admin gateway with phase-3 core baseline.",
+        description="ForgeGate runtime/admin gateway with phase-5 runtime.",
     )
 
     @app.get("/")
@@ -22,8 +22,8 @@ def create_app() -> FastAPI:
         return {
             "name": settings.app_name,
             "version": settings.app_version,
-            "status": "core-baseline",
-            "message": "Runtime target paths enabled; advanced features pending.",
+            "status": "phase-5-runtime",
+            "message": "Runtime paths enabled with stream-ready dispatch baseline.",
         }
 
     app.include_router(runtime_router)

@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "forgegate-backend"
-version = "0.4.0"
-description = "Phase-4 core baseline backend for ForgeGate"
+version = "0.5.0"
+description = "Phase-5 streaming/codex baseline backend for ForgeGate"
 requires-python = ">=3.11"
 dependencies = [
   "fastapi>=0.116,<1.0",

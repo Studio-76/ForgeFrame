@@ -11,6 +11,7 @@ def test_health_endpoint_has_runtime_metadata() -> None:
     assert response.status_code == 200
     body = response.json()
     assert body["status"] == "ok"
+    assert body["phase"] == "phase-5 streaming/codex baseline"
 
 
 def test_models_endpoint_returns_structured_list() -> None:
@@ -20,7 +21,7 @@ def test_models_endpoint_returns_structured_list() -> None:
     assert body["object"] == "list"
     assert isinstance(body["data"], list)
     assert len(body["data"]) >= 1
-    assert {"id", "provider", "owned_by", "ready"}.issubset(body["data"][0].keys())
+    assert {"id", "provider", "owned_by", "ready", "capabilities", "readiness_reason"}.issubset(body["data"][0].keys())
 
 
 def test_chat_endpoint_success_path_uses_baseline_provider_chain() -> None:
@@ -38,7 +39,24 @@ def test_chat_endpoint_success_path_uses_baseline_provider_chain() -> None:
     assert "ForgeGate baseline response" in body["choices"][0]["message"]["content"]
 
 
-def test_chat_endpoint_returns_not_implemented_for_openai_codex() -> None:
+def test_chat_endpoint_stream_success_path_uses_baseline_provider_chain() -> None:
+    with client.stream(
+        "POST",
+        "/v1/chat/completions",
+        json={
+            "messages": [{"role": "user", "content": "Hello stream"}],
+            "stream": True,
+        },
+    ) as response:
+        assert response.status_code == 200
+        raw = "".join(response.iter_text())
+
+    assert "chat.completion.chunk" in raw
+    assert "forgegate_baseline" in raw
+    assert "[DONE]" in raw
+
+
+def test_chat_endpoint_returns_not_ready_for_openai_codex() -> None:
     response = client.post(
         "/v1/chat/completions",
         json={
@@ -46,9 +64,9 @@ def test_chat_endpoint_returns_not_implemented_for_openai_codex() -> None:
             "model": "gpt-5.3-codex",
         },
     )
-    assert response.status_code == 501
+    assert response.status_code == 503
     detail = response.json()["detail"]
-    assert detail["type"] == "provider_not_implemented"
+    assert detail["type"] == "provider_not_ready"
     assert detail["provider"] == "openai_codex"
 
 

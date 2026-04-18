@@ -15,9 +15,10 @@ def list_models(
     providers: ProviderRegistry = Depends(get_provider_registry),
 ) -> dict[str, object]:
     models = registry.list_active_models()
-    return {
-        "object": "list",
-        "data": [
+    data = []
+    for model in models:
+        status = providers.get_provider_status(model.provider)
+        data.append(
             {
                 "id": model.id,
                 "object": "model",
@@ -26,8 +27,13 @@ def list_models(
                 "display_name": model.display_name,
                 "active": model.active,
                 "category": model.category,
-                "ready": providers.is_provider_ready(model.provider),
+                "ready": status["ready"],
+                "readiness_reason": status["readiness_reason"],
+                "capabilities": status["capabilities"],
             }
-            for model in models
-        ],
+        )
+
+    return {
+        "object": "list",
+        "data": data,
     }

@@ -20,6 +20,11 @@ def test_provider_enabled_flag_filters_catalog() -> None:
     assert not registry.has_model("gpt-4.1-mini")
 
 
-def test_default_model_is_baseline_phase4() -> None:
+def test_default_model_is_baseline_phase5() -> None:
     settings = Settings()
     assert settings.default_model == "forgegate-baseline-chat-v1"
+
+
+def test_codex_auth_mode_defaults_to_oauth() -> None:
+    settings = Settings()
+    assert settings.openai_codex_auth_mode == "oauth"

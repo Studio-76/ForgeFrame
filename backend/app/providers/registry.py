@@ -14,7 +14,7 @@ class ProviderRegistry:
         candidate_adapters: dict[str, ProviderAdapter] = {
             "forgegate_baseline": ForgeGateBaselineAdapter(),
             "openai_api": OpenAIAPIAdapter(settings),
-            "openai_codex": OpenAICodexAdapter(),
+            "openai_codex": OpenAICodexAdapter(settings),
             "gemini": GeminiAdapter(),
             "anthropic": AnthropicAdapter(),
         }
@@ -33,3 +33,11 @@ class ProviderRegistry:
     def is_provider_ready(self, provider_name: str) -> bool:
         adapter = self.get(provider_name)
         return adapter.is_ready()
+
+    def get_provider_status(self, provider_name: str) -> dict[str, object]:
+        adapter = self.get(provider_name)
+        return {
+            "ready": adapter.is_ready(),
+            "readiness_reason": adapter.readiness_reason(),
+            "capabilities": adapter.capabilities.model_dump(),
+        }

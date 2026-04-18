@@ -1,17 +1,25 @@
-"""Runtime chat entrypoint on `/v1/chat/completions` for phase-4 core baseline."""
+"""Runtime chat entrypoint on `/v1/chat/completions` for phase-5 runtime."""
+
+from collections.abc import Iterator
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.responses import StreamingResponse
 
 from app.api.runtime.dependencies import get_dispatch_service, get_model_registry, get_settings
 from app.api.runtime.schemas import ChatCompletionsRequest
 from app.core.dispatch import DispatchService
 from app.core.model_registry import ModelRegistry
+from app.core.streaming import provider_events_to_sse
 from app.providers import (
     ProviderAuthenticationError,
     ProviderBadRequestError,
     ProviderConfigurationError,
     ProviderError,
+    ProviderStreamEvent,
     ProviderNotImplementedError,
+    ProviderNotReadyError,
+    ProviderStreamInterruptedError,
+    ProviderUnsupportedFeatureError,
     ProviderUpstreamError,
 )
 from app.settings.config import Settings
@@ -19,13 +27,62 @@ from app.settings.config import Settings
 router = APIRouter(tags=["runtime-chat"])
 
 
-@router.post("/chat/completions")
+def _provider_exception_to_http(exc: Exception) -> HTTPException:
+    if isinstance(exc, ProviderNotImplementedError):
+        return HTTPException(
+            status_code=status.HTTP_501_NOT_IMPLEMENTED,
+            detail={
+                "type": exc.error_type,
+                "provider": exc.provider,
+                "message": str(exc),
+                "phase": "phase-5 streaming/codex",
+            },
+        )
+    if isinstance(exc, ProviderUnsupportedFeatureError):
+        return HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={"type": exc.error_type, "provider": exc.provider, "message": str(exc)},
+        )
+    if isinstance(exc, ProviderNotReadyError):
+        return HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail={"type": exc.error_type, "provider": exc.provider, "message": str(exc)},
+        )
+    if isinstance(exc, ProviderConfigurationError):
+        return HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail={"type": exc.error_type, "provider": exc.provider, "message": str(exc)},
+        )
+    if isinstance(exc, ProviderAuthenticationError):
+        return HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail={"type": exc.error_type, "provider": exc.provider, "message": str(exc)},
+        )
+    if isinstance(exc, ProviderBadRequestError):
+        return HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={"type": exc.error_type, "provider": exc.provider, "message": str(exc)},
+        )
+    if isinstance(exc, (ProviderUpstreamError, ProviderError)):
+        return HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail={"type": exc.error_type, "provider": exc.provider, "message": str(exc)},
+        )
+    if isinstance(exc, ValueError):
+        return HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={"type": "routing_error", "message": str(exc)},
+        )
+    raise exc
+
+
+@router.post("/chat/completions", response_model=None)
 def create_chat_completion(
     payload: ChatCompletionsRequest,
     registry: ModelRegistry = Depends(get_model_registry),
     dispatch: DispatchService = Depends(get_dispatch_service),
     settings: Settings = Depends(get_settings),
-) -> dict[str, object]:
+) -> object:
     requested_model = payload.model
     if requested_model and not registry.has_model(requested_model) and not settings.runtime_allow_unknown_models:
         raise HTTPException(
@@ -38,51 +95,37 @@ def create_chat_completion(
         )
 
     try:
+        if payload.stream:
+            model, provider, events = dispatch.dispatch_chat_stream(
+                requested_model=requested_model,
+                messages=[message.model_dump() for message in payload.messages],
+            )
+
+            def _sse_body() -> Iterator[str]:
+                try:
+                    yield from provider_events_to_sse(events, model=model, provider=provider)
+                except ProviderStreamInterruptedError as exc:
+                    yield from provider_events_to_sse(
+                        [
+                            ProviderStreamEvent(
+                                event="error",
+                                error_type=exc.error_type,
+                                error_message=str(exc),
+                            )
+                        ],
+                        model=model,
+                        provider=provider,
+                    )
+
+            return StreamingResponse(_sse_body(), media_type="text/event-stream")
+
         result = dispatch.dispatch_chat(
             requested_model=requested_model,
             messages=[message.model_dump() for message in payload.messages],
-            stream=payload.stream,
+            stream=False,
         )
-    except ProviderNotImplementedError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_501_NOT_IMPLEMENTED,
-            detail={
-                "type": exc.error_type,
-                "provider": exc.provider,
-                "message": str(exc),
-                "phase": "phase-4 core baseline",
-            },
-        ) from exc
-    except ProviderConfigurationError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail={"type": exc.error_type, "provider": exc.provider, "message": str(exc)},
-        ) from exc
-    except ProviderAuthenticationError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail={"type": exc.error_type, "provider": exc.provider, "message": str(exc)},
-        ) from exc
-    except ProviderBadRequestError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail={"type": exc.error_type, "provider": exc.provider, "message": str(exc)},
-        ) from exc
-    except ProviderUpstreamError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail={"type": exc.error_type, "provider": exc.provider, "message": str(exc)},
-        ) from exc
-    except ProviderError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail={"type": exc.error_type, "provider": exc.provider, "message": str(exc)},
-        ) from exc
-    except ValueError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail={"type": "routing_error", "message": str(exc)},
-        ) from exc
+    except Exception as exc:  # intentionally centralized mapping
+        raise _provider_exception_to_http(exc) from exc
 
     return {
         "id": "chatcmpl-forgegate",
