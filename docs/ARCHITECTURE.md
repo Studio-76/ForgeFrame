@@ -53,15 +53,27 @@ ForgeGate wird als modularer Neuaufbau erstellt: klare Schichten, klare Verantwo
 - Zusätzliche Provider und Features durch isolierte Module.
 - Observability- und Governance-Bausteine als durchgängige Querschnittsthemen.
 
-## Runtime-Zielpfade (Stand Phase 5)
+## Runtime-Zielpfade (Stand Phase 6)
 - `GET /health`
 - `GET /v1/models`
 - `POST /v1/chat/completions` (non-stream + stream)
 
-## Providerpfade (Stand Phase 5)
+## Providerpfade (Stand Phase 6)
 - Interner Baseline-Provider (`forgegate_baseline`): non-stream + stream.
 - Externer OpenAI-API-Provider (`openai_api`): non-stream + stream.
 - OpenAI-Codex: ehrliche Auth-/Readiness-/Discovery-Vorstufe, kein Fake-Success-Path.
+
+## Control-Plane-Achsen (Phase 6)
+- Provider/Model/Health werden über Admin-API + UI steuerbar ausgebaut.
+- Health wird explizit getrennt betrachtet:
+  - Provider-Health
+  - Modell-Health
+- Health-Traffic und Runtime-Traffic sind als getrennte Analytics-Achsen modelliert.
+- Error-Observability wird als eigene Achse geführt:
+  - Fehler pro Provider
+  - Fehler pro Modell
+  - Fehler pro API-Client/Consumer
+  - Fehler nach Traffic-Typ (runtime vs health_check)
 
 
 ## UI-Theming (Control Plane)

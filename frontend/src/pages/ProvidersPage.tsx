@@ -4,6 +4,7 @@ import {
   activateProvider,
   createProvider,
   deactivateProvider,
+  fetchUsageSummary,
   fetchProviderControlPlane,
   patchHealthConfig,
   runHealthChecks,
@@ -22,14 +23,21 @@ export function ProvidersPage() {
   const [syncNote, setSyncNote] = useState<string>("");
   const [healthConfig, setHealthConfig] = useState<HealthConfig | null>(null);
   const [newProvider, setNewProvider] = useState({ provider: "", label: "" });
+  const [providerErrors, setProviderErrors] = useState<Record<string, number>>({});
+  const [modelErrors, setModelErrors] = useState<Record<string, number>>({});
 
   const load = async () => {
     setState("loading");
     try {
       const payload = await fetchProviderControlPlane();
+      const usage = await fetchUsageSummary();
       setProviders(payload.providers);
       setSyncNote(payload.notes.sync_action);
       setHealthConfig(payload.health_config);
+      setProviderErrors(
+        Object.fromEntries(usage.aggregations.errors_by_provider.map((item) => [String(item.provider), Number(item.errors)])),
+      );
+      setModelErrors(Object.fromEntries(usage.aggregations.errors_by_model.map((item) => [String(item.model), Number(item.errors)])));
       setState("success");
     } catch (err) {
       setState("error");
@@ -143,6 +151,7 @@ export function ProvidersPage() {
             discovery_supported={String(provider.discovery_supported)} · last_sync_status={provider.last_sync_status} · models=
             {provider.model_count}
           </p>
+          <p>error_count={providerErrors[provider.provider] ?? 0}</p>
           {!provider.ready && provider.readiness_reason ? <p>reason: {provider.readiness_reason}</p> : null}
 
           <div className="fg-row" style={{ marginBottom: "0.5rem" }}>
@@ -171,7 +180,7 @@ export function ProvidersPage() {
             {provider.models.map((model) => (
               <li key={model.id}>
                 {model.id} · source={model.source} · discovery_status={model.discovery_status} · health={model.health_status} ·
-                active={String(model.active)}
+                active={String(model.active)} · errors={modelErrors[model.id] ?? 0}
               </li>
             ))}
           </ul>

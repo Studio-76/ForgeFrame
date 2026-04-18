@@ -2,7 +2,7 @@
 
 from collections.abc import Iterator
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, Request, status
 from fastapi.responses import JSONResponse, StreamingResponse
 
 from app.api.runtime.dependencies import get_dispatch_service, get_model_registry, get_settings
@@ -39,76 +39,56 @@ def _error_response(*, status_code: int, error_type: str, message: str, provider
     return JSONResponse(status_code=status_code, content={"error": error_payload})
 
 
-def _provider_exception_to_http(exc: Exception) -> JSONResponse:
+def _provider_exception_to_http(exc: Exception) -> tuple[int, str, str | None, str, dict[str, object]]:
     if isinstance(exc, ProviderNotImplementedError):
-        return _error_response(
-            status_code=status.HTTP_501_NOT_IMPLEMENTED,
-            error_type=exc.error_type,
-            provider=exc.provider,
-            message=str(exc),
-            phase="phase-5 streaming/codex",
-        )
+        return status.HTTP_501_NOT_IMPLEMENTED, exc.error_type, exc.provider, str(exc), {"phase": "phase-5 streaming/codex"}
     if isinstance(exc, ProviderUnsupportedFeatureError):
-        return _error_response(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            error_type=exc.error_type,
-            provider=exc.provider,
-            message=str(exc),
-        )
+        return status.HTTP_400_BAD_REQUEST, exc.error_type, exc.provider, str(exc), {}
     if isinstance(exc, ProviderNotReadyError):
-        return _error_response(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            error_type=exc.error_type,
-            provider=exc.provider,
-            message=str(exc),
-        )
+        return status.HTTP_503_SERVICE_UNAVAILABLE, exc.error_type, exc.provider, str(exc), {}
     if isinstance(exc, ProviderConfigurationError):
-        return _error_response(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            error_type=exc.error_type,
-            provider=exc.provider,
-            message=str(exc),
-        )
+        return status.HTTP_503_SERVICE_UNAVAILABLE, exc.error_type, exc.provider, str(exc), {}
     if isinstance(exc, ProviderAuthenticationError):
-        return _error_response(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            error_type=exc.error_type,
-            provider=exc.provider,
-            message=str(exc),
-        )
+        return status.HTTP_401_UNAUTHORIZED, exc.error_type, exc.provider, str(exc), {}
     if isinstance(exc, ProviderBadRequestError):
-        return _error_response(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            error_type=exc.error_type,
-            provider=exc.provider,
-            message=str(exc),
-        )
+        return status.HTTP_400_BAD_REQUEST, exc.error_type, exc.provider, str(exc), {}
     if isinstance(exc, (ProviderUpstreamError, ProviderError)):
-        return _error_response(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            error_type=exc.error_type,
-            provider=exc.provider,
-            message=str(exc),
-        )
+        return status.HTTP_502_BAD_GATEWAY, exc.error_type, exc.provider, str(exc), {}
     if isinstance(exc, ValueError):
-        return _error_response(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            error_type="routing_error",
-            message=str(exc),
-        )
+        return status.HTTP_400_BAD_REQUEST, "routing_error", None, str(exc), {}
     raise exc
+
+
+def _resolve_client_identifier(request: Request) -> str:
+    return (
+        request.headers.get("x-forgegate-client")
+        or request.headers.get("x-api-key")
+        or request.headers.get("user-agent")
+        or "unknown_client"
+    )
 
 
 @router.post("/chat/completions", response_model=None)
 def create_chat_completion(
     payload: ChatCompletionsRequest,
+    request: Request,
     registry: ModelRegistry = Depends(get_model_registry),
     dispatch: DispatchService = Depends(get_dispatch_service),
     settings: Settings = Depends(get_settings),
 ) -> object:
     analytics = get_usage_analytics_store()
+    client_id = _resolve_client_identifier(request)
     requested_model = payload.model
     if requested_model and not registry.has_model(requested_model) and not settings.runtime_allow_unknown_models:
+        analytics.record_runtime_error(
+            provider=None,
+            model=requested_model,
+            client=client_id,
+            route="/v1/chat/completions",
+            stream_mode="stream" if payload.stream else "non_stream",
+            error_type="model_not_found",
+            status_code=status.HTTP_404_NOT_FOUND,
+        )
         return _error_response(
             status_code=status.HTTP_404_NOT_FOUND,
             error_type="model_not_found",
@@ -133,6 +113,15 @@ def create_chat_completion(
 
                     yield from provider_events_to_sse(_event_iterator(), model=model, provider=provider)
                 except ProviderStreamInterruptedError as exc:
+                    analytics.record_runtime_error(
+                        provider=provider,
+                        model=model,
+                        client=client_id,
+                        route="/v1/chat/completions",
+                        stream_mode="stream",
+                        error_type=exc.error_type,
+                        status_code=status.HTTP_502_BAD_GATEWAY,
+                    )
                     yield from provider_events_to_sse(
                         [
                             ProviderStreamEvent(
@@ -153,7 +142,23 @@ def create_chat_completion(
             stream=False,
         )
     except Exception as exc:  # intentionally centralized mapping
-        return _provider_exception_to_http(exc)
+        status_code, error_type, provider, message, extra = _provider_exception_to_http(exc)
+        analytics.record_runtime_error(
+            provider=provider,
+            model=requested_model,
+            client=client_id,
+            route="/v1/chat/completions",
+            stream_mode="stream" if payload.stream else "non_stream",
+            error_type=error_type,
+            status_code=status_code,
+        )
+        return _error_response(
+            status_code=status_code,
+            error_type=error_type,
+            provider=provider,
+            message=message,
+            **extra,
+        )
 
     analytics.record_non_stream_result(result)
 

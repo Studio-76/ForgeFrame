@@ -29,9 +29,22 @@ class UsageEvent(BaseModel):
     created_at: str
 
 
+class ErrorEvent(BaseModel):
+    provider: str | None = None
+    model: str | None = None
+    client: str
+    route: str
+    stream_mode: Literal["stream", "non_stream"]
+    traffic_type: Literal["runtime", "health_check"] = "runtime"
+    error_type: str
+    status_code: int
+    created_at: str
+
+
 class UsageAnalyticsStore:
     def __init__(self):
         self._events: list[UsageEvent] = []
+        self._errors: list[ErrorEvent] = []
 
     def record_non_stream_result(self, result: ChatDispatchResult) -> None:
         self._events.append(
@@ -47,6 +60,31 @@ class UsageAnalyticsStore:
                 actual_cost=result.cost.actual_cost,
                 hypothetical_cost=result.cost.hypothetical_cost,
                 avoided_cost=result.cost.avoided_cost,
+                created_at=datetime.now(tz=UTC).isoformat(),
+            )
+        )
+
+    def record_runtime_error(
+        self,
+        *,
+        provider: str | None,
+        model: str | None,
+        client: str,
+        route: str,
+        stream_mode: Literal["stream", "non_stream"],
+        error_type: str,
+        status_code: int,
+    ) -> None:
+        self._errors.append(
+            ErrorEvent(
+                provider=provider,
+                model=model,
+                client=client,
+                route=route,
+                stream_mode=stream_mode,
+                traffic_type="runtime",
+                error_type=error_type,
+                status_code=status_code,
                 created_at=datetime.now(tz=UTC).isoformat(),
             )
         )
@@ -100,11 +138,39 @@ class UsageAnalyticsStore:
             )
         )
 
+    def record_health_check_error(
+        self,
+        *,
+        provider: str,
+        model: str,
+        check_type: str,
+        error_type: str,
+        status_code: int = 503,
+    ) -> None:
+        self._errors.append(
+            ErrorEvent(
+                provider=provider,
+                model=model,
+                client="control_plane",
+                route="/admin/providers/health/run",
+                stream_mode="non_stream",
+                traffic_type="health_check",
+                error_type=f"{check_type}:{error_type}",
+                status_code=status_code,
+                created_at=datetime.now(tz=UTC).isoformat(),
+            )
+        )
+
     def aggregate(self) -> dict[str, object]:
         grouped_provider = defaultdict(lambda: {"requests": 0, "tokens": 0, "actual_cost": 0.0, "hypothetical_cost": 0.0, "avoided_cost": 0.0})
         grouped_model = defaultdict(lambda: {"requests": 0, "tokens": 0})
         grouped_auth = defaultdict(lambda: {"requests": 0, "tokens": 0})
         grouped_traffic = defaultdict(lambda: {"requests": 0, "tokens": 0, "actual_cost": 0.0, "hypothetical_cost": 0.0, "avoided_cost": 0.0})
+        grouped_error_provider = defaultdict(lambda: {"errors": 0})
+        grouped_error_model = defaultdict(lambda: {"errors": 0})
+        grouped_error_client = defaultdict(lambda: {"errors": 0})
+        grouped_error_traffic = defaultdict(lambda: {"errors": 0})
+        grouped_error_type = defaultdict(lambda: {"errors": 0})
 
         for event in self._events:
             provider_item = grouped_provider[event.provider]
@@ -129,12 +195,25 @@ class UsageAnalyticsStore:
             traffic_item["hypothetical_cost"] += event.hypothetical_cost
             traffic_item["avoided_cost"] += event.avoided_cost
 
+        for error in self._errors:
+            grouped_error_provider[error.provider or "unknown"]["errors"] += 1
+            grouped_error_model[error.model or "unknown"]["errors"] += 1
+            grouped_error_client[error.client]["errors"] += 1
+            grouped_error_traffic[error.traffic_type]["errors"] += 1
+            grouped_error_type[f"{error.error_type}:{error.status_code}"]["errors"] += 1
+
         return {
             "event_count": len(self._events),
             "by_provider": [{"provider": key, **value} for key, value in grouped_provider.items()],
             "by_model": [{"model": key, **value} for key, value in grouped_model.items()],
             "by_auth": [{"auth_key": key, **value} for key, value in grouped_auth.items()],
             "by_traffic_type": [{"traffic_type": key, **value} for key, value in grouped_traffic.items()],
+            "error_event_count": len(self._errors),
+            "errors_by_provider": [{"provider": key, **value} for key, value in grouped_error_provider.items()],
+            "errors_by_model": [{"model": key, **value} for key, value in grouped_error_model.items()],
+            "errors_by_client": [{"client": key, **value} for key, value in grouped_error_client.items()],
+            "errors_by_traffic_type": [{"traffic_type": key, **value} for key, value in grouped_error_traffic.items()],
+            "errors_by_type": [{"error_key": key, **value} for key, value in grouped_error_type.items()],
         }
 
 

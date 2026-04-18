@@ -28,6 +28,8 @@ ForgeGate ist ein Smart AI Gateway, das Runtime-Ausführung, Provider-Anbindung 
 - Provider anlegen/bearbeiten/aktivieren/deaktivieren.
 - OAuth-/Key-Status verwalten.
 - Modellsync auslösen, Sichtbarkeit pflegen, Standardmodelle setzen.
+- Modell-Health und Provider-Health bewusst steuern.
+- Fehlerobservability für Provider/Modelle/API-Clients auswerten.
 
 ### 5) Runtime + Admin API
 - Runtime API für Laufzeitaufrufe.
@@ -38,6 +40,7 @@ ForgeGate ist ein Smart AI Gateway, das Runtime-Ausführung, Provider-Anbindung 
 - Kosten entlang zweier Achsen erfassen:
   - tatsächlich entstandene Kosten (actual)
   - hypothetische Kosten und vermiedene Kosten (hypothetical/avoided)
+- Zusätzlich Health-Check-Kosten explizit vom Runtime-Traffic trennen und separat auswerten.
 
 ## Feature-Phasen
 

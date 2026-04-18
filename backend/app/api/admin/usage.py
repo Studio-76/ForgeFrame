@@ -25,12 +25,18 @@ def usage_summary(
             "active_model_count": len(models),
             "stream_capable_model_count": len([m for m in models if m.provider in {"forgegate_baseline", "openai_api"}]),
             "recorded_request_count": aggregates["event_count"],
+            "recorded_error_count": aggregates["error_event_count"],
         },
         "aggregations": {
             "by_provider": aggregates["by_provider"],
             "by_model": aggregates["by_model"],
             "by_auth": aggregates["by_auth"],
             "by_traffic_type": aggregates["by_traffic_type"],
+            "errors_by_provider": aggregates["errors_by_provider"],
+            "errors_by_model": aggregates["errors_by_model"],
+            "errors_by_client": aggregates["errors_by_client"],
+            "errors_by_traffic_type": aggregates["errors_by_traffic_type"],
+            "errors_by_type": aggregates["errors_by_type"],
         },
         "traffic_split": {
             "runtime": next((item for item in aggregates["by_traffic_type"] if item["traffic_type"] == "runtime"), {"traffic_type": "runtime", "requests": 0, "tokens": 0, "actual_cost": 0.0, "hypothetical_cost": 0.0, "avoided_cost": 0.0}),

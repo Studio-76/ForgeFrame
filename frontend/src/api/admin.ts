@@ -50,12 +50,18 @@ export type UsageSummaryResponse = {
     active_model_count: number;
     stream_capable_model_count: number;
     recorded_request_count: number;
+    recorded_error_count: number;
   };
   aggregations: {
     by_provider: Array<Record<string, string | number>>;
     by_model: Array<Record<string, string | number>>;
     by_auth: Array<Record<string, string | number>>;
     by_traffic_type: Array<Record<string, string | number>>;
+    errors_by_provider: Array<Record<string, string | number>>;
+    errors_by_model: Array<Record<string, string | number>>;
+    errors_by_client: Array<Record<string, string | number>>;
+    errors_by_traffic_type: Array<Record<string, string | number>>;
+    errors_by_type: Array<Record<string, string | number>>;
   };
   traffic_split: {
     runtime: Record<string, string | number>;

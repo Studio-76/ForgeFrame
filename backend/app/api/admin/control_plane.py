@@ -200,6 +200,7 @@ class ControlPlaneService:
     def run_health_checks(self) -> dict[str, object]:
         now = datetime.now(tz=UTC).isoformat()
         check_type = self._health_config.probe_mode
+        provider_health_enabled = self._health_config.provider_health_enabled
 
         for provider in self.list_providers():
             runtime_status = None
@@ -224,12 +225,35 @@ class ControlPlaneService:
                 elif not provider.enabled:
                     status_record.status = "unavailable"
                     status_record.last_error = "provider_disabled"
+                    self._analytics.record_health_check_error(
+                        provider=provider.provider,
+                        model=model.id,
+                        check_type=check_type,
+                        error_type="provider_disabled",
+                    )
                 elif not runtime_status:
                     status_record.status = "unknown"
                     status_record.last_error = "provider_not_wired"
+                    if provider_health_enabled:
+                        self._analytics.record_health_check_error(
+                            provider=provider.provider,
+                            model=model.id,
+                            check_type=check_type,
+                            error_type="provider_not_wired",
+                        )
                 elif not runtime_status["ready"]:
-                    status_record.status = "not_configured"
-                    status_record.readiness_reason = str(runtime_status["readiness_reason"])
+                    if provider_health_enabled:
+                        status_record.status = "not_configured"
+                        status_record.readiness_reason = str(runtime_status["readiness_reason"])
+                        self._analytics.record_health_check_error(
+                            provider=provider.provider,
+                            model=model.id,
+                            check_type=check_type,
+                            error_type="not_configured",
+                        )
+                    else:
+                        status_record.status = "degraded"
+                        status_record.readiness_reason = str(runtime_status["readiness_reason"])
                 elif check_type == "synthetic_probe":
                     status_record.status = "healthy"
                     status_record.last_success_at = now

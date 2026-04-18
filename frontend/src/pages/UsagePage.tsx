@@ -55,6 +55,7 @@ export function UsagePage() {
               <li>Active models: {summary.metrics.active_model_count}</li>
               <li>Stream-capable models: {summary.metrics.stream_capable_model_count}</li>
               <li>Recorded requests: {summary.metrics.recorded_request_count}</li>
+              <li>Recorded errors: {summary.metrics.recorded_error_count}</li>
             </ul>
           </div>
 
@@ -91,6 +92,43 @@ export function UsagePage() {
               {summary.aggregations.by_auth.map((item) => (
                 <li key={String(item.auth_key)}>
                   {String(item.auth_key)} · requests={String(item.requests)} · tokens={String(item.tokens)}
+                </li>
+              ))}
+            </ul>
+          </div>
+
+          <div className="fg-card" style={{ marginBottom: "0.75rem" }}>
+            <h3>Errors by provider/model/client</h3>
+            <ul>
+              {summary.aggregations.errors_by_provider.map((item) => (
+                <li key={`p-${String(item.provider)}`}>
+                  provider {String(item.provider)}: {String(item.errors)}
+                </li>
+              ))}
+              {summary.aggregations.errors_by_model.map((item) => (
+                <li key={`m-${String(item.model)}`}>
+                  model {String(item.model)}: {String(item.errors)}
+                </li>
+              ))}
+              {summary.aggregations.errors_by_client.map((item) => (
+                <li key={`c-${String(item.client)}`}>
+                  client {String(item.client)}: {String(item.errors)}
+                </li>
+              ))}
+            </ul>
+          </div>
+
+          <div className="fg-card" style={{ marginBottom: "0.75rem" }}>
+            <h3>Errors by traffic/type</h3>
+            <ul>
+              {summary.aggregations.errors_by_traffic_type.map((item) => (
+                <li key={`t-${String(item.traffic_type)}`}>
+                  {String(item.traffic_type)}: {String(item.errors)}
+                </li>
+              ))}
+              {summary.aggregations.errors_by_type.map((item) => (
+                <li key={`e-${String(item.error_key)}`}>
+                  {String(item.error_key)}: {String(item.errors)}
                 </li>
               ))}
             </ul>
