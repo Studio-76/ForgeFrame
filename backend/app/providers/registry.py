@@ -2,22 +2,30 @@
 
 from app.providers.anthropic.adapter import AnthropicAdapter
 from app.providers.base import ProviderAdapter
+from app.providers.forgegate_baseline import ForgeGateBaselineAdapter
 from app.providers.gemini.adapter import GeminiAdapter
 from app.providers.openai_api.adapter import OpenAIAPIAdapter
 from app.providers.openai_codex.adapter import OpenAICodexAdapter
+from app.settings.config import Settings
 
 
 class ProviderRegistry:
-    def __init__(self):
-        self._adapters: dict[str, ProviderAdapter] = {
+    def __init__(self, settings: Settings):
+        candidate_adapters: dict[str, ProviderAdapter] = {
+            "forgegate_baseline": ForgeGateBaselineAdapter(),
             "openai_api": OpenAIAPIAdapter(),
             "openai_codex": OpenAICodexAdapter(),
             "gemini": GeminiAdapter(),
             "anthropic": AnthropicAdapter(),
+        }
+        self._adapters = {
+            name: adapter
+            for name, adapter in candidate_adapters.items()
+            if settings.is_provider_enabled(name)
         }
 
     def get(self, provider_name: str) -> ProviderAdapter:
         try:
             return self._adapters[provider_name]
         except KeyError as exc:
-            raise ValueError(f"Unknown provider adapter: {provider_name}") from exc
+            raise ValueError(f"Unknown or disabled provider adapter: {provider_name}") from exc

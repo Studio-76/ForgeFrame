@@ -51,3 +51,7 @@ ForgeGate wird als modularer Neuaufbau erstellt: klare Schichten, klare Verantwo
 - `POST /v1/chat/completions`
 
 Diese Pfade bilden den ersten produktiven Runtime-Kern und ersetzen das frühere reine Scaffold-Routing.
+
+## Phase-3-Fixlauf Hinweis
+- `POST /v1/chat/completions` besitzt einen echten internen Baseline-Success-Path (`forgegate_baseline`).
+- Externe Provider bleiben bewusst unvollständig und liefern strukturierte Not-Implemented-Fehler.

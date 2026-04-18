@@ -23,7 +23,7 @@ def get_routing_service() -> RoutingService:
 
 @lru_cache(maxsize=1)
 def get_provider_registry() -> ProviderRegistry:
-    return ProviderRegistry()
+    return ProviderRegistry(get_settings())
 
 
 @lru_cache(maxsize=1)

@@ -1,3 +1,4 @@
+from app.core.model_registry import ModelRegistry
 from app.settings.config import Settings, get_settings
 
 
@@ -11,3 +12,9 @@ def test_get_settings_is_cached() -> None:
     a = get_settings()
     b = get_settings()
     assert a is b
+
+
+def test_provider_enabled_flag_filters_catalog() -> None:
+    settings = Settings(openai_api_enabled=False)
+    registry = ModelRegistry(settings)
+    assert not registry.has_model("gpt-4.1-mini")

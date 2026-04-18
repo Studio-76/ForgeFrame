@@ -4,17 +4,18 @@ ForgeGate ist ein **neu aufgebautes Smart AI Gateway** mit klarer Trennung zwisc
 
 ## Projektziel
 
-Dieses Repository liefert ein architecture-first Fundament mit kontrolliertem Kernaufbau. In **Phase 3** ist der erste produktive Backend-Core-Unterbau vorhanden, während erweiterte Features bewusst noch ausstehen.
+Dieses Repository liefert ein architecture-first Fundament mit kontrolliertem Kernaufbau. Nach dem Phase-3-Fixlauf besitzt der Backend-Core einen echten durchlaufenden Runtime-Pfad für Chat sowie klar getrennte Fehlerpfade für noch nicht implementierte externe Provider.
 
 ## Entwicklungsstatus
 
-- Status: **Phase 3 core baseline**
+- Status: **Phase 3 core baseline (fixlauf abgeschlossen)**
 - Backend:
   - `GET /health`
   - `GET /v1/models`
-  - `POST /v1/chat/completions` (strukturierter Einstieg, noch ohne vollständigen Provider-Flow)
+  - `POST /v1/chat/completions` mit funktionierendem Baseline-Success-Path
+  - strukturierte 501-Semantik für externe Provider ohne Umsetzung
 - Frontend: minimal startbar (Phase-2-Basis)
-- Erweiterte Core-Features: pending
+- Erweiterte Core-Features (OAuth/Streaming/Tool/Fallback): pending
 
 ## Harte Leitlinien
 

@@ -2,23 +2,25 @@
 
 from fastapi import APIRouter, Depends, HTTPException, status
 
-from app.api.runtime.dependencies import get_dispatch_service, get_model_registry
+from app.api.runtime.dependencies import get_dispatch_service, get_model_registry, get_settings
 from app.api.runtime.schemas import ChatCompletionsRequest
 from app.core.dispatch import DispatchService
 from app.core.model_registry import ModelRegistry
-from app.providers import ProviderNotImplementedError
+from app.providers import ProviderError, ProviderNotImplementedError
+from app.settings.config import Settings
 
 router = APIRouter(tags=["runtime-chat"])
 
 
-@router.post("/v1/chat/completions")
+@router.post("/chat/completions")
 def create_chat_completion(
     payload: ChatCompletionsRequest,
     registry: ModelRegistry = Depends(get_model_registry),
     dispatch: DispatchService = Depends(get_dispatch_service),
+    settings: Settings = Depends(get_settings),
 ) -> dict[str, object]:
     requested_model = payload.model
-    if requested_model and not registry.has_model(requested_model):
+    if requested_model and not registry.has_model(requested_model) and not settings.runtime_allow_unknown_models:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail={
@@ -38,10 +40,16 @@ def create_chat_completion(
         raise HTTPException(
             status_code=status.HTTP_501_NOT_IMPLEMENTED,
             detail={
-                "type": "provider_not_implemented",
+                "type": exc.error_type,
+                "provider": exc.provider,
                 "message": str(exc),
                 "phase": "phase-3 core baseline",
             },
+        ) from exc
+    except ProviderError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail={"type": exc.error_type, "provider": exc.provider, "message": str(exc)},
         ) from exc
     except ValueError as exc:
         raise HTTPException(
@@ -50,14 +58,15 @@ def create_chat_completion(
         ) from exc
 
     return {
-        "id": "chatcmpl-scaffold",
+        "id": "chatcmpl-baseline-success",
         "object": "chat.completion",
         "model": result.model,
+        "provider": result.provider,
         "choices": [
             {
                 "index": 0,
                 "message": {"role": "assistant", "content": result.content},
-                "finish_reason": "stop",
+                "finish_reason": result.finish_reason,
             }
         ],
     }

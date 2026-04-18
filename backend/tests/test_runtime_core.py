@@ -24,7 +24,22 @@ def test_models_endpoint_returns_structured_list() -> None:
     assert {"id", "provider", "owned_by"}.issubset(body["data"][0].keys())
 
 
-def test_chat_endpoint_returns_structured_not_implemented_error() -> None:
+def test_chat_endpoint_success_path_uses_baseline_provider_chain() -> None:
+    response = client.post(
+        "/v1/chat/completions",
+        json={
+            "messages": [{"role": "user", "content": "Hello ForgeGate"}],
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["provider"] == "forgegate_baseline"
+    assert body["model"] == "forgegate-baseline-chat-v1"
+    assert "ForgeGate baseline response" in body["choices"][0]["message"]["content"]
+
+
+def test_chat_endpoint_returns_structured_not_implemented_for_external_provider() -> None:
     response = client.post(
         "/v1/chat/completions",
         json={
@@ -35,6 +50,7 @@ def test_chat_endpoint_returns_structured_not_implemented_error() -> None:
     assert response.status_code == 501
     detail = response.json()["detail"]
     assert detail["type"] == "provider_not_implemented"
+    assert detail["provider"] == "openai_api"
 
 
 def test_chat_endpoint_rejects_unknown_model() -> None:

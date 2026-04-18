@@ -8,7 +8,7 @@ from app.core.model_registry import ModelRegistry
 router = APIRouter(tags=["runtime-models"])
 
 
-@router.get("/v1/models")
+@router.get("/models")
 def list_models(registry: ModelRegistry = Depends(get_model_registry)) -> dict[str, object]:
     models = registry.list_active_models()
     return {

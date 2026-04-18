@@ -12,6 +12,8 @@ class ModelRegistry:
     def _build_registry(self) -> dict[str, RuntimeModel]:
         models: dict[str, RuntimeModel] = {}
         for model_id, provider, owned_by in self._settings.model_catalog:
+            if not self._settings.is_provider_enabled(provider):
+                continue
             models[model_id] = RuntimeModel(
                 id=model_id,
                 provider=provider,
