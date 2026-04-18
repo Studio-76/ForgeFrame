@@ -9,6 +9,7 @@ class ProviderCapabilities(BaseModel):
     streaming: bool = False
     tool_calling: bool = False
     vision: bool = False
+    external: bool = True
 
 
 class ChatDispatchRequest(BaseModel):
@@ -31,6 +32,9 @@ class ProviderAdapter(Protocol):
     def create_chat_completion(self, request: ChatDispatchRequest) -> ChatDispatchResult:
         """Dispatch a chat completion request to an upstream provider."""
 
+    def is_ready(self) -> bool:
+        """Return whether this adapter is currently configured for runtime use."""
+
 
 class ProviderError(RuntimeError):
     def __init__(self, *, provider: str, error_type: str, message: str):
@@ -48,3 +52,23 @@ class ProviderNotImplementedError(ProviderError):
             error_type="provider_not_implemented",
             message=f"Provider '{provider}' dispatch is not implemented yet.",
         )
+
+
+class ProviderConfigurationError(ProviderError):
+    def __init__(self, provider: str, message: str):
+        super().__init__(provider=provider, error_type="provider_configuration_error", message=message)
+
+
+class ProviderAuthenticationError(ProviderError):
+    def __init__(self, provider: str, message: str):
+        super().__init__(provider=provider, error_type="provider_authentication_error", message=message)
+
+
+class ProviderBadRequestError(ProviderError):
+    def __init__(self, provider: str, message: str):
+        super().__init__(provider=provider, error_type="provider_bad_request", message=message)
+
+
+class ProviderUpstreamError(ProviderError):
+    def __init__(self, provider: str, message: str):
+        super().__init__(provider=provider, error_type="provider_upstream_error", message=message)

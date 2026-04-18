@@ -13,7 +13,7 @@ class ProviderRegistry:
     def __init__(self, settings: Settings):
         candidate_adapters: dict[str, ProviderAdapter] = {
             "forgegate_baseline": ForgeGateBaselineAdapter(),
-            "openai_api": OpenAIAPIAdapter(),
+            "openai_api": OpenAIAPIAdapter(settings),
             "openai_codex": OpenAICodexAdapter(),
             "gemini": GeminiAdapter(),
             "anthropic": AnthropicAdapter(),
@@ -29,3 +29,7 @@ class ProviderRegistry:
             return self._adapters[provider_name]
         except KeyError as exc:
             raise ValueError(f"Unknown or disabled provider adapter: {provider_name}") from exc
+
+    def is_provider_ready(self, provider_name: str) -> bool:
+        adapter = self.get(provider_name)
+        return adapter.is_ready()

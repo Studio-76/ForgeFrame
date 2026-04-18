@@ -4,9 +4,13 @@ from .base import (
     ChatDispatchRequest,
     ChatDispatchResult,
     ProviderAdapter,
+    ProviderAuthenticationError,
+    ProviderBadRequestError,
     ProviderCapabilities,
+    ProviderConfigurationError,
     ProviderError,
     ProviderNotImplementedError,
+    ProviderUpstreamError,
 )
 from .registry import ProviderRegistry
 
@@ -16,6 +20,10 @@ __all__ = [
     "ProviderAdapter",
     "ProviderCapabilities",
     "ProviderError",
+    "ProviderConfigurationError",
+    "ProviderAuthenticationError",
+    "ProviderBadRequestError",
+    "ProviderUpstreamError",
     "ProviderNotImplementedError",
     "ProviderRegistry",
 ]

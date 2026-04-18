@@ -1,11 +1,12 @@
-# Backend (Phase 3 Core Baseline)
+# Backend (Phase 4 Core Baseline)
 
-Dieses Backend enthält den ersten tragfähigen ForgeGate-Core-Unterbau für Runtime-Pfade.
+Dieses Backend enthält jetzt einen tragfähigen ForgeGate-Runtime-Kern mit internem und erstem externem Providerpfad.
 
 ## Aktueller Stand
-- FastAPI-App mit Runtime-Zielpfaden: `GET /health`, `GET /v1/models`, `POST /v1/chat/completions`.
-- Chat besitzt einen echten Success Path über den internen `forgegate_baseline`-Adapter.
-- Externe Provider-Adapter sind architektonisch angebunden; nicht implementierte Provider liefern strukturierte 501-Fehler.
+- Runtime-Zielpfade: `GET /health`, `GET /v1/models`, `POST /v1/chat/completions`.
+- Interner Success Path: `forgegate_baseline`.
+- Externer Success Path: `openai_api` (wenn `FORGEGATE_OPENAI_API_KEY` gesetzt ist).
+- Externe Provider ohne Umsetzung liefern strukturierte Fehler (`provider_not_implemented` oder `provider_configuration_error`).
 - Model-Registry, Routing und Dispatch sind durchgängig verdrahtet.
 
 ## Bewusst noch nicht vollständig
@@ -13,7 +14,7 @@ Dieses Backend enthält den ersten tragfähigen ForgeGate-Core-Unterbau für Run
 - Streaming-Engine
 - Tool-Calling-Engine
 - Fallback-Engine
-- Vollständige externe Provider-Integrationen
+- Vollständige Gemini/Codex/Anthropic-Integrationen
 
 ## Start (Dev)
 ```bash

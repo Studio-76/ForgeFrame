@@ -1,4 +1,4 @@
-"""Central ForgeGate runtime configuration (phase-3 baseline)."""
+"""Central ForgeGate runtime configuration (phase-4 baseline)."""
 
 from functools import lru_cache
 
@@ -10,7 +10,7 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="FORGEGATE_", env_file=".env", extra="ignore")
 
     app_name: str = "ForgeGate — Smart AI Gateway"
-    app_version: str = "0.3.1"
+    app_version: str = "0.4.0"
     debug: bool = False
 
     host: str = "0.0.0.0"
@@ -27,10 +27,15 @@ class Settings(BaseSettings):
     gemini_enabled: bool = True
     anthropic_enabled: bool = True
 
+    openai_api_key: str = ""
+    openai_api_base_url: str = "https://api.openai.com/v1"
+    openai_timeout_seconds: int = 30
+
     model_catalog: tuple[tuple[str, str, str], ...] = Field(
         default=(
             ("forgegate-baseline-chat-v1", "forgegate_baseline", "ForgeGate"),
             ("gpt-4.1-mini", "openai_api", "OpenAI"),
+            ("gpt-4.1", "openai_api", "OpenAI"),
             ("gpt-5.3-codex", "openai_codex", "OpenAI Codex"),
             ("gemini-2.5-flash", "gemini", "Google"),
             ("claude-sonnet-4-5", "anthropic", "Anthropic"),

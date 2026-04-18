@@ -31,6 +31,14 @@ def get_dispatch_service() -> DispatchService:
     return DispatchService(get_routing_service(), get_provider_registry())
 
 
+def clear_runtime_dependency_caches() -> None:
+    get_settings.cache_clear()
+    get_model_registry.cache_clear()
+    get_routing_service.cache_clear()
+    get_provider_registry.cache_clear()
+    get_dispatch_service.cache_clear()
+
+
 __all__ = [
     "Settings",
     "get_settings",
@@ -38,4 +46,5 @@ __all__ = [
     "get_routing_service",
     "get_provider_registry",
     "get_dispatch_service",
+    "clear_runtime_dependency_caches",
 ]

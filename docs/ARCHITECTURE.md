@@ -55,3 +55,8 @@ Diese Pfade bilden den ersten produktiven Runtime-Kern und ersetzen das frühere
 ## Phase-3-Fixlauf Hinweis
 - `POST /v1/chat/completions` besitzt einen echten internen Baseline-Success-Path (`forgegate_baseline`).
 - Externe Provider bleiben bewusst unvollständig und liefern strukturierte Not-Implemented-Fehler.
+
+## Phase-4 Providerpfade
+- Interner Baseline-Provider (`forgegate_baseline`) bleibt als deterministischer Kernpfad aktiv.
+- Erster externer Providerpfad über `openai_api` ist angebunden (key-basiert).
+- Weitere externe Provider sind strukturell vorbereitet, aber noch nicht voll integriert.

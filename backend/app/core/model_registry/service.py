@@ -1,4 +1,4 @@
-"""In-memory model registry baseline for ForgeGate phase 3."""
+"""In-memory model registry baseline for ForgeGate phase 4."""
 
 from app.core.model_registry.models import RuntimeModel
 from app.settings.config import Settings
@@ -39,6 +39,12 @@ class ModelRegistry:
         model = self.get_model(self._settings.default_model)
         if model:
             return model
+
+        provider_candidates = [
+            m for m in self.list_active_models() if m.provider == self._settings.default_provider
+        ]
+        if provider_candidates:
+            return provider_candidates[0]
 
         active = self.list_active_models()
         if not active:

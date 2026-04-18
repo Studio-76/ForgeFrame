@@ -1,4 +1,4 @@
-"""Runtime chat entrypoint on `/v1/chat/completions` for phase-3 core baseline."""
+"""Runtime chat entrypoint on `/v1/chat/completions` for phase-4 core baseline."""
 
 from fastapi import APIRouter, Depends, HTTPException, status
 
@@ -6,7 +6,14 @@ from app.api.runtime.dependencies import get_dispatch_service, get_model_registr
 from app.api.runtime.schemas import ChatCompletionsRequest
 from app.core.dispatch import DispatchService
 from app.core.model_registry import ModelRegistry
-from app.providers import ProviderError, ProviderNotImplementedError
+from app.providers import (
+    ProviderAuthenticationError,
+    ProviderBadRequestError,
+    ProviderConfigurationError,
+    ProviderError,
+    ProviderNotImplementedError,
+    ProviderUpstreamError,
+)
 from app.settings.config import Settings
 
 router = APIRouter(tags=["runtime-chat"])
@@ -43,8 +50,28 @@ def create_chat_completion(
                 "type": exc.error_type,
                 "provider": exc.provider,
                 "message": str(exc),
-                "phase": "phase-3 core baseline",
+                "phase": "phase-4 core baseline",
             },
+        ) from exc
+    except ProviderConfigurationError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail={"type": exc.error_type, "provider": exc.provider, "message": str(exc)},
+        ) from exc
+    except ProviderAuthenticationError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail={"type": exc.error_type, "provider": exc.provider, "message": str(exc)},
+        ) from exc
+    except ProviderBadRequestError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={"type": exc.error_type, "provider": exc.provider, "message": str(exc)},
+        ) from exc
+    except ProviderUpstreamError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail={"type": exc.error_type, "provider": exc.provider, "message": str(exc)},
         ) from exc
     except ProviderError as exc:
         raise HTTPException(
@@ -58,7 +85,7 @@ def create_chat_completion(
         ) from exc
 
     return {
-        "id": "chatcmpl-baseline-success",
+        "id": "chatcmpl-forgegate",
         "object": "chat.completion",
         "model": result.model,
         "provider": result.provider,

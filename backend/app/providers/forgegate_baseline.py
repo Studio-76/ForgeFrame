@@ -1,11 +1,14 @@
-"""Internal deterministic baseline provider for phase-3 runtime proof path."""
+"""Internal deterministic baseline provider for phase-4 runtime proof path."""
 
 from app.providers.base import ChatDispatchRequest, ChatDispatchResult, ProviderCapabilities
 
 
 class ForgeGateBaselineAdapter:
     provider_name = "forgegate_baseline"
-    capabilities = ProviderCapabilities(streaming=False, tool_calling=False, vision=False)
+    capabilities = ProviderCapabilities(streaming=False, tool_calling=False, vision=False, external=False)
+
+    def is_ready(self) -> bool:
+        return True
 
     def create_chat_completion(self, request: ChatDispatchRequest) -> ChatDispatchResult:
         last_user_text = ""
