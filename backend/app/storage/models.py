@@ -1,0 +1,1 @@
+"""Storage model registry placeholder."""

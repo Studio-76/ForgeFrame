@@ -1,0 +1,17 @@
+"""Model registry domain models for ForgeGate runtime."""
+
+from pydantic import BaseModel
+
+
+class RuntimeModel(BaseModel):
+    id: str
+    provider: str
+    owned_by: str
+    display_name: str
+    category: str = "general"
+    active: bool = True
+
+
+class ModelsListResponse(BaseModel):
+    object: str = "list"
+    data: list[RuntimeModel]
