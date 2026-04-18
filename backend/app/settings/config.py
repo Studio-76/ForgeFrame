@@ -52,6 +52,7 @@ class Settings(BaseSettings):
     harness_runs_path: str = "backend/.forgegate/harness_runs.json"
     harness_storage_backend: Literal["postgresql", "file"] = "postgresql"
     harness_postgres_url: str = "postgresql+psycopg://forgegate:forgegate@localhost:5432/forgegate"
+    frontend_dist_path: str = "frontend/dist"
 
     model_catalog: tuple[tuple[str, str, str], ...] = Field(
         default=(
