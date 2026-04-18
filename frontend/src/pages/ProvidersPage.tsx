@@ -1,13 +1,14 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 
-import { fetchRuntimeModels, type RuntimeModelRecord } from "../api/runtime";
+import { fetchProviderControlPlane, type ProviderControlItem } from "../api/admin";
 
 type LoadState = "idle" | "loading" | "success" | "error";
 
 export function ProvidersPage() {
   const [state, setState] = useState<LoadState>("idle");
   const [error, setError] = useState<string | null>(null);
-  const [models, setModels] = useState<RuntimeModelRecord[]>([]);
+  const [providers, setProviders] = useState<ProviderControlItem[]>([]);
+  const [syncNote, setSyncNote] = useState<string>("");
 
   useEffect(() => {
     let mounted = true;
@@ -15,11 +16,12 @@ export function ProvidersPage() {
     const load = async () => {
       setState("loading");
       try {
-        const payload = await fetchRuntimeModels();
+        const payload = await fetchProviderControlPlane();
         if (!mounted) {
           return;
         }
-        setModels(payload.data);
+        setProviders(payload.providers);
+        setSyncNote(payload.notes.sync_action);
         setState("success");
       } catch (err) {
         if (!mounted) {
@@ -37,22 +39,12 @@ export function ProvidersPage() {
     };
   }, []);
 
-  const byProvider = useMemo(() => {
-    return models.reduce<Record<string, RuntimeModelRecord[]>>((acc, model) => {
-      if (!acc[model.provider]) {
-        acc[model.provider] = [];
-      }
-      acc[model.provider].push(model);
-      return acc;
-    }, {});
-  }, [models]);
-
   return (
     <section>
       <h2>Providers Control Plane</h2>
       <p>
-        Diese Ansicht ist die erste UI-first Grundlage für Provider-Readiness, Modellquellen (statisch/discovered)
-        und Capability-Status.
+        Diese Ansicht nutzt die Admin-Control-Plane-API und zeigt Provider-Readiness, Capabilities sowie
+        Modellquellen (static/discovered).
       </p>
 
       <p>
@@ -60,15 +52,19 @@ export function ProvidersPage() {
       </p>
       {error && <p style={{ color: "crimson" }}>{error}</p>}
 
-      {Object.entries(byProvider).map(([providerName, providerModels]) => (
-        <article key={providerName} style={{ border: "1px solid #ccc", padding: "0.75rem", marginBottom: "0.75rem" }}>
-          <h3>{providerName}</h3>
+      {providers.map((provider) => (
+        <article key={provider.provider} style={{ border: "1px solid #ccc", padding: "0.75rem", marginBottom: "0.75rem" }}>
+          <h3>{provider.provider}</h3>
+          <p>
+            ready={String(provider.ready)} · oauth_required={String(provider.oauth_required)} · discovery_supported=
+            {String(provider.discovery_supported)} · model_count={provider.model_count}
+          </p>
+          {!provider.ready && provider.readiness_reason ? <p>reason: {provider.readiness_reason}</p> : null}
           <ul>
-            {providerModels.map((model) => (
+            {provider.models.map((model) => (
               <li key={model.id}>
-                <strong>{model.id}</strong> · ready={String(model.ready)} · source={model.source} · streaming=
-                {String(model.capabilities.streaming)} · discovery={String(model.discovery_supported)}
-                {!model.ready && model.readiness_reason ? ` · reason: ${model.readiness_reason}` : ""}
+                {model.id} · source={model.source} · discovery_status={model.discovery_status} · active=
+                {String(model.active)}
               </li>
             ))}
           </ul>
@@ -76,13 +72,8 @@ export function ProvidersPage() {
       ))}
 
       <div style={{ borderTop: "1px dashed #999", paddingTop: "0.75rem" }}>
-        <h3>Geplante UI-Aktionen (Vorstufe)</h3>
-        <ul>
-          <li>Provider aktivieren/deaktivieren</li>
-          <li>OAuth-/Key-Status prüfen</li>
-          <li>Discovery-Sync manuell auslösen</li>
-          <li>Model-Visibility/Default-Modell pflegen</li>
-        </ul>
+        <h3>Discovery-/Sync-Vorstufe</h3>
+        <p>{syncNote}</p>
       </div>
     </section>
   );

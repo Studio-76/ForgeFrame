@@ -94,6 +94,6 @@ def test_chat_endpoint_openai_not_configured_error(monkeypatch: pytest.MonkeyPat
     )
 
     assert response.status_code == 503
-    detail = response.json()["detail"]
-    assert detail["type"] == "provider_not_ready"
-    assert detail["provider"] == "openai_api"
+    error = response.json()["error"]
+    assert error["type"] == "provider_not_ready"
+    assert error["provider"] == "openai_api"

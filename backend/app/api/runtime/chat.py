@@ -2,8 +2,8 @@
 
 from collections.abc import Iterator
 
-from fastapi import APIRouter, Depends, HTTPException, status
-from fastapi.responses import StreamingResponse
+from fastapi import APIRouter, Depends, status
+from fastapi.responses import JSONResponse, StreamingResponse
 
 from app.api.runtime.dependencies import get_dispatch_service, get_model_registry, get_settings
 from app.api.runtime.schemas import ChatCompletionsRequest
@@ -15,9 +15,9 @@ from app.providers import (
     ProviderBadRequestError,
     ProviderConfigurationError,
     ProviderError,
-    ProviderStreamEvent,
     ProviderNotImplementedError,
     ProviderNotReadyError,
+    ProviderStreamEvent,
     ProviderStreamInterruptedError,
     ProviderUnsupportedFeatureError,
     ProviderUpstreamError,
@@ -27,51 +27,73 @@ from app.settings.config import Settings
 router = APIRouter(tags=["runtime-chat"])
 
 
-def _provider_exception_to_http(exc: Exception) -> HTTPException:
+def _error_response(*, status_code: int, error_type: str, message: str, provider: str | None = None, **extra: object) -> JSONResponse:
+    error_payload: dict[str, object] = {
+        "type": error_type,
+        "message": message,
+    }
+    if provider:
+        error_payload["provider"] = provider
+    error_payload.update(extra)
+    return JSONResponse(status_code=status_code, content={"error": error_payload})
+
+
+def _provider_exception_to_http(exc: Exception) -> JSONResponse:
     if isinstance(exc, ProviderNotImplementedError):
-        return HTTPException(
+        return _error_response(
             status_code=status.HTTP_501_NOT_IMPLEMENTED,
-            detail={
-                "type": exc.error_type,
-                "provider": exc.provider,
-                "message": str(exc),
-                "phase": "phase-5 streaming/codex",
-            },
+            error_type=exc.error_type,
+            provider=exc.provider,
+            message=str(exc),
+            phase="phase-5 streaming/codex",
         )
     if isinstance(exc, ProviderUnsupportedFeatureError):
-        return HTTPException(
+        return _error_response(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail={"type": exc.error_type, "provider": exc.provider, "message": str(exc)},
+            error_type=exc.error_type,
+            provider=exc.provider,
+            message=str(exc),
         )
     if isinstance(exc, ProviderNotReadyError):
-        return HTTPException(
+        return _error_response(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail={"type": exc.error_type, "provider": exc.provider, "message": str(exc)},
+            error_type=exc.error_type,
+            provider=exc.provider,
+            message=str(exc),
         )
     if isinstance(exc, ProviderConfigurationError):
-        return HTTPException(
+        return _error_response(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail={"type": exc.error_type, "provider": exc.provider, "message": str(exc)},
+            error_type=exc.error_type,
+            provider=exc.provider,
+            message=str(exc),
         )
     if isinstance(exc, ProviderAuthenticationError):
-        return HTTPException(
+        return _error_response(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail={"type": exc.error_type, "provider": exc.provider, "message": str(exc)},
+            error_type=exc.error_type,
+            provider=exc.provider,
+            message=str(exc),
         )
     if isinstance(exc, ProviderBadRequestError):
-        return HTTPException(
+        return _error_response(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail={"type": exc.error_type, "provider": exc.provider, "message": str(exc)},
+            error_type=exc.error_type,
+            provider=exc.provider,
+            message=str(exc),
         )
     if isinstance(exc, (ProviderUpstreamError, ProviderError)):
-        return HTTPException(
+        return _error_response(
             status_code=status.HTTP_502_BAD_GATEWAY,
-            detail={"type": exc.error_type, "provider": exc.provider, "message": str(exc)},
+            error_type=exc.error_type,
+            provider=exc.provider,
+            message=str(exc),
         )
     if isinstance(exc, ValueError):
-        return HTTPException(
+        return _error_response(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail={"type": "routing_error", "message": str(exc)},
+            error_type="routing_error",
+            message=str(exc),
         )
     raise exc
 
@@ -85,13 +107,11 @@ def create_chat_completion(
 ) -> object:
     requested_model = payload.model
     if requested_model and not registry.has_model(requested_model) and not settings.runtime_allow_unknown_models:
-        raise HTTPException(
+        return _error_response(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail={
-                "type": "model_not_found",
-                "message": f"Requested model '{requested_model}' is not available.",
-                "available_models": [m.id for m in registry.list_active_models()],
-            },
+            error_type="model_not_found",
+            message=f"Requested model '{requested_model}' is not available.",
+            available_models=[m.id for m in registry.list_active_models()],
         )
 
     try:
@@ -125,7 +145,7 @@ def create_chat_completion(
             stream=False,
         )
     except Exception as exc:  # intentionally centralized mapping
-        raise _provider_exception_to_http(exc) from exc
+        return _provider_exception_to_http(exc)
 
     return {
         "id": "chatcmpl-forgegate",

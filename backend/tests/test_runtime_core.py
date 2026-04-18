@@ -77,9 +77,9 @@ def test_chat_endpoint_returns_not_ready_for_openai_codex() -> None:
         },
     )
     assert response.status_code == 503
-    detail = response.json()["detail"]
-    assert detail["type"] == "provider_not_ready"
-    assert detail["provider"] == "openai_codex"
+    error = response.json()["error"]
+    assert error["type"] == "provider_not_ready"
+    assert error["provider"] == "openai_codex"
 
 
 def test_chat_endpoint_rejects_unknown_model() -> None:
@@ -91,5 +91,14 @@ def test_chat_endpoint_rejects_unknown_model() -> None:
         },
     )
     assert response.status_code == 404
-    detail = response.json()["detail"]
-    assert detail["type"] == "model_not_found"
+    error = response.json()["error"]
+    assert error["type"] == "model_not_found"
+
+
+def test_admin_usage_summary_endpoint_available() -> None:
+    response = client.get("/admin/usage/")
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["status"] == "ok"
+    assert payload["object"] == "usage_summary"
+    assert "pricing_snapshot" in payload

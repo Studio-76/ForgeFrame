@@ -65,3 +65,10 @@ class ModelRegistry:
         if not active:
             raise RuntimeError("No active models configured in ForgeGate registry.")
         return active[0]
+
+    def discovery_summary(self) -> dict[str, int]:
+        active_models = self.list_active_models()
+        return {
+            "static": len([model for model in active_models if model.source == "static"]),
+            "discovered": len([model for model in active_models if model.source == "discovered"]),
+        }

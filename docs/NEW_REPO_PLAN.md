@@ -8,7 +8,7 @@ ForgeGate soll als Smart AI Gateway eine stabile, erweiterbare und provider-agno
 - Keine vorgezogene Core-Implementierung.
 - Keine halbfertigen Endpunkte als Pseudo-MVP.
 
-## Was aus NadirClaw übernommen werden soll
+## Was aus der Referenzsemantik übernommen werden soll
 - Semantik, Randfälle, Härtungswissen.
 - Test- und Verhaltenshinweise für OAuth, Streaming, Tool Calling und Fallback.
 

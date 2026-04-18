@@ -1,20 +1,13 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 
-import { fetchRuntimeModels, type RuntimeModelRecord } from "../api/runtime";
+import { fetchUsageSummary, type UsageSummaryResponse } from "../api/admin";
 
 type LoadState = "idle" | "loading" | "success" | "error";
-
-type UsageFoundation = {
-  readyModelCount: number;
-  streamCapableModels: number;
-  oauthBackedModels: number;
-  discoveredModelCount: number;
-};
 
 export function UsagePage() {
   const [state, setState] = useState<LoadState>("idle");
   const [error, setError] = useState<string | null>(null);
-  const [models, setModels] = useState<RuntimeModelRecord[]>([]);
+  const [summary, setSummary] = useState<UsageSummaryResponse | null>(null);
 
   useEffect(() => {
     let mounted = true;
@@ -22,11 +15,11 @@ export function UsagePage() {
     const load = async () => {
       setState("loading");
       try {
-        const payload = await fetchRuntimeModels();
+        const payload = await fetchUsageSummary();
         if (!mounted) {
           return;
         }
-        setModels(payload.data);
+        setSummary(payload);
         setState("success");
       } catch (err) {
         if (!mounted) {
@@ -44,21 +37,11 @@ export function UsagePage() {
     };
   }, []);
 
-  const summary = useMemo<UsageFoundation>(() => {
-    return {
-      readyModelCount: models.filter((m) => m.ready).length,
-      streamCapableModels: models.filter((m) => m.capabilities.streaming).length,
-      oauthBackedModels: models.filter((m) => m.oauth_required).length,
-      discoveredModelCount: models.filter((m) => m.source === "discovered").length,
-    };
-  }, [models]);
-
   return (
     <section>
       <h2>Usage & Cost Foundations</h2>
       <p>
-        Diese Seite ist eine frühe Control-Plane-Vorstufe: sie zeigt, welche Modellbasis aktuell für spätere
-        Usage-, Token- und Kostenanalyse verfügbar ist.
+        Diese Seite ist eine frühe Control-Plane-Vorstufe mit Backend-Anbindung an die Admin-Usage-Summary.
       </p>
 
       <p>
@@ -66,19 +49,31 @@ export function UsagePage() {
       </p>
       {error && <p style={{ color: "crimson" }}>{error}</p>}
 
-      <ul>
-        <li>Ready models: {summary.readyModelCount}</li>
-        <li>Stream-capable models: {summary.streamCapableModels}</li>
-        <li>OAuth-sensitive models: {summary.oauthBackedModels}</li>
-        <li>Discovered models: {summary.discoveredModelCount}</li>
-      </ul>
+      {summary ? (
+        <>
+          <ul>
+            <li>Active models: {summary.metrics.active_model_count}</li>
+            <li>Ready models: {summary.metrics.ready_model_count}</li>
+            <li>Stream-capable models: {summary.metrics.stream_capable_model_count}</li>
+          </ul>
 
-      <h3>Kostenachsen (Produktregel)</h3>
-      <ul>
-        <li>Actual cost: tatsächlich entstandene API-Kosten</li>
-        <li>Hypothetical cost: hypothetische Kosten bei alternativem API-Betrieb</li>
-        <li>Avoided cost: vermiedene Kosten bei OAuth-/Subscription-Nutzung</li>
-      </ul>
+          <h3>Kostenachsen (Produktregel)</h3>
+          <ul>
+            <li>Actual: {summary.cost_axes.actual}</li>
+            <li>Hypothetical: {summary.cost_axes.hypothetical}</li>
+            <li>Avoided: {summary.cost_axes.avoided}</li>
+          </ul>
+
+          <h3>Pricing-Snapshot</h3>
+          <ul>
+            {Object.entries(summary.pricing_snapshot).map(([key, value]) => (
+              <li key={key}>
+                {key}: {value}
+              </li>
+            ))}
+          </ul>
+        </>
+      ) : null}
     </section>
   );
 }
