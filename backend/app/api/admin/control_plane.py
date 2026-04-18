@@ -268,6 +268,14 @@ class ControlPlaneService:
                     self._record_health_check_cost(provider.provider, model.id, check_type)
 
                 self._health_records[key] = status_record
+                self._analytics.record_health_status(
+                    provider=status_record.provider,
+                    model=status_record.model,
+                    check_type=status_record.check_type,
+                    status=status_record.status,
+                    readiness_reason=status_record.readiness_reason,
+                    last_error=status_record.last_error,
+                )
 
         return {
             "status": "ok",

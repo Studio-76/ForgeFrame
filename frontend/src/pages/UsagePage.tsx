@@ -8,6 +8,7 @@ export function UsagePage() {
   const [state, setState] = useState<LoadState>("idle");
   const [error, setError] = useState<string | null>(null);
   const [summary, setSummary] = useState<UsageSummaryResponse | null>(null);
+  const [window, setWindow] = useState<"1h" | "24h" | "7d" | "all">("24h");
 
   useEffect(() => {
     let mounted = true;
@@ -15,7 +16,7 @@ export function UsagePage() {
     const load = async () => {
       setState("loading");
       try {
-        const payload = await fetchUsageSummary();
+        const payload = await fetchUsageSummary(window);
         if (!mounted) {
           return;
         }
@@ -35,7 +36,7 @@ export function UsagePage() {
     return () => {
       mounted = false;
     };
-  }, []);
+  }, [window]);
 
   return (
     <section>
@@ -45,6 +46,17 @@ export function UsagePage() {
       <p>
         <strong>Status:</strong> {state}
       </p>
+      <div className="fg-row" style={{ marginBottom: "0.75rem" }}>
+        <label>
+          Window:
+          <select value={window} onChange={(event) => setWindow(event.target.value as "1h" | "24h" | "7d" | "all")}>
+            <option value="1h">1h</option>
+            <option value="24h">24h</option>
+            <option value="7d">7d</option>
+            <option value="all">all</option>
+          </select>
+        </label>
+      </div>
       {error && <p className="fg-danger">{error}</p>}
 
       {summary ? (
@@ -56,6 +68,19 @@ export function UsagePage() {
               <li>Stream-capable models: {summary.metrics.stream_capable_model_count}</li>
               <li>Recorded requests: {summary.metrics.recorded_request_count}</li>
               <li>Recorded errors: {summary.metrics.recorded_error_count}</li>
+              <li>Recorded health events: {summary.metrics.recorded_health_event_count}</li>
+            </ul>
+          </div>
+
+          <div className="fg-card" style={{ marginBottom: "0.75rem" }}>
+            <h3>Alerts</h3>
+            <ul>
+              {summary.alerts.length === 0 ? <li>no active alert indicators</li> : null}
+              {summary.alerts.map((item, index) => (
+                <li key={`${String(item.type)}-${index}`}>
+                  {String(item.severity)} · {String(item.type)} · {String(item.message)} · value={String(item.value)}
+                </li>
+              ))}
             </ul>
           </div>
 
@@ -98,6 +123,18 @@ export function UsagePage() {
           </div>
 
           <div className="fg-card" style={{ marginBottom: "0.75rem" }}>
+            <h3>By client</h3>
+            <ul>
+              {summary.aggregations.by_client.map((item) => (
+                <li key={String(item.client_id)}>
+                  {String(item.client_id)} · requests={String(item.requests)} · tokens={String(item.tokens)} · actual=
+                  {String(item.actual_cost)}
+                </li>
+              ))}
+            </ul>
+          </div>
+
+          <div className="fg-card" style={{ marginBottom: "0.75rem" }}>
             <h3>Errors by provider/model/client</h3>
             <ul>
               {summary.aggregations.errors_by_provider.map((item) => (
@@ -111,8 +148,32 @@ export function UsagePage() {
                 </li>
               ))}
               {summary.aggregations.errors_by_client.map((item) => (
-                <li key={`c-${String(item.client)}`}>
-                  client {String(item.client)}: {String(item.errors)}
+                <li key={`c-${String(item.client_id)}`}>
+                  client {String(item.client_id)}: {String(item.errors)}
+                </li>
+              ))}
+            </ul>
+          </div>
+
+          <div className="fg-card" style={{ marginBottom: "0.75rem" }}>
+            <h3>Timeline (24h buckets)</h3>
+            <ul>
+              {summary.timeline_24h.slice(-8).map((item) => (
+                <li key={String(item.bucket_start)}>
+                  {String(item.bucket_start)} · req={String(item.requests)} · err={String(item.errors)} · rate=
+                  {Number(item.error_rate).toFixed(2)} · actual={String(item.actual_cost)}
+                </li>
+              ))}
+            </ul>
+          </div>
+
+          <div className="fg-card" style={{ marginBottom: "0.75rem" }}>
+            <h3>Latest health states</h3>
+            <ul>
+              {summary.latest_health.map((item) => (
+                <li key={`${String(item.provider)}:${String(item.model)}`}>
+                  {String(item.provider)} / {String(item.model)} · status={String(item.status)} · check={String(item.check_type)} ·
+                  at={String(item.checked_at)}
                 </li>
               ))}
             </ul>

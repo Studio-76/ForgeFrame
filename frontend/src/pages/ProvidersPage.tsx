@@ -152,6 +152,7 @@ export function ProvidersPage() {
             {provider.model_count}
           </p>
           <p>error_count={providerErrors[provider.provider] ?? 0}</p>
+          {(providerErrors[provider.provider] ?? 0) >= 3 ? <p className="fg-danger">needs attention: elevated provider errors</p> : null}
           {!provider.ready && provider.readiness_reason ? <p>reason: {provider.readiness_reason}</p> : null}
 
           <div className="fg-row" style={{ marginBottom: "0.5rem" }}>

@@ -23,7 +23,7 @@ from app.providers import (
     ProviderUpstreamError,
 )
 from app.settings.config import Settings
-from app.usage.analytics import get_usage_analytics_store
+from app.usage.analytics import ClientIdentity, get_usage_analytics_store
 
 router = APIRouter(tags=["runtime-chat"])
 
@@ -59,12 +59,17 @@ def _provider_exception_to_http(exc: Exception) -> tuple[int, str, str | None, s
     raise exc
 
 
-def _resolve_client_identifier(request: Request) -> str:
-    return (
-        request.headers.get("x-forgegate-client")
-        or request.headers.get("x-api-key")
-        or request.headers.get("user-agent")
-        or "unknown_client"
+def _resolve_client_identity(request: Request, payload: ChatCompletionsRequest) -> ClientIdentity:
+    return ClientIdentity(
+        client_id=(
+            payload.client.get("client_id")
+            or request.headers.get("x-forgegate-client")
+            or request.headers.get("x-api-key")
+            or request.headers.get("user-agent")
+            or "unknown_client"
+        ),
+        consumer=(payload.client.get("consumer") or request.headers.get("x-forgegate-consumer") or "unknown_consumer"),
+        integration=(payload.client.get("integration") or request.headers.get("x-forgegate-integration") or "unknown_integration"),
     )
 
 
@@ -77,13 +82,13 @@ def create_chat_completion(
     settings: Settings = Depends(get_settings),
 ) -> object:
     analytics = get_usage_analytics_store()
-    client_id = _resolve_client_identifier(request)
+    client_identity = _resolve_client_identity(request, payload)
     requested_model = payload.model
     if requested_model and not registry.has_model(requested_model) and not settings.runtime_allow_unknown_models:
         analytics.record_runtime_error(
             provider=None,
             model=requested_model,
-            client=client_id,
+            client=client_identity,
             route="/v1/chat/completions",
             stream_mode="stream" if payload.stream else "non_stream",
             error_type="model_not_found",
@@ -108,7 +113,7 @@ def create_chat_completion(
                     def _event_iterator() -> Iterator[ProviderStreamEvent]:
                         for event in events:
                             if event.event == "done":
-                                analytics.record_stream_done_event(provider=provider, model=model, event=event)
+                                analytics.record_stream_done_event(provider=provider, model=model, event=event, client=client_identity)
                             yield event
 
                     yield from provider_events_to_sse(_event_iterator(), model=model, provider=provider)
@@ -116,7 +121,7 @@ def create_chat_completion(
                     analytics.record_runtime_error(
                         provider=provider,
                         model=model,
-                        client=client_id,
+                        client=client_identity,
                         route="/v1/chat/completions",
                         stream_mode="stream",
                         error_type=exc.error_type,
@@ -146,7 +151,7 @@ def create_chat_completion(
         analytics.record_runtime_error(
             provider=provider,
             model=requested_model,
-            client=client_id,
+            client=client_identity,
             route="/v1/chat/completions",
             stream_mode="stream" if payload.stream else "non_stream",
             error_type=error_type,
@@ -160,7 +165,7 @@ def create_chat_completion(
             **extra,
         )
 
-    analytics.record_non_stream_result(result)
+    analytics.record_non_stream_result(result, client=client_identity)
 
     return {
         "id": "chatcmpl-forgegate",

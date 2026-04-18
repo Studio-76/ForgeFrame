@@ -75,6 +75,12 @@ ForgeGate wird als modularer Neuaufbau erstellt: klare Schichten, klare Verantwo
   - Fehler pro API-Client/Consumer
   - Fehler nach Traffic-Typ (runtime vs health_check)
 
+## Observability-Basis (Phase 7)
+- Usage-/Error-/Health-Events werden persistent als Event-Log gespeichert.
+- Admin-Analytics liefert zeitfensterbasierte Aggregationen (`1h`, `24h`, `7d`, `all`).
+- Zusätzlich gibt es eine 24h-Timeline (Buckets) für Requests, Errors und Kosten.
+- Alert-Indikatoren markieren auffällige Zustände (Fehlerrate, Health-Failures, Health-Kostendruck).
+
 
 ## UI-Theming (Control Plane)
 - Heller und dunkler Modus sind vorgesehen.

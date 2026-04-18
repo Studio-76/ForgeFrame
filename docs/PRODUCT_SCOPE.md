@@ -41,6 +41,8 @@ ForgeGate ist ein Smart AI Gateway, das Runtime-Ausführung, Provider-Anbindung 
   - tatsächlich entstandene Kosten (actual)
   - hypothetische Kosten und vermiedene Kosten (hypothetical/avoided)
 - Zusätzlich Health-Check-Kosten explizit vom Runtime-Traffic trennen und separat auswerten.
+- Persistente Event-Basis für Usage/Errors/Health als operative Grundlage.
+- Client-Achse (Client/Consumer/Integration) als eigene Auswertungsperspektive.
 
 ## Feature-Phasen
 
