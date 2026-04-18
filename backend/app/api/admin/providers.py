@@ -31,7 +31,7 @@ def list_provider_control_plane(service: ControlPlaneService = Depends(get_contr
             "sync_action": "Model sync can be triggered via POST /admin/providers/sync.",
             "health_action": "Model health checks can be configured and triggered via /admin/providers/health endpoints.",
             "harness_actions": ["preview", "dry_run", "verify", "probe", "snapshot"],
-            "persistence": "json_file_backed_harness_profiles",
+            "persistence": "repository_backed_harness_profiles",
         },
     }
 
@@ -183,5 +183,5 @@ def harness_snapshot(service: ControlPlaneService = Depends(get_control_plane_se
 
 
 @router.get("/harness/runs")
-def harness_runs(provider_key: str | None = None, mode: str | None = None, status: str | None = None, service: ControlPlaneService = Depends(get_control_plane_service)) -> object:
-    return service.harness_runs(provider_key, mode, status)
+def harness_runs(provider_key: str | None = None, mode: str | None = None, status: str | None = None, client_id: str | None = None, limit: int = 200, service: ControlPlaneService = Depends(get_control_plane_service)) -> object:
+    return service.harness_runs(provider_key, mode, status, client_id, limit)

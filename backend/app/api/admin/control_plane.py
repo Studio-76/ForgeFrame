@@ -287,13 +287,9 @@ class ControlPlaneService:
     def harness_snapshot(self) -> dict[str, object]:
         return {"status": "ok", "snapshot": self._harness.export_snapshot()}
 
-    def harness_runs(self, provider_key: str | None = None, mode: str | None = None, status: str | None = None) -> dict[str, object]:
-        runs = self._harness.list_runs(provider_key)
-        if mode:
-            runs = [item for item in runs if item.mode == mode]
-        if status:
-            runs = [item for item in runs if item.status == status]
-        return {"status": "ok", "runs": [item.model_dump() for item in runs], "summary": self._harness.runs_summary()}
+    def harness_runs(self, provider_key: str | None = None, mode: str | None = None, status: str | None = None, client_id: str | None = None, limit: int = 200) -> dict[str, object]:
+        runs = self._harness.list_runs(provider_key, mode=mode, status=status, client_id=client_id, limit=limit)
+        return {"status": "ok", "runs": [item.model_dump() for item in runs], "summary": self._harness.runs_summary(provider_key)}
 
     def get_health_config(self) -> HealthConfig:
         return self._health_config
@@ -347,7 +343,7 @@ class ControlPlaneService:
             health_by_provider.setdefault(record.provider, {})[record.model] = record.status
         snapshot: list[dict[str, object]] = []
         harness_profiles = self._harness.list_profiles()
-        harness_runs = self._harness.list_runs()
+        harness_runs = self._harness.list_runs(limit=500)
         for provider in self.list_providers():
             runtime_status = self._providers.get_provider_status(provider.provider) if provider.provider in {m.provider for m in self._registry.list_active_models()} else None
             snapshot.append(
@@ -369,6 +365,7 @@ class ControlPlaneService:
                     "model_count": len(provider.managed_models),
                     "models": [{**model.model_dump(), "health_status": health_by_provider.get(provider.provider, {}).get(model.id, "unknown")} for model in provider.managed_models],
                     "harness_profile_count": len([p for p in harness_profiles if p.enabled]) if provider.provider == "generic_harness" else 0,
+                    "harness_needs_attention_count": len([p for p in harness_profiles if p.needs_attention]) if provider.provider == "generic_harness" else 0,
                     "harness_run_count": len(harness_runs) if provider.provider == "generic_harness" else 0,
                 }
             )

@@ -79,8 +79,10 @@ class HarnessModelInventoryItem(BaseModel):
     model: str
     source: Literal["static", "manual", "discovered", "templated"] = "manual"
     active: bool = True
-    status: Literal["ready", "warning", "error"] = "ready"
+    status: Literal["ready", "warning", "error", "stale"] = "ready"
     readiness_reason: str | None = None
+    discovered_at: str | None = None
+    synced_at: str | None = None
 
 
 class HarnessProfileRecord(HarnessProviderProfile):
@@ -95,10 +97,19 @@ class HarnessProfileRecord(HarnessProviderProfile):
     last_sync_status: str = "never"
     last_sync_error: str | None = None
     last_error: str | None = None
+    last_used_at: str | None = None
+    last_used_model: str | None = None
     verify_success_count: int = 0
     verify_failure_count: int = 0
     probe_success_count: int = 0
     probe_failure_count: int = 0
+    request_count: int = 0
+    stream_request_count: int = 0
+    total_tokens: int = 0
+    total_actual_cost: float = 0.0
+    total_hypothetical_cost: float = 0.0
+    total_avoided_cost: float = 0.0
+    needs_attention: bool = False
     model_inventory: list[HarnessModelInventoryItem] = Field(default_factory=list)
 
 
@@ -128,14 +139,19 @@ class HarnessVerificationResult(BaseModel):
 
 
 class HarnessVerificationRun(BaseModel):
+    run_id: str | None = None
     provider_key: str
     integration_class: IntegrationClass
-    mode: Literal["verify", "dry_run", "probe", "preview", "sync"]
+    mode: Literal["verify", "dry_run", "probe", "preview", "sync", "runtime_non_stream", "runtime_stream"]
     status: Literal["ok", "warning", "failed"] = "ok"
     success: bool
     steps: list[dict[str, Any]]
     error: str | None = None
     executed_at: str
+    duration_ms: int | None = None
+    client_id: str | None = None
+    consumer: str | None = None
+    integration: str | None = None
 
 
 class HarnessTemplate(BaseModel):

@@ -25,6 +25,7 @@ export type ProviderControlItem = {
   last_sync_error?: string | null;
   harness_profile_count?: number;
   harness_run_count?: number;
+  harness_needs_attention_count?: number;
 };
 
 export type HealthConfig = {
@@ -100,6 +101,12 @@ export type HarnessProfile = {
   last_sync_at?: string | null;
   last_sync_status?: string;
   model_inventory?: Array<Record<string, string | boolean | null>>;
+  last_used_at?: string | null;
+  last_used_model?: string | null;
+  request_count?: number;
+  stream_request_count?: number;
+  total_tokens?: number;
+  needs_attention?: boolean;
 };
 
 async function fetchJson<T>(path: string, init?: RequestInit): Promise<T> {
@@ -242,11 +249,13 @@ export function fetchHarnessSnapshot() {
   return fetchJson<{ status: string; snapshot: Record<string, unknown> }>("/admin/providers/harness/snapshot");
 }
 
-export function fetchHarnessRuns(providerKey?: string, mode?: string, status?: string) {
+export function fetchHarnessRuns(providerKey?: string, mode?: string, status?: string, clientId?: string, limit = 50) {
   const params = new URLSearchParams();
   if (providerKey) params.set("provider_key", providerKey);
   if (mode) params.set("mode", mode);
   if (status) params.set("status", status);
+  if (clientId) params.set("client_id", clientId);
+  params.set("limit", String(limit));
   const suffix = params.size ? `?${params.toString()}` : "";
   return fetchJson<{ status: string; runs: Array<Record<string, unknown>>; summary: Record<string, number> }>(`/admin/providers/harness/runs${suffix}`);
 }

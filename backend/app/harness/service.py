@@ -22,7 +22,7 @@ from app.harness.models import (
 from app.harness.store import HarnessStore
 from app.harness.templates import BUILTIN_TEMPLATES
 from app.settings.config import get_settings
-from app.storage.harness_repository import FileHarnessRepository, HarnessStoragePaths, PostgresHarnessRepository
+from app.storage.harness_repository import FileHarnessRepository, HarnessRunQuery, HarnessStoragePaths, PostgresHarnessRepository
 
 
 class HarnessService:
@@ -70,18 +70,11 @@ class HarnessService:
     def get_profile(self, provider_key: str) -> HarnessProfileRecord:
         return self._store.get_profile(provider_key)
 
-    def list_runs(self, provider_key: str | None = None) -> list[HarnessVerificationRun]:
-        return self._store.list_runs(provider_key)
+    def list_runs(self, provider_key: str | None = None, *, mode: str | None = None, status: str | None = None, client_id: str | None = None, limit: int = 200) -> list[HarnessVerificationRun]:
+        return self._store.list_runs(HarnessRunQuery(provider_key=provider_key, mode=mode, status=status, client_id=client_id, limit=limit))
 
-    def runs_summary(self) -> dict[str, int]:
-        runs = self._store.list_runs()
-        return {
-            "total": len(runs),
-            "failed": len([r for r in runs if not r.success]),
-            "verify": len([r for r in runs if r.mode == "verify"]),
-            "probe": len([r for r in runs if r.mode == "probe"]),
-            "sync": len([r for r in runs if r.mode == "sync"]),
-        }
+    def runs_summary(self, provider_key: str | None = None) -> dict[str, int]:
+        return self._store.runs_summary(provider_key)
 
     def build_request_preview(self, payload: HarnessPreviewRequest) -> dict[str, Any]:
         profile = self.get_profile(payload.provider_key)
@@ -223,6 +216,8 @@ class HarnessService:
 
     def sync_profile_inventory(self, provider_key: str) -> HarnessProfileRecord:
         profile = self.get_profile(provider_key)
+        previous = {item.model: item for item in profile.model_inventory}
+        now = self._now_iso()
         inventory = [
             HarnessModelInventoryItem(
                 model=model,
@@ -230,16 +225,27 @@ class HarnessService:
                 active=profile.enabled,
                 status="ready" if profile.enabled else "warning",
                 readiness_reason=None if profile.enabled else "profile_disabled",
+                discovered_at=previous.get(model).discovered_at if model in previous else now,
+                synced_at=now,
             )
             for model in profile.models
         ]
         if not inventory:
-            inventory = [HarnessModelInventoryItem(model="no_models_configured", source="manual", active=False, status="warning", readiness_reason="profile_has_no_models")]
+            inventory = [HarnessModelInventoryItem(model="no_models_configured", source="manual", active=False, status="warning", readiness_reason="profile_has_no_models", discovered_at=now, synced_at=now)]
             updated = self._store.update_inventory(provider_key, inventory, status="warning", error="profile_has_no_models")
-            self._store.record_run(HarnessVerificationRun(provider_key=profile.provider_key, integration_class=profile.integration_class, mode="sync", status="warning", success=False, steps=[{"step": "sync_inventory", "status": "warning"}], error="profile_has_no_models", executed_at=self._now_iso()))
+            self._store.record_run(HarnessVerificationRun(provider_key=profile.provider_key, integration_class=profile.integration_class, mode="sync", status="warning", success=False, steps=[{"step": "discovery", "status": "warning", "reason": "profile_has_no_models"}, {"step": "inventory_diff", "status": "warning", "added": 1, "removed": len(previous), "stale": len(previous)}], error="profile_has_no_models", executed_at=self._now_iso()))
             return updated
+
+        current_ids = {item.model for item in inventory}
+        removed = sorted([model for model in previous if model not in current_ids])
+        added = sorted([item.model for item in inventory if item.model not in previous])
+        stale = []
+        if removed:
+            stale = removed
+            inventory.extend([HarnessModelInventoryItem(model=model, source=previous[model].source, active=False, status="stale", readiness_reason="removed_from_profile_models", discovered_at=previous[model].discovered_at, synced_at=now) for model in removed])
+
         updated = self._store.update_inventory(provider_key, inventory, status="ok")
-        self._store.record_run(HarnessVerificationRun(provider_key=profile.provider_key, integration_class=profile.integration_class, mode="sync", status="ok", success=True, steps=[{"step": "sync_inventory", "status": "ok", "models": len(inventory)}], executed_at=self._now_iso()))
+        self._store.record_run(HarnessVerificationRun(provider_key=profile.provider_key, integration_class=profile.integration_class, mode="sync", status="ok" if not stale else "warning", success=not bool(stale), steps=[{"step": "discovery", "status": "ok", "source": profile.capabilities.model_source}, {"step": "inventory_diff", "status": "ok" if not stale else "warning", "added": len(added), "removed": len(removed), "stale": len(stale)}], executed_at=self._now_iso()))
         return updated
 
     def export_snapshot(self) -> dict[str, Any]:
@@ -266,7 +272,10 @@ class HarnessService:
         if response.status_code >= 400:
             raise RuntimeError(f"Harness provider rejected request ({response.status_code}): {response.text[:300]}")
         payload = response.json()
-        return self._parse_non_stream_response(profile, payload, model=model)
+        parsed = self._parse_non_stream_response(profile, payload, model=model)
+        self._store.record_profile_usage(provider_key=provider_key, model=model, stream=False, total_tokens=int(parsed.get("total_tokens", 0)))
+        self._store.record_run(HarnessVerificationRun(provider_key=provider_key, integration_class=profile.integration_class, mode="runtime_non_stream", status="ok", success=True, steps=[{"step": "request_render", "status": "ok"}, {"step": "response_mapping", "status": "ok"}], executed_at=self._now_iso(), client_id="runtime", consumer="runtime", integration="generic_harness"))
+        return parsed
 
     def execute_stream(self, provider_key: str, *, model: str, messages: list[dict[str, Any]]):
         profile = self.get_profile(provider_key)
@@ -312,6 +321,8 @@ class HarnessService:
         if not saw_done and finish_reason == "stop" and not collected:
             raise RuntimeError("Stream closed without done marker or usable payload.")
 
+        self._store.record_profile_usage(provider_key=provider_key, model=model, stream=True, total_tokens=int(usage.get("total_tokens", 0)))
+        self._store.record_run(HarnessVerificationRun(provider_key=provider_key, integration_class=profile.integration_class, mode="runtime_stream", status="ok", success=True, steps=[{"step": "stream_readiness", "status": "ok"}, {"step": "stream_done", "status": "ok", "saw_done": saw_done}], executed_at=self._now_iso(), client_id="runtime", consumer="runtime", integration="generic_harness"))
         yield {"event": "done", "finish_reason": finish_reason, "usage": usage, "content": collected}
 
     def _parse_non_stream_response(self, profile: HarnessProfileRecord, payload: dict[str, Any], *, model: str) -> dict[str, Any]:
