@@ -40,7 +40,7 @@ export function UsagePage() {
   return (
     <section>
       <h2>Usage & Cost Analytics</h2>
-      <p className="fg-muted">Backend-gestützte Aggregationen nach Provider, Modell und Auth-Quelle.</p>
+      <p className="fg-muted">Backend-gestützte Aggregationen nach Provider, Modell, Auth-Quelle und Traffic-Typ.</p>
 
       <p>
         <strong>Status:</strong> {state}
@@ -55,6 +55,21 @@ export function UsagePage() {
               <li>Active models: {summary.metrics.active_model_count}</li>
               <li>Stream-capable models: {summary.metrics.stream_capable_model_count}</li>
               <li>Recorded requests: {summary.metrics.recorded_request_count}</li>
+            </ul>
+          </div>
+
+          <div className="fg-card" style={{ marginBottom: "0.75rem" }}>
+            <h3>Traffic split</h3>
+            <ul>
+              <li>
+                Runtime requests={String(summary.traffic_split.runtime.requests)} · tokens=
+                {String(summary.traffic_split.runtime.tokens)} · actual={String(summary.traffic_split.runtime.actual_cost)}
+              </li>
+              <li>
+                Health requests={String(summary.traffic_split.health_check.requests)} · tokens=
+                {String(summary.traffic_split.health_check.tokens)} · actual=
+                {String(summary.traffic_split.health_check.actual_cost)}
+              </li>
             </ul>
           </div>
 

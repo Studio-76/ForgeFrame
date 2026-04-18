@@ -30,6 +30,11 @@ def usage_summary(
             "by_provider": aggregates["by_provider"],
             "by_model": aggregates["by_model"],
             "by_auth": aggregates["by_auth"],
+            "by_traffic_type": aggregates["by_traffic_type"],
+        },
+        "traffic_split": {
+            "runtime": next((item for item in aggregates["by_traffic_type"] if item["traffic_type"] == "runtime"), {"traffic_type": "runtime", "requests": 0, "tokens": 0, "actual_cost": 0.0, "hypothetical_cost": 0.0, "avoided_cost": 0.0}),
+            "health_check": next((item for item in aggregates["by_traffic_type"] if item["traffic_type"] == "health_check"), {"traffic_type": "health_check", "requests": 0, "tokens": 0, "actual_cost": 0.0, "hypothetical_cost": 0.0, "avoided_cost": 0.0}),
         },
         "cost_axes": {
             "actual": "tracked for metered API providers",

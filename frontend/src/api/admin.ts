@@ -3,6 +3,7 @@ export type ManagedModel = {
   source: "static" | "discovered";
   discovery_status: string;
   active: boolean;
+  health_status: string;
 };
 
 export type ProviderControlItem = {
@@ -21,12 +22,22 @@ export type ProviderControlItem = {
   last_sync_status: string;
 };
 
+export type HealthConfig = {
+  provider_health_enabled: boolean;
+  model_health_enabled: boolean;
+  interval_seconds: number;
+  probe_mode: "provider" | "discovery" | "synthetic_probe";
+  selected_models: string[];
+};
+
 export type ProviderControlPlaneResponse = {
   status: "ok";
   object: "provider_control_plane";
   providers: ProviderControlItem[];
+  health_config: HealthConfig;
   notes: {
     sync_action: string;
+    health_action: string;
     ui_first: boolean;
     persistence: string;
   };
@@ -44,6 +55,11 @@ export type UsageSummaryResponse = {
     by_provider: Array<Record<string, string | number>>;
     by_model: Array<Record<string, string | number>>;
     by_auth: Array<Record<string, string | number>>;
+    by_traffic_type: Array<Record<string, string | number>>;
+  };
+  traffic_split: {
+    runtime: Record<string, string | number>;
+    health_check: Record<string, string | number>;
   };
   cost_axes: {
     actual: string;
@@ -113,6 +129,24 @@ export function syncProviders(provider?: string) {
   return fetchJson<{ status: string; synced_providers: string[]; sync_at: string; note: string }>("/admin/providers/sync", {
     method: "POST",
     body: JSON.stringify({ provider: provider ?? null }),
+  });
+}
+
+export function fetchHealthConfig() {
+  return fetchJson<{ status: string; config: HealthConfig }>("/admin/providers/health/config");
+}
+
+export function patchHealthConfig(payload: Partial<HealthConfig>) {
+  return fetchJson<{ status: string; config: HealthConfig }>("/admin/providers/health/config", {
+    method: "PATCH",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function runHealthChecks() {
+  return fetchJson<{ status: string; check_type: string; checked_at: string; health_records: Array<Record<string, string>> }>("/admin/providers/health/run", {
+    method: "POST",
+    body: JSON.stringify({}),
   });
 }
 
