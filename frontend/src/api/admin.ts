@@ -10,6 +10,8 @@ export type ProviderControlItem = {
   provider: string;
   label: string;
   enabled: boolean;
+  integration_class: string;
+  template_id: string | null;
   config: Record<string, string>;
   ready: boolean;
   readiness_reason: string | null;
@@ -64,6 +66,7 @@ export type UsageSummaryResponse = {
     errors_by_client: Array<Record<string, string | number>>;
     errors_by_traffic_type: Array<Record<string, string | number>>;
     errors_by_type: Array<Record<string, string | number>>;
+    errors_by_integration: Array<Record<string, string | number>>;
   };
   traffic_split: {
     runtime: Record<string, string | number>;
@@ -109,14 +112,14 @@ export function fetchProviderControlPlane(): Promise<ProviderControlPlaneRespons
   return fetchJson<ProviderControlPlaneResponse>("/admin/providers/");
 }
 
-export function createProvider(payload: { provider: string; label: string; config: Record<string, string> }) {
+export function createProvider(payload: { provider: string; label: string; integration_class?: string; template_id?: string | null; config: Record<string, string> }) {
   return fetchJson<{ status: string; provider: ProviderControlItem }>("/admin/providers/", {
     method: "POST",
     body: JSON.stringify(payload),
   });
 }
 
-export function updateProvider(provider: string, payload: { label?: string; config?: Record<string, string> }) {
+export function updateProvider(provider: string, payload: { label?: string; integration_class?: string; template_id?: string | null; config?: Record<string, string> }) {
   return fetchJson<{ status: string; provider: ProviderControlItem }>(`/admin/providers/${provider}`, {
     method: "PATCH",
     body: JSON.stringify(payload),
@@ -164,4 +167,47 @@ export function runHealthChecks() {
 
 export function fetchUsageSummary(window: "1h" | "24h" | "7d" | "all" = "24h"): Promise<UsageSummaryResponse> {
   return fetchJson<UsageSummaryResponse>(`/admin/usage/?window=${window}`);
+}
+
+export type HarnessTemplate = {
+  id: string;
+  label: string;
+  integration_class: string;
+  description: string;
+};
+
+export type HarnessProfile = {
+  provider_key: string;
+  label: string;
+  integration_class: "openai_compatible" | "templated_http" | "static_catalog";
+  endpoint_base_url: string;
+  auth_scheme: "none" | "bearer" | "api_key_header";
+  auth_value: string;
+  auth_header: string;
+  template_id: string | null;
+  enabled: boolean;
+  models: string[];
+  discovery_enabled: boolean;
+};
+
+export function fetchHarnessTemplates() {
+  return fetchJson<{ status: string; templates: HarnessTemplate[] }>("/admin/providers/harness/templates");
+}
+
+export function fetchHarnessProfiles() {
+  return fetchJson<{ status: string; profiles: HarnessProfile[] }>("/admin/providers/harness/profiles");
+}
+
+export function upsertHarnessProfile(providerKey: string, payload: Record<string, unknown>) {
+  return fetchJson<{ status: string; profile: Record<string, unknown> }>(`/admin/providers/harness/profiles/${providerKey}`, {
+    method: "PUT",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function verifyHarnessProfile(payload: { provider_key: string; model?: string; test_message?: string; include_preview?: boolean }) {
+  return fetchJson<{ status: string; verification: Record<string, unknown> }>("/admin/providers/harness/verify", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
 }

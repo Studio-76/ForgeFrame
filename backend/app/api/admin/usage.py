@@ -44,6 +44,7 @@ def usage_summary(
             "errors_by_client": aggregates["errors_by_client"],
             "errors_by_traffic_type": aggregates["errors_by_traffic_type"],
             "errors_by_type": aggregates["errors_by_type"],
+            "errors_by_integration": aggregates["errors_by_integration"],
         },
         "traffic_split": {
             "runtime": next((item for item in aggregates["by_traffic_type"] if item["traffic_type"] == "runtime"), {"traffic_type": "runtime", "requests": 0, "tokens": 0, "actual_cost": 0.0, "hypothetical_cost": 0.0, "avoided_cost": 0.0}),

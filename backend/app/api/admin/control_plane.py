@@ -1,4 +1,4 @@
-"""In-memory admin control-plane service for provider/model/health workflows."""
+"""In-memory admin control-plane service for provider/model/health/harness workflows."""
 
 from __future__ import annotations
 
@@ -9,10 +9,12 @@ from typing import Literal
 from pydantic import BaseModel, Field
 
 from app.core.model_registry import ModelRegistry
+from app.harness import HarnessProviderProfile, HarnessVerificationRequest
+from app.harness.service import HarnessService, get_harness_service
 from app.providers import ProviderRegistry
 from app.settings.config import Settings, get_settings
 from app.usage.analytics import UsageAnalyticsStore, get_usage_analytics_store
-from app.usage.models import CostBreakdown, TokenUsage
+from app.usage.models import TokenUsage
 from app.usage.service import UsageAccountingService
 
 
@@ -27,6 +29,8 @@ class ManagedProviderRecord(BaseModel):
     provider: str
     label: str
     enabled: bool
+    integration_class: str = "native"
+    template_id: str | None = None
     config: dict[str, str] = Field(default_factory=dict)
     last_sync_at: str | None = None
     last_sync_status: str = "never"
@@ -36,11 +40,15 @@ class ManagedProviderRecord(BaseModel):
 class ProviderCreateRequest(BaseModel):
     provider: str
     label: str
+    integration_class: str = "native"
+    template_id: str | None = None
     config: dict[str, str] = Field(default_factory=dict)
 
 
 class ProviderUpdateRequest(BaseModel):
     label: str | None = None
+    integration_class: str | None = None
+    template_id: str | None = None
     config: dict[str, str] | None = None
 
 
@@ -82,12 +90,14 @@ class ControlPlaneService:
         registry: ModelRegistry,
         providers: ProviderRegistry,
         analytics_store: UsageAnalyticsStore,
+        harness: HarnessService,
     ):
         self._settings = settings
         self._registry = registry
         self._providers = providers
         self._usage_accounting = UsageAccountingService(settings)
         self._analytics = analytics_store
+        self._harness = harness
         self._providers_state = self._bootstrap_provider_state()
         self._health_config = HealthConfig()
         self._health_records: dict[str, HealthStatusRecord] = {}
@@ -102,6 +112,7 @@ class ControlPlaneService:
                 provider=provider_name,
                 label=provider_name,
                 enabled=True,
+                integration_class="harness_generic" if provider_name == "generic_harness" else "native",
                 managed_models=[
                     ManagedModelRecord(
                         id=model.id,
@@ -133,6 +144,8 @@ class ControlPlaneService:
             provider=payload.provider,
             label=payload.label,
             enabled=False,
+            integration_class=payload.integration_class,
+            template_id=payload.template_id,
             config=payload.config,
             last_sync_status="created",
         )
@@ -143,6 +156,10 @@ class ControlPlaneService:
         provider = self.get_provider(provider_name)
         if payload.label is not None:
             provider.label = payload.label
+        if payload.integration_class is not None:
+            provider.integration_class = payload.integration_class
+        if payload.template_id is not None:
+            provider.template_id = payload.template_id
         if payload.config is not None:
             provider.config = payload.config
         return provider
@@ -151,6 +168,46 @@ class ControlPlaneService:
         provider = self.get_provider(provider_name)
         provider.enabled = enabled
         return provider
+
+    def list_harness_templates(self) -> list[dict[str, object]]:
+        return self._harness.list_templates()
+
+    def upsert_harness_profile(self, payload: HarnessProviderProfile) -> HarnessProviderProfile:
+        return self._harness.upsert_profile(payload)
+
+    def list_harness_profiles(self) -> list[HarnessProviderProfile]:
+        return self._harness.list_profiles()
+
+    def verify_harness_profile(self, payload: HarnessVerificationRequest) -> dict[str, object]:
+        try:
+            result = self._harness.verify_profile(payload)
+        except Exception as exc:
+            self._analytics.record_integration_error(
+                provider=payload.provider_key,
+                model=payload.model,
+                integration_class="harness",
+                template_id=None,
+                test_phase="verification",
+                error_type="verification_failed",
+                status_code=422,
+                client_id="control_plane",
+            )
+            raise
+
+        for step in result.steps:
+            if step["status"] in {"failed", "error"}:
+                self._analytics.record_integration_error(
+                    provider=payload.provider_key,
+                    model=payload.model,
+                    integration_class=result.integration_class,
+                    template_id=None,
+                    test_phase=str(step["step"]),
+                    error_type="harness_step_failed",
+                    status_code=422,
+                    client_id="control_plane",
+                )
+
+        return result.model_dump()
 
     def run_sync(self, target_provider: str | None = None) -> dict[str, object]:
         providers = [self.get_provider(target_provider)] if target_provider else self.list_providers()
@@ -163,14 +220,15 @@ class ControlPlaneService:
                     existing_ids = {model.id for model in provider.managed_models}
                     for model_id in discovered_models:
                         if model_id not in existing_ids:
-                            provider.managed_models.append(
-                                ManagedModelRecord(
-                                    id=model_id,
-                                    source="discovered",
-                                    discovery_status="synced",
-                                    active=True,
-                                )
-                            )
+                            provider.managed_models.append(ManagedModelRecord(id=model_id, source="discovered", discovery_status="synced", active=True))
+
+            if provider.provider == "generic_harness":
+                existing_ids = {model.id for model in provider.managed_models}
+                for profile in self._harness.list_profiles():
+                    for model_id in profile.models:
+                        if model_id not in existing_ids:
+                            provider.managed_models.append(ManagedModelRecord(id=model_id, source=profile.capabilities.model_source, discovery_status="synced", active=True))
+
             provider.last_sync_at = now
             provider.last_sync_status = "ok"
 
@@ -178,7 +236,7 @@ class ControlPlaneService:
             "status": "ok",
             "synced_providers": [provider.provider for provider in providers],
             "sync_at": now,
-            "note": "Control-plane sync uses configured/discovered metadata in this phase.",
+            "note": "Control-plane sync merges native discovery and harness model sources.",
         }
 
     def get_health_config(self) -> HealthConfig:
@@ -212,58 +270,24 @@ class ControlPlaneService:
                     continue
 
                 key = f"{provider.provider}:{model.id}"
-                status_record = HealthStatusRecord(
-                    provider=provider.provider,
-                    model=model.id,
-                    check_type=check_type,
-                    status="unknown",
-                    last_check_at=now,
-                )
+                status_record = HealthStatusRecord(provider=provider.provider, model=model.id, check_type=check_type, status="unknown", last_check_at=now)
 
                 if not self._health_config.model_health_enabled:
                     status_record.status = "discovery_only"
                 elif not provider.enabled:
                     status_record.status = "unavailable"
                     status_record.last_error = "provider_disabled"
-                    self._analytics.record_health_check_error(
-                        provider=provider.provider,
-                        model=model.id,
-                        check_type=check_type,
-                        error_type="provider_disabled",
-                    )
+                    self._analytics.record_health_check_error(provider=provider.provider, model=model.id, check_type=check_type, error_type="provider_disabled")
                 elif not runtime_status:
                     status_record.status = "unknown"
                     status_record.last_error = "provider_not_wired"
-                    if provider_health_enabled:
-                        self._analytics.record_health_check_error(
-                            provider=provider.provider,
-                            model=model.id,
-                            check_type=check_type,
-                            error_type="provider_not_wired",
-                        )
                 elif not runtime_status["ready"]:
+                    status_record.status = "not_configured" if provider_health_enabled else "degraded"
+                    status_record.readiness_reason = str(runtime_status["readiness_reason"])
                     if provider_health_enabled:
-                        status_record.status = "not_configured"
-                        status_record.readiness_reason = str(runtime_status["readiness_reason"])
-                        self._analytics.record_health_check_error(
-                            provider=provider.provider,
-                            model=model.id,
-                            check_type=check_type,
-                            error_type="not_configured",
-                        )
-                    else:
-                        status_record.status = "degraded"
-                        status_record.readiness_reason = str(runtime_status["readiness_reason"])
-                elif check_type == "synthetic_probe":
-                    status_record.status = "healthy"
-                    status_record.last_success_at = now
-                    self._record_health_check_cost(provider.provider, model.id, check_type)
-                elif check_type == "discovery":
-                    status_record.status = "discovery_only"
-                    status_record.last_success_at = now
-                    self._record_health_check_cost(provider.provider, model.id, check_type)
+                        self._analytics.record_health_check_error(provider=provider.provider, model=model.id, check_type=check_type, error_type="not_configured")
                 else:
-                    status_record.status = "healthy"
+                    status_record.status = "healthy" if check_type != "discovery" else "discovery_only"
                     status_record.last_success_at = now
                     self._record_health_check_cost(provider.provider, model.id, check_type)
 
@@ -277,12 +301,7 @@ class ControlPlaneService:
                     last_error=status_record.last_error,
                 )
 
-        return {
-            "status": "ok",
-            "check_type": check_type,
-            "checked_at": now,
-            "health_records": [record.model_dump() for record in self._health_records.values()],
-        }
+        return {"status": "ok", "check_type": check_type, "checked_at": now, "health_records": [record.model_dump() for record in self._health_records.values()]}
 
     def _record_health_check_cost(self, provider: str, model: str, check_type: str) -> None:
         usage = TokenUsage(input_tokens=8, output_tokens=4, total_tokens=12)
@@ -296,9 +315,6 @@ class ControlPlaneService:
             credential_type="health_probe",
             auth_source="control_plane",
         )
-
-    def get_health_records(self) -> list[HealthStatusRecord]:
-        return list(self._health_records.values())
 
     def provider_control_snapshot(self) -> list[dict[str, object]]:
         snapshot: list[dict[str, object]] = []
@@ -316,6 +332,8 @@ class ControlPlaneService:
                     "provider": provider.provider,
                     "label": provider.label,
                     "enabled": provider.enabled,
+                    "integration_class": provider.integration_class,
+                    "template_id": provider.template_id,
                     "config": provider.config,
                     "last_sync_at": provider.last_sync_at,
                     "last_sync_status": provider.last_sync_status,
@@ -325,13 +343,7 @@ class ControlPlaneService:
                     "oauth_required": runtime_status["oauth_required"] if runtime_status else False,
                     "discovery_supported": runtime_status["discovery_supported"] if runtime_status else False,
                     "model_count": len(provider.managed_models),
-                    "models": [
-                        {
-                            **model.model_dump(),
-                            "health_status": health_by_provider.get(provider.provider, {}).get(model.id, "unknown"),
-                        }
-                        for model in provider.managed_models
-                    ],
+                    "models": [{**model.model_dump(), "health_status": health_by_provider.get(provider.provider, {}).get(model.id, "unknown")} for model in provider.managed_models],
                 }
             )
         return snapshot
@@ -340,7 +352,8 @@ class ControlPlaneService:
 @lru_cache(maxsize=1)
 def get_control_plane_service() -> ControlPlaneService:
     settings = get_settings()
+    harness = get_harness_service()
     registry = ModelRegistry(settings)
-    providers = ProviderRegistry(settings)
+    providers = ProviderRegistry(settings, harness_service=harness)
     analytics = get_usage_analytics_store()
-    return ControlPlaneService(settings, registry, providers, analytics)
+    return ControlPlaneService(settings, registry, providers, analytics, harness)

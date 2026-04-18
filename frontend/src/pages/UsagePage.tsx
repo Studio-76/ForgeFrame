@@ -192,6 +192,11 @@ export function UsagePage() {
                   {String(item.error_key)}: {String(item.errors)}
                 </li>
               ))}
+              {summary.aggregations.errors_by_integration.map((item) => (
+                <li key={`i-${String(item.integration_key)}`}>
+                  {String(item.integration_key)}: {String(item.errors)}
+                </li>
+              ))}
             </ul>
           </div>
 

@@ -1,0 +1,96 @@
+"""Harness domain models for generic provider/model onboarding."""
+
+from __future__ import annotations
+
+from typing import Any, Literal
+
+from pydantic import BaseModel, Field
+
+
+IntegrationClass = Literal["openai_compatible", "templated_http", "static_catalog"]
+
+
+class HarnessRequestMapping(BaseModel):
+    method: Literal["POST", "GET"] = "POST"
+    path: str = "/chat/completions"
+    headers: dict[str, str] = Field(default_factory=dict)
+    body_template: dict[str, Any] = Field(
+        default_factory=lambda: {
+            "model": "{{model}}",
+            "messages": "{{messages}}",
+            "stream": "{{stream}}",
+        }
+    )
+
+
+class HarnessResponseMapping(BaseModel):
+    text_path: str = "choices.0.message.content"
+    finish_reason_path: str = "choices.0.finish_reason"
+    model_path: str = "model"
+    prompt_tokens_path: str = "usage.prompt_tokens"
+    completion_tokens_path: str = "usage.completion_tokens"
+    total_tokens_path: str = "usage.total_tokens"
+
+
+class HarnessErrorMapping(BaseModel):
+    message_path: str = "error.message"
+    type_path: str = "error.type"
+
+
+class HarnessStreamMapping(BaseModel):
+    enabled: bool = False
+    data_prefix: str = "data:"
+    done_marker: str = "[DONE]"
+    delta_path: str = "choices.0.delta.content"
+    finish_reason_path: str = "choices.0.finish_reason"
+
+
+class HarnessCapabilityProfile(BaseModel):
+    streaming: bool = False
+    tool_calling: bool = False
+    vision: bool = False
+    discovery_support: bool = False
+    model_source: Literal["static", "manual", "discovered", "templated"] = "manual"
+
+
+class HarnessProviderProfile(BaseModel):
+    provider_key: str
+    label: str
+    integration_class: IntegrationClass
+    endpoint_base_url: str
+    auth_scheme: Literal["none", "bearer", "api_key_header"] = "none"
+    auth_value: str = ""
+    auth_header: str = "Authorization"
+    template_id: str | None = None
+    enabled: bool = True
+    models: list[str] = Field(default_factory=list)
+    discovery_enabled: bool = False
+    request_mapping: HarnessRequestMapping = Field(default_factory=HarnessRequestMapping)
+    response_mapping: HarnessResponseMapping = Field(default_factory=HarnessResponseMapping)
+    error_mapping: HarnessErrorMapping = Field(default_factory=HarnessErrorMapping)
+    stream_mapping: HarnessStreamMapping = Field(default_factory=HarnessStreamMapping)
+    capabilities: HarnessCapabilityProfile = Field(default_factory=HarnessCapabilityProfile)
+
+
+class HarnessVerificationRequest(BaseModel):
+    provider_key: str
+    model: str | None = None
+    test_message: str = "Hello from ForgeGate harness"
+    include_preview: bool = True
+
+
+class HarnessVerificationResult(BaseModel):
+    provider_key: str
+    integration_class: IntegrationClass
+    steps: list[dict[str, Any]]
+    preview_request: dict[str, Any] | None = None
+    preview_response: dict[str, Any] | None = None
+    success: bool
+
+
+class HarnessTemplate(BaseModel):
+    id: str
+    label: str
+    integration_class: IntegrationClass
+    description: str
+    profile_defaults: HarnessProviderProfile

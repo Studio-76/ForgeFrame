@@ -1,6 +1,8 @@
 """Admin provider control-plane endpoints."""
 
 from fastapi import APIRouter, Depends, status
+
+from app.harness.models import HarnessProviderProfile, HarnessVerificationRequest
 from fastapi.responses import JSONResponse
 
 from app.api.admin.control_plane import (
@@ -94,3 +96,32 @@ def patch_health_config(payload: HealthConfigUpdateRequest, service: ControlPlan
 @router.post("/health/run")
 def run_health_checks(service: ControlPlaneService = Depends(get_control_plane_service)) -> dict[str, object]:
     return service.run_health_checks()
+
+
+@router.get("/harness/templates")
+def list_harness_templates(service: ControlPlaneService = Depends(get_control_plane_service)) -> dict[str, object]:
+    return {"status": "ok", "templates": service.list_harness_templates()}
+
+
+@router.get("/harness/profiles")
+def list_harness_profiles(service: ControlPlaneService = Depends(get_control_plane_service)) -> dict[str, object]:
+    return {"status": "ok", "profiles": [item.model_dump() for item in service.list_harness_profiles()]}
+
+
+@router.put("/harness/profiles/{provider_key}")
+def upsert_harness_profile(provider_key: str, payload: HarnessProviderProfile, service: ControlPlaneService = Depends(get_control_plane_service)) -> dict[str, object]:
+    if payload.provider_key != provider_key:
+        return _admin_error(status.HTTP_400_BAD_REQUEST, "provider_key_mismatch", "Path provider_key and payload.provider_key must match.")
+    profile = service.upsert_harness_profile(payload)
+    return {"status": "ok", "profile": profile.model_dump()}
+
+
+@router.post("/harness/verify")
+def verify_harness_profile(payload: HarnessVerificationRequest, service: ControlPlaneService = Depends(get_control_plane_service)) -> object:
+    try:
+        result = service.verify_harness_profile(payload)
+    except ValueError as exc:
+        return _admin_error(status.HTTP_404_NOT_FOUND, "harness_profile_not_found", str(exc))
+    except Exception as exc:
+        return _admin_error(status.HTTP_422_UNPROCESSABLE_ENTITY, "harness_verification_failed", str(exc))
+    return {"status": "ok", "verification": result}

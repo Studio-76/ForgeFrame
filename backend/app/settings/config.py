@@ -27,6 +27,7 @@ class Settings(BaseSettings):
     openai_codex_enabled: bool = True
     gemini_enabled: bool = True
     anthropic_enabled: bool = True
+    generic_harness_enabled: bool = True
 
     openai_api_key: str = ""
     openai_api_base_url: str = "https://api.openai.com/v1"
@@ -56,6 +57,7 @@ class Settings(BaseSettings):
             ("gpt-5.3-codex", "openai_codex", "OpenAI Codex"),
             ("gemini-2.5-flash", "gemini", "Google"),
             ("claude-sonnet-4-5", "anthropic", "Anthropic"),
+            ("generic-placeholder-chat", "generic_harness", "Generic Harness"),
         )
     )
 
@@ -66,6 +68,7 @@ class Settings(BaseSettings):
             "openai_codex": self.openai_codex_enabled,
             "gemini": self.gemini_enabled,
             "anthropic": self.anthropic_enabled,
+            "generic_harness": self.generic_harness_enabled,
         }
         return flag_map.get(provider_name, False)
 
