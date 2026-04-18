@@ -43,6 +43,9 @@ class HarnessStreamMapping(BaseModel):
     done_marker: str = "[DONE]"
     delta_path: str = "choices.0.delta.content"
     finish_reason_path: str = "choices.0.finish_reason"
+    usage_prompt_tokens_path: str = "usage.prompt_tokens"
+    usage_completion_tokens_path: str = "usage.completion_tokens"
+    usage_total_tokens_path: str = "usage.total_tokens"
 
 
 class HarnessCapabilityProfile(BaseModel):
@@ -72,11 +75,36 @@ class HarnessProviderProfile(BaseModel):
     capabilities: HarnessCapabilityProfile = Field(default_factory=HarnessCapabilityProfile)
 
 
+class HarnessModelInventoryItem(BaseModel):
+    model: str
+    source: Literal["static", "manual", "discovered", "templated"] = "manual"
+    active: bool = True
+    status: Literal["ready", "warning", "error"] = "ready"
+    readiness_reason: str | None = None
+
+
+class HarnessProfileRecord(HarnessProviderProfile):
+    created_at: str = ""
+    updated_at: str = ""
+    last_verified_at: str | None = None
+    last_sync_at: str | None = None
+    last_sync_status: str = "never"
+    last_sync_error: str | None = None
+    model_inventory: list[HarnessModelInventoryItem] = Field(default_factory=list)
+
+
 class HarnessVerificationRequest(BaseModel):
     provider_key: str
     model: str | None = None
     test_message: str = "Hello from ForgeGate harness"
     include_preview: bool = True
+
+
+class HarnessPreviewRequest(BaseModel):
+    provider_key: str
+    model: str
+    message: str = "Hello from ForgeGate"
+    stream: bool = False
 
 
 class HarnessVerificationResult(BaseModel):
@@ -86,6 +114,16 @@ class HarnessVerificationResult(BaseModel):
     preview_request: dict[str, Any] | None = None
     preview_response: dict[str, Any] | None = None
     success: bool
+
+
+class HarnessVerificationRun(BaseModel):
+    provider_key: str
+    integration_class: IntegrationClass
+    mode: Literal["verify", "dry_run", "probe", "preview"]
+    success: bool
+    steps: list[dict[str, Any]]
+    error: str | None = None
+    executed_at: str
 
 
 class HarnessTemplate(BaseModel):

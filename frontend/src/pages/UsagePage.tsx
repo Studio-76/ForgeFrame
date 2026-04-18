@@ -197,6 +197,11 @@ export function UsagePage() {
                   {String(item.integration_key)}: {String(item.errors)}
                 </li>
               ))}
+              {summary.aggregations.errors_by_profile.map((item) => (
+                <li key={`p2-${String(item.profile_key)}`}>
+                  profile {String(item.profile_key)}: {String(item.errors)}
+                </li>
+              ))}
             </ul>
           </div>
 

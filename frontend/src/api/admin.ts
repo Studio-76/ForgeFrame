@@ -1,6 +1,6 @@
 export type ManagedModel = {
   id: string;
-  source: "static" | "discovered";
+  source: "static" | "discovered" | "manual" | "templated";
   discovery_status: string;
   active: boolean;
   health_status: string;
@@ -22,6 +22,7 @@ export type ProviderControlItem = {
   models: ManagedModel[];
   last_sync_at: string | null;
   last_sync_status: string;
+  last_sync_error?: string | null;
 };
 
 export type HealthConfig = {
@@ -37,24 +38,13 @@ export type ProviderControlPlaneResponse = {
   object: "provider_control_plane";
   providers: ProviderControlItem[];
   health_config: HealthConfig;
-  notes: {
-    sync_action: string;
-    health_action: string;
-    ui_first: boolean;
-    persistence: string;
-  };
+  notes: Record<string, unknown>;
 };
 
 export type UsageSummaryResponse = {
   status: "ok";
   object: "usage_summary";
-  metrics: {
-    active_model_count: number;
-    stream_capable_model_count: number;
-    recorded_request_count: number;
-    recorded_error_count: number;
-    recorded_health_event_count: number;
-  };
+  metrics: Record<string, number>;
   aggregations: {
     by_provider: Array<Record<string, string | number>>;
     by_model: Array<Record<string, string | number>>;
@@ -67,21 +57,43 @@ export type UsageSummaryResponse = {
     errors_by_traffic_type: Array<Record<string, string | number>>;
     errors_by_type: Array<Record<string, string | number>>;
     errors_by_integration: Array<Record<string, string | number>>;
+    errors_by_profile: Array<Record<string, string | number>>;
   };
   traffic_split: {
     runtime: Record<string, string | number>;
     health_check: Record<string, string | number>;
   };
-  cost_axes: {
-    actual: string;
-    hypothetical: string;
-    avoided: string;
-  };
+  cost_axes: Record<string, string>;
   window: "1h" | "24h" | "7d" | "all";
   latest_health: Array<Record<string, string | number | null>>;
   timeline_24h: Array<Record<string, string | number>>;
   alerts: Array<Record<string, string | number>>;
   pricing_snapshot: Record<string, number>;
+};
+
+export type HarnessTemplate = {
+  id: string;
+  label: string;
+  integration_class: string;
+  description: string;
+};
+
+export type HarnessProfile = {
+  provider_key: string;
+  label: string;
+  integration_class: "openai_compatible" | "templated_http" | "static_catalog";
+  endpoint_base_url: string;
+  auth_scheme: "none" | "bearer" | "api_key_header";
+  auth_value: string;
+  auth_header: string;
+  template_id: string | null;
+  enabled: boolean;
+  models: string[];
+  discovery_enabled: boolean;
+  last_verified_at?: string | null;
+  last_sync_at?: string | null;
+  last_sync_status?: string;
+  model_inventory?: Array<Record<string, string | boolean | null>>;
 };
 
 async function fetchJson<T>(path: string, init?: RequestInit): Promise<T> {
@@ -147,10 +159,6 @@ export function syncProviders(provider?: string) {
   });
 }
 
-export function fetchHealthConfig() {
-  return fetchJson<{ status: string; config: HealthConfig }>("/admin/providers/health/config");
-}
-
 export function patchHealthConfig(payload: Partial<HealthConfig>) {
   return fetchJson<{ status: string; config: HealthConfig }>("/admin/providers/health/config", {
     method: "PATCH",
@@ -169,27 +177,6 @@ export function fetchUsageSummary(window: "1h" | "24h" | "7d" | "all" = "24h"): 
   return fetchJson<UsageSummaryResponse>(`/admin/usage/?window=${window}`);
 }
 
-export type HarnessTemplate = {
-  id: string;
-  label: string;
-  integration_class: string;
-  description: string;
-};
-
-export type HarnessProfile = {
-  provider_key: string;
-  label: string;
-  integration_class: "openai_compatible" | "templated_http" | "static_catalog";
-  endpoint_base_url: string;
-  auth_scheme: "none" | "bearer" | "api_key_header";
-  auth_value: string;
-  auth_header: string;
-  template_id: string | null;
-  enabled: boolean;
-  models: string[];
-  discovery_enabled: boolean;
-};
-
 export function fetchHarnessTemplates() {
   return fetchJson<{ status: string; templates: HarnessTemplate[] }>("/admin/providers/harness/templates");
 }
@@ -199,10 +186,22 @@ export function fetchHarnessProfiles() {
 }
 
 export function upsertHarnessProfile(providerKey: string, payload: Record<string, unknown>) {
-  return fetchJson<{ status: string; profile: Record<string, unknown> }>(`/admin/providers/harness/profiles/${providerKey}`, {
+  return fetchJson<{ status: string; profile: HarnessProfile }>(`/admin/providers/harness/profiles/${providerKey}`, {
     method: "PUT",
     body: JSON.stringify(payload),
   });
+}
+
+export function deleteHarnessProfile(providerKey: string) {
+  return fetchJson<{ status: string; deleted: string }>(`/admin/providers/harness/profiles/${providerKey}`, { method: "DELETE" });
+}
+
+export function activateHarnessProfile(providerKey: string) {
+  return fetchJson<{ status: string; profile: HarnessProfile }>(`/admin/providers/harness/profiles/${providerKey}/activate`, { method: "POST", body: "{}" });
+}
+
+export function deactivateHarnessProfile(providerKey: string) {
+  return fetchJson<{ status: string; profile: HarnessProfile }>(`/admin/providers/harness/profiles/${providerKey}/deactivate`, { method: "POST", body: "{}" });
 }
 
 export function verifyHarnessProfile(payload: { provider_key: string; model?: string; test_message?: string; include_preview?: boolean }) {
@@ -210,4 +209,34 @@ export function verifyHarnessProfile(payload: { provider_key: string; model?: st
     method: "POST",
     body: JSON.stringify(payload),
   });
+}
+
+export function previewHarness(payload: { provider_key: string; model: string; message: string; stream: boolean }) {
+  return fetchJson<{ status: string; preview: Record<string, unknown> }>("/admin/providers/harness/preview", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function dryRunHarness(payload: { provider_key: string; model: string; message: string; stream: boolean }) {
+  return fetchJson<{ status: string; preview_request: Record<string, unknown>; mapped_example: Record<string, unknown>; run: Record<string, unknown> }>("/admin/providers/harness/dry-run", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function probeHarness(payload: { provider_key: string; model: string; message: string; stream: boolean }) {
+  return fetchJson<{ status: string; status_code: number; parsed: Record<string, unknown>; raw: Record<string, unknown>; run: Record<string, unknown> }>("/admin/providers/harness/probe", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function fetchHarnessSnapshot() {
+  return fetchJson<{ status: string; snapshot: Record<string, unknown> }>("/admin/providers/harness/snapshot");
+}
+
+export function fetchHarnessRuns(providerKey?: string) {
+  const suffix = providerKey ? `?provider_key=${encodeURIComponent(providerKey)}` : "";
+  return fetchJson<{ status: string; runs: Array<Record<string, unknown>> }>(`/admin/providers/harness/runs${suffix}`);
 }

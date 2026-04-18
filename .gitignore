@@ -79,6 +79,7 @@ backend/build/
 backend/.venv/
 backend/venv/
 backend/.python-version
+backend/.forgegate/
 
 # -------------------------
 # Node / Frontend
