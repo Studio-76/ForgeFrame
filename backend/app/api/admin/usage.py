@@ -44,6 +44,8 @@ def usage_summary(
             "errors_by_client": aggregates["errors_by_client"],
             "errors_by_traffic_type": aggregates["errors_by_traffic_type"],
             "errors_by_type": aggregates["errors_by_type"],
+            "errors_by_integration": aggregates["errors_by_integration"],
+            "errors_by_profile": aggregates["errors_by_profile"],
         },
         "traffic_split": {
             "runtime": next((item for item in aggregates["by_traffic_type"] if item["traffic_type"] == "runtime"), {"traffic_type": "runtime", "requests": 0, "tokens": 0, "actual_cost": 0.0, "hypothetical_cost": 0.0, "avoided_cost": 0.0}),
@@ -65,3 +67,25 @@ def usage_summary(
             "codex_hyp_output_per_1m": settings.pricing_codex_hypothetical_output_per_1m_tokens,
         },
     }
+
+
+@router.get("/clients")
+def client_operational_view(
+    window: str = Query(default="24h", pattern="^(1h|24h|7d|all)$"),
+    analytics: UsageAnalyticsStore = Depends(get_usage_analytics_store),
+) -> dict[str, object]:
+    window_map: dict[str, int | None] = {"1h": 3600, "24h": 24 * 3600, "7d": 7 * 24 * 3600, "all": None}
+    selected_window = window_map[window]
+    aggregates = analytics.aggregate(window_seconds=selected_window)
+    client_map = {str(item["client_id"]): item for item in aggregates["by_client"]}
+    for err in aggregates["errors_by_client"]:
+        cid = str(err["client_id"])
+        client_map.setdefault(cid, {"client_id": cid, "requests": 0, "tokens": 0, "actual_cost": 0.0, "hypothetical_cost": 0.0, "avoided_cost": 0.0})
+        client_map[cid]["errors"] = int(err["errors"])
+    for value in client_map.values():
+        requests = int(value.get("requests", 0))
+        errors = int(value.get("errors", 0))
+        value["error_rate"] = errors / max(1, errors + requests)
+        value["needs_attention"] = bool(errors >= 3 or value["error_rate"] >= 0.2)
+    ranked = sorted(client_map.values(), key=lambda item: (bool(item["needs_attention"]), float(item.get("actual_cost", 0.0)), int(item.get("errors", 0))), reverse=True)
+    return {"status": "ok", "window": window, "clients": ranked[:50]}

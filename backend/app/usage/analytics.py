@@ -54,6 +54,10 @@ class ErrorEvent(BaseModel):
     traffic_type: Literal["runtime", "health_check"] = "runtime"
     error_type: str
     status_code: int
+    integration_class: str | None = None
+    template_id: str | None = None
+    test_phase: str | None = None
+    profile_key: str | None = None
     created_at: str
 
 
@@ -145,6 +149,10 @@ class UsageAnalyticsStore:
             traffic_type="runtime",
             error_type=error_type,
             status_code=status_code,
+            integration_class=None,
+            template_id=None,
+            test_phase=None,
+            profile_key=None,
             created_at=self._now_iso(),
         )
         self._errors.append(event)
@@ -226,6 +234,43 @@ class UsageAnalyticsStore:
             traffic_type="health_check",
             error_type=f"{check_type}:{error_type}",
             status_code=status_code,
+            integration_class="health_check",
+            template_id=None,
+            test_phase=check_type,
+            profile_key=None,
+            created_at=self._now_iso(),
+        )
+        self._errors.append(event)
+        self._append("error", event.model_dump())
+
+    def record_integration_error(
+        self,
+        *,
+        provider: str | None,
+        model: str | None,
+        integration_class: str,
+        template_id: str | None,
+        test_phase: str,
+        error_type: str,
+        status_code: int,
+        client_id: str,
+        profile_key: str | None,
+    ) -> None:
+        event = ErrorEvent(
+            provider=provider,
+            model=model,
+            client_id=client_id,
+            consumer="admin",
+            integration="harness",
+            route="/admin/providers/harness/verify",
+            stream_mode="non_stream",
+            traffic_type="runtime",
+            error_type=error_type,
+            status_code=status_code,
+            integration_class=integration_class,
+            template_id=template_id,
+            test_phase=test_phase,
+            profile_key=profile_key,
             created_at=self._now_iso(),
         )
         self._errors.append(event)
@@ -277,6 +322,8 @@ class UsageAnalyticsStore:
         grouped_error_client = defaultdict(lambda: {"errors": 0})
         grouped_error_traffic = defaultdict(lambda: {"errors": 0})
         grouped_error_type = defaultdict(lambda: {"errors": 0})
+        grouped_error_integration = defaultdict(lambda: {"errors": 0})
+        grouped_error_profile = defaultdict(lambda: {"errors": 0})
 
         for event in events:
             grouped_provider[event.provider]["requests"] += 1
@@ -309,6 +356,9 @@ class UsageAnalyticsStore:
             grouped_error_client[error.client_id]["errors"] += 1
             grouped_error_traffic[error.traffic_type]["errors"] += 1
             grouped_error_type[f"{error.error_type}:{error.status_code}"]["errors"] += 1
+            integration_key = f"{error.integration_class or 'runtime'}:{error.template_id or 'none'}:{error.test_phase or 'none'}"
+            grouped_error_integration[integration_key]["errors"] += 1
+            grouped_error_profile[error.profile_key or "none"]["errors"] += 1
 
         latest_health: dict[tuple[str, str], HealthEvent] = {}
         for event in health:
@@ -328,6 +378,8 @@ class UsageAnalyticsStore:
             "errors_by_client": [{"client_id": key, **value} for key, value in grouped_error_client.items()],
             "errors_by_traffic_type": [{"traffic_type": key, **value} for key, value in grouped_error_traffic.items()],
             "errors_by_type": [{"error_key": key, **value} for key, value in grouped_error_type.items()],
+            "errors_by_integration": [{"integration_key": key, **value} for key, value in grouped_error_integration.items()],
+            "errors_by_profile": [{"profile_key": key, **value} for key, value in grouped_error_profile.items()],
             "latest_health": [
                 {
                     "provider": event.provider,

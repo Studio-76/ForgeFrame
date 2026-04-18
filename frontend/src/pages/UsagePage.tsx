@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 
-import { fetchUsageSummary, type UsageSummaryResponse } from "../api/admin";
+import { fetchClientOperationalView, fetchUsageSummary, type UsageSummaryResponse } from "../api/admin";
 
 type LoadState = "idle" | "loading" | "success" | "error";
 
@@ -9,6 +9,7 @@ export function UsagePage() {
   const [error, setError] = useState<string | null>(null);
   const [summary, setSummary] = useState<UsageSummaryResponse | null>(null);
   const [window, setWindow] = useState<"1h" | "24h" | "7d" | "all">("24h");
+  const [clientOps, setClientOps] = useState<Array<Record<string, string | number | boolean>>>([]);
 
   useEffect(() => {
     let mounted = true;
@@ -16,11 +17,12 @@ export function UsagePage() {
     const load = async () => {
       setState("loading");
       try {
-        const payload = await fetchUsageSummary(window);
+        const [payload, clients] = await Promise.all([fetchUsageSummary(window), fetchClientOperationalView(window)]);
         if (!mounted) {
           return;
         }
         setSummary(payload);
+        setClientOps(clients.clients);
         setState("success");
       } catch (err) {
         if (!mounted) {
@@ -134,6 +136,18 @@ export function UsagePage() {
             </ul>
           </div>
 
+
+          <div className="fg-card" style={{ marginBottom: "0.75rem" }}>
+            <h3>Client operational view</h3>
+            <ul>
+              {clientOps.map((item) => (
+                <li key={String(item.client_id)}>
+                  {String(item.client_id)} · requests={String(item.requests)} · errors={String(item.errors ?? 0)} · rate={Number(item.error_rate ?? 0).toFixed(2)} · needs_attention={String(item.needs_attention)}
+                </li>
+              ))}
+            </ul>
+          </div>
+
           <div className="fg-card" style={{ marginBottom: "0.75rem" }}>
             <h3>Errors by provider/model/client</h3>
             <ul>
@@ -190,6 +204,16 @@ export function UsagePage() {
               {summary.aggregations.errors_by_type.map((item) => (
                 <li key={`e-${String(item.error_key)}`}>
                   {String(item.error_key)}: {String(item.errors)}
+                </li>
+              ))}
+              {summary.aggregations.errors_by_integration.map((item) => (
+                <li key={`i-${String(item.integration_key)}`}>
+                  {String(item.integration_key)}: {String(item.errors)}
+                </li>
+              ))}
+              {summary.aggregations.errors_by_profile.map((item) => (
+                <li key={`p2-${String(item.profile_key)}`}>
+                  profile {String(item.profile_key)}: {String(item.errors)}
                 </li>
               ))}
             </ul>
