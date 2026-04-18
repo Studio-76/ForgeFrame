@@ -1,2 +1,5 @@
 #!/usr/bin/env bash
-# TODO: Run backend test suite once tests are implemented.
+set -euo pipefail
+
+cd "$(dirname "$0")/../backend"
+exec pytest

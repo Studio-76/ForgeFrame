@@ -4,10 +4,24 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "forgegate-backend"
-version = "0.1.0"
-description = "Initial backend scaffold for ForgeGate"
+version = "0.2.0"
+description = "Phase-2 minimal runnable backend scaffold for ForgeGate"
 requires-python = ">=3.11"
-dependencies = []
+dependencies = [
+  "fastapi>=0.116,<1.0",
+  "uvicorn>=0.35,<1.0",
+  "pydantic>=2.11,<3.0",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.3,<9.0",
+  "httpx>=0.28,<1.0",
+]
+
+[tool.pytest.ini_options]
+addopts = "-q"
+testpaths = ["tests"]
 
 [tool.setuptools]
 package-dir = {"" = "."}

@@ -1,2 +1,5 @@
 #!/usr/bin/env bash
-# TODO: Start backend development server once runtime setup exists.
+set -euo pipefail
+
+cd "$(dirname "$0")/../backend"
+exec uvicorn app.main:app --reload --host 0.0.0.0 --port 8000

@@ -1,23 +1,24 @@
 # ForgeGate — Smart AI Gateway
 
-ForgeGate ist ein **neu aufgebautes Smart AI Gateway**, das mehrere AI-Provider über eine konsistente Runtime- und Admin-Plattform zusammenführt.
+ForgeGate ist ein **neu aufgebautes Smart AI Gateway** mit klarer Trennung zwischen Runtime- und Admin-Plattform.
 
 ## Projektziel
 
-Dieses Repository liefert zunächst das **Architektur- und Strukturfundament** für ForgeGate. Der produktive Core wird nachgelagert schrittweise neu implementiert.
+Dieses Repository liefert ein **architecture-first Fundament**. In Phase 2 ist das Projekt nun minimal startbar (Backend + Frontend), ohne produktive Core-Implementierung.
 
 ## Entwicklungsstatus
 
-- Status: **Initial Scaffold**
-- Vorgehen: **Architecture-first**
+- Status: **Phase 2 scaffold, minimal runnable**
+- Backend: **startbar (FastAPI placeholder endpoints)**
+- Frontend: **startbar (React/Vite placeholder routing)**
 - Core-Implementierung: **pending**
 
-## Grundprinzipien dieses Repos
+## Harte Leitlinien
 
 - ForgeGate wird **from scratch** aufgebaut.
-- Der Ordner `reference/` ist ausschließlich Referenzmaterial.
+- `reference/` ist ausschließlich Referenzmaterial.
 - Es gibt **keine produktiven Imports** aus `reference/`.
-- Es wurde bewusst noch **keine Business-Logik** implementiert.
+- Keine Business-Logik, keine Provider-/OAuth-/Streaming-/Tool-Calling-/Fallback-Implementierung in diesem Stand.
 
 ## Repository-Überblick
 
@@ -25,14 +26,24 @@ Dieses Repository liefert zunächst das **Architektur- und Strukturfundament** f
 forgegate/
   docs/        # Architektur-, Scope- und Migrationsdokumentation
   reference/   # Referenzmaterial (nicht produktiv)
-  backend/     # Neuer ForgeGate-Backend-Scaffold
-  frontend/    # Neuer ForgeGate-Frontend-Scaffold
-  scripts/     # Entwickler-Skripte (Platzhalter)
-  docker/      # Container-Scaffold (Platzhalter)
+  backend/     # Minimal startbares Backend-Scaffold
+  frontend/    # Minimal startbares Frontend-Scaffold
+  scripts/     # Dev-/Test-Skripte
+  docker/      # Minimales Container-Scaffold
 ```
 
-## Nächster Ausbau (außerhalb dieses Scaffolds)
+## Lokale Entwicklung
 
-- Runtime API und Admin API als klar getrennte Schichten aufbauen.
-- Provider-Adapter, Auth-Modi, Streaming- und Fallback-Semantik neu implementieren.
-- Persistenz, Telemetrie und Admin-UI schrittweise produktiv ausbauen.
+Backend (Port 8000):
+```bash
+./scripts/dev-backend.sh
+```
+
+Frontend (Port 5173):
+```bash
+./scripts/dev-frontend.sh
+```
+
+## Hinweis zu `reference/`
+
+Der Ordner `reference/` dient ausschließlich Semantikvergleich, Randfallanalyse und Härtungshinweisen für spätere Neuimplementierungen.
