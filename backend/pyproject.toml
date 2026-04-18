@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "forgegate-backend"
-version = "0.5.0"
-description = "Phase-5 streaming/codex baseline backend for ForgeGate"
+version = "0.6.0"
+description = "Phase-11 PostgreSQL harness-control-plane backend for ForgeGate"
 requires-python = ">=3.11"
 dependencies = [
   "fastapi>=0.116,<1.0",
@@ -13,6 +13,8 @@ dependencies = [
   "pydantic>=2.11,<3.0",
   "pydantic-settings>=2.10,<3.0",
   "httpx>=0.28,<1.0",
+  "sqlalchemy>=2.0,<3.0",
+  "psycopg[binary]>=3.2,<4.0",
 ]
 
 [project.optional-dependencies]

@@ -9,6 +9,8 @@ import {
   deleteHarnessProfile,
   dryRunHarness,
   fetchHarnessProfiles,
+  fetchBetaProviderTargets,
+  fetchClientOperationalView,
   fetchHarnessRuns,
   fetchHarnessTemplates,
   fetchProviderControlPlane,
@@ -18,6 +20,7 @@ import {
   probeHarness,
   runHealthChecks,
   syncProviders,
+  type BetaProviderTarget,
   type HarnessProfile,
   type HarnessTemplate,
   type HealthConfig,
@@ -39,6 +42,8 @@ export function ProvidersPage() {
   const [runSummary, setRunSummary] = useState<Record<string, number>>({});
   const [runModeFilter, setRunModeFilter] = useState<string>("all");
   const [runStatusFilter, setRunStatusFilter] = useState<string>("all");
+  const [runProviderFilter, setRunProviderFilter] = useState<string>("all");
+  const [runClientFilter, setRunClientFilter] = useState<string>("all");
   const [operationResult, setOperationResult] = useState<string>("");
   const [syncNote, setSyncNote] = useState<string>("");
   const [healthConfig, setHealthConfig] = useState<HealthConfig | null>(null);
@@ -47,6 +52,8 @@ export function ProvidersPage() {
   const [modelErrors, setModelErrors] = useState<Record<string, number>>({});
   const [integrationErrors, setIntegrationErrors] = useState<Record<string, number>>({});
   const [profileErrors, setProfileErrors] = useState<Record<string, number>>({});
+  const [clients, setClients] = useState<Array<Record<string, string | number | boolean>>>([]);
+  const [betaTargets, setBetaTargets] = useState<BetaProviderTarget[]>([]);
 
   const [newHarness, setNewHarness] = useState({
     provider_key: "generic_openai_like",
@@ -63,18 +70,28 @@ export function ProvidersPage() {
   const load = async () => {
     setState("loading");
     try {
-      const [payload, usage, harnessTemplates, harnessProfiles, harnessRuns] = await Promise.all([
+      const [payload, usage, harnessTemplates, harnessProfiles, harnessRuns, clientView, betaTargetsResponse] = await Promise.all([
         fetchProviderControlPlane(),
         fetchUsageSummary(),
         fetchHarnessTemplates(),
         fetchHarnessProfiles(),
-        fetchHarnessRuns(undefined, runModeFilter === "all" ? undefined : runModeFilter, runStatusFilter === "all" ? undefined : runStatusFilter),
+        fetchHarnessRuns(
+          runProviderFilter === "all" ? undefined : runProviderFilter,
+          runModeFilter === "all" ? undefined : runModeFilter,
+          runStatusFilter === "all" ? undefined : runStatusFilter,
+          runClientFilter === "all" ? undefined : runClientFilter,
+          40,
+        ),
+        fetchClientOperationalView(),
+        fetchBetaProviderTargets(),
       ]);
       setProviders(payload.providers);
       setTemplates(harnessTemplates.templates);
       setProfiles(harnessProfiles.profiles);
       setRuns(harnessRuns.runs.slice(0, 20));
       setRunSummary(harnessRuns.summary ?? {});
+      setClients(clientView.clients ?? []);
+      setBetaTargets(betaTargetsResponse.targets ?? []);
       setSyncNote(String(payload.notes.sync_action));
       setHealthConfig(payload.health_config);
       setProviderErrors(Object.fromEntries(usage.aggregations.errors_by_provider.map((item) => [String(item.provider), Number(item.errors)])));
@@ -90,7 +107,7 @@ export function ProvidersPage() {
 
   useEffect(() => {
     void load();
-  }, [runModeFilter, runStatusFilter]);
+  }, [runModeFilter, runStatusFilter, runProviderFilter, runClientFilter]);
 
   const runHarnessAction = async (providerKey: string, model?: string) => {
     const targetModel = model ?? profiles.find((item) => item.provider_key === providerKey)?.models[0] ?? "model-1";
@@ -166,7 +183,8 @@ export function ProvidersPage() {
         <ul>
           {profiles.map((profile) => (
             <li key={profile.provider_key}>
-              {profile.provider_key} · {profile.integration_class} · enabled={String(profile.enabled)} · lifecycle={String(profile.lifecycle_status ?? "unknown")} · verify={String(profile.last_verify_status ?? "never")} · probe={String(profile.last_probe_status ?? "never")} · last_sync={profile.last_sync_status ?? "never"} · models={profile.models.join(",") || "-"} · errors={profileErrors[profile.provider_key] ?? 0}
+              {profile.provider_key} · {profile.integration_class} · enabled={String(profile.enabled)} · lifecycle={String(profile.lifecycle_status ?? "unknown")} · verify={String(profile.last_verify_status ?? "never")} · probe={String(profile.last_probe_status ?? "never")} · last_sync={profile.last_sync_status ?? "never"} · last_used={String(profile.last_used_at ?? "never")} · last_model={String(profile.last_used_model ?? "-")} · requests={String(profile.request_count ?? 0)} · stream_requests={String(profile.stream_request_count ?? 0)} · tokens={String(profile.total_tokens ?? 0)} · errors={profileErrors[profile.provider_key] ?? 0}
+              {profile.needs_attention ? <strong className="fg-danger" style={{ marginLeft: "0.5rem" }}>needs attention</strong> : null}
               <button type="button" onClick={() => void runHarnessAction(profile.provider_key)} style={{ marginLeft: "0.5rem" }}>Preview+Verify</button>
               <button type="button" onClick={() => void probeHarness({ provider_key: profile.provider_key, model: profile.models[0] ?? "model-1", message: "probe", stream: false }).then((res) => setOperationResult(JSON.stringify(res, null, 2)))} style={{ marginLeft: "0.5rem" }}>Probe</button>
               {profile.enabled ? (
@@ -182,13 +200,15 @@ export function ProvidersPage() {
       </div>
 
       <div className="fg-card" style={{ marginBottom: "0.75rem" }}>
-        <h3>Recent harness runs</h3>
+        <h3>Recent harness runs & runtime history</h3>
         <div className="fg-row" style={{ marginBottom: "0.5rem" }}>
           <label>mode:<select value={runModeFilter} onChange={(event) => setRunModeFilter(event.target.value)}><option value="all">all</option><option value="verify">verify</option><option value="probe">probe</option><option value="sync">sync</option></select></label>
           <label>status:<select value={runStatusFilter} onChange={(event) => setRunStatusFilter(event.target.value)}><option value="all">all</option><option value="ok">ok</option><option value="warning">warning</option><option value="failed">failed</option></select></label>
-          <span>summary total={String(runSummary.total ?? 0)} failed={String(runSummary.failed ?? 0)} verify={String(runSummary.verify ?? 0)} probe={String(runSummary.probe ?? 0)} sync={String(runSummary.sync ?? 0)}</span>
+          <label>provider:<select value={runProviderFilter} onChange={(event) => setRunProviderFilter(event.target.value)}><option value="all">all</option>{profiles.map((p) => <option key={p.provider_key} value={p.provider_key}>{p.provider_key}</option>)}</select></label>
+          <label>client:<select value={runClientFilter} onChange={(event) => setRunClientFilter(event.target.value)}><option value="all">all</option><option value="runtime">runtime</option><option value="control_plane">control_plane</option></select></label>
+          <span>summary total={String(runSummary.total ?? 0)} failed={String(runSummary.failed ?? 0)} verify={String(runSummary.verify ?? 0)} probe={String(runSummary.probe ?? 0)} sync={String(runSummary.sync ?? 0)} runtime_non_stream={String(runSummary.runtime_non_stream ?? 0)} runtime_stream={String(runSummary.runtime_stream ?? 0)}</span>
         </div>
-        <ul>{runs.map((run, idx) => <li key={`${String(run.provider_key)}-${idx}`}>{String(run.executed_at)} · {String(run.provider_key)} · {String(run.mode)} · status={String(run.status)} · success={String(run.success)}</li>)}</ul>
+        <ul>{runs.map((run, idx) => <li key={`${String(run.run_id ?? run.provider_key)}-${idx}`}>{String(run.executed_at)} · {String(run.provider_key)} · {String(run.mode)} · status={String(run.status)} · success={String(run.success)} · client={String(run.client_id ?? "-")} · integration={String(run.integration ?? "-")}</li>)}</ul>
       </div>
 
       <div className="fg-card" style={{ marginBottom: "0.75rem" }}>
@@ -223,7 +243,7 @@ export function ProvidersPage() {
         <article key={provider.provider} className="fg-card" style={{ marginBottom: "0.75rem" }}>
           <h3>{provider.label} ({provider.provider})</h3>
           <p>integration_class={provider.integration_class} · template={provider.template_id ?? "-"} · last_sync_error={provider.last_sync_error ?? "none"}</p>
-          <p>harness_profiles={String(provider.harness_profile_count ?? 0)} · harness_runs={String(provider.harness_run_count ?? 0)}</p>
+          <p>harness_profiles={String(provider.harness_profile_count ?? 0)} · harness_runs={String(provider.harness_run_count ?? 0)} · harness_needs_attention={String(provider.harness_needs_attention_count ?? 0)}</p>
           <p>enabled={String(provider.enabled)} · ready={String(provider.ready)} · oauth_required={String(provider.oauth_required)}</p>
           <p>discovery_supported={String(provider.discovery_supported)} · last_sync_status={provider.last_sync_status} · models={provider.model_count}</p>
           <p>provider_errors={providerErrors[provider.provider] ?? 0} · integration_errors={integrationErrors[`runtime:none:none`] ?? 0}</p>
@@ -243,6 +263,27 @@ export function ProvidersPage() {
         </article>
       ))}
 
+
+      <div className="fg-card" style={{ marginBottom: "0.75rem" }}>
+        <h3>Client / Consumer Operational View</h3>
+        <ul>
+          {clients.slice(0, 15).map((client) => (
+            <li key={String(client.client_id)}>
+              {String(client.client_id)} · requests={String(client.requests ?? 0)} · errors={String(client.errors ?? 0)} · error_rate={Number(client.error_rate ?? 0).toFixed(2)} · actual_cost={Number(client.actual_cost ?? 0).toFixed(4)} · needs_attention={String(client.needs_attention ?? false)}
+            </li>
+          ))}
+        </ul>
+      </div>
+      <div className="fg-card" style={{ marginBottom: "0.75rem" }}>
+        <h3>Beta target matrix</h3>
+        <ul>
+          {betaTargets.map((target) => (
+            <li key={target.provider_key}>
+              {target.provider_key} · type={target.provider_type} · readiness={target.readiness} · auth={target.auth_model} · runtime={target.runtime_path}
+            </li>
+          ))}
+        </ul>
+      </div>
       <div className="fg-card"><h3>Discovery-/Sync-Zustand</h3><p>{syncNote}</p><p>integration error dimensions: {Object.entries(integrationErrors).map(([k, v]) => `${k}=${v}`).join(" | ") || "none"}</p></div>
     </section>
   );

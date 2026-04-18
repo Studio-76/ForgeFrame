@@ -5,11 +5,12 @@ from app.harness.service import HarnessService
 from app.harness.store import HarnessStore
 from app.providers.generic_harness.adapter import GenericHarnessAdapter
 from app.settings.config import Settings
-from app.storage.harness_repository import HarnessStoragePaths
+from app.storage.harness_repository import FileHarnessRepository, HarnessStoragePaths
 
 
 def build_service(tmp_path: Path) -> HarnessService:
-    store = HarnessStore(paths=HarnessStoragePaths(profiles_path=tmp_path / "profiles.json", runs_path=tmp_path / "runs.json"))
+    repo = FileHarnessRepository(paths=HarnessStoragePaths(profiles_path=tmp_path / "profiles.json", runs_path=tmp_path / "runs.json"))
+    store = HarnessStore(repository=repo)
     return HarnessService(store)
 
 
@@ -107,7 +108,8 @@ def test_harness_store_recovers_from_corrupt_file(tmp_path: Path) -> None:
     runs_path = tmp_path / "runs.json"
     profiles_path.write_text("{broken", encoding="utf-8")
     runs_path.write_text("[]", encoding="utf-8")
-    store = HarnessStore(paths=HarnessStoragePaths(profiles_path=profiles_path, runs_path=runs_path))
+    repo = FileHarnessRepository(paths=HarnessStoragePaths(profiles_path=profiles_path, runs_path=runs_path))
+    store = HarnessStore(repository=repo)
     assert store.list_profiles() == []
     assert profiles_path.with_suffix(".json.corrupt").exists()
 

@@ -11,7 +11,7 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="FORGEGATE_", env_file=".env", extra="ignore")
 
     app_name: str = "ForgeGate — Smart AI Gateway"
-    app_version: str = "0.5.0"
+    app_version: str = "0.6.0"
     debug: bool = False
 
     host: str = "0.0.0.0"
@@ -50,6 +50,9 @@ class Settings(BaseSettings):
     observability_events_path: str = "backend/.forgegate/observability_events.jsonl"
     harness_profiles_path: str = "backend/.forgegate/harness_profiles.json"
     harness_runs_path: str = "backend/.forgegate/harness_runs.json"
+    harness_storage_backend: Literal["postgresql", "file"] = "postgresql"
+    harness_postgres_url: str = "postgresql+psycopg://forgegate:forgegate@localhost:5432/forgegate"
+    frontend_dist_path: str = "frontend/dist"
 
     model_catalog: tuple[tuple[str, str, str], ...] = Field(
         default=(

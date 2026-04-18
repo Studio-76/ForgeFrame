@@ -13,6 +13,9 @@ from app.main import app
 def _reset_runtime_caches(tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
     events_path = tmp_path / "events.jsonl"
     monkeypatch.setenv("FORGEGATE_OBSERVABILITY_EVENTS_PATH", str(events_path))
+    monkeypatch.setenv("FORGEGATE_HARNESS_STORAGE_BACKEND", "file")
+    monkeypatch.setenv("FORGEGATE_HARNESS_PROFILES_PATH", str(tmp_path / "harness_profiles.json"))
+    monkeypatch.setenv("FORGEGATE_HARNESS_RUNS_PATH", str(tmp_path / "harness_runs.json"))
     clear_runtime_dependency_caches()
     get_control_plane_service.cache_clear()
     get_usage_analytics_store.cache_clear()
