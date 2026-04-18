@@ -22,7 +22,7 @@ from app.harness.models import (
 from app.harness.store import HarnessStore
 from app.harness.templates import BUILTIN_TEMPLATES
 from app.settings.config import get_settings
-from app.storage.harness_repository import HarnessStoragePaths
+from app.storage.harness_repository import FileHarnessRepository, HarnessStoragePaths, PostgresHarnessRepository
 
 
 class HarnessService:
@@ -363,5 +363,9 @@ class HarnessService:
 @lru_cache(maxsize=1)
 def get_harness_service() -> HarnessService:
     settings = get_settings()
-    store = HarnessStore(paths=HarnessStoragePaths(profiles_path=Path(settings.harness_profiles_path), runs_path=Path(settings.harness_runs_path)))
+    if settings.harness_storage_backend == "postgresql":
+        repository = PostgresHarnessRepository(settings.harness_postgres_url)
+    else:
+        repository = FileHarnessRepository(paths=HarnessStoragePaths(profiles_path=Path(settings.harness_profiles_path), runs_path=Path(settings.harness_runs_path)))
+    store = HarnessStore(repository=repository)
     return HarnessService(store=store)
