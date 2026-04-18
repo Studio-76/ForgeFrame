@@ -95,6 +95,11 @@ def run_health_checks(service: ControlPlaneService = Depends(get_control_plane_s
     return service.run_health_checks()
 
 
+@router.get("/beta-targets")
+def list_beta_targets(service: ControlPlaneService = Depends(get_control_plane_service)) -> dict[str, object]:
+    return {"status": "ok", "targets": service.beta_provider_targets()}
+
+
 @router.get("/harness/templates")
 def list_harness_templates(service: ControlPlaneService = Depends(get_control_plane_service)) -> dict[str, object]:
     return {"status": "ok", "templates": service.list_harness_templates()}

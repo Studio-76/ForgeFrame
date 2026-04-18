@@ -2,16 +2,18 @@ services:
   postgres:
     image: postgres:16-alpine
     container_name: forgegate-postgres
+    env_file:
+      - ../.env.compose
     environment:
-      POSTGRES_USER: forgegate
-      POSTGRES_PASSWORD: forgegate
-      POSTGRES_DB: forgegate
+      POSTGRES_USER: ${FORGEGATE_PG_USER:-forgegate}
+      POSTGRES_PASSWORD: ${FORGEGATE_PG_PASSWORD:-forgegate}
+      POSTGRES_DB: ${FORGEGATE_PG_DB:-forgegate}
     ports:
-      - "5432:5432"
+      - "${FORGEGATE_PG_PORT:-5432}:5432"
     volumes:
       - forgegate_postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U forgegate -d forgegate"]
+      test: ["CMD-SHELL", "pg_isready -U ${FORGEGATE_PG_USER:-forgegate} -d ${FORGEGATE_PG_DB:-forgegate}"]
       interval: 5s
       timeout: 5s
       retries: 12
@@ -24,15 +26,17 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+    env_file:
+      - ../.env.compose
     environment:
       FORGEGATE_HOST: 0.0.0.0
       FORGEGATE_PORT: 8000
       FORGEGATE_HARNESS_STORAGE_BACKEND: postgresql
-      FORGEGATE_HARNESS_POSTGRES_URL: postgresql+psycopg://forgegate:forgegate@postgres:5432/forgegate
+      FORGEGATE_HARNESS_POSTGRES_URL: ${FORGEGATE_POSTGRES_URL:-postgresql+psycopg://forgegate:forgegate@postgres:5432/forgegate}
       FORGEGATE_OBSERVABILITY_EVENTS_PATH: /var/lib/forgegate/observability_events.jsonl
       FORGEGATE_FRONTEND_DIST_PATH: /app/frontend_dist
     ports:
-      - "8000:8000"
+      - "${FORGEGATE_APP_PORT:-8000}:8000"
     volumes:
       - forgegate_app_data:/var/lib/forgegate
 

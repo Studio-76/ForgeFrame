@@ -74,6 +74,20 @@ export type UsageSummaryResponse = {
   pricing_snapshot: Record<string, number>;
 };
 
+
+export type BetaProviderTarget = {
+  provider_key: string;
+  provider_type: "oauth_account" | "openai_compatible" | "local";
+  auth_model: string;
+  runtime_path: string;
+  readiness: "planned" | "partial" | "ready";
+  health_semantics: string;
+  verify_probe_axis: string;
+  observability_axis: string;
+  ui_axis: string;
+  notes: string;
+};
+
 export type HarnessTemplate = {
   id: string;
   label: string;
@@ -263,4 +277,9 @@ export function fetchHarnessRuns(providerKey?: string, mode?: string, status?: s
 
 export function fetchClientOperationalView(window: "1h" | "24h" | "7d" | "all" = "24h") {
   return fetchJson<{ status: string; window: string; clients: Array<Record<string, string | number | boolean>> }>(`/admin/usage/clients?window=${window}`);
+}
+
+
+export function fetchBetaProviderTargets() {
+  return fetchJson<{ status: string; targets: BetaProviderTarget[] }>("/admin/providers/beta-targets");
 }

@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-COMPOSE_FILE="docker/docker-compose.yml"
-BASE_URL="http://127.0.0.1:8000"
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+COMPOSE_FILE="$ROOT_DIR/docker/docker-compose.yml"
+ENV_FILE="$ROOT_DIR/.env.compose"
+BASE_URL="http://127.0.0.1:${FORGEGATE_APP_PORT:-8000}"
 
 cleanup() {
   if [[ "${1:-}" == "down" ]]; then
@@ -11,6 +13,16 @@ cleanup() {
 }
 
 trap 'cleanup "${FORGEGATE_SMOKE_DOWN:-}"' EXIT
+
+command -v docker >/dev/null 2>&1 || { echo "docker command is required" >&2; exit 127; }
+[[ -f "$ENV_FILE" ]] || { echo "Missing $ENV_FILE" >&2; exit 1; }
+
+set -a
+# shellcheck disable=SC1090
+source "$ENV_FILE"
+set +a
+
+BASE_URL="http://127.0.0.1:${FORGEGATE_APP_PORT:-8000}"
 
 docker compose -f "$COMPOSE_FILE" up -d --build
 
@@ -43,9 +55,9 @@ curl -sf -X PUT "$BASE_URL/admin/providers/harness/profiles/local_compose" \
 curl -sf -X POST "$BASE_URL/admin/providers/sync" -H 'Content-Type: application/json' -d '{"provider": "generic_harness"}' >/tmp/forgegate-sync.json
 curl -sf "$BASE_URL/admin/providers/harness/runs?provider_key=local_compose&limit=20" >/tmp/forgegate-runs.json
 curl -sf "$BASE_URL/admin/providers/harness/snapshot" >/tmp/forgegate-snapshot.json
+curl -sf "$BASE_URL/admin/providers/beta-targets" >/tmp/forgegate-beta-targets.json
 
-
-docker compose -f "$COMPOSE_FILE" exec -T postgres psql -U forgegate -d forgegate -c "SELECT count(*) AS harness_profiles FROM harness_profiles;" >/tmp/forgegate-db-profiles.txt
+docker compose -f "$COMPOSE_FILE" exec -T postgres psql -U "${FORGEGATE_PG_USER:-forgegate}" -d "${FORGEGATE_PG_DB:-forgegate}" -c "SELECT count(*) AS harness_profiles FROM harness_profiles;" >/tmp/forgegate-db-profiles.txt
 
 echo "Smoke validation completed. Artifacts:"
 echo "  /tmp/forgegate-health.json"
@@ -53,4 +65,5 @@ echo "  /tmp/forgegate-profile.json"
 echo "  /tmp/forgegate-sync.json"
 echo "  /tmp/forgegate-runs.json"
 echo "  /tmp/forgegate-snapshot.json"
+echo "  /tmp/forgegate-beta-targets.json"
 echo "  /tmp/forgegate-db-profiles.txt"

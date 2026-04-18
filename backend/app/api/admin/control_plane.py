@@ -84,6 +84,20 @@ class HealthStatusRecord(BaseModel):
     last_error: str | None = None
 
 
+
+
+class BetaProviderTarget(BaseModel):
+    provider_key: str
+    provider_type: Literal["oauth_account", "openai_compatible", "local"]
+    auth_model: str
+    runtime_path: str
+    readiness: Literal["planned", "partial", "ready"]
+    health_semantics: str
+    verify_probe_axis: str
+    observability_axis: str
+    ui_axis: str
+    notes: str
+
 class ControlPlaneService:
     def __init__(
         self,
@@ -163,6 +177,108 @@ class ControlPlaneService:
 
     def list_harness_templates(self) -> list[dict[str, object]]:
         return self._harness.list_templates()
+
+    def beta_provider_targets(self) -> list[dict[str, object]]:
+        targets = [
+            BetaProviderTarget(
+                provider_key="openai_codex",
+                provider_type="oauth_account",
+                auth_model="oauth/api_key hybrid",
+                runtime_path="native provider adapter",
+                readiness="partial",
+                health_semantics="provider + model health with auth readiness",
+                verify_probe_axis="verify/probe supported",
+                observability_axis="provider/model/client/integration/profile",
+                ui_axis="providers + harness control plane",
+                notes="Existing path; needs deeper account lifecycle automation.",
+            ),
+            BetaProviderTarget(
+                provider_key="gemini",
+                provider_type="oauth_account",
+                auth_model="oauth/api_key",
+                runtime_path="native provider adapter",
+                readiness="partial",
+                health_semantics="provider/model discovery + auth readiness",
+                verify_probe_axis="verify/probe supported via harness/runtime",
+                observability_axis="provider/model/client/integration/profile",
+                ui_axis="providers + usage + harness",
+                notes="Existing path; needs stronger beta account onboarding.",
+            ),
+            BetaProviderTarget(
+                provider_key="antigravity",
+                provider_type="oauth_account",
+                auth_model="oauth_account",
+                runtime_path="generic openai-compatible harness",
+                readiness="planned",
+                health_semantics="auth + connection + discovery phases",
+                verify_probe_axis="verify/probe planned on generic harness profile",
+                observability_axis="integration/profile/client error axis",
+                ui_axis="beta target table + harness onboarding",
+                notes="Beta target explicitly planned; adapter not yet native.",
+            ),
+            BetaProviderTarget(
+                provider_key="github_copilot",
+                provider_type="oauth_account",
+                auth_model="oauth_account",
+                runtime_path="generic openai-compatible harness",
+                readiness="planned",
+                health_semantics="auth/session readiness + probe",
+                verify_probe_axis="verify/probe planned with profile template",
+                observability_axis="client/integration/profile errors",
+                ui_axis="providers beta target table",
+                notes="Beta target explicitly planned; runtime bridge pending.",
+            ),
+            BetaProviderTarget(
+                provider_key="claude_code",
+                provider_type="oauth_account",
+                auth_model="oauth_account",
+                runtime_path="generic openai-compatible harness",
+                readiness="planned",
+                health_semantics="auth + request rendering + mapping",
+                verify_probe_axis="verify/probe planned",
+                observability_axis="provider/model/client/integration/profile",
+                ui_axis="providers beta target table",
+                notes="Beta target explicitly planned; dedicated adapter pending.",
+            ),
+            BetaProviderTarget(
+                provider_key="openai_compatible_generic",
+                provider_type="openai_compatible",
+                auth_model="api_key_header/bearer/none",
+                runtime_path="generic_harness openai-compatible profile",
+                readiness="partial",
+                health_semantics="connection/auth/discovery/request/response/stream",
+                verify_probe_axis="preview/verify/dry-run/probe available",
+                observability_axis="integration/profile error axes active",
+                ui_axis="harness onboarding + runs/history",
+                notes="Core beta axis for broad provider compatibility.",
+            ),
+            BetaProviderTarget(
+                provider_key="ollama",
+                provider_type="local",
+                auth_model="none/local network",
+                runtime_path="dedicated local-provider beta path (planned)",
+                readiness="planned",
+                health_semantics="connection/discovery/model availability",
+                verify_probe_axis="verify/probe via local endpoint profile",
+                observability_axis="provider/model/client integration errors",
+                ui_axis="beta target table + harness profile template",
+                notes="Dedicated Ollama axis explicitly in beta scope.",
+            ),
+            BetaProviderTarget(
+                provider_key="openai_client_compat",
+                provider_type="openai_compatible",
+                auth_model="forgegate key + provider routing",
+                runtime_path="/v1/models + /v1/chat/completions",
+                readiness="partial",
+                health_semantics="runtime + health traffic split",
+                verify_probe_axis="harness + runtime validation",
+                observability_axis="client/provider/model/profile/integration",
+                ui_axis="usage + providers + harness",
+                notes="OpenAI-compatible client-facing beta axis.",
+            ),
+        ]
+        return [item.model_dump() for item in targets]
+
 
     def upsert_harness_profile(self, payload: HarnessProviderProfile):
         return self._harness.upsert_profile(payload)

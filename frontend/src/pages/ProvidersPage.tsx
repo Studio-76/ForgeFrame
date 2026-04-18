@@ -9,6 +9,7 @@ import {
   deleteHarnessProfile,
   dryRunHarness,
   fetchHarnessProfiles,
+  fetchBetaProviderTargets,
   fetchClientOperationalView,
   fetchHarnessRuns,
   fetchHarnessTemplates,
@@ -19,6 +20,7 @@ import {
   probeHarness,
   runHealthChecks,
   syncProviders,
+  type BetaProviderTarget,
   type HarnessProfile,
   type HarnessTemplate,
   type HealthConfig,
@@ -51,6 +53,7 @@ export function ProvidersPage() {
   const [integrationErrors, setIntegrationErrors] = useState<Record<string, number>>({});
   const [profileErrors, setProfileErrors] = useState<Record<string, number>>({});
   const [clients, setClients] = useState<Array<Record<string, string | number | boolean>>>([]);
+  const [betaTargets, setBetaTargets] = useState<BetaProviderTarget[]>([]);
 
   const [newHarness, setNewHarness] = useState({
     provider_key: "generic_openai_like",
@@ -67,7 +70,7 @@ export function ProvidersPage() {
   const load = async () => {
     setState("loading");
     try {
-      const [payload, usage, harnessTemplates, harnessProfiles, harnessRuns, clientView] = await Promise.all([
+      const [payload, usage, harnessTemplates, harnessProfiles, harnessRuns, clientView, betaTargetsResponse] = await Promise.all([
         fetchProviderControlPlane(),
         fetchUsageSummary(),
         fetchHarnessTemplates(),
@@ -80,6 +83,7 @@ export function ProvidersPage() {
           40,
         ),
         fetchClientOperationalView(),
+        fetchBetaProviderTargets(),
       ]);
       setProviders(payload.providers);
       setTemplates(harnessTemplates.templates);
@@ -87,6 +91,7 @@ export function ProvidersPage() {
       setRuns(harnessRuns.runs.slice(0, 20));
       setRunSummary(harnessRuns.summary ?? {});
       setClients(clientView.clients ?? []);
+      setBetaTargets(betaTargetsResponse.targets ?? []);
       setSyncNote(String(payload.notes.sync_action));
       setHealthConfig(payload.health_config);
       setProviderErrors(Object.fromEntries(usage.aggregations.errors_by_provider.map((item) => [String(item.provider), Number(item.errors)])));
@@ -265,6 +270,16 @@ export function ProvidersPage() {
           {clients.slice(0, 15).map((client) => (
             <li key={String(client.client_id)}>
               {String(client.client_id)} · requests={String(client.requests ?? 0)} · errors={String(client.errors ?? 0)} · error_rate={Number(client.error_rate ?? 0).toFixed(2)} · actual_cost={Number(client.actual_cost ?? 0).toFixed(4)} · needs_attention={String(client.needs_attention ?? false)}
+            </li>
+          ))}
+        </ul>
+      </div>
+      <div className="fg-card" style={{ marginBottom: "0.75rem" }}>
+        <h3>Beta target matrix</h3>
+        <ul>
+          {betaTargets.map((target) => (
+            <li key={target.provider_key}>
+              {target.provider_key} · type={target.provider_type} · readiness={target.readiness} · auth={target.auth_model} · runtime={target.runtime_path}
             </li>
           ))}
         </ul>
