@@ -22,6 +22,7 @@ from app.harness.models import (
 from app.harness.store import HarnessStore
 from app.harness.templates import BUILTIN_TEMPLATES
 from app.settings.config import get_settings
+from app.storage.harness_repository import HarnessStoragePaths
 
 
 class HarnessService:
@@ -95,6 +96,7 @@ class HarnessService:
             provider_key=profile.provider_key,
             integration_class=profile.integration_class,
             mode="dry_run",
+            status="ok",
             success=True,
             steps=[
                 {"step": "request_rendering", "status": "ok"},
@@ -131,6 +133,7 @@ class HarnessService:
                     provider_key=profile.provider_key,
                     integration_class=profile.integration_class,
                     mode="verify",
+                    status="failed",
                     success=False,
                     steps=steps,
                     error="missing_auth_value",
@@ -157,6 +160,7 @@ class HarnessService:
                 provider_key=profile.provider_key,
                 integration_class=profile.integration_class,
                 mode="verify",
+                status="ok",
                 success=True,
                 steps=steps,
                 executed_at=self._now_iso(),
@@ -174,6 +178,7 @@ class HarnessService:
                 provider_key=profile.provider_key,
                 integration_class=profile.integration_class,
                 mode="probe",
+                status="failed",
                 success=False,
                 steps=[{"step": "probe_request", "status": "failed"}],
                 error=str(exc),
@@ -189,6 +194,7 @@ class HarnessService:
             provider_key=profile.provider_key,
             integration_class=profile.integration_class,
             mode="probe",
+            status="ok" if success else "failed",
             success=success,
             steps=[{"step": "probe_request", "status": "ok" if success else "failed", "status_code": response.status_code}],
             error=None if success else str(body)[:500],
@@ -211,8 +217,12 @@ class HarnessService:
         ]
         if not inventory:
             inventory = [HarnessModelInventoryItem(model="no_models_configured", source="manual", active=False, status="warning", readiness_reason="profile_has_no_models")]
-            return self._store.update_inventory(provider_key, inventory, status="warning", error="profile_has_no_models")
-        return self._store.update_inventory(provider_key, inventory, status="ok")
+            updated = self._store.update_inventory(provider_key, inventory, status="warning", error="profile_has_no_models")
+            self._store.record_run(HarnessVerificationRun(provider_key=profile.provider_key, integration_class=profile.integration_class, mode="sync", status="warning", success=False, steps=[{"step": "sync_inventory", "status": "warning"}], error="profile_has_no_models", executed_at=self._now_iso()))
+            return updated
+        updated = self._store.update_inventory(provider_key, inventory, status="ok")
+        self._store.record_run(HarnessVerificationRun(provider_key=profile.provider_key, integration_class=profile.integration_class, mode="sync", status="ok", success=True, steps=[{"step": "sync_inventory", "status": "ok", "models": len(inventory)}], executed_at=self._now_iso()))
+        return updated
 
     def export_snapshot(self) -> dict[str, Any]:
         return self._store.export_snapshot()
@@ -240,29 +250,39 @@ class HarnessService:
         collected = ""
         usage = {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}
         finish_reason = "stop"
-        with httpx.stream(preview["method"], preview["url"], headers=preview["headers"], json=preview["json"], timeout=60) as response:
-            if response.status_code >= 400:
-                raise RuntimeError(f"Harness stream request failed ({response.status_code}): {response.text[:300]}")
-            for raw_line in response.iter_lines():
-                if not raw_line:
-                    continue
-                if not raw_line.startswith(profile.stream_mapping.data_prefix):
-                    continue
-                line = raw_line.removeprefix(profile.stream_mapping.data_prefix).strip()
-                if line == profile.stream_mapping.done_marker:
-                    break
-                try:
-                    chunk = json.loads(line)
-                except json.JSONDecodeError:
-                    continue
-                delta = self._extract(chunk, profile.stream_mapping.delta_path, default="")
-                if delta:
-                    collected += str(delta)
-                    yield {"event": "delta", "delta": str(delta)}
-                finish_reason = str(self._extract(chunk, profile.stream_mapping.finish_reason_path, default=finish_reason) or finish_reason)
-                usage["prompt_tokens"] = int(self._extract(chunk, profile.stream_mapping.usage_prompt_tokens_path, default=usage["prompt_tokens"]) or usage["prompt_tokens"])
-                usage["completion_tokens"] = int(self._extract(chunk, profile.stream_mapping.usage_completion_tokens_path, default=usage["completion_tokens"]) or usage["completion_tokens"])
-                usage["total_tokens"] = int(self._extract(chunk, profile.stream_mapping.usage_total_tokens_path, default=usage["total_tokens"]) or usage["total_tokens"])
+        saw_done = False
+
+        try:
+            with httpx.stream(preview["method"], preview["url"], headers=preview["headers"], json=preview["json"], timeout=60) as response:
+                if response.status_code >= 400:
+                    raise RuntimeError(f"Harness stream request failed ({response.status_code}): {response.text[:300]}")
+                for raw_line in response.iter_lines():
+                    if not raw_line:
+                        continue
+                    if not raw_line.startswith(profile.stream_mapping.data_prefix):
+                        continue
+                    line = raw_line.removeprefix(profile.stream_mapping.data_prefix).strip()
+                    if line == profile.stream_mapping.done_marker:
+                        saw_done = True
+                        break
+                    try:
+                        chunk = json.loads(line)
+                    except json.JSONDecodeError as exc:
+                        raise RuntimeError(f"Failed to decode stream chunk: {line[:160]}") from exc
+
+                    delta = self._extract(chunk, profile.stream_mapping.delta_path, default="")
+                    if delta:
+                        collected += str(delta)
+                        yield {"event": "delta", "delta": str(delta)}
+                    finish_reason = str(self._extract(chunk, profile.stream_mapping.finish_reason_path, default=finish_reason) or finish_reason)
+                    usage["prompt_tokens"] = int(self._extract(chunk, profile.stream_mapping.usage_prompt_tokens_path, default=usage["prompt_tokens"]) or usage["prompt_tokens"])
+                    usage["completion_tokens"] = int(self._extract(chunk, profile.stream_mapping.usage_completion_tokens_path, default=usage["completion_tokens"]) or usage["completion_tokens"])
+                    usage["total_tokens"] = int(self._extract(chunk, profile.stream_mapping.usage_total_tokens_path, default=usage["total_tokens"]) or usage["total_tokens"])
+        except httpx.RequestError as exc:
+            raise RuntimeError(f"Harness streaming connection failure: {exc}") from exc
+
+        if not saw_done and finish_reason == "stop" and not collected:
+            raise RuntimeError("Stream closed without done marker or usable payload.")
 
         yield {"event": "done", "finish_reason": finish_reason, "usage": usage, "content": collected}
 
@@ -315,8 +335,5 @@ class HarnessService:
 @lru_cache(maxsize=1)
 def get_harness_service() -> HarnessService:
     settings = get_settings()
-    store = HarnessStore(
-        profiles_path=Path(settings.harness_profiles_path),
-        runs_path=Path(settings.harness_runs_path),
-    )
+    store = HarnessStore(paths=HarnessStoragePaths(profiles_path=Path(settings.harness_profiles_path), runs_path=Path(settings.harness_runs_path)))
     return HarnessService(store=store)

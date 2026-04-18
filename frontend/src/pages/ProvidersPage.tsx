@@ -162,7 +162,7 @@ export function ProvidersPage() {
         <ul>
           {profiles.map((profile) => (
             <li key={profile.provider_key}>
-              {profile.provider_key} · {profile.integration_class} · enabled={String(profile.enabled)} · last_sync={profile.last_sync_status ?? "never"} · models={profile.models.join(",") || "-"} · errors={profileErrors[profile.provider_key] ?? 0}
+              {profile.provider_key} · {profile.integration_class} · enabled={String(profile.enabled)} · lifecycle={String(profile.lifecycle_status ?? "unknown")} · verify={String(profile.last_verify_status ?? "never")} · probe={String(profile.last_probe_status ?? "never")} · last_sync={profile.last_sync_status ?? "never"} · models={profile.models.join(",") || "-"} · errors={profileErrors[profile.provider_key] ?? 0}
               <button type="button" onClick={() => void runHarnessAction(profile.provider_key)} style={{ marginLeft: "0.5rem" }}>Preview+Verify</button>
               <button type="button" onClick={() => void probeHarness({ provider_key: profile.provider_key, model: profile.models[0] ?? "model-1", message: "probe", stream: false }).then((res) => setOperationResult(JSON.stringify(res, null, 2)))} style={{ marginLeft: "0.5rem" }}>Probe</button>
               {profile.enabled ? (
@@ -214,6 +214,7 @@ export function ProvidersPage() {
         <article key={provider.provider} className="fg-card" style={{ marginBottom: "0.75rem" }}>
           <h3>{provider.label} ({provider.provider})</h3>
           <p>integration_class={provider.integration_class} · template={provider.template_id ?? "-"} · last_sync_error={provider.last_sync_error ?? "none"}</p>
+          <p>harness_profiles={String(provider.harness_profile_count ?? 0)} · harness_runs={String(provider.harness_run_count ?? 0)}</p>
           <p>enabled={String(provider.enabled)} · ready={String(provider.ready)} · oauth_required={String(provider.oauth_required)}</p>
           <p>discovery_supported={String(provider.discovery_supported)} · last_sync_status={provider.last_sync_status} · models={provider.model_count}</p>
           <p>provider_errors={providerErrors[provider.provider] ?? 0} · integration_errors={integrationErrors[`runtime:none:none`] ?? 0}</p>

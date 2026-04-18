@@ -23,6 +23,8 @@ export type ProviderControlItem = {
   last_sync_at: string | null;
   last_sync_status: string;
   last_sync_error?: string | null;
+  harness_profile_count?: number;
+  harness_run_count?: number;
 };
 
 export type HealthConfig = {
@@ -90,7 +92,11 @@ export type HarnessProfile = {
   enabled: boolean;
   models: string[];
   discovery_enabled: boolean;
+  lifecycle_status?: string;
   last_verified_at?: string | null;
+  last_verify_status?: string;
+  last_probe_at?: string | null;
+  last_probe_status?: string;
   last_sync_at?: string | null;
   last_sync_status?: string;
   model_inventory?: Array<Record<string, string | boolean | null>>;
@@ -239,4 +245,9 @@ export function fetchHarnessSnapshot() {
 export function fetchHarnessRuns(providerKey?: string) {
   const suffix = providerKey ? `?provider_key=${encodeURIComponent(providerKey)}` : "";
   return fetchJson<{ status: string; runs: Array<Record<string, unknown>> }>(`/admin/providers/harness/runs${suffix}`);
+}
+
+
+export function fetchClientOperationalView(window: "1h" | "24h" | "7d" | "all" = "24h") {
+  return fetchJson<{ status: string; window: string; clients: Array<Record<string, string | number | boolean>> }>(`/admin/usage/clients?window=${window}`);
 }

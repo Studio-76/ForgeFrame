@@ -86,10 +86,19 @@ class HarnessModelInventoryItem(BaseModel):
 class HarnessProfileRecord(HarnessProviderProfile):
     created_at: str = ""
     updated_at: str = ""
+    lifecycle_status: Literal["draft", "ready", "degraded", "error", "disabled"] = "draft"
     last_verified_at: str | None = None
+    last_verify_status: Literal["never", "ok", "warning", "failed"] = "never"
+    last_probe_at: str | None = None
+    last_probe_status: Literal["never", "ok", "failed"] = "never"
     last_sync_at: str | None = None
     last_sync_status: str = "never"
     last_sync_error: str | None = None
+    last_error: str | None = None
+    verify_success_count: int = 0
+    verify_failure_count: int = 0
+    probe_success_count: int = 0
+    probe_failure_count: int = 0
     model_inventory: list[HarnessModelInventoryItem] = Field(default_factory=list)
 
 
@@ -119,7 +128,8 @@ class HarnessVerificationResult(BaseModel):
 class HarnessVerificationRun(BaseModel):
     provider_key: str
     integration_class: IntegrationClass
-    mode: Literal["verify", "dry_run", "probe", "preview"]
+    mode: Literal["verify", "dry_run", "probe", "preview", "sync"]
+    status: Literal["ok", "warning", "failed"] = "ok"
     success: bool
     steps: list[dict[str, Any]]
     error: str | None = None

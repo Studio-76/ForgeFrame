@@ -5,10 +5,11 @@ from app.harness.service import HarnessService
 from app.harness.store import HarnessStore
 from app.providers.generic_harness.adapter import GenericHarnessAdapter
 from app.settings.config import Settings
+from app.storage.harness_repository import HarnessStoragePaths
 
 
 def build_service(tmp_path: Path) -> HarnessService:
-    store = HarnessStore(profiles_path=tmp_path / "profiles.json", runs_path=tmp_path / "runs.json")
+    store = HarnessStore(paths=HarnessStoragePaths(profiles_path=tmp_path / "profiles.json", runs_path=tmp_path / "runs.json"))
     return HarnessService(store)
 
 
@@ -50,6 +51,7 @@ def test_harness_profiles_are_persistent(tmp_path: Path) -> None:
     new_service = build_service(tmp_path)
     profile = new_service.get_profile("persisted")
     assert profile.models == ["model-a", "model-b"]
+    assert profile.lifecycle_status in {"draft", "ready"}
 
 
 def test_harness_preview_renders_template_tokens(tmp_path: Path) -> None:

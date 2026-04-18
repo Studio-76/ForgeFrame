@@ -185,7 +185,21 @@ class ControlPlaneService:
         return {"status": "ok", **result}
 
     def harness_probe(self, payload: HarnessPreviewRequest) -> dict[str, object]:
-        result = self._harness.probe(payload)
+        try:
+            result = self._harness.probe(payload)
+        except RuntimeError as exc:
+            self._analytics.record_integration_error(
+                provider=payload.provider_key,
+                model=payload.model,
+                integration_class="harness_probe",
+                template_id=None,
+                test_phase="probe",
+                error_type="probe_runtime_error",
+                status_code=422,
+                client_id="control_plane",
+                profile_key=payload.provider_key,
+            )
+            raise
         if int(result["status_code"]) >= 400:
             self._analytics.record_integration_error(
                 provider=payload.provider_key,
@@ -228,15 +242,35 @@ class ControlPlaneService:
                         provider.managed_models.append(ManagedModelRecord(id=model_id, source="discovered", discovery_status="synced", active=True))
 
             if provider.provider == "generic_harness":
+                profile_failures = 0
                 for profile in self._harness.list_profiles():
                     sync_state = self._harness.sync_profile_inventory(profile.provider_key)
+                    if sync_state.last_sync_status != "ok":
+                        profile_failures += 1
+                        self._analytics.record_integration_error(
+                            provider="generic_harness",
+                            model=None,
+                            integration_class=sync_state.integration_class,
+                            template_id=sync_state.template_id,
+                            test_phase="sync_inventory",
+                            error_type=sync_state.last_sync_error or "sync_warning",
+                            status_code=422,
+                            client_id="control_plane",
+                            profile_key=profile.provider_key,
+                        )
                     for item in sync_state.model_inventory:
                         model_id = item.model
                         if model_id not in {m.id for m in provider.managed_models}:
                             provider.managed_models.append(ManagedModelRecord(id=model_id, source=item.source, discovery_status=sync_state.last_sync_status, active=item.active))
+                if profile_failures:
+                    provider.last_sync_error = f"{profile_failures} harness profile sync issues"
+                    provider.last_sync_status = "warning"
+                else:
+                    provider.last_sync_status = "ok"
 
             provider.last_sync_at = now
-            provider.last_sync_status = "ok"
+            if provider.last_sync_status == "never":
+                provider.last_sync_status = "ok"
         return {"status": "ok", "synced_providers": [provider.provider for provider in providers], "sync_at": now, "note": "Sync merges native discovery + persisted harness inventory."}
 
     def harness_snapshot(self) -> dict[str, object]:
@@ -296,6 +330,8 @@ class ControlPlaneService:
         for record in self._health_records.values():
             health_by_provider.setdefault(record.provider, {})[record.model] = record.status
         snapshot: list[dict[str, object]] = []
+        harness_profiles = self._harness.list_profiles()
+        harness_runs = self._harness.list_runs()
         for provider in self.list_providers():
             runtime_status = self._providers.get_provider_status(provider.provider) if provider.provider in {m.provider for m in self._registry.list_active_models()} else None
             snapshot.append(
@@ -316,6 +352,8 @@ class ControlPlaneService:
                     "discovery_supported": runtime_status["discovery_supported"] if runtime_status else False,
                     "model_count": len(provider.managed_models),
                     "models": [{**model.model_dump(), "health_status": health_by_provider.get(provider.provider, {}).get(model.id, "unknown")} for model in provider.managed_models],
+                    "harness_profile_count": len([p for p in harness_profiles if p.enabled]) if provider.provider == "generic_harness" else 0,
+                    "harness_run_count": len(harness_runs) if provider.provider == "generic_harness" else 0,
                 }
             )
         return snapshot
