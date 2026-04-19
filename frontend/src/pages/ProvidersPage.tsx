@@ -12,11 +12,13 @@ import {
   fetchBetaProviderTargets,
   fetchClientOperationalView,
   fetchHarnessRuns,
+  fetchOauthAccountTargets,
   fetchHarnessTemplates,
   fetchProviderControlPlane,
   fetchUsageSummary,
   patchHealthConfig,
   probeOauthAccountProvider,
+  syncOauthAccountBridgeProfiles,
   previewHarness,
   probeHarness,
   runHealthChecks,
@@ -55,6 +57,7 @@ export function ProvidersPage() {
   const [profileErrors, setProfileErrors] = useState<Record<string, number>>({});
   const [clients, setClients] = useState<Array<Record<string, string | number | boolean>>>([]);
   const [betaTargets, setBetaTargets] = useState<BetaProviderTarget[]>([]);
+  const [oauthTargets, setOauthTargets] = useState<Array<Record<string, string | boolean>>>([]);
 
   const [newHarness, setNewHarness] = useState({
     provider_key: "generic_openai_like",
@@ -71,7 +74,7 @@ export function ProvidersPage() {
   const load = async () => {
     setState("loading");
     try {
-      const [payload, usage, harnessTemplates, harnessProfiles, harnessRuns, clientView, betaTargetsResponse] = await Promise.all([
+      const [payload, usage, harnessTemplates, harnessProfiles, harnessRuns, clientView, betaTargetsResponse, oauthTargetsResponse] = await Promise.all([
         fetchProviderControlPlane(),
         fetchUsageSummary(),
         fetchHarnessTemplates(),
@@ -85,6 +88,7 @@ export function ProvidersPage() {
         ),
         fetchClientOperationalView(),
         fetchBetaProviderTargets(),
+        fetchOauthAccountTargets(),
       ]);
       setProviders(payload.providers);
       setTemplates(harnessTemplates.templates);
@@ -93,6 +97,7 @@ export function ProvidersPage() {
       setRunSummary(harnessRuns.summary ?? {});
       setClients(clientView.clients ?? []);
       setBetaTargets(betaTargetsResponse.targets ?? []);
+      setOauthTargets(oauthTargetsResponse.targets ?? []);
       setSyncNote(String(payload.notes.sync_action));
       setHealthConfig(payload.health_config);
       setProviderErrors(Object.fromEntries(usage.aggregations.errors_by_provider.map((item) => [String(item.provider), Number(item.errors)])));
@@ -279,6 +284,9 @@ export function ProvidersPage() {
       <div className="fg-card" style={{ marginBottom: "0.75rem" }}>
         <h3>Beta target matrix</h3>
         <p className="fg-muted">OAuth-/Account-Zielachsen können direkt mit readiness/live-probe geprüft werden.</p>
+        <button type="button" onClick={() => void syncOauthAccountBridgeProfiles().then((res) => { setOperationResult(JSON.stringify(res, null, 2)); void load(); })}>
+          Sync OAuth Bridge Profiles
+        </button>
         <ul>
           {betaTargets.map((target) => (
             <li key={target.provider_key}>
@@ -292,6 +300,14 @@ export function ProvidersPage() {
                   Probe OAuth
                 </button>
               ) : null}
+            </li>
+          ))}
+        </ul>
+        <h4>OAuth account operational status</h4>
+        <ul>
+          {oauthTargets.map((target) => (
+            <li key={String(target.provider_key)}>
+              {String(target.provider_key)} · configured={String(target.configured)} · bridge={String(target.runtime_bridge_enabled)} · probe={String(target.probe_enabled)} · harness={String(target.harness_profile_enabled)} · readiness={String(target.readiness)} · reason={String(target.readiness_reason)}
             </li>
           ))}
         </ul>

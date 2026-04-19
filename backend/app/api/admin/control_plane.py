@@ -118,6 +118,17 @@ class OAuthAccountProbeResult(BaseModel):
     status_code: int | None = None
     checked_at: str
 
+
+class OAuthAccountTargetStatus(BaseModel):
+    provider_key: str
+    configured: bool
+    runtime_bridge_enabled: bool
+    probe_enabled: bool
+    harness_profile_enabled: bool
+    readiness: Literal["planned", "partial", "ready"]
+    readiness_reason: str
+    auth_kind: Literal["oauth_account"]
+
 class ControlPlaneService:
     def __init__(
         self,
@@ -203,6 +214,9 @@ class ControlPlaneService:
         gemini_status = self._safe_provider_status("gemini")
         harness_status = self._safe_provider_status("generic_harness")
         ollama_status = self._safe_provider_status("ollama")
+        antigravity_status = self._oauth_target_status("antigravity")
+        copilot_status = self._oauth_target_status("github_copilot")
+        claude_code_status = self._oauth_target_status("claude_code")
         targets = [
             BetaProviderTarget(
                 provider_key="openai_codex",
@@ -252,20 +266,20 @@ class ControlPlaneService:
                 product_axis="oauth_account_providers",
                 auth_model="oauth_account",
                 runtime_path="generic openai-compatible harness",
-                readiness="planned",
-                readiness_score=24,
-                runtime_readiness="planned",
-                streaming_readiness="planned",
-                verify_probe_readiness="partial",
+                readiness=antigravity_status.readiness,
+                readiness_score=58 if antigravity_status.readiness == "ready" else (42 if antigravity_status.readiness == "partial" else 24),
+                runtime_readiness="partial" if antigravity_status.runtime_bridge_enabled else "planned",
+                streaming_readiness="partial" if antigravity_status.harness_profile_enabled else "planned",
+                verify_probe_readiness="ready" if antigravity_status.probe_enabled else "partial",
                 ui_readiness="partial",
                 beta_tier="concept",
                 health_semantics="auth + connection + discovery phases",
                 verify_probe_axis="verify/probe planned on generic harness profile",
                 observability_axis="integration/profile/client error axis",
                 ui_axis="beta target table + harness onboarding",
-                status_summary="Model axis explicit, no native adapter yet.",
+                status_summary=antigravity_status.readiness_reason,
                 oauth_account_provider=True,
-                notes="Beta target explicitly planned; adapter not yet native.",
+                notes="OAuth/account bridge status is code-driven; native adapter intentionally deferred.",
             ),
             BetaProviderTarget(
                 provider_key="github_copilot",
@@ -273,20 +287,20 @@ class ControlPlaneService:
                 product_axis="oauth_account_providers",
                 auth_model="oauth_account",
                 runtime_path="generic openai-compatible harness",
-                readiness="planned",
-                readiness_score=23,
-                runtime_readiness="planned",
-                streaming_readiness="planned",
-                verify_probe_readiness="partial",
+                readiness=copilot_status.readiness,
+                readiness_score=58 if copilot_status.readiness == "ready" else (42 if copilot_status.readiness == "partial" else 23),
+                runtime_readiness="partial" if copilot_status.runtime_bridge_enabled else "planned",
+                streaming_readiness="partial" if copilot_status.harness_profile_enabled else "planned",
+                verify_probe_readiness="ready" if copilot_status.probe_enabled else "partial",
                 ui_readiness="partial",
                 beta_tier="concept",
                 health_semantics="auth/session readiness + probe",
                 verify_probe_axis="verify/probe planned with profile template",
                 observability_axis="client/integration/profile errors",
                 ui_axis="providers beta target table",
-                status_summary="OAuth/account axis explicit, runtime bridge pending.",
+                status_summary=copilot_status.readiness_reason,
                 oauth_account_provider=True,
-                notes="Beta target explicitly planned; runtime bridge pending.",
+                notes="OAuth/account bridge status is code-driven; native adapter intentionally deferred.",
             ),
             BetaProviderTarget(
                 provider_key="claude_code",
@@ -294,20 +308,20 @@ class ControlPlaneService:
                 product_axis="oauth_account_providers",
                 auth_model="oauth_account",
                 runtime_path="generic openai-compatible harness",
-                readiness="planned",
-                readiness_score=23,
-                runtime_readiness="planned",
-                streaming_readiness="planned",
-                verify_probe_readiness="partial",
+                readiness=claude_code_status.readiness,
+                readiness_score=58 if claude_code_status.readiness == "ready" else (42 if claude_code_status.readiness == "partial" else 23),
+                runtime_readiness="partial" if claude_code_status.runtime_bridge_enabled else "planned",
+                streaming_readiness="partial" if claude_code_status.harness_profile_enabled else "planned",
+                verify_probe_readiness="ready" if claude_code_status.probe_enabled else "partial",
                 ui_readiness="partial",
                 beta_tier="concept",
                 health_semantics="auth + request rendering + mapping",
                 verify_probe_axis="verify/probe planned",
                 observability_axis="provider/model/client/integration/profile",
                 ui_axis="providers beta target table",
-                status_summary="OAuth/account axis explicit, dedicated adapter pending.",
+                status_summary=claude_code_status.readiness_reason,
                 oauth_account_provider=True,
-                notes="Beta target explicitly planned; dedicated adapter pending.",
+                notes="OAuth/account bridge status is code-driven; native adapter intentionally deferred.",
             ),
             BetaProviderTarget(
                 provider_key="openai_compatible_generic",
@@ -371,6 +385,67 @@ class ControlPlaneService:
             ),
         ]
         return [item.model_dump() for item in targets]
+
+    def list_oauth_account_target_statuses(self) -> list[dict[str, object]]:
+        providers = ["openai_codex", "gemini", "antigravity", "github_copilot", "claude_code"]
+        statuses: list[dict[str, object]] = []
+        for provider_key in providers:
+            if provider_key in {"antigravity", "github_copilot", "claude_code"}:
+                statuses.append(self._oauth_target_status(provider_key).model_dump())
+                continue
+            probe = self.probe_oauth_account_provider(provider_key)
+            statuses.append(
+                OAuthAccountTargetStatus(
+                    provider_key=provider_key,
+                    configured=probe.ready,
+                    runtime_bridge_enabled=(provider_key == "openai_codex" and self._settings.openai_codex_bridge_enabled),
+                    probe_enabled=(provider_key == "gemini" and self._settings.gemini_probe_enabled),
+                    harness_profile_enabled=False,
+                    readiness="ready" if probe.status == "ok" else ("partial" if probe.ready else "planned"),
+                    readiness_reason=probe.details,
+                    auth_kind="oauth_account",
+                ).model_dump()
+            )
+        return statuses
+
+    def _oauth_target_status(self, provider_key: str) -> OAuthAccountTargetStatus:
+        config = {
+            "antigravity": (
+                self._settings.antigravity_oauth_access_token,
+                self._settings.antigravity_probe_enabled,
+                self._settings.antigravity_bridge_profile_enabled,
+            ),
+            "github_copilot": (
+                self._settings.github_copilot_oauth_access_token,
+                self._settings.github_copilot_probe_enabled,
+                self._settings.github_copilot_bridge_profile_enabled,
+            ),
+            "claude_code": (
+                self._settings.claude_code_oauth_access_token,
+                self._settings.claude_code_probe_enabled,
+                self._settings.claude_code_bridge_profile_enabled,
+            ),
+        }
+        token, probe_enabled, bridge_enabled = config[provider_key]
+        configured = bool(token.strip())
+        readiness: Literal["planned", "partial", "ready"] = "planned"
+        reason = "OAuth/account credentials missing."
+        if configured:
+            readiness = "partial"
+            reason = "OAuth/account credentials configured; enable probe or bridge profile for operational depth."
+        if configured and (probe_enabled or bridge_enabled):
+            readiness = "ready"
+            reason = "OAuth/account credentials + operational probe/bridge profile are enabled."
+        return OAuthAccountTargetStatus(
+            provider_key=provider_key,
+            configured=configured,
+            runtime_bridge_enabled=bridge_enabled,
+            probe_enabled=probe_enabled,
+            harness_profile_enabled=bridge_enabled,
+            readiness=readiness,
+            readiness_reason=reason,
+            auth_kind="oauth_account",
+        )
 
     def _safe_provider_status(self, provider_key: str) -> dict[str, object]:
         try:
@@ -469,16 +544,66 @@ class ControlPlaneService:
             )
 
         if provider_key in {"antigravity", "github_copilot", "claude_code"}:
-            return OAuthAccountProbeResult(
-                provider_key=provider_key,
-                ready=False,
-                probe_mode="readiness_only",
-                status="warning",
-                details="Provider target is planned; no native probe bridge yet.",
-                checked_at=now,
-            )
+            return self._probe_additional_oauth_target(provider_key, now=now)
 
         raise ValueError(f"Unsupported oauth/account probe provider: {provider_key}")
+
+    def _probe_additional_oauth_target(self, provider_key: str, *, now: str) -> OAuthAccountProbeResult:
+        status = self._oauth_target_status(provider_key)
+        target_map = {
+            "antigravity": (self._settings.antigravity_probe_base_url, self._settings.antigravity_probe_model, self._settings.antigravity_oauth_access_token),
+            "github_copilot": (self._settings.github_copilot_probe_base_url, self._settings.github_copilot_probe_model, self._settings.github_copilot_oauth_access_token),
+            "claude_code": (self._settings.claude_code_probe_base_url, self._settings.claude_code_probe_model, self._settings.claude_code_oauth_access_token),
+        }
+        base_url, model, token = target_map[provider_key]
+        if not status.configured:
+            return OAuthAccountProbeResult(provider_key=provider_key, ready=False, probe_mode="readiness_only", status="failed", details=status.readiness_reason, checked_at=now)
+        if not status.probe_enabled:
+            return OAuthAccountProbeResult(provider_key=provider_key, ready=True, probe_mode="readiness_only", status="warning", details="Probe disabled; credentials are configured.", checked_at=now)
+        payload = {"model": model, "messages": [{"role": "user", "content": "health probe"}], "stream": False, "max_tokens": 8}
+        endpoint = f"{base_url.rstrip('/')}/chat/completions"
+        try:
+            response = httpx.post(endpoint, json=payload, headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"}, timeout=self._settings.oauth_account_probe_timeout_seconds)
+        except httpx.RequestError as exc:
+            return OAuthAccountProbeResult(provider_key=provider_key, ready=True, probe_mode="live_http_probe", status="failed", details=f"Probe request failed: {exc}", checked_at=now)
+        return OAuthAccountProbeResult(
+            provider_key=provider_key,
+            ready=True,
+            probe_mode="live_http_probe",
+            status="ok" if response.status_code < 400 else "failed",
+            details=f"{provider_key} probe succeeded." if response.status_code < 400 else f"{provider_key} probe failed: {response.text[:300]}",
+            status_code=response.status_code,
+            checked_at=now,
+        )
+
+    def sync_oauth_account_bridge_profiles(self) -> dict[str, object]:
+        provider_configs = {
+            "antigravity": (self._settings.antigravity_bridge_profile_enabled, self._settings.antigravity_probe_base_url, self._settings.antigravity_oauth_access_token, self._settings.antigravity_probe_model),
+            "github_copilot": (self._settings.github_copilot_bridge_profile_enabled, self._settings.github_copilot_probe_base_url, self._settings.github_copilot_oauth_access_token, self._settings.github_copilot_probe_model),
+            "claude_code": (self._settings.claude_code_bridge_profile_enabled, self._settings.claude_code_probe_base_url, self._settings.claude_code_oauth_access_token, self._settings.claude_code_probe_model),
+        }
+        upserted: list[str] = []
+        skipped: list[str] = []
+        for provider_key, (enabled, base_url, token, model) in provider_configs.items():
+            if not enabled:
+                skipped.append(provider_key)
+                continue
+            profile = HarnessProviderProfile(
+                provider_key=f"{provider_key}_oauth_bridge",
+                label=f"{provider_key} OAuth Bridge",
+                integration_class="openai_compatible",
+                endpoint_base_url=base_url.rstrip("/"),
+                auth_scheme="bearer",
+                auth_value=token,
+                enabled=True,
+                models=[model],
+                discovery_enabled=False,
+                stream_mapping={"enabled": True},
+                capabilities={"streaming": True, "model_source": "manual", "discovery_support": False},
+            )
+            self._harness.upsert_profile(profile)
+            upserted.append(profile.provider_key)
+        return {"status": "ok", "upserted_profiles": upserted, "skipped": skipped}
 
 
     def upsert_harness_profile(self, payload: HarnessProviderProfile):

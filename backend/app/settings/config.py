@@ -55,9 +55,31 @@ class Settings(BaseSettings):
     gemini_probe_model: str = "gemini-2.5-flash"
     gemini_timeout_seconds: int = 45
 
+    antigravity_enabled: bool = False
+    antigravity_oauth_access_token: str = ""
+    antigravity_probe_enabled: bool = False
+    antigravity_probe_base_url: str = "https://api.antigravity.example/v1"
+    antigravity_probe_model: str = "antigravity-beta"
+    antigravity_bridge_profile_enabled: bool = False
+
+    github_copilot_enabled: bool = False
+    github_copilot_oauth_access_token: str = ""
+    github_copilot_probe_enabled: bool = False
+    github_copilot_probe_base_url: str = "https://api.githubcopilot.example/v1"
+    github_copilot_probe_model: str = "copilot-chat"
+    github_copilot_bridge_profile_enabled: bool = False
+
+    claude_code_enabled: bool = False
+    claude_code_oauth_access_token: str = ""
+    claude_code_probe_enabled: bool = False
+    claude_code_probe_base_url: str = "https://api.claudecode.example/v1"
+    claude_code_probe_model: str = "claude-code"
+    claude_code_bridge_profile_enabled: bool = False
+
     ollama_base_url: str = "http://host.docker.internal:11434/v1"
     ollama_default_model: str = "llama3.2"
     ollama_timeout_seconds: int = 45
+    oauth_account_probe_timeout_seconds: int = 30
 
     pricing_openai_input_per_1m_tokens: float = 0.4
     pricing_openai_output_per_1m_tokens: float = 1.6

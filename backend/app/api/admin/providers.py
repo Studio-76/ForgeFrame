@@ -115,6 +115,16 @@ def probe_oauth_account_provider(provider_key: str, service: ControlPlaneService
     return {"status": "ok", "probe": result.model_dump()}
 
 
+@router.get("/oauth-account/targets")
+def list_oauth_account_targets(service: ControlPlaneService = Depends(get_control_plane_service)) -> object:
+    return {"status": "ok", "targets": service.list_oauth_account_target_statuses()}
+
+
+@router.post("/oauth-account/bridge-profiles/sync")
+def sync_oauth_account_bridge_profiles(service: ControlPlaneService = Depends(get_control_plane_service)) -> object:
+    return service.sync_oauth_account_bridge_profiles()
+
+
 @router.get("/harness/templates")
 def list_harness_templates(service: ControlPlaneService = Depends(get_control_plane_service)) -> dict[str, object]:
     return {"status": "ok", "templates": service.list_harness_templates()}

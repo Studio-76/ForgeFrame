@@ -301,3 +301,14 @@ export function probeOauthAccountProvider(providerKey: string) {
     body: "{}",
   });
 }
+
+export function fetchOauthAccountTargets() {
+  return fetchJson<{ status: string; targets: Array<Record<string, string | boolean>> }>("/admin/providers/oauth-account/targets");
+}
+
+export function syncOauthAccountBridgeProfiles() {
+  return fetchJson<{ status: string; upserted_profiles: string[]; skipped: string[] }>("/admin/providers/oauth-account/bridge-profiles/sync", {
+    method: "POST",
+    body: "{}",
+  });
+}

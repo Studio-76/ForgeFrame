@@ -60,3 +60,17 @@ def test_admin_oauth_account_probe_endpoint_available() -> None:
     payload = response.json()
     assert payload["status"] == "ok"
     assert payload["probe"]["provider_key"] == "gemini"
+
+
+def test_admin_oauth_account_targets_and_bridge_sync_endpoints_available() -> None:
+    targets_response = client.get("/admin/providers/oauth-account/targets")
+    assert targets_response.status_code == 200
+    targets_payload = targets_response.json()
+    assert targets_payload["status"] == "ok"
+    assert any(item["provider_key"] == "antigravity" for item in targets_payload["targets"])
+
+    sync_response = client.post("/admin/providers/oauth-account/bridge-profiles/sync", json={})
+    assert sync_response.status_code == 200
+    sync_payload = sync_response.json()
+    assert sync_payload["status"] == "ok"
+    assert "upserted_profiles" in sync_payload
