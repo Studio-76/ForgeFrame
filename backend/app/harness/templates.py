@@ -53,4 +53,20 @@ BUILTIN_TEMPLATES: dict[str, HarnessTemplate] = {
             capabilities=HarnessCapabilityProfile(streaming=False, discovery_support=False, model_source="static"),
         ),
     ),
+    "ollama_local": HarnessTemplate(
+        id="ollama_local",
+        label="Ollama Local Runtime",
+        integration_class="openai_compatible",
+        description="Dedicated local Ollama template via /v1/chat/completions-compatible path.",
+        profile_defaults=HarnessProviderProfile(
+            provider_key="ollama_local",
+            label="Ollama Local",
+            integration_class="openai_compatible",
+            endpoint_base_url="http://host.docker.internal:11434/v1",
+            auth_scheme="none",
+            models=["llama3.2"],
+            stream_mapping={"enabled": True},
+            capabilities=HarnessCapabilityProfile(streaming=True, discovery_support=True, model_source="manual"),
+        ),
+    ),
 }

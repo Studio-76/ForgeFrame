@@ -89,13 +89,22 @@ class HealthStatusRecord(BaseModel):
 class BetaProviderTarget(BaseModel):
     provider_key: str
     provider_type: Literal["oauth_account", "openai_compatible", "local"]
+    product_axis: Literal["oauth_account_providers", "openai_compatible_providers", "local_providers", "openai_compatible_clients"]
     auth_model: str
     runtime_path: str
     readiness: Literal["planned", "partial", "ready"]
+    readiness_score: int = Field(ge=0, le=100)
+    runtime_readiness: Literal["planned", "partial", "ready"]
+    streaming_readiness: Literal["planned", "partial", "ready"]
+    verify_probe_readiness: Literal["planned", "partial", "ready"]
+    ui_readiness: Literal["planned", "partial", "ready"]
+    beta_tier: Literal["concept", "beta", "beta_plus"]
     health_semantics: str
     verify_probe_axis: str
     observability_axis: str
     ui_axis: str
+    status_summary: str
+    oauth_account_provider: bool = False
     notes: str
 
 class ControlPlaneService:
@@ -179,101 +188,173 @@ class ControlPlaneService:
         return self._harness.list_templates()
 
     def beta_provider_targets(self) -> list[dict[str, object]]:
+        codex_status = self._providers.get_provider_status("openai_codex")
+        gemini_status = self._providers.get_provider_status("gemini")
+        harness_status = self._providers.get_provider_status("generic_harness")
         targets = [
             BetaProviderTarget(
                 provider_key="openai_codex",
                 provider_type="oauth_account",
+                product_axis="oauth_account_providers",
                 auth_model="oauth/api_key hybrid",
                 runtime_path="native provider adapter",
                 readiness="partial",
+                readiness_score=62 if codex_status["ready"] else 48,
+                runtime_readiness="partial",
+                streaming_readiness="planned",
+                verify_probe_readiness="partial",
+                ui_readiness="partial",
+                beta_tier="beta",
                 health_semantics="provider + model health with auth readiness",
                 verify_probe_axis="verify/probe supported",
                 observability_axis="provider/model/client/integration/profile",
                 ui_axis="providers + harness control plane",
+                status_summary="Auth semantics wired; runtime bridge still beta-scaffold.",
+                oauth_account_provider=True,
                 notes="Existing path; needs deeper account lifecycle automation.",
             ),
             BetaProviderTarget(
                 provider_key="gemini",
                 provider_type="oauth_account",
+                product_axis="oauth_account_providers",
                 auth_model="oauth/api_key",
                 runtime_path="native provider adapter",
                 readiness="partial",
+                readiness_score=46 if gemini_status["ready"] else 34,
+                runtime_readiness="planned",
+                streaming_readiness="planned",
+                verify_probe_readiness="partial",
+                ui_readiness="partial",
+                beta_tier="concept",
                 health_semantics="provider/model discovery + auth readiness",
                 verify_probe_axis="verify/probe supported via harness/runtime",
                 observability_axis="provider/model/client/integration/profile",
                 ui_axis="providers + usage + harness",
+                status_summary="OAuth/account credentials modeled; runtime implementation pending.",
+                oauth_account_provider=True,
                 notes="Existing path; needs stronger beta account onboarding.",
             ),
             BetaProviderTarget(
                 provider_key="antigravity",
                 provider_type="oauth_account",
+                product_axis="oauth_account_providers",
                 auth_model="oauth_account",
                 runtime_path="generic openai-compatible harness",
                 readiness="planned",
+                readiness_score=24,
+                runtime_readiness="planned",
+                streaming_readiness="planned",
+                verify_probe_readiness="partial",
+                ui_readiness="partial",
+                beta_tier="concept",
                 health_semantics="auth + connection + discovery phases",
                 verify_probe_axis="verify/probe planned on generic harness profile",
                 observability_axis="integration/profile/client error axis",
                 ui_axis="beta target table + harness onboarding",
+                status_summary="Model axis explicit, no native adapter yet.",
+                oauth_account_provider=True,
                 notes="Beta target explicitly planned; adapter not yet native.",
             ),
             BetaProviderTarget(
                 provider_key="github_copilot",
                 provider_type="oauth_account",
+                product_axis="oauth_account_providers",
                 auth_model="oauth_account",
                 runtime_path="generic openai-compatible harness",
                 readiness="planned",
+                readiness_score=23,
+                runtime_readiness="planned",
+                streaming_readiness="planned",
+                verify_probe_readiness="partial",
+                ui_readiness="partial",
+                beta_tier="concept",
                 health_semantics="auth/session readiness + probe",
                 verify_probe_axis="verify/probe planned with profile template",
                 observability_axis="client/integration/profile errors",
                 ui_axis="providers beta target table",
+                status_summary="OAuth/account axis explicit, runtime bridge pending.",
+                oauth_account_provider=True,
                 notes="Beta target explicitly planned; runtime bridge pending.",
             ),
             BetaProviderTarget(
                 provider_key="claude_code",
                 provider_type="oauth_account",
+                product_axis="oauth_account_providers",
                 auth_model="oauth_account",
                 runtime_path="generic openai-compatible harness",
                 readiness="planned",
+                readiness_score=23,
+                runtime_readiness="planned",
+                streaming_readiness="planned",
+                verify_probe_readiness="partial",
+                ui_readiness="partial",
+                beta_tier="concept",
                 health_semantics="auth + request rendering + mapping",
                 verify_probe_axis="verify/probe planned",
                 observability_axis="provider/model/client/integration/profile",
                 ui_axis="providers beta target table",
+                status_summary="OAuth/account axis explicit, dedicated adapter pending.",
+                oauth_account_provider=True,
                 notes="Beta target explicitly planned; dedicated adapter pending.",
             ),
             BetaProviderTarget(
                 provider_key="openai_compatible_generic",
                 provider_type="openai_compatible",
+                product_axis="openai_compatible_providers",
                 auth_model="api_key_header/bearer/none",
                 runtime_path="generic_harness openai-compatible profile",
                 readiness="partial",
+                readiness_score=66 if harness_status["ready"] else 52,
+                runtime_readiness="partial",
+                streaming_readiness="partial",
+                verify_probe_readiness="ready",
+                ui_readiness="partial",
+                beta_tier="beta_plus",
                 health_semantics="connection/auth/discovery/request/response/stream",
                 verify_probe_axis="preview/verify/dry-run/probe available",
                 observability_axis="integration/profile error axes active",
                 ui_axis="harness onboarding + runs/history",
+                status_summary="Operational harness path with profile-level runtime, verify and probe.",
                 notes="Core beta axis for broad provider compatibility.",
             ),
             BetaProviderTarget(
                 provider_key="ollama",
                 provider_type="local",
+                product_axis="local_providers",
                 auth_model="none/local network",
-                runtime_path="dedicated local-provider beta path (planned)",
-                readiness="planned",
+                runtime_path="dedicated ollama template + local endpoint harness path",
+                readiness="partial",
+                readiness_score=44,
+                runtime_readiness="partial",
+                streaming_readiness="partial",
+                verify_probe_readiness="ready",
+                ui_readiness="partial",
+                beta_tier="beta",
                 health_semantics="connection/discovery/model availability",
                 verify_probe_axis="verify/probe via local endpoint profile",
                 observability_axis="provider/model/client integration errors",
                 ui_axis="beta target table + harness profile template",
+                status_summary="Dedicated local axis with explicit template and control-plane lifecycle.",
                 notes="Dedicated Ollama axis explicitly in beta scope.",
             ),
             BetaProviderTarget(
                 provider_key="openai_client_compat",
                 provider_type="openai_compatible",
+                product_axis="openai_compatible_clients",
                 auth_model="forgegate key + provider routing",
-                runtime_path="/v1/models + /v1/chat/completions",
+                runtime_path="/v1/models + /v1/chat/completions + /v1/responses",
                 readiness="partial",
+                readiness_score=68,
+                runtime_readiness="partial",
+                streaming_readiness="partial",
+                verify_probe_readiness="partial",
+                ui_readiness="partial",
+                beta_tier="beta_plus",
                 health_semantics="runtime + health traffic split",
                 verify_probe_axis="harness + runtime validation",
                 observability_axis="client/provider/model/profile/integration",
                 ui_axis="usage + providers + harness",
+                status_summary="Client compatibility expanded beyond chat baseline.",
                 notes="OpenAI-compatible client-facing beta axis.",
             ),
         ]
@@ -476,6 +557,8 @@ class ControlPlaneService:
                     "ready": runtime_status["ready"] if runtime_status else False,
                     "readiness_reason": runtime_status["readiness_reason"] if runtime_status else "provider_not_wired",
                     "capabilities": runtime_status["capabilities"] if runtime_status else {},
+                    "provider_axis": (runtime_status["capabilities"].get("provider_axis") if runtime_status else "unknown"),
+                    "auth_mechanism": (runtime_status["capabilities"].get("auth_mechanism") if runtime_status else "unknown"),
                     "oauth_required": runtime_status["oauth_required"] if runtime_status else False,
                     "discovery_supported": runtime_status["discovery_supported"] if runtime_status else False,
                     "model_count": len(provider.managed_models),

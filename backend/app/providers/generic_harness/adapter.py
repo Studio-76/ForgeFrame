@@ -22,7 +22,17 @@ from app.usage.service import UsageAccountingService
 
 class GenericHarnessAdapter:
     provider_name = "generic_harness"
-    capabilities = ProviderCapabilities(streaming=True, tool_calling=False, vision=False, external=True, discovery_support=True)
+    capabilities = ProviderCapabilities(
+        streaming=True,
+        tool_calling=False,
+        vision=False,
+        external=True,
+        discovery_support=True,
+        provider_axis="openai_compatible_provider",
+        auth_mechanism="api_key",
+        verify_support=True,
+        probe_support=True,
+    )
 
     def __init__(self, settings: Settings, harness: HarnessService):
         self._settings = settings

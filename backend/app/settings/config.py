@@ -40,6 +40,9 @@ class Settings(BaseSettings):
     openai_codex_discovery_enabled: bool = False
     openai_codex_discovery_required: bool = False
     openai_codex_discovered_models: tuple[str, ...] = ()
+    gemini_auth_mode: Literal["oauth", "api_key"] = "oauth"
+    gemini_oauth_access_token: str = ""
+    gemini_api_key: str = ""
 
     pricing_openai_input_per_1m_tokens: float = 0.4
     pricing_openai_output_per_1m_tokens: float = 1.6

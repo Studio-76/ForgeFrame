@@ -32,6 +32,12 @@ def list_provider_control_plane(service: ControlPlaneService = Depends(get_contr
             "health_action": "Model health checks can be configured and triggered via /admin/providers/health endpoints.",
             "harness_actions": ["preview", "dry_run", "verify", "probe", "snapshot"],
             "persistence": "repository_backed_harness_profiles",
+            "product_axes": [
+                "oauth_account_providers",
+                "openai_compatible_providers",
+                "local_providers",
+                "openai_compatible_clients",
+            ],
         },
     }
 

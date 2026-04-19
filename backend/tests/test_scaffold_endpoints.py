@@ -49,3 +49,6 @@ def test_admin_provider_beta_targets_endpoint_available() -> None:
     targets = payload["targets"]
     assert any(item["provider_key"] == "ollama" for item in targets)
     assert any(item["provider_key"] == "openai_codex" for item in targets)
+    codex = next(item for item in targets if item["provider_key"] == "openai_codex")
+    assert codex["product_axis"] == "oauth_account_providers"
+    assert "readiness_score" in codex

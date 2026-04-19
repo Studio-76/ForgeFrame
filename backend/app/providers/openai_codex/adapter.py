@@ -27,6 +27,10 @@ class OpenAICodexAdapter:
             external=True,
             oauth_required=oauth_required,
             discovery_support=True,
+            provider_axis="oauth_account",
+            auth_mechanism="hybrid_oauth_api_key",
+            verify_support=True,
+            probe_support=True,
         )
 
     def is_ready(self) -> bool:

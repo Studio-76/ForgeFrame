@@ -17,5 +17,11 @@ class ChatCompletionsRequest(BaseModel):
     client: dict[str, str] = Field(default_factory=dict)
 
 
+class ResponsesRequest(BaseModel):
+    model: str | None = None
+    input: Any
+    client: dict[str, str] = Field(default_factory=dict)
+
+
 class ErrorEnvelope(BaseModel):
     error: dict[str, Any]

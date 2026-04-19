@@ -245,6 +245,7 @@ export function ProvidersPage() {
           <p>integration_class={provider.integration_class} · template={provider.template_id ?? "-"} · last_sync_error={provider.last_sync_error ?? "none"}</p>
           <p>harness_profiles={String(provider.harness_profile_count ?? 0)} · harness_runs={String(provider.harness_run_count ?? 0)} · harness_needs_attention={String(provider.harness_needs_attention_count ?? 0)}</p>
           <p>enabled={String(provider.enabled)} · ready={String(provider.ready)} · oauth_required={String(provider.oauth_required)}</p>
+          <p>axis={provider.provider_axis ?? "unknown"} · auth_mechanism={provider.auth_mechanism ?? "unknown"}</p>
           <p>discovery_supported={String(provider.discovery_supported)} · last_sync_status={provider.last_sync_status} · models={provider.model_count}</p>
           <p>provider_errors={providerErrors[provider.provider] ?? 0} · integration_errors={integrationErrors[`runtime:none:none`] ?? 0}</p>
           {(providerErrors[provider.provider] ?? 0) >= 3 ? <p className="fg-danger">needs attention: elevated provider errors</p> : null}
@@ -279,7 +280,7 @@ export function ProvidersPage() {
         <ul>
           {betaTargets.map((target) => (
             <li key={target.provider_key}>
-              {target.provider_key} · type={target.provider_type} · readiness={target.readiness} · auth={target.auth_model} · runtime={target.runtime_path}
+              {target.provider_key} · axis={target.product_axis} · type={target.provider_type} · readiness={target.readiness} ({target.readiness_score}) · beta_tier={target.beta_tier} · auth={target.auth_model} · runtime={target.runtime_path} · runtime_axis={target.runtime_readiness} · stream_axis={target.streaming_readiness} · verify_axis={target.verify_probe_readiness} · ui_axis={target.ui_readiness} · status={target.status_summary}
             </li>
           ))}
         </ul>

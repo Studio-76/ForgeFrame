@@ -1,4 +1,5 @@
 from app.auth.oauth.openai import resolve_codex_auth_state
+from app.auth.oauth.gemini import resolve_gemini_auth_state
 from app.providers.base import (
     ProviderCapabilities,
     ProviderConfigurationError,
@@ -76,3 +77,11 @@ def test_usage_accounting_service_supports_actual_and_avoided_cost_axes() -> Non
 def test_provider_configuration_error_type() -> None:
     error = ProviderConfigurationError("openai_api", "missing key")
     assert error.error_type == "provider_configuration_error"
+
+
+def test_gemini_auth_state_resolution() -> None:
+    settings = Settings(gemini_auth_mode="oauth", gemini_oauth_access_token="token")
+    state = resolve_gemini_auth_state(settings)
+    assert state.auth_mode == "oauth"
+    assert state.ready is True
+    assert state.credential_type == "oauth_access_token"

@@ -18,7 +18,7 @@ class ProviderRegistry:
             "forgegate_baseline": ForgeGateBaselineAdapter(settings),
             "openai_api": OpenAIAPIAdapter(settings),
             "openai_codex": OpenAICodexAdapter(settings),
-            "gemini": GeminiAdapter(),
+            "gemini": GeminiAdapter(settings),
             "anthropic": AnthropicAdapter(),
             "generic_harness": GenericHarnessAdapter(settings, harness),
         }
