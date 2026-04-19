@@ -173,3 +173,9 @@ def test_gemini_bridge_partial_runtime_executes_with_mocked_httpx(monkeypatch) -
     result = adapter.create_chat_completion(ChatDispatchRequest(model="gemini-2.5-flash", messages=[{"role": "user", "content": "hi"}], stream=False))
     assert result.provider == "gemini"
     assert result.content == "gemini-ok"
+
+
+def test_retry_after_http_date_is_parsed_for_openai_compatible_adapters() -> None:
+    value = "Wed, 21 Oct 2099 07:28:00 GMT"
+    assert OpenAIAPIAdapter._parse_retry_after_seconds(value) is not None
+    assert OpenAICodexAdapter._parse_retry_after_seconds(value) is not None

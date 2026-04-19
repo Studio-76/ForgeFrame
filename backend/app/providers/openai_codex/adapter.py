@@ -3,6 +3,7 @@
 import json
 from collections.abc import Iterator
 from datetime import datetime
+from email.utils import parsedate_to_datetime
 
 import httpx
 
@@ -91,8 +92,15 @@ class OpenAICodexAdapter:
             if tool_choice is not None:
                 payload["tool_choice"] = tool_choice
         data = self._post(payload)
-        choice = data.get("choices", [{}])[0]
+        choices = data.get("choices")
+        if not isinstance(choices, list) or not choices:
+            raise ProviderProtocolError(self.provider_name, "Codex bridge returned invalid payload: missing choices.")
+        choice = choices[0]
+        if not isinstance(choice, dict):
+            raise ProviderProtocolError(self.provider_name, "Codex bridge returned invalid payload: choice item must be an object.")
         message = choice.get("message", {})
+        if not isinstance(message, dict):
+            raise ProviderProtocolError(self.provider_name, "Codex bridge returned invalid payload: message item must be an object.")
         content = str(message.get("content", ""))
         tool_calls = message.get("tool_calls", [])
         usage = self._usage_from_payload(data.get("usage", {}), request.messages, content)
@@ -239,6 +247,10 @@ class OpenAICodexAdapter:
             return None
         if value.isdigit():
             return int(value)
+        http_date = parsedate_to_datetime(value)
+        if http_date is not None:
+            delta = int((http_date - datetime.now(tz=http_date.tzinfo)).total_seconds())
+            return delta if delta > 0 else 0
         try:
             retry_at = datetime.fromisoformat(value.replace("Z", "+00:00"))
         except ValueError:

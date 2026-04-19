@@ -257,6 +257,20 @@ def test_responses_endpoint_accepts_input_text_blocks() -> None:
     )
     assert response.status_code == 200
     assert response.json()["object"] == "response"
+    assert response.json()["status"] == "completed"
+    assert "output_text" in response.json()
+
+
+def test_responses_endpoint_accepts_single_input_text_object() -> None:
+    response = client.post(
+        "/v1/responses",
+        json={"input": {"type": "input_text", "text": "hello single block"}},
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["object"] == "response"
+    assert body["status"] == "completed"
+    assert body["output_text"]
 
 
 def test_responses_endpoint_includes_tool_call_output(monkeypatch: pytest.MonkeyPatch) -> None:
