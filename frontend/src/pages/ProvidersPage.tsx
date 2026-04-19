@@ -46,6 +46,7 @@ export function ProvidersPage() {
   const [profiles, setProfiles] = useState<HarnessProfile[]>([]);
   const [runs, setRuns] = useState<Array<Record<string, unknown>>>([]);
   const [runSummary, setRunSummary] = useState<Record<string, number>>({});
+  const [runOps, setRunOps] = useState<Record<string, unknown>>({});
   const [runModeFilter, setRunModeFilter] = useState<string>("all");
   const [runStatusFilter, setRunStatusFilter] = useState<string>("all");
   const [runProviderFilter, setRunProviderFilter] = useState<string>("all");
@@ -104,6 +105,7 @@ export function ProvidersPage() {
       setProfiles(harnessProfiles.profiles);
       setRuns(harnessRuns.runs.slice(0, 20));
       setRunSummary(harnessRuns.summary ?? {});
+      setRunOps(harnessRuns.ops ?? {});
       setClients(clientView.clients ?? []);
       setBetaTargets(betaTargetsResponse.targets ?? []);
       setOauthTargets(oauthTargetsResponse.targets ?? []);
@@ -229,7 +231,7 @@ export function ProvidersPage() {
           <label>status:<select value={runStatusFilter} onChange={(event) => setRunStatusFilter(event.target.value)}><option value="all">all</option><option value="ok">ok</option><option value="warning">warning</option><option value="failed">failed</option></select></label>
           <label>provider:<select value={runProviderFilter} onChange={(event) => setRunProviderFilter(event.target.value)}><option value="all">all</option>{profiles.map((p) => <option key={p.provider_key} value={p.provider_key}>{p.provider_key}</option>)}</select></label>
           <label>client:<select value={runClientFilter} onChange={(event) => setRunClientFilter(event.target.value)}><option value="all">all</option><option value="runtime">runtime</option><option value="control_plane">control_plane</option></select></label>
-          <span>summary total={String(runSummary.total ?? 0)} failed={String(runSummary.failed ?? 0)} verify={String(runSummary.verify ?? 0)} probe={String(runSummary.probe ?? 0)} sync={String(runSummary.sync ?? 0)} runtime_non_stream={String(runSummary.runtime_non_stream ?? 0)} runtime_stream={String(runSummary.runtime_stream ?? 0)}</span>
+          <span>summary total={String(runSummary.total ?? 0)} failed={String(runSummary.failed ?? 0)} verify={String(runSummary.verify ?? 0)} probe={String(runSummary.probe ?? 0)} sync={String(runSummary.sync ?? 0)} runtime_non_stream={String(runSummary.runtime_non_stream ?? 0)} runtime_stream={String(runSummary.runtime_stream ?? 0)} profiles={String(runOps.profile_count ?? 0)} needs_attention={String(runOps.profiles_needing_attention ?? 0)}</span>
         </div>
         <ul>{runs.map((run, idx) => <li key={`${String(run.run_id ?? run.provider_key)}-${idx}`}>{String(run.executed_at)} · {String(run.provider_key)} · {String(run.mode)} · status={String(run.status)} · success={String(run.success)} · client={String(run.client_id ?? "-")} · integration={String(run.integration ?? "-")}</li>)}</ul>
       </div>
@@ -337,7 +339,7 @@ export function ProvidersPage() {
         <ul>
           {oauthOperations.map((item) => (
             <li key={String(item.provider_key)}>
-              {String(item.provider_key)} · failures={String(item.failures ?? 0)} · failure_rate={Number(item.failure_rate ?? 0).toFixed(2)} · ops={String(item.operation_count ?? 0)} · needs_attention={String(item.needs_attention ?? false)} · last_probe={String((item.last_probe as Record<string, unknown> | null)?.status ?? "never")} · last_sync={String((item.last_bridge_sync as Record<string, unknown> | null)?.status ?? "never")}
+              {String(item.provider_key)} · failures={String(item.failures ?? 0)} · failures_24h={String(item.failures_24h ?? 0)} · probes={String(item.probe_count ?? 0)} · bridge_syncs={String(item.bridge_sync_count ?? 0)} · failure_rate={Number(item.failure_rate ?? 0).toFixed(2)} · ops={String(item.operation_count ?? 0)} · needs_attention={String(item.needs_attention ?? false)} · last_probe={String((item.last_probe as Record<string, unknown> | null)?.status ?? "never")} · last_failed={String((item.last_failed_operation as Record<string, unknown> | null)?.status ?? "never")} · last_sync={String((item.last_bridge_sync as Record<string, unknown> | null)?.status ?? "never")}
             </li>
           ))}
         </ul>

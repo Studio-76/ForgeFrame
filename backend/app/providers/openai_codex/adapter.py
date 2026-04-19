@@ -19,6 +19,7 @@ from app.providers.base import (
     ProviderProtocolError,
     ProviderRateLimitError,
     ProviderRequestTimeoutError,
+    ProviderModelNotFoundError,
     ProviderResourceGoneError,
     ProviderStreamEvent,
     ProviderStreamInterruptedError,
@@ -210,7 +211,9 @@ class OpenAICodexAdapter:
             raise ProviderAuthenticationError(self.provider_name, f"Codex authentication failed ({response.status_code}).")
         if response.status_code == 408:
             raise ProviderRequestTimeoutError(self.provider_name, f"Codex request timeout ({response.status_code}): {response.text[:500]}")
-        if response.status_code in {400, 404, 422}:
+        if response.status_code == 404:
+            raise ProviderModelNotFoundError(self.provider_name, message=f"Codex model/resource not found ({response.status_code}): {response.text[:500]}")
+        if response.status_code in {400, 422}:
             raise ProviderBadRequestError(self.provider_name, f"Codex bridge rejected request ({response.status_code}): {response.text[:500]}")
         if response.status_code == 410:
             raise ProviderResourceGoneError(self.provider_name, f"Codex resource gone ({response.status_code}): {response.text[:500]}")

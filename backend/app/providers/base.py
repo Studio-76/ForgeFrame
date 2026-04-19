@@ -133,6 +133,15 @@ class ProviderBadRequestError(ProviderError):
         super().__init__(provider=provider, error_type="provider_bad_request", message=message)
 
 
+class ProviderModelNotFoundError(ProviderError):
+    def __init__(self, provider: str, model: str | None = None, message: str | None = None):
+        if not message:
+            message = f"Provider '{provider}' could not find requested model."
+            if model:
+                message = f"Provider '{provider}' could not find requested model '{model}'."
+        super().__init__(provider=provider, error_type="provider_model_not_found", message=message, upstream_status_code=404)
+
+
 class ProviderValidationError(ProviderError):
     def __init__(self, provider: str, message: str):
         super().__init__(provider=provider, error_type="provider_validation_error", message=message)

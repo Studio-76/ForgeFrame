@@ -2,7 +2,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.main import app
-from app.providers import ProviderPayloadTooLargeError, ProviderRateLimitError, ProviderStreamEvent
+from app.providers import ProviderModelNotFoundError, ProviderPayloadTooLargeError, ProviderRateLimitError, ProviderStreamEvent
 from app.providers.openai_api.adapter import OpenAIAPIAdapter
 from app.usage.models import CostBreakdown, TokenUsage
 
@@ -160,3 +160,19 @@ def test_chat_endpoint_openai_tool_calls_are_forwarded(monkeypatch: pytest.Monke
     message = response.json()["choices"][0]["message"]
     assert isinstance(message["tool_calls"], list)
     assert message["tool_calls"][0]["function"]["name"] == "ping"
+
+
+def test_chat_endpoint_openai_model_not_found_maps_to_404(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("FORGEGATE_OPENAI_API_KEY", "test-key")
+
+    def _fake_post(self, payload: dict) -> dict:
+        del payload
+        raise ProviderModelNotFoundError("openai_api", model="gpt-missing")
+
+    monkeypatch.setattr(OpenAIAPIAdapter, "_post_chat_completion", _fake_post)
+    response = client.post(
+        "/v1/chat/completions",
+        json={"messages": [{"role": "user", "content": "Ping external"}], "model": "gpt-4.1-mini"},
+    )
+    assert response.status_code == 404
+    assert response.json()["error"]["type"] == "provider_model_not_found"

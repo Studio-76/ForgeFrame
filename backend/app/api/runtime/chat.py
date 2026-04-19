@@ -17,6 +17,7 @@ from app.providers import (
     ProviderConflictError,
     ProviderError,
     ProviderNotImplementedError,
+    ProviderModelNotFoundError,
     ProviderNotReadyError,
     ProviderProtocolError,
     ProviderRateLimitError,
@@ -54,6 +55,8 @@ def _provider_exception_to_http(exc: Exception) -> tuple[int, str, str | None, s
         return status.HTTP_501_NOT_IMPLEMENTED, exc.error_type, exc.provider, str(exc), {"phase": "phase-5 streaming/codex"}
     if isinstance(exc, ProviderUnsupportedFeatureError):
         return status.HTTP_400_BAD_REQUEST, exc.error_type, exc.provider, str(exc), {}
+    if isinstance(exc, ProviderModelNotFoundError):
+        return status.HTTP_404_NOT_FOUND, exc.error_type, exc.provider, str(exc), {}
     if isinstance(exc, ProviderNotReadyError):
         return status.HTTP_503_SERVICE_UNAVAILABLE, exc.error_type, exc.provider, str(exc), {}
     if isinstance(exc, ProviderConfigurationError):

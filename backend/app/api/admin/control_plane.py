@@ -423,13 +423,25 @@ class ControlPlaneService:
     def oauth_account_operations_summary(self) -> dict[str, object]:
         providers = ["openai_codex", "gemini", "antigravity", "github_copilot", "claude_code"]
         per_provider: list[dict[str, object]] = []
+        cutoff_24h = datetime.now(tz=UTC).timestamp() - 24 * 3600
         for provider_key in providers:
             status = self._oauth_target_status(provider_key) if provider_key in {"antigravity", "github_copilot", "claude_code"} else None
             provider_ops = [item for item in self._oauth_operations if item.provider_key == provider_key]
             last_probe = next((item for item in reversed(provider_ops) if item.action == "probe"), None)
             last_bridge_sync = next((item for item in reversed(provider_ops) if item.action == "bridge_sync"), None)
+            last_failed = next((item for item in reversed(provider_ops) if item.status == "failed"), None)
             failures = len([item for item in provider_ops if item.status == "failed"])
             total = len(provider_ops)
+            failures_24h = len(
+                [
+                    item
+                    for item in provider_ops
+                    if item.status == "failed"
+                    and datetime.fromisoformat(item.executed_at).timestamp() >= cutoff_24h
+                ]
+            )
+            probes_total = len([item for item in provider_ops if item.action == "probe"])
+            bridge_total = len([item for item in provider_ops if item.action == "bridge_sync"])
             per_provider.append(
                 {
                     "provider_key": provider_key,
@@ -442,8 +454,12 @@ class ControlPlaneService:
                     "bridge_profile_enabled": status.harness_profile_enabled if status else False,
                     "needs_attention": failures >= 2,
                     "failures": failures,
+                    "failures_24h": failures_24h,
+                    "probe_count": probes_total,
+                    "bridge_sync_count": bridge_total,
                     "operation_count": total,
                     "failure_rate": failures / max(1, total),
+                    "last_failed_operation": last_failed.model_dump() if last_failed else None,
                     "last_probe": last_probe.model_dump() if last_probe else None,
                     "last_bridge_sync": last_bridge_sync.model_dump() if last_bridge_sync else None,
                 }
@@ -854,7 +870,22 @@ class ControlPlaneService:
 
     def harness_runs(self, provider_key: str | None = None, mode: str | None = None, status: str | None = None, client_id: str | None = None, limit: int = 200) -> dict[str, object]:
         runs = self._harness.list_runs(provider_key, mode=mode, status=status, client_id=client_id, limit=limit)
-        return {"status": "ok", "runs": [item.model_dump() for item in runs], "summary": self._harness.runs_summary(provider_key)}
+        profiles = self._harness.list_profiles()
+        last_failed = next((run for run in runs if not run.success), None)
+        runs_by_provider: dict[str, int] = {}
+        for run in runs:
+            runs_by_provider[run.provider_key] = runs_by_provider.get(run.provider_key, 0) + 1
+        return {
+            "status": "ok",
+            "runs": [item.model_dump() for item in runs],
+            "summary": self._harness.runs_summary(provider_key),
+            "ops": {
+                "profile_count": len(profiles),
+                "profiles_needing_attention": len([p for p in profiles if p.needs_attention]),
+                "runs_by_provider": runs_by_provider,
+                "last_failed_run": last_failed.model_dump() if last_failed else None,
+            },
+        }
 
     def get_health_config(self) -> HealthConfig:
         return self._health_config

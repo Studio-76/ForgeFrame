@@ -287,7 +287,7 @@ export function fetchHarnessRuns(providerKey?: string, mode?: string, status?: s
   if (clientId) params.set("client_id", clientId);
   params.set("limit", String(limit));
   const suffix = params.size ? `?${params.toString()}` : "";
-  return fetchJson<{ status: string; runs: Array<Record<string, unknown>>; summary: Record<string, number> }>(`/admin/providers/harness/runs${suffix}`);
+  return fetchJson<{ status: string; runs: Array<Record<string, unknown>>; summary: Record<string, number>; ops?: Record<string, unknown> }>(`/admin/providers/harness/runs${suffix}`);
 }
 
 

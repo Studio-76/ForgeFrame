@@ -19,6 +19,7 @@ from app.providers.base import (
     ProviderProtocolError,
     ProviderRateLimitError,
     ProviderRequestTimeoutError,
+    ProviderModelNotFoundError,
     ProviderStreamEvent,
     ProviderStreamInterruptedError,
     ProviderTimeoutError,
@@ -246,7 +247,9 @@ class OpenAIAPIAdapter:
 
         if response.status_code == 408:
             raise ProviderRequestTimeoutError(self.provider_name, f"OpenAI request timeout ({response.status_code}): {response.text[:500]}")
-        if response.status_code in (400, 404, 422):
+        if response.status_code == 404:
+            raise ProviderModelNotFoundError(self.provider_name, message=f"OpenAI model/resource not found ({response.status_code}): {response.text[:500]}")
+        if response.status_code in (400, 422):
             raise ProviderBadRequestError(self.provider_name, f"OpenAI rejected request ({response.status_code}): {response.text[:500]}")
         if response.status_code == 410:
             raise ProviderResourceGoneError(self.provider_name, f"OpenAI resource gone ({response.status_code}): {response.text[:500]}")

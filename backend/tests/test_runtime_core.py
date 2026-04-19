@@ -160,6 +160,7 @@ def test_admin_oauth_operations_endpoint_available() -> None:
     assert payload["status"] == "ok"
     assert "operations" in payload
     assert "recent" in payload
+    assert "total_operations" in payload
 
 
 def test_admin_bootstrap_readiness_endpoint_available() -> None:
@@ -169,6 +170,15 @@ def test_admin_bootstrap_readiness_endpoint_available() -> None:
     assert payload["status"] == "ok"
     assert "checks" in payload
     assert "next_steps" in payload
+
+
+def test_harness_runs_endpoint_contains_ops_summary() -> None:
+    response = client.get("/admin/providers/harness/runs")
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["status"] == "ok"
+    assert "ops" in payload
+    assert "profile_count" in payload["ops"]
 
 
 def test_admin_usage_summary_records_runtime_requests() -> None:
