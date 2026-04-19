@@ -2,7 +2,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.main import app
-from app.providers import ProviderStreamEvent
+from app.providers import ProviderRateLimitError, ProviderStreamEvent
 from app.providers.openai_api.adapter import OpenAIAPIAdapter
 from app.usage.models import CostBreakdown, TokenUsage
 
@@ -97,3 +97,19 @@ def test_chat_endpoint_openai_not_configured_error(monkeypatch: pytest.MonkeyPat
     error = response.json()["error"]
     assert error["type"] == "provider_not_ready"
     assert error["provider"] == "openai_api"
+
+
+def test_chat_endpoint_openai_rate_limit_maps_to_429(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("FORGEGATE_OPENAI_API_KEY", "test-key")
+
+    def _fake_post(self, payload: dict) -> dict:
+        del payload
+        raise ProviderRateLimitError("openai_api", "rate limited")
+
+    monkeypatch.setattr(OpenAIAPIAdapter, "_post_chat_completion", _fake_post)
+    response = client.post(
+        "/v1/chat/completions",
+        json={"messages": [{"role": "user", "content": "Ping external"}], "model": "gpt-4.1-mini"},
+    )
+    assert response.status_code == 429
+    assert response.json()["error"]["type"] == "provider_rate_limited"

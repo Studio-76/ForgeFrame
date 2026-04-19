@@ -14,11 +14,15 @@ from app.providers import (
     ProviderAuthenticationError,
     ProviderBadRequestError,
     ProviderConfigurationError,
+    ProviderConflictError,
     ProviderError,
     ProviderNotImplementedError,
     ProviderNotReadyError,
+    ProviderProtocolError,
+    ProviderRateLimitError,
     ProviderStreamEvent,
     ProviderStreamInterruptedError,
+    ProviderTimeoutError,
     ProviderUnsupportedFeatureError,
     ProviderUpstreamError,
 )
@@ -50,6 +54,14 @@ def _provider_exception_to_http(exc: Exception) -> tuple[int, str, str | None, s
         return status.HTTP_503_SERVICE_UNAVAILABLE, exc.error_type, exc.provider, str(exc), {}
     if isinstance(exc, ProviderAuthenticationError):
         return status.HTTP_401_UNAUTHORIZED, exc.error_type, exc.provider, str(exc), {}
+    if isinstance(exc, ProviderRateLimitError):
+        return status.HTTP_429_TOO_MANY_REQUESTS, exc.error_type, exc.provider, str(exc), {"retryable": True}
+    if isinstance(exc, ProviderConflictError):
+        return status.HTTP_409_CONFLICT, exc.error_type, exc.provider, str(exc), {}
+    if isinstance(exc, ProviderProtocolError):
+        return status.HTTP_502_BAD_GATEWAY, exc.error_type, exc.provider, str(exc), {}
+    if isinstance(exc, ProviderTimeoutError):
+        return status.HTTP_504_GATEWAY_TIMEOUT, exc.error_type, exc.provider, str(exc), {"retryable": True}
     if isinstance(exc, ProviderBadRequestError):
         return status.HTTP_400_BAD_REQUEST, exc.error_type, exc.provider, str(exc), {}
     if isinstance(exc, (ProviderUpstreamError, ProviderError)):

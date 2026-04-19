@@ -70,9 +70,19 @@ class ProviderAdapter(Protocol):
 
 
 class ProviderError(RuntimeError):
-    def __init__(self, *, provider: str, error_type: str, message: str):
+    def __init__(
+        self,
+        *,
+        provider: str,
+        error_type: str,
+        message: str,
+        upstream_status_code: int | None = None,
+        retryable: bool = False,
+    ):
         self.provider = provider
         self.error_type = error_type
+        self.upstream_status_code = upstream_status_code
+        self.retryable = retryable
         super().__init__(message)
 
 
@@ -121,7 +131,27 @@ class ProviderBadRequestError(ProviderError):
 
 class ProviderUpstreamError(ProviderError):
     def __init__(self, provider: str, message: str):
-        super().__init__(provider=provider, error_type="provider_upstream_error", message=message)
+        super().__init__(provider=provider, error_type="provider_upstream_error", message=message, retryable=True)
+
+
+class ProviderRateLimitError(ProviderError):
+    def __init__(self, provider: str, message: str, *, upstream_status_code: int = 429):
+        super().__init__(provider=provider, error_type="provider_rate_limited", message=message, upstream_status_code=upstream_status_code, retryable=True)
+
+
+class ProviderConflictError(ProviderError):
+    def __init__(self, provider: str, message: str, *, upstream_status_code: int = 409):
+        super().__init__(provider=provider, error_type="provider_conflict", message=message, upstream_status_code=upstream_status_code)
+
+
+class ProviderTimeoutError(ProviderError):
+    def __init__(self, provider: str, message: str):
+        super().__init__(provider=provider, error_type="provider_timeout", message=message, retryable=True)
+
+
+class ProviderProtocolError(ProviderError):
+    def __init__(self, provider: str, message: str):
+        super().__init__(provider=provider, error_type="provider_protocol_error", message=message)
 
 
 class ProviderStreamInterruptedError(ProviderError):

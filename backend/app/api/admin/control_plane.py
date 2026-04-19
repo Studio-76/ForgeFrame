@@ -870,6 +870,16 @@ class ControlPlaneService:
 
     def provider_control_snapshot(self) -> list[dict[str, object]]:
         health_by_provider: dict[str, dict[str, str]] = {}
+        oauth_failures: dict[str, int] = {}
+        oauth_last_probe: dict[str, dict[str, object]] = {}
+        oauth_last_bridge: dict[str, dict[str, object]] = {}
+        for item in self._oauth_operations:
+            if item.status == "failed":
+                oauth_failures[item.provider_key] = oauth_failures.get(item.provider_key, 0) + 1
+            if item.action == "probe":
+                oauth_last_probe[item.provider_key] = item.model_dump()
+            if item.action == "bridge_sync":
+                oauth_last_bridge[item.provider_key] = item.model_dump()
         for record in self._health_records.values():
             health_by_provider.setdefault(record.provider, {})[record.model] = record.status
         snapshot: list[dict[str, object]] = []
@@ -900,6 +910,9 @@ class ControlPlaneService:
                     "harness_profile_count": len([p for p in harness_profiles if p.enabled]) if provider.provider == "generic_harness" else 0,
                     "harness_needs_attention_count": len([p for p in harness_profiles if p.needs_attention]) if provider.provider == "generic_harness" else 0,
                     "harness_run_count": len(harness_runs) if provider.provider == "generic_harness" else 0,
+                    "oauth_failure_count": oauth_failures.get(provider.provider, 0),
+                    "oauth_last_probe": oauth_last_probe.get(provider.provider),
+                    "oauth_last_bridge_sync": oauth_last_bridge.get(provider.provider),
                 }
             )
         return snapshot

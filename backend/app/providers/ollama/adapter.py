@@ -8,13 +8,18 @@ from collections.abc import Iterator
 import httpx
 
 from app.providers.base import (
+    ProviderAuthenticationError,
     ChatDispatchRequest,
     ChatDispatchResult,
     ProviderBadRequestError,
     ProviderCapabilities,
+    ProviderConflictError,
     ProviderConfigurationError,
+    ProviderProtocolError,
+    ProviderRateLimitError,
     ProviderStreamEvent,
     ProviderStreamInterruptedError,
+    ProviderTimeoutError,
     ProviderUpstreamError,
 )
 from app.settings.config import Settings
@@ -81,10 +86,15 @@ class OllamaAdapter:
     def _post(self, payload: dict) -> dict:
         try:
             response = httpx.post(self._endpoint(), json=payload, timeout=self._settings.ollama_timeout_seconds)
+        except httpx.TimeoutException as exc:
+            raise ProviderTimeoutError(self.provider_name, f"Ollama request timed out: {exc}") from exc
         except httpx.RequestError as exc:
             raise ProviderUpstreamError(self.provider_name, f"Ollama network error: {exc}") from exc
         self._raise_for_status(response)
-        return response.json()
+        try:
+            return response.json()
+        except ValueError as exc:
+            raise ProviderProtocolError(self.provider_name, "Ollama returned invalid JSON payload.") from exc
 
     def _stream(self, payload: dict, messages: list[dict]) -> Iterator[ProviderStreamEvent]:
         chunks: list[str] = []
@@ -101,7 +111,10 @@ class OllamaAdapter:
                     if line == "[DONE]":
                         saw_done = True
                         break
-                    payload = json.loads(line)
+                    try:
+                        payload = json.loads(line)
+                    except json.JSONDecodeError as exc:
+                        raise ProviderStreamInterruptedError(self.provider_name, "Ollama stream returned invalid JSON chunk.") from exc
                     choice = payload.get("choices", [{}])[0]
                     content = choice.get("delta", {}).get("content", "")
                     if content:
@@ -111,10 +124,10 @@ class OllamaAdapter:
                         finish_reason = str(choice["finish_reason"])
                     if payload.get("usage"):
                         usage = self._usage_from_payload(payload["usage"], messages, "".join(chunks))
+        except httpx.TimeoutException as exc:
+            raise ProviderStreamInterruptedError(self.provider_name, f"Ollama stream timed out: {exc}") from exc
         except httpx.RequestError as exc:
             raise ProviderStreamInterruptedError(self.provider_name, f"Ollama stream network error: {exc}") from exc
-        except json.JSONDecodeError as exc:
-            raise ProviderStreamInterruptedError(self.provider_name, "Ollama stream returned invalid JSON chunk.") from exc
         if not saw_done:
             raise ProviderStreamInterruptedError(self.provider_name, "Ollama stream ended without done marker.")
         final_usage = usage or self._usage.usage_from_prompt_completion(messages, "".join(chunks))
@@ -130,8 +143,14 @@ class OllamaAdapter:
         return self._usage.usage_from_prompt_completion(messages, content)
 
     def _raise_for_status(self, response: httpx.Response) -> None:
+        if response.status_code in {401, 403}:
+            raise ProviderAuthenticationError(self.provider_name, f"Ollama authentication failed ({response.status_code}).")
         if response.status_code in {400, 404, 422}:
             raise ProviderBadRequestError(self.provider_name, f"Ollama rejected request ({response.status_code}): {response.text[:500]}")
+        if response.status_code == 409:
+            raise ProviderConflictError(self.provider_name, f"Ollama conflict ({response.status_code}): {response.text[:500]}")
+        if response.status_code == 429:
+            raise ProviderRateLimitError(self.provider_name, f"Ollama rate limit reached ({response.status_code}): {response.text[:500]}")
         if response.status_code >= 500:
             raise ProviderUpstreamError(self.provider_name, f"Ollama upstream error ({response.status_code}): {response.text[:500]}")
         if response.status_code >= 300:

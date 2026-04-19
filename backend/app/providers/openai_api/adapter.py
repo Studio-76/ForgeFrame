@@ -13,9 +13,13 @@ from app.providers.base import (
     ProviderAuthenticationError,
     ProviderBadRequestError,
     ProviderCapabilities,
+    ProviderConflictError,
     ProviderConfigurationError,
+    ProviderProtocolError,
+    ProviderRateLimitError,
     ProviderStreamEvent,
     ProviderStreamInterruptedError,
+    ProviderTimeoutError,
     ProviderUpstreamError,
 )
 from app.settings.config import Settings
@@ -109,11 +113,16 @@ class OpenAIAPIAdapter:
                 headers=headers,
                 timeout=self._settings.openai_timeout_seconds,
             )
+        except httpx.TimeoutException as exc:
+            raise ProviderTimeoutError(self.provider_name, f"OpenAI request timed out: {exc}") from exc
         except httpx.RequestError as exc:
             raise ProviderUpstreamError(self.provider_name, f"Network error while calling OpenAI API: {exc}") from exc
 
         self._raise_for_status(response)
-        return response.json()
+        try:
+            return response.json()
+        except ValueError as exc:
+            raise ProviderProtocolError(self.provider_name, "OpenAI returned invalid JSON payload.") from exc
 
     def _stream_chat_completion(self, payload: dict, messages: list[dict]) -> Iterator[ProviderStreamEvent]:
         endpoint, headers = self._endpoint_and_headers()
@@ -181,6 +190,8 @@ class OpenAIAPIAdapter:
                     usage=usage,
                     cost=cost,
                 )
+        except httpx.TimeoutException as exc:
+            raise ProviderStreamInterruptedError(self.provider_name, f"OpenAI stream timed out: {exc}") from exc
         except httpx.RequestError as exc:
             raise ProviderStreamInterruptedError(self.provider_name, f"Network error while streaming OpenAI API: {exc}") from exc
 
@@ -207,6 +218,10 @@ class OpenAIAPIAdapter:
 
         if response.status_code in (400, 404, 422):
             raise ProviderBadRequestError(self.provider_name, f"OpenAI rejected request ({response.status_code}): {response.text[:500]}")
+        if response.status_code == 409:
+            raise ProviderConflictError(self.provider_name, f"OpenAI conflict ({response.status_code}): {response.text[:500]}")
+        if response.status_code == 429:
+            raise ProviderRateLimitError(self.provider_name, f"OpenAI rate limit reached ({response.status_code}): {response.text[:500]}")
 
         if response.status_code >= 500:
             raise ProviderUpstreamError(self.provider_name, f"OpenAI upstream error ({response.status_code}): {response.text[:500]}")

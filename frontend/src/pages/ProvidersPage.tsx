@@ -265,6 +265,7 @@ export function ProvidersPage() {
           <h3>{provider.label} ({provider.provider})</h3>
           <p>integration_class={provider.integration_class} · template={provider.template_id ?? "-"} · last_sync_error={provider.last_sync_error ?? "none"}</p>
           <p>harness_profiles={String(provider.harness_profile_count ?? 0)} · harness_runs={String(provider.harness_run_count ?? 0)} · harness_needs_attention={String(provider.harness_needs_attention_count ?? 0)}</p>
+          <p>oauth_failures={String(provider.oauth_failure_count ?? 0)} · oauth_last_probe={String((provider.oauth_last_probe as Record<string, unknown> | null)?.status ?? "never")} · oauth_last_bridge={String((provider.oauth_last_bridge_sync as Record<string, unknown> | null)?.status ?? "never")}</p>
           <p>enabled={String(provider.enabled)} · ready={String(provider.ready)} · oauth_required={String(provider.oauth_required)}</p>
           <p>axis={provider.provider_axis ?? "unknown"} · auth_mechanism={provider.auth_mechanism ?? "unknown"}</p>
           <p>discovery_supported={String(provider.discovery_supported)} · last_sync_status={provider.last_sync_status} · models={provider.model_count}</p>

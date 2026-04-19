@@ -152,3 +152,15 @@ def test_responses_endpoint_rejects_stream_mode_for_now() -> None:
     response = client.post("/v1/responses", json={"input": "Hello responses", "stream": True})
     assert response.status_code == 400
     assert response.json()["error"]["type"] == "unsupported_feature"
+
+
+def test_responses_endpoint_rejects_invalid_temperature() -> None:
+    response = client.post("/v1/responses", json={"input": "Hello responses", "temperature": 3})
+    assert response.status_code == 400
+    assert response.json()["error"]["type"] == "invalid_request"
+
+
+def test_responses_endpoint_rejects_invalid_input_list_object() -> None:
+    response = client.post("/v1/responses", json={"input": [{"type": "text"}]})
+    assert response.status_code == 422
+    assert response.json()["error"]["type"] == "unsupported_input"

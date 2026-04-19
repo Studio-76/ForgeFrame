@@ -26,13 +26,26 @@ def create_response(
             status_code=400,
             content={"error": {"type": "unsupported_feature", "message": "Streaming for /v1/responses is not implemented yet. Use /v1/chat/completions for stream mode."}},
         )
+    if payload.max_output_tokens is not None and payload.max_output_tokens <= 0:
+        return JSONResponse(status_code=400, content={"error": {"type": "invalid_request", "message": "max_output_tokens must be > 0 when provided."}})
+    if payload.temperature is not None and not 0 <= payload.temperature <= 2:
+        return JSONResponse(status_code=400, content={"error": {"type": "invalid_request", "message": "temperature must be between 0 and 2."}})
 
     input_value = payload.input
     if isinstance(input_value, list):
-        text_parts = [str(item.get("content", item)) if isinstance(item, dict) else str(item) for item in input_value]
+        text_parts = []
+        for item in input_value:
+            if isinstance(item, dict):
+                if "content" not in item:
+                    return JSONResponse(status_code=422, content={"error": {"type": "unsupported_input", "message": "List input objects must contain a 'content' field."}})
+                text_parts.append(str(item.get("content", "")))
+            else:
+                text_parts.append(str(item))
         resolved_input = "\n".join(part for part in text_parts if part.strip()) or " "
     else:
         resolved_input = str(input_value)
+    if not resolved_input.strip():
+        return JSONResponse(status_code=400, content={"error": {"type": "invalid_request", "message": "input must not be empty."}})
 
     if payload.instructions:
         resolved_input = f"{payload.instructions}\n\n{resolved_input}"

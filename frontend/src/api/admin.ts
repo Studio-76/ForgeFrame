@@ -28,6 +28,9 @@ export type ProviderControlItem = {
   harness_profile_count?: number;
   harness_run_count?: number;
   harness_needs_attention_count?: number;
+  oauth_failure_count?: number;
+  oauth_last_probe?: Record<string, unknown> | null;
+  oauth_last_bridge_sync?: Record<string, unknown> | null;
 };
 
 export type HealthConfig = {
