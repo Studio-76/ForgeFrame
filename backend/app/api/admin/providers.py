@@ -32,6 +32,12 @@ def list_provider_control_plane(service: ControlPlaneService = Depends(get_contr
             "health_action": "Model health checks can be configured and triggered via /admin/providers/health endpoints.",
             "harness_actions": ["preview", "dry_run", "verify", "probe", "snapshot"],
             "persistence": "repository_backed_harness_profiles",
+            "product_axes": [
+                "oauth_account_providers",
+                "openai_compatible_providers",
+                "local_providers",
+                "openai_compatible_clients",
+            ],
         },
     }
 
@@ -98,6 +104,25 @@ def run_health_checks(service: ControlPlaneService = Depends(get_control_plane_s
 @router.get("/beta-targets")
 def list_beta_targets(service: ControlPlaneService = Depends(get_control_plane_service)) -> dict[str, object]:
     return {"status": "ok", "targets": service.beta_provider_targets()}
+
+
+@router.post("/oauth-account/probe/{provider_key}")
+def probe_oauth_account_provider(provider_key: str, service: ControlPlaneService = Depends(get_control_plane_service)) -> object:
+    try:
+        result = service.probe_oauth_account_provider(provider_key)
+    except ValueError as exc:
+        return _admin_error(status.HTTP_404_NOT_FOUND, "oauth_provider_not_found", str(exc))
+    return {"status": "ok", "probe": result.model_dump()}
+
+
+@router.get("/oauth-account/targets")
+def list_oauth_account_targets(service: ControlPlaneService = Depends(get_control_plane_service)) -> object:
+    return {"status": "ok", "targets": service.list_oauth_account_target_statuses()}
+
+
+@router.post("/oauth-account/bridge-profiles/sync")
+def sync_oauth_account_bridge_profiles(service: ControlPlaneService = Depends(get_control_plane_service)) -> object:
+    return service.sync_oauth_account_bridge_profiles()
 
 
 @router.get("/harness/templates")

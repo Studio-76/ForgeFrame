@@ -116,3 +116,21 @@ def test_admin_usage_summary_records_runtime_requests() -> None:
     assert usage_response.status_code == 200
     payload = usage_response.json()
     assert payload["metrics"]["recorded_request_count"] >= 1
+
+
+def test_responses_endpoint_openai_compatible_baseline() -> None:
+    response = client.post(
+        "/v1/responses",
+        json={"input": "Hello responses"},
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["object"] == "response"
+    assert isinstance(body["output"], list)
+    assert body["provider"] == "forgegate_baseline"
+
+
+def test_responses_endpoint_rejects_stream_mode_for_now() -> None:
+    response = client.post("/v1/responses", json={"input": "Hello responses", "stream": True})
+    assert response.status_code == 400
+    assert response.json()["error"]["type"] == "unsupported_feature"

@@ -10,6 +10,7 @@ from app.providers.base import (
     ChatDispatchResult,
     ProviderCapabilities,
     ProviderConfigurationError,
+    ProviderNotReadyError,
     ProviderStreamEvent,
     ProviderStreamInterruptedError,
     ProviderUnsupportedFeatureError,
@@ -22,7 +23,17 @@ from app.usage.service import UsageAccountingService
 
 class GenericHarnessAdapter:
     provider_name = "generic_harness"
-    capabilities = ProviderCapabilities(streaming=True, tool_calling=False, vision=False, external=True, discovery_support=True)
+    capabilities = ProviderCapabilities(
+        streaming=True,
+        tool_calling=False,
+        vision=False,
+        external=True,
+        discovery_support=True,
+        provider_axis="openai_compatible_provider",
+        auth_mechanism="api_key",
+        verify_support=True,
+        probe_support=True,
+    )
 
     def __init__(self, settings: Settings, harness: HarnessService):
         self._settings = settings
@@ -103,4 +114,6 @@ class GenericHarnessAdapter:
                 return profile
         if not enabled:
             raise ProviderConfigurationError(self.provider_name, "No enabled harness profile configured.")
+        if not self._settings.generic_harness_allow_model_fallback:
+            raise ProviderNotReadyError(self.provider_name, f"No enabled harness profile owns model '{model}'.")
         return enabled[0]

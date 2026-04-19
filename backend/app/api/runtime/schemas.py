@@ -17,5 +17,16 @@ class ChatCompletionsRequest(BaseModel):
     client: dict[str, str] = Field(default_factory=dict)
 
 
+class ResponsesRequest(BaseModel):
+    model: str | None = None
+    input: Any
+    instructions: str | None = None
+    max_output_tokens: int | None = None
+    temperature: float | None = None
+    stream: bool = False
+    metadata: dict[str, Any] = Field(default_factory=dict)
+    client: dict[str, str] = Field(default_factory=dict)
+
+
 class ErrorEnvelope(BaseModel):
     error: dict[str, Any]

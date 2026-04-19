@@ -28,6 +28,8 @@ class Settings(BaseSettings):
     gemini_enabled: bool = True
     anthropic_enabled: bool = True
     generic_harness_enabled: bool = True
+    generic_harness_allow_model_fallback: bool = False
+    ollama_enabled: bool = True
 
     openai_api_key: str = ""
     openai_api_base_url: str = "https://api.openai.com/v1"
@@ -40,6 +42,44 @@ class Settings(BaseSettings):
     openai_codex_discovery_enabled: bool = False
     openai_codex_discovery_required: bool = False
     openai_codex_discovered_models: tuple[str, ...] = ()
+    openai_codex_bridge_enabled: bool = False
+    openai_codex_base_url: str = "https://api.openai.com/v1"
+    openai_codex_timeout_seconds: int = 45
+    openai_codex_probe_model: str = "gpt-5.3-codex"
+
+    gemini_auth_mode: Literal["oauth", "api_key"] = "oauth"
+    gemini_oauth_access_token: str = ""
+    gemini_api_key: str = ""
+    gemini_probe_enabled: bool = False
+    gemini_probe_base_url: str = "https://generativelanguage.googleapis.com/v1beta/openai"
+    gemini_probe_model: str = "gemini-2.5-flash"
+    gemini_timeout_seconds: int = 45
+
+    antigravity_enabled: bool = False
+    antigravity_oauth_access_token: str = ""
+    antigravity_probe_enabled: bool = False
+    antigravity_probe_base_url: str = "https://api.antigravity.example/v1"
+    antigravity_probe_model: str = "antigravity-beta"
+    antigravity_bridge_profile_enabled: bool = False
+
+    github_copilot_enabled: bool = False
+    github_copilot_oauth_access_token: str = ""
+    github_copilot_probe_enabled: bool = False
+    github_copilot_probe_base_url: str = "https://api.githubcopilot.example/v1"
+    github_copilot_probe_model: str = "copilot-chat"
+    github_copilot_bridge_profile_enabled: bool = False
+
+    claude_code_enabled: bool = False
+    claude_code_oauth_access_token: str = ""
+    claude_code_probe_enabled: bool = False
+    claude_code_probe_base_url: str = "https://api.claudecode.example/v1"
+    claude_code_probe_model: str = "claude-code"
+    claude_code_bridge_profile_enabled: bool = False
+
+    ollama_base_url: str = "http://host.docker.internal:11434/v1"
+    ollama_default_model: str = "llama3.2"
+    ollama_timeout_seconds: int = 45
+    oauth_account_probe_timeout_seconds: int = 30
 
     pricing_openai_input_per_1m_tokens: float = 0.4
     pricing_openai_output_per_1m_tokens: float = 1.6
@@ -63,6 +103,7 @@ class Settings(BaseSettings):
             ("gemini-2.5-flash", "gemini", "Google"),
             ("claude-sonnet-4-5", "anthropic", "Anthropic"),
             ("generic-placeholder-chat", "generic_harness", "Generic Harness"),
+            ("llama3.2", "ollama", "Ollama"),
         )
     )
 
@@ -74,6 +115,7 @@ class Settings(BaseSettings):
             "gemini": self.gemini_enabled,
             "anthropic": self.anthropic_enabled,
             "generic_harness": self.generic_harness_enabled,
+            "ollama": self.ollama_enabled,
         }
         return flag_map.get(provider_name, False)
 

@@ -12,10 +12,13 @@ import {
   fetchBetaProviderTargets,
   fetchClientOperationalView,
   fetchHarnessRuns,
+  fetchOauthAccountTargets,
   fetchHarnessTemplates,
   fetchProviderControlPlane,
   fetchUsageSummary,
   patchHealthConfig,
+  probeOauthAccountProvider,
+  syncOauthAccountBridgeProfiles,
   previewHarness,
   probeHarness,
   runHealthChecks,
@@ -54,6 +57,7 @@ export function ProvidersPage() {
   const [profileErrors, setProfileErrors] = useState<Record<string, number>>({});
   const [clients, setClients] = useState<Array<Record<string, string | number | boolean>>>([]);
   const [betaTargets, setBetaTargets] = useState<BetaProviderTarget[]>([]);
+  const [oauthTargets, setOauthTargets] = useState<Array<Record<string, string | boolean>>>([]);
 
   const [newHarness, setNewHarness] = useState({
     provider_key: "generic_openai_like",
@@ -70,7 +74,7 @@ export function ProvidersPage() {
   const load = async () => {
     setState("loading");
     try {
-      const [payload, usage, harnessTemplates, harnessProfiles, harnessRuns, clientView, betaTargetsResponse] = await Promise.all([
+      const [payload, usage, harnessTemplates, harnessProfiles, harnessRuns, clientView, betaTargetsResponse, oauthTargetsResponse] = await Promise.all([
         fetchProviderControlPlane(),
         fetchUsageSummary(),
         fetchHarnessTemplates(),
@@ -84,6 +88,7 @@ export function ProvidersPage() {
         ),
         fetchClientOperationalView(),
         fetchBetaProviderTargets(),
+        fetchOauthAccountTargets(),
       ]);
       setProviders(payload.providers);
       setTemplates(harnessTemplates.templates);
@@ -92,6 +97,7 @@ export function ProvidersPage() {
       setRunSummary(harnessRuns.summary ?? {});
       setClients(clientView.clients ?? []);
       setBetaTargets(betaTargetsResponse.targets ?? []);
+      setOauthTargets(oauthTargetsResponse.targets ?? []);
       setSyncNote(String(payload.notes.sync_action));
       setHealthConfig(payload.health_config);
       setProviderErrors(Object.fromEntries(usage.aggregations.errors_by_provider.map((item) => [String(item.provider), Number(item.errors)])));
@@ -245,6 +251,7 @@ export function ProvidersPage() {
           <p>integration_class={provider.integration_class} · template={provider.template_id ?? "-"} · last_sync_error={provider.last_sync_error ?? "none"}</p>
           <p>harness_profiles={String(provider.harness_profile_count ?? 0)} · harness_runs={String(provider.harness_run_count ?? 0)} · harness_needs_attention={String(provider.harness_needs_attention_count ?? 0)}</p>
           <p>enabled={String(provider.enabled)} · ready={String(provider.ready)} · oauth_required={String(provider.oauth_required)}</p>
+          <p>axis={provider.provider_axis ?? "unknown"} · auth_mechanism={provider.auth_mechanism ?? "unknown"}</p>
           <p>discovery_supported={String(provider.discovery_supported)} · last_sync_status={provider.last_sync_status} · models={provider.model_count}</p>
           <p>provider_errors={providerErrors[provider.provider] ?? 0} · integration_errors={integrationErrors[`runtime:none:none`] ?? 0}</p>
           {(providerErrors[provider.provider] ?? 0) >= 3 ? <p className="fg-danger">needs attention: elevated provider errors</p> : null}
@@ -276,10 +283,31 @@ export function ProvidersPage() {
       </div>
       <div className="fg-card" style={{ marginBottom: "0.75rem" }}>
         <h3>Beta target matrix</h3>
+        <p className="fg-muted">OAuth-/Account-Zielachsen können direkt mit readiness/live-probe geprüft werden.</p>
+        <button type="button" onClick={() => void syncOauthAccountBridgeProfiles().then((res) => { setOperationResult(JSON.stringify(res, null, 2)); void load(); })}>
+          Sync OAuth Bridge Profiles
+        </button>
         <ul>
           {betaTargets.map((target) => (
             <li key={target.provider_key}>
-              {target.provider_key} · type={target.provider_type} · readiness={target.readiness} · auth={target.auth_model} · runtime={target.runtime_path}
+              {target.provider_key} · axis={target.product_axis} · type={target.provider_type} · readiness={target.readiness} ({target.readiness_score}) · beta_tier={target.beta_tier} · auth={target.auth_model} · runtime={target.runtime_path} · runtime_axis={target.runtime_readiness} · stream_axis={target.streaming_readiness} · verify_axis={target.verify_probe_readiness} · ui_axis={target.ui_readiness} · status={target.status_summary}
+              {target.provider_type === "oauth_account" ? (
+                <button
+                  type="button"
+                  style={{ marginLeft: "0.5rem" }}
+                  onClick={() => void probeOauthAccountProvider(target.provider_key).then((res) => setOperationResult(JSON.stringify(res, null, 2)))}
+                >
+                  Probe OAuth
+                </button>
+              ) : null}
+            </li>
+          ))}
+        </ul>
+        <h4>OAuth account operational status</h4>
+        <ul>
+          {oauthTargets.map((target) => (
+            <li key={String(target.provider_key)}>
+              {String(target.provider_key)} · configured={String(target.configured)} · bridge={String(target.runtime_bridge_enabled)} · probe={String(target.probe_enabled)} · harness={String(target.harness_profile_enabled)} · readiness={String(target.readiness)} · reason={String(target.readiness_reason)}
             </li>
           ))}
         </ul>

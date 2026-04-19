@@ -7,6 +7,7 @@ from typing import Literal, Protocol
 
 from pydantic import BaseModel, Field
 
+from app.providers.axes import AuthMechanism, ProviderAxis
 from app.usage.models import CostBreakdown, TokenUsage
 
 
@@ -17,6 +18,10 @@ class ProviderCapabilities(BaseModel):
     external: bool = True
     oauth_required: bool = False
     discovery_support: bool = False
+    provider_axis: ProviderAxis = "openai_compatible_provider"
+    auth_mechanism: AuthMechanism = "api_key"
+    verify_support: bool = False
+    probe_support: bool = False
 
 
 class ChatDispatchRequest(BaseModel):

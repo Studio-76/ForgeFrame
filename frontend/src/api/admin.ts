@@ -15,7 +15,9 @@ export type ProviderControlItem = {
   config: Record<string, string>;
   ready: boolean;
   readiness_reason: string | null;
-  capabilities: Record<string, boolean>;
+  capabilities: Record<string, unknown>;
+  provider_axis?: string;
+  auth_mechanism?: string;
   oauth_required: boolean;
   discovery_supported: boolean;
   model_count: number;
@@ -78,13 +80,22 @@ export type UsageSummaryResponse = {
 export type BetaProviderTarget = {
   provider_key: string;
   provider_type: "oauth_account" | "openai_compatible" | "local";
+  product_axis: "oauth_account_providers" | "openai_compatible_providers" | "local_providers" | "openai_compatible_clients";
   auth_model: string;
   runtime_path: string;
   readiness: "planned" | "partial" | "ready";
+  readiness_score: number;
+  runtime_readiness: "planned" | "partial" | "ready";
+  streaming_readiness: "planned" | "partial" | "ready";
+  verify_probe_readiness: "planned" | "partial" | "ready";
+  ui_readiness: "planned" | "partial" | "ready";
+  beta_tier: "concept" | "beta" | "beta_plus";
   health_semantics: string;
   verify_probe_axis: string;
   observability_axis: string;
   ui_axis: string;
+  status_summary: string;
+  oauth_account_provider: boolean;
   notes: string;
 };
 
@@ -282,4 +293,22 @@ export function fetchClientOperationalView(window: "1h" | "24h" | "7d" | "all" =
 
 export function fetchBetaProviderTargets() {
   return fetchJson<{ status: string; targets: BetaProviderTarget[] }>("/admin/providers/beta-targets");
+}
+
+export function probeOauthAccountProvider(providerKey: string) {
+  return fetchJson<{ status: string; probe: Record<string, unknown> }>(`/admin/providers/oauth-account/probe/${providerKey}`, {
+    method: "POST",
+    body: "{}",
+  });
+}
+
+export function fetchOauthAccountTargets() {
+  return fetchJson<{ status: string; targets: Array<Record<string, string | boolean>> }>("/admin/providers/oauth-account/targets");
+}
+
+export function syncOauthAccountBridgeProfiles() {
+  return fetchJson<{ status: string; upserted_profiles: string[]; skipped: string[] }>("/admin/providers/oauth-account/bridge-profiles/sync", {
+    method: "POST",
+    body: "{}",
+  });
 }
