@@ -13,6 +13,28 @@ from app.settings.config import Settings
 router = APIRouter(tags=["runtime-responses"])
 
 
+def _normalize_responses_input(input_value: object) -> str:
+    if isinstance(input_value, list):
+        text_parts: list[str] = []
+        for item in input_value:
+            if isinstance(item, dict):
+                content = item.get("content")
+                if isinstance(content, list):
+                    block_texts = []
+                    for block in content:
+                        if isinstance(block, dict) and block.get("type") in {"input_text", "text"}:
+                            block_texts.append(str(block.get("text", "")))
+                    text_parts.append("\n".join(part for part in block_texts if part.strip()))
+                    continue
+                if content is None:
+                    raise ValueError("List input objects must contain a 'content' field.")
+                text_parts.append(str(content))
+                continue
+            text_parts.append(str(item))
+        return "\n".join(part for part in text_parts if part.strip()) or " "
+    return str(input_value)
+
+
 @router.post("/responses", response_model=None)
 def create_response(
     payload: ResponsesRequest,
@@ -32,18 +54,10 @@ def create_response(
         return JSONResponse(status_code=400, content={"error": {"type": "invalid_request", "message": "temperature must be between 0 and 2."}})
 
     input_value = payload.input
-    if isinstance(input_value, list):
-        text_parts = []
-        for item in input_value:
-            if isinstance(item, dict):
-                if "content" not in item:
-                    return JSONResponse(status_code=422, content={"error": {"type": "unsupported_input", "message": "List input objects must contain a 'content' field."}})
-                text_parts.append(str(item.get("content", "")))
-            else:
-                text_parts.append(str(item))
-        resolved_input = "\n".join(part for part in text_parts if part.strip()) or " "
-    else:
-        resolved_input = str(input_value)
+    try:
+        resolved_input = _normalize_responses_input(input_value)
+    except ValueError as exc:
+        return JSONResponse(status_code=422, content={"error": {"type": "unsupported_input", "message": str(exc)}})
     if not resolved_input.strip():
         return JSONResponse(status_code=400, content={"error": {"type": "invalid_request", "message": "input must not be empty."}})
 
@@ -61,7 +75,10 @@ def create_response(
     chat_result = create_chat_completion(chat_payload, request, registry, dispatch, settings)
     if not isinstance(chat_result, dict):
         return chat_result
-    output_items: list[dict[str, object]] = [{"type": "output_text", "text": chat_result["choices"][0]["message"]["content"]}]
+    output_items: list[dict[str, object]] = []
+    content = chat_result["choices"][0]["message"]["content"]
+    if str(content).strip():
+        output_items.append({"type": "output_text", "text": content})
     tool_calls = chat_result["choices"][0]["message"].get("tool_calls", [])
     for call in tool_calls if isinstance(tool_calls, list) else []:
         if isinstance(call, dict):

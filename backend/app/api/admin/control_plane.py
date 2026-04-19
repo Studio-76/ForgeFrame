@@ -975,6 +975,11 @@ class ControlPlaneService:
                     "provider_axis": (runtime_status["capabilities"].get("provider_axis") if runtime_status else "unknown"),
                     "auth_mechanism": (runtime_status["capabilities"].get("auth_mechanism") if runtime_status else "unknown"),
                     "oauth_required": runtime_status["oauth_required"] if runtime_status else False,
+                    "oauth_mode": (
+                        self._settings.openai_codex_auth_mode
+                        if provider.provider == "openai_codex"
+                        else (self._settings.gemini_auth_mode if provider.provider == "gemini" else None)
+                    ),
                     "discovery_supported": runtime_status["discovery_supported"] if runtime_status else False,
                     "model_count": len(provider.managed_models),
                     "models": [{**model.model_dump(), "health_status": health_by_provider.get(provider.provider, {}).get(model.id, "unknown")} for model in provider.managed_models],

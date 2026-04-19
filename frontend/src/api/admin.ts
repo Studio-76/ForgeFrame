@@ -21,6 +21,7 @@ export type ProviderControlItem = {
   provider_axis?: string;
   auth_mechanism?: string;
   oauth_required: boolean;
+  oauth_mode?: string | null;
   discovery_supported: boolean;
   model_count: number;
   models: ManagedModel[];

@@ -163,6 +163,14 @@ def test_admin_oauth_operations_endpoint_available() -> None:
     assert "total_operations" in payload
 
 
+def test_provider_control_plane_exposes_oauth_mode() -> None:
+    response = client.get("/admin/providers/")
+    assert response.status_code == 200
+    providers = response.json()["providers"]
+    codex = next(item for item in providers if item["provider"] == "openai_codex")
+    assert "oauth_mode" in codex
+
+
 def test_admin_bootstrap_readiness_endpoint_available() -> None:
     response = client.get("/admin/providers/bootstrap/readiness")
     assert response.status_code == 200
@@ -237,6 +245,20 @@ def test_responses_endpoint_forwards_tools_to_chat_validation() -> None:
     assert response.json()["error"]["type"] == "invalid_request"
 
 
+def test_responses_endpoint_accepts_input_text_blocks() -> None:
+    response = client.post(
+        "/v1/responses",
+        json={
+            "input": [
+                {"role": "user", "content": [{"type": "input_text", "text": "hello"}]},
+                {"role": "user", "content": [{"type": "text", "text": "world"}]},
+            ]
+        },
+    )
+    assert response.status_code == 200
+    assert response.json()["object"] == "response"
+
+
 def test_responses_endpoint_includes_tool_call_output(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("FORGEGATE_OPENAI_API_KEY", "test-key")
 
@@ -262,3 +284,4 @@ def test_responses_endpoint_includes_tool_call_output(monkeypatch: pytest.Monkey
     assert response.status_code == 200
     output = response.json()["output"]
     assert any(item.get("type") == "tool_call" for item in output)
+    assert not any(item.get("type") == "output_text" and not str(item.get("text", "")).strip() for item in output)

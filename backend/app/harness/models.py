@@ -30,6 +30,7 @@ class HarnessResponseMapping(BaseModel):
     prompt_tokens_path: str = "usage.prompt_tokens"
     completion_tokens_path: str = "usage.completion_tokens"
     total_tokens_path: str = "usage.total_tokens"
+    tool_calls_path: str = "choices.0.message.tool_calls"
 
 
 class HarnessErrorMapping(BaseModel):
@@ -127,6 +128,8 @@ class HarnessPreviewRequest(BaseModel):
     model: str
     message: str = "Hello from ForgeGate"
     stream: bool = False
+    tools: list[dict[str, Any]] = Field(default_factory=list)
+    tool_choice: str | dict[str, Any] | None = None
 
 
 class HarnessVerificationResult(BaseModel):
