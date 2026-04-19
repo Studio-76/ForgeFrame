@@ -28,6 +28,8 @@ class ChatDispatchRequest(BaseModel):
     model: str
     messages: list[dict]
     stream: bool = False
+    tools: list[dict] = Field(default_factory=list)
+    tool_choice: str | dict | None = None
     request_metadata: dict[str, str] = Field(default_factory=dict)
 
 
@@ -70,9 +72,19 @@ class ProviderAdapter(Protocol):
 
 
 class ProviderError(RuntimeError):
-    def __init__(self, *, provider: str, error_type: str, message: str):
+    def __init__(
+        self,
+        *,
+        provider: str,
+        error_type: str,
+        message: str,
+        upstream_status_code: int | None = None,
+        retryable: bool = False,
+    ):
         self.provider = provider
         self.error_type = error_type
+        self.upstream_status_code = upstream_status_code
+        self.retryable = retryable
         super().__init__(message)
 
 
@@ -121,7 +133,48 @@ class ProviderBadRequestError(ProviderError):
 
 class ProviderUpstreamError(ProviderError):
     def __init__(self, provider: str, message: str):
-        super().__init__(provider=provider, error_type="provider_upstream_error", message=message)
+        super().__init__(provider=provider, error_type="provider_upstream_error", message=message, retryable=True)
+
+
+class ProviderRateLimitError(ProviderError):
+    def __init__(self, provider: str, message: str, *, upstream_status_code: int = 429, retry_after_seconds: int | None = None):
+        self.retry_after_seconds = retry_after_seconds
+        super().__init__(provider=provider, error_type="provider_rate_limited", message=message, upstream_status_code=upstream_status_code, retryable=True)
+
+
+class ProviderConflictError(ProviderError):
+    def __init__(self, provider: str, message: str, *, upstream_status_code: int = 409):
+        super().__init__(provider=provider, error_type="provider_conflict", message=message, upstream_status_code=upstream_status_code)
+
+
+class ProviderTimeoutError(ProviderError):
+    def __init__(self, provider: str, message: str):
+        super().__init__(provider=provider, error_type="provider_timeout", message=message, retryable=True)
+
+
+class ProviderProtocolError(ProviderError):
+    def __init__(self, provider: str, message: str):
+        super().__init__(provider=provider, error_type="provider_protocol_error", message=message)
+
+
+class ProviderResourceGoneError(ProviderError):
+    def __init__(self, provider: str, message: str):
+        super().__init__(provider=provider, error_type="provider_resource_gone", message=message, upstream_status_code=410)
+
+
+class ProviderPayloadTooLargeError(ProviderError):
+    def __init__(self, provider: str, message: str):
+        super().__init__(provider=provider, error_type="provider_payload_too_large", message=message, upstream_status_code=413)
+
+
+class ProviderUnsupportedMediaTypeError(ProviderError):
+    def __init__(self, provider: str, message: str):
+        super().__init__(provider=provider, error_type="provider_unsupported_media_type", message=message, upstream_status_code=415)
+
+
+class ProviderUnavailableError(ProviderError):
+    def __init__(self, provider: str, message: str):
+        super().__init__(provider=provider, error_type="provider_unavailable", message=message, upstream_status_code=503, retryable=True)
 
 
 class ProviderStreamInterruptedError(ProviderError):

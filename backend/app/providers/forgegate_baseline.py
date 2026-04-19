@@ -7,6 +7,7 @@ from app.providers.base import (
     ChatDispatchResult,
     ProviderCapabilities,
     ProviderStreamEvent,
+    ProviderUnsupportedFeatureError,
 )
 from app.settings.config import Settings
 from app.usage.service import UsageAccountingService
@@ -43,6 +44,8 @@ class ForgeGateBaselineAdapter:
         return f"ForgeGate baseline response: {last_user_text}"
 
     def create_chat_completion(self, request: ChatDispatchRequest) -> ChatDispatchResult:
+        if getattr(request, "tools", []):
+            raise ProviderUnsupportedFeatureError(self.provider_name, "tool_calling")
         completion_text = self._build_response_text(request)
         usage = self._usage_accounting.usage_from_prompt_completion(request.messages, completion_text)
         cost = self._usage_accounting.costs_for_provider(provider=self.provider_name, usage=usage)
@@ -58,6 +61,8 @@ class ForgeGateBaselineAdapter:
         )
 
     def stream_chat_completion(self, request: ChatDispatchRequest) -> Iterator[ProviderStreamEvent]:
+        if getattr(request, "tools", []):
+            raise ProviderUnsupportedFeatureError(self.provider_name, "tool_calling")
         text = self._build_response_text(request)
         usage = self._usage_accounting.usage_from_prompt_completion(request.messages, text)
         cost = self._usage_accounting.costs_for_provider(provider=self.provider_name, usage=usage)

@@ -18,13 +18,15 @@ class DispatchService:
         self._routing = routing
         self._providers = providers
 
-    def dispatch_chat(self, requested_model: str | None, messages: list[dict], stream: bool = False) -> ChatDispatchResult:
+    def dispatch_chat(self, requested_model: str | None, messages: list[dict], stream: bool = False, tools: list[dict] | None = None, tool_choice: str | dict | None = None) -> ChatDispatchResult:
         decision = self._routing.resolve_model(requested_model)
         adapter = self._providers.get(decision.resolved_model.provider)
         request = ChatDispatchRequest(
             model=decision.resolved_model.id,
             messages=messages,
             stream=stream,
+            tools=tools or [],
+            tool_choice=tool_choice,
         )
 
         if not adapter.is_ready():
@@ -35,7 +37,7 @@ class DispatchService:
 
         return adapter.create_chat_completion(request)
 
-    def dispatch_chat_stream(self, requested_model: str | None, messages: list[dict]) -> tuple[str, str, Iterator[ProviderStreamEvent]]:
+    def dispatch_chat_stream(self, requested_model: str | None, messages: list[dict], *, tools: list[dict] | None = None, tool_choice: str | dict | None = None) -> tuple[str, str, Iterator[ProviderStreamEvent]]:
         decision = self._routing.resolve_model(requested_model)
         adapter = self._providers.get(decision.resolved_model.provider)
 
@@ -49,5 +51,7 @@ class DispatchService:
             model=decision.resolved_model.id,
             messages=messages,
             stream=True,
+            tools=tools or [],
+            tool_choice=tool_choice,
         )
         return decision.resolved_model.id, adapter.provider_name, adapter.stream_chat_completion(request)

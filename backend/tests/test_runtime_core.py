@@ -95,6 +95,27 @@ def test_chat_endpoint_rejects_unknown_model() -> None:
     assert error["type"] == "model_not_found"
 
 
+def test_chat_endpoint_rejects_tool_choice_without_tools() -> None:
+    response = client.post(
+        "/v1/chat/completions",
+        json={"messages": [{"role": "user", "content": "Hello"}], "tool_choice": "auto"},
+    )
+    assert response.status_code == 400
+    assert response.json()["error"]["type"] == "invalid_request"
+
+
+def test_chat_endpoint_rejects_tool_calling_for_baseline_provider() -> None:
+    response = client.post(
+        "/v1/chat/completions",
+        json={
+            "messages": [{"role": "user", "content": "Hello"}],
+            "tools": [{"type": "function", "function": {"name": "ping", "description": "Ping", "parameters": {"type": "object"}}}],
+        },
+    )
+    assert response.status_code == 400
+    assert response.json()["error"]["type"] == "provider_unsupported_feature"
+
+
 def test_admin_usage_summary_endpoint_available() -> None:
     response = client.get("/admin/usage/")
     assert response.status_code == 200
@@ -103,6 +124,24 @@ def test_admin_usage_summary_endpoint_available() -> None:
     assert payload["object"] == "usage_summary"
     assert "pricing_snapshot" in payload
     assert "aggregations" in payload
+
+
+def test_admin_oauth_operations_endpoint_available() -> None:
+    response = client.get("/admin/providers/oauth-account/operations")
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["status"] == "ok"
+    assert "operations" in payload
+    assert "recent" in payload
+
+
+def test_admin_bootstrap_readiness_endpoint_available() -> None:
+    response = client.get("/admin/providers/bootstrap/readiness")
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["status"] == "ok"
+    assert "checks" in payload
+    assert "next_steps" in payload
 
 
 def test_admin_usage_summary_records_runtime_requests() -> None:
@@ -134,3 +173,15 @@ def test_responses_endpoint_rejects_stream_mode_for_now() -> None:
     response = client.post("/v1/responses", json={"input": "Hello responses", "stream": True})
     assert response.status_code == 400
     assert response.json()["error"]["type"] == "unsupported_feature"
+
+
+def test_responses_endpoint_rejects_invalid_temperature() -> None:
+    response = client.post("/v1/responses", json={"input": "Hello responses", "temperature": 3})
+    assert response.status_code == 400
+    assert response.json()["error"]["type"] == "invalid_request"
+
+
+def test_responses_endpoint_rejects_invalid_input_list_object() -> None:
+    response = client.post("/v1/responses", json={"input": [{"type": "text"}]})
+    assert response.status_code == 422
+    assert response.json()["error"]["type"] == "unsupported_input"

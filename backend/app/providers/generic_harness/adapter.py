@@ -8,12 +8,22 @@ from app.harness.service import HarnessService
 from app.providers.base import (
     ChatDispatchRequest,
     ChatDispatchResult,
+    ProviderBadRequestError,
     ProviderCapabilities,
+    ProviderConflictError,
     ProviderConfigurationError,
     ProviderNotReadyError,
+    ProviderPayloadTooLargeError,
+    ProviderProtocolError,
+    ProviderRateLimitError,
+    ProviderResourceGoneError,
     ProviderStreamEvent,
     ProviderStreamInterruptedError,
     ProviderUnsupportedFeatureError,
+    ProviderUnavailableError,
+    ProviderUnsupportedMediaTypeError,
+    ProviderAuthenticationError,
+    ProviderTimeoutError,
     ProviderUpstreamError,
 )
 from app.settings.config import Settings
@@ -56,12 +66,14 @@ class GenericHarnessAdapter:
     def create_chat_completion(self, request: ChatDispatchRequest) -> ChatDispatchResult:
         if not self.is_ready():
             raise ProviderConfigurationError(self.provider_name, self.readiness_reason() or "Harness not ready")
+        if getattr(request, "tools", []):
+            raise ProviderUnsupportedFeatureError(self.provider_name, "tool_calling")
 
         profile = self._profile_for_model(request.model)
         try:
             parsed = self._harness.execute_non_stream(profile.provider_key, model=request.model, messages=request.messages)
         except RuntimeError as exc:
-            raise ProviderUpstreamError(self.provider_name, str(exc)) from exc
+            raise self._map_harness_error(str(exc)) from exc
         usage = TokenUsage(
             input_tokens=parsed["prompt_tokens"],
             output_tokens=parsed["completion_tokens"],
@@ -84,6 +96,8 @@ class GenericHarnessAdapter:
     def stream_chat_completion(self, request: ChatDispatchRequest) -> Iterator[ProviderStreamEvent]:
         if not self.is_ready():
             raise ProviderConfigurationError(self.provider_name, self.readiness_reason() or "Harness not ready")
+        if getattr(request, "tools", []):
+            raise ProviderUnsupportedFeatureError(self.provider_name, "tool_calling")
         profile = self._profile_for_model(request.model)
         if not profile.stream_mapping.enabled:
             raise ProviderUnsupportedFeatureError(self.provider_name, "streaming_not_enabled_in_profile")
@@ -105,7 +119,8 @@ class GenericHarnessAdapter:
                 cost = self._usage.costs_for_provider(provider=self.provider_name, usage=usage)
                 yield ProviderStreamEvent(event="done", finish_reason=str(item.get("finish_reason", "stop")), usage=usage, cost=cost)
         except RuntimeError as exc:
-            raise ProviderStreamInterruptedError(self.provider_name, str(exc)) from exc
+            mapped = self._map_harness_error(str(exc))
+            raise ProviderStreamInterruptedError(self.provider_name, str(mapped)) from exc
 
     def _profile_for_model(self, model: str):
         enabled = [profile for profile in self._harness.list_profiles() if profile.enabled]
@@ -117,3 +132,27 @@ class GenericHarnessAdapter:
         if not self._settings.generic_harness_allow_model_fallback:
             raise ProviderNotReadyError(self.provider_name, f"No enabled harness profile owns model '{model}'.")
         return enabled[0]
+
+    def _map_harness_error(self, message: str):
+        lower = message.lower()
+        if "timeout" in lower:
+            return ProviderTimeoutError(self.provider_name, message)
+        if "(429)" in lower or "rate limit" in lower:
+            return ProviderRateLimitError(self.provider_name, message)
+        if "(409)" in lower or "conflict" in lower:
+            return ProviderConflictError(self.provider_name, message)
+        if "decode" in lower or "invalid json" in lower:
+            return ProviderProtocolError(self.provider_name, message)
+        if "rejected request (400)" in lower or "rejected request (404)" in lower or "rejected request (422)" in lower:
+            return ProviderBadRequestError(self.provider_name, message)
+        if "rejected request (401)" in lower or "rejected request (403)" in lower:
+            return ProviderAuthenticationError(self.provider_name, message)
+        if "rejected request (410)" in lower:
+            return ProviderResourceGoneError(self.provider_name, message)
+        if "rejected request (413)" in lower:
+            return ProviderPayloadTooLargeError(self.provider_name, message)
+        if "rejected request (415)" in lower:
+            return ProviderUnsupportedMediaTypeError(self.provider_name, message)
+        if "rejected request (503)" in lower:
+            return ProviderUnavailableError(self.provider_name, message)
+        return ProviderUpstreamError(self.provider_name, message)

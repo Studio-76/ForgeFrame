@@ -4,13 +4,21 @@ from app.auth.oauth.gemini import resolve_gemini_auth_state
 from app.providers.base import (
     ChatDispatchRequest,
     ProviderCapabilities,
+    ProviderConflictError,
     ProviderConfigurationError,
     ProviderNotImplementedError,
     ProviderNotReadyError,
+    ProviderPayloadTooLargeError,
+    ProviderRateLimitError,
+    ProviderResourceGoneError,
     ProviderStreamInterruptedError,
+    ProviderTimeoutError,
+    ProviderUnsupportedMediaTypeError,
+    ProviderUnavailableError,
     ProviderUnsupportedFeatureError,
 )
 from app.providers.forgegate_baseline import ForgeGateBaselineAdapter
+from app.providers.gemini.adapter import GeminiAdapter
 from app.providers.openai_api.adapter import OpenAIAPIAdapter
 from app.providers.openai_codex.adapter import OpenAICodexAdapter
 from app.settings.config import Settings
@@ -42,6 +50,13 @@ def test_provider_error_types_for_new_semantics() -> None:
     assert ProviderUnsupportedFeatureError("openai", "stream").error_type == "provider_unsupported_feature"
     assert ProviderNotReadyError("openai").error_type == "provider_not_ready"
     assert ProviderStreamInterruptedError("openai", "boom").error_type == "provider_stream_interrupted"
+    assert ProviderRateLimitError("openai", "rl").error_type == "provider_rate_limited"
+    assert ProviderConflictError("openai", "conflict").error_type == "provider_conflict"
+    assert ProviderTimeoutError("openai", "timeout").error_type == "provider_timeout"
+    assert ProviderResourceGoneError("openai", "gone").error_type == "provider_resource_gone"
+    assert ProviderPayloadTooLargeError("openai", "big").error_type == "provider_payload_too_large"
+    assert ProviderUnsupportedMediaTypeError("openai", "media").error_type == "provider_unsupported_media_type"
+    assert ProviderUnavailableError("openai", "down").error_type == "provider_unavailable"
 
 
 def test_codex_auth_state_resolution() -> None:
@@ -129,3 +144,32 @@ def test_oauth_target_status_for_antigravity_becomes_ready_with_probe_flags() ->
     assert status.configured is True
     assert status.probe_enabled is True
     assert status.readiness == "ready"
+
+
+def test_gemini_bridge_partial_runtime_executes_with_mocked_httpx(monkeypatch) -> None:
+    class _MockResponse:
+        status_code = 200
+        text = "ok"
+
+        @staticmethod
+        def json() -> dict:
+            return {
+                "model": "gemini-2.5-flash",
+                "choices": [{"message": {"content": "gemini-ok"}, "finish_reason": "stop"}],
+                "usage": {"prompt_tokens": 4, "completion_tokens": 2, "total_tokens": 6},
+            }
+
+    def _mock_post(*args, **kwargs):
+        return _MockResponse()
+
+    monkeypatch.setattr("app.providers.gemini.adapter.httpx.post", _mock_post)
+    adapter = GeminiAdapter(
+        Settings(
+            gemini_auth_mode="oauth",
+            gemini_oauth_access_token="token",
+            gemini_probe_enabled=True,
+        )
+    )
+    result = adapter.create_chat_completion(ChatDispatchRequest(model="gemini-2.5-flash", messages=[{"role": "user", "content": "hi"}], stream=False))
+    assert result.provider == "gemini"
+    assert result.content == "gemini-ok"

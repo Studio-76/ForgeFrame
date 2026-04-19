@@ -28,6 +28,9 @@ export type ProviderControlItem = {
   harness_profile_count?: number;
   harness_run_count?: number;
   harness_needs_attention_count?: number;
+  oauth_failure_count?: number;
+  oauth_last_probe?: Record<string, unknown> | null;
+  oauth_last_bridge_sync?: Record<string, unknown> | null;
 };
 
 export type HealthConfig = {
@@ -311,4 +314,19 @@ export function syncOauthAccountBridgeProfiles() {
     method: "POST",
     body: "{}",
   });
+}
+
+export function probeAllOauthAccountProviders() {
+  return fetchJson<{ status: string; probes: Array<Record<string, unknown>> }>("/admin/providers/oauth-account/probe-all", {
+    method: "POST",
+    body: "{}",
+  });
+}
+
+export function fetchOauthAccountOperations() {
+  return fetchJson<{ status: string; operations: Array<Record<string, unknown>>; recent: Array<Record<string, unknown>> }>("/admin/providers/oauth-account/operations");
+}
+
+export function fetchBootstrapReadiness() {
+  return fetchJson<{ status: string; ready: boolean; checks: Array<Record<string, unknown>>; next_steps: string[] }>("/admin/providers/bootstrap/readiness");
 }
