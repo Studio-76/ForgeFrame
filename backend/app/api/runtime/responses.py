@@ -1,5 +1,8 @@
 """Runtime responses endpoint for broader OpenAI-compatible client behavior."""
 
+from datetime import UTC, datetime
+from uuid import uuid4
+
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse
 
@@ -14,6 +17,19 @@ router = APIRouter(tags=["runtime-responses"])
 
 
 def _normalize_responses_input(input_value: object) -> str:
+    if isinstance(input_value, dict):
+        if input_value.get("type") in {"input_text", "text"}:
+            return str(input_value.get("text", ""))
+        content = input_value.get("content")
+        if isinstance(content, list):
+            blocks: list[str] = []
+            for block in content:
+                if isinstance(block, dict) and block.get("type") in {"input_text", "text"}:
+                    blocks.append(str(block.get("text", "")))
+            return "\n".join(part for part in blocks if part.strip()) or " "
+        if content is not None:
+            return str(content)
+        return str(input_value)
     if isinstance(input_value, list):
         text_parts: list[str] = []
         for item in input_value:
@@ -83,11 +99,15 @@ def create_response(
     for call in tool_calls if isinstance(tool_calls, list) else []:
         if isinstance(call, dict):
             output_items.append({"type": "tool_call", "tool_call": call})
+    output_text = "".join(item["text"] for item in output_items if item.get("type") == "output_text" and isinstance(item.get("text"), str))
     return {
-        "id": "resp-forgegate",
+        "id": f"resp_{uuid4().hex}",
         "object": "response",
+        "created_at": datetime.now(tz=UTC).isoformat().replace("+00:00", "Z"),
+        "status": "completed",
         "model": chat_result.get("model"),
         "output": output_items,
+        "output_text": output_text,
         "usage": chat_result.get("usage", {}),
         "provider": chat_result.get("provider"),
         "credential_type": chat_result.get("credential_type"),

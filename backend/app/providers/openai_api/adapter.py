@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 from collections.abc import Iterator
 from datetime import datetime
+from email.utils import parsedate_to_datetime
 
 import httpx
 
@@ -71,10 +72,18 @@ class OpenAIAPIAdapter:
 
         response_payload = self._post_chat_completion(payload)
         try:
-            message = response_payload["choices"][0]["message"]
+            choices = response_payload["choices"]
+            if not isinstance(choices, list) or not choices:
+                raise TypeError("choices")
+            first_choice = choices[0]
+            if not isinstance(first_choice, dict):
+                raise TypeError("choice")
+            message = first_choice["message"]
+            if not isinstance(message, dict):
+                raise TypeError("message")
             content = message.get("content", "")
             tool_calls = message.get("tool_calls", [])
-            finish_reason = response_payload["choices"][0].get("finish_reason", "stop")
+            finish_reason = first_choice.get("finish_reason", "stop")
         except (KeyError, IndexError, TypeError) as exc:
             raise ProviderUpstreamError(self.provider_name, f"Malformed response from OpenAI API: {response_payload}") from exc
 
@@ -277,6 +286,10 @@ class OpenAIAPIAdapter:
             return None
         if value.isdigit():
             return int(value)
+        http_date = parsedate_to_datetime(value)
+        if http_date is not None:
+            delta = int((http_date - datetime.now(tz=http_date.tzinfo)).total_seconds())
+            return delta if delta > 0 else 0
         try:
             retry_at = datetime.fromisoformat(value.replace("Z", "+00:00"))
         except ValueError:
