@@ -120,9 +120,30 @@ def list_oauth_account_targets(service: ControlPlaneService = Depends(get_contro
     return {"status": "ok", "targets": service.list_oauth_account_target_statuses()}
 
 
+@router.get("/oauth-account/operations")
+def oauth_account_operations(service: ControlPlaneService = Depends(get_control_plane_service)) -> object:
+    return service.oauth_account_operations_summary()
+
+
+@router.post("/oauth-account/probe-all")
+def probe_all_oauth_account_targets(service: ControlPlaneService = Depends(get_control_plane_service)) -> object:
+    results = []
+    for provider_key in ["openai_codex", "gemini", "antigravity", "github_copilot", "claude_code"]:
+        try:
+            results.append(service.probe_oauth_account_provider(provider_key).model_dump())
+        except ValueError as exc:
+            results.append({"provider_key": provider_key, "status": "failed", "details": str(exc)})
+    return {"status": "ok", "probes": results}
+
+
 @router.post("/oauth-account/bridge-profiles/sync")
 def sync_oauth_account_bridge_profiles(service: ControlPlaneService = Depends(get_control_plane_service)) -> object:
     return service.sync_oauth_account_bridge_profiles()
+
+
+@router.get("/bootstrap/readiness")
+def bootstrap_readiness(service: ControlPlaneService = Depends(get_control_plane_service)) -> object:
+    return service.bootstrap_readiness_report()
 
 
 @router.get("/harness/templates")

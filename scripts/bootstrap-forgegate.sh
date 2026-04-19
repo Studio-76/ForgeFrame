@@ -14,6 +14,8 @@ require_cmd() {
 }
 
 require_cmd docker
+require_cmd curl
+require_cmd python
 
 if ! docker compose version >/dev/null 2>&1; then
   fail "Docker Compose plugin is required (docker compose ...)."
@@ -40,6 +42,10 @@ set +a
 : "${FORGEGATE_PG_DB:?FORGEGATE_PG_DB must be set in .env.compose}"
 : "${FORGEGATE_POSTGRES_URL:?FORGEGATE_POSTGRES_URL must be set in .env.compose}"
 
+if [[ "${FORGEGATE_PG_PASSWORD}" == "forgegate" ]]; then
+  log "WARNING: FORGEGATE_PG_PASSWORD uses default value. Change it before shared environment usage."
+fi
+
 log "Starting docker compose stack..."
 docker compose -f "$COMPOSE_FILE" up -d --build
 
@@ -59,6 +65,8 @@ for _ in {1..60}; do
   sleep 2
 done
 curl -sf "http://127.0.0.1:${FORGEGATE_APP_PORT:-8000}/health" >/dev/null || fail "ForgeGate health endpoint is not ready."
+curl -sf "http://127.0.0.1:${FORGEGATE_APP_PORT:-8000}/admin/providers/bootstrap/readiness" | python -m json.tool >/tmp/forgegate-bootstrap-readiness.json
+log "Bootstrap readiness report saved to /tmp/forgegate-bootstrap-readiness.json"
 
 log "Running compose smoke workflow..."
 "$ROOT_DIR/scripts/compose-smoke.sh"

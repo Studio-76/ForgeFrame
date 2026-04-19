@@ -12,12 +12,15 @@ import {
   fetchBetaProviderTargets,
   fetchClientOperationalView,
   fetchHarnessRuns,
+  fetchBootstrapReadiness,
+  fetchOauthAccountOperations,
   fetchOauthAccountTargets,
   fetchHarnessTemplates,
   fetchProviderControlPlane,
   fetchUsageSummary,
   patchHealthConfig,
   probeOauthAccountProvider,
+  probeAllOauthAccountProviders,
   syncOauthAccountBridgeProfiles,
   previewHarness,
   probeHarness,
@@ -58,6 +61,9 @@ export function ProvidersPage() {
   const [clients, setClients] = useState<Array<Record<string, string | number | boolean>>>([]);
   const [betaTargets, setBetaTargets] = useState<BetaProviderTarget[]>([]);
   const [oauthTargets, setOauthTargets] = useState<Array<Record<string, string | boolean>>>([]);
+  const [oauthOperations, setOauthOperations] = useState<Array<Record<string, unknown>>>([]);
+  const [oauthRecentOps, setOauthRecentOps] = useState<Array<Record<string, unknown>>>([]);
+  const [bootstrapReadiness, setBootstrapReadiness] = useState<{ ready: boolean; checks: Array<Record<string, unknown>>; next_steps: string[] } | null>(null);
 
   const [newHarness, setNewHarness] = useState({
     provider_key: "generic_openai_like",
@@ -74,7 +80,7 @@ export function ProvidersPage() {
   const load = async () => {
     setState("loading");
     try {
-      const [payload, usage, harnessTemplates, harnessProfiles, harnessRuns, clientView, betaTargetsResponse, oauthTargetsResponse] = await Promise.all([
+      const [payload, usage, harnessTemplates, harnessProfiles, harnessRuns, clientView, betaTargetsResponse, oauthTargetsResponse, oauthOpsResponse, bootstrapResponse] = await Promise.all([
         fetchProviderControlPlane(),
         fetchUsageSummary(),
         fetchHarnessTemplates(),
@@ -89,6 +95,8 @@ export function ProvidersPage() {
         fetchClientOperationalView(),
         fetchBetaProviderTargets(),
         fetchOauthAccountTargets(),
+        fetchOauthAccountOperations(),
+        fetchBootstrapReadiness(),
       ]);
       setProviders(payload.providers);
       setTemplates(harnessTemplates.templates);
@@ -98,6 +106,13 @@ export function ProvidersPage() {
       setClients(clientView.clients ?? []);
       setBetaTargets(betaTargetsResponse.targets ?? []);
       setOauthTargets(oauthTargetsResponse.targets ?? []);
+      setOauthOperations(oauthOpsResponse.operations ?? []);
+      setOauthRecentOps(oauthOpsResponse.recent ?? []);
+      setBootstrapReadiness({
+        ready: Boolean(bootstrapResponse.ready),
+        checks: bootstrapResponse.checks ?? [],
+        next_steps: bootstrapResponse.next_steps ?? [],
+      });
       setSyncNote(String(payload.notes.sync_action));
       setHealthConfig(payload.health_config);
       setProviderErrors(Object.fromEntries(usage.aggregations.errors_by_provider.map((item) => [String(item.provider), Number(item.errors)])));
@@ -287,6 +302,9 @@ export function ProvidersPage() {
         <button type="button" onClick={() => void syncOauthAccountBridgeProfiles().then((res) => { setOperationResult(JSON.stringify(res, null, 2)); void load(); })}>
           Sync OAuth Bridge Profiles
         </button>
+        <button type="button" style={{ marginLeft: "0.5rem" }} onClick={() => void probeAllOauthAccountProviders().then((res) => { setOperationResult(JSON.stringify(res, null, 2)); void load(); })}>
+          Probe all OAuth targets
+        </button>
         <ul>
           {betaTargets.map((target) => (
             <li key={target.provider_key}>
@@ -311,6 +329,42 @@ export function ProvidersPage() {
             </li>
           ))}
         </ul>
+        <h4>OAuth operations & failures</h4>
+        <ul>
+          {oauthOperations.map((item) => (
+            <li key={String(item.provider_key)}>
+              {String(item.provider_key)} · failures={String(item.failures ?? 0)} · needs_attention={String(item.needs_attention ?? false)} · last_probe={String((item.last_probe as Record<string, unknown> | null)?.status ?? "never")} · last_sync={String((item.last_bridge_sync as Record<string, unknown> | null)?.status ?? "never")}
+            </li>
+          ))}
+        </ul>
+        <details>
+          <summary>Recent OAuth operations log</summary>
+          <ul>
+            {oauthRecentOps.slice(-10).map((item, idx) => (
+              <li key={`${String(item.provider_key)}-${idx}`}>
+                {String(item.executed_at)} · {String(item.provider_key)} · {String(item.action)} · {String(item.status)} · {String(item.details)}
+              </li>
+            ))}
+          </ul>
+        </details>
+      </div>
+      <div className="fg-card" style={{ marginBottom: "0.75rem" }}>
+        <h3>Docker-first bootstrap readiness</h3>
+        {bootstrapReadiness ? (
+          <>
+            <p>ready={String(bootstrapReadiness.ready)}</p>
+            <ul>
+              {bootstrapReadiness.checks.map((check) => (
+                <li key={String(check.id)}>
+                  {String(check.id)} · ok={String(check.ok)} · details={String(check.details)}
+                </li>
+              ))}
+            </ul>
+            <ol>
+              {bootstrapReadiness.next_steps.map((step) => <li key={step}>{step}</li>)}
+            </ol>
+          </>
+        ) : null}
       </div>
       <div className="fg-card"><h3>Discovery-/Sync-Zustand</h3><p>{syncNote}</p><p>integration error dimensions: {Object.entries(integrationErrors).map(([k, v]) => `${k}=${v}`).join(" | ") || "none"}</p></div>
     </section>

@@ -105,6 +105,24 @@ def test_admin_usage_summary_endpoint_available() -> None:
     assert "aggregations" in payload
 
 
+def test_admin_oauth_operations_endpoint_available() -> None:
+    response = client.get("/admin/providers/oauth-account/operations")
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["status"] == "ok"
+    assert "operations" in payload
+    assert "recent" in payload
+
+
+def test_admin_bootstrap_readiness_endpoint_available() -> None:
+    response = client.get("/admin/providers/bootstrap/readiness")
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["status"] == "ok"
+    assert "checks" in payload
+    assert "next_steps" in payload
+
+
 def test_admin_usage_summary_records_runtime_requests() -> None:
     chat_response = client.post(
         "/v1/chat/completions",

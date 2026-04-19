@@ -312,3 +312,18 @@ export function syncOauthAccountBridgeProfiles() {
     body: "{}",
   });
 }
+
+export function probeAllOauthAccountProviders() {
+  return fetchJson<{ status: string; probes: Array<Record<string, unknown>> }>("/admin/providers/oauth-account/probe-all", {
+    method: "POST",
+    body: "{}",
+  });
+}
+
+export function fetchOauthAccountOperations() {
+  return fetchJson<{ status: string; operations: Array<Record<string, unknown>>; recent: Array<Record<string, unknown>> }>("/admin/providers/oauth-account/operations");
+}
+
+export function fetchBootstrapReadiness() {
+  return fetchJson<{ status: string; ready: boolean; checks: Array<Record<string, unknown>>; next_steps: string[] }>("/admin/providers/bootstrap/readiness");
+}

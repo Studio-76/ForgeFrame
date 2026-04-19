@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import os
 from datetime import UTC, datetime
 from functools import lru_cache
+from pathlib import Path
 from typing import Literal
 
 import httpx
@@ -129,6 +131,14 @@ class OAuthAccountTargetStatus(BaseModel):
     readiness_reason: str
     auth_kind: Literal["oauth_account"]
 
+
+class OAuthOperationRecord(BaseModel):
+    provider_key: str
+    action: Literal["probe", "bridge_sync"]
+    status: Literal["ok", "warning", "failed", "skipped"]
+    details: str
+    executed_at: str
+
 class ControlPlaneService:
     def __init__(
         self,
@@ -147,6 +157,7 @@ class ControlPlaneService:
         self._providers_state = self._bootstrap_provider_state()
         self._health_config = HealthConfig()
         self._health_records: dict[str, HealthStatusRecord] = {}
+        self._oauth_operations: list[OAuthOperationRecord] = []
 
     def _bootstrap_provider_state(self) -> dict[str, ManagedProviderRecord]:
         provider_map: dict[str, ManagedProviderRecord] = {}
@@ -408,6 +419,53 @@ class ControlPlaneService:
             )
         return statuses
 
+    def oauth_account_operations_summary(self) -> dict[str, object]:
+        providers = ["openai_codex", "gemini", "antigravity", "github_copilot", "claude_code"]
+        per_provider: list[dict[str, object]] = []
+        for provider_key in providers:
+            status = self._oauth_target_status(provider_key) if provider_key in {"antigravity", "github_copilot", "claude_code"} else None
+            provider_ops = [item for item in self._oauth_operations if item.provider_key == provider_key]
+            last_probe = next((item for item in reversed(provider_ops) if item.action == "probe"), None)
+            last_bridge_sync = next((item for item in reversed(provider_ops) if item.action == "bridge_sync"), None)
+            failures = len([item for item in provider_ops if item.status == "failed"])
+            per_provider.append(
+                {
+                    "provider_key": provider_key,
+                    "configured": status.configured if status else bool(
+                        (self._settings.openai_codex_oauth_access_token if provider_key == "openai_codex" else self._settings.gemini_oauth_access_token).strip()
+                    ),
+                    "probe_enabled": status.probe_enabled if status else (
+                        self._settings.openai_codex_bridge_enabled if provider_key == "openai_codex" else self._settings.gemini_probe_enabled
+                    ),
+                    "bridge_profile_enabled": status.harness_profile_enabled if status else False,
+                    "needs_attention": failures >= 2,
+                    "failures": failures,
+                    "last_probe": last_probe.model_dump() if last_probe else None,
+                    "last_bridge_sync": last_bridge_sync.model_dump() if last_bridge_sync else None,
+                }
+            )
+        return {"status": "ok", "operations": per_provider, "recent": [item.model_dump() for item in self._oauth_operations[-50:]]}
+
+    def bootstrap_readiness_report(self) -> dict[str, object]:
+        root_dir = Path(__file__).resolve().parents[4]
+        env_compose = root_dir / ".env.compose"
+        compose_file = root_dir / "docker" / "docker-compose.yml"
+        checks = [
+            {"id": "compose_file", "ok": compose_file.exists(), "details": str(compose_file)},
+            {"id": "env_compose", "ok": env_compose.exists(), "details": str(env_compose)},
+            {"id": "postgres_url", "ok": bool(self._settings.harness_postgres_url.strip()), "details": "FORGEGATE_HARNESS_POSTGRES_URL"},
+            {"id": "storage_backend", "ok": self._settings.harness_storage_backend in {"file", "postgresql"}, "details": self._settings.harness_storage_backend},
+            {"id": "app_port", "ok": bool(str(self._settings.port).strip()), "details": str(self._settings.port)},
+            {"id": "docker_host_hint", "ok": bool(os.environ.get("DOCKER_HOST") or os.path.exists("/var/run/docker.sock")), "details": os.environ.get("DOCKER_HOST", "/var/run/docker.sock")},
+        ]
+        ready = all(item["ok"] for item in checks[:5])
+        next_steps = [
+            "Run ./scripts/bootstrap-forgegate.sh for docker-first setup.",
+            "Use ./scripts/compose-smoke.sh to verify harness + control-plane path.",
+            "Open /app/ and verify provider probes + bridge profile sync from Providers page.",
+        ]
+        return {"status": "ok", "ready": ready, "checks": checks, "next_steps": next_steps}
+
     def _oauth_target_status(self, provider_key: str) -> OAuthAccountTargetStatus:
         config = {
             "antigravity": (
@@ -458,7 +516,7 @@ class ControlPlaneService:
         if provider_key == "openai_codex":
             status = self._providers.get_provider_status("openai_codex")
             if not status["ready"]:
-                return OAuthAccountProbeResult(
+                result = OAuthAccountProbeResult(
                     provider_key=provider_key,
                     ready=False,
                     probe_mode="readiness_only",
@@ -466,8 +524,10 @@ class ControlPlaneService:
                     details=str(status["readiness_reason"]),
                     checked_at=now,
                 )
+                self._record_oauth_operation(provider_key, "probe", result.status, result.details, now)
+                return result
             if not self._settings.openai_codex_bridge_enabled:
-                return OAuthAccountProbeResult(
+                result = OAuthAccountProbeResult(
                     provider_key=provider_key,
                     ready=True,
                     probe_mode="readiness_only",
@@ -475,13 +535,15 @@ class ControlPlaneService:
                     details="Codex bridge disabled; readiness only.",
                     checked_at=now,
                 )
+                self._record_oauth_operation(provider_key, "probe", result.status, result.details, now)
+                return result
             payload = {"model": self._settings.openai_codex_probe_model, "messages": [{"role": "user", "content": "health probe"}], "stream": False, "max_tokens": 8}
             endpoint = f"{self._settings.openai_codex_base_url.rstrip('/')}/chat/completions"
             token = self._settings.openai_codex_oauth_access_token if self._settings.openai_codex_auth_mode == "oauth" else self._settings.openai_codex_api_key
             try:
                 response = httpx.post(endpoint, json=payload, headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"}, timeout=self._settings.openai_codex_timeout_seconds)
             except httpx.RequestError as exc:
-                return OAuthAccountProbeResult(
+                result = OAuthAccountProbeResult(
                     provider_key=provider_key,
                     ready=True,
                     probe_mode="live_http_probe",
@@ -489,7 +551,9 @@ class ControlPlaneService:
                     details=f"Codex bridge probe request failed: {exc}",
                     checked_at=now,
                 )
-            return OAuthAccountProbeResult(
+                self._record_oauth_operation(provider_key, "probe", result.status, result.details, now)
+                return result
+            result = OAuthAccountProbeResult(
                 provider_key=provider_key,
                 ready=True,
                 probe_mode="live_http_probe",
@@ -498,11 +562,13 @@ class ControlPlaneService:
                 status_code=response.status_code,
                 checked_at=now,
             )
+            self._record_oauth_operation(provider_key, "probe", result.status, result.details, now)
+            return result
 
         if provider_key == "gemini":
             status = self._providers.get_provider_status("gemini")
             if not status["ready"]:
-                return OAuthAccountProbeResult(
+                result = OAuthAccountProbeResult(
                     provider_key=provider_key,
                     ready=False,
                     probe_mode="readiness_only",
@@ -510,8 +576,10 @@ class ControlPlaneService:
                     details=str(status["readiness_reason"]),
                     checked_at=now,
                 )
+                self._record_oauth_operation(provider_key, "probe", result.status, result.details, now)
+                return result
             if not self._settings.gemini_probe_enabled:
-                return OAuthAccountProbeResult(
+                result = OAuthAccountProbeResult(
                     provider_key=provider_key,
                     ready=True,
                     probe_mode="readiness_only",
@@ -519,13 +587,15 @@ class ControlPlaneService:
                     details="Gemini probe flow disabled; set FORGEGATE_GEMINI_PROBE_ENABLED=true.",
                     checked_at=now,
                 )
+                self._record_oauth_operation(provider_key, "probe", result.status, result.details, now)
+                return result
             payload = {"model": self._settings.gemini_probe_model, "messages": [{"role": "user", "content": "health probe"}], "stream": False, "max_tokens": 8}
             token = self._settings.gemini_oauth_access_token if self._settings.gemini_auth_mode == "oauth" else self._settings.gemini_api_key
             endpoint = f"{self._settings.gemini_probe_base_url.rstrip('/')}/chat/completions"
             try:
                 response = httpx.post(endpoint, json=payload, headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"}, timeout=self._settings.gemini_timeout_seconds)
             except httpx.RequestError as exc:
-                return OAuthAccountProbeResult(
+                result = OAuthAccountProbeResult(
                     provider_key=provider_key,
                     ready=True,
                     probe_mode="live_http_probe",
@@ -533,7 +603,9 @@ class ControlPlaneService:
                     details=f"Gemini probe request failed: {exc}",
                     checked_at=now,
                 )
-            return OAuthAccountProbeResult(
+                self._record_oauth_operation(provider_key, "probe", result.status, result.details, now)
+                return result
+            result = OAuthAccountProbeResult(
                 provider_key=provider_key,
                 ready=True,
                 probe_mode="live_http_probe",
@@ -542,6 +614,8 @@ class ControlPlaneService:
                 status_code=response.status_code,
                 checked_at=now,
             )
+            self._record_oauth_operation(provider_key, "probe", result.status, result.details, now)
+            return result
 
         if provider_key in {"antigravity", "github_copilot", "claude_code"}:
             return self._probe_additional_oauth_target(provider_key, now=now)
@@ -557,16 +631,22 @@ class ControlPlaneService:
         }
         base_url, model, token = target_map[provider_key]
         if not status.configured:
-            return OAuthAccountProbeResult(provider_key=provider_key, ready=False, probe_mode="readiness_only", status="failed", details=status.readiness_reason, checked_at=now)
+            result = OAuthAccountProbeResult(provider_key=provider_key, ready=False, probe_mode="readiness_only", status="failed", details=status.readiness_reason, checked_at=now)
+            self._record_oauth_operation(provider_key, "probe", result.status, result.details, now)
+            return result
         if not status.probe_enabled:
-            return OAuthAccountProbeResult(provider_key=provider_key, ready=True, probe_mode="readiness_only", status="warning", details="Probe disabled; credentials are configured.", checked_at=now)
+            result = OAuthAccountProbeResult(provider_key=provider_key, ready=True, probe_mode="readiness_only", status="warning", details="Probe disabled; credentials are configured.", checked_at=now)
+            self._record_oauth_operation(provider_key, "probe", result.status, result.details, now)
+            return result
         payload = {"model": model, "messages": [{"role": "user", "content": "health probe"}], "stream": False, "max_tokens": 8}
         endpoint = f"{base_url.rstrip('/')}/chat/completions"
         try:
             response = httpx.post(endpoint, json=payload, headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"}, timeout=self._settings.oauth_account_probe_timeout_seconds)
         except httpx.RequestError as exc:
-            return OAuthAccountProbeResult(provider_key=provider_key, ready=True, probe_mode="live_http_probe", status="failed", details=f"Probe request failed: {exc}", checked_at=now)
-        return OAuthAccountProbeResult(
+            result = OAuthAccountProbeResult(provider_key=provider_key, ready=True, probe_mode="live_http_probe", status="failed", details=f"Probe request failed: {exc}", checked_at=now)
+            self._record_oauth_operation(provider_key, "probe", result.status, result.details, now)
+            return result
+        result = OAuthAccountProbeResult(
             provider_key=provider_key,
             ready=True,
             probe_mode="live_http_probe",
@@ -575,6 +655,8 @@ class ControlPlaneService:
             status_code=response.status_code,
             checked_at=now,
         )
+        self._record_oauth_operation(provider_key, "probe", result.status, result.details, now)
+        return result
 
     def sync_oauth_account_bridge_profiles(self) -> dict[str, object]:
         provider_configs = {
@@ -587,6 +669,7 @@ class ControlPlaneService:
         for provider_key, (enabled, base_url, token, model) in provider_configs.items():
             if not enabled:
                 skipped.append(provider_key)
+                self._record_oauth_operation(provider_key, "bridge_sync", "skipped", "Bridge profile sync disabled in settings.", datetime.now(tz=UTC).isoformat())
                 continue
             profile = HarnessProviderProfile(
                 provider_key=f"{provider_key}_oauth_bridge",
@@ -603,7 +686,13 @@ class ControlPlaneService:
             )
             self._harness.upsert_profile(profile)
             upserted.append(profile.provider_key)
+            self._record_oauth_operation(provider_key, "bridge_sync", "ok", f"Upserted bridge profile {profile.provider_key}.", datetime.now(tz=UTC).isoformat())
         return {"status": "ok", "upserted_profiles": upserted, "skipped": skipped}
+
+    def _record_oauth_operation(self, provider_key: str, action: Literal["probe", "bridge_sync"], status: Literal["ok", "warning", "failed", "skipped"], details: str, executed_at: str) -> None:
+        self._oauth_operations.append(OAuthOperationRecord(provider_key=provider_key, action=action, status=status, details=details, executed_at=executed_at))
+        if len(self._oauth_operations) > 200:
+            self._oauth_operations = self._oauth_operations[-200:]
 
 
     def upsert_harness_profile(self, payload: HarnessProviderProfile):

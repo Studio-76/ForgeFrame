@@ -56,6 +56,8 @@ curl -sf -X POST "$BASE_URL/admin/providers/sync" -H 'Content-Type: application/
 curl -sf "$BASE_URL/admin/providers/harness/runs?provider_key=local_compose&limit=20" >/tmp/forgegate-runs.json
 curl -sf "$BASE_URL/admin/providers/harness/snapshot" >/tmp/forgegate-snapshot.json
 curl -sf "$BASE_URL/admin/providers/beta-targets" >/tmp/forgegate-beta-targets.json
+curl -sf "$BASE_URL/admin/providers/bootstrap/readiness" >/tmp/forgegate-bootstrap-readiness.json
+curl -sf "$BASE_URL/admin/providers/oauth-account/operations" >/tmp/forgegate-oauth-operations.json
 
 docker compose -f "$COMPOSE_FILE" exec -T postgres psql -U "${FORGEGATE_PG_USER:-forgegate}" -d "${FORGEGATE_PG_DB:-forgegate}" -c "SELECT count(*) AS harness_profiles FROM harness_profiles;" >/tmp/forgegate-db-profiles.txt
 
@@ -66,4 +68,6 @@ echo "  /tmp/forgegate-sync.json"
 echo "  /tmp/forgegate-runs.json"
 echo "  /tmp/forgegate-snapshot.json"
 echo "  /tmp/forgegate-beta-targets.json"
+echo "  /tmp/forgegate-bootstrap-readiness.json"
+echo "  /tmp/forgegate-oauth-operations.json"
 echo "  /tmp/forgegate-db-profiles.txt"
