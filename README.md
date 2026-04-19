@@ -1,5 +1,7 @@
 # ForgeGate — Smart AI Gateway for Every Model
 
+
+<p align=center><img src="./frontend/src/assets/ForgeGate_Logo.png" alt="ForgeGate Logo" width="50%"></p>
 ForgeGate ist ein **docker-first Smart AI Gateway**, das **Gateway, Harness und Control Plane** in einer Plattform vereint.
 
 Das Ziel: **AI-Provider, Modelle und Clients einheitlich anbinden, verwalten, testen, überwachen und nutzen** — ohne für jeden neuen Anbieter ein separates Zwischentool bauen zu müssen.
