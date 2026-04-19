@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import json
 from datetime import UTC, datetime
 from functools import lru_cache
 from pathlib import Path
@@ -157,7 +158,7 @@ class ControlPlaneService:
         self._providers_state = self._bootstrap_provider_state()
         self._health_config = HealthConfig()
         self._health_records: dict[str, HealthStatusRecord] = {}
-        self._oauth_operations: list[OAuthOperationRecord] = []
+        self._oauth_operations: list[OAuthOperationRecord] = self._load_oauth_operations()
 
     def _bootstrap_provider_state(self) -> dict[str, ManagedProviderRecord]:
         provider_map: dict[str, ManagedProviderRecord] = {}
@@ -428,6 +429,7 @@ class ControlPlaneService:
             last_probe = next((item for item in reversed(provider_ops) if item.action == "probe"), None)
             last_bridge_sync = next((item for item in reversed(provider_ops) if item.action == "bridge_sync"), None)
             failures = len([item for item in provider_ops if item.status == "failed"])
+            total = len(provider_ops)
             per_provider.append(
                 {
                     "provider_key": provider_key,
@@ -440,11 +442,18 @@ class ControlPlaneService:
                     "bridge_profile_enabled": status.harness_profile_enabled if status else False,
                     "needs_attention": failures >= 2,
                     "failures": failures,
+                    "operation_count": total,
+                    "failure_rate": failures / max(1, total),
                     "last_probe": last_probe.model_dump() if last_probe else None,
                     "last_bridge_sync": last_bridge_sync.model_dump() if last_bridge_sync else None,
                 }
             )
-        return {"status": "ok", "operations": per_provider, "recent": [item.model_dump() for item in self._oauth_operations[-50:]]}
+        return {
+            "status": "ok",
+            "operations": per_provider,
+            "recent": [item.model_dump() for item in self._oauth_operations[-50:]],
+            "total_operations": len(self._oauth_operations),
+        }
 
     def bootstrap_readiness_report(self) -> dict[str, object]:
         root_dir = Path(__file__).resolve().parents[4]
@@ -690,9 +699,34 @@ class ControlPlaneService:
         return {"status": "ok", "upserted_profiles": upserted, "skipped": skipped}
 
     def _record_oauth_operation(self, provider_key: str, action: Literal["probe", "bridge_sync"], status: Literal["ok", "warning", "failed", "skipped"], details: str, executed_at: str) -> None:
-        self._oauth_operations.append(OAuthOperationRecord(provider_key=provider_key, action=action, status=status, details=details, executed_at=executed_at))
+        event = OAuthOperationRecord(provider_key=provider_key, action=action, status=status, details=details, executed_at=executed_at)
+        self._oauth_operations.append(event)
+        self._append_oauth_operation(event)
         if len(self._oauth_operations) > 200:
             self._oauth_operations = self._oauth_operations[-200:]
+
+    def _load_oauth_operations(self) -> list[OAuthOperationRecord]:
+        path = Path(self._settings.oauth_operations_path)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        if not path.exists():
+            path.touch()
+            return []
+        events: list[OAuthOperationRecord] = []
+        for line in path.read_text(encoding="utf-8").splitlines():
+            if not line.strip():
+                continue
+            try:
+                payload = json.loads(line)
+                events.append(OAuthOperationRecord(**payload))
+            except (json.JSONDecodeError, ValueError):
+                continue
+        return events[-200:]
+
+    def _append_oauth_operation(self, event: OAuthOperationRecord) -> None:
+        path = Path(self._settings.oauth_operations_path)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with path.open("a", encoding="utf-8") as handle:
+            handle.write(json.dumps(event.model_dump()) + "\n")
 
 
     def upsert_harness_profile(self, payload: HarnessProviderProfile):

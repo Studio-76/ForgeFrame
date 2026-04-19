@@ -131,6 +131,11 @@ class ProviderBadRequestError(ProviderError):
         super().__init__(provider=provider, error_type="provider_bad_request", message=message)
 
 
+class ProviderValidationError(ProviderError):
+    def __init__(self, provider: str, message: str):
+        super().__init__(provider=provider, error_type="provider_validation_error", message=message)
+
+
 class ProviderUpstreamError(ProviderError):
     def __init__(self, provider: str, message: str):
         super().__init__(provider=provider, error_type="provider_upstream_error", message=message, retryable=True)
@@ -150,6 +155,11 @@ class ProviderConflictError(ProviderError):
 class ProviderTimeoutError(ProviderError):
     def __init__(self, provider: str, message: str):
         super().__init__(provider=provider, error_type="provider_timeout", message=message, retryable=True)
+
+
+class ProviderRequestTimeoutError(ProviderError):
+    def __init__(self, provider: str, message: str):
+        super().__init__(provider=provider, error_type="provider_request_timeout", message=message, upstream_status_code=408, retryable=True)
 
 
 class ProviderProtocolError(ProviderError):

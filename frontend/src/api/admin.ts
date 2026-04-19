@@ -324,7 +324,7 @@ export function probeAllOauthAccountProviders() {
 }
 
 export function fetchOauthAccountOperations() {
-  return fetchJson<{ status: string; operations: Array<Record<string, unknown>>; recent: Array<Record<string, unknown>> }>("/admin/providers/oauth-account/operations");
+  return fetchJson<{ status: string; operations: Array<Record<string, unknown>>; recent: Array<Record<string, unknown>>; total_operations: number }>("/admin/providers/oauth-account/operations");
 }
 
 export function fetchBootstrapReadiness() {

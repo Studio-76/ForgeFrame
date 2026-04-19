@@ -63,6 +63,7 @@ export function ProvidersPage() {
   const [oauthTargets, setOauthTargets] = useState<Array<Record<string, string | boolean>>>([]);
   const [oauthOperations, setOauthOperations] = useState<Array<Record<string, unknown>>>([]);
   const [oauthRecentOps, setOauthRecentOps] = useState<Array<Record<string, unknown>>>([]);
+  const [oauthTotalOps, setOauthTotalOps] = useState<number>(0);
   const [bootstrapReadiness, setBootstrapReadiness] = useState<{ ready: boolean; checks: Array<Record<string, unknown>>; next_steps: string[] } | null>(null);
 
   const [newHarness, setNewHarness] = useState({
@@ -108,6 +109,7 @@ export function ProvidersPage() {
       setOauthTargets(oauthTargetsResponse.targets ?? []);
       setOauthOperations(oauthOpsResponse.operations ?? []);
       setOauthRecentOps(oauthOpsResponse.recent ?? []);
+      setOauthTotalOps(Number(oauthOpsResponse.total_operations ?? 0));
       setBootstrapReadiness({
         ready: Boolean(bootstrapResponse.ready),
         checks: bootstrapResponse.checks ?? [],
@@ -331,10 +333,11 @@ export function ProvidersPage() {
           ))}
         </ul>
         <h4>OAuth operations & failures</h4>
+        <p>persisted_operations={oauthTotalOps}</p>
         <ul>
           {oauthOperations.map((item) => (
             <li key={String(item.provider_key)}>
-              {String(item.provider_key)} · failures={String(item.failures ?? 0)} · needs_attention={String(item.needs_attention ?? false)} · last_probe={String((item.last_probe as Record<string, unknown> | null)?.status ?? "never")} · last_sync={String((item.last_bridge_sync as Record<string, unknown> | null)?.status ?? "never")}
+              {String(item.provider_key)} · failures={String(item.failures ?? 0)} · failure_rate={Number(item.failure_rate ?? 0).toFixed(2)} · ops={String(item.operation_count ?? 0)} · needs_attention={String(item.needs_attention ?? false)} · last_probe={String((item.last_probe as Record<string, unknown> | null)?.status ?? "never")} · last_sync={String((item.last_bridge_sync as Record<string, unknown> | null)?.status ?? "never")}
             </li>
           ))}
         </ul>

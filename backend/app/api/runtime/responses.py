@@ -54,6 +54,8 @@ def create_response(
         model=payload.model,
         messages=[{"role": "user", "content": resolved_input}],
         stream=False,
+        tools=payload.tools,
+        tool_choice=payload.tool_choice,
         client=payload.client,
     )
     chat_result = create_chat_completion(chat_payload, request, registry, dispatch, settings)

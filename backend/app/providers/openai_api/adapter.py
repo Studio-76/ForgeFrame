@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Iterator
+from datetime import datetime
 
 import httpx
 
@@ -17,6 +18,7 @@ from app.providers.base import (
     ProviderConfigurationError,
     ProviderProtocolError,
     ProviderRateLimitError,
+    ProviderRequestTimeoutError,
     ProviderStreamEvent,
     ProviderStreamInterruptedError,
     ProviderTimeoutError,
@@ -232,6 +234,8 @@ class OpenAIAPIAdapter:
         if response.status_code in (401, 403):
             raise ProviderAuthenticationError(self.provider_name, f"OpenAI authentication failed ({response.status_code}).")
 
+        if response.status_code == 408:
+            raise ProviderRequestTimeoutError(self.provider_name, f"OpenAI request timeout ({response.status_code}): {response.text[:500]}")
         if response.status_code in (400, 404, 422):
             raise ProviderBadRequestError(self.provider_name, f"OpenAI rejected request ({response.status_code}): {response.text[:500]}")
         if response.status_code == 410:
@@ -243,7 +247,7 @@ class OpenAIAPIAdapter:
         if response.status_code == 409:
             raise ProviderConflictError(self.provider_name, f"OpenAI conflict ({response.status_code}): {response.text[:500]}")
         if response.status_code == 429:
-            retry_after = int(response.headers.get("retry-after", "0")) if response.headers.get("retry-after", "").isdigit() else None
+            retry_after = self._parse_retry_after_seconds(response.headers.get("retry-after"))
             raise ProviderRateLimitError(self.provider_name, f"OpenAI rate limit reached ({response.status_code}): {response.text[:500]}", retry_after_seconds=retry_after)
 
         if response.status_code >= 500:
@@ -253,3 +257,16 @@ class OpenAIAPIAdapter:
 
         if response.status_code >= 300:
             raise ProviderUpstreamError(self.provider_name, f"Unexpected OpenAI response ({response.status_code}): {response.text[:500]}")
+
+    @staticmethod
+    def _parse_retry_after_seconds(value: str | None) -> int | None:
+        if not value:
+            return None
+        if value.isdigit():
+            return int(value)
+        try:
+            retry_at = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        except ValueError:
+            return None
+        delta = int((retry_at - datetime.now(tz=retry_at.tzinfo)).total_seconds())
+        return delta if delta > 0 else 0

@@ -100,7 +100,7 @@ def test_chat_endpoint_rejects_tool_choice_without_tools() -> None:
         "/v1/chat/completions",
         json={"messages": [{"role": "user", "content": "Hello"}], "tool_choice": "auto"},
     )
-    assert response.status_code == 400
+    assert response.status_code == 422
     assert response.json()["error"]["type"] == "invalid_request"
 
 
@@ -114,6 +114,31 @@ def test_chat_endpoint_rejects_tool_calling_for_baseline_provider() -> None:
     )
     assert response.status_code == 400
     assert response.json()["error"]["type"] == "provider_unsupported_feature"
+
+
+def test_chat_endpoint_rejects_invalid_tool_definition() -> None:
+    response = client.post(
+        "/v1/chat/completions",
+        json={
+            "messages": [{"role": "user", "content": "Hello"}],
+            "tools": [{"type": "function", "function": {"description": "missing name"}}],
+        },
+    )
+    assert response.status_code == 422
+    assert response.json()["error"]["type"] == "invalid_request"
+
+
+def test_chat_endpoint_rejects_tool_choice_name_not_in_tools() -> None:
+    response = client.post(
+        "/v1/chat/completions",
+        json={
+            "messages": [{"role": "user", "content": "Hello"}],
+            "tools": [{"type": "function", "function": {"name": "ping"}}],
+            "tool_choice": {"type": "function", "function": {"name": "pong"}},
+        },
+    )
+    assert response.status_code == 422
+    assert response.json()["error"]["type"] == "invalid_request"
 
 
 def test_admin_usage_summary_endpoint_available() -> None:
@@ -185,3 +210,16 @@ def test_responses_endpoint_rejects_invalid_input_list_object() -> None:
     response = client.post("/v1/responses", json={"input": [{"type": "text"}]})
     assert response.status_code == 422
     assert response.json()["error"]["type"] == "unsupported_input"
+
+
+def test_responses_endpoint_forwards_tools_to_chat_validation() -> None:
+    response = client.post(
+        "/v1/responses",
+        json={
+            "input": "hello",
+            "tools": [{"type": "function", "function": {"name": "ping"}}],
+            "tool_choice": {"type": "function", "function": {"name": "pong"}},
+        },
+    )
+    assert response.status_code == 422
+    assert response.json()["error"]["type"] == "invalid_request"
