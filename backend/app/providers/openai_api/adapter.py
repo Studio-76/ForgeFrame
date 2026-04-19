@@ -35,7 +35,7 @@ from app.usage.service import UsageAccountingService
 
 class OpenAIAPIAdapter:
     provider_name = "openai_api"
-    capabilities = ProviderCapabilities(streaming=True, tool_calling=True, vision=True, external=True)
+    capabilities = ProviderCapabilities(streaming=True, tool_calling=True, tool_calling_level="full", vision=True, external=True)
 
     def __init__(self, settings: Settings):
         self._settings = settings
@@ -72,6 +72,7 @@ class OpenAIAPIAdapter:
         try:
             message = response_payload["choices"][0]["message"]
             content = message.get("content", "")
+            tool_calls = message.get("tool_calls", [])
             finish_reason = response_payload["choices"][0].get("finish_reason", "stop")
         except (KeyError, IndexError, TypeError) as exc:
             raise ProviderUpstreamError(self.provider_name, f"Malformed response from OpenAI API: {response_payload}") from exc
@@ -88,6 +89,7 @@ class OpenAIAPIAdapter:
             cost=cost,
             credential_type="api_key",
             auth_source="openai_api_key",
+            tool_calls=tool_calls if isinstance(tool_calls, list) else [],
         )
 
     def stream_chat_completion(self, request: ChatDispatchRequest) -> Iterator[ProviderStreamEvent]:
@@ -137,6 +139,10 @@ class OpenAIAPIAdapter:
             raise ProviderUpstreamError(self.provider_name, f"Network error while calling OpenAI API: {exc}") from exc
 
         self._raise_for_status(response)
+        headers = getattr(response, "headers", {}) or {}
+        content_type = str(headers.get("content-type", ""))
+        if content_type and "json" not in content_type.lower():
+            raise ProviderProtocolError(self.provider_name, f"OpenAI returned unexpected content-type '{content_type}'.")
         try:
             return response.json()
         except ValueError as exc:
@@ -158,6 +164,10 @@ class OpenAIAPIAdapter:
                 timeout=self._settings.openai_timeout_seconds,
             ) as response:
                 self._raise_for_status(response)
+                headers = getattr(response, "headers", {}) or {}
+                content_type = str(headers.get("content-type", ""))
+                if content_type and "text/event-stream" not in content_type.lower():
+                    raise ProviderStreamInterruptedError(self.provider_name, f"OpenAI stream returned unexpected content-type '{content_type}'.")
                 saw_done = False
                 for raw_line in response.iter_lines():
                     if not raw_line:

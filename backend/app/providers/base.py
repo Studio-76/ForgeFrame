@@ -22,6 +22,7 @@ class ProviderCapabilities(BaseModel):
     auth_mechanism: AuthMechanism = "api_key"
     verify_support: bool = False
     probe_support: bool = False
+    tool_calling_level: Literal["none", "partial", "full"] = "none"
 
 
 class ChatDispatchRequest(BaseModel):
@@ -42,6 +43,7 @@ class ChatDispatchResult(BaseModel):
     cost: CostBreakdown = Field(default_factory=CostBreakdown)
     credential_type: str = "internal"
     auth_source: str = "internal"
+    tool_calls: list[dict] = Field(default_factory=list)
 
 
 class ProviderStreamEvent(BaseModel):

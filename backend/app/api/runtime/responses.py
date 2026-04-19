@@ -61,11 +61,16 @@ def create_response(
     chat_result = create_chat_completion(chat_payload, request, registry, dispatch, settings)
     if not isinstance(chat_result, dict):
         return chat_result
+    output_items: list[dict[str, object]] = [{"type": "output_text", "text": chat_result["choices"][0]["message"]["content"]}]
+    tool_calls = chat_result["choices"][0]["message"].get("tool_calls", [])
+    for call in tool_calls if isinstance(tool_calls, list) else []:
+        if isinstance(call, dict):
+            output_items.append({"type": "tool_call", "tool_call": call})
     return {
         "id": "resp-forgegate",
         "object": "response",
         "model": chat_result.get("model"),
-        "output": [{"type": "output_text", "text": chat_result["choices"][0]["message"]["content"]}],
+        "output": output_items,
         "usage": chat_result.get("usage", {}),
         "provider": chat_result.get("provider"),
         "credential_type": chat_result.get("credential_type"),

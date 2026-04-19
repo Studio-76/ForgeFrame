@@ -935,6 +935,12 @@ class ControlPlaneService:
                     "ready": runtime_status["ready"] if runtime_status else False,
                     "readiness_reason": runtime_status["readiness_reason"] if runtime_status else "provider_not_wired",
                     "capabilities": runtime_status["capabilities"] if runtime_status else {},
+                    "tool_calling_level": (runtime_status["capabilities"].get("tool_calling_level") if runtime_status else "none"),
+                    "compatibility_tier": (
+                        "beta_plus"
+                        if runtime_status and runtime_status["ready"] and runtime_status["capabilities"].get("streaming") and runtime_status["capabilities"].get("tool_calling")
+                        else ("beta" if runtime_status and runtime_status["ready"] else "planned")
+                    ),
                     "provider_axis": (runtime_status["capabilities"].get("provider_axis") if runtime_status else "unknown"),
                     "auth_mechanism": (runtime_status["capabilities"].get("auth_mechanism") if runtime_status else "unknown"),
                     "oauth_required": runtime_status["oauth_required"] if runtime_status else False,

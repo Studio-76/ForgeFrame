@@ -16,6 +16,8 @@ export type ProviderControlItem = {
   ready: boolean;
   readiness_reason: string | null;
   capabilities: Record<string, unknown>;
+  tool_calling_level?: "none" | "partial" | "full";
+  compatibility_tier?: "planned" | "beta" | "beta_plus";
   provider_axis?: string;
   auth_mechanism?: string;
   oauth_required: boolean;

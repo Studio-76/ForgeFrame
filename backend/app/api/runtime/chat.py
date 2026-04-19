@@ -85,11 +85,11 @@ def _provider_exception_to_http(exc: Exception) -> tuple[int, str, str | None, s
     if isinstance(exc, ProviderBadRequestError):
         return status.HTTP_400_BAD_REQUEST, exc.error_type, exc.provider, str(exc), {}
     if isinstance(exc, ProviderValidationError):
-        return status.HTTP_422_UNPROCESSABLE_ENTITY, exc.error_type, exc.provider, str(exc), {}
+        return status.HTTP_422_UNPROCESSABLE_CONTENT, exc.error_type, exc.provider, str(exc), {}
     if isinstance(exc, (ProviderUpstreamError, ProviderError)):
         return status.HTTP_502_BAD_GATEWAY, exc.error_type, exc.provider, str(exc), {}
     if isinstance(exc, ValueError):
-        return status.HTTP_422_UNPROCESSABLE_ENTITY, "invalid_request", None, str(exc), {}
+        return status.HTTP_422_UNPROCESSABLE_CONTENT, "invalid_request", None, str(exc), {}
     raise exc
 
 
@@ -215,7 +215,11 @@ def create_chat_completion(
         "choices": [
             {
                 "index": 0,
-                "message": {"role": "assistant", "content": result.content},
+                "message": {
+                    "role": "assistant",
+                    "content": result.content,
+                    **({"tool_calls": result.tool_calls} if result.tool_calls else {}),
+                },
                 "finish_reason": result.finish_reason,
             }
         ],

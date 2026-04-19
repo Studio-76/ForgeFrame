@@ -1,6 +1,8 @@
+import pytest
 from fastapi.testclient import TestClient
 
 from app.main import app
+from app.providers.openai_api.adapter import OpenAIAPIAdapter
 
 
 client = TestClient(app)
@@ -223,3 +225,30 @@ def test_responses_endpoint_forwards_tools_to_chat_validation() -> None:
     )
     assert response.status_code == 422
     assert response.json()["error"]["type"] == "invalid_request"
+
+
+def test_responses_endpoint_includes_tool_call_output(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("FORGEGATE_OPENAI_API_KEY", "test-key")
+
+    def _fake_post(self, payload: dict) -> dict:
+        del payload
+        return {
+            "model": "gpt-4.1-mini",
+            "usage": {"prompt_tokens": 6, "completion_tokens": 3, "total_tokens": 9},
+            "choices": [
+                {
+                    "message": {
+                        "role": "assistant",
+                        "content": "",
+                        "tool_calls": [{"id": "call_1", "type": "function", "function": {"name": "lookup", "arguments": "{\"q\":\"x\"}"}}],
+                    },
+                    "finish_reason": "tool_calls",
+                }
+            ],
+        }
+
+    monkeypatch.setattr(OpenAIAPIAdapter, "_post_chat_completion", _fake_post)
+    response = client.post("/v1/responses", json={"input": "hello", "model": "gpt-4.1-mini"})
+    assert response.status_code == 200
+    output = response.json()["output"]
+    assert any(item.get("type") == "tool_call" for item in output)

@@ -44,6 +44,7 @@ class OpenAICodexAdapter:
         self.capabilities = ProviderCapabilities(
             streaming=settings.openai_codex_bridge_enabled,
             tool_calling=True,
+            tool_calling_level="partial",
             vision=False,
             external=True,
             oauth_required=oauth_required,
@@ -92,6 +93,7 @@ class OpenAICodexAdapter:
         choice = data.get("choices", [{}])[0]
         message = choice.get("message", {})
         content = str(message.get("content", ""))
+        tool_calls = message.get("tool_calls", [])
         usage = self._usage_from_payload(data.get("usage", {}), request.messages, content)
         cost = self._usage.costs_for_provider(provider=self.provider_name, usage=usage, oauth_mode=(self._settings.openai_codex_auth_mode == "oauth"))
         return ChatDispatchResult(
@@ -103,6 +105,7 @@ class OpenAICodexAdapter:
             cost=cost,
             credential_type="oauth_access_token" if self._settings.openai_codex_auth_mode == "oauth" else "api_key",
             auth_source="codex_oauth_account_bridge" if self._settings.openai_codex_auth_mode == "oauth" else "codex_api_key_bridge",
+            tool_calls=tool_calls if isinstance(tool_calls, list) else [],
         )
 
     def stream_chat_completion(self, request: ChatDispatchRequest) -> Iterator[ProviderStreamEvent]:
@@ -142,6 +145,10 @@ class OpenAICodexAdapter:
         except httpx.RequestError as exc:
             raise ProviderUpstreamError(self.provider_name, f"Codex bridge request failed: {exc}") from exc
         self._raise_for_status(response)
+        headers = getattr(response, "headers", {}) or {}
+        content_type = str(headers.get("content-type", ""))
+        if content_type and "json" not in content_type.lower():
+            raise ProviderProtocolError(self.provider_name, f"Codex returned unexpected content-type '{content_type}'.")
         try:
             return response.json()
         except ValueError as exc:
@@ -156,6 +163,10 @@ class OpenAICodexAdapter:
         try:
             with httpx.stream("POST", endpoint, json=payload, headers=headers, timeout=self._settings.openai_codex_timeout_seconds) as response:
                 self._raise_for_status(response)
+                headers = getattr(response, "headers", {}) or {}
+                content_type = str(headers.get("content-type", ""))
+                if content_type and "text/event-stream" not in content_type.lower():
+                    raise ProviderStreamInterruptedError(self.provider_name, f"Codex stream returned unexpected content-type '{content_type}'.")
                 for raw in response.iter_lines():
                     if not raw or not raw.startswith("data:"):
                         continue
