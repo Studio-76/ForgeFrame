@@ -16,11 +16,15 @@ from app.providers.base import (
     ProviderCapabilities,
     ProviderConfigurationError,
     ProviderConflictError,
+    ProviderPayloadTooLargeError,
     ProviderProtocolError,
     ProviderRateLimitError,
+    ProviderResourceGoneError,
     ProviderStreamEvent,
     ProviderStreamInterruptedError,
     ProviderTimeoutError,
+    ProviderUnavailableError,
+    ProviderUnsupportedMediaTypeError,
     ProviderUpstreamError,
 )
 from app.settings.config import Settings
@@ -66,6 +70,12 @@ class GeminiAdapter:
             raise ProviderConfigurationError(self.provider_name, reason)
 
         payload = {"model": request.model, "messages": request.messages, "stream": False}
+        tools = getattr(request, "tools", [])
+        if tools:
+            payload["tools"] = tools
+            tool_choice = getattr(request, "tool_choice", None)
+            if tool_choice is not None:
+                payload["tool_choice"] = tool_choice
         data = self._post(payload)
         choice = data.get("choices", [{}])[0]
         message = choice.get("message", {})
@@ -88,6 +98,12 @@ class GeminiAdapter:
         if reason:
             raise ProviderConfigurationError(self.provider_name, reason)
         payload = {"model": request.model, "messages": request.messages, "stream": True, "stream_options": {"include_usage": True}}
+        tools = getattr(request, "tools", [])
+        if tools:
+            payload["tools"] = tools
+            tool_choice = getattr(request, "tool_choice", None)
+            if tool_choice is not None:
+                payload["tool_choice"] = tool_choice
         yield from self._stream(payload, request.messages)
 
     def _endpoint_headers(self) -> tuple[str, dict[str, str]]:
@@ -162,12 +178,20 @@ class GeminiAdapter:
             raise ProviderAuthenticationError(self.provider_name, f"Gemini authentication failed ({response.status_code}).")
         if response.status_code in {400, 404, 422}:
             raise ProviderBadRequestError(self.provider_name, f"Gemini rejected request ({response.status_code}): {response.text[:500]}")
+        if response.status_code == 410:
+            raise ProviderResourceGoneError(self.provider_name, f"Gemini resource gone ({response.status_code}): {response.text[:500]}")
+        if response.status_code == 413:
+            raise ProviderPayloadTooLargeError(self.provider_name, f"Gemini payload too large ({response.status_code}): {response.text[:500]}")
+        if response.status_code == 415:
+            raise ProviderUnsupportedMediaTypeError(self.provider_name, f"Gemini unsupported media type ({response.status_code}): {response.text[:500]}")
         if response.status_code == 409:
             raise ProviderConflictError(self.provider_name, f"Gemini conflict ({response.status_code}): {response.text[:500]}")
         if response.status_code == 429:
-            raise ProviderRateLimitError(self.provider_name, f"Gemini rate limit reached ({response.status_code}): {response.text[:500]}")
+            retry_after = int(response.headers.get("retry-after", "0")) if response.headers.get("retry-after", "").isdigit() else None
+            raise ProviderRateLimitError(self.provider_name, f"Gemini rate limit reached ({response.status_code}): {response.text[:500]}", retry_after_seconds=retry_after)
         if response.status_code >= 500:
+            if response.status_code == 503:
+                raise ProviderUnavailableError(self.provider_name, f"Gemini unavailable ({response.status_code}): {response.text[:500]}")
             raise ProviderUpstreamError(self.provider_name, f"Gemini upstream error ({response.status_code}): {response.text[:500]}")
         if response.status_code >= 300:
             raise ProviderUpstreamError(self.provider_name, f"Unexpected Gemini response ({response.status_code}): {response.text[:500]}")
-

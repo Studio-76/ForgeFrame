@@ -8,9 +8,13 @@ from app.providers.base import (
     ProviderConfigurationError,
     ProviderNotImplementedError,
     ProviderNotReadyError,
+    ProviderPayloadTooLargeError,
     ProviderRateLimitError,
+    ProviderResourceGoneError,
     ProviderStreamInterruptedError,
     ProviderTimeoutError,
+    ProviderUnsupportedMediaTypeError,
+    ProviderUnavailableError,
     ProviderUnsupportedFeatureError,
 )
 from app.providers.forgegate_baseline import ForgeGateBaselineAdapter
@@ -49,6 +53,10 @@ def test_provider_error_types_for_new_semantics() -> None:
     assert ProviderRateLimitError("openai", "rl").error_type == "provider_rate_limited"
     assert ProviderConflictError("openai", "conflict").error_type == "provider_conflict"
     assert ProviderTimeoutError("openai", "timeout").error_type == "provider_timeout"
+    assert ProviderResourceGoneError("openai", "gone").error_type == "provider_resource_gone"
+    assert ProviderPayloadTooLargeError("openai", "big").error_type == "provider_payload_too_large"
+    assert ProviderUnsupportedMediaTypeError("openai", "media").error_type == "provider_unsupported_media_type"
+    assert ProviderUnavailableError("openai", "down").error_type == "provider_unavailable"
 
 
 def test_codex_auth_state_resolution() -> None:

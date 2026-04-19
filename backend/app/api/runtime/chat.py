@@ -20,9 +20,13 @@ from app.providers import (
     ProviderNotReadyError,
     ProviderProtocolError,
     ProviderRateLimitError,
+    ProviderResourceGoneError,
     ProviderStreamEvent,
     ProviderStreamInterruptedError,
     ProviderTimeoutError,
+    ProviderUnavailableError,
+    ProviderUnsupportedMediaTypeError,
+    ProviderPayloadTooLargeError,
     ProviderUnsupportedFeatureError,
     ProviderUpstreamError,
 )
@@ -55,9 +59,21 @@ def _provider_exception_to_http(exc: Exception) -> tuple[int, str, str | None, s
     if isinstance(exc, ProviderAuthenticationError):
         return status.HTTP_401_UNAUTHORIZED, exc.error_type, exc.provider, str(exc), {}
     if isinstance(exc, ProviderRateLimitError):
-        return status.HTTP_429_TOO_MANY_REQUESTS, exc.error_type, exc.provider, str(exc), {"retryable": True}
+        extras: dict[str, object] = {"retryable": True}
+        retry_after = getattr(exc, "retry_after_seconds", None)
+        if retry_after is not None:
+            extras["retry_after_seconds"] = retry_after
+        return status.HTTP_429_TOO_MANY_REQUESTS, exc.error_type, exc.provider, str(exc), extras
     if isinstance(exc, ProviderConflictError):
         return status.HTTP_409_CONFLICT, exc.error_type, exc.provider, str(exc), {}
+    if isinstance(exc, ProviderResourceGoneError):
+        return status.HTTP_410_GONE, exc.error_type, exc.provider, str(exc), {}
+    if isinstance(exc, ProviderPayloadTooLargeError):
+        return status.HTTP_413_CONTENT_TOO_LARGE, exc.error_type, exc.provider, str(exc), {}
+    if isinstance(exc, ProviderUnsupportedMediaTypeError):
+        return status.HTTP_415_UNSUPPORTED_MEDIA_TYPE, exc.error_type, exc.provider, str(exc), {}
+    if isinstance(exc, ProviderUnavailableError):
+        return status.HTTP_503_SERVICE_UNAVAILABLE, exc.error_type, exc.provider, str(exc), {"retryable": True}
     if isinstance(exc, ProviderProtocolError):
         return status.HTTP_502_BAD_GATEWAY, exc.error_type, exc.provider, str(exc), {}
     if isinstance(exc, ProviderTimeoutError):
@@ -114,10 +130,18 @@ def create_chat_completion(
         )
 
     try:
+        if payload.tool_choice is not None and not payload.tools:
+            return _error_response(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                error_type="invalid_request",
+                message="tool_choice was provided but no tools were declared.",
+            )
         if payload.stream:
             model, provider, events = dispatch.dispatch_chat_stream(
                 requested_model=requested_model,
                 messages=[message.model_dump() for message in payload.messages],
+                tools=payload.tools,
+                tool_choice=payload.tool_choice,
             )
 
             def _sse_body() -> Iterator[str]:
@@ -157,6 +181,8 @@ def create_chat_completion(
             requested_model=requested_model,
             messages=[message.model_dump() for message in payload.messages],
             stream=False,
+            tools=payload.tools,
+            tool_choice=payload.tool_choice,
         )
     except Exception as exc:  # intentionally centralized mapping
         status_code, error_type, provider, message, extra = _provider_exception_to_http(exc)

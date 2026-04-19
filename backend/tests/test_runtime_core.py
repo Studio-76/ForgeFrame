@@ -95,6 +95,27 @@ def test_chat_endpoint_rejects_unknown_model() -> None:
     assert error["type"] == "model_not_found"
 
 
+def test_chat_endpoint_rejects_tool_choice_without_tools() -> None:
+    response = client.post(
+        "/v1/chat/completions",
+        json={"messages": [{"role": "user", "content": "Hello"}], "tool_choice": "auto"},
+    )
+    assert response.status_code == 400
+    assert response.json()["error"]["type"] == "invalid_request"
+
+
+def test_chat_endpoint_rejects_tool_calling_for_baseline_provider() -> None:
+    response = client.post(
+        "/v1/chat/completions",
+        json={
+            "messages": [{"role": "user", "content": "Hello"}],
+            "tools": [{"type": "function", "function": {"name": "ping", "description": "Ping", "parameters": {"type": "object"}}}],
+        },
+    )
+    assert response.status_code == 400
+    assert response.json()["error"]["type"] == "provider_unsupported_feature"
+
+
 def test_admin_usage_summary_endpoint_available() -> None:
     response = client.get("/admin/usage/")
     assert response.status_code == 200

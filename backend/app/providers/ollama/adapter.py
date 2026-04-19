@@ -15,11 +15,16 @@ from app.providers.base import (
     ProviderCapabilities,
     ProviderConflictError,
     ProviderConfigurationError,
+    ProviderPayloadTooLargeError,
     ProviderProtocolError,
     ProviderRateLimitError,
+    ProviderResourceGoneError,
     ProviderStreamEvent,
     ProviderStreamInterruptedError,
     ProviderTimeoutError,
+    ProviderUnavailableError,
+    ProviderUnsupportedFeatureError,
+    ProviderUnsupportedMediaTypeError,
     ProviderUpstreamError,
 )
 from app.settings.config import Settings
@@ -56,6 +61,8 @@ class OllamaAdapter:
     def create_chat_completion(self, request: ChatDispatchRequest) -> ChatDispatchResult:
         if not self.is_ready():
             raise ProviderConfigurationError(self.provider_name, self.readiness_reason() or "Ollama is not configured.")
+        if getattr(request, "tools", []):
+            raise ProviderUnsupportedFeatureError(self.provider_name, "tool_calling")
         payload = {"model": request.model or self._settings.ollama_default_model, "messages": request.messages, "stream": False}
         data = self._post(payload)
         choice = data.get("choices", [{}])[0]
@@ -77,6 +84,8 @@ class OllamaAdapter:
     def stream_chat_completion(self, request: ChatDispatchRequest) -> Iterator[ProviderStreamEvent]:
         if not self.is_ready():
             raise ProviderConfigurationError(self.provider_name, self.readiness_reason() or "Ollama is not configured.")
+        if getattr(request, "tools", []):
+            raise ProviderUnsupportedFeatureError(self.provider_name, "tool_calling")
         payload = {"model": request.model or self._settings.ollama_default_model, "messages": request.messages, "stream": True}
         yield from self._stream(payload, request.messages)
 
@@ -147,11 +156,20 @@ class OllamaAdapter:
             raise ProviderAuthenticationError(self.provider_name, f"Ollama authentication failed ({response.status_code}).")
         if response.status_code in {400, 404, 422}:
             raise ProviderBadRequestError(self.provider_name, f"Ollama rejected request ({response.status_code}): {response.text[:500]}")
+        if response.status_code == 410:
+            raise ProviderResourceGoneError(self.provider_name, f"Ollama resource gone ({response.status_code}): {response.text[:500]}")
+        if response.status_code == 413:
+            raise ProviderPayloadTooLargeError(self.provider_name, f"Ollama payload too large ({response.status_code}): {response.text[:500]}")
+        if response.status_code == 415:
+            raise ProviderUnsupportedMediaTypeError(self.provider_name, f"Ollama unsupported media type ({response.status_code}): {response.text[:500]}")
         if response.status_code == 409:
             raise ProviderConflictError(self.provider_name, f"Ollama conflict ({response.status_code}): {response.text[:500]}")
         if response.status_code == 429:
-            raise ProviderRateLimitError(self.provider_name, f"Ollama rate limit reached ({response.status_code}): {response.text[:500]}")
+            retry_after = int(response.headers.get("retry-after", "0")) if response.headers.get("retry-after", "").isdigit() else None
+            raise ProviderRateLimitError(self.provider_name, f"Ollama rate limit reached ({response.status_code}): {response.text[:500]}", retry_after_seconds=retry_after)
         if response.status_code >= 500:
+            if response.status_code == 503:
+                raise ProviderUnavailableError(self.provider_name, f"Ollama unavailable ({response.status_code}): {response.text[:500]}")
             raise ProviderUpstreamError(self.provider_name, f"Ollama upstream error ({response.status_code}): {response.text[:500]}")
         if response.status_code >= 300:
             raise ProviderUpstreamError(self.provider_name, f"Unexpected Ollama response ({response.status_code}): {response.text[:500]}")

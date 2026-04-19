@@ -13,11 +13,16 @@ from app.providers.base import (
     ProviderConflictError,
     ProviderConfigurationError,
     ProviderNotReadyError,
+    ProviderPayloadTooLargeError,
     ProviderProtocolError,
     ProviderRateLimitError,
+    ProviderResourceGoneError,
     ProviderStreamEvent,
     ProviderStreamInterruptedError,
     ProviderUnsupportedFeatureError,
+    ProviderUnavailableError,
+    ProviderUnsupportedMediaTypeError,
+    ProviderAuthenticationError,
     ProviderTimeoutError,
     ProviderUpstreamError,
 )
@@ -61,6 +66,8 @@ class GenericHarnessAdapter:
     def create_chat_completion(self, request: ChatDispatchRequest) -> ChatDispatchResult:
         if not self.is_ready():
             raise ProviderConfigurationError(self.provider_name, self.readiness_reason() or "Harness not ready")
+        if getattr(request, "tools", []):
+            raise ProviderUnsupportedFeatureError(self.provider_name, "tool_calling")
 
         profile = self._profile_for_model(request.model)
         try:
@@ -89,6 +96,8 @@ class GenericHarnessAdapter:
     def stream_chat_completion(self, request: ChatDispatchRequest) -> Iterator[ProviderStreamEvent]:
         if not self.is_ready():
             raise ProviderConfigurationError(self.provider_name, self.readiness_reason() or "Harness not ready")
+        if getattr(request, "tools", []):
+            raise ProviderUnsupportedFeatureError(self.provider_name, "tool_calling")
         profile = self._profile_for_model(request.model)
         if not profile.stream_mapping.enabled:
             raise ProviderUnsupportedFeatureError(self.provider_name, "streaming_not_enabled_in_profile")
@@ -136,4 +145,14 @@ class GenericHarnessAdapter:
             return ProviderProtocolError(self.provider_name, message)
         if "rejected request (400)" in lower or "rejected request (404)" in lower or "rejected request (422)" in lower:
             return ProviderBadRequestError(self.provider_name, message)
+        if "rejected request (401)" in lower or "rejected request (403)" in lower:
+            return ProviderAuthenticationError(self.provider_name, message)
+        if "rejected request (410)" in lower:
+            return ProviderResourceGoneError(self.provider_name, message)
+        if "rejected request (413)" in lower:
+            return ProviderPayloadTooLargeError(self.provider_name, message)
+        if "rejected request (415)" in lower:
+            return ProviderUnsupportedMediaTypeError(self.provider_name, message)
+        if "rejected request (503)" in lower:
+            return ProviderUnavailableError(self.provider_name, message)
         return ProviderUpstreamError(self.provider_name, message)

@@ -2,7 +2,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.main import app
-from app.providers import ProviderRateLimitError, ProviderStreamEvent
+from app.providers import ProviderPayloadTooLargeError, ProviderRateLimitError, ProviderStreamEvent
 from app.providers.openai_api.adapter import OpenAIAPIAdapter
 from app.usage.models import CostBreakdown, TokenUsage
 
@@ -113,3 +113,19 @@ def test_chat_endpoint_openai_rate_limit_maps_to_429(monkeypatch: pytest.MonkeyP
     )
     assert response.status_code == 429
     assert response.json()["error"]["type"] == "provider_rate_limited"
+
+
+def test_chat_endpoint_openai_payload_too_large_maps_to_413(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("FORGEGATE_OPENAI_API_KEY", "test-key")
+
+    def _fake_post(self, payload: dict) -> dict:
+        del payload
+        raise ProviderPayloadTooLargeError("openai_api", "payload too large")
+
+    monkeypatch.setattr(OpenAIAPIAdapter, "_post_chat_completion", _fake_post)
+    response = client.post(
+        "/v1/chat/completions",
+        json={"messages": [{"role": "user", "content": "x" * 10}], "model": "gpt-4.1-mini"},
+    )
+    assert response.status_code == 413
+    assert response.json()["error"]["type"] == "provider_payload_too_large"

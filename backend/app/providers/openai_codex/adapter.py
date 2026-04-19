@@ -17,9 +17,13 @@ from app.providers.base import (
     ProviderNotImplementedError,
     ProviderProtocolError,
     ProviderRateLimitError,
+    ProviderResourceGoneError,
     ProviderStreamEvent,
     ProviderStreamInterruptedError,
     ProviderTimeoutError,
+    ProviderUnavailableError,
+    ProviderUnsupportedMediaTypeError,
+    ProviderPayloadTooLargeError,
     ProviderUnsupportedFeatureError,
     ProviderUpstreamError,
 )
@@ -76,6 +80,12 @@ class OpenAICodexAdapter:
         if not self._settings.openai_codex_bridge_enabled:
             raise ProviderNotImplementedError(self.provider_name)
         payload = {"model": request.model, "messages": request.messages, "stream": False}
+        tools = getattr(request, "tools", [])
+        if tools:
+            payload["tools"] = tools
+            tool_choice = getattr(request, "tool_choice", None)
+            if tool_choice is not None:
+                payload["tool_choice"] = tool_choice
         data = self._post(payload)
         choice = data.get("choices", [{}])[0]
         message = choice.get("message", {})
@@ -107,6 +117,12 @@ class OpenAICodexAdapter:
             "stream": True,
             "stream_options": {"include_usage": True},
         }
+        tools = getattr(request, "tools", [])
+        if tools:
+            payload["tools"] = tools
+            tool_choice = getattr(request, "tool_choice", None)
+            if tool_choice is not None:
+                payload["tool_choice"] = tool_choice
         yield from self._stream(payload, request.messages)
 
     def _endpoint_headers(self) -> tuple[str, dict[str, str]]:
@@ -181,11 +197,20 @@ class OpenAICodexAdapter:
             raise ProviderAuthenticationError(self.provider_name, f"Codex authentication failed ({response.status_code}).")
         if response.status_code in {400, 404, 422}:
             raise ProviderBadRequestError(self.provider_name, f"Codex bridge rejected request ({response.status_code}): {response.text[:500]}")
+        if response.status_code == 410:
+            raise ProviderResourceGoneError(self.provider_name, f"Codex resource gone ({response.status_code}): {response.text[:500]}")
+        if response.status_code == 413:
+            raise ProviderPayloadTooLargeError(self.provider_name, f"Codex payload too large ({response.status_code}): {response.text[:500]}")
+        if response.status_code == 415:
+            raise ProviderUnsupportedMediaTypeError(self.provider_name, f"Codex unsupported media type ({response.status_code}): {response.text[:500]}")
         if response.status_code == 409:
             raise ProviderConflictError(self.provider_name, f"Codex bridge conflict ({response.status_code}): {response.text[:500]}")
         if response.status_code == 429:
-            raise ProviderRateLimitError(self.provider_name, f"Codex bridge rate limit reached ({response.status_code}): {response.text[:500]}")
+            retry_after = int(response.headers.get("retry-after", "0")) if response.headers.get("retry-after", "").isdigit() else None
+            raise ProviderRateLimitError(self.provider_name, f"Codex bridge rate limit reached ({response.status_code}): {response.text[:500]}", retry_after_seconds=retry_after)
         if response.status_code >= 500:
+            if response.status_code == 503:
+                raise ProviderUnavailableError(self.provider_name, f"Codex upstream unavailable ({response.status_code}): {response.text[:500]}")
             raise ProviderUpstreamError(self.provider_name, f"Codex upstream error ({response.status_code}): {response.text[:500]}")
         if response.status_code >= 300:
             raise ProviderUpstreamError(self.provider_name, f"Unexpected Codex bridge response ({response.status_code}): {response.text[:500]}")

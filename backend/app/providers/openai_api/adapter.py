@@ -20,6 +20,10 @@ from app.providers.base import (
     ProviderStreamEvent,
     ProviderStreamInterruptedError,
     ProviderTimeoutError,
+    ProviderPayloadTooLargeError,
+    ProviderResourceGoneError,
+    ProviderUnavailableError,
+    ProviderUnsupportedMediaTypeError,
     ProviderUpstreamError,
 )
 from app.settings.config import Settings
@@ -29,7 +33,7 @@ from app.usage.service import UsageAccountingService
 
 class OpenAIAPIAdapter:
     provider_name = "openai_api"
-    capabilities = ProviderCapabilities(streaming=True, tool_calling=False, vision=True, external=True)
+    capabilities = ProviderCapabilities(streaming=True, tool_calling=True, vision=True, external=True)
 
     def __init__(self, settings: Settings):
         self._settings = settings
@@ -55,6 +59,12 @@ class OpenAIAPIAdapter:
             "messages": request.messages,
             "stream": False,
         }
+        tools = getattr(request, "tools", [])
+        if tools:
+            payload["tools"] = tools
+            tool_choice = getattr(request, "tool_choice", None)
+            if tool_choice is not None:
+                payload["tool_choice"] = tool_choice
 
         response_payload = self._post_chat_completion(payload)
         try:
@@ -91,6 +101,12 @@ class OpenAIAPIAdapter:
             "stream": True,
             "stream_options": {"include_usage": True},
         }
+        tools = getattr(request, "tools", [])
+        if tools:
+            payload["tools"] = tools
+            tool_choice = getattr(request, "tool_choice", None)
+            if tool_choice is not None:
+                payload["tool_choice"] = tool_choice
 
         yield from self._stream_chat_completion(payload, request.messages)
 
@@ -218,12 +234,21 @@ class OpenAIAPIAdapter:
 
         if response.status_code in (400, 404, 422):
             raise ProviderBadRequestError(self.provider_name, f"OpenAI rejected request ({response.status_code}): {response.text[:500]}")
+        if response.status_code == 410:
+            raise ProviderResourceGoneError(self.provider_name, f"OpenAI resource gone ({response.status_code}): {response.text[:500]}")
+        if response.status_code == 413:
+            raise ProviderPayloadTooLargeError(self.provider_name, f"OpenAI payload too large ({response.status_code}): {response.text[:500]}")
+        if response.status_code == 415:
+            raise ProviderUnsupportedMediaTypeError(self.provider_name, f"OpenAI media type unsupported ({response.status_code}): {response.text[:500]}")
         if response.status_code == 409:
             raise ProviderConflictError(self.provider_name, f"OpenAI conflict ({response.status_code}): {response.text[:500]}")
         if response.status_code == 429:
-            raise ProviderRateLimitError(self.provider_name, f"OpenAI rate limit reached ({response.status_code}): {response.text[:500]}")
+            retry_after = int(response.headers.get("retry-after", "0")) if response.headers.get("retry-after", "").isdigit() else None
+            raise ProviderRateLimitError(self.provider_name, f"OpenAI rate limit reached ({response.status_code}): {response.text[:500]}", retry_after_seconds=retry_after)
 
         if response.status_code >= 500:
+            if response.status_code == 503:
+                raise ProviderUnavailableError(self.provider_name, f"OpenAI temporarily unavailable ({response.status_code}): {response.text[:500]}")
             raise ProviderUpstreamError(self.provider_name, f"OpenAI upstream error ({response.status_code}): {response.text[:500]}")
 
         if response.status_code >= 300:

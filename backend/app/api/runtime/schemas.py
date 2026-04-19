@@ -14,6 +14,8 @@ class ChatCompletionsRequest(BaseModel):
     model: str | None = None
     messages: list[ChatMessage] = Field(min_length=1)
     stream: bool = False
+    tools: list[dict[str, Any]] = Field(default_factory=list)
+    tool_choice: str | dict[str, Any] | None = None
     client: dict[str, str] = Field(default_factory=dict)
 
 
