@@ -128,3 +128,9 @@ def test_responses_endpoint_openai_compatible_baseline() -> None:
     assert body["object"] == "response"
     assert isinstance(body["output"], list)
     assert body["provider"] == "forgegate_baseline"
+
+
+def test_responses_endpoint_rejects_stream_mode_for_now() -> None:
+    response = client.post("/v1/responses", json={"input": "Hello responses", "stream": True})
+    assert response.status_code == 400
+    assert response.json()["error"]["type"] == "unsupported_feature"

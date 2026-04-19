@@ -6,6 +6,7 @@ from app.providers.base import ProviderAdapter
 from app.providers.forgegate_baseline import ForgeGateBaselineAdapter
 from app.providers.gemini.adapter import GeminiAdapter
 from app.providers.generic_harness.adapter import GenericHarnessAdapter
+from app.providers.ollama.adapter import OllamaAdapter
 from app.providers.openai_api.adapter import OpenAIAPIAdapter
 from app.providers.openai_codex.adapter import OpenAICodexAdapter
 from app.settings.config import Settings
@@ -21,6 +22,7 @@ class ProviderRegistry:
             "gemini": GeminiAdapter(settings),
             "anthropic": AnthropicAdapter(),
             "generic_harness": GenericHarnessAdapter(settings, harness),
+            "ollama": OllamaAdapter(settings),
         }
         self._adapters = {
             name: adapter

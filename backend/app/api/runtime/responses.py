@@ -1,6 +1,7 @@
 """Runtime responses endpoint for broader OpenAI-compatible client behavior."""
 
 from fastapi import APIRouter, Depends, Request
+from fastapi.responses import JSONResponse
 
 from app.api.runtime.chat import create_chat_completion
 from app.api.runtime.dependencies import get_dispatch_service, get_model_registry, get_settings
@@ -20,9 +21,25 @@ def create_response(
     dispatch: DispatchService = Depends(get_dispatch_service),
     settings: Settings = Depends(get_settings),
 ) -> object:
+    if payload.stream:
+        return JSONResponse(
+            status_code=400,
+            content={"error": {"type": "unsupported_feature", "message": "Streaming for /v1/responses is not implemented yet. Use /v1/chat/completions for stream mode."}},
+        )
+
+    input_value = payload.input
+    if isinstance(input_value, list):
+        text_parts = [str(item.get("content", item)) if isinstance(item, dict) else str(item) for item in input_value]
+        resolved_input = "\n".join(part for part in text_parts if part.strip()) or " "
+    else:
+        resolved_input = str(input_value)
+
+    if payload.instructions:
+        resolved_input = f"{payload.instructions}\n\n{resolved_input}"
+
     chat_payload = ChatCompletionsRequest(
         model=payload.model,
-        messages=[{"role": "user", "content": payload.input}],
+        messages=[{"role": "user", "content": resolved_input}],
         stream=False,
         client=payload.client,
     )

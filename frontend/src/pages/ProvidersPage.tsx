@@ -16,6 +16,7 @@ import {
   fetchProviderControlPlane,
   fetchUsageSummary,
   patchHealthConfig,
+  probeOauthAccountProvider,
   previewHarness,
   probeHarness,
   runHealthChecks,
@@ -277,10 +278,20 @@ export function ProvidersPage() {
       </div>
       <div className="fg-card" style={{ marginBottom: "0.75rem" }}>
         <h3>Beta target matrix</h3>
+        <p className="fg-muted">OAuth-/Account-Zielachsen können direkt mit readiness/live-probe geprüft werden.</p>
         <ul>
           {betaTargets.map((target) => (
             <li key={target.provider_key}>
               {target.provider_key} · axis={target.product_axis} · type={target.provider_type} · readiness={target.readiness} ({target.readiness_score}) · beta_tier={target.beta_tier} · auth={target.auth_model} · runtime={target.runtime_path} · runtime_axis={target.runtime_readiness} · stream_axis={target.streaming_readiness} · verify_axis={target.verify_probe_readiness} · ui_axis={target.ui_readiness} · status={target.status_summary}
+              {target.provider_type === "oauth_account" ? (
+                <button
+                  type="button"
+                  style={{ marginLeft: "0.5rem" }}
+                  onClick={() => void probeOauthAccountProvider(target.provider_key).then((res) => setOperationResult(JSON.stringify(res, null, 2)))}
+                >
+                  Probe OAuth
+                </button>
+              ) : null}
             </li>
           ))}
         </ul>

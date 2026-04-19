@@ -6,6 +6,7 @@ from datetime import UTC, datetime
 from functools import lru_cache
 from typing import Literal
 
+import httpx
 from pydantic import BaseModel, Field
 
 from app.core.model_registry import ModelRegistry
@@ -107,6 +108,16 @@ class BetaProviderTarget(BaseModel):
     oauth_account_provider: bool = False
     notes: str
 
+
+class OAuthAccountProbeResult(BaseModel):
+    provider_key: str
+    ready: bool
+    probe_mode: Literal["readiness_only", "live_http_probe"]
+    status: Literal["ok", "warning", "failed"]
+    details: str
+    status_code: int | None = None
+    checked_at: str
+
 class ControlPlaneService:
     def __init__(
         self,
@@ -188,9 +199,10 @@ class ControlPlaneService:
         return self._harness.list_templates()
 
     def beta_provider_targets(self) -> list[dict[str, object]]:
-        codex_status = self._providers.get_provider_status("openai_codex")
-        gemini_status = self._providers.get_provider_status("gemini")
-        harness_status = self._providers.get_provider_status("generic_harness")
+        codex_status = self._safe_provider_status("openai_codex")
+        gemini_status = self._safe_provider_status("gemini")
+        harness_status = self._safe_provider_status("generic_harness")
+        ollama_status = self._safe_provider_status("ollama")
         targets = [
             BetaProviderTarget(
                 provider_key="openai_codex",
@@ -200,8 +212,8 @@ class ControlPlaneService:
                 runtime_path="native provider adapter",
                 readiness="partial",
                 readiness_score=62 if codex_status["ready"] else 48,
-                runtime_readiness="partial",
-                streaming_readiness="planned",
+                runtime_readiness="partial" if self._settings.openai_codex_bridge_enabled else "planned",
+                streaming_readiness="partial" if self._settings.openai_codex_bridge_enabled else "planned",
                 verify_probe_readiness="partial",
                 ui_readiness="partial",
                 beta_tier="beta",
@@ -209,7 +221,7 @@ class ControlPlaneService:
                 verify_probe_axis="verify/probe supported",
                 observability_axis="provider/model/client/integration/profile",
                 ui_axis="providers + harness control plane",
-                status_summary="Auth semantics wired; runtime bridge still beta-scaffold.",
+                status_summary="Auth semantics wired; partial bridge active." if self._settings.openai_codex_bridge_enabled else "Auth semantics wired; runtime bridge still beta-scaffold.",
                 oauth_account_provider=True,
                 notes="Existing path; needs deeper account lifecycle automation.",
             ),
@@ -220,17 +232,17 @@ class ControlPlaneService:
                 auth_model="oauth/api_key",
                 runtime_path="native provider adapter",
                 readiness="partial",
-                readiness_score=46 if gemini_status["ready"] else 34,
-                runtime_readiness="planned",
+                readiness_score=52 if self._settings.gemini_probe_enabled else (46 if gemini_status["ready"] else 34),
+                runtime_readiness="partial" if self._settings.gemini_probe_enabled else "planned",
                 streaming_readiness="planned",
-                verify_probe_readiness="partial",
+                verify_probe_readiness="ready" if self._settings.gemini_probe_enabled else "partial",
                 ui_readiness="partial",
                 beta_tier="concept",
                 health_semantics="provider/model discovery + auth readiness",
                 verify_probe_axis="verify/probe supported via harness/runtime",
                 observability_axis="provider/model/client/integration/profile",
                 ui_axis="providers + usage + harness",
-                status_summary="OAuth/account credentials modeled; runtime implementation pending.",
+                status_summary="OAuth/account probe-ready flow active." if self._settings.gemini_probe_enabled else "OAuth/account credentials modeled; runtime implementation pending.",
                 oauth_account_provider=True,
                 notes="Existing path; needs stronger beta account onboarding.",
             ),
@@ -323,10 +335,10 @@ class ControlPlaneService:
                 product_axis="local_providers",
                 auth_model="none/local network",
                 runtime_path="dedicated ollama template + local endpoint harness path",
-                readiness="partial",
-                readiness_score=44,
-                runtime_readiness="partial",
-                streaming_readiness="partial",
+                readiness="ready" if ollama_status["ready"] else "partial",
+                readiness_score=72 if ollama_status["ready"] else 44,
+                runtime_readiness="ready" if ollama_status["ready"] else "partial",
+                streaming_readiness="ready" if ollama_status["ready"] else "partial",
                 verify_probe_readiness="ready",
                 ui_readiness="partial",
                 beta_tier="beta",
@@ -334,7 +346,7 @@ class ControlPlaneService:
                 verify_probe_axis="verify/probe via local endpoint profile",
                 observability_axis="provider/model/client integration errors",
                 ui_axis="beta target table + harness profile template",
-                status_summary="Dedicated local axis with explicit template and control-plane lifecycle.",
+                status_summary="Dedicated local runtime adapter and template are active." if ollama_status["ready"] else "Dedicated local axis with explicit template and control-plane lifecycle.",
                 notes="Dedicated Ollama axis explicitly in beta scope.",
             ),
             BetaProviderTarget(
@@ -359,6 +371,114 @@ class ControlPlaneService:
             ),
         ]
         return [item.model_dump() for item in targets]
+
+    def _safe_provider_status(self, provider_key: str) -> dict[str, object]:
+        try:
+            return self._providers.get_provider_status(provider_key)
+        except ValueError:
+            return {"ready": False, "readiness_reason": "provider_disabled_or_not_registered", "capabilities": {}}
+
+    def probe_oauth_account_provider(self, provider_key: str) -> OAuthAccountProbeResult:
+        now = datetime.now(tz=UTC).isoformat()
+        if provider_key == "openai_codex":
+            status = self._providers.get_provider_status("openai_codex")
+            if not status["ready"]:
+                return OAuthAccountProbeResult(
+                    provider_key=provider_key,
+                    ready=False,
+                    probe_mode="readiness_only",
+                    status="failed",
+                    details=str(status["readiness_reason"]),
+                    checked_at=now,
+                )
+            if not self._settings.openai_codex_bridge_enabled:
+                return OAuthAccountProbeResult(
+                    provider_key=provider_key,
+                    ready=True,
+                    probe_mode="readiness_only",
+                    status="warning",
+                    details="Codex bridge disabled; readiness only.",
+                    checked_at=now,
+                )
+            payload = {"model": self._settings.openai_codex_probe_model, "messages": [{"role": "user", "content": "health probe"}], "stream": False, "max_tokens": 8}
+            endpoint = f"{self._settings.openai_codex_base_url.rstrip('/')}/chat/completions"
+            token = self._settings.openai_codex_oauth_access_token if self._settings.openai_codex_auth_mode == "oauth" else self._settings.openai_codex_api_key
+            try:
+                response = httpx.post(endpoint, json=payload, headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"}, timeout=self._settings.openai_codex_timeout_seconds)
+            except httpx.RequestError as exc:
+                return OAuthAccountProbeResult(
+                    provider_key=provider_key,
+                    ready=True,
+                    probe_mode="live_http_probe",
+                    status="failed",
+                    details=f"Codex bridge probe request failed: {exc}",
+                    checked_at=now,
+                )
+            return OAuthAccountProbeResult(
+                provider_key=provider_key,
+                ready=True,
+                probe_mode="live_http_probe",
+                status="ok" if response.status_code < 400 else "failed",
+                details="Codex bridge probe succeeded." if response.status_code < 400 else f"Codex bridge probe failed: {response.text[:300]}",
+                status_code=response.status_code,
+                checked_at=now,
+            )
+
+        if provider_key == "gemini":
+            status = self._providers.get_provider_status("gemini")
+            if not status["ready"]:
+                return OAuthAccountProbeResult(
+                    provider_key=provider_key,
+                    ready=False,
+                    probe_mode="readiness_only",
+                    status="failed",
+                    details=str(status["readiness_reason"]),
+                    checked_at=now,
+                )
+            if not self._settings.gemini_probe_enabled:
+                return OAuthAccountProbeResult(
+                    provider_key=provider_key,
+                    ready=True,
+                    probe_mode="readiness_only",
+                    status="warning",
+                    details="Gemini probe flow disabled; set FORGEGATE_GEMINI_PROBE_ENABLED=true.",
+                    checked_at=now,
+                )
+            payload = {"model": self._settings.gemini_probe_model, "messages": [{"role": "user", "content": "health probe"}], "stream": False, "max_tokens": 8}
+            token = self._settings.gemini_oauth_access_token if self._settings.gemini_auth_mode == "oauth" else self._settings.gemini_api_key
+            endpoint = f"{self._settings.gemini_probe_base_url.rstrip('/')}/chat/completions"
+            try:
+                response = httpx.post(endpoint, json=payload, headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"}, timeout=self._settings.gemini_timeout_seconds)
+            except httpx.RequestError as exc:
+                return OAuthAccountProbeResult(
+                    provider_key=provider_key,
+                    ready=True,
+                    probe_mode="live_http_probe",
+                    status="failed",
+                    details=f"Gemini probe request failed: {exc}",
+                    checked_at=now,
+                )
+            return OAuthAccountProbeResult(
+                provider_key=provider_key,
+                ready=True,
+                probe_mode="live_http_probe",
+                status="ok" if response.status_code < 400 else "failed",
+                details="Gemini OAuth/account probe succeeded." if response.status_code < 400 else f"Gemini probe failed: {response.text[:300]}",
+                status_code=response.status_code,
+                checked_at=now,
+            )
+
+        if provider_key in {"antigravity", "github_copilot", "claude_code"}:
+            return OAuthAccountProbeResult(
+                provider_key=provider_key,
+                ready=False,
+                probe_mode="readiness_only",
+                status="warning",
+                details="Provider target is planned; no native probe bridge yet.",
+                checked_at=now,
+            )
+
+        raise ValueError(f"Unsupported oauth/account probe provider: {provider_key}")
 
 
     def upsert_harness_profile(self, payload: HarnessProviderProfile):

@@ -10,6 +10,7 @@ from app.providers.base import (
     ChatDispatchResult,
     ProviderCapabilities,
     ProviderConfigurationError,
+    ProviderNotReadyError,
     ProviderStreamEvent,
     ProviderStreamInterruptedError,
     ProviderUnsupportedFeatureError,
@@ -113,4 +114,6 @@ class GenericHarnessAdapter:
                 return profile
         if not enabled:
             raise ProviderConfigurationError(self.provider_name, "No enabled harness profile configured.")
+        if not self._settings.generic_harness_allow_model_fallback:
+            raise ProviderNotReadyError(self.provider_name, f"No enabled harness profile owns model '{model}'.")
         return enabled[0]

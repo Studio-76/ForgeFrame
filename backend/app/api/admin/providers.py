@@ -106,6 +106,15 @@ def list_beta_targets(service: ControlPlaneService = Depends(get_control_plane_s
     return {"status": "ok", "targets": service.beta_provider_targets()}
 
 
+@router.post("/oauth-account/probe/{provider_key}")
+def probe_oauth_account_provider(provider_key: str, service: ControlPlaneService = Depends(get_control_plane_service)) -> object:
+    try:
+        result = service.probe_oauth_account_provider(provider_key)
+    except ValueError as exc:
+        return _admin_error(status.HTTP_404_NOT_FOUND, "oauth_provider_not_found", str(exc))
+    return {"status": "ok", "probe": result.model_dump()}
+
+
 @router.get("/harness/templates")
 def list_harness_templates(service: ControlPlaneService = Depends(get_control_plane_service)) -> dict[str, object]:
     return {"status": "ok", "templates": service.list_harness_templates()}

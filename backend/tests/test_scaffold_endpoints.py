@@ -52,3 +52,11 @@ def test_admin_provider_beta_targets_endpoint_available() -> None:
     codex = next(item for item in targets if item["provider_key"] == "openai_codex")
     assert codex["product_axis"] == "oauth_account_providers"
     assert "readiness_score" in codex
+
+
+def test_admin_oauth_account_probe_endpoint_available() -> None:
+    response = client.post("/admin/providers/oauth-account/probe/gemini", json={})
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["status"] == "ok"
+    assert payload["probe"]["provider_key"] == "gemini"

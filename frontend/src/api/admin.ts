@@ -294,3 +294,10 @@ export function fetchClientOperationalView(window: "1h" | "24h" | "7d" | "all" =
 export function fetchBetaProviderTargets() {
   return fetchJson<{ status: string; targets: BetaProviderTarget[] }>("/admin/providers/beta-targets");
 }
+
+export function probeOauthAccountProvider(providerKey: string) {
+  return fetchJson<{ status: string; probe: Record<string, unknown> }>(`/admin/providers/oauth-account/probe/${providerKey}`, {
+    method: "POST",
+    body: "{}",
+  });
+}
