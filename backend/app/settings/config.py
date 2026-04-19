@@ -88,6 +88,7 @@ class Settings(BaseSettings):
     pricing_internal_hypothetical_input_per_1m_tokens: float = 0.2
     pricing_internal_hypothetical_output_per_1m_tokens: float = 0.8
     observability_events_path: str = "backend/.forgegate/observability_events.jsonl"
+    oauth_operations_path: str = "backend/.forgegate/oauth_operations.jsonl"
     harness_profiles_path: str = "backend/.forgegate/harness_profiles.json"
     harness_runs_path: str = "backend/.forgegate/harness_runs.json"
     harness_storage_backend: Literal["postgresql", "file"] = "postgresql"

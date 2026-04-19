@@ -16,9 +16,12 @@ export type ProviderControlItem = {
   ready: boolean;
   readiness_reason: string | null;
   capabilities: Record<string, unknown>;
+  tool_calling_level?: "none" | "partial" | "full";
+  compatibility_tier?: "planned" | "beta" | "beta_plus";
   provider_axis?: string;
   auth_mechanism?: string;
   oauth_required: boolean;
+  oauth_mode?: string | null;
   discovery_supported: boolean;
   model_count: number;
   models: ManagedModel[];
@@ -285,7 +288,7 @@ export function fetchHarnessRuns(providerKey?: string, mode?: string, status?: s
   if (clientId) params.set("client_id", clientId);
   params.set("limit", String(limit));
   const suffix = params.size ? `?${params.toString()}` : "";
-  return fetchJson<{ status: string; runs: Array<Record<string, unknown>>; summary: Record<string, number> }>(`/admin/providers/harness/runs${suffix}`);
+  return fetchJson<{ status: string; runs: Array<Record<string, unknown>>; summary: Record<string, number>; ops?: Record<string, unknown> }>(`/admin/providers/harness/runs${suffix}`);
 }
 
 
@@ -324,7 +327,7 @@ export function probeAllOauthAccountProviders() {
 }
 
 export function fetchOauthAccountOperations() {
-  return fetchJson<{ status: string; operations: Array<Record<string, unknown>>; recent: Array<Record<string, unknown>> }>("/admin/providers/oauth-account/operations");
+  return fetchJson<{ status: string; operations: Array<Record<string, unknown>>; recent: Array<Record<string, unknown>>; total_operations: number }>("/admin/providers/oauth-account/operations");
 }
 
 export function fetchBootstrapReadiness() {

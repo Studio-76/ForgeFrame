@@ -22,6 +22,7 @@ class ProviderCapabilities(BaseModel):
     auth_mechanism: AuthMechanism = "api_key"
     verify_support: bool = False
     probe_support: bool = False
+    tool_calling_level: Literal["none", "partial", "full"] = "none"
 
 
 class ChatDispatchRequest(BaseModel):
@@ -42,6 +43,7 @@ class ChatDispatchResult(BaseModel):
     cost: CostBreakdown = Field(default_factory=CostBreakdown)
     credential_type: str = "internal"
     auth_source: str = "internal"
+    tool_calls: list[dict] = Field(default_factory=list)
 
 
 class ProviderStreamEvent(BaseModel):
@@ -131,6 +133,20 @@ class ProviderBadRequestError(ProviderError):
         super().__init__(provider=provider, error_type="provider_bad_request", message=message)
 
 
+class ProviderModelNotFoundError(ProviderError):
+    def __init__(self, provider: str, model: str | None = None, message: str | None = None):
+        if not message:
+            message = f"Provider '{provider}' could not find requested model."
+            if model:
+                message = f"Provider '{provider}' could not find requested model '{model}'."
+        super().__init__(provider=provider, error_type="provider_model_not_found", message=message, upstream_status_code=404)
+
+
+class ProviderValidationError(ProviderError):
+    def __init__(self, provider: str, message: str):
+        super().__init__(provider=provider, error_type="provider_validation_error", message=message)
+
+
 class ProviderUpstreamError(ProviderError):
     def __init__(self, provider: str, message: str):
         super().__init__(provider=provider, error_type="provider_upstream_error", message=message, retryable=True)
@@ -150,6 +166,11 @@ class ProviderConflictError(ProviderError):
 class ProviderTimeoutError(ProviderError):
     def __init__(self, provider: str, message: str):
         super().__init__(provider=provider, error_type="provider_timeout", message=message, retryable=True)
+
+
+class ProviderRequestTimeoutError(ProviderError):
+    def __init__(self, provider: str, message: str):
+        super().__init__(provider=provider, error_type="provider_request_timeout", message=message, upstream_status_code=408, retryable=True)
 
 
 class ProviderProtocolError(ProviderError):

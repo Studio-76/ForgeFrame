@@ -17,6 +17,7 @@ from app.providers import (
     ProviderConflictError,
     ProviderError,
     ProviderNotImplementedError,
+    ProviderModelNotFoundError,
     ProviderNotReadyError,
     ProviderProtocolError,
     ProviderRateLimitError,
@@ -24,11 +25,13 @@ from app.providers import (
     ProviderStreamEvent,
     ProviderStreamInterruptedError,
     ProviderTimeoutError,
+    ProviderRequestTimeoutError,
     ProviderUnavailableError,
     ProviderUnsupportedMediaTypeError,
     ProviderPayloadTooLargeError,
     ProviderUnsupportedFeatureError,
     ProviderUpstreamError,
+    ProviderValidationError,
 )
 from app.settings.config import Settings
 from app.usage.analytics import ClientIdentity, get_usage_analytics_store
@@ -52,6 +55,8 @@ def _provider_exception_to_http(exc: Exception) -> tuple[int, str, str | None, s
         return status.HTTP_501_NOT_IMPLEMENTED, exc.error_type, exc.provider, str(exc), {"phase": "phase-5 streaming/codex"}
     if isinstance(exc, ProviderUnsupportedFeatureError):
         return status.HTTP_400_BAD_REQUEST, exc.error_type, exc.provider, str(exc), {}
+    if isinstance(exc, ProviderModelNotFoundError):
+        return status.HTTP_404_NOT_FOUND, exc.error_type, exc.provider, str(exc), {}
     if isinstance(exc, ProviderNotReadyError):
         return status.HTTP_503_SERVICE_UNAVAILABLE, exc.error_type, exc.provider, str(exc), {}
     if isinstance(exc, ProviderConfigurationError):
@@ -78,12 +83,16 @@ def _provider_exception_to_http(exc: Exception) -> tuple[int, str, str | None, s
         return status.HTTP_502_BAD_GATEWAY, exc.error_type, exc.provider, str(exc), {}
     if isinstance(exc, ProviderTimeoutError):
         return status.HTTP_504_GATEWAY_TIMEOUT, exc.error_type, exc.provider, str(exc), {"retryable": True}
+    if isinstance(exc, ProviderRequestTimeoutError):
+        return status.HTTP_408_REQUEST_TIMEOUT, exc.error_type, exc.provider, str(exc), {"retryable": True}
     if isinstance(exc, ProviderBadRequestError):
         return status.HTTP_400_BAD_REQUEST, exc.error_type, exc.provider, str(exc), {}
+    if isinstance(exc, ProviderValidationError):
+        return status.HTTP_422_UNPROCESSABLE_CONTENT, exc.error_type, exc.provider, str(exc), {}
     if isinstance(exc, (ProviderUpstreamError, ProviderError)):
         return status.HTTP_502_BAD_GATEWAY, exc.error_type, exc.provider, str(exc), {}
     if isinstance(exc, ValueError):
-        return status.HTTP_400_BAD_REQUEST, "routing_error", None, str(exc), {}
+        return status.HTTP_422_UNPROCESSABLE_CONTENT, "invalid_request", None, str(exc), {}
     raise exc
 
 
@@ -130,12 +139,6 @@ def create_chat_completion(
         )
 
     try:
-        if payload.tool_choice is not None and not payload.tools:
-            return _error_response(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                error_type="invalid_request",
-                message="tool_choice was provided but no tools were declared.",
-            )
         if payload.stream:
             model, provider, events = dispatch.dispatch_chat_stream(
                 requested_model=requested_model,
@@ -215,7 +218,11 @@ def create_chat_completion(
         "choices": [
             {
                 "index": 0,
-                "message": {"role": "assistant", "content": result.content},
+                "message": {
+                    "role": "assistant",
+                    "content": result.content,
+                    **({"tool_calls": result.tool_calls} if result.tool_calls else {}),
+                },
                 "finish_reason": result.finish_reason,
             }
         ],

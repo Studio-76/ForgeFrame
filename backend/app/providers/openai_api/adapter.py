@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Iterator
+from datetime import datetime
 
 import httpx
 
@@ -17,6 +18,8 @@ from app.providers.base import (
     ProviderConfigurationError,
     ProviderProtocolError,
     ProviderRateLimitError,
+    ProviderRequestTimeoutError,
+    ProviderModelNotFoundError,
     ProviderStreamEvent,
     ProviderStreamInterruptedError,
     ProviderTimeoutError,
@@ -33,7 +36,7 @@ from app.usage.service import UsageAccountingService
 
 class OpenAIAPIAdapter:
     provider_name = "openai_api"
-    capabilities = ProviderCapabilities(streaming=True, tool_calling=True, vision=True, external=True)
+    capabilities = ProviderCapabilities(streaming=True, tool_calling=True, tool_calling_level="full", vision=True, external=True)
 
     def __init__(self, settings: Settings):
         self._settings = settings
@@ -70,6 +73,7 @@ class OpenAIAPIAdapter:
         try:
             message = response_payload["choices"][0]["message"]
             content = message.get("content", "")
+            tool_calls = message.get("tool_calls", [])
             finish_reason = response_payload["choices"][0].get("finish_reason", "stop")
         except (KeyError, IndexError, TypeError) as exc:
             raise ProviderUpstreamError(self.provider_name, f"Malformed response from OpenAI API: {response_payload}") from exc
@@ -86,6 +90,7 @@ class OpenAIAPIAdapter:
             cost=cost,
             credential_type="api_key",
             auth_source="openai_api_key",
+            tool_calls=tool_calls if isinstance(tool_calls, list) else [],
         )
 
     def stream_chat_completion(self, request: ChatDispatchRequest) -> Iterator[ProviderStreamEvent]:
@@ -135,6 +140,10 @@ class OpenAIAPIAdapter:
             raise ProviderUpstreamError(self.provider_name, f"Network error while calling OpenAI API: {exc}") from exc
 
         self._raise_for_status(response)
+        headers = getattr(response, "headers", {}) or {}
+        content_type = str(headers.get("content-type", ""))
+        if content_type and "json" not in content_type.lower():
+            raise ProviderProtocolError(self.provider_name, f"OpenAI returned unexpected content-type '{content_type}'.")
         try:
             return response.json()
         except ValueError as exc:
@@ -156,6 +165,10 @@ class OpenAIAPIAdapter:
                 timeout=self._settings.openai_timeout_seconds,
             ) as response:
                 self._raise_for_status(response)
+                headers = getattr(response, "headers", {}) or {}
+                content_type = str(headers.get("content-type", ""))
+                if content_type and "text/event-stream" not in content_type.lower():
+                    raise ProviderStreamInterruptedError(self.provider_name, f"OpenAI stream returned unexpected content-type '{content_type}'.")
                 saw_done = False
                 for raw_line in response.iter_lines():
                     if not raw_line:
@@ -232,7 +245,11 @@ class OpenAIAPIAdapter:
         if response.status_code in (401, 403):
             raise ProviderAuthenticationError(self.provider_name, f"OpenAI authentication failed ({response.status_code}).")
 
-        if response.status_code in (400, 404, 422):
+        if response.status_code == 408:
+            raise ProviderRequestTimeoutError(self.provider_name, f"OpenAI request timeout ({response.status_code}): {response.text[:500]}")
+        if response.status_code == 404:
+            raise ProviderModelNotFoundError(self.provider_name, message=f"OpenAI model/resource not found ({response.status_code}): {response.text[:500]}")
+        if response.status_code in (400, 422):
             raise ProviderBadRequestError(self.provider_name, f"OpenAI rejected request ({response.status_code}): {response.text[:500]}")
         if response.status_code == 410:
             raise ProviderResourceGoneError(self.provider_name, f"OpenAI resource gone ({response.status_code}): {response.text[:500]}")
@@ -243,7 +260,7 @@ class OpenAIAPIAdapter:
         if response.status_code == 409:
             raise ProviderConflictError(self.provider_name, f"OpenAI conflict ({response.status_code}): {response.text[:500]}")
         if response.status_code == 429:
-            retry_after = int(response.headers.get("retry-after", "0")) if response.headers.get("retry-after", "").isdigit() else None
+            retry_after = self._parse_retry_after_seconds(response.headers.get("retry-after"))
             raise ProviderRateLimitError(self.provider_name, f"OpenAI rate limit reached ({response.status_code}): {response.text[:500]}", retry_after_seconds=retry_after)
 
         if response.status_code >= 500:
@@ -253,3 +270,16 @@ class OpenAIAPIAdapter:
 
         if response.status_code >= 300:
             raise ProviderUpstreamError(self.provider_name, f"Unexpected OpenAI response ({response.status_code}): {response.text[:500]}")
+
+    @staticmethod
+    def _parse_retry_after_seconds(value: str | None) -> int | None:
+        if not value:
+            return None
+        if value.isdigit():
+            return int(value)
+        try:
+            retry_at = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        except ValueError:
+            return None
+        delta = int((retry_at - datetime.now(tz=retry_at.tzinfo)).total_seconds())
+        return delta if delta > 0 else 0

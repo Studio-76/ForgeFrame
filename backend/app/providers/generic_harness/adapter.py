@@ -35,7 +35,8 @@ class GenericHarnessAdapter:
     provider_name = "generic_harness"
     capabilities = ProviderCapabilities(
         streaming=True,
-        tool_calling=False,
+        tool_calling=True,
+        tool_calling_level="partial",
         vision=False,
         external=True,
         discovery_support=True,
@@ -66,12 +67,20 @@ class GenericHarnessAdapter:
     def create_chat_completion(self, request: ChatDispatchRequest) -> ChatDispatchResult:
         if not self.is_ready():
             raise ProviderConfigurationError(self.provider_name, self.readiness_reason() or "Harness not ready")
-        if getattr(request, "tools", []):
-            raise ProviderUnsupportedFeatureError(self.provider_name, "tool_calling")
-
         profile = self._profile_for_model(request.model)
+        if getattr(request, "tools", []) and not profile.capabilities.tool_calling:
+            raise ProviderUnsupportedFeatureError(self.provider_name, "tool_calling")
         try:
-            parsed = self._harness.execute_non_stream(profile.provider_key, model=request.model, messages=request.messages)
+            try:
+                parsed = self._harness.execute_non_stream(
+                    profile.provider_key,
+                    model=request.model,
+                    messages=request.messages,
+                    tools=getattr(request, "tools", []),
+                    tool_choice=getattr(request, "tool_choice", None),
+                )
+            except TypeError:
+                parsed = self._harness.execute_non_stream(profile.provider_key, model=request.model, messages=request.messages)
         except RuntimeError as exc:
             raise self._map_harness_error(str(exc)) from exc
         usage = TokenUsage(
@@ -91,19 +100,30 @@ class GenericHarnessAdapter:
             cost=cost,
             credential_type="harness_template",
             auth_source=profile.integration_class,
+            tool_calls=parsed.get("tool_calls", []) if isinstance(parsed.get("tool_calls", []), list) else [],
         )
 
     def stream_chat_completion(self, request: ChatDispatchRequest) -> Iterator[ProviderStreamEvent]:
         if not self.is_ready():
             raise ProviderConfigurationError(self.provider_name, self.readiness_reason() or "Harness not ready")
-        if getattr(request, "tools", []):
-            raise ProviderUnsupportedFeatureError(self.provider_name, "tool_calling")
         profile = self._profile_for_model(request.model)
+        if getattr(request, "tools", []) and not profile.capabilities.tool_calling:
+            raise ProviderUnsupportedFeatureError(self.provider_name, "tool_calling")
         if not profile.stream_mapping.enabled:
             raise ProviderUnsupportedFeatureError(self.provider_name, "streaming_not_enabled_in_profile")
 
         try:
-            for item in self._harness.execute_stream(profile.provider_key, model=request.model, messages=request.messages):
+            try:
+                stream_iter = self._harness.execute_stream(
+                    profile.provider_key,
+                    model=request.model,
+                    messages=request.messages,
+                    tools=getattr(request, "tools", []),
+                    tool_choice=getattr(request, "tool_choice", None),
+                )
+            except TypeError:
+                stream_iter = self._harness.execute_stream(profile.provider_key, model=request.model, messages=request.messages)
+            for item in stream_iter:
                 if item.get("event") == "delta":
                     yield ProviderStreamEvent(event="delta", delta=str(item.get("delta", "")))
                     continue

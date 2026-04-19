@@ -1,6 +1,8 @@
+import pytest
 from fastapi.testclient import TestClient
 
 from app.main import app
+from app.providers.openai_api.adapter import OpenAIAPIAdapter
 
 
 client = TestClient(app)
@@ -100,7 +102,7 @@ def test_chat_endpoint_rejects_tool_choice_without_tools() -> None:
         "/v1/chat/completions",
         json={"messages": [{"role": "user", "content": "Hello"}], "tool_choice": "auto"},
     )
-    assert response.status_code == 400
+    assert response.status_code == 422
     assert response.json()["error"]["type"] == "invalid_request"
 
 
@@ -114,6 +116,31 @@ def test_chat_endpoint_rejects_tool_calling_for_baseline_provider() -> None:
     )
     assert response.status_code == 400
     assert response.json()["error"]["type"] == "provider_unsupported_feature"
+
+
+def test_chat_endpoint_rejects_invalid_tool_definition() -> None:
+    response = client.post(
+        "/v1/chat/completions",
+        json={
+            "messages": [{"role": "user", "content": "Hello"}],
+            "tools": [{"type": "function", "function": {"description": "missing name"}}],
+        },
+    )
+    assert response.status_code == 422
+    assert response.json()["error"]["type"] == "invalid_request"
+
+
+def test_chat_endpoint_rejects_tool_choice_name_not_in_tools() -> None:
+    response = client.post(
+        "/v1/chat/completions",
+        json={
+            "messages": [{"role": "user", "content": "Hello"}],
+            "tools": [{"type": "function", "function": {"name": "ping"}}],
+            "tool_choice": {"type": "function", "function": {"name": "pong"}},
+        },
+    )
+    assert response.status_code == 422
+    assert response.json()["error"]["type"] == "invalid_request"
 
 
 def test_admin_usage_summary_endpoint_available() -> None:
@@ -133,6 +160,15 @@ def test_admin_oauth_operations_endpoint_available() -> None:
     assert payload["status"] == "ok"
     assert "operations" in payload
     assert "recent" in payload
+    assert "total_operations" in payload
+
+
+def test_provider_control_plane_exposes_oauth_mode() -> None:
+    response = client.get("/admin/providers/")
+    assert response.status_code == 200
+    providers = response.json()["providers"]
+    codex = next(item for item in providers if item["provider"] == "openai_codex")
+    assert "oauth_mode" in codex
 
 
 def test_admin_bootstrap_readiness_endpoint_available() -> None:
@@ -142,6 +178,15 @@ def test_admin_bootstrap_readiness_endpoint_available() -> None:
     assert payload["status"] == "ok"
     assert "checks" in payload
     assert "next_steps" in payload
+
+
+def test_harness_runs_endpoint_contains_ops_summary() -> None:
+    response = client.get("/admin/providers/harness/runs")
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["status"] == "ok"
+    assert "ops" in payload
+    assert "profile_count" in payload["ops"]
 
 
 def test_admin_usage_summary_records_runtime_requests() -> None:
@@ -185,3 +230,58 @@ def test_responses_endpoint_rejects_invalid_input_list_object() -> None:
     response = client.post("/v1/responses", json={"input": [{"type": "text"}]})
     assert response.status_code == 422
     assert response.json()["error"]["type"] == "unsupported_input"
+
+
+def test_responses_endpoint_forwards_tools_to_chat_validation() -> None:
+    response = client.post(
+        "/v1/responses",
+        json={
+            "input": "hello",
+            "tools": [{"type": "function", "function": {"name": "ping"}}],
+            "tool_choice": {"type": "function", "function": {"name": "pong"}},
+        },
+    )
+    assert response.status_code == 422
+    assert response.json()["error"]["type"] == "invalid_request"
+
+
+def test_responses_endpoint_accepts_input_text_blocks() -> None:
+    response = client.post(
+        "/v1/responses",
+        json={
+            "input": [
+                {"role": "user", "content": [{"type": "input_text", "text": "hello"}]},
+                {"role": "user", "content": [{"type": "text", "text": "world"}]},
+            ]
+        },
+    )
+    assert response.status_code == 200
+    assert response.json()["object"] == "response"
+
+
+def test_responses_endpoint_includes_tool_call_output(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("FORGEGATE_OPENAI_API_KEY", "test-key")
+
+    def _fake_post(self, payload: dict) -> dict:
+        del payload
+        return {
+            "model": "gpt-4.1-mini",
+            "usage": {"prompt_tokens": 6, "completion_tokens": 3, "total_tokens": 9},
+            "choices": [
+                {
+                    "message": {
+                        "role": "assistant",
+                        "content": "",
+                        "tool_calls": [{"id": "call_1", "type": "function", "function": {"name": "lookup", "arguments": "{\"q\":\"x\"}"}}],
+                    },
+                    "finish_reason": "tool_calls",
+                }
+            ],
+        }
+
+    monkeypatch.setattr(OpenAIAPIAdapter, "_post_chat_completion", _fake_post)
+    response = client.post("/v1/responses", json={"input": "hello", "model": "gpt-4.1-mini"})
+    assert response.status_code == 200
+    output = response.json()["output"]
+    assert any(item.get("type") == "tool_call" for item in output)
+    assert not any(item.get("type") == "output_text" and not str(item.get("text", "")).strip() for item in output)

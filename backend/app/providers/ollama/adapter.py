@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Iterator
+from datetime import datetime
 
 import httpx
 
@@ -18,6 +19,8 @@ from app.providers.base import (
     ProviderPayloadTooLargeError,
     ProviderProtocolError,
     ProviderRateLimitError,
+    ProviderRequestTimeoutError,
+    ProviderModelNotFoundError,
     ProviderResourceGoneError,
     ProviderStreamEvent,
     ProviderStreamInterruptedError,
@@ -37,6 +40,7 @@ class OllamaAdapter:
     capabilities = ProviderCapabilities(
         streaming=True,
         tool_calling=False,
+        tool_calling_level="none",
         vision=False,
         external=False,
         discovery_support=True,
@@ -100,6 +104,10 @@ class OllamaAdapter:
         except httpx.RequestError as exc:
             raise ProviderUpstreamError(self.provider_name, f"Ollama network error: {exc}") from exc
         self._raise_for_status(response)
+        headers = getattr(response, "headers", {}) or {}
+        content_type = str(headers.get("content-type", ""))
+        if content_type and "json" not in content_type.lower():
+            raise ProviderProtocolError(self.provider_name, f"Ollama returned unexpected content-type '{content_type}'.")
         try:
             return response.json()
         except ValueError as exc:
@@ -113,6 +121,10 @@ class OllamaAdapter:
         try:
             with httpx.stream("POST", self._endpoint(), json=payload, timeout=self._settings.ollama_timeout_seconds) as response:
                 self._raise_for_status(response)
+                headers = getattr(response, "headers", {}) or {}
+                content_type = str(headers.get("content-type", ""))
+                if content_type and "text/event-stream" not in content_type.lower():
+                    raise ProviderStreamInterruptedError(self.provider_name, f"Ollama stream returned unexpected content-type '{content_type}'.")
                 for raw_line in response.iter_lines():
                     if not raw_line or not raw_line.startswith("data:"):
                         continue
@@ -154,7 +166,11 @@ class OllamaAdapter:
     def _raise_for_status(self, response: httpx.Response) -> None:
         if response.status_code in {401, 403}:
             raise ProviderAuthenticationError(self.provider_name, f"Ollama authentication failed ({response.status_code}).")
-        if response.status_code in {400, 404, 422}:
+        if response.status_code == 408:
+            raise ProviderRequestTimeoutError(self.provider_name, f"Ollama request timeout ({response.status_code}): {response.text[:500]}")
+        if response.status_code == 404:
+            raise ProviderModelNotFoundError(self.provider_name, message=f"Ollama model/resource not found ({response.status_code}): {response.text[:500]}")
+        if response.status_code in {400, 422}:
             raise ProviderBadRequestError(self.provider_name, f"Ollama rejected request ({response.status_code}): {response.text[:500]}")
         if response.status_code == 410:
             raise ProviderResourceGoneError(self.provider_name, f"Ollama resource gone ({response.status_code}): {response.text[:500]}")
@@ -165,7 +181,7 @@ class OllamaAdapter:
         if response.status_code == 409:
             raise ProviderConflictError(self.provider_name, f"Ollama conflict ({response.status_code}): {response.text[:500]}")
         if response.status_code == 429:
-            retry_after = int(response.headers.get("retry-after", "0")) if response.headers.get("retry-after", "").isdigit() else None
+            retry_after = self._parse_retry_after_seconds(response.headers.get("retry-after"))
             raise ProviderRateLimitError(self.provider_name, f"Ollama rate limit reached ({response.status_code}): {response.text[:500]}", retry_after_seconds=retry_after)
         if response.status_code >= 500:
             if response.status_code == 503:
@@ -173,3 +189,16 @@ class OllamaAdapter:
             raise ProviderUpstreamError(self.provider_name, f"Ollama upstream error ({response.status_code}): {response.text[:500]}")
         if response.status_code >= 300:
             raise ProviderUpstreamError(self.provider_name, f"Unexpected Ollama response ({response.status_code}): {response.text[:500]}")
+
+    @staticmethod
+    def _parse_retry_after_seconds(value: str | None) -> int | None:
+        if not value:
+            return None
+        if value.isdigit():
+            return int(value)
+        try:
+            retry_at = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        except ValueError:
+            return None
+        delta = int((retry_at - datetime.now(tz=retry_at.tzinfo)).total_seconds())
+        return delta if delta > 0 else 0

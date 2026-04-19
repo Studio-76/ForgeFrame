@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import json
 from datetime import UTC, datetime
 from functools import lru_cache
 from pathlib import Path
@@ -157,7 +158,7 @@ class ControlPlaneService:
         self._providers_state = self._bootstrap_provider_state()
         self._health_config = HealthConfig()
         self._health_records: dict[str, HealthStatusRecord] = {}
-        self._oauth_operations: list[OAuthOperationRecord] = []
+        self._oauth_operations: list[OAuthOperationRecord] = self._load_oauth_operations()
 
     def _bootstrap_provider_state(self) -> dict[str, ManagedProviderRecord]:
         provider_map: dict[str, ManagedProviderRecord] = {}
@@ -422,12 +423,25 @@ class ControlPlaneService:
     def oauth_account_operations_summary(self) -> dict[str, object]:
         providers = ["openai_codex", "gemini", "antigravity", "github_copilot", "claude_code"]
         per_provider: list[dict[str, object]] = []
+        cutoff_24h = datetime.now(tz=UTC).timestamp() - 24 * 3600
         for provider_key in providers:
             status = self._oauth_target_status(provider_key) if provider_key in {"antigravity", "github_copilot", "claude_code"} else None
             provider_ops = [item for item in self._oauth_operations if item.provider_key == provider_key]
             last_probe = next((item for item in reversed(provider_ops) if item.action == "probe"), None)
             last_bridge_sync = next((item for item in reversed(provider_ops) if item.action == "bridge_sync"), None)
+            last_failed = next((item for item in reversed(provider_ops) if item.status == "failed"), None)
             failures = len([item for item in provider_ops if item.status == "failed"])
+            total = len(provider_ops)
+            failures_24h = len(
+                [
+                    item
+                    for item in provider_ops
+                    if item.status == "failed"
+                    and datetime.fromisoformat(item.executed_at).timestamp() >= cutoff_24h
+                ]
+            )
+            probes_total = len([item for item in provider_ops if item.action == "probe"])
+            bridge_total = len([item for item in provider_ops if item.action == "bridge_sync"])
             per_provider.append(
                 {
                     "provider_key": provider_key,
@@ -440,11 +454,22 @@ class ControlPlaneService:
                     "bridge_profile_enabled": status.harness_profile_enabled if status else False,
                     "needs_attention": failures >= 2,
                     "failures": failures,
+                    "failures_24h": failures_24h,
+                    "probe_count": probes_total,
+                    "bridge_sync_count": bridge_total,
+                    "operation_count": total,
+                    "failure_rate": failures / max(1, total),
+                    "last_failed_operation": last_failed.model_dump() if last_failed else None,
                     "last_probe": last_probe.model_dump() if last_probe else None,
                     "last_bridge_sync": last_bridge_sync.model_dump() if last_bridge_sync else None,
                 }
             )
-        return {"status": "ok", "operations": per_provider, "recent": [item.model_dump() for item in self._oauth_operations[-50:]]}
+        return {
+            "status": "ok",
+            "operations": per_provider,
+            "recent": [item.model_dump() for item in self._oauth_operations[-50:]],
+            "total_operations": len(self._oauth_operations),
+        }
 
     def bootstrap_readiness_report(self) -> dict[str, object]:
         root_dir = Path(__file__).resolve().parents[4]
@@ -690,9 +715,34 @@ class ControlPlaneService:
         return {"status": "ok", "upserted_profiles": upserted, "skipped": skipped}
 
     def _record_oauth_operation(self, provider_key: str, action: Literal["probe", "bridge_sync"], status: Literal["ok", "warning", "failed", "skipped"], details: str, executed_at: str) -> None:
-        self._oauth_operations.append(OAuthOperationRecord(provider_key=provider_key, action=action, status=status, details=details, executed_at=executed_at))
+        event = OAuthOperationRecord(provider_key=provider_key, action=action, status=status, details=details, executed_at=executed_at)
+        self._oauth_operations.append(event)
+        self._append_oauth_operation(event)
         if len(self._oauth_operations) > 200:
             self._oauth_operations = self._oauth_operations[-200:]
+
+    def _load_oauth_operations(self) -> list[OAuthOperationRecord]:
+        path = Path(self._settings.oauth_operations_path)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        if not path.exists():
+            path.touch()
+            return []
+        events: list[OAuthOperationRecord] = []
+        for line in path.read_text(encoding="utf-8").splitlines():
+            if not line.strip():
+                continue
+            try:
+                payload = json.loads(line)
+                events.append(OAuthOperationRecord(**payload))
+            except (json.JSONDecodeError, ValueError):
+                continue
+        return events[-200:]
+
+    def _append_oauth_operation(self, event: OAuthOperationRecord) -> None:
+        path = Path(self._settings.oauth_operations_path)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with path.open("a", encoding="utf-8") as handle:
+            handle.write(json.dumps(event.model_dump()) + "\n")
 
 
     def upsert_harness_profile(self, payload: HarnessProviderProfile):
@@ -820,7 +870,22 @@ class ControlPlaneService:
 
     def harness_runs(self, provider_key: str | None = None, mode: str | None = None, status: str | None = None, client_id: str | None = None, limit: int = 200) -> dict[str, object]:
         runs = self._harness.list_runs(provider_key, mode=mode, status=status, client_id=client_id, limit=limit)
-        return {"status": "ok", "runs": [item.model_dump() for item in runs], "summary": self._harness.runs_summary(provider_key)}
+        profiles = self._harness.list_profiles()
+        last_failed = next((run for run in runs if not run.success), None)
+        runs_by_provider: dict[str, int] = {}
+        for run in runs:
+            runs_by_provider[run.provider_key] = runs_by_provider.get(run.provider_key, 0) + 1
+        return {
+            "status": "ok",
+            "runs": [item.model_dump() for item in runs],
+            "summary": self._harness.runs_summary(provider_key),
+            "ops": {
+                "profile_count": len(profiles),
+                "profiles_needing_attention": len([p for p in profiles if p.needs_attention]),
+                "runs_by_provider": runs_by_provider,
+                "last_failed_run": last_failed.model_dump() if last_failed else None,
+            },
+        }
 
     def get_health_config(self) -> HealthConfig:
         return self._health_config
@@ -901,9 +966,20 @@ class ControlPlaneService:
                     "ready": runtime_status["ready"] if runtime_status else False,
                     "readiness_reason": runtime_status["readiness_reason"] if runtime_status else "provider_not_wired",
                     "capabilities": runtime_status["capabilities"] if runtime_status else {},
+                    "tool_calling_level": (runtime_status["capabilities"].get("tool_calling_level") if runtime_status else "none"),
+                    "compatibility_tier": (
+                        "beta_plus"
+                        if runtime_status and runtime_status["ready"] and runtime_status["capabilities"].get("streaming") and runtime_status["capabilities"].get("tool_calling")
+                        else ("beta" if runtime_status and runtime_status["ready"] else "planned")
+                    ),
                     "provider_axis": (runtime_status["capabilities"].get("provider_axis") if runtime_status else "unknown"),
                     "auth_mechanism": (runtime_status["capabilities"].get("auth_mechanism") if runtime_status else "unknown"),
                     "oauth_required": runtime_status["oauth_required"] if runtime_status else False,
+                    "oauth_mode": (
+                        self._settings.openai_codex_auth_mode
+                        if provider.provider == "openai_codex"
+                        else (self._settings.gemini_auth_mode if provider.provider == "gemini" else None)
+                    ),
                     "discovery_supported": runtime_status["discovery_supported"] if runtime_status else False,
                     "model_count": len(provider.managed_models),
                     "models": [{**model.model_dump(), "health_status": health_by_provider.get(provider.provider, {}).get(model.id, "unknown")} for model in provider.managed_models],

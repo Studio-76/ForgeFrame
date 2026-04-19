@@ -80,8 +80,18 @@ class HarnessService:
         profile = self.get_profile(payload.provider_key)
         request_payload = self._render_template(
             profile.request_mapping.body_template,
-            {"model": payload.model, "messages": [{"role": "user", "content": payload.message}], "stream": payload.stream},
+            {
+                "model": payload.model,
+                "messages": [{"role": "user", "content": payload.message}],
+                "stream": payload.stream,
+                "tools": payload.tools,
+                "tool_choice": payload.tool_choice,
+            },
         )
+        if payload.tools and "tools" not in request_payload:
+            request_payload["tools"] = payload.tools
+        if payload.tool_choice is not None and "tool_choice" not in request_payload:
+            request_payload["tool_choice"] = payload.tool_choice
         endpoint = f"{profile.endpoint_base_url.rstrip('/')}{profile.request_mapping.path}"
         headers = self._build_headers(profile)
         headers.update(profile.request_mapping.headers)
@@ -261,10 +271,10 @@ class HarnessService:
         }
         return snapshot
 
-    def execute_non_stream(self, provider_key: str, *, model: str, messages: list[dict[str, Any]]) -> dict[str, Any]:
+    def execute_non_stream(self, provider_key: str, *, model: str, messages: list[dict[str, Any]], tools: list[dict[str, Any]] | None = None, tool_choice: str | dict[str, Any] | None = None) -> dict[str, Any]:
         profile = self.get_profile(provider_key)
         message_text = str(messages[-1].get("content", "")) if messages else ""
-        preview = self.build_request_preview(HarnessPreviewRequest(provider_key=provider_key, model=model, message=message_text, stream=False))
+        preview = self.build_request_preview(HarnessPreviewRequest(provider_key=provider_key, model=model, message=message_text, stream=False, tools=tools or [], tool_choice=tool_choice))
         try:
             response = httpx.request(preview["method"], preview["url"], headers=preview["headers"], json=preview["json"], timeout=30)
         except httpx.RequestError as exc:
@@ -277,12 +287,12 @@ class HarnessService:
         self._store.record_run(HarnessVerificationRun(provider_key=provider_key, integration_class=profile.integration_class, mode="runtime_non_stream", status="ok", success=True, steps=[{"step": "request_render", "status": "ok"}, {"step": "response_mapping", "status": "ok"}], executed_at=self._now_iso(), client_id="runtime", consumer="runtime", integration="generic_harness"))
         return parsed
 
-    def execute_stream(self, provider_key: str, *, model: str, messages: list[dict[str, Any]]):
+    def execute_stream(self, provider_key: str, *, model: str, messages: list[dict[str, Any]], tools: list[dict[str, Any]] | None = None, tool_choice: str | dict[str, Any] | None = None):
         profile = self.get_profile(provider_key)
         if not profile.stream_mapping.enabled:
             raise RuntimeError("Harness profile stream mapping is not enabled.")
         message_text = str(messages[-1].get("content", "")) if messages else ""
-        preview = self.build_request_preview(HarnessPreviewRequest(provider_key=provider_key, model=model, message=message_text, stream=True))
+        preview = self.build_request_preview(HarnessPreviewRequest(provider_key=provider_key, model=model, message=message_text, stream=True, tools=tools or [], tool_choice=tool_choice))
 
         collected = ""
         usage = {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}
@@ -330,6 +340,7 @@ class HarnessService:
             "model": self._extract(payload, profile.response_mapping.model_path, default=model),
             "content": str(self._extract(payload, profile.response_mapping.text_path, default="")),
             "finish_reason": str(self._extract(payload, profile.response_mapping.finish_reason_path, default="stop")),
+            "tool_calls": self._extract(payload, profile.response_mapping.tool_calls_path, default=[]),
             "prompt_tokens": int(self._extract(payload, profile.response_mapping.prompt_tokens_path, default=0) or 0),
             "completion_tokens": int(self._extract(payload, profile.response_mapping.completion_tokens_path, default=0) or 0),
             "total_tokens": int(self._extract(payload, profile.response_mapping.total_tokens_path, default=0) or 0),
