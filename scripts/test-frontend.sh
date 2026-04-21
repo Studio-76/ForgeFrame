@@ -1,5 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-cd "$(dirname "$0")/../frontend"
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$ROOT_DIR/frontend"
+
+if [[ ! -d node_modules ]]; then
+  npm ci
+fi
+
 exec npm run build

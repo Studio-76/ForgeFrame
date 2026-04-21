@@ -2,105 +2,28 @@
 
 from __future__ import annotations
 
-import json
 from collections import defaultdict
 from datetime import UTC, datetime, timedelta
 from functools import lru_cache
-from pathlib import Path
-from typing import Any, Literal, TypeVar
+from typing import Literal, TypeVar
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
 from app.providers import ChatDispatchResult, ProviderStreamEvent
 from app.settings.config import get_settings
+from app.storage.observability_repository import ObservabilityRepository, get_observability_repository
+from app.usage.events import ClientIdentity, ErrorEvent, HealthEvent, UsageEvent
 from app.usage.models import CostBreakdown, TokenUsage
 
 TModel = TypeVar("TModel", bound=BaseModel)
 
 
-class ClientIdentity(BaseModel):
-    client_id: str = "unknown_client"
-    consumer: str = "unknown_consumer"
-    integration: str = "unknown_integration"
-
-
-class UsageEvent(BaseModel):
-    provider: str
-    model: str
-    credential_type: str
-    auth_source: str
-    client_id: str = "unknown_client"
-    consumer: str = "unknown_consumer"
-    integration: str = "unknown_integration"
-    traffic_type: Literal["runtime", "health_check"] = "runtime"
-    check_type: str | None = None
-    input_tokens: int
-    output_tokens: int
-    total_tokens: int
-    actual_cost: float
-    hypothetical_cost: float
-    avoided_cost: float
-    created_at: str
-
-
-class ErrorEvent(BaseModel):
-    provider: str | None = None
-    model: str | None = None
-    client_id: str
-    consumer: str = "unknown_consumer"
-    integration: str = "unknown_integration"
-    route: str
-    stream_mode: Literal["stream", "non_stream"]
-    traffic_type: Literal["runtime", "health_check"] = "runtime"
-    error_type: str
-    status_code: int
-    integration_class: str | None = None
-    template_id: str | None = None
-    test_phase: str | None = None
-    profile_key: str | None = None
-    created_at: str
-
-
-class HealthEvent(BaseModel):
-    provider: str
-    model: str
-    check_type: Literal["provider", "discovery", "synthetic_probe"]
-    status: str
-    readiness_reason: str | None = None
-    last_error: str | None = None
-    created_at: str
-
-
 class UsageAnalyticsStore:
-    def __init__(self, path: Path):
-        self._path = path
-        self._events: list[UsageEvent] = []
-        self._errors: list[ErrorEvent] = []
-        self._health_events: list[HealthEvent] = []
-        self._ensure_loaded()
-
-    def _ensure_loaded(self) -> None:
-        self._path.parent.mkdir(parents=True, exist_ok=True)
-        if not self._path.exists():
-            self._path.touch()
-            return
-
-        for line in self._path.read_text().splitlines():
-            if not line.strip():
-                continue
-            payload = json.loads(line)
-            kind = payload.get("kind")
-            data = payload.get("data", {})
-            if kind == "usage":
-                self._events.append(UsageEvent(**data))
-            elif kind == "error":
-                self._errors.append(ErrorEvent(**data))
-            elif kind == "health":
-                self._health_events.append(HealthEvent(**data))
-
-    def _append(self, kind: str, data: dict[str, Any]) -> None:
-        with self._path.open("a", encoding="utf-8") as handle:
-            handle.write(json.dumps({"kind": kind, "data": data}) + "\n")
+    def __init__(self, repository: ObservabilityRepository):
+        self._repository = repository
+        self._events: list[UsageEvent] = repository.load_usage_events()
+        self._errors: list[ErrorEvent] = repository.load_error_events()
+        self._health_events: list[HealthEvent] = repository.load_health_events()
 
     def _now_iso(self) -> str:
         return datetime.now(tz=UTC).isoformat()
@@ -125,7 +48,7 @@ class UsageAnalyticsStore:
             created_at=self._now_iso(),
         )
         self._events.append(event)
-        self._append("usage", event.model_dump())
+        self._repository.append_usage_event(event)
 
     def record_runtime_error(
         self,
@@ -156,7 +79,7 @@ class UsageAnalyticsStore:
             created_at=self._now_iso(),
         )
         self._errors.append(event)
-        self._append("error", event.model_dump())
+        self._repository.append_error_event(event)
 
     def record_stream_done_event(self, *, provider: str, model: str, event: ProviderStreamEvent, client: ClientIdentity | None = None) -> None:
         if not event.usage or not event.cost:
@@ -180,7 +103,7 @@ class UsageAnalyticsStore:
             created_at=self._now_iso(),
         )
         self._events.append(usage_event)
-        self._append("usage", usage_event.model_dump())
+        self._repository.append_usage_event(usage_event)
 
     def record_health_check(
         self,
@@ -212,7 +135,7 @@ class UsageAnalyticsStore:
             created_at=self._now_iso(),
         )
         self._events.append(event)
-        self._append("usage", event.model_dump())
+        self._repository.append_usage_event(event)
 
     def record_health_check_error(
         self,
@@ -241,7 +164,7 @@ class UsageAnalyticsStore:
             created_at=self._now_iso(),
         )
         self._errors.append(event)
-        self._append("error", event.model_dump())
+        self._repository.append_error_event(event)
 
     def record_integration_error(
         self,
@@ -274,7 +197,7 @@ class UsageAnalyticsStore:
             created_at=self._now_iso(),
         )
         self._errors.append(event)
-        self._append("error", event.model_dump())
+        self._repository.append_error_event(event)
 
     def record_health_status(
         self,
@@ -296,7 +219,7 @@ class UsageAnalyticsStore:
             created_at=self._now_iso(),
         )
         self._health_events.append(event)
-        self._append("health", event.model_dump())
+        self._repository.append_health_event(event)
 
     def _parse_dt(self, value: str) -> datetime:
         return datetime.fromisoformat(value)
@@ -417,6 +340,59 @@ class UsageAnalyticsStore:
             )
         return buckets
 
+    def provider_drilldown(self, provider: str, *, window_seconds: int | None = None) -> dict[str, object]:
+        events = [event for event in self._window_filter(self._events, window_seconds) if event.provider == provider]
+        errors = [event for event in self._window_filter(self._errors, window_seconds) if event.provider == provider]
+        health = [event for event in self._window_filter(self._health_events, window_seconds) if event.provider == provider]
+        models: dict[str, dict[str, object]] = {}
+        clients: dict[str, dict[str, object]] = {}
+        for event in events:
+            model_row = models.setdefault(event.model, {"model": event.model, "requests": 0, "tokens": 0, "actual_cost": 0.0})
+            model_row["requests"] = int(model_row["requests"]) + 1
+            model_row["tokens"] = int(model_row["tokens"]) + event.total_tokens
+            model_row["actual_cost"] = float(model_row["actual_cost"]) + event.actual_cost
+            client_row = clients.setdefault(event.client_id, {"client_id": event.client_id, "requests": 0, "tokens": 0, "actual_cost": 0.0, "errors": 0})
+            client_row["requests"] = int(client_row["requests"]) + 1
+            client_row["tokens"] = int(client_row["tokens"]) + event.total_tokens
+            client_row["actual_cost"] = float(client_row["actual_cost"]) + event.actual_cost
+        for error in errors:
+            client_id = error.client_id
+            client_row = clients.setdefault(client_id, {"client_id": client_id, "requests": 0, "tokens": 0, "actual_cost": 0.0, "errors": 0})
+            client_row["errors"] = int(client_row["errors"]) + 1
+            model_key = error.model or "unknown"
+            model_row = models.setdefault(model_key, {"model": model_key, "requests": 0, "tokens": 0, "actual_cost": 0.0, "errors": 0})
+            model_row["errors"] = int(model_row.get("errors", 0)) + 1
+        return {
+            "provider": provider,
+            "requests": len(events),
+            "errors": len(errors),
+            "latest_health": [item.model_dump() for item in sorted(health, key=lambda event: event.created_at, reverse=True)[:20]],
+            "models": sorted(models.values(), key=lambda item: (int(item.get("errors", 0)), int(item["requests"])), reverse=True),
+            "clients": sorted(clients.values(), key=lambda item: (int(item.get("errors", 0)), float(item.get("actual_cost", 0.0))), reverse=True),
+        }
+
+    def client_drilldown(self, client_id: str, *, window_seconds: int | None = None) -> dict[str, object]:
+        events = [event for event in self._window_filter(self._events, window_seconds) if event.client_id == client_id]
+        errors = [event for event in self._window_filter(self._errors, window_seconds) if event.client_id == client_id]
+        providers: dict[str, dict[str, object]] = {}
+        for event in events:
+            row = providers.setdefault(event.provider, {"provider": event.provider, "requests": 0, "tokens": 0, "actual_cost": 0.0})
+            row["requests"] = int(row["requests"]) + 1
+            row["tokens"] = int(row["tokens"]) + event.total_tokens
+            row["actual_cost"] = float(row["actual_cost"]) + event.actual_cost
+        for error in errors:
+            provider_key = error.provider or "unknown"
+            row = providers.setdefault(provider_key, {"provider": provider_key, "requests": 0, "tokens": 0, "actual_cost": 0.0, "errors": 0})
+            row["errors"] = int(row.get("errors", 0)) + 1
+        return {
+            "client_id": client_id,
+            "requests": len(events),
+            "errors": len(errors),
+            "providers": sorted(providers.values(), key=lambda item: (int(item.get("errors", 0)), int(item["requests"])), reverse=True),
+            "recent_errors": [item.model_dump() for item in sorted(errors, key=lambda event: event.created_at, reverse=True)[:25]],
+            "recent_usage": [item.model_dump() for item in sorted(events, key=lambda event: event.created_at, reverse=True)[:25]],
+        }
+
     def alert_indicators(self) -> list[dict[str, object]]:
         last_hour = self.aggregate(window_seconds=3600)
         requests = int(last_hour["event_count"])
@@ -436,11 +412,16 @@ class UsageAnalyticsStore:
         runtime_cost = next((item["actual_cost"] for item in last_hour["by_traffic_type"] if item["traffic_type"] == "runtime"), 0.0)
         if health_cost > runtime_cost and health_cost > 0:
             alerts.append({"severity": "warning", "type": "health_cost_pressure", "message": "Health-check costs exceeded runtime costs in last hour.", "value": health_cost})
+        if requests == 0 and errors > 0:
+            alerts.append({"severity": "warning", "type": "control_plane_only_errors", "message": "Only error traffic was recorded in the last hour.", "value": errors})
+        top_provider = max(last_hour["errors_by_provider"], key=lambda item: item["errors"], default=None)
+        if top_provider and int(top_provider["errors"]) >= 3:
+            alerts.append({"severity": "warning", "type": "provider_hotspot", "message": f"Provider {top_provider['provider']} is the current error hotspot.", "value": top_provider["errors"]})
 
         return alerts
 
 
 @lru_cache(maxsize=1)
 def get_usage_analytics_store() -> UsageAnalyticsStore:
-    path = Path(get_settings().observability_events_path)
-    return UsageAnalyticsStore(path=path)
+    settings = get_settings()
+    return UsageAnalyticsStore(repository=get_observability_repository(settings))

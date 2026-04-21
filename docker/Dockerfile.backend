@@ -23,6 +23,7 @@ ENV PYTHONUNBUFFERED=1 \
 
 COPY --from=backend-build /build/backend /app/backend
 RUN pip install --no-cache-dir /app/backend
+COPY scripts/ /app/scripts
 COPY --from=frontend-build /build/frontend/dist /app/frontend_dist
 
 EXPOSE 8000

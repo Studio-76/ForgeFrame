@@ -1,6 +1,7 @@
 import pytest
 from fastapi.testclient import TestClient
 
+from app.api.runtime.dependencies import clear_runtime_dependency_caches
 from app.main import app
 from app.providers.openai_api.adapter import OpenAIAPIAdapter
 
@@ -8,12 +9,18 @@ from app.providers.openai_api.adapter import OpenAIAPIAdapter
 client = TestClient(app)
 
 
+def _admin_headers() -> dict[str, str]:
+    response = client.post("/admin/auth/login", json={"username": "admin", "password": "forgegate-admin"})
+    assert response.status_code == 201
+    return {"Authorization": f"Bearer {response.json()['access_token']}"}
+
+
 def test_health_endpoint_has_runtime_metadata() -> None:
     response = client.get("/health")
     assert response.status_code == 200
     body = response.json()
     assert body["status"] == "ok"
-    assert body["phase"] == "phase-5 streaming/codex baseline"
+    assert body["api_base"] == "/v1"
 
 
 def test_models_endpoint_returns_structured_list() -> None:
@@ -114,8 +121,8 @@ def test_chat_endpoint_rejects_tool_calling_for_baseline_provider() -> None:
             "tools": [{"type": "function", "function": {"name": "ping", "description": "Ping", "parameters": {"type": "object"}}}],
         },
     )
-    assert response.status_code == 400
-    assert response.json()["error"]["type"] == "provider_unsupported_feature"
+    assert response.status_code == 503
+    assert response.json()["error"]["type"] == "provider_not_ready"
 
 
 def test_chat_endpoint_rejects_invalid_tool_definition() -> None:
@@ -144,7 +151,7 @@ def test_chat_endpoint_rejects_tool_choice_name_not_in_tools() -> None:
 
 
 def test_admin_usage_summary_endpoint_available() -> None:
-    response = client.get("/admin/usage/")
+    response = client.get("/admin/usage/", headers=_admin_headers())
     assert response.status_code == 200
     payload = response.json()
     assert payload["status"] == "ok"
@@ -154,7 +161,7 @@ def test_admin_usage_summary_endpoint_available() -> None:
 
 
 def test_admin_oauth_operations_endpoint_available() -> None:
-    response = client.get("/admin/providers/oauth-account/operations")
+    response = client.get("/admin/providers/oauth-account/operations", headers=_admin_headers())
     assert response.status_code == 200
     payload = response.json()
     assert payload["status"] == "ok"
@@ -164,7 +171,7 @@ def test_admin_oauth_operations_endpoint_available() -> None:
 
 
 def test_provider_control_plane_exposes_oauth_mode() -> None:
-    response = client.get("/admin/providers/")
+    response = client.get("/admin/providers/", headers=_admin_headers())
     assert response.status_code == 200
     providers = response.json()["providers"]
     codex = next(item for item in providers if item["provider"] == "openai_codex")
@@ -172,7 +179,7 @@ def test_provider_control_plane_exposes_oauth_mode() -> None:
 
 
 def test_admin_bootstrap_readiness_endpoint_available() -> None:
-    response = client.get("/admin/providers/bootstrap/readiness")
+    response = client.get("/admin/providers/bootstrap/readiness", headers=_admin_headers())
     assert response.status_code == 200
     payload = response.json()
     assert payload["status"] == "ok"
@@ -180,8 +187,18 @@ def test_admin_bootstrap_readiness_endpoint_available() -> None:
     assert "next_steps" in payload
 
 
+def test_oauth_onboarding_and_harness_export_endpoints_available() -> None:
+    onboarding = client.get("/admin/providers/oauth-account/onboarding", headers=_admin_headers())
+    assert onboarding.status_code == 200
+    assert "targets" in onboarding.json()
+
+    harness_export = client.get("/admin/providers/harness/export", headers=_admin_headers())
+    assert harness_export.status_code == 200
+    assert harness_export.json()["snapshot"]["object"] == "harness_config_export"
+
+
 def test_harness_runs_endpoint_contains_ops_summary() -> None:
-    response = client.get("/admin/providers/harness/runs")
+    response = client.get("/admin/providers/harness/runs", headers=_admin_headers())
     assert response.status_code == 200
     payload = response.json()
     assert payload["status"] == "ok"
@@ -196,10 +213,29 @@ def test_admin_usage_summary_records_runtime_requests() -> None:
     )
     assert chat_response.status_code == 200
 
-    usage_response = client.get("/admin/usage/")
+    usage_response = client.get("/admin/usage/", headers=_admin_headers())
     assert usage_response.status_code == 200
     payload = usage_response.json()
     assert payload["metrics"]["recorded_request_count"] >= 1
+
+
+def test_admin_usage_drilldown_endpoints_expose_provider_and_client_views() -> None:
+    chat_response = client.post(
+        "/v1/chat/completions",
+        json={
+            "messages": [{"role": "user", "content": "Drilldown me"}],
+            "client": {"client_id": "integration-suite", "consumer": "tests", "integration": "pytest"},
+        },
+    )
+    assert chat_response.status_code == 200
+
+    provider_response = client.get("/admin/usage/providers/forgegate_baseline", headers=_admin_headers())
+    assert provider_response.status_code == 200
+    assert provider_response.json()["drilldown"]["provider"] == "forgegate_baseline"
+
+    client_response = client.get("/admin/usage/clients/integration-suite", headers=_admin_headers())
+    assert client_response.status_code == 200
+    assert client_response.json()["drilldown"]["client_id"] == "integration-suite"
 
 
 def test_responses_endpoint_openai_compatible_baseline() -> None:
@@ -214,10 +250,21 @@ def test_responses_endpoint_openai_compatible_baseline() -> None:
     assert body["provider"] == "forgegate_baseline"
 
 
-def test_responses_endpoint_rejects_stream_mode_for_now() -> None:
-    response = client.post("/v1/responses", json={"input": "Hello responses", "stream": True})
-    assert response.status_code == 400
-    assert response.json()["error"]["type"] == "unsupported_feature"
+def test_responses_endpoint_supports_stream_mode() -> None:
+    with client.stream("POST", "/v1/responses", json={"input": "Hello responses", "stream": True}) as response:
+        assert response.status_code == 200
+        raw = "".join(response.iter_text())
+    assert "response.created" in raw
+    assert "response.completed" in raw
+    assert "[DONE]" in raw
+
+
+def test_runtime_models_endpoint_requires_key_when_enabled(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("FORGEGATE_RUNTIME_AUTH_REQUIRED", "true")
+    clear_runtime_dependency_caches()
+    secure_client = TestClient(app)
+    response = secure_client.get("/v1/models")
+    assert response.status_code == 401
 
 
 def test_responses_endpoint_rejects_invalid_temperature() -> None:

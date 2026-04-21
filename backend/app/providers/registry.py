@@ -20,7 +20,7 @@ class ProviderRegistry:
             "openai_api": OpenAIAPIAdapter(settings),
             "openai_codex": OpenAICodexAdapter(settings),
             "gemini": GeminiAdapter(settings),
-            "anthropic": AnthropicAdapter(),
+            "anthropic": AnthropicAdapter(settings),
             "generic_harness": GenericHarnessAdapter(settings, harness),
             "ollama": OllamaAdapter(settings),
         }

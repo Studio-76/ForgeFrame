@@ -40,8 +40,8 @@ def create_app() -> FastAPI:
         return {
             "name": settings.app_name,
             "version": settings.app_version,
-            "status": "phase-5-runtime",
-            "message": "Runtime paths enabled with stream-ready dispatch baseline.",
+            "status": "ok",
+            "message": "ForgeGate runtime, admin and control-plane modules are available.",
         }
 
     app.include_router(runtime_router)

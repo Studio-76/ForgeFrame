@@ -8,25 +8,31 @@ import {
   deactivateProvider,
   deleteHarnessProfile,
   dryRunHarness,
+  fetchHarnessExport,
   fetchHarnessProfiles,
   fetchBetaProviderTargets,
   fetchClientOperationalView,
   fetchHarnessRuns,
   fetchBootstrapReadiness,
+  fetchCompatibilityMatrix,
   fetchOauthAccountOperations,
+  fetchOauthOnboarding,
   fetchOauthAccountTargets,
   fetchHarnessTemplates,
   fetchProviderControlPlane,
   fetchUsageSummary,
+  importHarnessConfig,
   patchHealthConfig,
   probeOauthAccountProvider,
   probeAllOauthAccountProviders,
+  rollbackHarnessProfile,
   syncOauthAccountBridgeProfiles,
   previewHarness,
   probeHarness,
   runHealthChecks,
   syncProviders,
   type BetaProviderTarget,
+  type CompatibilityMatrixRow,
   type HarnessProfile,
   type HarnessTemplate,
   type HealthConfig,
@@ -65,7 +71,10 @@ export function ProvidersPage() {
   const [oauthOperations, setOauthOperations] = useState<Array<Record<string, unknown>>>([]);
   const [oauthRecentOps, setOauthRecentOps] = useState<Array<Record<string, unknown>>>([]);
   const [oauthTotalOps, setOauthTotalOps] = useState<number>(0);
+  const [oauthOnboarding, setOauthOnboarding] = useState<Array<Record<string, unknown>>>([]);
+  const [compatibilityMatrix, setCompatibilityMatrix] = useState<CompatibilityMatrixRow[]>([]);
   const [bootstrapReadiness, setBootstrapReadiness] = useState<{ ready: boolean; checks: Array<Record<string, unknown>>; next_steps: string[] } | null>(null);
+  const [importPayload, setImportPayload] = useState<string>("");
 
   const [newHarness, setNewHarness] = useState({
     provider_key: "generic_openai_like",
@@ -82,7 +91,7 @@ export function ProvidersPage() {
   const load = async () => {
     setState("loading");
     try {
-      const [payload, usage, harnessTemplates, harnessProfiles, harnessRuns, clientView, betaTargetsResponse, oauthTargetsResponse, oauthOpsResponse, bootstrapResponse] = await Promise.all([
+      const [payload, usage, harnessTemplates, harnessProfiles, harnessRuns, clientView, betaTargetsResponse, oauthTargetsResponse, oauthOpsResponse, oauthOnboardingResponse, bootstrapResponse, compatibilityResponse] = await Promise.all([
         fetchProviderControlPlane(),
         fetchUsageSummary(),
         fetchHarnessTemplates(),
@@ -98,7 +107,9 @@ export function ProvidersPage() {
         fetchBetaProviderTargets(),
         fetchOauthAccountTargets(),
         fetchOauthAccountOperations(),
+        fetchOauthOnboarding(),
         fetchBootstrapReadiness(),
+        fetchCompatibilityMatrix(),
       ]);
       setProviders(payload.providers);
       setTemplates(harnessTemplates.templates);
@@ -112,6 +123,8 @@ export function ProvidersPage() {
       setOauthOperations(oauthOpsResponse.operations ?? []);
       setOauthRecentOps(oauthOpsResponse.recent ?? []);
       setOauthTotalOps(Number(oauthOpsResponse.total_operations ?? 0));
+      setOauthOnboarding(oauthOnboardingResponse.targets ?? []);
+      setCompatibilityMatrix(compatibilityResponse.matrix ?? []);
       setBootstrapReadiness({
         ready: Boolean(bootstrapResponse.ready),
         checks: bootstrapResponse.checks ?? [],
@@ -182,6 +195,40 @@ export function ProvidersPage() {
     await load();
   };
 
+  const onExportHarness = async (redactSecrets: boolean) => {
+    try {
+      const response = await fetchHarnessExport(redactSecrets);
+      const formatted = JSON.stringify(response.snapshot, null, 2);
+      setImportPayload(formatted);
+      setOperationResult(formatted);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Harness export failed.");
+    }
+  };
+
+  const onImportHarness = async (dryRun: boolean) => {
+    try {
+      const parsed = JSON.parse(importPayload) as Record<string, unknown>;
+      const result = await importHarnessConfig(parsed, dryRun);
+      setOperationResult(JSON.stringify(result, null, 2));
+      if (!dryRun) {
+        await load();
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Harness import failed.");
+    }
+  };
+
+  const onRollbackHarness = async (providerKey: string, revision: number) => {
+    try {
+      const response = await rollbackHarnessProfile(providerKey, revision);
+      setOperationResult(JSON.stringify(response.profile, null, 2));
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Harness rollback failed.");
+    }
+  };
+
   return (
     <section>
       <h2>Providers & Harness Control Plane</h2>
@@ -208,7 +255,7 @@ export function ProvidersPage() {
         <ul>
           {profiles.map((profile) => (
             <li key={profile.provider_key}>
-              {profile.provider_key} · {profile.integration_class} · enabled={String(profile.enabled)} · lifecycle={String(profile.lifecycle_status ?? "unknown")} · verify={String(profile.last_verify_status ?? "never")} · probe={String(profile.last_probe_status ?? "never")} · last_sync={profile.last_sync_status ?? "never"} · last_used={String(profile.last_used_at ?? "never")} · last_model={String(profile.last_used_model ?? "-")} · requests={String(profile.request_count ?? 0)} · stream_requests={String(profile.stream_request_count ?? 0)} · tokens={String(profile.total_tokens ?? 0)} · errors={profileErrors[profile.provider_key] ?? 0}
+              {profile.provider_key} · {profile.integration_class} · enabled={String(profile.enabled)} · lifecycle={String(profile.lifecycle_status ?? "unknown")} · revision={String(profile.config_revision ?? 1)} · parent={String(profile.config_revision_parent ?? "-")} · verify={String(profile.last_verify_status ?? "never")} · probe={String(profile.last_probe_status ?? "never")} · last_sync={profile.last_sync_status ?? "never"} · last_used={String(profile.last_used_at ?? "never")} · last_model={String(profile.last_used_model ?? "-")} · requests={String(profile.request_count ?? 0)} · stream_requests={String(profile.stream_request_count ?? 0)} · tokens={String(profile.total_tokens ?? 0)} · errors={profileErrors[profile.provider_key] ?? 0}
               {profile.needs_attention ? <strong className="fg-danger" style={{ marginLeft: "0.5rem" }}>needs attention</strong> : null}
               <button type="button" onClick={() => void runHarnessAction(profile.provider_key)} style={{ marginLeft: "0.5rem" }}>Preview+Verify</button>
               <button type="button" onClick={() => void probeHarness({ provider_key: profile.provider_key, model: profile.models[0] ?? "model-1", message: "probe", stream: false }).then((res) => setOperationResult(JSON.stringify(res, null, 2)))} style={{ marginLeft: "0.5rem" }}>Probe</button>
@@ -217,11 +264,37 @@ export function ProvidersPage() {
               ) : (
                 <button type="button" onClick={() => void activateHarnessProfile(profile.provider_key).then(load)} style={{ marginLeft: "0.5rem" }}>Activate</button>
               )}
+              {(profile.config_revision ?? 1) > 1 ? (
+                <button
+                  type="button"
+                  onClick={() => void onRollbackHarness(profile.provider_key, (profile.config_revision ?? 1) - 1)}
+                  style={{ marginLeft: "0.5rem" }}
+                >
+                  Rollback
+                </button>
+              ) : null}
               <button type="button" onClick={() => void deleteHarnessProfile(profile.provider_key).then(load)} style={{ marginLeft: "0.5rem" }}>Delete</button>
             </li>
           ))}
         </ul>
         {operationResult ? <pre>{operationResult}</pre> : null}
+      </div>
+
+      <div className="fg-card" style={{ marginBottom: "0.75rem" }}>
+        <h3>Harness import / export</h3>
+        <div className="fg-row" style={{ marginBottom: "0.5rem" }}>
+          <button type="button" onClick={() => void onExportHarness(true)}>Export redacted</button>
+          <button type="button" onClick={() => void onExportHarness(false)}>Export full snapshot</button>
+          <button type="button" onClick={() => void onImportHarness(true)}>Dry-run import</button>
+          <button type="button" onClick={() => void onImportHarness(false)}>Apply import</button>
+        </div>
+        <textarea
+          value={importPayload}
+          onChange={(event) => setImportPayload(event.target.value)}
+          rows={14}
+          style={{ width: "100%" }}
+          placeholder="Harness snapshot JSON for dry-run or import"
+        />
       </div>
 
       <div className="fg-card" style={{ marginBottom: "0.75rem" }}>
@@ -284,7 +357,9 @@ export function ProvidersPage() {
           </div>
           <ul>
             {provider.models.map((model) => (
-              <li key={model.id}>{model.id} · source={model.source} · discovery_status={model.discovery_status} · health={model.health_status} · active={String(model.active)} · errors={modelErrors[model.id] ?? 0}</li>
+              <li key={model.id}>
+                {model.id} · source={model.source} · discovery_status={model.discovery_status} · runtime={model.runtime_status ?? "unknown"} · availability={model.availability_status ?? "unknown"} · health={model.health_status} · active={String(model.active)} · last_probe={String(model.last_probe_at ?? "never")} · stale_since={String(model.stale_since ?? "-")} · reason={model.status_reason ?? "-"} · errors={modelErrors[model.id] ?? 0}
+              </li>
             ))}
           </ul>
         </article>
@@ -302,8 +377,8 @@ export function ProvidersPage() {
         </ul>
       </div>
       <div className="fg-card" style={{ marginBottom: "0.75rem" }}>
-        <h3>Beta target matrix</h3>
-        <p className="fg-muted">OAuth-/Account-Zielachsen können direkt mit readiness/live-probe geprüft werden.</p>
+        <h3>Expansion targets (not default runtime truth)</h3>
+        <p className="fg-muted">Diese Tabelle beschreibt Ausbau- und Onboarding-Ziele. Die aktuelle Produktwahrheit steht oberhalb im Provider-Snapshot und in der Compatibility Matrix.</p>
         <button type="button" onClick={() => void syncOauthAccountBridgeProfiles().then((res) => { setOperationResult(JSON.stringify(res, null, 2)); void load(); })}>
           Sync OAuth Bridge Profiles
         </button>
@@ -353,6 +428,28 @@ export function ProvidersPage() {
             ))}
           </ul>
         </details>
+      </div>
+      <div className="fg-card" style={{ marginBottom: "0.75rem" }}>
+        <h3>OAuth onboarding guide</h3>
+        <ul>
+          {oauthOnboarding.map((target) => (
+            <li key={String(target.provider_key)}>
+              {String(target.provider_key)} · readiness={String(target.readiness)} · depth={String(target.operational_depth)} · reason={String(target.readiness_reason)}
+              {Array.isArray(target.next_steps) && target.next_steps.length > 0 ? ` · next=${String(target.next_steps[0])}` : ""}
+            </li>
+          ))}
+        </ul>
+      </div>
+      <div className="fg-card" style={{ marginBottom: "0.75rem" }}>
+        <h3>Compatibility matrix</h3>
+        <p className="fg-muted">Diese Matrix spiegelt die aktuelle Runtime-/Control-Plane-Wahrheit der verdrahteten Provider, nicht die Ausbauziele.</p>
+        <ul>
+          {compatibilityMatrix.map((row) => (
+            <li key={row.provider}>
+              {row.label} · tier={row.tier} · ready={String(row.ready)} · axis={row.provider_axis} · streaming={row.streaming} · tool_calling={row.tool_calling} · vision={row.vision} · discovery={row.discovery} · ui_models={row.ui_models}
+            </li>
+          ))}
+        </ul>
       </div>
       <div className="fg-card" style={{ marginBottom: "0.75rem" }}>
         <h3>Docker-first bootstrap readiness</h3>

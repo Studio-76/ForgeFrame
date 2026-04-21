@@ -1,4 +1,4 @@
-"""Central ForgeGate runtime configuration (phase-5 streaming/codex baseline)."""
+"""Central ForgeGate runtime configuration."""
 
 from functools import lru_cache
 from typing import Literal
@@ -21,12 +21,21 @@ class Settings(BaseSettings):
     default_model: str = "forgegate-baseline-chat-v1"
     default_provider: str = "forgegate_baseline"
     runtime_allow_unknown_models: bool = False
+    runtime_auth_required: bool = False
+    routing_strategy: Literal["balanced", "quality", "cost"] = "balanced"
+    routing_require_healthy: bool = False
+    routing_allow_degraded_fallback: bool = True
+
+    admin_auth_enabled: bool = True
+    bootstrap_admin_username: str = "admin"
+    bootstrap_admin_password: str = "forgegate-admin"
+    admin_session_ttl_hours: int = 12
 
     forgegate_baseline_enabled: bool = True
     openai_api_enabled: bool = True
     openai_codex_enabled: bool = True
     gemini_enabled: bool = True
-    anthropic_enabled: bool = True
+    anthropic_enabled: bool = False
     generic_harness_enabled: bool = True
     generic_harness_allow_model_fallback: bool = False
     ollama_enabled: bool = True
@@ -54,6 +63,13 @@ class Settings(BaseSettings):
     gemini_probe_base_url: str = "https://generativelanguage.googleapis.com/v1beta/openai"
     gemini_probe_model: str = "gemini-2.5-flash"
     gemini_timeout_seconds: int = 45
+
+    anthropic_api_key: str = ""
+    anthropic_base_url: str = "https://api.anthropic.com/v1"
+    anthropic_timeout_seconds: int = 45
+    anthropic_version: str = "2023-06-01"
+    anthropic_probe_model: str = "claude-3-5-sonnet-latest"
+    anthropic_discovered_models: tuple[str, ...] = ("claude-3-5-sonnet-latest",)
 
     antigravity_enabled: bool = False
     antigravity_oauth_access_token: str = ""
@@ -87,22 +103,29 @@ class Settings(BaseSettings):
     pricing_codex_hypothetical_output_per_1m_tokens: float = 6.0
     pricing_internal_hypothetical_input_per_1m_tokens: float = 0.2
     pricing_internal_hypothetical_output_per_1m_tokens: float = 0.8
+    observability_storage_backend: Literal["postgresql", "file"] = "postgresql"
+    observability_postgres_url: str = ""
     observability_events_path: str = "backend/.forgegate/observability_events.jsonl"
     oauth_operations_path: str = "backend/.forgegate/oauth_operations.jsonl"
     harness_profiles_path: str = "backend/.forgegate/harness_profiles.json"
     harness_runs_path: str = "backend/.forgegate/harness_runs.json"
     harness_storage_backend: Literal["postgresql", "file"] = "postgresql"
     harness_postgres_url: str = "postgresql+psycopg://forgegate:forgegate@localhost:5432/forgegate"
+    control_plane_storage_backend: Literal["postgresql", "file"] = "postgresql"
+    control_plane_postgres_url: str = ""
+    control_plane_state_path: str = "backend/.forgegate/control_plane_state.json"
+    governance_storage_backend: Literal["postgresql", "file"] = "postgresql"
+    governance_postgres_url: str = ""
+    governance_state_path: str = "backend/.forgegate/governance_state.json"
     frontend_dist_path: str = "frontend/dist"
 
-    model_catalog: tuple[tuple[str, str, str], ...] = Field(
+    bootstrap_model_catalog: tuple[tuple[str, str, str], ...] = Field(
         default=(
             ("forgegate-baseline-chat-v1", "forgegate_baseline", "ForgeGate"),
             ("gpt-4.1-mini", "openai_api", "OpenAI"),
             ("gpt-4.1", "openai_api", "OpenAI"),
             ("gpt-5.3-codex", "openai_codex", "OpenAI Codex"),
             ("gemini-2.5-flash", "gemini", "Google"),
-            ("claude-sonnet-4-5", "anthropic", "Anthropic"),
             ("generic-placeholder-chat", "generic_harness", "Generic Harness"),
             ("llama3.2", "ollama", "Ollama"),
         )
@@ -123,4 +146,13 @@ class Settings(BaseSettings):
 
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:
-    return Settings()
+    base = Settings()
+    try:
+        from app.settings.service import load_persisted_setting_overrides
+
+        overrides = load_persisted_setting_overrides(base)
+    except Exception:
+        overrides = {}
+    if not overrides:
+        return base
+    return base.model_copy(update=overrides)

@@ -1,1 +1,5 @@
-"""Accounts models placeholder for future domain schema."""
+"""Gateway account model exports."""
+
+from app.governance.models import GatewayAccountRecord
+
+__all__ = ["GatewayAccountRecord"]

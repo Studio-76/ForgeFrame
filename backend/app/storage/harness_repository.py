@@ -190,6 +190,11 @@ class FileHarnessRepository:
         if existing:
             profile.created_at = existing.created_at
             profile.updated_at = self._now_iso()
+            profile.config_revision = profile.config_revision or existing.config_revision
+            profile.config_revision_parent = profile.config_revision_parent if profile.config_revision_parent is not None else existing.config_revision_parent
+            profile.config_history = profile.config_history or existing.config_history
+            profile.last_exported_at = profile.last_exported_at or existing.last_exported_at
+            profile.last_imported_at = profile.last_imported_at or existing.last_imported_at
             profile.last_verified_at = existing.last_verified_at
             profile.last_verify_status = existing.last_verify_status
             profile.last_probe_at = existing.last_probe_at
@@ -375,6 +380,11 @@ class PostgresHarnessRepository:
             prior = HarnessProfileRecord(**existing_payload)
             profile.created_at = prior.created_at
             profile.updated_at = self._now_iso()
+            profile.config_revision = profile.config_revision or prior.config_revision
+            profile.config_revision_parent = profile.config_revision_parent if profile.config_revision_parent is not None else prior.config_revision_parent
+            profile.config_history = profile.config_history or prior.config_history
+            profile.last_exported_at = profile.last_exported_at or prior.last_exported_at
+            profile.last_imported_at = profile.last_imported_at or prior.last_imported_at
             profile.last_verified_at = prior.last_verified_at
             profile.last_verify_status = prior.last_verify_status
             profile.last_probe_at = prior.last_probe_at

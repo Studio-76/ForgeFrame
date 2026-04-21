@@ -1,1 +1,1 @@
-"""Package placeholder for future ForgeGate implementation."""
+"""API router packages for ForgeGate runtime and admin surfaces."""

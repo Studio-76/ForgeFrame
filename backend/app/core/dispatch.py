@@ -20,7 +20,11 @@ class DispatchService:
         self._providers = providers
 
     def dispatch_chat(self, requested_model: str | None, messages: list[dict], stream: bool = False, tools: list[dict] | None = None, tool_choice: str | dict | None = None) -> ChatDispatchResult:
-        decision = self._routing.resolve_model(requested_model)
+        decision = self._routing.resolve_model(
+            requested_model,
+            stream=stream,
+            tools=tools,
+        )
         adapter = self._providers.get(decision.resolved_model.provider)
         validate_tools_and_choice(tools, tool_choice)
         request = ChatDispatchRequest(
@@ -42,7 +46,11 @@ class DispatchService:
         return adapter.create_chat_completion(request)
 
     def dispatch_chat_stream(self, requested_model: str | None, messages: list[dict], *, tools: list[dict] | None = None, tool_choice: str | dict | None = None) -> tuple[str, str, Iterator[ProviderStreamEvent]]:
-        decision = self._routing.resolve_model(requested_model)
+        decision = self._routing.resolve_model(
+            requested_model,
+            stream=True,
+            tools=tools,
+        )
         adapter = self._providers.get(decision.resolved_model.provider)
         validate_tools_and_choice(tools, tool_choice)
 

@@ -89,6 +89,11 @@ class HarnessModelInventoryItem(BaseModel):
 class HarnessProfileRecord(HarnessProviderProfile):
     created_at: str = ""
     updated_at: str = ""
+    config_revision: int = 1
+    config_revision_parent: int | None = None
+    config_history: list[dict[str, Any]] = Field(default_factory=list)
+    last_exported_at: str | None = None
+    last_imported_at: str | None = None
     lifecycle_status: Literal["draft", "ready", "degraded", "error", "disabled"] = "draft"
     last_verified_at: str | None = None
     last_verify_status: Literal["never", "ok", "warning", "failed"] = "never"
@@ -163,3 +168,8 @@ class HarnessTemplate(BaseModel):
     integration_class: IntegrationClass
     description: str
     profile_defaults: HarnessProviderProfile
+
+
+class HarnessImportRequest(BaseModel):
+    snapshot: dict[str, Any]
+    dry_run: bool = True

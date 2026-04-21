@@ -11,6 +11,7 @@ from typing import Any
 import httpx
 
 from app.harness.models import (
+    HarnessImportRequest,
     HarnessModelInventoryItem,
     HarnessPreviewRequest,
     HarnessProfileRecord,
@@ -44,8 +45,40 @@ class HarnessService:
             for template in BUILTIN_TEMPLATES.values()
         ]
 
+    @staticmethod
+    def _config_snapshot_from_profile(profile: HarnessProviderProfile | HarnessProfileRecord) -> dict[str, Any]:
+        return HarnessProviderProfile(**profile.model_dump()).model_dump()
+
+    def _history_entry(self, profile: HarnessProfileRecord) -> dict[str, Any]:
+        return {
+            "revision": profile.config_revision,
+            "saved_at": profile.updated_at or self._now_iso(),
+            "profile": self._config_snapshot_from_profile(profile),
+        }
+
     def upsert_profile(self, profile: HarnessProviderProfile) -> HarnessProfileRecord:
         record = HarnessProfileRecord(**profile.model_dump())
+        try:
+            existing = self.get_profile(profile.provider_key)
+        except ValueError:
+            existing = None
+        if existing is None:
+            record.config_revision = 1
+            record.config_revision_parent = None
+            record.config_history = []
+        else:
+            existing_config = self._config_snapshot_from_profile(existing)
+            incoming_config = self._config_snapshot_from_profile(profile)
+            if existing_config != incoming_config:
+                record.config_revision = existing.config_revision + 1
+                record.config_revision_parent = existing.config_revision
+                record.config_history = [*existing.config_history, self._history_entry(existing)][-20:]
+            else:
+                record.config_revision = existing.config_revision
+                record.config_revision_parent = existing.config_revision_parent
+                record.config_history = list(existing.config_history)
+            record.last_exported_at = existing.last_exported_at
+            record.last_imported_at = existing.last_imported_at
         if not record.model_inventory and record.models:
             record.model_inventory = [
                 HarnessModelInventoryItem(
@@ -270,6 +303,73 @@ class HarnessService:
             "failed_run_count": len([item for item in runs if not item.get("success")]),
         }
         return snapshot
+
+    def export_config_snapshot(self, *, redact_secrets: bool = True, include_runs: bool = True) -> dict[str, Any]:
+        profiles = []
+        for profile in self.list_profiles():
+            payload = {
+                "provider_key": profile.provider_key,
+                "config_revision": profile.config_revision,
+                "saved_at": profile.updated_at,
+                "profile": self._config_snapshot_from_profile(profile),
+            }
+            if redact_secrets:
+                payload["profile"]["auth_value"] = "***redacted***"
+            profiles.append(payload)
+        snapshot = {
+            "schema_version": 1,
+            "object": "harness_config_export",
+            "exported_at": self._now_iso(),
+            "redacted": redact_secrets,
+            "profiles": profiles,
+        }
+        if include_runs:
+            snapshot["recent_runs"] = [item.model_dump() for item in self.list_runs(limit=40)]
+        snapshot["summary"] = {
+            "profile_count": len(profiles),
+            "revisions": sum(int(item.get("config_revision", 1)) for item in profiles),
+        }
+        return snapshot
+
+    def import_config_snapshot(self, request: HarnessImportRequest) -> dict[str, Any]:
+        payload = request.snapshot
+        profiles_raw = payload.get("profiles")
+        if not isinstance(profiles_raw, list):
+            raise ValueError("snapshot_profiles_required")
+        parsed_profiles: list[HarnessProviderProfile] = []
+        for item in profiles_raw:
+            if not isinstance(item, dict):
+                raise ValueError("snapshot_profile_entry_invalid")
+            profile_payload = item.get("profile", item)
+            if not isinstance(profile_payload, dict):
+                raise ValueError("snapshot_profile_payload_invalid")
+            parsed_profiles.append(HarnessProviderProfile(**profile_payload))
+        if request.dry_run:
+            return {
+                "status": "ok",
+                "dry_run": True,
+                "validated_profiles": [profile.provider_key for profile in parsed_profiles],
+                "count": len(parsed_profiles),
+            }
+        imported: list[str] = []
+        for profile in parsed_profiles:
+            upserted = self.upsert_profile(profile)
+            upserted.last_imported_at = self._now_iso()
+            self._store.upsert_profile(upserted)
+            imported.append(profile.provider_key)
+        return {"status": "ok", "dry_run": False, "imported_profiles": imported, "count": len(imported)}
+
+    def rollback_profile(self, provider_key: str, revision: int) -> HarnessProfileRecord:
+        profile = self.get_profile(provider_key)
+        if revision == profile.config_revision:
+            return profile
+        target = next((item for item in profile.config_history if int(item.get("revision", -1)) == revision), None)
+        if target is None:
+            raise ValueError(f"revision_{revision}_not_found")
+        target_payload = target.get("profile")
+        if not isinstance(target_payload, dict):
+            raise ValueError("revision_payload_invalid")
+        return self.upsert_profile(HarnessProviderProfile(**target_payload))
 
     def execute_non_stream(self, provider_key: str, *, model: str, messages: list[dict[str, Any]], tools: list[dict[str, Any]] | None = None, tool_choice: str | dict[str, Any] | None = None) -> dict[str, Any]:
         profile = self.get_profile(provider_key)

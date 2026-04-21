@@ -4,6 +4,12 @@ export type ManagedModel = {
   discovery_status: string;
   active: boolean;
   health_status: string;
+  runtime_status?: string;
+  availability_status?: string;
+  status_reason?: string | null;
+  last_seen_at?: string | null;
+  last_probe_at?: string | null;
+  stale_since?: string | null;
 };
 
 export type ProviderControlItem = {
@@ -138,13 +144,156 @@ export type HarnessProfile = {
   stream_request_count?: number;
   total_tokens?: number;
   needs_attention?: boolean;
+  config_revision?: number;
+  config_revision_parent?: number | null;
+  config_history?: Array<Record<string, unknown>>;
 };
 
+export type AdminUser = {
+  user_id: string;
+  username: string;
+  display_name: string;
+  role: "admin" | "operator" | "viewer";
+  status: "active" | "disabled";
+  must_rotate_password: boolean;
+  created_at: string;
+  updated_at: string;
+  last_login_at?: string | null;
+  created_by?: string | null;
+};
+
+export type AdminSecuritySession = {
+  session_id: string;
+  user_id: string;
+  role: "admin" | "operator" | "viewer";
+  created_at: string;
+  expires_at: string;
+  last_used_at: string;
+  revoked_at?: string | null;
+  revoked_reason?: string | null;
+  username: string;
+  display_name: string;
+  user_status: string;
+  active: boolean;
+};
+
+export type SecurityBootstrapResponse = {
+  status: "ok";
+  bootstrap: Record<string, string | number | boolean>;
+  secret_posture: Array<Record<string, string | number | boolean>>;
+};
+
+export type AdminSessionUser = {
+  session_id: string;
+  user_id: string;
+  username: string;
+  display_name: string;
+  role: "admin" | "operator" | "viewer";
+  must_rotate_password?: boolean;
+};
+
+export type GatewayAccount = {
+  account_id: string;
+  label: string;
+  status: "active" | "suspended" | "disabled";
+  provider_bindings: string[];
+  notes: string;
+  created_at: string;
+  updated_at: string;
+  last_activity_at?: string | null;
+  runtime_key_count?: number;
+};
+
+export type RuntimeKey = {
+  key_id: string;
+  account_id: string | null;
+  label: string;
+  prefix: string;
+  scopes: string[];
+  status: "active" | "disabled" | "revoked";
+  created_at: string;
+  updated_at: string;
+  last_used_at?: string | null;
+  rotated_from?: string | null;
+};
+
+export type MutableSettingEntry = {
+  key: string;
+  label: string;
+  category: string;
+  value_type: "str" | "bool" | "float";
+  description: string;
+  default_value: string | number | boolean;
+  effective_value: string | number | boolean;
+  overridden: boolean;
+  updated_at?: string | null;
+  updated_by?: string | null;
+};
+
+export type DashboardResponse = {
+  status: "ok";
+  kpis: Record<string, number>;
+  alerts: Array<Record<string, string | number>>;
+  needs_attention: string[];
+  security: Record<string, string | number | boolean>;
+};
+
+export type CompatibilityMatrixRow = {
+  provider: string;
+  label: string;
+  tier: string;
+  ready: boolean;
+  provider_axis: string;
+  streaming: string;
+  tool_calling: string;
+  vision: string;
+  discovery: string;
+  oauth_required: boolean;
+  ui_models: number;
+  notes: string;
+};
+
+export type LogsResponse = {
+  status: "ok";
+  audit_events: Array<Record<string, unknown>>;
+  alerts: Array<Record<string, string | number>>;
+  error_summary: Record<string, unknown>;
+};
+
+const ADMIN_TOKEN_STORAGE_KEY = "forgegate_admin_token";
+
+export function getAdminToken(): string {
+  if (typeof window === "undefined") {
+    return "";
+  }
+  return window.localStorage.getItem(ADMIN_TOKEN_STORAGE_KEY) ?? "";
+}
+
+export function setAdminToken(token: string): void {
+  if (typeof window === "undefined") {
+    return;
+  }
+  window.localStorage.setItem(ADMIN_TOKEN_STORAGE_KEY, token);
+}
+
+export function clearAdminToken(): void {
+  if (typeof window === "undefined") {
+    return;
+  }
+  window.localStorage.removeItem(ADMIN_TOKEN_STORAGE_KEY);
+}
+
 async function fetchJson<T>(path: string, init?: RequestInit): Promise<T> {
+  const token = path.startsWith("/admin") ? getAdminToken() : "";
+  const headers = new Headers(init?.headers ?? {});
+  if (!headers.has("Content-Type")) {
+    headers.set("Content-Type", "application/json");
+  }
+  if (token && !headers.has("Authorization")) {
+    headers.set("Authorization", `Bearer ${token}`);
+  }
   const response = await fetch(path, {
-    headers: {
-      "Content-Type": "application/json",
-    },
+    headers,
     ...init,
   });
 
@@ -164,8 +313,153 @@ async function fetchJson<T>(path: string, init?: RequestInit): Promise<T> {
   return (await response.json()) as T;
 }
 
+export function fetchAuthBootstrap() {
+  return fetchJson<{ status: string; bootstrap: Record<string, string | boolean> }>("/admin/auth/bootstrap");
+}
+
+export function loginAdmin(payload: { username: string; password: string }) {
+  return fetchJson<{ status: string; access_token: string; expires_at: string; user: AdminSessionUser }>("/admin/auth/login", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function fetchAdminSession() {
+  return fetchJson<{ status: string; user: AdminSessionUser }>("/admin/auth/me");
+}
+
+export function logoutAdmin() {
+  return fetchJson<{ status: string; message: string }>("/admin/auth/logout", {
+    method: "POST",
+    body: "{}",
+  });
+}
+
+export function rotateOwnPassword(payload: { current_password: string; new_password: string }) {
+  return fetchJson<{ status: string; user: AdminUser }>("/admin/auth/rotate-password", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function fetchDashboard() {
+  return fetchJson<DashboardResponse>("/admin/dashboard/");
+}
+
+export function fetchAccounts() {
+  return fetchJson<{ status: string; accounts: GatewayAccount[] }>("/admin/accounts/");
+}
+
+export function createAccount(payload: { label: string; provider_bindings?: string[]; notes?: string }) {
+  return fetchJson<{ status: string; account: GatewayAccount }>("/admin/accounts/", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function updateAccount(accountId: string, payload: { label?: string; provider_bindings?: string[]; notes?: string; status?: string }) {
+  return fetchJson<{ status: string; account: GatewayAccount }>(`/admin/accounts/${accountId}`, {
+    method: "PATCH",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function fetchRuntimeKeys() {
+  return fetchJson<{ status: string; keys: RuntimeKey[] }>("/admin/keys/");
+}
+
+export function createRuntimeKey(payload: { label: string; account_id?: string | null; scopes?: string[] }) {
+  return fetchJson<{ status: string; issued: { key_id: string; token: string; prefix: string; account_id: string | null; label: string; scopes: string[]; created_at: string } }>("/admin/keys/", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function rotateRuntimeKey(keyId: string) {
+  return fetchJson<{ status: string; issued: { key_id: string; token: string; prefix: string; account_id: string | null; label: string; scopes: string[]; created_at: string } }>(`/admin/keys/${keyId}/rotate`, {
+    method: "POST",
+    body: "{}",
+  });
+}
+
+export function setRuntimeKeyStatus(keyId: string, action: "activate" | "disable" | "revoke") {
+  return fetchJson<{ status: string; key: RuntimeKey }>(`/admin/keys/${keyId}/${action}`, {
+    method: "POST",
+    body: "{}",
+  });
+}
+
+export function fetchMutableSettings() {
+  return fetchJson<{ status: string; settings: MutableSettingEntry[] }>("/admin/settings/");
+}
+
+export function patchMutableSettings(updates: Record<string, unknown>) {
+  return fetchJson<{ status: string; updated: string[]; settings: MutableSettingEntry[] }>("/admin/settings/", {
+    method: "PATCH",
+    body: JSON.stringify({ updates }),
+  });
+}
+
+export function resetMutableSetting(key: string) {
+  return fetchJson<{ status: string; reset: string }>(`/admin/settings/${key}`, {
+    method: "DELETE",
+  });
+}
+
+export function fetchLogs() {
+  return fetchJson<LogsResponse>("/admin/logs/");
+}
+
+export function fetchSecurityBootstrap() {
+  return fetchJson<SecurityBootstrapResponse>("/admin/security/bootstrap");
+}
+
+export function fetchAdminUsers() {
+  return fetchJson<{ status: string; users: AdminUser[] }>("/admin/security/users");
+}
+
+export function createAdminUser(payload: { username: string; display_name: string; role: string; password: string }) {
+  return fetchJson<{ status: string; user: AdminUser }>("/admin/security/users", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function updateAdminUser(userId: string, payload: { display_name?: string; role?: string; status?: string; must_rotate_password?: boolean }) {
+  return fetchJson<{ status: string; user: AdminUser }>(`/admin/security/users/${userId}`, {
+    method: "PATCH",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function rotateAdminPassword(userId: string, payload: { new_password: string; must_rotate_password?: boolean }) {
+  return fetchJson<{ status: string; user: AdminUser }>(`/admin/security/users/${userId}/rotate-password`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function fetchAdminSessions() {
+  return fetchJson<{ status: string; sessions: AdminSecuritySession[] }>("/admin/security/sessions");
+}
+
+export function revokeAdminSession(sessionId: string) {
+  return fetchJson<{ status: string; session: AdminSecuritySession }>(`/admin/security/sessions/${sessionId}/revoke`, {
+    method: "POST",
+    body: "{}",
+  });
+}
+
+export function fetchProviderSecretPosture() {
+  return fetchJson<{ status: string; providers: Array<Record<string, string | number | boolean>> }>("/admin/security/secret-posture");
+}
+
 export function fetchProviderControlPlane(): Promise<ProviderControlPlaneResponse> {
   return fetchJson<ProviderControlPlaneResponse>("/admin/providers/");
+}
+
+export function fetchCompatibilityMatrix() {
+  return fetchJson<{ status: string; matrix: CompatibilityMatrixRow[] }>("/admin/providers/compatibility-matrix");
 }
 
 export function createProvider(payload: { provider: string; label: string; integration_class?: string; template_id?: string | null; config: Record<string, string> }) {
@@ -280,6 +574,24 @@ export function fetchHarnessSnapshot() {
   return fetchJson<{ status: string; snapshot: Record<string, unknown> }>("/admin/providers/harness/snapshot");
 }
 
+export function fetchHarnessExport(redactSecrets = true) {
+  return fetchJson<{ status: string; snapshot: Record<string, unknown> }>(`/admin/providers/harness/export?redact_secrets=${String(redactSecrets)}`);
+}
+
+export function importHarnessConfig(snapshot: Record<string, unknown>, dryRun = true) {
+  return fetchJson<Record<string, unknown>>("/admin/providers/harness/import", {
+    method: "POST",
+    body: JSON.stringify({ snapshot, dry_run: dryRun }),
+  });
+}
+
+export function rollbackHarnessProfile(providerKey: string, revision: number) {
+  return fetchJson<{ status: string; profile: HarnessProfile }>(`/admin/providers/harness/profiles/${providerKey}/rollback/${revision}`, {
+    method: "POST",
+    body: "{}",
+  });
+}
+
 export function fetchHarnessRuns(providerKey?: string, mode?: string, status?: string, clientId?: string, limit = 50) {
   const params = new URLSearchParams();
   if (providerKey) params.set("provider_key", providerKey);
@@ -296,6 +608,14 @@ export function fetchClientOperationalView(window: "1h" | "24h" | "7d" | "all" =
   return fetchJson<{ status: string; window: string; clients: Array<Record<string, string | number | boolean>> }>(`/admin/usage/clients?window=${window}`);
 }
 
+export function fetchProviderDrilldown(provider: string, window: "1h" | "24h" | "7d" | "all" = "24h") {
+  return fetchJson<{ status: string; window: string; drilldown: Record<string, unknown> }>(`/admin/usage/providers/${provider}?window=${window}`);
+}
+
+export function fetchClientDrilldown(clientId: string, window: "1h" | "24h" | "7d" | "all" = "24h") {
+  return fetchJson<{ status: string; window: string; drilldown: Record<string, unknown> }>(`/admin/usage/clients/${encodeURIComponent(clientId)}?window=${window}`);
+}
+
 
 export function fetchBetaProviderTargets() {
   return fetchJson<{ status: string; targets: BetaProviderTarget[] }>("/admin/providers/beta-targets");
@@ -310,6 +630,10 @@ export function probeOauthAccountProvider(providerKey: string) {
 
 export function fetchOauthAccountTargets() {
   return fetchJson<{ status: string; targets: Array<Record<string, string | boolean>> }>("/admin/providers/oauth-account/targets");
+}
+
+export function fetchOauthOnboarding() {
+  return fetchJson<{ status: string; targets: Array<Record<string, unknown>> }>("/admin/providers/oauth-account/onboarding");
 }
 
 export function syncOauthAccountBridgeProfiles() {

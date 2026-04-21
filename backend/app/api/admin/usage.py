@@ -89,3 +89,31 @@ def client_operational_view(
         value["needs_attention"] = bool(errors >= 3 or value["error_rate"] >= 0.2)
     ranked = sorted(client_map.values(), key=lambda item: (bool(item["needs_attention"]), float(item.get("actual_cost", 0.0)), int(item.get("errors", 0))), reverse=True)
     return {"status": "ok", "window": window, "clients": ranked[:50]}
+
+
+@router.get("/providers/{provider_name}")
+def provider_drilldown(
+    provider_name: str,
+    window: str = Query(default="24h", pattern="^(1h|24h|7d|all)$"),
+    analytics: UsageAnalyticsStore = Depends(get_usage_analytics_store),
+) -> dict[str, object]:
+    window_map: dict[str, int | None] = {"1h": 3600, "24h": 24 * 3600, "7d": 7 * 24 * 3600, "all": None}
+    return {
+        "status": "ok",
+        "window": window,
+        "drilldown": analytics.provider_drilldown(provider_name, window_seconds=window_map[window]),
+    }
+
+
+@router.get("/clients/{client_id}")
+def client_drilldown(
+    client_id: str,
+    window: str = Query(default="24h", pattern="^(1h|24h|7d|all)$"),
+    analytics: UsageAnalyticsStore = Depends(get_usage_analytics_store),
+) -> dict[str, object]:
+    window_map: dict[str, int | None] = {"1h": 3600, "24h": 24 * 3600, "7d": 7 * 24 * 3600, "all": None}
+    return {
+        "status": "ok",
+        "window": window,
+        "drilldown": analytics.client_drilldown(client_id, window_seconds=window_map[window]),
+    }

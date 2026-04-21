@@ -1,1 +1,5 @@
-"""Keys service placeholder for future business logic."""
+"""Runtime key service exports."""
+
+from app.governance.service import GovernanceService, get_governance_service
+
+__all__ = ["GovernanceService", "get_governance_service"]

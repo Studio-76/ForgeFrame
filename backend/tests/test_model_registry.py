@@ -20,6 +20,13 @@ def test_model_registry_lists_active_models() -> None:
     assert all(model.active for model in models)
 
 
+def test_model_registry_does_not_seed_anthropic_into_default_runtime_truth() -> None:
+    settings = Settings()
+    registry = ModelRegistry(settings)
+
+    assert registry.has_model("claude-3-5-sonnet-latest") is False
+
+
 def test_model_registry_prefers_default_provider_when_default_model_missing() -> None:
     settings = Settings(default_model="missing-model", default_provider="openai_api")
     registry = ModelRegistry(settings)

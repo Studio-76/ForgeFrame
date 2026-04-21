@@ -5,6 +5,8 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 COMPOSE_FILE="$ROOT_DIR/docker/docker-compose.yml"
 ENV_FILE="$ROOT_DIR/.env.compose"
 BASE_URL="http://127.0.0.1:${FORGEGATE_APP_PORT:-8000}"
+AUTH_FILE="/tmp/forgegate-admin-login.json"
+AUTH_HEADER_FILE="/tmp/forgegate-admin-auth-header.txt"
 
 cleanup() {
   if [[ "${1:-}" == "down" ]]; then
@@ -33,9 +35,24 @@ for _ in {1..40}; do
   sleep 2
 done
 
-curl -sf "$BASE_URL/health" | python -m json.tool >/tmp/forgegate-health.json
+curl -sf "$BASE_URL/health" | python3 -m json.tool >/tmp/forgegate-health.json
+
+curl -sf -X POST "$BASE_URL/admin/auth/login" \
+  -H 'Content-Type: application/json' \
+  -d "{\"username\":\"${FORGEGATE_BOOTSTRAP_ADMIN_USERNAME:-admin}\",\"password\":\"${FORGEGATE_BOOTSTRAP_ADMIN_PASSWORD:-forgegate-admin}\"}" \
+  >"$AUTH_FILE"
+python3 - "$AUTH_FILE" "$AUTH_HEADER_FILE" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+payload = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+Path(sys.argv[2]).write_text(f"Authorization: Bearer {payload['access_token']}\n", encoding="utf-8")
+PY
+AUTH_HEADER="$(cat "$AUTH_HEADER_FILE")"
 
 curl -sf -X PUT "$BASE_URL/admin/providers/harness/profiles/local_compose" \
+  -H "$AUTH_HEADER" \
   -H 'Content-Type: application/json' \
   -d '{
     "provider_key": "local_compose",
@@ -52,12 +69,12 @@ curl -sf -X PUT "$BASE_URL/admin/providers/harness/profiles/local_compose" \
     "capabilities": {"streaming": false, "model_source": "manual"}
   }' >/tmp/forgegate-profile.json
 
-curl -sf -X POST "$BASE_URL/admin/providers/sync" -H 'Content-Type: application/json' -d '{"provider": "generic_harness"}' >/tmp/forgegate-sync.json
-curl -sf "$BASE_URL/admin/providers/harness/runs?provider_key=local_compose&limit=20" >/tmp/forgegate-runs.json
-curl -sf "$BASE_URL/admin/providers/harness/snapshot" >/tmp/forgegate-snapshot.json
-curl -sf "$BASE_URL/admin/providers/beta-targets" >/tmp/forgegate-beta-targets.json
-curl -sf "$BASE_URL/admin/providers/bootstrap/readiness" >/tmp/forgegate-bootstrap-readiness.json
-curl -sf "$BASE_URL/admin/providers/oauth-account/operations" >/tmp/forgegate-oauth-operations.json
+curl -sf -X POST "$BASE_URL/admin/providers/sync" -H "$AUTH_HEADER" -H 'Content-Type: application/json' -d '{"provider": "generic_harness"}' >/tmp/forgegate-sync.json
+curl -sf "$BASE_URL/admin/providers/harness/runs?provider_key=local_compose&limit=20" -H "$AUTH_HEADER" >/tmp/forgegate-runs.json
+curl -sf "$BASE_URL/admin/providers/harness/snapshot" -H "$AUTH_HEADER" >/tmp/forgegate-snapshot.json
+curl -sf "$BASE_URL/admin/providers/beta-targets" -H "$AUTH_HEADER" >/tmp/forgegate-beta-targets.json
+curl -sf "$BASE_URL/admin/providers/bootstrap/readiness" -H "$AUTH_HEADER" >/tmp/forgegate-bootstrap-readiness.json
+curl -sf "$BASE_URL/admin/providers/oauth-account/operations" -H "$AUTH_HEADER" >/tmp/forgegate-oauth-operations.json
 
 docker compose -f "$COMPOSE_FILE" exec -T postgres psql -U "${FORGEGATE_PG_USER:-forgegate}" -d "${FORGEGATE_PG_DB:-forgegate}" -c "SELECT count(*) AS harness_profiles FROM harness_profiles;" >/tmp/forgegate-db-profiles.txt
 

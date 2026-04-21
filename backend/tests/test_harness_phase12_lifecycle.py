@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from app.harness.models import HarnessProviderProfile, HarnessVerificationRequest
+from app.harness.models import HarnessImportRequest, HarnessProviderProfile, HarnessVerificationRequest
 from app.harness.service import HarnessService
 from app.harness.store import HarnessStore
 from app.storage.harness_repository import FileHarnessRepository, HarnessRunQuery, HarnessStoragePaths
@@ -75,3 +75,53 @@ def test_run_query_filters_provider_and_mode(tmp_path: Path) -> None:
     verify_runs = service._store.list_runs(HarnessRunQuery(provider_key="r1", mode="verify", limit=50))  # noqa: SLF001
     assert sync_runs
     assert verify_runs
+
+
+def test_profile_versioning_export_import_and_rollback(tmp_path: Path) -> None:
+    service = _service(tmp_path)
+    service.upsert_profile(
+        HarnessProviderProfile(
+            provider_key="versioned",
+            label="Versioned",
+            integration_class="openai_compatible",
+            endpoint_base_url="https://example.invalid/v1",
+            auth_scheme="bearer",
+            auth_value="secret-token",
+            models=["alpha"],
+        )
+    )
+    updated = service.upsert_profile(
+        HarnessProviderProfile(
+            provider_key="versioned",
+            label="Versioned",
+            integration_class="openai_compatible",
+            endpoint_base_url="https://example.invalid/v2",
+            auth_scheme="bearer",
+            auth_value="secret-token",
+            models=["beta"],
+        )
+    )
+
+    assert updated.config_revision == 2
+    assert updated.config_revision_parent == 1
+    assert len(updated.config_history) == 1
+
+    redacted_export = service.export_config_snapshot()
+    assert redacted_export["redacted"] is True
+    assert redacted_export["profiles"][0]["profile"]["auth_value"] == "***redacted***"
+
+    full_export = service.export_config_snapshot(redact_secrets=False, include_runs=False)
+    dry_run = service.import_config_snapshot(HarnessImportRequest(snapshot=full_export, dry_run=True))
+    assert dry_run["dry_run"] is True
+    assert dry_run["validated_profiles"] == ["versioned"]
+
+    service.rollback_profile("versioned", 1)
+    rolled_back = service.get_profile("versioned")
+    assert rolled_back.config_revision == 3
+    assert rolled_back.endpoint_base_url == "https://example.invalid/v1"
+    assert rolled_back.models == ["alpha"]
+
+    imported = service.import_config_snapshot(HarnessImportRequest(snapshot=full_export, dry_run=False))
+    assert imported["dry_run"] is False
+    assert imported["imported_profiles"] == ["versioned"]
+    assert service.get_profile("versioned").last_imported_at is not None

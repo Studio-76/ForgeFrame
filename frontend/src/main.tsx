@@ -10,7 +10,9 @@ import { ApiKeysPage } from "./pages/ApiKeysPage";
 import { DashboardPage } from "./pages/DashboardPage";
 import { LoginPage } from "./pages/LoginPage";
 import { LogsPage } from "./pages/LogsPage";
+import { OnboardingPage } from "./pages/OnboardingPage";
 import { ProvidersPage } from "./pages/ProvidersPage";
+import { SecurityPage } from "./pages/SecurityPage";
 import { SettingsPage } from "./pages/SettingsPage";
 import { UsagePage } from "./pages/UsagePage";
 
@@ -22,9 +24,11 @@ const router = createBrowserRouter([
       { index: true, element: <Navigate to="/dashboard" replace /> },
       { path: "login", element: <LoginPage /> },
       { path: "dashboard", element: <DashboardPage /> },
+      { path: "onboarding", element: <OnboardingPage /> },
       { path: "providers", element: <ProvidersPage /> },
       { path: "accounts", element: <AccountsPage /> },
       { path: "api-keys", element: <ApiKeysPage /> },
+      { path: "security", element: <SecurityPage /> },
       { path: "usage", element: <UsagePage /> },
       { path: "logs", element: <LogsPage /> },
       { path: "settings", element: <SettingsPage /> },

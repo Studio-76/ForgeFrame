@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "forgegate-backend"
 version = "0.6.0"
-description = "Phase-11 PostgreSQL harness-control-plane backend for ForgeGate"
+description = "ForgeGate backend with runtime, control-plane and governance services"
 requires-python = ">=3.11"
 dependencies = [
   "fastapi>=0.116,<1.0",

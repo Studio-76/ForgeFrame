@@ -1,15 +1,22 @@
-"""Runtime chat entrypoint on `/v1/chat/completions` for phase-5 runtime."""
+"""Runtime chat entrypoint on `/v1/chat/completions`."""
 
 from collections.abc import Iterator
 
 from fastapi import APIRouter, Depends, Request, status
 from fastapi.responses import JSONResponse, StreamingResponse
 
-from app.api.runtime.dependencies import get_dispatch_service, get_model_registry, get_settings
+from app.api.runtime.dependencies import (
+    get_dispatch_service,
+    get_model_registry,
+    get_runtime_gateway_identity,
+    get_settings,
+)
 from app.api.runtime.schemas import ChatCompletionsRequest
 from app.core.dispatch import DispatchService
 from app.core.model_registry import ModelRegistry
+from app.core.response_normalization import build_chat_completion_payload
 from app.core.streaming import provider_events_to_sse
+from app.governance.models import RuntimeGatewayIdentity
 from app.providers import (
     ProviderAuthenticationError,
     ProviderBadRequestError,
@@ -52,7 +59,7 @@ def _error_response(*, status_code: int, error_type: str, message: str, provider
 
 def _provider_exception_to_http(exc: Exception) -> tuple[int, str, str | None, str, dict[str, object]]:
     if isinstance(exc, ProviderNotImplementedError):
-        return status.HTTP_501_NOT_IMPLEMENTED, exc.error_type, exc.provider, str(exc), {"phase": "phase-5 streaming/codex"}
+        return status.HTTP_501_NOT_IMPLEMENTED, exc.error_type, exc.provider, str(exc), {}
     if isinstance(exc, ProviderUnsupportedFeatureError):
         return status.HTTP_400_BAD_REQUEST, exc.error_type, exc.provider, str(exc), {}
     if isinstance(exc, ProviderModelNotFoundError):
@@ -96,7 +103,17 @@ def _provider_exception_to_http(exc: Exception) -> tuple[int, str, str | None, s
     raise exc
 
 
-def _resolve_client_identity(request: Request, payload: ChatCompletionsRequest) -> ClientIdentity:
+def _resolve_client_identity(
+    request: Request,
+    payload: ChatCompletionsRequest,
+    gateway_identity: RuntimeGatewayIdentity | None,
+) -> ClientIdentity:
+    if gateway_identity is not None:
+        return ClientIdentity(
+            client_id=gateway_identity.client_id,
+            consumer=gateway_identity.consumer,
+            integration=gateway_identity.integration,
+        )
     return ClientIdentity(
         client_id=(
             payload.client.get("client_id")
@@ -117,9 +134,10 @@ def create_chat_completion(
     registry: ModelRegistry = Depends(get_model_registry),
     dispatch: DispatchService = Depends(get_dispatch_service),
     settings: Settings = Depends(get_settings),
+    gateway_identity: RuntimeGatewayIdentity | None = Depends(get_runtime_gateway_identity),
 ) -> object:
     analytics = get_usage_analytics_store()
-    client_identity = _resolve_client_identity(request, payload)
+    client_identity = _resolve_client_identity(request, payload, gateway_identity)
     requested_model = payload.model
     if requested_model and not registry.has_model(requested_model) and not settings.runtime_allow_unknown_models:
         analytics.record_runtime_error(
@@ -208,24 +226,4 @@ def create_chat_completion(
 
     analytics.record_non_stream_result(result, client=client_identity)
 
-    return {
-        "id": "chatcmpl-forgegate",
-        "object": "chat.completion",
-        "model": result.model,
-        "provider": result.provider,
-        "credential_type": result.credential_type,
-        "auth_source": result.auth_source,
-        "choices": [
-            {
-                "index": 0,
-                "message": {
-                    "role": "assistant",
-                    "content": result.content,
-                    **({"tool_calls": result.tool_calls} if result.tool_calls else {}),
-                },
-                "finish_reason": result.finish_reason,
-            }
-        ],
-        "usage": result.usage.model_dump(),
-        "cost": result.cost.model_dump(),
-    }
+    return build_chat_completion_payload(result)
