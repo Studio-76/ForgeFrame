@@ -46,6 +46,44 @@ class ModelRegistry:
                 )
             )
 
+        if self._settings.anthropic_enabled:
+            provider_record = providers.setdefault(
+                "anthropic",
+                ManagedProviderRecord(
+                    provider="anthropic",
+                    label="Anthropic",
+                    enabled=True,
+                    integration_class="native",
+                ),
+            )
+            existing_ids = {model.id for model in provider_record.managed_models}
+            seed_models = [
+                model_id
+                for model_id in (
+                    *self._settings.anthropic_discovered_models,
+                    self._settings.anthropic_probe_model,
+                )
+                if model_id.strip()
+            ]
+            for model_id in seed_models:
+                if model_id in existing_ids:
+                    continue
+                provider_record.managed_models.append(
+                    ManagedModelRecord(
+                        id=model_id,
+                        source="discovered",
+                        discovery_status="catalog",
+                        active=True,
+                        owned_by="Anthropic",
+                        display_name=model_id,
+                        category="general",
+                        runtime_status="partial",
+                        availability_status="healthy",
+                        status_reason="anthropic_catalog_seed",
+                    )
+                )
+                existing_ids.add(model_id)
+
         if self._settings.openai_codex_enabled and self._settings.openai_codex_discovery_enabled:
             provider_record = providers.setdefault(
                 "openai_codex",
@@ -80,10 +118,54 @@ class ModelRegistry:
 
         return sorted(providers.values(), key=lambda item: item.provider)
 
+    def _merge_bootstrap_provider_state(
+        self,
+        stored_state: ControlPlaneStateRecord,
+    ) -> ControlPlaneStateRecord:
+        if not self._settings.anthropic_enabled:
+            return stored_state
+
+        anthropic_bootstrap_provider = next(
+            (
+                provider
+                for provider in self._bootstrap_provider_state()
+                if provider.provider == "anthropic"
+            ),
+            None,
+        )
+        if anthropic_bootstrap_provider is None:
+            return stored_state
+
+        provider_map = {
+            provider.provider: provider.model_copy(deep=True)
+            for provider in stored_state.providers
+        }
+
+        existing_provider = provider_map.get(anthropic_bootstrap_provider.provider)
+        if existing_provider is None:
+            provider_map[anthropic_bootstrap_provider.provider] = anthropic_bootstrap_provider.model_copy(deep=True)
+        else:
+            existing_model_ids = {model.id for model in existing_provider.managed_models}
+            for bootstrap_model in anthropic_bootstrap_provider.managed_models:
+                if bootstrap_model.id in existing_model_ids:
+                    continue
+                existing_provider.managed_models.append(bootstrap_model.model_copy(deep=True))
+                existing_model_ids.add(bootstrap_model.id)
+            existing_provider.managed_models = sorted(existing_provider.managed_models, key=lambda item: item.id)
+
+        return stored_state.model_copy(
+            update={
+                "providers": sorted(provider_map.values(), key=lambda item: item.provider),
+            }
+        )
+
     def _load_or_seed_state(self) -> ControlPlaneStateRecord:
         stored_state = self._state_repository.load_state()
         if stored_state is not None:
-            return stored_state
+            merged_state = self._merge_bootstrap_provider_state(stored_state)
+            if merged_state.model_dump() != stored_state.model_dump():
+                return self._state_repository.save_state(merged_state)
+            return merged_state
         seed_state = ControlPlaneStateRecord(
             providers=self._bootstrap_provider_state(),
         )

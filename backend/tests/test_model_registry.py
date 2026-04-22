@@ -1,3 +1,6 @@
+from pathlib import Path
+
+from app.control_plane import ControlPlaneStateRecord
 from app.core.model_registry import ModelRegistry
 from app.settings.config import Settings
 
@@ -20,11 +23,74 @@ def test_model_registry_lists_active_models() -> None:
     assert all(model.active for model in models)
 
 
-def test_model_registry_does_not_seed_anthropic_into_default_runtime_truth() -> None:
+def test_model_registry_keeps_anthropic_out_of_runtime_truth_while_disabled() -> None:
     settings = Settings()
     registry = ModelRegistry(settings)
 
     assert registry.has_model("claude-3-5-sonnet-latest") is False
+
+
+def test_model_registry_seeds_anthropic_into_runtime_truth_when_enabled() -> None:
+    settings = Settings(
+        default_model="claude-3-5-sonnet-latest",
+        default_provider="anthropic",
+        forgegate_baseline_enabled=False,
+        openai_api_enabled=False,
+        openai_codex_enabled=False,
+        gemini_enabled=False,
+        anthropic_enabled=True,
+        generic_harness_enabled=False,
+        ollama_enabled=False,
+    )
+    registry = ModelRegistry(settings)
+
+    assert registry.has_model("claude-3-5-sonnet-latest") is True
+    assert registry.default_model().provider == "anthropic"
+
+
+def test_model_registry_falls_back_to_anthropic_probe_model_when_catalog_seed_is_empty() -> None:
+    settings = Settings(
+        default_model="claude-sonnet-bootstrap",
+        default_provider="anthropic",
+        forgegate_baseline_enabled=False,
+        openai_api_enabled=False,
+        openai_codex_enabled=False,
+        gemini_enabled=False,
+        anthropic_enabled=True,
+        anthropic_probe_model="claude-sonnet-bootstrap",
+        anthropic_discovered_models=(),
+        generic_harness_enabled=False,
+        ollama_enabled=False,
+    )
+    registry = ModelRegistry(settings)
+
+    assert registry.has_model("claude-sonnet-bootstrap") is True
+    assert registry.default_model().id == "claude-sonnet-bootstrap"
+
+
+def test_model_registry_repairs_persisted_state_with_new_anthropic_bootstrap_models(tmp_path: Path) -> None:
+    state_path = tmp_path / "control_plane_state.json"
+    state_path.write_text(ControlPlaneStateRecord(providers=[]).model_dump_json(indent=2) + "\n", encoding="utf-8")
+    settings = Settings(
+        default_model="claude-3-5-sonnet-latest",
+        default_provider="anthropic",
+        forgegate_baseline_enabled=False,
+        openai_api_enabled=False,
+        openai_codex_enabled=False,
+        gemini_enabled=False,
+        anthropic_enabled=True,
+        generic_harness_enabled=False,
+        ollama_enabled=False,
+        control_plane_storage_backend="file",
+        control_plane_state_path=str(state_path),
+    )
+
+    registry = ModelRegistry(settings)
+
+    assert registry.has_model("claude-3-5-sonnet-latest") is True
+    repaired_state = ControlPlaneStateRecord.model_validate_json(state_path.read_text(encoding="utf-8"))
+    anthropic_provider = next(provider for provider in repaired_state.providers if provider.provider == "anthropic")
+    assert {model.id for model in anthropic_provider.managed_models} == {"claude-3-5-sonnet-latest"}
 
 
 def test_model_registry_prefers_default_provider_when_default_model_missing() -> None:

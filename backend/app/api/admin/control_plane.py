@@ -26,7 +26,7 @@ from app.api.admin.control_plane_oauth_targets_domain import (
 from app.api.admin.control_plane_provider_domain import ControlPlaneProviderDomainMixin
 from app.api.admin.control_plane_snapshot_domain import ControlPlaneSnapshotDomainMixin
 from app.api.admin.control_plane_truth_domain import ControlPlaneTruthDomainMixin
-from app.control_plane import HealthConfig, OAuthOperationRecord
+from app.control_plane import HealthConfig
 from app.core.model_registry import ModelRegistry
 from app.harness.service import HarnessService, get_harness_service
 from app.providers import ProviderRegistry
@@ -39,6 +39,7 @@ from app.storage.oauth_operations_repository import (
     OAuthOperationsRepository,
     get_oauth_operations_repository,
 )
+from app.tenancy import normalize_tenant_id
 from app.usage.analytics import UsageAnalyticsStore, get_usage_analytics_store
 from app.usage.service import UsageAccountingService
 
@@ -65,6 +66,7 @@ class ControlPlaneService(
         oauth_operations_repository: OAuthOperationsRepository | None = None,
     ):
         self._settings = settings
+        self._default_tenant_id = normalize_tenant_id(settings.bootstrap_tenant_id)
         self._registry = registry
         self._providers = providers
         self._usage_accounting = UsageAccountingService(settings)
@@ -84,7 +86,6 @@ class ControlPlaneService(
         self._last_bootstrap_readiness = (
             stored_state.last_bootstrap_readiness if stored_state else None
         )
-        self._oauth_operations: list[OAuthOperationRecord] = self._load_oauth_operations()
         if self._last_bootstrap_readiness is None:
             self._last_bootstrap_readiness = self._build_bootstrap_readiness_report()
         self._persist_state()

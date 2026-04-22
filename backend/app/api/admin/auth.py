@@ -2,17 +2,31 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, Request, status
 from fastapi.responses import JSONResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel, Field
 
-from app.api.admin.security import require_admin_session
+from app.api.admin.idempotency import unsupported_idempotency_response
+from app.api.admin.security import (
+    require_admin_session_allowing_password_rotation,
+    require_admin_write_session_allowing_password_rotation,
+)
 from app.governance.models import AuthenticatedAdmin
 from app.governance.service import GovernanceService, get_governance_service
+from app.readiness import (
+    RuntimeReadinessReport,
+    StartupValidationError,
+    build_operator_runtime_readiness_payload,
+    ensure_runtime_startup_validated,
+)
 
 router = APIRouter(prefix="/auth", tags=["admin-auth"])
 _bearer = HTTPBearer(auto_error=False)
+_AUTH_IDEMPOTENCY_MESSAGE = (
+    "Idempotency-Key is not supported for admin auth mutations because these routes mint or revoke sessions and "
+    "rotate passwords."
+)
 
 
 class LoginRequest(BaseModel):
@@ -25,16 +39,47 @@ class RotateOwnPasswordRequest(BaseModel):
     new_password: str = Field(min_length=8)
 
 
+class SignedOutBootstrapHint(BaseModel):
+    message: str = "Sign in to inspect bootstrap posture."
+
+
 @router.get("/bootstrap")
-def auth_bootstrap_status(service: GovernanceService = Depends(get_governance_service)) -> dict[str, object]:
-    return {"status": "ok", "bootstrap": service.bootstrap_status()}
+def auth_bootstrap_status() -> dict[str, object]:
+    return {"status": "ok", "bootstrap": SignedOutBootstrapHint().model_dump()}
+
+
+def _resolve_runtime_readiness(request: Request) -> RuntimeReadinessReport:
+    readiness = getattr(request.app.state, "runtime_readiness", None)
+    if isinstance(readiness, RuntimeReadinessReport) and getattr(request.app.state, "runtime_startup_checks", None) is not None:
+        return readiness
+    try:
+        ensure_runtime_startup_validated(request.app)
+    except StartupValidationError as exc:
+        request.app.state.runtime_startup_checks = exc.checks
+        request.app.state.runtime_readiness = RuntimeReadinessReport.from_checks(exc.checks)
+    readiness = getattr(request.app.state, "runtime_readiness", None)
+    if isinstance(readiness, RuntimeReadinessReport):
+        return readiness
+    return RuntimeReadinessReport.booting()
 
 
 @router.post("/login", status_code=status.HTTP_201_CREATED)
-def login(payload: LoginRequest, service: GovernanceService = Depends(get_governance_service)) -> dict[str, object]:
+def login(
+    payload: LoginRequest,
+    request: Request,
+    service: GovernanceService = Depends(get_governance_service),
+) -> dict[str, object]:
+    unsupported = unsupported_idempotency_response(request, message=_AUTH_IDEMPOTENCY_MESSAGE)
+    if unsupported is not None:
+        return unsupported
     try:
         result = service.login(payload.username, payload.password)
-    except ValueError:
+    except ValueError as exc:
+        if str(exc) == "login_rate_limited":
+            return JSONResponse(status_code=status.HTTP_429_TOO_MANY_REQUESTS, content={
+                "status": "error",
+                "error": {"type": "login_rate_limited", "message": "Too many failed login attempts. Try again later."},
+            })
         return JSONResponse(status_code=status.HTTP_401_UNAUTHORIZED, content={
             "status": "error",
             "error": {"type": "invalid_credentials", "message": "Invalid admin credentials."},
@@ -42,17 +87,33 @@ def login(payload: LoginRequest, service: GovernanceService = Depends(get_govern
     return {"status": "ok", **result.model_dump()}
 
 
+@router.get("/runtime-readiness")
+def runtime_readiness(
+    request: Request,
+    admin: AuthenticatedAdmin = Depends(require_admin_session_allowing_password_rotation),
+) -> dict[str, object]:
+    del admin
+    return {
+        "status": "ok",
+        "readiness": build_operator_runtime_readiness_payload(_resolve_runtime_readiness(request)),
+    }
+
+
 @router.get("/me")
-def me(admin: AuthenticatedAdmin = Depends(require_admin_session)) -> dict[str, object]:
+def me(admin: AuthenticatedAdmin = Depends(require_admin_session_allowing_password_rotation)) -> dict[str, object]:
     return {"status": "ok", "user": admin.model_dump()}
 
 
 @router.post("/logout")
 def logout(
-    admin: AuthenticatedAdmin = Depends(require_admin_session),
+    request: Request,
+    admin: AuthenticatedAdmin = Depends(require_admin_session_allowing_password_rotation),
     credentials: HTTPAuthorizationCredentials | None = Depends(_bearer),
     service: GovernanceService = Depends(get_governance_service),
 ) -> dict[str, object]:
+    unsupported = unsupported_idempotency_response(request, message=_AUTH_IDEMPOTENCY_MESSAGE)
+    if unsupported is not None:
+        return unsupported
     del admin
     if credentials and credentials.scheme.lower() == "bearer":
         service.revoke_admin_session(credentials.credentials)
@@ -62,9 +123,13 @@ def logout(
 @router.post("/rotate-password")
 def rotate_own_password(
     payload: RotateOwnPasswordRequest,
-    admin: AuthenticatedAdmin = Depends(require_admin_session),
+    request: Request,
+    admin: AuthenticatedAdmin = Depends(require_admin_write_session_allowing_password_rotation),
     service: GovernanceService = Depends(get_governance_service),
 ) -> object:
+    unsupported = unsupported_idempotency_response(request, message=_AUTH_IDEMPOTENCY_MESSAGE)
+    if unsupported is not None:
+        return unsupported
     try:
         user = service.rotate_own_admin_password(
             admin,

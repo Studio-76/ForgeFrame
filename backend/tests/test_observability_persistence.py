@@ -10,9 +10,23 @@ from app.usage.analytics import get_usage_analytics_store
 
 
 def _admin_headers(client: TestClient) -> dict[str, str]:
-    response = client.post("/admin/auth/login", json={"username": "admin", "password": "forgegate-admin"})
+    response = client.post(
+        "/admin/auth/login",
+        json={"username": "admin", "password": os.environ["FORGEGATE_BOOTSTRAP_ADMIN_PASSWORD"]},
+    )
     assert response.status_code == 201
-    return {"Authorization": f"Bearer {response.json()['access_token']}"}
+    headers = {"Authorization": f"Bearer {response.json()['access_token']}"}
+    if response.json()["user"]["must_rotate_password"] is True:
+        rotation = client.post(
+            "/admin/auth/rotate-password",
+            headers=headers,
+            json={
+                "current_password": os.environ["FORGEGATE_BOOTSTRAP_ADMIN_PASSWORD"],
+                "new_password": os.environ["FORGEGATE_BOOTSTRAP_ADMIN_PASSWORD"],
+            },
+        )
+        assert rotation.status_code == 200
+    return headers
 
 
 def test_usage_events_are_persisted_across_store_reload() -> None:
@@ -61,3 +75,56 @@ def test_health_events_are_persisted_across_store_reload() -> None:
     summary_after = reloaded_client.get("/admin/usage/", headers=_admin_headers(reloaded_client))
     assert summary_after.status_code == 200
     assert summary_after.json()["metrics"]["recorded_health_event_count"] >= 1
+
+
+def test_logs_operability_and_bootstrap_readiness_reflect_observability_signal_path() -> None:
+    client = TestClient(app)
+    headers = _admin_headers(client)
+
+    chat_response = client.post(
+        "/v1/chat/completions",
+        json={
+            "messages": [{"role": "user", "content": "operability signal"}],
+            "client": {"client_id": "observability-suite", "consumer": "tests", "integration": "pytest"},
+        },
+    )
+    assert chat_response.status_code == 200
+
+    missing_model = client.post(
+        "/v1/chat/completions",
+        json={
+            "model": "missing-operability-model",
+            "messages": [{"role": "user", "content": "record an error path"}],
+            "client": {"client_id": "observability-suite", "consumer": "tests", "integration": "pytest"},
+        },
+    )
+    assert missing_model.status_code == 404
+
+    health_response = client.post("/admin/providers/health/run", headers=headers)
+    assert health_response.status_code == 200
+
+    logs = client.get("/admin/logs/", headers=headers)
+    assert logs.status_code == 200
+    operability = logs.json()["operability"]
+    checks = {item["id"]: item for item in operability["checks"]}
+    assert operability["ready"] is True
+    assert checks["runtime_signal_path"]["ok"] is True
+    assert checks["health_signal_path"]["ok"] is True
+    assert checks["audit_signal_path"]["ok"] is True
+    assert checks["structured_runtime_context"]["ok"] is True
+    assert checks["tracing_scope_declared"]["ok"] is True
+    assert operability["metrics"]["runtime_errors"] >= 1
+    assert operability["metrics"]["red_metrics"]["requests"] >= 2
+    assert operability["metrics"]["queue_metrics"]["active_backlog"] >= 0
+    assert operability["metrics"]["dependency_metrics"]
+    assert operability["metrics"]["slo_indicators"]["request_volume"] >= 2
+    assert "trace_id" in operability["logging"]["structured_fields"]
+    assert "span_id" in operability["logging"]["structured_fields"]
+    assert operability["tracing"]["configured"] is True
+    assert "X-ForgeGate-Span-Id" in operability["tracing"]["emitted_headers"]
+
+    readiness = client.get("/admin/providers/bootstrap/readiness", headers=headers)
+    assert readiness.status_code == 200
+    readiness_checks = {item["id"]: item for item in readiness.json()["checks"]}
+    assert readiness_checks["observability_signal_path"]["ok"] is True
+    assert readiness_checks["observability_error_path"]["ok"] is True

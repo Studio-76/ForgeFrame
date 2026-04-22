@@ -1,16 +1,28 @@
 import { useEffect, useState } from "react";
 
+import { CONTROL_PLANE_ROUTES } from "../app/navigation";
+import { useAppSession } from "../app/session";
 import {
   fetchMutableSettings,
   patchMutableSettings,
   resetMutableSetting,
   type MutableSettingEntry,
 } from "../api/admin";
+import { PageIntro } from "../components/PageIntro";
 
 export function SettingsPage() {
   const [settings, setSettings] = useState<MutableSettingEntry[]>([]);
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [error, setError] = useState("");
+  const { session, sessionReady } = useAppSession();
+  const canMutate = sessionReady && session?.role === "admin" && !session.read_only;
+  const accessLabel = canMutate ? "Admin mutations enabled" : sessionReady ? "Read only" : "Checking access";
+  const accessTone = canMutate ? "success" : sessionReady ? "warning" : "neutral";
+  const readOnlyDescription = !sessionReady
+    ? "The page is checking the current session role before exposing admin-only settings controls."
+    : session?.role === "admin" && session.read_only
+      ? "This admin session is read-only. Open a standard admin session to save overrides or reset defaults."
+      : "Authenticated non-admin sessions can inspect effective settings here, while admin users perform override and reset actions.";
 
   const load = async () => {
     try {
@@ -36,13 +48,60 @@ export function SettingsPage() {
         : rawValue;
     const response = await patchMutableSettings({ [item.key]: value });
     setSettings(response.settings);
+    setDrafts(Object.fromEntries(response.settings.map((entry) => [entry.key, String(entry.effective_value)])));
   };
 
   return (
-    <section>
-      <h2>Settings</h2>
-      <p className="fg-muted">Mutable operational settings with persisted overrides and reset-to-default support.</p>
+    <section className="fg-page">
+      <PageIntro
+        eyebrow="Settings"
+        title="System Settings"
+        description="Mutable environment defaults, effective values, and reset-to-default support for the control plane."
+        question="Are you reviewing the current operating defaults or applying an admin-only configuration change?"
+        links={[
+          {
+            label: "System Settings",
+            to: CONTROL_PLANE_ROUTES.settings,
+            description: "Inspect current effective values and override posture.",
+            badge: canMutate ? undefined : "Read only",
+          },
+          {
+            label: "Usage & Costs",
+            to: CONTROL_PLANE_ROUTES.usage,
+            description: "Cross-check whether the change is tied to runtime traffic, cost, or alert pressure.",
+          },
+          {
+            label: "Accounts",
+            to: CONTROL_PLANE_ROUTES.accounts,
+            description: "Return to runtime access review when the work is identity-oriented instead of environment-oriented.",
+          },
+          sessionReady && session && session.role !== "viewer"
+            ? {
+                label: "Security & Policies",
+                to: CONTROL_PLANE_ROUTES.security,
+                description: session.role === "admin"
+                  ? "Open elevated-access workflow plus admin posture when the change touches access or security controls."
+                  : "Open the elevated-access request/start flow when the change requires operator security follow-up.",
+                badge: session.role === "admin" ? "Admin posture" : "Request flow",
+              }
+            : {
+                label: "Security & Policies",
+                to: CONTROL_PLANE_ROUTES.security,
+                description: "Reserved for operators and admins who can request elevated access or inspect security posture.",
+                badge: "Operator or admin",
+                disabled: true,
+              },
+        ]}
+        badges={[{ label: accessLabel, tone: accessTone }]}
+        note="Settings stay visible to authenticated roles, but save and reset actions remain admin-only so the page does not imply a broader mutation envelope than the backend exposes."
+      />
       {error ? <p className="fg-danger">{error}</p> : null}
+      {!canMutate ? (
+        <article className="fg-card">
+          <h3>Read-Only Settings Review</h3>
+          <p className="fg-muted">{readOnlyDescription}</p>
+        </article>
+      ) : null}
       <div className="fg-grid">
         {settings.map((item) => (
           <article key={item.key} className="fg-card">
@@ -50,17 +109,31 @@ export function SettingsPage() {
             <p className="fg-muted">{item.category} · {item.value_type} · overridden={String(item.overridden)}</p>
             <p>{item.description}</p>
             {item.value_type === "bool" ? (
-              <select value={drafts[item.key] ?? String(item.effective_value)} onChange={(event) => setDrafts((prev) => ({ ...prev, [item.key]: event.target.value }))}>
+              <select
+                aria-label={`${item.label} effective value`}
+                disabled={!canMutate}
+                value={drafts[item.key] ?? String(item.effective_value)}
+                onChange={(event) => setDrafts((prev) => ({ ...prev, [item.key]: event.target.value }))}
+              >
                 <option value="true">true</option>
                 <option value="false">false</option>
               </select>
             ) : (
-              <input value={drafts[item.key] ?? String(item.effective_value)} onChange={(event) => setDrafts((prev) => ({ ...prev, [item.key]: event.target.value }))} />
+              <input
+                aria-label={`${item.label} effective value`}
+                disabled={!canMutate}
+                value={drafts[item.key] ?? String(item.effective_value)}
+                onChange={(event) => setDrafts((prev) => ({ ...prev, [item.key]: event.target.value }))}
+              />
             )}
-            <div className="fg-row" style={{ marginTop: "0.75rem" }}>
-              <button type="button" onClick={() => void onSave(item)}>Save</button>
-              <button type="button" onClick={() => void resetMutableSetting(item.key).then(load)}>Reset</button>
-            </div>
+            {canMutate ? (
+              <div className="fg-row" style={{ marginTop: "0.75rem" }}>
+                <button type="button" onClick={() => void onSave(item)}>Save</button>
+                <button type="button" onClick={() => void resetMutableSetting(item.key).then(load)}>Reset</button>
+              </div>
+            ) : (
+              <p className="fg-muted fg-mt-sm">Admin access is required to save or reset this setting.</p>
+            )}
           </article>
         ))}
       </div>

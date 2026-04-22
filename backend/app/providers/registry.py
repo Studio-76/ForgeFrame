@@ -42,7 +42,11 @@ class ProviderRegistry:
 
     def get_provider_status(self, provider_name: str) -> dict[str, object]:
         adapter = self.get(provider_name)
-        capabilities = adapter.capabilities.model_dump()
+        status_capabilities = getattr(adapter, "status_capabilities", None)
+        if callable(status_capabilities):
+            capabilities = dict(status_capabilities())
+        else:
+            capabilities = adapter.capabilities.model_dump()
         return {
             "ready": adapter.is_ready(),
             "readiness_reason": adapter.readiness_reason(),
@@ -50,3 +54,12 @@ class ProviderRegistry:
             "discovery_supported": capabilities.get("discovery_support", False),
             "oauth_required": capabilities.get("oauth_required", False),
         }
+
+    def list_provider_statuses(self) -> list[dict[str, object]]:
+        return [
+            {
+                "provider": provider_name,
+                **self.get_provider_status(provider_name),
+            }
+            for provider_name in sorted(self._adapters)
+        ]

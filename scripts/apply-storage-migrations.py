@@ -20,7 +20,11 @@ def main() -> int:
         print(json.dumps({"status": "skipped", "reason": "no_postgresql_storage_targets"}, indent=2))
         return 0
 
-    reports = [apply_storage_migrations(target) for target in targets]
+    try:
+        reports = [apply_storage_migrations(target) for target in targets]
+    except ValueError as exc:
+        print(json.dumps({"status": "error", "reason": str(exc)}, indent=2), file=sys.stderr)
+        return 1
     print(json.dumps({"status": "ok", "reports": reports}, indent=2))
     return 0
 

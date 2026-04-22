@@ -3,8 +3,10 @@
 from functools import lru_cache
 from typing import Literal
 
-from pydantic import Field
+from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+from app.tenancy import DEFAULT_BOOTSTRAP_TENANT_ID
 
 
 class Settings(BaseSettings):
@@ -30,6 +32,13 @@ class Settings(BaseSettings):
     bootstrap_admin_username: str = "admin"
     bootstrap_admin_password: str = "forgegate-admin"
     admin_session_ttl_hours: int = 12
+    admin_login_rate_limit_attempts: int = 5
+    admin_login_rate_limit_window_minutes: int = 15
+    runtime_key_ttl_days: int = 90
+    runtime_key_rotation_warning_days: int = 14
+    impersonation_session_max_minutes: int = 30
+    break_glass_session_max_minutes: int = 60
+    audit_event_retention_limit: int = 1000
 
     forgegate_baseline_enabled: bool = True
     openai_api_enabled: bool = True
@@ -71,21 +80,21 @@ class Settings(BaseSettings):
     anthropic_probe_model: str = "claude-3-5-sonnet-latest"
     anthropic_discovered_models: tuple[str, ...] = ("claude-3-5-sonnet-latest",)
 
-    antigravity_enabled: bool = False
+    # Bridge-only OAuth/account targets are not runtime providers. Their
+    # operator controls are explicit probe/profile toggles instead of generic
+    # provider-enabled flags.
     antigravity_oauth_access_token: str = ""
     antigravity_probe_enabled: bool = False
     antigravity_probe_base_url: str = "https://api.antigravity.example/v1"
     antigravity_probe_model: str = "antigravity-beta"
     antigravity_bridge_profile_enabled: bool = False
 
-    github_copilot_enabled: bool = False
     github_copilot_oauth_access_token: str = ""
     github_copilot_probe_enabled: bool = False
     github_copilot_probe_base_url: str = "https://api.githubcopilot.example/v1"
     github_copilot_probe_model: str = "copilot-chat"
     github_copilot_bridge_profile_enabled: bool = False
 
-    claude_code_enabled: bool = False
     claude_code_oauth_access_token: str = ""
     claude_code_probe_enabled: bool = False
     claude_code_probe_base_url: str = "https://api.claudecode.example/v1"
@@ -103,6 +112,7 @@ class Settings(BaseSettings):
     pricing_codex_hypothetical_output_per_1m_tokens: float = 6.0
     pricing_internal_hypothetical_input_per_1m_tokens: float = 0.2
     pricing_internal_hypothetical_output_per_1m_tokens: float = 0.8
+    bootstrap_tenant_id: str = DEFAULT_BOOTSTRAP_TENANT_ID
     observability_storage_backend: Literal["postgresql", "file"] = "postgresql"
     observability_postgres_url: str = ""
     observability_events_path: str = "backend/.forgegate/observability_events.jsonl"
@@ -116,7 +126,15 @@ class Settings(BaseSettings):
     control_plane_state_path: str = "backend/.forgegate/control_plane_state.json"
     governance_storage_backend: Literal["postgresql", "file"] = "postgresql"
     governance_postgres_url: str = ""
+    governance_relational_dual_write_enabled: bool = True
+    governance_relational_reads_enabled: bool = False
     governance_state_path: str = "backend/.forgegate/governance_state.json"
+    execution_postgres_url: str = ""
+    execution_sqlite_path: str = "backend/.forgegate/execution.sqlite"
+    execution_max_attempts: int = 3
+    execution_retry_backoff_base_seconds: int = 30
+    execution_retry_backoff_max_seconds: int = 900
+    execution_retry_backoff_jitter_ratio: float = 0.2
     frontend_dist_path: str = "frontend/dist"
 
     bootstrap_model_catalog: tuple[tuple[str, str, str], ...] = Field(
@@ -130,6 +148,50 @@ class Settings(BaseSettings):
             ("llama3.2", "ollama", "Ollama"),
         )
     )
+
+    @staticmethod
+    def _validate_postgres_target(setting_name: str, database_url: str) -> None:
+        normalized = database_url.strip()
+        if not normalized:
+            raise ValueError(f"{setting_name} must be set when PostgreSQL storage is enabled.")
+        if not normalized.startswith("postgresql"):
+            raise ValueError(f"{setting_name} must use a postgresql:// or postgresql+ driver URL.")
+
+    @model_validator(mode="after")
+    def validate_operational_contract(self) -> "Settings":
+        if self.admin_auth_enabled:
+            if not self.bootstrap_admin_username.strip():
+                raise ValueError("FORGEGATE_BOOTSTRAP_ADMIN_USERNAME must be set when admin auth is enabled.")
+            if not self.bootstrap_admin_password.strip():
+                raise ValueError("FORGEGATE_BOOTSTRAP_ADMIN_PASSWORD must be set when admin auth is enabled.")
+
+        if not self.is_provider_enabled(self.default_provider):
+            raise ValueError("FORGEGATE_DEFAULT_PROVIDER must reference an enabled provider.")
+
+        if self.harness_storage_backend == "postgresql":
+            self._validate_postgres_target("FORGEGATE_HARNESS_POSTGRES_URL", self.harness_postgres_url)
+
+        for backend_name, storage_backend, database_url in [
+            (
+                "FORGEGATE_CONTROL_PLANE_POSTGRES_URL",
+                self.control_plane_storage_backend,
+                self.control_plane_postgres_url.strip() or self.harness_postgres_url,
+            ),
+            (
+                "FORGEGATE_OBSERVABILITY_POSTGRES_URL",
+                self.observability_storage_backend,
+                self.observability_postgres_url.strip() or self.harness_postgres_url,
+            ),
+            (
+                "FORGEGATE_GOVERNANCE_POSTGRES_URL",
+                self.governance_storage_backend,
+                self.governance_postgres_url.strip() or self.harness_postgres_url,
+            ),
+        ]:
+            if storage_backend == "postgresql":
+                self._validate_postgres_target(backend_name, database_url)
+
+        return self
 
     def is_provider_enabled(self, provider_name: str) -> bool:
         flag_map = {

@@ -6,6 +6,7 @@ from datetime import UTC, datetime
 
 from app.api.admin.control_plane_models import HealthConfigUpdateRequest
 from app.control_plane import HealthConfig, HealthStatusRecord
+from app.telemetry.context import TelemetryContext
 from app.usage.models import TokenUsage
 
 
@@ -27,7 +28,7 @@ class ControlPlaneHealthDomainMixin:
         self._persist_state()
         return self._health_config
 
-    def run_health_checks(self) -> dict[str, object]:
+    def run_health_checks(self, *, context: TelemetryContext | None = None) -> dict[str, object]:
         now = datetime.now(tz=UTC).isoformat()
         check_type = self._health_config.probe_mode
         active_runtime_providers = {model.provider for model in self._registry.list_active_models()}
@@ -58,6 +59,7 @@ class ControlPlaneHealthDomainMixin:
                         model=model.id,
                         check_type=check_type,
                         error_type="provider_disabled",
+                        context=context,
                     )
                 elif not runtime_status:
                     status_record.status = "unknown"
@@ -70,11 +72,12 @@ class ControlPlaneHealthDomainMixin:
                         model=model.id,
                         check_type=check_type,
                         error_type="not_configured",
+                        context=context,
                     )
                 else:
                     status_record.status = "healthy" if check_type != "discovery" else "discovery_only"
                     status_record.last_success_at = now
-                    self._record_health_check_cost(provider.provider, model.id, check_type)
+                    self._record_health_check_cost(provider.provider, model.id, check_type, context=context)
                 self._health_records[key] = status_record
                 self._analytics.record_health_status(
                     provider=status_record.provider,
@@ -83,6 +86,7 @@ class ControlPlaneHealthDomainMixin:
                     status=status_record.status,
                     readiness_reason=status_record.readiness_reason,
                     last_error=status_record.last_error,
+                    context=context,
                 )
         self._persist_state()
         return {
@@ -92,7 +96,14 @@ class ControlPlaneHealthDomainMixin:
             "health_records": [record.model_dump() for record in self._health_records.values()],
         }
 
-    def _record_health_check_cost(self, provider: str, model: str, check_type: str) -> None:
+    def _record_health_check_cost(
+        self,
+        provider: str,
+        model: str,
+        check_type: str,
+        *,
+        context: TelemetryContext | None = None,
+    ) -> None:
         usage = TokenUsage(input_tokens=8, output_tokens=4, total_tokens=12)
         cost = self._usage_accounting.costs_for_provider(
             provider=provider,
@@ -107,4 +118,5 @@ class ControlPlaneHealthDomainMixin:
             check_type=check_type,
             credential_type="health_probe",
             auth_source="control_plane",
+            context=context,
         )

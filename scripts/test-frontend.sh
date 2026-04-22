@@ -8,4 +8,5 @@ if [[ ! -d node_modules ]]; then
   npm ci
 fi
 
+npm run test
 exec npm run build

@@ -17,6 +17,12 @@
 - Compose setzt `FORGEGATE_HARNESS_STORAGE_BACKEND=postgresql`.
 - `FORGEGATE_HARNESS_POSTGRES_URL` kommt aus `.env.compose`.
 - Smoke-Script prüft Harness-Daten in der laufenden DB per `psql`.
+- Compose-Smoke prueft zusaetzlich den Observability-Signalpfad:
+  - Runtime-Request
+  - absichtlicher Runtime-Fehler
+  - Health-Run
+  - Admin-Usage/Admin-Logs
+  - Persistenz in `usage_events`, `error_events`, `health_events`
 
 ## 3) Integriertes Frontend im ForgeGate-Container
 

@@ -24,6 +24,8 @@ export type ProviderControlItem = {
   capabilities: Record<string, unknown>;
   tool_calling_level?: "none" | "partial" | "full";
   compatibility_tier?: "planned" | "beta" | "beta_plus";
+  runtime_readiness: "planned" | "partial" | "ready";
+  streaming_readiness: "planned" | "partial" | "ready";
   provider_axis?: string;
   auth_mechanism?: string;
   oauth_required: boolean;
@@ -37,6 +39,8 @@ export type ProviderControlItem = {
   harness_profile_count?: number;
   harness_run_count?: number;
   harness_needs_attention_count?: number;
+  harness_proof_status: "none" | "partial" | "proven";
+  harness_proven_profile_keys: string[];
   oauth_failure_count?: number;
   oauth_last_probe?: Record<string, unknown> | null;
   oauth_last_bridge_sync?: Record<string, unknown> | null;
@@ -137,6 +141,7 @@ export type HarnessProfile = {
   last_probe_status?: string;
   last_sync_at?: string | null;
   last_sync_status?: string;
+  last_sync_error?: string | null;
   model_inventory?: Array<Record<string, string | boolean | null>>;
   last_used_at?: string | null;
   last_used_model?: string | null;
@@ -162,10 +167,16 @@ export type AdminUser = {
   created_by?: string | null;
 };
 
+export type AdminPasswordRotationPayload = {
+  new_password: string;
+  must_rotate_password?: true;
+};
+
 export type AdminSecuritySession = {
   session_id: string;
   user_id: string;
   role: "admin" | "operator" | "viewer";
+  session_type: "standard" | "impersonation" | "break_glass";
   created_at: string;
   expires_at: string;
   last_used_at: string;
@@ -175,12 +186,69 @@ export type AdminSecuritySession = {
   display_name: string;
   user_status: string;
   active: boolean;
+  expired?: boolean;
+  elevated?: boolean;
+  read_only?: boolean;
+  issued_by_user_id?: string | null;
+  issued_by_username?: string | null;
+  approved_by_user_id?: string | null;
+  approved_by_username?: string | null;
+  approval_request_id?: string | null;
+  approval_reference?: string | null;
+  justification?: string | null;
+  notification_targets?: string[];
+};
+
+export type ElevatedAccessApproverPosture = {
+  state: "approval_available" | "recovery_required";
+  label: string;
+  approval_requires_distinct_admin: boolean;
+  eligible_admin_approver_count: number;
+  blocked_reason?: string | null;
+  primary_message: string;
+  secondary_message: string;
+};
+
+export type SecurityCredentialPolicy = {
+  human_sessions?: Record<string, unknown>;
+  elevated_access_requests?: {
+    approval_ttl_minutes: number;
+    gate_statuses: string[];
+    issuance_states: string[];
+    requester_claim_required: boolean;
+    self_approval_allowed: boolean;
+    approver_availability: ElevatedAccessApproverPosture;
+  };
+  service_account_keys?: Record<string, unknown>;
+  impersonation_sessions?: {
+    max_ttl_minutes: number;
+    approval_reference_required: boolean;
+    notification_targets_required: boolean;
+    approval_required_before_issue: boolean;
+    read_only: boolean;
+    write_capable_admin_routes: boolean;
+  };
+  break_glass_sessions?: {
+    max_ttl_minutes: number;
+    approval_reference_required: boolean;
+    notification_targets_required: boolean;
+    approval_required_before_issue: boolean;
+    eligible_roles: string[];
+  };
+  audit?: Record<string, unknown>;
+  rate_limits?: Record<string, unknown>;
+  observability?: Record<string, unknown>;
 };
 
 export type SecurityBootstrapResponse = {
   status: "ok";
-  bootstrap: Record<string, string | number | boolean>;
-  secret_posture: Array<Record<string, string | number | boolean>>;
+  credential_policy: SecurityCredentialPolicy;
+  elevated_access_approver_posture: ElevatedAccessApproverPosture;
+  bootstrap?: Record<string, string | number | boolean>;
+  secret_posture?: Array<Record<string, string | number | boolean>>;
+  harness_profiles?: Array<Record<string, string | number | boolean>>;
+  recent_rotations?: Array<Record<string, unknown>>;
+  secret_storage_controls?: Array<Record<string, unknown>>;
 };
 
 export type AdminSessionUser = {
@@ -189,6 +257,8 @@ export type AdminSessionUser = {
   username: string;
   display_name: string;
   role: "admin" | "operator" | "viewer";
+  session_type?: "standard" | "impersonation" | "break_glass";
+  read_only?: boolean;
   must_rotate_password?: boolean;
 };
 
@@ -235,7 +305,7 @@ export type DashboardResponse = {
   kpis: Record<string, number>;
   alerts: Array<Record<string, string | number>>;
   needs_attention: string[];
-  security: Record<string, string | number | boolean>;
+  security?: Record<string, string | number | boolean>;
 };
 
 export type CompatibilityMatrixRow = {
@@ -243,6 +313,8 @@ export type CompatibilityMatrixRow = {
   label: string;
   tier: string;
   ready: boolean;
+  runtime_readiness: "planned" | "partial" | "ready";
+  streaming_readiness: "planned" | "partial" | "ready";
   provider_axis: string;
   streaming: string;
   tool_calling: string;
@@ -250,15 +322,349 @@ export type CompatibilityMatrixRow = {
   discovery: string;
   oauth_required: boolean;
   ui_models: number;
+  proof_status: "none" | "partial" | "proven";
+  proven_profile_keys: string[];
   notes: string;
 };
 
 export type LogsResponse = {
   status: "ok";
-  audit_events: Array<Record<string, unknown>>;
+  audit_preview: AuditHistoryRow[];
+  audit_retention: {
+    eventLimit: number;
+    oldestAvailableAt?: string | null;
+    retentionLimited: boolean;
+    latestEventAt?: string | null;
+  };
   alerts: Array<Record<string, string | number>>;
   error_summary: Record<string, unknown>;
+  operability: {
+    ready: boolean;
+    checks: Array<Record<string, unknown>>;
+    metrics: Record<string, unknown>;
+    logging: Record<string, unknown>;
+    tracing: Record<string, unknown>;
+  };
 };
+
+export type AuditHistoryWindow = "24h" | "7d" | "30d" | "all";
+
+export type AuditHistoryStatus = "ok" | "warning" | "failed";
+
+export type AuditHistoryActorSummary = {
+  type: string;
+  id?: string | null;
+  label: string;
+  secondary?: string | null;
+};
+
+export type AuditHistoryTargetSummary = {
+  type: string;
+  typeLabel: string;
+  id?: string | null;
+  label: string;
+  secondary?: string | null;
+};
+
+export type AuditHistoryRow = {
+  eventId: string;
+  createdAt: string;
+  tenantId?: string | null;
+  companyId?: string | null;
+  actionKey: string;
+  actionLabel: string;
+  status: AuditHistoryStatus;
+  statusLabel: string;
+  actor: AuditHistoryActorSummary;
+  target: AuditHistoryTargetSummary;
+  summary: string;
+  detailAvailable: boolean;
+};
+
+export type AuditHistoryFilterOption = {
+  value: string;
+  label: string;
+};
+
+export type AuditHistoryResponse = {
+  status: "ok";
+  items: AuditHistoryRow[];
+  page: {
+    limit: number;
+    nextCursor?: string | null;
+    hasMore: boolean;
+  };
+  retention: {
+    eventLimit: number;
+    oldestAvailableAt?: string | null;
+    retentionLimited: boolean;
+  };
+  filters: {
+    applied: {
+      window: AuditHistoryWindow;
+      action?: string | null;
+      actor?: string | null;
+      targetType?: string | null;
+      targetId?: string | null;
+      status?: AuditHistoryStatus | null;
+    };
+    available: {
+      actions: AuditHistoryFilterOption[];
+      statuses: AuditHistoryFilterOption[];
+      targetTypes: AuditHistoryFilterOption[];
+    };
+  };
+  summary: {
+    totalInScope: number;
+    totalMatchingFilters: number;
+    latestEventAt?: string | null;
+  };
+};
+
+export type AuditHistoryDetailResponse = {
+  status: "ok";
+  event: {
+    eventId: string;
+    createdAt: string;
+    tenantId?: string | null;
+    companyId?: string | null;
+    actionKey: string;
+    actionLabel: string;
+    status: AuditHistoryStatus;
+    statusLabel: string;
+  };
+  actor: AuditHistoryActorSummary;
+  target: AuditHistoryTargetSummary;
+  summary: string;
+  outcome: string;
+  changeContext: Array<{ label: string; value: string }>;
+  changeContextUnavailable: boolean;
+  rawMetadata: Record<string, unknown>;
+  redactions: Array<{ path: string; reason: string }>;
+  relatedLinks: Array<{ label: string; href: string; kind: string }>;
+};
+
+export type AuditHistoryQuery = {
+  tenantId?: string | null;
+  companyId?: string | null;
+  window?: AuditHistoryWindow;
+  action?: string | null;
+  actor?: string | null;
+  targetType?: string | null;
+  targetId?: string | null;
+  status?: AuditHistoryStatus | null;
+  cursor?: string | null;
+  limit?: number | null;
+};
+
+export type AuditExportFormat = "csv" | "json";
+
+export type AuditExportWindow = "24h" | "7d" | "30d" | "all";
+
+export type AuditExportStatus = "ok" | "warning" | "failed";
+
+export type AuditExportRequest = {
+  format: AuditExportFormat;
+  window: AuditExportWindow;
+  action?: string | null;
+  status?: AuditExportStatus | null;
+  subject?: string | null;
+  limit?: number;
+};
+
+export type AuditExportResult = {
+  exportId: string;
+  filename: string;
+  status: "ready";
+  rowCount: number;
+  generatedAt: string | null;
+  blob: Blob;
+};
+
+export type ApprovalStatus = "open" | "approved" | "rejected" | "timed_out" | "cancelled";
+
+export type ApprovalSourceKind = "execution_run" | "elevated_access";
+
+export type ApprovalType = "execution_run" | "break_glass" | "impersonation";
+
+export type ApprovalSessionStatus = "not_issued" | "active" | "expired" | "revoked";
+
+export type ApprovalDecisionBlockedReason =
+  | "admin_role_required"
+  | "elevated_access_self_approval_forbidden"
+  | "approval_not_open"
+  | "elevated_access_active_session_conflict"
+  | string;
+
+export type ElevatedAccessRequestType = "break_glass" | "impersonation";
+
+export type ElevatedAccessRequest = {
+  request_id: string;
+  request_type: ElevatedAccessRequestType;
+  gate_status: ApprovalStatus;
+  issuance_status: "pending" | "issued";
+  requested_by_user_id: string;
+  target_user_id: string;
+  target_role: "admin" | "operator" | "viewer";
+  session_role: "admin" | "operator" | "viewer";
+  approval_reference: string;
+  justification: string;
+  notification_targets: string[];
+  duration_minutes: number;
+  approval_expires_at: string;
+  decision_note?: string | null;
+  decided_at?: string | null;
+  decided_by_user_id?: string | null;
+  decided_by_username?: string | null;
+  issued_at?: string | null;
+  issued_by_user_id?: string | null;
+  issued_by_username?: string | null;
+  issued_session_id?: string | null;
+  created_at: string;
+  updated_at: string;
+  approval_id: string;
+  requested_by_username?: string | null;
+  requested_by_display_name?: string | null;
+  target_username?: string | null;
+  target_display_name?: string | null;
+  ready_to_issue: boolean;
+  session_status: ApprovalSessionStatus;
+};
+
+export type ApprovalActorSummary = {
+  user_id?: string | null;
+  username?: string | null;
+  display_name?: string | null;
+  role?: string | null;
+};
+
+export type ApprovalSummary = {
+  approval_id: string;
+  source_kind: ApprovalSourceKind;
+  native_approval_id: string;
+  approval_type: ApprovalType;
+  status: ApprovalStatus;
+  title: string;
+  opened_at: string;
+  decided_at?: string | null;
+  expires_at?: string | null;
+  company_id?: string | null;
+  issue_id?: string | null;
+  requester?: ApprovalActorSummary | null;
+  target?: ApprovalActorSummary | null;
+  decision_actor?: ApprovalActorSummary | null;
+  ready_to_issue: boolean;
+  session_status?: ApprovalSessionStatus | null;
+};
+
+export type ApprovalDetail = ApprovalSummary & {
+  evidence: Record<string, unknown>;
+  source: Record<string, unknown>;
+  actions: {
+    can_approve?: boolean;
+    can_reject?: boolean;
+    decision_blocked_reason?: ApprovalDecisionBlockedReason | null;
+    approve_blocked_reason?: ApprovalDecisionBlockedReason | null;
+    reject_blocked_reason?: ApprovalDecisionBlockedReason | null;
+  };
+};
+
+export type ExecutionRunAttemptView = {
+  id: string;
+  attempt_no: number;
+  attempt_state: string;
+  retry_count: number;
+  scheduled_at: string;
+  started_at?: string | null;
+  finished_at?: string | null;
+  backoff_until?: string | null;
+  last_error_code?: string | null;
+  last_error_detail?: string | null;
+  version: number;
+};
+
+export type ExecutionRunCommandView = {
+  id: string;
+  command_type: string;
+  command_status: string;
+  actor_type: string;
+  actor_id: string;
+  idempotency_key: string;
+  accepted_transition?: string | null;
+  response_snapshot?: Record<string, unknown> | null;
+  issued_at: string;
+  completed_at?: string | null;
+};
+
+export type ExecutionRunOutboxView = {
+  id: string;
+  event_type: string;
+  publish_state: string;
+  available_at: string;
+  publish_attempts: number;
+  published_at?: string | null;
+  dead_lettered_at?: string | null;
+  last_publish_error?: string | null;
+  payload: Record<string, unknown>;
+};
+
+export type ExecutionRunSummary = {
+  run_id: string;
+  run_kind: string;
+  state: string;
+  issue_id?: string | null;
+  active_attempt_no: number;
+  failure_class?: string | null;
+  status_reason?: string | null;
+  current_attempt?: ExecutionRunAttemptView | null;
+  next_wakeup_at?: string | null;
+  terminal_at?: string | null;
+  result_summary?: Record<string, unknown> | null;
+  replayable: boolean;
+  created_at: string;
+  updated_at: string;
+};
+
+export type ExecutionRunDetail = ExecutionRunSummary & {
+  attempts: ExecutionRunAttemptView[];
+  commands: ExecutionRunCommandView[];
+  outbox: ExecutionRunOutboxView[];
+};
+
+export type ExecutionReplayAuditReference = {
+  event_id: string;
+  action: string;
+  target_type: string;
+  target_id?: string | null;
+  status: string;
+  tenant_id: string;
+  company_id?: string | null;
+};
+
+export type ExecutionReplayResult = {
+  command_id: string;
+  run_id: string;
+  attempt_id?: string | null;
+  run_state: string;
+  outbox_event?: string | null;
+  deduplicated: boolean;
+  replay_reason: string;
+  audit?: ExecutionReplayAuditReference | null;
+};
+
+export class AdminApiError extends Error {
+  status: number;
+  code?: string;
+  details?: unknown;
+
+  constructor(message: string, status: number, code?: string, details?: unknown) {
+    super(message);
+    this.name = "AdminApiError";
+    this.status = status;
+    this.code = code;
+    this.details = details;
+  }
+}
 
 const ADMIN_TOKEN_STORAGE_KEY = "forgegate_admin_token";
 
@@ -299,22 +705,95 @@ async function fetchJson<T>(path: string, init?: RequestInit): Promise<T> {
 
   if (!response.ok) {
     let message = `Failed to load ${path} (${response.status}).`;
+    let code: string | undefined;
+    let details: unknown;
     try {
-      const payload = (await response.json()) as { error?: { message?: string } };
+      const payload = (await response.json()) as {
+        error?: { type?: string; message?: string; details?: unknown };
+        detail?: string | { code?: string; message?: string };
+      };
       if (payload.error?.message) {
         message = payload.error.message;
+        code = payload.error.type;
+        details = payload.error.details;
+      } else if (typeof payload.detail === "string") {
+        message = payload.detail;
+      } else if (payload.detail?.message) {
+        message = payload.detail.message;
+        code = payload.detail.code;
       }
     } catch {
       // noop
     }
-    throw new Error(message);
+    throw new AdminApiError(message, response.status, code, details);
   }
 
   return (await response.json()) as T;
 }
 
-export function fetchAuthBootstrap() {
-  return fetchJson<{ status: string; bootstrap: Record<string, string | boolean> }>("/admin/auth/bootstrap");
+function parseContentDispositionFilename(header: string | null): string | null {
+  if (!header) {
+    return null;
+  }
+  const encodedMatch = /filename\*=UTF-8''([^;]+)/i.exec(header);
+  if (encodedMatch?.[1]) {
+    return decodeURIComponent(encodedMatch[1]);
+  }
+  const plainMatch = /filename=\"?([^\";]+)\"?/i.exec(header);
+  return plainMatch?.[1] ?? null;
+}
+
+function appendTenantScope(path: string, tenantId?: string | null): string {
+  const normalizedTenantId = (tenantId ?? "").trim();
+  if (!normalizedTenantId) {
+    return path;
+  }
+  const url = new URL(path, "https://forgegate.local");
+  url.searchParams.set("tenantId", normalizedTenantId);
+  const search = url.searchParams.toString();
+  return `${url.pathname}${search ? `?${search}` : ""}${url.hash}`;
+}
+
+function appendAuditScope(path: string, tenantId?: string | null, companyId?: string | null): string {
+  const normalizedTenantId = (tenantId ?? "").trim();
+  const normalizedCompanyId = (companyId ?? "").trim();
+  if (!normalizedTenantId && !normalizedCompanyId) {
+    return path;
+  }
+  const url = new URL(path, "https://forgegate.local");
+  if (normalizedTenantId) {
+    url.searchParams.set("tenantId", normalizedTenantId);
+  }
+  if (normalizedCompanyId) {
+    url.searchParams.set("companyId", normalizedCompanyId);
+  }
+  const search = url.searchParams.toString();
+  return `${url.pathname}${search ? `?${search}` : ""}${url.hash}`;
+}
+
+function appendQueryParams(
+  path: string,
+  params: Record<string, string | number | null | undefined>,
+): string {
+  const url = new URL(path, "https://forgegate.local");
+
+  Object.entries(params).forEach(([key, value]) => {
+    if (value === null || value === undefined) {
+      url.searchParams.delete(key);
+      return;
+    }
+
+    const normalized = String(value).trim();
+    if (!normalized) {
+      url.searchParams.delete(key);
+      return;
+    }
+
+    url.searchParams.set(key, normalized);
+  });
+
+  const search = url.searchParams.toString();
+  return `${url.pathname}${search ? `?${search}` : ""}${url.hash}`;
 }
 
 export function loginAdmin(payload: { username: string; password: string }) {
@@ -342,12 +821,12 @@ export function rotateOwnPassword(payload: { current_password: string; new_passw
   });
 }
 
-export function fetchDashboard() {
-  return fetchJson<DashboardResponse>("/admin/dashboard/");
+export function fetchDashboard(tenantId?: string | null) {
+  return fetchJson<DashboardResponse>(appendTenantScope("/admin/dashboard/", tenantId));
 }
 
-export function fetchAccounts() {
-  return fetchJson<{ status: string; accounts: GatewayAccount[] }>("/admin/accounts/");
+export function fetchAccounts(tenantId?: string | null) {
+  return fetchJson<{ status: string; accounts: GatewayAccount[] }>(appendTenantScope("/admin/accounts/", tenantId));
 }
 
 export function createAccount(payload: { label: string; provider_bindings?: string[]; notes?: string }) {
@@ -364,8 +843,8 @@ export function updateAccount(accountId: string, payload: { label?: string; prov
   });
 }
 
-export function fetchRuntimeKeys() {
-  return fetchJson<{ status: string; keys: RuntimeKey[] }>("/admin/keys/");
+export function fetchRuntimeKeys(tenantId?: string | null) {
+  return fetchJson<{ status: string; keys: RuntimeKey[] }>(appendTenantScope("/admin/keys/", tenantId));
 }
 
 export function createRuntimeKey(payload: { label: string; account_id?: string | null; scopes?: string[] }) {
@@ -406,12 +885,203 @@ export function resetMutableSetting(key: string) {
   });
 }
 
-export function fetchLogs() {
-  return fetchJson<LogsResponse>("/admin/logs/");
+export function fetchLogs(tenantId?: string | null, companyId?: string | null) {
+  return fetchJson<LogsResponse>(appendAuditScope("/admin/logs/", tenantId, companyId));
+}
+
+export function fetchAuditHistory(query: AuditHistoryQuery = {}) {
+  return fetchJson<AuditHistoryResponse>(appendQueryParams("/admin/logs/audit-events", {
+    tenantId: query.tenantId,
+    companyId: query.companyId,
+    window: query.window ?? "7d",
+    action: query.action,
+    actor: query.actor,
+    targetType: query.targetType,
+    targetId: query.targetId,
+    status: query.status,
+    cursor: query.cursor,
+    limit: query.limit,
+  }));
+}
+
+export function fetchAuditHistoryDetail(eventId: string, tenantId?: string | null, companyId?: string | null) {
+  return fetchJson<AuditHistoryDetailResponse>(appendQueryParams(`/admin/logs/audit-events/${encodeURIComponent(eventId)}`, {
+    tenantId,
+    companyId,
+  }));
+}
+
+export async function generateAuditExport(
+  payload: AuditExportRequest,
+  tenantId?: string | null,
+  companyId?: string | null,
+): Promise<AuditExportResult> {
+  const path = appendAuditScope("/admin/logs/audit-export", tenantId, companyId);
+  const token = getAdminToken();
+  const headers = new Headers({ "Content-Type": "application/json" });
+  if (token) {
+    headers.set("Authorization", `Bearer ${token}`);
+  }
+
+  const response = await fetch(path, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({
+      ...payload,
+      action: payload.action?.trim() ? payload.action.trim() : null,
+      status: payload.status ?? null,
+      subject: payload.subject?.trim() ? payload.subject.trim() : null,
+      limit: payload.limit ?? 250,
+    }),
+  });
+
+  if (!response.ok) {
+    let message = `Failed to generate audit export (${response.status}).`;
+    let code: string | undefined;
+    try {
+      const errorPayload = (await response.json()) as {
+        error?: { type?: string; message?: string };
+        detail?: string | { message?: string };
+      };
+      if (errorPayload.error?.message) {
+        message = errorPayload.error.message;
+        code = errorPayload.error.type;
+      } else if (typeof errorPayload.detail === "string") {
+        message = errorPayload.detail;
+      } else if (errorPayload.detail?.message) {
+        message = errorPayload.detail.message;
+      }
+    } catch {
+      // noop
+    }
+    throw new AdminApiError(message, response.status, code);
+  }
+
+  const blob = await response.blob();
+  return {
+    exportId: response.headers.get("X-ForgeGate-Audit-Export-Id") ?? "",
+    filename: parseContentDispositionFilename(response.headers.get("Content-Disposition"))
+      ?? `forgegate-audit-export.${payload.format}`,
+    status: "ready",
+    rowCount: Number(response.headers.get("X-ForgeGate-Audit-Export-Row-Count") ?? "0"),
+    generatedAt: response.headers.get("X-ForgeGate-Audit-Export-Generated-At"),
+    blob,
+  };
+}
+
+export function fetchApprovals(status: ApprovalStatus | "all" = "open") {
+  const params = new URLSearchParams();
+  if (status !== "all") {
+    params.set("status", status);
+  }
+  const suffix = params.size ? `?${params.toString()}` : "";
+  return fetchJson<{ status: string; approvals: ApprovalSummary[] }>(`/admin/approvals${suffix}`);
+}
+
+export function fetchApprovalDetail(approvalId: string) {
+  return fetchJson<{ status: string; approval: ApprovalDetail }>(`/admin/approvals/${encodeURIComponent(approvalId)}`);
+}
+
+export function approveApproval(approvalId: string, decisionNote: string) {
+  return fetchJson<{ status: string; approval: ApprovalDetail }>(`/admin/approvals/${encodeURIComponent(approvalId)}/approve`, {
+    method: "POST",
+    body: JSON.stringify({ decision_note: decisionNote }),
+  });
+}
+
+export function rejectApproval(approvalId: string, decisionNote: string) {
+  return fetchJson<{ status: string; approval: ApprovalDetail }>(`/admin/approvals/${encodeURIComponent(approvalId)}/reject`, {
+    method: "POST",
+    body: JSON.stringify({ decision_note: decisionNote }),
+  });
+}
+
+export function fetchExecutionRuns(options: { companyId: string; state?: string; limit?: number }) {
+  const params = new URLSearchParams({ companyId: options.companyId });
+  if (options.state && options.state !== "all") {
+    params.set("state", options.state);
+  }
+  if (options.limit) {
+    params.set("limit", String(options.limit));
+  }
+  return fetchJson<{ status: string; runs: ExecutionRunSummary[] }>(`/admin/execution/runs?${params.toString()}`);
+}
+
+export function fetchExecutionRunDetail(runId: string, options: { companyId: string }) {
+  const params = new URLSearchParams({ companyId: options.companyId });
+  return fetchJson<{ status: string; run: ExecutionRunDetail }>(`/admin/execution/runs/${encodeURIComponent(runId)}?${params.toString()}`);
+}
+
+export function replayExecutionRun(runId: string, payload: { companyId: string; reason: string; idempotencyKey?: string }) {
+  const params = new URLSearchParams({ companyId: payload.companyId });
+  return fetchJson<{ status: string; replay: ExecutionReplayResult }>(`/admin/execution/runs/${encodeURIComponent(runId)}/replay?${params.toString()}`, {
+    method: "POST",
+    body: JSON.stringify({
+      reason: payload.reason,
+      idempotency_key: payload.idempotencyKey?.trim() ? payload.idempotencyKey.trim() : null,
+    }),
+  });
 }
 
 export function fetchSecurityBootstrap() {
   return fetchJson<SecurityBootstrapResponse>("/admin/security/bootstrap");
+}
+
+export function fetchElevatedAccessRequests(gateStatus: ApprovalStatus | "all" = "all") {
+  return fetchJson<{ status: string; requests: ElevatedAccessRequest[] }>(
+    appendQueryParams("/admin/security/elevated-access-requests", {
+      gate_status: gateStatus === "all" ? null : gateStatus,
+    }),
+  );
+}
+
+export function createBreakGlassRequest(payload: {
+  approval_reference: string;
+  justification: string;
+  notification_targets: string[];
+  duration_minutes: number;
+}) {
+  return fetchJson<{ status: string; request: ElevatedAccessRequest }>("/admin/security/break-glass", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function createImpersonationRequest(payload: {
+  target_user_id: string;
+  approval_reference: string;
+  justification: string;
+  notification_targets: string[];
+  duration_minutes: number;
+}) {
+  return fetchJson<{ status: string; request: ElevatedAccessRequest }>("/admin/security/impersonations", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function cancelElevatedAccessRequest(requestId: string) {
+  return fetchJson<{ status: string; request: ElevatedAccessRequest }>(
+    `/admin/security/elevated-access-requests/${encodeURIComponent(requestId)}/cancel`,
+    {
+      method: "POST",
+      body: "{}",
+    },
+  );
+}
+
+export function issueElevatedAccessRequest(requestId: string) {
+  return fetchJson<{
+    status: string;
+    request: ElevatedAccessRequest;
+    access_token: string;
+    token_type: string;
+    expires_at: string;
+    user: AdminSessionUser;
+  }>(`/admin/security/elevated-access-requests/${encodeURIComponent(requestId)}/issue`, {
+    method: "POST",
+    body: "{}",
+  });
 }
 
 export function fetchAdminUsers() {
@@ -425,14 +1095,14 @@ export function createAdminUser(payload: { username: string; display_name: strin
   });
 }
 
-export function updateAdminUser(userId: string, payload: { display_name?: string; role?: string; status?: string; must_rotate_password?: boolean }) {
+export function updateAdminUser(userId: string, payload: { display_name?: string; role?: string; status?: string; must_rotate_password?: true }) {
   return fetchJson<{ status: string; user: AdminUser }>(`/admin/security/users/${userId}`, {
     method: "PATCH",
     body: JSON.stringify(payload),
   });
 }
 
-export function rotateAdminPassword(userId: string, payload: { new_password: string; must_rotate_password?: boolean }) {
+export function rotateAdminPassword(userId: string, payload: AdminPasswordRotationPayload) {
   return fetchJson<{ status: string; user: AdminUser }>(`/admin/security/users/${userId}/rotate-password`, {
     method: "POST",
     body: JSON.stringify(payload),
@@ -454,12 +1124,12 @@ export function fetchProviderSecretPosture() {
   return fetchJson<{ status: string; providers: Array<Record<string, string | number | boolean>> }>("/admin/security/secret-posture");
 }
 
-export function fetchProviderControlPlane(): Promise<ProviderControlPlaneResponse> {
-  return fetchJson<ProviderControlPlaneResponse>("/admin/providers/");
+export function fetchProviderControlPlane(tenantId?: string | null): Promise<ProviderControlPlaneResponse> {
+  return fetchJson<ProviderControlPlaneResponse>(appendTenantScope("/admin/providers/", tenantId));
 }
 
-export function fetchCompatibilityMatrix() {
-  return fetchJson<{ status: string; matrix: CompatibilityMatrixRow[] }>("/admin/providers/compatibility-matrix");
+export function fetchCompatibilityMatrix(tenantId?: string | null) {
+  return fetchJson<{ status: string; matrix: CompatibilityMatrixRow[] }>(appendTenantScope("/admin/providers/compatibility-matrix", tenantId));
 }
 
 export function createProvider(payload: { provider: string; label: string; integration_class?: string; template_id?: string | null; config: Record<string, string> }) {
@@ -511,8 +1181,8 @@ export function runHealthChecks() {
   });
 }
 
-export function fetchUsageSummary(window: "1h" | "24h" | "7d" | "all" = "24h"): Promise<UsageSummaryResponse> {
-  return fetchJson<UsageSummaryResponse>(`/admin/usage/?window=${window}`);
+export function fetchUsageSummary(window: "1h" | "24h" | "7d" | "all" = "24h", tenantId?: string | null): Promise<UsageSummaryResponse> {
+  return fetchJson<UsageSummaryResponse>(appendTenantScope(`/admin/usage/?window=${window}`, tenantId));
 }
 
 export function fetchHarnessTemplates() {
@@ -604,21 +1274,27 @@ export function fetchHarnessRuns(providerKey?: string, mode?: string, status?: s
 }
 
 
-export function fetchClientOperationalView(window: "1h" | "24h" | "7d" | "all" = "24h") {
-  return fetchJson<{ status: string; window: string; clients: Array<Record<string, string | number | boolean>> }>(`/admin/usage/clients?window=${window}`);
+export function fetchClientOperationalView(window: "1h" | "24h" | "7d" | "all" = "24h", tenantId?: string | null) {
+  return fetchJson<{ status: string; window: string; clients: Array<Record<string, string | number | boolean>> }>(
+    appendTenantScope(`/admin/usage/clients?window=${window}`, tenantId),
+  );
 }
 
-export function fetchProviderDrilldown(provider: string, window: "1h" | "24h" | "7d" | "all" = "24h") {
-  return fetchJson<{ status: string; window: string; drilldown: Record<string, unknown> }>(`/admin/usage/providers/${provider}?window=${window}`);
+export function fetchProviderDrilldown(provider: string, window: "1h" | "24h" | "7d" | "all" = "24h", tenantId?: string | null) {
+  return fetchJson<{ status: string; window: string; drilldown: Record<string, unknown> }>(
+    appendTenantScope(`/admin/usage/providers/${provider}?window=${window}`, tenantId),
+  );
 }
 
-export function fetchClientDrilldown(clientId: string, window: "1h" | "24h" | "7d" | "all" = "24h") {
-  return fetchJson<{ status: string; window: string; drilldown: Record<string, unknown> }>(`/admin/usage/clients/${encodeURIComponent(clientId)}?window=${window}`);
+export function fetchClientDrilldown(clientId: string, window: "1h" | "24h" | "7d" | "all" = "24h", tenantId?: string | null) {
+  return fetchJson<{ status: string; window: string; drilldown: Record<string, unknown> }>(
+    appendTenantScope(`/admin/usage/clients/${encodeURIComponent(clientId)}?window=${window}`, tenantId),
+  );
 }
 
 
-export function fetchBetaProviderTargets() {
-  return fetchJson<{ status: string; targets: BetaProviderTarget[] }>("/admin/providers/beta-targets");
+export function fetchBetaProviderTargets(tenantId?: string | null) {
+  return fetchJson<{ status: string; targets: BetaProviderTarget[] }>(appendTenantScope("/admin/providers/beta-targets", tenantId));
 }
 
 export function probeOauthAccountProvider(providerKey: string) {
@@ -628,12 +1304,16 @@ export function probeOauthAccountProvider(providerKey: string) {
   });
 }
 
-export function fetchOauthAccountTargets() {
-  return fetchJson<{ status: string; targets: Array<Record<string, string | boolean>> }>("/admin/providers/oauth-account/targets");
+export function fetchOauthAccountTargets(tenantId?: string | null) {
+  return fetchJson<{ status: string; targets: Array<Record<string, string | boolean>> }>(
+    appendTenantScope("/admin/providers/oauth-account/targets", tenantId),
+  );
 }
 
-export function fetchOauthOnboarding() {
-  return fetchJson<{ status: string; targets: Array<Record<string, unknown>> }>("/admin/providers/oauth-account/onboarding");
+export function fetchOauthOnboarding(tenantId?: string | null) {
+  return fetchJson<{ status: string; targets: Array<Record<string, unknown>> }>(
+    appendTenantScope("/admin/providers/oauth-account/onboarding", tenantId),
+  );
 }
 
 export function syncOauthAccountBridgeProfiles() {
@@ -650,10 +1330,12 @@ export function probeAllOauthAccountProviders() {
   });
 }
 
-export function fetchOauthAccountOperations() {
-  return fetchJson<{ status: string; operations: Array<Record<string, unknown>>; recent: Array<Record<string, unknown>>; total_operations: number }>("/admin/providers/oauth-account/operations");
+export function fetchOauthAccountOperations(tenantId?: string | null) {
+  return fetchJson<{ status: string; operations: Array<Record<string, unknown>>; recent: Array<Record<string, unknown>>; total_operations: number }>(
+    appendTenantScope("/admin/providers/oauth-account/operations", tenantId),
+  );
 }
 
 export function fetchBootstrapReadiness() {
-  return fetchJson<{ status: string; ready: boolean; checks: Array<Record<string, unknown>>; next_steps: string[] }>("/admin/providers/bootstrap/readiness");
+  return fetchJson<{ status: string; ready: boolean; checks: Array<Record<string, unknown>>; next_steps: string[]; checked_at?: string }>("/admin/providers/bootstrap/readiness");
 }

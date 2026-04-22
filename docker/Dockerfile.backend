@@ -24,7 +24,8 @@ ENV PYTHONUNBUFFERED=1 \
 COPY --from=backend-build /build/backend /app/backend
 RUN pip install --no-cache-dir /app/backend
 COPY scripts/ /app/scripts
+RUN chmod +x /app/scripts/start-forgegate.sh
 COPY --from=frontend-build /build/frontend/dist /app/frontend_dist
 
 EXPOSE 8000
-CMD ["uvicorn", "app.main:app", "--app-dir", "/app/backend", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["/app/scripts/start-forgegate.sh"]

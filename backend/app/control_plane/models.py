@@ -6,6 +6,8 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
+from app.tenancy import DEFAULT_BOOTSTRAP_TENANT_ID
+
 
 class ManagedModelRecord(BaseModel):
     id: str
@@ -83,6 +85,7 @@ class ControlPlaneBootstrapReadinessReport(BaseModel):
 
 
 class OAuthOperationRecord(BaseModel):
+    tenant_id: str = DEFAULT_BOOTSTRAP_TENANT_ID
     provider_key: str
     action: Literal["probe", "bridge_sync"]
     status: Literal["ok", "warning", "failed", "skipped"]
@@ -90,13 +93,30 @@ class OAuthOperationRecord(BaseModel):
     executed_at: str
 
 
+class CapabilityEvidenceRecord(BaseModel):
+    status: Literal["missing", "observed", "failed"] = "missing"
+    source: Literal["none", "oauth_probe", "runtime_non_stream", "runtime_stream", "runtime_tool_call"] = "none"
+    recorded_at: str | None = None
+    details: str = "No evidence recorded yet."
+
+
+class ProviderCapabilityEvidenceRecord(BaseModel):
+    runtime: CapabilityEvidenceRecord = Field(default_factory=lambda: CapabilityEvidenceRecord(details="No successful non-stream runtime traffic recorded yet."))
+    streaming: CapabilityEvidenceRecord = Field(default_factory=lambda: CapabilityEvidenceRecord(details="No successful streaming runtime traffic recorded yet."))
+    tool_calling: CapabilityEvidenceRecord = Field(default_factory=lambda: CapabilityEvidenceRecord(details="No successful tool-calling runtime traffic recorded yet."))
+    live_probe: CapabilityEvidenceRecord = Field(default_factory=lambda: CapabilityEvidenceRecord(details="No successful live probe recorded yet."))
+
+
 class RuntimeProviderTruthRecord(BaseModel):
     provider: str
     wired: bool = False
     ready: bool = False
     readiness_reason: str = "provider_not_wired"
+    runtime_readiness: Literal["planned", "partial", "ready"] = "planned"
+    streaming_readiness: Literal["planned", "partial", "ready"] = "planned"
     capabilities: dict[str, object] = Field(default_factory=dict)
     tool_calling_level: str = "none"
+    evidence: ProviderCapabilityEvidenceRecord = Field(default_factory=ProviderCapabilityEvidenceRecord)
     compatibility_tier: Literal["planned", "beta", "beta_plus"] = "planned"
     provider_axis: str = "unknown"
     auth_mechanism: str = "unknown"
@@ -109,9 +129,14 @@ class HarnessProviderTruthRecord(BaseModel):
     provider: str
     profile_count: int = 0
     enabled_profile_count: int = 0
+    runtime_profile_count: int = 0
+    model_less_enabled_profile_count: int = 0
     profiles_needing_attention: int = 0
     run_count: int = 0
     profile_keys: list[str] = Field(default_factory=list)
+    proof_status: Literal["none", "partial", "proven"] = "none"
+    successful_modes: list[str] = Field(default_factory=list)
+    proven_profile_keys: list[str] = Field(default_factory=list)
     last_failed_run: dict[str, object] | None = None
 
 
@@ -131,8 +156,11 @@ class ProviderUiTruthRecord(BaseModel):
     last_sync_error: str | None = None
     ready: bool = False
     readiness_reason: str = "provider_not_wired"
+    runtime_readiness: Literal["planned", "partial", "ready"] = "planned"
+    streaming_readiness: Literal["planned", "partial", "ready"] = "planned"
     capabilities: dict[str, object] = Field(default_factory=dict)
     tool_calling_level: str = "none"
+    evidence: ProviderCapabilityEvidenceRecord = Field(default_factory=ProviderCapabilityEvidenceRecord)
     compatibility_tier: str = "planned"
     provider_axis: str = "unknown"
     auth_mechanism: str = "unknown"
@@ -145,6 +173,8 @@ class ProviderUiTruthRecord(BaseModel):
     harness_enabled_profile_count: int = 0
     harness_needs_attention_count: int = 0
     harness_run_count: int = 0
+    harness_proof_status: Literal["none", "partial", "proven"] = "none"
+    harness_proven_profile_keys: list[str] = Field(default_factory=list)
     oauth_failure_count: int = 0
     oauth_last_probe: dict[str, object] | None = None
     oauth_last_bridge_sync: dict[str, object] | None = None

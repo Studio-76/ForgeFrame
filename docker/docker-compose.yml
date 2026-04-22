@@ -43,6 +43,8 @@ services:
       FORGEGATE_FRONTEND_DIST_PATH: /app/frontend_dist
     ports:
       - "${FORGEGATE_APP_PORT:-8000}:8000"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     volumes:
       - forgegate_app_data:/var/lib/forgegate
 

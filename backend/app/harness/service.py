@@ -20,8 +20,10 @@ from app.harness.models import (
     HarnessVerificationResult,
     HarnessVerificationRun,
 )
+from app.harness.redaction import redact_sensitive_payload
 from app.harness.store import HarnessStore
 from app.harness.templates import BUILTIN_TEMPLATES
+from app.request_metadata import forgegate_request_metadata_headers
 from app.settings.config import get_settings
 from app.storage.harness_repository import FileHarnessRepository, HarnessRunQuery, HarnessStoragePaths, PostgresHarnessRepository
 
@@ -103,32 +105,76 @@ class HarnessService:
     def get_profile(self, provider_key: str) -> HarnessProfileRecord:
         return self._store.get_profile(provider_key)
 
-    def list_runs(self, provider_key: str | None = None, *, mode: str | None = None, status: str | None = None, client_id: str | None = None, limit: int = 200) -> list[HarnessVerificationRun]:
+    def list_runs(
+        self,
+        provider_key: str | None = None,
+        *,
+        mode: str | None = None,
+        status: str | None = None,
+        client_id: str | None = None,
+        limit: int | None = 200,
+    ) -> list[HarnessVerificationRun]:
         return self._store.list_runs(HarnessRunQuery(provider_key=provider_key, mode=mode, status=status, client_id=client_id, limit=limit))
 
     def runs_summary(self, provider_key: str | None = None) -> dict[str, int]:
         return self._store.runs_summary(provider_key)
 
-    def build_request_preview(self, payload: HarnessPreviewRequest) -> dict[str, Any]:
+    def build_request_preview(
+        self,
+        payload: HarnessPreviewRequest,
+        *,
+        request_metadata: dict[str, str] | None = None,
+    ) -> dict[str, Any]:
         profile = self.get_profile(payload.provider_key)
+        rendered_messages = list(payload.messages) if payload.messages else [{"role": "user", "content": payload.message}]
         request_payload = self._render_template(
             profile.request_mapping.body_template,
             {
                 "model": payload.model,
-                "messages": [{"role": "user", "content": payload.message}],
+                "messages": rendered_messages,
                 "stream": payload.stream,
                 "tools": payload.tools,
                 "tool_choice": payload.tool_choice,
+                "temperature": payload.temperature,
+                "max_output_tokens": payload.max_output_tokens,
+                "metadata": payload.metadata,
             },
         )
         if payload.tools and "tools" not in request_payload:
             request_payload["tools"] = payload.tools
         if payload.tool_choice is not None and "tool_choice" not in request_payload:
             request_payload["tool_choice"] = payload.tool_choice
+        if payload.temperature is not None and "temperature" not in request_payload:
+            request_payload["temperature"] = payload.temperature
+        if payload.max_output_tokens is not None and "max_output_tokens" not in request_payload and "max_tokens" not in request_payload:
+            request_payload["max_tokens"] = payload.max_output_tokens
+        if payload.metadata and "metadata" not in request_payload:
+            request_payload["metadata"] = payload.metadata
         endpoint = f"{profile.endpoint_base_url.rstrip('/')}{profile.request_mapping.path}"
         headers = self._build_headers(profile)
         headers.update(profile.request_mapping.headers)
+        headers.update(forgegate_request_metadata_headers(request_metadata))
         return {"method": profile.request_mapping.method, "url": endpoint, "headers": headers, "json": request_payload}
+
+    def preview(self, payload: HarnessPreviewRequest) -> dict[str, Any]:
+        profile = self.get_profile(payload.provider_key)
+        preview = self.build_request_preview(payload)
+        self._store.record_run(
+            HarnessVerificationRun(
+                provider_key=profile.provider_key,
+                integration_class=profile.integration_class,
+                model=payload.model,
+                mode="preview",
+                status="ok",
+                success=True,
+                steps=[{"step": "request_rendering", "status": "ok"}],
+                executed_at=self._now_iso(),
+                client_id="control_plane",
+                consumer="control_plane",
+                integration="harness_preview",
+            )
+        )
+        return preview
 
     def dry_run(self, payload: HarnessPreviewRequest) -> dict[str, Any]:
         profile = self.get_profile(payload.provider_key)
@@ -141,12 +187,18 @@ class HarnessService:
         run = HarnessVerificationRun(
             provider_key=profile.provider_key,
             integration_class=profile.integration_class,
+            model=payload.model,
             mode="dry_run",
             status="ok",
             success=True,
             steps=[
                 {"step": "request_rendering", "status": "ok"},
                 {"step": "response_mapping", "status": "ok"},
+                {
+                    "step": "tool_calling_support",
+                    "status": "ok",
+                    "support": "supported" if profile.capabilities.tool_calling else "unsupported",
+                },
                 {"step": "stream_readiness", "status": "ok" if profile.stream_mapping.enabled else "skipped"},
             ],
             executed_at=self._now_iso(),
@@ -178,6 +230,7 @@ class HarnessService:
                 HarnessVerificationRun(
                     provider_key=profile.provider_key,
                     integration_class=profile.integration_class,
+                    model=model,
                     mode="verify",
                     status="failed",
                     success=False,
@@ -192,6 +245,13 @@ class HarnessService:
         steps.append({"step": "test_discovery", "status": "ok" if profile.discovery_enabled else "skipped"})
         steps.append({"step": "request_rendering", "status": "ok"})
         steps.append({"step": "response_mapping", "status": "ok"})
+        steps.append(
+            {
+                "step": "tool_calling_support",
+                "status": "ok",
+                "support": "supported" if profile.capabilities.tool_calling else "unsupported",
+            }
+        )
         steps.append({"step": "stream_readiness", "status": "ok" if (request.check_stream and profile.stream_mapping.enabled) else "skipped"})
 
         if request.live_probe:
@@ -213,6 +273,7 @@ class HarnessService:
             HarnessVerificationRun(
                 provider_key=profile.provider_key,
                 integration_class=profile.integration_class,
+                model=model,
                 mode="verify",
                 status="ok",
                 success=True,
@@ -228,34 +289,44 @@ class HarnessService:
         try:
             response = httpx.request(preview["method"], preview["url"], headers=preview["headers"], json=preview["json"], timeout=30)
         except httpx.RequestError as exc:
+            redacted_error = str(redact_sensitive_payload(str(exc)))
             run = HarnessVerificationRun(
                 provider_key=profile.provider_key,
                 integration_class=profile.integration_class,
+                model=payload.model,
                 mode="probe",
                 status="failed",
                 success=False,
                 steps=[{"step": "probe_request", "status": "failed"}],
-                error=str(exc),
+                error=redacted_error,
                 executed_at=self._now_iso(),
             )
             self._store.record_run(run)
-            raise RuntimeError(f"Harness probe request failed: {exc}") from exc
+            raise RuntimeError(f"Harness probe request failed: {redacted_error}") from exc
 
         body = response.json() if "json" in response.headers.get("content-type", "") else {"raw": response.text}
         parsed = self._parse_non_stream_response(profile, body, model=payload.model)
+        redacted_body = redact_sensitive_payload(body)
+        redacted_parsed = redact_sensitive_payload(parsed)
         success = response.status_code < 400
         run = HarnessVerificationRun(
             provider_key=profile.provider_key,
             integration_class=profile.integration_class,
+            model=payload.model,
             mode="probe",
             status="ok" if success else "failed",
             success=success,
             steps=[{"step": "probe_request", "status": "ok" if success else "failed", "status_code": response.status_code}],
-            error=None if success else str(body)[:500],
+            error=None if success else str(redacted_body)[:500],
             executed_at=self._now_iso(),
         )
         self._store.record_run(run)
-        return {"status_code": response.status_code, "parsed": parsed, "raw": body, "run": run.model_dump()}
+        return {
+            "status_code": response.status_code,
+            "parsed": redacted_parsed,
+            "raw": redacted_body,
+            "run": redact_sensitive_payload(run.model_dump()),
+        }
 
     def sync_profile_inventory(self, provider_key: str) -> HarnessProfileRecord:
         profile = self.get_profile(provider_key)
@@ -291,7 +362,7 @@ class HarnessService:
         self._store.record_run(HarnessVerificationRun(provider_key=profile.provider_key, integration_class=profile.integration_class, mode="sync", status="ok" if not stale else "warning", success=not bool(stale), steps=[{"step": "discovery", "status": "ok", "source": profile.capabilities.model_source}, {"step": "inventory_diff", "status": "ok" if not stale else "warning", "added": len(added), "removed": len(removed), "stale": len(stale)}], executed_at=self._now_iso()))
         return updated
 
-    def export_snapshot(self) -> dict[str, Any]:
+    def export_snapshot(self, *, redact_secrets: bool = True) -> dict[str, Any]:
         snapshot = self._store.export_snapshot()
         profiles = snapshot.get("profiles", [])
         runs = snapshot.get("runs", [])
@@ -302,6 +373,8 @@ class HarnessService:
             "run_count": len(runs),
             "failed_run_count": len([item for item in runs if not item.get("success")]),
         }
+        if redact_secrets:
+            return redact_sensitive_payload(snapshot)
         return snapshot
 
     def export_config_snapshot(self, *, redact_secrets: bool = True, include_runs: bool = True) -> dict[str, Any]:
@@ -313,8 +386,6 @@ class HarnessService:
                 "saved_at": profile.updated_at,
                 "profile": self._config_snapshot_from_profile(profile),
             }
-            if redact_secrets:
-                payload["profile"]["auth_value"] = "***redacted***"
             profiles.append(payload)
         snapshot = {
             "schema_version": 1,
@@ -329,6 +400,8 @@ class HarnessService:
             "profile_count": len(profiles),
             "revisions": sum(int(item.get("config_revision", 1)) for item in profiles),
         }
+        if redact_secrets:
+            return redact_sensitive_payload(snapshot)
         return snapshot
 
     def import_config_snapshot(self, request: HarnessImportRequest) -> dict[str, Any]:
@@ -371,10 +444,34 @@ class HarnessService:
             raise ValueError("revision_payload_invalid")
         return self.upsert_profile(HarnessProviderProfile(**target_payload))
 
-    def execute_non_stream(self, provider_key: str, *, model: str, messages: list[dict[str, Any]], tools: list[dict[str, Any]] | None = None, tool_choice: str | dict[str, Any] | None = None) -> dict[str, Any]:
+    def execute_non_stream(
+        self,
+        provider_key: str,
+        *,
+        model: str,
+        messages: list[dict[str, Any]],
+        tools: list[dict[str, Any]] | None = None,
+        tool_choice: str | dict[str, Any] | None = None,
+        temperature: float | None = None,
+        max_output_tokens: int | None = None,
+        metadata: dict[str, Any] | None = None,
+        request_metadata: dict[str, str] | None = None,
+    ) -> dict[str, Any]:
         profile = self.get_profile(provider_key)
-        message_text = str(messages[-1].get("content", "")) if messages else ""
-        preview = self.build_request_preview(HarnessPreviewRequest(provider_key=provider_key, model=model, message=message_text, stream=False, tools=tools or [], tool_choice=tool_choice))
+        preview = self.build_request_preview(
+            HarnessPreviewRequest(
+                provider_key=provider_key,
+                model=model,
+                messages=messages,
+                stream=False,
+                tools=tools or [],
+                tool_choice=tool_choice,
+                temperature=temperature,
+                max_output_tokens=max_output_tokens,
+                metadata=metadata or {},
+            ),
+            request_metadata=request_metadata,
+        )
         try:
             response = httpx.request(preview["method"], preview["url"], headers=preview["headers"], json=preview["json"], timeout=30)
         except httpx.RequestError as exc:
@@ -384,20 +481,50 @@ class HarnessService:
         payload = response.json()
         parsed = self._parse_non_stream_response(profile, payload, model=model)
         self._store.record_profile_usage(provider_key=provider_key, model=model, stream=False, total_tokens=int(parsed.get("total_tokens", 0)))
-        self._store.record_run(HarnessVerificationRun(provider_key=provider_key, integration_class=profile.integration_class, mode="runtime_non_stream", status="ok", success=True, steps=[{"step": "request_render", "status": "ok"}, {"step": "response_mapping", "status": "ok"}], executed_at=self._now_iso(), client_id="runtime", consumer="runtime", integration="generic_harness"))
+        self._store.record_run(HarnessVerificationRun(provider_key=provider_key, integration_class=profile.integration_class, model=model, mode="runtime_non_stream", status="ok", success=True, steps=[{"step": "request_render", "status": "ok"}, {"step": "response_mapping", "status": "ok"}], executed_at=self._now_iso(), client_id="runtime", consumer="runtime", integration="generic_harness"))
         return parsed
 
-    def execute_stream(self, provider_key: str, *, model: str, messages: list[dict[str, Any]], tools: list[dict[str, Any]] | None = None, tool_choice: str | dict[str, Any] | None = None):
+    def execute_stream(
+        self,
+        provider_key: str,
+        *,
+        model: str,
+        messages: list[dict[str, Any]],
+        tools: list[dict[str, Any]] | None = None,
+        tool_choice: str | dict[str, Any] | None = None,
+        temperature: float | None = None,
+        max_output_tokens: int | None = None,
+        metadata: dict[str, Any] | None = None,
+        request_metadata: dict[str, str] | None = None,
+    ):
+        from app.providers.openai_streaming import (
+            finalize_openai_tool_calls,
+            merge_openai_tool_call_chunks,
+        )
+
         profile = self.get_profile(provider_key)
         if not profile.stream_mapping.enabled:
             raise RuntimeError("Harness profile stream mapping is not enabled.")
-        message_text = str(messages[-1].get("content", "")) if messages else ""
-        preview = self.build_request_preview(HarnessPreviewRequest(provider_key=provider_key, model=model, message=message_text, stream=True, tools=tools or [], tool_choice=tool_choice))
+        preview = self.build_request_preview(
+            HarnessPreviewRequest(
+                provider_key=provider_key,
+                model=model,
+                messages=messages,
+                stream=True,
+                tools=tools or [],
+                tool_choice=tool_choice,
+                temperature=temperature,
+                max_output_tokens=max_output_tokens,
+                metadata=metadata or {},
+            ),
+            request_metadata=request_metadata,
+        )
 
         collected = ""
         usage = {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}
         finish_reason = "stop"
         saw_done = False
+        tool_call_chunks: dict[int, dict[str, Any]] = {}
 
         try:
             with httpx.stream(preview["method"], preview["url"], headers=preview["headers"], json=preview["json"], timeout=60) as response:
@@ -421,6 +548,9 @@ class HarnessService:
                     if delta:
                         collected += str(delta)
                         yield {"event": "delta", "delta": str(delta)}
+                    tool_calls = self._extract(chunk, profile.stream_mapping.tool_calls_path, default=[])
+                    if isinstance(tool_calls, list):
+                        merge_openai_tool_call_chunks(tool_call_chunks, tool_calls)
                     finish_reason = str(self._extract(chunk, profile.stream_mapping.finish_reason_path, default=finish_reason) or finish_reason)
                     usage["prompt_tokens"] = int(self._extract(chunk, profile.stream_mapping.usage_prompt_tokens_path, default=usage["prompt_tokens"]) or usage["prompt_tokens"])
                     usage["completion_tokens"] = int(self._extract(chunk, profile.stream_mapping.usage_completion_tokens_path, default=usage["completion_tokens"]) or usage["completion_tokens"])
@@ -432,8 +562,14 @@ class HarnessService:
             raise RuntimeError("Stream closed without done marker or usable payload.")
 
         self._store.record_profile_usage(provider_key=provider_key, model=model, stream=True, total_tokens=int(usage.get("total_tokens", 0)))
-        self._store.record_run(HarnessVerificationRun(provider_key=provider_key, integration_class=profile.integration_class, mode="runtime_stream", status="ok", success=True, steps=[{"step": "stream_readiness", "status": "ok"}, {"step": "stream_done", "status": "ok", "saw_done": saw_done}], executed_at=self._now_iso(), client_id="runtime", consumer="runtime", integration="generic_harness"))
-        yield {"event": "done", "finish_reason": finish_reason, "usage": usage, "content": collected}
+        self._store.record_run(HarnessVerificationRun(provider_key=provider_key, integration_class=profile.integration_class, model=model, mode="runtime_stream", status="ok", success=True, steps=[{"step": "stream_readiness", "status": "ok"}, {"step": "stream_done", "status": "ok", "saw_done": saw_done}], executed_at=self._now_iso(), client_id="runtime", consumer="runtime", integration="generic_harness"))
+        yield {
+            "event": "done",
+            "finish_reason": finish_reason,
+            "usage": usage,
+            "content": collected,
+            "tool_calls": finalize_openai_tool_calls(tool_call_chunks),
+        }
 
     def _parse_non_stream_response(self, profile: HarnessProfileRecord, payload: dict[str, Any], *, model: str) -> dict[str, Any]:
         return {

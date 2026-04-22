@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from app.harness import HarnessImportRequest, HarnessPreviewRequest, HarnessProviderProfile, HarnessVerificationRequest
+from app.harness.redaction import redact_sensitive_payload as _redact_sensitive_payload
 
 
 class ControlPlaneHarnessDomainMixin:
@@ -22,7 +23,7 @@ class ControlPlaneHarnessDomainMixin:
         return self._harness.list_profiles()
 
     def harness_preview(self, payload: HarnessPreviewRequest) -> dict[str, object]:
-        preview = self._harness.build_request_preview(payload)
+        preview = self._harness.preview(payload)
         return {"status": "ok", "preview": preview}
 
     def harness_dry_run(self, payload: HarnessPreviewRequest) -> dict[str, object]:
@@ -57,7 +58,7 @@ class ControlPlaneHarnessDomainMixin:
                 client_id="control_plane",
                 profile_key=payload.provider_key,
             )
-        return {"status": "ok", **result}
+        return _redact_sensitive_payload({"status": "ok", **result})
 
     def verify_harness_profile(self, payload: HarnessVerificationRequest) -> dict[str, object]:
         result = self._harness.verify_profile(payload)
@@ -110,12 +111,12 @@ class ControlPlaneHarnessDomainMixin:
             runs_by_provider[run.provider_key] = runs_by_provider.get(run.provider_key, 0) + 1
         return {
             "status": "ok",
-            "runs": [item.model_dump() for item in runs],
+            "runs": [_redact_sensitive_payload(item.model_dump()) for item in runs],
             "summary": self._harness.runs_summary(provider_key),
             "ops": {
                 "profile_count": len(profiles),
                 "profiles_needing_attention": len([profile for profile in profiles if profile.needs_attention]),
                 "runs_by_provider": runs_by_provider,
-                "last_failed_run": last_failed.model_dump() if last_failed else None,
+                "last_failed_run": _redact_sensitive_payload(last_failed.model_dump()) if last_failed else None,
             },
         }

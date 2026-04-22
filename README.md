@@ -97,6 +97,12 @@ Für diese Provider sind im Zielbild relevant:
 - Fehler-/Observability-Achse
 - UI-/Control-Plane-Sicht
 
+Aktuelle Beta-Wahrheit im Repo:
+
+- OpenAI Codex und Gemini haben native Runtime-Pfade, bleiben aber solange **bewusst partiell**, bis echte Probe- oder Runtime-Evidenz im Control Plane vorliegt.
+- Antigravity, GitHub Copilot und Claude Code bleiben in der aktuellen Beta **Onboarding-/Bridge-Achsen** und gelten nicht als native Live-Runtime-Wahrheit.
+- Ein nativer Anthropic-`/messages`-Pfad kann im Runtime-Core verdrahtet sein, bleibt aber bewusst **außerhalb der aktuellen vier Produktachsen**, bis ForgeGate dafür eine ehrliche Taxonomie besitzt. Die Control Plane darf Anthropic daher nicht als generischen OpenAI-kompatiblen Provider ausweisen.
+
 ## Sonstige Cloud-Provider
 ForgeGate soll eine **möglichst kompatible OpenAI-Schnittstelle** für sonstige Provider bieten, damit viele OpenAI-ähnliche Dienste **ohne separates Zwischentool** angebunden werden können.
 
@@ -139,6 +145,22 @@ ForgeGate soll für Tools und Clients eine **möglichst kompatible OpenAI-Schnit
   - hypothetical
   - avoided
 
+Der docker-first Operability-Pfad ist jetzt reproduzierbar pruefbar:
+
+- `bash scripts/compose-smoke.sh`
+  - erzeugt einen echten Runtime-Request ueber `forgegate_baseline`
+  - erzwingt einen kontrollierten Runtime-Fehler fuer den Error-Ledger
+  - fuehrt `POST /admin/providers/health/run` aus
+  - beweist an einer temporaeren Pre-`0007`-Postgres-DB, dass der Container-Startup die Storage-Migrationen vor der Runtime-Validierung nachzieht
+  - validiert `/admin/usage/`, `/admin/logs/` und die PostgreSQL-Tabellen `usage_events`, `error_events`, `health_events`
+- `bash scripts/compose-ollama-smoke.sh`
+  - bleibt bewusst ausserhalb des Default-Release-Gates und startet weiterhin nur `forgegate + postgres`
+  - setzt eine von innen aus dem ForgeGate-Container erreichbare `FORGEGATE_OLLAMA_BASE_URL` sowie ein vorhandenes `FORGEGATE_OLLAMA_DEFAULT_MODEL` voraus
+  - beweist fuer die lokale Achse `/health`, Ollama-Readiness im Provider-Truth, `/v1/models`, `/v1/chat/completions`, SSE-Streaming und den expliziten `provider_unsupported_feature`-Fehlerpfad fuer Tool Calling
+- `bash scripts/bootstrap-forgegate.sh`
+  - fuehrt denselben Observability-Smoke im normalen Bootstrap aus
+  - schreibt den finalen Readiness-Report nach allen Smokes nach `/tmp/forgegate-bootstrap-readiness.json`
+
 ## UI / Control Plane
 - Provider- und Profilverwaltung
 - Modellinventar
@@ -156,6 +178,26 @@ ForgeGate soll für Tools und Clients eine **möglichst kompatible OpenAI-Schnit
 - Frontend im ForgeGate-Container integriert
 - Betrieb per Docker Compose
 - später Bootstrap-/Installer-Routine für Anwender
+
+## Backup & Restore
+
+Der Compose-Pfad hat jetzt eine reproduzierbare Recovery-Automation:
+
+- `bash scripts/backup-forgegate.sh`
+  - erstellt einen PostgreSQL-Custom-Dump unter `.forgegate/backups/`
+- `bash scripts/restore-forgegate.sh <dump> <target_db>`
+  - stellt absichtlich standardmaessig in eine neue Datenbank wieder her
+  - ein Ueberschreiben der Quell-DB bleibt ein explizites Opt-in
+- `bash scripts/compose-backup-restore-smoke.sh`
+  - nimmt einen echten Dump der laufenden Compose-Datenbank
+  - stellt ihn in eine temporaere Verify-DB wieder her
+  - vergleicht die Row-Counts aller User-Tabellen als Recovery-Check
+
+`bash scripts/bootstrap-forgegate.sh` fuehrt den normalen Compose-Smoke jetzt zusammen mit dem Backup/Restore-Smoke aus, sofern `FORGEGATE_BOOTSTRAP_SKIP_RESTORE_SMOKE` nicht auf `1` gesetzt ist.
+
+Der repo-eigene Release-Gate `bash scripts/release-validate.sh` fuehrt jetzt neben Backend-/Frontend-Checks und `scripts/compose-smoke.sh` auch `scripts/compose-backup-restore-smoke.sh` sowie einen nicht-destruktiven Retention-Guard-Dry-Run aus. Damit wird die Recovery-Voraussetzung fuer spaetere Archive-Purges im Standard-Releasepfad sichtbar geprueft; `--apply` und echtes Purging bleiben bewusste Operator-Schritte.
+
+Die Ollama-/Local-Achse bleibt absichtlich ein separater Operator-Check: `scripts/release-validate.sh` behaelt das Default-Zielbild bei zwei Services, waehrend `bash scripts/compose-ollama-smoke.sh` nur dann zusaetzliche Release-Evidenz liefert, wenn ein echtes lokales Ollama-Endpoint erreichbar und mit einem Modell vorbereitet ist.
 
 ---
 

@@ -1,8 +1,17 @@
+import json
+
 import pytest
 from fastapi.testclient import TestClient
 
 from app.main import app
-from app.providers import ProviderModelNotFoundError, ProviderPayloadTooLargeError, ProviderRateLimitError, ProviderStreamEvent
+from app.providers import (
+    ProviderBadRequestError,
+    ProviderModelNotFoundError,
+    ProviderPayloadTooLargeError,
+    ProviderRateLimitError,
+    ProviderStreamEvent,
+    ProviderStreamInterruptedError,
+)
 from app.providers.openai_api.adapter import OpenAIAPIAdapter
 from app.usage.models import CostBreakdown, TokenUsage
 
@@ -58,10 +67,12 @@ def test_chat_endpoint_external_openai_success_path(mock_openai_success: None) -
 
     assert response.status_code == 200
     body = response.json()
-    assert body["provider"] == "openai_api"
     assert body["choices"][0]["message"]["content"] == "openai-success"
     assert body["usage"]["total_tokens"] == 15
     assert body["cost"]["actual_cost"] >= 0.0
+    assert "provider" not in body
+    assert "credential_type" not in body
+    assert "auth_source" not in body
 
 
 def test_chat_endpoint_external_openai_stream_success_path(mock_openai_stream_success: None) -> None:
@@ -81,6 +92,8 @@ def test_chat_endpoint_external_openai_stream_success_path(mock_openai_stream_su
     assert "stream" in raw
     assert '"usage": {"input_tokens": 12' in raw
     assert "[DONE]" in raw
+    assert '"provider"' not in raw
+    assert "openai_api" not in raw
 
 
 def test_chat_endpoint_openai_not_configured_error(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -96,7 +109,7 @@ def test_chat_endpoint_openai_not_configured_error(monkeypatch: pytest.MonkeyPat
     assert response.status_code == 503
     error = response.json()["error"]
     assert error["type"] == "provider_not_ready"
-    assert error["provider"] == "openai_api"
+    assert "provider" not in error
 
 
 def test_chat_endpoint_openai_rate_limit_maps_to_429(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -113,6 +126,28 @@ def test_chat_endpoint_openai_rate_limit_maps_to_429(monkeypatch: pytest.MonkeyP
     )
     assert response.status_code == 429
     assert response.json()["error"]["type"] == "provider_rate_limited"
+
+
+def test_chat_endpoint_openai_rate_limit_emits_retry_envelope_headers(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("FORGEGATE_OPENAI_API_KEY", "test-key")
+
+    def _fake_post(self, payload: dict) -> dict:
+        del payload
+        raise ProviderRateLimitError("openai_api", "rate limited", retry_after_seconds=17)
+
+    monkeypatch.setattr(OpenAIAPIAdapter, "_post_chat_completion", _fake_post)
+    response = client.post(
+        "/v1/chat/completions",
+        json={"messages": [{"role": "user", "content": "Ping external"}], "model": "gpt-4.1-mini"},
+        headers={"X-Request-Id": "req_rate_limit_envelope_1"},
+    )
+
+    assert response.status_code == 429
+    assert response.headers["Retry-After"] == "17"
+    assert response.headers["X-ForgeGate-Request-Id"] == "req_rate_limit_envelope_1"
+    assert response.headers["X-ForgeGate-Correlation-Id"] == "req_rate_limit_envelope_1"
+    assert response.headers["X-ForgeGate-Causation-Id"] == "req_rate_limit_envelope_1"
+    assert response.json()["error"]["retry_after_seconds"] == 17
 
 
 def test_chat_endpoint_openai_payload_too_large_maps_to_413(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -176,3 +211,121 @@ def test_chat_endpoint_openai_model_not_found_maps_to_404(monkeypatch: pytest.Mo
     )
     assert response.status_code == 404
     assert response.json()["error"]["type"] == "provider_model_not_found"
+
+
+def test_chat_endpoint_sanitizes_upstream_provider_error_message(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("FORGEGATE_OPENAI_API_KEY", "test-key")
+
+    def _fake_post(self, payload: dict) -> dict:
+        del payload
+        raise ProviderBadRequestError(
+            "openai_api",
+            "OpenAI rejected request (400): upstream-body secret_token=sk-live-123 prompt=tenant-a",
+        )
+
+    monkeypatch.setattr(OpenAIAPIAdapter, "_post_chat_completion", _fake_post)
+    response = client.post(
+        "/v1/chat/completions",
+        json={"messages": [{"role": "user", "content": "sanitize chat"}], "model": "gpt-4.1-mini"},
+    )
+
+    assert response.status_code == 400
+    error = response.json()["error"]
+    assert error["type"] == "provider_bad_request"
+    assert error["message"] == "Selected provider rejected the request."
+    payload = json.dumps(response.json())
+    assert "secret_token" not in payload
+    assert "sk-live-123" not in payload
+    assert "tenant-a" not in payload
+    assert "upstream-body" not in payload
+
+
+def test_responses_endpoint_sanitizes_upstream_provider_error_message(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("FORGEGATE_OPENAI_API_KEY", "test-key")
+
+    def _fake_post(self, payload: dict) -> dict:
+        del payload
+        raise ProviderBadRequestError(
+            "openai_api",
+            "OpenAI rejected request (400): upstream-body secret_token=sk-live-456 prompt=tenant-b",
+        )
+
+    monkeypatch.setattr(OpenAIAPIAdapter, "_post_chat_completion", _fake_post)
+    response = client.post(
+        "/v1/responses",
+        json={"input": "sanitize responses", "model": "gpt-4.1-mini"},
+    )
+
+    assert response.status_code == 400
+    error = response.json()["error"]
+    assert error["type"] == "provider_bad_request"
+    assert error["message"] == "Selected provider rejected the request."
+    payload = json.dumps(response.json())
+    assert "secret_token" not in payload
+    assert "sk-live-456" not in payload
+    assert "tenant-b" not in payload
+    assert "upstream-body" not in payload
+
+
+def test_chat_stream_sanitizes_provider_stream_error_message(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("FORGEGATE_OPENAI_API_KEY", "test-key")
+
+    def _fake_stream(self, payload: dict, messages: list[dict]):
+        del payload, messages
+        yield ProviderStreamEvent(event="delta", delta="partial")
+        raise ProviderStreamInterruptedError(
+            "openai_api",
+            "Network error while streaming OpenAI API: secret_token=sk-live-789 prompt=tenant-c",
+        )
+
+    monkeypatch.setattr(OpenAIAPIAdapter, "_stream_chat_completion", _fake_stream)
+    with client.stream(
+        "POST",
+        "/v1/chat/completions",
+        json={
+            "messages": [{"role": "user", "content": "sanitize stream"}],
+            "model": "gpt-4.1-mini",
+            "stream": True,
+        },
+    ) as response:
+        assert response.status_code == 200
+        raw = "".join(response.iter_text())
+
+    assert "Selected provider stream was interrupted." in raw
+    assert '"provider"' not in raw
+    assert "openai_api" not in raw
+    assert "secret_token" not in raw
+    assert "sk-live-789" not in raw
+    assert "tenant-c" not in raw
+
+
+def test_responses_stream_sanitizes_provider_stream_error_message(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("FORGEGATE_OPENAI_API_KEY", "test-key")
+
+    def _fake_stream(self, payload: dict, messages: list[dict]):
+        del payload, messages
+        yield ProviderStreamEvent(event="delta", delta="partial")
+        raise ProviderStreamInterruptedError(
+            "openai_api",
+            "Network error while streaming OpenAI API: secret_token=sk-live-000 prompt=tenant-d",
+        )
+
+    monkeypatch.setattr(OpenAIAPIAdapter, "_stream_chat_completion", _fake_stream)
+    with client.stream(
+        "POST",
+        "/v1/responses",
+        json={
+            "input": "sanitize responses stream",
+            "model": "gpt-4.1-mini",
+            "stream": True,
+        },
+    ) as response:
+        assert response.status_code == 200
+        raw = "".join(response.iter_text())
+
+    assert "Selected provider stream was interrupted." in raw
+    assert '"provider"' not in raw
+    assert "openai_api" not in raw
+    assert "secret_token" not in raw
+    assert "sk-live-000" not in raw
+    assert "tenant-d" not in raw

@@ -1,6 +1,7 @@
 """Control-plane domain models and helpers."""
 
 from app.control_plane.models import (
+    CapabilityEvidenceRecord,
     ControlPlaneBootstrapCheck,
     ControlPlaneBootstrapReadinessReport,
     ControlPlaneStateRecord,
@@ -12,12 +13,14 @@ from app.control_plane.models import (
     ManagedProviderRecord,
     ManagedProviderTruthRecord,
     OAuthOperationRecord,
+    ProviderCapabilityEvidenceRecord,
     ProviderTruthAxesRecord,
     ProviderUiTruthRecord,
     RuntimeProviderTruthRecord,
 )
 
 __all__ = [
+    "CapabilityEvidenceRecord",
     "ControlPlaneBootstrapCheck",
     "ControlPlaneBootstrapReadinessReport",
     "ControlPlaneStateRecord",
@@ -29,6 +32,7 @@ __all__ = [
     "ManagedProviderRecord",
     "ManagedProviderTruthRecord",
     "OAuthOperationRecord",
+    "ProviderCapabilityEvidenceRecord",
     "ProviderTruthAxesRecord",
     "ProviderUiTruthRecord",
     "RuntimeProviderTruthRecord",

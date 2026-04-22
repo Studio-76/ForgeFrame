@@ -2,15 +2,27 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, status
+from typing import Literal
+
+from fastapi import APIRouter, Depends, Request, status
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
-from app.api.admin.security import require_admin_role, require_admin_session
+from app.api.admin.idempotency import unsupported_idempotency_response
+from app.api.admin.security import (
+    require_admin_mutation_role,
+    require_admin_role,
+    require_admin_write_session,
+)
+from app.governance.errors import GovernanceConflictError, GovernanceEligibilityError, GovernanceNotFoundError
 from app.governance.models import AuthenticatedAdmin
 from app.governance.service import GovernanceService, get_governance_service
 
 router = APIRouter(prefix="/security", tags=["admin-security"])
+_SECURITY_IDEMPOTENCY_MESSAGE = (
+    "Idempotency-Key is not supported for admin security mutations until ForgeGate can persist replay-safe security "
+    "outcomes without storing credentials or minting duplicate privileged sessions."
+)
 
 
 class AdminUserCreateRequest(BaseModel):
@@ -24,28 +36,73 @@ class AdminUserUpdateRequest(BaseModel):
     display_name: str | None = None
     role: str | None = None
     status: str | None = None
-    must_rotate_password: bool | None = None
+    must_rotate_password: Literal[True] | None = None
 
 
 class AdminPasswordRotateRequest(BaseModel):
     new_password: str = Field(min_length=8)
-    must_rotate_password: bool = False
+    must_rotate_password: Literal[True] = True
 
 
-def _security_error(status_code: int, error_type: str, message: str) -> JSONResponse:
-    return JSONResponse(status_code=status_code, content={"error": {"type": error_type, "message": message}})
+class ElevatedSessionRequest(BaseModel):
+    approval_reference: str = Field(min_length=3)
+    justification: str = Field(min_length=8)
+    notification_targets: list[str] = Field(min_length=1)
+    duration_minutes: int = Field(ge=1)
+
+
+class ImpersonationRequest(ElevatedSessionRequest):
+    target_user_id: str = Field(min_length=1)
+
+
+class ElevatedAccessDecisionRequest(BaseModel):
+    decision_note: str = Field(min_length=8, max_length=500)
+
+
+class SecretRotationRecordRequest(BaseModel):
+    target_type: str = Field(default="provider", min_length=1)
+    target_id: str = Field(min_length=1)
+    kind: str = Field(min_length=3)
+    reference: str | None = Field(default=None, min_length=3)
+    notes: str | None = None
+
+
+def _security_error(
+    status_code: int,
+    error_type: str,
+    message: str,
+    *,
+    details: dict[str, object] | None = None,
+) -> JSONResponse:
+    error: dict[str, object] = {"type": error_type, "message": message}
+    if details:
+        error["details"] = details
+    return JSONResponse(status_code=status_code, content={"error": error})
 
 
 @router.get("/bootstrap")
 def security_bootstrap(
-    _admin: AuthenticatedAdmin = Depends(require_admin_role("admin")),
+    admin: AuthenticatedAdmin = Depends(require_admin_role("operator")),
     service: GovernanceService = Depends(get_governance_service),
 ) -> dict[str, object]:
-    return {
+    response: dict[str, object] = {
         "status": "ok",
-        "bootstrap": service.bootstrap_status(),
-        "secret_posture": service.provider_secret_posture(),
+        "credential_policy": service.credential_lifecycle_policy(actor=admin),
+        "elevated_access_approver_posture": service.elevated_access_approver_posture(actor=admin),
     }
+    # Operators need pre-submit elevated-access posture, but secret/bootstrap governance
+    # details remain limited to full admin sessions.
+    if admin.role == "admin":
+        response.update(
+            {
+                "bootstrap": service.bootstrap_status(),
+                "secret_posture": service.provider_secret_posture(),
+                "harness_profiles": service.harness_secret_posture(),
+                "recent_rotations": service.list_secret_rotation_events(limit=20),
+                "secret_storage_controls": service.secret_storage_controls(),
+            }
+        )
+    return response
 
 
 @router.get("/users")
@@ -59,9 +116,13 @@ def list_admin_users(
 @router.post("/users", status_code=status.HTTP_201_CREATED)
 def create_admin_user(
     payload: AdminUserCreateRequest,
-    admin: AuthenticatedAdmin = Depends(require_admin_role("admin")),
+    request: Request,
+    admin: AuthenticatedAdmin = Depends(require_admin_mutation_role("admin")),
     service: GovernanceService = Depends(get_governance_service),
 ) -> object:
+    unsupported = unsupported_idempotency_response(request, message=_SECURITY_IDEMPOTENCY_MESSAGE)
+    if unsupported is not None:
+        return unsupported
     try:
         user = service.create_admin_user(
             username=payload.username,
@@ -79,9 +140,13 @@ def create_admin_user(
 def update_admin_user(
     user_id: str,
     payload: AdminUserUpdateRequest,
-    admin: AuthenticatedAdmin = Depends(require_admin_role("admin")),
+    request: Request,
+    admin: AuthenticatedAdmin = Depends(require_admin_mutation_role("admin")),
     service: GovernanceService = Depends(get_governance_service),
 ) -> object:
+    unsupported = unsupported_idempotency_response(request, message=_SECURITY_IDEMPOTENCY_MESSAGE)
+    if unsupported is not None:
+        return unsupported
     try:
         user = service.update_admin_user(
             user_id,
@@ -100,15 +165,18 @@ def update_admin_user(
 def rotate_admin_password(
     user_id: str,
     payload: AdminPasswordRotateRequest,
-    admin: AuthenticatedAdmin = Depends(require_admin_role("admin")),
+    request: Request,
+    admin: AuthenticatedAdmin = Depends(require_admin_mutation_role("admin")),
     service: GovernanceService = Depends(get_governance_service),
 ) -> object:
+    unsupported = unsupported_idempotency_response(request, message=_SECURITY_IDEMPOTENCY_MESSAGE)
+    if unsupported is not None:
+        return unsupported
     try:
         user = service.rotate_admin_password(
             user_id,
             new_password=payload.new_password,
             actor=admin,
-            must_rotate_password=payload.must_rotate_password,
         )
     except ValueError as exc:
         return _security_error(status.HTTP_404_NOT_FOUND, "admin_password_rotation_failed", str(exc))
@@ -126,9 +194,13 @@ def list_admin_sessions(
 @router.post("/sessions/{session_id}/revoke")
 def revoke_admin_session_by_id(
     session_id: str,
-    admin: AuthenticatedAdmin = Depends(require_admin_role("admin")),
+    request: Request,
+    admin: AuthenticatedAdmin = Depends(require_admin_mutation_role("admin")),
     service: GovernanceService = Depends(get_governance_service),
 ) -> object:
+    unsupported = unsupported_idempotency_response(request, message=_SECURITY_IDEMPOTENCY_MESSAGE)
+    if unsupported is not None:
+        return unsupported
     try:
         session = service.revoke_admin_session_by_id(session_id, actor=admin)
     except ValueError as exc:
@@ -141,5 +213,228 @@ def secret_posture(
     _admin: AuthenticatedAdmin = Depends(require_admin_role("admin")),
     service: GovernanceService = Depends(get_governance_service),
 ) -> dict[str, object]:
-    return {"status": "ok", "providers": service.provider_secret_posture()}
+    return {
+        "status": "ok",
+        "providers": service.provider_secret_posture(),
+        "harness_profiles": service.harness_secret_posture(),
+        "recent_rotations": service.list_secret_rotation_events(limit=20),
+        "controls": service.secret_storage_controls(),
+    }
 
+
+@router.get("/credential-policy")
+def credential_policy(
+    admin: AuthenticatedAdmin = Depends(require_admin_role("operator")),
+    service: GovernanceService = Depends(get_governance_service),
+) -> dict[str, object]:
+    return {"status": "ok", "policy": service.credential_lifecycle_policy(actor=admin)}
+
+
+@router.get("/secret-rotations")
+def list_secret_rotations(
+    limit: int = 200,
+    _admin: AuthenticatedAdmin = Depends(require_admin_role("admin")),
+    service: GovernanceService = Depends(get_governance_service),
+) -> dict[str, object]:
+    return {"status": "ok", "rotations": service.list_secret_rotation_events(limit=limit)}
+
+
+@router.post("/secret-rotations", status_code=status.HTTP_201_CREATED)
+def record_secret_rotation(
+    payload: SecretRotationRecordRequest,
+    request: Request,
+    admin: AuthenticatedAdmin = Depends(require_admin_mutation_role("admin")),
+    service: GovernanceService = Depends(get_governance_service),
+) -> object:
+    unsupported = unsupported_idempotency_response(request, message=_SECURITY_IDEMPOTENCY_MESSAGE)
+    if unsupported is not None:
+        return unsupported
+    try:
+        rotation = service.record_secret_rotation(
+            target_type=payload.target_type,
+            target_id=payload.target_id,
+            kind=payload.kind,
+            actor=admin,
+            reference=payload.reference,
+            notes=payload.notes,
+        )
+    except ValueError as exc:
+        return _security_error(status.HTTP_400_BAD_REQUEST, "secret_rotation_record_failed", str(exc))
+    return {"status": "ok", "rotation": rotation.model_dump()}
+
+
+@router.get("/elevated-access-requests")
+def list_elevated_access_requests(
+    gate_status: str | None = None,
+    admin: AuthenticatedAdmin = Depends(require_admin_role("operator")),
+    service: GovernanceService = Depends(get_governance_service),
+) -> dict[str, object]:
+    return {"status": "ok", "requests": service.list_elevated_access_requests(actor=admin, gate_status=gate_status)}
+
+
+@router.post("/impersonations", status_code=status.HTTP_202_ACCEPTED)
+def create_impersonation_request(
+    payload: ImpersonationRequest,
+    request: Request,
+    admin: AuthenticatedAdmin = Depends(require_admin_mutation_role("admin")),
+    service: GovernanceService = Depends(get_governance_service),
+) -> object:
+    unsupported = unsupported_idempotency_response(request, message=_SECURITY_IDEMPOTENCY_MESSAGE)
+    if unsupported is not None:
+        return unsupported
+    try:
+        access_request = service.request_impersonation_session(
+            target_user_id=payload.target_user_id,
+            actor=admin,
+            justification=payload.justification,
+            approval_reference=payload.approval_reference,
+            notification_targets=payload.notification_targets,
+            duration_minutes=payload.duration_minutes,
+        )
+    except GovernanceConflictError as exc:
+        return _security_error(status.HTTP_409_CONFLICT, "elevated_access_request_conflict", str(exc))
+    except GovernanceEligibilityError as exc:
+        return _security_error(
+            status.HTTP_409_CONFLICT,
+            "elevated_access_recovery_required",
+            str(exc),
+            details=exc.details,
+        )
+    except PermissionError as exc:
+        return _security_error(status.HTTP_403_FORBIDDEN, "impersonation_forbidden", str(exc))
+    except ValueError as exc:
+        return _security_error(status.HTTP_400_BAD_REQUEST, "impersonation_failed", str(exc))
+    return {"status": "ok", "request": access_request}
+
+
+@router.post("/break-glass", status_code=status.HTTP_202_ACCEPTED)
+def create_break_glass_request(
+    payload: ElevatedSessionRequest,
+    request: Request,
+    admin: AuthenticatedAdmin = Depends(require_admin_write_session),
+    service: GovernanceService = Depends(get_governance_service),
+) -> object:
+    unsupported = unsupported_idempotency_response(request, message=_SECURITY_IDEMPOTENCY_MESSAGE)
+    if unsupported is not None:
+        return unsupported
+    try:
+        access_request = service.request_break_glass_session(
+            actor=admin,
+            justification=payload.justification,
+            approval_reference=payload.approval_reference,
+            notification_targets=payload.notification_targets,
+            duration_minutes=payload.duration_minutes,
+        )
+    except GovernanceConflictError as exc:
+        return _security_error(status.HTTP_409_CONFLICT, "elevated_access_request_conflict", str(exc))
+    except GovernanceEligibilityError as exc:
+        return _security_error(
+            status.HTTP_409_CONFLICT,
+            "elevated_access_recovery_required",
+            str(exc),
+            details=exc.details,
+        )
+    except PermissionError as exc:
+        return _security_error(status.HTTP_403_FORBIDDEN, "break_glass_forbidden", str(exc))
+    except ValueError as exc:
+        return _security_error(status.HTTP_400_BAD_REQUEST, "break_glass_failed", str(exc))
+    return {"status": "ok", "request": access_request}
+
+
+@router.post("/elevated-access-requests/{request_id}/approve")
+def approve_elevated_access_request(
+    request_id: str,
+    payload: ElevatedAccessDecisionRequest,
+    request: Request,
+    admin: AuthenticatedAdmin = Depends(require_admin_mutation_role("admin")),
+    service: GovernanceService = Depends(get_governance_service),
+) -> object:
+    unsupported = unsupported_idempotency_response(request, message=_SECURITY_IDEMPOTENCY_MESSAGE)
+    if unsupported is not None:
+        return unsupported
+    try:
+        access_request = service.approve_elevated_access_request(
+            request_id=request_id,
+            actor=admin,
+            decision_note=payload.decision_note,
+        )
+    except GovernanceNotFoundError as exc:
+        return _security_error(status.HTTP_404_NOT_FOUND, "elevated_access_request_not_found", str(exc))
+    except GovernanceConflictError as exc:
+        return _security_error(status.HTTP_409_CONFLICT, "elevated_access_request_conflict", str(exc))
+    except PermissionError as exc:
+        return _security_error(status.HTTP_403_FORBIDDEN, "elevated_access_request_forbidden", str(exc))
+    return {"status": "ok", "request": access_request}
+
+
+@router.post("/elevated-access-requests/{request_id}/reject")
+def reject_elevated_access_request(
+    request_id: str,
+    payload: ElevatedAccessDecisionRequest,
+    request: Request,
+    admin: AuthenticatedAdmin = Depends(require_admin_mutation_role("admin")),
+    service: GovernanceService = Depends(get_governance_service),
+) -> object:
+    unsupported = unsupported_idempotency_response(request, message=_SECURITY_IDEMPOTENCY_MESSAGE)
+    if unsupported is not None:
+        return unsupported
+    try:
+        access_request = service.reject_elevated_access_request(
+            request_id=request_id,
+            actor=admin,
+            decision_note=payload.decision_note,
+        )
+    except GovernanceNotFoundError as exc:
+        return _security_error(status.HTTP_404_NOT_FOUND, "elevated_access_request_not_found", str(exc))
+    except GovernanceConflictError as exc:
+        return _security_error(status.HTTP_409_CONFLICT, "elevated_access_request_conflict", str(exc))
+    except PermissionError as exc:
+        return _security_error(status.HTTP_403_FORBIDDEN, "elevated_access_request_forbidden", str(exc))
+    return {"status": "ok", "request": access_request}
+
+
+@router.post("/elevated-access-requests/{request_id}/cancel")
+def cancel_elevated_access_request(
+    request_id: str,
+    request: Request,
+    admin: AuthenticatedAdmin = Depends(require_admin_mutation_role("operator")),
+    service: GovernanceService = Depends(get_governance_service),
+) -> object:
+    unsupported = unsupported_idempotency_response(request, message=_SECURITY_IDEMPOTENCY_MESSAGE)
+    if unsupported is not None:
+        return unsupported
+    try:
+        access_request = service.cancel_elevated_access_request(
+            request_id=request_id,
+            actor=admin,
+        )
+    except GovernanceNotFoundError as exc:
+        return _security_error(status.HTTP_404_NOT_FOUND, "elevated_access_request_not_found", str(exc))
+    except GovernanceConflictError as exc:
+        return _security_error(status.HTTP_409_CONFLICT, "elevated_access_request_conflict", str(exc))
+    except PermissionError as exc:
+        return _security_error(status.HTTP_403_FORBIDDEN, "elevated_access_request_forbidden", str(exc))
+    return {"status": "ok", "request": access_request}
+
+
+@router.post("/elevated-access-requests/{request_id}/issue", status_code=status.HTTP_201_CREATED)
+def issue_elevated_access_session(
+    request_id: str,
+    request: Request,
+    admin: AuthenticatedAdmin = Depends(require_admin_write_session),
+    service: GovernanceService = Depends(get_governance_service),
+) -> object:
+    unsupported = unsupported_idempotency_response(request, message=_SECURITY_IDEMPOTENCY_MESSAGE)
+    if unsupported is not None:
+        return unsupported
+    try:
+        access_request, issued = service.issue_elevated_access_session(request_id=request_id, actor=admin)
+    except GovernanceNotFoundError as exc:
+        return _security_error(status.HTTP_404_NOT_FOUND, "elevated_access_request_not_found", str(exc))
+    except GovernanceConflictError as exc:
+        return _security_error(status.HTTP_409_CONFLICT, "elevated_access_request_conflict", str(exc))
+    except PermissionError as exc:
+        return _security_error(status.HTTP_403_FORBIDDEN, "elevated_access_request_forbidden", str(exc))
+    except ValueError as exc:
+        return _security_error(status.HTTP_400_BAD_REQUEST, "elevated_access_request_invalid", str(exc))
+    return {"status": "ok", "request": access_request, **issued.model_dump()}

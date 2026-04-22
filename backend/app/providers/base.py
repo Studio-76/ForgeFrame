@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterator
+from collections.abc import Iterator, Mapping
 from typing import Literal, Protocol
 
 from pydantic import BaseModel, Field
@@ -32,6 +32,7 @@ class ChatDispatchRequest(BaseModel):
     tools: list[dict] = Field(default_factory=list)
     tool_choice: str | dict | None = None
     request_metadata: dict[str, str] = Field(default_factory=dict)
+    response_controls: dict[str, object] = Field(default_factory=dict)
 
 
 class ChatDispatchResult(BaseModel):
@@ -54,6 +55,26 @@ class ProviderStreamEvent(BaseModel):
     error_message: str | None = None
     usage: TokenUsage | None = None
     cost: CostBreakdown | None = None
+    tool_calls: list[dict] = Field(default_factory=list)
+    credential_type: str | None = None
+    auth_source: str | None = None
+
+
+def openai_compatible_response_controls(response_controls: Mapping[str, object] | None) -> dict[str, object]:
+    """Map response-style controls into chat-completions-compatible fields."""
+
+    if not response_controls:
+        return {}
+
+    controls: dict[str, object] = {}
+    if response_controls.get("temperature") is not None:
+        controls["temperature"] = response_controls["temperature"]
+    if response_controls.get("max_output_tokens") is not None:
+        controls["max_tokens"] = response_controls["max_output_tokens"]
+    metadata = response_controls.get("metadata")
+    if isinstance(metadata, dict) and metadata:
+        controls["metadata"] = metadata
+    return controls
 
 
 class ProviderAdapter(Protocol):

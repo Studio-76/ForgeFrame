@@ -6,6 +6,8 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
+from app.control_plane import ProviderCapabilityEvidenceRecord
+
 
 class ProviderCreateRequest(BaseModel):
     provider: str
@@ -46,6 +48,7 @@ class BetaProviderTarget(BaseModel):
     streaming_readiness: Literal["planned", "partial", "ready"]
     verify_probe_readiness: Literal["planned", "partial", "ready"]
     ui_readiness: Literal["planned", "partial", "ready"]
+    evidence: ProviderCapabilityEvidenceRecord = Field(default_factory=ProviderCapabilityEvidenceRecord)
     beta_tier: Literal["concept", "beta", "beta_plus"]
     health_semantics: str
     verify_probe_axis: str
@@ -74,7 +77,10 @@ class OAuthAccountTargetStatus(BaseModel):
     harness_profile_enabled: bool
     readiness: Literal["planned", "partial", "ready"]
     readiness_reason: str
-    auth_kind: Literal["oauth_account"]
+    auth_kind: Literal["oauth_account", "api_key"]
+    oauth_mode: str | None = None
+    oauth_flow_support: str | None = None
+    evidence: ProviderCapabilityEvidenceRecord = Field(default_factory=ProviderCapabilityEvidenceRecord)
 
 
 __all__ = [

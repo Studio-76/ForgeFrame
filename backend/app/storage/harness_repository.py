@@ -76,7 +76,7 @@ class HarnessRunQuery:
     mode: str | None = None
     status: str | None = None
     client_id: str | None = None
-    limit: int = 200
+    limit: int | None = 200
 
 
 class HarnessRepository(Protocol):
@@ -330,7 +330,10 @@ class FileHarnessRepository:
             runs = [item for item in runs if item.status == query.status]
         if query.client_id:
             runs = [item for item in runs if item.client_id == query.client_id]
-        return sorted(runs, key=lambda item: item.executed_at, reverse=True)[: max(1, query.limit)]
+        ordered_runs = sorted(runs, key=lambda item: item.executed_at, reverse=True)
+        if query.limit is None:
+            return ordered_runs
+        return ordered_runs[: max(1, query.limit)]
 
     def runs_summary(self, provider_key: str | None = None) -> dict[str, int]:
         runs = self.list_runs(HarnessRunQuery(provider_key=provider_key, limit=5000))
@@ -587,7 +590,10 @@ class PostgresHarnessRepository:
                 stmt = stmt.where(HarnessRunORM.status == query.status)
             if query.client_id:
                 stmt = stmt.where(HarnessRunORM.client_id == query.client_id)
-            rows = session.scalars(stmt.order_by(HarnessRunORM.executed_at.desc()).limit(max(1, query.limit))).all()
+            stmt = stmt.order_by(HarnessRunORM.executed_at.desc())
+            if query.limit is not None:
+                stmt = stmt.limit(max(1, query.limit))
+            rows = session.scalars(stmt).all()
             return [HarnessVerificationRun(**row.payload) for row in rows]
 
     def runs_summary(self, provider_key: str | None = None) -> dict[str, int]:

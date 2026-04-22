@@ -115,6 +115,7 @@ temp/
 # -------------------------
 # Docker / local runtime leftovers
 # -------------------------
+.forgegate/
 *.pid
 *.sock
 

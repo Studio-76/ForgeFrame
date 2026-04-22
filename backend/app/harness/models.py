@@ -43,6 +43,7 @@ class HarnessStreamMapping(BaseModel):
     data_prefix: str = "data:"
     done_marker: str = "[DONE]"
     delta_path: str = "choices.0.delta.content"
+    tool_calls_path: str = "choices.0.delta.tool_calls"
     finish_reason_path: str = "choices.0.finish_reason"
     usage_prompt_tokens_path: str = "usage.prompt_tokens"
     usage_completion_tokens_path: str = "usage.completion_tokens"
@@ -132,9 +133,13 @@ class HarnessPreviewRequest(BaseModel):
     provider_key: str
     model: str
     message: str = "Hello from ForgeGate"
+    messages: list[dict[str, Any]] = Field(default_factory=list)
     stream: bool = False
     tools: list[dict[str, Any]] = Field(default_factory=list)
     tool_choice: str | dict[str, Any] | None = None
+    temperature: float | None = None
+    max_output_tokens: int | None = None
+    metadata: dict[str, Any] = Field(default_factory=dict)
 
 
 class HarnessVerificationResult(BaseModel):
@@ -150,6 +155,7 @@ class HarnessVerificationRun(BaseModel):
     run_id: str | None = None
     provider_key: str
     integration_class: IntegrationClass
+    model: str | None = None
     mode: Literal["verify", "dry_run", "probe", "preview", "sync", "runtime_non_stream", "runtime_stream"]
     status: Literal["ok", "warning", "failed"] = "ok"
     success: bool

@@ -1,0 +1,134 @@
+:root {
+  --fg-ref-color-canvas: #0e1617;
+  --fg-ref-color-shell-glow: rgba(216, 168, 64, 0.15);
+  --fg-ref-color-shell-haze: rgba(84, 116, 110, 0.12);
+  --fg-ref-color-surface-default: rgba(24, 38, 40, 0.86);
+  --fg-ref-color-surface-strong: rgba(17, 26, 28, 0.92);
+  --fg-ref-color-surface-subtle: rgba(255, 255, 255, 0.03);
+  --fg-ref-color-surface-field: rgba(255, 255, 255, 0.04);
+  --fg-ref-color-surface-code: rgba(0, 0, 0, 0.16);
+  --fg-ref-color-text-primary: #f6f3ea;
+  --fg-ref-color-text-secondary: #b8c5c2;
+  --fg-ref-color-border-default: rgba(122, 157, 149, 0.32);
+  --fg-ref-color-action-primary: #d8a840;
+  --fg-ref-color-action-primary-soft: rgba(216, 168, 64, 0.18);
+  --fg-ref-color-status-success: #86d1a7;
+  --fg-ref-color-status-success-soft: rgba(134, 209, 167, 0.14);
+  --fg-ref-color-status-success-border: rgba(134, 209, 167, 0.45);
+  --fg-ref-color-status-warning: #f0c66a;
+  --fg-ref-color-status-warning-soft: rgba(240, 198, 106, 0.16);
+  --fg-ref-color-status-warning-border: rgba(240, 198, 106, 0.4);
+  --fg-ref-color-status-danger: #ff8272;
+  --fg-ref-color-status-danger-soft: rgba(255, 130, 114, 0.14);
+  --fg-ref-color-status-danger-border: rgba(255, 130, 114, 0.45);
+  --fg-ref-color-status-info: #7eb2d9;
+  --fg-ref-color-status-info-soft: rgba(126, 178, 217, 0.16);
+  --fg-ref-color-status-info-border: rgba(126, 178, 217, 0.4);
+  --fg-ref-color-focus-ring: #f0c66a;
+  --fg-ref-shadow-panel: 0 18px 40px rgba(0, 0, 0, 0.28);
+
+  --fg-space-1: 0.25rem;
+  --fg-space-2: 0.5rem;
+  --fg-space-3: 0.75rem;
+  --fg-space-4: 1rem;
+  --fg-space-5: 1.5rem;
+  --fg-space-6: 2rem;
+  --fg-space-7: 2.5rem;
+
+  --fg-radius-sm: 0.625rem;
+  --fg-radius-md: 0.875rem;
+  --fg-radius-lg: 1.125rem;
+  --fg-radius-pill: 999px;
+
+  --fg-font-sans: "Segoe UI Variable Text", "Aptos", "Trebuchet MS", sans-serif;
+  --fg-font-mono: ui-monospace, "SFMono-Regular", "Consolas", monospace;
+
+  --fg-type-size-body: 0.9375rem;
+  --fg-type-size-meta: 0.8125rem;
+  --fg-type-size-title: 2rem;
+  --fg-type-size-section: 1.5rem;
+  --fg-type-size-card: 1.125rem;
+  --fg-type-size-kpi: 1.75rem;
+  --fg-type-line-body: 1.6;
+  --fg-type-line-heading: 1.25;
+  --fg-type-line-tight: 1.1;
+
+  --fg-motion-fast: 120ms;
+  --fg-motion-base: 180ms;
+  --fg-ease-standard: ease-in-out;
+
+  --fg-color-canvas: var(--fg-ref-color-canvas);
+  --fg-color-shell-glow: var(--fg-ref-color-shell-glow);
+  --fg-color-shell-haze: var(--fg-ref-color-shell-haze);
+  --fg-color-surface-default: var(--fg-ref-color-surface-default);
+  --fg-color-surface-strong: var(--fg-ref-color-surface-strong);
+  --fg-color-surface-subtle: var(--fg-ref-color-surface-subtle);
+  --fg-color-surface-field: var(--fg-ref-color-surface-field);
+  --fg-color-surface-code: var(--fg-ref-color-surface-code);
+  --fg-color-text-primary: var(--fg-ref-color-text-primary);
+  --fg-color-text-secondary: var(--fg-ref-color-text-secondary);
+  --fg-color-border-default: var(--fg-ref-color-border-default);
+  --fg-color-action-primary: var(--fg-ref-color-action-primary);
+  --fg-color-action-primary-soft: var(--fg-ref-color-action-primary-soft);
+  --fg-color-status-success: var(--fg-ref-color-status-success);
+  --fg-color-status-success-soft: var(--fg-ref-color-status-success-soft);
+  --fg-color-status-success-border: var(--fg-ref-color-status-success-border);
+  --fg-color-status-warning: var(--fg-ref-color-status-warning);
+  --fg-color-status-warning-soft: var(--fg-ref-color-status-warning-soft);
+  --fg-color-status-warning-border: var(--fg-ref-color-status-warning-border);
+  --fg-color-status-danger: var(--fg-ref-color-status-danger);
+  --fg-color-status-danger-soft: var(--fg-ref-color-status-danger-soft);
+  --fg-color-status-danger-border: var(--fg-ref-color-status-danger-border);
+  --fg-color-status-info: var(--fg-ref-color-status-info);
+  --fg-color-status-info-soft: var(--fg-ref-color-status-info-soft);
+  --fg-color-status-info-border: var(--fg-ref-color-status-info-border);
+  --fg-color-focus-ring: var(--fg-ref-color-focus-ring);
+  --fg-shadow-panel: var(--fg-ref-shadow-panel);
+
+  /* Transition aliases for the current shared utility layer. */
+  --bg: var(--fg-color-canvas);
+  --bg-surface: var(--fg-color-surface-default);
+  --bg-panel: var(--fg-color-surface-strong);
+  --text: var(--fg-color-text-primary);
+  --text-muted: var(--fg-color-text-secondary);
+  --border: var(--fg-color-border-default);
+  --accent: var(--fg-color-action-primary);
+  --accent-soft: var(--fg-color-action-primary-soft);
+  --danger: var(--fg-color-status-danger);
+  --success: var(--fg-color-status-success);
+  --shadow: var(--fg-shadow-panel);
+
+  color-scheme: dark;
+}
+
+:root[data-theme="light"] {
+  --fg-ref-color-canvas: #f4efe3;
+  --fg-ref-color-shell-glow: rgba(154, 90, 0, 0.12);
+  --fg-ref-color-shell-haze: rgba(108, 132, 128, 0.12);
+  --fg-ref-color-surface-default: rgba(255, 251, 244, 0.95);
+  --fg-ref-color-surface-strong: rgba(255, 247, 236, 0.98);
+  --fg-ref-color-surface-subtle: rgba(31, 43, 45, 0.04);
+  --fg-ref-color-surface-field: rgba(31, 43, 45, 0.05);
+  --fg-ref-color-surface-code: rgba(31, 43, 45, 0.08);
+  --fg-ref-color-text-primary: #1f2b2d;
+  --fg-ref-color-text-secondary: #5a6865;
+  --fg-ref-color-border-default: rgba(108, 132, 128, 0.28);
+  --fg-ref-color-action-primary: #9a5a00;
+  --fg-ref-color-action-primary-soft: rgba(154, 90, 0, 0.12);
+  --fg-ref-color-status-success: #17724c;
+  --fg-ref-color-status-success-soft: rgba(23, 114, 76, 0.12);
+  --fg-ref-color-status-success-border: rgba(23, 114, 76, 0.24);
+  --fg-ref-color-status-warning: #8c5c00;
+  --fg-ref-color-status-warning-soft: rgba(140, 92, 0, 0.12);
+  --fg-ref-color-status-warning-border: rgba(140, 92, 0, 0.24);
+  --fg-ref-color-status-danger: #c33e2f;
+  --fg-ref-color-status-danger-soft: rgba(195, 62, 47, 0.12);
+  --fg-ref-color-status-danger-border: rgba(195, 62, 47, 0.22);
+  --fg-ref-color-status-info: #1f5f87;
+  --fg-ref-color-status-info-soft: rgba(31, 95, 135, 0.12);
+  --fg-ref-color-status-info-border: rgba(31, 95, 135, 0.22);
+  --fg-ref-color-focus-ring: #9a5a00;
+  --fg-ref-shadow-panel: 0 20px 45px rgba(81, 58, 18, 0.12);
+
+  color-scheme: light;
+}

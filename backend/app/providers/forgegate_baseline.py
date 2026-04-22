@@ -46,6 +46,9 @@ class ForgeGateBaselineAdapter:
     def create_chat_completion(self, request: ChatDispatchRequest) -> ChatDispatchResult:
         if getattr(request, "tools", []):
             raise ProviderUnsupportedFeatureError(self.provider_name, "tool_calling")
+        if request.response_controls:
+            unsupported = ",".join(sorted(request.response_controls))
+            raise ProviderUnsupportedFeatureError(self.provider_name, f"response_controls:{unsupported}")
         completion_text = self._build_response_text(request)
         usage = self._usage_accounting.usage_from_prompt_completion(request.messages, completion_text)
         cost = self._usage_accounting.costs_for_provider(provider=self.provider_name, usage=usage)
@@ -63,10 +66,20 @@ class ForgeGateBaselineAdapter:
     def stream_chat_completion(self, request: ChatDispatchRequest) -> Iterator[ProviderStreamEvent]:
         if getattr(request, "tools", []):
             raise ProviderUnsupportedFeatureError(self.provider_name, "tool_calling")
+        if request.response_controls:
+            unsupported = ",".join(sorted(request.response_controls))
+            raise ProviderUnsupportedFeatureError(self.provider_name, f"response_controls:{unsupported}")
         text = self._build_response_text(request)
         usage = self._usage_accounting.usage_from_prompt_completion(request.messages, text)
         cost = self._usage_accounting.costs_for_provider(provider=self.provider_name, usage=usage)
 
         for token in text.split(" "):
             yield ProviderStreamEvent(event="delta", delta=f"{token} ")
-        yield ProviderStreamEvent(event="done", finish_reason="stop", usage=usage, cost=cost)
+        yield ProviderStreamEvent(
+            event="done",
+            finish_reason="stop",
+            usage=usage,
+            cost=cost,
+            credential_type="internal",
+            auth_source="internal",
+        )

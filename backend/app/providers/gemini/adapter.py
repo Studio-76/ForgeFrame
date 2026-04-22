@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 from collections.abc import Iterator
 from datetime import datetime
+from urllib.parse import urlsplit
 
 import httpx
 
@@ -29,7 +30,13 @@ from app.providers.base import (
     ProviderUnavailableError,
     ProviderUnsupportedMediaTypeError,
     ProviderUpstreamError,
+    openai_compatible_response_controls,
 )
+from app.providers.openai_streaming import (
+    finalize_openai_tool_calls,
+    merge_openai_tool_call_chunks,
+)
+from app.request_metadata import forgegate_request_metadata_headers
 from app.settings.config import Settings
 from app.usage.models import TokenUsage
 from app.usage.service import UsageAccountingService
@@ -41,13 +48,14 @@ class GeminiAdapter:
     def __init__(self, settings: Settings):
         self._settings = settings
         self._usage = UsageAccountingService(settings)
+        oauth_required = settings.gemini_auth_mode == "oauth"
         self.capabilities = ProviderCapabilities(
             streaming=settings.gemini_probe_enabled,
             tool_calling=True,
             tool_calling_level="partial",
             vision=True,
             external=True,
-            oauth_required=True,
+            oauth_required=oauth_required,
             discovery_support=True,
             provider_axis="oauth_account",
             auth_mechanism="hybrid_oauth_api_key",
@@ -66,6 +74,8 @@ class GeminiAdapter:
             return "Gemini API-key mode selected but FORGEGATE_GEMINI_API_KEY is missing."
         if not self._settings.gemini_probe_enabled:
             return "Gemini runtime bridge is disabled. Enable FORGEGATE_GEMINI_PROBE_ENABLED=true for beta runtime path."
+        if self._configured_base_url() is None:
+            return "FORGEGATE_GEMINI_PROBE_BASE_URL must be an absolute http(s) URL."
         return None
 
     def create_chat_completion(self, request: ChatDispatchRequest) -> ChatDispatchResult:
@@ -74,13 +84,14 @@ class GeminiAdapter:
             raise ProviderConfigurationError(self.provider_name, reason)
 
         payload = {"model": request.model, "messages": request.messages, "stream": False}
+        payload.update(openai_compatible_response_controls(request.response_controls))
         tools = getattr(request, "tools", [])
         if tools:
             payload["tools"] = tools
             tool_choice = getattr(request, "tool_choice", None)
             if tool_choice is not None:
                 payload["tool_choice"] = tool_choice
-        data = self._post(payload)
+        data = self._post(payload, request.request_metadata)
         choice = data.get("choices", [{}])[0]
         message = choice.get("message", {})
         content = str(message.get("content", ""))
@@ -104,21 +115,38 @@ class GeminiAdapter:
         if reason:
             raise ProviderConfigurationError(self.provider_name, reason)
         payload = {"model": request.model, "messages": request.messages, "stream": True, "stream_options": {"include_usage": True}}
+        payload.update(openai_compatible_response_controls(request.response_controls))
         tools = getattr(request, "tools", [])
         if tools:
             payload["tools"] = tools
             tool_choice = getattr(request, "tool_choice", None)
             if tool_choice is not None:
                 payload["tool_choice"] = tool_choice
-        yield from self._stream(payload, request.messages)
+        yield from self._stream(payload, request.messages, request.request_metadata)
 
-    def _endpoint_headers(self) -> tuple[str, dict[str, str]]:
-        endpoint = f"{self._settings.gemini_probe_base_url.rstrip('/')}/chat/completions"
+    def _endpoint_headers(self, request_metadata: dict[str, str] | None = None) -> tuple[str, dict[str, str]]:
+        base_url = self._configured_base_url()
+        if base_url is None:  # pragma: no cover - guarded by readiness checks
+            raise ProviderConfigurationError(
+                self.provider_name,
+                "FORGEGATE_GEMINI_PROBE_BASE_URL must be an absolute http(s) URL.",
+            )
+        endpoint = f"{base_url}/chat/completions"
         token = self._settings.gemini_oauth_access_token.strip() if self._settings.gemini_auth_mode == "oauth" else self._settings.gemini_api_key.strip()
-        return endpoint, {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
+        headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
+        headers.update(forgegate_request_metadata_headers(request_metadata))
+        return endpoint, headers
 
-    def _post(self, payload: dict) -> dict:
-        endpoint, headers = self._endpoint_headers()
+    def _configured_base_url(self) -> str | None:
+        base_url = self._settings.gemini_probe_base_url.strip()
+        parsed = urlsplit(base_url)
+        host = parsed.hostname or ""
+        if parsed.scheme not in {"http", "https"} or not host or any(char.isspace() for char in host):
+            return None
+        return base_url.rstrip("/")
+
+    def _post(self, payload: dict, request_metadata: dict[str, str] | None = None) -> dict:
+        endpoint, headers = self._endpoint_headers(request_metadata)
         try:
             response = httpx.post(endpoint, json=payload, headers=headers, timeout=self._settings.gemini_timeout_seconds)
         except httpx.TimeoutException as exc:
@@ -135,12 +163,18 @@ class GeminiAdapter:
         except ValueError as exc:
             raise ProviderProtocolError(self.provider_name, "Gemini returned invalid JSON payload.") from exc
 
-    def _stream(self, payload: dict, messages: list[dict]) -> Iterator[ProviderStreamEvent]:
-        endpoint, headers = self._endpoint_headers()
+    def _stream(
+        self,
+        payload: dict,
+        messages: list[dict],
+        request_metadata: dict[str, str] | None = None,
+    ) -> Iterator[ProviderStreamEvent]:
+        endpoint, headers = self._endpoint_headers(request_metadata)
         chunks: list[str] = []
         usage: TokenUsage | None = None
         finish_reason = "stop"
         saw_done = False
+        tool_call_chunks: dict[int, dict[str, object]] = {}
         try:
             with httpx.stream("POST", endpoint, json=payload, headers=headers, timeout=self._settings.gemini_timeout_seconds) as response:
                 self._raise_for_status(response)
@@ -160,10 +194,12 @@ class GeminiAdapter:
                     except json.JSONDecodeError as exc:
                         raise ProviderStreamInterruptedError(self.provider_name, "Gemini stream produced invalid JSON chunk.") from exc
                     choice = item.get("choices", [{}])[0]
-                    delta = choice.get("delta", {}).get("content", "")
+                    delta_payload = choice.get("delta", {})
+                    delta = delta_payload.get("content", "")
                     if delta:
                         chunks.append(str(delta))
                         yield ProviderStreamEvent(event="delta", delta=str(delta))
+                    merge_openai_tool_call_chunks(tool_call_chunks, delta_payload.get("tool_calls"))
                     if choice.get("finish_reason"):
                         finish_reason = str(choice["finish_reason"])
                     if item.get("usage"):
@@ -177,7 +213,15 @@ class GeminiAdapter:
             raise ProviderStreamInterruptedError(self.provider_name, "Gemini stream ended without done marker.")
         final_usage = usage or self._usage.usage_from_prompt_completion(messages, "".join(chunks))
         final_cost = self._usage.costs_for_provider(provider=self.provider_name, usage=final_usage, oauth_mode=(self._settings.gemini_auth_mode == "oauth"))
-        yield ProviderStreamEvent(event="done", finish_reason=finish_reason, usage=final_usage, cost=final_cost)
+        yield ProviderStreamEvent(
+            event="done",
+            finish_reason=finish_reason,
+            usage=final_usage,
+            cost=final_cost,
+            tool_calls=finalize_openai_tool_calls(tool_call_chunks),
+            credential_type="oauth_access_token" if self._settings.gemini_auth_mode == "oauth" else "api_key",
+            auth_source="gemini_oauth_account_bridge" if self._settings.gemini_auth_mode == "oauth" else "gemini_api_key_bridge",
+        )
 
     def _usage_from_payload(self, usage_payload: dict, messages: list[dict], content: str) -> TokenUsage:
         if usage_payload:

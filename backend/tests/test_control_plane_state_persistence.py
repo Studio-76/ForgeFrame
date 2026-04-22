@@ -12,9 +12,23 @@ def _client() -> TestClient:
 
 
 def _admin_headers(client: TestClient) -> dict[str, str]:
-    response = client.post("/admin/auth/login", json={"username": "admin", "password": "forgegate-admin"})
+    response = client.post(
+        "/admin/auth/login",
+        json={"username": "admin", "password": os.environ["FORGEGATE_BOOTSTRAP_ADMIN_PASSWORD"]},
+    )
     assert response.status_code == 201
-    return {"Authorization": f"Bearer {response.json()['access_token']}"}
+    headers = {"Authorization": f"Bearer {response.json()['access_token']}"}
+    if response.json()["user"]["must_rotate_password"] is True:
+        rotation = client.post(
+            "/admin/auth/rotate-password",
+            headers=headers,
+            json={
+                "current_password": os.environ["FORGEGATE_BOOTSTRAP_ADMIN_PASSWORD"],
+                "new_password": os.environ["FORGEGATE_BOOTSTRAP_ADMIN_PASSWORD"],
+            },
+        )
+        assert rotation.status_code == 200
+    return headers
 
 
 def test_provider_state_is_persisted_across_control_plane_reload() -> None:

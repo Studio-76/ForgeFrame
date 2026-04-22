@@ -96,17 +96,56 @@ class RoutingService:
             return "healthy"
         return "unknown"
 
-    def _provider_status(self, provider: str) -> dict[str, object]:
+    def _provider_status(
+        self,
+        provider: str,
+        *,
+        status_cache: dict[str, dict[str, object]] | None = None,
+    ) -> dict[str, object]:
+        if status_cache is not None and provider in status_cache:
+            return status_cache[provider]
         try:
-            return self._providers.get_provider_status(provider)
+            status = self._providers.get_provider_status(provider)
         except ValueError:
-            return {
+            status = {
                 "ready": False,
                 "readiness_reason": "provider_disabled_or_not_registered",
                 "capabilities": {},
                 "oauth_required": False,
                 "discovery_supported": False,
             }
+        if status_cache is not None:
+            status_cache[provider] = status
+        return status
+
+    def _model_dispatchability(
+        self,
+        model: RuntimeModel,
+        *,
+        require_streaming: bool,
+        require_tool_calling: bool,
+        require_vision: bool,
+    ) -> tuple[bool, str | None]:
+        try:
+            adapter = self._providers.get(model.provider)
+        except ValueError:
+            return False, "provider_disabled_or_not_registered"
+        dispatchability_check = getattr(adapter, "can_dispatch_model", None)
+        if not callable(dispatchability_check):
+            return True, None
+        try:
+            result = dispatchability_check(
+                model.id,
+                require_streaming=require_streaming,
+                require_tool_calling=require_tool_calling,
+                require_vision=require_vision,
+            )
+        except Exception:
+            return False, "dispatchability_check_failed"
+        if isinstance(result, tuple):
+            can_dispatch, reason = result
+            return bool(can_dispatch), reason
+        return bool(result), None
 
     def _evaluate_candidate(
         self,
@@ -114,9 +153,11 @@ class RoutingService:
         *,
         require_streaming: bool,
         require_tool_calling: bool,
+        require_vision: bool,
         health_index: dict[tuple[str, str], str],
+        status_cache: dict[str, dict[str, object]] | None = None,
     ) -> RouteCandidate:
-        provider_status = self._provider_status(model.provider)
+        provider_status = self._provider_status(model.provider, status_cache=status_cache)
         capabilities = provider_status.get("capabilities", {})
         reasons: list[str] = []
         capability_match = True
@@ -126,6 +167,18 @@ class RoutingService:
         if require_tool_calling and not capabilities.get("tool_calling", False):
             capability_match = False
             reasons.append("tool_calling_missing")
+        if require_vision and not capabilities.get("vision", False):
+            capability_match = False
+            reasons.append("vision_missing")
+        model_dispatchable, dispatch_reason = self._model_dispatchability(
+            model,
+            require_streaming=require_streaming,
+            require_tool_calling=require_tool_calling,
+            require_vision=require_vision,
+        )
+        if not model_dispatchable:
+            capability_match = False
+            reasons.append(f"model_dispatch_unavailable:{dispatch_reason or 'unknown'}")
 
         health_status = health_index.get((model.provider, model.id), "unknown")
         ready = bool(provider_status.get("ready", False))
@@ -177,15 +230,55 @@ class RoutingService:
             reasons=reasons,
         )
 
+    def list_runtime_usable_models(
+        self,
+        *,
+        stream: bool = False,
+        tools: list[dict] | None = None,
+        require_vision: bool = False,
+        allowed_providers: set[str] | None = None,
+    ) -> list[RuntimeModel]:
+        health_index = self._health_index()
+        require_tool_calling = bool(tools)
+        candidate_models = self._registry.list_active_models()
+        if allowed_providers is not None:
+            candidate_models = [model for model in candidate_models if model.provider in allowed_providers]
+
+        healthy_states = {"healthy", "discovery_only", "unknown"}
+        unusable_states = {"unavailable", "auth_failed", "not_configured"}
+        status_cache: dict[str, dict[str, object]] = {}
+        usable_models: list[RuntimeModel] = []
+        for model in candidate_models:
+            candidate = self._evaluate_candidate(
+                model,
+                require_streaming=stream,
+                require_tool_calling=require_tool_calling,
+                require_vision=require_vision,
+                health_index=health_index,
+                status_cache=status_cache,
+            )
+            if not candidate.ready or not candidate.capability_match:
+                continue
+            if self._settings.routing_require_healthy:
+                if candidate.health_status not in healthy_states:
+                    continue
+            elif candidate.health_status in unusable_states:
+                continue
+            usable_models.append(model)
+        return usable_models
+
     def resolve_model(
         self,
         requested_model: str | None,
         *,
         stream: bool = False,
         tools: list[dict] | None = None,
+        require_vision: bool = False,
+        allowed_providers: set[str] | None = None,
     ) -> RouteDecision:
         health_index = self._health_index()
         require_tool_calling = bool(tools)
+        status_cache: dict[str, dict[str, object]] = {}
         if requested_model:
             model = self._registry.get_model(requested_model)
             if not model:
@@ -194,25 +287,33 @@ class RoutingService:
                 model,
                 require_streaming=stream,
                 require_tool_calling=require_tool_calling,
+                require_vision=require_vision,
                 health_index=health_index,
+                status_cache=status_cache,
             )
             return RouteDecision(
                 requested_model=requested_model,
                 resolved_model=model,
                 reason="requested_model_strict",
-                requirement={"streaming": stream, "tool_calling": require_tool_calling},
+                requirement={"streaming": stream, "tool_calling": require_tool_calling, "vision": require_vision},
                 selection_basis={"selected_provider": model.provider, "selected_model": model.id},
                 considered_candidates=[candidate],
             )
+
+        candidate_models = self._registry.list_active_models()
+        if allowed_providers is not None:
+            candidate_models = [model for model in candidate_models if model.provider in allowed_providers]
 
         candidates = [
             self._evaluate_candidate(
                 model,
                 require_streaming=stream,
                 require_tool_calling=require_tool_calling,
+                require_vision=require_vision,
                 health_index=health_index,
+                status_cache=status_cache,
             )
-            for model in self._registry.list_active_models()
+            for model in candidate_models
         ]
         healthy_states = {"healthy", "discovery_only", "unknown"}
         selectable = [
@@ -249,7 +350,7 @@ class RoutingService:
             resolved_model=resolved_model,
             reason="smart_default_fallback" if fallback_used else "default_model",
             fallback_used=fallback_used,
-            requirement={"streaming": stream, "tool_calling": require_tool_calling},
+            requirement={"streaming": stream, "tool_calling": require_tool_calling, "vision": require_vision},
             selection_basis={
                 "selected_provider": resolved_model.provider,
                 "selected_model": resolved_model.id,
@@ -258,6 +359,7 @@ class RoutingService:
                 "routing_strategy": self._settings.routing_strategy,
                 "routing_require_healthy": self._settings.routing_require_healthy,
                 "routing_allow_degraded_fallback": self._settings.routing_allow_degraded_fallback,
+                "allowed_providers": sorted(allowed_providers) if allowed_providers is not None else None,
             },
             considered_candidates=sorted(
                 candidates,

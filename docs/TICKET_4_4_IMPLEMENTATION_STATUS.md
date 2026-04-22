@@ -8,10 +8,13 @@ Referenz: `F:/Projekte/ForgeGate/ForgeGate_Ticket_4_4_Entwicklungsanweisung.md`
 
 - Audit- und Verlaufsdaten werden persistiert und ueber Admin-Logs sichtbar gemacht.
 - Governance-Ereignisse sind damit nachvollziehbarer.
+- Provider- und Harness-Credentials erhalten jetzt redaktierte Rotationsnachweise ueber `/admin/security/secret-posture` und `/admin/security/secret-rotations`.
+- Harness-Profil-Revisionen werden als Historienquelle fuer credential-tragende Profile sichtbar gemacht, ohne Secret-Material in die Security-Historie zu kopieren.
 
 ## Offene Punkte
 
-- Secret-Rotation und tiefe Historie fuer alle Providerpfade sind noch nicht final.
+- Provider-Secrets in Umgebungsvariablen/OAuth bleiben bewusst operator-managed; ForgeGate speichert hier nur Rotationsnachweise und keine Secret-Werte.
+- Generic-Harness-Profile persistieren Auth-Material weiterhin in der konfigurierten Harness-Storage und benoetigen externe Datenbank-/Filesystem-Haertung.
 
 ## Verifikation
 

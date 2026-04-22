@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
 from app.api.admin.control_plane import get_control_plane_service
-from app.api.admin.security import require_admin_role
+from app.api.admin.idempotency import unsupported_idempotency_response
+from app.api.admin.security import require_admin_mutation_role
 from app.api.runtime.dependencies import clear_runtime_dependency_caches
 from app.api.runtime.dependencies import get_settings as get_effective_settings
 from app.governance.models import AuthenticatedAdmin
@@ -21,6 +22,10 @@ from app.settings.service import (
 from app.usage.analytics import get_usage_analytics_store
 
 router = APIRouter(prefix="/settings", tags=["admin-settings"])
+_SETTINGS_IDEMPOTENCY_MESSAGE = (
+    "Idempotency-Key is not supported for settings mutations until ForgeGate persists replay-safe override write "
+    "responses without duplicating configuration audit side effects."
+)
 
 
 class SettingsPatchRequest(BaseModel):
@@ -41,9 +46,13 @@ def list_settings(service: GovernanceService = Depends(get_governance_service)) 
 @router.patch("/")
 def patch_settings(
     payload: SettingsPatchRequest,
-    admin: AuthenticatedAdmin = Depends(require_admin_role("admin")),
+    request: Request,
+    admin: AuthenticatedAdmin = Depends(require_admin_mutation_role("admin")),
     service: GovernanceService = Depends(get_governance_service),
 ) -> dict[str, object]:
+    unsupported = unsupported_idempotency_response(request, message=_SETTINGS_IDEMPOTENCY_MESSAGE)
+    if unsupported is not None:
+        return unsupported
     updated: list[str] = []
     for key, raw_value in payload.updates.items():
         definition = MUTABLE_SETTINGS.get(key)
@@ -69,9 +78,13 @@ def patch_settings(
 @router.delete("/{key}")
 def reset_setting(
     key: str,
-    admin: AuthenticatedAdmin = Depends(require_admin_role("admin")),
+    request: Request,
+    admin: AuthenticatedAdmin = Depends(require_admin_mutation_role("admin")),
     service: GovernanceService = Depends(get_governance_service),
 ) -> dict[str, object]:
+    unsupported = unsupported_idempotency_response(request, message=_SETTINGS_IDEMPOTENCY_MESSAGE)
+    if unsupported is not None:
+        return unsupported
     try:
         service.remove_setting_override(key=key, actor=admin)
     except ValueError as exc:

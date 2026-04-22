@@ -7,6 +7,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from app.control_plane import ControlPlaneBootstrapCheck, ControlPlaneBootstrapReadinessReport
+from app.tenancy import TenantFilterRequiredError
 
 
 class ControlPlaneBootstrapDomainMixin:
@@ -16,6 +17,16 @@ class ControlPlaneBootstrapDomainMixin:
         env_compose = root_dir / ".env.compose"
         compose_file = root_dir / "docker" / "docker-compose.yml"
         containerized_runtime = root_dir == Path("/app")
+        observability_filter_required = False
+        try:
+            observability_aggregates = self._analytics.aggregate(window_seconds=24 * 3600)
+        except TenantFilterRequiredError:
+            observability_filter_required = True
+            observability_aggregates = {
+                "event_count": 0,
+                "health_event_count": 0,
+                "error_event_count": 0,
+            }
         checks = [
             ControlPlaneBootstrapCheck(
                 id="compose_file",
@@ -58,6 +69,41 @@ class ControlPlaneBootstrapDomainMixin:
                 details=str(root_dir / "scripts" / "apply-storage-migrations.py"),
             ),
             ControlPlaneBootstrapCheck(
+                id="backup_restore_automation",
+                ok=(
+                    (root_dir / "scripts" / "backup-forgegate.sh").exists()
+                    and (root_dir / "scripts" / "restore-forgegate.sh").exists()
+                    and (root_dir / "scripts" / "compose-backup-restore-smoke.sh").exists()
+                ),
+                details="scripts/backup-forgegate.sh + scripts/restore-forgegate.sh + scripts/compose-backup-restore-smoke.sh",
+            ),
+            ControlPlaneBootstrapCheck(
+                id="observability_signal_path",
+                ok=(
+                    not observability_filter_required
+                    and
+                    int(observability_aggregates["event_count"]) > 0
+                    and int(observability_aggregates["health_event_count"]) > 0
+                ),
+                details=(
+                    "tenant_filter_required"
+                    if observability_filter_required
+                    else (
+                        f"runtime_events_24h={observability_aggregates['event_count']} "
+                        f"health_events_24h={observability_aggregates['health_event_count']}"
+                    )
+                ),
+            ),
+            ControlPlaneBootstrapCheck(
+                id="observability_error_path",
+                ok=(not observability_filter_required) and int(observability_aggregates["error_event_count"]) > 0,
+                details=(
+                    "tenant_filter_required"
+                    if observability_filter_required
+                    else f"errors_24h={observability_aggregates['error_event_count']}"
+                ),
+            ),
+            ControlPlaneBootstrapCheck(
                 id="app_port",
                 ok=bool(str(self._settings.port).strip()),
                 details=str(self._settings.port),
@@ -68,11 +114,12 @@ class ControlPlaneBootstrapDomainMixin:
                 details=os.environ.get("DOCKER_HOST", "/var/run/docker.sock"),
             ),
         ]
-        ready = all(item.ok for item in checks[:-1])
+        ready = all(item.ok for item in checks if item.id != "docker_host_hint")
         next_steps = [
-            "Run ./scripts/bootstrap-forgegate.sh for docker-first setup including storage migrations.",
+            "Run ./scripts/bootstrap-forgegate.sh for docker-first setup including storage migrations, compose/runtime observability smoke, and backup/restore validation.",
             "For non-docker recovery, run python3 scripts/apply-storage-migrations.py against the configured PostgreSQL target.",
-            "Use ./scripts/compose-smoke.sh to verify harness + control-plane path.",
+            "Use ./scripts/backup-forgegate.sh to capture a PostgreSQL backup and ./scripts/restore-forgegate.sh <dump> <target_db> for non-destructive recovery drills.",
+            "Use ./scripts/compose-smoke.sh and ./scripts/compose-backup-restore-smoke.sh to verify the compose path, runtime/error/health observability, and recovery end to end.",
             "Open /app/ and verify provider probes, security bootstrap and bridge profile sync from the control plane.",
         ]
         return ControlPlaneBootstrapReadinessReport(

@@ -1,475 +1,81 @@
-import { useEffect, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 
+import { CONTROL_PLANE_ROUTES } from "../app/navigation";
+import { useAppSession } from "../app/session";
+import { getTenantIdFromSearchParams } from "../app/tenantScope";
+import { PageIntro } from "../components/PageIntro";
 import {
-  activateHarnessProfile,
-  activateProvider,
-  createProvider,
-  deactivateHarnessProfile,
-  deactivateProvider,
-  deleteHarnessProfile,
-  dryRunHarness,
-  fetchHarnessExport,
-  fetchHarnessProfiles,
-  fetchBetaProviderTargets,
-  fetchClientOperationalView,
-  fetchHarnessRuns,
-  fetchBootstrapReadiness,
-  fetchCompatibilityMatrix,
-  fetchOauthAccountOperations,
-  fetchOauthOnboarding,
-  fetchOauthAccountTargets,
-  fetchHarnessTemplates,
-  fetchProviderControlPlane,
-  fetchUsageSummary,
-  importHarnessConfig,
-  patchHealthConfig,
-  probeOauthAccountProvider,
-  probeAllOauthAccountProviders,
-  rollbackHarnessProfile,
-  syncOauthAccountBridgeProfiles,
-  previewHarness,
-  probeHarness,
-  runHealthChecks,
-  syncProviders,
-  type BetaProviderTarget,
-  type CompatibilityMatrixRow,
-  type HarnessProfile,
-  type HarnessTemplate,
-  type HealthConfig,
-  type ProviderControlItem,
-  updateProvider,
-  upsertHarnessProfile,
-  verifyHarnessProfile,
-} from "../api/admin";
-
-type LoadState = "idle" | "loading" | "success" | "error";
+  ExpansionTargetsSection,
+  HarnessControlSection,
+  OperationResultSection,
+  ProviderInventorySection,
+  ProvidersOverviewSection,
+} from "../features/providers/ProvidersSections";
+import { getProvidersAccess } from "../features/providers/providersShared";
+import { useProvidersControlPlane } from "../features/providers/useProvidersControlPlane";
 
 export function ProvidersPage() {
-  const [state, setState] = useState<LoadState>("idle");
-  const [error, setError] = useState<string | null>(null);
-  const [providers, setProviders] = useState<ProviderControlItem[]>([]);
-  const [templates, setTemplates] = useState<HarnessTemplate[]>([]);
-  const [profiles, setProfiles] = useState<HarnessProfile[]>([]);
-  const [runs, setRuns] = useState<Array<Record<string, unknown>>>([]);
-  const [runSummary, setRunSummary] = useState<Record<string, number>>({});
-  const [runOps, setRunOps] = useState<Record<string, unknown>>({});
-  const [runModeFilter, setRunModeFilter] = useState<string>("all");
-  const [runStatusFilter, setRunStatusFilter] = useState<string>("all");
-  const [runProviderFilter, setRunProviderFilter] = useState<string>("all");
-  const [runClientFilter, setRunClientFilter] = useState<string>("all");
-  const [operationResult, setOperationResult] = useState<string>("");
-  const [syncNote, setSyncNote] = useState<string>("");
-  const [healthConfig, setHealthConfig] = useState<HealthConfig | null>(null);
-  const [newProvider, setNewProvider] = useState({ provider: "", label: "" });
-  const [providerErrors, setProviderErrors] = useState<Record<string, number>>({});
-  const [modelErrors, setModelErrors] = useState<Record<string, number>>({});
-  const [integrationErrors, setIntegrationErrors] = useState<Record<string, number>>({});
-  const [profileErrors, setProfileErrors] = useState<Record<string, number>>({});
-  const [clients, setClients] = useState<Array<Record<string, string | number | boolean>>>([]);
-  const [betaTargets, setBetaTargets] = useState<BetaProviderTarget[]>([]);
-  const [oauthTargets, setOauthTargets] = useState<Array<Record<string, string | boolean>>>([]);
-  const [oauthOperations, setOauthOperations] = useState<Array<Record<string, unknown>>>([]);
-  const [oauthRecentOps, setOauthRecentOps] = useState<Array<Record<string, unknown>>>([]);
-  const [oauthTotalOps, setOauthTotalOps] = useState<number>(0);
-  const [oauthOnboarding, setOauthOnboarding] = useState<Array<Record<string, unknown>>>([]);
-  const [compatibilityMatrix, setCompatibilityMatrix] = useState<CompatibilityMatrixRow[]>([]);
-  const [bootstrapReadiness, setBootstrapReadiness] = useState<{ ready: boolean; checks: Array<Record<string, unknown>>; next_steps: string[] } | null>(null);
-  const [importPayload, setImportPayload] = useState<string>("");
-
-  const [newHarness, setNewHarness] = useState({
-    provider_key: "generic_openai_like",
-    label: "Generic OpenAI-like",
-    integration_class: "openai_compatible" as HarnessProfile["integration_class"],
-    endpoint_base_url: "https://example.invalid/v1",
-    auth_scheme: "bearer" as HarnessProfile["auth_scheme"],
-    auth_value: "",
-    auth_header: "Authorization",
-    models: "model-1",
-    stream_enabled: false,
-  });
-
-  const load = async () => {
-    setState("loading");
-    try {
-      const [payload, usage, harnessTemplates, harnessProfiles, harnessRuns, clientView, betaTargetsResponse, oauthTargetsResponse, oauthOpsResponse, oauthOnboardingResponse, bootstrapResponse, compatibilityResponse] = await Promise.all([
-        fetchProviderControlPlane(),
-        fetchUsageSummary(),
-        fetchHarnessTemplates(),
-        fetchHarnessProfiles(),
-        fetchHarnessRuns(
-          runProviderFilter === "all" ? undefined : runProviderFilter,
-          runModeFilter === "all" ? undefined : runModeFilter,
-          runStatusFilter === "all" ? undefined : runStatusFilter,
-          runClientFilter === "all" ? undefined : runClientFilter,
-          40,
-        ),
-        fetchClientOperationalView(),
-        fetchBetaProviderTargets(),
-        fetchOauthAccountTargets(),
-        fetchOauthAccountOperations(),
-        fetchOauthOnboarding(),
-        fetchBootstrapReadiness(),
-        fetchCompatibilityMatrix(),
-      ]);
-      setProviders(payload.providers);
-      setTemplates(harnessTemplates.templates);
-      setProfiles(harnessProfiles.profiles);
-      setRuns(harnessRuns.runs.slice(0, 20));
-      setRunSummary(harnessRuns.summary ?? {});
-      setRunOps(harnessRuns.ops ?? {});
-      setClients(clientView.clients ?? []);
-      setBetaTargets(betaTargetsResponse.targets ?? []);
-      setOauthTargets(oauthTargetsResponse.targets ?? []);
-      setOauthOperations(oauthOpsResponse.operations ?? []);
-      setOauthRecentOps(oauthOpsResponse.recent ?? []);
-      setOauthTotalOps(Number(oauthOpsResponse.total_operations ?? 0));
-      setOauthOnboarding(oauthOnboardingResponse.targets ?? []);
-      setCompatibilityMatrix(compatibilityResponse.matrix ?? []);
-      setBootstrapReadiness({
-        ready: Boolean(bootstrapResponse.ready),
-        checks: bootstrapResponse.checks ?? [],
-        next_steps: bootstrapResponse.next_steps ?? [],
-      });
-      setSyncNote(String(payload.notes.sync_action));
-      setHealthConfig(payload.health_config);
-      setProviderErrors(Object.fromEntries(usage.aggregations.errors_by_provider.map((item) => [String(item.provider), Number(item.errors)])));
-      setModelErrors(Object.fromEntries(usage.aggregations.errors_by_model.map((item) => [String(item.model), Number(item.errors)])));
-      setIntegrationErrors(Object.fromEntries(usage.aggregations.errors_by_integration.map((item) => [String(item.integration_key), Number(item.errors)])));
-      setProfileErrors(Object.fromEntries(usage.aggregations.errors_by_profile.map((item) => [String(item.profile_key), Number(item.errors)])));
-      setState("success");
-    } catch (err) {
-      setState("error");
-      setError(err instanceof Error ? err.message : "Unknown provider loading error.");
-    }
-  };
-
-  useEffect(() => {
-    void load();
-  }, [runModeFilter, runStatusFilter, runProviderFilter, runClientFilter]);
-
-  const runHarnessAction = async (providerKey: string, model?: string) => {
-    const targetModel = model ?? profiles.find((item) => item.provider_key === providerKey)?.models[0] ?? "model-1";
-    try {
-      const preview = await previewHarness({ provider_key: providerKey, model: targetModel, message: "preview", stream: false });
-      const dry = await dryRunHarness({ provider_key: providerKey, model: targetModel, message: "dry-run", stream: false });
-      const verify = await verifyHarnessProfile({ provider_key: providerKey, model: targetModel });
-      setOperationResult(JSON.stringify({ preview, dry, verify }, null, 2));
-      await load();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Harness action failed.");
-    }
-  };
-
-  const onCreateProvider = async () => {
-    if (!newProvider.provider || !newProvider.label) {
-      setError("Provider und Label sind erforderlich.");
-      return;
-    }
-    await createProvider({ provider: newProvider.provider, label: newProvider.label, integration_class: "native", config: {} });
-    setNewProvider({ provider: "", label: "" });
-    await load();
-  };
-
-  const onUpsertHarness = async () => {
-    await upsertHarnessProfile(newHarness.provider_key, {
-      provider_key: newHarness.provider_key,
-      label: newHarness.label,
-      integration_class: newHarness.integration_class,
-      endpoint_base_url: newHarness.endpoint_base_url,
-      auth_scheme: newHarness.auth_scheme,
-      auth_value: newHarness.auth_value,
-      auth_header: newHarness.auth_header,
-      template_id: newHarness.integration_class,
-      enabled: true,
-      models: newHarness.models.split(",").map((item) => item.trim()).filter(Boolean),
-      discovery_enabled: false,
-      stream_mapping: { enabled: newHarness.stream_enabled },
-      capabilities: { streaming: newHarness.stream_enabled, model_source: "manual" },
-    });
-    await load();
-  };
-
-  const updateHealth = async (patch: Partial<HealthConfig>) => {
-    const response = await patchHealthConfig(patch);
-    setHealthConfig(response.config);
-    await load();
-  };
-
-  const onExportHarness = async (redactSecrets: boolean) => {
-    try {
-      const response = await fetchHarnessExport(redactSecrets);
-      const formatted = JSON.stringify(response.snapshot, null, 2);
-      setImportPayload(formatted);
-      setOperationResult(formatted);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Harness export failed.");
-    }
-  };
-
-  const onImportHarness = async (dryRun: boolean) => {
-    try {
-      const parsed = JSON.parse(importPayload) as Record<string, unknown>;
-      const result = await importHarnessConfig(parsed, dryRun);
-      setOperationResult(JSON.stringify(result, null, 2));
-      if (!dryRun) {
-        await load();
-      }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Harness import failed.");
-    }
-  };
-
-  const onRollbackHarness = async (providerKey: string, revision: number) => {
-    try {
-      const response = await rollbackHarnessProfile(providerKey, revision);
-      setOperationResult(JSON.stringify(response.profile, null, 2));
-      await load();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Harness rollback failed.");
-    }
-  };
+  const [searchParams] = useSearchParams();
+  const { session, sessionReady } = useAppSession();
+  const tenantId = getTenantIdFromSearchParams(searchParams);
+  const access = getProvidersAccess(session, sessionReady);
+  const { data, actions } = useProvidersControlPlane(access, tenantId);
+  const note = access.canMutate
+    ? "Setup keeps the default top-level destination for this route. Operations links can still deep-link directly into live provider health and run review without introducing nested routes yet."
+    : `${access.summaryDetail} Runtime truth stays visible here without surfacing mutations that the backend will block.`;
 
   return (
-    <section>
-      <h2>Providers & Harness Control Plane</h2>
-      <p className="fg-muted">Persistente Harness-Profile, Preview/Verify/Dry-Run/Probe, Sync und Health-Steuerung.</p>
-
-      <div className="fg-card" style={{ marginBottom: "0.75rem" }}>
-        <h3>Harness templates</h3>
-        <ul>{templates.map((item) => <li key={item.id}>{item.id} · {item.integration_class} · {item.description}</li>)}</ul>
-      </div>
-
-      <div className="fg-card" style={{ marginBottom: "0.75rem" }}>
-        <h3>Harness onboarding</h3>
-        <div className="fg-row">
-          <input value={newHarness.provider_key} onChange={(event) => setNewHarness((prev) => ({ ...prev, provider_key: event.target.value }))} placeholder="provider_key" />
-          <input value={newHarness.label} onChange={(event) => setNewHarness((prev) => ({ ...prev, label: event.target.value }))} placeholder="label" />
-          <input value={newHarness.endpoint_base_url} onChange={(event) => setNewHarness((prev) => ({ ...prev, endpoint_base_url: event.target.value }))} placeholder="endpoint_base_url" />
-          <select value={newHarness.integration_class} onChange={(event) => setNewHarness((prev) => ({ ...prev, integration_class: event.target.value as HarnessProfile["integration_class"] }))}>
-            <option value="openai_compatible">openai_compatible</option><option value="templated_http">templated_http</option><option value="static_catalog">static_catalog</option>
-          </select>
-          <label><input type="checkbox" checked={newHarness.stream_enabled} onChange={(event) => setNewHarness((prev) => ({ ...prev, stream_enabled: event.target.checked }))} />stream enabled</label>
-          <input value={newHarness.models} onChange={(event) => setNewHarness((prev) => ({ ...prev, models: event.target.value }))} placeholder="models comma separated" />
-          <button type="button" onClick={() => void onUpsertHarness()}>Save Profile</button>
+    <section className="fg-page">
+      <PageIntro
+        eyebrow="Setup"
+        title="Providers & Harness Control Plane"
+        description="Live provider truth, harness onboarding, and expansion targets stay separated so operators can scan runtime posture without confusing it with roadmap coverage."
+        question="Which provider task are you handling right now: onboarding, live health, or expansion planning?"
+        links={[
+          {
+            label: "Overview",
+            to: CONTROL_PLANE_ROUTES.providers,
+            description: "Start with the route-level summary and current runtime truth.",
+          },
+          {
+            label: "Harness Profiles",
+            to: "/providers#harness-control",
+            description: access.canMutate
+              ? "Preview, verify, probe, and manage saved provider harness profiles."
+              : "Inspect saved provider harness profiles, templates, and recent run truth without mutation controls.",
+          },
+          {
+            label: "Provider Health & Runs",
+            to: CONTROL_PLANE_ROUTES.providerHealthRuns,
+            description: "Jump straight to live provider inventory, compatibility, and run posture.",
+          },
+          {
+            label: "Expansion Targets",
+            to: "/providers#expansion-targets",
+            description: "Review planned or partial provider coverage without implying runtime readiness.",
+          },
+        ]}
+        badges={[
+          { label: access.badgeLabel, tone: access.badgeTone },
+          ...(tenantId ? [{ label: `Tenant scope: ${tenantId}`, tone: "success" as const }] : []),
+        ]}
+        note={note}
+      />
+      <div className="fg-stack">
+        <div id="provider-overview">
+          <ProvidersOverviewSection data={data} actions={actions} />
         </div>
-        <ul>
-          {profiles.map((profile) => (
-            <li key={profile.provider_key}>
-              {profile.provider_key} · {profile.integration_class} · enabled={String(profile.enabled)} · lifecycle={String(profile.lifecycle_status ?? "unknown")} · revision={String(profile.config_revision ?? 1)} · parent={String(profile.config_revision_parent ?? "-")} · verify={String(profile.last_verify_status ?? "never")} · probe={String(profile.last_probe_status ?? "never")} · last_sync={profile.last_sync_status ?? "never"} · last_used={String(profile.last_used_at ?? "never")} · last_model={String(profile.last_used_model ?? "-")} · requests={String(profile.request_count ?? 0)} · stream_requests={String(profile.stream_request_count ?? 0)} · tokens={String(profile.total_tokens ?? 0)} · errors={profileErrors[profile.provider_key] ?? 0}
-              {profile.needs_attention ? <strong className="fg-danger" style={{ marginLeft: "0.5rem" }}>needs attention</strong> : null}
-              <button type="button" onClick={() => void runHarnessAction(profile.provider_key)} style={{ marginLeft: "0.5rem" }}>Preview+Verify</button>
-              <button type="button" onClick={() => void probeHarness({ provider_key: profile.provider_key, model: profile.models[0] ?? "model-1", message: "probe", stream: false }).then((res) => setOperationResult(JSON.stringify(res, null, 2)))} style={{ marginLeft: "0.5rem" }}>Probe</button>
-              {profile.enabled ? (
-                <button type="button" onClick={() => void deactivateHarnessProfile(profile.provider_key).then(load)} style={{ marginLeft: "0.5rem" }}>Deactivate</button>
-              ) : (
-                <button type="button" onClick={() => void activateHarnessProfile(profile.provider_key).then(load)} style={{ marginLeft: "0.5rem" }}>Activate</button>
-              )}
-              {(profile.config_revision ?? 1) > 1 ? (
-                <button
-                  type="button"
-                  onClick={() => void onRollbackHarness(profile.provider_key, (profile.config_revision ?? 1) - 1)}
-                  style={{ marginLeft: "0.5rem" }}
-                >
-                  Rollback
-                </button>
-              ) : null}
-              <button type="button" onClick={() => void deleteHarnessProfile(profile.provider_key).then(load)} style={{ marginLeft: "0.5rem" }}>Delete</button>
-            </li>
-          ))}
-        </ul>
-        {operationResult ? <pre>{operationResult}</pre> : null}
-      </div>
-
-      <div className="fg-card" style={{ marginBottom: "0.75rem" }}>
-        <h3>Harness import / export</h3>
-        <div className="fg-row" style={{ marginBottom: "0.5rem" }}>
-          <button type="button" onClick={() => void onExportHarness(true)}>Export redacted</button>
-          <button type="button" onClick={() => void onExportHarness(false)}>Export full snapshot</button>
-          <button type="button" onClick={() => void onImportHarness(true)}>Dry-run import</button>
-          <button type="button" onClick={() => void onImportHarness(false)}>Apply import</button>
+        <OperationResultSection data={data} actions={actions} />
+        <div id="harness-control">
+          <HarnessControlSection data={data} actions={actions} />
         </div>
-        <textarea
-          value={importPayload}
-          onChange={(event) => setImportPayload(event.target.value)}
-          rows={14}
-          style={{ width: "100%" }}
-          placeholder="Harness snapshot JSON for dry-run or import"
-        />
-      </div>
-
-      <div className="fg-card" style={{ marginBottom: "0.75rem" }}>
-        <h3>Recent harness runs & runtime history</h3>
-        <div className="fg-row" style={{ marginBottom: "0.5rem" }}>
-          <label>mode:<select value={runModeFilter} onChange={(event) => setRunModeFilter(event.target.value)}><option value="all">all</option><option value="verify">verify</option><option value="probe">probe</option><option value="sync">sync</option></select></label>
-          <label>status:<select value={runStatusFilter} onChange={(event) => setRunStatusFilter(event.target.value)}><option value="all">all</option><option value="ok">ok</option><option value="warning">warning</option><option value="failed">failed</option></select></label>
-          <label>provider:<select value={runProviderFilter} onChange={(event) => setRunProviderFilter(event.target.value)}><option value="all">all</option>{profiles.map((p) => <option key={p.provider_key} value={p.provider_key}>{p.provider_key}</option>)}</select></label>
-          <label>client:<select value={runClientFilter} onChange={(event) => setRunClientFilter(event.target.value)}><option value="all">all</option><option value="runtime">runtime</option><option value="control_plane">control_plane</option></select></label>
-          <span>summary total={String(runSummary.total ?? 0)} failed={String(runSummary.failed ?? 0)} verify={String(runSummary.verify ?? 0)} probe={String(runSummary.probe ?? 0)} sync={String(runSummary.sync ?? 0)} runtime_non_stream={String(runSummary.runtime_non_stream ?? 0)} runtime_stream={String(runSummary.runtime_stream ?? 0)} profiles={String(runOps.profile_count ?? 0)} needs_attention={String(runOps.profiles_needing_attention ?? 0)}</span>
+        <div id="provider-health-runs">
+          <ProviderInventorySection data={data} actions={actions} />
         </div>
-        <ul>{runs.map((run, idx) => <li key={`${String(run.run_id ?? run.provider_key)}-${idx}`}>{String(run.executed_at)} · {String(run.provider_key)} · {String(run.mode)} · status={String(run.status)} · success={String(run.success)} · client={String(run.client_id ?? "-")} · integration={String(run.integration ?? "-")}</li>)}</ul>
-      </div>
-
-      <div className="fg-card" style={{ marginBottom: "0.75rem" }}>
-        <h3>Model Health Controls</h3>
-        {healthConfig ? (
-          <div className="fg-row">
-            <label><input type="checkbox" checked={healthConfig.provider_health_enabled} onChange={(event) => void updateHealth({ provider_health_enabled: event.target.checked })} />Provider health enabled</label>
-            <label><input type="checkbox" checked={healthConfig.model_health_enabled} onChange={(event) => void updateHealth({ model_health_enabled: event.target.checked })} />Model health enabled</label>
-            <label>Probe mode:
-              <select value={healthConfig.probe_mode} onChange={(event) => void updateHealth({ probe_mode: event.target.value as HealthConfig["probe_mode"] })}>
-                <option value="provider">provider</option><option value="discovery">discovery</option><option value="synthetic_probe">synthetic_probe</option>
-              </select>
-            </label>
-            <button type="button" onClick={() => void runHealthChecks().then(load)}>Run health checks</button>
-          </div>
-        ) : null}
-      </div>
-
-      <div className="fg-card" style={{ marginBottom: "0.75rem" }}>
-        <h3>Provider anlegen</h3>
-        <div className="fg-row">
-          <input placeholder="provider_key" value={newProvider.provider} onChange={(event) => setNewProvider((prev) => ({ ...prev, provider: event.target.value }))} />
-          <input placeholder="Provider Label" value={newProvider.label} onChange={(event) => setNewProvider((prev) => ({ ...prev, label: event.target.value }))} />
-          <button type="button" onClick={() => void onCreateProvider()}>Create</button>
+        <div id="expansion-targets">
+          <ExpansionTargetsSection data={data} actions={actions} />
         </div>
       </div>
-
-      <div className="fg-row" style={{ marginBottom: "0.75rem" }}><strong>Status:</strong> {state}<button type="button" onClick={() => void syncProviders().then(load)}>Sync all providers</button></div>
-      {error && <p className="fg-danger">{error}</p>}
-
-      {providers.map((provider) => (
-        <article key={provider.provider} className="fg-card" style={{ marginBottom: "0.75rem" }}>
-          <h3>{provider.label} ({provider.provider})</h3>
-          <p>integration_class={provider.integration_class} · template={provider.template_id ?? "-"} · last_sync_error={provider.last_sync_error ?? "none"}</p>
-          <p>harness_profiles={String(provider.harness_profile_count ?? 0)} · harness_runs={String(provider.harness_run_count ?? 0)} · harness_needs_attention={String(provider.harness_needs_attention_count ?? 0)}</p>
-          <p>oauth_failures={String(provider.oauth_failure_count ?? 0)} · oauth_last_probe={String((provider.oauth_last_probe as Record<string, unknown> | null)?.status ?? "never")} · oauth_last_bridge={String((provider.oauth_last_bridge_sync as Record<string, unknown> | null)?.status ?? "never")}</p>
-          <p>enabled={String(provider.enabled)} · ready={String(provider.ready)} · oauth_required={String(provider.oauth_required)} · oauth_mode={String(provider.oauth_mode ?? "-")}</p>
-          <p>axis={provider.provider_axis ?? "unknown"} · auth_mechanism={provider.auth_mechanism ?? "unknown"} · tool_calling_level={provider.tool_calling_level ?? "none"} · compatibility_tier={provider.compatibility_tier ?? "planned"}</p>
-          <p>discovery_supported={String(provider.discovery_supported)} · last_sync_status={provider.last_sync_status} · models={provider.model_count}</p>
-          <p>provider_errors={providerErrors[provider.provider] ?? 0} · integration_errors={integrationErrors[`runtime:none:none`] ?? 0}</p>
-          {(providerErrors[provider.provider] ?? 0) >= 3 ? <p className="fg-danger">needs attention: elevated provider errors</p> : null}
-          {!provider.ready && provider.readiness_reason ? <p>reason: {provider.readiness_reason}</p> : null}
-          <div className="fg-row" style={{ marginBottom: "0.5rem" }}>
-            <button type="button" onClick={() => void activateProvider(provider.provider).then(load)}>Activate</button>
-            <button type="button" onClick={() => void deactivateProvider(provider.provider).then(load)}>Deactivate</button>
-            <button type="button" onClick={() => void syncProviders(provider.provider).then(load)}>Sync models</button>
-            <button type="button" onClick={() => void updateProvider(provider.provider, { label: `${provider.label} (edited)` }).then(load)}>Edit label</button>
-          </div>
-          <ul>
-            {provider.models.map((model) => (
-              <li key={model.id}>
-                {model.id} · source={model.source} · discovery_status={model.discovery_status} · runtime={model.runtime_status ?? "unknown"} · availability={model.availability_status ?? "unknown"} · health={model.health_status} · active={String(model.active)} · last_probe={String(model.last_probe_at ?? "never")} · stale_since={String(model.stale_since ?? "-")} · reason={model.status_reason ?? "-"} · errors={modelErrors[model.id] ?? 0}
-              </li>
-            ))}
-          </ul>
-        </article>
-      ))}
-
-
-      <div className="fg-card" style={{ marginBottom: "0.75rem" }}>
-        <h3>Client / Consumer Operational View</h3>
-        <ul>
-          {clients.slice(0, 15).map((client) => (
-            <li key={String(client.client_id)}>
-              {String(client.client_id)} · requests={String(client.requests ?? 0)} · errors={String(client.errors ?? 0)} · error_rate={Number(client.error_rate ?? 0).toFixed(2)} · actual_cost={Number(client.actual_cost ?? 0).toFixed(4)} · needs_attention={String(client.needs_attention ?? false)}
-            </li>
-          ))}
-        </ul>
-      </div>
-      <div className="fg-card" style={{ marginBottom: "0.75rem" }}>
-        <h3>Expansion targets (not default runtime truth)</h3>
-        <p className="fg-muted">Diese Tabelle beschreibt Ausbau- und Onboarding-Ziele. Die aktuelle Produktwahrheit steht oberhalb im Provider-Snapshot und in der Compatibility Matrix.</p>
-        <button type="button" onClick={() => void syncOauthAccountBridgeProfiles().then((res) => { setOperationResult(JSON.stringify(res, null, 2)); void load(); })}>
-          Sync OAuth Bridge Profiles
-        </button>
-        <button type="button" style={{ marginLeft: "0.5rem" }} onClick={() => void probeAllOauthAccountProviders().then((res) => { setOperationResult(JSON.stringify(res, null, 2)); void load(); })}>
-          Probe all OAuth targets
-        </button>
-        <ul>
-          {betaTargets.map((target) => (
-            <li key={target.provider_key}>
-              {target.provider_key} · axis={target.product_axis} · type={target.provider_type} · readiness={target.readiness} ({target.readiness_score}) · beta_tier={target.beta_tier} · auth={target.auth_model} · runtime={target.runtime_path} · runtime_axis={target.runtime_readiness} · stream_axis={target.streaming_readiness} · verify_axis={target.verify_probe_readiness} · ui_axis={target.ui_readiness} · status={target.status_summary}
-              {target.provider_type === "oauth_account" ? (
-                <button
-                  type="button"
-                  style={{ marginLeft: "0.5rem" }}
-                  onClick={() => void probeOauthAccountProvider(target.provider_key).then((res) => setOperationResult(JSON.stringify(res, null, 2)))}
-                >
-                  Probe OAuth
-                </button>
-              ) : null}
-            </li>
-          ))}
-        </ul>
-        <h4>OAuth account operational status</h4>
-        <ul>
-          {oauthTargets.map((target) => (
-            <li key={String(target.provider_key)}>
-              {String(target.provider_key)} · configured={String(target.configured)} · bridge={String(target.runtime_bridge_enabled)} · probe={String(target.probe_enabled)} · harness={String(target.harness_profile_enabled)} · readiness={String(target.readiness)} · reason={String(target.readiness_reason)}
-            </li>
-          ))}
-        </ul>
-        <h4>OAuth operations & failures</h4>
-        <p>persisted_operations={oauthTotalOps}</p>
-        <ul>
-          {oauthOperations.map((item) => (
-            <li key={String(item.provider_key)}>
-              {String(item.provider_key)} · failures={String(item.failures ?? 0)} · failures_24h={String(item.failures_24h ?? 0)} · probes={String(item.probe_count ?? 0)} · bridge_syncs={String(item.bridge_sync_count ?? 0)} · failure_rate={Number(item.failure_rate ?? 0).toFixed(2)} · ops={String(item.operation_count ?? 0)} · needs_attention={String(item.needs_attention ?? false)} · last_probe={String((item.last_probe as Record<string, unknown> | null)?.status ?? "never")} · last_failed={String((item.last_failed_operation as Record<string, unknown> | null)?.status ?? "never")} · last_sync={String((item.last_bridge_sync as Record<string, unknown> | null)?.status ?? "never")}
-            </li>
-          ))}
-        </ul>
-        <details>
-          <summary>Recent OAuth operations log</summary>
-          <ul>
-            {oauthRecentOps.slice(-10).map((item, idx) => (
-              <li key={`${String(item.provider_key)}-${idx}`}>
-                {String(item.executed_at)} · {String(item.provider_key)} · {String(item.action)} · {String(item.status)} · {String(item.details)}
-              </li>
-            ))}
-          </ul>
-        </details>
-      </div>
-      <div className="fg-card" style={{ marginBottom: "0.75rem" }}>
-        <h3>OAuth onboarding guide</h3>
-        <ul>
-          {oauthOnboarding.map((target) => (
-            <li key={String(target.provider_key)}>
-              {String(target.provider_key)} · readiness={String(target.readiness)} · depth={String(target.operational_depth)} · reason={String(target.readiness_reason)}
-              {Array.isArray(target.next_steps) && target.next_steps.length > 0 ? ` · next=${String(target.next_steps[0])}` : ""}
-            </li>
-          ))}
-        </ul>
-      </div>
-      <div className="fg-card" style={{ marginBottom: "0.75rem" }}>
-        <h3>Compatibility matrix</h3>
-        <p className="fg-muted">Diese Matrix spiegelt die aktuelle Runtime-/Control-Plane-Wahrheit der verdrahteten Provider, nicht die Ausbauziele.</p>
-        <ul>
-          {compatibilityMatrix.map((row) => (
-            <li key={row.provider}>
-              {row.label} · tier={row.tier} · ready={String(row.ready)} · axis={row.provider_axis} · streaming={row.streaming} · tool_calling={row.tool_calling} · vision={row.vision} · discovery={row.discovery} · ui_models={row.ui_models}
-            </li>
-          ))}
-        </ul>
-      </div>
-      <div className="fg-card" style={{ marginBottom: "0.75rem" }}>
-        <h3>Docker-first bootstrap readiness</h3>
-        {bootstrapReadiness ? (
-          <>
-            <p>ready={String(bootstrapReadiness.ready)}</p>
-            <ul>
-              {bootstrapReadiness.checks.map((check) => (
-                <li key={String(check.id)}>
-                  {String(check.id)} · ok={String(check.ok)} · details={String(check.details)}
-                </li>
-              ))}
-            </ul>
-            <ol>
-              {bootstrapReadiness.next_steps.map((step) => <li key={step}>{step}</li>)}
-            </ol>
-          </>
-        ) : null}
-      </div>
-      <div className="fg-card"><h3>Discovery-/Sync-Zustand</h3><p>{syncNote}</p><p>integration error dimensions: {Object.entries(integrationErrors).map(([k, v]) => `${k}=${v}`).join(" | ") || "none"}</p></div>
     </section>
   );
 }

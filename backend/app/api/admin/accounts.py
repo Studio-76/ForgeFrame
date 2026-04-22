@@ -2,15 +2,20 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, Query, Request, status
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
-from app.api.admin.security import require_admin_role
+from app.api.admin.idempotency import unsupported_idempotency_response
+from app.api.admin.security import require_admin_mutation_role
 from app.governance.models import AuthenticatedAdmin
 from app.governance.service import GovernanceService, get_governance_service
 
 router = APIRouter(prefix="/accounts", tags=["admin-accounts"])
+_ACCOUNT_IDEMPOTENCY_MESSAGE = (
+    "Idempotency-Key is not supported for account mutations until ForgeGate persists replay-safe account write "
+    "responses without duplicating governance audit side effects."
+)
 
 
 class AccountCreateRequest(BaseModel):
@@ -27,8 +32,11 @@ class AccountUpdateRequest(BaseModel):
 
 
 @router.get("/")
-def list_accounts(service: GovernanceService = Depends(get_governance_service)) -> dict[str, object]:
-    keys = service.list_runtime_keys()
+def list_accounts(
+    tenant_id: str | None = Query(default=None, alias="tenantId"),
+    service: GovernanceService = Depends(get_governance_service),
+) -> dict[str, object]:
+    keys = service.list_runtime_keys(tenant_id=tenant_id)
     key_counts: dict[str, int] = {}
     for item in keys:
         if item.account_id:
@@ -40,7 +48,7 @@ def list_accounts(service: GovernanceService = Depends(get_governance_service)) 
                 **account.model_dump(),
                 "runtime_key_count": key_counts.get(account.account_id, 0),
             }
-            for account in service.list_accounts()
+            for account in service.list_accounts(tenant_id=tenant_id)
         ],
     }
 
@@ -48,9 +56,13 @@ def list_accounts(service: GovernanceService = Depends(get_governance_service)) 
 @router.post("/", status_code=status.HTTP_201_CREATED)
 def create_account(
     payload: AccountCreateRequest,
-    admin: AuthenticatedAdmin = Depends(require_admin_role("admin")),
+    request: Request,
+    admin: AuthenticatedAdmin = Depends(require_admin_mutation_role("admin")),
     service: GovernanceService = Depends(get_governance_service),
 ) -> dict[str, object]:
+    unsupported = unsupported_idempotency_response(request, message=_ACCOUNT_IDEMPOTENCY_MESSAGE)
+    if unsupported is not None:
+        return unsupported
     account = service.create_account(
         label=payload.label,
         provider_bindings=payload.provider_bindings,
@@ -64,9 +76,13 @@ def create_account(
 def update_account(
     account_id: str,
     payload: AccountUpdateRequest,
-    admin: AuthenticatedAdmin = Depends(require_admin_role("admin")),
+    request: Request,
+    admin: AuthenticatedAdmin = Depends(require_admin_mutation_role("admin")),
     service: GovernanceService = Depends(get_governance_service),
 ) -> dict[str, object]:
+    unsupported = unsupported_idempotency_response(request, message=_ACCOUNT_IDEMPOTENCY_MESSAGE)
+    if unsupported is not None:
+        return unsupported
     try:
         account = service.update_account(
             account_id,

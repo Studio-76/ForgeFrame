@@ -8,10 +8,26 @@ from typing import Literal
 import httpx
 
 from app.api.admin.control_plane_models import OAuthAccountProbeResult, OAuthAccountTargetStatus
+from app.auth.oauth.gemini import resolve_gemini_auth_state
+from app.auth.oauth.openai import resolve_codex_auth_state
 from app.harness import HarnessProviderProfile
 
 
 class ControlPlaneOAuthTargetsDomainMixin:
+    @staticmethod
+    def _native_oauth_bridge_path_enabled(status: OAuthAccountTargetStatus) -> bool:
+        return status.runtime_bridge_enabled or status.probe_enabled
+
+    @staticmethod
+    def _native_oauth_disabled_evidence_suffix(status: OAuthAccountTargetStatus) -> str:
+        if status.evidence.runtime.status == "observed" and status.evidence.live_probe.status == "observed":
+            return " Historical live runtime and probe evidence remain recorded from an earlier enabled state."
+        if status.evidence.runtime.status == "observed":
+            return " Historical live runtime evidence remains recorded from an earlier enabled state."
+        if status.evidence.live_probe.status == "observed":
+            return " Historical live probe evidence remains recorded from an earlier enabled state."
+        return ""
+
     def _oauth_target_next_steps(self, provider_key: str, status: OAuthAccountTargetStatus) -> list[str]:
         steps: list[str] = []
         if not status.configured:
@@ -20,58 +36,152 @@ class ControlPlaneOAuthTargetsDomainMixin:
             steps.append(f"Enable live probe support for {provider_key}.")
         if not status.runtime_bridge_enabled and provider_key in {"openai_codex", "gemini"}:
             steps.append(f"Enable native runtime bridge for {provider_key}.")
+        if status.configured and status.evidence.live_probe.status != "observed" and provider_key in {"openai_codex", "gemini"}:
+            steps.append(f"Run an explicit live probe for {provider_key} so the control plane can promote the route beyond credentials-only readiness.")
+        if status.configured and status.evidence.runtime.status != "observed" and provider_key in {"openai_codex", "gemini"}:
+            steps.append(f"Send a real runtime request through {provider_key} to record live non-stream evidence.")
         if not status.harness_profile_enabled and provider_key in {"antigravity", "github_copilot", "claude_code"}:
             steps.append(f"Enable OAuth bridge profile sync for {provider_key}.")
         if not steps:
-            steps.append(f"{provider_key} is operational; verify UI and runtime behavior against live upstreams.")
+            if provider_key in {"antigravity", "github_copilot", "claude_code"}:
+                steps.append(
+                    f"Keep {provider_key} positioned as onboarding/bridge-only; probe success does not promote it to native runtime-ready truth."
+                )
+            else:
+                steps.append(f"{provider_key} is operational; verify UI and runtime behavior against live upstreams.")
         return steps
 
-    def list_oauth_account_target_statuses(self) -> list[dict[str, object]]:
+    @staticmethod
+    def _oauth_target_operational_depth(
+        provider_key: str,
+        status: OAuthAccountTargetStatus,
+    ) -> str:
+        if provider_key in {"openai_codex", "gemini"} and not ControlPlaneOAuthTargetsDomainMixin._native_oauth_bridge_path_enabled(status):
+            if status.evidence.runtime.status == "observed" and status.evidence.live_probe.status == "observed":
+                return "path_disabled_runtime_and_probe_evidenced"
+            if status.evidence.runtime.status == "observed":
+                return "path_disabled_runtime_evidenced"
+            if status.evidence.live_probe.status == "observed":
+                return "path_disabled_probe_evidenced"
+        if status.evidence.runtime.status == "observed" and status.evidence.live_probe.status == "observed":
+            return "runtime_and_probe_evidenced"
+        if status.evidence.runtime.status == "observed":
+            return "runtime_evidenced"
+        if status.evidence.live_probe.status == "observed":
+            return "bridge_probe_evidenced" if provider_key in {"antigravity", "github_copilot", "claude_code"} else "probe_evidenced"
+        if status.runtime_bridge_enabled and status.probe_enabled:
+            return "runtime_path_configured"
+        if status.harness_profile_enabled or status.probe_enabled:
+            return "bridge_path_configured"
+        if status.configured:
+            return "credentials_only"
+        return "not_configured"
+
+    def list_oauth_account_target_statuses(self, tenant_id: str | None = None) -> list[dict[str, object]]:
+        effective_tenant_id = self._effective_truth_projection_tenant_id(tenant_id)
         providers = ["openai_codex", "gemini", "antigravity", "github_copilot", "claude_code"]
         statuses: list[dict[str, object]] = []
         for provider_key in providers:
             if provider_key in {"antigravity", "github_copilot", "claude_code"}:
-                statuses.append(self._oauth_target_status(provider_key).model_dump())
+                statuses.append(self._oauth_target_status(provider_key, tenant_id=effective_tenant_id).model_dump())
                 continue
-            probe = self.probe_oauth_account_provider(provider_key)
+            status = self._native_oauth_target_status(provider_key, tenant_id=effective_tenant_id)
             statuses.append(
-                OAuthAccountTargetStatus(
-                    provider_key=provider_key,
-                    configured=probe.ready,
-                    runtime_bridge_enabled=(
-                        provider_key == "openai_codex"
-                        and self._settings.openai_codex_bridge_enabled
-                    ),
-                    probe_enabled=(
-                        provider_key == "gemini"
-                        and self._settings.gemini_probe_enabled
-                    ),
-                    harness_profile_enabled=False,
-                    readiness="ready" if probe.status == "ok" else ("partial" if probe.ready else "planned"),
-                    readiness_reason=probe.details,
-                    auth_kind="oauth_account",
-                ).model_dump()
+                status.model_dump()
             )
         return statuses
 
-    def oauth_account_onboarding_summary(self) -> dict[str, object]:
+    def oauth_account_onboarding_summary(self, tenant_id: str | None = None) -> dict[str, object]:
+        effective_tenant_id = self._effective_truth_projection_tenant_id(tenant_id)
         targets = []
-        for item in self.list_oauth_account_target_statuses():
+        for item in self.list_oauth_account_target_statuses(tenant_id=effective_tenant_id):
             status = OAuthAccountTargetStatus(**item)
             targets.append(
                 {
                     **status.model_dump(),
                     "next_steps": self._oauth_target_next_steps(status.provider_key, status),
-                    "operational_depth": (
-                        "runtime_and_probe"
-                        if status.runtime_bridge_enabled and status.probe_enabled
-                        else ("probe_only" if status.probe_enabled else "credentials_only")
-                    ),
+                    "operational_depth": self._oauth_target_operational_depth(status.provider_key, status),
                 }
             )
-        return {"status": "ok", "targets": targets}
+        return {"status": "ok", "targets": targets, "tenant_id": effective_tenant_id}
 
-    def _oauth_target_status(self, provider_key: str) -> OAuthAccountTargetStatus:
+    def _native_oauth_target_status(
+        self,
+        provider_key: str,
+        *,
+        tenant_id: str | None = None,
+    ) -> OAuthAccountTargetStatus:
+        if provider_key == "openai_codex":
+            auth_state = resolve_codex_auth_state(self._settings)
+            configured = auth_state.ready
+            runtime_bridge_enabled = self._settings.openai_codex_bridge_enabled
+            probe_enabled = runtime_bridge_enabled
+        elif provider_key == "gemini":
+            auth_state = resolve_gemini_auth_state(self._settings)
+            configured = auth_state.ready
+            runtime_bridge_enabled = self._settings.gemini_probe_enabled
+            probe_enabled = self._settings.gemini_probe_enabled
+        else:
+            raise ValueError(f"Unsupported native oauth/account target: {provider_key}")
+
+        auth_kind: Literal["oauth_account", "api_key"] = (
+            "oauth_account" if auth_state.auth_mode == "oauth" else "api_key"
+        )
+        provider_status = self._safe_provider_status(provider_key)
+        provider_ready = bool(provider_status.get("ready"))
+        provider_reason = str(provider_status.get("readiness_reason") or "")
+        evidence = self._provider_capability_evidence(provider_key, tenant_id=tenant_id)
+        readiness: Literal["planned", "partial", "ready"] = "planned"
+        reason = "OAuth/account credentials missing."
+        if configured:
+            readiness = "partial"
+            if runtime_bridge_enabled and not provider_ready and provider_reason:
+                reason = provider_reason
+            elif provider_key == "openai_codex" and auth_state.auth_mode == "oauth":
+                reason = (
+                    f"Codex OAuth mode '{auth_state.oauth_mode}' is configured via a pre-issued access token, "
+                    "but no live probe or runtime evidence is recorded yet."
+                )
+            else:
+                reason = "Credentials are configured, but no live probe or runtime evidence is recorded yet."
+        if configured and runtime_bridge_enabled and provider_ready and evidence.live_probe.status == "observed":
+            readiness = "ready"
+            reason = str(evidence.live_probe.details)
+        elif configured and runtime_bridge_enabled and provider_ready and evidence.runtime.status == "observed":
+            readiness = "ready"
+            reason = "Live runtime traffic is recorded for this provider."
+
+        if configured and not runtime_bridge_enabled:
+            if provider_key == "openai_codex" and auth_state.auth_mode == "oauth":
+                reason = (
+                    f"Codex OAuth mode '{auth_state.oauth_mode}' is configured, but the native runtime bridge is still disabled."
+                )
+            else:
+                reason = "Credentials are configured, but the native runtime bridge is still disabled."
+        status = OAuthAccountTargetStatus(
+            provider_key=provider_key,
+            configured=configured,
+            runtime_bridge_enabled=runtime_bridge_enabled,
+            probe_enabled=probe_enabled,
+            harness_profile_enabled=False,
+            readiness=readiness,
+            readiness_reason=reason,
+            auth_kind=auth_kind,
+            oauth_mode=(auth_state.oauth_mode if provider_key == "openai_codex" and auth_state.auth_mode == "oauth" else None),
+            oauth_flow_support=(auth_state.oauth_flow_support if provider_key == "openai_codex" and auth_state.auth_mode == "oauth" else None),
+            evidence=evidence,
+        )
+        if configured and not self._native_oauth_bridge_path_enabled(status):
+            status.readiness = "partial"
+            status.readiness_reason = f"{status.readiness_reason}{self._native_oauth_disabled_evidence_suffix(status)}"
+        return status
+
+    def _oauth_target_status(
+        self,
+        provider_key: str,
+        *,
+        tenant_id: str | None = None,
+    ) -> OAuthAccountTargetStatus:
         config = {
             "antigravity": (
                 self._settings.antigravity_oauth_access_token,
@@ -91,14 +201,16 @@ class ControlPlaneOAuthTargetsDomainMixin:
         }
         token, probe_enabled, bridge_enabled = config[provider_key]
         configured = bool(token.strip())
+        evidence = self._provider_capability_evidence(provider_key, tenant_id=tenant_id)
         readiness: Literal["planned", "partial", "ready"] = "planned"
         reason = "OAuth/account credentials missing."
         if configured:
             readiness = "partial"
-            reason = "OAuth/account credentials configured; enable probe or bridge profile for operational depth."
-        if configured and (probe_enabled or bridge_enabled):
-            readiness = "ready"
-            reason = "OAuth/account credentials + operational probe/bridge profile are enabled."
+            reason = "OAuth/account credentials configured; runtime truth remains onboarding/bridge-only until explicit live evidence exists."
+        if configured and evidence.live_probe.status == "observed":
+            reason = "Live probe evidence is recorded, but this target remains onboarding/bridge-only in the current beta slice."
+        elif configured and (probe_enabled or bridge_enabled):
+            reason = "OAuth/account operational knobs are enabled, but this axis still remains onboarding/bridge-only in the current beta slice."
         return OAuthAccountTargetStatus(
             provider_key=provider_key,
             configured=configured,
@@ -108,6 +220,7 @@ class ControlPlaneOAuthTargetsDomainMixin:
             readiness=readiness,
             readiness_reason=reason,
             auth_kind="oauth_account",
+            evidence=evidence,
         )
 
     def _safe_provider_status(self, provider_key: str) -> dict[str, object]:

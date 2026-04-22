@@ -6,11 +6,20 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
+from app.approvals.models import ApprovalStatus
+from app.tenancy import DEFAULT_BOOTSTRAP_TENANT_ID
+
 AdminRole = Literal["admin", "operator", "viewer"]
 AdminStatus = Literal["active", "disabled"]
 AccountStatus = Literal["active", "suspended", "disabled"]
 KeyStatus = Literal["active", "disabled", "revoked"]
 AuditStatus = Literal["ok", "warning", "failed"]
+AdminSessionType = Literal["standard", "impersonation", "break_glass"]
+ElevatedAccessRequestType = Literal["impersonation", "break_glass"]
+ElevatedAccessGateStatus = ApprovalStatus
+ElevatedAccessIssuanceStatus = Literal["pending", "issued"]
+SecretRotationTargetType = Literal["provider", "harness_profile"]
+SecretRotationKind = Literal["manual_env_rotation", "oauth_token_rotation", "api_key_rotation", "harness_profile_rotation"]
 
 
 class AdminUserRecord(BaseModel):
@@ -33,9 +42,16 @@ class AdminSessionRecord(BaseModel):
     user_id: str
     token_hash: str
     role: AdminRole
+    session_type: AdminSessionType = "standard"
     created_at: str
     expires_at: str
     last_used_at: str
+    issued_by_user_id: str | None = None
+    approved_by_user_id: str | None = None
+    approval_request_id: str | None = None
+    approval_reference: str | None = None
+    justification: str | None = None
+    notification_targets: list[str] = Field(default_factory=list)
     revoked_at: str | None = None
     revoked_reason: str | None = None
 
@@ -46,7 +62,16 @@ class AuthenticatedAdmin(BaseModel):
     username: str
     display_name: str
     role: AdminRole
+    session_type: AdminSessionType = "standard"
+    read_only: bool = False
     must_rotate_password: bool = False
+    expires_at: str | None = None
+    issued_by_user_id: str | None = None
+    approved_by_user_id: str | None = None
+    approval_request_id: str | None = None
+    approval_reference: str | None = None
+    justification: str | None = None
+    notification_targets: list[str] = Field(default_factory=list)
 
 
 class AdminLoginResult(BaseModel):
@@ -54,6 +79,30 @@ class AdminLoginResult(BaseModel):
     token_type: str = "bearer"
     expires_at: str
     user: AuthenticatedAdmin
+
+
+class ElevatedAccessRequestRecord(BaseModel):
+    request_id: str
+    request_type: ElevatedAccessRequestType
+    gate_status: ElevatedAccessGateStatus = "open"
+    issuance_status: ElevatedAccessIssuanceStatus = "pending"
+    requested_by_user_id: str
+    target_user_id: str
+    target_role: AdminRole
+    session_role: AdminRole
+    approval_reference: str
+    justification: str
+    notification_targets: list[str] = Field(default_factory=list)
+    duration_minutes: int
+    approval_expires_at: str
+    decision_note: str | None = None
+    decided_at: str | None = None
+    decided_by_user_id: str | None = None
+    issued_at: str | None = None
+    issued_by_user_id: str | None = None
+    issued_session_id: str | None = None
+    created_at: str
+    updated_at: str
 
 
 class GatewayAccountRecord(BaseModel):
@@ -77,8 +126,13 @@ class RuntimeKeyRecord(BaseModel):
     status: KeyStatus = "active"
     created_at: str
     updated_at: str
+    expires_at: str | None = None
     last_used_at: str | None = None
+    last_rotated_at: str | None = None
     rotated_from: str | None = None
+    revoked_at: str | None = None
+    revoked_reason: str | None = None
+    created_by: str | None = None
 
 
 class IssuedApiKey(BaseModel):
@@ -95,6 +149,8 @@ class RuntimeGatewayIdentity(BaseModel):
     key_id: str
     account_id: str | None = None
     account_label: str | None = None
+    account_status: AccountStatus | None = None
+    provider_bindings: list[str] = Field(default_factory=list)
     scopes: list[str] = Field(default_factory=list)
     client_id: str
     consumer: str
@@ -113,6 +169,8 @@ class AuditEventRecord(BaseModel):
     event_id: str
     actor_type: Literal["admin_user", "runtime_key", "system", "anonymous"]
     actor_id: str | None = None
+    tenant_id: str = DEFAULT_BOOTSTRAP_TENANT_ID
+    company_id: str | None = None
     action: str
     target_type: str
     target_id: str | None = None
@@ -122,12 +180,32 @@ class AuditEventRecord(BaseModel):
     created_at: str
 
 
+class AdminLoginFailureRecord(BaseModel):
+    username: str
+    failed_at: str
+
+
+class SecretRotationEventRecord(BaseModel):
+    event_id: str
+    target_type: SecretRotationTargetType
+    target_id: str
+    kind: SecretRotationKind
+    recorded_at: str
+    recorded_by_user_id: str | None = None
+    reference: str | None = None
+    notes: str | None = None
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
 class GovernanceStateRecord(BaseModel):
-    schema_version: int = 1
+    schema_version: int = 4
     admin_users: list[AdminUserRecord] = Field(default_factory=list)
     admin_sessions: list[AdminSessionRecord] = Field(default_factory=list)
+    elevated_access_requests: list[ElevatedAccessRequestRecord] = Field(default_factory=list)
     gateway_accounts: list[GatewayAccountRecord] = Field(default_factory=list)
     runtime_keys: list[RuntimeKeyRecord] = Field(default_factory=list)
     setting_overrides: list[MutableSettingRecord] = Field(default_factory=list)
     audit_events: list[AuditEventRecord] = Field(default_factory=list)
+    admin_login_failures: list[AdminLoginFailureRecord] = Field(default_factory=list)
+    secret_rotation_events: list[SecretRotationEventRecord] = Field(default_factory=list)
     updated_at: str = ""

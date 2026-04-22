@@ -24,3 +24,5 @@ Phase 15.1 fokussiert auf operative Substanz ohne Scope-Explosion:
 
 - Keine Vollruntime für alle fünf OAuth-/Account-Provider.
 - Codex und Gemini sind operativer, aber weiterhin bewusst beta-partiell.
+- `ready` im Control Plane setzt für Codex/Gemini echte Probe- oder Runtime-Evidenz voraus; reine Credentials bleiben `partial`.
+- Antigravity, GitHub Copilot und Claude Code bleiben in diesem Slice onboarding-/bridge-only und erben keine native Runtime-Claims.

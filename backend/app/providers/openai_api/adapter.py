@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import inspect
 import json
 from collections.abc import Iterator
 from datetime import datetime
 from email.utils import parsedate_to_datetime
+from urllib.parse import urlsplit
 
 import httpx
 
@@ -29,7 +31,13 @@ from app.providers.base import (
     ProviderUnavailableError,
     ProviderUnsupportedMediaTypeError,
     ProviderUpstreamError,
+    openai_compatible_response_controls,
 )
+from app.providers.openai_streaming import (
+    finalize_openai_tool_calls,
+    merge_openai_tool_call_chunks,
+)
+from app.request_metadata import forgegate_request_metadata_headers
 from app.settings.config import Settings
 from app.usage.models import TokenUsage
 from app.usage.service import UsageAccountingService
@@ -44,25 +52,26 @@ class OpenAIAPIAdapter:
         self._usage_accounting = UsageAccountingService(settings)
 
     def is_ready(self) -> bool:
-        return bool(self._settings.openai_api_key.strip())
+        return self.readiness_reason() is None
 
     def readiness_reason(self) -> str | None:
-        if self.is_ready():
-            return None
-        return "FORGEGATE_OPENAI_API_KEY is required."
+        if not self._settings.openai_api_key.strip():
+            return "FORGEGATE_OPENAI_API_KEY is required."
+        if self._configured_base_url() is None:
+            return "FORGEGATE_OPENAI_API_BASE_URL must be an absolute http(s) URL."
+        return None
 
     def create_chat_completion(self, request: ChatDispatchRequest) -> ChatDispatchResult:
-        if not self.is_ready():
-            raise ProviderConfigurationError(
-                self.provider_name,
-                "FORGEGATE_OPENAI_API_KEY is required for OpenAI API usage.",
-            )
+        reason = self.readiness_reason()
+        if reason:
+            raise ProviderConfigurationError(self.provider_name, reason)
 
         payload = {
             "model": request.model,
             "messages": request.messages,
             "stream": False,
         }
+        payload.update(openai_compatible_response_controls(request.response_controls))
         tools = getattr(request, "tools", [])
         if tools:
             payload["tools"] = tools
@@ -70,7 +79,7 @@ class OpenAIAPIAdapter:
             if tool_choice is not None:
                 payload["tool_choice"] = tool_choice
 
-        response_payload = self._post_chat_completion(payload)
+        response_payload = self._call_post_chat_completion(payload, request.request_metadata)
         try:
             choices = response_payload["choices"]
             if not isinstance(choices, list) or not choices:
@@ -103,11 +112,9 @@ class OpenAIAPIAdapter:
         )
 
     def stream_chat_completion(self, request: ChatDispatchRequest) -> Iterator[ProviderStreamEvent]:
-        if not self.is_ready():
-            raise ProviderConfigurationError(
-                self.provider_name,
-                "FORGEGATE_OPENAI_API_KEY is required for OpenAI API usage.",
-            )
+        reason = self.readiness_reason()
+        if reason:
+            raise ProviderConfigurationError(self.provider_name, reason)
 
         payload = {
             "model": request.model,
@@ -115,6 +122,7 @@ class OpenAIAPIAdapter:
             "stream": True,
             "stream_options": {"include_usage": True},
         }
+        payload.update(openai_compatible_response_controls(request.response_controls))
         tools = getattr(request, "tools", [])
         if tools:
             payload["tools"] = tools
@@ -122,19 +130,50 @@ class OpenAIAPIAdapter:
             if tool_choice is not None:
                 payload["tool_choice"] = tool_choice
 
-        yield from self._stream_chat_completion(payload, request.messages)
+        yield from self._call_stream_chat_completion(payload, request.messages, request.request_metadata)
 
-    def _endpoint_and_headers(self) -> tuple[str, dict[str, str]]:
-        base_url = self._settings.openai_api_base_url.rstrip("/")
+    def _call_post_chat_completion(self, payload: dict, request_metadata: dict[str, str]) -> dict:
+        signature = inspect.signature(self._post_chat_completion)
+        if "request_metadata" in signature.parameters:
+            return self._post_chat_completion(payload, request_metadata=request_metadata)
+        return self._post_chat_completion(payload)
+
+    def _call_stream_chat_completion(
+        self,
+        payload: dict,
+        messages: list[dict],
+        request_metadata: dict[str, str],
+    ) -> Iterator[ProviderStreamEvent]:
+        signature = inspect.signature(self._stream_chat_completion)
+        if "request_metadata" in signature.parameters:
+            return self._stream_chat_completion(payload, messages, request_metadata=request_metadata)
+        return self._stream_chat_completion(payload, messages)
+
+    def _endpoint_and_headers(self, request_metadata: dict[str, str] | None = None) -> tuple[str, dict[str, str]]:
+        base_url = self._configured_base_url()
+        if base_url is None:  # pragma: no cover - guarded by readiness checks
+            raise ProviderConfigurationError(
+                self.provider_name,
+                "FORGEGATE_OPENAI_API_BASE_URL must be an absolute http(s) URL.",
+            )
         endpoint = f"{base_url}/chat/completions"
         headers = {
             "Authorization": f"Bearer {self._settings.openai_api_key}",
             "Content-Type": "application/json",
         }
+        headers.update(forgegate_request_metadata_headers(request_metadata))
         return endpoint, headers
 
-    def _post_chat_completion(self, payload: dict) -> dict:
-        endpoint, headers = self._endpoint_and_headers()
+    def _configured_base_url(self) -> str | None:
+        base_url = self._settings.openai_api_base_url.strip()
+        parsed = urlsplit(base_url)
+        host = parsed.hostname or ""
+        if parsed.scheme not in {"http", "https"} or not host or any(char.isspace() for char in host):
+            return None
+        return base_url.rstrip("/")
+
+    def _post_chat_completion(self, payload: dict, request_metadata: dict[str, str] | None = None) -> dict:
+        endpoint, headers = self._endpoint_and_headers(request_metadata)
 
         try:
             response = httpx.post(
@@ -158,12 +197,18 @@ class OpenAIAPIAdapter:
         except ValueError as exc:
             raise ProviderProtocolError(self.provider_name, "OpenAI returned invalid JSON payload.") from exc
 
-    def _stream_chat_completion(self, payload: dict, messages: list[dict]) -> Iterator[ProviderStreamEvent]:
-        endpoint, headers = self._endpoint_and_headers()
+    def _stream_chat_completion(
+        self,
+        payload: dict,
+        messages: list[dict],
+        request_metadata: dict[str, str] | None = None,
+    ) -> Iterator[ProviderStreamEvent]:
+        endpoint, headers = self._endpoint_and_headers(request_metadata)
 
         collected_text: list[str] = []
         final_usage: TokenUsage | None = None
         final_finish_reason: str | None = None
+        tool_call_chunks: dict[int, dict[str, object]] = {}
 
         try:
             with httpx.stream(
@@ -209,6 +254,7 @@ class OpenAIAPIAdapter:
                     if content_piece:
                         collected_text.append(content_piece)
                         yield ProviderStreamEvent(event="delta", delta=content_piece)
+                    merge_openai_tool_call_chunks(tool_call_chunks, delta.get("tool_calls"))
 
                     finish_reason = choice.get("finish_reason")
                     if finish_reason:
@@ -227,6 +273,9 @@ class OpenAIAPIAdapter:
                     finish_reason=final_finish_reason or "stop",
                     usage=usage,
                     cost=cost,
+                    tool_calls=finalize_openai_tool_calls(tool_call_chunks),
+                    credential_type="api_key",
+                    auth_source="openai_api_key",
                 )
         except httpx.TimeoutException as exc:
             raise ProviderStreamInterruptedError(self.provider_name, f"OpenAI stream timed out: {exc}") from exc

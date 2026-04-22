@@ -1,12 +1,17 @@
 """Dependency wiring for runtime API layer."""
 
 from functools import lru_cache
+from uuid import uuid4
 
-from fastapi import Depends, HTTPException, Request, status
+from fastapi import Depends, Request, status
 
+from app.authz import ActorScope, PolicyEvaluator, RequestActor, TenantBoundTarget, get_route_policy
+from app.authz.route_guards import raise_route_guard_violation
+from app.api.runtime.errors import public_runtime_auth_message
 from app.core.dispatch import DispatchService
 from app.core.model_registry import ModelRegistry
 from app.core.routing import RoutingService
+from app.governance.errors import RuntimeAuthorizationError
 from app.governance.models import RuntimeGatewayIdentity
 from app.governance.service import GovernanceService, get_governance_service
 from app.providers import ProviderRegistry
@@ -47,12 +52,104 @@ def get_runtime_gateway_identity(
     if authorization.lower().startswith("bearer "):
         bearer_token = authorization.split(" ", 1)[1].strip()
     token = bearer_token or request.headers.get("x-api-key", "").strip()
-    identity = governance.authenticate_runtime_key(token) if token else None
+    request_id = _request_id(request)
+    try:
+        identity = governance.authenticate_runtime_key(token) if token else None
+    except RuntimeAuthorizationError as exc:
+        raise_route_guard_violation(
+            status_code=exc.status_code,
+            code=exc.error_type,
+            message=public_runtime_auth_message(exc.error_type),
+            details={},
+            request_id=request_id,
+        )
     if token and identity is None:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="invalid_runtime_key")
+        raise_route_guard_violation(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            code="invalid_runtime_key",
+            message="Runtime key is invalid or expired.",
+            details={},
+            request_id=request_id,
+        )
     if settings.runtime_auth_required and identity is None:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="runtime_auth_required")
+        raise_route_guard_violation(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            code="runtime_auth_required",
+            message="Runtime authentication is required.",
+            details={},
+            request_id=request_id,
+        )
     return identity
+
+
+def _request_id(request: Request) -> str:
+    envelope = getattr(request.state, "request_envelope", None)
+    envelope_request_id = getattr(envelope, "request_id", None)
+    if isinstance(envelope_request_id, str) and envelope_request_id.strip():
+        return envelope_request_id.strip()
+    raw_request_id = request.headers.get("x-request-id", "").strip() or request.headers.get("x-forgegate-request-id", "").strip()
+    return raw_request_id or f"req_{uuid4().hex[:12]}"
+
+
+def get_runtime_request_actor(
+    request: Request,
+    gateway_identity: RuntimeGatewayIdentity | None = Depends(get_runtime_gateway_identity),
+) -> RequestActor | None:
+    if gateway_identity is None:
+        return None
+    if gateway_identity.account_id is None:
+        raise_route_guard_violation(
+            status_code=status.HTTP_403_FORBIDDEN,
+            code="runtime_key_unbound",
+            message=public_runtime_auth_message("runtime_key_unbound"),
+            details={},
+            request_id=_request_id(request),
+        )
+    return RequestActor(
+        principal_type="service",
+        principal_id=gateway_identity.account_id or gateway_identity.key_id,
+        credential_id=gateway_identity.key_id,
+        auth_method="bearer_token",
+        credential_state="active",
+        tenant_id=gateway_identity.account_id,
+        role_keys=[],
+        scope=ActorScope(permission_keys=list(gateway_identity.scopes)),
+        membership_state=None,
+        request_id=_request_id(request),
+    )
+
+
+def require_runtime_permission(policy_key: str):
+    policy = get_route_policy(policy_key)
+    evaluator = PolicyEvaluator()
+
+    def _dependency(
+        request: Request,
+        actor: RequestActor | None = Depends(get_runtime_request_actor),
+    ) -> RequestActor | None:
+        if actor is None:
+            return None
+
+        decision = evaluator.authorize(
+            actor=actor,
+            policy=policy,
+            target=TenantBoundTarget(
+                resource_type="runtime_route",
+                resource_id=request.url.path,
+                tenant_id=actor.tenant_id,
+            ),
+        )
+        if not decision.allowed:
+            raise_route_guard_violation(
+                status_code=decision.status_code,
+                code=decision.error_code,
+                message=public_runtime_auth_message(decision.error_code),
+                details={},
+                request_id=actor.request_id,
+            )
+        return actor
+
+    return _dependency
 
 
 def clear_runtime_dependency_caches() -> None:
@@ -71,5 +168,7 @@ __all__ = [
     "get_provider_registry",
     "get_dispatch_service",
     "get_runtime_gateway_identity",
+    "get_runtime_request_actor",
+    "require_runtime_permission",
     "clear_runtime_dependency_caches",
 ]

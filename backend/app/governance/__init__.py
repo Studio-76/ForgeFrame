@@ -10,6 +10,7 @@ from app.governance.models import (
     GovernanceStateRecord,
     IssuedApiKey,
     MutableSettingRecord,
+    SecretRotationEventRecord,
     RuntimeGatewayIdentity,
     RuntimeKeyRecord,
 )
@@ -25,6 +26,7 @@ __all__ = [
     "GovernanceStateRecord",
     "IssuedApiKey",
     "MutableSettingRecord",
+    "SecretRotationEventRecord",
     "RuntimeGatewayIdentity",
     "RuntimeKeyRecord",
     "GovernanceService",

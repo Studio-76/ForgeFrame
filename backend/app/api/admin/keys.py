@@ -2,15 +2,20 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, Query, Request, status
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
-from app.api.admin.security import require_admin_role
+from app.api.admin.idempotency import unsupported_idempotency_response
+from app.api.admin.security import require_admin_mutation_role
 from app.governance.models import AuthenticatedAdmin
 from app.governance.service import GovernanceService, get_governance_service
 
 router = APIRouter(prefix="/keys", tags=["admin-keys"])
+_RUNTIME_KEY_IDEMPOTENCY_MESSAGE = (
+    "Idempotency-Key is not supported for runtime key issuance, rotation, or status mutations until ForgeGate "
+    "defines replay-safe redaction for secret-bearing key-admin responses."
+)
 
 
 class RuntimeKeyCreateRequest(BaseModel):
@@ -20,16 +25,23 @@ class RuntimeKeyCreateRequest(BaseModel):
 
 
 @router.get("/")
-def list_runtime_keys(service: GovernanceService = Depends(get_governance_service)) -> dict[str, object]:
-    return {"status": "ok", "keys": [item.model_dump() for item in service.list_runtime_keys()]}
+def list_runtime_keys(
+    tenant_id: str | None = Query(default=None, alias="tenantId"),
+    service: GovernanceService = Depends(get_governance_service),
+) -> dict[str, object]:
+    return {"status": "ok", "keys": [item.model_dump() for item in service.list_runtime_keys(tenant_id=tenant_id)]}
 
 
 @router.post("/", status_code=status.HTTP_201_CREATED)
 def create_runtime_key(
     payload: RuntimeKeyCreateRequest,
-    admin: AuthenticatedAdmin = Depends(require_admin_role("admin")),
+    request: Request,
+    admin: AuthenticatedAdmin = Depends(require_admin_mutation_role("admin")),
     service: GovernanceService = Depends(get_governance_service),
 ) -> dict[str, object]:
+    unsupported = unsupported_idempotency_response(request, message=_RUNTIME_KEY_IDEMPOTENCY_MESSAGE)
+    if unsupported is not None:
+        return unsupported
     issued = service.issue_runtime_key(
         account_id=payload.account_id,
         label=payload.label,
@@ -42,9 +54,13 @@ def create_runtime_key(
 @router.post("/{key_id}/rotate")
 def rotate_runtime_key(
     key_id: str,
-    admin: AuthenticatedAdmin = Depends(require_admin_role("admin")),
+    request: Request,
+    admin: AuthenticatedAdmin = Depends(require_admin_mutation_role("admin")),
     service: GovernanceService = Depends(get_governance_service),
 ) -> dict[str, object]:
+    unsupported = unsupported_idempotency_response(request, message=_RUNTIME_KEY_IDEMPOTENCY_MESSAGE)
+    if unsupported is not None:
+        return unsupported
     try:
         issued = service.rotate_runtime_key(key_id, admin)
     except ValueError as exc:
@@ -55,9 +71,13 @@ def rotate_runtime_key(
 @router.post("/{key_id}/disable")
 def disable_runtime_key(
     key_id: str,
-    admin: AuthenticatedAdmin = Depends(require_admin_role("admin")),
+    request: Request,
+    admin: AuthenticatedAdmin = Depends(require_admin_mutation_role("admin")),
     service: GovernanceService = Depends(get_governance_service),
 ) -> dict[str, object]:
+    unsupported = unsupported_idempotency_response(request, message=_RUNTIME_KEY_IDEMPOTENCY_MESSAGE)
+    if unsupported is not None:
+        return unsupported
     try:
         key = service.set_runtime_key_status(key_id, "disabled", admin)
     except ValueError as exc:
@@ -68,9 +88,13 @@ def disable_runtime_key(
 @router.post("/{key_id}/activate")
 def activate_runtime_key(
     key_id: str,
-    admin: AuthenticatedAdmin = Depends(require_admin_role("admin")),
+    request: Request,
+    admin: AuthenticatedAdmin = Depends(require_admin_mutation_role("admin")),
     service: GovernanceService = Depends(get_governance_service),
 ) -> dict[str, object]:
+    unsupported = unsupported_idempotency_response(request, message=_RUNTIME_KEY_IDEMPOTENCY_MESSAGE)
+    if unsupported is not None:
+        return unsupported
     try:
         key = service.set_runtime_key_status(key_id, "active", admin)
     except ValueError as exc:
@@ -81,9 +105,13 @@ def activate_runtime_key(
 @router.post("/{key_id}/revoke")
 def revoke_runtime_key(
     key_id: str,
-    admin: AuthenticatedAdmin = Depends(require_admin_role("admin")),
+    request: Request,
+    admin: AuthenticatedAdmin = Depends(require_admin_mutation_role("admin")),
     service: GovernanceService = Depends(get_governance_service),
 ) -> dict[str, object]:
+    unsupported = unsupported_idempotency_response(request, message=_RUNTIME_KEY_IDEMPOTENCY_MESSAGE)
+    if unsupported is not None:
+        return unsupported
     try:
         key = service.set_runtime_key_status(key_id, "revoked", admin)
     except ValueError as exc:

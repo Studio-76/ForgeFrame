@@ -8,14 +8,25 @@ from uuid import uuid4
 from app.providers import ChatDispatchResult
 
 
-def build_chat_completion_payload(result: ChatDispatchResult) -> dict[str, object]:
+def new_chat_completion_id() -> str:
+    return f"chatcmpl-{uuid4().hex}"
+
+
+def new_chat_completion_created() -> int:
+    return int(datetime.now(tz=UTC).timestamp())
+
+
+def build_chat_completion_payload(
+    result: ChatDispatchResult,
+    *,
+    completion_id: str | None = None,
+    created: int | None = None,
+) -> dict[str, object]:
     return {
-        "id": "chatcmpl-forgegate",
+        "id": completion_id or new_chat_completion_id(),
         "object": "chat.completion",
+        "created": created if created is not None else new_chat_completion_created(),
         "model": result.model,
-        "provider": result.provider,
-        "credential_type": result.credential_type,
-        "auth_source": result.auth_source,
         "choices": [
             {
                 "index": 0,
@@ -48,6 +59,8 @@ def build_responses_payload(result: ChatDispatchResult, *, response_id: str | No
         for item in output_items
         if item.get("type") == "output_text" and isinstance(item.get("text"), str)
     )
+    # Runtime success payloads stay client-facing; routing and auth provenance
+    # belongs in observability/control-plane surfaces instead.
     return {
         "id": response_id or f"resp_{uuid4().hex}",
         "object": "response",
@@ -58,7 +71,4 @@ def build_responses_payload(result: ChatDispatchResult, *, response_id: str | No
         "output_text": output_text,
         "usage": result.usage.model_dump(),
         "cost": result.cost.model_dump(),
-        "provider": result.provider,
-        "credential_type": result.credential_type,
-        "auth_source": result.auth_source,
     }

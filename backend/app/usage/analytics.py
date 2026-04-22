@@ -5,49 +5,175 @@ from __future__ import annotations
 from collections import defaultdict
 from datetime import UTC, datetime, timedelta
 from functools import lru_cache
-from typing import Literal, TypeVar
+from math import ceil
+from typing import Literal, Protocol, TypeVar, cast
 
 from pydantic import BaseModel
 
 from app.providers import ChatDispatchResult, ProviderStreamEvent
 from app.settings.config import get_settings
 from app.storage.observability_repository import ObservabilityRepository, get_observability_repository
+from app.telemetry.context import TelemetryContext
+from app.tenancy import effective_tenant_filter, normalize_tenant_id
 from app.usage.events import ClientIdentity, ErrorEvent, HealthEvent, UsageEvent
 from app.usage.models import CostBreakdown, TokenUsage
 
 TModel = TypeVar("TModel", bound=BaseModel)
 
 
+class SqlBackedObservabilityRepository(Protocol):
+    def effective_history_tenant_id(self, requested_tenant_id: str | None) -> str | None: ...
+
+    def aggregate_summary(self, *, window_seconds: int | None, tenant_id: str | None) -> dict[str, object]: ...
+
+    def timeline(self, *, window_seconds: int, bucket_seconds: int, tenant_id: str | None) -> list[dict[str, object]]: ...
+
+    def provider_drilldown(
+        self,
+        provider: str,
+        *,
+        window_seconds: int | None,
+        tenant_id: str | None,
+    ) -> dict[str, object]: ...
+
+    def client_drilldown(
+        self,
+        client_id: str,
+        *,
+        window_seconds: int | None,
+        tenant_id: str | None,
+    ) -> dict[str, object]: ...
+
+    def latest_usage_event(
+        self,
+        provider: str,
+        *,
+        tenant_id: str | None = None,
+        stream_mode: str | None = None,
+        require_tool_calls: bool = False,
+    ) -> UsageEvent | None: ...
+
+    def latest_error_event(
+        self,
+        provider: str,
+        *,
+        tenant_id: str | None = None,
+        stream_mode: str | None = None,
+    ) -> ErrorEvent | None: ...
+
+
 class UsageAnalyticsStore:
-    def __init__(self, repository: ObservabilityRepository):
+    def __init__(self, repository: ObservabilityRepository, *, default_tenant_id: str):
         self._repository = repository
-        self._events: list[UsageEvent] = repository.load_usage_events()
-        self._errors: list[ErrorEvent] = repository.load_error_events()
-        self._health_events: list[HealthEvent] = repository.load_health_events()
+        self._default_tenant_id = normalize_tenant_id(default_tenant_id)
 
     def _now_iso(self) -> str:
         return datetime.now(tz=UTC).isoformat()
 
-    def record_non_stream_result(self, result: ChatDispatchResult, client: ClientIdentity | None = None) -> None:
+    def _tenant_id(self, tenant_id: str | None = None) -> str:
+        return normalize_tenant_id(tenant_id, fallback_tenant_id=self._default_tenant_id)
+
+    def _sql_repository(self) -> SqlBackedObservabilityRepository | None:
+        required = (
+            "effective_history_tenant_id",
+            "aggregate_summary",
+            "timeline",
+            "provider_drilldown",
+            "client_drilldown",
+            "latest_usage_event",
+            "latest_error_event",
+        )
+        if all(callable(getattr(self._repository, name, None)) for name in required):
+            return cast(SqlBackedObservabilityRepository, self._repository)
+        return None
+
+    def _usage_events(self) -> list[UsageEvent]:
+        return self._repository.load_usage_events()
+
+    def _error_events(self) -> list[ErrorEvent]:
+        return self._repository.load_error_events()
+
+    def _health_events(self) -> list[HealthEvent]:
+        return self._repository.load_health_events()
+
+    def _effective_query_tenant_id(
+        self,
+        *entry_groups: list[BaseModel],
+        tenant_id: str | None = None,
+    ) -> str | None:
+        tenant_ids = [
+            self._tenant_id(getattr(entry, "tenant_id", None))
+            for group in entry_groups
+            for entry in group
+        ]
+        return effective_tenant_filter(tenant_ids, tenant_id)
+
+    def _effective_history_tenant_id(self, *, tenant_id: str | None = None) -> str | None:
+        sql_repository = self._sql_repository()
+        if sql_repository is not None:
+            return sql_repository.effective_history_tenant_id(tenant_id)
+        return self._effective_query_tenant_id(
+            self._usage_events(),
+            self._error_events(),
+            self._health_events(),
+            tenant_id=tenant_id,
+        )
+
+    def effective_history_tenant_id(self, *, tenant_id: str | None = None) -> str | None:
+        return self._effective_history_tenant_id(tenant_id=tenant_id)
+
+    def _apply_tenant_filter(self, entries: list[TModel], tenant_id: str | None) -> list[TModel]:
+        if tenant_id is None:
+            return entries
+        return [
+            entry
+            for entry in entries
+            if self._tenant_id(getattr(entry, "tenant_id", None)) == tenant_id
+        ]
+
+    @staticmethod
+    def _context_fields(context: TelemetryContext | None) -> dict[str, object]:
+        if context is None:
+            return {}
+        return {
+            "request_id": context.request_id,
+            "correlation_id": context.correlation_id,
+            "causation_id": context.causation_id,
+            "trace_id": context.trace_id,
+            "span_id": context.span_id,
+            "duration_ms": context.duration_ms,
+        }
+
+    def record_non_stream_result(
+        self,
+        result: ChatDispatchResult,
+        client: ClientIdentity | None = None,
+        *,
+        context: TelemetryContext | None = None,
+    ) -> None:
         identity = client or ClientIdentity()
         event = UsageEvent(
+            tenant_id=self._tenant_id(identity.tenant_id),
             provider=result.provider,
             model=result.model,
             credential_type=result.credential_type,
             auth_source=result.auth_source,
+            route=context.route if context is not None else None,
             client_id=identity.client_id,
             consumer=identity.consumer,
             integration=identity.integration,
             traffic_type="runtime",
+            stream_mode="non_stream",
+            tool_call_count=len(result.tool_calls),
             input_tokens=result.usage.input_tokens,
             output_tokens=result.usage.output_tokens,
             total_tokens=result.usage.total_tokens,
             actual_cost=result.cost.actual_cost,
             hypothetical_cost=result.cost.hypothetical_cost,
             avoided_cost=result.cost.avoided_cost,
+            **self._context_fields(context),
             created_at=self._now_iso(),
         )
-        self._events.append(event)
         self._repository.append_usage_event(event)
 
     def record_runtime_error(
@@ -60,8 +186,10 @@ class UsageAnalyticsStore:
         stream_mode: Literal["stream", "non_stream"],
         error_type: str,
         status_code: int,
+        context: TelemetryContext | None = None,
     ) -> None:
         event = ErrorEvent(
+            tenant_id=self._tenant_id(client.tenant_id),
             provider=provider,
             model=model,
             client_id=client.client_id,
@@ -76,33 +204,45 @@ class UsageAnalyticsStore:
             template_id=None,
             test_phase=None,
             profile_key=None,
+            **self._context_fields(context),
             created_at=self._now_iso(),
         )
-        self._errors.append(event)
         self._repository.append_error_event(event)
 
-    def record_stream_done_event(self, *, provider: str, model: str, event: ProviderStreamEvent, client: ClientIdentity | None = None) -> None:
+    def record_stream_done_event(
+        self,
+        *,
+        provider: str,
+        model: str,
+        event: ProviderStreamEvent,
+        client: ClientIdentity | None = None,
+        context: TelemetryContext | None = None,
+    ) -> None:
         if not event.usage or not event.cost:
             return
         identity = client or ClientIdentity()
         usage_event = UsageEvent(
+            tenant_id=self._tenant_id(identity.tenant_id),
             provider=provider,
             model=model,
-            credential_type="stream",
-            auth_source="runtime_stream",
+            credential_type=str(event.credential_type or "unknown"),
+            auth_source=str(event.auth_source or "unknown"),
+            route=context.route if context is not None else None,
             client_id=identity.client_id,
             consumer=identity.consumer,
             integration=identity.integration,
             traffic_type="runtime",
+            stream_mode="stream",
+            tool_call_count=len(event.tool_calls),
             input_tokens=event.usage.input_tokens,
             output_tokens=event.usage.output_tokens,
             total_tokens=event.usage.total_tokens,
             actual_cost=event.cost.actual_cost,
             hypothetical_cost=event.cost.hypothetical_cost,
             avoided_cost=event.cost.avoided_cost,
+            **self._context_fields(context),
             created_at=self._now_iso(),
         )
-        self._events.append(usage_event)
         self._repository.append_usage_event(usage_event)
 
     def record_health_check(
@@ -115,16 +255,21 @@ class UsageAnalyticsStore:
         check_type: str,
         credential_type: str,
         auth_source: str,
+        tenant_id: str | None = None,
+        context: TelemetryContext | None = None,
     ) -> None:
         event = UsageEvent(
+            tenant_id=self._tenant_id(tenant_id),
             provider=provider,
             model=model,
             credential_type=credential_type,
             auth_source=auth_source,
+            route=context.route if context is not None else "/admin/providers/health/run",
             client_id="control_plane",
             consumer="admin",
             integration="health_scheduler",
             traffic_type="health_check",
+            stream_mode="non_stream",
             check_type=check_type,
             input_tokens=usage.input_tokens,
             output_tokens=usage.output_tokens,
@@ -132,9 +277,14 @@ class UsageAnalyticsStore:
             actual_cost=cost.actual_cost,
             hypothetical_cost=cost.hypothetical_cost,
             avoided_cost=cost.avoided_cost,
+            request_id=context.request_id if context is not None else None,
+            correlation_id=context.correlation_id if context is not None else None,
+            causation_id=context.causation_id if context is not None else None,
+            trace_id=context.trace_id if context is not None else None,
+            span_id=context.span_id if context is not None else None,
+            duration_ms=context.duration_ms if context is not None else None,
             created_at=self._now_iso(),
         )
-        self._events.append(event)
         self._repository.append_usage_event(event)
 
     def record_health_check_error(
@@ -145,8 +295,11 @@ class UsageAnalyticsStore:
         check_type: str,
         error_type: str,
         status_code: int = 503,
+        tenant_id: str | None = None,
+        context: TelemetryContext | None = None,
     ) -> None:
         event = ErrorEvent(
+            tenant_id=self._tenant_id(tenant_id),
             provider=provider,
             model=model,
             client_id="control_plane",
@@ -161,9 +314,14 @@ class UsageAnalyticsStore:
             template_id=None,
             test_phase=check_type,
             profile_key=None,
+            request_id=context.request_id if context is not None else None,
+            correlation_id=context.correlation_id if context is not None else None,
+            causation_id=context.causation_id if context is not None else None,
+            trace_id=context.trace_id if context is not None else None,
+            span_id=context.span_id if context is not None else None,
+            duration_ms=context.duration_ms if context is not None else None,
             created_at=self._now_iso(),
         )
-        self._errors.append(event)
         self._repository.append_error_event(event)
 
     def record_integration_error(
@@ -178,8 +336,11 @@ class UsageAnalyticsStore:
         status_code: int,
         client_id: str,
         profile_key: str | None,
+        tenant_id: str | None = None,
+        context: TelemetryContext | None = None,
     ) -> None:
         event = ErrorEvent(
+            tenant_id=self._tenant_id(tenant_id),
             provider=provider,
             model=model,
             client_id=client_id,
@@ -194,9 +355,14 @@ class UsageAnalyticsStore:
             template_id=template_id,
             test_phase=test_phase,
             profile_key=profile_key,
+            request_id=context.request_id if context is not None else None,
+            correlation_id=context.correlation_id if context is not None else None,
+            causation_id=context.causation_id if context is not None else None,
+            trace_id=context.trace_id if context is not None else None,
+            span_id=context.span_id if context is not None else None,
+            duration_ms=context.duration_ms if context is not None else None,
             created_at=self._now_iso(),
         )
-        self._errors.append(event)
         self._repository.append_error_event(event)
 
     def record_health_status(
@@ -208,17 +374,26 @@ class UsageAnalyticsStore:
         status: str,
         readiness_reason: str | None,
         last_error: str | None,
+        tenant_id: str | None = None,
+        context: TelemetryContext | None = None,
     ) -> None:
         event = HealthEvent(
+            tenant_id=self._tenant_id(tenant_id),
             provider=provider,
             model=model,
+            route=context.route if context is not None else "/admin/providers/health/run",
             check_type=check_type,
             status=status,
             readiness_reason=readiness_reason,
             last_error=last_error,
+            request_id=context.request_id if context is not None else None,
+            correlation_id=context.correlation_id if context is not None else None,
+            causation_id=context.causation_id if context is not None else None,
+            trace_id=context.trace_id if context is not None else None,
+            span_id=context.span_id if context is not None else None,
+            duration_ms=context.duration_ms if context is not None else None,
             created_at=self._now_iso(),
         )
-        self._health_events.append(event)
         self._repository.append_health_event(event)
 
     def _parse_dt(self, value: str) -> datetime:
@@ -230,10 +405,142 @@ class UsageAnalyticsStore:
         cutoff = datetime.now(tz=UTC) - timedelta(seconds=window_seconds)
         return [entry for entry in entries if self._parse_dt(getattr(entry, "created_at")) >= cutoff]
 
-    def aggregate(self, window_seconds: int | None = None) -> dict[str, object]:
-        events = self._window_filter(self._events, window_seconds)
-        errors = self._window_filter(self._errors, window_seconds)
-        health = self._window_filter(self._health_events, window_seconds)
+    @staticmethod
+    def _duration_percentile(samples: list[int], percentile: float) -> int | None:
+        if not samples:
+            return None
+        index = max(0, ceil(percentile * len(samples)) - 1)
+        return samples[index]
+
+    @classmethod
+    def _runtime_duration_summary(
+        cls,
+        events: list[UsageEvent],
+        errors: list[ErrorEvent],
+    ) -> dict[str, object]:
+        samples = sorted(
+            int(duration_ms)
+            for entry in [*events, *errors]
+            if getattr(entry, "traffic_type", None) == "runtime"
+            and (duration_ms := getattr(entry, "duration_ms", None)) is not None
+        )
+        if not samples:
+            return {
+                "sample_count": 0,
+                "avg": None,
+                "p50": None,
+                "p95": None,
+                "max": None,
+            }
+        return {
+            "sample_count": len(samples),
+            "avg": round(sum(samples) / len(samples), 2),
+            "p50": cls._duration_percentile(samples, 0.50),
+            "p95": cls._duration_percentile(samples, 0.95),
+            "max": samples[-1],
+        }
+
+    def list_usage_events(self, *, tenant_id: str | None = None) -> list[UsageEvent]:
+        events = self._usage_events()
+        if tenant_id is None:
+            return list(events)
+        effective_tenant_id = self._effective_history_tenant_id(tenant_id=tenant_id)
+        return list(self._apply_tenant_filter(events, effective_tenant_id))
+
+    def list_error_events(self, *, tenant_id: str | None = None) -> list[ErrorEvent]:
+        errors = self._error_events()
+        if tenant_id is None:
+            return list(errors)
+        effective_tenant_id = self._effective_history_tenant_id(tenant_id=tenant_id)
+        return list(self._apply_tenant_filter(errors, effective_tenant_id))
+
+    def list_health_events(self, *, tenant_id: str | None = None) -> list[HealthEvent]:
+        health_events = self._health_events()
+        if tenant_id is None:
+            return list(health_events)
+        effective_tenant_id = self._effective_history_tenant_id(tenant_id=tenant_id)
+        return list(self._apply_tenant_filter(health_events, effective_tenant_id))
+
+    def latest_usage_event(
+        self,
+        provider: str,
+        *,
+        tenant_id: str | None = None,
+        stream_mode: str | None = None,
+        require_tool_calls: bool = False,
+    ) -> UsageEvent | None:
+        sql_repository = self._sql_repository()
+        if sql_repository is not None:
+            return sql_repository.latest_usage_event(
+                provider,
+                tenant_id=tenant_id,
+                stream_mode=stream_mode,
+                require_tool_calls=require_tool_calls,
+            )
+        events = self._usage_events()
+        filtered = [
+            event
+            for event in events
+            if event.provider == provider
+            and event.traffic_type == "runtime"
+            and (tenant_id is None or self._tenant_id(getattr(event, "tenant_id", None)) == tenant_id)
+            and (
+                stream_mode is None
+                or (event.stream_mode == stream_mode)
+                or (
+                    event.stream_mode is None
+                    and stream_mode == "stream"
+                    and event.credential_type == "stream"
+                )
+                or (
+                    event.stream_mode is None
+                    and stream_mode == "non_stream"
+                    and event.credential_type != "stream"
+                )
+            )
+            and (not require_tool_calls or int(getattr(event, "tool_call_count", 0)) > 0)
+        ]
+        return filtered[-1] if filtered else None
+
+    def latest_error_event(
+        self,
+        provider: str,
+        *,
+        tenant_id: str | None = None,
+        stream_mode: str | None = None,
+    ) -> ErrorEvent | None:
+        sql_repository = self._sql_repository()
+        if sql_repository is not None:
+            return sql_repository.latest_error_event(
+                provider,
+                tenant_id=tenant_id,
+                stream_mode=stream_mode,
+            )
+        errors = self._error_events()
+        filtered = [
+            event
+            for event in errors
+            if event.provider == provider
+            and event.traffic_type == "runtime"
+            and (tenant_id is None or self._tenant_id(getattr(event, "tenant_id", None)) == tenant_id)
+            and (stream_mode is None or event.stream_mode == stream_mode)
+        ]
+        return filtered[-1] if filtered else None
+
+    def aggregate(self, window_seconds: int | None = None, *, tenant_id: str | None = None) -> dict[str, object]:
+        sql_repository = self._sql_repository()
+        effective_tenant_id = self._effective_history_tenant_id(tenant_id=tenant_id)
+        if sql_repository is not None:
+            return sql_repository.aggregate_summary(
+                window_seconds=window_seconds,
+                tenant_id=effective_tenant_id,
+            )
+        events = self._window_filter(self._usage_events(), window_seconds)
+        errors = self._window_filter(self._error_events(), window_seconds)
+        health = self._window_filter(self._health_events(), window_seconds)
+        events = self._apply_tenant_filter(events, effective_tenant_id)
+        errors = self._apply_tenant_filter(errors, effective_tenant_id)
+        health = self._apply_tenant_filter(health, effective_tenant_id)
 
         grouped_provider = defaultdict(lambda: {"requests": 0, "tokens": 0, "actual_cost": 0.0, "hypothetical_cost": 0.0, "avoided_cost": 0.0})
         grouped_model = defaultdict(lambda: {"requests": 0, "tokens": 0})
@@ -286,6 +593,7 @@ class UsageAnalyticsStore:
         latest_health: dict[tuple[str, str], HealthEvent] = {}
         for event in health:
             latest_health[(event.provider, event.model)] = event
+        runtime_duration_ms = self._runtime_duration_summary(events, errors)
 
         return {
             "event_count": len(events),
@@ -303,6 +611,7 @@ class UsageAnalyticsStore:
             "errors_by_type": [{"error_key": key, **value} for key, value in grouped_error_type.items()],
             "errors_by_integration": [{"integration_key": key, **value} for key, value in grouped_error_integration.items()],
             "errors_by_profile": [{"profile_key": key, **value} for key, value in grouped_error_profile.items()],
+            "runtime_duration_ms": runtime_duration_ms,
             "latest_health": [
                 {
                     "provider": event.provider,
@@ -317,33 +626,68 @@ class UsageAnalyticsStore:
             ],
         }
 
-    def timeline(self, *, window_seconds: int = 24 * 3600, bucket_seconds: int = 3600) -> list[dict[str, object]]:
+    def timeline(
+        self,
+        *,
+        window_seconds: int = 24 * 3600,
+        bucket_seconds: int = 3600,
+        tenant_id: str | None = None,
+    ) -> list[dict[str, object]]:
         now = datetime.now(tz=UTC)
         bucket_count = max(1, window_seconds // bucket_seconds)
+        sql_repository = self._sql_repository()
+        effective_tenant_id = self._effective_history_tenant_id(tenant_id=tenant_id)
+        if sql_repository is not None:
+            return sql_repository.timeline(
+                window_seconds=window_seconds,
+                bucket_seconds=bucket_seconds,
+                tenant_id=effective_tenant_id,
+            )
+        events = self._window_filter(self._usage_events(), window_seconds)
+        errors = self._window_filter(self._error_events(), window_seconds)
+        events = self._apply_tenant_filter(events, effective_tenant_id)
+        errors = self._apply_tenant_filter(errors, effective_tenant_id)
         buckets = []
         for index in range(bucket_count):
             bucket_start = now - timedelta(seconds=(bucket_count - index) * bucket_seconds)
             bucket_end = bucket_start + timedelta(seconds=bucket_seconds)
-            events = [event for event in self._events if bucket_start <= self._parse_dt(event.created_at) < bucket_end]
-            errors = [event for event in self._errors if bucket_start <= self._parse_dt(event.created_at) < bucket_end]
+            bucket_events = [event for event in events if bucket_start <= self._parse_dt(event.created_at) < bucket_end]
+            bucket_errors = [event for event in errors if bucket_start <= self._parse_dt(event.created_at) < bucket_end]
             buckets.append(
                 {
                     "bucket_start": bucket_start.isoformat(),
                     "bucket_end": bucket_end.isoformat(),
-                    "requests": len(events),
-                    "errors": len(errors),
-                    "actual_cost": sum(event.actual_cost for event in events),
-                    "hypothetical_cost": sum(event.hypothetical_cost for event in events),
-                    "avoided_cost": sum(event.avoided_cost for event in events),
-                    "error_rate": (len(errors) / max(1, len(events) + len(errors))),
+                    "requests": len(bucket_events),
+                    "errors": len(bucket_errors),
+                    "actual_cost": sum(event.actual_cost for event in bucket_events),
+                    "hypothetical_cost": sum(event.hypothetical_cost for event in bucket_events),
+                    "avoided_cost": sum(event.avoided_cost for event in bucket_events),
+                    "error_rate": (len(bucket_errors) / max(1, len(bucket_events) + len(bucket_errors))),
                 }
             )
         return buckets
 
-    def provider_drilldown(self, provider: str, *, window_seconds: int | None = None) -> dict[str, object]:
-        events = [event for event in self._window_filter(self._events, window_seconds) if event.provider == provider]
-        errors = [event for event in self._window_filter(self._errors, window_seconds) if event.provider == provider]
-        health = [event for event in self._window_filter(self._health_events, window_seconds) if event.provider == provider]
+    def provider_drilldown(
+        self,
+        provider: str,
+        *,
+        window_seconds: int | None = None,
+        tenant_id: str | None = None,
+    ) -> dict[str, object]:
+        sql_repository = self._sql_repository()
+        effective_tenant_id = self._effective_history_tenant_id(tenant_id=tenant_id)
+        if sql_repository is not None:
+            return sql_repository.provider_drilldown(
+                provider,
+                window_seconds=window_seconds,
+                tenant_id=effective_tenant_id,
+            )
+        events = [event for event in self._window_filter(self._usage_events(), window_seconds) if event.provider == provider]
+        errors = [event for event in self._window_filter(self._error_events(), window_seconds) if event.provider == provider]
+        health = [event for event in self._window_filter(self._health_events(), window_seconds) if event.provider == provider]
+        events = self._apply_tenant_filter(events, effective_tenant_id)
+        errors = self._apply_tenant_filter(errors, effective_tenant_id)
+        health = self._apply_tenant_filter(health, effective_tenant_id)
         models: dict[str, dict[str, object]] = {}
         clients: dict[str, dict[str, object]] = {}
         for event in events:
@@ -371,9 +715,25 @@ class UsageAnalyticsStore:
             "clients": sorted(clients.values(), key=lambda item: (int(item.get("errors", 0)), float(item.get("actual_cost", 0.0))), reverse=True),
         }
 
-    def client_drilldown(self, client_id: str, *, window_seconds: int | None = None) -> dict[str, object]:
-        events = [event for event in self._window_filter(self._events, window_seconds) if event.client_id == client_id]
-        errors = [event for event in self._window_filter(self._errors, window_seconds) if event.client_id == client_id]
+    def client_drilldown(
+        self,
+        client_id: str,
+        *,
+        window_seconds: int | None = None,
+        tenant_id: str | None = None,
+    ) -> dict[str, object]:
+        sql_repository = self._sql_repository()
+        effective_tenant_id = self._effective_history_tenant_id(tenant_id=tenant_id)
+        if sql_repository is not None:
+            return sql_repository.client_drilldown(
+                client_id,
+                window_seconds=window_seconds,
+                tenant_id=effective_tenant_id,
+            )
+        events = [event for event in self._window_filter(self._usage_events(), window_seconds) if event.client_id == client_id]
+        errors = [event for event in self._window_filter(self._error_events(), window_seconds) if event.client_id == client_id]
+        events = self._apply_tenant_filter(events, effective_tenant_id)
+        errors = self._apply_tenant_filter(errors, effective_tenant_id)
         providers: dict[str, dict[str, object]] = {}
         for event in events:
             row = providers.setdefault(event.provider, {"provider": event.provider, "requests": 0, "tokens": 0, "actual_cost": 0.0})
@@ -393,8 +753,8 @@ class UsageAnalyticsStore:
             "recent_usage": [item.model_dump() for item in sorted(events, key=lambda event: event.created_at, reverse=True)[:25]],
         }
 
-    def alert_indicators(self) -> list[dict[str, object]]:
-        last_hour = self.aggregate(window_seconds=3600)
+    def alert_indicators(self, *, tenant_id: str | None = None) -> list[dict[str, object]]:
+        last_hour = self.aggregate(window_seconds=3600, tenant_id=tenant_id)
         requests = int(last_hour["event_count"])
         errors = int(last_hour["error_event_count"])
         error_rate = errors / max(1, (requests + errors))
@@ -424,4 +784,7 @@ class UsageAnalyticsStore:
 @lru_cache(maxsize=1)
 def get_usage_analytics_store() -> UsageAnalyticsStore:
     settings = get_settings()
-    return UsageAnalyticsStore(repository=get_observability_repository(settings))
+    return UsageAnalyticsStore(
+        repository=get_observability_repository(settings),
+        default_tenant_id=settings.bootstrap_tenant_id,
+    )

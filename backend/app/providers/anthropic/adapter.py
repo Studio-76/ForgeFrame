@@ -2,9 +2,13 @@
 
 from __future__ import annotations
 
+import base64
+import binascii
 import json
+import re
 from collections.abc import Iterator
 from datetime import datetime
+from urllib.parse import urlsplit
 
 import httpx
 
@@ -30,9 +34,12 @@ from app.providers.base import (
     ProviderUnsupportedMediaTypeError,
     ProviderUpstreamError,
 )
+from app.request_metadata import forgegate_request_metadata_headers
 from app.settings.config import Settings
 from app.usage.models import TokenUsage
 from app.usage.service import UsageAccountingService
+
+_DATA_URL_PATTERN = re.compile(r"^data:(?P<media_type>image/[A-Za-z0-9.+-]+);base64,(?P<data>.+)$", re.DOTALL)
 
 
 class AnthropicAdapter:
@@ -48,25 +55,27 @@ class AnthropicAdapter:
             vision=True,
             external=True,
             discovery_support=True,
-            provider_axis="openai_compatible_provider",
+            provider_axis="unmapped_native_runtime",
             auth_mechanism="api_key",
             verify_support=True,
             probe_support=True,
         )
 
     def is_ready(self) -> bool:
-        return bool(self._settings.anthropic_api_key.strip())
+        return self.readiness_reason() is None
 
     def readiness_reason(self) -> str | None:
-        if self.is_ready():
-            return None
-        return "FORGEGATE_ANTHROPIC_API_KEY is required."
+        if not self._settings.anthropic_api_key.strip():
+            return "FORGEGATE_ANTHROPIC_API_KEY is required."
+        if self._configured_base_url() is None:
+            return "FORGEGATE_ANTHROPIC_BASE_URL must be an absolute http(s) URL."
+        return None
 
     def create_chat_completion(self, request: ChatDispatchRequest) -> ChatDispatchResult:
         if not self.is_ready():
             raise ProviderConfigurationError(self.provider_name, self.readiness_reason() or "Anthropic is not configured.")
         payload = self._build_payload(request, stream=False)
-        data = self._post(payload)
+        data = self._post(payload, request.request_metadata)
         content, tool_calls = self._extract_content(data.get("content", []))
         usage = self._usage_from_payload(data.get("usage", {}), request.messages, content)
         cost = self._usage.costs_for_provider(provider=self.provider_name, usage=usage)
@@ -74,7 +83,7 @@ class AnthropicAdapter:
             model=str(data.get("model", request.model)),
             provider=self.provider_name,
             content=content,
-            finish_reason=str(data.get("stop_reason", "stop") or "stop"),
+            finish_reason=self._normalize_stop_reason(data.get("stop_reason", "stop")),
             usage=usage,
             cost=cost,
             credential_type="api_key",
@@ -86,15 +95,31 @@ class AnthropicAdapter:
         if not self.is_ready():
             raise ProviderConfigurationError(self.provider_name, self.readiness_reason() or "Anthropic is not configured.")
         payload = self._build_payload(request, stream=True)
-        yield from self._stream(payload, request.messages)
+        yield from self._stream(payload, request.messages, request.request_metadata)
 
-    def _endpoint_and_headers(self) -> tuple[str, dict[str, str]]:
-        endpoint = f"{self._settings.anthropic_base_url.rstrip('/')}/messages"
-        return endpoint, {
+    def _endpoint_and_headers(self, request_metadata: dict[str, str] | None = None) -> tuple[str, dict[str, str]]:
+        base_url = self._configured_base_url()
+        if base_url is None:  # pragma: no cover - guarded by readiness checks
+            raise ProviderConfigurationError(
+                self.provider_name,
+                "FORGEGATE_ANTHROPIC_BASE_URL must be an absolute http(s) URL.",
+            )
+        endpoint = f"{base_url}/messages"
+        headers = {
             "x-api-key": self._settings.anthropic_api_key,
             "anthropic-version": self._settings.anthropic_version,
             "content-type": "application/json",
         }
+        headers.update(forgegate_request_metadata_headers(request_metadata))
+        return endpoint, headers
+
+    def _configured_base_url(self) -> str | None:
+        base_url = self._settings.anthropic_base_url.strip()
+        parsed = urlsplit(base_url)
+        host = parsed.hostname or ""
+        if parsed.scheme not in {"http", "https"} or not host or any(char.isspace() for char in host):
+            return None
+        return base_url.rstrip("/")
 
     @staticmethod
     def _stringify_content(value: object) -> str:
@@ -112,19 +137,229 @@ class AnthropicAdapter:
             return json.dumps(value, ensure_ascii=True)
         return str(value)
 
+    @classmethod
+    def _content_to_text_blocks(cls, value: object) -> list[dict[str, str]]:
+        if value is None:
+            return []
+        if isinstance(value, dict):
+            block_type = value.get("type")
+            if block_type in {"text", "input_text"}:
+                text = str(value.get("text", ""))
+                return [{"type": "text", "text": text}] if text.strip() else []
+            nested_content = value.get("content")
+            if isinstance(nested_content, list):
+                return cls._content_to_text_blocks(nested_content)
+        if isinstance(value, list):
+            blocks: list[dict[str, str]] = []
+            for item in value:
+                blocks.extend(cls._content_to_text_blocks(item))
+            return blocks
+        text = cls._stringify_content(value)
+        return [{"type": "text", "text": text}] if text.strip() else []
+
+    @staticmethod
+    def _validate_base64_image_data(data: str) -> None:
+        try:
+            base64.b64decode(data, validate=True)
+        except (binascii.Error, ValueError) as exc:
+            raise ProviderBadRequestError(
+                AnthropicAdapter.provider_name,
+                "Anthropic vision translation requires valid base64 image data.",
+            ) from exc
+
+    @classmethod
+    def _image_source_from_url(cls, raw_url: object) -> dict[str, str]:
+        url = str(raw_url or "").strip()
+        if not url:
+            raise ProviderBadRequestError(cls.provider_name, "Anthropic vision translation requires image_url.url.")
+        data_url_match = _DATA_URL_PATTERN.match(url)
+        if data_url_match is not None:
+            media_type = data_url_match.group("media_type").strip()
+            data = data_url_match.group("data").strip()
+            cls._validate_base64_image_data(data)
+            return {"type": "base64", "media_type": media_type, "data": data}
+        return {"type": "url", "url": url}
+
+    @classmethod
+    def _normalize_image_source(cls, source: object) -> dict[str, str]:
+        if not isinstance(source, dict):
+            raise ProviderBadRequestError(cls.provider_name, "Anthropic image blocks require a source object.")
+        source_type = str(source.get("type", "") or "").strip()
+        if source_type == "url":
+            url = str(source.get("url", "") or "").strip()
+            if not url:
+                raise ProviderBadRequestError(cls.provider_name, "Anthropic image URL sources require a url field.")
+            return {"type": "url", "url": url}
+        if source_type == "base64":
+            media_type = str(source.get("media_type", "") or "").strip()
+            data = str(source.get("data", "") or "").strip()
+            if not media_type or not data:
+                raise ProviderBadRequestError(
+                    cls.provider_name,
+                    "Anthropic base64 image sources require media_type and data.",
+                )
+            cls._validate_base64_image_data(data)
+            return {"type": "base64", "media_type": media_type, "data": data}
+        raise ProviderUnsupportedFeatureError(cls.provider_name, f"vision_source:{source_type or 'unknown'}")
+
+    @classmethod
+    def _normalize_openai_image_block(cls, block: dict[str, object]) -> dict[str, object]:
+        if block.get("file_id") is not None:
+            raise ProviderUnsupportedFeatureError(cls.provider_name, "vision:file_id")
+        image_url = block.get("image_url", block.get("url"))
+        if isinstance(image_url, dict):
+            if image_url.get("file_id") is not None:
+                raise ProviderUnsupportedFeatureError(cls.provider_name, "vision:file_id")
+            image_url = image_url.get("url")
+        return {"type": "image", "source": cls._image_source_from_url(image_url)}
+
+    @classmethod
+    def _content_to_anthropic_blocks(cls, value: object) -> list[dict[str, object]]:
+        if value is None:
+            return []
+        if isinstance(value, dict):
+            block_type = str(value.get("type", "") or "")
+            if block_type in {"text", "input_text"}:
+                text = str(value.get("text", ""))
+                return [{"type": "text", "text": text}] if text.strip() else []
+            if block_type in {"image_url", "input_image"}:
+                return [cls._normalize_openai_image_block(value)]
+            if block_type == "image":
+                return [{"type": "image", "source": cls._normalize_image_source(value.get("source"))}]
+            nested_content = value.get("content")
+            if isinstance(nested_content, list):
+                return cls._content_to_anthropic_blocks(nested_content)
+        if isinstance(value, list):
+            blocks: list[dict[str, object]] = []
+            for item in value:
+                blocks.extend(cls._content_to_anthropic_blocks(item))
+            return blocks
+        text = cls._stringify_content(value)
+        return [{"type": "text", "text": text}] if text.strip() else []
+
+    @classmethod
+    def _normalize_tool_use_block(cls, tool_call: object) -> dict[str, object]:
+        if not isinstance(tool_call, dict):
+            raise ProviderBadRequestError(cls.provider_name, "Anthropic follow-up translation requires assistant tool_calls to be objects.")
+
+        tool_call_id = str(tool_call.get("id", "") or "").strip()
+        if not tool_call_id:
+            raise ProviderBadRequestError(cls.provider_name, "Anthropic follow-up translation requires assistant tool_calls[].id.")
+
+        function = tool_call.get("function", {})
+        if not isinstance(function, dict):
+            raise ProviderBadRequestError(cls.provider_name, "Anthropic follow-up translation requires assistant tool_calls[].function to be an object.")
+
+        tool_name = str(function.get("name", "") or "").strip()
+        if not tool_name:
+            raise ProviderBadRequestError(cls.provider_name, "Anthropic follow-up translation requires assistant tool_calls[].function.name.")
+
+        raw_arguments = function.get("arguments", "{}")
+        if raw_arguments is None:
+            parsed_arguments: object = {}
+        elif isinstance(raw_arguments, str):
+            stripped_arguments = raw_arguments.strip()
+            try:
+                parsed_arguments = {} if not stripped_arguments else json.loads(stripped_arguments)
+            except json.JSONDecodeError as exc:
+                raise ProviderBadRequestError(
+                    cls.provider_name,
+                    "Anthropic follow-up translation requires assistant tool_calls[].function.arguments to be valid JSON.",
+                ) from exc
+        elif isinstance(raw_arguments, dict):
+            parsed_arguments = raw_arguments
+        else:
+            raise ProviderBadRequestError(
+                cls.provider_name,
+                "Anthropic follow-up translation requires assistant tool_calls[].function.arguments to be a JSON string or object.",
+            )
+
+        if not isinstance(parsed_arguments, dict):
+            raise ProviderBadRequestError(
+                cls.provider_name,
+                "Anthropic follow-up translation requires assistant tool_calls[].function.arguments to decode to a JSON object.",
+            )
+
+        return {
+            "type": "tool_use",
+            "id": tool_call_id,
+            "name": tool_name,
+            "input": parsed_arguments,
+        }
+
+    @classmethod
+    def _assistant_content(cls, message: dict[str, object]) -> str | list[dict[str, object]]:
+        text_blocks = cls._content_to_text_blocks(message.get("content"))
+        raw_tool_calls = message.get("tool_calls", [])
+        if raw_tool_calls is None:
+            raw_tool_calls = []
+        if not isinstance(raw_tool_calls, list):
+            raise ProviderBadRequestError(cls.provider_name, "Anthropic follow-up translation requires assistant tool_calls to be a list.")
+        tool_blocks = [cls._normalize_tool_use_block(tool_call) for tool_call in raw_tool_calls]
+        if tool_blocks:
+            return [*text_blocks, *tool_blocks]
+        if isinstance(message.get("content"), str) and len(text_blocks) == 1:
+            return text_blocks[0]["text"]
+        if text_blocks:
+            return text_blocks
+        return " "
+
+    @classmethod
+    def _normalize_tool_result_content(cls, value: object) -> str | list[dict[str, object]]:
+        if isinstance(value, str):
+            return value if value.strip() else " "
+        text_blocks = cls._content_to_text_blocks(value)
+        return text_blocks if text_blocks else " "
+
+    @classmethod
+    def _normalize_tool_result_block(cls, message: dict[str, object]) -> dict[str, object]:
+        tool_call_id = str(message.get("tool_call_id", "") or "").strip()
+        if not tool_call_id:
+            raise ProviderBadRequestError(cls.provider_name, "Anthropic follow-up translation requires tool messages to include tool_call_id.")
+        return {
+            "type": "tool_result",
+            "tool_use_id": tool_call_id,
+            "content": cls._normalize_tool_result_content(message.get("content")),
+        }
+
     def _build_payload(self, request: ChatDispatchRequest, *, stream: bool) -> dict[str, object]:
         system_messages: list[str] = []
         translated_messages: list[dict[str, object]] = []
+        pending_tool_results: list[dict[str, object]] = []
+
+        def _append_user_message(content: object) -> None:
+            nonlocal pending_tool_results
+            content_blocks = self._content_to_anthropic_blocks(content)
+            if pending_tool_results:
+                merged_blocks = [*pending_tool_results, *content_blocks]
+                translated_messages.append({"role": "user", "content": merged_blocks if merged_blocks else " "})
+                pending_tool_results = []
+                return
+            if isinstance(content, str):
+                translated_messages.append({"role": "user", "content": content if content.strip() else " "})
+                return
+            if content_blocks:
+                translated_messages.append({"role": "user", "content": content_blocks})
+                return
+            translated_messages.append({"role": "user", "content": " "})
+
         for item in request.messages:
             role = str(item.get("role", "user"))
-            content = self._stringify_content(item.get("content", ""))
             if role == "system":
-                system_messages.append(content)
+                system_messages.append(self._stringify_content(item.get("content", "")))
                 continue
             if role == "assistant":
-                translated_messages.append({"role": "assistant", "content": content})
+                if pending_tool_results:
+                    translated_messages.append({"role": "user", "content": pending_tool_results})
+                    pending_tool_results = []
+                translated_messages.append({"role": "assistant", "content": self._assistant_content(item)})
                 continue
-            translated_messages.append({"role": "user", "content": content})
+            if role == "tool":
+                pending_tool_results.append(self._normalize_tool_result_block(item))
+                continue
+            _append_user_message(item.get("content"))
+        if pending_tool_results:
+            translated_messages.append({"role": "user", "content": pending_tool_results})
         if not translated_messages:
             translated_messages = [{"role": "user", "content": " "}]
         payload: dict[str, object] = {
@@ -133,6 +368,12 @@ class AnthropicAdapter:
             "max_tokens": 1024,
             "stream": stream,
         }
+        if request.response_controls.get("max_output_tokens") is not None:
+            payload["max_tokens"] = request.response_controls["max_output_tokens"]
+        if request.response_controls.get("temperature") is not None:
+            payload["temperature"] = request.response_controls["temperature"]
+        if request.response_controls.get("metadata"):
+            raise ProviderUnsupportedFeatureError(self.provider_name, "metadata")
         if system_messages:
             payload["system"] = "\n\n".join(part for part in system_messages if part.strip())
         if request.tools:
@@ -167,8 +408,8 @@ class AnthropicAdapter:
             return None
         return {"type": "tool", "name": str(name)}
 
-    def _post(self, payload: dict[str, object]) -> dict:
-        endpoint, headers = self._endpoint_and_headers()
+    def _post(self, payload: dict[str, object], request_metadata: dict[str, str] | None = None) -> dict:
+        endpoint, headers = self._endpoint_and_headers(request_metadata)
         try:
             response = httpx.post(endpoint, json=payload, headers=headers, timeout=self._settings.anthropic_timeout_seconds)
         except httpx.TimeoutException as exc:
@@ -181,13 +422,20 @@ class AnthropicAdapter:
         except ValueError as exc:
             raise ProviderProtocolError(self.provider_name, "Anthropic returned invalid JSON payload.") from exc
 
-    def _stream(self, payload: dict[str, object], messages: list[dict]) -> Iterator[ProviderStreamEvent]:
-        endpoint, headers = self._endpoint_and_headers()
+    def _stream(
+        self,
+        payload: dict[str, object],
+        messages: list[dict],
+        request_metadata: dict[str, str] | None = None,
+    ) -> Iterator[ProviderStreamEvent]:
+        endpoint, headers = self._endpoint_and_headers(request_metadata)
         collected = ""
         usage = TokenUsage()
         finish_reason = "stop"
         saw_done = False
         current_event = ""
+        streamed_tool_calls: dict[int, dict[str, object]] = {}
+        streamed_tool_inputs: dict[int, object] = {}
         try:
             with httpx.stream("POST", endpoint, json=payload, headers=headers, timeout=self._settings.anthropic_timeout_seconds) as response:
                 self._raise_for_status(response)
@@ -211,13 +459,21 @@ class AnthropicAdapter:
                     except json.JSONDecodeError as exc:
                         raise ProviderStreamInterruptedError(self.provider_name, "Anthropic stream produced invalid JSON chunk.") from exc
                     event_type = current_event or str(payload_item.get("type", ""))
-                    if event_type == "content_block_delta":
-                        delta = str(payload_item.get("delta", {}).get("text", ""))
+                    if event_type == "content_block_start":
+                        self._capture_stream_tool_call_start(payload_item, streamed_tool_calls, streamed_tool_inputs)
+                    elif event_type == "content_block_delta":
+                        delta_payload = payload_item.get("delta", {})
+                        delta_type = delta_payload.get("type") if isinstance(delta_payload, dict) else None
+                        delta = ""
+                        if isinstance(delta_payload, dict) and delta_type in {None, "text_delta"}:
+                            delta = str(delta_payload.get("text", ""))
                         if delta:
                             collected += delta
                             yield ProviderStreamEvent(event="delta", delta=delta)
+                        if isinstance(delta_payload, dict) and delta_type == "input_json_delta":
+                            self._append_stream_tool_call_delta(payload_item, delta_payload, streamed_tool_calls)
                     elif event_type == "message_delta":
-                        finish_reason = str(payload_item.get("delta", {}).get("stop_reason", finish_reason) or finish_reason)
+                        finish_reason = self._normalize_stop_reason(payload_item.get("delta", {}).get("stop_reason", finish_reason) or finish_reason)
                         usage_payload = payload_item.get("usage", {})
                         usage = self._usage_from_payload(usage_payload, messages, collected, default=usage)
                     elif event_type == "message_start":
@@ -237,7 +493,116 @@ class AnthropicAdapter:
         if usage.total_tokens == 0:
             usage = self._usage.usage_from_prompt_completion(messages, collected)
         cost = self._usage.costs_for_provider(provider=self.provider_name, usage=usage)
-        yield ProviderStreamEvent(event="done", finish_reason=finish_reason, usage=usage, cost=cost)
+        tool_calls = self._finalize_stream_tool_calls(streamed_tool_calls, streamed_tool_inputs)
+        yield ProviderStreamEvent(
+            event="done",
+            finish_reason=finish_reason,
+            usage=usage,
+            cost=cost,
+            tool_calls=tool_calls,
+            credential_type="api_key",
+            auth_source="anthropic_api_key",
+        )
+
+    @staticmethod
+    def _tool_arguments_json(value: object) -> str:
+        return json.dumps(value if value is not None else {}, ensure_ascii=True, separators=(",", ":"))
+
+    @staticmethod
+    def _stream_block_index(raw_index: object, *, default: int) -> int:
+        try:
+            return int(raw_index)
+        except (TypeError, ValueError):
+            return default
+
+    @classmethod
+    def _capture_stream_tool_call_start(
+        cls,
+        payload_item: dict[str, object],
+        streamed_tool_calls: dict[int, dict[str, object]],
+        streamed_tool_inputs: dict[int, object],
+    ) -> None:
+        content_block = payload_item.get("content_block", {})
+        if not isinstance(content_block, dict) or content_block.get("type") != "tool_use":
+            return
+        index = cls._stream_block_index(payload_item.get("index"), default=len(streamed_tool_calls))
+        current = streamed_tool_calls.setdefault(
+            index,
+            {
+                "id": "",
+                "type": "function",
+                "function": {"name": "", "arguments": ""},
+            },
+        )
+        if content_block.get("id"):
+            current["id"] = str(content_block.get("id"))
+        function_payload = current.setdefault("function", {"name": "", "arguments": ""})
+        if not isinstance(function_payload, dict):
+            function_payload = {"name": "", "arguments": ""}
+            current["function"] = function_payload
+        if content_block.get("name"):
+            function_payload["name"] = str(content_block.get("name"))
+        if "input" in content_block:
+            streamed_tool_inputs[index] = content_block.get("input")
+
+    @classmethod
+    def _append_stream_tool_call_delta(
+        cls,
+        payload_item: dict[str, object],
+        delta_payload: dict[str, object],
+        streamed_tool_calls: dict[int, dict[str, object]],
+    ) -> None:
+        partial_json = delta_payload.get("partial_json")
+        if partial_json is None:
+            return
+        index = cls._stream_block_index(payload_item.get("index"), default=len(streamed_tool_calls))
+        current = streamed_tool_calls.setdefault(
+            index,
+            {
+                "id": "",
+                "type": "function",
+                "function": {"name": "", "arguments": ""},
+            },
+        )
+        function_payload = current.setdefault("function", {"name": "", "arguments": ""})
+        if not isinstance(function_payload, dict):
+            function_payload = {"name": "", "arguments": ""}
+            current["function"] = function_payload
+        function_payload["arguments"] = f"{function_payload.get('arguments', '')}{partial_json}"
+
+    @classmethod
+    def _finalize_stream_tool_calls(
+        cls,
+        streamed_tool_calls: dict[int, dict[str, object]],
+        streamed_tool_inputs: dict[int, object],
+    ) -> list[dict[str, object]]:
+        finalized: list[dict[str, object]] = []
+        for index in sorted(streamed_tool_calls):
+            call = streamed_tool_calls[index]
+            function_payload = call.get("function", {})
+            raw_arguments = ""
+            tool_name = ""
+            if isinstance(function_payload, dict):
+                raw_arguments = str(function_payload.get("arguments", ""))
+                tool_name = str(function_payload.get("name", ""))
+            if raw_arguments.strip():
+                try:
+                    arguments = cls._tool_arguments_json(json.loads(raw_arguments))
+                except json.JSONDecodeError:
+                    arguments = raw_arguments
+            else:
+                arguments = cls._tool_arguments_json(streamed_tool_inputs.get(index))
+            finalized.append(
+                {
+                    "id": str(call.get("id", "")),
+                    "type": str(call.get("type", "function") or "function"),
+                    "function": {
+                        "name": tool_name,
+                        "arguments": arguments,
+                    },
+                }
+            )
+        return finalized
 
     @staticmethod
     def _extract_content(content_blocks: object) -> tuple[str, list[dict]]:
@@ -258,7 +623,7 @@ class AnthropicAdapter:
                         "type": "function",
                         "function": {
                             "name": str(block.get("name", "")),
-                            "arguments": json.dumps(block.get("input", {}), ensure_ascii=True),
+                            "arguments": AnthropicAdapter._tool_arguments_json(block.get("input", {})),
                         },
                     }
                 )
@@ -318,3 +683,13 @@ class AnthropicAdapter:
             return None
         delta = int((retry_at - datetime.now(tz=retry_at.tzinfo)).total_seconds())
         return delta if delta > 0 else 0
+
+    @staticmethod
+    def _normalize_stop_reason(stop_reason: object) -> str:
+        normalized = str(stop_reason or "stop")
+        return {
+            "end_turn": "stop",
+            "stop_sequence": "stop",
+            "tool_use": "tool_calls",
+            "max_tokens": "length",
+        }.get(normalized, normalized)
