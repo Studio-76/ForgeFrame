@@ -12,13 +12,13 @@ def test_file_control_plane_repository_upgrades_legacy_model_payload(tmp_path: P
                 "schema_version": 1,
                 "providers": [
                     {
-                        "provider": "forgegate_baseline",
-                        "label": "ForgeGate",
+                        "provider": "forgeframe_baseline",
+                        "label": "ForgeFrame",
                         "enabled": True,
                         "integration_class": "native",
                         "managed_models": [
                             {
-                                "id": "forgegate-baseline-chat-v1",
+                                "id": "forgeframe-baseline-chat-v1",
                                 "source": "static",
                                 "discovery_status": "catalog",
                                 "active": True,
@@ -47,10 +47,12 @@ def test_file_control_plane_repository_upgrades_legacy_model_payload(tmp_path: P
     state = repository.load_state()
 
     assert state is not None
-    assert state.schema_version == 2
+    assert state.schema_version == 3
     model = state.providers[0].managed_models[0]
-    assert model.owned_by == "ForgeGate"
-    assert model.display_name == "forgegate-baseline-chat-v1"
+    assert model.owned_by == "ForgeFrame"
+    assert model.display_name == "forgeframe-baseline-chat-v1"
     assert model.category == "general"
+    assert model.routing_key == "forgeframe_baseline/forgeframe-baseline-chat-v1"
+    assert state.provider_targets[0].target_key == "forgeframe_baseline::forgeframe-baseline-chat-v1"
 
 

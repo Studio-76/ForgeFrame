@@ -20,11 +20,11 @@ TRACE_CONTEXT_FIELDS = (
 )
 
 TRACE_PROPAGATION_HEADERS = (
-    "X-ForgeGate-Request-Id",
-    "X-ForgeGate-Correlation-Id",
-    "X-ForgeGate-Causation-Id",
-    "X-ForgeGate-Trace-Id",
-    "X-ForgeGate-Span-Id",
+    "X-ForgeFrame-Request-Id",
+    "X-ForgeFrame-Correlation-Id",
+    "X-ForgeFrame-Causation-Id",
+    "X-ForgeFrame-Trace-Id",
+    "X-ForgeFrame-Span-Id",
     "Idempotency-Key",
 )
 

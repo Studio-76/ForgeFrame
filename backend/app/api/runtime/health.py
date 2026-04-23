@@ -27,6 +27,7 @@ def health(
         governance=governance,
         harness=harness,
         analytics=analytics,
+        app=request.app,
     )
     request.app.state.runtime_readiness = readiness
     return JSONResponse(

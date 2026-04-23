@@ -95,6 +95,33 @@ function toneFromReadinessAxis(axis: "planned" | "partial" | "ready"): Tone {
   return "neutral";
 }
 
+function toneFromContractClassification(
+  classification: "runtime-ready" | "partial-runtime" | "bridge-only" | "onboarding-only" | "unsupported",
+): Tone {
+  if (classification === "runtime-ready") {
+    return "success";
+  }
+  if (classification === "partial-runtime") {
+    return "warning";
+  }
+  if (classification === "unsupported") {
+    return "danger";
+  }
+  return "neutral";
+}
+
+function formatContractClassification(
+  classification: "runtime-ready" | "partial-runtime" | "bridge-only" | "onboarding-only" | "unsupported",
+): string {
+  return classification.replaceAll("-", " ");
+}
+
+function formatCompatibilityDepth(
+  depth: "none" | "limited" | "constrained" | "validated",
+): string {
+  return depth.replaceAll("_", " ");
+}
+
 function toneFromProofStatus(status: "none" | "partial" | "proven"): Tone {
   if (status === "proven") {
     return "success";
@@ -243,7 +270,7 @@ export function ProvidersOverviewSection({ data, actions }: SectionProps) {
   return (
     <SectionCard
       title="Control-Plane Summary"
-      description="Current runtime truth is separated from roadmap and onboarding targets. Live provider inventory, compatibility, and harness profiles stay in the runtime sections below."
+      description="Current runtime truth is separated from roadmap and onboarding targets. Live provider inventory and compatibility stay below, while harness profiles now live on the dedicated Harness route."
       actions={
         <>
           <button type="button" onClick={() => void actions.load()}>
@@ -273,7 +300,7 @@ export function ProvidersOverviewSection({ data, actions }: SectionProps) {
       ) : null}
 
       <p className="fg-note fg-mt-md">
-        Runtime truth: provider cards, saved harness profiles, client view, and the compatibility matrix describe what the backend currently exposes. Expansion targets and onboarding guidance remain isolated below so the UI does not imply live runtime coverage.
+        Runtime truth: provider cards, client view, and the compatibility matrix describe what the backend currently exposes here. Saved harness profiles and proof actions moved to the dedicated Harness module so this route no longer acts as the primary harness surface.
       </p>
 
       {data.error ? <p className="fg-danger">{data.error}</p> : null}
@@ -518,7 +545,7 @@ export function HarnessControlSection({ data, actions }: SectionProps) {
         ) : !data.access.canExportFull ? (
           <p className="fg-note fg-mb-sm">
             {data.access.canMutate
-              ? "Redacted harness export stays available here, but full secret-bearing snapshot stays admin-only on the providers surface."
+              ? "Redacted harness export stays available here, but full secret-bearing snapshot stays admin-only on the dedicated Harness surface."
               : "Redacted harness export stays available for inspection, but full secret-bearing snapshot remains admin-only and import/apply actions stay hidden for this session."}
           </p>
         ) : !data.access.canMutate ? (
@@ -716,6 +743,10 @@ export function ProviderInventorySection({ data, actions }: SectionProps) {
                   </p>
                 </div>
                 <div className="fg-actions">
+                  <TonePill
+                    label={`contract ${formatContractClassification(provider.contract_classification)}`}
+                    tone={toneFromContractClassification(provider.contract_classification)}
+                  />
                   <TonePill label={provider.enabled ? "enabled" : "disabled"} tone={provider.enabled ? "success" : "neutral"} />
                   <TonePill
                     label={provider.ready ? "ready" : "not ready"}
@@ -731,8 +762,8 @@ export function ProviderInventorySection({ data, actions }: SectionProps) {
 
               <div className="fg-detail-grid">
                 <p>
-                  runtime axis={provider.runtime_readiness} · streaming axis={provider.streaming_readiness} · provider axis=
-                  {formatProviderAxis(provider.provider_axis)} · compatibility={provider.compatibility_tier ?? "planned"}
+                  contract={formatContractClassification(provider.contract_classification)} · runtime axis={provider.runtime_readiness} · streaming axis={provider.streaming_readiness} · provider axis=
+                  {formatProviderAxis(provider.provider_axis)} · compatibility depth={formatCompatibilityDepth(provider.compatibility_depth ?? "none")}
                 </p>
                 <p>
                   auth={provider.auth_mechanism ?? "unknown"} · tool calling={provider.tool_calling_level ?? "none"} · oauth required=
@@ -811,6 +842,10 @@ export function ProviderInventorySection({ data, actions }: SectionProps) {
                 </div>
                 <div className="fg-actions">
                   <TonePill
+                    label={`contract ${formatContractClassification(row.contract_classification)}`}
+                    tone={toneFromContractClassification(row.contract_classification)}
+                  />
+                  <TonePill
                     label={row.ready ? "ready" : "not ready"}
                     tone={row.ready ? "success" : toneFromReadinessAxis(row.runtime_readiness === "partial" || row.streaming_readiness === "partial" ? "partial" : "planned")}
                   />
@@ -820,7 +855,7 @@ export function ProviderInventorySection({ data, actions }: SectionProps) {
               </div>
               <div className="fg-detail-grid">
                 <p>
-                  tier={row.tier} · runtime axis={row.runtime_readiness} · streaming axis={row.streaming_readiness} · provider axis=
+                  compatibility depth={formatCompatibilityDepth(row.compatibility_depth)} · contract={formatContractClassification(row.contract_classification)} · runtime axis={row.runtime_readiness} · streaming axis={row.streaming_readiness} · provider axis=
                   {formatProviderAxis(row.provider_axis)}
                 </p>
                 <p>
@@ -859,8 +894,8 @@ export function ExpansionTargetsSection({ data, actions }: SectionProps) {
   return (
     <>
       <SectionCard
-        title="Expansion Targets"
-        description="These records describe onboarding and bridge depth. They are intentionally separated from live runtime truth."
+        title="Product Axis Contracts"
+        description="These records carry the explicit product contract for each non-core axis. They stay separated from live runtime truth so onboarding or bridge depth cannot masquerade as shipped runtime coverage."
         actions={
           data.access.canMutate ? (
             <>
@@ -881,26 +916,37 @@ export function ExpansionTargetsSection({ data, actions }: SectionProps) {
         ) : null}
 
         <div className="fg-card-grid">
-          {data.betaTargets.map((target) => (
+          {data.productAxisTargets.map((target) => (
             <article key={target.provider_key} className="fg-subcard">
               <div className="fg-panel-heading">
                 <div>
                   <h4>{target.provider_key}</h4>
                   <p className="fg-muted">
-                    axis={target.product_axis} · type={target.provider_type} · beta tier={target.beta_tier}
+                    axis={target.product_axis} · type={target.provider_type} · operator surface={target.operator_surface}
                   </p>
                 </div>
-                <TonePill label={`onboarding ${target.readiness}`} tone={toneFromReadinessAxis(target.readiness)} />
+                <div className="fg-actions">
+                  <TonePill
+                    label={`contract ${formatContractClassification(target.contract_classification)}`}
+                    tone={toneFromContractClassification(target.contract_classification)}
+                  />
+                  <TonePill label={`onboarding ${target.readiness}`} tone={toneFromReadinessAxis(target.readiness)} />
+                </div>
               </div>
               <div className="fg-detail-grid">
                 <p>
-                  runtime={target.runtime_path} · auth={target.auth_model} · score={formatMetric(target.readiness_score)} · onboarding status=
-                  {target.status_summary}
+                  contract={formatContractClassification(target.contract_classification)} · runtime={target.runtime_path} · auth={target.auth_model} · score=
+                  {formatMetric(target.readiness_score)}
                 </p>
                 <p>
                   runtime axis={target.runtime_readiness} · stream axis={target.streaming_readiness} · verify axis=
                   {target.verify_probe_readiness} · ui axis={target.ui_readiness}
                 </p>
+                <p>classification reason: {target.classification_reason}</p>
+                <p>onboarding status: {target.status_summary}</p>
+                {target.technical_requirements.length > 0 ? (
+                  <p>technical requirements: {target.technical_requirements.join(" | ")}</p>
+                ) : null}
                 <p className="fg-muted">{target.notes}</p>
               </div>
               {target.provider_type === "oauth_account" && data.access.canMutate ? (
@@ -915,16 +961,30 @@ export function ExpansionTargetsSection({ data, actions }: SectionProps) {
         </div>
       </SectionCard>
 
-      <SectionCard title="OAuth Operational Status" description="Configured targets and failure rates are shown explicitly so operators can distinguish bridge health from onboarding intent.">
+      <SectionCard title="OAuth Operational Status" description="Configured targets expose contract classification, lane posture, session truth, and cost posture so account-backed slices cannot hide behind generic bridge wording.">
         <div className="fg-grid">
           <div className="fg-subcard">
             <h4>Current target posture</h4>
             <ul className="fg-list">
               {data.oauthTargets.map((target) => (
                 <li key={toStringValue(target.provider_key)}>
-                  {toStringValue(target.provider_key)} · configured={toStringValue(target.configured)} · bridge=
-                  {toStringValue(target.runtime_bridge_enabled)} · probe={toStringValue(target.probe_enabled)} · harness=
-                  {toStringValue(target.harness_profile_enabled)} · onboarding status={toStringValue(target.readiness)}
+                  {toStringValue(target.provider_key)} · contract={formatContractClassification(target.contract_classification)} · configured=
+                  {toStringValue(target.configured)} · bridge={toStringValue(target.runtime_bridge_enabled)} · probe=
+                  {toStringValue(target.probe_enabled)} · lane={toStringValue(target.queue_lane)} · parallelism=
+                  {toStringValue(target.parallelism_mode)} · cost={toStringValue(target.cost_posture)}
+                </li>
+              ))}
+            </ul>
+          </div>
+
+          <div className="fg-subcard">
+            <h4>Session and escalation truth</h4>
+            <ul className="fg-list">
+              {data.oauthTargets.map((target) => (
+                <li key={`${toStringValue(target.provider_key)}-truth`}>
+                  {toStringValue(target.provider_key)} · auth={toStringValue(target.auth_kind)} · session reuse=
+                  {toStringValue(target.session_reuse_strategy)} · escalation={toStringValue(target.escalation_support)} · truth=
+                  {toStringValue(target.operator_truth)}
                 </li>
               ))}
             </ul>
@@ -966,7 +1026,8 @@ export function ExpansionTargetsSection({ data, actions }: SectionProps) {
             const nextSteps = Array.isArray(target.next_steps) ? target.next_steps : [];
             return (
               <li key={`${toStringValue(target.provider_key, "target")}-${index}`}>
-                {toStringValue(target.provider_key)} · onboarding status={toStringValue(target.readiness)} · depth={toStringValue(target.operational_depth)} ·
+                {toStringValue(target.provider_key)} · contract={formatContractClassification(target.contract_classification)} · onboarding status=
+                {toStringValue(target.readiness)} · depth={toStringValue(target.operational_depth)} · lane={toStringValue(target.queue_lane)} ·
                 reason={toStringValue(target.readiness_reason)}{nextSteps.length > 0 ? ` · next=${toStringValue(nextSteps[0])}` : ""}
               </li>
             );

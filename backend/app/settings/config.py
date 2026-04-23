@@ -1,36 +1,123 @@
-"""Central ForgeGate runtime configuration."""
+"""Central ForgeFrame runtime configuration."""
 
+import json
+import os
 from functools import lru_cache
-from typing import Literal
+from pathlib import Path
+from typing import Any, Literal, get_origin
 
 from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from app.tenancy import DEFAULT_BOOTSTRAP_TENANT_ID
 
+PRIMARY_ENV_PREFIX = "FORGEFRAME_"
+LEGACY_ENV_PREFIX = "FORGEGATE_"
+_ENV_FILES = (".env",)
+
+def _coerce_env_value(value: str) -> str:
+    return value.strip().strip('"').strip("'")
+
+
+def _load_env_file_values() -> dict[str, str]:
+    values: dict[str, str] = {}
+    for env_file in _ENV_FILES:
+        path = Path(env_file)
+        if not path.exists():
+            continue
+        for raw_line in path.read_text(encoding="utf-8").splitlines():
+            line = raw_line.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            key, _, raw_value = line.partition("=")
+            normalized_key = key.strip()
+            normalized_value = _coerce_env_value(raw_value)
+            values.setdefault(normalized_key, normalized_value)
+    return values
+
+
+def _legacy_brand_env_fallbacks(*, explicit_values: dict[str, Any]) -> dict[str, Any]:
+    raw_values = _load_env_file_values()
+    raw_values.update(os.environ)
+
+    legacy_aliases: dict[str, tuple[str, ...]] = {
+        "forgeframe_baseline_enabled": (
+            "FORGEFRAME_FORGEGATE_BASELINE_ENABLED",
+            "FORGEGATE_FORGEGATE_BASELINE_ENABLED",
+        ),
+    }
+    legacy_fallbacks: dict[str, Any] = {}
+    for field_name in Settings.model_fields:
+        if field_name in explicit_values:
+            continue
+
+        suffix = field_name.upper()
+        primary_key = f"{PRIMARY_ENV_PREFIX}{suffix}"
+        legacy_key = f"{LEGACY_ENV_PREFIX}{suffix}"
+        if primary_key in raw_values:
+            continue
+
+        legacy_value = next(
+            (
+                raw_values[key]
+                for key in (legacy_key, *legacy_aliases.get(field_name, ()))
+                if key in raw_values
+            ),
+            None,
+        )
+        if legacy_value is not None:
+            origin = get_origin(Settings.model_fields[field_name].annotation)
+            if origin in {dict, list, tuple}:
+                try:
+                    legacy_fallbacks[field_name] = json.loads(legacy_value)
+                    continue
+                except json.JSONDecodeError:
+                    pass
+            legacy_fallbacks[field_name] = legacy_value
+
+    return legacy_fallbacks
+
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_prefix="FORGEGATE_", env_file=".env", extra="ignore")
+    model_config = SettingsConfigDict(env_prefix="FORGEFRAME_", env_file=".env", extra="ignore")
 
-    app_name: str = "ForgeGate — Smart AI Gateway"
+    def __init__(self, **values):
+        super().__init__(**(_legacy_brand_env_fallbacks(explicit_values=values) | values))
+
+    app_name: str = "ForgeFrame — Autonomous AI Runtime Platform"
     app_version: str = "0.6.0"
     debug: bool = False
 
-    host: str = "0.0.0.0"
-    port: int = 8000
+    host: str = "127.0.0.1"
+    port: int = 8080
     api_base: str = "/v1"
+    public_fqdn: str = ""
+    public_https_host: str = "0.0.0.0"
+    public_https_port: int = 443
+    public_http_helper_host: str = "0.0.0.0"
+    public_http_helper_port: int = 80
+    public_admin_base: str = "/admin"
+    public_tls_mode: Literal["disabled", "manual", "integrated_acme"] = "disabled"
+    public_tls_cert_path: str = "/etc/forgeframe/tls/live/fullchain.pem"
+    public_tls_key_path: str = "/etc/forgeframe/tls/live/privkey.pem"
+    public_tls_webroot_path: str = "/var/lib/forgeframe/acme-webroot"
+    public_tls_state_path: str = "/var/lib/forgeframe/tls"
+    public_tls_last_error_path: str = "/var/lib/forgeframe/tls/last_error.txt"
+    public_tls_renewal_window_days: int = 30
+    public_tls_acme_email: str = ""
+    public_tls_acme_directory_url: str = "https://acme-v02.api.letsencrypt.org/directory"
 
-    default_model: str = "forgegate-baseline-chat-v1"
-    default_provider: str = "forgegate_baseline"
+    default_model: str = "forgeframe-baseline-chat-v1"
+    default_provider: str = "forgeframe_baseline"
     runtime_allow_unknown_models: bool = False
-    runtime_auth_required: bool = False
+    runtime_auth_required: bool = True
     routing_strategy: Literal["balanced", "quality", "cost"] = "balanced"
     routing_require_healthy: bool = False
     routing_allow_degraded_fallback: bool = True
 
     admin_auth_enabled: bool = True
     bootstrap_admin_username: str = "admin"
-    bootstrap_admin_password: str = "forgegate-admin"
+    bootstrap_admin_password: str = ""
     admin_session_ttl_hours: int = 12
     admin_login_rate_limit_attempts: int = 5
     admin_login_rate_limit_window_minutes: int = 15
@@ -40,7 +127,7 @@ class Settings(BaseSettings):
     break_glass_session_max_minutes: int = 60
     audit_event_retention_limit: int = 1000
 
-    forgegate_baseline_enabled: bool = True
+    forgeframe_baseline_enabled: bool = True
     openai_api_enabled: bool = True
     openai_codex_enabled: bool = True
     gemini_enabled: bool = True
@@ -101,7 +188,7 @@ class Settings(BaseSettings):
     claude_code_probe_model: str = "claude-code"
     claude_code_bridge_profile_enabled: bool = False
 
-    ollama_base_url: str = "http://host.docker.internal:11434/v1"
+    ollama_base_url: str = "http://127.0.0.1:11434/v1"
     ollama_default_model: str = "llama3.2"
     ollama_timeout_seconds: int = 45
     oauth_account_probe_timeout_seconds: int = 30
@@ -115,31 +202,42 @@ class Settings(BaseSettings):
     bootstrap_tenant_id: str = DEFAULT_BOOTSTRAP_TENANT_ID
     observability_storage_backend: Literal["postgresql", "file"] = "postgresql"
     observability_postgres_url: str = ""
-    observability_events_path: str = "backend/.forgegate/observability_events.jsonl"
-    oauth_operations_path: str = "backend/.forgegate/oauth_operations.jsonl"
-    harness_profiles_path: str = "backend/.forgegate/harness_profiles.json"
-    harness_runs_path: str = "backend/.forgegate/harness_runs.json"
+    observability_events_path: str = "backend/.forgeframe/observability_events.jsonl"
+    oauth_operations_path: str = "backend/.forgeframe/oauth_operations.jsonl"
+    harness_profiles_path: str = "backend/.forgeframe/harness_profiles.json"
+    harness_runs_path: str = "backend/.forgeframe/harness_runs.json"
     harness_storage_backend: Literal["postgresql", "file"] = "postgresql"
-    harness_postgres_url: str = "postgresql+psycopg://forgegate:forgegate@localhost:5432/forgegate"
+    harness_postgres_url: str = ""
     control_plane_storage_backend: Literal["postgresql", "file"] = "postgresql"
     control_plane_postgres_url: str = ""
-    control_plane_state_path: str = "backend/.forgegate/control_plane_state.json"
+    control_plane_state_path: str = "backend/.forgeframe/control_plane_state.json"
+    instances_storage_backend: Literal["postgresql", "file"] = "postgresql"
+    instances_postgres_url: str = ""
+    instances_state_path: str = "backend/.forgeframe/instances_state.json"
     governance_storage_backend: Literal["postgresql", "file"] = "postgresql"
     governance_postgres_url: str = ""
     governance_relational_dual_write_enabled: bool = True
-    governance_relational_reads_enabled: bool = False
-    governance_state_path: str = "backend/.forgegate/governance_state.json"
+    governance_relational_reads_enabled: bool = True
+    governance_state_path: str = "backend/.forgeframe/governance_state.json"
     execution_postgres_url: str = ""
-    execution_sqlite_path: str = "backend/.forgegate/execution.sqlite"
+    execution_sqlite_path: str = "backend/.forgeframe/execution.sqlite"
     execution_max_attempts: int = 3
     execution_retry_backoff_base_seconds: int = 30
     execution_retry_backoff_max_seconds: int = 900
     execution_retry_backoff_jitter_ratio: float = 0.2
+    execution_worker_instance_id: str = ""
+    execution_worker_company_id: str = ""
+    execution_worker_key: str = "forgeframe-worker"
+    execution_worker_execution_lane: str = "background_agentic"
+    execution_worker_run_kind: str = "responses_background"
+    execution_worker_poll_interval_seconds: float = 2.0
+    execution_worker_lease_ttl_seconds: int = 300
+    execution_worker_heartbeat_ttl_seconds: int = 360
     frontend_dist_path: str = "frontend/dist"
 
     bootstrap_model_catalog: tuple[tuple[str, str, str], ...] = Field(
         default=(
-            ("forgegate-baseline-chat-v1", "forgegate_baseline", "ForgeGate"),
+            ("forgeframe-baseline-chat-v1", "forgeframe_baseline", "ForgeFrame"),
             ("gpt-4.1-mini", "openai_api", "OpenAI"),
             ("gpt-4.1", "openai_api", "OpenAI"),
             ("gpt-5.3-codex", "openai_codex", "OpenAI Codex"),
@@ -161,41 +259,52 @@ class Settings(BaseSettings):
     def validate_operational_contract(self) -> "Settings":
         if self.admin_auth_enabled:
             if not self.bootstrap_admin_username.strip():
-                raise ValueError("FORGEGATE_BOOTSTRAP_ADMIN_USERNAME must be set when admin auth is enabled.")
+                raise ValueError("FORGEFRAME_BOOTSTRAP_ADMIN_USERNAME must be set when admin auth is enabled.")
             if not self.bootstrap_admin_password.strip():
-                raise ValueError("FORGEGATE_BOOTSTRAP_ADMIN_PASSWORD must be set when admin auth is enabled.")
+                raise ValueError("FORGEFRAME_BOOTSTRAP_ADMIN_PASSWORD must be set when admin auth is enabled.")
 
         if not self.is_provider_enabled(self.default_provider):
-            raise ValueError("FORGEGATE_DEFAULT_PROVIDER must reference an enabled provider.")
+            raise ValueError("FORGEFRAME_DEFAULT_PROVIDER must reference an enabled provider.")
 
         if self.harness_storage_backend == "postgresql":
-            self._validate_postgres_target("FORGEGATE_HARNESS_POSTGRES_URL", self.harness_postgres_url)
+            self._validate_postgres_target("FORGEFRAME_HARNESS_POSTGRES_URL", self.harness_postgres_url)
 
         for backend_name, storage_backend, database_url in [
             (
-                "FORGEGATE_CONTROL_PLANE_POSTGRES_URL",
+                "FORGEFRAME_CONTROL_PLANE_POSTGRES_URL",
                 self.control_plane_storage_backend,
                 self.control_plane_postgres_url.strip() or self.harness_postgres_url,
             ),
             (
-                "FORGEGATE_OBSERVABILITY_POSTGRES_URL",
+                "FORGEFRAME_OBSERVABILITY_POSTGRES_URL",
                 self.observability_storage_backend,
                 self.observability_postgres_url.strip() or self.harness_postgres_url,
             ),
             (
-                "FORGEGATE_GOVERNANCE_POSTGRES_URL",
+                "FORGEFRAME_GOVERNANCE_POSTGRES_URL",
                 self.governance_storage_backend,
                 self.governance_postgres_url.strip() or self.harness_postgres_url,
+            ),
+            (
+                "FORGEFRAME_INSTANCES_POSTGRES_URL",
+                self.instances_storage_backend,
+                self.instances_postgres_url.strip() or self.governance_postgres_url.strip() or self.harness_postgres_url,
             ),
         ]:
             if storage_backend == "postgresql":
                 self._validate_postgres_target(backend_name, database_url)
 
+        if self.public_tls_mode == "integrated_acme":
+            if not self.public_fqdn.strip():
+                raise ValueError("FORGEFRAME_PUBLIC_FQDN must be set when integrated ACME/TLS mode is enabled.")
+            if not self.public_tls_acme_email.strip():
+                raise ValueError("FORGEFRAME_PUBLIC_TLS_ACME_EMAIL must be set when integrated ACME/TLS mode is enabled.")
+
         return self
 
     def is_provider_enabled(self, provider_name: str) -> bool:
         flag_map = {
-            "forgegate_baseline": self.forgegate_baseline_enabled,
+            "forgeframe_baseline": self.forgeframe_baseline_enabled,
             "openai_api": self.openai_api_enabled,
             "openai_codex": self.openai_codex_enabled,
             "gemini": self.gemini_enabled,

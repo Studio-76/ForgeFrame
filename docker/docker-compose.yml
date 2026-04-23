@@ -1,53 +1,53 @@
 services:
   postgres:
     image: postgres:16-alpine
-    container_name: forgegate-postgres
+    container_name: forgeframe-postgres
     env_file:
       - ../.env.compose
     environment:
-      POSTGRES_USER: ${FORGEGATE_PG_USER:-forgegate}
-      POSTGRES_PASSWORD: ${FORGEGATE_PG_PASSWORD:-forgegate}
-      POSTGRES_DB: ${FORGEGATE_PG_DB:-forgegate}
+      POSTGRES_USER: ${FORGEFRAME_PG_USER:-forgeframe}
+      POSTGRES_PASSWORD: ${FORGEFRAME_PG_PASSWORD:?FORGEFRAME_PG_PASSWORD must be set}
+      POSTGRES_DB: ${FORGEFRAME_PG_DB:-forgeframe}
     ports:
-      - "${FORGEGATE_PG_PORT:-5432}:5432"
+      - "${FORGEFRAME_PG_PORT:-5432}:5432"
     volumes:
-      - forgegate_postgres_data:/var/lib/postgresql/data
+      - forgeframe_postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${FORGEGATE_PG_USER:-forgegate} -d ${FORGEGATE_PG_DB:-forgegate}"]
+      test: ["CMD-SHELL", "pg_isready -U ${FORGEFRAME_PG_USER:-forgeframe} -d ${FORGEFRAME_PG_DB:-forgeframe}"]
       interval: 5s
       timeout: 5s
       retries: 12
 
-  forgegate:
+  forgeframe:
     build:
       context: ..
       dockerfile: docker/Dockerfile.backend
-    container_name: forgegate-app
+    container_name: forgeframe-app
     depends_on:
       postgres:
         condition: service_healthy
     env_file:
       - ../.env.compose
     environment:
-      FORGEGATE_HOST: 0.0.0.0
-      FORGEGATE_PORT: 8000
-      FORGEGATE_HARNESS_STORAGE_BACKEND: postgresql
-      FORGEGATE_CONTROL_PLANE_STORAGE_BACKEND: postgresql
-      FORGEGATE_OBSERVABILITY_STORAGE_BACKEND: postgresql
-      FORGEGATE_GOVERNANCE_STORAGE_BACKEND: postgresql
-      FORGEGATE_HARNESS_POSTGRES_URL: ${FORGEGATE_POSTGRES_URL:-postgresql+psycopg://forgegate:forgegate@postgres:5432/forgegate}
-      FORGEGATE_CONTROL_PLANE_POSTGRES_URL: ${FORGEGATE_CONTROL_PLANE_POSTGRES_URL:-postgresql+psycopg://forgegate:forgegate@postgres:5432/forgegate}
-      FORGEGATE_OBSERVABILITY_POSTGRES_URL: ${FORGEGATE_OBSERVABILITY_POSTGRES_URL:-postgresql+psycopg://forgegate:forgegate@postgres:5432/forgegate}
-      FORGEGATE_GOVERNANCE_POSTGRES_URL: ${FORGEGATE_GOVERNANCE_POSTGRES_URL:-postgresql+psycopg://forgegate:forgegate@postgres:5432/forgegate}
-      FORGEGATE_OBSERVABILITY_EVENTS_PATH: /var/lib/forgegate/observability_events.jsonl
-      FORGEGATE_FRONTEND_DIST_PATH: /app/frontend_dist
+      FORGEFRAME_HOST: 0.0.0.0
+      FORGEFRAME_PORT: 8000
+      FORGEFRAME_HARNESS_STORAGE_BACKEND: postgresql
+      FORGEFRAME_CONTROL_PLANE_STORAGE_BACKEND: postgresql
+      FORGEFRAME_OBSERVABILITY_STORAGE_BACKEND: postgresql
+      FORGEFRAME_GOVERNANCE_STORAGE_BACKEND: postgresql
+      FORGEFRAME_HARNESS_POSTGRES_URL: ${FORGEFRAME_HARNESS_POSTGRES_URL:?FORGEFRAME_HARNESS_POSTGRES_URL must be set}
+      FORGEFRAME_CONTROL_PLANE_POSTGRES_URL: ${FORGEFRAME_CONTROL_PLANE_POSTGRES_URL:?FORGEFRAME_CONTROL_PLANE_POSTGRES_URL must be set}
+      FORGEFRAME_OBSERVABILITY_POSTGRES_URL: ${FORGEFRAME_OBSERVABILITY_POSTGRES_URL:?FORGEFRAME_OBSERVABILITY_POSTGRES_URL must be set}
+      FORGEFRAME_GOVERNANCE_POSTGRES_URL: ${FORGEFRAME_GOVERNANCE_POSTGRES_URL:?FORGEFRAME_GOVERNANCE_POSTGRES_URL must be set}
+      FORGEFRAME_OBSERVABILITY_EVENTS_PATH: /var/lib/forgeframe/observability_events.jsonl
+      FORGEFRAME_FRONTEND_DIST_PATH: /app/frontend_dist
     ports:
-      - "${FORGEGATE_APP_PORT:-8000}:8000"
+      - "${FORGEFRAME_APP_PORT:-8000}:8000"
     extra_hosts:
       - "host.docker.internal:host-gateway"
     volumes:
-      - forgegate_app_data:/var/lib/forgegate
+      - forgeframe_app_data:/var/lib/forgeframe
 
 volumes:
-  forgegate_postgres_data:
-  forgegate_app_data:
+  forgeframe_postgres_data:
+  forgeframe_app_data:

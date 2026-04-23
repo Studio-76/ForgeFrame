@@ -8,13 +8,13 @@ def build_tracing_operability_snapshot() -> dict[str, object]:
         "configured": True,
         "exporter": "header_propagation",
         "release_scope": "backend_runtime_and_control_plane",
-        "accepted_headers": ["X-ForgeGate-Trace-Id", "X-ForgeGate-Span-Id", "traceparent"],
+        "accepted_headers": ["X-ForgeFrame-Trace-Id", "X-ForgeFrame-Span-Id", "traceparent"],
         "emitted_headers": [
-            "X-ForgeGate-Request-Id",
-            "X-ForgeGate-Correlation-Id",
-            "X-ForgeGate-Causation-Id",
-            "X-ForgeGate-Trace-Id",
-            "X-ForgeGate-Span-Id",
+            "X-ForgeFrame-Request-Id",
+            "X-ForgeFrame-Correlation-Id",
+            "X-ForgeFrame-Causation-Id",
+            "X-ForgeFrame-Trace-Id",
+            "X-ForgeFrame-Span-Id",
         ],
         "context_fields": ["request_id", "correlation_id", "causation_id", "trace_id", "span_id"],
         "async_bridges": [
@@ -23,7 +23,7 @@ def build_tracing_operability_snapshot() -> dict[str, object]:
             "observability_event_payloads",
         ],
         "details": (
-            "ForgeGate propagates trace context from HTTP ingress into provider calls, "
+            "ForgeFrame propagates trace context from HTTP ingress into provider calls, "
             "request-idempotency persistence, and emitted observability events."
         ),
     }

@@ -1,4 +1,4 @@
-"""Provider adapter contracts for ForgeGate runtime dispatch."""
+"""Provider adapter contracts for ForgeFrame runtime dispatch."""
 
 from __future__ import annotations
 

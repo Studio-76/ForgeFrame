@@ -3,7 +3,7 @@
 from collections.abc import Callable
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import JSONResponse
 
 from app.api.admin.control_plane import (
@@ -14,7 +14,9 @@ from app.api.admin.control_plane import (
     ProviderUpdateRequest,
     get_control_plane_service,
 )
-from app.api.admin.security import require_admin_mutation_role, require_admin_role
+from app.api.admin.instance_scope import resolve_admin_instance_scope
+from app.api.admin.security import require_admin_instance_permission
+from app.auth.local_auth import role_allows
 from app.execution.dependencies import get_execution_session_factory
 from app.governance.models import AuthenticatedAdmin
 from app.harness.models import (
@@ -23,6 +25,7 @@ from app.harness.models import (
     HarnessProviderProfile,
     HarnessVerificationRequest,
 )
+from app.instances.models import InstanceRecord
 from app.harness.redaction import (
     redact_sensitive_payload as _redact_sensitive_payload,
     redacted_harness_profile_payload as _redacted_harness_profile_payload,
@@ -40,6 +43,15 @@ from app.telemetry.context import telemetry_context_from_request
 from app.tenancy import TenantFilterRequiredError
 
 router = APIRouter(prefix="/providers", tags=["admin-providers"])
+_require_provider_read = require_admin_instance_permission("providers.read")
+_require_provider_operate = require_admin_instance_permission(
+    "providers.read",
+    allow_impersonation=False,
+)
+_require_provider_write = require_admin_instance_permission(
+    "providers.write",
+    allow_impersonation=False,
+)
 
 
 def _admin_error(status_code: int, error_type: str, message: str) -> JSONResponse:
@@ -52,7 +64,7 @@ def _admin_error_payload(error_type: str, message: str) -> dict[str, object]:
 
 def _replay_snapshot_response(snapshot: StoredResponseSnapshot) -> JSONResponse:
     response = JSONResponse(status_code=snapshot.status_code, content=snapshot.body)
-    response.headers["X-ForgeGate-Idempotent-Replay"] = "true"
+    response.headers["X-ForgeFrame-Idempotent-Replay"] = "true"
     for key, value in snapshot.headers.items():
         response.headers[key] = value
     return response
@@ -141,7 +153,7 @@ def _ensure_harness_export_access(
                 "message": "Read-only sessions cannot request full secret-bearing harness exports.",
             },
         )
-    if admin.role != "admin":
+    if not role_allows(admin.role, "admin"):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail={
@@ -153,18 +165,20 @@ def _ensure_harness_export_access(
 
 @router.get("/")
 def list_provider_control_plane(
-    tenant_id: str | None = Query(default=None, alias="tenantId"),
+    _admin: AuthenticatedAdmin = Depends(_require_provider_read),
+    instance: InstanceRecord = Depends(resolve_admin_instance_scope),
     service: ControlPlaneService = Depends(get_control_plane_service),
 ) -> dict[str, object]:
     bootstrap_readiness = service.get_last_bootstrap_readiness()
     try:
-        truth_axes = service.provider_truth_axes(tenant_id=tenant_id)
-        providers = service.provider_control_snapshot(tenant_id=tenant_id)
+        truth_axes = service.provider_truth_axes(tenant_id=instance.tenant_id)
+        providers = service.provider_control_snapshot(tenant_id=instance.tenant_id)
     except TenantFilterRequiredError as exc:
         return _admin_error(status.HTTP_400_BAD_REQUEST, "tenant_filter_required", str(exc))
     return {
         "status": "ok",
         "object": "provider_control_plane",
+        "instance": instance.model_dump(mode="json"),
         "providers": providers,
         "truth_axes": [item.model_dump() for item in truth_axes],
         "health_config": service.get_health_config().model_dump(),
@@ -193,7 +207,7 @@ def list_provider_control_plane(
 @router.post("/", status_code=status.HTTP_201_CREATED, response_model=None)
 def create_provider(
     payload: ProviderCreateRequest,
-    _admin: AuthenticatedAdmin = Depends(require_admin_mutation_role("operator")),
+    _admin: AuthenticatedAdmin = Depends(_require_provider_write),
     service: ControlPlaneService = Depends(get_control_plane_service),
 ) -> object:
     try:
@@ -207,7 +221,7 @@ def create_provider(
 def update_provider(
     provider_name: str,
     payload: ProviderUpdateRequest,
-    _admin: AuthenticatedAdmin = Depends(require_admin_mutation_role("operator")),
+    _admin: AuthenticatedAdmin = Depends(_require_provider_write),
     service: ControlPlaneService = Depends(get_control_plane_service),
 ) -> object:
     try:
@@ -220,7 +234,7 @@ def update_provider(
 @router.post("/{provider_name}/activate", response_model=None)
 def activate_provider(
     provider_name: str,
-    _admin: AuthenticatedAdmin = Depends(require_admin_mutation_role("operator")),
+    _admin: AuthenticatedAdmin = Depends(_require_provider_write),
     service: ControlPlaneService = Depends(get_control_plane_service),
 ) -> object:
     try:
@@ -233,7 +247,7 @@ def activate_provider(
 @router.post("/{provider_name}/deactivate", response_model=None)
 def deactivate_provider(
     provider_name: str,
-    _admin: AuthenticatedAdmin = Depends(require_admin_mutation_role("operator")),
+    _admin: AuthenticatedAdmin = Depends(_require_provider_write),
     service: ControlPlaneService = Depends(get_control_plane_service),
 ) -> object:
     try:
@@ -247,7 +261,7 @@ def deactivate_provider(
 def sync_provider_models(
     payload: ProviderSyncRequest,
     request: Request,
-    _admin: AuthenticatedAdmin = Depends(require_admin_mutation_role("operator")),
+    _admin: AuthenticatedAdmin = Depends(_require_provider_write),
     service: ControlPlaneService = Depends(get_control_plane_service),
 ) -> object:
     return _execute_idempotent_admin_json(
@@ -262,14 +276,17 @@ def sync_provider_models(
 
 
 @router.get("/health/config")
-def get_health_config(service: ControlPlaneService = Depends(get_control_plane_service)) -> dict[str, object]:
+def get_health_config(
+    _admin: AuthenticatedAdmin = Depends(_require_provider_read),
+    service: ControlPlaneService = Depends(get_control_plane_service),
+) -> dict[str, object]:
     return {"status": "ok", "config": service.get_health_config().model_dump()}
 
 
 @router.patch("/health/config")
 def patch_health_config(
     payload: HealthConfigUpdateRequest,
-    _admin: AuthenticatedAdmin = Depends(require_admin_mutation_role("operator")),
+    _admin: AuthenticatedAdmin = Depends(_require_provider_write),
     service: ControlPlaneService = Depends(get_control_plane_service),
 ) -> dict[str, object]:
     return {"status": "ok", "config": service.update_health_config(payload).model_dump()}
@@ -278,14 +295,14 @@ def patch_health_config(
 @router.post("/health/run")
 def run_health_checks(
     request: Request,
-    _admin: AuthenticatedAdmin = Depends(require_admin_mutation_role("operator")),
+    _admin: AuthenticatedAdmin = Depends(_require_provider_operate),
     service: ControlPlaneService = Depends(get_control_plane_service),
 ) -> dict[str, object]:
     telemetry_context = telemetry_context_from_request(
         request,
         route=request.url.path or "/admin/providers/health/run",
         operation="admin.providers.health.run",
-        service_name="forgegate-control-plane",
+        service_name="forgeframe-control-plane",
         service_kind="control_plane",
     )
     return _execute_idempotent_admin_json(
@@ -298,13 +315,18 @@ def run_health_checks(
     )
 
 
-@router.get("/beta-targets")
-def list_beta_targets(
-    tenant_id: str | None = Query(default=None, alias="tenantId"),
+@router.get("/product-axis-targets")
+def list_product_axis_targets(
+    _admin: AuthenticatedAdmin = Depends(_require_provider_read),
+    instance: InstanceRecord = Depends(resolve_admin_instance_scope),
     service: ControlPlaneService = Depends(get_control_plane_service),
 ) -> object:
     try:
-        return {"status": "ok", "targets": service.beta_provider_targets(tenant_id=tenant_id)}
+        return {
+            "status": "ok",
+            "instance": instance.model_dump(mode="json"),
+            "targets": service.product_axis_targets(tenant_id=instance.tenant_id),
+        }
     except TenantFilterRequiredError as exc:
         return _admin_error(status.HTTP_400_BAD_REQUEST, "tenant_filter_required", str(exc))
 
@@ -313,7 +335,7 @@ def list_beta_targets(
 def probe_oauth_account_provider(
     provider_key: str,
     request: Request,
-    _admin: AuthenticatedAdmin = Depends(require_admin_mutation_role("operator")),
+    _admin: AuthenticatedAdmin = Depends(_require_provider_operate),
     service: ControlPlaneService = Depends(get_control_plane_service),
 ) -> object:
     return _execute_idempotent_admin_json(
@@ -329,44 +351,58 @@ def probe_oauth_account_provider(
 
 @router.get("/oauth-account/targets")
 def list_oauth_account_targets(
-    tenant_id: str | None = Query(default=None, alias="tenantId"),
+    _admin: AuthenticatedAdmin = Depends(_require_provider_read),
+    instance: InstanceRecord = Depends(resolve_admin_instance_scope),
     service: ControlPlaneService = Depends(get_control_plane_service),
 ) -> object:
     try:
-        return {"status": "ok", "targets": service.list_oauth_account_target_statuses(tenant_id=tenant_id)}
+        return {
+            "status": "ok",
+            "instance": instance.model_dump(mode="json"),
+            "targets": service.list_oauth_account_target_statuses(tenant_id=instance.tenant_id),
+        }
     except TenantFilterRequiredError as exc:
         return _admin_error(status.HTTP_400_BAD_REQUEST, "tenant_filter_required", str(exc))
 
 
 @router.get("/oauth-account/onboarding")
 def oauth_account_onboarding(
-    tenant_id: str | None = Query(default=None, alias="tenantId"),
+    _admin: AuthenticatedAdmin = Depends(_require_provider_read),
+    instance: InstanceRecord = Depends(resolve_admin_instance_scope),
     service: ControlPlaneService = Depends(get_control_plane_service),
 ) -> object:
     try:
-        return service.oauth_account_onboarding_summary(tenant_id=tenant_id)
+        response = service.oauth_account_onboarding_summary(tenant_id=instance.tenant_id)
+        if isinstance(response, dict):
+            return {"instance": instance.model_dump(mode="json"), **response}
+        return response
     except TenantFilterRequiredError as exc:
         return _admin_error(status.HTTP_400_BAD_REQUEST, "tenant_filter_required", str(exc))
 
 
 @router.get("/oauth-account/operations")
 def oauth_account_operations(
-    tenant_id: str | None = Query(default=None, alias="tenantId"),
+    _admin: AuthenticatedAdmin = Depends(_require_provider_read),
+    instance: InstanceRecord = Depends(resolve_admin_instance_scope),
     service: ControlPlaneService = Depends(get_control_plane_service),
 ) -> object:
     try:
-        return service.oauth_account_operations_summary(tenant_id=tenant_id)
+        response = service.oauth_account_operations_summary(tenant_id=instance.tenant_id)
+        if isinstance(response, dict):
+            return {"instance": instance.model_dump(mode="json"), **response}
+        return response
     except TenantFilterRequiredError as exc:
         return _admin_error(status.HTTP_400_BAD_REQUEST, "tenant_filter_required", str(exc))
 
 
 @router.get("/compatibility-matrix")
 def compatibility_matrix(
-    tenant_id: str | None = Query(default=None, alias="tenantId"),
+    _admin: AuthenticatedAdmin = Depends(_require_provider_read),
+    instance: InstanceRecord = Depends(resolve_admin_instance_scope),
     service: ControlPlaneService = Depends(get_control_plane_service),
 ) -> object:
     try:
-        truth_axes = service.provider_truth_axes(tenant_id=tenant_id)
+        truth_axes = service.provider_truth_axes(tenant_id=instance.tenant_id)
     except TenantFilterRequiredError as exc:
         return _admin_error(status.HTTP_400_BAD_REQUEST, "tenant_filter_required", str(exc))
     matrix = []
@@ -418,7 +454,8 @@ def compatibility_matrix(
             {
                 "provider": item.provider.provider,
                 "label": item.provider.label,
-                "tier": item.runtime.compatibility_tier,
+                "compatibility_depth": item.runtime.compatibility_depth,
+                "contract_classification": item.runtime.contract_classification,
                 "ready": item.runtime.ready,
                 "runtime_readiness": item.runtime.runtime_readiness,
                 "streaming_readiness": item.runtime.streaming_readiness,
@@ -435,12 +472,12 @@ def compatibility_matrix(
                 "notes": notes,
             }
         )
-    return {"status": "ok", "matrix": matrix}
+    return {"status": "ok", "instance": instance.model_dump(mode="json"), "matrix": matrix}
 
 
 @router.post("/oauth-account/probe-all")
 def probe_all_oauth_account_targets(
-    _admin: AuthenticatedAdmin = Depends(require_admin_mutation_role("operator")),
+    _admin: AuthenticatedAdmin = Depends(_require_provider_operate),
     service: ControlPlaneService = Depends(get_control_plane_service),
 ) -> object:
     results = []
@@ -455,7 +492,7 @@ def probe_all_oauth_account_targets(
 @router.post("/oauth-account/bridge-profiles/sync")
 def sync_oauth_account_bridge_profiles(
     request: Request,
-    _admin: AuthenticatedAdmin = Depends(require_admin_mutation_role("operator")),
+    _admin: AuthenticatedAdmin = Depends(_require_provider_write),
     service: ControlPlaneService = Depends(get_control_plane_service),
 ) -> object:
     return _execute_idempotent_admin_json(
@@ -469,17 +506,26 @@ def sync_oauth_account_bridge_profiles(
 
 
 @router.get("/bootstrap/readiness")
-def bootstrap_readiness(service: ControlPlaneService = Depends(get_control_plane_service)) -> object:
+def bootstrap_readiness(
+    _admin: AuthenticatedAdmin = Depends(_require_provider_read),
+    service: ControlPlaneService = Depends(get_control_plane_service),
+) -> object:
     return service.bootstrap_readiness_report()
 
 
 @router.get("/harness/templates")
-def list_harness_templates(service: ControlPlaneService = Depends(get_control_plane_service)) -> dict[str, object]:
+def list_harness_templates(
+    _admin: AuthenticatedAdmin = Depends(_require_provider_read),
+    service: ControlPlaneService = Depends(get_control_plane_service),
+) -> dict[str, object]:
     return {"status": "ok", "templates": service.list_harness_templates()}
 
 
 @router.get("/harness/profiles")
-def list_harness_profiles(service: ControlPlaneService = Depends(get_control_plane_service)) -> dict[str, object]:
+def list_harness_profiles(
+    _admin: AuthenticatedAdmin = Depends(_require_provider_read),
+    service: ControlPlaneService = Depends(get_control_plane_service),
+) -> dict[str, object]:
     return {"status": "ok", "profiles": [_redacted_harness_profile_payload(item) for item in service.list_harness_profiles()]}
 
 
@@ -488,7 +534,7 @@ def upsert_harness_profile(
     provider_key: str,
     payload: HarnessProviderProfile,
     request: Request,
-    _admin: AuthenticatedAdmin = Depends(require_admin_mutation_role("operator")),
+    _admin: AuthenticatedAdmin = Depends(_require_provider_write),
     service: ControlPlaneService = Depends(get_control_plane_service),
 ) -> object:
     if payload.provider_key != provider_key:
@@ -510,7 +556,7 @@ def upsert_harness_profile(
 def delete_harness_profile(
     provider_key: str,
     request: Request,
-    _admin: AuthenticatedAdmin = Depends(require_admin_mutation_role("operator")),
+    _admin: AuthenticatedAdmin = Depends(_require_provider_write),
     service: ControlPlaneService = Depends(get_control_plane_service),
 ) -> object:
     return _execute_idempotent_admin_json(
@@ -528,7 +574,7 @@ def delete_harness_profile(
 def activate_harness_profile(
     provider_key: str,
     request: Request,
-    _admin: AuthenticatedAdmin = Depends(require_admin_mutation_role("operator")),
+    _admin: AuthenticatedAdmin = Depends(_require_provider_write),
     service: ControlPlaneService = Depends(get_control_plane_service),
 ) -> object:
     return _execute_idempotent_admin_json(
@@ -549,7 +595,7 @@ def activate_harness_profile(
 def deactivate_harness_profile(
     provider_key: str,
     request: Request,
-    _admin: AuthenticatedAdmin = Depends(require_admin_mutation_role("operator")),
+    _admin: AuthenticatedAdmin = Depends(_require_provider_write),
     service: ControlPlaneService = Depends(get_control_plane_service),
 ) -> object:
     return _execute_idempotent_admin_json(
@@ -570,7 +616,7 @@ def deactivate_harness_profile(
 def harness_preview(
     payload: HarnessPreviewRequest,
     request: Request,
-    _admin: AuthenticatedAdmin = Depends(require_admin_role("operator")),
+    _admin: AuthenticatedAdmin = Depends(_require_provider_read),
     service: ControlPlaneService = Depends(get_control_plane_service),
 ) -> object:
     return _execute_idempotent_admin_json(
@@ -588,7 +634,7 @@ def harness_preview(
 def harness_dry_run(
     payload: HarnessPreviewRequest,
     request: Request,
-    _admin: AuthenticatedAdmin = Depends(require_admin_mutation_role("operator")),
+    _admin: AuthenticatedAdmin = Depends(_require_provider_operate),
     service: ControlPlaneService = Depends(get_control_plane_service),
 ) -> object:
     return _execute_idempotent_admin_json(
@@ -606,7 +652,7 @@ def harness_dry_run(
 def harness_probe(
     payload: HarnessPreviewRequest,
     request: Request,
-    _admin: AuthenticatedAdmin = Depends(require_admin_mutation_role("operator")),
+    _admin: AuthenticatedAdmin = Depends(_require_provider_operate),
     service: ControlPlaneService = Depends(get_control_plane_service),
 ) -> object:
     unsupported = _unsupported_idempotency_response(
@@ -631,7 +677,7 @@ def harness_probe(
 def verify_harness_profile(
     payload: HarnessVerificationRequest,
     request: Request,
-    _admin: AuthenticatedAdmin = Depends(require_admin_mutation_role("operator")),
+    _admin: AuthenticatedAdmin = Depends(_require_provider_operate),
     service: ControlPlaneService = Depends(get_control_plane_service),
 ) -> object:
     return _execute_idempotent_admin_json(
@@ -652,14 +698,17 @@ def verify_harness_profile(
 
 
 @router.get("/harness/snapshot")
-def harness_snapshot(service: ControlPlaneService = Depends(get_control_plane_service)) -> object:
+def harness_snapshot(
+    _admin: AuthenticatedAdmin = Depends(_require_provider_read),
+    service: ControlPlaneService = Depends(get_control_plane_service),
+) -> object:
     return service.harness_snapshot()
 
 
 @router.get("/harness/export")
 def export_harness_config(
     redact_secrets: bool = True,
-    admin: AuthenticatedAdmin = Depends(require_admin_role("operator")),
+    admin: AuthenticatedAdmin = Depends(_require_provider_read),
     service: ControlPlaneService = Depends(get_control_plane_service),
 ) -> object:
     _ensure_harness_export_access(admin, redact_secrets=redact_secrets)
@@ -670,7 +719,7 @@ def export_harness_config(
 def import_harness_config(
     payload: HarnessImportRequest,
     request: Request,
-    _admin: AuthenticatedAdmin = Depends(require_admin_mutation_role("operator")),
+    _admin: AuthenticatedAdmin = Depends(_require_provider_write),
     service: ControlPlaneService = Depends(get_control_plane_service),
 ) -> object:
     return _execute_idempotent_admin_json(
@@ -689,7 +738,7 @@ def rollback_harness_profile(
     provider_key: str,
     revision: int,
     request: Request,
-    _admin: AuthenticatedAdmin = Depends(require_admin_mutation_role("operator")),
+    _admin: AuthenticatedAdmin = Depends(_require_provider_write),
     service: ControlPlaneService = Depends(get_control_plane_service),
 ) -> object:
     return _execute_idempotent_admin_json(
@@ -707,7 +756,15 @@ def rollback_harness_profile(
 
 
 @router.get("/harness/runs")
-def harness_runs(provider_key: str | None = None, mode: str | None = None, status: str | None = None, client_id: str | None = None, limit: int = 200, service: ControlPlaneService = Depends(get_control_plane_service)) -> object:
+def harness_runs(
+    provider_key: str | None = None,
+    mode: str | None = None,
+    status: str | None = None,
+    client_id: str | None = None,
+    limit: int = 200,
+    _admin: AuthenticatedAdmin = Depends(_require_provider_read),
+    service: ControlPlaneService = Depends(get_control_plane_service),
+) -> object:
     return _redact_sensitive_payload(service.harness_runs(provider_key, mode, status, client_id, limit))
 
 

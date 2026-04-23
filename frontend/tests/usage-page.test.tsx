@@ -5,11 +5,13 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const {
+  fetchInstancesMock,
   fetchUsageSummaryMock,
   fetchClientOperationalViewMock,
   fetchProviderDrilldownMock,
   fetchClientDrilldownMock,
 } = vi.hoisted(() => ({
+  fetchInstancesMock: vi.fn(),
   fetchUsageSummaryMock: vi.fn(),
   fetchClientOperationalViewMock: vi.fn(),
   fetchProviderDrilldownMock: vi.fn(),
@@ -21,6 +23,7 @@ vi.mock("../src/api/admin", async () => {
 
   return {
     ...actual,
+    fetchInstances: fetchInstancesMock,
     fetchUsageSummary: fetchUsageSummaryMock,
     fetchClientOperationalView: fetchClientOperationalViewMock,
     fetchProviderDrilldown: fetchProviderDrilldownMock,
@@ -28,7 +31,7 @@ vi.mock("../src/api/admin", async () => {
   };
 });
 
-import type { AdminSessionUser, UsageSummaryResponse } from "../src/api/admin";
+import type { AdminSessionUser, InstanceRecord, UsageSummaryResponse } from "../src/api/admin";
 import { UsagePage } from "../src/pages/UsagePage";
 import { withAppContext } from "./testContext";
 
@@ -49,6 +52,25 @@ const viewerSession: AdminSessionUser = {
   display_name: "Viewer",
   role: "viewer",
 };
+
+function createInstanceRecord(overrides: Partial<InstanceRecord> = {}): InstanceRecord {
+  return {
+    instance_id: "instance_alpha",
+    slug: "instance-alpha",
+    display_name: "Alpha Instance",
+    description: "Alpha usage scope",
+    status: "active",
+    tenant_id: "tenant_alpha",
+    company_id: "company_alpha",
+    deployment_mode: "linux_host_native",
+    exposure_mode: "same_origin",
+    is_default: true,
+    metadata: {},
+    created_at: "2026-04-22T08:00:00Z",
+    updated_at: "2026-04-22T08:00:00Z",
+    ...overrides,
+  };
+}
 
 function createUsageSummary({
   recordedRequests = 12,
@@ -172,6 +194,10 @@ beforeEach(() => {
   vi.resetAllMocks();
   vi.useFakeTimers();
   vi.setSystemTime(new Date("2026-04-21T22:00:00Z"));
+  fetchInstancesMock.mockResolvedValue({
+    status: "ok",
+    instances: [createInstanceRecord()],
+  });
   fetchUsageSummaryMock.mockResolvedValue(createUsageSummary());
   fetchClientOperationalViewMock.mockResolvedValue(createClientOps());
   fetchProviderDrilldownMock.mockResolvedValue({
@@ -220,7 +246,8 @@ describe("Usage page operations drilldown", () => {
   it("shows explicit viewer read-only framing", async () => {
     await renderUsagePage(viewerSession);
 
-    expect(fetchUsageSummaryMock).toHaveBeenCalledWith("24h");
+    expect(fetchInstancesMock).toHaveBeenCalledTimes(1);
+    expect(fetchUsageSummaryMock).toHaveBeenCalledWith("24h", null);
     expect(container.textContent).toContain("What needs operational attention?");
     expect(container.textContent).toContain("Viewer read-only");
     expect(container.textContent).toContain("Viewer read-only usage drilldown");
@@ -228,7 +255,7 @@ describe("Usage page operations drilldown", () => {
     expect(container.textContent).toContain("Client investigation");
   });
 
-  it("preserves tenant scope across usage fetches and secondary CTAs", async () => {
+  it("preserves instance scope across usage fetches and secondary CTAs", async () => {
     fetchUsageSummaryMock.mockResolvedValueOnce(createUsageSummary({
       recordedErrors: 0,
       alerts: [],
@@ -238,20 +265,21 @@ describe("Usage page operations drilldown", () => {
       { client_id: "web-ui", requests: 8, errors: 0, error_rate: 0, needs_attention: false },
     ]));
 
-    await renderUsagePage(operatorSession, "/usage?tenantId=acct_alpha");
+    await renderUsagePage(operatorSession, "/usage?instanceId=instance_alpha");
 
-    expect(fetchUsageSummaryMock).toHaveBeenCalledWith("24h", "acct_alpha");
-    expect(fetchClientOperationalViewMock).toHaveBeenCalledWith("24h", "acct_alpha");
-    expect(fetchProviderDrilldownMock).toHaveBeenCalledWith("openai_api", "24h", "acct_alpha");
-    expect(fetchClientDrilldownMock).toHaveBeenCalledWith("billing-sync", "24h", "acct_alpha");
-    expect(container.textContent).toContain("Tenant scope: acct_alpha");
+    expect(fetchInstancesMock).toHaveBeenCalledTimes(1);
+    expect(fetchUsageSummaryMock).toHaveBeenCalledWith("24h", "instance_alpha");
+    expect(fetchClientOperationalViewMock).toHaveBeenCalledWith("24h", "instance_alpha");
+    expect(fetchProviderDrilldownMock).toHaveBeenCalledWith("openai_api", "24h", "instance_alpha");
+    expect(fetchClientDrilldownMock).toHaveBeenCalledWith("billing-sync", "24h", "instance_alpha");
+    expect(container.textContent).toContain("Instance scope: Alpha Instance");
 
     const hrefs = collectLinkHrefs();
-    expect(hrefs).toContain("/usage?tenantId=acct_alpha");
-    expect(hrefs).toContain("/usage?tenantId=acct_alpha#client-investigation");
-    expect(hrefs).toContain("/providers?tenantId=acct_alpha#provider-health-runs");
-    expect(hrefs).toContain("/logs?tenantId=acct_alpha");
-    expect(hrefs).toContain("/dashboard?tenantId=acct_alpha");
+    expect(hrefs).toContain("/usage?instanceId=instance_alpha");
+    expect(hrefs).toContain("/usage?instanceId=instance_alpha#client-investigation");
+    expect(hrefs).toContain("/providers?instanceId=instance_alpha#provider-health-runs");
+    expect(hrefs).toContain("/logs?instanceId=instance_alpha");
+    expect(hrefs).toContain("/dashboard?instanceId=instance_alpha");
     expect(hrefs).not.toContain("/providers#provider-health-runs");
     expect(hrefs).not.toContain("/logs");
     expect(hrefs).not.toContain("/dashboard");
@@ -317,7 +345,8 @@ describe("Usage page operations drilldown", () => {
     });
     await flushEffects();
 
-    expect(fetchUsageSummaryMock).toHaveBeenLastCalledWith("7d");
+    expect(fetchUsageSummaryMock).toHaveBeenLastCalledWith("7d", null);
+    expect(fetchClientOperationalViewMock).toHaveBeenLastCalledWith("7d", null);
     expect(container.textContent).toContain("Recent evidence unavailable");
     expect(container.textContent).toContain("Freshness is based on recent health checks and the fixed 24h timeline only, not the entire selected history.");
     expect(container.textContent).not.toContain("The selected window has no recorded runtime or health evidence yet.");

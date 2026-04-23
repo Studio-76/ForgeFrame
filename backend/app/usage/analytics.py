@@ -11,6 +11,7 @@ from typing import Literal, Protocol, TypeVar, cast
 from pydantic import BaseModel
 
 from app.providers import ChatDispatchResult, ProviderStreamEvent
+from app.request_metadata import extract_scope_attributes
 from app.settings.config import get_settings
 from app.storage.observability_repository import ObservabilityRepository, get_observability_repository
 from app.telemetry.context import TelemetryContext
@@ -144,16 +145,26 @@ class UsageAnalyticsStore:
             "duration_ms": context.duration_ms,
         }
 
+    @staticmethod
+    def _scope_fields(
+        request_metadata: dict[str, object] | dict[str, str] | None,
+    ) -> dict[str, object]:
+        return {
+            "scope_attributes": extract_scope_attributes(request_metadata)
+        }
+
     def record_non_stream_result(
         self,
         result: ChatDispatchResult,
         client: ClientIdentity | None = None,
         *,
         context: TelemetryContext | None = None,
+        request_metadata: dict[str, object] | dict[str, str] | None = None,
     ) -> None:
         identity = client or ClientIdentity()
+        resolved_tenant_id = self._tenant_id(identity.tenant_id)
         event = UsageEvent(
-            tenant_id=self._tenant_id(identity.tenant_id),
+            tenant_id=resolved_tenant_id,
             provider=result.provider,
             model=result.model,
             credential_type=result.credential_type,
@@ -172,6 +183,7 @@ class UsageAnalyticsStore:
             hypothetical_cost=result.cost.hypothetical_cost,
             avoided_cost=result.cost.avoided_cost,
             **self._context_fields(context),
+            **self._scope_fields(request_metadata),
             created_at=self._now_iso(),
         )
         self._repository.append_usage_event(event)
@@ -187,9 +199,11 @@ class UsageAnalyticsStore:
         error_type: str,
         status_code: int,
         context: TelemetryContext | None = None,
+        request_metadata: dict[str, object] | dict[str, str] | None = None,
     ) -> None:
+        resolved_tenant_id = self._tenant_id(client.tenant_id)
         event = ErrorEvent(
-            tenant_id=self._tenant_id(client.tenant_id),
+            tenant_id=resolved_tenant_id,
             provider=provider,
             model=model,
             client_id=client.client_id,
@@ -205,6 +219,7 @@ class UsageAnalyticsStore:
             test_phase=None,
             profile_key=None,
             **self._context_fields(context),
+            **self._scope_fields(request_metadata),
             created_at=self._now_iso(),
         )
         self._repository.append_error_event(event)
@@ -217,12 +232,14 @@ class UsageAnalyticsStore:
         event: ProviderStreamEvent,
         client: ClientIdentity | None = None,
         context: TelemetryContext | None = None,
+        request_metadata: dict[str, object] | dict[str, str] | None = None,
     ) -> None:
         if not event.usage or not event.cost:
             return
         identity = client or ClientIdentity()
+        resolved_tenant_id = self._tenant_id(identity.tenant_id)
         usage_event = UsageEvent(
-            tenant_id=self._tenant_id(identity.tenant_id),
+            tenant_id=resolved_tenant_id,
             provider=provider,
             model=model,
             credential_type=str(event.credential_type or "unknown"),
@@ -241,6 +258,7 @@ class UsageAnalyticsStore:
             hypothetical_cost=event.cost.hypothetical_cost,
             avoided_cost=event.cost.avoided_cost,
             **self._context_fields(context),
+            **self._scope_fields(request_metadata),
             created_at=self._now_iso(),
         )
         self._repository.append_usage_event(usage_event)

@@ -207,6 +207,16 @@ def storage_postgres_targets(settings: Settings) -> list[str]:
             settings.governance_storage_backend == "postgresql",
             settings.governance_postgres_url.strip() or settings.harness_postgres_url.strip(),
         ),
+        (
+            settings.instances_storage_backend == "postgresql",
+            settings.instances_postgres_url.strip()
+            or settings.governance_postgres_url.strip()
+            or settings.harness_postgres_url.strip(),
+        ),
+        (
+            bool(settings.execution_postgres_url.strip()),
+            settings.execution_postgres_url.strip(),
+        ),
     ]:
         if not enabled or not database_url:
             continue

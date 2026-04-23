@@ -4,14 +4,11 @@ import { act, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const {
-  fetchAccountsMock,
-  fetchAuditHistoryMock,
-  fetchRuntimeKeysMock,
-} = vi.hoisted(() => ({
+const { fetchAccountsMock, fetchAuditHistoryMock, fetchRuntimeKeysMock, fetchInstancesMock } = vi.hoisted(() => ({
   fetchAccountsMock: vi.fn(),
   fetchAuditHistoryMock: vi.fn(),
   fetchRuntimeKeysMock: vi.fn(),
+  fetchInstancesMock: vi.fn(),
 }));
 
 vi.mock("../src/api/admin", async () => {
@@ -22,6 +19,7 @@ vi.mock("../src/api/admin", async () => {
     fetchAccounts: fetchAccountsMock,
     fetchAuditHistory: fetchAuditHistoryMock,
     fetchRuntimeKeys: fetchRuntimeKeysMock,
+    fetchInstances: fetchInstancesMock,
   };
 });
 
@@ -71,6 +69,12 @@ async function flushEffects() {
 }
 
 async function renderPage(path: string, element: ReactNode, session: AdminSessionUser = adminSession) {
+  if (root) {
+    act(() => {
+      root?.unmount();
+    });
+    root = null;
+  }
   await renderIntoDom(withAppContext({
     path,
     element: element as JSX.Element,
@@ -81,11 +85,33 @@ async function renderPage(path: string, element: ReactNode, session: AdminSessio
 
 beforeEach(() => {
   vi.resetAllMocks();
+  fetchInstancesMock.mockResolvedValue({
+    status: "ok",
+    instances: [
+      {
+        instance_id: "instance_alpha",
+        slug: "instance-alpha",
+        display_name: "Alpha Instance",
+        description: "Alpha instance",
+        status: "active",
+        tenant_id: "tenant_alpha",
+        company_id: "company_alpha",
+        deployment_mode: "restricted_eval",
+        exposure_mode: "local_only",
+        is_default: true,
+        metadata: {},
+        created_at: "2026-04-22T08:00:00Z",
+        updated_at: "2026-04-22T08:00:00Z",
+      },
+    ],
+  });
   fetchAccountsMock.mockResolvedValue({
     status: "ok",
     accounts: [
       {
         account_id: "acct_alpha",
+        instance_id: "instance_alpha",
+        tenant_id: "tenant_alpha",
         label: "Tenant Alpha",
         status: "active",
         provider_bindings: [],
@@ -101,67 +127,41 @@ beforeEach(() => {
     keys: [
       {
         key_id: "key_alpha",
+        account_id: "acct_alpha",
+        instance_id: "instance_alpha",
+        tenant_id: "tenant_alpha",
         prefix: "fgk_alpha",
         label: "Primary Runtime Key",
-        account_id: "acct_alpha",
         scopes: ["models:read", "chat:write"],
         status: "active",
         created_at: "2026-04-21T10:05:00Z",
         updated_at: "2026-04-21T10:05:00Z",
-        expires_at: null,
-        last_used_at: null,
-        secret_hash: "hash",
       },
     ],
   });
   fetchAuditHistoryMock.mockImplementation(async (query?: { targetType?: string | null }) => {
-    if (query?.targetType === "runtime_key") {
-      return {
-        status: "ok",
-        items: [
-          {
-            eventId: "audit_evt_key_latest",
-            createdAt: "2026-04-21T21:46:00Z",
-            tenantId: "acct_alpha",
-            companyId: null,
-            actionKey: "runtime_key_issue",
-            actionLabel: "Runtime key issued",
-            status: "ok",
-            statusLabel: "Succeeded",
-            actor: { type: "admin_user", id: "admin_1", label: "Ops Admin", secondary: "ops-admin" },
-            target: { type: "runtime_key", typeLabel: "Runtime key", id: "key_alpha", label: "Primary Runtime Key", secondary: "fgk_alpha" },
-            summary: "Runtime key issued.",
-            detailAvailable: true,
-          },
-        ],
-        page: { limit: 1, nextCursor: null, hasMore: false },
-        retention: { eventLimit: 1000, oldestAvailableAt: "2026-04-20T10:00:00Z", retentionLimited: true },
-        filters: { applied: { window: "all", action: null, actor: null, targetType: "runtime_key", targetId: null, status: null }, available: { actions: [], statuses: [], targetTypes: [] } },
-        summary: { totalInScope: 1, totalMatchingFilters: 1, latestEventAt: "2026-04-21T21:46:00Z" },
-      };
-    }
-
+    const eventId = query?.targetType === "runtime_key" ? "audit_evt_key_latest" : "audit_evt_account_latest";
     return {
       status: "ok",
       items: [
         {
-          eventId: "audit_evt_account_latest",
+          eventId,
           createdAt: "2026-04-21T21:45:00Z",
-          tenantId: "acct_alpha",
-          companyId: null,
+          tenantId: "tenant_alpha",
+          companyId: "company_alpha",
           actionKey: "account_update",
           actionLabel: "Account updated",
           status: "ok",
           statusLabel: "Succeeded",
           actor: { type: "admin_user", id: "admin_1", label: "Ops Admin", secondary: "ops-admin" },
-          target: { type: "gateway_account", typeLabel: "Gateway account", id: "acct_alpha", label: "Tenant Alpha", secondary: "acct_alpha" },
+          target: { type: query?.targetType ?? "gateway_account", typeLabel: "Target", id: "target-alpha", label: "Target", secondary: null },
           summary: "Account updated.",
           detailAvailable: true,
         },
       ],
       page: { limit: 1, nextCursor: null, hasMore: false },
       retention: { eventLimit: 1000, oldestAvailableAt: "2026-04-20T10:00:00Z", retentionLimited: true },
-      filters: { applied: { window: "all", action: null, actor: null, targetType: "gateway_account", targetId: null, status: null }, available: { actions: [], statuses: [], targetTypes: [] } },
+      filters: { applied: { window: "all", action: null, actor: null, targetType: query?.targetType ?? null, targetId: null, status: null }, available: { actions: [], statuses: [], targetTypes: [] } },
       summary: { totalInScope: 1, totalMatchingFilters: 1, latestEventAt: "2026-04-21T21:45:00Z" },
     };
   });
@@ -182,53 +182,42 @@ afterEach(() => {
 });
 
 describe("governance audit handoff links", () => {
-  it("routes Accounts to the newest account-related audit event", async () => {
-    await renderPage("/accounts", <AccountsPage />);
+  it("routes Accounts to the newest account-related audit event inside the active instance", async () => {
+    await renderPage("/accounts?instanceId=instance_alpha", <AccountsPage />);
 
     const auditLink = Array.from(container.querySelectorAll("a")).find((link) => link.textContent?.includes("Audit History"));
     expect(fetchAuditHistoryMock).toHaveBeenCalledWith({
-      tenantId: null,
+      instanceId: "instance_alpha",
       window: "all",
       targetType: "gateway_account",
       targetId: null,
       limit: 1,
     });
-    expect(auditLink?.getAttribute("href")).toContain("auditTargetType=gateway_account");
-    expect(auditLink?.getAttribute("href")).toContain("auditEvent=audit_evt_account_latest");
+    expect(auditLink?.getAttribute("href")).toBe("/logs?instanceId=instance_alpha&auditWindow=all&auditTargetType=gateway_account&auditEvent=audit_evt_account_latest#audit-history");
   });
 
-  it("routes API Keys to the newest runtime-key audit event", async () => {
-    await renderPage("/api-keys", <ApiKeysPage />);
+  it("routes API Keys to the newest runtime-key audit event inside the active instance", async () => {
+    await renderPage("/api-keys?instanceId=instance_alpha", <ApiKeysPage />);
 
     const auditLink = Array.from(container.querySelectorAll("a")).find((link) => link.textContent?.includes("Audit History"));
     expect(fetchAuditHistoryMock).toHaveBeenCalledWith({
-      tenantId: null,
+      instanceId: "instance_alpha",
       window: "all",
       targetType: "runtime_key",
       targetId: null,
       limit: 1,
     });
-    expect(auditLink?.getAttribute("href")).toContain("auditTargetType=runtime_key");
-    expect(auditLink?.getAttribute("href")).toContain("auditEvent=audit_evt_key_latest");
+    expect(auditLink?.getAttribute("href")).toBe("/logs?instanceId=instance_alpha&auditWindow=all&auditTargetType=runtime_key&auditEvent=audit_evt_key_latest#audit-history");
   });
 
-  it("keeps Accounts on a static audit-history fallback for viewer sessions", async () => {
-    await renderPage("/accounts?tenantId=acct_alpha", <AccountsPage />, viewerSession);
-
-    const auditLink = Array.from(container.querySelectorAll("a")).find((link) => link.textContent?.includes("Audit History"));
+  it("keeps viewer fallbacks on instance-scoped static audit history links", async () => {
+    await renderPage("/accounts?instanceId=instance_alpha", <AccountsPage />, viewerSession);
+    let auditLink = Array.from(container.querySelectorAll("a")).find((link) => link.textContent?.includes("Audit History"));
     expect(fetchAuditHistoryMock).not.toHaveBeenCalled();
-    expect(auditLink?.getAttribute("href")).toBe(
-      "/logs?tenantId=acct_alpha&auditWindow=all&auditTargetType=gateway_account#audit-history",
-    );
-  });
+    expect(auditLink?.getAttribute("href")).toBe("/logs?instanceId=instance_alpha&auditWindow=all&auditTargetType=gateway_account#audit-history");
 
-  it("keeps API Keys on a static audit-history fallback for viewer sessions", async () => {
-    await renderPage("/api-keys?tenantId=acct_alpha", <ApiKeysPage />, viewerSession);
-
-    const auditLink = Array.from(container.querySelectorAll("a")).find((link) => link.textContent?.includes("Audit History"));
-    expect(fetchAuditHistoryMock).not.toHaveBeenCalled();
-    expect(auditLink?.getAttribute("href")).toBe(
-      "/logs?tenantId=acct_alpha&auditWindow=all&auditTargetType=runtime_key#audit-history",
-    );
+    await renderPage("/api-keys?instanceId=instance_alpha", <ApiKeysPage />, viewerSession);
+    auditLink = Array.from(container.querySelectorAll("a")).find((link) => link.textContent?.includes("Audit History"));
+    expect(auditLink?.getAttribute("href")).toBe("/logs?instanceId=instance_alpha&auditWindow=all&auditTargetType=runtime_key#audit-history");
   });
 });

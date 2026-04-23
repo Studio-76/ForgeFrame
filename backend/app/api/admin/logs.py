@@ -16,6 +16,7 @@ from fastapi.responses import JSONResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel, Field
 
+from app.api.admin.instance_scope import resolve_admin_instance_scope
 from app.api.admin.security import require_admin_mutation_role, require_admin_session
 from app.auth.local_auth import role_allows
 from app.governance.models import (
@@ -27,6 +28,7 @@ from app.governance.models import (
     RuntimeKeyRecord,
 )
 from app.governance.service import GovernanceService, get_governance_service
+from app.instances.models import InstanceRecord
 from app.settings.config import Settings, get_settings
 from app.tenancy import TenantFilterRequiredError
 from app.telemetry import (
@@ -382,11 +384,18 @@ def _redact_metadata(value: Any, *, path: str = "") -> tuple[Any, list[dict[str,
 def _build_lookup_indexes(
     governance: GovernanceService,
     *,
+    instance_id: str | None,
     tenant_id: str | None,
 ) -> dict[str, dict[str, Any]]:
     users = {user.user_id: user for user in governance.list_admin_users()}
-    accounts = {account.account_id: account for account in governance.list_accounts(tenant_id=tenant_id)}
-    runtime_keys = {item.key_id: item for item in governance.list_runtime_keys(tenant_id=tenant_id)}
+    accounts = {
+        account.account_id: account
+        for account in governance.list_accounts(instance_id=instance_id, tenant_id=tenant_id)
+    }
+    runtime_keys = {
+        item.key_id: item
+        for item in governance.list_runtime_keys(instance_id=instance_id, tenant_id=tenant_id)
+    }
     settings = {item.key: item for item in governance.list_setting_overrides()}
     return {
         "users": users,
@@ -394,6 +403,17 @@ def _build_lookup_indexes(
         "runtime_keys": runtime_keys,
         "settings": settings,
     }
+
+
+def _resolve_scope_from_instance(
+    *,
+    instance: InstanceRecord,
+    tenant_id: str | None,
+    company_id: str | None,
+) -> tuple[str, str | None]:
+    resolved_tenant_id = (tenant_id or "").strip() or instance.tenant_id
+    resolved_company_id = (company_id or "").strip() or instance.company_id
+    return resolved_tenant_id, (resolved_company_id or None)
 
 
 def _actor_summary(
@@ -428,7 +448,7 @@ def _actor_summary(
         return {
             "type": event.actor_type,
             "id": None,
-            "label": "ForgeGate system",
+            "label": "ForgeFrame system",
             "secondary": None,
         }
 
@@ -764,6 +784,7 @@ def list_audit_history(
     _admin: AuthenticatedAdmin = Depends(require_audit_history_role("operator")),
     governance: GovernanceService = Depends(get_governance_service),
     settings: Settings = Depends(get_settings),
+    instance: InstanceRecord = Depends(resolve_admin_instance_scope),
     tenant_id: str | None = Query(default=None, alias="tenantId"),
     company_id: str | None = Query(default=None, alias="companyId"),
     window: Literal["24h", "7d", "30d", "all"] = Query(default="24h"),
@@ -775,7 +796,16 @@ def list_audit_history(
     cursor: str | None = Query(default=None),
     limit: int = Query(default=25, ge=1, le=100),
 ) -> Any:
-    indexes = _build_lookup_indexes(governance, tenant_id=tenant_id)
+    resolved_tenant_id, resolved_company_id = _resolve_scope_from_instance(
+        instance=instance,
+        tenant_id=tenant_id,
+        company_id=company_id,
+    )
+    indexes = _build_lookup_indexes(
+        governance,
+        instance_id=instance.instance_id,
+        tenant_id=resolved_tenant_id,
+    )
     normalized_action = _normalize_filter_value(action)
     normalized_actor = _normalize_filter_value(actor)
     normalized_target_type = _normalize_filter_value(target_type)
@@ -788,21 +818,21 @@ def list_audit_history(
 
     try:
         retention = governance.audit_event_retention_summary(
-            tenant_id=tenant_id,
-            company_id=company_id,
+            tenant_id=resolved_tenant_id,
+            company_id=resolved_company_id,
             require_explicit_scope=True,
         )
         window_scoped_events = governance.query_audit_events(
             limit=_retained_audit_limit(settings),
-            tenant_id=tenant_id,
-            company_id=company_id,
+            tenant_id=resolved_tenant_id,
+            company_id=resolved_company_id,
             require_explicit_scope=True,
             window_seconds=int(_AUDIT_EXPORT_WINDOWS[window].total_seconds()) if _AUDIT_EXPORT_WINDOWS[window] is not None else None,
         )
         filtered_events = governance.query_audit_events(
             limit=_retained_audit_limit(settings),
-            tenant_id=tenant_id,
-            company_id=company_id,
+            tenant_id=resolved_tenant_id,
+            company_id=resolved_company_id,
             require_explicit_scope=True,
             window_seconds=int(_AUDIT_EXPORT_WINDOWS[window].total_seconds()) if _AUDIT_EXPORT_WINDOWS[window] is not None else None,
             action=normalized_action,
@@ -813,8 +843,8 @@ def list_audit_history(
         )
         cursor_scoped_events = governance.query_audit_events(
             limit=limit + 1,
-            tenant_id=tenant_id,
-            company_id=company_id,
+            tenant_id=resolved_tenant_id,
+            company_id=resolved_company_id,
             require_explicit_scope=True,
             window_seconds=int(_AUDIT_EXPORT_WINDOWS[window].total_seconds()) if _AUDIT_EXPORT_WINDOWS[window] is not None else None,
             action=normalized_action,
@@ -841,6 +871,7 @@ def list_audit_history(
     return {
         "status": "ok",
         "object": "audit_history",
+        "instance": instance.model_dump(mode="json"),
         "items": [_normalize_audit_row(event, indexes=indexes) for event in page_items],
         "page": {
             "limit": limit,
@@ -874,14 +905,20 @@ def get_audit_history_event(
     event_id: str,
     _admin: AuthenticatedAdmin = Depends(require_audit_history_role("operator")),
     governance: GovernanceService = Depends(get_governance_service),
+    instance: InstanceRecord = Depends(resolve_admin_instance_scope),
     tenant_id: str | None = Query(default=None, alias="tenantId"),
     company_id: str | None = Query(default=None, alias="companyId"),
 ) -> Any:
+    resolved_tenant_id, resolved_company_id = _resolve_scope_from_instance(
+        instance=instance,
+        tenant_id=tenant_id,
+        company_id=company_id,
+    )
     try:
         event = governance.get_audit_event(
             event_id,
-            tenant_id=tenant_id,
-            company_id=company_id,
+            tenant_id=resolved_tenant_id,
+            company_id=resolved_company_id,
             require_explicit_scope=True,
         )
     except TenantFilterRequiredError as exc:
@@ -891,10 +928,15 @@ def get_audit_history_event(
         )
     if event is None:
         return _admin_error(404, "audit_event_not_found", f"Audit event '{event_id}' was not found.")
-    indexes = _build_lookup_indexes(governance, tenant_id=tenant_id)
+    indexes = _build_lookup_indexes(
+        governance,
+        instance_id=instance.instance_id,
+        tenant_id=resolved_tenant_id,
+    )
     return {
         "status": "ok",
         "object": "audit_event_detail",
+        "instance": instance.model_dump(mode="json"),
         **_audit_detail_payload(event, indexes=indexes),
     }
 
@@ -905,26 +947,33 @@ def logs_view(
     governance: GovernanceService = Depends(get_governance_service),
     analytics: UsageAnalyticsStore = Depends(get_usage_analytics_store),
     settings: Settings = Depends(get_settings),
+    instance: InstanceRecord = Depends(resolve_admin_instance_scope),
     tenant_id: str | None = Query(default=None, alias="tenantId"),
     company_id: str | None = Query(default=None, alias="companyId"),
 ) -> Any:
+    resolved_tenant_id, resolved_company_id = _resolve_scope_from_instance(
+        instance=instance,
+        tenant_id=tenant_id,
+        company_id=company_id,
+    )
     try:
         metrics_snapshot = build_metrics_operability_snapshot(
             settings,
             analytics,
-            tenant_id=tenant_id,
-            company_id=company_id,
+            tenant_id=resolved_tenant_id,
+            company_id=resolved_company_id,
+            instance_id=instance.instance_id,
         )
-        aggregates = analytics.aggregate(window_seconds=24 * 3600, tenant_id=tenant_id)
+        aggregates = analytics.aggregate(window_seconds=24 * 3600, tenant_id=resolved_tenant_id)
         retention = governance.audit_event_retention_summary(
-            tenant_id=tenant_id,
-            company_id=company_id,
+            tenant_id=resolved_tenant_id,
+            company_id=resolved_company_id,
             require_explicit_scope=True,
         )
         retained_events = governance.query_audit_events(
             limit=_retained_audit_limit(settings),
-            tenant_id=tenant_id,
-            company_id=company_id,
+            tenant_id=resolved_tenant_id,
+            company_id=resolved_company_id,
             window_seconds=None,
         )
     except TenantFilterRequiredError as exc:
@@ -933,13 +982,17 @@ def logs_view(
             content={"error": {"type": "tenant_filter_required", "message": str(exc)}},
         )
     preview_events = retained_events[:5]
-    indexes = _build_lookup_indexes(governance, tenant_id=tenant_id)
+    indexes = _build_lookup_indexes(
+        governance,
+        instance_id=instance.instance_id,
+        tenant_id=resolved_tenant_id,
+    )
     logging_snapshot = build_logging_operability_snapshot(
         settings,
         governance,
         analytics,
-        tenant_id=tenant_id,
-        company_id=company_id,
+        tenant_id=resolved_tenant_id,
+        company_id=resolved_company_id,
     )
     tracing_snapshot = build_tracing_operability_snapshot()
     recent_alerts = list(metrics_snapshot["alerts"])
@@ -977,9 +1030,28 @@ def logs_view(
             "ok": bool(tracing_snapshot["configured"]),
             "details": str(tracing_snapshot["details"]),
         },
+        {
+            "id": "routing_decision_signal_path",
+            "ok": int(metrics_snapshot["routing_metrics"]["decision_count"]) > 0,
+            "details": f"decisions_24h={metrics_snapshot['routing_metrics']['decision_count']}",
+        },
+        {
+            "id": "routing_explainability_path",
+            "ok": (
+                int(metrics_snapshot["routing_metrics"]["explainability_coverage"]["structured"]) > 0
+                and int(metrics_snapshot["routing_metrics"]["explainability_coverage"]["raw"]) > 0
+            ),
+            "details": (
+                "structured="
+                f"{metrics_snapshot['routing_metrics']['explainability_coverage']['structured']},"
+                "raw="
+                f"{metrics_snapshot['routing_metrics']['explainability_coverage']['raw']}"
+            ),
+        },
     ]
     return {
         "status": "ok",
+        "instance": instance.model_dump(mode="json"),
         "audit_preview": [_normalize_audit_row(event, indexes=indexes) for event in preview_events],
         "audit_retention": {
             "eventLimit": int(retention["event_limit"]),
@@ -1009,9 +1081,15 @@ def export_audit_events(
     admin: AuthenticatedAdmin = Depends(require_admin_mutation_role("operator")),
     governance: GovernanceService = Depends(get_governance_service),
     settings: Settings = Depends(get_settings),
+    instance: InstanceRecord = Depends(resolve_admin_instance_scope),
     tenant_id: str | None = Query(default=None, alias="tenantId"),
     company_id: str | None = Query(default=None, alias="companyId"),
 ) -> Response:
+    resolved_tenant_id, resolved_company_id = _resolve_scope_from_instance(
+        instance=instance,
+        tenant_id=tenant_id,
+        company_id=company_id,
+    )
     retained_limit = _retained_audit_limit(settings)
     effective_limit = min(payload.limit, retained_limit)
     normalized_action = _normalize_filter_value(payload.action)
@@ -1020,8 +1098,8 @@ def export_audit_events(
     try:
         audit_events = governance.query_audit_events(
             limit=retained_limit,
-            tenant_id=tenant_id,
-            company_id=company_id,
+            tenant_id=resolved_tenant_id,
+            company_id=resolved_company_id,
             require_explicit_scope=True,
             window_seconds=window_seconds,
             action=normalized_action,
@@ -1041,18 +1119,19 @@ def export_audit_events(
         "action": normalized_action,
         "status": payload.status,
         "subject": payload.subject,
-        "tenant_id": tenant_id,
-        "company_id": company_id,
+        "tenant_id": resolved_tenant_id,
+        "company_id": resolved_company_id,
+        "instance_id": instance.instance_id,
         "limit": effective_limit,
     }
     timestamp = datetime.now(tz=UTC).strftime("%Y%m%dT%H%M%SZ")
-    if tenant_id:
-        scope_label = tenant_id
-    elif company_id:
-        scope_label = f"company-{company_id}"
+    if resolved_tenant_id:
+        scope_label = instance.slug or resolved_tenant_id
+    elif resolved_company_id:
+        scope_label = f"company-{resolved_company_id}"
     else:
         scope_label = "global"
-    filename = f"forgegate-audit-export-{scope_label.replace('/', '_')}-{timestamp}.{payload.format}"
+    filename = f"forgeframe-audit-export-{scope_label.replace('/', '_')}-{timestamp}.{payload.format}"
 
     if payload.format == "csv":
         content = _render_audit_export_csv(filtered_events)
@@ -1084,14 +1163,15 @@ def export_audit_events(
             "format": payload.format,
             "effective_limit": effective_limit,
         },
-        tenant_id=tenant_id,
-        company_id=company_id,
+        instance_id=instance.instance_id,
+        tenant_id=resolved_tenant_id,
+        company_id=resolved_company_id,
     )
 
     response = Response(content=content, media_type=media_type)
     response.headers["Content-Disposition"] = f'attachment; filename="{filename}"'
-    response.headers["X-ForgeGate-Audit-Export-Id"] = export_id
-    response.headers["X-ForgeGate-Audit-Export-Status"] = "ready"
-    response.headers["X-ForgeGate-Audit-Export-Row-Count"] = str(len(filtered_events))
-    response.headers["X-ForgeGate-Audit-Export-Generated-At"] = generated_at
+    response.headers["X-ForgeFrame-Audit-Export-Id"] = export_id
+    response.headers["X-ForgeFrame-Audit-Export-Status"] = "ready"
+    response.headers["X-ForgeFrame-Audit-Export-Row-Count"] = str(len(filtered_events))
+    response.headers["X-ForgeFrame-Audit-Export-Generated-At"] = generated_at
     return response

@@ -1,4 +1,4 @@
-"""Default-deny policy evaluator for ForgeGate route guards."""
+"""Default-deny policy evaluator for ForgeFrame route guards."""
 
 from __future__ import annotations
 

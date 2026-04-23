@@ -33,6 +33,7 @@ class ResponsesRequest(BaseModel):
     max_output_tokens: int | None = None
     temperature: float | None = None
     stream: bool = False
+    background: bool = False
     tools: list[dict[str, Any]] = Field(default_factory=list)
     tool_choice: str | dict[str, Any] | None = None
     metadata: dict[str, Any] = Field(default_factory=dict)

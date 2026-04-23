@@ -2,21 +2,36 @@
 
 from __future__ import annotations
 
-import os
 from datetime import UTC, datetime
 from pathlib import Path
 
 from app.control_plane import ControlPlaneBootstrapCheck, ControlPlaneBootstrapReadinessReport
+from app.public_surface import (
+    FRONTEND_MOUNT_PATH,
+    ROOT_SURFACE_KIND,
+    NORMATIVE_HTTPS_HOST,
+    NORMATIVE_HTTPS_PORT,
+    has_integrated_tls_automation,
+    has_linux_host_installation_artifacts,
+    resolve_repo_relative_path,
+)
 from app.tenancy import TenantFilterRequiredError
+from app.ingress.service import build_ingress_tls_status
 
 
 class ControlPlaneBootstrapDomainMixin:
     def _build_bootstrap_readiness_report(self) -> ControlPlaneBootstrapReadinessReport:
         checked_at = datetime.now(tz=UTC).isoformat()
         root_dir = Path(__file__).resolve().parents[4]
-        env_compose = root_dir / ".env.compose"
-        compose_file = root_dir / "docker" / "docker-compose.yml"
         containerized_runtime = root_dir == Path("/app")
+        frontend_dist_path = resolve_repo_relative_path(root_dir, self._settings.frontend_dist_path)
+        frontend_index = frontend_dist_path / "index.html"
+        host_install_script = root_dir / "scripts" / "install-forgeframe.sh"
+        host_smoke_script = root_dir / "scripts" / "host-smoke.sh"
+        host_backup_restore_smoke = root_dir / "scripts" / "host-backup-restore-smoke.sh"
+        systemd_dir = root_dir / "deploy" / "systemd"
+        host_env_template = root_dir / "deploy" / "env" / "forgeframe-host.env.example"
+        ingress_status = build_ingress_tls_status(self._settings)
         observability_filter_required = False
         try:
             observability_aggregates = self._analytics.aggregate(window_seconds=24 * 3600)
@@ -29,19 +44,28 @@ class ControlPlaneBootstrapDomainMixin:
             }
         checks = [
             ControlPlaneBootstrapCheck(
-                id="compose_file",
-                ok=compose_file.exists() or containerized_runtime,
-                details=str(compose_file) if compose_file.exists() else ("containerized_runtime" if containerized_runtime else str(compose_file)),
+                id="host_install_script",
+                ok=host_install_script.exists(),
+                details=str(host_install_script),
             ),
             ControlPlaneBootstrapCheck(
-                id="env_compose",
-                ok=env_compose.exists() or containerized_runtime,
-                details=str(env_compose) if env_compose.exists() else ("containerized_runtime" if containerized_runtime else str(env_compose)),
+                id="host_env_template",
+                ok=host_env_template.exists(),
+                details=str(host_env_template),
+            ),
+            ControlPlaneBootstrapCheck(
+                id="systemd_runtime_units",
+                ok=(
+                    (systemd_dir / "forgeframe-api.service").exists()
+                    and (systemd_dir / "forgeframe-retention.service").exists()
+                    and (systemd_dir / "forgeframe-retention.timer").exists()
+                ),
+                details=str(systemd_dir),
             ),
             ControlPlaneBootstrapCheck(
                 id="postgres_url",
                 ok=bool(self._settings.harness_postgres_url.strip()),
-                details="FORGEGATE_HARNESS_POSTGRES_URL",
+                details="FORGEFRAME_HARNESS_POSTGRES_URL",
             ),
             ControlPlaneBootstrapCheck(
                 id="harness_storage_backend",
@@ -71,11 +95,16 @@ class ControlPlaneBootstrapDomainMixin:
             ControlPlaneBootstrapCheck(
                 id="backup_restore_automation",
                 ok=(
-                    (root_dir / "scripts" / "backup-forgegate.sh").exists()
-                    and (root_dir / "scripts" / "restore-forgegate.sh").exists()
-                    and (root_dir / "scripts" / "compose-backup-restore-smoke.sh").exists()
+                    (root_dir / "scripts" / "backup-forgeframe.sh").exists()
+                    and (root_dir / "scripts" / "restore-forgeframe.sh").exists()
+                    and host_backup_restore_smoke.exists()
                 ),
-                details="scripts/backup-forgegate.sh + scripts/restore-forgegate.sh + scripts/compose-backup-restore-smoke.sh",
+                details="scripts/backup-forgeframe.sh + scripts/restore-forgeframe.sh + scripts/host-backup-restore-smoke.sh",
+            ),
+            ControlPlaneBootstrapCheck(
+                id="host_smoke_driver",
+                ok=host_smoke_script.exists(),
+                details=str(host_smoke_script),
             ),
             ControlPlaneBootstrapCheck(
                 id="observability_signal_path",
@@ -109,18 +138,81 @@ class ControlPlaneBootstrapDomainMixin:
                 details=str(self._settings.port),
             ),
             ControlPlaneBootstrapCheck(
-                id="docker_host_hint",
-                ok=bool(os.environ.get("DOCKER_HOST") or os.path.exists("/var/run/docker.sock")),
-                details=os.environ.get("DOCKER_HOST", "/var/run/docker.sock"),
+                id="frontend_dist",
+                ok=frontend_index.exists(),
+                details=str(frontend_index),
+            ),
+            ControlPlaneBootstrapCheck(
+                id="root_ui_on_slash",
+                ok=FRONTEND_MOUNT_PATH == "/" and ROOT_SURFACE_KIND == "spa",
+                details=f"root_surface={ROOT_SURFACE_KIND};frontend_mount_path={FRONTEND_MOUNT_PATH}",
+            ),
+            ControlPlaneBootstrapCheck(
+                id="same_origin_runtime_api",
+                ok=self._settings.api_base.startswith("/") and self._settings.public_admin_base.startswith("/"),
+                details=f"runtime={self._settings.api_base};admin={self._settings.public_admin_base}",
+            ),
+            ControlPlaneBootstrapCheck(
+                id="public_fqdn_configured",
+                ok=bool(self._settings.public_fqdn.strip()),
+                details=self._settings.public_fqdn.strip() or "missing",
+            ),
+            ControlPlaneBootstrapCheck(
+                id="public_dns_resolution",
+                ok=ingress_status.dns_resolves,
+                details=",".join(ingress_status.resolved_addresses) if ingress_status.resolved_addresses else "unresolved",
+            ),
+            ControlPlaneBootstrapCheck(
+                id="public_https_listener",
+                ok=(
+                    self._settings.public_https_host == NORMATIVE_HTTPS_HOST
+                    and self._settings.public_https_port == NORMATIVE_HTTPS_PORT
+                    and self._settings.public_tls_mode == "integrated_acme"
+                ),
+                details=f"{self._settings.public_https_host}:{self._settings.public_https_port};mode={self._settings.public_tls_mode}",
+            ),
+            ControlPlaneBootstrapCheck(
+                id="port80_certificate_helper",
+                ok=self._settings.public_http_helper_port == 80 and self._settings.public_tls_mode == "integrated_acme",
+                details=f"{self._settings.public_http_helper_host}:{self._settings.public_http_helper_port}",
+            ),
+            ControlPlaneBootstrapCheck(
+                id="certificate_material",
+                ok=ingress_status.certificate.present,
+                details=ingress_status.certificate.certificate_path,
+            ),
+            ControlPlaneBootstrapCheck(
+                id="tls_mode_classification",
+                ok=ingress_status.mode_classification == "normative_public_https",
+                details=ingress_status.mode_classification,
+            ),
+            ControlPlaneBootstrapCheck(
+                id="tls_certificate_management",
+                ok=has_integrated_tls_automation(root_dir),
+                details=(
+                    "integrated_tls_automation_present"
+                    if has_integrated_tls_automation(root_dir)
+                    else "integrated_tls_automation_missing"
+                ),
+            ),
+            ControlPlaneBootstrapCheck(
+                id="linux_host_installation",
+                ok=has_linux_host_installation_artifacts(root_dir),
+                details=(
+                    "linux_host_installation_artifacts_present"
+                    if has_linux_host_installation_artifacts(root_dir)
+                    else "missing_install_script_or_systemd_units"
+                ),
             ),
         ]
-        ready = all(item.ok for item in checks if item.id != "docker_host_hint")
+        ready = all(item.ok for item in checks)
         next_steps = [
-            "Run ./scripts/bootstrap-forgegate.sh for docker-first setup including storage migrations, compose/runtime observability smoke, and backup/restore validation.",
-            "For non-docker recovery, run python3 scripts/apply-storage-migrations.py against the configured PostgreSQL target.",
-            "Use ./scripts/backup-forgegate.sh to capture a PostgreSQL backup and ./scripts/restore-forgegate.sh <dump> <target_db> for non-destructive recovery drills.",
-            "Use ./scripts/compose-smoke.sh and ./scripts/compose-backup-restore-smoke.sh to verify the compose path, runtime/error/health observability, and recovery end to end.",
-            "Open /app/ and verify provider probes, security bootstrap and bridge profile sync from the control plane.",
+            "Run scripts/install-forgeframe.sh on the Linux host, populate forgeframe.env with reachable PostgreSQL URLs, and enable the installed systemd units.",
+            "Populate /etc/forgeframe/forgeframe.env with reachable PostgreSQL URLs and bootstrap credentials, then enable forgeframe-api.service and forgeframe-retention.timer.",
+            "Expose the operator UI on / and keep /v1 plus /admin on the same HTTPS origin instead of the current /app-only delivery.",
+            "Implement integrated ACME or Let's Encrypt automation with a dedicated port-80 helper listener and renewal monitoring.",
+            "Treat compose/bootstrap scripts as an alternative path only; they no longer prove the normative Linux-host deployment.",
+            "After the public HTTPS origin exists, rerun host-smoke plus host-backup-restore-smoke end to end.",
         ]
         return ControlPlaneBootstrapReadinessReport(
             ready=ready,

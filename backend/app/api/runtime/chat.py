@@ -16,6 +16,7 @@ from app.api.runtime.access import (
     requested_model_blocked_by_disabled_public_bridge,
 )
 from app.api.runtime.errors import public_runtime_exception_message
+from app.api.runtime.errors import public_runtime_error_code
 from app.api.runtime.dependencies import (
     get_dispatch_service,
     get_model_registry,
@@ -28,7 +29,12 @@ from app.api.runtime.schemas import ChatCompletionsRequest, normalize_chat_messa
 from app.core.dispatch import DispatchService
 from app.core.model_registry import ModelRegistry
 from app.core.response_normalization import build_chat_completion_payload, new_chat_completion_created, new_chat_completion_id
-from app.core.routing import RoutingService
+from app.core.routing import (
+    RoutingBudgetExceededError,
+    RoutingCircuitOpenError,
+    RoutingNoCandidateError,
+    RoutingService,
+)
 from app.core.streaming import provider_events_to_sse
 from app.governance.errors import RuntimeAuthorizationError
 from app.governance.models import RuntimeGatewayIdentity
@@ -56,8 +62,10 @@ from app.providers import (
     ProviderUpstreamError,
     ProviderValidationError,
 )
+from app.request_metadata import merge_request_metadata
 from app.settings.config import Settings
 from app.telemetry.context import telemetry_context_from_request
+from app.tenancy import normalize_tenant_id
 from app.usage.analytics import ClientIdentity, get_usage_analytics_store
 
 router = APIRouter(tags=["runtime-chat"])
@@ -78,6 +86,15 @@ def _error_response(*, status_code: int, error_type: str, message: str, **extra:
     if isinstance(retry_after, int) and retry_after >= 0:
         response.headers["Retry-After"] = str(retry_after)
     return response
+
+
+def _routing_headers(decision_id: str | None, target_key: str | None = None) -> dict[str, str]:
+    headers: dict[str, str] = {}
+    if decision_id:
+        headers["X-ForgeFrame-Routing-Decision"] = decision_id
+    if target_key:
+        headers["X-ForgeFrame-Routing-Target"] = target_key
+    return headers
 
 
 def _validation_error_response(exc: ValidationError) -> JSONResponse:
@@ -122,7 +139,13 @@ def _validation_error_response(exc: ValidationError) -> JSONResponse:
 def _provider_exception_to_http(exc: Exception) -> tuple[int, str, str | None, str, dict[str, object]]:
     message = public_runtime_exception_message(exc)
     if isinstance(exc, RuntimeAuthorizationError):
-        return exc.status_code, exc.error_type, None, message, {}
+        return exc.status_code, public_runtime_error_code(exc.error_type) or exc.error_type, None, message, {}
+    if isinstance(exc, RoutingBudgetExceededError):
+        return status.HTTP_429_TOO_MANY_REQUESTS, public_runtime_error_code(exc.error_type) or exc.error_type, None, message, {"retryable": False}
+    if isinstance(exc, RoutingCircuitOpenError):
+        return status.HTTP_503_SERVICE_UNAVAILABLE, public_runtime_error_code(exc.error_type) or exc.error_type, None, message, {"retryable": True}
+    if isinstance(exc, RoutingNoCandidateError):
+        return status.HTTP_503_SERVICE_UNAVAILABLE, public_runtime_error_code(exc.error_type) or exc.error_type, None, message, {}
     if isinstance(exc, ProviderNotImplementedError):
         return status.HTTP_501_NOT_IMPLEMENTED, exc.error_type, exc.provider, message, {}
     if isinstance(exc, ProviderUnsupportedFeatureError):
@@ -185,15 +208,41 @@ def _resolve_client_identity(
     return ClientIdentity(
         client_id=(
             payload.client.get("client_id")
+            or request.headers.get("x-forgeframe-client")
             or request.headers.get("x-forgegate-client")
             or request.headers.get("x-api-key")
             or request.headers.get("user-agent")
             or "unknown_client"
         ),
-        consumer=(payload.client.get("consumer") or request.headers.get("x-forgegate-consumer") or "unknown_consumer"),
-        integration=(payload.client.get("integration") or request.headers.get("x-forgegate-integration") or "unknown_integration"),
+        consumer=(
+            payload.client.get("consumer")
+            or request.headers.get("x-forgeframe-consumer")
+            or request.headers.get("x-forgegate-consumer")
+            or "unknown_consumer"
+        ),
+        integration=(
+            payload.client.get("integration")
+            or request.headers.get("x-forgeframe-integration")
+            or request.headers.get("x-forgegate-integration")
+            or "unknown_integration"
+        ),
         tenant_id=default_tenant_id,
     )
+
+
+def _runtime_request_metadata(
+    *,
+    telemetry_context,
+    gateway_identity: RuntimeGatewayIdentity | None,
+    settings: Settings,
+) -> dict[str, str]:
+    instance_id = normalize_tenant_id(
+        gateway_identity.instance_id if gateway_identity is not None else settings.bootstrap_tenant_id
+    )
+    supplemental: dict[str, object] = {"instance_id": instance_id}
+    if gateway_identity is not None and gateway_identity.account_id:
+        supplemental["account_id"] = gateway_identity.account_id
+    return merge_request_metadata(telemetry_context.as_request_metadata(), supplemental)
 
 
 @router.post("/chat/completions", response_model=None)
@@ -220,7 +269,7 @@ def create_chat_completion(
         request,
         route=runtime_route,
         operation="runtime.chat.completions.create",
-        service_name="forgegate-runtime-api",
+        service_name="forgeframe-runtime-api",
         service_kind="runtime_api",
     )
     client_identity = _resolve_client_identity(
@@ -228,6 +277,11 @@ def create_chat_completion(
         payload,
         gateway_identity,
         default_tenant_id=settings.bootstrap_tenant_id,
+    )
+    runtime_request_metadata = _runtime_request_metadata(
+        telemetry_context=telemetry_context,
+        gateway_identity=gateway_identity,
+        settings=settings,
     )
     completion_id = new_chat_completion_id()
     completion_created = new_chat_completion_created()
@@ -250,6 +304,7 @@ def create_chat_completion(
             error_type=exc.error_type,
             status_code=exc.status_code,
             context=telemetry_context.with_duration(_duration_ms(started_at)),
+            request_metadata=runtime_request_metadata,
         )
         return _error_response(
             status_code=exc.status_code,
@@ -274,6 +329,7 @@ def create_chat_completion(
             error_type="model_not_found",
             status_code=status.HTTP_404_NOT_FOUND,
             context=telemetry_context.with_duration(_duration_ms(started_at)),
+            request_metadata=runtime_request_metadata,
         )
         return _error_response(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -291,6 +347,7 @@ def create_chat_completion(
             error_type="model_not_found",
             status_code=status.HTTP_404_NOT_FOUND,
             context=telemetry_context.with_duration(_duration_ms(started_at)),
+            request_metadata=runtime_request_metadata,
         )
         return _error_response(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -305,13 +362,13 @@ def create_chat_completion(
     try:
         normalized_messages = normalize_chat_messages(payload.messages)
         if payload.stream:
-            model, provider, events = dispatch.dispatch_chat_stream(
+            model, provider, events, decision = dispatch.dispatch_chat_stream(
                 requested_model=requested_model,
                 messages=normalized_messages,
                 tools=payload.tools,
                 tool_choice=payload.tool_choice,
                 allowed_providers=allowed_provider_set(gateway_identity),
-                request_metadata=telemetry_context.as_request_metadata(),
+                request_metadata=runtime_request_metadata,
             )
 
             def _sse_body() -> Iterator[str]:
@@ -325,6 +382,7 @@ def create_chat_completion(
                                     event=event,
                                     client=client_identity,
                                     context=telemetry_context.with_duration(_duration_ms(started_at)),
+                                    request_metadata=runtime_request_metadata,
                                 )
                             if event.event == "error":
                                 analytics.record_runtime_error(
@@ -336,6 +394,7 @@ def create_chat_completion(
                                     error_type=event.error_type or "provider_stream_interrupted",
                                     status_code=status.HTTP_502_BAD_GATEWAY,
                                     context=telemetry_context.with_duration(_duration_ms(started_at)),
+                                    request_metadata=runtime_request_metadata,
                                 )
                             yield event
 
@@ -356,6 +415,7 @@ def create_chat_completion(
                         error_type=error_type,
                         status_code=status_code,
                         context=telemetry_context.with_duration(_duration_ms(started_at)),
+                        request_metadata=runtime_request_metadata,
                     )
                     yield from provider_events_to_sse(
                         [
@@ -370,16 +430,20 @@ def create_chat_completion(
                         created=completion_created,
                     )
 
-            return StreamingResponse(_sse_body(), media_type="text/event-stream")
+            return StreamingResponse(
+                _sse_body(),
+                media_type="text/event-stream",
+                headers=_routing_headers(decision.decision_id, decision.resolved_target.target_key),
+            )
 
-        result = dispatch.dispatch_chat(
+        result, decision = dispatch.dispatch_chat(
             requested_model=requested_model,
             messages=normalized_messages,
             stream=False,
             tools=payload.tools,
             tool_choice=payload.tool_choice,
             allowed_providers=allowed_provider_set(gateway_identity),
-            request_metadata=telemetry_context.as_request_metadata(),
+            request_metadata=runtime_request_metadata,
         )
     except Exception as exc:  # intentionally centralized mapping
         status_code, error_type, provider, message, extra = _provider_exception_to_http(exc)
@@ -392,6 +456,7 @@ def create_chat_completion(
             error_type=error_type,
             status_code=status_code,
             context=telemetry_context.with_duration(_duration_ms(started_at)),
+            request_metadata=runtime_request_metadata,
         )
         return _error_response(
             status_code=status_code,
@@ -404,10 +469,14 @@ def create_chat_completion(
         result,
         client=client_identity,
         context=telemetry_context.with_duration(_duration_ms(started_at)),
+        request_metadata=runtime_request_metadata,
     )
 
-    return build_chat_completion_payload(
-        result,
-        completion_id=completion_id,
-        created=completion_created,
+    return JSONResponse(
+        content=build_chat_completion_payload(
+            result,
+            completion_id=completion_id,
+            created=completion_created,
+        ),
+        headers=_routing_headers(decision.decision_id, decision.resolved_target.target_key),
     )

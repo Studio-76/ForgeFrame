@@ -15,6 +15,7 @@ from app.auth.local_auth import (
     issue_runtime_key_token,
     issue_session_token,
     new_secret_salt,
+    role_allows,
     verify_password,
 )
 from app.governance.errors import (
@@ -27,6 +28,7 @@ from app.harness.service import HarnessService, get_harness_service
 from app.governance.models import (
     AdminLoginResult,
     AdminLoginFailureRecord,
+    AdminInstanceMembershipRecord,
     AdminSessionRecord,
     AdminUserRecord,
     AuditEventRecord,
@@ -44,7 +46,13 @@ from app.settings.config import Settings, get_settings
 from app.storage.governance_repository import GovernanceRepository, get_governance_repository
 from app.tenancy import TenantFilterRequiredError, effective_tenant_filter, normalize_tenant_id
 
-_INSECURE_BOOTSTRAP_ADMIN_PASSWORDS = ("forgegate-admin", "replace-with-a-strong-password")
+_INSECURE_BOOTSTRAP_ADMIN_PASSWORDS = (
+    "",
+    "forgegate-admin",
+    "forgeframe-admin",
+    "replace-with-a-strong-password",
+    "replace-with-a-generated-bootstrap-password",
+)
 _ELEVATED_SESSION_TYPES = {"impersonation", "break_glass"}
 _ELEVATED_ACCESS_ACTIVE_SESSION_CONFLICT_MESSAGE = (
     "An elevated session is already active for this subject. Review the active session before creating a new request."
@@ -56,7 +64,7 @@ _ELEVATED_ACCESS_RECOVERY_MESSAGE = (
     "before requesting access."
 )
 _ELEVATED_ACCESS_RECOVERY_SECONDARY_MESSAGE = (
-    "ForgeGate will not create a pending approval item or issue elevated access while no eligible "
+    "ForgeFrame will not create a pending approval item or issue elevated access while no eligible "
     "approver exists."
 )
 _ELEVATED_ACCESS_APPROVAL_AVAILABLE_LABEL = "Approval available"
@@ -64,8 +72,67 @@ _ELEVATED_ACCESS_APPROVAL_AVAILABLE_MESSAGE = (
     "A different admin can review elevated-access requests in this environment."
 )
 _ELEVATED_ACCESS_APPROVAL_AVAILABLE_SECONDARY_MESSAGE = (
-    "ForgeGate keeps elevated-access requests pending until a different admin approves them."
+    "ForgeFrame keeps elevated-access requests pending until a different admin approves them."
 )
+_INSTANCE_PERMISSION_KEYS_BY_ROLE: dict[str, frozenset[str]] = {
+    "owner": frozenset(
+        {
+            "instance.read",
+            "instance.write",
+            "providers.read",
+            "providers.write",
+            "provider_targets.read",
+            "provider_targets.write",
+            "routing.read",
+            "routing.write",
+            "approvals.read",
+            "approvals.decide",
+            "execution.read",
+            "execution.operate",
+            "security.read",
+            "security.write",
+            "audit.read",
+            "settings.read",
+            "settings.write",
+        }
+    ),
+    "admin": frozenset(
+        {
+            "instance.read",
+            "providers.read",
+            "providers.write",
+            "provider_targets.read",
+            "provider_targets.write",
+            "routing.read",
+            "routing.write",
+            "approvals.read",
+            "approvals.decide",
+            "execution.read",
+            "execution.operate",
+            "security.read",
+            "security.write",
+            "audit.read",
+            "settings.read",
+            "settings.write",
+        }
+    ),
+    "operator": frozenset(
+        {
+            "instance.read",
+            "providers.read",
+            "provider_targets.read",
+            "routing.read",
+            "approvals.read",
+            "execution.read",
+            "execution.operate",
+            "security.read",
+            "audit.read",
+            "settings.read",
+        }
+    ),
+    "viewer": frozenset({"instance.read", "audit.read", "settings.read"}),
+}
+_ADMIN_ROLE_RANK = {"viewer": 0, "operator": 1, "admin": 2, "owner": 3}
 
 
 class GovernanceService:
@@ -84,6 +151,8 @@ class GovernanceService:
         self._prune_expired_sessions()
         self._prune_expired_elevated_access_requests()
         self._ensure_bootstrap_admin()
+        if self._ensure_admin_memberships():
+            self._persist()
 
     @staticmethod
     def _now() -> datetime:
@@ -132,7 +201,7 @@ class GovernanceService:
         return [
             user
             for user in self._state.admin_users
-            if user.role == "admin"
+            if role_allows(user.role, "admin")
             and user.status == "active"
             and user.user_id != requested_by_user_id
         ]
@@ -314,20 +383,331 @@ class GovernanceService:
         normalized = str(value).strip()
         return normalized or None
 
+    @staticmethod
+    def _role_rank(role: str) -> int:
+        return _ADMIN_ROLE_RANK.get(role, -1)
+
+    def _default_instance_id(self) -> str:
+        return normalize_tenant_id(
+            self._settings.bootstrap_tenant_id,
+            fallback_tenant_id=self._settings.bootstrap_tenant_id,
+        )
+
+    def _default_tenant_scope(self) -> str:
+        return normalize_tenant_id(
+            self._settings.bootstrap_tenant_id,
+            fallback_tenant_id=self._default_instance_id(),
+        )
+
+    def _default_company_scope(self) -> str:
+        return self._default_instance_id()
+
+    def _membership_id(self, user_id: str, tenant_id: str | None = None) -> str:
+        normalized_tenant = normalize_tenant_id(
+            tenant_id,
+            fallback_tenant_id=self._default_tenant_scope(),
+        )
+        return f"membership_{normalized_tenant}_{user_id}"
+
+    def _permission_keys_for_role(self, role: str) -> set[str]:
+        return set(_INSTANCE_PERMISSION_KEYS_BY_ROLE.get(role, frozenset()))
+
+    def _known_instance_scopes(self) -> list[tuple[str, str, str]]:
+        scopes: dict[str, tuple[str, str, str]] = {
+            self._default_instance_id(): (
+                self._default_instance_id(),
+                self._default_tenant_scope(),
+                self._default_company_scope(),
+            )
+        }
+        try:
+            from app.instances.service import get_instance_service
+
+            for instance in get_instance_service().list_instances():
+                normalized_instance_id = self._normalize_instance_scope(instance.instance_id)
+                scopes[normalized_instance_id] = (
+                    normalized_instance_id,
+                    normalize_tenant_id(
+                        instance.tenant_id,
+                        fallback_tenant_id=normalized_instance_id,
+                    ),
+                    self._normalize_scope_value(instance.company_id) or normalized_instance_id,
+                )
+        except Exception:
+            return list(scopes.values())
+        return list(scopes.values())
+
+    def _upsert_admin_membership(
+        self,
+        user: AdminUserRecord,
+        *,
+        instance_id: str,
+        tenant_id: str,
+        company_id: str,
+        role: str | None = None,
+        status: str | None = None,
+        created_by: str | None = None,
+    ) -> bool:
+        normalized_instance_id = self._normalize_instance_scope(instance_id)
+        normalized_tenant_id = normalize_tenant_id(
+            tenant_id,
+            fallback_tenant_id=normalized_instance_id,
+        )
+        normalized_company_id = self._normalize_scope_value(company_id) or normalized_instance_id
+        now = self._now_iso()
+        membership_id = self._membership_id(user.user_id, normalized_tenant_id)
+        membership_role = role or user.role
+        membership_status = status or user.status
+
+        for index, membership in enumerate(self._state.instance_memberships):
+            if membership.user_id != user.user_id:
+                continue
+            if not self._membership_matches_instance(
+                membership,
+                instance_id=normalized_instance_id,
+                tenant_id=normalized_tenant_id,
+            ):
+                continue
+            updated = membership.model_copy(
+                update={
+                    "membership_id": membership_id,
+                    "instance_id": normalized_instance_id,
+                    "tenant_id": normalized_tenant_id,
+                    "company_id": normalized_company_id,
+                    "role": membership_role,
+                    "status": membership_status,
+                    "updated_at": user.updated_at or now,
+                    "created_by": membership.created_by or created_by or user.created_by,
+                }
+            )
+            if updated != membership:
+                self._state.instance_memberships[index] = updated
+                return True
+            return False
+
+        created_at = user.created_at or now
+        self._state.instance_memberships.append(
+            AdminInstanceMembershipRecord(
+                membership_id=membership_id,
+                user_id=user.user_id,
+                instance_id=normalized_instance_id,
+                tenant_id=normalized_tenant_id,
+                company_id=normalized_company_id,
+                role=membership_role,  # type: ignore[arg-type]
+                status=membership_status,  # type: ignore[arg-type]
+                created_at=created_at,
+                updated_at=user.updated_at or now,
+                created_by=created_by or user.created_by,
+            )
+        )
+        return True
+
+    def _all_instance_memberships_for_user(self, user_id: str) -> list[AdminInstanceMembershipRecord]:
+        return [
+            membership
+            for membership in self._state.instance_memberships
+            if membership.user_id == user_id
+        ]
+
+    def _instance_memberships_for_user(self, user_id: str) -> list[AdminInstanceMembershipRecord]:
+        return [
+            membership
+            for membership in self._all_instance_memberships_for_user(user_id)
+            if membership.user_id == user_id and membership.status == "active"
+        ]
+
+    def _membership_matches_instance(
+        self,
+        membership: AdminInstanceMembershipRecord,
+        *,
+        instance_id: str | None,
+        tenant_id: str | None,
+    ) -> bool:
+        membership_instance_id = self._normalize_instance_scope(membership.instance_id)
+        membership_tenant_id = normalize_tenant_id(
+            membership.tenant_id,
+            fallback_tenant_id=self._default_tenant_scope(),
+        )
+        return membership_instance_id == self._normalize_instance_scope(instance_id) or membership_tenant_id == normalize_tenant_id(
+            tenant_id,
+            fallback_tenant_id=self._default_tenant_scope(),
+        )
+
+    def _primary_membership_for_user(self, user_id: str) -> AdminInstanceMembershipRecord | None:
+        memberships = sorted(
+            self._instance_memberships_for_user(user_id),
+            key=lambda item: (self._role_rank(item.role), item.created_at),
+            reverse=True,
+        )
+        return memberships[0] if memberships else None
+
+    def _sync_user_role_from_memberships(self, user: AdminUserRecord) -> None:
+        memberships = self._instance_memberships_for_user(user.user_id)
+        if not memberships:
+            return
+        highest_role = max(memberships, key=lambda item: self._role_rank(item.role)).role
+        if user.role != highest_role:
+            user.role = highest_role
+
+    def _sync_memberships_from_user_defaults(self, user: AdminUserRecord) -> bool:
+        changed = False
+        role_rank = self._role_rank(user.role)
+        for index, membership in enumerate(self._all_instance_memberships_for_user(user.user_id)):
+            updates: dict[str, object] = {}
+            if membership.status != user.status:
+                updates["status"] = user.status
+            if self._role_rank(membership.role) > role_rank:
+                updates["role"] = user.role
+            if not updates:
+                continue
+            updates["updated_at"] = user.updated_at or self._now_iso()
+            self._state.instance_memberships[index] = membership.model_copy(update=updates)
+            changed = True
+        return changed
+
+    def _ensure_admin_memberships(self) -> bool:
+        changed = False
+        for user in self._state.admin_users:
+            if not self._all_instance_memberships_for_user(user.user_id):
+                if self._upsert_admin_membership(
+                    user,
+                    instance_id=self._default_instance_id(),
+                    tenant_id=self._default_tenant_scope(),
+                    company_id=self._default_company_scope(),
+                    role=user.role,
+                    status=user.status,
+                    created_by=user.created_by,
+                ):
+                    changed = True
+            if self._sync_memberships_from_user_defaults(user):
+                changed = True
+            self._sync_user_role_from_memberships(user)
+        return changed
+
+    def _effective_session_membership_role(
+        self,
+        session: AdminSessionRecord,
+        membership: AdminInstanceMembershipRecord,
+    ) -> str:
+        if (
+            session.membership_id == membership.membership_id
+            and self._role_rank(session.role) > self._role_rank(membership.role)
+        ):
+            return session.role
+        return membership.role
+
+    def _effective_actor_membership_role(
+        self,
+        actor: AuthenticatedAdmin,
+        membership: AdminInstanceMembershipRecord,
+    ) -> str:
+        if (
+            actor.membership_id == membership.membership_id
+            and self._role_rank(actor.role) > self._role_rank(membership.role)
+        ):
+            return actor.role
+        return membership.role
+
+    def _memberships_for_instance_scope(
+        self,
+        user_id: str,
+        *,
+        instance_id: str | None,
+        tenant_id: str | None,
+    ) -> list[AdminInstanceMembershipRecord]:
+        return [
+            membership
+            for membership in self._instance_memberships_for_user(user_id)
+            if self._membership_matches_instance(
+                membership,
+                instance_id=instance_id,
+                tenant_id=tenant_id,
+            )
+        ]
+
+    def _normalize_instance_scope(self, instance_id: str | None) -> str:
+        return normalize_tenant_id(
+            instance_id,
+            fallback_tenant_id=self._default_instance_id(),
+        )
+
+    def _tenant_scope_for_instance(self, instance_id: str | None) -> str:
+        normalized_instance_id = self._normalize_scope_value(instance_id)
+        if normalized_instance_id is None:
+            return self._default_tenant_scope()
+
+        for account in self._state.gateway_accounts:
+            if self._normalize_instance_scope(account.instance_id) == normalized_instance_id:
+                return normalize_tenant_id(
+                    account.tenant_id,
+                    fallback_tenant_id=self._default_tenant_scope(),
+                )
+
+        for key in self._state.runtime_keys:
+            if self._normalize_instance_scope(key.instance_id) == normalized_instance_id:
+                return normalize_tenant_id(
+                    key.tenant_id,
+                    fallback_tenant_id=self._default_tenant_scope(),
+                )
+
+        return normalize_tenant_id(
+            normalized_instance_id,
+            fallback_tenant_id=self._default_tenant_scope(),
+        )
+
     def _tenant_scope_for_account(self, account_id: str | None) -> str:
-        return normalize_tenant_id(account_id, fallback_tenant_id=self._settings.bootstrap_tenant_id)
+        account = self._find_account_by_id(account_id)
+        if account is not None:
+            return normalize_tenant_id(
+                account.tenant_id,
+                fallback_tenant_id=self._default_tenant_scope(),
+            )
+        return normalize_tenant_id(
+            account_id,
+            fallback_tenant_id=self._default_tenant_scope(),
+        )
+
+    def _instance_scope_for_account(self, account_id: str | None) -> str:
+        account = self._find_account_by_id(account_id)
+        if account is not None:
+            return self._normalize_instance_scope(account.instance_id)
+        return self._default_instance_id()
 
     def _effective_tenant_scope(self, tenant_id: str | None) -> str | None:
         tenant_filter = self._normalize_scope_value(tenant_id)
         if tenant_filter is None:
             return None
-        return self._tenant_scope_for_account(tenant_filter)
+        return normalize_tenant_id(
+            tenant_filter,
+            fallback_tenant_id=self._default_tenant_scope(),
+        )
+
+    def _effective_instance_scope(self, instance_id: str | None) -> str | None:
+        instance_filter = self._normalize_scope_value(instance_id)
+        if instance_filter is None:
+            return None
+        return self._normalize_instance_scope(instance_filter)
 
     def _runtime_key_account_id(self, key_id: str | None) -> str | None:
         if not key_id:
             return None
         record = next((item for item in self._state.runtime_keys if item.key_id == key_id), None)
         return record.account_id if record is not None else None
+
+    def _runtime_key_instance_scope(self, key_id: str | None) -> str:
+        record = self._find_runtime_key_by_id(key_id)
+        if record is not None:
+            return self._normalize_instance_scope(record.instance_id)
+        return self._default_instance_id()
+
+    def _runtime_key_tenant_scope(self, key_id: str | None) -> str:
+        record = self._find_runtime_key_by_id(key_id)
+        if record is not None:
+            return normalize_tenant_id(
+                record.tenant_id,
+                fallback_tenant_id=self._default_tenant_scope(),
+            )
+        return self._default_tenant_scope()
 
     def _find_account_by_id(self, account_id: str | None) -> GatewayAccountRecord | None:
         if not account_id:
@@ -358,7 +738,10 @@ class GovernanceService:
         effective_tenant_id = effective_tenant_filter(tenant_ids, tenant_id)
         if effective_tenant_id is None:
             return None
-        return self._tenant_scope_for_account(effective_tenant_id)
+        return normalize_tenant_id(
+            effective_tenant_id,
+            fallback_tenant_id=self._default_tenant_scope(),
+        )
 
     def _audit_events_for_scope(
         self,
@@ -382,7 +765,10 @@ class GovernanceService:
             events = [
                 item
                 for item in events
-                if self._tenant_scope_for_account(item.tenant_id) == effective_tenant_id
+                if normalize_tenant_id(
+                    item.tenant_id,
+                    fallback_tenant_id=self._default_tenant_scope(),
+                ) == effective_tenant_id
             ]
         if company_filter is not None:
             events = [
@@ -520,46 +906,88 @@ class GovernanceService:
         target_type: str,
         target_id: str | None,
         metadata: dict[str, Any] | None,
+        instance_id: str | None = None,
         tenant_id: str | None = None,
         company_id: str | None = None,
-    ) -> tuple[str, str | None]:
+    ) -> tuple[str, str, str | None]:
         payload = metadata or {}
+        resolved_instance_id = self._normalize_scope_value(instance_id) or self._normalize_scope_value(payload.get("instance_id"))
         resolved_company_id = self._normalize_scope_value(company_id) or self._normalize_scope_value(payload.get("company_id"))
         resolved_tenant_id = self._normalize_scope_value(tenant_id) or self._normalize_scope_value(payload.get("tenant_id"))
+
+        if resolved_instance_id is not None:
+            normalized_instance_id = self._normalize_instance_scope(resolved_instance_id)
+            return (
+                normalized_instance_id,
+                normalize_tenant_id(
+                    resolved_tenant_id,
+                    fallback_tenant_id=self._tenant_scope_for_instance(normalized_instance_id),
+                ),
+                resolved_company_id,
+            )
+
         if resolved_tenant_id is not None:
-            return self._tenant_scope_for_account(resolved_tenant_id), resolved_company_id
+            normalized_tenant_id = normalize_tenant_id(
+                resolved_tenant_id,
+                fallback_tenant_id=self._default_tenant_scope(),
+            )
+            return (
+                self._normalize_instance_scope(normalized_tenant_id),
+                normalized_tenant_id,
+                resolved_company_id,
+            )
 
         account_id = self._normalize_scope_value(payload.get("account_id"))
         if account_id is not None:
-            return self._tenant_scope_for_account(account_id), resolved_company_id
+            return (
+                self._instance_scope_for_account(account_id),
+                self._tenant_scope_for_account(account_id),
+                resolved_company_id,
+            )
 
         if target_type == "gateway_account":
-            return self._tenant_scope_for_account(target_id), resolved_company_id
+            return (
+                self._instance_scope_for_account(target_id),
+                self._tenant_scope_for_account(target_id),
+                resolved_company_id,
+            )
 
         if target_type == "runtime_key":
-            runtime_key_account_id = self._runtime_key_account_id(target_id)
-            if runtime_key_account_id is not None:
-                return self._tenant_scope_for_account(runtime_key_account_id), resolved_company_id
+            return (
+                self._runtime_key_instance_scope(target_id),
+                self._runtime_key_tenant_scope(target_id),
+                resolved_company_id,
+            )
 
         if actor_type == "runtime_key":
-            runtime_key_account_id = self._runtime_key_account_id(actor_id)
-            if runtime_key_account_id is not None:
-                return self._tenant_scope_for_account(runtime_key_account_id), resolved_company_id
+            return (
+                self._runtime_key_instance_scope(actor_id),
+                self._runtime_key_tenant_scope(actor_id),
+                resolved_company_id,
+            )
 
-        return self._tenant_scope_for_account(None), resolved_company_id
+        return (
+            self._default_instance_id(),
+            self._default_tenant_scope(),
+            resolved_company_id,
+        )
 
     def _backfill_audit_event_scope(self) -> bool:
         changed = False
         for event in self._state.audit_events:
-            tenant_id, company_id = self._resolve_audit_scope(
+            instance_id, tenant_id, company_id = self._resolve_audit_scope(
                 actor_type=event.actor_type,
                 actor_id=event.actor_id,
                 target_type=event.target_type,
                 target_id=event.target_id,
                 metadata=event.metadata,
+                instance_id=event.instance_id,
                 tenant_id=event.tenant_id,
                 company_id=event.company_id,
             )
+            if event.instance_id != instance_id:
+                event.instance_id = instance_id
+                changed = True
             if event.tenant_id != tenant_id:
                 event.tenant_id = tenant_id
                 changed = True
@@ -579,22 +1007,30 @@ class GovernanceService:
         status: str,
         details: str,
         metadata: dict[str, Any] | None = None,
+        instance_id: str | None = None,
         tenant_id: str | None = None,
         company_id: str | None = None,
     ) -> AuditEventRecord:
-        resolved_tenant_id, resolved_company_id = self._resolve_audit_scope(
+        resolved_instance_id, resolved_tenant_id, resolved_company_id = self._resolve_audit_scope(
             actor_type=actor_type,
             actor_id=actor_id,
             target_type=target_type,
             target_id=target_id,
             metadata=metadata,
+            instance_id=instance_id,
             tenant_id=tenant_id,
             company_id=company_id,
         )
+        event_metadata = dict(metadata or {})
+        event_metadata.setdefault("instance_id", resolved_instance_id)
+        event_metadata.setdefault("tenant_id", resolved_tenant_id)
+        if resolved_company_id is not None:
+            event_metadata.setdefault("company_id", resolved_company_id)
         event = AuditEventRecord(
             event_id=f"audit_{uuid4().hex[:12]}",
             actor_type=actor_type,
             actor_id=actor_id,
+            instance_id=resolved_instance_id,
             tenant_id=resolved_tenant_id,
             company_id=resolved_company_id,
             action=action,
@@ -602,7 +1038,7 @@ class GovernanceService:
             target_id=target_id,
             status=status,
             details=details,
-            metadata=metadata or {},
+            metadata=event_metadata,
             created_at=self._now_iso(),
         )
         self._state.audit_events.append(event)
@@ -719,6 +1155,7 @@ class GovernanceService:
         ttl_minutes: int | None = None,
     ) -> AdminLoginResult:
         now = self._now()
+        primary_membership = self._primary_membership_for_user(user.user_id)
         session_ttl = timedelta(
             minutes=max(1, ttl_minutes)
             if ttl_minutes is not None
@@ -730,6 +1167,20 @@ class GovernanceService:
             user_id=user.user_id,
             token_hash=hash_token(token),
             role=role,  # type: ignore[arg-type]
+            membership_id=primary_membership.membership_id if primary_membership is not None else None,
+            instance_id=(
+                self._normalize_instance_scope(primary_membership.instance_id)
+                if primary_membership is not None
+                else self._default_instance_id()
+            ),
+            tenant_id=(
+                normalize_tenant_id(
+                    primary_membership.tenant_id,
+                    fallback_tenant_id=self._default_tenant_scope(),
+                )
+                if primary_membership is not None
+                else self._default_tenant_scope()
+            ),
             session_type=session_type,  # type: ignore[arg-type]
             created_at=now.isoformat(),
             expires_at=(now + session_ttl).isoformat(),
@@ -751,12 +1202,33 @@ class GovernanceService:
         )
 
     def _build_authenticated_admin(self, session: AdminSessionRecord, user: AdminUserRecord) -> AuthenticatedAdmin:
+        memberships = self._instance_memberships_for_user(user.user_id)
+        active_membership = next(
+            (membership for membership in memberships if membership.membership_id == session.membership_id),
+            None,
+        )
+        instance_permissions: dict[str, set[str]] = {}
+        for membership in memberships:
+            effective_role = self._effective_session_membership_role(session, membership)
+            normalized_instance_id = self._normalize_instance_scope(membership.instance_id)
+            instance_permissions.setdefault(normalized_instance_id, set()).update(
+                self._permission_keys_for_role(effective_role)
+            )
+
         return AuthenticatedAdmin(
             session_id=session.session_id,
             user_id=user.user_id,
             username=user.username,
             display_name=user.display_name,
             role=session.role,
+            membership_id=session.membership_id,
+            active_instance_id=self._normalize_instance_scope(
+                session.instance_id or (active_membership.instance_id if active_membership is not None else None)
+            ),
+            active_tenant_id=normalize_tenant_id(
+                session.tenant_id or (active_membership.tenant_id if active_membership is not None else None),
+                fallback_tenant_id=self._default_tenant_scope(),
+            ),
             session_type=session.session_type,
             read_only=session.session_type == "impersonation",
             must_rotate_password=user.must_rotate_password,
@@ -767,7 +1239,109 @@ class GovernanceService:
             approval_reference=session.approval_reference,
             justification=session.justification,
             notification_targets=list(session.notification_targets),
+            instance_memberships=memberships,
+            instance_permissions={
+                instance_id: sorted(permission_keys)
+                for instance_id, permission_keys in instance_permissions.items()
+            },
         )
+
+    def admin_membership_for_instance(
+        self,
+        *,
+        actor: AuthenticatedAdmin,
+        instance: "InstanceRecord",
+    ) -> AdminInstanceMembershipRecord | None:
+        if self._ensure_admin_memberships():
+            self._persist()
+        memberships = self._memberships_for_instance_scope(
+            actor.user_id,
+            instance_id=instance.instance_id,
+            tenant_id=instance.tenant_id,
+        )
+        if not memberships:
+            return None
+        return max(
+            memberships,
+            key=lambda membership: self._role_rank(
+                self._effective_actor_membership_role(actor, membership)
+            ),
+        )
+
+    def authorize_admin_instance_permission(
+        self,
+        *,
+        actor: AuthenticatedAdmin,
+        instance: "InstanceRecord",
+        permission_key: str,
+    ) -> AdminInstanceMembershipRecord:
+        membership = self.admin_membership_for_instance(actor=actor, instance=instance)
+        if membership is None:
+            raise PermissionError("instance_membership_required")
+
+        granted_permissions: set[str] = set()
+        for item in self._memberships_for_instance_scope(
+            actor.user_id,
+            instance_id=instance.instance_id,
+            tenant_id=instance.tenant_id,
+        ):
+            granted_permissions.update(
+                self._permission_keys_for_role(self._effective_actor_membership_role(actor, item))
+            )
+        if permission_key not in granted_permissions:
+            raise PermissionError(f"missing_instance_permission:{permission_key}")
+        return membership
+
+    def admin_has_instance_permission(
+        self,
+        *,
+        actor: AuthenticatedAdmin,
+        instance: "InstanceRecord",
+        permission_key: str,
+    ) -> bool:
+        try:
+            self.authorize_admin_instance_permission(
+                actor=actor,
+                instance=instance,
+                permission_key=permission_key,
+            )
+        except PermissionError:
+            return False
+        return True
+
+    def list_authorized_instance_ids(
+        self,
+        *,
+        actor: AuthenticatedAdmin,
+        permission_key: str,
+    ) -> list[str]:
+        authorized_ids: list[str] = []
+        for instance_id, permission_keys in actor.instance_permissions.items():
+            if permission_key not in permission_keys:
+                continue
+            authorized_ids.append(self._normalize_instance_scope(instance_id))
+        return sorted(dict.fromkeys(authorized_ids))
+
+    def list_accessible_instances(
+        self,
+        *,
+        actor: AuthenticatedAdmin,
+        instances: list["InstanceRecord"],
+        permission_key: str,
+    ) -> list["InstanceRecord"]:
+        authorized_ids = set(
+            self.list_authorized_instance_ids(
+                actor=actor,
+                permission_key=permission_key,
+            )
+        )
+        if not authorized_ids:
+            return []
+        return [
+            instance
+            for instance in instances
+            if self._normalize_instance_scope(instance.instance_id) in authorized_ids
+        ]
 
     def _prune_login_failures(self) -> None:
         cutoff = self._now() - timedelta(minutes=max(1, self._settings.admin_login_rate_limit_window_minutes))
@@ -847,7 +1421,7 @@ class GovernanceService:
         bootstrap_user = next((user for user in self._state.admin_users if user.created_by == "system"), None)
         if bootstrap_user is not None:
             return bootstrap_user
-        if len(self._state.admin_users) == 1 and self._state.admin_users[0].role == "admin":
+        if len(self._state.admin_users) == 1 and role_allows(self._state.admin_users[0].role, "admin"):
             return self._state.admin_users[0]
         return None
 
@@ -867,7 +1441,7 @@ class GovernanceService:
             user = AdminUserRecord(
                 user_id=f"admin_{uuid4().hex[:10]}",
                 username=self._settings.bootstrap_admin_username,
-                display_name="ForgeGate Bootstrap Admin",
+                display_name="ForgeFrame Bootstrap Admin",
                 role="admin",
                 status="active",
                 password_hash=hash_password(self._settings.bootstrap_admin_password, salt),
@@ -962,7 +1536,7 @@ class GovernanceService:
         actor: AuthenticatedAdmin,
         record: ElevatedAccessRequestRecord,
     ) -> None:
-        if actor.role != "admin" and record.requested_by_user_id != actor.user_id:
+        if not role_allows(actor.role, "admin") and record.requested_by_user_id != actor.user_id:
             raise PermissionError("elevated_access_request_forbidden")
 
     def _authorize_shared_elevated_access_approval_read(
@@ -970,7 +1544,7 @@ class GovernanceService:
         *,
         actor: AuthenticatedAdmin,
     ) -> None:
-        if actor.role not in {"admin", "operator"}:
+        if not role_allows(actor.role, "operator"):
             raise PermissionError("elevated_access_request_forbidden")
 
     def _elevated_access_session_status(self, record: ElevatedAccessRequestRecord) -> str:
@@ -1053,6 +1627,8 @@ class GovernanceService:
             raise ValueError("invalid_credentials")
 
         self._clear_login_failures(username)
+        if self._ensure_admin_memberships():
+            self._persist()
         result = self._issue_admin_session(
             user=user,
             role=user.role,
@@ -1084,6 +1660,8 @@ class GovernanceService:
         user = self._find_user_by_id(session.user_id)
         if user is None or user.status != "active":
             raise PermissionError("admin_user_disabled")
+        if self._ensure_admin_memberships():
+            self._persist()
         session.last_used_at = self._now_iso()
         self._persist()
         return self._build_authenticated_admin(session, user)
@@ -1110,6 +1688,142 @@ class GovernanceService:
     def list_admin_users(self) -> list[AdminUserRecord]:
         return sorted(self._state.admin_users, key=lambda item: (item.username.lower(), item.created_at))
 
+    def list_admin_instance_memberships(self, user_id: str) -> list[AdminInstanceMembershipRecord]:
+        user = self._find_user_by_id(user_id)
+        if user is None:
+            raise ValueError("admin_user_not_found")
+        return sorted(
+            self._all_instance_memberships_for_user(user_id),
+            key=lambda item: (item.instance_id, item.created_at, item.membership_id),
+        )
+
+    def upsert_admin_instance_membership(
+        self,
+        *,
+        user_id: str,
+        instance: "InstanceRecord",
+        role: str,
+        actor: AuthenticatedAdmin,
+        status: str = "active",
+    ) -> AdminInstanceMembershipRecord:
+        user = self._find_user_by_id(user_id)
+        if user is None:
+            raise ValueError("admin_user_not_found")
+        if role not in _ADMIN_ROLE_RANK:
+            raise ValueError("unsupported_admin_role")
+        if status not in {"active", "disabled"}:
+            raise ValueError("unsupported_admin_status")
+        if self._role_rank(role) > self._role_rank(user.role):
+            raise ValueError("membership_role_exceeds_admin_role")
+        changed = self._upsert_admin_membership(
+            user,
+            instance_id=instance.instance_id,
+            tenant_id=instance.tenant_id,
+            company_id=instance.company_id,
+            role=role,
+            status=status,
+            created_by=actor.user_id,
+        )
+        memberships = self._memberships_for_instance_scope(
+            user.user_id,
+            instance_id=instance.instance_id,
+            tenant_id=instance.tenant_id,
+        )
+        membership = max(memberships, key=lambda item: (self._role_rank(item.role), item.created_at)) if memberships else None
+        if membership is None:
+            raise ValueError("admin_instance_membership_not_found")
+        if changed:
+            self._append_audit(
+                actor_type="admin_user",
+                actor_id=actor.user_id,
+                action="admin_instance_membership_upsert",
+                target_type="admin_instance_membership",
+                target_id=membership.membership_id,
+                status="ok",
+                details=(
+                    f"Admin instance membership for '{user.username}' upserted on "
+                    f"instance '{instance.instance_id}' with role '{membership.role}'."
+                ),
+                metadata={
+                    "user_id": user.user_id,
+                    "instance_id": instance.instance_id,
+                    "tenant_id": instance.tenant_id,
+                    "company_id": instance.company_id,
+                    "role": membership.role,
+                    "membership_status": membership.status,
+                },
+                instance_id=instance.instance_id,
+                tenant_id=instance.tenant_id,
+                company_id=instance.company_id,
+            )
+            if user.user_id != actor.user_id:
+                self._revoke_sessions_for_user(
+                    user.user_id,
+                    reason="instance_membership_updated",
+                    actor_user_id=actor.user_id,
+                )
+            self._persist()
+        return membership
+
+    def remove_admin_instance_membership(
+        self,
+        *,
+        user_id: str,
+        instance: "InstanceRecord",
+        actor: AuthenticatedAdmin,
+    ) -> None:
+        user = self._find_user_by_id(user_id)
+        if user is None:
+            raise ValueError("admin_user_not_found")
+        matching_memberships = self._memberships_for_instance_scope(
+            user_id,
+            instance_id=instance.instance_id,
+            tenant_id=instance.tenant_id,
+        )
+        if not matching_memberships:
+            raise ValueError("admin_instance_membership_not_found")
+        remaining_memberships = [
+            membership
+            for membership in self._all_instance_memberships_for_user(user_id)
+            if membership.membership_id not in {item.membership_id for item in matching_memberships}
+        ]
+        if not remaining_memberships:
+            raise ValueError("admin_user_membership_required")
+        self._state.instance_memberships = [
+            membership
+            for membership in self._state.instance_memberships
+            if membership.membership_id not in {item.membership_id for item in matching_memberships}
+        ]
+        self._append_audit(
+            actor_type="admin_user",
+            actor_id=actor.user_id,
+            action="admin_instance_membership_remove",
+            target_type="admin_instance_membership",
+            target_id=matching_memberships[0].membership_id,
+            status="warning",
+            details=(
+                f"Admin instance membership for '{user.username}' removed from "
+                f"instance '{instance.instance_id}'."
+            ),
+            metadata={
+                "user_id": user.user_id,
+                "instance_id": instance.instance_id,
+                "tenant_id": instance.tenant_id,
+                "company_id": instance.company_id,
+                "removed_membership_ids": [item.membership_id for item in matching_memberships],
+            },
+            instance_id=instance.instance_id,
+            tenant_id=instance.tenant_id,
+            company_id=instance.company_id,
+        )
+        if user.user_id != actor.user_id:
+            self._revoke_sessions_for_user(
+                user.user_id,
+                reason="instance_membership_removed",
+                actor_user_id=actor.user_id,
+            )
+        self._persist()
+
     def create_admin_user(
         self,
         *,
@@ -1124,7 +1838,7 @@ class GovernanceService:
             raise ValueError("username_required")
         if self._find_user_by_username(normalized_username) is not None:
             raise ValueError("admin_username_conflict")
-        if role not in {"admin", "operator", "viewer"}:
+        if role not in _ADMIN_ROLE_RANK:
             raise ValueError("unsupported_admin_role")
         now = self._now_iso()
         salt = new_secret_salt()
@@ -1142,6 +1856,7 @@ class GovernanceService:
             created_by=actor.user_id,
         )
         self._state.admin_users.append(user)
+        self._ensure_admin_memberships()
         self._append_audit(
             actor_type="admin_user",
             actor_id=actor.user_id,
@@ -1172,12 +1887,18 @@ class GovernanceService:
             raise ValueError("password_rotation_clear_requires_self_rotation")
         previous_role = user.role
         previous_status = user.status
-        if role is not None and role not in {"admin", "operator", "viewer"}:
+        if role is not None and role not in _ADMIN_ROLE_RANK:
             raise ValueError("unsupported_admin_role")
         if status is not None and status not in {"active", "disabled"}:
             raise ValueError("unsupported_admin_status")
-        if status == "disabled" and user.role == "admin":
-            active_admins = [item for item in self._state.admin_users if item.role == "admin" and item.status == "active" and item.user_id != user.user_id]
+        if status == "disabled" and role_allows(user.role, "admin"):
+            active_admins = [
+                item
+                for item in self._state.admin_users
+                if role_allows(item.role, "admin")
+                and item.status == "active"
+                and item.user_id != user.user_id
+            ]
             if not active_admins:
                 raise ValueError("cannot_disable_last_active_admin")
         if display_name is not None:
@@ -1189,6 +1910,7 @@ class GovernanceService:
         if must_rotate_password is True:
             user.must_rotate_password = True
         user.updated_at = self._now_iso()
+        self._ensure_admin_memberships()
         if previous_role != user.role:
             self._append_audit(
                 actor_type="admin_user",
@@ -1236,6 +1958,8 @@ class GovernanceService:
         actor: AuthenticatedAdmin,
         must_rotate_password: bool,
     ) -> AdminUserRecord:
+        if verify_password(new_password, salt=user.password_salt, expected_hash=user.password_hash):
+            raise ValueError("new_password_must_differ")
         salt = new_secret_salt()
         user.password_salt = salt
         user.password_hash = hash_password(new_password, salt)
@@ -1380,7 +2104,7 @@ class GovernanceService:
                 "auth_mode": "api_key",
                 "rotation_support": "manual_env_rotation",
                 "secret_storage": "environment_variable",
-                "credential_reference": "FORGEGATE_OPENAI_API_KEY",
+                "credential_reference": "FORGEFRAME_OPENAI_API_KEY",
             },
             {
                 "provider": "openai_codex",
@@ -1391,7 +2115,7 @@ class GovernanceService:
                 "rotation_support": "oauth_token_rotation" if openai_codex_oauth else "manual_env_rotation",
                 "secret_storage": "environment_variable",
                 "credential_reference": (
-                    "FORGEGATE_OPENAI_CODEX_OAUTH_ACCESS_TOKEN" if openai_codex_oauth else "FORGEGATE_OPENAI_CODEX_API_KEY"
+                    "FORGEFRAME_OPENAI_CODEX_OAUTH_ACCESS_TOKEN" if openai_codex_oauth else "FORGEFRAME_OPENAI_CODEX_API_KEY"
                 ),
                 "oauth_mode": codex_auth_state.oauth_mode if openai_codex_oauth else None,
                 "oauth_flow_support": codex_auth_state.oauth_flow_support if openai_codex_oauth else None,
@@ -1405,7 +2129,7 @@ class GovernanceService:
                 "auth_mode": self._settings.gemini_auth_mode,
                 "rotation_support": "oauth_token_rotation" if gemini_oauth else "manual_env_rotation",
                 "secret_storage": "environment_variable",
-                "credential_reference": "FORGEGATE_GEMINI_OAUTH_ACCESS_TOKEN" if gemini_oauth else "FORGEGATE_GEMINI_API_KEY",
+                "credential_reference": "FORGEFRAME_GEMINI_OAUTH_ACCESS_TOKEN" if gemini_oauth else "FORGEFRAME_GEMINI_API_KEY",
             },
             {
                 "provider": "anthropic",
@@ -1413,7 +2137,7 @@ class GovernanceService:
                 "auth_mode": "api_key",
                 "rotation_support": "manual_env_rotation",
                 "secret_storage": "environment_variable",
-                "credential_reference": "FORGEGATE_ANTHROPIC_API_KEY",
+                "credential_reference": "FORGEFRAME_ANTHROPIC_API_KEY",
             },
             {
                 "provider": "antigravity",
@@ -1421,7 +2145,7 @@ class GovernanceService:
                 "auth_mode": "oauth_account",
                 "rotation_support": "oauth_token_rotation",
                 "secret_storage": "environment_variable",
-                "credential_reference": "FORGEGATE_ANTIGRAVITY_OAUTH_ACCESS_TOKEN",
+                "credential_reference": "FORGEFRAME_ANTIGRAVITY_OAUTH_ACCESS_TOKEN",
             },
             {
                 "provider": "github_copilot",
@@ -1429,7 +2153,7 @@ class GovernanceService:
                 "auth_mode": "oauth_account",
                 "rotation_support": "oauth_token_rotation",
                 "secret_storage": "environment_variable",
-                "credential_reference": "FORGEGATE_GITHUB_COPILOT_OAUTH_ACCESS_TOKEN",
+                "credential_reference": "FORGEFRAME_GITHUB_COPILOT_OAUTH_ACCESS_TOKEN",
             },
             {
                 "provider": "claude_code",
@@ -1437,7 +2161,7 @@ class GovernanceService:
                 "auth_mode": "oauth_account",
                 "rotation_support": "oauth_token_rotation",
                 "secret_storage": "environment_variable",
-                "credential_reference": "FORGEGATE_CLAUDE_CODE_OAUTH_ACCESS_TOKEN",
+                "credential_reference": "FORGEFRAME_CLAUDE_CODE_OAUTH_ACCESS_TOKEN",
             },
         ]
 
@@ -1715,7 +2439,7 @@ class GovernanceService:
                 "approval_reference_required": True,
                 "notification_targets_required": True,
                 "approval_required_before_issue": True,
-                "eligible_roles": ["admin", "operator"],
+                "eligible_roles": ["owner", "admin", "operator"],
             },
             "audit": {
                 "retention_event_limit": self._settings.audit_event_retention_limit,
@@ -1766,21 +2490,49 @@ class GovernanceService:
             },
         }
 
-    def list_accounts(self, *, tenant_id: str | None = None) -> list[GatewayAccountRecord]:
+    def list_accounts(
+        self,
+        *,
+        instance_id: str | None = None,
+        tenant_id: str | None = None,
+    ) -> list[GatewayAccountRecord]:
+        effective_instance_id = self._effective_instance_scope(instance_id)
         effective_tenant_id = self._effective_tenant_scope(tenant_id)
         accounts = sorted(self._state.gateway_accounts, key=lambda item: item.label.lower())
+        if effective_instance_id is not None:
+            accounts = [
+                item
+                for item in accounts
+                if self._normalize_instance_scope(item.instance_id) == effective_instance_id
+            ]
         if effective_tenant_id is None:
             return accounts
         return [
             item
             for item in accounts
-            if self._tenant_scope_for_account(item.account_id) == effective_tenant_id
+            if normalize_tenant_id(item.tenant_id, fallback_tenant_id=self._default_tenant_scope()) == effective_tenant_id
         ]
 
-    def create_account(self, *, label: str, provider_bindings: list[str] | None, notes: str, actor: AuthenticatedAdmin) -> GatewayAccountRecord:
+    def create_account(
+        self,
+        *,
+        instance_id: str | None,
+        tenant_id: str | None,
+        label: str,
+        provider_bindings: list[str] | None,
+        notes: str,
+        actor: AuthenticatedAdmin,
+    ) -> GatewayAccountRecord:
         now = self._now_iso()
+        normalized_instance_id = self._normalize_instance_scope(instance_id)
+        normalized_tenant_id = normalize_tenant_id(
+            tenant_id,
+            fallback_tenant_id=self._tenant_scope_for_instance(normalized_instance_id),
+        )
         account = GatewayAccountRecord(
             account_id=f"acct_{uuid4().hex[:10]}",
+            instance_id=normalized_instance_id,
+            tenant_id=normalized_tenant_id,
             label=label.strip(),
             provider_bindings=sorted(set(provider_bindings or [])),
             notes=notes.strip(),
@@ -1796,6 +2548,9 @@ class GovernanceService:
             target_id=account.account_id,
             status="ok",
             details=f"Account '{account.label}' created.",
+            instance_id=account.instance_id,
+            tenant_id=account.tenant_id,
+            metadata={"account_id": account.account_id},
         )
         self._persist()
         return account
@@ -1804,6 +2559,7 @@ class GovernanceService:
         self,
         account_id: str,
         *,
+        instance_id: str | None,
         label: str | None,
         provider_bindings: list[str] | None,
         notes: str | None,
@@ -1813,6 +2569,8 @@ class GovernanceService:
         account = next((item for item in self._state.gateway_accounts if item.account_id == account_id), None)
         if account is None:
             raise ValueError(f"Account '{account_id}' not found.")
+        if instance_id is not None and self._normalize_instance_scope(account.instance_id) != self._normalize_instance_scope(instance_id):
+            raise ValueError(f"Account '{account_id}' is not bound to instance '{instance_id}'.")
         if label is not None:
             account.label = label.strip()
         if provider_bindings is not None:
@@ -1832,24 +2590,41 @@ class GovernanceService:
             target_id=account.account_id,
             status="ok",
             details=f"Account '{account.label}' updated.",
+            instance_id=account.instance_id,
+            tenant_id=account.tenant_id,
+            metadata={"account_id": account.account_id},
         )
         self._persist()
         return account
 
-    def list_runtime_keys(self, *, tenant_id: str | None = None) -> list[RuntimeKeyRecord]:
+    def list_runtime_keys(
+        self,
+        *,
+        instance_id: str | None = None,
+        tenant_id: str | None = None,
+    ) -> list[RuntimeKeyRecord]:
+        effective_instance_id = self._effective_instance_scope(instance_id)
         effective_tenant_id = self._effective_tenant_scope(tenant_id)
         keys = sorted(self._state.runtime_keys, key=lambda item: item.created_at, reverse=True)
+        if effective_instance_id is not None:
+            keys = [
+                item
+                for item in keys
+                if self._normalize_instance_scope(item.instance_id) == effective_instance_id
+            ]
         if effective_tenant_id is None:
             return keys
         return [
             item
             for item in keys
-            if self._tenant_scope_for_account(item.account_id) == effective_tenant_id
+            if normalize_tenant_id(item.tenant_id, fallback_tenant_id=self._default_tenant_scope()) == effective_tenant_id
         ]
 
     def issue_runtime_key(
         self,
         *,
+        instance_id: str | None,
+        tenant_id: str | None,
         account_id: str | None,
         label: str,
         scopes: list[str],
@@ -1857,11 +2632,39 @@ class GovernanceService:
         rotated_from: str | None = None,
     ) -> IssuedApiKey:
         now = self._now_iso()
+        normalized_account_id = self._normalize_scope_value(account_id)
+        account = self._find_account_by_id(normalized_account_id)
+        if normalized_account_id is not None and account is None:
+            raise ValueError(f"Account '{normalized_account_id}' not found.")
+
+        normalized_instance_id = self._normalize_instance_scope(
+            account.instance_id if account is not None else instance_id
+        )
+        normalized_tenant_id = normalize_tenant_id(
+            account.tenant_id if account is not None else tenant_id,
+            fallback_tenant_id=self._tenant_scope_for_instance(normalized_instance_id),
+        )
+
+        if account is not None:
+            if instance_id is not None and normalized_instance_id != self._normalize_instance_scope(instance_id):
+                raise ValueError(
+                    f"Account '{normalized_account_id}' is not bound to instance '{instance_id}'."
+                )
+            if normalized_tenant_id != normalize_tenant_id(
+                account.tenant_id,
+                fallback_tenant_id=self._default_tenant_scope(),
+            ):
+                raise ValueError(
+                    f"Account '{normalized_account_id}' tenant scope does not match the requested runtime key scope."
+                )
+
         token = issue_runtime_key_token()
         prefix = token[:16]
         record = RuntimeKeyRecord(
             key_id=f"key_{uuid4().hex[:12]}",
-            account_id=account_id,
+            instance_id=normalized_instance_id,
+            tenant_id=normalized_tenant_id,
+            account_id=normalized_account_id,
             label=label.strip(),
             prefix=prefix,
             secret_hash=hash_token(token),
@@ -1882,11 +2685,19 @@ class GovernanceService:
             target_id=record.key_id,
             status="ok",
             details=f"Runtime key '{record.label}' issued.",
-            metadata={"account_id": account_id, "scopes": record.scopes, "expires_at": record.expires_at},
+            instance_id=record.instance_id,
+            tenant_id=record.tenant_id,
+            metadata={
+                "account_id": normalized_account_id,
+                "scopes": record.scopes,
+                "expires_at": record.expires_at,
+            },
         )
         self._persist()
         return IssuedApiKey(
             key_id=record.key_id,
+            instance_id=record.instance_id,
+            tenant_id=record.tenant_id,
             token=token,
             prefix=record.prefix,
             account_id=record.account_id,
@@ -1895,15 +2706,25 @@ class GovernanceService:
             created_at=record.created_at,
         )
 
-    def rotate_runtime_key(self, key_id: str, actor: AuthenticatedAdmin) -> IssuedApiKey:
+    def rotate_runtime_key(
+        self,
+        key_id: str,
+        actor: AuthenticatedAdmin,
+        *,
+        instance_id: str | None = None,
+    ) -> IssuedApiKey:
         current = next((item for item in self._state.runtime_keys if item.key_id == key_id), None)
         if current is None:
             raise ValueError(f"Runtime key '{key_id}' not found.")
+        if instance_id is not None and self._normalize_instance_scope(current.instance_id) != self._normalize_instance_scope(instance_id):
+            raise ValueError(f"Runtime key '{key_id}' is not bound to instance '{instance_id}'.")
         current.status = "revoked"
         current.updated_at = self._now_iso()
         current.revoked_at = self._now_iso()
         current.revoked_reason = "rotated"
         issued = self.issue_runtime_key(
+            instance_id=current.instance_id,
+            tenant_id=current.tenant_id,
             account_id=current.account_id,
             label=f"{current.label} (rotated)",
             scopes=current.scopes,
@@ -1918,15 +2739,26 @@ class GovernanceService:
             target_id=issued.key_id,
             status="ok",
             details=f"Runtime key '{current.label}' rotated.",
+            instance_id=current.instance_id,
+            tenant_id=current.tenant_id,
             metadata={"rotated_from": current.key_id, "rotated_to": issued.key_id},
         )
         self._persist()
         return issued
 
-    def set_runtime_key_status(self, key_id: str, status: str, actor: AuthenticatedAdmin) -> RuntimeKeyRecord:
+    def set_runtime_key_status(
+        self,
+        key_id: str,
+        status: str,
+        actor: AuthenticatedAdmin,
+        *,
+        instance_id: str | None = None,
+    ) -> RuntimeKeyRecord:
         record = next((item for item in self._state.runtime_keys if item.key_id == key_id), None)
         if record is None:
             raise ValueError(f"Runtime key '{key_id}' not found.")
+        if instance_id is not None and self._normalize_instance_scope(record.instance_id) != self._normalize_instance_scope(instance_id):
+            raise ValueError(f"Runtime key '{key_id}' is not bound to instance '{instance_id}'.")
         if status not in {"active", "disabled", "revoked"}:
             raise ValueError(f"Unsupported runtime key status '{status}'.")
         record.status = status  # type: ignore[assignment]
@@ -1945,6 +2777,9 @@ class GovernanceService:
             target_id=record.key_id,
             status="ok",
             details=f"Runtime key '{record.label}' set to {status}.",
+            instance_id=record.instance_id,
+            tenant_id=record.tenant_id,
+            metadata={"account_id": record.account_id},
         )
         self._persist()
         return record
@@ -1987,6 +2822,8 @@ class GovernanceService:
         self._persist()
         return RuntimeGatewayIdentity(
             key_id=record.key_id,
+            instance_id=record.instance_id,
+            tenant_id=record.tenant_id,
             account_id=account.account_id,
             account_label=account.label,
             account_status=account.status,
@@ -2065,6 +2902,7 @@ class GovernanceService:
         status: str,
         details: str,
         metadata: dict[str, Any] | None = None,
+        instance_id: str | None = None,
         tenant_id: str | None = None,
         company_id: str | None = None,
     ) -> AuditEventRecord:
@@ -2077,6 +2915,7 @@ class GovernanceService:
             status=status,
             details=details,
             metadata=metadata,
+            instance_id=instance_id,
             tenant_id=tenant_id,
             company_id=company_id,
         )
@@ -2147,7 +2986,7 @@ class GovernanceService:
         self._prune_expired_elevated_access_requests()
         normalized_status = gate_status.strip().lower() if gate_status else None
         requests = sorted(self._state.elevated_access_requests, key=lambda item: item.created_at, reverse=True)
-        if actor.role != "admin":
+        if not role_allows(actor.role, "admin"):
             requests = [item for item in requests if item.requested_by_user_id == actor.user_id]
         if normalized_status is not None:
             requests = [item for item in requests if item.gate_status == normalized_status]
@@ -2204,7 +3043,7 @@ class GovernanceService:
         duration_minutes: int,
     ) -> dict[str, object]:
         self._prune_expired_elevated_access_requests()
-        if actor.role != "admin":
+        if not role_allows(actor.role, "admin"):
             raise PermissionError("admin_role_required")
         target_user = self._find_user_by_id(target_user_id)
         if target_user is None or target_user.status != "active":
@@ -2240,7 +3079,7 @@ class GovernanceService:
         duration_minutes: int,
     ) -> dict[str, object]:
         self._prune_expired_elevated_access_requests()
-        if actor.role not in {"admin", "operator"}:
+        if not role_allows(actor.role, "operator"):
             raise PermissionError("break_glass_role_not_eligible")
         actor_user = self._find_user_by_id(actor.user_id)
         if actor_user is None or actor_user.status != "active":
@@ -2278,7 +3117,7 @@ class GovernanceService:
         record = self._find_elevated_access_request(request_id)
         if record is None:
             raise GovernanceNotFoundError("elevated_access_request_not_found")
-        if actor.role != "admin":
+        if not role_allows(actor.role, "admin"):
             raise PermissionError("admin_role_required")
         if actor.user_id == record.requested_by_user_id:
             raise PermissionError("elevated_access_self_approval_forbidden")
@@ -2360,7 +3199,7 @@ class GovernanceService:
             raise GovernanceNotFoundError("elevated_access_request_not_found")
         if actor.read_only:
             raise PermissionError("impersonation_session_read_only")
-        if actor.role not in {"admin", "operator"}:
+        if not role_allows(actor.role, "operator"):
             raise PermissionError("operator_role_required")
         if record.requested_by_user_id != actor.user_id:
             raise PermissionError("elevated_access_cancel_forbidden")

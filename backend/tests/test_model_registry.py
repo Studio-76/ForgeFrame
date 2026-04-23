@@ -34,7 +34,7 @@ def test_model_registry_seeds_anthropic_into_runtime_truth_when_enabled() -> Non
     settings = Settings(
         default_model="claude-3-5-sonnet-latest",
         default_provider="anthropic",
-        forgegate_baseline_enabled=False,
+        forgeframe_baseline_enabled=False,
         openai_api_enabled=False,
         openai_codex_enabled=False,
         gemini_enabled=False,
@@ -52,7 +52,7 @@ def test_model_registry_falls_back_to_anthropic_probe_model_when_catalog_seed_is
     settings = Settings(
         default_model="claude-sonnet-bootstrap",
         default_provider="anthropic",
-        forgegate_baseline_enabled=False,
+        forgeframe_baseline_enabled=False,
         openai_api_enabled=False,
         openai_codex_enabled=False,
         gemini_enabled=False,
@@ -74,7 +74,7 @@ def test_model_registry_repairs_persisted_state_with_new_anthropic_bootstrap_mod
     settings = Settings(
         default_model="claude-3-5-sonnet-latest",
         default_provider="anthropic",
-        forgegate_baseline_enabled=False,
+        forgeframe_baseline_enabled=False,
         openai_api_enabled=False,
         openai_codex_enabled=False,
         gemini_enabled=False,
@@ -109,3 +109,15 @@ def test_model_registry_includes_discovered_codex_models_when_enabled() -> None:
     discovered = registry.get_model("gpt-5.3-codex-preview")
     assert discovered is not None
     assert discovered.source == "discovered"
+
+
+def test_model_registry_builds_runtime_targets_for_active_models() -> None:
+    settings = Settings()
+    registry = ModelRegistry(settings)
+
+    targets = registry.list_active_targets()
+
+    assert any(target.target_key == "forgeframe_baseline::forgeframe-baseline-chat-v1" for target in targets)
+    baseline_target = next(target for target in targets if target.target_key == "forgeframe_baseline::forgeframe-baseline-chat-v1")
+    assert baseline_target.model.routing_key == "forgeframe_baseline/forgeframe-baseline-chat-v1"
+    assert baseline_target.product_axis == "openai_compatible_clients"

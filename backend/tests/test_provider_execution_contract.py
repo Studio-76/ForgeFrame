@@ -39,16 +39,16 @@ def test_adapter_call_metadata_projects_stable_headers() -> None:
     headers = _metadata().as_adapter_headers()
 
     assert headers == {
-        "X-ForgeGate-Request-Id": "req_123",
-        "X-ForgeGate-Correlation-Id": "corr_123",
-        "X-ForgeGate-Causation-Id": "cmd_123",
+        "X-ForgeFrame-Request-Id": "req_123",
+        "X-ForgeFrame-Correlation-Id": "corr_123",
+        "X-ForgeFrame-Causation-Id": "cmd_123",
         "Idempotency-Key": "idem_123",
-        "X-ForgeGate-Execution-Attempt": "2",
-        "X-ForgeGate-Deadline-At": "2026-04-21T18:40:00Z",
-        "X-ForgeGate-Cancellation-Token": "cancel_123",
-        "X-ForgeGate-Cancel-Requested": "true",
-        "X-ForgeGate-Trace-Id": "trace_123",
-        "X-ForgeGate-Span-Id": "span_123",
+        "X-ForgeFrame-Execution-Attempt": "2",
+        "X-ForgeFrame-Deadline-At": "2026-04-21T18:40:00Z",
+        "X-ForgeFrame-Cancellation-Token": "cancel_123",
+        "X-ForgeFrame-Cancel-Requested": "true",
+        "X-ForgeFrame-Trace-Id": "trace_123",
+        "X-ForgeFrame-Span-Id": "span_123",
     }
 
 

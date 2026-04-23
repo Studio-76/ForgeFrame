@@ -1,4 +1,4 @@
-"""Local auth helpers for ForgeGate admin and runtime security."""
+"""Local auth helpers for ForgeFrame admin and runtime security."""
 
 from __future__ import annotations
 
@@ -12,6 +12,7 @@ _ROLE_ORDER: dict[AdminRole, int] = {
     "viewer": 0,
     "operator": 1,
     "admin": 2,
+    "owner": 3,
 }
 
 

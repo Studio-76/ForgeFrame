@@ -70,7 +70,7 @@ function createData(access: ProvidersAccessState): ProvidersPageData {
     integrationErrors: {},
     profileErrors: {},
     clients: [],
-    betaTargets: [],
+    productAxisTargets: [],
     oauthTargets: [],
     oauthOperations: [],
     oauthRecentOps: [],
@@ -100,7 +100,7 @@ function createSession(overrides: Partial<AdminSessionUser> = {}): AdminSessionU
     user_id: "user_test",
     username: "ops-user",
     display_name: "Ops User",
-    role: "operator",
+    role: "admin",
     session_type: "standard",
     read_only: false,
     must_rotate_password: false,
@@ -109,7 +109,7 @@ function createSession(overrides: Partial<AdminSessionUser> = {}): AdminSessionU
 }
 
 vi.mock("../src/features/providers/useProvidersControlPlane", () => ({
-  useProvidersControlPlane: (access: ProvidersAccessState, tenantId?: string | null) => mockedUseProvidersControlPlane(access, tenantId),
+  useProvidersControlPlane: (access: ProvidersAccessState, instanceId?: string | null) => mockedUseProvidersControlPlane(access, instanceId),
 }));
 
 describe("Providers page hierarchy", () => {
@@ -131,14 +131,16 @@ describe("Providers page hierarchy", () => {
 
     expect(markup).toContain("<section class=\"fg-page\">");
     expect(markup).toContain("Which provider task are you handling right now");
+    expect(markup).toContain(">Harness<");
+    expect(markup).toContain("href=\"/harness\"");
     expect(markup).toContain(">Provider Health &amp; Runs<");
     expect(markup).toContain(">Control-Plane Summary</h3>");
-    expect(markup).toContain("Operator mutations enabled");
+    expect(markup).toContain("Admin mutations enabled");
     expect(markup).toContain("Sync all providers");
-    expect(markup).toContain("Export redacted");
-    expect(markup).not.toContain("Export full snapshot");
-    expect(markup).toContain("Dry-run import");
-    expect(markup.indexOf("Providers &amp; Harness Control Plane")).toBeLessThan(markup.indexOf(">Control-Plane Summary</h3>"));
+    expect(markup).toContain("Providers Control Plane");
+    expect(markup).not.toContain("Save profile");
+    expect(markup).not.toContain("Preview + Verify");
+    expect(markup.indexOf("Providers Control Plane")).toBeLessThan(markup.indexOf(">Control-Plane Summary</h3>"));
   });
 
   it("shows permission-limited copy for viewer sessions before the page surfaces actions", () => {
@@ -151,26 +153,23 @@ describe("Providers page hierarchy", () => {
     );
 
     expect(markup).toContain("Viewer access");
-    expect(markup).toContain("harness export and mutating provider actions stay hidden");
+    expect(markup).toContain("mutating provider actions stay hidden");
     expect(markup).toContain("Runtime truth stays visible here without surfacing mutations that the backend will block.");
-    expect(markup).toContain("Harness export and import actions stay hidden for viewer sessions.");
     expect(markup).not.toContain("Sync all providers");
-    expect(markup).not.toContain("Export redacted");
-    expect(markup).not.toContain("Export full snapshot");
-    expect(markup).not.toContain("Dry-run import");
-    expect(markup).not.toContain("Apply import");
+    expect(markup).not.toContain("Save profile");
+    expect(markup).not.toContain("Preview + Verify");
   });
 
-  it("forwards tenant scope from the route into the providers hook", () => {
+  it("forwards instance scope from the route into the providers hook", () => {
     renderToStaticMarkup(
       withAppContext({
-        path: "/providers?tenantId=acct_alpha",
+        path: "/providers?instanceId=instance_alpha",
         element: <ProvidersPage />,
         session: createSession(),
       }),
     );
 
-    expect(mockedUseProvidersControlPlane).toHaveBeenCalledWith(expect.any(Object), "acct_alpha");
+    expect(mockedUseProvidersControlPlane).toHaveBeenCalledWith(expect.any(Object), "instance_alpha");
   });
 
   it("shows read-only copy for impersonated sessions before the page surfaces actions", () => {
@@ -183,12 +182,11 @@ describe("Providers page hierarchy", () => {
     );
 
     expect(markup).toContain("Read only session");
-    expect(markup).toContain("provider truth, harness state, runs, expansion targets, and redacted harness exports");
+    expect(markup).toContain("provider truth and expansion targets here");
+    expect(markup).toContain("dedicated harness state, runs, and redacted harness exports on the Harness route");
     expect(markup).toContain("Runtime truth stays visible here without surfacing mutations that the backend will block.");
-    expect(markup).toContain("Export redacted");
-    expect(markup).not.toContain("Export full snapshot");
     expect(markup).not.toContain("Sync all providers");
-    expect(markup).not.toContain("Dry-run import");
-    expect(markup).not.toContain("Apply import");
+    expect(markup).not.toContain("Save profile");
+    expect(markup).not.toContain("Preview + Verify");
   });
 });

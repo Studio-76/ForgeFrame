@@ -4,29 +4,14 @@ import os
 import pytest
 from fastapi.testclient import TestClient
 
+from conftest import admin_headers as shared_admin_headers
 from app.api.admin.control_plane import get_control_plane_service
 from app.api.runtime.dependencies import clear_runtime_dependency_caches
 from app.main import app
 
 
 def _admin_headers(client: TestClient) -> dict[str, str]:
-    response = client.post(
-        "/admin/auth/login",
-        json={"username": "admin", "password": os.environ["FORGEGATE_BOOTSTRAP_ADMIN_PASSWORD"]},
-    )
-    assert response.status_code == 201
-    headers = {"Authorization": f"Bearer {response.json()['access_token']}"}
-    if response.json()["user"]["must_rotate_password"] is True:
-        rotation = client.post(
-            "/admin/auth/rotate-password",
-            headers=headers,
-            json={
-                "current_password": os.environ["FORGEGATE_BOOTSTRAP_ADMIN_PASSWORD"],
-                "new_password": os.environ["FORGEGATE_BOOTSTRAP_ADMIN_PASSWORD"],
-            },
-        )
-        assert rotation.status_code == 200
-    return headers
+    return shared_admin_headers(client)
 
 
 def _sse_payload(raw: str, event_name: str) -> dict[str, object]:
@@ -137,7 +122,7 @@ def test_generic_harness_openai_compatible_profile_proves_fidelity(monkeypatch: 
     def _mock_request(method: str, url: str, headers: dict[str, str] | None = None, json: dict[str, object] | None = None, timeout: int | None = None):
         del method, timeout
         assert url == "https://acme.invalid/v1/chat/completions"
-        if headers and not captured_runtime_headers and headers.get("X-ForgeGate-Route") == "/v1/chat/completions":
+        if headers and not captured_runtime_headers and headers.get("X-ForgeFrame-Route") == "/v1/chat/completions":
             captured_runtime_headers.update(headers)
         payload = json or {}
         messages = payload.get("messages", [])
@@ -306,9 +291,9 @@ def test_generic_harness_openai_compatible_profile_proves_fidelity(monkeypatch: 
         "/v1/chat/completions",
         headers={
             "X-Request-Id": "req_generic_harness_headers_1",
-            "X-ForgeGate-Correlation-Id": "corr_generic_harness_headers_1",
-            "X-ForgeGate-Trace-Id": "trace_generic_harness_headers_1",
-            "X-ForgeGate-Span-Id": "span_generic_harness_headers_1",
+            "X-ForgeFrame-Correlation-Id": "corr_generic_harness_headers_1",
+            "X-ForgeFrame-Trace-Id": "trace_generic_harness_headers_1",
+            "X-ForgeFrame-Span-Id": "span_generic_harness_headers_1",
         },
         json={
             "model": model_id,
@@ -323,11 +308,11 @@ def test_generic_harness_openai_compatible_profile_proves_fidelity(monkeypatch: 
     assert "provider" not in chat_payload
     assert "credential_type" not in chat_payload
     assert "auth_source" not in chat_payload
-    assert captured_runtime_headers["X-ForgeGate-Request-Id"] == "req_generic_harness_headers_1"
-    assert captured_runtime_headers["X-ForgeGate-Correlation-Id"] == "corr_generic_harness_headers_1"
-    assert captured_runtime_headers["X-ForgeGate-Trace-Id"] == "trace_generic_harness_headers_1"
-    assert captured_runtime_headers["X-ForgeGate-Span-Id"] == "span_generic_harness_headers_1"
-    assert captured_runtime_headers["X-ForgeGate-Route"] == "/v1/chat/completions"
+    assert captured_runtime_headers["X-ForgeFrame-Request-Id"] == "req_generic_harness_headers_1"
+    assert captured_runtime_headers["X-ForgeFrame-Correlation-Id"] == "corr_generic_harness_headers_1"
+    assert captured_runtime_headers["X-ForgeFrame-Trace-Id"] == "trace_generic_harness_headers_1"
+    assert captured_runtime_headers["X-ForgeFrame-Span-Id"] == "span_generic_harness_headers_1"
+    assert captured_runtime_headers["X-ForgeFrame-Route"] == "/v1/chat/completions"
 
     responses_response = client.post(
         "/v1/responses",
@@ -423,10 +408,10 @@ def test_generic_harness_openai_compatible_profile_proves_fidelity(monkeypatch: 
     assert provider_key in generic_matrix_row["proven_profile_keys"]
     assert provider_key in generic_matrix_row["notes"]
 
-    beta_targets = client.get("/admin/providers/beta-targets", headers=headers).json()["targets"]
-    generic_beta_row = next(item for item in beta_targets if item["provider_key"] == "openai_compatible_generic")
-    assert generic_beta_row["runtime_readiness"] == "partial"
-    assert generic_beta_row["streaming_readiness"] == "partial"
+    axis_targets = client.get("/admin/providers/product-axis-targets", headers=headers).json()["targets"]
+    generic_axis_row = next(item for item in axis_targets if item["provider_key"] == "openai_compatible_generic")
+    assert generic_axis_row["runtime_readiness"] == "partial"
+    assert generic_axis_row["streaming_readiness"] == "partial"
 
 
 def test_generic_harness_truth_surfaces_stay_planned_when_enabled_profile_owns_no_models() -> None:
@@ -499,12 +484,12 @@ def test_generic_harness_truth_surfaces_stay_planned_when_enabled_profile_owns_n
     assert generic_row["provider_axis"] == "openai_compatible_provider"
     assert generic_row["notes"] == "Harness profiles exist, but no enabled profile owns any models."
 
-    beta_targets = client.get("/admin/providers/beta-targets", headers=headers).json()["targets"]
-    generic_beta_row = next(item for item in beta_targets if item["provider_key"] == "openai_compatible_generic")
-    assert generic_beta_row["readiness"] == "planned"
-    assert generic_beta_row["runtime_readiness"] == "planned"
-    assert generic_beta_row["streaming_readiness"] == "planned"
-    assert "no enabled profile currently owns a runtime model" in generic_beta_row["status_summary"]
+    axis_targets = client.get("/admin/providers/product-axis-targets", headers=headers).json()["targets"]
+    generic_axis_row = next(item for item in axis_targets if item["provider_key"] == "openai_compatible_generic")
+    assert generic_axis_row["readiness"] == "planned"
+    assert generic_axis_row["runtime_readiness"] == "planned"
+    assert generic_axis_row["streaming_readiness"] == "planned"
+    assert "no enabled profile currently owns a runtime model" in generic_axis_row["status_summary"]
 
 
 def test_generic_harness_matrix_keeps_current_reason_when_historical_proof_profile_is_disabled(
@@ -654,10 +639,10 @@ def test_generic_harness_matrix_keeps_current_reason_when_historical_proof_profi
     assert proven_profile_key in generic_row["proven_profile_keys"]
     assert generic_row["notes"] == "Harness profiles exist, but no enabled profile owns any models."
 
-    beta_targets = client.get("/admin/providers/beta-targets", headers=headers).json()["targets"]
-    generic_beta_row = next(item for item in beta_targets if item["provider_key"] == "openai_compatible_generic")
-    assert generic_beta_row["readiness"] == "planned"
-    assert "no enabled profile currently owns a runtime model" in generic_beta_row["status_summary"]
+    axis_targets = client.get("/admin/providers/product-axis-targets", headers=headers).json()["targets"]
+    generic_axis_row = next(item for item in axis_targets if item["provider_key"] == "openai_compatible_generic")
+    assert generic_axis_row["readiness"] == "planned"
+    assert "no enabled profile currently owns a runtime model" in generic_axis_row["status_summary"]
 
 
 def test_generic_harness_runtime_preserves_multiturn_multimodal_chat_sequence(monkeypatch: pytest.MonkeyPatch) -> None:

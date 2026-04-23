@@ -26,6 +26,9 @@ SessionFactory = Callable[[], Session]
 _TERMINAL_RUN_STATES = {"succeeded", "failed", "cancelled", "timed_out", "compensated", "dead_lettered"}
 _CLAIMABLE_ATTEMPT_STATES = {"queued", "retry_backoff"}
 _RETRYABLE_RUN_STATES = {"failed", "timed_out", "compensated", "dead_lettered"}
+_TERMINAL_OPERATOR_STATES = {"completed", "quarantined", "failed"}
+_CLAIMABLE_OPERATOR_STATES = {"admitted", "retry_scheduled"}
+_IN_FLIGHT_ATTEMPT_STATES = {"dispatching", "executing", "cancel_requested", "compensating"}
 
 
 class ExecutionTransitionError(RuntimeError):
@@ -80,6 +83,9 @@ class CommandTransitionResult:
     approval_link_id: str | None
     outbox_event: str | None
     run_state: str
+    operator_state: str | None = None
+    execution_lane: str | None = None
+    related_run_id: str | None = None
     deduplicated: bool = False
 
 
@@ -106,8 +112,26 @@ class ClaimResult:
     attempt_id: str
     lease_token: str
     worker_key: str
+    execution_lane: str
     run_version: int
     attempt_version: int
+
+
+@dataclass(frozen=True)
+class LeaseHeartbeatResult:
+    run_id: str
+    attempt_id: str
+    lease_token: str
+    lease_expires_at: datetime
+    last_heartbeat_at: datetime
+
+
+@dataclass(frozen=True)
+class LeaseReconcileResult:
+    run_id: str
+    attempt_id: str
+    reconciled_to_state: str
+    dead_letter_reason: str
 
 
 @dataclass(frozen=True)
@@ -139,6 +163,43 @@ class ExecutionTransitionService:
     @staticmethod
     def _new_id(prefix: str) -> str:
         return f"{prefix}_{uuid4().hex}"
+
+    @staticmethod
+    def _default_execution_lane(run_kind: str) -> str:
+        normalized = run_kind.strip().lower()
+        if "oauth" in normalized:
+            return "oauth_serialized"
+        if "interactive" in normalized and "heavy" in normalized:
+            return "interactive_heavy"
+        if "interactive" in normalized or "sync" in normalized:
+            return "interactive_low_latency"
+        return "background_agentic"
+
+    @staticmethod
+    def _operator_state_for_execution_step(step_key: str) -> str:
+        normalized = step_key.strip().lower()
+        if any(token in normalized for token in ("provider", "oauth", "webhook", "http", "remote", "external")):
+            return "waiting_external"
+        return "executing"
+
+    @staticmethod
+    def _operator_state_for_retry_delay(retry_delay_seconds: int | None) -> str:
+        return "retry_scheduled" if retry_delay_seconds and retry_delay_seconds > 0 else "admitted"
+
+    @staticmethod
+    def _operator_state_for_resume(raw_state: str) -> str:
+        return {
+            "queued": "admitted",
+            "dispatching": "leased",
+            "executing": "waiting_external",
+            "waiting_on_approval": "waiting_on_approval",
+            "cancel_requested": "cancel_requested",
+            "retry_backoff": "retry_scheduled",
+            "compensating": "compensating",
+            "succeeded": "completed",
+            "failed": "failed",
+            "dead_lettered": "quarantined",
+        }.get(raw_state, "admitted")
 
     @staticmethod
     def _current_attempt(session: Session, run: RunORM) -> RunAttemptORM:
@@ -213,6 +274,9 @@ class ExecutionTransitionService:
             approval_link_id=snapshot.get("approval_link_id"),
             outbox_event=snapshot.get("outbox_event"),
             run_state=str(snapshot.get("run_state") or command.accepted_transition or ""),
+            operator_state=snapshot.get("operator_state"),
+            execution_lane=snapshot.get("execution_lane"),
+            related_run_id=snapshot.get("related_run_id"),
             deduplicated=deduplicated,
         )
 
@@ -293,8 +357,14 @@ class ExecutionTransitionService:
             sleep(0.01)
 
     @staticmethod
-    def _claim_query(company_id: str, now: datetime) -> Select[tuple[RunAttemptORM, RunORM]]:
-        return (
+    def _claim_query(
+        company_id: str,
+        now: datetime,
+        *,
+        execution_lane: str | None = None,
+        run_kind: str | None = None,
+    ) -> Select[tuple[RunAttemptORM, RunORM]]:
+        query = (
             select(RunAttemptORM, RunORM)
             .join(
                 RunORM,
@@ -303,10 +373,16 @@ class ExecutionTransitionService:
             .where(
                 RunAttemptORM.company_id == company_id,
                 RunAttemptORM.attempt_state.in_(_CLAIMABLE_ATTEMPT_STATES),
+                RunAttemptORM.operator_state.in_(_CLAIMABLE_OPERATOR_STATES),
                 RunAttemptORM.scheduled_at <= now,
             )
             .order_by(RunAttemptORM.scheduled_at.asc(), RunAttemptORM.attempt_no.asc(), RunAttemptORM.created_at.asc())
         )
+        if execution_lane is not None:
+            query = query.where(RunORM.execution_lane == execution_lane)
+        if run_kind is not None:
+            query = query.where(RunORM.run_kind == run_kind)
+        return query
 
     @staticmethod
     def _clear_attempt_lease(attempt: RunAttemptORM) -> None:
@@ -315,6 +391,8 @@ class ExecutionTransitionService:
         attempt.lease_acquired_at = None
         attempt.lease_expires_at = None
         attempt.last_heartbeat_at = None
+        if attempt.lease_status != "expired":
+            attempt.lease_status = "released"
 
     @staticmethod
     def _retry_backoff_seconds(
@@ -363,8 +441,45 @@ class ExecutionTransitionService:
             payload["retry_delay_seconds"] = retry_delay_seconds
         return payload
 
-    def _select_claim_candidate(self, session: Session, *, company_id: str, now: datetime) -> ClaimCandidate | None:
-        query = self._claim_query(company_id, now)
+    @classmethod
+    def _json_value(cls, value: Any) -> Any:
+        if isinstance(value, datetime):
+            if value.tzinfo is None:
+                raise ValueError("timestamps must be timezone-aware")
+            return value.astimezone(UTC).isoformat()
+        if isinstance(value, dict):
+            return {str(key): cls._json_value(item) for key, item in value.items() if item is not None}
+        if isinstance(value, (list, tuple)):
+            return [cls._json_value(item) for item in value]
+        return value
+
+    @classmethod
+    def _detail_payload(cls, **fields: Any) -> dict[str, Any]:
+        return {key: cls._json_value(value) for key, value in fields.items() if value is not None}
+
+    @classmethod
+    def _merge_result_summary(cls, existing: dict[str, Any] | None, **sections: Any) -> dict[str, Any]:
+        merged = dict(existing or {})
+        for key, value in sections.items():
+            if value is None:
+                continue
+            normalized = cls._json_value(value)
+            if isinstance(normalized, dict) and isinstance(merged.get(key), dict):
+                merged[key] = {**merged[key], **normalized}
+            else:
+                merged[key] = normalized
+        return merged
+
+    def _select_claim_candidate(
+        self,
+        session: Session,
+        *,
+        company_id: str,
+        now: datetime,
+        execution_lane: str | None = None,
+        run_kind: str | None = None,
+    ) -> ClaimCandidate | None:
+        query = self._claim_query(company_id, now, execution_lane=execution_lane, run_kind=run_kind)
         bind = session.get_bind()
         if bind is not None and bind.dialect.name != "sqlite":
             query = query.with_for_update(skip_locked=True, of=RunAttemptORM)
@@ -380,10 +495,23 @@ class ExecutionTransitionService:
             attempt_version=attempt.version,
         )
 
-    def peek_claimable_attempt(self, *, company_id: str, now: datetime | None = None) -> ClaimCandidate | None:
+    def peek_claimable_attempt(
+        self,
+        *,
+        company_id: str,
+        execution_lane: str | None = None,
+        run_kind: str | None = None,
+        now: datetime | None = None,
+    ) -> ClaimCandidate | None:
         current_time = self._now(now)
         with self._session_factory() as session:
-            return self._select_claim_candidate(session, company_id=company_id, now=current_time)
+            return self._select_claim_candidate(
+                session,
+                company_id=company_id,
+                now=current_time,
+                execution_lane=execution_lane,
+                run_kind=run_kind,
+            )
 
     def admit_create(
         self,
@@ -396,9 +524,11 @@ class ExecutionTransitionService:
         run_kind: str,
         workspace_id: str | None = None,
         issue_id: str | None = None,
+        execution_lane: str | None = None,
         now: datetime | None = None,
     ) -> CommandTransitionResult:
         current_time = self._now(now)
+        lane = execution_lane or self._default_execution_lane(run_kind)
         try:
             with self._session_factory() as session, session.begin():
                 existing = self._find_command_or_raise_conflict(
@@ -445,6 +575,8 @@ class ExecutionTransitionService:
                     "attempt_id": attempt_id,
                     "outbox_event": "run_dispatch",
                     "run_state": "queued",
+                    "operator_state": "admitted",
+                    "execution_lane": lane,
                 }
 
                 run = RunORM(
@@ -454,6 +586,8 @@ class ExecutionTransitionService:
                     issue_id=issue_id,
                     run_kind=run_kind,
                     state="queued",
+                    execution_lane=lane,
+                    operator_state="admitted",
                     active_attempt_no=1,
                     current_attempt_id=attempt_id,
                     latest_command_id=command.id,
@@ -469,6 +603,8 @@ class ExecutionTransitionService:
                     run_id=run_id,
                     attempt_no=1,
                     attempt_state="queued",
+                    operator_state="admitted",
+                    lease_status="not_leased",
                     scheduled_at=current_time,
                     version=0,
                     created_at=current_time,
@@ -519,12 +655,20 @@ class ExecutionTransitionService:
         *,
         company_id: str,
         worker_key: str,
+        execution_lane: str | None = None,
+        run_kind: str | None = None,
         lease_ttl_seconds: int = 60,
         now: datetime | None = None,
     ) -> ClaimResult | None:
         current_time = self._now(now)
         with self._session_factory() as session, session.begin():
-            candidate = self._select_claim_candidate(session, company_id=company_id, now=current_time)
+            candidate = self._select_claim_candidate(
+                session,
+                company_id=company_id,
+                now=current_time,
+                execution_lane=execution_lane,
+                run_kind=run_kind,
+            )
             if candidate is None:
                 return None
             return self._claim_attempt(
@@ -592,7 +736,9 @@ class ExecutionTransitionService:
             )
             .values(
                 attempt_state="dispatching",
+                operator_state="leased",
                 worker_key=worker_key,
+                lease_status="leased",
                 lease_token=lease_token,
                 lease_acquired_at=now,
                 lease_expires_at=lease_expires_at,
@@ -613,6 +759,7 @@ class ExecutionTransitionService:
             )
             .values(
                 state="dispatching",
+                operator_state="leased",
                 current_attempt_id=attempt_id,
                 version=expected_run_version + 1,
                 updated_at=now,
@@ -621,11 +768,33 @@ class ExecutionTransitionService:
         if run_update.rowcount != 1:
             raise StaleWorkerClaimError(f"Run '{run_id}' changed while claiming attempt '{attempt_id}'.")
 
+        refreshed_run = session.get(RunORM, run_id)
+        refreshed_attempt = session.get(RunAttemptORM, attempt_id)
+        if refreshed_run is not None:
+            refreshed_run.result_summary = self._merge_result_summary(
+                refreshed_run.result_summary,
+                wake_gate=self._detail_payload(
+                    claim_allowed=True,
+                    scheduled_at=refreshed_attempt.scheduled_at if refreshed_attempt is not None else None,
+                    claimed_at=now,
+                    lease_expires_at=lease_expires_at,
+                    worker_key=worker_key,
+                    spurious_wake_blocked=False,
+                ),
+                dispatch=self._detail_payload(
+                    stage="claimed",
+                    run_id=run_id,
+                    attempt_id=attempt_id,
+                    execution_lane=refreshed_run.execution_lane,
+                    worker_key=worker_key,
+                ),
+            )
         return ClaimResult(
             run_id=run_id,
             attempt_id=attempt_id,
             lease_token=lease_token,
             worker_key=worker_key,
+            execution_lane=refreshed_run.execution_lane if refreshed_run is not None else "background_agentic",
             run_version=expected_run_version + 1,
             attempt_version=expected_attempt_version + 1,
         )
@@ -652,15 +821,40 @@ class ExecutionTransitionService:
                 raise RunTransitionConflictError("Only dispatched attempts can move to executing.")
             if attempt.lease_token != lease_token:
                 raise RunTransitionConflictError("Lease token does not match the active worker claim.")
+            if run.operator_state == "paused" or attempt.operator_state == "paused":
+                raise RunTransitionConflictError("Paused runs cannot move into executing work.")
+
+            operator_state = self._operator_state_for_execution_step(step_key)
 
             attempt.version += 1
             attempt.attempt_state = "executing"
+            attempt.operator_state = operator_state
             attempt.started_at = attempt.started_at or current_time
+            attempt.lease_status = "leased"
             attempt.updated_at = current_time
 
             run.version += 1
             run.state = "executing"
+            run.operator_state = operator_state
             run.current_step_key = step_key
+            run.result_summary = self._merge_result_summary(
+                run.result_summary,
+                wake_gate=self._detail_payload(
+                    claim_allowed=True,
+                    executing_at=current_time,
+                    worker_key=attempt.worker_key,
+                    spurious_wake_blocked=False,
+                ),
+                dispatch=self._detail_payload(
+                    stage="executing",
+                    run_id=run_id,
+                    attempt_id=attempt_id,
+                    execution_lane=run.execution_lane,
+                    operator_state=operator_state,
+                    step_key=step_key,
+                    entered_at=current_time,
+                ),
+            )
             run.updated_at = current_time
 
     def record_attempt_failure(
@@ -703,6 +897,7 @@ class ExecutionTransitionService:
 
             attempt.version += 1
             attempt.attempt_state = "failed"
+            attempt.operator_state = "failed"
             attempt.finished_at = current_time
             attempt.last_error_code = error_code
             attempt.last_error_detail = error_detail
@@ -729,6 +924,7 @@ class ExecutionTransitionService:
                 scheduled_at = current_time + timedelta(seconds=retry_delay_seconds)
                 next_attempt_id = self._new_id("attempt")
                 next_state = "retry_backoff" if retry_delay_seconds > 0 else "queued"
+                next_operator_state = self._operator_state_for_retry_delay(retry_delay_seconds)
 
                 session.add(
                     RunAttemptORM(
@@ -737,6 +933,8 @@ class ExecutionTransitionService:
                         run_id=run_id,
                         attempt_no=next_attempt_no,
                         attempt_state=next_state,
+                        operator_state=next_operator_state,
+                        lease_status="not_leased",
                         scheduled_at=scheduled_at,
                         retry_count=retry_count,
                         backoff_until=scheduled_at if retry_delay_seconds > 0 else None,
@@ -770,26 +968,43 @@ class ExecutionTransitionService:
 
                 run.version += 1
                 run.state = "retry_backoff" if retry_delay_seconds > 0 else "queued"
+                run.operator_state = next_operator_state
                 run.status_reason = "retry_scheduled"
                 run.active_attempt_no = next_attempt_no
                 run.current_attempt_id = next_attempt_id
                 run.current_approval_link_id = None
                 run.current_step_key = None
                 run.failure_class = failure_class
-                run.result_summary = {
-                    "last_failure": self._failure_summary(
-                        failure_class=failure_class,
-                        error_code=error_code,
-                        error_detail=error_detail,
-                        retryable=True,
-                        attempt_no=attempt.attempt_no,
-                        retry_count=attempt.retry_count,
-                        max_attempts=max_attempts,
+                last_failure = self._failure_summary(
+                    failure_class=failure_class,
+                    error_code=error_code,
+                    error_detail=error_detail,
+                    retryable=True,
+                    attempt_no=attempt.attempt_no,
+                    retry_count=attempt.retry_count,
+                    max_attempts=max_attempts,
+                    retry_delay_seconds=retry_delay_seconds,
+                )
+                run.result_summary = self._merge_result_summary(
+                    run.result_summary,
+                    last_failure=last_failure,
+                    next_attempt_no=next_attempt_no,
+                    next_attempt_id=next_attempt_id,
+                    wake_gate=self._detail_payload(
+                        claim_allowed=retry_delay_seconds in {None, 0},
+                        spurious_wake_blocked=bool(retry_delay_seconds and retry_delay_seconds > 0),
                         retry_delay_seconds=retry_delay_seconds,
+                        next_wakeup_at=scheduled_at,
+                        scheduled_by="retry_backoff",
                     ),
-                    "next_attempt_no": next_attempt_no,
-                    "next_attempt_id": next_attempt_id,
-                }
+                    dispatch=self._detail_payload(
+                        stage="retry_scheduled" if retry_delay_seconds and retry_delay_seconds > 0 else "requeued",
+                        run_id=run_id,
+                        attempt_id=next_attempt_id,
+                        execution_lane=run.execution_lane,
+                        failed_attempt_id=attempt_id,
+                    ),
+                )
                 run.next_wakeup_at = scheduled_at
                 run.terminal_at = None
                 run.updated_at = current_time
@@ -806,6 +1021,7 @@ class ExecutionTransitionService:
 
             dead_letter_reason = "retry_budget_exhausted" if retryable else "terminal_failure"
             attempt.attempt_state = "dead_lettered"
+            attempt.operator_state = "quarantined"
 
             session.add(
                 RunOutboxORM(
@@ -836,11 +1052,12 @@ class ExecutionTransitionService:
 
             run.version += 1
             run.state = "dead_lettered"
+            run.operator_state = "quarantined"
             run.status_reason = dead_letter_reason
             run.current_approval_link_id = None
             run.current_step_key = None
             run.failure_class = failure_class
-            run.result_summary = self._failure_summary(
+            last_failure = self._failure_summary(
                 failure_class=failure_class,
                 error_code=error_code,
                 error_detail=error_detail,
@@ -849,6 +1066,24 @@ class ExecutionTransitionService:
                 retry_count=attempt.retry_count,
                 max_attempts=max_attempts,
                 retry_delay_seconds=None,
+            )
+            run.result_summary = self._merge_result_summary(
+                run.result_summary,
+                **last_failure,
+                last_failure=last_failure,
+                wake_gate=self._detail_payload(
+                    claim_allowed=False,
+                    closed_at=current_time,
+                    dead_letter_reason=dead_letter_reason,
+                    spurious_wake_blocked=False,
+                ),
+                dispatch=self._detail_payload(
+                    stage="dead_lettered",
+                    run_id=run_id,
+                    attempt_id=attempt_id,
+                    execution_lane=run.execution_lane,
+                    dead_letter_reason=dead_letter_reason,
+                ),
             )
             run.next_wakeup_at = None
             run.terminal_at = current_time
@@ -936,10 +1171,12 @@ class ExecutionTransitionService:
 
             attempt.version += 1
             attempt.attempt_state = "cancel_requested"
+            attempt.operator_state = "cancel_requested"
             attempt.updated_at = current_time
 
             run.version += 1
             run.state = "cancel_requested"
+            run.operator_state = "cancel_requested"
             run.cancel_requested_at = current_time
             run.latest_command_id = command.id
             run.updated_at = current_time
@@ -949,6 +1186,8 @@ class ExecutionTransitionService:
                 "attempt_id": attempt.id,
                 "outbox_event": "run_cancel",
                 "run_state": "cancel_requested",
+                "operator_state": "cancel_requested",
+                "execution_lane": run.execution_lane,
             }
             command.accepted_transition = "cancel_requested"
             command.response_snapshot = snapshot
@@ -1022,6 +1261,8 @@ class ExecutionTransitionService:
                     run_id=run_id,
                     attempt_no=next_attempt_no,
                     attempt_state="queued",
+                    operator_state="admitted",
+                    lease_status="not_leased",
                     scheduled_at=current_time,
                     version=0,
                     created_at=current_time,
@@ -1051,6 +1292,7 @@ class ExecutionTransitionService:
 
                 run.version += 1
                 run.state = "queued"
+                run.operator_state = "admitted"
                 run.status_reason = None
                 run.active_attempt_no = next_attempt_no
                 run.current_attempt_id = attempt_id
@@ -1069,6 +1311,8 @@ class ExecutionTransitionService:
                     "attempt_id": attempt_id,
                     "outbox_event": "run_dispatch",
                     "run_state": "queued",
+                    "operator_state": "admitted",
+                    "execution_lane": run.execution_lane,
                     "replay_reason": replay_reason,
                 }
                 command.accepted_transition = "queued"
@@ -1147,7 +1391,9 @@ class ExecutionTransitionService:
 
             attempt.version += 1
             attempt.attempt_state = "waiting_on_approval"
+            attempt.operator_state = "waiting_on_approval"
             attempt.worker_key = None
+            attempt.lease_status = "released"
             attempt.lease_token = None
             attempt.lease_acquired_at = None
             attempt.lease_expires_at = None
@@ -1156,6 +1402,7 @@ class ExecutionTransitionService:
 
             run.version += 1
             run.state = "waiting_on_approval"
+            run.operator_state = "waiting_on_approval"
             run.current_approval_link_id = approval_link.id
             run.current_step_key = gate_key
             run.updated_at = current_time
@@ -1234,6 +1481,7 @@ class ExecutionTransitionService:
             if approved:
                 run_state = "queued"
                 attempt_state = "queued"
+                operator_state = "admitted"
                 approval_link.gate_status = "approved"
                 approval_link.resume_enqueued_at = current_time
                 outbox_event = "run_resume"
@@ -1243,15 +1491,18 @@ class ExecutionTransitionService:
                 if approval_link.resume_disposition == "cancel":
                     run_state = "cancel_requested"
                     attempt_state = "cancel_requested"
+                    operator_state = "cancel_requested"
                     outbox_event = "run_cancel"
                     run.cancel_requested_at = current_time
                 elif approval_link.resume_disposition == "compensate":
                     run_state = "compensating"
                     attempt_state = "compensating"
+                    operator_state = "compensating"
                     outbox_event = "run_resume"
                 else:
                     run_state = "failed"
                     attempt_state = "failed"
+                    operator_state = "failed"
                     run.terminal_at = current_time
                     attempt.finished_at = current_time
 
@@ -1263,7 +1514,9 @@ class ExecutionTransitionService:
 
             attempt.version += 1
             attempt.attempt_state = attempt_state
+            attempt.operator_state = operator_state
             attempt.worker_key = None
+            attempt.lease_status = "released"
             attempt.lease_token = None
             attempt.lease_acquired_at = None
             attempt.lease_expires_at = None
@@ -1273,6 +1526,7 @@ class ExecutionTransitionService:
 
             run.version += 1
             run.state = run_state
+            run.operator_state = operator_state
             run.latest_command_id = command.id
             run.current_step_key = None
             run.updated_at = current_time
@@ -1308,11 +1562,789 @@ class ExecutionTransitionService:
                 "approval_link_id": approval_link.id,
                 "outbox_event": outbox_event,
                 "run_state": run_state,
+                "operator_state": operator_state,
+                "execution_lane": run.execution_lane,
             }
             command.accepted_transition = run_state
             command.response_snapshot = snapshot
 
             return self._command_result(command)
+
+    def renew_attempt_lease(
+        self,
+        *,
+        company_id: str,
+        run_id: str,
+        attempt_id: str,
+        lease_token: str,
+        lease_ttl_seconds: int = 60,
+        now: datetime | None = None,
+    ) -> LeaseHeartbeatResult:
+        current_time = self._now(now)
+        with self._session_factory() as session, session.begin():
+            run = session.get(RunORM, run_id)
+            attempt = session.get(RunAttemptORM, attempt_id)
+            if run is None or run.company_id != company_id:
+                raise RunNotFoundError(f"Run '{run_id}' not found for company '{company_id}'.")
+            if attempt is None or attempt.company_id != company_id or attempt.run_id != run_id:
+                raise RunTransitionConflictError(f"Attempt '{attempt_id}' does not belong to run '{run_id}'.")
+            if attempt.lease_token != lease_token or attempt.lease_status != "leased":
+                raise RunTransitionConflictError("Lease token does not match the active worker claim.")
+            if attempt.attempt_state not in _IN_FLIGHT_ATTEMPT_STATES:
+                raise RunTransitionConflictError("Only in-flight attempts can renew worker leases.")
+
+            attempt.last_heartbeat_at = current_time
+            attempt.lease_expires_at = current_time + timedelta(seconds=max(1, lease_ttl_seconds))
+            attempt.updated_at = current_time
+            return LeaseHeartbeatResult(
+                run_id=run_id,
+                attempt_id=attempt_id,
+                lease_token=lease_token,
+                lease_expires_at=attempt.lease_expires_at,
+                last_heartbeat_at=current_time,
+            )
+
+    def complete_attempt_success(
+        self,
+        *,
+        company_id: str,
+        run_id: str,
+        attempt_id: str,
+        lease_token: str,
+        result_summary: dict[str, Any] | None = None,
+        now: datetime | None = None,
+    ) -> None:
+        current_time = self._now(now)
+        with self._session_factory() as session, session.begin():
+            run = session.get(RunORM, run_id)
+            attempt = session.get(RunAttemptORM, attempt_id)
+            if run is None or run.company_id != company_id:
+                raise RunNotFoundError(f"Run '{run_id}' not found for company '{company_id}'.")
+            if attempt is None or attempt.company_id != company_id or attempt.run_id != run_id:
+                raise RunTransitionConflictError(f"Attempt '{attempt_id}' does not belong to run '{run_id}'.")
+            if attempt.lease_token != lease_token:
+                raise RunTransitionConflictError("Lease token does not match the active worker claim.")
+            if attempt.attempt_state not in _IN_FLIGHT_ATTEMPT_STATES:
+                raise RunTransitionConflictError("Only in-flight attempts can complete successfully.")
+
+            attempt.version += 1
+            attempt.attempt_state = "succeeded"
+            attempt.operator_state = "completed"
+            attempt.finished_at = current_time
+            attempt.updated_at = current_time
+            self._clear_attempt_lease(attempt)
+
+            run.version += 1
+            run.state = "succeeded"
+            run.operator_state = "completed"
+            run.status_reason = None
+            run.result_summary = (
+                self._merge_result_summary(run.result_summary, **result_summary)
+                if result_summary
+                else run.result_summary
+            )
+            run.next_wakeup_at = None
+            run.terminal_at = current_time
+            run.current_step_key = None
+            run.updated_at = current_time
+
+    def pause_run(
+        self,
+        *,
+        company_id: str,
+        run_id: str,
+        actor_type: str,
+        actor_id: str,
+        idempotency_key: str,
+        request_fingerprint_hash: str,
+        reason: str,
+        now: datetime | None = None,
+    ) -> CommandTransitionResult:
+        current_time = self._now(now)
+        pause_reason = reason.strip()
+        with self._session_factory() as session, session.begin():
+            existing = self._find_command_or_raise_conflict(
+                session,
+                company_id=company_id,
+                command_type="pause",
+                actor_type=actor_type,
+                actor_id=actor_id,
+                idempotency_key=idempotency_key,
+                request_fingerprint_hash=request_fingerprint_hash,
+            )
+            if existing is not None:
+                return self._command_result(existing, deduplicated=True)
+
+            run = session.get(RunORM, run_id)
+            if run is None or run.company_id != company_id:
+                raise RunNotFoundError(f"Run '{run_id}' not found for company '{company_id}'.")
+            if run.operator_state in _TERMINAL_OPERATOR_STATES or run.operator_state == "paused":
+                raise RunTransitionConflictError(f"Run '{run_id}' cannot pause from operator state '{run.operator_state}'.")
+
+            attempt = self._current_attempt(session, run)
+            if attempt.attempt_state in _IN_FLIGHT_ATTEMPT_STATES:
+                raise RunTransitionConflictError("In-flight attempts must be interrupted instead of paused.")
+
+            command = RunCommandORM(
+                id=self._new_id("cmd"),
+                company_id=company_id,
+                run_id=run_id,
+                command_type="pause",
+                actor_type=actor_type,
+                actor_id=actor_id,
+                idempotency_key=idempotency_key,
+                request_fingerprint_hash=request_fingerprint_hash,
+                command_status="completed",
+                issued_at=current_time,
+                completed_at=current_time,
+                created_at=current_time,
+                updated_at=current_time,
+            )
+            session.add(command)
+            session.flush()
+
+            run.version += 1
+            run.operator_state = "paused"
+            run.status_reason = pause_reason
+            run.latest_command_id = command.id
+            run.result_summary = self._merge_result_summary(
+                run.result_summary,
+                wake_gate=self._detail_payload(
+                    claim_allowed=False,
+                    paused_at=current_time,
+                    pause_reason=pause_reason,
+                    spurious_wake_blocked=bool(run.next_wakeup_at and run.next_wakeup_at > current_time),
+                    next_wakeup_at=run.next_wakeup_at,
+                ),
+                dispatch=self._detail_payload(
+                    stage="paused",
+                    run_id=run.id,
+                    attempt_id=attempt.id,
+                    execution_lane=run.execution_lane,
+                    operator_state="paused",
+                ),
+            )
+            run.updated_at = current_time
+
+            attempt.version += 1
+            attempt.operator_state = "paused"
+            attempt.updated_at = current_time
+
+            command.accepted_transition = run.state
+            command.response_snapshot = {
+                "run_id": run.id,
+                "attempt_id": attempt.id,
+                "run_state": run.state,
+                "operator_state": "paused",
+                "execution_lane": run.execution_lane,
+                "reason": pause_reason,
+            }
+            return self._command_result(command)
+
+    def resume_run(
+        self,
+        *,
+        company_id: str,
+        run_id: str,
+        actor_type: str,
+        actor_id: str,
+        idempotency_key: str,
+        request_fingerprint_hash: str,
+        reason: str,
+        now: datetime | None = None,
+    ) -> CommandTransitionResult:
+        current_time = self._now(now)
+        resume_reason = reason.strip()
+        with self._session_factory() as session, session.begin():
+            existing = self._find_command_or_raise_conflict(
+                session,
+                company_id=company_id,
+                command_type="resume",
+                actor_type=actor_type,
+                actor_id=actor_id,
+                idempotency_key=idempotency_key,
+                request_fingerprint_hash=request_fingerprint_hash,
+            )
+            if existing is not None:
+                return self._command_result(existing, deduplicated=True)
+
+            run = session.get(RunORM, run_id)
+            if run is None or run.company_id != company_id:
+                raise RunNotFoundError(f"Run '{run_id}' not found for company '{company_id}'.")
+            if run.operator_state != "paused":
+                raise RunTransitionConflictError(f"Run '{run_id}' cannot resume from operator state '{run.operator_state}'.")
+            if run.current_approval_link_id:
+                raise RunTransitionConflictError("Runs waiting on approval cannot be resumed outside the approval flow.")
+
+            attempt = self._current_attempt(session, run)
+            spurious_wake_blocked = bool(
+                run.state == "retry_backoff" and run.next_wakeup_at is not None and run.next_wakeup_at > current_time
+            )
+            operator_state = "retry_scheduled" if spurious_wake_blocked else self._operator_state_for_resume(run.state)
+
+            command = RunCommandORM(
+                id=self._new_id("cmd"),
+                company_id=company_id,
+                run_id=run_id,
+                command_type="resume",
+                actor_type=actor_type,
+                actor_id=actor_id,
+                idempotency_key=idempotency_key,
+                request_fingerprint_hash=request_fingerprint_hash,
+                command_status="completed",
+                issued_at=current_time,
+                completed_at=current_time,
+                created_at=current_time,
+                updated_at=current_time,
+            )
+            session.add(command)
+            session.flush()
+
+            run.version += 1
+            run.operator_state = operator_state
+            run.status_reason = "retry_scheduled" if spurious_wake_blocked else (resume_reason or None)
+            run.latest_command_id = command.id
+            run.result_summary = self._merge_result_summary(
+                run.result_summary,
+                wake_gate=self._detail_payload(
+                    claim_allowed=not spurious_wake_blocked,
+                    spurious_wake_blocked=spurious_wake_blocked,
+                    next_wakeup_at=run.next_wakeup_at,
+                    resumed_at=current_time,
+                    resume_reason=resume_reason or None,
+                ),
+                dispatch=self._detail_payload(
+                    stage="resume_blocked_until_wakeup" if spurious_wake_blocked else "resumed",
+                    run_id=run.id,
+                    attempt_id=attempt.id,
+                    execution_lane=run.execution_lane,
+                    operator_state=operator_state,
+                ),
+            )
+            run.updated_at = current_time
+
+            attempt.version += 1
+            attempt.operator_state = operator_state
+            attempt.updated_at = current_time
+
+            command.accepted_transition = run.state
+            command.response_snapshot = {
+                "run_id": run.id,
+                "attempt_id": attempt.id,
+                "run_state": run.state,
+                "operator_state": operator_state,
+                "execution_lane": run.execution_lane,
+                "reason": resume_reason,
+                "spurious_wake_blocked": spurious_wake_blocked,
+                "next_wakeup_at": self._json_value(run.next_wakeup_at),
+            }
+            return self._command_result(command)
+
+    def interrupt_run(
+        self,
+        *,
+        company_id: str,
+        run_id: str,
+        actor_type: str,
+        actor_id: str,
+        idempotency_key: str,
+        request_fingerprint_hash: str,
+        reason: str,
+        now: datetime | None = None,
+    ) -> CommandTransitionResult:
+        current_time = self._now(now)
+        interrupt_reason = reason.strip()
+        with self._session_factory() as session, session.begin():
+            existing = self._find_command_or_raise_conflict(
+                session,
+                company_id=company_id,
+                command_type="interrupt",
+                actor_type=actor_type,
+                actor_id=actor_id,
+                idempotency_key=idempotency_key,
+                request_fingerprint_hash=request_fingerprint_hash,
+            )
+            if existing is not None:
+                return self._command_result(existing, deduplicated=True)
+
+            run = session.get(RunORM, run_id)
+            if run is None or run.company_id != company_id:
+                raise RunNotFoundError(f"Run '{run_id}' not found for company '{company_id}'.")
+            if run.operator_state in _TERMINAL_OPERATOR_STATES:
+                raise RunTransitionConflictError(f"Run '{run_id}' cannot be interrupted from operator state '{run.operator_state}'.")
+
+            attempt = self._current_attempt(session, run)
+            command = RunCommandORM(
+                id=self._new_id("cmd"),
+                company_id=company_id,
+                run_id=run_id,
+                command_type="interrupt",
+                actor_type=actor_type,
+                actor_id=actor_id,
+                idempotency_key=idempotency_key,
+                request_fingerprint_hash=request_fingerprint_hash,
+                command_status="completed",
+                issued_at=current_time,
+                completed_at=current_time,
+                created_at=current_time,
+                updated_at=current_time,
+            )
+            session.add(command)
+            session.flush()
+
+            session.add(
+                RunOutboxORM(
+                    id=self._new_id("outbox"),
+                    company_id=company_id,
+                    run_id=run_id,
+                    attempt_id=attempt.id,
+                    event_type="run_cancel",
+                    payload={
+                        "run_id": run_id,
+                        "attempt_id": attempt.id,
+                        "command_id": command.id,
+                        "interrupt_reason": interrupt_reason,
+                    },
+                    publish_state="pending",
+                    dedupe_key=f"run:{run_id}:command:{command.id}:interrupt",
+                    available_at=current_time,
+                    created_at=current_time,
+                    updated_at=current_time,
+                )
+            )
+
+            attempt.version += 1
+            attempt.operator_state = "interrupted"
+            attempt.attempt_state = "cancel_requested"
+            attempt.updated_at = current_time
+            self._clear_attempt_lease(attempt)
+
+            run.version += 1
+            run.state = "cancel_requested"
+            run.operator_state = "interrupted"
+            run.status_reason = interrupt_reason or "operator_interrupt_requested"
+            run.cancel_requested_at = current_time
+            run.latest_command_id = command.id
+            run.updated_at = current_time
+
+            command.accepted_transition = "cancel_requested"
+            command.response_snapshot = {
+                "run_id": run.id,
+                "attempt_id": attempt.id,
+                "run_state": "cancel_requested",
+                "operator_state": "interrupted",
+                "execution_lane": run.execution_lane,
+                "outbox_event": "run_cancel",
+                "reason": interrupt_reason,
+            }
+            return self._command_result(command)
+
+    def quarantine_run(
+        self,
+        *,
+        company_id: str,
+        run_id: str,
+        actor_type: str,
+        actor_id: str,
+        idempotency_key: str,
+        request_fingerprint_hash: str,
+        reason: str,
+        now: datetime | None = None,
+    ) -> CommandTransitionResult:
+        current_time = self._now(now)
+        quarantine_reason = reason.strip() or "operator_quarantine"
+        with self._session_factory() as session, session.begin():
+            existing = self._find_command_or_raise_conflict(
+                session,
+                company_id=company_id,
+                command_type="quarantine",
+                actor_type=actor_type,
+                actor_id=actor_id,
+                idempotency_key=idempotency_key,
+                request_fingerprint_hash=request_fingerprint_hash,
+            )
+            if existing is not None:
+                return self._command_result(existing, deduplicated=True)
+
+            run = session.get(RunORM, run_id)
+            if run is None or run.company_id != company_id:
+                raise RunNotFoundError(f"Run '{run_id}' not found for company '{company_id}'.")
+            if run.operator_state == "quarantined":
+                raise RunTransitionConflictError(f"Run '{run_id}' is already quarantined.")
+
+            attempt = self._current_attempt(session, run)
+            command = RunCommandORM(
+                id=self._new_id("cmd"),
+                company_id=company_id,
+                run_id=run_id,
+                command_type="quarantine",
+                actor_type=actor_type,
+                actor_id=actor_id,
+                idempotency_key=idempotency_key,
+                request_fingerprint_hash=request_fingerprint_hash,
+                command_status="completed",
+                issued_at=current_time,
+                completed_at=current_time,
+                created_at=current_time,
+                updated_at=current_time,
+            )
+            session.add(command)
+            session.flush()
+
+            session.add(
+                RunOutboxORM(
+                    id=self._new_id("outbox"),
+                    company_id=company_id,
+                    run_id=run_id,
+                    attempt_id=attempt.id,
+                    event_type="dead_letter",
+                    payload={
+                        "run_id": run_id,
+                        "attempt_id": attempt.id,
+                        "command_id": command.id,
+                        "dead_letter_reason": quarantine_reason,
+                    },
+                    publish_state="pending",
+                    dedupe_key=f"run:{run_id}:command:{command.id}:quarantine",
+                    available_at=current_time,
+                    created_at=current_time,
+                    updated_at=current_time,
+                )
+            )
+
+            attempt.version += 1
+            attempt.attempt_state = "dead_lettered"
+            attempt.operator_state = "quarantined"
+            attempt.finished_at = attempt.finished_at or current_time
+            attempt.last_error_code = attempt.last_error_code or "operator_quarantine"
+            attempt.last_error_detail = quarantine_reason
+            attempt.updated_at = current_time
+            self._clear_attempt_lease(attempt)
+
+            run.version += 1
+            run.state = "dead_lettered"
+            run.operator_state = "quarantined"
+            run.status_reason = quarantine_reason
+            run.failure_class = run.failure_class or "internal"
+            run.result_summary = {
+                "quarantined_by_operator": True,
+                "reason": quarantine_reason,
+                "attempt_id": attempt.id,
+            }
+            run.next_wakeup_at = None
+            run.terminal_at = current_time
+            run.latest_command_id = command.id
+            run.updated_at = current_time
+
+            command.accepted_transition = "dead_lettered"
+            command.response_snapshot = {
+                "run_id": run.id,
+                "attempt_id": attempt.id,
+                "run_state": "dead_lettered",
+                "operator_state": "quarantined",
+                "execution_lane": run.execution_lane,
+                "outbox_event": "dead_letter",
+                "reason": quarantine_reason,
+            }
+            return self._command_result(command)
+
+    def escalate_run(
+        self,
+        *,
+        company_id: str,
+        run_id: str,
+        actor_type: str,
+        actor_id: str,
+        idempotency_key: str,
+        request_fingerprint_hash: str,
+        target_execution_lane: str,
+        reason: str,
+        now: datetime | None = None,
+    ) -> CommandTransitionResult:
+        current_time = self._now(now)
+        escalation_reason = reason.strip()
+        with self._session_factory() as session, session.begin():
+            existing = self._find_command_or_raise_conflict(
+                session,
+                company_id=company_id,
+                command_type="escalate",
+                actor_type=actor_type,
+                actor_id=actor_id,
+                idempotency_key=idempotency_key,
+                request_fingerprint_hash=request_fingerprint_hash,
+            )
+            if existing is not None:
+                return self._command_result(existing, deduplicated=True)
+
+            run = session.get(RunORM, run_id)
+            if run is None or run.company_id != company_id:
+                raise RunNotFoundError(f"Run '{run_id}' not found for company '{company_id}'.")
+            if run.execution_lane == target_execution_lane:
+                raise RunTransitionConflictError(f"Run '{run_id}' is already on execution lane '{target_execution_lane}'.")
+
+            command = RunCommandORM(
+                id=self._new_id("cmd"),
+                company_id=company_id,
+                run_id=run_id,
+                command_type="escalate",
+                actor_type=actor_type,
+                actor_id=actor_id,
+                idempotency_key=idempotency_key,
+                request_fingerprint_hash=request_fingerprint_hash,
+                command_status="completed",
+                issued_at=current_time,
+                completed_at=current_time,
+                created_at=current_time,
+                updated_at=current_time,
+            )
+            session.add(command)
+            session.flush()
+
+            run.version += 1
+            run.execution_lane = target_execution_lane
+            run.status_reason = escalation_reason or run.status_reason
+            run.latest_command_id = command.id
+            run.updated_at = current_time
+
+            command.accepted_transition = run.state
+            command.response_snapshot = {
+                "run_id": run.id,
+                "attempt_id": run.current_attempt_id,
+                "run_state": run.state,
+                "operator_state": run.operator_state,
+                "execution_lane": run.execution_lane,
+                "reason": escalation_reason,
+            }
+            return self._command_result(command)
+
+    def restart_run_from_scratch(
+        self,
+        *,
+        company_id: str,
+        run_id: str,
+        actor_type: str,
+        actor_id: str,
+        idempotency_key: str,
+        request_fingerprint_hash: str,
+        reason: str,
+        execution_lane: str | None = None,
+        now: datetime | None = None,
+    ) -> CommandTransitionResult:
+        current_time = self._now(now)
+        restart_reason = reason.strip()
+        with self._session_factory() as session, session.begin():
+            existing = self._find_command_or_raise_conflict(
+                session,
+                company_id=company_id,
+                command_type="restart_from_scratch",
+                actor_type=actor_type,
+                actor_id=actor_id,
+                idempotency_key=idempotency_key,
+                request_fingerprint_hash=request_fingerprint_hash,
+            )
+            if existing is not None:
+                return self._command_result(existing, deduplicated=True)
+
+            source_run = session.get(RunORM, run_id)
+            if source_run is None or source_run.company_id != company_id:
+                raise RunNotFoundError(f"Run '{run_id}' not found for company '{company_id}'.")
+
+            lane = execution_lane or source_run.execution_lane
+            command = RunCommandORM(
+                id=self._new_id("cmd"),
+                company_id=company_id,
+                run_id=run_id,
+                command_type="restart_from_scratch",
+                actor_type=actor_type,
+                actor_id=actor_id,
+                idempotency_key=idempotency_key,
+                request_fingerprint_hash=request_fingerprint_hash,
+                command_status="completed",
+                issued_at=current_time,
+                completed_at=current_time,
+                created_at=current_time,
+                updated_at=current_time,
+            )
+            session.add(command)
+            session.flush()
+
+            new_run_id = self._new_id("run")
+            new_attempt_id = self._new_id("attempt")
+            session.add(
+                RunORM(
+                    id=new_run_id,
+                    company_id=company_id,
+                    workspace_id=source_run.workspace_id,
+                    issue_id=source_run.issue_id,
+                    run_kind=source_run.run_kind,
+                    state="queued",
+                    execution_lane=lane,
+                    operator_state="admitted",
+                    active_attempt_no=1,
+                    current_attempt_id=new_attempt_id,
+                    latest_command_id=command.id,
+                    version=0,
+                    created_at=current_time,
+                    updated_at=current_time,
+                )
+            )
+            session.add(
+                RunAttemptORM(
+                    id=new_attempt_id,
+                    company_id=company_id,
+                    run_id=new_run_id,
+                    attempt_no=1,
+                    attempt_state="queued",
+                    operator_state="admitted",
+                    lease_status="not_leased",
+                    scheduled_at=current_time,
+                    version=0,
+                    created_at=current_time,
+                    updated_at=current_time,
+                )
+            )
+            session.add(
+                RunOutboxORM(
+                    id=self._new_id("outbox"),
+                    company_id=company_id,
+                    run_id=new_run_id,
+                    attempt_id=new_attempt_id,
+                    event_type="run_dispatch",
+                    payload={
+                        "run_id": new_run_id,
+                        "attempt_id": new_attempt_id,
+                        "command_id": command.id,
+                        "restart_reason": restart_reason,
+                        "source_run_id": source_run.id,
+                    },
+                    publish_state="pending",
+                    dedupe_key=f"run:{new_run_id}:command:{command.id}:dispatch",
+                    available_at=current_time,
+                    created_at=current_time,
+                    updated_at=current_time,
+                )
+            )
+
+            source_run.version += 1
+            source_run.status_reason = restart_reason or source_run.status_reason
+            source_run.latest_command_id = command.id
+            source_run.updated_at = current_time
+
+            command.accepted_transition = "queued"
+            command.response_snapshot = {
+                "run_id": new_run_id,
+                "attempt_id": new_attempt_id,
+                "run_state": "queued",
+                "operator_state": "admitted",
+                "execution_lane": lane,
+                "related_run_id": source_run.id,
+                "outbox_event": "run_dispatch",
+                "reason": restart_reason,
+            }
+            return self._command_result(command)
+
+    def reconcile_expired_leases(
+        self,
+        *,
+        company_id: str,
+        now: datetime | None = None,
+    ) -> list[LeaseReconcileResult]:
+        current_time = self._now(now)
+        results: list[LeaseReconcileResult] = []
+        with self._session_factory() as session, session.begin():
+            attempts = session.execute(
+                select(RunAttemptORM)
+                .join(
+                    RunORM,
+                    (RunORM.company_id == RunAttemptORM.company_id) & (RunORM.id == RunAttemptORM.run_id),
+                )
+                .where(
+                    RunAttemptORM.company_id == company_id,
+                    RunAttemptORM.lease_status == "leased",
+                    RunAttemptORM.attempt_state.in_(_IN_FLIGHT_ATTEMPT_STATES),
+                    RunAttemptORM.lease_expires_at.is_not(None),
+                    RunAttemptORM.lease_expires_at < current_time,
+                )
+            ).scalars().all()
+
+            for attempt in attempts:
+                run = session.get(RunORM, attempt.run_id)
+                if run is None or run.company_id != company_id:
+                    continue
+                if run.operator_state in _TERMINAL_OPERATOR_STATES:
+                    continue
+
+                session.add(
+                    RunOutboxORM(
+                        id=self._new_id("outbox"),
+                        company_id=company_id,
+                        run_id=run.id,
+                        attempt_id=attempt.id,
+                        event_type="dead_letter",
+                        payload={
+                            "run_id": run.id,
+                            "attempt_id": attempt.id,
+                            "dead_letter_reason": "lease_expired",
+                        },
+                        publish_state="pending",
+                        dedupe_key=f"run:{run.id}:attempt:{attempt.id}:lease-expired",
+                        available_at=current_time,
+                        created_at=current_time,
+                        updated_at=current_time,
+                    )
+                )
+
+                attempt.version += 1
+                attempt.attempt_state = "timed_out"
+                attempt.operator_state = "interrupted"
+                attempt.worker_key = None
+                attempt.lease_status = "expired"
+                attempt.lease_token = None
+                attempt.lease_acquired_at = None
+                attempt.lease_expires_at = None
+                attempt.last_heartbeat_at = None
+                attempt.finished_at = current_time
+                attempt.last_error_code = "lease_expired"
+                attempt.last_error_detail = "Worker lease expired before the attempt could report completion."
+                attempt.updated_at = current_time
+
+                run.version += 1
+                run.state = "timed_out"
+                run.operator_state = "quarantined"
+                run.status_reason = "lease_expired"
+                run.failure_class = "timeout"
+                run.result_summary = self._merge_result_summary(
+                    run.result_summary,
+                    error_code="lease_expired",
+                    error_detail="Worker lease expired before the attempt could report completion.",
+                    attempt_id=attempt.id,
+                    wake_gate=self._detail_payload(
+                        claim_allowed=False,
+                        lease_expired_at=current_time,
+                        worker_key=attempt.worker_key,
+                        spurious_wake_blocked=False,
+                    ),
+                    dispatch=self._detail_payload(
+                        stage="lease_expired",
+                        run_id=run.id,
+                        attempt_id=attempt.id,
+                        execution_lane=run.execution_lane,
+                    ),
+                )
+                run.next_wakeup_at = None
+                run.terminal_at = current_time
+                run.current_step_key = None
+                run.updated_at = current_time
+
+                results.append(
+                    LeaseReconcileResult(
+                        run_id=run.id,
+                        attempt_id=attempt.id,
+                        reconciled_to_state="quarantined",
+                        dead_letter_reason="lease_expired",
+                    )
+                )
+        return results
 
     def fetch_run(self, *, company_id: str, run_id: str) -> RunORM:
         with self._session_factory() as session:
@@ -1330,6 +2362,8 @@ __all__ = [
     "CommandTransitionResult",
     "ExecutionTransitionError",
     "ExecutionTransitionService",
+    "LeaseHeartbeatResult",
+    "LeaseReconcileResult",
     "RunNotFoundError",
     "RunTransitionConflictError",
     "StaleWorkerClaimError",

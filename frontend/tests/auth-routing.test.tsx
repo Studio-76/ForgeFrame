@@ -133,7 +133,7 @@ describe("control-plane auth routing", () => {
   });
 
   it("redirects authenticated login attempts back into the protected shell", async () => {
-    installWindow({ forgegate_admin_token: "fgas_test_token" });
+    installWindow({ forgeframe_admin_token: "fgas_test_token" });
     testGlobal.fetch = vi.fn(async () => new Response(
       JSON.stringify({
         status: "ok",

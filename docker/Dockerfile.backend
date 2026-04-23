@@ -16,16 +16,16 @@ FROM python:3.12-slim
 WORKDIR /app
 
 ENV PYTHONUNBUFFERED=1 \
-    FORGEGATE_HOST=0.0.0.0 \
-    FORGEGATE_PORT=8000 \
-    FORGEGATE_HARNESS_STORAGE_BACKEND=postgresql \
-    FORGEGATE_FRONTEND_DIST_PATH=/app/frontend_dist
+    FORGEFRAME_HOST=0.0.0.0 \
+    FORGEFRAME_PORT=8000 \
+    FORGEFRAME_HARNESS_STORAGE_BACKEND=postgresql \
+    FORGEFRAME_FRONTEND_DIST_PATH=/app/frontend_dist
 
 COPY --from=backend-build /build/backend /app/backend
 RUN pip install --no-cache-dir /app/backend
 COPY scripts/ /app/scripts
-RUN chmod +x /app/scripts/start-forgegate.sh
+RUN chmod +x /app/scripts/start-forgeframe.sh
 COPY --from=frontend-build /build/frontend/dist /app/frontend_dist
 
 EXPOSE 8000
-CMD ["/app/scripts/start-forgegate.sh"]
+CMD ["/app/scripts/start-forgeframe.sh"]

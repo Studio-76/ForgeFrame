@@ -14,12 +14,16 @@ from app.api.admin.security import (
 )
 from app.governance.models import AuthenticatedAdmin
 from app.governance.service import GovernanceService, get_governance_service
+from app.harness.service import HarnessService, get_harness_service
 from app.readiness import (
     RuntimeReadinessReport,
     StartupValidationError,
     build_operator_runtime_readiness_payload,
+    build_runtime_readiness_report,
     ensure_runtime_startup_validated,
 )
+from app.settings.config import Settings, get_settings
+from app.usage.analytics import UsageAnalyticsStore, get_usage_analytics_store
 
 router = APIRouter(prefix="/auth", tags=["admin-auth"])
 _bearer = HTTPBearer(auto_error=False)
@@ -48,19 +52,34 @@ def auth_bootstrap_status() -> dict[str, object]:
     return {"status": "ok", "bootstrap": SignedOutBootstrapHint().model_dump()}
 
 
-def _resolve_runtime_readiness(request: Request) -> RuntimeReadinessReport:
+def _resolve_runtime_readiness(
+    request: Request,
+    *,
+    settings: Settings,
+    governance: GovernanceService,
+    harness: HarnessService,
+    analytics: UsageAnalyticsStore,
+) -> RuntimeReadinessReport:
     readiness = getattr(request.app.state, "runtime_readiness", None)
     if isinstance(readiness, RuntimeReadinessReport) and getattr(request.app.state, "runtime_startup_checks", None) is not None:
-        return readiness
-    try:
-        ensure_runtime_startup_validated(request.app)
-    except StartupValidationError as exc:
-        request.app.state.runtime_startup_checks = exc.checks
-        request.app.state.runtime_readiness = RuntimeReadinessReport.from_checks(exc.checks)
-    readiness = getattr(request.app.state, "runtime_readiness", None)
-    if isinstance(readiness, RuntimeReadinessReport):
-        return readiness
-    return RuntimeReadinessReport.booting()
+        startup_checks = request.app.state.runtime_startup_checks
+    else:
+        try:
+            startup_checks = ensure_runtime_startup_validated(request.app)
+        except StartupValidationError as exc:
+            startup_checks = exc.checks
+            request.app.state.runtime_startup_checks = exc.checks
+            request.app.state.runtime_readiness = RuntimeReadinessReport.from_checks(exc.checks)
+    readiness = build_runtime_readiness_report(
+        settings=settings,
+        startup_checks=startup_checks,
+        governance=governance,
+        harness=harness,
+        analytics=analytics,
+        app=request.app,
+    )
+    request.app.state.runtime_readiness = readiness
+    return readiness
 
 
 @router.post("/login", status_code=status.HTTP_201_CREATED)
@@ -91,11 +110,23 @@ def login(
 def runtime_readiness(
     request: Request,
     admin: AuthenticatedAdmin = Depends(require_admin_session_allowing_password_rotation),
+    settings: Settings = Depends(get_settings),
+    governance: GovernanceService = Depends(get_governance_service),
+    harness: HarnessService = Depends(get_harness_service),
+    analytics: UsageAnalyticsStore = Depends(get_usage_analytics_store),
 ) -> dict[str, object]:
     del admin
     return {
         "status": "ok",
-        "readiness": build_operator_runtime_readiness_payload(_resolve_runtime_readiness(request)),
+        "readiness": build_operator_runtime_readiness_payload(
+            _resolve_runtime_readiness(
+                request,
+                settings=settings,
+                governance=governance,
+                harness=harness,
+                analytics=analytics,
+            )
+        ),
     }
 
 

@@ -4,8 +4,10 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
+from app.api.runtime.dependencies import clear_runtime_dependency_caches
 from app.api.admin.control_plane_models import ProviderCreateRequest, ProviderUpdateRequest
 from app.control_plane import ControlPlaneStateRecord, HealthConfig, HealthStatusRecord, ManagedModelRecord, ManagedProviderRecord
+from app.control_plane.target_defaults import ensure_model_registry_metadata
 
 
 class ControlPlaneProviderDomainMixin:
@@ -44,20 +46,26 @@ class ControlPlaneProviderDomainMixin:
                 ),
             )
             provider.managed_models.append(
-                ManagedModelRecord(
-                    id=model.id,
-                    source=model.source,
-                    discovery_status=model.discovery_status,
-                    active=model.active,
-                    owned_by=model.owned_by,
-                    display_name=model.display_name,
-                    category=model.category,
-                    runtime_status=model.runtime_status,
-                    availability_status=model.availability_status,
-                    status_reason=model.status_reason,
-                    last_seen_at=model.last_seen_at,
-                    last_probe_at=model.last_probe_at,
-                    stale_since=model.stale_since,
+                ensure_model_registry_metadata(
+                    ManagedModelRecord(
+                        id=model.id,
+                        source=model.source,
+                        discovery_status=model.discovery_status,
+                        active=model.active,
+                        owned_by=model.owned_by,
+                        display_name=model.display_name,
+                        category=model.category,
+                        routing_key=model.routing_key,
+                        capabilities=dict(model.capabilities),
+                        runtime_status=model.runtime_status,
+                        availability_status=model.availability_status,
+                        status_reason=model.status_reason,
+                        last_seen_at=model.last_seen_at,
+                        last_probe_at=model.last_probe_at,
+                        stale_since=model.stale_since,
+                    ),
+                    provider_label=provider.label or provider.provider,
+                    provider_name=provider.provider,
                 )
             )
         return provider_map
@@ -86,6 +94,12 @@ class ControlPlaneProviderDomainMixin:
         for stored in stored_providers:
             existing = provider_map.get(stored.provider)
             if existing is None:
+                for stored_model in stored.managed_models:
+                    ensure_model_registry_metadata(
+                        stored_model,
+                        stored.label or stored.provider,
+                        stored.provider,
+                    )
                 provider_map[stored.provider] = stored.model_copy(deep=True)
                 continue
 
@@ -103,9 +117,19 @@ class ControlPlaneProviderDomainMixin:
                 for model in existing.managed_models
             }
             for stored_model in stored.managed_models:
+                ensure_model_registry_metadata(
+                    stored_model,
+                    stored.label or stored.provider,
+                    stored.provider,
+                )
                 model_map[stored_model.id] = stored_model.model_copy(deep=True)
             existing.managed_models = sorted(model_map.values(), key=lambda item: item.id)
             for model in existing.managed_models:
+                ensure_model_registry_metadata(
+                    model,
+                    existing.label or existing.provider,
+                    existing.provider,
+                )
                 if not model.runtime_status:
                     model.runtime_status = self._managed_model_runtime_status(model)  # type: ignore[assignment]
                 if not model.availability_status:
@@ -115,7 +139,26 @@ class ControlPlaneProviderDomainMixin:
 
     def _persist_state(self) -> ControlPlaneStateRecord:
         state = ControlPlaneStateRecord(
+            instance_id=self._instance.instance_id,
             providers=[item.model_copy(deep=True) for item in self.list_providers()],
+            provider_targets=[item.model_copy(deep=True) for item in self.list_provider_targets()],
+            routing_policies=[
+                item.model_copy(deep=True)
+                for item in getattr(self, "_routing_policies_state", {}).values()
+            ],
+            routing_budget_state=getattr(
+                self,
+                "_routing_budget_state",
+                ControlPlaneStateRecord().routing_budget_state,
+            ).model_copy(deep=True),
+            routing_circuits=[
+                item.model_copy(deep=True)
+                for item in getattr(self, "_routing_circuits_state", {}).values()
+            ],
+            routing_decisions=[
+                item.model_copy(deep=True)
+                for item in getattr(self, "_routing_decisions_state", [])
+            ],
             health_config=self._health_config.model_copy(deep=True),
             health_records=[
                 item.model_copy(deep=True)
@@ -154,7 +197,9 @@ class ControlPlaneProviderDomainMixin:
             last_sync_status="created",
         )
         self._providers_state[payload.provider] = provider
+        self._refresh_provider_targets()
         self._persist_state()
+        clear_runtime_dependency_caches()
         return provider
 
     def update_provider(
@@ -171,13 +216,17 @@ class ControlPlaneProviderDomainMixin:
             provider.template_id = payload.template_id
         if payload.config is not None:
             provider.config = payload.config
+        self._refresh_provider_targets()
         self._persist_state()
+        clear_runtime_dependency_caches()
         return provider
 
     def set_provider_enabled(self, provider_name: str, enabled: bool) -> ManagedProviderRecord:
         provider = self.get_provider(provider_name)
         provider.enabled = enabled
+        self._refresh_provider_targets()
         self._persist_state()
+        clear_runtime_dependency_caches()
         return provider
 
     def run_sync(self, target_provider: str | None = None) -> dict[str, object]:
@@ -189,18 +238,22 @@ class ControlPlaneProviderDomainMixin:
                 for model_id in self._settings.openai_codex_discovered_models:
                     if model_id not in {model.id for model in provider.managed_models}:
                         provider.managed_models.append(
-                            ManagedModelRecord(
-                                id=model_id,
-                                source="discovered",
-                                discovery_status="synced",
-                                active=True,
-                                owned_by=provider.label or "OpenAI Codex",
-                                display_name=model_id,
-                                category="general",
-                                runtime_status="partial",
-                                availability_status="healthy",
-                                status_reason="codex_discovery_sync",
-                                last_seen_at=now,
+                            ensure_model_registry_metadata(
+                                ManagedModelRecord(
+                                    id=model_id,
+                                    source="discovered",
+                                    discovery_status="synced",
+                                    active=True,
+                                    owned_by=provider.label or "OpenAI Codex",
+                                    display_name=model_id,
+                                    category="general",
+                                    runtime_status="partial",
+                                    availability_status="healthy",
+                                    status_reason="codex_discovery_sync",
+                                    last_seen_at=now,
+                                ),
+                                provider.label or "OpenAI Codex",
+                                provider.provider,
                             )
                         )
 
@@ -238,18 +291,22 @@ class ControlPlaneProviderDomainMixin:
                             existing_map[model_id].stale_since = None if item.active else existing_map[model_id].stale_since
                         else:
                             provider.managed_models.append(
-                                ManagedModelRecord(
-                                    id=model_id,
-                                    source=item.source,
-                                    discovery_status=sync_state.last_sync_status,
-                                    active=item.active,
-                                    owned_by=provider.label or provider.provider,
-                                    display_name=model_id,
-                                    category="general",
-                                    runtime_status="partial" if item.active else "unavailable",
-                                    availability_status="healthy" if item.active else "unavailable",
-                                    status_reason=sync_state.last_sync_status,
-                                    last_seen_at=now,
+                                ensure_model_registry_metadata(
+                                    ManagedModelRecord(
+                                        id=model_id,
+                                        source=item.source,
+                                        discovery_status=sync_state.last_sync_status,
+                                        active=item.active,
+                                        owned_by=provider.label or provider.provider,
+                                        display_name=model_id,
+                                        category="general",
+                                        runtime_status="partial" if item.active else "unavailable",
+                                        availability_status="healthy" if item.active else "unavailable",
+                                        status_reason=sync_state.last_sync_status,
+                                        last_seen_at=now,
+                                    ),
+                                    provider.label or provider.provider,
+                                    provider.provider,
                                 )
                             )
                     for model_id in [
@@ -279,18 +336,22 @@ class ControlPlaneProviderDomainMixin:
                     if model_id in existing_ids:
                         continue
                     provider.managed_models.append(
-                        ManagedModelRecord(
-                            id=model_id,
-                            source="discovered",
-                            discovery_status="catalog",
-                            active=True,
-                            owned_by=provider.label or "Anthropic",
-                            display_name=model_id,
-                            category="general",
-                            runtime_status="partial",
-                            availability_status="healthy",
-                            status_reason="anthropic_catalog_seed",
-                            last_seen_at=now,
+                        ensure_model_registry_metadata(
+                            ManagedModelRecord(
+                                id=model_id,
+                                source="discovered",
+                                discovery_status="catalog",
+                                active=True,
+                                owned_by=provider.label or "Anthropic",
+                                display_name=model_id,
+                                category="general",
+                                runtime_status="partial",
+                                availability_status="healthy",
+                                status_reason="anthropic_catalog_seed",
+                                last_seen_at=now,
+                            ),
+                            provider.label or "Anthropic",
+                            provider.provider,
                         )
                     )
 
@@ -298,12 +359,19 @@ class ControlPlaneProviderDomainMixin:
             if provider.last_sync_status == "never":
                 provider.last_sync_status = "ok"
             for model in provider.managed_models:
+                ensure_model_registry_metadata(
+                    model,
+                    provider.label or provider.provider,
+                    provider.provider,
+                )
                 if not model.runtime_status or model.runtime_status == "planned":
                     model.runtime_status = self._managed_model_runtime_status(model)  # type: ignore[assignment]
                 if not model.availability_status or model.availability_status == "unknown":
                     model.availability_status = self._managed_model_availability(model)  # type: ignore[assignment]
             provider.managed_models = sorted(provider.managed_models, key=lambda item: item.id)
+        self._refresh_provider_targets()
         self._persist_state()
+        clear_runtime_dependency_caches()
         return {
             "status": "ok",
             "synced_providers": [provider.provider for provider in providers],

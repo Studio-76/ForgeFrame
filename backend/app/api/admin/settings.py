@@ -23,7 +23,7 @@ from app.usage.analytics import get_usage_analytics_store
 
 router = APIRouter(prefix="/settings", tags=["admin-settings"])
 _SETTINGS_IDEMPOTENCY_MESSAGE = (
-    "Idempotency-Key is not supported for settings mutations until ForgeGate persists replay-safe override write "
+    "Idempotency-Key is not supported for settings mutations until ForgeFrame persists replay-safe override write "
     "responses without duplicating configuration audit side effects."
 )
 

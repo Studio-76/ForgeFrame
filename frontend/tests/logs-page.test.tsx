@@ -5,12 +5,14 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const {
+  fetchInstancesMock,
   fetchAccountsMock,
   fetchAuditHistoryDetailMock,
   fetchAuditHistoryMock,
   fetchLogsMock,
   generateAuditExportMock,
 } = vi.hoisted(() => ({
+  fetchInstancesMock: vi.fn(),
   fetchAccountsMock: vi.fn(),
   fetchAuditHistoryDetailMock: vi.fn(),
   fetchAuditHistoryMock: vi.fn(),
@@ -23,6 +25,7 @@ vi.mock("../src/api/admin", async () => {
 
   return {
     ...actual,
+    fetchInstances: fetchInstancesMock,
     fetchAccounts: fetchAccountsMock,
     fetchAuditHistory: fetchAuditHistoryMock,
     fetchAuditHistoryDetail: fetchAuditHistoryDetailMock,
@@ -36,6 +39,7 @@ import type {
   AdminSessionUser,
   AuditHistoryDetailResponse,
   AuditHistoryResponse,
+  InstanceRecord,
   LogsResponse,
 } from "../src/api/admin";
 import { withAppContext } from "./testContext";
@@ -57,6 +61,25 @@ const viewerSession: AdminSessionUser = {
   display_name: "Viewer",
   role: "viewer",
 };
+
+function createInstanceRecord(overrides: Partial<InstanceRecord> = {}): InstanceRecord {
+  return {
+    instance_id: "instance_alpha",
+    slug: "instance-alpha",
+    display_name: "Alpha Instance",
+    description: "Alpha log scope",
+    status: "active",
+    tenant_id: "tenant_alpha",
+    company_id: "company_alpha",
+    deployment_mode: "linux_host_native",
+    exposure_mode: "same_origin",
+    is_default: true,
+    metadata: {},
+    created_at: "2026-04-21T09:40:00Z",
+    updated_at: "2026-04-21T09:40:00Z",
+    ...overrides,
+  };
+}
 
 function createLogsResponse(): LogsResponse {
   return {
@@ -220,7 +243,7 @@ function createAuditHistoryDetail(): AuditHistoryDetailResponse {
 function createAuditExportResult(format: "json" | "csv" = "json") {
   return {
     exportId: "audit_export_1",
-    filename: `forgegate-audit-export-acct_alpha-20260421T214500Z.${format}`,
+    filename: `forgeframe-audit-export-acct_alpha-20260421T214500Z.${format}`,
     status: "ready" as const,
     rowCount: 2,
     generatedAt: "2026-04-21T21:50:00Z",
@@ -261,6 +284,10 @@ async function renderLogsPage(path = "/logs#audit-history") {
 
 beforeEach(() => {
   vi.resetAllMocks();
+  fetchInstancesMock.mockResolvedValue({
+    status: "ok",
+    instances: [createInstanceRecord()],
+  });
   fetchAccountsMock.mockResolvedValue({
     status: "ok",
     accounts: [
@@ -298,11 +325,12 @@ afterEach(() => {
 
 describe("Logs page audit history workflow", () => {
   it("persists audit filters from the URL and exposes audit export as a distinct anchor on the same route", async () => {
-    await renderLogsPage("/logs?tenantId=acct_alpha&auditWindow=30d&auditAction=runtime_key_issue&auditActor=ops&auditTargetType=runtime_key&auditTargetId=key_alpha&auditStatus=warning#audit-history");
+    await renderLogsPage("/logs?instanceId=instance_alpha&auditWindow=30d&auditAction=runtime_key_issue&auditActor=ops&auditTargetType=runtime_key&auditTargetId=key_alpha&auditStatus=warning#audit-history");
 
-    expect(fetchLogsMock).toHaveBeenCalledWith("acct_alpha", null);
+    expect(fetchInstancesMock).toHaveBeenCalledTimes(1);
+    expect(fetchLogsMock).toHaveBeenCalledWith("instance_alpha", undefined, null);
     expect(fetchAuditHistoryMock).toHaveBeenCalledWith({
-      tenantId: "acct_alpha",
+      instanceId: "instance_alpha",
       window: "30d",
       action: "runtime_key_issue",
       actor: "ops",
@@ -314,21 +342,22 @@ describe("Logs page audit history workflow", () => {
     expect(container.textContent).toContain("Errors, Activity, and Audit History");
     expect(container.textContent).toContain("Export stays on this route");
     expect(container.textContent).toContain("Audit export");
-    expect(container.textContent).toContain("Current export scope: Format: JSON · Window: 30d · Action: runtime_key_issue · Status: warning · Limit: 250");
+    expect(container.textContent).toContain("Current export scope: Format: JSON · Instance: Alpha Instance · Window: 30d · Action: runtime_key_issue · Status: warning · Limit: 250");
     expect(container.textContent).not.toContain("Subject: ops runtime_key key_alpha");
     expect(container.querySelector<HTMLSelectElement>("#audit-history select")?.value).toBe("30d");
     expect(container.querySelector<HTMLInputElement>('input[placeholder="Search actor"]')?.value).toBe("ops");
     expect(container.querySelector<HTMLButtonElement>("#audit-export button")?.disabled).toBe(false);
 
     const exportLink = Array.from(container.querySelectorAll("a")).find((link) => link.textContent?.includes("Open Audit Export"));
-    expect(exportLink?.getAttribute("href")).toBe("/logs?tenantId=acct_alpha&auditWindow=30d&auditAction=runtime_key_issue&auditStatus=warning#audit-export");
+    expect(exportLink?.getAttribute("href")).toBe("/logs?instanceId=instance_alpha&auditWindow=30d&auditAction=runtime_key_issue&auditStatus=warning#audit-export");
   });
 
   it("keeps company-scoped execution audit links on the company filter path", async () => {
-    await renderLogsPage("/logs?companyId=company_alpha&auditWindow=all&auditAction=execution_run_replay&auditTargetType=execution_run&auditTargetId=run_alpha&auditStatus=ok&auditEvent=audit_evt_execution_replay#audit-history");
+    await renderLogsPage("/logs?instanceId=instance_alpha&companyId=company_alpha&auditWindow=all&auditAction=execution_run_replay&auditTargetType=execution_run&auditTargetId=run_alpha&auditStatus=ok&auditEvent=audit_evt_execution_replay#audit-history");
 
-    expect(fetchLogsMock).toHaveBeenCalledWith(null, "company_alpha");
+    expect(fetchLogsMock).toHaveBeenCalledWith("instance_alpha", undefined, "company_alpha");
     expect(fetchAuditHistoryMock).toHaveBeenCalledWith({
+      instanceId: "instance_alpha",
       companyId: "company_alpha",
       window: "all",
       action: "execution_run_replay",
@@ -338,22 +367,22 @@ describe("Logs page audit history workflow", () => {
       status: "ok",
       limit: 25,
     });
-    expect(fetchAuditHistoryDetailMock).toHaveBeenCalledWith("audit_evt_execution_replay", null, "company_alpha");
+    expect(fetchAuditHistoryDetailMock).toHaveBeenCalledWith("audit_evt_execution_replay", "instance_alpha", undefined, "company_alpha");
 
     const exportLink = Array.from(container.querySelectorAll("a")).find((link) => link.textContent?.includes("Open Audit Export"));
-    expect(exportLink?.getAttribute("href")).toBe("/logs?companyId=company_alpha&auditWindow=all&auditAction=execution_run_replay&auditStatus=ok#audit-export");
+    expect(exportLink?.getAttribute("href")).toBe("/logs?instanceId=instance_alpha&companyId=company_alpha&auditWindow=all&auditAction=execution_run_replay&auditStatus=ok#audit-export");
   });
 
-  it("preserves tenant scope on the in-page audit export CTA", async () => {
-    await renderLogsPage("/logs?tenantId=acct_alpha");
+  it("preserves instance scope on the in-page audit export CTA", async () => {
+    await renderLogsPage("/logs?instanceId=instance_alpha");
 
     const exportLink = Array.from(container.querySelectorAll("a")).find((link) => link.textContent?.includes("Open Audit Export"));
-    expect(exportLink?.getAttribute("href")).toBe("/logs?tenantId=acct_alpha&auditWindow=7d#audit-export");
+    expect(exportLink?.getAttribute("href")).toBe("/logs?instanceId=instance_alpha&auditWindow=7d#audit-export");
   });
 
   it("generates an export from the shipped backend contract and leaves a durable package summary", async () => {
     generateAuditExportMock.mockResolvedValueOnce(createAuditExportResult("csv"));
-    await renderLogsPage("/logs?tenantId=acct_alpha&auditWindow=30d&auditAction=runtime_key_issue&auditStatus=warning#audit-export");
+    await renderLogsPage("/logs?instanceId=instance_alpha&auditWindow=30d&auditAction=runtime_key_issue&auditStatus=warning#audit-export");
 
     const formatSelect = container.querySelector<HTMLSelectElement>("#audit-export select");
     const exportInputs = container.querySelectorAll<HTMLInputElement>("#audit-export input");
@@ -390,21 +419,22 @@ describe("Logs page audit history workflow", () => {
       status: "warning",
       subject: "runtime key evidence",
       limit: 40,
-    }, "acct_alpha", null);
+    }, "instance_alpha", undefined, null);
     expect(container.textContent).toContain("Latest exported package");
-    expect(container.textContent).toContain("forgegate-audit-export-acct_alpha-20260421T214500Z.csv");
+    expect(container.textContent).toContain("forgeframe-audit-export-acct_alpha-20260421T214500Z.csv");
     expect(container.textContent).toContain("Rows exported: 2");
     expect(container.textContent).toContain("Open export audit event");
     expect(container.textContent).toContain("Download latest export again");
 
     const auditEventLink = Array.from(container.querySelectorAll("a")).find((link) => link.textContent?.includes("Open export audit event"));
+    expect(auditEventLink?.getAttribute("href")).toContain("instanceId=instance_alpha");
     expect(auditEventLink?.getAttribute("href")).toContain("auditAction=audit_export_generated");
     expect(auditEventLink?.getAttribute("href")).toContain("auditTargetType=audit_export");
     expect(auditEventLink?.getAttribute("href")).toContain("auditTargetId=audit_export_1");
   });
 
   it("does not silently derive export subject from history-only filters", async () => {
-    await renderLogsPage("/logs?tenantId=acct_alpha&auditWindow=30d&auditAction=runtime_key_issue&auditActor=ops&auditTargetType=runtime_key&auditTargetId=key_alpha&auditStatus=warning#audit-export");
+    await renderLogsPage("/logs?instanceId=instance_alpha&auditWindow=30d&auditAction=runtime_key_issue&auditActor=ops&auditTargetType=runtime_key&auditTargetId=key_alpha&auditStatus=warning#audit-export");
 
     const exportInputs = container.querySelectorAll<HTMLInputElement>("#audit-export input");
     const subjectInput = exportInputs[0];
@@ -424,12 +454,12 @@ describe("Logs page audit history workflow", () => {
       status: "warning",
       subject: null,
       limit: 250,
-    }, "acct_alpha", null);
+    }, "instance_alpha", undefined, null);
   });
 
   it("keeps the latest exported package summary when review-only filters change", async () => {
     generateAuditExportMock.mockResolvedValueOnce(createAuditExportResult());
-    await renderLogsPage("/logs?tenantId=acct_alpha&auditWindow=30d&auditAction=runtime_key_issue&auditStatus=warning#audit-export");
+    await renderLogsPage("/logs?instanceId=instance_alpha&auditWindow=30d&auditAction=runtime_key_issue&auditStatus=warning#audit-export");
 
     const exportInputs = container.querySelectorAll<HTMLInputElement>("#audit-export input");
     const subjectInput = exportInputs[0];
@@ -461,7 +491,7 @@ describe("Logs page audit history workflow", () => {
     await flushEffects();
 
     expect(fetchAuditHistoryMock).toHaveBeenLastCalledWith({
-      tenantId: "acct_alpha",
+      instanceId: "instance_alpha",
       window: "30d",
       action: "runtime_key_issue",
       actor: null,
@@ -477,7 +507,7 @@ describe("Logs page audit history workflow", () => {
 
   it("keeps export visible but disabled for viewer sessions", async () => {
     await renderIntoDom(withAppContext({
-      path: "/logs?tenantId=acct_alpha#audit-export",
+      path: "/logs?instanceId=instance_alpha#audit-export",
       element: <LogsPage />,
       session: viewerSession,
     }));
@@ -485,6 +515,7 @@ describe("Logs page audit history workflow", () => {
 
     const button = container.querySelector<HTMLButtonElement>("#audit-export button");
     expect(button?.disabled).toBe(true);
+    expect(fetchLogsMock).toHaveBeenCalledWith("instance_alpha", undefined, null);
     expect(fetchAuditHistoryMock).not.toHaveBeenCalled();
     expect(fetchAuditHistoryDetailMock).not.toHaveBeenCalled();
     expect(container.textContent).toContain("Viewer read-only");
@@ -496,7 +527,7 @@ describe("Logs page audit history workflow", () => {
   it("shows a failed export state when the backend contract returns an error", async () => {
     generateAuditExportMock.mockRejectedValueOnce(new Error("upstream export failed"));
 
-    await renderLogsPage("/logs?tenantId=acct_alpha#audit-export");
+    await renderLogsPage("/logs?instanceId=instance_alpha#audit-export");
 
     const button = container.querySelector<HTMLButtonElement>("#audit-export button");
     await act(async () => {
@@ -534,7 +565,7 @@ describe("Logs page audit history workflow", () => {
   });
 
   it("opens the detail panel without losing the table state", async () => {
-    await renderLogsPage();
+    await renderLogsPage("/logs?instanceId=instance_alpha#audit-history");
 
     const button = container.querySelector<HTMLButtonElement>("button.fg-table-trigger");
     expect(button).not.toBeNull();
@@ -544,9 +575,11 @@ describe("Logs page audit history workflow", () => {
     });
     await flushEffects();
 
-    expect(fetchAuditHistoryDetailMock).toHaveBeenCalledWith("audit_evt_1", null, null);
+    expect(fetchAuditHistoryDetailMock).toHaveBeenCalledWith("audit_evt_1", "instance_alpha", undefined, null);
     expect(container.textContent).toContain("Replay after provider credentials were rotated and verified.");
     expect(container.textContent).toContain("Raw metadata");
     expect(container.textContent).toContain("Open Provider Health & Runs");
+    const relatedLink = Array.from(container.querySelectorAll("a")).find((link) => link.textContent === "Open Provider Health & Runs");
+    expect(relatedLink?.getAttribute("href")).toBe("/providers?instanceId=instance_alpha#provider-health-runs");
   });
 });

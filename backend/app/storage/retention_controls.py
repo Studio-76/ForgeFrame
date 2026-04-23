@@ -1,4 +1,4 @@
-"""Retention policy helpers for ForgeGate operational history."""
+"""Retention policy helpers for ForgeFrame operational history."""
 
 from __future__ import annotations
 

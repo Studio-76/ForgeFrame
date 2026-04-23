@@ -1,13 +1,23 @@
-"""Startup validation and readiness reporting for ForgeGate."""
+"""Startup validation and readiness reporting for ForgeFrame."""
 
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import TYPE_CHECKING, Literal
 
 from fastapi import FastAPI
 from pydantic import BaseModel
 
+from app.public_surface import (
+    NORMATIVE_HTTPS_HOST,
+    NORMATIVE_HTTPS_PORT,
+    FRONTEND_MOUNT_PATH,
+    ROOT_SURFACE_KIND,
+    has_integrated_tls_automation,
+    has_linux_host_installation_artifacts,
+    resolve_repo_relative_path,
+)
 from app.tenancy import TenantFilterRequiredError
 
 if TYPE_CHECKING:
@@ -18,7 +28,15 @@ if TYPE_CHECKING:
 
 ReadinessState = Literal["booting", "degraded", "ready"]
 ReadinessSeverity = Literal["critical", "warning"]
-INSECURE_BOOTSTRAP_ADMIN_PASSWORDS = frozenset({"", "forgegate-admin", "replace-with-a-strong-password"})
+INSECURE_BOOTSTRAP_ADMIN_PASSWORDS = frozenset(
+    {
+        "",
+        "forgegate-admin",
+        "forgeframe-admin",
+        "replace-with-a-strong-password",
+        "replace-with-a-generated-bootstrap-password",
+    }
+)
 PUBLIC_READINESS_ID_MAP = {
     "settings_validation": "startup_validation",
     "bootstrap_admin_password": "security_configuration",
@@ -35,6 +53,17 @@ PUBLIC_READINESS_ID_MAP = {
     "default_runtime_model_boot": "runtime_model_configuration",
     "default_provider_ready": "runtime_provider_configuration",
     "default_provider_adapter_boot": "runtime_provider_configuration",
+    "frontend_dist_path": "ui_delivery",
+    "root_ui_delivery": "ui_delivery",
+    "same_origin_runtime_api": "public_origin_contract",
+    "public_fqdn_configured": "public_origin_contract",
+    "public_dns_resolution": "public_origin_contract",
+    "public_https_listener": "public_origin_contract",
+    "port80_certificate_helper": "tls_certificate_management",
+    "certificate_material": "tls_certificate_management",
+    "tls_mode_classification": "tls_certificate_management",
+    "tls_certificate_management": "tls_certificate_management",
+    "linux_host_runtime": "deployment_posture",
     "observability_backend": "observability",
 }
 PUBLIC_READINESS_DISPLAY_ORDER = (
@@ -43,6 +72,10 @@ PUBLIC_READINESS_DISPLAY_ORDER = (
     "service_dependencies",
     "runtime_model_configuration",
     "runtime_provider_configuration",
+    "ui_delivery",
+    "public_origin_contract",
+    "tls_certificate_management",
+    "deployment_posture",
     "observability",
 )
 
@@ -164,7 +197,7 @@ def build_public_runtime_readiness_payload(readiness: RuntimeReadinessReport) ->
 class StartupValidationError(RuntimeError):
     def __init__(self, checks: list[RuntimeReadinessCheck]):
         self.checks = checks
-        super().__init__("ForgeGate startup validation failed.")
+        super().__init__("ForgeFrame startup validation failed.")
 
 
 def reset_runtime_readiness_state(app: FastAPI) -> None:
@@ -341,6 +374,104 @@ def ensure_runtime_startup_validated(app: FastAPI) -> list[RuntimeReadinessCheck
     return checks
 
 
+def _build_public_surface_checks(
+    *,
+    settings: Settings,
+    app: FastAPI | None,
+) -> list[RuntimeReadinessCheck]:
+    from app.ingress.service import build_ingress_tls_status
+
+    repo_root = Path(__file__).resolve().parents[2]
+    frontend_dist_path = resolve_repo_relative_path(repo_root, settings.frontend_dist_path)
+    frontend_index = frontend_dist_path / "index.html"
+    frontend_mount_path = getattr(app.state, "frontend_mount_path", None) if app is not None else None
+    root_surface_kind = getattr(app.state, "root_surface_kind", None) if app is not None else None
+    ingress_status = build_ingress_tls_status(settings)
+
+    return [
+        RuntimeReadinessCheck(
+            id="frontend_dist_path",
+            ok=frontend_index.exists(),
+            severity="warning",
+            details=str(frontend_index),
+        ),
+        RuntimeReadinessCheck(
+            id="root_ui_delivery",
+            ok=frontend_mount_path == "/" and root_surface_kind == "spa",
+            severity="warning",
+            details=(
+                f"root_surface={root_surface_kind or ROOT_SURFACE_KIND};"
+                f"frontend_mount_path={frontend_mount_path or FRONTEND_MOUNT_PATH}"
+            ),
+        ),
+        RuntimeReadinessCheck(
+            id="same_origin_runtime_api",
+            ok=settings.api_base.startswith("/") and settings.public_admin_base.startswith("/"),
+            severity="warning",
+            details=f"runtime={settings.api_base};admin={settings.public_admin_base}",
+        ),
+        RuntimeReadinessCheck(
+            id="public_fqdn_configured",
+            ok=bool(settings.public_fqdn.strip()),
+            severity="warning",
+            details=settings.public_fqdn.strip() or "missing",
+        ),
+        RuntimeReadinessCheck(
+            id="public_dns_resolution",
+            ok=ingress_status.dns_resolves,
+            severity="warning",
+            details=",".join(ingress_status.resolved_addresses) if ingress_status.resolved_addresses else "unresolved",
+        ),
+        RuntimeReadinessCheck(
+            id="public_https_listener",
+            ok=(
+                settings.public_https_host == NORMATIVE_HTTPS_HOST
+                and settings.public_https_port == NORMATIVE_HTTPS_PORT
+                and settings.public_tls_mode == "integrated_acme"
+            ),
+            severity="warning",
+            details=f"{settings.public_https_host}:{settings.public_https_port};mode={settings.public_tls_mode}",
+        ),
+        RuntimeReadinessCheck(
+            id="port80_certificate_helper",
+            ok=(
+                settings.public_http_helper_port == NORMATIVE_HTTP_HELPER_PORT
+                and settings.public_tls_mode == "integrated_acme"
+            ),
+            severity="warning",
+            details=f"{settings.public_http_helper_host}:{settings.public_http_helper_port}",
+        ),
+        RuntimeReadinessCheck(
+            id="certificate_material",
+            ok=ingress_status.certificate.present,
+            severity="warning",
+            details=ingress_status.certificate.certificate_path,
+        ),
+        RuntimeReadinessCheck(
+            id="tls_mode_classification",
+            ok=ingress_status.mode_classification == "normative_public_https",
+            severity="warning",
+            details=ingress_status.mode_classification,
+        ),
+        RuntimeReadinessCheck(
+            id="tls_certificate_management",
+            ok=has_integrated_tls_automation(repo_root),
+            severity="warning",
+            details="integrated_tls_automation_present" if has_integrated_tls_automation(repo_root) else "integrated_tls_automation_missing",
+        ),
+        RuntimeReadinessCheck(
+            id="linux_host_runtime",
+            ok=has_linux_host_installation_artifacts(repo_root),
+            severity="warning",
+            details=(
+                "linux_host_installation_artifacts_present"
+                if has_linux_host_installation_artifacts(repo_root)
+                else "missing_install_script_or_systemd_units"
+            ),
+        ),
+    ]
+
+
 def build_runtime_readiness_report(
     *,
     settings: Settings,
@@ -348,6 +479,7 @@ def build_runtime_readiness_report(
     governance: GovernanceService,
     harness: HarnessService,
     analytics: UsageAnalyticsStore,
+    app: FastAPI | None = None,
 ) -> RuntimeReadinessReport:
     from app.core.model_registry import ModelRegistry
     from app.providers import ProviderRegistry
@@ -404,7 +536,7 @@ def build_runtime_readiness_report(
             details=(
                 "admin_auth_enabled"
                 if settings.admin_auth_enabled
-                else "FORGEGATE_ADMIN_AUTH_ENABLED=false"
+                else "FORGEFRAME_ADMIN_AUTH_ENABLED=false"
             ),
         )
     )
@@ -440,6 +572,7 @@ def build_runtime_readiness_report(
             details=observability_details,
         )
     )
+    checks.extend(_build_public_surface_checks(settings=settings, app=app))
 
     return RuntimeReadinessReport.from_checks(checks)
 

@@ -1,4 +1,4 @@
-"""ForgeGate authz foundation exports."""
+"""ForgeFrame authz foundation exports."""
 
 from app.authz.catalog import (
     ALL_ROUTE_POLICIES,

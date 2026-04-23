@@ -61,7 +61,7 @@ class GenericHarnessAdapter:
 
     def readiness_reason(self) -> str | None:
         if not self._settings.generic_harness_enabled:
-            return "FORGEGATE_GENERIC_HARNESS_ENABLED=false"
+            return "FORGEFRAME_GENERIC_HARNESS_ENABLED=false"
         if not self._harness.list_profiles():
             return "No harness provider profile configured in control plane."
         if not self._active_profiles():

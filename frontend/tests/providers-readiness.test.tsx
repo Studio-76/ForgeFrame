@@ -48,7 +48,7 @@ function createSession(overrides: Partial<AdminSessionUser> = {}): AdminSessionU
     user_id: "user_test",
     username: "ops-user",
     display_name: "Ops User",
-    role: "operator",
+    role: "admin",
     session_type: "standard",
     read_only: false,
     must_rotate_password: false,
@@ -71,9 +71,10 @@ function createData(sessionOverrides: Partial<AdminSessionUser> = {}): Providers
         config: {},
         ready: true,
         readiness_reason: null,
+        contract_classification: "runtime-ready",
         capabilities: {},
         tool_calling_level: "full",
-        compatibility_tier: "beta_plus",
+        compatibility_depth: "validated",
         runtime_readiness: "ready",
         streaming_readiness: "partial",
         provider_axis: "wired",
@@ -145,15 +146,18 @@ function createData(sessionOverrides: Partial<AdminSessionUser> = {}): Providers
     integrationErrors: {},
     profileErrors: {},
     clients: [],
-    betaTargets: [
+    productAxisTargets: [
       {
         provider_key: "github_copilot",
         product_axis: "oauth_account_providers",
         provider_type: "oauth_account",
-        beta_tier: "beta",
         readiness: "partial",
         runtime_path: "bridge",
         auth_model: "oauth",
+        contract_classification: "bridge-only",
+        classification_reason: "This target remains bridge-only in the current release truth.",
+        technical_requirements: ["Credentials must be configured."],
+        operator_surface: "/oauth-targets",
         readiness_score: 72,
         status_summary: "Probe required",
         runtime_readiness: "partial",
@@ -177,7 +181,8 @@ function createData(sessionOverrides: Partial<AdminSessionUser> = {}): Providers
       {
         provider: "openai",
         label: "OpenAI",
-        tier: "beta_plus",
+        compatibility_depth: "validated",
+        contract_classification: "runtime-ready",
         ready: true,
         runtime_readiness: "partial",
         streaming_readiness: "ready",
@@ -213,12 +218,11 @@ function createData(sessionOverrides: Partial<AdminSessionUser> = {}): Providers
 describe("Provider readiness axes", () => {
   it("renders runtime and streaming readiness separately in the inventory and matrix", () => {
     const markup = renderToStaticMarkup(<ProviderInventorySection data={createData()} actions={createActions()} />);
-    const inventoryReadinessDetail = "runtime axis=ready · streaming axis=partial · provider axis=wired · compatibility=beta_plus";
-    const matrixReadinessDetail = "tier=beta_plus · runtime axis=partial · streaming axis=ready · provider axis=wired";
+    const inventoryReadinessDetail = "contract=runtime ready · runtime axis=ready · streaming axis=partial · provider axis=wired · compatibility depth=validated";
+    const matrixReadinessDetail = "compatibility depth=validated · contract=runtime ready · runtime axis=partial · streaming axis=ready · provider axis=wired";
     const inventoryProofDetail = "harness proof=proven · proven profiles=generic_openai_like";
     const matrixProofDetail = "proof=proven · proven profiles=generic_openai_like";
 
-    expect(markup).toContain("Runtime and streaming readiness stay visible as separate axes.");
     expect(markup).toContain("harness proven");
     expect(markup).toContain("proof proven");
     expect(markup).toContain("runtime ready");
@@ -231,8 +235,8 @@ describe("Provider readiness axes", () => {
     expect(markup).toContain(matrixProofDetail);
     expect(markup.split(inventoryReadinessDetail)).toHaveLength(2);
     expect(markup.split(matrixReadinessDetail)).toHaveLength(2);
-    expect(markup).not.toContain("tier=beta_plus · runtime axis=ready · streaming axis=partial · provider axis=wired");
-    expect(markup).not.toContain("runtime axis=partial · streaming axis=ready · provider axis=wired · compatibility=beta_plus");
+    expect(markup).not.toContain("compatibility depth=validated · contract=runtime ready · runtime axis=ready · streaming axis=partial · provider axis=wired");
+    expect(markup).not.toContain("contract=runtime ready · runtime axis=partial · streaming axis=ready · provider axis=wired · compatibility depth=validated");
   });
 
   it("uses warning tones for partial readiness and needs-attention states", () => {
@@ -257,10 +261,11 @@ describe("Provider readiness axes", () => {
         provider: "anthropic",
         label: "Anthropic",
         ready: false,
+        contract_classification: "unsupported",
         runtime_readiness: "partial",
         streaming_readiness: "partial",
         provider_axis: "unmapped_native_runtime",
-        compatibility_tier: "planned",
+        compatibility_depth: "limited",
       },
     ];
     data.compatibilityMatrix = [
@@ -268,7 +273,8 @@ describe("Provider readiness axes", () => {
         ...data.compatibilityMatrix[0],
         provider: "anthropic",
         label: "Anthropic",
-        tier: "planned",
+        compatibility_depth: "limited",
+        contract_classification: "unsupported",
         runtime_readiness: "partial",
         streaming_readiness: "partial",
         provider_axis: "unmapped_native_runtime",
@@ -277,17 +283,17 @@ describe("Provider readiness axes", () => {
 
     const markup = renderToStaticMarkup(<ProviderInventorySection data={data} actions={createActions()} />);
 
-    expect(markup).toContain("provider axis=native runtime (outside product axes) · compatibility=planned");
+    expect(markup).toContain("contract=unsupported · runtime axis=partial · streaming axis=partial · provider axis=native runtime (outside product axes) · compatibility depth=limited");
     expect(markup).toContain(
-      "tier=planned · runtime axis=partial · streaming axis=partial · provider axis=native runtime (outside product axes)",
+      "compatibility depth=limited · contract=unsupported · runtime axis=partial · streaming axis=partial · provider axis=native runtime (outside product axes)",
     );
   });
 
   it("labels OAuth expansion rows as onboarding status instead of generic readiness", () => {
     const data = createData();
-    data.betaTargets = [
+    data.productAxisTargets = [
       {
-        ...data.betaTargets[0],
+        ...data.productAxisTargets[0],
         readiness: "ready",
         status_summary: "Live probe evidence is recorded, but runtime stays outside live provider truth.",
         verify_probe_readiness: "ready",
@@ -301,14 +307,40 @@ describe("Provider readiness axes", () => {
         probe_enabled: true,
         harness_profile_enabled: true,
         readiness: "partial",
+        contract_classification: "bridge-only",
+        queue_lane: "bridge_probe_only",
+        parallelism_mode: "not_enforced",
+        parallelism_limit: null,
+        session_reuse_strategy: "Pre-issued OAuth access token is forwarded through bridge/profile operations only; no managed refresh or session reuse contract exists.",
+        escalation_support: "native_runtime_unavailable",
+        cost_posture: "avoided-cost is tracked while direct provider billing stays outside ForgeFrame.",
+        operator_surface: "/oauth-targets",
+        operator_truth: "ForgeFrame can probe or sync bridge profiles for this target, but no native runtime lane is shipped for it in the current release truth.",
       },
     ];
     data.oauthOnboarding = [
       {
         provider_key: "github_copilot",
         readiness: "partial",
+        contract_classification: "bridge-only",
+        queue_lane: "bridge_probe_only",
+        parallelism_mode: "not_enforced",
+        parallelism_limit: null,
+        session_reuse_strategy: "Pre-issued OAuth access token is forwarded through bridge/profile operations only; no managed refresh or session reuse contract exists.",
+        escalation_support: "native_runtime_unavailable",
+        cost_posture: "avoided-cost is tracked while direct provider billing stays outside ForgeFrame.",
+        operator_surface: "/oauth-targets",
+        operator_truth: "ForgeFrame can probe or sync bridge profiles for this target, but no native runtime lane is shipped for it in the current release truth.",
+        configured: true,
+        runtime_bridge_enabled: true,
+        probe_enabled: true,
+        harness_profile_enabled: true,
+        auth_kind: "oauth_account",
+        oauth_mode: null,
+        oauth_flow_support: null,
+        evidence: {},
         operational_depth: "bridge_probe_evidenced",
-        readiness_reason: "Live probe evidence is recorded, but this target remains onboarding/bridge-only in the current beta slice.",
+        readiness_reason: "Live probe evidence is recorded, but this target remains onboarding/bridge-only in the current release truth.",
         next_steps: ["Keep github_copilot positioned as onboarding/bridge-only; probe success does not promote it to native runtime-ready truth."],
       },
     ];
@@ -367,7 +399,7 @@ describe("Provider readiness axes", () => {
     expect(markup).not.toContain("Probe all OAuth targets");
   });
 
-  it("keeps routine provider mutations visible for operator sessions", () => {
+  it("keeps routine provider mutations visible for admin sessions", () => {
     const data = createData();
     const markup = renderToStaticMarkup(
       <>
@@ -382,7 +414,7 @@ describe("Provider readiness axes", () => {
     expect(markup).toContain("Save profile");
     expect(markup).toContain("Preview + Verify");
     expect(markup).toContain("Export redacted");
-    expect(markup).not.toContain("Export full snapshot");
+    expect(markup).toContain("Export full snapshot");
     expect(markup).toContain("Dry-run import");
     expect(markup).toContain("Create provider");
     expect(markup).toContain("Save label");

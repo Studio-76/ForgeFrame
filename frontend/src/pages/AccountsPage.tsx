@@ -2,10 +2,13 @@ import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 
 import { buildAuditHistoryPath, resolveNewestAuditHistoryPathForSession } from "../app/auditHistory";
+import { roleAllows, sessionHasAnyInstancePermission } from "../app/adminAccess";
 import { CONTROL_PLANE_ROUTES } from "../app/navigation";
 import { useAppSession } from "../app/session";
-import { getTenantIdFromSearchParams } from "../app/tenantScope";
+import { getInstanceIdFromSearchParams } from "../app/tenantScope";
+import { useInstanceCatalog } from "../app/useInstanceCatalog";
 import { createAccount, fetchAccounts, updateAccount, type GatewayAccount } from "../api/admin";
+import { InstanceScopeCard } from "../components/InstanceScopeCard";
 import { PageIntro } from "../components/PageIntro";
 
 export function AccountsPage() {
@@ -16,15 +19,30 @@ export function AccountsPage() {
   ));
   const [form, setForm] = useState({ label: "", provider_bindings: "", notes: "" });
   const { session, sessionReady } = useAppSession();
-  const [searchParams] = useSearchParams();
-  const tenantId = getTenantIdFromSearchParams(searchParams);
-  const selectedAccount = accounts.find((account) => account.account_id === tenantId) ?? null;
-  const tenantScopeLabel = tenantId ? selectedAccount?.label ?? tenantId : "Shared accounts";
-  const canMutate = sessionReady && session?.role === "admin" && !session.read_only;
+  const [searchParams, setSearchParams] = useSearchParams();
+  const instanceId = getInstanceIdFromSearchParams(searchParams);
+  const { instances, loadState, error: instancesError, selectedInstance } = useInstanceCatalog(instanceId);
+  const instanceScopeLabel = selectedInstance?.display_name ?? selectedInstance?.instance_id ?? "Default instance path";
+  const canMutate = sessionReady && roleAllows(session?.role, "admin") && session?.read_only !== true;
+  const canOpenSecurity = sessionReady && (
+    sessionHasAnyInstancePermission(session, "security.read")
+    || sessionHasAnyInstancePermission(session, "security.write")
+  );
+  const canManageSecurity = sessionReady && sessionHasAnyInstancePermission(session, "security.write");
+
+  const onInstanceChange = (nextInstanceId: string | null) => {
+    const nextSearchParams = new URLSearchParams(searchParams);
+    if (nextInstanceId) {
+      nextSearchParams.set("instanceId", nextInstanceId);
+    } else {
+      nextSearchParams.delete("instanceId");
+    }
+    setSearchParams(nextSearchParams);
+  };
 
   const load = async () => {
     try {
-      const payload = await fetchAccounts(tenantId);
+      const payload = await fetchAccounts(instanceId);
       setAccounts(payload.accounts);
       setError("");
     } catch (err) {
@@ -34,24 +52,24 @@ export function AccountsPage() {
 
   useEffect(() => {
     void load();
-  }, [tenantId]);
+  }, [instanceId]);
 
   const refreshAuditHistoryRoute = async (targetId?: string | null) => {
     const route = await resolveNewestAuditHistoryPathForSession(
       session,
       sessionReady,
-      [{ query: { tenantId, window: "all", targetType: "gateway_account", targetId: targetId ?? null } }],
-      { tenantId, window: "all", targetType: "gateway_account", targetId: targetId ?? null },
+      [{ query: { instanceId, window: "all", targetType: "gateway_account", targetId: targetId ?? null } }],
+      { instanceId, window: "all", targetType: "gateway_account", targetId: targetId ?? null },
     );
     setAuditHistoryRoute(route);
   };
 
   useEffect(() => {
     void refreshAuditHistoryRoute();
-  }, [session, sessionReady, tenantId]);
+  }, [session, sessionReady, instanceId]);
 
   const onCreate = async () => {
-    const result = await createAccount({
+    const result = await createAccount(instanceId, {
       label: form.label,
       provider_bindings: form.provider_bindings.split(",").map((item) => item.trim()).filter(Boolean),
       notes: form.notes,
@@ -61,7 +79,7 @@ export function AccountsPage() {
   };
 
   const onUpdateStatus = async (accountId: string, status: string) => {
-    await updateAccount(accountId, { status });
+    await updateAccount(instanceId, accountId, { status });
     await Promise.all([load(), refreshAuditHistoryRoute(accountId)]);
   };
 
@@ -88,14 +106,14 @@ export function AccountsPage() {
             to: auditHistoryRoute,
             description: "Confirm runtime access changes against the audit trail.",
           },
-          sessionReady && session && session.role !== "viewer"
+          canOpenSecurity
             ? {
                 label: "Security & Policies",
                 to: CONTROL_PLANE_ROUTES.security,
-                description: session.role === "admin"
+                description: canManageSecurity
                   ? "Jump to elevated-access workflow plus admin bootstrap and session posture."
                   : "Request break-glass access or review your elevated-access history when the task exceeds runtime identities.",
-                badge: session.role === "admin" ? "Admin posture" : "Request flow",
+                badge: canManageSecurity ? "Admin posture" : "Request flow",
               }
             : {
                 label: "Security & Policies",
@@ -106,11 +124,22 @@ export function AccountsPage() {
               },
         ]}
         badges={[
-          { label: tenantId ? `Tenant scope: ${tenantScopeLabel}` : "Shared accounts", tone: tenantId ? "success" : "neutral" },
+          { label: selectedInstance ? `Instance scope: ${instanceScopeLabel}` : "Default instance path", tone: selectedInstance ? "success" : "neutral" },
           { label: canMutate ? "Admin mutations enabled" : "Read only", tone: canMutate ? "success" : "warning" },
         ]}
         note="Runtime account inventory stays operator-visible. Lifecycle mutations remain admin-only so the page does not imply a broader permission envelope than the backend provides."
       />
+
+      <InstanceScopeCard
+        instanceId={instanceId}
+        selectedInstance={selectedInstance}
+        instances={instances}
+        loadState={loadState}
+        error={instancesError}
+        surfaceLabel="runtime account governance"
+        onInstanceChange={onInstanceChange}
+      />
+
       {error ? <p className="fg-danger">{error}</p> : null}
       {canMutate ? (
         <div className="fg-card">
@@ -132,7 +161,9 @@ export function AccountsPage() {
         {accounts.map((account) => (
           <article key={account.account_id} className="fg-card">
             <h3>{account.label}</h3>
-            <p className="fg-muted">status={account.status} · runtime_keys={account.runtime_key_count ?? 0}</p>
+            <p className="fg-muted">
+              instance={account.instance_id ?? "unknown"} · tenant={account.tenant_id ?? "unknown"} · status={account.status} · runtime_keys={account.runtime_key_count ?? 0}
+            </p>
             <p>providers: {account.provider_bindings.join(", ") || "none"}</p>
             <p>notes: {account.notes || "none"}</p>
             {canMutate ? (

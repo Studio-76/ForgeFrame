@@ -1,4 +1,4 @@
-"""OpenAI OAuth mode semantics for ForgeGate runtime.
+"""OpenAI OAuth mode semantics for ForgeFrame runtime.
 
 This module intentionally models mode/readiness semantics only.
 It does not implement browser callback/device grant token exchange yet.
@@ -52,16 +52,16 @@ class OpenAICodexAuthState(BaseModel):
         if self.auth_mode != "oauth":
             return None
         return (
-            f"ForgeGate consumes a pre-issued access token for Codex OAuth mode '{self.oauth_mode}' "
+            f"ForgeFrame consumes a pre-issued access token for Codex OAuth mode '{self.oauth_mode}' "
             f"({self.oauth_mode_label}) and does not initiate or complete that OAuth flow itself."
         )
 
     def missing_credential_reason(self, *, provider_label: str = "OpenAI Codex") -> str:
         if self.auth_mode != "oauth":
-            return f"{provider_label} API-key mode selected but FORGEGATE_OPENAI_CODEX_API_KEY is missing."
+            return f"{provider_label} API-key mode selected but FORGEFRAME_OPENAI_CODEX_API_KEY is missing."
         return (
             f"{provider_label} OAuth mode '{self.oauth_mode}' expects a pre-issued access token in "
-            "FORGEGATE_OPENAI_CODEX_OAUTH_ACCESS_TOKEN. ForgeGate does not initiate or complete that OAuth flow itself."
+                "FORGEFRAME_OPENAI_CODEX_OAUTH_ACCESS_TOKEN. ForgeFrame does not initiate or complete that OAuth flow itself."
         )
 
 

@@ -34,7 +34,7 @@ from app.providers.base import (
     ProviderUnsupportedMediaTypeError,
     ProviderUpstreamError,
 )
-from app.request_metadata import forgegate_request_metadata_headers
+from app.request_metadata import forgeframe_request_metadata_headers
 from app.settings.config import Settings
 from app.usage.models import TokenUsage
 from app.usage.service import UsageAccountingService
@@ -66,9 +66,9 @@ class AnthropicAdapter:
 
     def readiness_reason(self) -> str | None:
         if not self._settings.anthropic_api_key.strip():
-            return "FORGEGATE_ANTHROPIC_API_KEY is required."
+            return "FORGEFRAME_ANTHROPIC_API_KEY is required."
         if self._configured_base_url() is None:
-            return "FORGEGATE_ANTHROPIC_BASE_URL must be an absolute http(s) URL."
+            return "FORGEFRAME_ANTHROPIC_BASE_URL must be an absolute http(s) URL."
         return None
 
     def create_chat_completion(self, request: ChatDispatchRequest) -> ChatDispatchResult:
@@ -102,7 +102,7 @@ class AnthropicAdapter:
         if base_url is None:  # pragma: no cover - guarded by readiness checks
             raise ProviderConfigurationError(
                 self.provider_name,
-                "FORGEGATE_ANTHROPIC_BASE_URL must be an absolute http(s) URL.",
+                "FORGEFRAME_ANTHROPIC_BASE_URL must be an absolute http(s) URL.",
             )
         endpoint = f"{base_url}/messages"
         headers = {
@@ -110,7 +110,7 @@ class AnthropicAdapter:
             "anthropic-version": self._settings.anthropic_version,
             "content-type": "application/json",
         }
-        headers.update(forgegate_request_metadata_headers(request_metadata))
+        headers.update(forgeframe_request_metadata_headers(request_metadata))
         return endpoint, headers
 
     def _configured_base_url(self) -> str | None:

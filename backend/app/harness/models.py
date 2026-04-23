@@ -123,7 +123,7 @@ class HarnessProfileRecord(HarnessProviderProfile):
 class HarnessVerificationRequest(BaseModel):
     provider_key: str
     model: str | None = None
-    test_message: str = "Hello from ForgeGate harness"
+    test_message: str = "Hello from ForgeFrame harness"
     include_preview: bool = True
     live_probe: bool = False
     check_stream: bool = True
@@ -132,7 +132,7 @@ class HarnessVerificationRequest(BaseModel):
 class HarnessPreviewRequest(BaseModel):
     provider_key: str
     model: str
-    message: str = "Hello from ForgeGate"
+    message: str = "Hello from ForgeFrame"
     messages: list[dict[str, Any]] = Field(default_factory=list)
     stream: bool = False
     tools: list[dict[str, Any]] = Field(default_factory=list)

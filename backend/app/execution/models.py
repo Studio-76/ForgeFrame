@@ -15,6 +15,12 @@ RUN_COMMAND_TYPES = (
     "create",
     "cancel",
     "retry",
+    "pause",
+    "resume",
+    "interrupt",
+    "restart_from_scratch",
+    "quarantine",
+    "escalate",
     "approval_resume",
     "approval_reject",
     "timeout_reconcile",
@@ -24,6 +30,12 @@ RunCommandType = Literal[
     "create",
     "cancel",
     "retry",
+    "pause",
+    "resume",
+    "interrupt",
+    "restart_from_scratch",
+    "quarantine",
+    "escalate",
     "approval_resume",
     "approval_reject",
     "timeout_reconcile",
@@ -65,6 +77,50 @@ RunState = Literal[
     "timed_out",
     "compensated",
     "dead_lettered",
+]
+
+RUN_EXECUTION_LANES = (
+    "interactive_low_latency",
+    "interactive_heavy",
+    "background_agentic",
+    "oauth_serialized",
+)
+RunExecutionLane = Literal[
+    "interactive_low_latency",
+    "interactive_heavy",
+    "background_agentic",
+    "oauth_serialized",
+]
+
+RUN_OPERATOR_STATES = (
+    "admitted",
+    "leased",
+    "executing",
+    "waiting_external",
+    "waiting_on_approval",
+    "paused",
+    "interrupted",
+    "retry_scheduled",
+    "completed",
+    "quarantined",
+    "failed",
+    "cancel_requested",
+    "compensating",
+)
+RunOperatorState = Literal[
+    "admitted",
+    "leased",
+    "executing",
+    "waiting_external",
+    "waiting_on_approval",
+    "paused",
+    "interrupted",
+    "retry_scheduled",
+    "completed",
+    "quarantined",
+    "failed",
+    "cancel_requested",
+    "compensating",
 ]
 
 RUN_FAILURE_CLASSES = (
@@ -116,6 +172,12 @@ RunAttemptState = Literal[
     "compensated",
     "dead_lettered",
 ]
+
+RUN_LEASE_STATUSES = ("not_leased", "leased", "released", "expired")
+RunLeaseStatus = Literal["not_leased", "leased", "released", "expired"]
+
+EXECUTION_WORKER_STATES = ("starting", "idle", "busy", "stopping", "stopped", "failed")
+ExecutionWorkerState = Literal["starting", "idle", "busy", "stopping", "stopped", "failed"]
 
 RUN_APPROVAL_GATE_STATUSES = APPROVAL_STATUSES
 RunApprovalGateStatus = ApprovalStatus
@@ -206,6 +268,8 @@ class RunRecord(BaseModel):
     issue_id: str | None = None
     run_kind: str
     state: RunState = "queued"
+    execution_lane: RunExecutionLane = "background_agentic"
+    operator_state: RunOperatorState = "admitted"
     status_reason: str | None = None
     active_attempt_no: int = Field(default=1, ge=1)
     current_attempt_id: str | None = None
@@ -228,7 +292,9 @@ class RunAttemptRecord(BaseModel):
     run_id: str
     attempt_no: int = Field(ge=1)
     attempt_state: RunAttemptState = "queued"
+    operator_state: RunOperatorState = "admitted"
     worker_key: str | None = None
+    lease_status: RunLeaseStatus = "not_leased"
     lease_token: str | None = None
     lease_acquired_at: datetime | None = None
     lease_expires_at: datetime | None = None
@@ -342,6 +408,30 @@ class RunSecretBindingRecord(BaseModel):
     updated_at: datetime
 
 
+class ExecutionWorkerRecord(BaseModel):
+    id: str
+    company_id: str
+    instance_id: str
+    worker_key: str
+    execution_lane: RunExecutionLane = "background_agentic"
+    worker_state: ExecutionWorkerState = "starting"
+    active_attempts: int = Field(default=0, ge=0)
+    current_run_id: str | None = None
+    current_attempt_id: str | None = None
+    lease_token: str | None = None
+    process_id: int | None = None
+    started_at: datetime | None = None
+    stopped_at: datetime | None = None
+    last_claimed_at: datetime | None = None
+    last_completed_at: datetime | None = None
+    last_heartbeat_at: datetime | None = None
+    heartbeat_expires_at: datetime | None = None
+    last_error_code: str | None = None
+    last_error_detail: str | None = None
+    created_at: datetime
+    updated_at: datetime
+
+
 class CreateRunCommand(BaseModel):
     run_id: str | None = None
     command_type: RunCommandType
@@ -355,11 +445,33 @@ class CreateRunCommand(BaseModel):
     expires_at: datetime | None = None
 
 
+class CreateExecutionWorker(BaseModel):
+    instance_id: str = Field(min_length=1)
+    worker_key: str = Field(min_length=1)
+    execution_lane: RunExecutionLane = "background_agentic"
+    worker_state: ExecutionWorkerState = "starting"
+    active_attempts: int = Field(default=0, ge=0)
+    current_run_id: str | None = None
+    current_attempt_id: str | None = None
+    lease_token: str | None = None
+    process_id: int | None = None
+    started_at: datetime | None = None
+    stopped_at: datetime | None = None
+    last_claimed_at: datetime | None = None
+    last_completed_at: datetime | None = None
+    last_heartbeat_at: datetime | None = None
+    heartbeat_expires_at: datetime | None = None
+    last_error_code: str | None = None
+    last_error_detail: str | None = None
+
+
 class CreateRun(BaseModel):
     workspace_id: str | None = None
     issue_id: str | None = None
     run_kind: str = Field(min_length=1)
     state: RunState = "queued"
+    execution_lane: RunExecutionLane = "background_agentic"
+    operator_state: RunOperatorState = "admitted"
     status_reason: str | None = None
     active_attempt_no: int = Field(default=1, ge=1)
     current_attempt_id: str | None = None
@@ -378,7 +490,9 @@ class CreateRunAttempt(BaseModel):
     run_id: str = Field(min_length=1)
     attempt_no: int = Field(ge=1)
     attempt_state: RunAttemptState = "queued"
+    operator_state: RunOperatorState = "admitted"
     worker_key: str | None = None
+    lease_status: RunLeaseStatus = "not_leased"
     lease_token: str | None = None
     lease_acquired_at: datetime | None = None
     lease_expires_at: datetime | None = None

@@ -1,4 +1,4 @@
-"""Runtime API routers for ForgeGate target paths."""
+"""Runtime API routers for ForgeFrame target paths."""
 
 from fastapi import APIRouter
 

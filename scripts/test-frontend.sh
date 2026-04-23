@@ -2,11 +2,4 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-cd "$ROOT_DIR/frontend"
-
-if [[ ! -d node_modules ]]; then
-  npm ci
-fi
-
-npm run test
-exec npm run build
+exec python3 "$ROOT_DIR/scripts/test-frontend.py" "$@"

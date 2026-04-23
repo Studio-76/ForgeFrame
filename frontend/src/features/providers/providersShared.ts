@@ -1,13 +1,20 @@
 import type { Dispatch, SetStateAction } from "react";
 
 import type { AdminSessionUser } from "../../api/admin";
+import {
+  roleAllows,
+  sessionCanMutateScopedOrAnyInstance,
+  sessionHasAnyInstancePermission,
+} from "../../app/adminAccess";
 import type {
-  BetaProviderTarget,
   CompatibilityMatrixRow,
   HarnessProfile,
   HarnessTemplate,
   HealthConfig,
+  OauthOnboardingTarget,
+  OauthTargetStatus,
   ProviderControlItem,
+  ProductAxisTarget,
 } from "../../api/admin";
 
 export type LoadState = "idle" | "loading" | "success" | "error";
@@ -84,12 +91,12 @@ export type ProvidersPageData = {
   integrationErrors: Record<string, number>;
   profileErrors: Record<string, number>;
   clients: ClientOpsRecord[];
-  betaTargets: BetaProviderTarget[];
-  oauthTargets: Array<Record<string, string | boolean>>;
+  productAxisTargets: ProductAxisTarget[];
+  oauthTargets: OauthTargetStatus[];
   oauthOperations: UnknownRecord[];
   oauthRecentOps: UnknownRecord[];
   oauthTotalOps: number;
-  oauthOnboarding: UnknownRecord[];
+  oauthOnboarding: OauthOnboardingTarget[];
   compatibilityMatrix: CompatibilityMatrixRow[];
   bootstrapReadiness: BootstrapReadiness | null;
   importPayload: string;
@@ -125,12 +132,14 @@ export type ProvidersPageActions = {
 };
 
 export function getProvidersAccess(session: AdminSessionUser | null, sessionReady: boolean): ProvidersAccessState {
-  const isViewer = session?.role === "viewer";
+  const canReadProviders = sessionHasAnyInstancePermission(session, "providers.read");
+  const canWriteProviders = sessionCanMutateScopedOrAnyInstance(session, null, "providers.write");
+  const isViewer = Boolean(session) && !canReadProviders;
   const isReadOnly = Boolean(session?.read_only);
-  const isAdmin = session?.role === "admin";
-  const canExportRedacted = sessionReady && Boolean(session) && !isViewer;
-  const canExportFull = sessionReady && Boolean(session) && isAdmin && !isReadOnly;
-  const canMutate = sessionReady && Boolean(session) && !isViewer && !isReadOnly;
+  const isAdmin = roleAllows(session?.role, "admin");
+  const canExportRedacted = sessionReady && canReadProviders;
+  const canExportFull = sessionReady && isAdmin && !isReadOnly;
+  const canMutate = sessionReady && canWriteProviders;
 
   if (!sessionReady) {
     return {
@@ -143,15 +152,15 @@ export function getProvidersAccess(session: AdminSessionUser | null, sessionRead
       badgeLabel: "Checking permissions",
       badgeTone: "neutral",
       summaryTitle: "Checking provider permissions",
-      summaryDetail: "ForgeGate is confirming whether this session can run provider, harness, health, and OAuth control-plane actions.",
-      exportBlockedMessage: "ForgeGate is still checking whether this session can inspect redacted harness exports.",
-      fullExportBlockedMessage: "ForgeGate is still checking whether this session can inspect full secret-bearing harness exports.",
-      mutationBlockedMessage: "ForgeGate is still checking whether this session can run provider mutations.",
+      summaryDetail: "ForgeFrame is confirming whether this session can run provider, harness, health, and OAuth control-plane actions.",
+      exportBlockedMessage: "ForgeFrame is still checking whether this session can inspect redacted harness exports.",
+      fullExportBlockedMessage: "ForgeFrame is still checking whether this session can inspect full secret-bearing harness exports.",
+      mutationBlockedMessage: "ForgeFrame is still checking whether this session can run provider mutations.",
     };
   }
 
   if (canMutate) {
-    const roleLabel = session?.role === "admin" ? "Admin" : "Operator";
+    const roleLabel = isAdmin ? "Admin" : "Operator";
 
     return {
       canExportRedacted: true,
@@ -163,9 +172,9 @@ export function getProvidersAccess(session: AdminSessionUser | null, sessionRead
       badgeLabel: `${roleLabel} mutations enabled`,
       badgeTone: "success",
       summaryTitle: "Provider mutations enabled",
-      summaryDetail: `Standard ${roleLabel.toLowerCase()} sessions can manage providers, harness profiles, health controls, and OAuth bridge actions here.`,
+      summaryDetail: `Standard ${roleLabel.toLowerCase()} sessions can manage provider state here and use the dedicated Harness route for saved-profile, verify, probe, import, and export operations.`,
       exportBlockedMessage: "",
-      fullExportBlockedMessage: isAdmin ? "" : "Full secret-bearing harness export stays admin-only on the providers surface.",
+      fullExportBlockedMessage: isAdmin ? "" : "Full secret-bearing harness export stays admin-only on the dedicated Harness surface.",
       mutationBlockedMessage: "",
     };
   }
@@ -181,7 +190,7 @@ export function getProvidersAccess(session: AdminSessionUser | null, sessionRead
       badgeLabel: "Read only session",
       badgeTone: "warning",
       summaryTitle: "Read-only provider view",
-      summaryDetail: "Read-only sessions can inspect provider truth, harness state, runs, expansion targets, and redacted harness exports, but full secret-bearing exports, provider, health, import, and OAuth mutations stay hidden.",
+      summaryDetail: "Read-only sessions can inspect provider truth and expansion targets here, and can inspect dedicated harness state, runs, and redacted harness exports on the Harness route, but full secret-bearing exports plus provider, health, import, and OAuth mutations stay hidden.",
       exportBlockedMessage: "",
       fullExportBlockedMessage: "Full secret-bearing harness export stays admin-only and hidden for read-only sessions.",
       mutationBlockedMessage: "This session is read only, so provider and harness mutations stay hidden on this surface.",
@@ -199,7 +208,7 @@ export function getProvidersAccess(session: AdminSessionUser | null, sessionRead
       badgeLabel: "Viewer access",
       badgeTone: "warning",
       summaryTitle: "Permission-limited provider view",
-      summaryDetail: "Viewer sessions can inspect provider truth, harness state, runs, and expansion targets, but harness export and mutating provider actions stay hidden.",
+      summaryDetail: "Viewer sessions can inspect provider truth and expansion targets here, and can inspect dedicated harness state and runs on the Harness route, but harness export and mutating provider actions stay hidden.",
       exportBlockedMessage: "Viewer sessions can inspect provider truth here, but harness export actions stay hidden.",
       fullExportBlockedMessage: "Viewer sessions can inspect provider truth here, but full secret-bearing harness export stays hidden.",
       mutationBlockedMessage: "Viewer sessions can inspect provider truth here, but mutating provider and harness actions stay hidden.",
@@ -216,7 +225,7 @@ export function getProvidersAccess(session: AdminSessionUser | null, sessionRead
     badgeLabel: "Read only",
     badgeTone: "warning",
     summaryTitle: "Read-only provider view",
-    summaryDetail: "This session can inspect provider truth, runs, expansion targets, and redacted harness exports, but full secret-bearing export and provider mutations stay hidden.",
+    summaryDetail: "This session can inspect provider truth and expansion targets here, and can inspect dedicated harness runs and redacted exports on the Harness route, but full secret-bearing export and provider mutations stay hidden.",
     exportBlockedMessage: "This session cannot inspect redacted harness exports on this surface.",
     fullExportBlockedMessage: "This session cannot inspect full secret-bearing harness exports on this surface.",
     mutationBlockedMessage: "This session cannot run provider mutations on this surface.",

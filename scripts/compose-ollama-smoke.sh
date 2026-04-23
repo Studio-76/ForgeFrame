@@ -5,81 +5,24 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 COMPOSE_FILE="$ROOT_DIR/docker/docker-compose.yml"
 ENV_FILE="$ROOT_DIR/.env.compose"
 ENV_EXAMPLE="$ROOT_DIR/docker/.env.compose.example"
-AUTH_FILE="/tmp/forgegate-admin-login-ollama.json"
-AUTH_HEADER_FILE="/tmp/forgegate-admin-auth-header-ollama.txt"
-HEALTH_PATH="/tmp/forgegate-ollama-health.json"
-HEALTH_RUN_PATH="/tmp/forgegate-ollama-health-run.json"
-PROVIDER_TRUTH_PATH="/tmp/forgegate-ollama-provider-truth.json"
-MODELS_PATH="/tmp/forgegate-ollama-models.json"
-CHAT_PATH="/tmp/forgegate-ollama-chat.json"
-STREAM_PATH="/tmp/forgegate-ollama-stream.txt"
-TOOL_BOUNDARY_PATH="/tmp/forgegate-ollama-tool-boundary.json"
+# shellcheck source=./lib/forgeframe-env.sh
+source "$ROOT_DIR/scripts/lib/forgeframe-env.sh"
+AUTH_FILE="/tmp/forgeframe-admin-login-ollama.json"
+AUTH_HEADER_FILE="/tmp/forgeframe-admin-auth-header-ollama.txt"
+HEALTH_PATH="/tmp/forgeframe-ollama-health.json"
+HEALTH_RUN_PATH="/tmp/forgeframe-ollama-health-run.json"
+PROVIDER_TRUTH_PATH="/tmp/forgeframe-ollama-provider-truth.json"
+MODELS_PATH="/tmp/forgeframe-ollama-models.json"
+CHAT_PATH="/tmp/forgeframe-ollama-chat.json"
+STREAM_PATH="/tmp/forgeframe-ollama-stream.txt"
+TOOL_BOUNDARY_PATH="/tmp/forgeframe-ollama-tool-boundary.json"
 
-log() { printf "[forgegate-compose-ollama-smoke] %s\n" "$*"; }
-fail() { printf "[forgegate-compose-ollama-smoke][ERROR] %s\n" "$*" >&2; exit 1; }
+log() { printf "[forgeframe-compose-ollama-smoke] %s\n" "$*"; }
+fail() { printf "[forgeframe-compose-ollama-smoke][ERROR] %s\n" "$*" >&2; exit 1; }
 
 cleanup() {
-  if [[ "${FORGEGATE_OLLAMA_SMOKE_DOWN:-}" == "down" ]]; then
+  if [[ "${FORGEFRAME_OLLAMA_SMOKE_DOWN:-}" == "down" ]]; then
     docker compose -f "$COMPOSE_FILE" down -v
-  fi
-}
-
-ensure_bootstrap_admin_secret() {
-  local generated_secret
-  local status
-
-  set +e
-  generated_secret="$(
-    python3 - "$ENV_FILE" <<'PY'
-import secrets
-import sys
-from pathlib import Path
-
-path = Path(sys.argv[1])
-placeholder = "replace-with-a-strong-password"
-lines = path.read_text(encoding="utf-8").splitlines()
-generated = None
-has_username = False
-has_password = False
-updated_lines: list[str] = []
-
-for line in lines:
-    if line.startswith("FORGEGATE_BOOTSTRAP_ADMIN_USERNAME="):
-        has_username = True
-        if not line.split("=", 1)[1].strip():
-            line = "FORGEGATE_BOOTSTRAP_ADMIN_USERNAME=admin"
-    elif line.startswith("FORGEGATE_BOOTSTRAP_ADMIN_PASSWORD="):
-        has_password = True
-        password = line.split("=", 1)[1].strip()
-        if password == "forgegate-admin":
-            raise SystemExit(12)
-        if not password or password == placeholder:
-            generated = f"fg-admin-{secrets.token_urlsafe(18)}"
-            line = f"FORGEGATE_BOOTSTRAP_ADMIN_PASSWORD={generated}"
-    updated_lines.append(line)
-
-if not has_username:
-    updated_lines.append("FORGEGATE_BOOTSTRAP_ADMIN_USERNAME=admin")
-if not has_password:
-    generated = f"fg-admin-{secrets.token_urlsafe(18)}"
-    updated_lines.append(f"FORGEGATE_BOOTSTRAP_ADMIN_PASSWORD={generated}")
-
-path.write_text("\n".join(updated_lines) + "\n", encoding="utf-8")
-if generated:
-    print(generated)
-PY
-  )"
-  status=$?
-  set -e
-
-  if [[ $status -eq 12 ]]; then
-    fail "FORGEGATE_BOOTSTRAP_ADMIN_PASSWORD in $ENV_FILE still uses the insecure default 'forgegate-admin'. Rotate it before running the Ollama validation path."
-  fi
-  if [[ $status -ne 0 ]]; then
-    fail "Failed to ensure a secure bootstrap admin secret in $ENV_FILE."
-  fi
-  if [[ -n "$generated_secret" ]]; then
-    log "Generated a bootstrap admin password in $ENV_FILE."
   fi
 }
 
@@ -98,25 +41,27 @@ if ! docker compose version >/dev/null 2>&1; then
 fi
 
 if [[ ! -f "$ENV_FILE" ]]; then
-  [[ -f "$ENV_EXAMPLE" ]] || fail "Missing $ENV_FILE and $ENV_EXAMPLE"
-  cp "$ENV_EXAMPLE" "$ENV_FILE"
+  forgeframe_ensure_compose_env_file "$ENV_FILE" "$ENV_EXAMPLE" || fail "Missing $ENV_FILE and $ENV_EXAMPLE"
   log "Created $ENV_FILE from $ENV_EXAMPLE"
 fi
 
-ensure_bootstrap_admin_secret
+GENERATED_ENV_ITEMS="$(forgeframe_prepare_compose_env "$ENV_FILE")" || fail "Failed to prepare secure compose secrets in $ENV_FILE."
+if [[ -n "$GENERATED_ENV_ITEMS" ]]; then
+  while IFS= read -r item; do
+    [[ -n "$item" ]] || continue
+    log "Generated $item in $ENV_FILE."
+  done <<< "$GENERATED_ENV_ITEMS"
+fi
 
-set -a
-# shellcheck disable=SC1090
-source "$ENV_FILE"
-set +a
+forgeframe_load_env_file "$ENV_FILE" || fail "Missing $ENV_FILE"
 
-: "${FORGEGATE_OLLAMA_BASE_URL:?Set FORGEGATE_OLLAMA_BASE_URL in .env.compose to a reachable Ollama OpenAI-compatible endpoint before running this smoke.}"
-: "${FORGEGATE_OLLAMA_DEFAULT_MODEL:?Set FORGEGATE_OLLAMA_DEFAULT_MODEL in .env.compose before running this smoke.}"
+: "${FORGEFRAME_OLLAMA_BASE_URL:?Set FORGEFRAME_OLLAMA_BASE_URL in .env.compose to a reachable Ollama OpenAI-compatible endpoint before running this smoke.}"
+: "${FORGEFRAME_OLLAMA_DEFAULT_MODEL:?Set FORGEFRAME_OLLAMA_DEFAULT_MODEL in .env.compose before running this smoke.}"
 
-OLLAMA_VALIDATION_MODEL="${FORGEGATE_OLLAMA_VALIDATION_MODEL:-$FORGEGATE_OLLAMA_DEFAULT_MODEL}"
-BASE_URL="http://127.0.0.1:${FORGEGATE_APP_PORT:-8000}"
+OLLAMA_VALIDATION_MODEL="${FORGEFRAME_OLLAMA_VALIDATION_MODEL:-$FORGEFRAME_OLLAMA_DEFAULT_MODEL}"
+BASE_URL="http://127.0.0.1:${FORGEFRAME_APP_PORT:-8000}"
 
-python3 - "$FORGEGATE_OLLAMA_BASE_URL" <<'PY' || fail "FORGEGATE_OLLAMA_BASE_URL must target a container-reachable Ollama endpoint."
+python3 - "$FORGEFRAME_OLLAMA_BASE_URL" <<'PY' || fail "FORGEFRAME_OLLAMA_BASE_URL must target a container-reachable Ollama endpoint."
 import sys
 from urllib.parse import urlparse
 
@@ -124,59 +69,29 @@ target = sys.argv[1].strip()
 parsed = urlparse(target)
 host = (parsed.hostname or "").lower()
 if not parsed.scheme.startswith("http"):
-    raise SystemExit("FORGEGATE_OLLAMA_BASE_URL must use http:// or https://")
+    raise SystemExit("FORGEFRAME_OLLAMA_BASE_URL must use http:// or https://")
 if not host:
-    raise SystemExit("FORGEGATE_OLLAMA_BASE_URL must include a hostname")
+    raise SystemExit("FORGEFRAME_OLLAMA_BASE_URL must include a hostname")
 if host in {"127.0.0.1", "localhost", "::1", "0.0.0.0"}:
     raise SystemExit(
-        "FORGEGATE_OLLAMA_BASE_URL points at localhost. The ForgeGate container cannot use a host-local Ollama via localhost; use host.docker.internal or another reachable host."
+        "FORGEFRAME_OLLAMA_BASE_URL points at localhost. The ForgeFrame container cannot use a host-local Ollama via localhost; use host.docker.internal or another reachable host."
     )
 PY
 
-log "Starting the default 2-service compose stack (postgres + forgegate) for Ollama validation..."
-docker compose -f "$COMPOSE_FILE" up -d --build postgres forgegate >/dev/null
+log "Starting the default 2-service compose stack (postgres + forgeframe) for Ollama validation..."
+docker compose -f "$COMPOSE_FILE" up -d --build postgres forgeframe >/dev/null
 
-log "Waiting for ForgeGate health endpoint..."
+log "Waiting for ForgeFrame health endpoint..."
 for _ in {1..60}; do
   if curl -sf "$BASE_URL/health" >"$HEALTH_PATH"; then
     break
   fi
   sleep 2
 done
-curl -sf "$BASE_URL/health" >"$HEALTH_PATH" || fail "ForgeGate health endpoint is not ready."
+curl -sf "$BASE_URL/health" >"$HEALTH_PATH" || fail "ForgeFrame health endpoint is not ready."
 
-curl -sf -X POST "$BASE_URL/admin/auth/login" \
-  -H 'Content-Type: application/json' \
-  -d "{\"username\":\"${FORGEGATE_BOOTSTRAP_ADMIN_USERNAME:-admin}\",\"password\":\"${FORGEGATE_BOOTSTRAP_ADMIN_PASSWORD}\"}" \
-  >"$AUTH_FILE"
-MUST_ROTATE_BOOTSTRAP_PASSWORD="$(
-python3 - "$AUTH_FILE" "$AUTH_HEADER_FILE" <<'PY'
-import json
-import sys
-from pathlib import Path
-
-payload = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
-Path(sys.argv[2]).write_text(f"Authorization: Bearer {payload['access_token']}\n", encoding="utf-8")
-print("1" if payload.get("user", {}).get("must_rotate_password") else "0")
-PY
-)"
+forgeframe_login_and_rotate_bootstrap_admin_if_required "$BASE_URL" "$ENV_FILE" "$AUTH_FILE" "$AUTH_HEADER_FILE" || fail "Failed to authenticate and, when required, rotate the bootstrap admin password."
 AUTH_HEADER="$(cat "$AUTH_HEADER_FILE")"
-
-if [[ "$MUST_ROTATE_BOOTSTRAP_PASSWORD" == "1" ]]; then
-  ROTATE_PAYLOAD="$(
-    python3 - <<'PY'
-import json
-import os
-
-password = os.environ["FORGEGATE_BOOTSTRAP_ADMIN_PASSWORD"]
-print(json.dumps({"current_password": password, "new_password": password}))
-PY
-  )"
-  curl -sf -X POST "$BASE_URL/admin/auth/rotate-password" \
-    -H "$AUTH_HEADER" \
-    -H 'Content-Type: application/json' \
-    -d "$ROTATE_PAYLOAD" >/tmp/forgegate-ollama-bootstrap-password-rotation.json
-fi
 
 curl -sf -X POST "$BASE_URL/admin/providers/health/run" -H "$AUTH_HEADER" >"$HEALTH_RUN_PATH"
 curl -sf "$BASE_URL/admin/providers/" -H "$AUTH_HEADER" >"$PROVIDER_TRUTH_PATH"

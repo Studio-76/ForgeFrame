@@ -72,7 +72,7 @@ def test_admin_provider_sync_replays_original_outcome_for_matching_idempotency_k
     assert first.status_code == 200
     assert second.status_code == 200
     assert second.json() == first.json()
-    assert second.headers["X-ForgeGate-Idempotent-Replay"] == "true"
+    assert second.headers["X-ForgeFrame-Idempotent-Replay"] == "true"
     assert second.headers["Idempotency-Key"] == headers["Idempotency-Key"]
 
     providers = client.get("/admin/providers/", headers=admin_headers)
@@ -130,7 +130,7 @@ def test_admin_provider_health_run_replays_original_outcome_without_repeating_si
     assert first.status_code == 200
     assert second.status_code == 200
     assert second.json() == first.json()
-    assert second.headers["X-ForgeGate-Idempotent-Replay"] == "true"
+    assert second.headers["X-ForgeFrame-Idempotent-Replay"] == "true"
     assert after_first > before
     assert after_second == after_first
 
@@ -149,7 +149,7 @@ def test_admin_oauth_probe_replays_original_outcome_without_repeating_operation_
     assert first.status_code == 200
     assert second.status_code == 200
     assert second.json() == first.json()
-    assert second.headers["X-ForgeGate-Idempotent-Replay"] == "true"
+    assert second.headers["X-ForgeFrame-Idempotent-Replay"] == "true"
     assert after_first == before + 1
     assert after_second == after_first
 
@@ -168,7 +168,7 @@ def test_admin_oauth_bridge_sync_replays_original_outcome_without_repeating_oper
     assert first.status_code == 200
     assert second.status_code == 200
     assert second.json() == first.json()
-    assert second.headers["X-ForgeGate-Idempotent-Replay"] == "true"
+    assert second.headers["X-ForgeFrame-Idempotent-Replay"] == "true"
     assert after_first == before + 3
     assert after_second == after_first
 
@@ -195,7 +195,7 @@ def test_admin_harness_profile_upsert_replays_redacted_outcome_for_matching_idem
     assert first.status_code == 200
     assert second.status_code == 200
     assert second.json() == first.json()
-    assert second.headers["X-ForgeGate-Idempotent-Replay"] == "true"
+    assert second.headers["X-ForgeFrame-Idempotent-Replay"] == "true"
     assert first.json()["profile"]["auth_value"] == "***redacted***"
     assert first.json()["profile"]["request_mapping"]["headers"]["Authorization"] == "***redacted***"
     assert first.json()["profile"]["request_mapping"]["headers"]["X-Custom"] == "keep"
@@ -347,7 +347,7 @@ def test_admin_harness_profile_deactivate_replays_original_outcome_without_repea
     assert first.status_code == 200
     assert second.status_code == 200
     assert second.json() == first.json()
-    assert second.headers["X-ForgeGate-Idempotent-Replay"] == "true"
+    assert second.headers["X-ForgeFrame-Idempotent-Replay"] == "true"
     assert first.json()["profile"]["auth_value"] == "***redacted***"
 
     first_profile = next(
@@ -392,7 +392,7 @@ def test_admin_harness_import_replays_original_outcome_without_repeating_side_ef
     assert first.status_code == 200
     assert second.status_code == 200
     assert second.json() == first.json()
-    assert second.headers["X-ForgeGate-Idempotent-Replay"] == "true"
+    assert second.headers["X-ForgeFrame-Idempotent-Replay"] == "true"
 
     first_profile = next(
         item for item in profiles_after_first.json()["profiles"] if item["provider_key"] == provider_key
@@ -431,7 +431,7 @@ def test_admin_harness_preview_replays_redacted_outcome_for_matching_idempotency
     assert first.status_code == 200
     assert second.status_code == 200
     assert second.json() == first.json()
-    assert second.headers["X-ForgeGate-Idempotent-Replay"] == "true"
+    assert second.headers["X-ForgeFrame-Idempotent-Replay"] == "true"
     assert first.json()["preview"]["headers"]["Authorization"] == "***redacted***"
     assert first.json()["preview"]["headers"]["X-Custom"] == "keep"
 
@@ -465,7 +465,7 @@ def test_admin_harness_dry_run_replays_redacted_outcome_without_repeating_side_e
     assert first.status_code == 200
     assert second.status_code == 200
     assert second.json() == first.json()
-    assert second.headers["X-ForgeGate-Idempotent-Replay"] == "true"
+    assert second.headers["X-ForgeFrame-Idempotent-Replay"] == "true"
     assert first.json()["preview_request"]["headers"]["Authorization"] == "***redacted***"
     assert len(runs_after_first.json()["runs"]) == len(runs_after_second.json()["runs"])
 
@@ -499,7 +499,7 @@ def test_admin_harness_verify_replays_redacted_outcome_without_repeating_side_ef
     assert first.status_code == 200
     assert second.status_code == 200
     assert second.json() == first.json()
-    assert second.headers["X-ForgeGate-Idempotent-Replay"] == "true"
+    assert second.headers["X-ForgeFrame-Idempotent-Replay"] == "true"
     assert first.json()["verification"]["preview_request"]["headers"]["Authorization"] == "***redacted***"
     assert len(runs_after_first.json()["runs"]) == len(runs_after_second.json()["runs"])
 

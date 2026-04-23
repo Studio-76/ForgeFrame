@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import threading
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from sqlalchemy import create_engine, func, select
@@ -509,6 +510,8 @@ def test_retryable_failure_schedules_backoff_attempt_and_dispatch_outbox(tmp_pat
         assert run.result_summary is not None
         assert run.result_summary["last_failure"]["retryable"] is True
         assert run.result_summary["next_attempt_id"] == retry_attempt.id
+        assert run.result_summary["wake_gate"]["spurious_wake_blocked"] is True
+        assert run.result_summary["dispatch"]["stage"] == "retry_scheduled"
         assert outbox.event_type == "run_dispatch"
         assert outbox.payload["retry_of_attempt_id"] == created.attempt_id
         assert outbox.dedupe_key == f"run:{created.run_id}:attempt:{retry_attempt.id}:dispatch"
@@ -570,6 +573,7 @@ def test_terminal_failure_dead_letters_run_and_preserves_diagnostics(tmp_path: P
         assert run.terminal_at is not None
         assert run.result_summary is not None
         assert run.result_summary["error_code"] == "provider_authentication_error"
+        assert run.result_summary["dispatch"]["stage"] == "dead_lettered"
         assert attempt.attempt_state == "dead_lettered"
         assert attempt.last_error_code == "provider_authentication_error"
         assert attempt.last_error_detail == "credentials rejected by upstream"
@@ -765,3 +769,89 @@ def test_approval_resume_and_reject_transitions_are_durable(tmp_path: Path) -> N
         assert reject_cancel.dedupe_key == (
             f"approval:{reject_approval.approval_link_id}:command:{reject_result.command_id}:run_cancel"
         )
+
+
+def test_resume_does_not_force_spurious_wakeup_before_retry_window(tmp_path: Path) -> None:
+    service, session_factory = _service(tmp_path)
+    admitted = service.admit_create(
+        company_id="cmp_789",
+        actor_type="agent",
+        actor_id="agent_backend",
+        idempotency_key="idem_create_retry_resume",
+        request_fingerprint_hash="fp_create_retry_resume",
+        run_kind="provider_dispatch",
+    )
+    claimed_at = datetime(2026, 4, 23, 12, 0, tzinfo=UTC)
+    claim = service.claim_next_attempt(
+        company_id="cmp_789",
+        worker_key="worker_alpha",
+        now=claimed_at,
+    )
+    assert claim is not None
+
+    service.mark_attempt_executing(
+        company_id="cmp_789",
+        run_id=claim.run_id,
+        attempt_id=claim.attempt_id,
+        lease_token=claim.lease_token,
+        step_key="provider_dispatch",
+        now=claimed_at + timedelta(seconds=1),
+    )
+    failure = service.record_attempt_failure(
+        company_id="cmp_789",
+        run_id=claim.run_id,
+        attempt_id=claim.attempt_id,
+        lease_token=claim.lease_token,
+        failure_class="provider_transient",
+        error_code="provider_timeout",
+        error_detail="upstream timed out",
+        retryable=True,
+        max_attempts=3,
+        backoff_base_seconds=60,
+        backoff_max_seconds=60,
+        backoff_jitter_ratio=0.0,
+        now=claimed_at + timedelta(seconds=2),
+    )
+    assert failure.retry_scheduled is True
+    assert failure.next_attempt_id is not None
+
+    pause_result = service.pause_run(
+        company_id="cmp_789",
+        run_id=admitted.run_id,
+        actor_type="user",
+        actor_id="operator_1",
+        idempotency_key="idem_pause_retry_resume",
+        request_fingerprint_hash="fp_pause_retry_resume",
+        reason="operator hold",
+        now=claimed_at + timedelta(seconds=3),
+    )
+    assert pause_result.operator_state == "paused"
+
+    resume_result = service.resume_run(
+        company_id="cmp_789",
+        run_id=admitted.run_id,
+        actor_type="user",
+        actor_id="operator_1",
+        idempotency_key="idem_resume_retry_resume",
+        request_fingerprint_hash="fp_resume_retry_resume",
+        reason="resume requested",
+        now=claimed_at + timedelta(seconds=10),
+    )
+    assert resume_result.operator_state == "retry_scheduled"
+
+    with session_factory() as session:
+        run = session.get(RunORM, admitted.run_id)
+        attempt = session.get(RunAttemptORM, failure.next_attempt_id)
+
+        assert run is not None
+        assert attempt is not None
+        assert run.state == "retry_backoff"
+        assert run.operator_state == "retry_scheduled"
+        assert run.status_reason == "retry_scheduled"
+        assert attempt.operator_state == "retry_scheduled"
+        assert run.next_wakeup_at is not None
+        assert run.next_wakeup_at > claimed_at + timedelta(seconds=10)
+        assert run.result_summary is not None
+        assert run.result_summary["wake_gate"]["spurious_wake_blocked"] is True
+        assert run.result_summary["wake_gate"]["next_wakeup_at"] == run.next_wakeup_at.isoformat()
+        assert run.result_summary["dispatch"]["stage"] == "resume_blocked_until_wakeup"

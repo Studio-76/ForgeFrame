@@ -2,6 +2,7 @@ import os
 
 from fastapi.testclient import TestClient
 
+from conftest import admin_headers as shared_admin_headers
 from app.main import app
 
 
@@ -15,19 +16,7 @@ def _login(client: TestClient, username: str, password: str) -> dict[str, object
 
 
 def _admin_headers(client: TestClient) -> dict[str, str]:
-    login = _login(client, "admin", os.environ["FORGEGATE_BOOTSTRAP_ADMIN_PASSWORD"])
-    headers = {"Authorization": f"Bearer {login['access_token']}"}
-    if login["user"]["must_rotate_password"] is True:
-        rotate = client.post(
-            "/admin/auth/rotate-password",
-            headers=headers,
-            json={
-                "current_password": os.environ["FORGEGATE_BOOTSTRAP_ADMIN_PASSWORD"],
-                "new_password": os.environ["FORGEGATE_BOOTSTRAP_ADMIN_PASSWORD"],
-            },
-        )
-        assert rotate.status_code == 200
-    return headers
+    return shared_admin_headers(client)
 
 
 def _create_operator(client: TestClient, headers: dict[str, str], *, username: str, password: str) -> str:
@@ -158,3 +147,22 @@ def test_admin_profile_update_rejects_clearing_password_rotation_requirement() -
     )
 
     assert update_response.status_code == 422
+
+
+def test_self_rotation_rejects_reusing_the_same_password() -> None:
+    client = TestClient(app)
+    login = _login(client, "admin", os.environ["FORGEGATE_BOOTSTRAP_ADMIN_PASSWORD"])
+    headers = {"Authorization": f"Bearer {login['access_token']}"}
+
+    rotate_response = client.post(
+        "/admin/auth/rotate-password",
+        headers=headers,
+        json={
+            "current_password": os.environ["FORGEGATE_BOOTSTRAP_ADMIN_PASSWORD"],
+            "new_password": os.environ["FORGEGATE_BOOTSTRAP_ADMIN_PASSWORD"],
+        },
+    )
+
+    assert rotate_response.status_code == 400
+    assert rotate_response.json()["error"]["type"] == "password_rotation_failed"
+    assert rotate_response.json()["error"]["message"] == "new_password_must_differ"

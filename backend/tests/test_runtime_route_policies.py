@@ -2,29 +2,14 @@ import os
 
 from fastapi.testclient import TestClient
 
+from conftest import admin_headers as shared_admin_headers
 from app.api.runtime.dependencies import clear_runtime_dependency_caches
 from app.governance.service import get_governance_service
 from app.main import app
 
 
 def _admin_headers(client: TestClient) -> dict[str, str]:
-    response = client.post(
-        "/admin/auth/login",
-        json={"username": "admin", "password": os.environ["FORGEGATE_BOOTSTRAP_ADMIN_PASSWORD"]},
-    )
-    assert response.status_code == 201
-    headers = {"Authorization": f"Bearer {response.json()['access_token']}"}
-    if response.json()["user"]["must_rotate_password"] is True:
-        rotation = client.post(
-            "/admin/auth/rotate-password",
-            headers=headers,
-            json={
-                "current_password": os.environ["FORGEGATE_BOOTSTRAP_ADMIN_PASSWORD"],
-                "new_password": os.environ["FORGEGATE_BOOTSTRAP_ADMIN_PASSWORD"],
-            },
-        )
-        assert rotation.status_code == 200
-    return headers
+    return shared_admin_headers(client)
 
 
 def _issue_runtime_key(client: TestClient, *, scopes: list[str]) -> str:
@@ -76,8 +61,8 @@ def test_chat_route_requires_chat_write_scope(monkeypatch) -> None:
     assert error["type"] == "forbidden"
     assert error["message"] == "Runtime key is not permitted to access this route."
     assert error["details"] == {}
-    assert error["request_id"] == response.headers["X-ForgeGate-Request-Id"]
-    assert response.headers["X-ForgeGate-Correlation-Id"] == error["request_id"]
+    assert error["request_id"] == response.headers["X-ForgeFrame-Request-Id"]
+    assert response.headers["X-ForgeFrame-Correlation-Id"] == error["request_id"]
 
 
 def test_responses_route_accepts_runtime_key_with_responses_scope(monkeypatch) -> None:
@@ -96,4 +81,29 @@ def test_responses_route_accepts_runtime_key_with_responses_scope(monkeypatch) -
     assert response.status_code == 200
     body = response.json()
     assert body["status"] == "completed"
-    assert body["output"][0]["type"] == "output_text"
+    assert body["output"][0]["type"] == "message"
+    assert body["output"][0]["content"][0]["type"] == "output_text"
+
+
+def test_responses_retrieval_route_accepts_runtime_key_with_responses_scope(monkeypatch) -> None:
+    monkeypatch.setenv("FORGEGATE_RUNTIME_AUTH_REQUIRED", "true")
+    clear_runtime_dependency_caches()
+    get_governance_service.cache_clear()
+    client = TestClient(app)
+    token = _issue_runtime_key(client, scopes=["responses:write"])
+
+    create_response = client.post(
+        "/v1/responses",
+        headers={"Authorization": f"Bearer {token}"},
+        json={"input": "hello retrieval policy"},
+    )
+    assert create_response.status_code == 200
+    response_id = create_response.json()["id"]
+
+    fetch_response = client.get(
+        f"/v1/responses/{response_id}",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert fetch_response.status_code == 200
+    assert fetch_response.json()["id"] == response_id

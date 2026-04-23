@@ -11,35 +11,23 @@ from app.api.runtime.errors import public_runtime_auth_message
 from app.core.dispatch import DispatchService
 from app.core.model_registry import ModelRegistry
 from app.core.routing import RoutingService
+from app.execution.dependencies import (
+    clear_execution_dependency_caches,
+    get_execution_responses_service,
+    get_execution_session_factory,
+    get_execution_transition_service,
+)
 from app.governance.errors import RuntimeAuthorizationError
 from app.governance.models import RuntimeGatewayIdentity
 from app.governance.service import GovernanceService, get_governance_service
 from app.providers import ProviderRegistry
 from app.settings.config import Settings, get_settings
-
-
-@lru_cache(maxsize=1)
-def get_model_registry() -> ModelRegistry:
-    settings = get_settings()
-    return ModelRegistry(settings)
-
-
-@lru_cache(maxsize=1)
-def get_routing_service() -> RoutingService:
-    settings = get_settings()
-    registry = get_model_registry()
-    providers = get_provider_registry()
-    return RoutingService(registry, providers, settings)
+from app.tenancy import normalize_tenant_id
 
 
 @lru_cache(maxsize=1)
 def get_provider_registry() -> ProviderRegistry:
     return ProviderRegistry(get_settings())
-
-
-@lru_cache(maxsize=1)
-def get_dispatch_service() -> DispatchService:
-    return DispatchService(get_routing_service(), get_provider_registry())
 
 
 def get_runtime_gateway_identity(
@@ -87,8 +75,61 @@ def _request_id(request: Request) -> str:
     envelope_request_id = getattr(envelope, "request_id", None)
     if isinstance(envelope_request_id, str) and envelope_request_id.strip():
         return envelope_request_id.strip()
-    raw_request_id = request.headers.get("x-request-id", "").strip() or request.headers.get("x-forgegate-request-id", "").strip()
+    raw_request_id = (
+        request.headers.get("x-request-id", "").strip()
+        or request.headers.get("x-forgeframe-request-id", "").strip()
+        or request.headers.get("x-forgegate-request-id", "").strip()
+    )
     return raw_request_id or f"req_{uuid4().hex[:12]}"
+
+
+@lru_cache(maxsize=32)
+def _build_model_registry(instance_id: str) -> ModelRegistry:
+    settings = get_settings()
+    return ModelRegistry(settings, instance_id=instance_id)
+
+
+def _runtime_instance_id(identity: RuntimeGatewayIdentity | None) -> str:
+    settings = get_settings()
+    return normalize_tenant_id(
+        identity.instance_id if identity is not None else settings.bootstrap_tenant_id,
+        fallback_tenant_id=settings.bootstrap_tenant_id,
+    )
+
+
+def get_model_registry(
+    gateway_identity: RuntimeGatewayIdentity | None = Depends(get_runtime_gateway_identity),
+) -> ModelRegistry:
+    return _build_model_registry(_runtime_instance_id(gateway_identity))
+
+
+@lru_cache(maxsize=32)
+def _build_routing_service(instance_id: str) -> RoutingService:
+    settings = get_settings()
+    registry = _build_model_registry(instance_id)
+    providers = get_provider_registry()
+    return RoutingService(registry, providers, settings, instance_id=instance_id)
+
+
+def get_routing_service(
+    gateway_identity: RuntimeGatewayIdentity | None = Depends(get_runtime_gateway_identity),
+) -> RoutingService:
+    return _build_routing_service(_runtime_instance_id(gateway_identity))
+
+
+@lru_cache(maxsize=32)
+def _build_dispatch_service(instance_id: str) -> DispatchService:
+    return DispatchService(_build_routing_service(instance_id), get_provider_registry())
+
+
+def get_dispatch_service(
+    gateway_identity: RuntimeGatewayIdentity | None = Depends(get_runtime_gateway_identity),
+) -> DispatchService:
+    return _build_dispatch_service(_runtime_instance_id(gateway_identity))
+
+
+def get_responses_service():
+    return get_execution_responses_service()
 
 
 def get_runtime_request_actor(
@@ -154,10 +195,16 @@ def require_runtime_permission(policy_key: str):
 
 def clear_runtime_dependency_caches() -> None:
     get_settings.cache_clear()
-    get_model_registry.cache_clear()
-    get_routing_service.cache_clear()
+    _build_model_registry.cache_clear()
+    _build_routing_service.cache_clear()
+    _build_dispatch_service.cache_clear()
     get_provider_registry.cache_clear()
-    get_dispatch_service.cache_clear()
+    clear_execution_dependency_caches()
+
+
+get_model_registry.cache_clear = _build_model_registry.cache_clear  # type: ignore[attr-defined]
+get_routing_service.cache_clear = _build_routing_service.cache_clear  # type: ignore[attr-defined]
+get_dispatch_service.cache_clear = _build_dispatch_service.cache_clear  # type: ignore[attr-defined]
 
 
 __all__ = [
@@ -167,6 +214,7 @@ __all__ = [
     "get_routing_service",
     "get_provider_registry",
     "get_dispatch_service",
+    "get_responses_service",
     "get_runtime_gateway_identity",
     "get_runtime_request_actor",
     "require_runtime_permission",

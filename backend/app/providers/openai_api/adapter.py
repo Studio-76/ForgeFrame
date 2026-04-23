@@ -37,7 +37,7 @@ from app.providers.openai_streaming import (
     finalize_openai_tool_calls,
     merge_openai_tool_call_chunks,
 )
-from app.request_metadata import forgegate_request_metadata_headers
+from app.request_metadata import forgeframe_request_metadata_headers
 from app.settings.config import Settings
 from app.usage.models import TokenUsage
 from app.usage.service import UsageAccountingService
@@ -56,9 +56,9 @@ class OpenAIAPIAdapter:
 
     def readiness_reason(self) -> str | None:
         if not self._settings.openai_api_key.strip():
-            return "FORGEGATE_OPENAI_API_KEY is required."
+            return "FORGEFRAME_OPENAI_API_KEY is required."
         if self._configured_base_url() is None:
-            return "FORGEGATE_OPENAI_API_BASE_URL must be an absolute http(s) URL."
+            return "FORGEFRAME_OPENAI_API_BASE_URL must be an absolute http(s) URL."
         return None
 
     def create_chat_completion(self, request: ChatDispatchRequest) -> ChatDispatchResult:
@@ -154,14 +154,14 @@ class OpenAIAPIAdapter:
         if base_url is None:  # pragma: no cover - guarded by readiness checks
             raise ProviderConfigurationError(
                 self.provider_name,
-                "FORGEGATE_OPENAI_API_BASE_URL must be an absolute http(s) URL.",
+                "FORGEFRAME_OPENAI_API_BASE_URL must be an absolute http(s) URL.",
             )
         endpoint = f"{base_url}/chat/completions"
         headers = {
             "Authorization": f"Bearer {self._settings.openai_api_key}",
             "Content-Type": "application/json",
         }
-        headers.update(forgegate_request_metadata_headers(request_metadata))
+        headers.update(forgeframe_request_metadata_headers(request_metadata))
         return endpoint, headers
 
     def _configured_base_url(self) -> str | None:

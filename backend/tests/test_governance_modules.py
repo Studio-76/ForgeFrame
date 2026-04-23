@@ -8,6 +8,7 @@ import pytest
 from sqlalchemy import create_engine, text
 from sqlalchemy.exc import IntegrityError
 
+from conftest import admin_headers as shared_admin_headers, login_headers_allowing_password_rotation
 from app.api.runtime.dependencies import clear_runtime_dependency_caches
 from app.auth.local_auth import hash_password, hash_token, new_secret_salt
 from app.governance.models import (
@@ -27,28 +28,11 @@ from app.storage.migrator import apply_storage_migrations, list_storage_migratio
 
 
 def _login_headers(client: TestClient, *, username: str, password: str) -> dict[str, str]:
-    response = client.post(
-        "/admin/auth/login",
-        json={"username": username, "password": password},
-    )
-    assert response.status_code == 201
-    headers = {"Authorization": f"Bearer {response.json()['access_token']}"}
-    if response.json()["user"]["must_rotate_password"] is True:
-        rotation = client.post(
-            "/admin/auth/rotate-password",
-            headers=headers,
-            json={"current_password": password, "new_password": password},
-        )
-        assert rotation.status_code == 200
-    return headers
+    return login_headers_allowing_password_rotation(client, username=username, password=password)
 
 
 def _admin_headers(client: TestClient) -> dict[str, str]:
-    return _login_headers(
-        client,
-        username="admin",
-        password=os.environ["FORGEGATE_BOOTSTRAP_ADMIN_PASSWORD"],
-    )
+    return shared_admin_headers(client)
 
 
 def _create_admin_user_and_headers(
@@ -322,7 +306,7 @@ def test_bootstrap_admin_password_reload_applies_before_first_rotation(monkeypat
     first_login = client.post("/admin/auth/login", json={"username": "admin", "password": old_password})
     assert first_login.status_code == 201
 
-    monkeypatch.setenv("FORGEGATE_BOOTSTRAP_ADMIN_PASSWORD", "ForgeGate-Test-Admin-Secret-456")
+    monkeypatch.setenv("FORGEGATE_BOOTSTRAP_ADMIN_PASSWORD", "ForgeFrame-Test-Admin-Secret-456")
     clear_runtime_dependency_caches()
     get_governance_service.cache_clear()
 
@@ -393,7 +377,7 @@ def test_runtime_key_rejects_disabled_and_suspended_accounts(monkeypatch) -> Non
         account, issued = _create_runtime_account_and_key(
             client,
             headers,
-            provider_bindings=["forgegate_baseline"],
+            provider_bindings=["forgeframe_baseline"],
             scopes=["models:read"],
         )
         updated = client.patch(
@@ -441,13 +425,13 @@ def test_runtime_provider_bindings_filter_models_and_block_disallowed_chat(monke
     assert payload
     assert all(set(item.keys()) == {"id", "object", "owned_by"} for item in payload)
     assert {item["owned_by"] for item in payload} == {"OpenAI"}
-    assert "forgegate-baseline-chat-v1" not in {item["id"] for item in payload}
+    assert "forgeframe-baseline-chat-v1" not in {item["id"] for item in payload}
 
     denied = client.post(
         "/v1/chat/completions",
         headers=runtime_headers,
         json={
-            "model": "forgegate-baseline-chat-v1",
+            "model": "forgeframe-baseline-chat-v1",
             "messages": [{"role": "user", "content": "binding check"}],
         },
     )
@@ -461,9 +445,9 @@ def test_runtime_provider_bindings_filter_models_and_block_disallowed_chat(monke
     denial = next(
         item
         for item in governance.list_audit_events(limit=50)
-        if item.action == "runtime_provider_binding_denied" and item.target_id == "forgegate_baseline"
+        if item.action == "runtime_provider_binding_denied" and item.target_id == "forgeframe_baseline"
     )
-    assert denial.metadata["requested_model"] == "forgegate-baseline-chat-v1"
+    assert denial.metadata["requested_model"] == "forgeframe-baseline-chat-v1"
 
 
 def test_runtime_provider_bindings_hide_unready_provider_models(monkeypatch) -> None:
@@ -598,7 +582,7 @@ def test_runtime_provider_binding_denial_on_responses_persists_responses_route(m
         "/v1/responses",
         headers=runtime_headers,
         json={
-            "model": "forgegate-baseline-chat-v1",
+            "model": "forgeframe-baseline-chat-v1",
             "input": "binding check",
         },
     )
@@ -615,7 +599,7 @@ def test_runtime_provider_binding_denial_on_responses_persists_responses_route(m
     ]
     assert denial_events
     latest_denial = denial_events[-1]
-    assert latest_denial["model"] == "forgegate-baseline-chat-v1"
+    assert latest_denial["model"] == "forgeframe-baseline-chat-v1"
     assert latest_denial["route"] == "/v1/responses"
     assert latest_denial["stream_mode"] == "non_stream"
 
@@ -1037,7 +1021,7 @@ def test_impersonation_sessions_are_read_only_for_control_plane_writes() -> None
         client.patch(
             "/admin/settings/",
             headers=impersonation_headers,
-            json={"updates": {"app_name": f"Impersonated ForgeGate {suffix}"}},
+            json={"updates": {"app_name": f"Impersonated ForgeFrame {suffix}"}},
         ),
         client.post(
             "/admin/auth/rotate-password",
@@ -2264,7 +2248,7 @@ def test_postgres_governance_relational_backfill_dual_write_and_read_cutover(tmp
                 AdminUserRecord(
                     user_id="admin_seed",
                     username="admin",
-                    display_name="ForgeGate Admin",
+                    display_name="ForgeFrame Admin",
                     role="admin",
                     status="active",
                     password_hash=hash_password("forgegate-admin", salt),
@@ -2518,7 +2502,7 @@ def test_postgres_governance_relational_backfill_dual_write_and_read_cutover(tmp
             session_id="sess_seed",
             user_id="admin_seed",
             username="admin",
-            display_name="ForgeGate Admin",
+            display_name="ForgeFrame Admin",
             role="admin",
         )
         created_account = service.create_account(
@@ -3597,7 +3581,7 @@ def test_postgres_governance_migrations_repair_legacy_tenant_shape_when_phase23_
             governance_storage_backend="postgresql",
             governance_postgres_url=scoped_url,
             governance_state_path=str(tmp_path / "ignored_governance_state.json"),
-            bootstrap_admin_password="ForgeGate-Bootstrap-123",
+            bootstrap_admin_password="ForgeFrame-Bootstrap-123",
         )
         service = GovernanceService(
             settings,
@@ -3650,7 +3634,7 @@ def test_postgres_governance_migrations_repair_legacy_principal_must_rotate_pass
                 AdminUserRecord(
                     user_id="admin_seed",
                     username="admin",
-                    display_name="ForgeGate Admin",
+                    display_name="ForgeFrame Admin",
                     role="admin",
                     status="active",
                     password_hash=hash_password("Operator-Seed-123", salt),
@@ -3800,7 +3784,7 @@ def test_postgres_governance_migrations_repair_legacy_shadow_default_columns() -
                 AdminUserRecord(
                     user_id="admin_seed",
                     username="admin",
-                    display_name="ForgeGate Admin",
+                    display_name="ForgeFrame Admin",
                     role="admin",
                     status="active",
                     password_hash=hash_password("Operator-Seed-123", salt),

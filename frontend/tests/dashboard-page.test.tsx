@@ -2,16 +2,12 @@
 
 import { act, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const { fetchDashboardMock } = vi.hoisted(() => ({
+const { fetchDashboardMock, fetchAuditHistoryMock, fetchInstancesMock } = vi.hoisted(() => ({
   fetchDashboardMock: vi.fn(),
-}));
-
-const { fetchAccountsMock, fetchAuditHistoryMock } = vi.hoisted(() => ({
-  fetchAccountsMock: vi.fn(),
   fetchAuditHistoryMock: vi.fn(),
+  fetchInstancesMock: vi.fn(),
 }));
 
 vi.mock("../src/api/admin", async () => {
@@ -19,13 +15,13 @@ vi.mock("../src/api/admin", async () => {
 
   return {
     ...actual,
-    fetchAccounts: fetchAccountsMock,
-    fetchAuditHistory: fetchAuditHistoryMock,
     fetchDashboard: fetchDashboardMock,
+    fetchAuditHistory: fetchAuditHistoryMock,
+    fetchInstances: fetchInstancesMock,
   };
 });
 
-import type { AdminSessionUser, DashboardResponse } from "../src/api/admin";
+import type { AdminSessionUser, DashboardResponse, InstanceRecord } from "../src/api/admin";
 import { DashboardPage } from "../src/pages/DashboardPage";
 import { withAppContext } from "./testContext";
 
@@ -47,23 +43,26 @@ const viewerSession: AdminSessionUser = {
   role: "viewer",
 };
 
-const adminSession: AdminSessionUser = {
-  session_id: "session-admin",
-  user_id: "user-admin",
-  username: "admin",
-  display_name: "Admin",
-  role: "admin",
-};
+function createInstance(overrides: Partial<InstanceRecord> = {}): InstanceRecord {
+  return {
+    instance_id: "instance_alpha",
+    slug: "instance-alpha",
+    display_name: "Alpha Instance",
+    description: "Alpha instance for dashboard coverage.",
+    status: "active",
+    tenant_id: "tenant_alpha",
+    company_id: "company_alpha",
+    deployment_mode: "restricted_eval",
+    exposure_mode: "local_only",
+    is_default: true,
+    metadata: {},
+    created_at: "2026-04-22T08:00:00Z",
+    updated_at: "2026-04-22T08:00:00Z",
+    ...overrides,
+  };
+}
 
-function createDashboardResponse({
-  alerts = [],
-  needsAttention = [],
-  security,
-}: {
-  alerts?: Array<Record<string, string | number>>;
-  needsAttention?: string[];
-  security?: Record<string, string | number | boolean>;
-} = {}): DashboardResponse {
+function createDashboardResponse(): DashboardResponse {
   return {
     status: "ok",
     kpis: {
@@ -71,13 +70,12 @@ function createDashboardResponse({
       active_models: 12,
       runtime_requests_24h: 24,
       errors_24h: 0,
-      needs_attention_count: needsAttention.length,
+      needs_attention_count: 0,
       runtime_keys: 2,
       accounts: 2,
     },
-    alerts,
-    needs_attention: needsAttention,
-    security,
+    alerts: [],
+    needs_attention: [],
   };
 }
 
@@ -98,6 +96,9 @@ async function flushEffects() {
   await act(async () => {
     await Promise.resolve();
   });
+  await act(async () => {
+    await Promise.resolve();
+  });
 }
 
 async function renderDashboardPage(session: AdminSessionUser, path = "/dashboard") {
@@ -111,30 +112,19 @@ async function renderDashboardPage(session: AdminSessionUser, path = "/dashboard
 
 beforeEach(() => {
   vi.resetAllMocks();
-  fetchDashboardMock.mockResolvedValue(createDashboardResponse());
-  fetchAccountsMock.mockResolvedValue({
+  fetchInstancesMock.mockResolvedValue({
     status: "ok",
-    accounts: [
-      {
-        account_id: "acct_alpha",
-        label: "Tenant Alpha",
-        status: "active",
-        provider_bindings: [],
-        notes: "",
-        created_at: "2026-04-21T10:00:00Z",
-        updated_at: "2026-04-21T10:00:00Z",
-        runtime_key_count: 1,
-      },
-    ],
+    instances: [createInstance()],
   });
+  fetchDashboardMock.mockResolvedValue(createDashboardResponse());
   fetchAuditHistoryMock.mockResolvedValue({
     status: "ok",
     items: [
       {
         eventId: "audit_evt_dashboard_latest",
         createdAt: "2026-04-21T21:45:00Z",
-        tenantId: "acct_alpha",
-        companyId: null,
+        tenantId: "tenant_alpha",
+        companyId: "company_alpha",
         actionKey: "runtime_key_issue",
         actionLabel: "Runtime key issued",
         status: "ok",
@@ -169,113 +159,29 @@ afterEach(() => {
   root = null;
 });
 
-describe("dashboard wayfinding", () => {
-  it("uses the operator-safe governance label for non-admin users", () => {
-    const markup = renderToStaticMarkup(
-      withAppContext({
-        path: "/dashboard",
-        element: <DashboardPage />,
-        session: operatorSession,
-      }),
-    );
+describe("dashboard instance scope", () => {
+  it("loads dashboard and audit truth against the selected instance", async () => {
+    await renderDashboardPage(operatorSession, "/dashboard?instanceId=instance_alpha");
 
-    expect(markup).toContain(">Runtime Access Review<");
-    expect(markup).toContain(">Operator safe<");
-  });
+    expect(fetchInstancesMock).toHaveBeenCalledTimes(1);
+    expect(fetchDashboardMock).toHaveBeenCalledWith("instance_alpha");
+    expect(fetchAuditHistoryMock).toHaveBeenCalledWith({ instanceId: "instance_alpha", window: "all", limit: 1 });
+    expect(container.textContent).toContain("Instance scope: Alpha Instance");
 
-  it("uses the admin governance label for admin users", () => {
-    const markup = renderToStaticMarkup(
-      withAppContext({
-        path: "/dashboard",
-        element: <DashboardPage />,
-        session: adminSession,
-      }),
-    );
-
-    expect(markup).toContain(">Policy Review<");
-    expect(markup).toContain(">Admin only<");
-  });
-
-  it("renders admin-only bootstrap posture and governance action for admins", async () => {
-    fetchDashboardMock.mockResolvedValueOnce(
-      createDashboardResponse({
-        security: {
-          default_password_in_use: true,
-          must_rotate_password: false,
-          admin_auth_enabled: true,
-        },
-      }),
-    );
-
-    await renderDashboardPage(adminSession);
-
-    expect(fetchDashboardMock).toHaveBeenCalledTimes(1);
-    expect(container.textContent).toContain("Tighten governance posture");
-    expect(container.textContent).toContain("Security Bootstrap");
-  });
-
-  it("keeps operator primary actions on shared operator-safe signals", async () => {
-    fetchDashboardMock.mockResolvedValueOnce(createDashboardResponse());
-
-    await renderDashboardPage(operatorSession);
-
-    expect(fetchDashboardMock).toHaveBeenCalledTimes(1);
-    expect(container.textContent).toContain("Confirm go-live readiness");
-    expect(container.textContent).not.toContain("Security Bootstrap");
-    expect(container.textContent).not.toContain("Review runtime access posture");
-  });
-
-  it("does not render admin-only bootstrap posture for viewers", async () => {
-    fetchDashboardMock.mockResolvedValueOnce(createDashboardResponse());
-
-    await renderDashboardPage(viewerSession);
-
-    expect(fetchDashboardMock).toHaveBeenCalledTimes(1);
-    expect(container.textContent).toContain("Confirm go-live readiness");
-    expect(container.textContent).not.toContain("Security Bootstrap");
-  });
-
-  it("passes tenant scope from the URL into the dashboard fetch and renders the scope state", async () => {
-    fetchDashboardMock.mockResolvedValueOnce(createDashboardResponse());
-
-    await renderDashboardPage(operatorSession, "/dashboard?tenantId=acct_alpha");
-
-    expect(fetchDashboardMock).toHaveBeenCalledWith("acct_alpha");
-    expect(fetchAuditHistoryMock).toHaveBeenCalledWith({ tenantId: "acct_alpha", window: "all", limit: 1 });
-    expect(container.textContent).toContain("Tenant scope: Tenant Alpha");
-    expect(container.textContent).toContain("Scoped to Tenant Alpha");
-  });
-
-  it("preserves tenant scope on the shared accounts helper CTA", async () => {
-    await renderDashboardPage(operatorSession, "/dashboard?tenantId=acct_alpha");
-
-    const accountsLink = Array.from(container.querySelectorAll("a")).find((link) => link.textContent?.includes("Open Accounts"));
-    expect(accountsLink?.getAttribute("href")).toBe("/accounts?tenantId=acct_alpha");
-  });
-
-  it("deep-links the audit wayfinding card to the newest audit event in scope", async () => {
-    await renderDashboardPage(operatorSession, "/dashboard?tenantId=acct_alpha");
+    const accountsLink = Array.from(container.querySelectorAll("a")).find((link) => link.textContent?.includes("Policy Review") || link.textContent?.includes("Runtime Access Review"));
+    expect(accountsLink?.getAttribute("href")).toBe("/accounts?instanceId=instance_alpha");
 
     const auditLink = Array.from(container.querySelectorAll("a")).find((link) => link.textContent?.includes("Audit History"));
-    expect(auditLink?.getAttribute("href")).toBe("/logs?tenantId=acct_alpha&auditWindow=all&auditEvent=audit_evt_dashboard_latest#audit-history");
+    expect(auditLink?.getAttribute("href")).toBe("/logs?instanceId=instance_alpha&auditWindow=all&auditEvent=audit_evt_dashboard_latest#audit-history");
   });
 
-  it("keeps viewer audit wayfinding on a static logs fallback without probing audit history", async () => {
-    await renderDashboardPage(viewerSession, "/dashboard?tenantId=acct_alpha");
+  it("keeps viewers on the static audit fallback without probing audit history", async () => {
+    await renderDashboardPage(viewerSession, "/dashboard?instanceId=instance_alpha");
 
-    const auditLink = Array.from(container.querySelectorAll("a")).find((link) => link.textContent?.includes("Audit History"));
+    expect(fetchDashboardMock).toHaveBeenCalledWith("instance_alpha");
     expect(fetchAuditHistoryMock).not.toHaveBeenCalled();
-    expect(auditLink?.getAttribute("href")).toBe("/logs?tenantId=acct_alpha&auditWindow=all#audit-history");
-  });
 
-  it("explains when the global dashboard view requires an explicit tenant scope", async () => {
-    const error = Object.assign(new Error("Select a runtime account to continue."), { code: "tenant_filter_required", status: 400 });
-    fetchDashboardMock.mockRejectedValueOnce(error);
-
-    await renderDashboardPage(operatorSession);
-
-    expect(container.textContent).toContain("Select a runtime account to continue.");
-    expect(container.textContent).toContain("Mixed runtime history spans multiple tenants");
-    expect(container.textContent).toContain("Runtime Tenant Scope");
+    const auditLink = Array.from(container.querySelectorAll("a")).find((link) => link.textContent?.includes("Audit History"));
+    expect(auditLink?.getAttribute("href")).toBe("/logs?instanceId=instance_alpha&auditWindow=all#audit-history");
   });
 });

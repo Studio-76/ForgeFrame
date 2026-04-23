@@ -1,1 +1,1 @@
-"""Package placeholder for future ForgeGate implementation."""
+"""Package placeholder for future ForgeFrame implementation."""

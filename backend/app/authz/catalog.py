@@ -256,6 +256,13 @@ RUNTIME_ROUTE_POLICIES: dict[str, RoutePolicy] = {
         audit_action="runtime_responses_write",
         is_mutating=True,
     ),
+    "runtime.responses.read": RoutePolicy(
+        policy_key="runtime.responses.read",
+        permission_keys=["responses:write"],
+        resource_scope="integration",
+        tenant_resolver="service_account_lookup",
+        audit_action="runtime_responses_read",
+    ),
 }
 
 ALL_ROUTE_POLICIES: dict[str, RoutePolicy] = {

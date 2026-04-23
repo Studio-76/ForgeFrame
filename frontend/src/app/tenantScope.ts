@@ -1,8 +1,18 @@
+export const INSTANCE_ID_QUERY_PARAM = "instanceId";
 export const TENANT_ID_QUERY_PARAM = "tenantId";
+
+export function normalizeInstanceId(value: string | null | undefined): string | null {
+  const normalized = (value ?? "").trim();
+  return normalized.length > 0 ? normalized : null;
+}
 
 export function normalizeTenantId(value: string | null | undefined): string | null {
   const normalized = (value ?? "").trim();
   return normalized.length > 0 ? normalized : null;
+}
+
+export function getInstanceIdFromSearchParams(searchParams: URLSearchParams): string | null {
+  return normalizeInstanceId(searchParams.get(INSTANCE_ID_QUERY_PARAM));
 }
 
 export function getTenantIdFromSearchParams(searchParams: URLSearchParams): string | null {
@@ -13,7 +23,7 @@ export function withQueryParams(
   to: string,
   params: Record<string, string | null | undefined>,
 ): string {
-  const url = new URL(to, "https://forgegate.local");
+  const url = new URL(to, "https://forgeframe.local");
 
   Object.entries(params).forEach(([key, value]) => {
     const normalized = normalizeTenantId(value);
@@ -30,4 +40,8 @@ export function withQueryParams(
 
 export function withTenantScope(to: string, tenantId: string | null | undefined): string {
   return withQueryParams(to, { [TENANT_ID_QUERY_PARAM]: tenantId });
+}
+
+export function withInstanceScope(to: string, instanceId: string | null | undefined): string {
+  return withQueryParams(to, { [INSTANCE_ID_QUERY_PARAM]: instanceId });
 }

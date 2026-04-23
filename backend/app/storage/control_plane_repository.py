@@ -8,22 +8,41 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Protocol
 
-from sqlalchemy import JSON, DateTime, String, create_engine
+from sqlalchemy import JSON, DateTime, String, create_engine, text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, Session, mapped_column, sessionmaker
 
-from app.control_plane.models import ControlPlaneStateRecord
+from app.control_plane.models import (
+    ControlPlaneStateRecord,
+    ManagedModelRecord,
+    ManagedProviderRecord,
+    ManagedProviderTargetRecord,
+    RoutingBudgetStateRecord,
+    RoutingCircuitStateRecord,
+    RoutingPolicyRecord,
+)
+from app.control_plane.routing_defaults import (
+    build_default_routing_policies,
+    merge_routing_circuits,
+    merge_routing_policies,
+    normalize_routing_budget_state,
+)
+from app.control_plane.target_defaults import (
+    build_default_targets_from_providers,
+    ensure_model_registry_metadata,
+)
 from app.settings.config import Settings
 from app.storage.harness_repository import Base
+from app.tenancy import DEFAULT_BOOTSTRAP_TENANT_ID, normalize_tenant_id
 
-_STATE_KEY = "default"
-_CONTROL_PLANE_STATE_SCHEMA_VERSION = 2
+_CONTROL_PLANE_STATE_SCHEMA_VERSION = 4
+_LEGACY_STATE_KEY = "default"
 
 
 class ControlPlaneStateORM(Base):
-    __tablename__ = "control_plane_state"
+    __tablename__ = "instance_control_plane_state"
 
-    state_key: Mapped[str] = mapped_column(String(32), primary_key=True, default=_STATE_KEY)
+    instance_id: Mapped[str] = mapped_column(String(191), primary_key=True)
     payload: Mapped[dict[str, Any]] = mapped_column(JSONB().with_variant(JSON(), "sqlite"))
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(tz=UTC), nullable=False)
 
@@ -34,7 +53,7 @@ class ControlPlaneStatePaths:
 
 
 class ControlPlaneStateRepository(Protocol):
-    def load_state(self) -> ControlPlaneStateRecord | None: ...
+    def load_state(self, instance_id: str | None = None) -> ControlPlaneStateRecord | None: ...
 
     def save_state(self, state: ControlPlaneStateRecord) -> ControlPlaneStateRecord: ...
 
@@ -87,25 +106,163 @@ class FileControlPlaneStateRepository:
             normalized["schema_version"] = _CONTROL_PLANE_STATE_SCHEMA_VERSION
             changed = True
 
+        providers = normalized.get("providers", [])
+        if isinstance(providers, list):
+            for provider in providers:
+                if not isinstance(provider, dict):
+                    continue
+                provider_label = str(provider.get("label") or provider.get("provider") or "")
+                provider_name = str(provider.get("provider") or "")
+                for model in provider.get("managed_models", []):
+                    if not isinstance(model, dict):
+                        continue
+                    upgraded = ensure_model_registry_metadata(
+                        model=ManagedModelRecord(**model),
+                        provider_label=provider_label or provider_name,
+                        provider_name=provider_name,
+                    )
+                    upgraded_payload = upgraded.model_dump(mode="json")
+                    if upgraded_payload != model:
+                        model.clear()
+                        model.update(upgraded_payload)
+                        changed = True
+
+        if version < 3 or "provider_targets" not in normalized:
+            provider_records = []
+            for provider in providers if isinstance(providers, list) else []:
+                if not isinstance(provider, dict):
+                    continue
+                try:
+                    provider_records.append(ManagedProviderRecord(**provider))
+                except Exception:
+                    continue
+            normalized["provider_targets"] = [
+                target.model_dump(mode="json")
+                for target in build_default_targets_from_providers(
+                    provider_records,
+                    instance_id=normalized.get("instance_id") or DEFAULT_BOOTSTRAP_TENANT_ID,
+                )
+            ]
+            normalized["schema_version"] = _CONTROL_PLANE_STATE_SCHEMA_VERSION
+            changed = True
+
+        if version < 4 or any(
+            key not in normalized
+            for key in ("routing_policies", "routing_budget_state", "routing_circuits", "routing_decisions")
+        ):
+            target_records: list[ManagedProviderTargetRecord] = []
+            for raw_target in normalized.get("provider_targets", []):
+                if not isinstance(raw_target, dict):
+                    continue
+                try:
+                    target_records.append(ManagedProviderTargetRecord(**raw_target))
+                except Exception:
+                    continue
+            available_target_keys = [target.target_key for target in target_records]
+            default_policies = build_default_routing_policies(target_records)
+            stored_policies = []
+            for raw_policy in normalized.get("routing_policies", []) or []:
+                if not isinstance(raw_policy, dict):
+                    continue
+                try:
+                    stored_policies.append(RoutingPolicyRecord(**raw_policy))
+                except Exception:
+                    continue
+            normalized["routing_policies"] = [
+                policy.model_dump(mode="json")
+                for policy in merge_routing_policies(
+                    default_policies,
+                    stored_policies,
+                    available_target_keys=available_target_keys,
+                )
+            ]
+            try:
+                budget_state = RoutingBudgetStateRecord(**dict(normalized.get("routing_budget_state") or {}))
+            except Exception:
+                budget_state = RoutingBudgetStateRecord()
+            normalized["routing_budget_state"] = normalize_routing_budget_state(budget_state).model_dump(mode="json")
+            stored_circuits: list[RoutingCircuitStateRecord] = []
+            for raw_circuit in normalized.get("routing_circuits", []) or []:
+                if not isinstance(raw_circuit, dict):
+                    continue
+                try:
+                    stored_circuits.append(RoutingCircuitStateRecord(**raw_circuit))
+                except Exception:
+                    continue
+            normalized["routing_circuits"] = [
+                circuit.model_dump(mode="json")
+                for circuit in merge_routing_circuits(
+                    stored_circuits,
+                    available_target_keys=available_target_keys,
+                )
+            ]
+            if not isinstance(normalized.get("routing_decisions"), list):
+                normalized["routing_decisions"] = []
+            normalized["schema_version"] = _CONTROL_PLANE_STATE_SCHEMA_VERSION
+            changed = True
+
         if "updated_at" not in normalized:
             normalized["updated_at"] = ""
             changed = True
 
+        if not normalized.get("instance_id"):
+            normalized["instance_id"] = DEFAULT_BOOTSTRAP_TENANT_ID
+            changed = True
+
         return normalized, changed
 
-    def load_state(self) -> ControlPlaneStateRecord | None:
+    @staticmethod
+    def _normalize_instance_id(instance_id: str | None) -> str:
+        return normalize_tenant_id(instance_id, fallback_tenant_id=DEFAULT_BOOTSTRAP_TENANT_ID)
+
+    def _load_state_map(self) -> tuple[dict[str, dict[str, Any]], bool]:
+        path = self._paths.state_path
+        path.parent.mkdir(parents=True, exist_ok=True)
+        if not path.exists():
+            return {}, False
+        raw = path.read_text(encoding="utf-8")
+        if not raw.strip():
+            return {}, False
+        payload = json.loads(raw)
+        if isinstance(payload, dict) and "states" in payload:
+            normalized_states: dict[str, dict[str, Any]] = {}
+            changed = False
+            raw_states = payload.get("states") or {}
+            if isinstance(raw_states, dict):
+                for key, state_payload in raw_states.items():
+                    if not isinstance(state_payload, dict):
+                        continue
+                    upgraded_state, upgraded_changed = self._upgrade_payload(state_payload)
+                    upgraded_key = self._normalize_instance_id(
+                        upgraded_state.get("instance_id") or key
+                    )
+                    upgraded_state["instance_id"] = upgraded_key
+                    normalized_states[upgraded_key] = upgraded_state
+                    changed = changed or upgraded_changed or upgraded_key != key
+            return normalized_states, changed
+
+        if isinstance(payload, dict):
+            upgraded_state, changed = self._upgrade_payload(payload)
+            instance_id = self._normalize_instance_id(upgraded_state.get("instance_id"))
+            upgraded_state["instance_id"] = instance_id
+            return {instance_id: upgraded_state}, True
+        return {}, False
+
+    def load_state(self, instance_id: str | None = None) -> ControlPlaneStateRecord | None:
         path = self._paths.state_path
         path.parent.mkdir(parents=True, exist_ok=True)
         if not path.exists():
             return None
         try:
-            raw = path.read_text(encoding="utf-8")
-            if not raw.strip():
+            state_map, changed = self._load_state_map()
+            normalized_instance_id = self._normalize_instance_id(instance_id)
+            payload = state_map.get(normalized_instance_id)
+            if payload is None:
                 return None
-            payload, changed = self._upgrade_payload(json.loads(raw))
             state = ControlPlaneStateRecord(**payload)
             if changed:
-                return self.save_state(state)
+                self.save_state(state)
+                return self.load_state(normalized_instance_id)
             return state
         except (OSError, json.JSONDecodeError, ValueError):
             backup = path.with_suffix(path.suffix + ".corrupt")
@@ -116,11 +273,30 @@ class FileControlPlaneStateRepository:
             return None
 
     def save_state(self, state: ControlPlaneStateRecord) -> ControlPlaneStateRecord:
-        normalized = state.model_copy(update={"updated_at": self._now_iso()})
+        normalized_instance_id = self._normalize_instance_id(state.instance_id)
+        normalized = state.model_copy(
+            update={
+                "instance_id": normalized_instance_id,
+                "updated_at": self._now_iso(),
+            }
+        )
+        state_map, _ = self._load_state_map()
+        state_map[normalized_instance_id] = normalized.model_dump(mode="json")
         path = self._paths.state_path
         path.parent.mkdir(parents=True, exist_ok=True)
         tmp = path.with_suffix(path.suffix + ".tmp")
-        tmp.write_text(json.dumps(normalized.model_dump(), indent=2) + "\n", encoding="utf-8")
+        tmp.write_text(
+            json.dumps(
+                {
+                    "schema_version": _CONTROL_PLANE_STATE_SCHEMA_VERSION,
+                    "states": state_map,
+                    "updated_at": self._now_iso(),
+                },
+                indent=2,
+            )
+            + "\n",
+            encoding="utf-8",
+        )
         tmp.replace(path)
         return normalized
 
@@ -140,12 +316,40 @@ class PostgresControlPlaneStateRepository:
     def _session(self) -> Session:
         return self._session_factory()
 
-    def load_state(self) -> ControlPlaneStateRecord | None:
+    @staticmethod
+    def _normalize_instance_id(instance_id: str | None) -> str:
+        return normalize_tenant_id(instance_id, fallback_tenant_id=DEFAULT_BOOTSTRAP_TENANT_ID)
+
+    def _load_legacy_default_state(self, session: Session) -> ControlPlaneStateRecord | None:
+        row = session.execute(
+            text(
+                """
+                SELECT payload
+                FROM control_plane_state
+                WHERE state_key = :state_key
+                """
+            ),
+            {"state_key": _LEGACY_STATE_KEY},
+        ).first()
+        if row is None:
+            return None
+        payload = dict(row[0] or {})
+        upgraded_payload, _ = FileControlPlaneStateRepository._upgrade_payload(payload)
+        upgraded_payload["instance_id"] = DEFAULT_BOOTSTRAP_TENANT_ID
+        state = ControlPlaneStateRecord(**upgraded_payload)
+        self.save_state(state)
+        return state
+
+    def load_state(self, instance_id: str | None = None) -> ControlPlaneStateRecord | None:
+        normalized_instance_id = self._normalize_instance_id(instance_id)
         with self._session() as session:
-            row = session.get(ControlPlaneStateORM, _STATE_KEY)
+            row = session.get(ControlPlaneStateORM, normalized_instance_id)
             if not row:
+                if normalized_instance_id == DEFAULT_BOOTSTRAP_TENANT_ID:
+                    return self._load_legacy_default_state(session)
                 return None
             payload, changed = FileControlPlaneStateRepository._upgrade_payload(row.payload)
+            payload["instance_id"] = normalized_instance_id
             state = ControlPlaneStateRecord(**payload)
             if changed:
                 row.payload = state.model_dump()
@@ -154,9 +358,15 @@ class PostgresControlPlaneStateRepository:
             return state
 
     def save_state(self, state: ControlPlaneStateRecord) -> ControlPlaneStateRecord:
-        normalized = state.model_copy(update={"updated_at": self._now().isoformat()})
+        normalized_instance_id = self._normalize_instance_id(state.instance_id)
+        normalized = state.model_copy(
+            update={
+                "instance_id": normalized_instance_id,
+                "updated_at": self._now().isoformat(),
+            }
+        )
         with self._session() as session:
-            row = session.get(ControlPlaneStateORM, _STATE_KEY)
+            row = session.get(ControlPlaneStateORM, normalized_instance_id)
             payload = normalized.model_dump()
             if row:
                 row.payload = payload
@@ -164,7 +374,7 @@ class PostgresControlPlaneStateRepository:
             else:
                 session.add(
                     ControlPlaneStateORM(
-                        state_key=_STATE_KEY,
+                        instance_id=normalized_instance_id,
                         payload=payload,
                         updated_at=self._now(),
                     )

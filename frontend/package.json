@@ -1,8 +1,8 @@
 {
-  "name": "forgegate-frontend",
+  "name": "forgeframe-frontend",
   "version": "0.2.0",
   "private": true,
-  "description": "ForgeGate control-plane frontend",
+  "description": "ForgeFrame control-plane frontend",
   "type": "module",
   "scripts": {
     "dev": "vite",

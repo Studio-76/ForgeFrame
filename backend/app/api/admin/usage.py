@@ -3,9 +3,10 @@
 from fastapi import APIRouter, Depends, Query
 from fastapi.responses import JSONResponse
 
-from app.api.runtime.dependencies import get_model_registry, get_settings
+from app.api.admin.instance_scope import resolve_admin_instance_scope
 from app.core.model_registry import ModelRegistry
-from app.settings.config import Settings
+from app.instances.models import InstanceRecord
+from app.settings.config import Settings, get_settings
 from app.tenancy import TenantFilterRequiredError
 from app.usage.analytics import UsageAnalyticsStore, get_usage_analytics_store
 
@@ -19,21 +20,28 @@ def _tenant_filter_error(exc: TenantFilterRequiredError) -> JSONResponse:
     )
 
 
+def get_admin_model_registry(
+    instance: InstanceRecord = Depends(resolve_admin_instance_scope),
+    settings: Settings = Depends(get_settings),
+) -> ModelRegistry:
+    return ModelRegistry(settings, instance_id=instance.instance_id)
+
+
 @router.get("/")
 def usage_summary(
     window: str = Query(default="24h", pattern="^(1h|24h|7d|all)$"),
-    tenant_id: str | None = Query(default=None, alias="tenantId"),
+    instance: InstanceRecord = Depends(resolve_admin_instance_scope),
     settings: Settings = Depends(get_settings),
-    registry: ModelRegistry = Depends(get_model_registry),
+    registry: ModelRegistry = Depends(get_admin_model_registry),
     analytics: UsageAnalyticsStore = Depends(get_usage_analytics_store),
 ) -> dict[str, object]:
     window_map: dict[str, int | None] = {"1h": 3600, "24h": 24 * 3600, "7d": 7 * 24 * 3600, "all": None}
     selected_window = window_map[window]
     models = registry.list_active_models()
     try:
-        aggregates = analytics.aggregate(window_seconds=selected_window, tenant_id=tenant_id)
-        timeline = analytics.timeline(window_seconds=24 * 3600, bucket_seconds=3600, tenant_id=tenant_id)
-        alerts = analytics.alert_indicators(tenant_id=tenant_id)
+        aggregates = analytics.aggregate(window_seconds=selected_window, tenant_id=instance.tenant_id)
+        timeline = analytics.timeline(window_seconds=24 * 3600, bucket_seconds=3600, tenant_id=instance.tenant_id)
+        alerts = analytics.alert_indicators(tenant_id=instance.tenant_id)
     except TenantFilterRequiredError as exc:
         return _tenant_filter_error(exc)
     return {
@@ -41,7 +49,7 @@ def usage_summary(
         "object": "usage_summary",
         "metrics": {
             "active_model_count": len(models),
-            "stream_capable_model_count": len([m for m in models if m.provider in {"forgegate_baseline", "openai_api"}]),
+            "stream_capable_model_count": len([m for m in models if m.provider in {"forgeframe_baseline", "openai_api"}]),
             "recorded_request_count": aggregates["event_count"],
             "recorded_error_count": aggregates["error_event_count"],
             "recorded_health_event_count": aggregates["health_event_count"],
@@ -70,6 +78,11 @@ def usage_summary(
             "avoided": "derived from actual vs hypothetical",
         },
         "window": window,
+        "instance": {
+            "instance_id": instance.instance_id,
+            "tenant_id": instance.tenant_id,
+            "company_id": instance.company_id,
+        },
         "latest_health": aggregates["latest_health"],
         "timeline_24h": timeline,
         "alerts": alerts,
@@ -85,13 +98,13 @@ def usage_summary(
 @router.get("/clients")
 def client_operational_view(
     window: str = Query(default="24h", pattern="^(1h|24h|7d|all)$"),
-    tenant_id: str | None = Query(default=None, alias="tenantId"),
+    instance: InstanceRecord = Depends(resolve_admin_instance_scope),
     analytics: UsageAnalyticsStore = Depends(get_usage_analytics_store),
 ) -> dict[str, object]:
     window_map: dict[str, int | None] = {"1h": 3600, "24h": 24 * 3600, "7d": 7 * 24 * 3600, "all": None}
     selected_window = window_map[window]
     try:
-        aggregates = analytics.aggregate(window_seconds=selected_window, tenant_id=tenant_id)
+        aggregates = analytics.aggregate(window_seconds=selected_window, tenant_id=instance.tenant_id)
     except TenantFilterRequiredError as exc:
         return _tenant_filter_error(exc)
     client_map = {str(item["client_id"]): item for item in aggregates["by_client"]}
@@ -112,7 +125,7 @@ def client_operational_view(
 def provider_drilldown(
     provider_name: str,
     window: str = Query(default="24h", pattern="^(1h|24h|7d|all)$"),
-    tenant_id: str | None = Query(default=None, alias="tenantId"),
+    instance: InstanceRecord = Depends(resolve_admin_instance_scope),
     analytics: UsageAnalyticsStore = Depends(get_usage_analytics_store),
 ) -> dict[str, object]:
     window_map: dict[str, int | None] = {"1h": 3600, "24h": 24 * 3600, "7d": 7 * 24 * 3600, "all": None}
@@ -120,7 +133,7 @@ def provider_drilldown(
         drilldown = analytics.provider_drilldown(
             provider_name,
             window_seconds=window_map[window],
-            tenant_id=tenant_id,
+            tenant_id=instance.tenant_id,
         )
     except TenantFilterRequiredError as exc:
         return _tenant_filter_error(exc)
@@ -131,7 +144,7 @@ def provider_drilldown(
 def client_drilldown(
     client_id: str,
     window: str = Query(default="24h", pattern="^(1h|24h|7d|all)$"),
-    tenant_id: str | None = Query(default=None, alias="tenantId"),
+    instance: InstanceRecord = Depends(resolve_admin_instance_scope),
     analytics: UsageAnalyticsStore = Depends(get_usage_analytics_store),
 ) -> dict[str, object]:
     window_map: dict[str, int | None] = {"1h": 3600, "24h": 24 * 3600, "7d": 7 * 24 * 3600, "all": None}
@@ -139,7 +152,7 @@ def client_drilldown(
         drilldown = analytics.client_drilldown(
             client_id,
             window_seconds=window_map[window],
-            tenant_id=tenant_id,
+            tenant_id=instance.tenant_id,
         )
     except TenantFilterRequiredError as exc:
         return _tenant_filter_error(exc)

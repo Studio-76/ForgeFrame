@@ -172,7 +172,7 @@ class ControlPlaneTruthDomainMixin:
         }.get(provider_name)
         if beta_target_key is not None:
             target = next(
-                (item for item in self.beta_provider_targets(tenant_id=tenant_id) if item["provider_key"] == beta_target_key),
+                (item for item in self.product_axis_targets(tenant_id=tenant_id) if item["provider_key"] == beta_target_key),
                 None,
             )
             if target is not None:
@@ -181,7 +181,7 @@ class ControlPlaneTruthDomainMixin:
         if provider_name == "openai_api":
             readiness = "ready" if ready else "planned"
             return readiness, readiness if streaming else "planned"
-        if provider_name == "forgegate_baseline":
+        if provider_name == "forgeframe_baseline":
             return "ready", "ready"
         if provider_name == "anthropic":
             return ("partial" if ready else "planned"), ("partial" if ready and streaming else "planned")
@@ -190,6 +190,46 @@ class ControlPlaneTruthDomainMixin:
     @staticmethod
     def _runtime_summary_ready(runtime_readiness: str) -> bool:
         return runtime_readiness == "ready"
+
+    @staticmethod
+    def _runtime_contract_classification(
+        provider_name: str,
+        runtime_status: dict[str, object],
+        runtime_readiness: str,
+    ) -> str:
+        if runtime_readiness == "ready":
+            return "runtime-ready"
+
+        provider_axis = str(runtime_status["capabilities"].get("provider_axis", "unknown"))
+        ready = bool(runtime_status.get("ready"))
+
+        if provider_name == "generic_harness":
+            return "partial-runtime" if ready or runtime_readiness == "partial" else "onboarding-only"
+        if provider_name in {"openai_codex", "gemini"}:
+            return "partial-runtime" if runtime_readiness == "partial" else "onboarding-only"
+        if provider_axis == "unmapped_native_runtime":
+            return "partial-runtime" if ready else "unsupported"
+        if runtime_readiness == "partial" or ready:
+            return "partial-runtime"
+        return "unsupported"
+
+    @staticmethod
+    def _compatibility_depth(
+        provider_axis: str,
+        ready: bool,
+        runtime_readiness: str,
+        streaming: bool,
+        tool_calling_level: str,
+    ) -> str:
+        if provider_axis == "unmapped_native_runtime":
+            return "limited" if ready or runtime_readiness == "partial" else "none"
+        if ready and streaming and tool_calling_level == "full":
+            return "validated"
+        if ready:
+            return "constrained"
+        if runtime_readiness == "partial":
+            return "limited"
+        return "none"
 
     def _runtime_summary_reason(
         self,
@@ -209,11 +249,11 @@ class ControlPlaneTruthDomainMixin:
         if provider_axis == "unmapped_native_runtime":
             if provider_name == "anthropic":
                 return (
-                    "Anthropic runs through the native /messages adapter. ForgeGate still ships only four product axes, "
+                    "Anthropic runs through the native /messages adapter. ForgeFrame still ships only four product axes, "
                     "so Anthropic stays outside the current product-axis taxonomy and is intentionally omitted from beta targets."
                 )
             return (
-                "This provider uses native runtime semantics outside ForgeGate's current shipped product-axis taxonomy "
+                "This provider uses native runtime semantics outside ForgeFrame's current shipped product-axis taxonomy "
                 "and stays intentionally omitted from beta targets until a truthful axis exists."
             )
 
@@ -235,7 +275,7 @@ class ControlPlaneTruthDomainMixin:
         }.get(provider_name)
         if beta_target_key is not None:
             target = next(
-                (item for item in self.beta_provider_targets(tenant_id=tenant_id) if item["provider_key"] == beta_target_key),
+                (item for item in self.product_axis_targets(tenant_id=tenant_id) if item["provider_key"] == beta_target_key),
                 None,
             )
             if target is not None and target.get("status_summary"):
@@ -296,9 +336,13 @@ class ControlPlaneTruthDomainMixin:
             evidence,
             tenant_id=tenant_id,
         )
-        compatibility_tier = "planned"
-        if runtime_status["ready"] and provider_axis != "unmapped_native_runtime":
-            compatibility_tier = "beta_plus" if streaming and tool_calling_level == "full" else "beta"
+        compatibility_depth = self._compatibility_depth(
+            provider_axis,
+            bool(runtime_status["ready"]),
+            runtime_readiness,
+            streaming,
+            tool_calling_level,
+        )
         oauth_mode = (
             self._settings.openai_codex_oauth_mode
             if provider.provider == "openai_codex" and self._settings.openai_codex_auth_mode == "oauth"
@@ -309,12 +353,17 @@ class ControlPlaneTruthDomainMixin:
             wired=True,
             ready=summary_ready,
             readiness_reason=readiness_reason,
+            contract_classification=self._runtime_contract_classification(
+                provider.provider,
+                runtime_status,
+                runtime_readiness,
+            ),
             runtime_readiness=runtime_readiness,
             streaming_readiness=streaming_readiness,
             capabilities=dict(runtime_status["capabilities"]),
             tool_calling_level=str(runtime_status["capabilities"].get("tool_calling_level", "none")),
             evidence=evidence,
-            compatibility_tier=compatibility_tier,
+            compatibility_depth=compatibility_depth,
             provider_axis=provider_axis,
             auth_mechanism=str(runtime_status["capabilities"].get("auth_mechanism", "unknown")),
             oauth_required=bool(runtime_status["oauth_required"]),
@@ -400,12 +449,13 @@ class ControlPlaneTruthDomainMixin:
             last_sync_error=provider_truth.last_sync_error,
             ready=runtime_truth.ready,
             readiness_reason=runtime_truth.readiness_reason,
+            contract_classification=runtime_truth.contract_classification,
             runtime_readiness=runtime_truth.runtime_readiness,
             streaming_readiness=runtime_truth.streaming_readiness,
             capabilities=dict(runtime_truth.capabilities),
             tool_calling_level=runtime_truth.tool_calling_level,
             evidence=runtime_truth.evidence.model_copy(deep=True),
-            compatibility_tier=runtime_truth.compatibility_tier,
+            compatibility_depth=runtime_truth.compatibility_depth,
             provider_axis=runtime_truth.provider_axis,
             auth_mechanism=runtime_truth.auth_mechanism,
             oauth_required=runtime_truth.oauth_required,

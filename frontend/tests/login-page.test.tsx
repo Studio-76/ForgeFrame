@@ -150,12 +150,12 @@ describe("Login page", () => {
     });
 
     await renderIntoDom(<RouterProvider router={router} />);
-    await fillLoginForm("ops-admin", "Temp-ForgeGate-42");
+    await fillLoginForm("ops-admin", "Temp-ForgeFrame-42");
     await submitLoginForm();
 
     expect(loginAdminMock).toHaveBeenCalledWith({
       username: "ops-admin",
-      password: "Temp-ForgeGate-42",
+      password: "Temp-ForgeFrame-42",
     });
     expect(setAdminTokenMock).toHaveBeenCalledWith("token-123");
     expect(router.state.location.pathname).toBe("/dashboard");

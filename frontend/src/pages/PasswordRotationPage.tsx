@@ -30,7 +30,7 @@ export function PasswordRotationPage() {
           },
         ]}
         badges={[{ label: "Access restricted", tone: "warning" }]}
-        note="ForgeGate keeps the standard control-plane shell hidden until this password rotation succeeds."
+        note="ForgeFrame keeps the standard control-plane shell hidden until this password rotation succeeds."
       />
       <PasswordRotationGate
         session={session}

@@ -8,7 +8,6 @@ import {
   deactivateProvider,
   deleteHarnessProfile as deleteHarnessProfileRequest,
   dryRunHarness,
-  fetchBetaProviderTargets,
   fetchBootstrapReadiness,
   fetchClientOperationalView,
   fetchCompatibilityMatrix,
@@ -19,6 +18,7 @@ import {
   fetchOauthAccountOperations,
   fetchOauthAccountTargets,
   fetchOauthOnboarding,
+  fetchProductAxisTargets,
   fetchProviderControlPlane,
   fetchUsageSummary,
   importHarnessConfig,
@@ -88,7 +88,7 @@ function getModelSource(integrationClass: HarnessProfile["integration_class"]): 
 
 export function useProvidersControlPlane(
   access: ProvidersAccessState,
-  tenantId?: string | null,
+  instanceId?: string | null,
 ): { data: ProvidersPageData; actions: ProvidersPageActions } {
   const [state, setState] = useState<LoadState>("idle");
   const [error, setError] = useState<string | null>(null);
@@ -109,7 +109,7 @@ export function useProvidersControlPlane(
   const [integrationErrors, setIntegrationErrors] = useState<Record<string, number>>({});
   const [profileErrors, setProfileErrors] = useState<Record<string, number>>({});
   const [clients, setClients] = useState<ProvidersPageData["clients"]>([]);
-  const [betaTargets, setBetaTargets] = useState<ProvidersPageData["betaTargets"]>([]);
+  const [productAxisTargets, setProductAxisTargets] = useState<ProvidersPageData["productAxisTargets"]>([]);
   const [oauthTargets, setOauthTargets] = useState<ProvidersPageData["oauthTargets"]>([]);
   const [oauthOperations, setOauthOperations] = useState<ProvidersPageData["oauthOperations"]>([]);
   const [oauthRecentOps, setOauthRecentOps] = useState<ProvidersPageData["oauthRecentOps"]>([]);
@@ -158,15 +158,15 @@ export function useProvidersControlPlane(
         harnessProfiles,
         harnessRuns,
         clientView,
-        betaTargetsResponse,
+        productAxisTargetsResponse,
         oauthTargetsResponse,
         oauthOpsResponse,
         oauthOnboardingResponse,
         bootstrapResponse,
         compatibilityResponse,
       ] = await Promise.all([
-        tenantId ? fetchProviderControlPlane(tenantId) : fetchProviderControlPlane(),
-        tenantId ? fetchUsageSummary("24h", tenantId) : fetchUsageSummary(),
+        instanceId ? fetchProviderControlPlane(instanceId) : fetchProviderControlPlane(),
+        instanceId ? fetchUsageSummary("24h", instanceId) : fetchUsageSummary(),
         fetchHarnessTemplates(),
         fetchHarnessProfiles(),
         fetchHarnessRuns(
@@ -176,13 +176,13 @@ export function useProvidersControlPlane(
           runFilters.client === "all" ? undefined : runFilters.client,
           40,
         ),
-        tenantId ? fetchClientOperationalView("24h", tenantId) : fetchClientOperationalView(),
-        tenantId ? fetchBetaProviderTargets(tenantId) : fetchBetaProviderTargets(),
-        tenantId ? fetchOauthAccountTargets(tenantId) : fetchOauthAccountTargets(),
-        tenantId ? fetchOauthAccountOperations(tenantId) : fetchOauthAccountOperations(),
-        tenantId ? fetchOauthOnboarding(tenantId) : fetchOauthOnboarding(),
+        instanceId ? fetchClientOperationalView("24h", instanceId) : fetchClientOperationalView(),
+        instanceId ? fetchProductAxisTargets(instanceId) : fetchProductAxisTargets(),
+        instanceId ? fetchOauthAccountTargets(instanceId) : fetchOauthAccountTargets(),
+        instanceId ? fetchOauthAccountOperations(instanceId) : fetchOauthAccountOperations(),
+        instanceId ? fetchOauthOnboarding(instanceId) : fetchOauthOnboarding(),
         fetchBootstrapReadiness(),
-        tenantId ? fetchCompatibilityMatrix(tenantId) : fetchCompatibilityMatrix(),
+        instanceId ? fetchCompatibilityMatrix(instanceId) : fetchCompatibilityMatrix(),
       ]);
 
       setProviders(payload.providers);
@@ -192,7 +192,7 @@ export function useProvidersControlPlane(
       setRunSummary(harnessRuns.summary ?? {});
       setRunOps(harnessRuns.ops ?? {});
       setClients(clientView.clients ?? []);
-      setBetaTargets(betaTargetsResponse.targets ?? []);
+      setProductAxisTargets(productAxisTargetsResponse.targets ?? []);
       setOauthTargets(oauthTargetsResponse.targets ?? []);
       setOauthOperations(oauthOpsResponse.operations ?? []);
       setOauthRecentOps(oauthOpsResponse.recent ?? []);
@@ -220,7 +220,7 @@ export function useProvidersControlPlane(
 
   useEffect(() => {
     void load();
-  }, [runFilters.client, runFilters.mode, runFilters.provider, runFilters.status, tenantId]);
+  }, [instanceId, runFilters.client, runFilters.mode, runFilters.provider, runFilters.status]);
 
   const withAction = async (task: () => Promise<void>, fallback: string, requiresMutation = false) => {
     if (requiresMutation && !ensureMutationAllowed()) {
@@ -477,7 +477,7 @@ export function useProvidersControlPlane(
     integrationErrors,
     profileErrors,
     clients,
-    betaTargets,
+    productAxisTargets,
     oauthTargets,
     oauthOperations,
     oauthRecentOps,

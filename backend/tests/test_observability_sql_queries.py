@@ -5,6 +5,7 @@ from uuid import uuid4
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, text
 
+from conftest import admin_headers as shared_admin_headers
 from app.api.admin.control_plane import get_control_plane_service
 from app.api.runtime.dependencies import clear_runtime_dependency_caches
 from app.control_plane import OAuthOperationRecord
@@ -17,23 +18,7 @@ from app.usage.events import ErrorEvent, HealthEvent, UsageEvent
 
 
 def _admin_headers(client: TestClient) -> dict[str, str]:
-    response = client.post(
-        "/admin/auth/login",
-        json={"username": "admin", "password": os.environ["FORGEGATE_BOOTSTRAP_ADMIN_PASSWORD"]},
-    )
-    assert response.status_code == 201
-    headers = {"Authorization": f"Bearer {response.json()['access_token']}"}
-    if response.json()["user"]["must_rotate_password"] is True:
-        rotate = client.post(
-            "/admin/auth/rotate-password",
-            headers=headers,
-            json={
-                "current_password": os.environ["FORGEGATE_BOOTSTRAP_ADMIN_PASSWORD"],
-                "new_password": os.environ["FORGEGATE_BOOTSTRAP_ADMIN_PASSWORD"],
-            },
-        )
-        assert rotate.status_code == 200
-    return headers
+    return shared_admin_headers(client)
 
 
 def _scoped_postgres_url(schema_name: str) -> tuple[str, object]:

@@ -4,51 +4,18 @@ from uuid import uuid4
 
 from fastapi.testclient import TestClient
 
+from conftest import admin_headers as shared_admin_headers, login_headers_allowing_password_rotation
 from app.api.admin.control_plane import get_control_plane_service
 from app.harness.models import HarnessVerificationRun
 from app.main import app
 
-_ROTATED_ADMIN_PASSWORD = "ForgeGate-Harness-Export-Admin-456"
-
 
 def _login_headers(client: TestClient, *, username: str, password: str) -> dict[str, str]:
-    response = client.post(
-        "/admin/auth/login",
-        json={"username": username, "password": password},
-    )
-    assert response.status_code == 201
-    headers = {"Authorization": f"Bearer {response.json()['access_token']}"}
-    if response.json()["user"]["must_rotate_password"] is True:
-        rotation = client.post(
-            "/admin/auth/rotate-password",
-            headers=headers,
-            json={"current_password": password, "new_password": password},
-        )
-        assert rotation.status_code == 200
-    return headers
+    return login_headers_allowing_password_rotation(client, username=username, password=password)
 
 
 def _admin_headers(client: TestClient) -> dict[str, str]:
-    bootstrap_password = os.environ["FORGEGATE_BOOTSTRAP_ADMIN_PASSWORD"]
-    active_password = bootstrap_password
-    response = client.post("/admin/auth/login", json={"username": "admin", "password": active_password})
-    if response.status_code == 401:
-        active_password = _ROTATED_ADMIN_PASSWORD
-        response = client.post("/admin/auth/login", json={"username": "admin", "password": active_password})
-    assert response.status_code == 201
-    headers = {"Authorization": f"Bearer {response.json()['access_token']}"}
-    if response.json()["user"]["must_rotate_password"] is True:
-        rotation = client.post(
-            "/admin/auth/rotate-password",
-            headers=headers,
-            json={
-                "current_password": active_password,
-                "new_password": _ROTATED_ADMIN_PASSWORD,
-            },
-        )
-        assert rotation.status_code == 200
-        headers = _login_headers(client, username="admin", password=_ROTATED_ADMIN_PASSWORD)
-    return headers
+    return shared_admin_headers(client)
 
 
 def _create_user_headers(
@@ -58,7 +25,7 @@ def _create_user_headers(
     role: str,
 ) -> tuple[dict[str, object], dict[str, str]]:
     suffix = uuid4().hex[:8]
-    password = f"ForgeGate-{role}-pass-123"
+    password = f"ForgeFrame-{role}-pass-123"
     created = client.post(
         "/admin/security/users",
         headers=creator_headers,
@@ -389,6 +356,69 @@ def test_provider_truth_axes_redact_historical_harness_failures_for_operator_and
         assert runs_payload["ops"]["last_failed_run"]["error"] == run["error"]
 
 
+def test_provider_admin_routes_require_instance_membership_and_keep_write_denied_for_operator_memberships() -> None:
+    client = TestClient(app)
+    admin_headers = _admin_headers(client)
+    operator_user, operator_headers = _create_user_headers(client, admin_headers, role="operator")
+    operator_password = "ForgeFrame-operator-pass-123"
+
+    created_instance = client.post(
+        "/admin/instances/",
+        headers=admin_headers,
+        json={
+            "instance_id": "providers_alpha",
+            "display_name": "Providers Alpha",
+            "tenant_id": "providers_alpha",
+            "company_id": "providers_alpha",
+        },
+    )
+    assert created_instance.status_code == 201
+    instance_id = created_instance.json()["instance"]["instance_id"]
+
+    denied_listing = client.get(
+        "/admin/providers/",
+        headers=operator_headers,
+        params={"instanceId": instance_id},
+    )
+    assert denied_listing.status_code == 403
+    assert denied_listing.json()["detail"] == "instance_membership_required"
+
+    granted = client.put(
+        f"/admin/security/users/{operator_user['user_id']}/memberships/{instance_id}",
+        headers=admin_headers,
+        json={"role": "operator", "status": "active"},
+    )
+    assert granted.status_code == 200
+
+    operator_headers = _login_headers(
+        client,
+        username=str(operator_user["username"]),
+        password=operator_password,
+    )
+
+    listing = client.get(
+        "/admin/providers/",
+        headers=operator_headers,
+        params={"instanceId": instance_id},
+    )
+    assert listing.status_code == 200
+    assert listing.json()["instance"]["instance_id"] == instance_id
+
+    denied_create = client.post(
+        "/admin/providers/",
+        headers=operator_headers,
+        params={"instanceId": instance_id},
+        json={
+            "provider": f"scoped_provider_{uuid4().hex[:8]}",
+            "label": "Scoped Provider",
+            "integration_class": "native",
+            "config": {},
+        },
+    )
+    assert denied_create.status_code == 403
+    assert denied_create.json()["detail"] == "missing_instance_permission:providers.write"
+
+
 def test_viewer_session_cannot_access_harness_export() -> None:
     client = TestClient(app)
     admin_headers = _admin_headers(client)
@@ -397,4 +427,4 @@ def test_viewer_session_cannot_access_harness_export() -> None:
     response = client.get("/admin/providers/harness/export", headers=viewer_headers)
 
     assert response.status_code == 403
-    assert response.json()["detail"] == "operator_role_required"
+    assert response.json()["detail"] == "missing_instance_permission:providers.read"

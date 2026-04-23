@@ -7,6 +7,7 @@ from uuid import uuid4
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, text
 
+from conftest import admin_headers as shared_admin_headers
 from app.api.admin.control_plane import get_control_plane_service
 from app.api.runtime.dependencies import clear_runtime_dependency_caches
 from app.governance.models import AuthenticatedAdmin
@@ -20,23 +21,7 @@ from app.usage.analytics import get_usage_analytics_store
 
 
 def _admin_headers(client: TestClient) -> dict[str, str]:
-    response = client.post(
-        "/admin/auth/login",
-        json={"username": "admin", "password": os.environ["FORGEGATE_BOOTSTRAP_ADMIN_PASSWORD"]},
-    )
-    assert response.status_code == 201
-    headers = {"Authorization": f"Bearer {response.json()['access_token']}"}
-    if response.json()["user"]["must_rotate_password"] is True:
-        rotate = client.post(
-            "/admin/auth/rotate-password",
-            headers=headers,
-            json={
-                "current_password": os.environ["FORGEGATE_BOOTSTRAP_ADMIN_PASSWORD"],
-                "new_password": os.environ["FORGEGATE_BOOTSTRAP_ADMIN_PASSWORD"],
-            },
-        )
-        assert rotate.status_code == 200
-    return headers
+    return shared_admin_headers(client)
 
 
 def _issue_runtime_key(client: TestClient, *, label: str) -> tuple[str, str]:
@@ -360,9 +345,9 @@ def test_oauth_operations_endpoint_requires_tenant_filter_for_mixed_history() ->
     assert unfiltered_provider_snapshot.status_code == 400
     assert unfiltered_provider_snapshot.json()["error"]["type"] == "tenant_filter_required"
 
-    unfiltered_beta_targets = client.get("/admin/providers/beta-targets", headers=headers)
-    assert unfiltered_beta_targets.status_code == 400
-    assert unfiltered_beta_targets.json()["error"]["type"] == "tenant_filter_required"
+    unfiltered_axis_targets = client.get("/admin/providers/product-axis-targets", headers=headers)
+    assert unfiltered_axis_targets.status_code == 400
+    assert unfiltered_axis_targets.json()["error"]["type"] == "tenant_filter_required"
 
     unfiltered_oauth_targets = client.get("/admin/providers/oauth-account/targets", headers=headers)
     assert unfiltered_oauth_targets.status_code == 400
@@ -371,11 +356,11 @@ def test_oauth_operations_endpoint_requires_tenant_filter_for_mixed_history() ->
     provider_snapshot = client.get("/admin/providers/?tenantId=tenant_a", headers=headers)
     assert provider_snapshot.status_code == 200
 
-    beta_targets = client.get("/admin/providers/beta-targets?tenantId=tenant_a", headers=headers)
-    assert beta_targets.status_code == 200
-    antigravity_beta = next(item for item in beta_targets.json()["targets"] if item["provider_key"] == "antigravity")
-    assert antigravity_beta["verify_probe_readiness"] == "planned"
-    assert antigravity_beta["evidence"]["live_probe"]["details"] == "Tenant A probe"
+    axis_targets = client.get("/admin/providers/product-axis-targets?tenantId=tenant_a", headers=headers)
+    assert axis_targets.status_code == 200
+    antigravity_axis = next(item for item in axis_targets.json()["targets"] if item["provider_key"] == "antigravity")
+    assert antigravity_axis["verify_probe_readiness"] == "planned"
+    assert antigravity_axis["evidence"]["live_probe"]["details"] == "Tenant A probe"
 
     oauth_targets = client.get("/admin/providers/oauth-account/targets?tenantId=tenant_a", headers=headers)
     assert oauth_targets.status_code == 200
@@ -422,7 +407,7 @@ def test_governance_audit_scope_persists_company_and_tenant_metadata_in_postgres
             session_id="sess_test_admin",
             user_id="admin_test_user",
             username="admin",
-            display_name="ForgeGate Admin",
+            display_name="ForgeFrame Admin",
             role="admin",
         )
 

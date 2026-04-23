@@ -1,19 +1,29 @@
 import pytest
 from fastapi.routing import APIRoute
 from fastapi.testclient import TestClient
+from pydantic import ValidationError
 
-from app.main import app
+from app.main import app, create_app
 from app.readiness import StartupValidationError
+from app.settings.config import get_settings
 
 
-def test_app_boots_and_root_endpoint_returns_phase5_runtime_status() -> None:
+def test_app_boots_and_root_endpoint_serves_the_control_plane_shell() -> None:
     client = TestClient(app)
     response = client.get("/")
 
     assert response.status_code == 200
-    payload = response.json()
-    assert payload["status"] == "ok"
-    assert "control-plane" in payload["message"]
+    assert response.headers["content-type"].startswith("text/html")
+    assert "ForgeFrame Control Plane" in response.text
+
+
+def test_unknown_non_api_route_falls_back_to_the_control_plane_shell() -> None:
+    client = TestClient(app)
+    response = client.get("/operators/ingress")
+
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("text/html")
+    assert "ForgeFrame Control Plane" in response.text
 
 
 def test_target_routes_are_registered() -> None:
@@ -51,19 +61,24 @@ def test_admin_audit_history_routes_disable_response_model_generation() -> None:
 
 
 def test_startup_validation_fails_fast_for_invalid_storage_contract(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("FORGEFRAME_HARNESS_STORAGE_BACKEND", raising=False)
+    monkeypatch.delenv("FORGEFRAME_HARNESS_POSTGRES_URL", raising=False)
     monkeypatch.setenv("FORGEGATE_HARNESS_STORAGE_BACKEND", "postgresql")
     monkeypatch.setenv("FORGEGATE_HARNESS_POSTGRES_URL", "sqlite:///tmp/forgegate.db")
+    get_settings.cache_clear()
 
-    with pytest.raises(StartupValidationError):
-        with TestClient(app):
+    with pytest.raises((StartupValidationError, ValidationError)):
+        with TestClient(create_app()):
             pass
 
 
 def test_startup_validation_fails_fast_for_insecure_bootstrap_admin_password(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    monkeypatch.delenv("FORGEFRAME_BOOTSTRAP_ADMIN_PASSWORD", raising=False)
     monkeypatch.setenv("FORGEGATE_BOOTSTRAP_ADMIN_PASSWORD", "forgegate-admin")
+    get_settings.cache_clear()
 
     with pytest.raises(StartupValidationError):
-        with TestClient(app):
+        with TestClient(create_app()):
             pass

@@ -5,6 +5,7 @@ from uuid import uuid4
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, text
 
+from conftest import admin_headers as shared_admin_headers
 from app.api.runtime.dependencies import clear_runtime_dependency_caches
 from app.auth.local_auth import hash_password, new_secret_salt
 from app.governance.models import AdminUserRecord, AuditEventRecord, GatewayAccountRecord, GovernanceStateRecord
@@ -13,7 +14,7 @@ from app.main import app
 from app.storage.migrator import apply_storage_migrations
 
 
-TEST_BOOTSTRAP_ADMIN_PASSWORD = "ForgeGate-Test-Admin-Secret-123"
+TEST_BOOTSTRAP_ADMIN_PASSWORD = "ForgeFrame-Test-Admin-Secret-123"
 
 
 def _clear_dependency_caches() -> None:
@@ -22,23 +23,7 @@ def _clear_dependency_caches() -> None:
 
 
 def _admin_login(client: TestClient) -> dict[str, str]:
-    response = client.post(
-        "/admin/auth/login",
-        json={"username": "admin", "password": os.environ["FORGEGATE_BOOTSTRAP_ADMIN_PASSWORD"]},
-    )
-    assert response.status_code == 201
-    headers = {"Authorization": f"Bearer {response.json()['access_token']}"}
-    if response.json()["user"]["must_rotate_password"] is True:
-        rotate = client.post(
-            "/admin/auth/rotate-password",
-            headers=headers,
-            json={
-                "current_password": os.environ["FORGEGATE_BOOTSTRAP_ADMIN_PASSWORD"],
-                "new_password": os.environ["FORGEGATE_BOOTSTRAP_ADMIN_PASSWORD"],
-            },
-        )
-        assert rotate.status_code == 200
-    return headers
+    return shared_admin_headers(client)
 
 
 def test_postgres_admin_logs_routes_prefer_relational_audit_truth_over_stale_legacy_shadow(
@@ -62,7 +47,7 @@ def test_postgres_admin_logs_routes_prefer_relational_audit_truth_over_stale_leg
                 AdminUserRecord(
                     user_id="admin_seed",
                     username="admin",
-                    display_name="ForgeGate Admin",
+                    display_name="ForgeFrame Admin",
                     role="admin",
                     status="active",
                     password_hash=hash_password(TEST_BOOTSTRAP_ADMIN_PASSWORD, salt),

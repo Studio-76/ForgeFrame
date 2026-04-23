@@ -24,6 +24,7 @@ from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, Session, mapped_column, sessionmaker
 
 from app.governance.models import (
+    AdminInstanceMembershipRecord,
     AdminSessionRecord,
     AdminUserRecord,
     AuditEventRecord,
@@ -37,7 +38,8 @@ from app.tenancy import DEFAULT_BOOTSTRAP_TENANT_ID, normalize_tenant_id
 
 _STATE_KEY = "default"
 _UNBOUND_RUNTIME_SERVICE_ACCOUNT_ID = "svc_bootstrap_runtime"
-_BOOTSTRAP_TENANT_DISPLAY_NAME = "ForgeGate Bootstrap Tenant"
+_BOOTSTRAP_TENANT_DISPLAY_NAME = "ForgeFrame Bootstrap Tenant"
+_ADMIN_ROLE_RANK = {"viewer": 0, "operator": 1, "admin": 2, "owner": 3}
 
 
 class GovernanceStateORM(Base):
@@ -298,8 +300,9 @@ class FileGovernanceRepository:
     @staticmethod
     def _upgrade_payload(payload: dict[str, Any]) -> dict[str, Any]:
         normalized = dict(payload)
-        normalized.setdefault("schema_version", 4)
+        normalized["schema_version"] = max(6, int(normalized.get("schema_version") or 0))
         normalized.setdefault("admin_users", [])
+        normalized.setdefault("instance_memberships", [])
         normalized.setdefault("admin_sessions", [])
         normalized.setdefault("elevated_access_requests", [])
         normalized.setdefault("gateway_accounts", [])
@@ -309,6 +312,80 @@ class FileGovernanceRepository:
         normalized.setdefault("admin_login_failures", [])
         normalized.setdefault("secret_rotation_events", [])
         normalized.setdefault("updated_at", "")
+
+        upgraded_accounts: list[dict[str, Any]] = []
+        for raw_account in normalized.get("gateway_accounts", []):
+            account = dict(raw_account or {})
+            tenant_scope = normalize_tenant_id(
+                account.get("tenant_id") or account.get("account_id"),
+                fallback_tenant_id=DEFAULT_BOOTSTRAP_TENANT_ID,
+            )
+            account["tenant_id"] = tenant_scope
+            account["instance_id"] = normalize_tenant_id(
+                account.get("instance_id") or tenant_scope,
+                fallback_tenant_id=tenant_scope,
+            )
+            upgraded_accounts.append(account)
+        normalized["gateway_accounts"] = upgraded_accounts
+
+        upgraded_memberships: list[dict[str, Any]] = []
+        for raw_membership in normalized.get("instance_memberships", []):
+            membership = dict(raw_membership or {})
+            tenant_scope = normalize_tenant_id(
+                membership.get("tenant_id") or membership.get("instance_id") or membership.get("user_id"),
+                fallback_tenant_id=DEFAULT_BOOTSTRAP_TENANT_ID,
+            )
+            membership["tenant_id"] = tenant_scope
+            membership["instance_id"] = normalize_tenant_id(
+                membership.get("instance_id") or tenant_scope,
+                fallback_tenant_id=tenant_scope,
+            )
+            membership["company_id"] = str(
+                membership.get("company_id") or membership["instance_id"] or tenant_scope
+            )
+            membership["membership_id"] = str(
+                membership.get("membership_id")
+                or FileGovernanceRepository._membership_id_for_user(
+                    str(membership.get("user_id") or ""),
+                    tenant_scope,
+                )
+            )
+            membership["created_at"] = str(membership.get("created_at") or "")
+            membership["updated_at"] = str(membership.get("updated_at") or membership["created_at"] or "")
+            upgraded_memberships.append(membership)
+        normalized["instance_memberships"] = upgraded_memberships
+
+        upgraded_keys: list[dict[str, Any]] = []
+        for raw_key in normalized.get("runtime_keys", []):
+            key = dict(raw_key or {})
+            tenant_scope = normalize_tenant_id(
+                key.get("tenant_id") or key.get("account_id"),
+                fallback_tenant_id=DEFAULT_BOOTSTRAP_TENANT_ID,
+            )
+            key["tenant_id"] = tenant_scope
+            key["instance_id"] = normalize_tenant_id(
+                key.get("instance_id") or tenant_scope,
+                fallback_tenant_id=tenant_scope,
+            )
+            upgraded_keys.append(key)
+        normalized["runtime_keys"] = upgraded_keys
+
+        upgraded_events: list[dict[str, Any]] = []
+        for raw_event in normalized.get("audit_events", []):
+            event = dict(raw_event or {})
+            event_metadata = dict(event.get("metadata") or {})
+            tenant_scope = normalize_tenant_id(
+                event.get("tenant_id") or event_metadata.get("tenant_id"),
+                fallback_tenant_id=DEFAULT_BOOTSTRAP_TENANT_ID,
+            )
+            instance_scope = normalize_tenant_id(
+                event.get("instance_id") or event_metadata.get("instance_id") or tenant_scope,
+                fallback_tenant_id=tenant_scope,
+            )
+            event["tenant_id"] = tenant_scope
+            event["instance_id"] = instance_scope
+            upgraded_events.append(event)
+        normalized["audit_events"] = upgraded_events
         return normalized
 
     def load_state(self) -> GovernanceStateRecord:
@@ -347,7 +424,7 @@ class PostgresGovernanceRepository:
         *,
         bootstrap_tenant_id: str = DEFAULT_BOOTSTRAP_TENANT_ID,
         relational_dual_write_enabled: bool = True,
-        relational_reads_enabled: bool = False,
+        relational_reads_enabled: bool = True,
     ):
         if not database_url.startswith("postgresql"):
             raise ValueError("Governance PostgreSQL backend requires a postgresql:// URL.")
@@ -367,7 +444,9 @@ class PostgresGovernanceRepository:
         return datetime.now(tz=UTC)
 
     @staticmethod
-    def _membership_id_for_user(user_id: str) -> str:
+    def _membership_id_for_user(user_id: str, tenant_id: str | None = None) -> str:
+        if tenant_id:
+            return f"membership_{normalize_tenant_id(tenant_id)}_{user_id}"
         return f"membership_{user_id}"
 
     @staticmethod
@@ -388,6 +467,49 @@ class PostgresGovernanceRepository:
 
     def _session(self) -> Session:
         return self._session_factory()
+
+    def _default_admin_membership(
+        self,
+        user: AdminUserRecord,
+        *,
+        created_by: str | None = None,
+    ) -> AdminInstanceMembershipRecord:
+        tenant_id = self._bootstrap_tenant_id
+        created_at = user.created_at
+        return AdminInstanceMembershipRecord(
+            membership_id=self._membership_id_for_user(user.user_id, tenant_id),
+            user_id=user.user_id,
+            instance_id=tenant_id,
+            tenant_id=tenant_id,
+            company_id=tenant_id,
+            role=user.role,
+            status=user.status,
+            created_at=created_at,
+            updated_at=user.updated_at or created_at,
+            created_by=created_by or user.created_by,
+        )
+
+    def _backfill_admin_memberships(self, state: GovernanceStateRecord) -> list[AdminInstanceMembershipRecord]:
+        if state.instance_memberships:
+            return [
+                membership.model_copy(
+                    update={
+                        "membership_id": membership.membership_id or self._membership_id_for_user(membership.user_id, membership.tenant_id),
+                        "instance_id": membership.instance_id or membership.tenant_id or self._bootstrap_tenant_id,
+                        "tenant_id": normalize_tenant_id(
+                            membership.tenant_id or membership.instance_id,
+                            fallback_tenant_id=self._bootstrap_tenant_id,
+                        ),
+                        "company_id": membership.company_id or membership.instance_id or membership.tenant_id or self._bootstrap_tenant_id,
+                    }
+                )
+                for membership in state.instance_memberships
+            ]
+
+        memberships: list[AdminInstanceMembershipRecord] = []
+        for user in state.admin_users:
+            memberships.append(self._default_admin_membership(user))
+        return memberships
 
     def _should_sync_relational_shadow(self) -> bool:
         return self._relational_dual_write_enabled or self._relational_reads_enabled
@@ -494,24 +616,50 @@ class PostgresGovernanceRepository:
                 },
             )
 
-        for user in state.admin_users:
-            membership_id = self._membership_id_for_user(user.user_id)
+        admin_memberships = self._backfill_admin_memberships(state)
+        for membership in admin_memberships:
+            tenant_id = normalize_tenant_id(
+                membership.tenant_id or membership.instance_id,
+                fallback_tenant_id=self._bootstrap_tenant_id,
+            )
+            company_id = str(membership.company_id or membership.instance_id or tenant_id)
+            self._ensure_tenant_row(
+                tenant_rows,
+                tenant_id=tenant_id,
+                display_name=membership.instance_id,
+                status=membership.status,
+                created_at=self._required_dt(membership.created_at),
+                updated_at=self._required_dt(membership.updated_at),
+                attributes={
+                    "instance_id": membership.instance_id,
+                    "company_id": company_id,
+                    "source": "admin_membership",
+                },
+            )
+            membership_id = membership.membership_id or self._membership_id_for_user(membership.user_id, tenant_id)
             membership_rows[membership_id] = GovernanceTenantMembershipORM(
                 membership_id=membership_id,
-                tenant_id=self._bootstrap_tenant_id,
-                principal_id=user.user_id,
-                membership_role=user.role,
-                status=user.status,
-                created_by_membership_id=self._membership_id_for_user(user.created_by)
-                if user.created_by and self._membership_id_for_user(user.created_by) in membership_rows
+                tenant_id=tenant_id,
+                principal_id=membership.user_id,
+                membership_role=membership.role,
+                status=membership.status,
+                created_by_membership_id=self._membership_id_for_user(membership.created_by, tenant_id)
+                if membership.created_by and self._membership_id_for_user(membership.created_by, tenant_id) in membership_rows
                 else None,
-                created_at=self._required_dt(user.created_at),
-                updated_at=self._required_dt(user.updated_at),
-                attributes={},
+                created_at=self._required_dt(membership.created_at),
+                updated_at=self._required_dt(membership.updated_at),
+                attributes={
+                    "instance_id": membership.instance_id,
+                    "company_id": company_id,
+                    "created_by": membership.created_by,
+                },
             )
 
         for account in state.gateway_accounts:
-            tenant_id = self._tenant_scope_for_account(account.account_id)
+            tenant_id = normalize_tenant_id(
+                account.tenant_id,
+                fallback_tenant_id=self._bootstrap_tenant_id,
+            )
             self._ensure_tenant_row(
                 tenant_rows,
                 tenant_id=tenant_id,
@@ -519,7 +667,12 @@ class PostgresGovernanceRepository:
                 status=account.status,
                 created_at=self._required_dt(account.created_at),
                 updated_at=self._required_dt(account.updated_at),
-                attributes={"synthetic": False, "legacy_account_id": account.account_id},
+                attributes={
+                    "synthetic": False,
+                    "legacy_account_id": account.account_id,
+                    "instance_id": account.instance_id,
+                    "tenant_id": account.tenant_id,
+                },
                 replace_existing=True,
             )
             service_account_rows[account.account_id] = GovernanceServiceAccountORM(
@@ -534,6 +687,8 @@ class PostgresGovernanceRepository:
                 last_used_at=self._dt(account.last_activity_at),
                 attributes={
                     "legacy_account_id": account.account_id,
+                    "instance_id": account.instance_id,
+                    "tenant_id": account.tenant_id,
                     "provider_bindings": list(account.provider_bindings),
                     "notes": account.notes,
                     "synthetic": False,
@@ -544,7 +699,10 @@ class PostgresGovernanceRepository:
             account_id = key.account_id
             if account_id:
                 service_account_id = account_id
-                tenant_id = self._tenant_scope_for_account(account_id)
+                tenant_id = normalize_tenant_id(
+                    key.tenant_id,
+                    fallback_tenant_id=self._bootstrap_tenant_id,
+                )
                 if service_account_id not in service_account_rows:
                     self._ensure_tenant_row(
                         tenant_rows,
@@ -553,7 +711,12 @@ class PostgresGovernanceRepository:
                         status="active",
                         created_at=self._required_dt(key.created_at),
                         updated_at=self._required_dt(key.updated_at),
-                        attributes={"synthetic": True, "legacy_account_id": account_id},
+                        attributes={
+                            "synthetic": True,
+                            "legacy_account_id": account_id,
+                            "instance_id": key.instance_id,
+                            "tenant_id": key.tenant_id,
+                        },
                     )
                     service_account_rows[service_account_id] = GovernanceServiceAccountORM(
                         service_account_id=service_account_id,
@@ -567,6 +730,8 @@ class PostgresGovernanceRepository:
                         last_used_at=self._dt(key.last_used_at),
                         attributes={
                             "legacy_account_id": account_id,
+                            "instance_id": key.instance_id,
+                            "tenant_id": key.tenant_id,
                             "provider_bindings": [],
                             "notes": "",
                             "synthetic": True,
@@ -575,7 +740,10 @@ class PostgresGovernanceRepository:
                     )
             else:
                 service_account_id = _UNBOUND_RUNTIME_SERVICE_ACCOUNT_ID
-                tenant_id = self._bootstrap_tenant_id
+                tenant_id = normalize_tenant_id(
+                    key.tenant_id,
+                    fallback_tenant_id=self._bootstrap_tenant_id,
+                )
                 if service_account_id not in service_account_rows:
                     service_account_rows[service_account_id] = GovernanceServiceAccountORM(
                         service_account_id=service_account_id,
@@ -589,6 +757,8 @@ class PostgresGovernanceRepository:
                         last_used_at=self._dt(key.last_used_at),
                         attributes={
                             "legacy_account_id": None,
+                            "instance_id": key.instance_id,
+                            "tenant_id": key.tenant_id,
                             "provider_bindings": [],
                             "notes": "",
                             "synthetic": True,
@@ -625,6 +795,8 @@ class PostgresGovernanceRepository:
                     attributes={
                         "label": key.label,
                         "scopes": list(key.scopes),
+                        "instance_id": key.instance_id,
+                        "tenant_id": key.tenant_id,
                         "legacy_account_id": key.account_id,
                         "last_rotated_at": key.last_rotated_at,
                         "revoked_at": key.revoked_at,
@@ -635,7 +807,11 @@ class PostgresGovernanceRepository:
             )
 
         for session_record in state.admin_sessions:
-            membership_id = self._membership_id_for_user(session_record.user_id)
+            tenant_id = normalize_tenant_id(
+                session_record.tenant_id or session_record.instance_id,
+                fallback_tenant_id=self._bootstrap_tenant_id,
+            )
+            membership_id = session_record.membership_id or self._membership_id_for_user(session_record.user_id, tenant_id)
             if membership_id not in membership_rows:
                 created_at = self._required_dt(session_record.created_at)
                 principal_rows[session_record.user_id] = GovernancePrincipalORM(
@@ -656,7 +832,7 @@ class PostgresGovernanceRepository:
                 )
                 membership_rows[membership_id] = GovernanceTenantMembershipORM(
                     membership_id=membership_id,
-                    tenant_id=self._bootstrap_tenant_id,
+                    tenant_id=tenant_id,
                     principal_id=session_record.user_id,
                     membership_role=session_record.role,
                     status="disabled",
@@ -668,7 +844,7 @@ class PostgresGovernanceRepository:
             auth_session_rows.append(
                 GovernanceAuthSessionORM(
                     session_id=session_record.session_id,
-                    tenant_id=self._bootstrap_tenant_id,
+                    tenant_id=tenant_id,
                     membership_id=membership_id,
                     session_hash=session_record.token_hash,
                     status="revoked" if session_record.revoked_at else "active",
@@ -687,6 +863,8 @@ class PostgresGovernanceRepository:
                         "justification": session_record.justification,
                         "notification_targets": list(session_record.notification_targets),
                         "legacy_user_id": session_record.user_id,
+                        "instance_id": session_record.instance_id,
+                        "tenant_id": session_record.tenant_id,
                     },
                 )
             )
@@ -703,6 +881,8 @@ class PostgresGovernanceRepository:
                 attributes={"synthetic": True, "source": "audit_event"},
             )
             event_metadata = dict(event.metadata)
+            event_metadata.setdefault("instance_id", event.instance_id)
+            event_metadata.setdefault("tenant_id", event.tenant_id)
             actor_membership_id = None
             actor_service_account_id = None
             if event.actor_id:
@@ -874,6 +1054,12 @@ class PostgresGovernanceRepository:
                     event_id=row.event_id,
                     actor_type=row.actor_type,  # type: ignore[arg-type]
                     actor_id=actor_id,
+                    instance_id=str(
+                        metadata.get("instance_id")
+                        or metadata.get("tenant_id")
+                        or row.tenant_id
+                        or self._bootstrap_tenant_id
+                    ),
                     tenant_id=row.tenant_id or self._bootstrap_tenant_id,
                     company_id=row.company_id,
                     action=row.action,
@@ -920,17 +1106,43 @@ class PostgresGovernanceRepository:
             )
         ).all()
         membership_by_id = {row.membership_id: row for row in membership_rows}
-        memberships_by_principal: dict[str, GovernanceTenantMembershipORM] = {}
+        memberships_by_principal: dict[str, list[GovernanceTenantMembershipORM]] = {}
         for membership in membership_rows:
-            memberships_by_principal.setdefault(membership.principal_id, membership)
+            memberships_by_principal.setdefault(membership.principal_id, []).append(membership)
+
+        admin_memberships: list[AdminInstanceMembershipRecord] = []
+        for membership in membership_rows:
+            principal = next((item for item in principal_rows if item.principal_id == membership.principal_id), None)
+            if principal is None or principal.principal_type != "admin_user":
+                continue
+            attrs = dict(membership.attributes or {})
+            admin_memberships.append(
+                AdminInstanceMembershipRecord(
+                    membership_id=membership.membership_id,
+                    user_id=membership.principal_id,
+                    instance_id=str(attrs.get("instance_id") or membership.tenant_id or self._bootstrap_tenant_id),
+                    tenant_id=str(membership.tenant_id or self._bootstrap_tenant_id),
+                    company_id=str(attrs.get("company_id") or attrs.get("instance_id") or membership.tenant_id or self._bootstrap_tenant_id),
+                    role=membership.membership_role,  # type: ignore[arg-type]
+                    status=membership.status,  # type: ignore[arg-type]
+                    created_at=membership.created_at.isoformat(),
+                    updated_at=membership.updated_at.isoformat(),
+                    created_by=attrs.get("created_by"),
+                )
+            )
+        state.instance_memberships = admin_memberships
 
         admin_users: list[AdminUserRecord] = []
         for principal in principal_rows:
             if principal.principal_type != "admin_user":
                 continue
-            membership = memberships_by_principal.get(principal.principal_id)
-            if membership is None:
+            principal_memberships = memberships_by_principal.get(principal.principal_id, [])
+            if not principal_memberships:
                 continue
+            membership = max(
+                principal_memberships,
+                key=lambda item: _ADMIN_ROLE_RANK.get(item.membership_role, -1),
+            )
             attrs = dict(principal.attributes or {})
             admin_users.append(
                 AdminUserRecord(
@@ -968,6 +1180,17 @@ class PostgresGovernanceRepository:
                     user_id=user_id,
                     token_hash=session_row.session_hash,
                     role=role,  # type: ignore[arg-type]
+                    membership_id=session_row.membership_id,
+                    instance_id=str(
+                        attrs.get("instance_id")
+                        or (membership.tenant_id if membership is not None else None)
+                        or self._bootstrap_tenant_id
+                    ),
+                    tenant_id=str(
+                        attrs.get("tenant_id")
+                        or (membership.tenant_id if membership is not None else None)
+                        or self._bootstrap_tenant_id
+                    ),
                     session_type=attrs.get("session_type", "standard"),  # type: ignore[arg-type]
                     created_at=session_row.issued_at.isoformat(),
                     expires_at=session_row.expires_at.isoformat(),
@@ -998,6 +1221,8 @@ class PostgresGovernanceRepository:
             gateway_accounts.append(
                 GatewayAccountRecord(
                     account_id=str(attrs.get("legacy_account_id") or row.service_account_id),
+                    instance_id=str(attrs.get("instance_id") or attrs.get("tenant_id") or row.tenant_id or self._bootstrap_tenant_id),
+                    tenant_id=str(attrs.get("tenant_id") or row.tenant_id or self._bootstrap_tenant_id),
                     label=row.display_name,
                     status=row.status,  # type: ignore[arg-type]
                     provider_bindings=list(attrs.get("provider_bindings", [])),
@@ -1023,6 +1248,8 @@ class PostgresGovernanceRepository:
             runtime_keys.append(
                 RuntimeKeyRecord(
                     key_id=row.credential_id,
+                    instance_id=str(attrs.get("instance_id") or attrs.get("tenant_id") or row.tenant_id or self._bootstrap_tenant_id),
+                    tenant_id=str(attrs.get("tenant_id") or row.tenant_id or self._bootstrap_tenant_id),
                     account_id=attrs.get("legacy_account_id"),
                     label=str(attrs.get("label", row.credential_id)),
                     prefix=row.secret_prefix or "",
@@ -1054,6 +1281,7 @@ class PostgresGovernanceRepository:
         return any(
             [
                 bool(state.admin_users),
+                bool(state.instance_memberships),
                 bool(state.admin_sessions),
                 bool(state.gateway_accounts),
                 bool(state.runtime_keys),

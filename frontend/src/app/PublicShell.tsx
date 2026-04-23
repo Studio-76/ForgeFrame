@@ -14,7 +14,7 @@ export function PublicShell() {
     <div className="fg-shell fg-page">
       <header className="fg-row fg-row-spread">
         <div className="fg-page-header">
-          <h1>ForgeGate — Smart AI Gateway</h1>
+          <h1>ForgeFrame — Autonomous AI Runtime Platform</h1>
           <p className="fg-muted">Signed-out entry shell for control-plane authentication and protected-route recovery.</p>
           <p className="fg-muted">Sign in before opening Setup, Governance, Operations, or Settings.</p>
         </div>

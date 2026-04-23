@@ -1,4 +1,4 @@
-"""Internal provider-execution and secret-broker contracts for ForgeGate.
+"""Internal provider-execution and secret-broker contracts for ForgeFrame.
 
 These types sit behind the control-plane boundary from FOR-22.
 
@@ -76,19 +76,19 @@ class AdapterCallMetadata(BaseModel):
         """Project stable execution metadata into header-like key/value pairs."""
 
         headers = {
-            "X-ForgeGate-Request-Id": self.request_id,
-            "X-ForgeGate-Correlation-Id": self.correlation_id,
-            "X-ForgeGate-Causation-Id": self.causation_id,
+            "X-ForgeFrame-Request-Id": self.request_id,
+            "X-ForgeFrame-Correlation-Id": self.correlation_id,
+            "X-ForgeFrame-Causation-Id": self.causation_id,
             "Idempotency-Key": self.idempotency_key,
-            "X-ForgeGate-Execution-Attempt": str(self.attempt_number),
-            "X-ForgeGate-Deadline-At": self.deadline_at.isoformat().replace("+00:00", "Z"),
-            "X-ForgeGate-Cancellation-Token": self.cancellation_token,
-            "X-ForgeGate-Cancel-Requested": "true" if self.cancel_requested else "false",
+            "X-ForgeFrame-Execution-Attempt": str(self.attempt_number),
+            "X-ForgeFrame-Deadline-At": self.deadline_at.isoformat().replace("+00:00", "Z"),
+            "X-ForgeFrame-Cancellation-Token": self.cancellation_token,
+            "X-ForgeFrame-Cancel-Requested": "true" if self.cancel_requested else "false",
         }
         if self.trace_id:
-            headers["X-ForgeGate-Trace-Id"] = self.trace_id
+            headers["X-ForgeFrame-Trace-Id"] = self.trace_id
         if self.span_id:
-            headers["X-ForgeGate-Span-Id"] = self.span_id
+            headers["X-ForgeFrame-Span-Id"] = self.span_id
         return headers
 
 
@@ -344,5 +344,5 @@ class ProviderExecutionAdapter(Protocol):
         error: Exception,
         metadata: AdapterCallMetadata | None = None,
     ) -> NormalizedProviderError:
-        """Map provider-specific failures into ForgeGate's normalized error contract."""
+        """Map provider-specific failures into ForgeFrame's normalized error contract."""
 

@@ -23,7 +23,7 @@ from app.harness.models import (
 from app.harness.redaction import redact_sensitive_payload
 from app.harness.store import HarnessStore
 from app.harness.templates import BUILTIN_TEMPLATES
-from app.request_metadata import forgegate_request_metadata_headers
+from app.request_metadata import forgeframe_request_metadata_headers
 from app.settings.config import get_settings
 from app.storage.harness_repository import FileHarnessRepository, HarnessRunQuery, HarnessStoragePaths, PostgresHarnessRepository
 
@@ -153,7 +153,7 @@ class HarnessService:
         endpoint = f"{profile.endpoint_base_url.rstrip('/')}{profile.request_mapping.path}"
         headers = self._build_headers(profile)
         headers.update(profile.request_mapping.headers)
-        headers.update(forgegate_request_metadata_headers(request_metadata))
+        headers.update(forgeframe_request_metadata_headers(request_metadata))
         return {"method": profile.request_mapping.method, "url": endpoint, "headers": headers, "json": request_payload}
 
     def preview(self, payload: HarnessPreviewRequest) -> dict[str, Any]:

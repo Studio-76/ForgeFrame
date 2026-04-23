@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 
 import { CONTROL_PLANE_ROUTES } from "../app/navigation";
+import { roleAllows, sessionHasAnyInstancePermission } from "../app/adminAccess";
 import { useAppSession } from "../app/session";
 import {
   fetchMutableSettings,
@@ -15,12 +16,17 @@ export function SettingsPage() {
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [error, setError] = useState("");
   const { session, sessionReady } = useAppSession();
-  const canMutate = sessionReady && session?.role === "admin" && !session.read_only;
+  const canMutate = sessionReady && roleAllows(session?.role, "admin") && session?.read_only !== true;
+  const canManageSecurity = sessionReady && sessionHasAnyInstancePermission(session, "security.write");
+  const canOpenSecurity = sessionReady && (
+    sessionHasAnyInstancePermission(session, "security.read")
+    || sessionHasAnyInstancePermission(session, "security.write")
+  );
   const accessLabel = canMutate ? "Admin mutations enabled" : sessionReady ? "Read only" : "Checking access";
   const accessTone = canMutate ? "success" : sessionReady ? "warning" : "neutral";
   const readOnlyDescription = !sessionReady
     ? "The page is checking the current session role before exposing admin-only settings controls."
-    : session?.role === "admin" && session.read_only
+    : roleAllows(session?.role, "admin") && session?.read_only === true
       ? "This admin session is read-only. Open a standard admin session to save overrides or reset defaults."
       : "Authenticated non-admin sessions can inspect effective settings here, while admin users perform override and reset actions.";
 
@@ -75,14 +81,14 @@ export function SettingsPage() {
             to: CONTROL_PLANE_ROUTES.accounts,
             description: "Return to runtime access review when the work is identity-oriented instead of environment-oriented.",
           },
-          sessionReady && session && session.role !== "viewer"
+          canOpenSecurity
             ? {
                 label: "Security & Policies",
                 to: CONTROL_PLANE_ROUTES.security,
-                description: session.role === "admin"
+                description: canManageSecurity
                   ? "Open elevated-access workflow plus admin posture when the change touches access or security controls."
                   : "Open the elevated-access request/start flow when the change requires operator security follow-up.",
-                badge: session.role === "admin" ? "Admin posture" : "Request flow",
+                badge: canManageSecurity ? "Admin posture" : "Request flow",
               }
             : {
                 label: "Security & Policies",

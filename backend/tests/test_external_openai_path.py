@@ -144,9 +144,9 @@ def test_chat_endpoint_openai_rate_limit_emits_retry_envelope_headers(monkeypatc
 
     assert response.status_code == 429
     assert response.headers["Retry-After"] == "17"
-    assert response.headers["X-ForgeGate-Request-Id"] == "req_rate_limit_envelope_1"
-    assert response.headers["X-ForgeGate-Correlation-Id"] == "req_rate_limit_envelope_1"
-    assert response.headers["X-ForgeGate-Causation-Id"] == "req_rate_limit_envelope_1"
+    assert response.headers["X-ForgeFrame-Request-Id"] == "req_rate_limit_envelope_1"
+    assert response.headers["X-ForgeFrame-Correlation-Id"] == "req_rate_limit_envelope_1"
+    assert response.headers["X-ForgeFrame-Causation-Id"] == "req_rate_limit_envelope_1"
     assert response.json()["error"]["retry_after_seconds"] == 17
 
 

@@ -4,34 +4,36 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 COMPOSE_FILE="$ROOT_DIR/docker/docker-compose.yml"
 ENV_FILE="$ROOT_DIR/.env.compose"
+# shellcheck source=./lib/forgeframe-env.sh
+source "$ROOT_DIR/scripts/lib/forgeframe-env.sh"
 
-HEALTH_ARTIFACT="${FORGEGATE_CLIENT_COMPAT_HEALTH_ARTIFACT:-/tmp/forgegate-client-compat-health.json}"
-MODELS_ARTIFACT="${FORGEGATE_CLIENT_COMPAT_MODELS_ARTIFACT:-/tmp/forgegate-client-compat-models.json}"
-CHAT_ARTIFACT="${FORGEGATE_CLIENT_COMPAT_CHAT_ARTIFACT:-/tmp/forgegate-client-compat-chat.json}"
-CHAT_STREAM_ARTIFACT="${FORGEGATE_CLIENT_COMPAT_CHAT_STREAM_ARTIFACT:-/tmp/forgegate-client-compat-chat-stream.txt}"
-RESPONSES_ARTIFACT="${FORGEGATE_CLIENT_COMPAT_RESPONSES_ARTIFACT:-/tmp/forgegate-client-compat-responses.json}"
-RESPONSES_STREAM_ARTIFACT="${FORGEGATE_CLIENT_COMPAT_RESPONSES_STREAM_ARTIFACT:-/tmp/forgegate-client-compat-responses-stream.txt}"
-NEGATIVE_ARTIFACT="${FORGEGATE_CLIENT_COMPAT_NEGATIVE_ARTIFACT:-/tmp/forgegate-client-compat-responses-startup-failure.json}"
-NEGATIVE_HEADERS_ARTIFACT="${FORGEGATE_CLIENT_COMPAT_NEGATIVE_HEADERS_ARTIFACT:-/tmp/forgegate-client-compat-responses-startup-failure-headers.txt}"
-NEGATIVE_DB_ARTIFACT="${FORGEGATE_CLIENT_COMPAT_NEGATIVE_DB_ARTIFACT:-/tmp/forgegate-client-compat-error-event.tsv}"
-REPORT_PATH="${FORGEGATE_CLIENT_COMPAT_REPORT_PATH:-/tmp/forgegate-client-compat-signoff.json}"
+HEALTH_ARTIFACT="${FORGEFRAME_CLIENT_COMPAT_HEALTH_ARTIFACT:-/tmp/forgeframe-client-compat-health.json}"
+MODELS_ARTIFACT="${FORGEFRAME_CLIENT_COMPAT_MODELS_ARTIFACT:-/tmp/forgeframe-client-compat-models.json}"
+CHAT_ARTIFACT="${FORGEFRAME_CLIENT_COMPAT_CHAT_ARTIFACT:-/tmp/forgeframe-client-compat-chat.json}"
+CHAT_STREAM_ARTIFACT="${FORGEFRAME_CLIENT_COMPAT_CHAT_STREAM_ARTIFACT:-/tmp/forgeframe-client-compat-chat-stream.txt}"
+RESPONSES_ARTIFACT="${FORGEFRAME_CLIENT_COMPAT_RESPONSES_ARTIFACT:-/tmp/forgeframe-client-compat-responses.json}"
+RESPONSES_STREAM_ARTIFACT="${FORGEFRAME_CLIENT_COMPAT_RESPONSES_STREAM_ARTIFACT:-/tmp/forgeframe-client-compat-responses-stream.txt}"
+NEGATIVE_ARTIFACT="${FORGEFRAME_CLIENT_COMPAT_NEGATIVE_ARTIFACT:-/tmp/forgeframe-client-compat-responses-startup-failure.json}"
+NEGATIVE_HEADERS_ARTIFACT="${FORGEFRAME_CLIENT_COMPAT_NEGATIVE_HEADERS_ARTIFACT:-/tmp/forgeframe-client-compat-responses-startup-failure-headers.txt}"
+NEGATIVE_DB_ARTIFACT="${FORGEFRAME_CLIENT_COMPAT_NEGATIVE_DB_ARTIFACT:-/tmp/forgeframe-client-compat-error-event.tsv}"
+REPORT_PATH="${FORGEFRAME_CLIENT_COMPAT_REPORT_PATH:-/tmp/forgeframe-client-compat-signoff.json}"
 
-NEGATIVE_MODEL="${FORGEGATE_CLIENT_COMPAT_NEGATIVE_MODEL:-gpt-5.3-codex}"
-NEGATIVE_CLIENT_ID="${FORGEGATE_CLIENT_COMPAT_NEGATIVE_CLIENT_ID:-client-compat-signoff-responses-startup}"
-NEGATIVE_RUN_TOKEN="${FORGEGATE_CLIENT_COMPAT_NEGATIVE_RUN_TOKEN:-$(python3 - <<'PY'
+NEGATIVE_MODEL="${FORGEFRAME_CLIENT_COMPAT_NEGATIVE_MODEL:-gpt-5.3-codex}"
+NEGATIVE_CLIENT_ID="${FORGEFRAME_CLIENT_COMPAT_NEGATIVE_CLIENT_ID:-client-compat-signoff-responses-startup}"
+NEGATIVE_RUN_TOKEN="${FORGEFRAME_CLIENT_COMPAT_NEGATIVE_RUN_TOKEN:-$(python3 - <<'PY'
 from uuid import uuid4
 
 print(uuid4().hex[:12])
 PY
 )}"
-NEGATIVE_CORRELATION_ID="${FORGEGATE_CLIENT_COMPAT_NEGATIVE_CORRELATION_ID:-corr_client_compat_signoff_${NEGATIVE_RUN_TOKEN}}"
-NEGATIVE_TRACE_ID="${FORGEGATE_CLIENT_COMPAT_NEGATIVE_TRACE_ID:-trace_client_compat_signoff_${NEGATIVE_RUN_TOKEN}}"
-NEGATIVE_SPAN_ID="${FORGEGATE_CLIENT_COMPAT_NEGATIVE_SPAN_ID:-span_client_compat_signoff_${NEGATIVE_RUN_TOKEN}}"
+NEGATIVE_CORRELATION_ID="${FORGEFRAME_CLIENT_COMPAT_NEGATIVE_CORRELATION_ID:-corr_client_compat_signoff_${NEGATIVE_RUN_TOKEN}}"
+NEGATIVE_TRACE_ID="${FORGEFRAME_CLIENT_COMPAT_NEGATIVE_TRACE_ID:-trace_client_compat_signoff_${NEGATIVE_RUN_TOKEN}}"
+NEGATIVE_SPAN_ID="${FORGEFRAME_CLIENT_COMPAT_NEGATIVE_SPAN_ID:-span_client_compat_signoff_${NEGATIVE_RUN_TOKEN}}"
 
-BASE_URL="http://127.0.0.1:${FORGEGATE_APP_PORT:-8000}"
+BASE_URL="http://127.0.0.1:${FORGEFRAME_APP_PORT:-8000}"
 
 fail() {
-  printf "[forgegate-client-compat-signoff][ERROR] %s\n" "$*" >&2
+  printf "[forgeframe-client-compat-signoff][ERROR] %s\n" "$*" >&2
   exit 1
 }
 
@@ -55,7 +57,7 @@ ensure_compose_stack_running() {
   local running
 
   running="$(docker compose -f "$COMPOSE_FILE" ps --status running --services 2>/dev/null || true)"
-  grep -qx "forgegate" <<<"$running" || fail "forgegate container is not running. Run bash scripts/compose-smoke.sh first."
+  grep -qx "forgeframe" <<<"$running" || fail "forgeframe container is not running. Run bash scripts/compose-smoke.sh first."
   grep -qx "postgres" <<<"$running" || fail "postgres container is not running. Run bash scripts/compose-smoke.sh first."
 }
 
@@ -67,16 +69,13 @@ wait_for_health() {
     fi
     sleep 2
   done
-  fail "ForgeGate did not become healthy at $BASE_URL/health"
+  fail "ForgeFrame did not become healthy at $BASE_URL/health"
 }
 
 load_compose_env() {
   if [[ -f "$ENV_FILE" ]]; then
-    set -a
-    # shellcheck disable=SC1090
-    source "$ENV_FILE"
-    set +a
-    BASE_URL="http://127.0.0.1:${FORGEGATE_APP_PORT:-8000}"
+    forgeframe_load_env_file "$ENV_FILE" || fail "Missing $ENV_FILE"
+    BASE_URL="http://127.0.0.1:${FORGEFRAME_APP_PORT:-8000}"
   fi
 }
 
@@ -86,8 +85,8 @@ query_latest_negative_error_event() {
   local escaped_client_id
   local escaped_correlation_id
 
-  pg_user="${FORGEGATE_PG_USER:-forgegate}"
-  pg_db="${FORGEGATE_PG_DB:-forgegate}"
+  pg_user="${FORGEFRAME_PG_USER:-forgeframe}"
+  pg_db="${FORGEFRAME_PG_DB:-forgeframe}"
   escaped_client_id="${NEGATIVE_CLIENT_ID//\'/\'\'}"
   escaped_correlation_id="${NEGATIVE_CORRELATION_ID//\'/\'\'}"
 
@@ -136,37 +135,37 @@ curl -sf "$BASE_URL/v1/models" >"$MODELS_ARTIFACT"
 curl -sf -X POST "$BASE_URL/v1/chat/completions" \
   -H 'Content-Type: application/json' \
   -d '{
-    "messages": [{"role": "user", "content": "ForgeGate client signoff chat"}]
+    "messages": [{"role": "user", "content": "ForgeFrame client signoff chat"}]
   }' >"$CHAT_ARTIFACT"
 
 curl -sfN -X POST "$BASE_URL/v1/chat/completions" \
   -H 'Content-Type: application/json' \
   -d '{
-    "messages": [{"role": "user", "content": "ForgeGate client signoff chat stream"}],
+    "messages": [{"role": "user", "content": "ForgeFrame client signoff chat stream"}],
     "stream": true
   }' >"$CHAT_STREAM_ARTIFACT"
 
 curl -sf -X POST "$BASE_URL/v1/responses" \
   -H 'Content-Type: application/json' \
   -d '{
-    "input": "ForgeGate client signoff responses"
+    "input": "ForgeFrame client signoff responses"
   }' >"$RESPONSES_ARTIFACT"
 
 curl -sfN -X POST "$BASE_URL/v1/responses" \
   -H 'Content-Type: application/json' \
   -d '{
-    "input": "ForgeGate client signoff responses stream",
+    "input": "ForgeFrame client signoff responses stream",
     "stream": true
   }' >"$RESPONSES_STREAM_ARTIFACT"
 
 NEGATIVE_STATUS="$(
   curl -sS -D "$NEGATIVE_HEADERS_ARTIFACT" -o "$NEGATIVE_ARTIFACT" -w '%{http_code}' -X POST "$BASE_URL/v1/responses" \
     -H 'Content-Type: application/json' \
-    -H "X-ForgeGate-Trace-Id: $NEGATIVE_TRACE_ID" \
-    -H "X-ForgeGate-Correlation-Id: $NEGATIVE_CORRELATION_ID" \
-    -H "X-ForgeGate-Span-Id: $NEGATIVE_SPAN_ID" \
+    -H "X-ForgeFrame-Trace-Id: $NEGATIVE_TRACE_ID" \
+    -H "X-ForgeFrame-Correlation-Id: $NEGATIVE_CORRELATION_ID" \
+    -H "X-ForgeFrame-Span-Id: $NEGATIVE_SPAN_ID" \
     -d "{
-      \"input\": \"ForgeGate client signoff unsupported response stream\",
+      \"input\": \"ForgeFrame client signoff unsupported response stream\",
       \"model\": \"$NEGATIVE_MODEL\",
       \"stream\": true,
       \"client\": {
@@ -262,12 +261,12 @@ assert error["message"] == f"Requested model '{negative_model}' is not available
 assert error["available_models"] == public_model_ids, negative
 assert negative_model not in error["available_models"], negative
 
-request_id = negative_headers.get("x-forgegate-request-id", "")
+request_id = negative_headers.get("x-forgeframe-request-id", "")
 assert request_id, negative_headers
-assert negative_headers.get("x-forgegate-correlation-id") == negative_correlation_id, negative_headers
-assert negative_headers.get("x-forgegate-trace-id") == negative_trace_id, negative_headers
-assert negative_headers.get("x-forgegate-span-id") == negative_span_id, negative_headers
-assert negative_headers.get("x-forgegate-causation-id") == request_id, negative_headers
+assert negative_headers.get("x-forgeframe-correlation-id") == negative_correlation_id, negative_headers
+assert negative_headers.get("x-forgeframe-trace-id") == negative_trace_id, negative_headers
+assert negative_headers.get("x-forgeframe-span-id") == negative_span_id, negative_headers
+assert negative_headers.get("x-forgeframe-causation-id") == request_id, negative_headers
 
 assert db_row, "expected a persisted error_events row for the negative responses-stream check"
 row_parts = db_row.split("\t")

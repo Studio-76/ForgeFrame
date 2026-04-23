@@ -8,7 +8,8 @@ type ThemeContextValue = {
   toggleMode: () => void;
 };
 
-const THEME_STORAGE_KEY = "forgegate_theme_mode";
+const THEME_STORAGE_KEY = "forgeframe_theme_mode";
+const LEGACY_THEME_STORAGE_KEY = "forgegate_theme_mode";
 
 const ThemeContext = createContext<ThemeContextValue | null>(null);
 
@@ -16,7 +17,7 @@ function getInitialMode(): ThemeMode {
   if (typeof window === "undefined") {
     return "dark";
   }
-  const saved = window.localStorage.getItem(THEME_STORAGE_KEY);
+  const saved = window.localStorage.getItem(THEME_STORAGE_KEY) ?? window.localStorage.getItem(LEGACY_THEME_STORAGE_KEY);
   if (saved === "dark" || saved === "light") {
     return saved;
   }
@@ -29,6 +30,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     document.documentElement.dataset.theme = mode;
     window.localStorage.setItem(THEME_STORAGE_KEY, mode);
+    window.localStorage.removeItem(LEGACY_THEME_STORAGE_KEY);
   }, [mode]);
 
   const value = useMemo<ThemeContextValue>(() => ({

@@ -13,8 +13,19 @@ _RUNTIME_AUTH_MESSAGES: dict[str, str] = {
     "runtime_auth_required": "Runtime authentication is required.",
 }
 
+_PUBLIC_RUNTIME_ERROR_CODE_MAP: dict[str, str] = {
+    "background_admission_failed": "dispatch_blocked",
+    "routing_budget_exceeded": "budget_exceeded",
+    "routing_circuit_open": "circuit_open",
+    "routing_no_candidate": "dispatch_blocked",
+}
+
 _PROVIDER_ERROR_MESSAGES: dict[str, str] = {
-    "provider_authentication_error": "Selected provider rejected ForgeGate credentials.",
+    "budget_exceeded": "Routing is blocked by the current ForgeFrame budget posture.",
+    "circuit_open": "Routing is blocked because the relevant ForgeFrame target circuits are open.",
+    "dispatch_blocked": "ForgeFrame could not admit this request onto any policy-compliant runtime path.",
+    "queue_timeout": "ForgeFrame could not complete queue admission within the allowed window.",
+    "provider_authentication_error": "Selected provider rejected ForgeFrame credentials.",
     "provider_bad_request": "Selected provider rejected the request.",
     "provider_configuration_error": "Selected provider is not configured for runtime use.",
     "provider_conflict": "Selected provider reported a request conflict.",
@@ -36,6 +47,12 @@ _PROVIDER_ERROR_MESSAGES: dict[str, str] = {
 }
 
 
+def public_runtime_error_code(error_type: str | None) -> str | None:
+    if error_type is None:
+        return None
+    return _PUBLIC_RUNTIME_ERROR_CODE_MAP.get(error_type, error_type)
+
+
 def public_runtime_auth_message(error_type: str | None) -> str:
     if error_type:
         return _RUNTIME_AUTH_MESSAGES.get(error_type, "Runtime request is not authorized.")
@@ -43,8 +60,9 @@ def public_runtime_auth_message(error_type: str | None) -> str:
 
 
 def public_runtime_provider_message(error_type: str | None) -> str:
-    if error_type:
-        return _PROVIDER_ERROR_MESSAGES.get(error_type, "Selected provider failed while processing the request.")
+    normalized_error_type = public_runtime_error_code(error_type)
+    if normalized_error_type:
+        return _PROVIDER_ERROR_MESSAGES.get(normalized_error_type, "Selected provider failed while processing the request.")
     return "Selected provider failed while processing the request."
 
 
@@ -55,3 +73,10 @@ def public_runtime_exception_message(exc: Exception) -> str:
     if isinstance(error_type, str):
         return public_runtime_provider_message(error_type)
     return public_runtime_provider_message(None)
+
+
+def public_background_error_type(exc: Exception) -> str:
+    error_text = str(exc).lower()
+    if isinstance(exc, TimeoutError) or "timed out" in error_text or "timeout" in error_text:
+        return "queue_timeout"
+    return "dispatch_blocked"

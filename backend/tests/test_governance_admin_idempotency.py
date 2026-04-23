@@ -3,23 +3,13 @@ import os
 import pytest
 from fastapi.testclient import TestClient
 
+from conftest import admin_headers as shared_admin_headers
 from app.approvals.models import build_elevated_access_approval_id
 from app.main import app
 
 
 def _admin_headers(client: TestClient) -> dict[str, str]:
-    password = os.environ["FORGEGATE_BOOTSTRAP_ADMIN_PASSWORD"]
-    response = client.post("/admin/auth/login", json={"username": "admin", "password": password})
-    assert response.status_code == 201
-    headers = {"Authorization": f"Bearer {response.json()['access_token']}"}
-    if response.json()["user"].get("must_rotate_password") is True:
-        rotation = client.post(
-            "/admin/auth/rotate-password",
-            headers=headers,
-            json={"current_password": password, "new_password": password},
-        )
-        assert rotation.status_code == 200
-    return headers
+    return shared_admin_headers(client)
 
 
 def _assert_idempotency_not_supported(
@@ -75,7 +65,7 @@ def test_admin_auth_mutations_reject_idempotency_key() -> None:
         ("post", "/admin/keys/key_boundary/disable", None),
         ("post", "/admin/keys/key_boundary/activate", None),
         ("post", "/admin/keys/key_boundary/revoke", None),
-        ("patch", "/admin/settings/", {"updates": {"default_model": "forgegate-baseline-chat-v1"}}),
+        ("patch", "/admin/settings/", {"updates": {"default_model": "forgeframe-baseline-chat-v1"}}),
         ("delete", "/admin/settings/runtime_auth_required", None),
     ],
 )

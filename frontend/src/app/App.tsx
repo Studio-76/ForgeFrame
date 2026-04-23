@@ -4,7 +4,7 @@ import { Link, NavLink, Navigate, Outlet, useLocation } from "react-router-dom";
 import { clearAdminToken, fetchAdminSession, getAdminToken, logoutAdmin, type AdminSessionUser } from "../api/admin";
 import { getSessionRouteState } from "./authRouting";
 import { CONTROL_PLANE_ROUTES, getControlPlaneNavigation, isHrefCurrent } from "./navigation";
-import { getTenantIdFromSearchParams, withTenantScope } from "./tenantScope";
+import { getInstanceIdFromSearchParams, withQueryParams } from "./tenantScope";
 import { useTheme } from "../theme/ThemeProvider";
 
 export function App() {
@@ -15,7 +15,8 @@ export function App() {
   const [sessionReady, setSessionReady] = useState<boolean>(false);
 
   const navigationSections = getControlPlaneNavigation(session);
-  const tenantId = getTenantIdFromSearchParams(new URLSearchParams(location.search));
+  const scopeSearchParams = new URLSearchParams(location.search);
+  const instanceId = getInstanceIdFromSearchParams(scopeSearchParams);
   const routeState = getSessionRouteState({
     pathname: location.pathname,
     hasToken: Boolean(getAdminToken()),
@@ -96,7 +97,7 @@ export function App() {
           </div>
           <div className="fg-section-links">
             {section.links.map((link) => {
-              const scopedTo = withTenantScope(link.to, tenantId);
+              const scopedTo = withQueryParams(link.to, { instanceId });
               const isCurrent = isHrefCurrent(location.pathname, location.hash, scopedTo);
               const className = `fg-section-link${isCurrent ? " is-current" : ""}${link.disabled ? " is-disabled" : ""}`;
 
@@ -132,13 +133,13 @@ export function App() {
     <div className="fg-shell fg-page">
       <header className="fg-row fg-row-spread">
         <div className="fg-page-header">
-          <h1>ForgeGate — Smart AI Gateway</h1>
+          <h1>ForgeFrame — Autonomous AI Runtime Platform</h1>
           <p className="fg-muted">UI-first Control Plane mit Auth, Accounts, Runtime Keys, Observability und Provider-Operatorik.</p>
           <p className="fg-muted">
             {session ? `Signed in as ${session.display_name} (${session.role})` : "No active admin session."}
           </p>
           {session?.must_rotate_password ? (
-            <p className="fg-danger">Password rotation required before ForgeGate will open the standard control-plane routes.</p>
+            <p className="fg-danger">Password rotation required before ForgeFrame will open the standard control-plane routes.</p>
           ) : null}
           {sessionError ? <p className="fg-danger">{sessionError}</p> : null}
         </div>

@@ -50,7 +50,7 @@ export function AdminPasswordResetForm({
         <div>
           <h4>Prepare temporary password handoff</h4>
           <p className="fg-muted">
-            Enter a temporary secret for {targetName}. Share it through a trusted channel only. ForgeGate will force a password
+            Enter a temporary secret for {targetName}. Share it through a trusted channel only. ForgeFrame will force a password
             change on first login.
           </p>
         </div>

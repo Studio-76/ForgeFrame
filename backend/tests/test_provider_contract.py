@@ -21,7 +21,7 @@ from app.providers.base import (
     ProviderUnavailableError,
     ProviderUnsupportedFeatureError,
 )
-from app.providers.forgegate_baseline import ForgeGateBaselineAdapter
+from app.providers.forgeframe_baseline import ForgeFrameBaselineAdapter
 from app.providers.gemini.adapter import GeminiAdapter
 from app.providers.ollama.adapter import OllamaAdapter
 from app.providers.openai_api.adapter import OpenAIAPIAdapter
@@ -34,15 +34,15 @@ from app.usage.service import UsageAccountingService
 
 
 def _assert_forwarded_request_metadata(headers: dict[str, str]) -> None:
-    assert headers["X-ForgeGate-Request-Id"] == "req_provider_headers_1"
-    assert headers["X-ForgeGate-Correlation-Id"] == "corr_provider_headers_1"
-    assert headers["X-ForgeGate-Trace-Id"] == "trace_provider_headers_1"
-    assert headers["X-ForgeGate-Span-Id"] == "span_provider_headers_1"
-    assert headers["X-ForgeGate-Route"] == "/v1/chat/completions"
+    assert headers["X-ForgeFrame-Request-Id"] == "req_provider_headers_1"
+    assert headers["X-ForgeFrame-Correlation-Id"] == "corr_provider_headers_1"
+    assert headers["X-ForgeFrame-Trace-Id"] == "trace_provider_headers_1"
+    assert headers["X-ForgeFrame-Span-Id"] == "span_provider_headers_1"
+    assert headers["X-ForgeFrame-Route"] == "/v1/chat/completions"
 
 
 def test_baseline_provider_capabilities_are_declared() -> None:
-    adapter = ForgeGateBaselineAdapter()
+    adapter = ForgeFrameBaselineAdapter()
     assert isinstance(adapter.capabilities, ProviderCapabilities)
     assert adapter.capabilities.streaming is True
     assert adapter.capabilities.external is False

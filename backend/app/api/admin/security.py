@@ -10,6 +10,8 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from app.auth.local_auth import role_allows
 from app.governance.models import AuthenticatedAdmin
 from app.governance.service import GovernanceService, get_governance_service
+from app.instances.models import InstanceRecord
+from app.api.admin.instance_scope import require_admin_instance_scope, resolve_admin_instance_scope
 
 _bearer = HTTPBearer(auto_error=False)
 
@@ -95,3 +97,32 @@ def require_admin_role(
 
 def require_admin_mutation_role(required_role: str) -> Callable[[AuthenticatedAdmin], AuthenticatedAdmin]:
     return require_admin_role(required_role, allow_impersonation=False)
+
+
+def require_admin_instance_permission(
+    permission_key: str,
+    *,
+    allow_impersonation: bool = True,
+    explicit_scope: bool = False,
+) -> Callable[[AuthenticatedAdmin], AuthenticatedAdmin]:
+    instance_dependency = require_admin_instance_scope if explicit_scope else resolve_admin_instance_scope
+
+    def _dependency(
+        admin: AuthenticatedAdmin = Depends(authenticate_admin_session),
+        instance: InstanceRecord = Depends(instance_dependency),
+        service: GovernanceService = Depends(get_governance_service),
+    ) -> AuthenticatedAdmin:
+        if not allow_impersonation:
+            admin = _ensure_write_capable_session(admin)
+        admin = _ensure_password_rotation_complete(admin)
+        try:
+            service.authorize_admin_instance_permission(
+                actor=admin,
+                instance=instance,
+                permission_key=permission_key,
+            )
+        except PermissionError as exc:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
+        return admin
+
+    return _dependency

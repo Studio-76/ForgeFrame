@@ -72,7 +72,7 @@ function createBootstrap(): SecurityBootstrapResponse {
           eligible_admin_approver_count: 2,
           blocked_reason: null,
           primary_message: "A different admin can review elevated-access requests in this environment.",
-          secondary_message: "ForgeGate keeps elevated-access requests pending until a different admin approves them.",
+          secondary_message: "ForgeFrame keeps elevated-access requests pending until a different admin approves them.",
         },
       },
       impersonation_sessions: {
@@ -98,7 +98,7 @@ function createBootstrap(): SecurityBootstrapResponse {
       eligible_admin_approver_count: 2,
       blocked_reason: null,
       primary_message: "A different admin can review elevated-access requests in this environment.",
-      secondary_message: "ForgeGate keeps elevated-access requests pending until a different admin approves them.",
+      secondary_message: "ForgeFrame keeps elevated-access requests pending until a different admin approves them.",
     },
   };
 }

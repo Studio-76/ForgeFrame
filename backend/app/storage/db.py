@@ -1,4 +1,4 @@
-"""Database bootstrap helpers for ForgeGate storage."""
+"""Database bootstrap helpers for ForgeFrame storage."""
 
 from __future__ import annotations
 

@@ -3,7 +3,7 @@
 from collections.abc import Iterator
 
 from app.core.message_features import messages_require_vision
-from app.core.routing import RoutingService
+from app.core.routing import RouteDecision, RoutingNoCandidateError, RoutingService
 from app.core.tool_calling import validate_tools_and_choice
 from app.providers import (
     ChatDispatchRequest,
@@ -30,22 +30,27 @@ class DispatchService:
         allowed_providers: set[str] | None = None,
         request_metadata: dict[str, str] | None = None,
         response_controls: dict[str, object] | None = None,
-    ) -> ChatDispatchResult:
+    ) -> tuple[ChatDispatchResult, RouteDecision]:
+        validate_tools_and_choice(tools, tool_choice)
         require_vision = messages_require_vision(messages)
         try:
             decision = self._routing.resolve_model(
                 requested_model,
+                messages=messages,
                 stream=stream,
                 tools=tools,
                 require_vision=require_vision,
                 allowed_providers=allowed_providers,
+                route_context=request_metadata,
+                response_controls=response_controls,
             )
         except RuntimeError as exc:
-            if require_vision and str(exc) == "No active models satisfy current routing requirements.":
+            if require_vision and (
+                isinstance(exc, RoutingNoCandidateError) or str(exc) == "No active models satisfy current routing requirements."
+            ):
                 raise ProviderUnsupportedFeatureError("runtime", "vision") from exc
             raise
         adapter = self._providers.get(decision.resolved_model.provider)
-        validate_tools_and_choice(tools, tool_choice)
         provider_status = self._providers.get_provider_status(adapter.provider_name)
         if require_vision and not bool(provider_status.get("capabilities", {}).get("vision", False)):
             raise ProviderUnsupportedFeatureError(adapter.provider_name, "vision")
@@ -67,7 +72,7 @@ class DispatchService:
         if tools and not adapter.capabilities.tool_calling:
             raise ProviderUnsupportedFeatureError(adapter.provider_name, "tool_calling")
 
-        return adapter.create_chat_completion(request)
+        return adapter.create_chat_completion(request), decision
 
     def dispatch_chat_stream(
         self,
@@ -79,22 +84,27 @@ class DispatchService:
         allowed_providers: set[str] | None = None,
         request_metadata: dict[str, str] | None = None,
         response_controls: dict[str, object] | None = None,
-    ) -> tuple[str, str, Iterator[ProviderStreamEvent]]:
+    ) -> tuple[str, str, Iterator[ProviderStreamEvent], RouteDecision]:
+        validate_tools_and_choice(tools, tool_choice)
         require_vision = messages_require_vision(messages)
         try:
             decision = self._routing.resolve_model(
                 requested_model,
+                messages=messages,
                 stream=True,
                 tools=tools,
                 require_vision=require_vision,
                 allowed_providers=allowed_providers,
+                route_context=request_metadata,
+                response_controls=response_controls,
             )
         except RuntimeError as exc:
-            if require_vision and str(exc) == "No active models satisfy current routing requirements.":
+            if require_vision and (
+                isinstance(exc, RoutingNoCandidateError) or str(exc) == "No active models satisfy current routing requirements."
+            ):
                 raise ProviderUnsupportedFeatureError("runtime", "vision") from exc
             raise
         adapter = self._providers.get(decision.resolved_model.provider)
-        validate_tools_and_choice(tools, tool_choice)
         provider_status = self._providers.get_provider_status(adapter.provider_name)
         if require_vision and not bool(provider_status.get("capabilities", {}).get("vision", False)):
             raise ProviderUnsupportedFeatureError(adapter.provider_name, "vision")
@@ -116,4 +126,9 @@ class DispatchService:
             request_metadata=request_metadata or {},
             response_controls=response_controls or {},
         )
-        return decision.resolved_model.id, adapter.provider_name, adapter.stream_chat_completion(request)
+        return (
+            decision.resolved_model.id,
+            adapter.provider_name,
+            adapter.stream_chat_completion(request),
+            decision,
+        )

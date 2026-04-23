@@ -36,7 +36,7 @@ from app.providers.openai_streaming import (
     finalize_openai_tool_calls,
     merge_openai_tool_call_chunks,
 )
-from app.request_metadata import forgegate_request_metadata_headers
+from app.request_metadata import forgeframe_request_metadata_headers
 from app.settings.config import Settings
 from app.usage.models import TokenUsage
 from app.usage.service import UsageAccountingService
@@ -70,12 +70,12 @@ class GeminiAdapter:
         auth_state = resolve_gemini_auth_state(self._settings)
         if not auth_state.ready:
             if auth_state.auth_mode == "oauth":
-                return "Gemini OAuth/account mode requires FORGEGATE_GEMINI_OAUTH_ACCESS_TOKEN."
-            return "Gemini API-key mode selected but FORGEGATE_GEMINI_API_KEY is missing."
+                return "Gemini OAuth/account mode requires FORGEFRAME_GEMINI_OAUTH_ACCESS_TOKEN."
+            return "Gemini API-key mode selected but FORGEFRAME_GEMINI_API_KEY is missing."
         if not self._settings.gemini_probe_enabled:
-            return "Gemini runtime bridge is disabled. Enable FORGEGATE_GEMINI_PROBE_ENABLED=true for beta runtime path."
+            return "Gemini runtime bridge is disabled. Enable FORGEFRAME_GEMINI_PROBE_ENABLED=true for beta runtime path."
         if self._configured_base_url() is None:
-            return "FORGEGATE_GEMINI_PROBE_BASE_URL must be an absolute http(s) URL."
+            return "FORGEFRAME_GEMINI_PROBE_BASE_URL must be an absolute http(s) URL."
         return None
 
     def create_chat_completion(self, request: ChatDispatchRequest) -> ChatDispatchResult:
@@ -129,12 +129,12 @@ class GeminiAdapter:
         if base_url is None:  # pragma: no cover - guarded by readiness checks
             raise ProviderConfigurationError(
                 self.provider_name,
-                "FORGEGATE_GEMINI_PROBE_BASE_URL must be an absolute http(s) URL.",
+                "FORGEFRAME_GEMINI_PROBE_BASE_URL must be an absolute http(s) URL.",
             )
         endpoint = f"{base_url}/chat/completions"
         token = self._settings.gemini_oauth_access_token.strip() if self._settings.gemini_auth_mode == "oauth" else self._settings.gemini_api_key.strip()
         headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
-        headers.update(forgegate_request_metadata_headers(request_metadata))
+        headers.update(forgeframe_request_metadata_headers(request_metadata))
         return endpoint, headers
 
     def _configured_base_url(self) -> str | None:

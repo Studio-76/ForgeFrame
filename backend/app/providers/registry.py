@@ -1,9 +1,9 @@
-"""Provider adapter registry for ForgeGate runtime."""
+"""Provider adapter registry for ForgeFrame runtime."""
 
 from app.harness.service import HarnessService, get_harness_service
 from app.providers.anthropic.adapter import AnthropicAdapter
 from app.providers.base import ProviderAdapter
-from app.providers.forgegate_baseline import ForgeGateBaselineAdapter
+from app.providers.forgeframe_baseline import ForgeFrameBaselineAdapter
 from app.providers.gemini.adapter import GeminiAdapter
 from app.providers.generic_harness.adapter import GenericHarnessAdapter
 from app.providers.ollama.adapter import OllamaAdapter
@@ -16,7 +16,7 @@ class ProviderRegistry:
     def __init__(self, settings: Settings, harness_service: HarnessService | None = None):
         harness = harness_service or get_harness_service()
         candidate_adapters: dict[str, ProviderAdapter] = {
-            "forgegate_baseline": ForgeGateBaselineAdapter(settings),
+            "forgeframe_baseline": ForgeFrameBaselineAdapter(settings),
             "openai_api": OpenAIAPIAdapter(settings),
             "openai_codex": OpenAICodexAdapter(settings),
             "gemini": GeminiAdapter(settings),

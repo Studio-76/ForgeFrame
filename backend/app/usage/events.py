@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from app.tenancy import DEFAULT_BOOTSTRAP_TENANT_ID
 
@@ -42,6 +42,7 @@ class UsageEvent(BaseModel):
     trace_id: str | None = None
     span_id: str | None = None
     duration_ms: int | None = None
+    scope_attributes: dict[str, str] = Field(default_factory=dict)
     created_at: str
 
 
@@ -67,6 +68,7 @@ class ErrorEvent(BaseModel):
     trace_id: str | None = None
     span_id: str | None = None
     duration_ms: int | None = None
+    scope_attributes: dict[str, str] = Field(default_factory=dict)
     created_at: str
 
 

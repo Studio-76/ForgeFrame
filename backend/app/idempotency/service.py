@@ -21,6 +21,14 @@ _MUTATING_METHODS = frozenset({"POST", "PUT", "PATCH", "DELETE"})
 _IDEMPOTENCY_KEY_MAX_LENGTH = 191
 
 
+def _first_header(request: Request, *names: str) -> str:
+    for name in names:
+        value = request.headers.get(name, "").strip()
+        if value:
+            return value
+    return ""
+
+
 class InvalidIdempotencyKeyError(ValueError):
     """Raised when a client supplies an invalid or conflicting idempotency key."""
 
@@ -147,21 +155,20 @@ def build_request_fingerprint(
 
 def build_request_envelope(request: Request, body: bytes | None = None) -> RequestEnvelope:
     request_id = (
-        request.headers.get("x-request-id", "").strip()
-        or request.headers.get("x-forgegate-request-id", "").strip()
+        _first_header(request, "x-request-id", "x-forgeframe-request-id", "x-forgegate-request-id")
         or f"req_{uuid4().hex[:12]}"
     )
-    correlation_id = request.headers.get("x-forgegate-correlation-id", "").strip() or request_id
-    causation_id = request.headers.get("x-forgegate-causation-id", "").strip() or request_id
+    correlation_id = _first_header(request, "x-forgeframe-correlation-id", "x-forgegate-correlation-id") or request_id
+    causation_id = _first_header(request, "x-forgeframe-causation-id", "x-forgegate-causation-id") or request_id
     traceparent = request.headers.get("traceparent", "").strip()
-    trace_id = request.headers.get("x-forgegate-trace-id", "").strip()
+    trace_id = _first_header(request, "x-forgeframe-trace-id", "x-forgegate-trace-id")
     if not trace_id and traceparent:
         parts = traceparent.split("-")
         if len(parts) == 4 and len(parts[1]) == 32:
             trace_id = parts[1]
     if not trace_id:
         trace_id = f"trace_{uuid4().hex[:16]}"
-    span_id = request.headers.get("x-forgegate-span-id", "").strip() or request_id
+    span_id = _first_header(request, "x-forgeframe-span-id", "x-forgegate-span-id") or request_id
     idempotency_key = request.headers.get("idempotency-key", "").strip() or None
     return RequestEnvelope(
         request_id=request_id,

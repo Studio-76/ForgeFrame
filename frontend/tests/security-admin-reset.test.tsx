@@ -26,22 +26,22 @@ function createUser(): AdminUser {
 describe("admin password reset workflow", () => {
   it("builds the rotation payload from confirmed operator input and keeps first-login rotation enabled", () => {
     const payload: AdminPasswordRotationPayload = buildAdminPasswordResetPayload({
-      new_password: "Temp-ForgeGate-42",
-      confirm_password: "Temp-ForgeGate-42",
+      new_password: "Temp-ForgeFrame-42",
+      confirm_password: "Temp-ForgeFrame-42",
     });
 
     expect(payload).toEqual({
-      new_password: "Temp-ForgeGate-42",
+      new_password: "Temp-ForgeFrame-42",
       must_rotate_password: true,
     });
-    expect(payload.new_password).not.toBe("ForgeGate-Reset-123");
+    expect(payload.new_password).not.toBe("ForgeFrame-Reset-123");
   });
 
   it("rejects mismatched confirmation before the reset request is submitted", () => {
     expect(() =>
       buildAdminPasswordResetPayload({
-        new_password: "Temp-ForgeGate-42",
-        confirm_password: "Temp-ForgeGate-24",
+        new_password: "Temp-ForgeFrame-42",
+        confirm_password: "Temp-ForgeFrame-24",
       }),
     ).toThrow("Password confirmation does not match.");
   });
@@ -63,6 +63,6 @@ describe("admin password reset workflow", () => {
     expect(markup).toContain("Confirm temporary password");
     expect(markup).toContain("trusted channel");
     expect(markup).toContain("first login must rotate");
-    expect(markup).not.toContain("ForgeGate-Reset-123");
+    expect(markup).not.toContain("ForgeFrame-Reset-123");
   });
 });

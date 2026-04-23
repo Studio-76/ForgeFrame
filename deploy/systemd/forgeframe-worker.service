@@ -1,0 +1,26 @@
+[Unit]
+Description=ForgeFrame execution worker
+After=network-online.target forgeframe-api.service
+Wants=network-online.target
+ConditionPathExists=@@ENV_FILE@@
+
+[Service]
+Type=simple
+User=@@SYSTEM_USER@@
+Group=@@SYSTEM_GROUP@@
+WorkingDirectory=@@INSTALL_ROOT@@
+Environment=FORGEFRAME_ENV_FILE=@@ENV_FILE@@
+Environment=FORGEFRAME_RUNTIME_MODE=host_native
+ExecStart=@@INSTALL_ROOT@@/.venv/bin/python @@INSTALL_ROOT@@/scripts/run-execution-worker.py
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=full
+ReadWritePaths=@@STATE_DIR@@ @@INSTALL_ROOT@@/backend/.forgeframe
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

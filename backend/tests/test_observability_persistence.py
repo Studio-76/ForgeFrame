@@ -3,30 +3,16 @@ from pathlib import Path
 
 from fastapi.testclient import TestClient
 
+from conftest import admin_headers as shared_admin_headers
 from app.api.admin.control_plane import get_control_plane_service
 from app.api.runtime.dependencies import clear_runtime_dependency_caches
 from app.main import app
+from app.settings.config import get_settings
 from app.usage.analytics import get_usage_analytics_store
 
 
 def _admin_headers(client: TestClient) -> dict[str, str]:
-    response = client.post(
-        "/admin/auth/login",
-        json={"username": "admin", "password": os.environ["FORGEGATE_BOOTSTRAP_ADMIN_PASSWORD"]},
-    )
-    assert response.status_code == 201
-    headers = {"Authorization": f"Bearer {response.json()['access_token']}"}
-    if response.json()["user"]["must_rotate_password"] is True:
-        rotation = client.post(
-            "/admin/auth/rotate-password",
-            headers=headers,
-            json={
-                "current_password": os.environ["FORGEGATE_BOOTSTRAP_ADMIN_PASSWORD"],
-                "new_password": os.environ["FORGEGATE_BOOTSTRAP_ADMIN_PASSWORD"],
-            },
-        )
-        assert rotation.status_code == 200
-    return headers
+    return shared_admin_headers(client)
 
 
 def test_usage_events_are_persisted_across_store_reload() -> None:
@@ -77,6 +63,34 @@ def test_health_events_are_persisted_across_store_reload() -> None:
     assert summary_after.json()["metrics"]["recorded_health_event_count"] >= 1
 
 
+def test_responses_usage_events_persist_scope_attributes_from_request_metadata() -> None:
+    client = TestClient(app)
+    analytics = get_usage_analytics_store()
+    repository = analytics._repository  # type: ignore[attr-defined]
+    before_count = len(repository.load_usage_events())
+    settings = get_settings()
+
+    response = client.post(
+        "/v1/responses",
+        json={
+            "model": "forgeframe-baseline-chat-v1",
+            "input": "persist scope metadata",
+            "metadata": {
+                "agent_id": "assistant-scope-audit",
+                "task_id": "task-scope-audit",
+            },
+        },
+    )
+    assert response.status_code == 200
+
+    events = repository.load_usage_events()
+    assert len(events) >= before_count + 1
+    latest = events[-1]
+    assert latest.scope_attributes["instance_id"] == settings.bootstrap_tenant_id
+    assert latest.scope_attributes["agent_id"] == "assistant-scope-audit"
+    assert latest.scope_attributes["task_id"] == "task-scope-audit"
+
+
 def test_logs_operability_and_bootstrap_readiness_reflect_observability_signal_path() -> None:
     client = TestClient(app)
     headers = _admin_headers(client)
@@ -113,15 +127,22 @@ def test_logs_operability_and_bootstrap_readiness_reflect_observability_signal_p
     assert checks["audit_signal_path"]["ok"] is True
     assert checks["structured_runtime_context"]["ok"] is True
     assert checks["tracing_scope_declared"]["ok"] is True
+    assert checks["routing_decision_signal_path"]["ok"] is True
+    assert checks["routing_explainability_path"]["ok"] is True
     assert operability["metrics"]["runtime_errors"] >= 1
     assert operability["metrics"]["red_metrics"]["requests"] >= 2
     assert operability["metrics"]["queue_metrics"]["active_backlog"] >= 0
+    assert "run_lanes" in operability["metrics"]["queue_metrics"]
+    assert "lease_states" in operability["metrics"]["queue_metrics"]
     assert operability["metrics"]["dependency_metrics"]
+    assert operability["metrics"]["routing_metrics"]["decision_count"] >= 1
+    assert operability["metrics"]["routing_metrics"]["explainability_coverage"]["structured"] >= 1
+    assert operability["metrics"]["routing_metrics"]["explainability_coverage"]["raw"] >= 1
     assert operability["metrics"]["slo_indicators"]["request_volume"] >= 2
     assert "trace_id" in operability["logging"]["structured_fields"]
     assert "span_id" in operability["logging"]["structured_fields"]
     assert operability["tracing"]["configured"] is True
-    assert "X-ForgeGate-Span-Id" in operability["tracing"]["emitted_headers"]
+    assert "X-ForgeFrame-Span-Id" in operability["tracing"]["emitted_headers"]
 
     readiness = client.get("/admin/providers/bootstrap/readiness", headers=headers)
     assert readiness.status_code == 200

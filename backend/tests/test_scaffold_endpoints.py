@@ -3,6 +3,7 @@ import os
 
 from fastapi.testclient import TestClient
 
+from conftest import admin_headers as shared_admin_headers
 from app.api.admin.control_plane import get_control_plane_service
 from app.control_plane import ControlPlaneStateRecord
 from app.api.runtime.dependencies import clear_runtime_dependency_caches
@@ -17,23 +18,7 @@ client = TestClient(app)
 
 
 def _admin_headers() -> dict[str, str]:
-    response = client.post(
-        "/admin/auth/login",
-        json={"username": "admin", "password": os.environ["FORGEGATE_BOOTSTRAP_ADMIN_PASSWORD"]},
-    )
-    assert response.status_code == 201
-    headers = {"Authorization": f"Bearer {response.json()['access_token']}"}
-    if response.json()["user"]["must_rotate_password"] is True:
-        rotate = client.post(
-            "/admin/auth/rotate-password",
-            headers=headers,
-            json={
-                "current_password": os.environ["FORGEGATE_BOOTSTRAP_ADMIN_PASSWORD"],
-                "new_password": os.environ["FORGEGATE_BOOTSTRAP_ADMIN_PASSWORD"],
-            },
-        )
-        assert rotate.status_code == 200
-    return headers
+    return shared_admin_headers(client)
 
 
 def test_admin_providers_control_plane_endpoint_available() -> None:
@@ -71,9 +56,11 @@ def test_anthropic_only_bootstrap_keeps_runtime_and_provider_control_plane_avail
     assert health_response.status_code == 200
     health_payload = health_response.json()
     assert health_payload["status"] == "ok"
+    assert health_payload["readiness"]["state"] == "degraded"
     assert health_payload["readiness"]["accepting_traffic"] is True
     readiness_checks = {item["id"]: item for item in health_payload["readiness"]["checks"]}
     assert readiness_checks["runtime_model_configuration"]["ok"] is True
+    assert readiness_checks["public_origin_contract"]["ok"] is False
 
     models_response = client.get("/v1/models")
     assert models_response.status_code == 200
@@ -99,12 +86,12 @@ def test_anthropic_only_bootstrap_keeps_runtime_and_provider_control_plane_avail
     assert matrix_response.status_code == 200
     anthropic_matrix_row = next(item for item in matrix_response.json()["matrix"] if item["provider"] == "anthropic")
     assert anthropic_matrix_row["provider_axis"] == "unmapped_native_runtime"
-    assert anthropic_matrix_row["tier"] == "planned"
+    assert anthropic_matrix_row["compatibility_depth"] == "limited"
     assert "outside the current product-axis taxonomy" in anthropic_matrix_row["notes"]
 
-    beta_targets_response = client.get("/admin/providers/beta-targets", headers=headers)
-    assert beta_targets_response.status_code == 200
-    assert all(item["provider_key"] != "anthropic" for item in beta_targets_response.json()["targets"])
+    axis_targets_response = client.get("/admin/providers/product-axis-targets", headers=headers)
+    assert axis_targets_response.status_code == 200
+    assert all(item["provider_key"] != "anthropic" for item in axis_targets_response.json()["targets"])
 
     sync_response = client.post("/admin/providers/sync", json={"provider": "anthropic"}, headers=headers)
     assert sync_response.status_code == 200
@@ -138,6 +125,7 @@ def test_anthropic_only_bootstrap_repairs_persisted_state_before_runtime_readine
 
     health_response = client.get("/health")
     assert health_response.status_code == 200
+    assert health_response.json()["readiness"]["state"] == "degraded"
     readiness_checks = {
         item["id"]: item
         for item in health_response.json()["readiness"]["checks"]
@@ -191,8 +179,8 @@ def test_admin_providers_create_update_activate_deactivate_and_sync() -> None:
     assert "custom_provider" in sync_response.json()["synced_providers"]
 
 
-def test_admin_provider_beta_targets_endpoint_available() -> None:
-    response = client.get("/admin/providers/beta-targets", headers=_admin_headers())
+def test_admin_provider_product_axis_targets_endpoint_available() -> None:
+    response = client.get("/admin/providers/product-axis-targets", headers=_admin_headers())
     assert response.status_code == 200
     payload = response.json()
     assert payload["status"] == "ok"
@@ -203,9 +191,14 @@ def test_admin_provider_beta_targets_endpoint_available() -> None:
     antigravity = next(item for item in targets if item["provider_key"] == "antigravity")
     client_axis = next(item for item in targets if item["provider_key"] == "openai_client_compat")
     assert codex["product_axis"] == "oauth_account_providers"
+    assert codex["contract_classification"] in {"partial-runtime", "runtime-ready", "onboarding-only"}
+    assert codex["operator_surface"] == "/oauth-targets"
+    assert isinstance(codex["technical_requirements"], list)
     assert "readiness_score" in codex
     assert antigravity["runtime_readiness"] == "planned"
-    assert client_axis["beta_tier"] == "beta"
+    assert antigravity["contract_classification"] in {"bridge-only", "onboarding-only"}
+    assert client_axis["contract_classification"] == "partial-runtime"
+    assert client_axis["classification_reason"].startswith("The public OpenAI-compatible surface is live")
 
 
 def test_admin_provider_truth_and_compatibility_matrix_expose_honest_readiness_axes(
@@ -299,12 +292,18 @@ def test_admin_oauth_account_targets_are_read_only_and_keep_native_targets_parti
     codex = next(item for item in targets if item["provider_key"] == "openai_codex")
     gemini = next(item for item in targets if item["provider_key"] == "gemini")
     assert codex["readiness"] == "partial"
+    assert codex["contract_classification"] == "partial-runtime"
     assert codex["auth_kind"] == "oauth_account"
     assert codex["oauth_mode"] == "device_hosted_code"
     assert codex["oauth_flow_support"] == "external_token_only"
+    assert codex["queue_lane"] == "sync_interactive"
+    assert codex["parallelism_mode"] == "not_enforced"
+    assert codex["cost_posture"].startswith("avoided-cost")
+    assert "pre-issued access token" in codex["operator_truth"]
     assert "pre-issued access token" in codex["readiness_reason"]
     assert codex["evidence"]["live_probe"]["status"] == "missing"
     assert gemini["readiness"] == "partial"
+    assert gemini["contract_classification"] == "partial-runtime"
     assert gemini["auth_kind"] == "oauth_account"
     assert gemini["oauth_mode"] is None
     assert gemini["evidence"]["live_probe"]["status"] == "missing"
@@ -473,7 +472,7 @@ def test_admin_provider_truth_and_oauth_targets_keep_gemini_non_ready_when_bridg
     assert gemini_target["readiness_reason"] == "FORGEGATE_GEMINI_PROBE_BASE_URL must be an absolute http(s) URL."
 
 
-def test_admin_beta_targets_keep_gemini_probe_truth_partial_when_bridge_base_url_is_invalid(
+def test_admin_product_axis_targets_keep_gemini_probe_truth_partial_when_bridge_base_url_is_invalid(
     monkeypatch,
 ) -> None:
     monkeypatch.setenv("FORGEGATE_GEMINI_OAUTH_ACCESS_TOKEN", "token")
@@ -507,7 +506,7 @@ def test_admin_beta_targets_keep_gemini_probe_truth_partial_when_bridge_base_url
         "2026-04-22T00:01:00+00:00",
     )
 
-    response = client.get("/admin/providers/beta-targets", headers=_admin_headers())
+    response = client.get("/admin/providers/product-axis-targets", headers=_admin_headers())
     assert response.status_code == 200
     gemini_target = next(item for item in response.json()["targets"] if item["provider_key"] == "gemini")
     assert gemini_target["readiness"] == "partial"
@@ -520,7 +519,7 @@ def test_admin_beta_targets_keep_gemini_probe_truth_partial_when_bridge_base_url
     assert gemini_target["status_summary"] == "FORGEGATE_GEMINI_PROBE_BASE_URL must be an absolute http(s) URL."
 
 
-def test_admin_gemini_beta_and_oauth_targets_honor_tenant_id(
+def test_admin_gemini_product_axis_and_oauth_targets_honor_tenant_id(
     monkeypatch,
 ) -> None:
     monkeypatch.setenv("FORGEGATE_GEMINI_OAUTH_ACCESS_TOKEN", "token")
@@ -555,26 +554,26 @@ def test_admin_gemini_beta_and_oauth_targets_honor_tenant_id(
     )
 
     headers = _admin_headers()
-    beta_tenant_a = client.get("/admin/providers/beta-targets?tenantId=tenant_a", headers=headers)
-    beta_tenant_b = client.get("/admin/providers/beta-targets?tenantId=tenant_b", headers=headers)
+    axis_tenant_a = client.get("/admin/providers/product-axis-targets?tenantId=tenant_a", headers=headers)
+    axis_tenant_b = client.get("/admin/providers/product-axis-targets?tenantId=tenant_b", headers=headers)
     oauth_tenant_a = client.get("/admin/providers/oauth-account/targets?tenantId=tenant_a", headers=headers)
     oauth_tenant_b = client.get("/admin/providers/oauth-account/targets?tenantId=tenant_b", headers=headers)
 
-    assert beta_tenant_a.status_code == 200
-    assert beta_tenant_b.status_code == 200
+    assert axis_tenant_a.status_code == 200
+    assert axis_tenant_b.status_code == 200
     assert oauth_tenant_a.status_code == 200
     assert oauth_tenant_b.status_code == 200
 
-    gemini_beta_tenant_a = next(item for item in beta_tenant_a.json()["targets"] if item["provider_key"] == "gemini")
-    gemini_beta_tenant_b = next(item for item in beta_tenant_b.json()["targets"] if item["provider_key"] == "gemini")
-    assert gemini_beta_tenant_a["runtime_readiness"] == "ready"
-    assert gemini_beta_tenant_a["verify_probe_readiness"] == "ready"
-    assert gemini_beta_tenant_a["evidence"]["runtime"]["status"] == "observed"
-    assert gemini_beta_tenant_a["evidence"]["live_probe"]["status"] == "observed"
-    assert gemini_beta_tenant_b["runtime_readiness"] == "partial"
-    assert gemini_beta_tenant_b["verify_probe_readiness"] == "partial"
-    assert gemini_beta_tenant_b["evidence"]["runtime"]["status"] == "missing"
-    assert gemini_beta_tenant_b["evidence"]["live_probe"]["status"] == "missing"
+    gemini_axis_tenant_a = next(item for item in axis_tenant_a.json()["targets"] if item["provider_key"] == "gemini")
+    gemini_axis_tenant_b = next(item for item in axis_tenant_b.json()["targets"] if item["provider_key"] == "gemini")
+    assert gemini_axis_tenant_a["runtime_readiness"] == "ready"
+    assert gemini_axis_tenant_a["verify_probe_readiness"] == "ready"
+    assert gemini_axis_tenant_a["evidence"]["runtime"]["status"] == "observed"
+    assert gemini_axis_tenant_a["evidence"]["live_probe"]["status"] == "observed"
+    assert gemini_axis_tenant_b["runtime_readiness"] == "partial"
+    assert gemini_axis_tenant_b["verify_probe_readiness"] == "partial"
+    assert gemini_axis_tenant_b["evidence"]["runtime"]["status"] == "missing"
+    assert gemini_axis_tenant_b["evidence"]["live_probe"]["status"] == "missing"
 
     gemini_oauth_tenant_a = next(item for item in oauth_tenant_a.json()["targets"] if item["provider_key"] == "gemini")
     gemini_oauth_tenant_b = next(item for item in oauth_tenant_b.json()["targets"] if item["provider_key"] == "gemini")
@@ -641,7 +640,7 @@ def test_admin_provider_truth_and_oauth_targets_keep_codex_non_ready_when_bridge
     assert codex_target["readiness_reason"] == "FORGEGATE_OPENAI_CODEX_BASE_URL must be an absolute http(s) URL."
 
 
-def test_admin_beta_targets_keep_codex_probe_truth_partial_when_bridge_base_url_is_invalid(
+def test_admin_product_axis_targets_keep_codex_probe_truth_partial_when_bridge_base_url_is_invalid(
     monkeypatch,
 ) -> None:
     monkeypatch.setenv("FORGEGATE_OPENAI_CODEX_OAUTH_ACCESS_TOKEN", "token")
@@ -675,7 +674,7 @@ def test_admin_beta_targets_keep_codex_probe_truth_partial_when_bridge_base_url_
         "2026-04-22T00:00:00+00:00",
     )
 
-    response = client.get("/admin/providers/beta-targets", headers=_admin_headers())
+    response = client.get("/admin/providers/product-axis-targets", headers=_admin_headers())
     assert response.status_code == 200
     codex_target = next(item for item in response.json()["targets"] if item["provider_key"] == "openai_codex")
     assert codex_target["readiness"] == "partial"
@@ -712,14 +711,14 @@ def test_admin_oauth_account_targets_keep_bridge_only_targets_partial_even_after
     assert antigravity["evidence"]["live_probe"]["status"] == "observed"
     assert "bridge-only" in antigravity["readiness_reason"]
 
-    beta_targets_response = client.get("/admin/providers/beta-targets", headers=_admin_headers())
-    assert beta_targets_response.status_code == 200
-    antigravity_target = next(item for item in beta_targets_response.json()["targets"] if item["provider_key"] == "antigravity")
+    axis_targets_response = client.get("/admin/providers/product-axis-targets", headers=_admin_headers())
+    assert axis_targets_response.status_code == 200
+    antigravity_target = next(item for item in axis_targets_response.json()["targets"] if item["provider_key"] == "antigravity")
     assert antigravity_target["readiness"] == "partial"
     assert antigravity_target["verify_probe_readiness"] == "ready"
 
 
-def test_admin_beta_targets_keep_bridge_only_probe_truth_planned_without_current_configuration_even_with_historical_probe_evidence(
+def test_admin_product_axis_targets_keep_bridge_only_probe_truth_planned_without_current_configuration_even_with_historical_probe_evidence(
     monkeypatch,
 ) -> None:
     for provider_key in ("ANTIGRAVITY", "GITHUB_COPILOT", "CLAUDE_CODE"):
@@ -744,7 +743,7 @@ def test_admin_beta_targets_keep_bridge_only_probe_truth_planned_without_current
             "2026-04-22T00:02:00+00:00",
         )
 
-    response = client.get("/admin/providers/beta-targets", headers=_admin_headers())
+    response = client.get("/admin/providers/product-axis-targets", headers=_admin_headers())
     assert response.status_code == 200
     targets = {item["provider_key"]: item for item in response.json()["targets"]}
 
@@ -780,7 +779,7 @@ def test_admin_oauth_operations_summary_honors_api_key_mode_for_native_targets(
     assert gemini["bridge_profile_enabled"] is False
 
 
-def test_admin_provider_truth_and_beta_targets_promote_native_oauth_axes_only_after_recorded_evidence(
+def test_admin_provider_truth_and_product_axis_targets_promote_native_oauth_axes_only_after_recorded_evidence(
     monkeypatch,
 ) -> None:
     monkeypatch.setenv("FORGEGATE_OPENAI_CODEX_BRIDGE_ENABLED", "true")
@@ -868,10 +867,10 @@ def test_admin_provider_truth_and_beta_targets_promote_native_oauth_axes_only_af
     assert gemini_truth["streaming_readiness"] == "ready"
     assert gemini_truth["evidence"]["tool_calling"]["status"] == "observed"
 
-    beta_targets_response = client.get("/admin/providers/beta-targets", headers=headers)
-    assert beta_targets_response.status_code == 200
-    codex_target = next(item for item in beta_targets_response.json()["targets"] if item["provider_key"] == "openai_codex")
-    gemini_target = next(item for item in beta_targets_response.json()["targets"] if item["provider_key"] == "gemini")
+    axis_targets_response = client.get("/admin/providers/product-axis-targets", headers=headers)
+    assert axis_targets_response.status_code == 200
+    codex_target = next(item for item in axis_targets_response.json()["targets"] if item["provider_key"] == "openai_codex")
+    gemini_target = next(item for item in axis_targets_response.json()["targets"] if item["provider_key"] == "gemini")
     assert codex_target["verify_probe_readiness"] == "ready"
     assert codex_target["evidence"]["live_probe"]["status"] == "observed"
     assert gemini_target["verify_probe_readiness"] == "ready"

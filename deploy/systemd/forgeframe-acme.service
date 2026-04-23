@@ -1,0 +1,20 @@
+[Unit]
+Description=ForgeFrame ACME certificate renewal
+After=network-online.target forgeframe-http-helper.service
+Wants=network-online.target
+ConditionPathExists=@@ENV_FILE@@
+
+[Service]
+Type=oneshot
+User=root
+Group=root
+WorkingDirectory=@@INSTALL_ROOT@@
+Environment=FORGEFRAME_ENV_FILE=@@ENV_FILE@@
+ExecStart=@@INSTALL_ROOT@@/scripts/renew-certificates.sh
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=full
+ReadWritePaths=@@STATE_DIR@@
+StandardOutput=journal
+StandardError=journal

@@ -3,9 +3,9 @@ requires = ["setuptools>=68", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "forgegate-backend"
+name = "forgeframe-backend"
 version = "0.6.0"
-description = "ForgeGate backend with runtime, control-plane and governance services"
+description = "ForgeFrame backend with runtime, control-plane and governance services"
 requires-python = ">=3.11"
 dependencies = [
   "fastapi>=0.116,<1.0",

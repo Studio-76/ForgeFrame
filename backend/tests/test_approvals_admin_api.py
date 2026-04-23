@@ -3,29 +3,15 @@ from uuid import uuid4
 
 from fastapi.testclient import TestClient
 
+from conftest import admin_headers as shared_admin_headers, login_headers_allowing_password_rotation
 from app.approvals.models import build_elevated_access_approval_id, build_execution_approval_id
 from app.execution.dependencies import get_execution_transition_service
+from app.governance.service import get_governance_service
 from app.main import app
 
 
 def _admin_headers(client: TestClient) -> dict[str, str]:
-    response = client.post(
-        "/admin/auth/login",
-        json={"username": "admin", "password": os.environ["FORGEGATE_BOOTSTRAP_ADMIN_PASSWORD"]},
-    )
-    assert response.status_code == 201
-    headers = {"Authorization": f"Bearer {response.json()['access_token']}"}
-    if response.json()["user"]["must_rotate_password"] is True:
-        rotation = client.post(
-            "/admin/auth/rotate-password",
-            headers=headers,
-            json={
-                "current_password": os.environ["FORGEGATE_BOOTSTRAP_ADMIN_PASSWORD"],
-                "new_password": os.environ["FORGEGATE_BOOTSTRAP_ADMIN_PASSWORD"],
-            },
-        )
-        assert rotation.status_code == 200
-    return headers
+    return shared_admin_headers(client)
 
 
 def _create_admin_user_and_headers(
@@ -48,16 +34,7 @@ def _create_admin_user_and_headers(
         },
     )
     assert created.status_code == 201
-    login = client.post("/admin/auth/login", json={"username": username, "password": password})
-    assert login.status_code == 201
-    headers = {"Authorization": f"Bearer {login.json()['access_token']}"}
-    if login.json()["user"]["must_rotate_password"] is True:
-        rotation = client.post(
-            "/admin/auth/rotate-password",
-            headers=headers,
-            json={"current_password": password, "new_password": password},
-        )
-        assert rotation.status_code == 200
+    headers = login_headers_allowing_password_rotation(client, username=username, password=password)
     return created.json()["user"]["user_id"], headers
 
 
@@ -91,6 +68,30 @@ def _open_execution_approval(*, company_id: str) -> tuple[str, str]:
         gate_key="manual_approval_gate",
     )
     return claim.run_id, approval_native_id
+
+
+def _create_instance(
+    client: TestClient,
+    headers: dict[str, str],
+    *,
+    instance_id: str,
+    company_id: str,
+    tenant_id: str | None = None,
+) -> str:
+    response = client.post(
+        "/admin/instances/",
+        headers=headers,
+        json={
+            "instance_id": instance_id,
+            "display_name": instance_id,
+            "tenant_id": tenant_id or instance_id,
+            "company_id": company_id,
+            "deployment_mode": "restricted_eval",
+            "exposure_mode": "local_only",
+        },
+    )
+    assert response.status_code == 201
+    return response.json()["instance"]["instance_id"]
 
 
 def _activate_break_glass_session(
@@ -165,18 +166,24 @@ def test_shared_approvals_queue_and_detail_include_execution_and_elevated_access
     assert request.status_code == 202
     request_id = request.json()["request"]["request_id"]
 
+    instance_id = _create_instance(client, headers, instance_id="instance_alpha", company_id="company_alpha")
     run_id, execution_native_id = _open_execution_approval(company_id="company_alpha")
 
     approvals = client.get("/admin/approvals", headers=headers)
     assert approvals.status_code == 200
     items = {item["approval_id"]: item for item in approvals.json()["approvals"]}
 
-    execution_approval_id = build_execution_approval_id(company_id="company_alpha", approval_id=execution_native_id)
+    execution_approval_id = build_execution_approval_id(
+        instance_id=instance_id,
+        company_id="company_alpha",
+        approval_id=execution_native_id,
+    )
     elevated_approval_id = build_elevated_access_approval_id(request_id)
 
     assert items[execution_approval_id]["source_kind"] == "execution_run"
     assert items[execution_approval_id]["approval_type"] == "execution_run"
     assert items[execution_approval_id]["status"] == "open"
+    assert items[execution_approval_id]["instance_id"] == instance_id
     assert items[execution_approval_id]["company_id"] == "company_alpha"
 
     assert items[elevated_approval_id]["source_kind"] == "elevated_access"
@@ -184,9 +191,14 @@ def test_shared_approvals_queue_and_detail_include_execution_and_elevated_access
     assert items[elevated_approval_id]["status"] == "open"
     assert items[elevated_approval_id]["session_status"] == "not_issued"
 
-    execution_detail = client.get(f"/admin/approvals/{execution_approval_id}", headers=headers)
+    execution_detail = client.get(
+        f"/admin/approvals/{execution_approval_id}",
+        headers=headers,
+        params={"instanceId": instance_id},
+    )
     assert execution_detail.status_code == 200
     assert execution_detail.json()["approval"]["source"]["run_id"] == run_id
+    assert execution_detail.json()["approval"]["source"]["instance_id"] == instance_id
     assert execution_detail.json()["approval"]["evidence"]["gate_key"] == "manual_approval_gate"
 
     elevated_detail = client.get(f"/admin/approvals/{elevated_approval_id}", headers=headers)
@@ -198,7 +210,7 @@ def test_shared_approvals_queue_and_detail_include_execution_and_elevated_access
     assert elevated_payload["actions"]["decision_blocked_reason"] == "elevated_access_self_approval_forbidden"
 
 
-def test_shared_approvals_reject_company_scope_until_all_items_support_it() -> None:
+def test_shared_approvals_support_instance_scope_but_reject_legacy_tenant_and_company_filters() -> None:
     client = TestClient(app)
     headers = _admin_headers(client)
     suffix = uuid4().hex[:8]
@@ -234,18 +246,167 @@ def test_shared_approvals_reject_company_scope_until_all_items_support_it() -> N
     )
     assert request.status_code == 202
 
-    _open_execution_approval(company_id="company_alpha")
+    alpha_instance_id = _create_instance(client, headers, instance_id="instance_alpha", company_id="company_alpha")
+    _create_instance(client, headers, instance_id="instance_beta", company_id="company_beta")
+    alpha_run_id, alpha_native_id = _open_execution_approval(company_id="company_alpha")
+    _beta_run_id, _beta_native_id = _open_execution_approval(company_id="company_beta")
 
     approvals = client.get(
         "/admin/approvals",
         headers=headers,
+        params={"instanceId": alpha_instance_id},
+    )
+    assert approvals.status_code == 200
+    approval_ids = {item["approval_id"] for item in approvals.json()["approvals"]}
+    assert build_execution_approval_id(
+        instance_id=alpha_instance_id,
+        company_id="company_alpha",
+        approval_id=alpha_native_id,
+    ) in approval_ids
+    assert not any(item.endswith("company_beta:" + _beta_native_id) for item in approval_ids)
+
+    detail = client.get(
+        f"/admin/approvals/{build_execution_approval_id(instance_id=alpha_instance_id, company_id='company_alpha', approval_id=alpha_native_id)}",
+        headers=headers,
+        params={"instanceId": alpha_instance_id},
+    )
+    assert detail.status_code == 200
+    assert detail.json()["approval"]["source"]["run_id"] == alpha_run_id
+
+    company_scoped = client.get(
+        "/admin/approvals",
+        headers=headers,
         params={"companyId": "company_alpha"},
     )
-    assert approvals.status_code == 400
-    assert approvals.json()["error"]["type"] == "approval_company_scope_unsupported"
-    assert approvals.json()["error"]["message"] == (
+    assert company_scoped.status_code == 400
+    assert company_scoped.json()["error"]["type"] == "approval_company_scope_unsupported"
+    assert company_scoped.json()["error"]["message"] == (
         "companyId is not supported on /admin/approvals because elevated-access approvals are not company-scoped."
     )
+
+    tenant_scoped = client.get(
+        "/admin/approvals",
+        headers=headers,
+        params={"tenantId": "tenant_alpha"},
+    )
+    assert tenant_scoped.status_code == 400
+    assert tenant_scoped.json()["error"]["type"] == "approval_tenant_scope_unsupported"
+
+
+def test_shared_execution_approval_decisions_record_instance_scoped_audit_truth() -> None:
+    client = TestClient(app)
+    headers = _admin_headers(client)
+    instance_id = _create_instance(client, headers, instance_id="instance_alpha", company_id="company_alpha")
+    _run_id, execution_native_id = _open_execution_approval(company_id="company_alpha")
+    approval_id = build_execution_approval_id(
+        instance_id=instance_id,
+        company_id="company_alpha",
+        approval_id=execution_native_id,
+    )
+
+    approved = client.post(
+        f"/admin/approvals/{approval_id}/approve",
+        headers=headers,
+        params={"instanceId": instance_id},
+        json={"decision_note": "Approve the execution run after verifying the instance-scoped failure evidence."},
+    )
+
+    assert approved.status_code == 200
+    approval_payload = approved.json()["approval"]
+    assert approval_payload["status"] == "approved"
+    assert approval_payload["instance_id"] == instance_id
+    assert approval_payload["source"]["instance_id"] == instance_id
+
+    governance = get_governance_service()
+    audit_event = next(
+        item
+        for item in governance.list_audit_events(limit=20, company_id="company_alpha")
+        if item.action == "execution_approval_approved" and item.target_id == approval_id
+    )
+    assert audit_event.instance_id == instance_id
+    assert audit_event.metadata["instance_id"] == instance_id
+
+
+def test_shared_execution_approvals_require_instance_membership_and_separate_read_from_decide() -> None:
+    client = TestClient(app)
+    admin_headers = _admin_headers(client)
+    suffix = uuid4().hex[:8]
+    instance_id = _create_instance(client, admin_headers, instance_id=f"instance_{suffix}", company_id=f"company_{suffix}")
+    _run_id, execution_native_id = _open_execution_approval(company_id=f"company_{suffix}")
+    approval_id = build_execution_approval_id(
+        instance_id=instance_id,
+        company_id=f"company_{suffix}",
+        approval_id=execution_native_id,
+    )
+
+    operator_user_id, operator_headers = _create_admin_user_and_headers(
+        client,
+        admin_headers,
+        username=f"instance-approval-operator-{suffix}",
+        display_name="Instance Approval Operator",
+        role="operator",
+        password="Instance-Approval-Operator-123",
+    )
+
+    denied_listing = client.get(
+        "/admin/approvals",
+        headers=operator_headers,
+        params={"instanceId": instance_id},
+    )
+    assert denied_listing.status_code == 403
+    assert denied_listing.json()["error"]["type"] == "approval_forbidden"
+    assert denied_listing.json()["error"]["message"] == "instance_membership_required"
+
+    granted = client.put(
+        f"/admin/security/users/{operator_user_id}/memberships/{instance_id}",
+        headers=admin_headers,
+        json={"role": "operator", "status": "active"},
+    )
+    assert granted.status_code == 200
+
+    operator_headers = login_headers_allowing_password_rotation(
+        client,
+        username=f"instance-approval-operator-{suffix}",
+        password="Instance-Approval-Operator-123",
+    )
+
+    listing = client.get(
+        "/admin/approvals",
+        headers=operator_headers,
+        params={"instanceId": instance_id},
+    )
+    assert listing.status_code == 200
+    assert any(item["approval_id"] == approval_id for item in listing.json()["approvals"])
+
+    detail = client.get(
+        f"/admin/approvals/{approval_id}",
+        headers=operator_headers,
+        params={"instanceId": instance_id},
+    )
+    assert detail.status_code == 200
+    approval_payload = detail.json()["approval"]
+    assert approval_payload["instance_id"] == instance_id
+    assert approval_payload["actions"]["can_approve"] is False
+    assert approval_payload["actions"]["decision_blocked_reason"] == "missing_instance_permission:approvals.decide"
+
+    denied_decision = client.post(
+        f"/admin/approvals/{approval_id}/approve",
+        headers=operator_headers,
+        params={"instanceId": instance_id},
+        json={"decision_note": "Operators can review this execution approval but they cannot decide it."},
+    )
+    assert denied_decision.status_code == 403
+    assert denied_decision.json()["error"]["type"] == "approval_forbidden"
+    assert denied_decision.json()["error"]["message"] == "missing_instance_permission:approvals.decide"
+
+    approved = client.post(
+        f"/admin/approvals/{approval_id}/approve",
+        headers=admin_headers,
+        params={"instanceId": instance_id},
+        json={"decision_note": "Approve the instance-scoped execution approval after membership validation."},
+    )
+    assert approved.status_code == 200
+    assert approved.json()["approval"]["status"] == "approved"
 
 
 def test_shared_approvals_expose_elevated_access_requests_to_operator_observers_in_review_only_mode() -> None:

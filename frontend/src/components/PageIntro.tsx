@@ -1,7 +1,7 @@
 import { Link, useLocation } from "react-router-dom";
 
 import { isHrefCurrent } from "../app/navigation";
-import { getTenantIdFromSearchParams, withTenantScope } from "../app/tenantScope";
+import { getInstanceIdFromSearchParams, withQueryParams } from "../app/tenantScope";
 
 type IntroBadge = {
   label: string;
@@ -28,7 +28,8 @@ type PageIntroProps = {
 
 export function PageIntro({ eyebrow, title, description, question, links, badges = [], note }: PageIntroProps) {
   const location = useLocation();
-  const tenantId = getTenantIdFromSearchParams(new URLSearchParams(location.search));
+  const scopeSearchParams = new URLSearchParams(location.search);
+  const instanceId = getInstanceIdFromSearchParams(scopeSearchParams);
 
   return (
     <div className="fg-card fg-page-intro">
@@ -52,7 +53,7 @@ export function PageIntro({ eyebrow, title, description, question, links, badges
 
       <div className="fg-wayfinding-grid">
         {links.map((link) => {
-          const scopedTo = withTenantScope(link.to, tenantId);
+          const scopedTo = withQueryParams(link.to, { instanceId });
           const isCurrent = !link.disabled && isHrefCurrent(location.pathname, location.hash, scopedTo);
           const className = `fg-wayfinding-link${isCurrent ? " is-current" : ""}${link.disabled ? " is-disabled" : ""}`;
 

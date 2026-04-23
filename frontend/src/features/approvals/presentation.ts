@@ -159,8 +159,8 @@ function describeExecutionDecision(detail: ApprovalDetail): ApprovalBanner & { m
         tone: "success",
         title: "Execution run queued to resume",
         body: runState === "queued"
-          ? "ForgeGate recorded the approve decision and moved the run back to queued so the resume path can continue."
-          : "ForgeGate recorded the approve decision and resumed the waiting execution path.",
+          ? "ForgeFrame recorded the approve decision and moved the run back to queued so the resume path can continue."
+          : "ForgeFrame recorded the approve decision and resumed the waiting execution path.",
         message: "Execution run queued to resume.",
       };
     case "rejected":
@@ -168,7 +168,7 @@ function describeExecutionDecision(detail: ApprovalDetail): ApprovalBanner & { m
         return {
           tone: "warning",
           title: "Execution run entered cancel flow",
-          body: "ForgeGate recorded the reject decision and moved the run into cancel requested so the cancellation path can complete.",
+          body: "ForgeFrame recorded the reject decision and moved the run into cancel requested so the cancellation path can complete.",
           message: "Execution run entered cancel flow.",
         };
       }
@@ -177,7 +177,7 @@ function describeExecutionDecision(detail: ApprovalDetail): ApprovalBanner & { m
         return {
           tone: "warning",
           title: "Execution run entered compensating flow",
-          body: "ForgeGate recorded the reject decision and moved the run into compensating so rollback or cleanup work can continue.",
+          body: "ForgeFrame recorded the reject decision and moved the run into compensating so rollback or cleanup work can continue.",
           message: "Execution run entered compensating flow.",
         };
       }
@@ -186,7 +186,7 @@ function describeExecutionDecision(detail: ApprovalDetail): ApprovalBanner & { m
         return {
           tone: "danger",
           title: "Execution run moved to failed",
-          body: "ForgeGate recorded the reject decision and closed the waiting execution path as failed.",
+          body: "ForgeFrame recorded the reject decision and closed the waiting execution path as failed.",
           message: "Execution run moved to failed.",
         };
       }
@@ -316,7 +316,7 @@ export function describeApprovalDecisionConfirmation(
     return {
       tone: "warning",
       title: "Approve execution request?",
-      body: "ForgeGate will record the approve decision and let the waiting execution path resume or re-queue according to the backend run disposition.",
+      body: "ForgeFrame will record the approve decision and let the waiting execution path resume or re-queue according to the backend run disposition.",
       reviewLabel: "Review approval",
       confirmLabel: "Approve request",
     };
@@ -326,7 +326,7 @@ export function describeApprovalDecisionConfirmation(
     return {
       tone: "danger",
       title: "Reject request?",
-      body: "ForgeGate will deny this access request. The rejection rationale below will be recorded in audit history, and no elevated session will be issued.",
+      body: "ForgeFrame will deny this access request. The rejection rationale below will be recorded in audit history, and no elevated session will be issued.",
       reviewLabel: "Review rejection",
       confirmLabel: "Reject request",
     };
@@ -335,7 +335,7 @@ export function describeApprovalDecisionConfirmation(
   return {
     tone: "danger",
     title: "Reject request?",
-    body: "ForgeGate will record the reject decision and move the waiting execution path into its configured deny flow, such as failed, cancel, or compensating.",
+    body: "ForgeFrame will record the reject decision and move the waiting execution path into its configured deny flow, such as failed, cancel, or compensating.",
     reviewLabel: "Review rejection",
     confirmLabel: "Reject request",
   };

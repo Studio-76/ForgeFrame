@@ -7,6 +7,8 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
+from app.artifacts.models import ArtifactRecord
+
 
 APPROVAL_STATUSES = ("open", "approved", "rejected", "timed_out", "cancelled")
 ApprovalStatus = Literal["open", "approved", "rejected", "timed_out", "cancelled"]
@@ -24,7 +26,10 @@ _EXECUTION_APPROVAL_PREFIX = "run"
 _ELEVATED_ACCESS_APPROVAL_PREFIX = "elevated"
 
 
-def build_execution_approval_id(*, company_id: str, approval_id: str) -> str:
+def build_execution_approval_id(*, company_id: str, approval_id: str, instance_id: str | None = None) -> str:
+    normalized_instance_id = (instance_id or "").strip()
+    if normalized_instance_id:
+        return f"{_EXECUTION_APPROVAL_PREFIX}:{normalized_instance_id}:{company_id}:{approval_id}"
     return f"{_EXECUTION_APPROVAL_PREFIX}:{company_id}:{approval_id}"
 
 
@@ -40,7 +45,13 @@ def parse_shared_approval_id(value: str) -> tuple[ApprovalSourceKind, dict[str, 
             return "elevated_access", {"request_id": request_id}
         raise ValueError("shared_approval_id_invalid")
     if normalized.startswith(f"{_EXECUTION_APPROVAL_PREFIX}:"):
-        parts = normalized.split(":", 2)
+        parts = normalized.split(":")
+        if len(parts) == 4 and parts[1].strip() and parts[2].strip() and parts[3].strip():
+            return "execution_run", {
+                "instance_id": parts[1].strip(),
+                "company_id": parts[2].strip(),
+                "approval_id": parts[3].strip(),
+            }
         if len(parts) == 3 and parts[1].strip() and parts[2].strip():
             return "execution_run", {"company_id": parts[1].strip(), "approval_id": parts[2].strip()}
         raise ValueError("shared_approval_id_invalid")
@@ -64,8 +75,10 @@ class ApprovalSummary(BaseModel):
     opened_at: datetime
     decided_at: datetime | None = None
     expires_at: datetime | None = None
+    instance_id: str | None = None
     company_id: str | None = None
     issue_id: str | None = None
+    workspace_id: str | None = None
     requester: ApprovalActorSummary | None = None
     target: ApprovalActorSummary | None = None
     decision_actor: ApprovalActorSummary | None = None
@@ -76,4 +89,6 @@ class ApprovalSummary(BaseModel):
 class ApprovalDetail(ApprovalSummary):
     evidence: dict[str, Any] = Field(default_factory=dict)
     source: dict[str, Any] = Field(default_factory=dict)
+    artifacts: list[ArtifactRecord] = Field(default_factory=list)
+    workspace: dict[str, Any] = Field(default_factory=dict)
     actions: dict[str, Any] = Field(default_factory=dict)

@@ -5,12 +5,18 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const {
+  fetchInstancesMock,
+  createInstanceMock,
+  updateInstanceMock,
   fetchAccountsMock,
   fetchBootstrapReadinessMock,
   fetchOauthOnboardingMock,
   fetchProviderControlPlaneMock,
   fetchRuntimeKeysMock,
 } = vi.hoisted(() => ({
+  fetchInstancesMock: vi.fn(),
+  createInstanceMock: vi.fn(),
+  updateInstanceMock: vi.fn(),
   fetchAccountsMock: vi.fn(),
   fetchBootstrapReadinessMock: vi.fn(),
   fetchOauthOnboardingMock: vi.fn(),
@@ -23,6 +29,9 @@ vi.mock("../src/api/admin", async () => {
 
   return {
     ...actual,
+    fetchInstances: fetchInstancesMock,
+    createInstance: createInstanceMock,
+    updateInstance: updateInstanceMock,
     fetchAccounts: fetchAccountsMock,
     fetchBootstrapReadiness: fetchBootstrapReadinessMock,
     fetchOauthOnboarding: fetchOauthOnboardingMock,
@@ -34,6 +43,7 @@ vi.mock("../src/api/admin", async () => {
 import type {
   AdminSessionUser,
   GatewayAccount,
+  InstanceRecord,
   ProviderControlItem,
   RuntimeKey,
 } from "../src/api/admin";
@@ -56,6 +66,72 @@ function createSession(overrides: Partial<AdminSessionUser>): AdminSessionUser {
   };
 }
 
+function createOnboardingMetadata(overrides: Record<string, unknown> = {}) {
+  return {
+    onboarding_v4: {
+      operating_mode: "normative_public_https",
+      postgres_mode: "native_host",
+      fqdn: "forgeframe.example.com",
+      dns_ready: true,
+      port_80_ready: true,
+      port_443_ready: true,
+      tls_mode: "lets_encrypt",
+      certificate_status: "issued",
+      certificate_auto_renew: true,
+      helper_port_80_mode: "acme_redirect_only",
+      provider_direction: "mixed_control_plane",
+      autonomy_mode: "bounded_autonomy",
+      routing_default: "balanced",
+      allow_premium_escalation: true,
+      runtime_driver_mode: "embedded_control_plane",
+      edge_admission_mode: "disabled",
+      work_interaction_mode: "ops_assistant",
+      inbox_enabled: true,
+      tasks_enabled: true,
+      notifications_enabled: true,
+      assistant_mode: "ops",
+      first_success_action: "provider_verification",
+      first_artifact: "provider_preview",
+      operator_surface: "providers",
+      ...overrides,
+    },
+  };
+}
+
+function createLimitedOnboardingMetadata(overrides: Record<string, unknown> = {}) {
+  return createOnboardingMetadata({
+    operating_mode: "limited_evaluation",
+    fqdn: "",
+    dns_ready: false,
+    port_80_ready: false,
+    port_443_ready: false,
+    tls_mode: "disabled",
+    certificate_status: "manual",
+    certificate_auto_renew: false,
+    helper_port_80_mode: "not_available",
+    ...overrides,
+  });
+}
+
+function createInstanceRecord(overrides: Partial<InstanceRecord> = {}): InstanceRecord {
+  return {
+    instance_id: "instance_alpha",
+    slug: "instance-alpha",
+    display_name: "Alpha Instance",
+    description: "Alpha runtime slice",
+    status: "active",
+    tenant_id: "tenant_alpha",
+    company_id: "company_alpha",
+    deployment_mode: "linux_host_native",
+    exposure_mode: "same_origin",
+    is_default: true,
+    metadata: createOnboardingMetadata(),
+    created_at: "2026-04-21T09:50:00Z",
+    updated_at: "2026-04-21T09:50:00Z",
+    ...overrides,
+  };
+}
+
 function createBootstrapReadiness(ready = true) {
   return {
     status: "ok",
@@ -63,9 +139,9 @@ function createBootstrapReadiness(ready = true) {
     checks: [
       { id: "compose_file", ok: true, details: "docker/docker-compose.yml" },
       { id: "env_compose", ok: true, details: ".env.compose" },
-      { id: "postgres_url", ok: ready, details: "FORGEGATE_HARNESS_POSTGRES_URL" },
+      { id: "postgres_url", ok: ready, details: "FORGEFRAME_HARNESS_POSTGRES_URL" },
     ],
-    next_steps: ["Run ./scripts/bootstrap-forgegate.sh."],
+    next_steps: ["Run ./scripts/bootstrap-forgeframe.sh."],
     checked_at: "2026-04-21T10:00:00Z",
   };
 }
@@ -80,9 +156,10 @@ function createProvider(overrides: Partial<ProviderControlItem> = {}): ProviderC
     config: {},
     ready: true,
     readiness_reason: null,
+    contract_classification: "runtime-ready",
     capabilities: {},
     tool_calling_level: "full",
-    compatibility_tier: "beta_plus",
+    compatibility_depth: "validated",
     runtime_readiness: "ready",
     streaming_readiness: "ready",
     provider_axis: "oauth_account_providers",
@@ -193,9 +270,74 @@ function collectLinkHrefs(): string[] {
     .filter((href): href is string => Boolean(href));
 }
 
+function getField<T extends Element>(selector: string): T {
+  const field = container.querySelector(selector);
+  if (!field) {
+    throw new Error(`Field not found: ${selector}`);
+  }
+  return field as T;
+}
+
+function setElementValue(element: HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement, value: string) {
+  const prototype =
+    element instanceof HTMLTextAreaElement
+      ? HTMLTextAreaElement.prototype
+      : element instanceof HTMLSelectElement
+        ? HTMLSelectElement.prototype
+        : HTMLInputElement.prototype;
+  const descriptor = Object.getOwnPropertyDescriptor(prototype, "value");
+  descriptor?.set?.call(element, value);
+}
+
+async function changeTextControl(name: string, value: string) {
+  const field = getField<HTMLInputElement | HTMLTextAreaElement>(`[name="${name}"]`);
+  await act(async () => {
+    setElementValue(field, value);
+    field.dispatchEvent(new Event("input", { bubbles: true }));
+    field.dispatchEvent(new Event("change", { bubbles: true }));
+  });
+}
+
+async function changeSelect(name: string, value: string) {
+  const field = getField<HTMLSelectElement>(`select[name="${name}"]`);
+  await act(async () => {
+    setElementValue(field, value);
+    field.dispatchEvent(new Event("change", { bubbles: true }));
+  });
+}
+
+async function changeCheckbox(name: string, checked: boolean) {
+  const field = getField<HTMLInputElement>(`input[name="${name}"]`);
+  await act(async () => {
+    if (field.checked !== checked) {
+      field.click();
+    }
+  });
+}
+
+async function submitInterviewForm() {
+  const form = getField<HTMLFormElement>("form");
+  await act(async () => {
+    form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+  });
+  await flushEffects();
+}
+
 beforeEach(() => {
   vi.resetAllMocks();
 
+  fetchInstancesMock.mockResolvedValue({
+    status: "ok",
+    instances: [createInstanceRecord()],
+  });
+  createInstanceMock.mockResolvedValue({
+    status: "ok",
+    instance: createInstanceRecord(),
+  });
+  updateInstanceMock.mockResolvedValue({
+    status: "ok",
+    instance: createInstanceRecord(),
+  });
   fetchBootstrapReadinessMock.mockResolvedValue(createBootstrapReadiness(true));
   fetchProviderControlPlaneMock.mockResolvedValue({
     status: "ok",
@@ -240,7 +382,7 @@ afterEach(() => {
 });
 
 describe("Onboarding page checklist", () => {
-  it("shows the go-live success state for standard admin sessions", async () => {
+  it("shows the go-live success state for standard admin sessions when onboarding truth is normative", async () => {
     await renderOnboardingPage(createSession({ role: "admin", username: "admin", display_name: "Admin" }));
 
     expect(fetchBootstrapReadinessMock).toHaveBeenCalledTimes(1);
@@ -250,32 +392,36 @@ describe("Onboarding page checklist", () => {
     expect(fetchRuntimeKeysMock).toHaveBeenCalledTimes(1);
 
     expect(container.textContent).toContain("Admin setup actions enabled");
+    expect(container.textContent).toContain("Normative path recorded");
     expect(container.textContent).toContain("Ready for live traffic");
-    expect(container.textContent).toContain("ForgeGate is ready for live traffic from the current control-plane view.");
+    expect(container.textContent).toContain("ForgeFrame is ready for live traffic from the current control-plane view.");
     expect(container.textContent).toContain("1/1 configured OAuth/account targets have live probe or runtime evidence.");
-    expect(container.textContent).not.toContain("configured OAuth/account targets are ready.");
+    expect(container.textContent).toContain("Checklist progress");
+    expect(container.textContent).toContain("5/5");
     expect(container.textContent).toContain("Open Dashboard");
   });
 
-  it("threads tenant scope through onboarding fetches and checklist links", async () => {
+  it("threads instance scope through onboarding fetches and checklist links", async () => {
     await renderOnboardingPage(
       createSession({ role: "admin", username: "admin", display_name: "Admin" }),
-      "/onboarding?tenantId=tenant-acme",
+      "/onboarding?instanceId=instance_alpha",
     );
 
-    expect(fetchProviderControlPlaneMock).toHaveBeenCalledWith("tenant-acme");
-    expect(fetchOauthOnboardingMock).toHaveBeenCalledWith("tenant-acme");
-    expect(fetchAccountsMock).toHaveBeenCalledWith("tenant-acme");
-    expect(fetchRuntimeKeysMock).toHaveBeenCalledWith("tenant-acme");
-    expect(container.textContent).toContain("Tenant scope: tenant-acme");
+    expect(fetchInstancesMock).toHaveBeenCalledTimes(1);
+    expect(fetchProviderControlPlaneMock).toHaveBeenCalledWith("instance_alpha");
+    expect(fetchOauthOnboardingMock).toHaveBeenCalledWith("instance_alpha");
+    expect(fetchAccountsMock).toHaveBeenCalledWith("instance_alpha");
+    expect(fetchRuntimeKeysMock).toHaveBeenCalledWith("instance_alpha");
+    expect(container.textContent).toContain("Instance scope: Alpha Instance");
+    expect(container.textContent).toContain("Current binding: tenant tenant_alpha");
 
     const hrefs = collectLinkHrefs();
-    expect(hrefs).toContain("/onboarding?tenantId=tenant-acme");
-    expect(hrefs).toContain("/providers?tenantId=tenant-acme");
-    expect(hrefs).toContain("/accounts?tenantId=tenant-acme");
-    expect(hrefs).toContain("/api-keys?tenantId=tenant-acme");
-    expect(hrefs).toContain("/dashboard?tenantId=tenant-acme");
-    expect(hrefs).toContain("/providers?tenantId=tenant-acme#provider-health-runs");
+    expect(hrefs).toContain("/onboarding?instanceId=instance_alpha");
+    expect(hrefs).toContain("/providers?instanceId=instance_alpha");
+    expect(hrefs).toContain("/accounts?instanceId=instance_alpha");
+    expect(hrefs).toContain("/api-keys?instanceId=instance_alpha");
+    expect(hrefs).toContain("/dashboard?instanceId=instance_alpha");
+    expect(hrefs).toContain("/providers?instanceId=instance_alpha#provider-health-runs");
   });
 
   it("counts bridge-only probe evidence without treating the target as live-provider proof", async () => {
@@ -299,7 +445,7 @@ describe("Onboarding page checklist", () => {
           provider_key: "github_copilot",
           readiness: "partial",
           configured: true,
-          readiness_reason: "Live probe evidence is recorded, but this target remains onboarding/bridge-only in the current beta slice.",
+          readiness_reason: "Live probe evidence is recorded, but this target remains onboarding/bridge-only in the current release truth.",
           operational_depth: "bridge_probe_evidenced",
           evidence: {
             live_probe: {
@@ -363,7 +509,7 @@ describe("Onboarding page checklist", () => {
     await renderOnboardingPage(createSession({ role: "viewer", username: "viewer", display_name: "Viewer" }));
 
     expect(container.textContent).toContain("Viewer access");
-    expect(container.textContent).toContain("Viewer sessions can inspect the full checklist, but provider verification requires an operator or admin, and runtime access issuance requires an admin.");
+    expect(container.textContent).toContain("Viewer sessions can inspect the full checklist, but provider verification requires an operator or admin, and onboarding persistence plus runtime access issuance require an admin.");
     expect(container.textContent).toContain("Handoff required");
   });
 
@@ -377,27 +523,27 @@ describe("Onboarding page checklist", () => {
     }));
 
     expect(container.textContent).toContain("Read only session");
-    expect(container.textContent).toContain("Read-only sessions can inspect bootstrap, provider, and runtime access posture, but provider verification and runtime access issuance still require a standard operator or admin session.");
+    expect(container.textContent).toContain("Read-only sessions can inspect bootstrap, provider, runtime access, and onboarding posture, but they cannot persist changes or complete verification and issuance.");
   });
 
-  it("does not treat the ForgeGate baseline smoke path as live provider verification", async () => {
+  it("does not treat the ForgeFrame baseline smoke path as live provider verification", async () => {
     fetchProviderControlPlaneMock.mockResolvedValueOnce({
       status: "ok",
       object: "provider_control_plane",
       providers: [
         createProvider({
-          provider: "forgegate_baseline",
-          label: "ForgeGate Baseline",
+          provider: "forgeframe_baseline",
+          label: "ForgeFrame Baseline",
           integration_class: "internal",
           tool_calling_level: "none",
-          compatibility_tier: "beta",
+          compatibility_depth: "constrained",
           provider_axis: "openai_compatible_provider",
           auth_mechanism: "internal",
           oauth_required: false,
           oauth_mode: null,
           models: [
             {
-              id: "forgegate-baseline-chat-v1",
+              id: "forgeframe-baseline-chat-v1",
               source: "static",
               discovery_status: "listed",
               active: true,
@@ -434,9 +580,9 @@ describe("Onboarding page checklist", () => {
 
     expect(container.textContent).toContain("Only internal smoke routes are runtime-ready; a real provider still needs live verification.");
     expect(container.textContent).toContain("1 runtime-ready provider routes, 0 eligible for live go-live proof.");
-    expect(container.textContent).toContain("ForgeGate baseline is runtime-ready for internal smoke checks, but it does not count as verified live provider coverage for go-live.");
+    expect(container.textContent).toContain("ForgeFrame baseline is runtime-ready for internal smoke checks, but it does not count as verified live provider coverage for go-live.");
     expect(container.textContent).toContain("Provider verification still blocks go-live.");
-    expect(container.textContent).not.toContain("ForgeGate is ready for live traffic from the current control-plane view.");
+    expect(container.textContent).not.toContain("ForgeFrame is ready for live traffic from the current control-plane view.");
   });
 
   it("counts bridge-only OAuth targets with probe evidence even when onboarding readiness stays partial", async () => {
@@ -453,7 +599,7 @@ describe("Onboarding page checklist", () => {
           evidence: {
             live_probe: {
               status: "observed",
-              details: "Live probe evidence is recorded, but this target remains onboarding/bridge-only in the current beta slice.",
+              details: "Live probe evidence is recorded, but this target remains onboarding/bridge-only in the current release truth.",
             },
             runtime: { status: "missing" },
           },
@@ -502,7 +648,7 @@ describe("Onboarding page checklist", () => {
     expect(container.textContent).toContain("Active runtime keys exist, but none currently permit live write traffic on `/v1/chat/completions` or `/v1/responses`.");
     expect(container.textContent).toContain("Global runtime key: missing chat:write, responses:write for the default go-live route set.");
     expect(container.textContent).toContain("Runtime key scope coverage still blocks go-live.");
-    expect(container.textContent).not.toContain("ForgeGate is ready for live traffic from the current control-plane view.");
+    expect(container.textContent).not.toContain("ForgeFrame is ready for live traffic from the current control-plane view.");
   });
 
   it("blocks go-live when a full-scope account-bound key cannot reach the verified provider", async () => {
@@ -523,6 +669,123 @@ describe("Onboarding page checklist", () => {
     expect(container.textContent).toContain("At least one full-scope runtime key must be able to reach a verified live provider through its current account bindings before go-live.");
     expect(container.textContent).toContain("Bound full-scope key: account bindings allow openai_api, while the verified live provider set is openai_codex.");
     expect(container.textContent).toContain("Open Accounts");
-    expect(container.textContent).not.toContain("ForgeGate is ready for live traffic from the current control-plane view.");
+    expect(container.textContent).not.toContain("ForgeFrame is ready for live traffic from the current control-plane view.");
+  });
+
+  it("persists onboarding truth on an existing instance and clears typed blockers once normative data is saved", async () => {
+    fetchInstancesMock
+      .mockResolvedValueOnce({
+        status: "ok",
+        instances: [createInstanceRecord({ metadata: createLimitedOnboardingMetadata(), updated_at: "2026-04-21T09:50:00Z" })],
+      })
+      .mockResolvedValueOnce({
+        status: "ok",
+        instances: [createInstanceRecord({ metadata: createOnboardingMetadata({ fqdn: "customer.example.com" }), updated_at: "2026-04-21T11:15:00Z" })],
+      });
+    updateInstanceMock.mockResolvedValueOnce({
+      status: "ok",
+      instance: createInstanceRecord({ metadata: createOnboardingMetadata({ fqdn: "customer.example.com" }), updated_at: "2026-04-21T11:15:00Z" }),
+    });
+
+    await renderOnboardingPage(createSession({ role: "admin", username: "admin", display_name: "Admin" }));
+
+    expect(container.textContent).toContain("limited_mode_selected");
+
+    await changeSelect("operatingMode", "normative_public_https");
+    await changeTextControl("fqdn", "customer.example.com");
+    await changeSelect("tlsMode", "lets_encrypt");
+    await changeSelect("certificateStatus", "issued");
+    await changeSelect("helperPort80Mode", "acme_redirect_only");
+    await changeCheckbox("dnsReady", true);
+    await changeCheckbox("port80Ready", true);
+    await changeCheckbox("port443Ready", true);
+    await changeCheckbox("certificateAutoRenew", true);
+    await submitInterviewForm();
+
+    expect(updateInstanceMock).toHaveBeenCalledWith("instance_alpha", expect.objectContaining({
+      display_name: "Alpha Instance",
+      tenant_id: "tenant_alpha",
+      company_id: "company_alpha",
+      deployment_mode: "linux_host_native",
+      exposure_mode: "same_origin",
+      metadata: expect.objectContaining({
+        onboarding_v4: expect.objectContaining({
+          operating_mode: "normative_public_https",
+          fqdn: "customer.example.com",
+          dns_ready: true,
+          port_80_ready: true,
+          port_443_ready: true,
+          tls_mode: "lets_encrypt",
+          certificate_status: "issued",
+          certificate_auto_renew: true,
+        }),
+      }),
+    }));
+    expect(container.textContent).toContain("Onboarding truth for Alpha Instance saved.");
+    expect(container.textContent).toContain("Ready for live traffic");
+    expect(container.textContent).not.toContain("limited_mode_selected");
+  });
+
+  it("creates the first instance from onboarding when the catalog is empty", async () => {
+    fetchInstancesMock
+      .mockResolvedValueOnce({
+        status: "ok",
+        instances: [],
+      })
+      .mockResolvedValueOnce({
+        status: "ok",
+        instances: [createInstanceRecord({
+          instance_id: "customer-prod",
+          slug: "customer-prod",
+          display_name: "Customer Production",
+          tenant_id: "customer-prod",
+          company_id: "customer-prod",
+          metadata: createOnboardingMetadata({ fqdn: "customer.example.com" }),
+        })],
+      });
+    createInstanceMock.mockResolvedValueOnce({
+      status: "ok",
+      instance: createInstanceRecord({
+        instance_id: "customer-prod",
+        slug: "customer-prod",
+        display_name: "Customer Production",
+        tenant_id: "customer-prod",
+        company_id: "customer-prod",
+        metadata: createOnboardingMetadata({ fqdn: "customer.example.com" }),
+      }),
+    });
+
+    await renderOnboardingPage(createSession({ role: "admin", username: "admin", display_name: "Admin" }));
+
+    await changeTextControl("instanceId", "customer-prod");
+    await changeTextControl("displayName", "Customer Production");
+    await changeTextControl("tenantId", "customer-prod");
+    await changeTextControl("companyId", "customer-prod");
+    await changeSelect("operatingMode", "normative_public_https");
+    await changeTextControl("fqdn", "customer.example.com");
+    await changeSelect("tlsMode", "lets_encrypt");
+    await changeSelect("helperPort80Mode", "acme_redirect_only");
+    await changeCheckbox("dnsReady", true);
+    await changeCheckbox("port80Ready", true);
+    await changeCheckbox("port443Ready", true);
+    await changeSelect("certificateStatus", "issued");
+    await changeCheckbox("certificateAutoRenew", true);
+    await submitInterviewForm();
+
+    expect(createInstanceMock).toHaveBeenCalledWith(expect.objectContaining({
+      instance_id: "customer-prod",
+      display_name: "Customer Production",
+      tenant_id: "customer-prod",
+      company_id: "customer-prod",
+      deployment_mode: "linux_host_native",
+      exposure_mode: "same_origin",
+      metadata: expect.objectContaining({
+        onboarding_v4: expect.objectContaining({
+          fqdn: "customer.example.com",
+          operating_mode: "normative_public_https",
+        }),
+      }),
+    }));
+    expect(container.textContent).toContain("First instance Customer Production created and onboarding truth saved.");
   });
 });

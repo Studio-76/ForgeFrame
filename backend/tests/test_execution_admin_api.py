@@ -3,34 +3,18 @@ from uuid import uuid4
 
 from fastapi.testclient import TestClient
 
+from conftest import admin_headers as shared_admin_headers, login_headers_allowing_password_rotation
 from app.execution.dependencies import get_execution_transition_service
 from app.governance.service import get_governance_service
 from app.main import app
 
 
 def _login_headers(client: TestClient, *, username: str, password: str) -> dict[str, str]:
-    response = client.post(
-        "/admin/auth/login",
-        json={"username": username, "password": password},
-    )
-    assert response.status_code == 201
-    headers = {"Authorization": f"Bearer {response.json()['access_token']}"}
-    if response.json()["user"]["must_rotate_password"] is True:
-        rotation = client.post(
-            "/admin/auth/rotate-password",
-            headers=headers,
-            json={"current_password": password, "new_password": password},
-        )
-        assert rotation.status_code == 200
-    return headers
+    return login_headers_allowing_password_rotation(client, username=username, password=password)
 
 
 def _admin_headers(client: TestClient) -> dict[str, str]:
-    return _login_headers(
-        client,
-        username="admin",
-        password=os.environ["FORGEGATE_BOOTSTRAP_ADMIN_PASSWORD"],
-    )
+    return shared_admin_headers(client)
 
 
 def _operator_headers(client: TestClient) -> dict[str, str]:
@@ -53,8 +37,32 @@ def _operator_headers(client: TestClient) -> dict[str, str]:
     return _login_headers(client, username=username, password=password)
 
 
-def _execution_scope(company_id: str, **params: str) -> dict[str, str]:
-    return {"companyId": company_id, **params}
+def _create_instance(
+    client: TestClient,
+    headers: dict[str, str],
+    *,
+    instance_id: str,
+    company_id: str,
+    tenant_id: str | None = None,
+) -> str:
+    response = client.post(
+        "/admin/instances/",
+        headers=headers,
+        json={
+            "instance_id": instance_id,
+            "display_name": instance_id,
+            "tenant_id": tenant_id or instance_id,
+            "company_id": company_id,
+            "deployment_mode": "restricted_eval",
+            "exposure_mode": "local_only",
+        },
+    )
+    assert response.status_code == 201
+    return response.json()["instance"]["instance_id"]
+
+
+def _execution_scope(instance_id: str, **params: str) -> dict[str, str]:
+    return {"instanceId": instance_id, **params}
 
 
 def _impersonation_headers(client: TestClient, *, role: str = "operator") -> dict[str, str]:
@@ -181,11 +189,12 @@ def _dead_letter_next_attempt(*, company_id: str, run_id: str, worker_key: str =
 def test_admin_execution_runs_expose_dead_letter_detail() -> None:
     client = TestClient(app)
     headers = _admin_headers(client)
+    instance_id = _create_instance(client, headers, instance_id="instance_alpha", company_id="company_alpha")
     run_id = _seed_dead_letter_run(company_id="company_alpha")
 
     listing = client.get(
         "/admin/execution/runs",
-        params=_execution_scope("company_alpha", state="dead_lettered"),
+        params=_execution_scope(instance_id, state="dead_lettered"),
         headers=headers,
     )
 
@@ -199,7 +208,7 @@ def test_admin_execution_runs_expose_dead_letter_detail() -> None:
 
     detail = client.get(
         f"/admin/execution/runs/{run_id}",
-        params=_execution_scope("company_alpha"),
+        params=_execution_scope(instance_id),
         headers=headers,
     )
 
@@ -214,12 +223,13 @@ def test_admin_execution_runs_expose_dead_letter_detail() -> None:
 def test_admin_execution_replay_persists_reason_and_audit_event() -> None:
     client = TestClient(app)
     headers = _admin_headers(client)
+    instance_id = _create_instance(client, headers, instance_id="instance_alpha", company_id="company_alpha")
     run_id = _seed_dead_letter_run(company_id="company_alpha")
 
     replay = client.post(
         f"/admin/execution/runs/{run_id}/replay",
         json={"reason": "Replay after provider credentials were rotated and verified."},
-        params=_execution_scope("company_alpha"),
+        params=_execution_scope(instance_id),
         headers=headers,
     )
 
@@ -231,12 +241,13 @@ def test_admin_execution_replay_persists_reason_and_audit_event() -> None:
     assert replay_payload["audit"]["action"] == "execution_run_replay"
     assert replay_payload["audit"]["target_type"] == "execution_run"
     assert replay_payload["audit"]["target_id"] == run_id
+    assert replay_payload["audit"]["instance_id"] == instance_id
     assert replay_payload["audit"]["company_id"] == "company_alpha"
     assert replay_payload["audit"]["event_id"].startswith("audit_")
 
     detail = client.get(
         f"/admin/execution/runs/{run_id}",
-        params=_execution_scope("company_alpha"),
+        params=_execution_scope(instance_id),
         headers=headers,
     )
     assert detail.status_code == 200
@@ -253,13 +264,15 @@ def test_admin_execution_replay_persists_reason_and_audit_event() -> None:
 def test_operator_execution_replay_allows_non_impersonated_sessions() -> None:
     client = TestClient(app)
     operator_headers = _operator_headers(client)
+    admin_headers = _admin_headers(client)
+    instance_id = _create_instance(client, admin_headers, instance_id="instance_alpha", company_id="company_alpha")
     run_id = _seed_dead_letter_run(company_id="company_alpha")
     reason = "Replay after provider credentials were rotated and verified."
 
     replay = client.post(
         f"/admin/execution/runs/{run_id}/replay",
         json={"reason": reason},
-        params=_execution_scope("company_alpha"),
+        params=_execution_scope(instance_id),
         headers=operator_headers,
     )
 
@@ -268,11 +281,12 @@ def test_operator_execution_replay_allows_non_impersonated_sessions() -> None:
     assert replay_payload["run_id"] == run_id
     assert replay_payload["run_state"] == "queued"
     assert replay_payload["deduplicated"] is False
+    assert replay_payload["audit"]["instance_id"] == instance_id
     assert replay_payload["audit"]["company_id"] == "company_alpha"
 
     detail = client.get(
         f"/admin/execution/runs/{run_id}",
-        params=_execution_scope("company_alpha"),
+        params=_execution_scope(instance_id),
         headers=operator_headers,
     )
     assert detail.status_code == 200
@@ -291,8 +305,10 @@ def test_operator_execution_replay_allows_non_impersonated_sessions() -> None:
 
 def test_admin_execution_replay_replays_original_outcome_for_matching_idempotency_key() -> None:
     client = TestClient(app)
+    bootstrap_headers = _admin_headers(client)
+    instance_id = _create_instance(client, bootstrap_headers, instance_id="instance_alpha", company_id="company_alpha")
     headers = {
-        **_admin_headers(client),
+        **bootstrap_headers,
         "Idempotency-Key": "idem_api_replay_1",
         "X-Request-Id": "req_replay_api_1",
     }
@@ -302,29 +318,29 @@ def test_admin_execution_replay_replays_original_outcome_for_matching_idempotenc
     first = client.post(
         f"/admin/execution/runs/{run_id}/replay",
         json={"reason": reason},
-        params=_execution_scope("company_alpha"),
+        params=_execution_scope(instance_id),
         headers=headers,
     )
     second = client.post(
         f"/admin/execution/runs/{run_id}/replay",
         json={"reason": reason},
-        params=_execution_scope("company_alpha"),
+        params=_execution_scope(instance_id),
         headers=headers,
     )
 
     assert first.status_code == 200
     assert second.status_code == 200
     assert second.json() == first.json()
-    assert second.headers["X-ForgeGate-Idempotent-Replay"] == "true"
+    assert second.headers["X-ForgeFrame-Idempotent-Replay"] == "true"
     assert second.headers["Idempotency-Key"] == "idem_api_replay_1"
-    assert second.headers["X-ForgeGate-Request-Id"] == "req_replay_api_1"
-    assert second.headers["X-ForgeGate-Correlation-Id"] == "req_replay_api_1"
-    assert second.headers["X-ForgeGate-Causation-Id"] == "req_replay_api_1"
+    assert second.headers["X-ForgeFrame-Request-Id"] == "req_replay_api_1"
+    assert second.headers["X-ForgeFrame-Correlation-Id"] == "req_replay_api_1"
+    assert second.headers["X-ForgeFrame-Causation-Id"] == "req_replay_api_1"
 
     detail = client.get(
         f"/admin/execution/runs/{run_id}",
-        params=_execution_scope("company_alpha"),
-        headers=_admin_headers(client),
+        params=_execution_scope(instance_id),
+        headers=bootstrap_headers,
     )
     assert detail.status_code == 200
     retry_commands = [item for item in detail.json()["run"]["commands"] if item["command_type"] == "retry"]
@@ -340,19 +356,21 @@ def test_admin_execution_replay_replays_original_outcome_for_matching_idempotenc
 
 def test_admin_execution_replay_rejects_idempotency_fingerprint_mismatch() -> None:
     client = TestClient(app)
-    headers = {**_admin_headers(client), "Idempotency-Key": "idem_api_replay_conflict"}
+    bootstrap_headers = _admin_headers(client)
+    instance_id = _create_instance(client, bootstrap_headers, instance_id="instance_alpha", company_id="company_alpha")
+    headers = {**bootstrap_headers, "Idempotency-Key": "idem_api_replay_conflict"}
     run_id = _seed_dead_letter_run(company_id="company_alpha")
 
     first = client.post(
         f"/admin/execution/runs/{run_id}/replay",
         json={"reason": "Replay after provider credentials were rotated and verified."},
-        params=_execution_scope("company_alpha"),
+        params=_execution_scope(instance_id),
         headers=headers,
     )
     second = client.post(
         f"/admin/execution/runs/{run_id}/replay",
         json={"reason": "Replay after provider credentials were manually cancelled instead."},
-        params=_execution_scope("company_alpha"),
+        params=_execution_scope(instance_id),
         headers=headers,
     )
 
@@ -362,8 +380,8 @@ def test_admin_execution_replay_rejects_idempotency_fingerprint_mismatch() -> No
 
     detail = client.get(
         f"/admin/execution/runs/{run_id}",
-        params=_execution_scope("company_alpha"),
-        headers=_admin_headers(client),
+        params=_execution_scope(instance_id),
+        headers=bootstrap_headers,
     )
     assert detail.status_code == 200
     commands = detail.json()["run"]["commands"]
@@ -373,19 +391,20 @@ def test_admin_execution_replay_rejects_idempotency_fingerprint_mismatch() -> No
 def test_admin_execution_replay_without_idempotency_key_is_deduplicated() -> None:
     client = TestClient(app)
     headers = _admin_headers(client)
+    instance_id = _create_instance(client, headers, instance_id="instance_alpha", company_id="company_alpha")
     run_id = _seed_dead_letter_run(company_id="company_alpha")
     reason = "Replay after provider credentials were rotated and verified."
 
     first = client.post(
         f"/admin/execution/runs/{run_id}/replay",
         json={"reason": reason},
-        params=_execution_scope("company_alpha"),
+        params=_execution_scope(instance_id),
         headers=headers,
     )
     duplicate = client.post(
         f"/admin/execution/runs/{run_id}/replay",
         json={"reason": reason},
-        params=_execution_scope("company_alpha"),
+        params=_execution_scope(instance_id),
         headers=headers,
     )
 
@@ -398,7 +417,7 @@ def test_admin_execution_replay_without_idempotency_key_is_deduplicated() -> Non
 
     detail = client.get(
         f"/admin/execution/runs/{run_id}",
-        params=_execution_scope("company_alpha"),
+        params=_execution_scope(instance_id),
         headers=headers,
     )
     assert detail.status_code == 200
@@ -418,13 +437,14 @@ def test_admin_execution_replay_without_idempotency_key_is_deduplicated() -> Non
 def test_admin_execution_replay_without_idempotency_key_allows_new_terminal_attempt() -> None:
     client = TestClient(app)
     headers = _admin_headers(client)
+    instance_id = _create_instance(client, headers, instance_id="instance_alpha", company_id="company_alpha")
     run_id = _seed_dead_letter_run(company_id="company_alpha")
     reason = "Replay after provider credentials were rotated and verified."
 
     first = client.post(
         f"/admin/execution/runs/{run_id}/replay",
         json={"reason": reason},
-        params=_execution_scope("company_alpha"),
+        params=_execution_scope(instance_id),
         headers=headers,
     )
     assert first.status_code == 200
@@ -434,7 +454,7 @@ def test_admin_execution_replay_without_idempotency_key_allows_new_terminal_atte
     second = client.post(
         f"/admin/execution/runs/{run_id}/replay",
         json={"reason": reason},
-        params=_execution_scope("company_alpha"),
+        params=_execution_scope(instance_id),
         headers=headers,
     )
 
@@ -444,7 +464,7 @@ def test_admin_execution_replay_without_idempotency_key_allows_new_terminal_atte
 
     detail = client.get(
         f"/admin/execution/runs/{run_id}",
-        params=_execution_scope("company_alpha"),
+        params=_execution_scope(instance_id),
         headers=headers,
     )
     assert detail.status_code == 200
@@ -458,23 +478,24 @@ def test_admin_execution_replay_without_idempotency_key_allows_new_terminal_atte
 
 def test_admin_execution_replay_rejects_read_only_impersonation_sessions() -> None:
     client = TestClient(app)
+    admin_headers = _admin_headers(client)
+    instance_id = _create_instance(client, admin_headers, instance_id="instance_alpha", company_id="company_alpha")
     run_id = _seed_dead_letter_run(company_id="company_alpha")
     impersonation_headers = _impersonation_headers(client)
 
     replay = client.post(
         f"/admin/execution/runs/{run_id}/replay",
         json={"reason": "Replay after provider credentials were rotated and verified."},
-        params=_execution_scope("company_alpha"),
+        params=_execution_scope(instance_id),
         headers=impersonation_headers,
     )
 
     assert replay.status_code == 403
     assert replay.json()["detail"] == "impersonation_session_read_only"
 
-    admin_headers = _admin_headers(client)
     detail = client.get(
         f"/admin/execution/runs/{run_id}",
-        params=_execution_scope("company_alpha"),
+        params=_execution_scope(instance_id),
         headers=admin_headers,
     )
     assert detail.status_code == 200
@@ -488,12 +509,14 @@ def test_admin_execution_replay_rejects_read_only_impersonation_sessions() -> No
 
 def test_admin_execution_reads_allow_read_only_impersonation_sessions() -> None:
     client = TestClient(app)
+    admin_headers = _admin_headers(client)
+    instance_id = _create_instance(client, admin_headers, instance_id="instance_alpha", company_id="company_alpha")
     run_id = _seed_dead_letter_run(company_id="company_alpha")
     impersonation_headers = _impersonation_headers(client)
 
     listing = client.get(
         "/admin/execution/runs",
-        params=_execution_scope("company_alpha", state="dead_lettered"),
+        params=_execution_scope(instance_id, state="dead_lettered"),
         headers=impersonation_headers,
     )
 
@@ -503,7 +526,7 @@ def test_admin_execution_reads_allow_read_only_impersonation_sessions() -> None:
 
     detail = client.get(
         f"/admin/execution/runs/{run_id}",
-        params=_execution_scope("company_alpha"),
+        params=_execution_scope(instance_id),
         headers=impersonation_headers,
     )
 
@@ -604,12 +627,14 @@ def test_full_harness_export_requires_admin_and_keeps_redacted_exports_available
 def test_admin_execution_runs_are_filtered_to_request_company_scope() -> None:
     client = TestClient(app)
     headers = _admin_headers(client)
+    alpha_instance_id = _create_instance(client, headers, instance_id="instance_alpha", company_id="company_alpha")
+    _create_instance(client, headers, instance_id="instance_beta", company_id="company_beta")
     alpha_run_id = _seed_dead_letter_run(company_id="company_alpha")
     beta_run_id = _seed_dead_letter_run(company_id="company_beta")
 
     listing = client.get(
         "/admin/execution/runs",
-        params=_execution_scope("company_alpha", state="dead_lettered"),
+        params=_execution_scope(alpha_instance_id, state="dead_lettered"),
         headers=headers,
     )
 
@@ -622,11 +647,13 @@ def test_admin_execution_runs_are_filtered_to_request_company_scope() -> None:
 def test_admin_execution_detail_and_replay_do_not_cross_company_boundaries() -> None:
     client = TestClient(app)
     headers = _admin_headers(client)
+    alpha_instance_id = _create_instance(client, headers, instance_id="instance_alpha", company_id="company_alpha")
+    beta_instance_id = _create_instance(client, headers, instance_id="instance_beta", company_id="company_beta")
     beta_run_id = _seed_dead_letter_run(company_id="company_beta")
 
     detail = client.get(
         f"/admin/execution/runs/{beta_run_id}",
-        params=_execution_scope("company_alpha"),
+        params=_execution_scope(alpha_instance_id),
         headers=headers,
     )
 
@@ -636,7 +663,7 @@ def test_admin_execution_detail_and_replay_do_not_cross_company_boundaries() -> 
     replay = client.post(
         f"/admin/execution/runs/{beta_run_id}/replay",
         json={"reason": "Replay after provider credentials were rotated and verified."},
-        params=_execution_scope("company_alpha"),
+        params=_execution_scope(alpha_instance_id),
         headers=headers,
     )
 
@@ -645,7 +672,7 @@ def test_admin_execution_detail_and_replay_do_not_cross_company_boundaries() -> 
 
     beta_detail = client.get(
         f"/admin/execution/runs/{beta_run_id}",
-        params=_execution_scope("company_beta"),
+        params=_execution_scope(beta_instance_id),
         headers=headers,
     )
 
@@ -658,15 +685,16 @@ def test_admin_execution_detail_and_replay_do_not_cross_company_boundaries() -> 
 def test_admin_execution_routes_require_explicit_company_scope() -> None:
     client = TestClient(app)
     headers = _admin_headers(client)
+    instance_id = _create_instance(client, headers, instance_id="instance_alpha", company_id="company_alpha")
     run_id = _seed_dead_letter_run(company_id="company_alpha")
 
     listing = client.get("/admin/execution/runs", headers=headers)
     assert listing.status_code == 400
-    assert listing.json()["detail"] == "execution_company_scope_required"
+    assert listing.json()["detail"] == "execution_instance_scope_required"
 
     detail = client.get(f"/admin/execution/runs/{run_id}", headers=headers)
     assert detail.status_code == 400
-    assert detail.json()["detail"] == "execution_company_scope_required"
+    assert detail.json()["detail"] == "execution_instance_scope_required"
 
     replay = client.post(
         f"/admin/execution/runs/{run_id}/replay",
@@ -674,4 +702,11 @@ def test_admin_execution_routes_require_explicit_company_scope() -> None:
         headers=headers,
     )
     assert replay.status_code == 400
-    assert replay.json()["detail"] == "execution_company_scope_required"
+    assert replay.json()["detail"] == "execution_instance_scope_required"
+
+    scoped = client.get(
+        "/admin/execution/runs",
+        params=_execution_scope(instance_id, state="dead_lettered"),
+        headers=headers,
+    )
+    assert scoped.status_code == 200

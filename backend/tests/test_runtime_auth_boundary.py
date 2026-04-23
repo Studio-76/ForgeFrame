@@ -3,6 +3,7 @@ import os
 from fastapi.testclient import TestClient
 import pytest
 
+from conftest import admin_headers as shared_admin_headers
 from app.api.runtime.dependencies import clear_runtime_dependency_caches
 from app.authz.evaluator import PolicyEvaluator
 from app.governance.service import get_governance_service
@@ -10,23 +11,7 @@ from app.main import app
 
 
 def _admin_headers(client: TestClient) -> dict[str, str]:
-    response = client.post(
-        "/admin/auth/login",
-        json={"username": "admin", "password": os.environ["FORGEGATE_BOOTSTRAP_ADMIN_PASSWORD"]},
-    )
-    assert response.status_code == 201
-    headers = {"Authorization": f"Bearer {response.json()['access_token']}"}
-    if response.json()["user"]["must_rotate_password"] is True:
-        rotation = client.post(
-            "/admin/auth/rotate-password",
-            headers=headers,
-            json={
-                "current_password": os.environ["FORGEGATE_BOOTSTRAP_ADMIN_PASSWORD"],
-                "new_password": os.environ["FORGEGATE_BOOTSTRAP_ADMIN_PASSWORD"],
-            },
-        )
-        assert rotation.status_code == 200
-    return headers
+    return shared_admin_headers(client)
 
 
 def _issue_unbound_runtime_key(client: TestClient, *, scopes: list[str]) -> dict[str, object]:
@@ -78,6 +63,8 @@ def _issue_stale_account_runtime_key(
     ("method", "path", "payload", "scopes"),
     [
         ("GET", "/v1/models", None, ["models:read"]),
+        ("GET", "/v1/responses/resp_boundary", None, ["responses:write"]),
+        ("GET", "/v1/responses/resp_boundary/input_items", None, ["responses:write"]),
         (
             "POST",
             "/v1/chat/completions",
@@ -118,8 +105,8 @@ def test_unbound_runtime_keys_are_rejected_before_policy_evaluation(
     assert error["type"] == "runtime_key_unbound"
     assert error["message"] == "Runtime key must be bound to a gateway account before it can access runtime APIs."
     assert error["details"] == {}
-    assert error["request_id"] == response.headers["X-ForgeGate-Request-Id"]
-    assert response.headers["X-ForgeGate-Correlation-Id"] == error["request_id"]
+    assert error["request_id"] == response.headers["X-ForgeFrame-Request-Id"]
+    assert response.headers["X-ForgeFrame-Correlation-Id"] == error["request_id"]
 
     governance = get_governance_service()
     denial = next(
@@ -137,6 +124,8 @@ def test_unbound_runtime_keys_are_rejected_before_policy_evaluation(
     ("method", "path", "payload", "scopes"),
     [
         ("GET", "/v1/models", None, ["models:read"]),
+        ("GET", "/v1/responses/resp_boundary", None, ["responses:write"]),
+        ("GET", "/v1/responses/resp_boundary/input_items", None, ["responses:write"]),
         (
             "POST",
             "/v1/chat/completions",
@@ -177,8 +166,8 @@ def test_stale_account_runtime_keys_are_rejected_before_policy_evaluation(
     assert error["type"] == "runtime_key_unbound"
     assert error["message"] == "Runtime key must be bound to a gateway account before it can access runtime APIs."
     assert error["details"] == {}
-    assert error["request_id"] == response.headers["X-ForgeGate-Request-Id"]
-    assert response.headers["X-ForgeGate-Correlation-Id"] == error["request_id"]
+    assert error["request_id"] == response.headers["X-ForgeFrame-Request-Id"]
+    assert response.headers["X-ForgeFrame-Correlation-Id"] == error["request_id"]
 
     governance = get_governance_service()
     denial = next(

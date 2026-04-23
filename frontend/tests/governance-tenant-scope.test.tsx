@@ -4,14 +4,11 @@ import { act, type ReactElement, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const {
-  fetchAccountsMock,
-  fetchAuditHistoryMock,
-  fetchRuntimeKeysMock,
-} = vi.hoisted(() => ({
+const { fetchAccountsMock, fetchAuditHistoryMock, fetchRuntimeKeysMock, fetchInstancesMock } = vi.hoisted(() => ({
   fetchAccountsMock: vi.fn(),
   fetchAuditHistoryMock: vi.fn(),
   fetchRuntimeKeysMock: vi.fn(),
+  fetchInstancesMock: vi.fn(),
 }));
 
 vi.mock("../src/api/admin", async () => {
@@ -22,15 +19,11 @@ vi.mock("../src/api/admin", async () => {
     fetchAccounts: fetchAccountsMock,
     fetchAuditHistory: fetchAuditHistoryMock,
     fetchRuntimeKeys: fetchRuntimeKeysMock,
+    fetchInstances: fetchInstancesMock,
   };
 });
 
-import type {
-  AdminSessionUser,
-  AuditHistoryResponse,
-  GatewayAccount,
-  RuntimeKey,
-} from "../src/api/admin";
+import type { AdminSessionUser, AuditHistoryResponse, GatewayAccount, InstanceRecord, RuntimeKey } from "../src/api/admin";
 import { AccountsPage } from "../src/pages/AccountsPage";
 import { ApiKeysPage } from "../src/pages/ApiKeysPage";
 import { withAppContext } from "./testContext";
@@ -45,9 +38,30 @@ const operatorSession: AdminSessionUser = {
   role: "operator",
 };
 
+function createInstance(overrides: Partial<InstanceRecord> = {}): InstanceRecord {
+  return {
+    instance_id: "instance_alpha",
+    slug: "instance-alpha",
+    display_name: "Alpha Instance",
+    description: "Alpha instance",
+    status: "active",
+    tenant_id: "tenant_alpha",
+    company_id: "company_alpha",
+    deployment_mode: "restricted_eval",
+    exposure_mode: "local_only",
+    is_default: true,
+    metadata: {},
+    created_at: "2026-04-22T08:00:00Z",
+    updated_at: "2026-04-22T08:00:00Z",
+    ...overrides,
+  };
+}
+
 function createAccount(overrides: Partial<GatewayAccount> = {}): GatewayAccount {
   return {
     account_id: "acct_alpha",
+    instance_id: "instance_alpha",
+    tenant_id: "tenant_alpha",
     label: "Tenant Alpha",
     status: "active",
     provider_bindings: ["openai_codex"],
@@ -63,6 +77,8 @@ function createRuntimeKey(overrides: Partial<RuntimeKey> = {}): RuntimeKey {
   return {
     key_id: "key_alpha",
     account_id: "acct_alpha",
+    instance_id: "instance_alpha",
+    tenant_id: "tenant_alpha",
     label: "Tenant Alpha Key",
     prefix: "fg_live_alpha",
     scopes: ["models:read", "chat:write", "responses:write"],
@@ -73,21 +89,15 @@ function createRuntimeKey(overrides: Partial<RuntimeKey> = {}): RuntimeKey {
   };
 }
 
-function createAuditHistoryResponse({
-  eventId,
-  targetType,
-}: {
-  eventId: string;
-  targetType: string;
-}): AuditHistoryResponse {
+function createAuditHistoryResponse(eventId: string, targetType: string): AuditHistoryResponse {
   return {
     status: "ok",
     items: [
       {
         eventId,
         createdAt: "2026-04-21T21:45:00Z",
-        tenantId: "acct_alpha",
-        companyId: null,
+        tenantId: "tenant_alpha",
+        companyId: "company_alpha",
         actionKey: "runtime_key_issue",
         actionLabel: "Runtime key issued",
         status: "ok",
@@ -147,6 +157,10 @@ function collectLinkHrefs(): string[] {
 
 beforeEach(() => {
   vi.resetAllMocks();
+  fetchInstancesMock.mockResolvedValue({
+    status: "ok",
+    instances: [createInstance()],
+  });
   fetchAccountsMock.mockResolvedValue({
     status: "ok",
     accounts: [createAccount()],
@@ -155,11 +169,7 @@ beforeEach(() => {
     status: "ok",
     keys: [createRuntimeKey()],
   });
-  fetchAuditHistoryMock.mockResolvedValue(createAuditHistoryResponse({
-    eventId: "audit_evt_account_scope",
-    targetType: "gateway_account",
-  }));
-
+  fetchAuditHistoryMock.mockResolvedValue(createAuditHistoryResponse("audit_evt_account_scope", "gateway_account"));
   container = document.createElement("div");
   document.body.innerHTML = "";
   document.body.appendChild(container);
@@ -176,48 +186,46 @@ afterEach(() => {
   root = null;
 });
 
-describe("governance tenant scope", () => {
-  it("loads accounts and audit handoff within the active tenant scope", async () => {
-    await renderPage("/accounts?tenantId=acct_alpha", <AccountsPage />);
+describe("governance instance scope", () => {
+  it("loads accounts and audit handoff within the active instance scope", async () => {
+    await renderPage("/accounts?instanceId=instance_alpha", <AccountsPage />);
 
-    expect(fetchAccountsMock).toHaveBeenCalledWith("acct_alpha");
+    expect(fetchInstancesMock).toHaveBeenCalledTimes(1);
+    expect(fetchAccountsMock).toHaveBeenCalledWith("instance_alpha");
     expect(fetchAuditHistoryMock).toHaveBeenCalledWith({
-      tenantId: "acct_alpha",
+      instanceId: "instance_alpha",
       window: "all",
       targetType: "gateway_account",
       targetId: null,
       limit: 1,
     });
-    expect(container.textContent).toContain("Tenant scope: Tenant Alpha");
+    expect(container.textContent).toContain("Instance scope: Alpha Instance");
 
     const hrefs = collectLinkHrefs();
-    expect(hrefs).toContain("/accounts?tenantId=acct_alpha");
-    expect(hrefs).toContain("/api-keys?tenantId=acct_alpha");
-    expect(hrefs).toContain("/logs?tenantId=acct_alpha&auditWindow=all&auditTargetType=gateway_account&auditEvent=audit_evt_account_scope#audit-history");
+    expect(hrefs).toContain("/accounts?instanceId=instance_alpha");
+    expect(hrefs).toContain("/api-keys?instanceId=instance_alpha");
+    expect(hrefs).toContain("/logs?instanceId=instance_alpha&auditWindow=all&auditTargetType=gateway_account&auditEvent=audit_evt_account_scope#audit-history");
   });
 
-  it("loads runtime keys and account inventory within the active tenant scope", async () => {
-    fetchAuditHistoryMock.mockResolvedValueOnce(createAuditHistoryResponse({
-      eventId: "audit_evt_key_scope",
-      targetType: "runtime_key",
-    }));
+  it("loads runtime keys and account inventory within the active instance scope", async () => {
+    fetchAuditHistoryMock.mockResolvedValueOnce(createAuditHistoryResponse("audit_evt_key_scope", "runtime_key"));
 
-    await renderPage("/api-keys?tenantId=acct_alpha", <ApiKeysPage />);
+    await renderPage("/api-keys?instanceId=instance_alpha", <ApiKeysPage />);
 
-    expect(fetchRuntimeKeysMock).toHaveBeenCalledWith("acct_alpha");
-    expect(fetchAccountsMock).toHaveBeenCalledWith("acct_alpha");
+    expect(fetchRuntimeKeysMock).toHaveBeenCalledWith("instance_alpha");
+    expect(fetchAccountsMock).toHaveBeenCalledWith("instance_alpha");
     expect(fetchAuditHistoryMock).toHaveBeenCalledWith({
-      tenantId: "acct_alpha",
+      instanceId: "instance_alpha",
       window: "all",
       targetType: "runtime_key",
       targetId: null,
       limit: 1,
     });
-    expect(container.textContent).toContain("Tenant scope: Tenant Alpha");
+    expect(container.textContent).toContain("Instance scope: Alpha Instance");
 
     const hrefs = collectLinkHrefs();
-    expect(hrefs).toContain("/api-keys?tenantId=acct_alpha");
-    expect(hrefs).toContain("/accounts?tenantId=acct_alpha");
-    expect(hrefs).toContain("/logs?tenantId=acct_alpha&auditWindow=all&auditTargetType=runtime_key&auditEvent=audit_evt_key_scope#audit-history");
+    expect(hrefs).toContain("/api-keys?instanceId=instance_alpha");
+    expect(hrefs).toContain("/accounts?instanceId=instance_alpha");
+    expect(hrefs).toContain("/logs?instanceId=instance_alpha&auditWindow=all&auditTargetType=runtime_key&auditEvent=audit_evt_key_scope#audit-history");
   });
 });

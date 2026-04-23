@@ -1,4 +1,4 @@
-"""Policy-evaluation contracts for ForgeGate authz and tenant-aware route guards."""
+"""Policy-evaluation contracts for ForgeFrame authz and tenant-aware route guards."""
 
 from __future__ import annotations
 

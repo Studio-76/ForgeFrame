@@ -15,6 +15,39 @@ from app.harness import HarnessProviderProfile
 
 class ControlPlaneOAuthTargetsDomainMixin:
     @staticmethod
+    def _oauth_target_contract_classification(
+        provider_key: str,
+        status: OAuthAccountTargetStatus,
+    ) -> str:
+        if provider_key in {"openai_codex", "gemini"}:
+            if status.readiness == "ready":
+                return "runtime-ready"
+            if status.configured and status.runtime_bridge_enabled:
+                return "partial-runtime"
+            return "onboarding-only"
+        if status.configured or status.probe_enabled or status.harness_profile_enabled:
+            return "bridge-only"
+        return "onboarding-only"
+
+    @staticmethod
+    def _oauth_target_queue_lane(contract_classification: str) -> str:
+        if contract_classification in {"runtime-ready", "partial-runtime"}:
+            return "sync_interactive"
+        if contract_classification == "bridge-only":
+            return "bridge_probe_only"
+        return "not_applicable"
+
+    @staticmethod
+    def _oauth_target_parallelism_mode(contract_classification: str) -> str:
+        return "not_applicable" if contract_classification == "onboarding-only" else "not_enforced"
+
+    @staticmethod
+    def _oauth_target_cost_posture(auth_kind: str) -> str:
+        if auth_kind == "oauth_account":
+            return "avoided-cost is tracked while direct provider billing stays outside ForgeFrame."
+        return "API-key traffic is metered directly in ForgeFrame usage and cost summaries."
+
+    @staticmethod
     def _native_oauth_bridge_path_enabled(status: OAuthAccountTargetStatus) -> bool:
         return status.runtime_bridge_enabled or status.probe_enabled
 
@@ -158,12 +191,60 @@ class ControlPlaneOAuthTargetsDomainMixin:
                 )
             else:
                 reason = "Credentials are configured, but the native runtime bridge is still disabled."
+        contract_classification = self._oauth_target_contract_classification(
+            provider_key,
+            OAuthAccountTargetStatus(
+                provider_key=provider_key,
+                configured=configured,
+                runtime_bridge_enabled=runtime_bridge_enabled,
+                probe_enabled=probe_enabled,
+                harness_profile_enabled=False,
+                contract_classification="onboarding-only",
+                queue_lane="not_applicable",
+                parallelism_mode="not_applicable",
+                parallelism_limit=None,
+                session_reuse_strategy="unknown",
+                escalation_support="not_modeled_in_oauth_axis",
+                cost_posture="unknown",
+                operator_surface="/oauth-targets",
+                operator_truth="",
+                readiness=readiness,
+                readiness_reason=reason,
+                auth_kind=auth_kind,
+                oauth_mode=(auth_state.oauth_mode if provider_key == "openai_codex" and auth_state.auth_mode == "oauth" else None),
+                oauth_flow_support=(auth_state.oauth_flow_support if provider_key == "openai_codex" and auth_state.auth_mode == "oauth" else None),
+                evidence=evidence,
+            ),
+        )
+        session_reuse_strategy = (
+            "pre-issued OAuth access token is forwarded per request; ForgeFrame does not mint, refresh, or reuse a managed session."
+            if auth_state.auth_mode == "oauth"
+            else "API key is forwarded per request; no ForgeFrame-managed session reuse exists for this target."
+        )
+        operator_truth = (
+            auth_state.oauth_operator_truth
+            if provider_key == "openai_codex" and auth_state.auth_mode == "oauth"
+            else (
+                "ForgeFrame consumes a pre-issued Gemini OAuth access token and does not initiate or refresh that OAuth flow itself."
+                if provider_key == "gemini" and auth_state.auth_mode == "oauth"
+                else "ForgeFrame uses direct API-key mode for this target; OAuth session semantics do not apply."
+            )
+        )
         status = OAuthAccountTargetStatus(
             provider_key=provider_key,
             configured=configured,
             runtime_bridge_enabled=runtime_bridge_enabled,
             probe_enabled=probe_enabled,
             harness_profile_enabled=False,
+            contract_classification=contract_classification,  # type: ignore[arg-type]
+            queue_lane=self._oauth_target_queue_lane(contract_classification),  # type: ignore[arg-type]
+            parallelism_mode=self._oauth_target_parallelism_mode(contract_classification),  # type: ignore[arg-type]
+            parallelism_limit=None,
+            session_reuse_strategy=session_reuse_strategy,
+            escalation_support="not_modeled_in_oauth_axis",
+            cost_posture=self._oauth_target_cost_posture(auth_kind),
+            operator_surface="/oauth-targets",
+            operator_truth=operator_truth,
             readiness=readiness,
             readiness_reason=reason,
             auth_kind=auth_kind,
@@ -208,15 +289,25 @@ class ControlPlaneOAuthTargetsDomainMixin:
             readiness = "partial"
             reason = "OAuth/account credentials configured; runtime truth remains onboarding/bridge-only until explicit live evidence exists."
         if configured and evidence.live_probe.status == "observed":
-            reason = "Live probe evidence is recorded, but this target remains onboarding/bridge-only in the current beta slice."
+            reason = "Live probe evidence is recorded, but this target remains onboarding/bridge-only in the current release truth."
         elif configured and (probe_enabled or bridge_enabled):
-            reason = "OAuth/account operational knobs are enabled, but this axis still remains onboarding/bridge-only in the current beta slice."
+            reason = "OAuth/account operational knobs are enabled, but this axis still remains onboarding/bridge-only in the current release truth."
+        contract_classification = "bridge-only" if configured or probe_enabled or bridge_enabled else "onboarding-only"
         return OAuthAccountTargetStatus(
             provider_key=provider_key,
             configured=configured,
             runtime_bridge_enabled=bridge_enabled,
             probe_enabled=probe_enabled,
             harness_profile_enabled=bridge_enabled,
+            contract_classification=contract_classification,  # type: ignore[arg-type]
+            queue_lane=self._oauth_target_queue_lane(contract_classification),  # type: ignore[arg-type]
+            parallelism_mode=self._oauth_target_parallelism_mode(contract_classification),  # type: ignore[arg-type]
+            parallelism_limit=None,
+            session_reuse_strategy="Pre-issued OAuth access token is forwarded through bridge/profile operations only; no managed refresh or session reuse contract exists.",
+            escalation_support="native_runtime_unavailable",
+            cost_posture=self._oauth_target_cost_posture("oauth_account"),
+            operator_surface="/oauth-targets",
+            operator_truth="ForgeFrame can probe or sync bridge profiles for this target, but no native runtime lane is shipped for it in the current release truth.",
             readiness=readiness,
             readiness_reason=reason,
             auth_kind="oauth_account",
@@ -327,7 +418,7 @@ class ControlPlaneOAuthTargetsDomainMixin:
                     ready=True,
                     probe_mode="readiness_only",
                     status="warning",
-                    details="Gemini probe flow disabled; set FORGEGATE_GEMINI_PROBE_ENABLED=true.",
+                    details="Gemini probe flow disabled; set FORGEFRAME_GEMINI_PROBE_ENABLED=true.",
                     checked_at=now,
                 )
                 self._record_oauth_operation(provider_key, "probe", result.status, result.details, now)

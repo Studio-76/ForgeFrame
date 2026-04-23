@@ -17,10 +17,14 @@ from app.approvals.models import (
     build_execution_approval_id,
     parse_shared_approval_id,
 )
+from app.auth.local_auth import role_allows
 from app.execution.service import ExecutionTransitionService
 from app.governance.models import AuthenticatedAdmin
 from app.governance.service import GovernanceService
+from app.instances.models import InstanceRecord
+from app.instances.service import InstanceService, get_instance_service
 from app.storage.execution_repository import RunApprovalLinkORM, RunORM
+from app.workspaces.service import WorkInteractionAdminService
 
 SessionFactory = Callable[[], Session]
 
@@ -32,10 +36,13 @@ class ApprovalAdminService:
         session_factory: SessionFactory,
         governance: GovernanceService,
         execution: ExecutionTransitionService,
+        instance_service: InstanceService | None = None,
     ) -> None:
         self._session_factory = session_factory
         self._governance = governance
         self._execution = execution
+        self._instances = instance_service or get_instance_service()
+        self._work = WorkInteractionAdminService(session_factory)
 
     @staticmethod
     def _parse_dt(value: str | datetime | None) -> datetime | None:
@@ -120,9 +127,9 @@ class ApprovalAdminService:
         conflict_state = self._governance.get_elevated_access_request_conflict_state(
             request_id=str(payload["request_id"]),
         )
-        can_reject = actor.role == "admin" and actor.user_id != payload.get("requested_by_user_id") and is_open
+        can_reject = role_allows(actor.role, "admin") and actor.user_id != payload.get("requested_by_user_id") and is_open
         can_approve = can_reject and not bool(conflict_state["has_conflict"])
-        if actor.role != "admin":
+        if not role_allows(actor.role, "admin"):
             approve_blocked_reason = "admin_role_required"
             reject_blocked_reason = "admin_role_required"
         elif actor.user_id == payload.get("requested_by_user_id"):
@@ -172,10 +179,30 @@ class ApprovalAdminService:
             },
         )
 
-    @staticmethod
-    def _build_execution_summary(link: RunApprovalLinkORM, run: RunORM) -> ApprovalSummary:
+    def _resolve_instance_for_company(self, company_id: str) -> InstanceRecord | None:
+        try:
+            return self._instances.resolve_instance(
+                company_id=company_id,
+                allow_default=False,
+                allow_legacy_backfill=True,
+            )
+        except ValueError:
+            return None
+
+    def _build_execution_summary(
+        self,
+        link: RunApprovalLinkORM,
+        run: RunORM,
+        *,
+        instance: InstanceRecord | None = None,
+    ) -> ApprovalSummary:
+        instance = instance or self._resolve_instance_for_company(link.company_id)
         return ApprovalSummary(
-            approval_id=build_execution_approval_id(company_id=link.company_id, approval_id=link.approval_id),
+            approval_id=build_execution_approval_id(
+                instance_id=instance.instance_id if instance is not None else None,
+                company_id=link.company_id,
+                approval_id=link.approval_id,
+            ),
             source_kind="execution_run",
             native_approval_id=link.approval_id,
             approval_type="execution_run",
@@ -183,8 +210,10 @@ class ApprovalAdminService:
             title=f"Execution approval for {run.run_kind}",
             opened_at=link.opened_at,
             decided_at=link.decided_at,
+            instance_id=instance.instance_id if instance is not None else None,
             company_id=link.company_id,
             issue_id=run.issue_id,
+            workspace_id=run.workspace_id,
             decision_actor=ApprovalActorSummary(user_id=link.decision_actor_id),
         )
 
@@ -194,13 +223,32 @@ class ApprovalAdminService:
         run: RunORM,
         *,
         actor: AuthenticatedAdmin,
+        instance: InstanceRecord | None = None,
     ) -> ApprovalDetail:
-        summary = self._build_execution_summary(link, run)
-        can_decide = actor.role == "admin" and summary.status == "open"
-        if actor.role != "admin":
-            blocked_reason = "admin_role_required"
-        elif summary.status != "open":
+        instance = instance or self._resolve_instance_for_company(link.company_id)
+        summary = self._build_execution_summary(link, run, instance=instance)
+        workspace = (
+            self._work.get_workspace_summary(company_id=link.company_id, workspace_id=run.workspace_id)
+            if run.workspace_id
+            else None
+        )
+        decision_permission_error: str | None = None
+        if instance is None:
+            decision_permission_error = "instance_membership_required"
+        else:
+            try:
+                self._governance.authorize_admin_instance_permission(
+                    actor=actor,
+                    instance=instance,
+                    permission_key="approvals.decide",
+                )
+            except PermissionError as exc:
+                decision_permission_error = str(exc)
+        can_decide = decision_permission_error is None and summary.status == "open"
+        if summary.status != "open":
             blocked_reason = "approval_not_open"
+        elif decision_permission_error is not None:
+            blocked_reason = decision_permission_error
         else:
             blocked_reason = None
         return ApprovalDetail(
@@ -212,12 +260,21 @@ class ApprovalAdminService:
                 "run_kind": run.run_kind,
             },
             source={
+                "instance_id": instance.instance_id if instance is not None else None,
+                "tenant_id": instance.tenant_id if instance is not None else None,
                 "run_id": run.id,
                 "attempt_id": link.attempt_id,
                 "company_id": link.company_id,
                 "issue_id": run.issue_id,
+                "workspace_id": run.workspace_id,
                 "current_step_key": run.current_step_key,
             },
+            artifacts=self._work.list_artifacts_for_target(
+                company_id=link.company_id,
+                target_kind="approval",
+                target_id=summary.approval_id,
+            ),
+            workspace=workspace.model_dump(mode="json") if workspace is not None else {},
             actions={
                 "can_approve": can_decide,
                 "can_reject": can_decide,
@@ -225,11 +282,41 @@ class ApprovalAdminService:
             },
         )
 
+    def _authorized_execution_instances(
+        self,
+        *,
+        actor: AuthenticatedAdmin,
+        permission_key: str,
+    ) -> list[InstanceRecord]:
+        return self._governance.list_accessible_instances(
+            actor=actor,
+            instances=self._instances.list_instances(),
+            permission_key=permission_key,
+        )
+
     def _list_execution_approvals(
         self,
         *,
+        actor: AuthenticatedAdmin,
         status: str | None,
+        instance: InstanceRecord | None = None,
     ) -> list[ApprovalSummary]:
+        if instance is not None:
+            self._governance.authorize_admin_instance_permission(
+                actor=actor,
+                instance=instance,
+                permission_key="approvals.read",
+            )
+            accessible_instances = [instance]
+        else:
+            accessible_instances = self._authorized_execution_instances(
+                actor=actor,
+                permission_key="approvals.read",
+            )
+            if not accessible_instances:
+                return []
+        allowed_company_ids = {item.company_id for item in accessible_instances}
+        instance_by_company = {item.company_id: item for item in accessible_instances}
         with self._session_factory() as session:
             stmt = (
                 select(RunApprovalLinkORM, RunORM)
@@ -242,10 +329,18 @@ class ApprovalAdminService:
                 )
                 .order_by(RunApprovalLinkORM.opened_at.desc())
             )
+            stmt = stmt.where(RunApprovalLinkORM.company_id.in_(allowed_company_ids))
             if status is not None:
                 stmt = stmt.where(RunApprovalLinkORM.gate_status == status)
             rows = session.execute(stmt).all()
-            return [self._build_execution_summary(link, run) for link, run in rows]
+            return [
+                self._build_execution_summary(
+                    link,
+                    run,
+                    instance=instance_by_company.get(link.company_id),
+                )
+                for link, run in rows
+            ]
 
     def _get_execution_approval(self, *, company_id: str, approval_id: str) -> tuple[RunApprovalLinkORM, RunORM]:
         with self._session_factory() as session:
@@ -273,6 +368,7 @@ class ApprovalAdminService:
         actor: AuthenticatedAdmin,
         status: str | None = None,
         limit: int = 100,
+        instance: InstanceRecord | None = None,
     ) -> list[ApprovalSummary]:
         normalized_status = self._normalize_status(status)
         approvals: list[ApprovalSummary] = []
@@ -283,7 +379,13 @@ class ApprovalAdminService:
                 gate_status=normalized_status,
             )
         )
-        approvals.extend(self._list_execution_approvals(status=normalized_status))
+        approvals.extend(
+            self._list_execution_approvals(
+                actor=actor,
+                status=normalized_status,
+                instance=instance,
+            )
+        )
         approvals.sort(key=self._sort_opened_at, reverse=True)
         return approvals[: max(1, min(limit, 200))]
 
@@ -292,6 +394,7 @@ class ApprovalAdminService:
         *,
         actor: AuthenticatedAdmin,
         approval_id: str,
+        instance: InstanceRecord | None = None,
     ) -> ApprovalDetail:
         source_kind, parts = parse_shared_approval_id(approval_id)
         if source_kind == "elevated_access":
@@ -300,8 +403,23 @@ class ApprovalAdminService:
                 actor=actor,
             )
             return self._build_elevated_access_detail(payload, actor=actor)
+        resolved_instance = instance or self._resolve_instance_for_company(parts["company_id"])
+        if resolved_instance is None:
+            raise LookupError("approval_not_found")
+        if parts["company_id"] != resolved_instance.company_id:
+            raise LookupError("approval_not_found")
+        self._governance.authorize_admin_instance_permission(
+            actor=actor,
+            instance=resolved_instance,
+            permission_key="approvals.read",
+        )
         link, run = self._get_execution_approval(company_id=parts["company_id"], approval_id=parts["approval_id"])
-        return self._build_execution_detail(link, run, actor=actor)
+        return self._build_execution_detail(
+            link,
+            run,
+            actor=actor,
+            instance=resolved_instance,
+        )
 
     def decide_approval(
         self,
@@ -312,6 +430,7 @@ class ApprovalAdminService:
         decision_note: str,
         idempotency_key: str,
         request_fingerprint_hash: str,
+        instance: InstanceRecord | None = None,
     ) -> ApprovalDetail:
         source_kind, parts = parse_shared_approval_id(approval_id)
         if source_kind == "elevated_access":
@@ -329,7 +448,16 @@ class ApprovalAdminService:
                 )
             )
             return self._build_elevated_access_detail(payload, actor=actor)
-
+        resolved_instance = instance or self._resolve_instance_for_company(parts["company_id"])
+        if resolved_instance is None:
+            raise LookupError("approval_not_found")
+        if parts["company_id"] != resolved_instance.company_id:
+            raise LookupError("approval_not_found")
+        self._governance.authorize_admin_instance_permission(
+            actor=actor,
+            instance=resolved_instance,
+            permission_key="approvals.decide",
+        )
         result = self._execution.decide_approval(
             company_id=parts["company_id"],
             approval_id=parts["approval_id"],
@@ -348,14 +476,22 @@ class ApprovalAdminService:
             status="ok" if approved else "warning",
             details=f"Execution approval '{parts['approval_id']}' {'approved' if approved else 'rejected'}.",
             metadata={
+                "instance_id": resolved_instance.instance_id if resolved_instance is not None else None,
                 "company_id": parts["company_id"],
                 "native_approval_id": parts["approval_id"],
                 "decision_note": decision_note.strip(),
                 "command_id": result.command_id,
             },
+            instance_id=resolved_instance.instance_id if resolved_instance is not None else None,
+            tenant_id=resolved_instance.tenant_id if resolved_instance is not None else None,
             company_id=parts["company_id"],
         )
-        return self._build_execution_detail(link, run, actor=actor)
+        return self._build_execution_detail(
+            link,
+            run,
+            actor=actor,
+            instance=resolved_instance,
+        )
     @staticmethod
     def _sort_opened_at(item: ApprovalSummary) -> datetime:
         return item.opened_at if item.opened_at.tzinfo is not None else item.opened_at.replace(tzinfo=UTC)

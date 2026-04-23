@@ -14,13 +14,15 @@ from app.api.admin.security import (
     require_admin_role,
     require_admin_write_session,
 )
+from app.auth.local_auth import role_allows
 from app.governance.errors import GovernanceConflictError, GovernanceEligibilityError, GovernanceNotFoundError
 from app.governance.models import AuthenticatedAdmin
 from app.governance.service import GovernanceService, get_governance_service
+from app.instances.service import InstanceService, get_instance_service
 
 router = APIRouter(prefix="/security", tags=["admin-security"])
 _SECURITY_IDEMPOTENCY_MESSAGE = (
-    "Idempotency-Key is not supported for admin security mutations until ForgeGate can persist replay-safe security "
+    "Idempotency-Key is not supported for admin security mutations until ForgeFrame can persist replay-safe security "
     "outcomes without storing credentials or minting duplicate privileged sessions."
 )
 
@@ -37,6 +39,11 @@ class AdminUserUpdateRequest(BaseModel):
     role: str | None = None
     status: str | None = None
     must_rotate_password: Literal[True] | None = None
+
+
+class AdminInstanceMembershipRequest(BaseModel):
+    role: Literal["owner", "admin", "operator", "viewer"]
+    status: Literal["active", "disabled"] = "active"
 
 
 class AdminPasswordRotateRequest(BaseModel):
@@ -92,7 +99,7 @@ def security_bootstrap(
     }
     # Operators need pre-submit elevated-access posture, but secret/bootstrap governance
     # details remain limited to full admin sessions.
-    if admin.role == "admin":
+    if role_allows(admin.role, "admin"):
         response.update(
             {
                 "bootstrap": service.bootstrap_status(),
@@ -179,8 +186,87 @@ def rotate_admin_password(
             actor=admin,
         )
     except ValueError as exc:
-        return _security_error(status.HTTP_404_NOT_FOUND, "admin_password_rotation_failed", str(exc))
+        error_type = "admin_user_not_found" if str(exc) == "admin_user_not_found" else "admin_password_rotation_failed"
+        error_status = status.HTTP_404_NOT_FOUND if error_type == "admin_user_not_found" else status.HTTP_400_BAD_REQUEST
+        return _security_error(error_status, error_type, str(exc))
     return {"status": "ok", "user": user.model_dump()}
+
+
+@router.get("/users/{user_id}/memberships")
+def list_admin_user_memberships(
+    user_id: str,
+    _admin: AuthenticatedAdmin = Depends(require_admin_role("admin")),
+    service: GovernanceService = Depends(get_governance_service),
+) -> object:
+    try:
+        memberships = service.list_admin_instance_memberships(user_id)
+    except ValueError as exc:
+        return _security_error(status.HTTP_404_NOT_FOUND, "admin_user_not_found", str(exc))
+    return {"status": "ok", "memberships": [item.model_dump(mode="json") for item in memberships]}
+
+
+@router.put("/users/{user_id}/memberships/{instance_id}")
+def upsert_admin_user_membership(
+    user_id: str,
+    instance_id: str,
+    payload: AdminInstanceMembershipRequest,
+    request: Request,
+    admin: AuthenticatedAdmin = Depends(require_admin_mutation_role("admin")),
+    service: GovernanceService = Depends(get_governance_service),
+    instances: InstanceService = Depends(get_instance_service),
+) -> object:
+    unsupported = unsupported_idempotency_response(request, message=_SECURITY_IDEMPOTENCY_MESSAGE)
+    if unsupported is not None:
+        return unsupported
+    try:
+        instance = instances.get_instance(instance_id)
+    except ValueError as exc:
+        return _security_error(status.HTTP_404_NOT_FOUND, "instance_not_found", str(exc))
+    try:
+        membership = service.upsert_admin_instance_membership(
+            user_id=user_id,
+            instance=instance,
+            role=payload.role,
+            status=payload.status,
+            actor=admin,
+        )
+    except ValueError as exc:
+        error_type = "admin_user_not_found" if str(exc) == "admin_user_not_found" else "admin_instance_membership_invalid"
+        error_status = status.HTTP_404_NOT_FOUND if error_type == "admin_user_not_found" else status.HTTP_400_BAD_REQUEST
+        return _security_error(error_status, error_type, str(exc))
+    return {"status": "ok", "membership": membership.model_dump(mode="json")}
+
+
+@router.delete("/users/{user_id}/memberships/{instance_id}")
+def delete_admin_user_membership(
+    user_id: str,
+    instance_id: str,
+    request: Request,
+    admin: AuthenticatedAdmin = Depends(require_admin_mutation_role("admin")),
+    service: GovernanceService = Depends(get_governance_service),
+    instances: InstanceService = Depends(get_instance_service),
+) -> object:
+    unsupported = unsupported_idempotency_response(request, message=_SECURITY_IDEMPOTENCY_MESSAGE)
+    if unsupported is not None:
+        return unsupported
+    try:
+        instance = instances.get_instance(instance_id)
+    except ValueError as exc:
+        return _security_error(status.HTTP_404_NOT_FOUND, "instance_not_found", str(exc))
+    try:
+        service.remove_admin_instance_membership(
+            user_id=user_id,
+            instance=instance,
+            actor=admin,
+        )
+    except ValueError as exc:
+        error_type = str(exc)
+        if error_type == "admin_user_not_found":
+            return _security_error(status.HTTP_404_NOT_FOUND, error_type, error_type)
+        if error_type == "admin_instance_membership_not_found":
+            return _security_error(status.HTTP_404_NOT_FOUND, error_type, error_type)
+        return _security_error(status.HTTP_400_BAD_REQUEST, error_type, error_type)
+    return {"status": "ok", "deleted": {"user_id": user_id, "instance_id": instance_id}}
 
 
 @router.get("/sessions")

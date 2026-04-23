@@ -9,34 +9,18 @@ from uuid import uuid4
 import pytest
 from fastapi.testclient import TestClient
 
+from conftest import admin_headers as shared_admin_headers, login_headers_allowing_password_rotation
 from app.governance.service import GovernanceService
 from app.governance.service import get_governance_service
 from app.main import app
 
 
 def _login_headers(client: TestClient, *, username: str, password: str) -> dict[str, str]:
-    response = client.post(
-        "/admin/auth/login",
-        json={"username": username, "password": password},
-    )
-    assert response.status_code == 201
-    headers = {"Authorization": f"Bearer {response.json()['access_token']}"}
-    if response.json()["user"]["must_rotate_password"] is True:
-        rotation = client.post(
-            "/admin/auth/rotate-password",
-            headers=headers,
-            json={"current_password": password, "new_password": password},
-        )
-        assert rotation.status_code == 200
-    return headers
+    return login_headers_allowing_password_rotation(client, username=username, password=password)
 
 
 def _admin_headers(client: TestClient) -> dict[str, str]:
-    return _login_headers(
-        client,
-        username="admin",
-        password=os.environ["FORGEGATE_BOOTSTRAP_ADMIN_PASSWORD"],
-    )
+    return shared_admin_headers(client)
 
 
 def _create_user_headers(
@@ -46,7 +30,7 @@ def _create_user_headers(
     role: str,
 ) -> tuple[dict[str, object], dict[str, str]]:
     suffix = uuid4().hex[:8]
-    password = f"ForgeGate-{role}-pass-123"
+    password = f"ForgeFrame-{role}-pass-123"
     created = client.post(
         "/admin/security/users",
         headers=creator_headers,
@@ -130,8 +114,8 @@ def test_operator_can_generate_csv_audit_export_and_export_is_audited() -> None:
     assert export_response.status_code == 200
     assert export_response.headers["content-type"].startswith("text/csv")
     assert "attachment; filename=" in export_response.headers["content-disposition"]
-    assert export_response.headers["x-forgegate-audit-export-status"] == "ready"
-    assert int(export_response.headers["x-forgegate-audit-export-row-count"]) >= 1
+    assert export_response.headers["x-forgeframe-audit-export-status"] == "ready"
+    assert int(export_response.headers["x-forgeframe-audit-export-row-count"]) >= 1
 
     rows = list(csv.DictReader(io.StringIO(export_response.text)))
     assert rows
@@ -196,7 +180,7 @@ def test_audit_export_applies_filters_before_limit(monkeypatch: pytest.MonkeyPat
     )
 
     assert export_response.status_code == 200
-    assert export_response.headers["x-forgegate-audit-export-row-count"] == "1"
+    assert export_response.headers["x-forgeframe-audit-export-row-count"] == "1"
     payload = export_response.json()
     assert payload["row_count"] == 1
     assert payload["filters"]["action"] == "account_create"
@@ -252,7 +236,7 @@ def test_audit_export_matches_audit_history_on_window_boundary(monkeypatch: pyte
     )
 
     assert export_response.status_code == 200
-    assert export_response.headers["x-forgegate-audit-export-row-count"] == "1"
+    assert export_response.headers["x-forgeframe-audit-export-row-count"] == "1"
     export_payload = export_response.json()
     assert export_payload["row_count"] == history_payload["summary"]["totalMatchingFilters"]
     assert export_payload["events"][0]["event_id"] == history_payload["items"][0]["eventId"]
@@ -387,9 +371,9 @@ def test_audit_export_subject_filter_uses_redacted_metadata_for_search(export_fo
     assert secret_response.status_code == 200
     assert wrong_secret_response.status_code == 200
     assert safe_context_response.status_code == 200
-    assert secret_response.headers["x-forgegate-audit-export-row-count"] == "0"
-    assert wrong_secret_response.headers["x-forgegate-audit-export-row-count"] == "0"
-    assert safe_context_response.headers["x-forgegate-audit-export-row-count"] == "1"
+    assert secret_response.headers["x-forgeframe-audit-export-row-count"] == "0"
+    assert wrong_secret_response.headers["x-forgeframe-audit-export-row-count"] == "0"
+    assert safe_context_response.headers["x-forgeframe-audit-export-row-count"] == "1"
     assert "very-secret" not in safe_context_response.text
     assert "manual verification" in safe_context_response.text
 
@@ -454,7 +438,7 @@ def test_audit_export_normalizes_action_whitespace_like_audit_history() -> None:
         },
     )
     assert export_response.status_code == 200
-    assert export_response.headers["x-forgegate-audit-export-row-count"] == "1"
+    assert export_response.headers["x-forgeframe-audit-export-row-count"] == "1"
 
     export_payload = export_response.json()
     assert export_payload["filters"]["action"] == "account_create"
@@ -509,8 +493,8 @@ def test_audit_export_honors_company_scope_and_self_audits_with_company_id() -> 
     )
 
     assert export_response.status_code == 200
-    assert f"forgegate-audit-export-company-{company_alpha}-" in export_response.headers["content-disposition"]
-    assert export_response.headers["x-forgegate-audit-export-row-count"] == "1"
+    assert f"forgeframe-audit-export-company-{company_alpha}-" in export_response.headers["content-disposition"]
+    assert export_response.headers["x-forgeframe-audit-export-row-count"] == "1"
 
     export_payload = export_response.json()
     assert export_payload["filters"]["tenant_id"] is None
@@ -520,7 +504,7 @@ def test_audit_export_honors_company_scope_and_self_audits_with_company_id() -> 
     assert export_payload["events"][0]["company_id"] == company_alpha
     assert export_payload["events"][0]["metadata"]["reason"] == "company alpha replay"
 
-    export_id = export_response.headers["x-forgegate-audit-export-id"]
+    export_id = export_response.headers["x-forgeframe-audit-export-id"]
     assert any(
         event.action == "audit_export_generated"
         and event.target_id == export_id
@@ -579,7 +563,7 @@ def test_audit_export_requires_tenant_filter_for_mixed_history_and_scoped_export
         },
     )
     assert scoped_response.status_code == 200
-    assert scoped_response.headers["x-forgegate-audit-export-row-count"] == "1"
+    assert scoped_response.headers["x-forgeframe-audit-export-row-count"] == "1"
 
     scoped_payload = scoped_response.json()
     assert scoped_payload["filters"]["tenant_id"] == tenant_a

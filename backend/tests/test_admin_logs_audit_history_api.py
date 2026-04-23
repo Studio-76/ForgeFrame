@@ -3,6 +3,7 @@ from uuid import uuid4
 
 from fastapi.testclient import TestClient
 
+from conftest import admin_headers as shared_admin_headers, login_headers_allowing_password_rotation
 from app.api.runtime.dependencies import clear_runtime_dependency_caches
 from app.governance.service import get_governance_service
 from app.main import app
@@ -17,24 +18,8 @@ def _clear_dependency_caches() -> None:
 
 
 def _admin_login(client: TestClient) -> tuple[dict[str, str], str]:
-    response = client.post(
-        "/admin/auth/login",
-        json={"username": "admin", "password": os.environ["FORGEGATE_BOOTSTRAP_ADMIN_PASSWORD"]},
-    )
-    assert response.status_code == 201
-    token = response.json()["access_token"]
-    headers = {"Authorization": f"Bearer {token}"}
-    if response.json()["user"]["must_rotate_password"] is True:
-        rotate = client.post(
-            "/admin/auth/rotate-password",
-            headers=headers,
-            json={
-                "current_password": os.environ["FORGEGATE_BOOTSTRAP_ADMIN_PASSWORD"],
-                "new_password": os.environ["FORGEGATE_BOOTSTRAP_ADMIN_PASSWORD"],
-            },
-        )
-        assert rotate.status_code == 200
-    return headers, token
+    headers = shared_admin_headers(client)
+    return headers, headers["Authorization"].removeprefix("Bearer ")
 
 
 def _issue_runtime_key(client: TestClient, headers: dict[str, str], *, label: str) -> tuple[str, str]:
@@ -62,7 +47,7 @@ def _create_user_headers(
     role: str,
 ) -> tuple[dict[str, object], dict[str, str]]:
     suffix = uuid4().hex[:8]
-    password = f"ForgeGate-{role}-pass-123"
+    password = f"ForgeFrame-{role}-pass-123"
     created = client.post(
         "/admin/security/users",
         headers=creator_headers,
@@ -87,24 +72,7 @@ def _admin_login_with_password(
     username: str,
     password: str,
 ) -> dict[str, str]:
-    response = client.post(
-        "/admin/auth/login",
-        json={"username": username, "password": password},
-    )
-    assert response.status_code == 201
-    token = response.json()["access_token"]
-    headers = {"Authorization": f"Bearer {token}"}
-    if response.json()["user"]["must_rotate_password"] is True:
-        rotate = client.post(
-            "/admin/auth/rotate-password",
-            headers=headers,
-            json={
-                "current_password": password,
-                "new_password": password,
-            },
-        )
-        assert rotate.status_code == 200
-    return headers
+    return login_headers_allowing_password_rotation(client, username=username, password=password)
 
 
 def _activate_impersonation_headers(

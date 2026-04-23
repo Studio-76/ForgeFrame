@@ -3,17 +3,17 @@ import { Link, useSearchParams } from "react-router-dom";
 
 import {
   AdminApiError,
-  fetchAccounts,
   fetchDashboard,
   type DashboardResponse,
-  type GatewayAccount,
 } from "../api/admin";
 import { buildAuditHistoryPath, resolveNewestAuditHistoryPathForSession } from "../app/auditHistory";
+import { roleAllows, sessionHasAnyInstancePermission } from "../app/adminAccess";
 import { CONTROL_PLANE_ROUTES } from "../app/navigation";
 import { useAppSession } from "../app/session";
-import { getTenantIdFromSearchParams, withTenantScope } from "../app/tenantScope";
+import { getInstanceIdFromSearchParams, withInstanceScope } from "../app/tenantScope";
+import { useInstanceCatalog } from "../app/useInstanceCatalog";
+import { InstanceScopeCard } from "../components/InstanceScopeCard";
 import { PageIntro } from "../components/PageIntro";
-import { TenantScopeCard } from "../components/TenantScopeCard";
 
 type PrimaryAction = {
   title: string;
@@ -75,31 +75,29 @@ export function DashboardPage() {
   const [dashboard, setDashboard] = useState<DashboardResponse | null>(null);
   const [error, setError] = useState<string>("");
   const [errorCode, setErrorCode] = useState<string | null>(null);
-  const [accounts, setAccounts] = useState<GatewayAccount[]>([]);
-  const [accountsLoaded, setAccountsLoaded] = useState<boolean>(false);
-  const [accountsError, setAccountsError] = useState<string>("");
   const [auditHistoryRoute, setAuditHistoryRoute] = useState<string>(() => buildAuditHistoryPath({ window: "all" }));
   const [searchParams, setSearchParams] = useSearchParams();
   const { session, sessionReady } = useAppSession();
-  const tenantId = getTenantIdFromSearchParams(searchParams);
-  const selectedAccount = accounts.find((account) => account.account_id === tenantId) ?? null;
-  const tenantScopeLabel = tenantId ? selectedAccount?.label ?? tenantId : "Global dashboard";
-  const isAdmin = session?.role === "admin";
-  const canReviewApprovals = session?.role === "admin" || session?.role === "operator";
-  const governanceRoute = isAdmin ? CONTROL_PLANE_ROUTES.security : CONTROL_PLANE_ROUTES.accounts;
-  const governanceLabel = isAdmin ? "Policy Review" : "Runtime Access Review";
-  const governanceDescription = isAdmin
+  const instanceId = getInstanceIdFromSearchParams(searchParams);
+  const { instances, loadState, error: instancesError, selectedInstance } = useInstanceCatalog(instanceId);
+  const instanceScopeLabel = selectedInstance?.display_name ?? selectedInstance?.instance_id ?? "Default instance path";
+  const canManageSecurity = sessionHasAnyInstancePermission(session, "security.write");
+  const isAdmin = roleAllows(session?.role, "admin");
+  const canReviewApprovals = sessionHasAnyInstancePermission(session, "approvals.read");
+  const governanceRoute = canManageSecurity ? CONTROL_PLANE_ROUTES.security : CONTROL_PLANE_ROUTES.accounts;
+  const governanceLabel = canManageSecurity ? "Policy Review" : "Runtime Access Review";
+  const governanceDescription = canManageSecurity
     ? "Admin posture, sessions, bootstrap controls, and provider secret policy."
     : "Operator-safe governance path for accounts, keys, and downstream access posture.";
-  const primaryAction = dashboard ? getPrimaryAction(dashboard, isAdmin) : null;
-  const tenantFilterRequired = errorCode === "tenant_filter_required";
+  const primaryAction = dashboard ? getPrimaryAction(dashboard, canManageSecurity) : null;
+  const instanceFilterRequired = errorCode === "instance_scope_not_found";
 
-  const onTenantChange = (nextTenantId: string | null) => {
+  const onInstanceChange = (nextInstanceId: string | null) => {
     const nextSearchParams = new URLSearchParams(searchParams);
-    if (nextTenantId) {
-      nextSearchParams.set("tenantId", nextTenantId);
+    if (nextInstanceId) {
+      nextSearchParams.set("instanceId", nextInstanceId);
     } else {
-      nextSearchParams.delete("tenantId");
+      nextSearchParams.delete("instanceId");
     }
     setSearchParams(nextSearchParams);
   };
@@ -108,7 +106,7 @@ export function DashboardPage() {
     let mounted = true;
     const load = async () => {
       try {
-        const payload = tenantId ? await fetchDashboard(tenantId) : await fetchDashboard();
+        const payload = instanceId ? await fetchDashboard(instanceId) : await fetchDashboard();
         if (!mounted) {
           return;
         }
@@ -128,7 +126,7 @@ export function DashboardPage() {
     return () => {
       mounted = false;
     };
-  }, [tenantId]);
+  }, [instanceId]);
 
   useEffect(() => {
     let mounted = true;
@@ -136,8 +134,8 @@ export function DashboardPage() {
     void resolveNewestAuditHistoryPathForSession(
       session,
       sessionReady,
-      [{ query: { tenantId, window: "all" } }],
-      { tenantId, window: "all" },
+      [{ query: { instanceId, window: "all" } }],
+      { instanceId, window: "all" },
     ).then((route) => {
       if (mounted) {
         setAuditHistoryRoute(route);
@@ -147,41 +145,13 @@ export function DashboardPage() {
     return () => {
       mounted = false;
     };
-  }, [session, sessionReady, tenantId]);
-
-  useEffect(() => {
-    let mounted = true;
-    const loadAccounts = async () => {
-      try {
-        const payload = await fetchAccounts();
-        if (!mounted) {
-          return;
-        }
-        setAccounts(payload.accounts);
-        setAccountsError("");
-      } catch (err) {
-        if (!mounted) {
-          return;
-        }
-        setAccountsError(err instanceof Error ? err.message : "Runtime account inventory failed to load.");
-      } finally {
-        if (mounted) {
-          setAccountsLoaded(true);
-        }
-      }
-    };
-
-    void loadAccounts();
-    return () => {
-      mounted = false;
-    };
-  }, []);
+  }, [session, sessionReady, instanceId]);
 
   return (
     <section className="fg-page">
       <PageIntro
         eyebrow="Home"
-        title="ForgeGate Control Plane Dashboard"
+        title="ForgeFrame Control Plane Dashboard"
         description="KPIs, alerts, governance posture, and needs-attention signals on the command-center route."
         question="What needs attention first, and which route should you open next?"
         links={[
@@ -194,13 +164,13 @@ export function DashboardPage() {
             label: governanceLabel,
             to: governanceRoute,
             description: governanceDescription,
-            badge: isAdmin ? "Admin only" : "Operator safe",
+            badge: canManageSecurity ? "Admin only" : "Operator safe",
           },
           {
             label: "Approvals",
             to: CONTROL_PLANE_ROUTES.approvals,
             description: "Shared queue for execution-run and elevated-access approval review.",
-            badge: canReviewApprovals ? (isAdmin ? undefined : "Review only") : "Operator or admin",
+            badge: canReviewApprovals ? (canManageSecurity ? undefined : "Review only") : "Operator or admin",
             disabled: !canReviewApprovals,
           },
           {
@@ -214,19 +184,21 @@ export function DashboardPage() {
             description: "Recent evidence and audit history on the shared logs route.",
           },
         ]}
-        badges={[{ label: tenantId ? `Tenant scope: ${tenantScopeLabel}` : "Global dashboard", tone: tenantId ? "success" : "neutral" }]}
+        badges={[{ label: selectedInstance ? `Instance scope: ${instanceScopeLabel}` : "Default instance path", tone: selectedInstance ? "success" : "neutral" }]}
         note="The dashboard stays the command center. Deep links fan out by operator intent instead of forcing every alert into the same backend module."
       />
-      <TenantScopeCard
-        tenantId={tenantId}
-        accounts={accounts}
-        accountsLoaded={accountsLoaded}
-        accountsError={accountsError}
-        tenantFilterRequired={tenantFilterRequired}
-        surfaceLabel="dashboard"
-        onTenantChange={onTenantChange}
+
+      <InstanceScopeCard
+        instanceId={instanceId}
+        selectedInstance={selectedInstance}
+        instances={instances}
+        loadState={loadState}
+        error={instancesError}
+        surfaceLabel="dashboard truth"
+        onInstanceChange={onInstanceChange}
       />
-      {error ? <p className="fg-danger">{error}</p> : null}
+
+      {error && !instanceFilterRequired ? <p className="fg-danger">{error}</p> : null}
       {dashboard ? (
         <div className="fg-stack">
           {primaryAction ? (
@@ -236,7 +208,7 @@ export function DashboardPage() {
                   <h3>Primary Next Action</h3>
                   <p className="fg-muted">{primaryAction.description}</p>
                 </div>
-                <Link className="fg-nav-link" to={withTenantScope(primaryAction.to, tenantId)}>
+                <Link className="fg-nav-link" to={withInstanceScope(primaryAction.to, instanceId)}>
                   Open route
                 </Link>
               </div>
@@ -273,7 +245,7 @@ export function DashboardPage() {
               </ul>
             </article>
           </div>
-          {isAdmin && dashboard.security ? (
+          {canManageSecurity && dashboard.security ? (
             <article className="fg-card">
               <h3>Security Bootstrap</h3>
               <ul className="fg-list">

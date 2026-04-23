@@ -6,6 +6,7 @@ from datetime import UTC, datetime
 from uuid import uuid4
 
 from app.providers import ChatDispatchResult
+from app.responses.models import build_response_object, build_response_output_items
 
 
 def new_chat_completion_id() -> str:
@@ -44,31 +45,26 @@ def build_chat_completion_payload(
 
 
 def build_responses_output_items(result: ChatDispatchResult) -> list[dict[str, object]]:
-    output_items: list[dict[str, object]] = []
-    if str(result.content).strip():
-        output_items.append({"type": "output_text", "text": result.content})
-    for call in result.tool_calls:
-        output_items.append({"type": "tool_call", "tool_call": call})
+    output_items, _output_text = build_response_output_items(
+        text=result.content,
+        tool_calls=result.tool_calls,
+    )
     return output_items
 
 
 def build_responses_payload(result: ChatDispatchResult, *, response_id: str | None = None, status: str = "completed") -> dict[str, object]:
-    output_items = build_responses_output_items(result)
-    output_text = "".join(
-        item["text"]
-        for item in output_items
-        if item.get("type") == "output_text" and isinstance(item.get("text"), str)
+    output_items, output_text = build_response_output_items(
+        text=result.content,
+        tool_calls=result.tool_calls,
     )
-    # Runtime success payloads stay client-facing; routing and auth provenance
-    # belongs in observability/control-plane surfaces instead.
-    return {
-        "id": response_id or f"resp_{uuid4().hex}",
-        "object": "response",
-        "created_at": datetime.now(tz=UTC).isoformat().replace("+00:00", "Z"),
-        "status": status,
-        "model": result.model,
-        "output": output_items,
-        "output_text": output_text,
-        "usage": result.usage.model_dump(),
-        "cost": result.cost.model_dump(),
-    }
+    return build_response_object(
+        response_id=response_id or f"resp_{uuid4().hex}",
+        created_at=int(datetime.now(tz=UTC).timestamp()),
+        status=status,  # type: ignore[arg-type]
+        background=False,
+        model=result.model,
+        output=output_items,
+        output_text=output_text,
+        usage=result.usage,
+        cost=result.cost,
+    ).model_dump(mode="json")

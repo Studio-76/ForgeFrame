@@ -2,11 +2,12 @@ import { useSearchParams } from "react-router-dom";
 
 import { CONTROL_PLANE_ROUTES } from "../app/navigation";
 import { useAppSession } from "../app/session";
-import { getTenantIdFromSearchParams } from "../app/tenantScope";
+import { getInstanceIdFromSearchParams } from "../app/tenantScope";
+import { useInstanceCatalog } from "../app/useInstanceCatalog";
+import { InstanceScopeCard } from "../components/InstanceScopeCard";
 import { PageIntro } from "../components/PageIntro";
 import {
   ExpansionTargetsSection,
-  HarnessControlSection,
   OperationResultSection,
   ProviderInventorySection,
   ProvidersOverviewSection,
@@ -15,22 +16,33 @@ import { getProvidersAccess } from "../features/providers/providersShared";
 import { useProvidersControlPlane } from "../features/providers/useProvidersControlPlane";
 
 export function ProvidersPage() {
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { session, sessionReady } = useAppSession();
-  const tenantId = getTenantIdFromSearchParams(searchParams);
+  const instanceId = getInstanceIdFromSearchParams(searchParams);
+  const { instances, loadState, error: instancesError, selectedInstance } = useInstanceCatalog(instanceId);
   const access = getProvidersAccess(session, sessionReady);
-  const { data, actions } = useProvidersControlPlane(access, tenantId);
+  const { data, actions } = useProvidersControlPlane(access, instanceId);
   const note = access.canMutate
     ? "Setup keeps the default top-level destination for this route. Operations links can still deep-link directly into live provider health and run review without introducing nested routes yet."
     : `${access.summaryDetail} Runtime truth stays visible here without surfacing mutations that the backend will block.`;
+
+  const onInstanceChange = (nextInstanceId: string | null) => {
+    const nextSearchParams = new URLSearchParams(searchParams);
+    if (nextInstanceId) {
+      nextSearchParams.set("instanceId", nextInstanceId);
+    } else {
+      nextSearchParams.delete("instanceId");
+    }
+    setSearchParams(nextSearchParams);
+  };
 
   return (
     <section className="fg-page">
       <PageIntro
         eyebrow="Setup"
-        title="Providers & Harness Control Plane"
-        description="Live provider truth, harness onboarding, and expansion targets stay separated so operators can scan runtime posture without confusing it with roadmap coverage."
-        question="Which provider task are you handling right now: onboarding, live health, or expansion planning?"
+        title="Providers Control Plane"
+        description="Live provider truth, compatibility posture, and expansion targets stay here. Dedicated harness work moved to its own module instead of continuing as a hidden sub-surface of provider setup."
+        question="Which provider task are you handling right now: live runtime posture, compatibility truth, or expansion planning?"
         links={[
           {
             label: "Overview",
@@ -38,11 +50,11 @@ export function ProvidersPage() {
             description: "Start with the route-level summary and current runtime truth.",
           },
           {
-            label: "Harness Profiles",
-            to: "/providers#harness-control",
+            label: "Harness",
+            to: CONTROL_PLANE_ROUTES.harness,
             description: access.canMutate
-              ? "Preview, verify, probe, and manage saved provider harness profiles."
-              : "Inspect saved provider harness profiles, templates, and recent run truth without mutation controls.",
+              ? "Open the dedicated harness module for profile creation, verification, probe, import, and export work."
+              : "Inspect dedicated harness proof, profile, and run truth without reopening the provider module.",
           },
           {
             label: "Provider Health & Runs",
@@ -54,21 +66,32 @@ export function ProvidersPage() {
             to: "/providers#expansion-targets",
             description: "Review planned or partial provider coverage without implying runtime readiness.",
           },
+          {
+            label: "OAuth Targets",
+            to: CONTROL_PLANE_ROUTES.oauthTargets,
+            description: "Open the dedicated operator surface for account-backed target classification, probes, and session truth.",
+          },
         ]}
         badges={[
           { label: access.badgeLabel, tone: access.badgeTone },
-          ...(tenantId ? [{ label: `Tenant scope: ${tenantId}`, tone: "success" as const }] : []),
+          ...(selectedInstance ? [{ label: `Instance scope: ${selectedInstance.display_name}`, tone: "success" as const }] : []),
         ]}
         note={note}
+      />
+      <InstanceScopeCard
+        instanceId={instanceId}
+        selectedInstance={selectedInstance}
+        instances={instances}
+        loadState={loadState}
+        error={instancesError}
+        surfaceLabel="provider control-plane truth"
+        onInstanceChange={onInstanceChange}
       />
       <div className="fg-stack">
         <div id="provider-overview">
           <ProvidersOverviewSection data={data} actions={actions} />
         </div>
         <OperationResultSection data={data} actions={actions} />
-        <div id="harness-control">
-          <HarnessControlSection data={data} actions={actions} />
-        </div>
         <div id="provider-health-runs">
           <ProviderInventorySection data={data} actions={actions} />
         </div>

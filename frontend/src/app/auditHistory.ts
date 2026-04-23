@@ -5,8 +5,10 @@ import {
   type AuditHistoryStatus,
   type AuditHistoryWindow,
 } from "../api/admin";
+import { sessionHasAnyInstancePermission } from "./adminAccess";
 
 type AuditHistoryPathOptions = {
+  instanceId?: string | null;
   tenantId?: string | null;
   companyId?: string | null;
   window?: AuditHistoryWindow;
@@ -45,6 +47,7 @@ function timestampValue(value: string): number {
 
 export function buildAuditHistoryPath(options: AuditHistoryPathOptions = {}): string {
   const searchParams = new URLSearchParams();
+  setQueryParam(searchParams, "instanceId", options.instanceId);
   setQueryParam(searchParams, "tenantId", options.tenantId);
   setQueryParam(searchParams, "companyId", options.companyId);
   setQueryParam(searchParams, "auditWindow", options.window);
@@ -62,7 +65,7 @@ export function canResolveNewestAuditHistoryPath(
   session: AdminSessionUser | null,
   sessionReady: boolean,
 ): boolean {
-  return sessionReady && session !== null && session.role !== "viewer";
+  return sessionReady && sessionHasAnyInstancePermission(session, "audit.read");
 }
 
 async function fetchLatestAuditMatch(candidate: AuditHistoryPathCandidate): Promise<AuditHistoryPathMatch | null> {
@@ -104,6 +107,7 @@ export async function resolveNewestAuditHistoryPath(
 
   const newest = matches[0];
   return buildAuditHistoryPath({
+    instanceId: newest.query.instanceId,
     tenantId: newest.query.tenantId,
     companyId: newest.query.companyId,
     window: newest.query.window ?? "all",

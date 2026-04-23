@@ -20,13 +20,17 @@ from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.execution.models import (
+    EXECUTION_WORKER_STATES,
     RUN_APPROVAL_GATE_STATUSES,
     RUN_ATTEMPT_STATES,
     RUN_COMMAND_ACTOR_TYPES,
     RUN_COMMAND_STATUSES,
     RUN_COMMAND_TYPES,
+    RUN_EXECUTION_LANES,
     RUN_EXTERNAL_CALL_STATUSES,
     RUN_FAILURE_CLASSES,
+    RUN_LEASE_STATUSES,
+    RUN_OPERATOR_STATES,
     RUN_OUTBOX_EVENT_TYPES,
     RUN_OUTBOX_PUBLISH_STATES,
     RUN_RESUME_DISPOSITIONS,
@@ -107,15 +111,52 @@ class SecretReferenceORM(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, nullable=False)
 
 
+class ExecutionWorkerORM(Base):
+    __tablename__ = "execution_workers"
+    __table_args__ = (
+        CheckConstraint("active_attempts >= 0", name="execution_workers_active_attempts_nonnegative_ck"),
+        _enum_check("execution_workers_execution_lane_ck", "execution_lane", RUN_EXECUTION_LANES),
+        _enum_check("execution_workers_worker_state_ck", "worker_state", EXECUTION_WORKER_STATES),
+        Index("execution_workers_company_worker_key_uq", "company_id", "worker_key", unique=True),
+        Index("execution_workers_company_state_heartbeat_idx", "company_id", "worker_state", "heartbeat_expires_at"),
+        Index("execution_workers_company_current_attempt_idx", "company_id", "current_attempt_id"),
+    )
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    company_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    instance_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    worker_key: Mapped[str] = mapped_column(String(191), nullable=False)
+    execution_lane: Mapped[str] = mapped_column(String(64), default="background_agentic", nullable=False)
+    worker_state: Mapped[str] = mapped_column(String(32), default="starting", nullable=False)
+    active_attempts: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    current_run_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    current_attempt_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    lease_token: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    process_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    stopped_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_claimed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_heartbeat_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    heartbeat_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_error_code: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    last_error_detail: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, nullable=False)
+
+
 class RunORM(Base):
     __tablename__ = "runs"
     __table_args__ = (
         CheckConstraint("active_attempt_no >= 1", name="runs_active_attempt_no_positive_ck"),
         CheckConstraint("version >= 0", name="runs_version_nonnegative_ck"),
         _enum_check("runs_state_ck", "state", RUN_STATES),
+        _enum_check("runs_execution_lane_ck", "execution_lane", RUN_EXECUTION_LANES),
+        _enum_check("runs_operator_state_ck", "operator_state", RUN_OPERATOR_STATES),
         _enum_check("runs_failure_class_ck", "failure_class", RUN_FAILURE_CLASSES, nullable=True),
         Index("runs_company_id_id_uq", "company_id", "id", unique=True),
         Index("runs_company_state_next_wakeup_idx", "company_id", "state", "next_wakeup_at"),
+        Index("runs_company_lane_operator_idx", "company_id", "execution_lane", "operator_state"),
         Index("runs_company_issue_created_idx", "company_id", "issue_id", "created_at"),
         Index("runs_company_current_approval_idx", "company_id", "current_approval_link_id"),
     )
@@ -126,6 +167,8 @@ class RunORM(Base):
     issue_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
     run_kind: Mapped[str] = mapped_column(String(64), nullable=False)
     state: Mapped[str] = mapped_column(String(32), default="queued", nullable=False)
+    execution_lane: Mapped[str] = mapped_column(String(64), default="background_agentic", nullable=False)
+    operator_state: Mapped[str] = mapped_column(String(32), default="admitted", nullable=False)
     status_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
     active_attempt_no: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
     current_attempt_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
@@ -262,8 +305,11 @@ class RunAttemptORM(Base):
         CheckConstraint("retry_count >= 0", name="run_attempts_retry_count_nonnegative_ck"),
         CheckConstraint("version >= 0", name="run_attempts_version_nonnegative_ck"),
         _enum_check("run_attempts_attempt_state_ck", "attempt_state", RUN_ATTEMPT_STATES),
+        _enum_check("run_attempts_operator_state_ck", "operator_state", RUN_OPERATOR_STATES),
+        _enum_check("run_attempts_lease_status_ck", "lease_status", RUN_LEASE_STATUSES),
         Index("run_attempts_company_id_id_uq", "company_id", "id", unique=True),
         Index("run_attempts_company_run_attempt_no_uq", "company_id", "run_id", "attempt_no", unique=True),
+        Index("run_attempts_company_operator_state_idx", "company_id", "operator_state", "scheduled_at"),
         Index(
             "run_attempts_company_scheduled_idx",
             "company_id",
@@ -283,7 +329,9 @@ class RunAttemptORM(Base):
     run_id: Mapped[str] = mapped_column(String(64), nullable=False)
     attempt_no: Mapped[int] = mapped_column(Integer, nullable=False)
     attempt_state: Mapped[str] = mapped_column(String(32), default="queued", nullable=False)
+    operator_state: Mapped[str] = mapped_column(String(32), default="admitted", nullable=False)
     worker_key: Mapped[str | None] = mapped_column(String(191), nullable=True)
+    lease_status: Mapped[str] = mapped_column(String(32), default="not_leased", nullable=False)
     lease_token: Mapped[str | None] = mapped_column(String(64), nullable=True)
     lease_acquired_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     lease_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

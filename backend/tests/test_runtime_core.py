@@ -20,7 +20,7 @@ from app.usage.models import CostBreakdown, TokenUsage
 
 
 client = TestClient(app)
-_ROTATED_ADMIN_PASSWORD = "ForgeGate-Test-Admin-Secret-456"
+_ROTATED_ADMIN_PASSWORD = "ForgeFrame-Test-Admin-Secret-456"
 
 
 def _admin_headers(test_client: TestClient = client) -> dict[str, str]:
@@ -160,21 +160,27 @@ def test_health_endpoint_has_runtime_metadata() -> None:
     body = response.json()
     assert body["status"] == "ok"
     assert body["api_base"] == "/v1"
-    assert body["readiness"]["state"] == "ready"
+    assert body["readiness"]["state"] == "degraded"
     assert body["readiness"]["accepting_traffic"] is True
     checks = {item["id"]: item for item in body["readiness"]["checks"]}
     assert checks["security_configuration"]["ok"] is True
     assert checks["runtime_model_configuration"]["ok"] is True
+    assert checks["ui_delivery"]["ok"] is False
+    assert checks["public_origin_contract"]["ok"] is False
+    assert checks["tls_certificate_management"]["ok"] is False
+    assert checks["deployment_posture"]["ok"] is False
     assert all("details" not in item for item in body["readiness"]["checks"])
 
 
-def test_health_endpoint_can_be_ready_after_bootstrap_secret_rotation(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("FORGEGATE_BOOTSTRAP_ADMIN_PASSWORD", "ForgeGate-Admin-Secret-456")
+def test_health_endpoint_stays_degraded_after_bootstrap_secret_rotation_until_public_surface_gaps_are_closed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("FORGEGATE_BOOTSTRAP_ADMIN_PASSWORD", "ForgeFrame-Admin-Secret-456")
     clear_runtime_dependency_caches()
     ready_client = TestClient(app)
     response = ready_client.get("/health")
     assert response.status_code == 200
-    assert response.json()["readiness"]["state"] == "ready"
+    assert response.json()["readiness"]["state"] == "degraded"
 
 
 def test_public_runtime_readiness_payload_keeps_critical_failures_critical() -> None:
@@ -353,8 +359,8 @@ def test_admin_runtime_readiness_endpoint_rejects_bootstrap_header_bypass() -> N
     response = client.get(
         "/admin/auth/runtime-readiness",
         headers={
-            "X-ForgeGate-Bootstrap-Username": "admin",
-            "X-ForgeGate-Bootstrap-Password": os.environ["FORGEGATE_BOOTSTRAP_ADMIN_PASSWORD"],
+            "X-ForgeFrame-Bootstrap-Username": "admin",
+            "X-ForgeFrame-Bootstrap-Password": os.environ["FORGEGATE_BOOTSTRAP_ADMIN_PASSWORD"],
         },
     )
 
@@ -402,7 +408,7 @@ def test_models_endpoint_returns_sanitized_openai_compatible_list(monkeypatch: p
     assert isinstance(body["data"], list)
     assert len(body["data"]) >= 1
     assert set(body["data"][0].keys()) == {"id", "object", "owned_by"}
-    assert {item["id"] for item in body["data"]} == {"forgegate-baseline-chat-v1"}
+    assert {item["id"] for item in body["data"]} == {"forgeframe-baseline-chat-v1"}
     forbidden_keys = {
         "provider",
         "display_name",
@@ -631,7 +637,7 @@ def test_models_endpoint_keeps_anthropic_hidden_from_public_inventory_after_resp
         raw = "".join(response.iter_text())
 
     completed = _sse_payload(raw, "response.completed")
-    assert completed["output"][0]["type"] == "tool_call"
+    assert completed["output"][0]["type"] == "function_call"
 
     models_response = anthropic_client.get("/v1/models")
 
@@ -679,7 +685,7 @@ def test_models_endpoint_only_lists_models_that_dispatch_under_same_runtime_conf
     models_response = local_client.get("/v1/models")
     assert models_response.status_code == 200
     model_ids = [item["id"] for item in models_response.json()["data"]]
-    assert model_ids == ["forgegate-baseline-chat-v1"]
+    assert model_ids == ["forgeframe-baseline-chat-v1"]
 
     for model_id in model_ids:
         completion = local_client.post(
@@ -778,7 +784,7 @@ def test_models_endpoint_omits_stale_generic_harness_models_that_no_longer_dispa
     models_response = local_client.get("/v1/models")
 
     assert models_response.status_code == 200
-    assert [item["id"] for item in models_response.json()["data"]] == ["forgegate-baseline-chat-v1"]
+    assert [item["id"] for item in models_response.json()["data"]] == ["forgeframe-baseline-chat-v1"]
 
     stale_dispatch = local_client.post(
         "/v1/chat/completions",
@@ -829,7 +835,7 @@ def test_models_endpoint_hides_enabled_templated_generic_harness_profiles_from_p
 
     models_response = local_client.get("/v1/models")
     assert models_response.status_code == 200
-    assert [item["id"] for item in models_response.json()["data"]] == ["forgegate-baseline-chat-v1"]
+    assert [item["id"] for item in models_response.json()["data"]] == ["forgeframe-baseline-chat-v1"]
 
     unknown_model = local_client.post(
         "/v1/chat/completions",
@@ -839,7 +845,7 @@ def test_models_endpoint_hides_enabled_templated_generic_harness_profiles_from_p
         },
     )
     assert unknown_model.status_code == 404
-    assert unknown_model.json()["error"]["available_models"] == ["forgegate-baseline-chat-v1"]
+    assert unknown_model.json()["error"]["available_models"] == ["forgeframe-baseline-chat-v1"]
 
 
 def test_models_endpoint_keeps_generic_harness_model_hidden_after_admin_probe_only(
@@ -932,7 +938,7 @@ def test_models_endpoint_keeps_generic_harness_model_hidden_after_admin_probe_on
 
     after_probe = local_client.get("/v1/models")
     assert after_probe.status_code == 200
-    assert [item["id"] for item in after_probe.json()["data"]] == ["forgegate-baseline-chat-v1"]
+    assert [item["id"] for item in after_probe.json()["data"]] == ["forgeframe-baseline-chat-v1"]
 
 
 def test_models_endpoint_only_promotes_generic_harness_models_with_model_specific_runtime_proof(
@@ -1014,7 +1020,7 @@ def test_models_endpoint_only_promotes_generic_harness_models_with_model_specifi
 
     before_runtime = local_client.get("/v1/models")
     assert before_runtime.status_code == 200
-    assert [item["id"] for item in before_runtime.json()["data"]] == ["forgegate-baseline-chat-v1"]
+    assert [item["id"] for item in before_runtime.json()["data"]] == ["forgeframe-baseline-chat-v1"]
 
     completion = local_client.post(
         "/v1/chat/completions",
@@ -1037,7 +1043,7 @@ def test_models_endpoint_only_promotes_generic_harness_models_with_model_specifi
     after_runtime = local_client.get("/v1/models")
     assert after_runtime.status_code == 200
     assert [item["id"] for item in after_runtime.json()["data"]] == [
-        "forgegate-baseline-chat-v1",
+        "forgeframe-baseline-chat-v1",
         proven_model,
     ]
     assert unproven_model not in [item["id"] for item in after_runtime.json()["data"]]
@@ -1122,7 +1128,7 @@ def test_models_endpoint_keeps_generic_harness_public_model_when_unrelated_newer
 
     before_runtime = local_client.get("/v1/models")
     assert before_runtime.status_code == 200
-    assert [item["id"] for item in before_runtime.json()["data"]] == ["forgegate-baseline-chat-v1"]
+    assert [item["id"] for item in before_runtime.json()["data"]] == ["forgeframe-baseline-chat-v1"]
 
     harness = get_harness_service()
     proof_recorded_at = datetime.now(tz=UTC)
@@ -1163,7 +1169,7 @@ def test_models_endpoint_keeps_generic_harness_public_model_when_unrelated_newer
     assert after_noise.status_code == 200
     public_model_ids = {item["id"] for item in after_noise.json()["data"]}
     assert public_model_ids == {
-        "forgegate-baseline-chat-v1",
+        "forgeframe-baseline-chat-v1",
         proven_model,
         noise_model,
     }
@@ -1244,7 +1250,7 @@ def test_models_endpoint_lists_generic_harness_model_after_live_runtime_proof(
 
     before_runtime = local_client.get("/v1/models")
     assert before_runtime.status_code == 200
-    assert [item["id"] for item in before_runtime.json()["data"]] == ["forgegate-baseline-chat-v1"]
+    assert [item["id"] for item in before_runtime.json()["data"]] == ["forgeframe-baseline-chat-v1"]
 
     completion = local_client.post(
         "/v1/chat/completions",
@@ -1259,7 +1265,7 @@ def test_models_endpoint_lists_generic_harness_model_after_live_runtime_proof(
     after_runtime = local_client.get("/v1/models")
     assert after_runtime.status_code == 200
     assert [item["id"] for item in after_runtime.json()["data"]] == [
-        "forgegate-baseline-chat-v1",
+        "forgeframe-baseline-chat-v1",
         model_id,
     ]
 
@@ -1277,7 +1283,7 @@ def test_models_endpoint_hides_codex_inventory_when_bridge_is_disabled_even_with
 
     assert response.status_code == 200
     model_ids = [item["id"] for item in response.json()["data"]]
-    assert model_ids == ["forgegate-baseline-chat-v1"]
+    assert model_ids == ["forgeframe-baseline-chat-v1"]
     assert "gpt-5.3-codex" not in model_ids
 
 
@@ -1301,7 +1307,7 @@ def test_chat_endpoint_rejects_explicit_codex_when_bridge_is_disabled_even_with_
     assert response.status_code == 404
     error = response.json()["error"]
     assert error["type"] == "model_not_found"
-    assert error["available_models"] == ["forgegate-baseline-chat-v1"]
+    assert error["available_models"] == ["forgeframe-baseline-chat-v1"]
     assert "gpt-5.3-codex" not in error["available_models"]
 
 
@@ -1327,7 +1333,7 @@ def test_chat_endpoint_rejects_discovered_codex_when_bridge_is_disabled_even_wit
     assert response.status_code == 404
     error = response.json()["error"]
     assert error["type"] == "model_not_found"
-    assert error["available_models"] == ["forgegate-baseline-chat-v1"]
+    assert error["available_models"] == ["forgeframe-baseline-chat-v1"]
     assert "gpt-5.3-codex-preview" not in error["available_models"]
 
 
@@ -1367,7 +1373,7 @@ def test_model_not_found_available_models_hide_codex_inventory_when_bridge_is_di
     assert response.status_code == 404
     error = response.json()["error"]
     assert error["type"] == "model_not_found"
-    assert error["available_models"] == ["forgegate-baseline-chat-v1"]
+    assert error["available_models"] == ["forgeframe-baseline-chat-v1"]
     assert "gpt-5.3-codex" not in error["available_models"]
 
 
@@ -1376,17 +1382,17 @@ def test_chat_endpoint_success_path_uses_baseline_provider_chain() -> None:
     response = client.post(
         "/v1/chat/completions",
         json={
-            "messages": [{"role": "user", "content": "Hello ForgeGate"}],
+            "messages": [{"role": "user", "content": "Hello ForgeFrame"}],
         },
     )
     after = int(datetime.now(tz=UTC).timestamp())
 
     assert response.status_code == 200
     body = response.json()
-    assert body["model"] == "forgegate-baseline-chat-v1"
+    assert body["model"] == "forgeframe-baseline-chat-v1"
     assert isinstance(body["created"], int)
     assert before <= body["created"] <= after
-    assert "ForgeGate baseline response" in body["choices"][0]["message"]["content"]
+    assert "ForgeFrame baseline response" in body["choices"][0]["message"]["content"]
     assert body["usage"]["total_tokens"] > 0
     assert body["cost"]["avoided_cost"] >= 0.0
     assert "provider" not in body
@@ -1429,7 +1435,7 @@ def test_chat_endpoint_stream_success_path_uses_baseline_provider_chain() -> Non
     assert '"usage": {' in raw
     assert "[DONE]" in raw
     assert '"provider"' not in raw
-    assert "forgegate_baseline" not in raw
+    assert "forgeframe_baseline" not in raw
 
 
 def test_chat_endpoint_stream_reuses_one_unique_completion_id_per_request() -> None:
@@ -1488,7 +1494,7 @@ def test_chat_endpoint_rejects_static_codex_when_bridge_is_disabled_without_cred
     assert response.status_code == 404
     error = response.json()["error"]
     assert error["type"] == "model_not_found"
-    assert error["available_models"] == ["forgegate-baseline-chat-v1"]
+    assert error["available_models"] == ["forgeframe-baseline-chat-v1"]
     assert "provider" not in error
 
 
@@ -1740,8 +1746,17 @@ def test_admin_bootstrap_readiness_endpoint_available() -> None:
     assert response.status_code == 200
     payload = response.json()
     assert payload["status"] == "ok"
+    assert payload["ready"] is False
     assert "checks" in payload
     assert "next_steps" in payload
+    checks = {item["id"]: item for item in payload["checks"]}
+    assert checks["host_install_script"]["ok"] is True
+    assert checks["host_env_template"]["ok"] is True
+    assert checks["systemd_runtime_units"]["ok"] is True
+    assert checks["linux_host_installation"]["ok"] is True
+    assert checks["root_ui_on_slash"]["ok"] is True
+    assert checks["public_https_listener"]["ok"] is False
+    assert checks["tls_certificate_management"]["ok"] is False
 
 
 def test_oauth_onboarding_and_harness_export_endpoints_available() -> None:
@@ -1786,9 +1801,9 @@ def test_admin_usage_drilldown_endpoints_expose_provider_and_client_views() -> N
     )
     assert chat_response.status_code == 200
 
-    provider_response = client.get("/admin/usage/providers/forgegate_baseline", headers=_admin_headers())
+    provider_response = client.get("/admin/usage/providers/forgeframe_baseline", headers=_admin_headers())
     assert provider_response.status_code == 200
-    assert provider_response.json()["drilldown"]["provider"] == "forgegate_baseline"
+    assert provider_response.json()["drilldown"]["provider"] == "forgeframe_baseline"
 
     client_response = client.get("/admin/usage/clients/integration-suite", headers=_admin_headers())
     assert client_response.status_code == 200
@@ -1818,6 +1833,120 @@ def test_responses_endpoint_supports_stream_mode() -> None:
     assert "[DONE]" in raw
 
 
+def test_responses_endpoint_persists_response_and_allows_retrieval() -> None:
+    response = client.post(
+        "/v1/responses",
+        json={
+            "input": "persist this response",
+            "metadata": {"case": "retrieval"},
+        },
+    )
+    assert response.status_code == 200
+    created = response.json()
+
+    fetch_response = client.get(f"/v1/responses/{created['id']}")
+    assert fetch_response.status_code == 200
+    assert fetch_response.json() == created
+
+    input_items_response = client.get(f"/v1/responses/{created['id']}/input_items")
+    assert input_items_response.status_code == 200
+    input_items = input_items_response.json()
+    assert input_items["object"] == "list"
+    assert input_items["has_more"] is False
+    assert len(input_items["data"]) == 1
+    assert input_items["data"][0]["type"] == "message"
+    assert input_items["data"][0]["role"] == "user"
+    assert input_items["data"][0]["content"] == [{"type": "input_text", "text": "persist this response"}]
+
+
+def test_responses_endpoint_background_path_returns_queued_response_and_location() -> None:
+    response = client.post(
+        "/v1/responses",
+        json={
+            "input": "queue this response",
+            "background": True,
+            "metadata": {"case": "background"},
+        },
+    )
+
+    assert response.status_code == 202
+    body = response.json()
+    assert body["object"] == "response"
+    assert body["status"] == "queued"
+    assert body["background"] is True
+    assert body["output"] == []
+    assert response.headers["Location"] == f"/v1/responses/{body['id']}"
+
+    queued = client.get(response.headers["Location"])
+    assert queued.status_code == 200
+    assert queued.json()["status"] == "queued"
+    assert queued.json()["background"] is True
+
+
+def test_responses_endpoint_preserves_function_call_output_inputs_and_retrieves_them(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured: dict[str, object] = {}
+    monkeypatch.setenv("FORGEGATE_OPENAI_API_KEY", "test-key")
+
+    def _fake_post(self, payload: dict) -> dict:
+        del self
+        captured["payload"] = payload
+        return {
+            "model": payload["model"],
+            "usage": {"prompt_tokens": 8, "completion_tokens": 3, "total_tokens": 11},
+            "choices": [
+                {
+                    "message": {"role": "assistant", "content": "tool-output-accepted"},
+                    "finish_reason": "stop",
+                }
+            ],
+        }
+
+    monkeypatch.setattr(OpenAIAPIAdapter, "_post_chat_completion", _fake_post)
+    response = client.post(
+        "/v1/responses",
+        json={
+            "model": "gpt-4.1-mini",
+            "input": [
+                {"type": "message", "role": "user", "content": [{"type": "input_text", "text": "use tool output"}]},
+                {"type": "function_call", "call_id": "call_123", "name": "lookup", "arguments": "{\"q\":\"forgeframe\"}"},
+                {"type": "function_call_output", "call_id": "call_123", "output": "lookup result"},
+            ],
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()["output_text"] == "tool-output-accepted"
+    assert captured["payload"]["messages"] == [
+        {"role": "user", "content": "use tool output"},
+        {
+            "role": "assistant",
+            "content": "",
+            "tool_calls": [
+                {
+                    "id": "call_123",
+                    "type": "function",
+                    "function": {"name": "lookup", "arguments": "{\"q\":\"forgeframe\"}"},
+                }
+            ],
+        },
+        {
+            "role": "tool",
+            "tool_call_id": "call_123",
+            "content": "lookup result",
+        },
+    ]
+
+    input_items_response = client.get(f"/v1/responses/{response.json()['id']}/input_items")
+    assert input_items_response.status_code == 200
+    input_items = input_items_response.json()["data"]
+    assert [item["type"] for item in input_items] == ["message", "function_call", "function_call_output"]
+    assert input_items[1]["call_id"] == "call_123"
+    assert input_items[2]["call_id"] == "call_123"
+    assert input_items[2]["output"] == "lookup result"
+
+
 def test_responses_stream_unknown_model_returns_filtered_public_inventory(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -1837,7 +1966,7 @@ def test_responses_stream_unknown_model_returns_filtered_public_inventory(
     error = response.json()["error"]
     assert error["type"] == "model_not_found"
     assert error["available_models"] == public_inventory
-    assert error["available_models"] == ["forgegate-baseline-chat-v1"]
+    assert error["available_models"] == ["forgeframe-baseline-chat-v1"]
 
 
 def test_responses_stream_unknown_model_keeps_anthropic_public_inventory_hidden_after_runtime_evidence(
@@ -1893,7 +2022,7 @@ def test_responses_endpoint_rejects_static_codex_when_bridge_is_disabled_without
     assert response.status_code == 404
     error = response.json()["error"]
     assert error["type"] == "model_not_found"
-    assert error["available_models"] == ["forgegate-baseline-chat-v1"]
+    assert error["available_models"] == ["forgeframe-baseline-chat-v1"]
     assert "provider" not in error
 
 
@@ -1910,9 +2039,9 @@ def test_responses_stream_hidden_codex_requests_persist_model_not_found_error_ev
     response = local_client.post(
         "/v1/responses",
         headers={
-            "X-ForgeGate-Trace-Id": "trace_responses_stream_failure_1",
-            "X-ForgeGate-Correlation-Id": "corr_responses_stream_failure_1",
-            "X-ForgeGate-Span-Id": "span_responses_stream_failure_1",
+            "X-ForgeFrame-Trace-Id": "trace_responses_stream_failure_1",
+            "X-ForgeFrame-Correlation-Id": "corr_responses_stream_failure_1",
+            "X-ForgeFrame-Span-Id": "span_responses_stream_failure_1",
         },
         json={
             "input": "Hello responses",
@@ -1929,7 +2058,7 @@ def test_responses_stream_hidden_codex_requests_persist_model_not_found_error_ev
     assert response.status_code == 404
     error = response.json()["error"]
     assert error["type"] == "model_not_found"
-    assert error["available_models"] == ["forgegate-baseline-chat-v1"]
+    assert error["available_models"] == ["forgeframe-baseline-chat-v1"]
     assert "provider" not in error
 
     error_events = [
@@ -1946,9 +2075,9 @@ def test_responses_stream_hidden_codex_requests_persist_model_not_found_error_ev
     assert latest_error["error_type"] == "model_not_found"
     assert latest_error["trace_id"] == "trace_responses_stream_failure_1"
     assert latest_error["correlation_id"] == "corr_responses_stream_failure_1"
-    assert latest_error["request_id"] == response.headers["X-ForgeGate-Request-Id"]
+    assert latest_error["request_id"] == response.headers["X-ForgeFrame-Request-Id"]
     assert latest_error["span_id"] == "span_responses_stream_failure_1"
-    assert response.headers["X-ForgeGate-Span-Id"] == "span_responses_stream_failure_1"
+    assert response.headers["X-ForgeFrame-Span-Id"] == "span_responses_stream_failure_1"
     assert latest_error["duration_ms"] >= 0
 
 
@@ -1973,7 +2102,7 @@ def test_responses_stream_rejects_explicit_codex_when_bridge_is_disabled_even_wi
     assert response.status_code == 404
     error = response.json()["error"]
     assert error["type"] == "model_not_found"
-    assert error["available_models"] == ["forgegate-baseline-chat-v1"]
+    assert error["available_models"] == ["forgeframe-baseline-chat-v1"]
     assert "gpt-5.3-codex" not in error["available_models"]
 
 
@@ -2000,7 +2129,7 @@ def test_responses_stream_rejects_discovered_codex_when_bridge_is_disabled_even_
     assert response.status_code == 404
     error = response.json()["error"]
     assert error["type"] == "model_not_found"
-    assert error["available_models"] == ["forgegate-baseline-chat-v1"]
+    assert error["available_models"] == ["forgeframe-baseline-chat-v1"]
     assert "gpt-5.3-codex-preview" not in error["available_models"]
 
 
@@ -2008,10 +2137,10 @@ def test_chat_endpoint_persists_trace_context_in_usage_event() -> None:
     response = client.post(
         "/v1/chat/completions",
         headers={
-            "X-ForgeGate-Trace-Id": "trace_chat_usage_1",
-            "X-ForgeGate-Correlation-Id": "corr_chat_usage_1",
-            "X-ForgeGate-Causation-Id": "cause_chat_usage_1",
-            "X-ForgeGate-Span-Id": "span_chat_usage_1",
+            "X-ForgeFrame-Trace-Id": "trace_chat_usage_1",
+            "X-ForgeFrame-Correlation-Id": "corr_chat_usage_1",
+            "X-ForgeFrame-Causation-Id": "cause_chat_usage_1",
+            "X-ForgeFrame-Span-Id": "span_chat_usage_1",
         },
         json={
             "messages": [{"role": "user", "content": "trace the runtime call"}],
@@ -2024,7 +2153,7 @@ def test_chat_endpoint_persists_trace_context_in_usage_event() -> None:
     )
 
     assert response.status_code == 200
-    assert response.headers["X-ForgeGate-Trace-Id"] == "trace_chat_usage_1"
+    assert response.headers["X-ForgeFrame-Trace-Id"] == "trace_chat_usage_1"
     usage_events = [
         item["data"]
         for item in _observability_events()
@@ -2038,8 +2167,8 @@ def test_chat_endpoint_persists_trace_context_in_usage_event() -> None:
     assert latest_usage["correlation_id"] == "corr_chat_usage_1"
     assert latest_usage["causation_id"] == "cause_chat_usage_1"
     assert latest_usage["span_id"] == "span_chat_usage_1"
-    assert latest_usage["request_id"] == response.headers["X-ForgeGate-Request-Id"]
-    assert response.headers["X-ForgeGate-Span-Id"] == "span_chat_usage_1"
+    assert latest_usage["request_id"] == response.headers["X-ForgeFrame-Request-Id"]
+    assert response.headers["X-ForgeFrame-Span-Id"] == "span_chat_usage_1"
     assert latest_usage["duration_ms"] >= 0
 
 
@@ -2117,7 +2246,7 @@ def test_responses_stream_sanitizes_raw_provider_error_event(monkeypatch: pytest
     assert error_event["object"] == "response"
     assert error_event["status"] == "failed"
     assert error_event["model"] == "gpt-4.1-mini"
-    assert error_event["error"]["type"] == "provider_stream_interrupted"
+    assert error_event["error"]["code"] == "provider_stream_interrupted"
     assert error_event["error"]["message"] == "Selected provider stream was interrupted."
     assert "provider" not in error_event["error"]
     assert "hidden stream prompt" not in raw
@@ -2167,9 +2296,9 @@ def test_chat_stream_yielded_provider_error_event_persists_runtime_error_event(m
         "POST",
         "/v1/chat/completions",
         headers={
-            "X-ForgeGate-Trace-Id": "trace_chat_stream_yielded_error_1",
-            "X-ForgeGate-Correlation-Id": "corr_chat_stream_yielded_error_1",
-            "X-ForgeGate-Span-Id": "span_chat_stream_yielded_error_1",
+            "X-ForgeFrame-Trace-Id": "trace_chat_stream_yielded_error_1",
+            "X-ForgeFrame-Correlation-Id": "corr_chat_stream_yielded_error_1",
+            "X-ForgeFrame-Span-Id": "span_chat_stream_yielded_error_1",
         },
         json={
             "messages": [{"role": "user", "content": "hello"}],
@@ -2202,7 +2331,7 @@ def test_chat_stream_yielded_provider_error_event_persists_runtime_error_event(m
     assert latest_error["status_code"] == 502
     assert latest_error["trace_id"] == "trace_chat_stream_yielded_error_1"
     assert latest_error["correlation_id"] == "corr_chat_stream_yielded_error_1"
-    assert latest_error["request_id"] == response.headers["X-ForgeGate-Request-Id"]
+    assert latest_error["request_id"] == response.headers["X-ForgeFrame-Request-Id"]
     assert latest_error["span_id"] == "span_chat_stream_yielded_error_1"
     assert latest_error["duration_ms"] >= 0
 
@@ -2229,7 +2358,7 @@ def test_responses_stream_sanitizes_yielded_provider_error_event(monkeypatch: py
     assert error_event["object"] == "response"
     assert error_event["status"] == "failed"
     assert error_event["model"] == "gpt-4.1-mini"
-    assert error_event["error"]["type"] == "provider_stream_interrupted"
+    assert error_event["error"]["code"] == "provider_stream_interrupted"
     assert error_event["error"]["message"] == "Selected provider stream was interrupted."
     assert "provider" not in error_event["error"]
     assert "secret_token" not in raw
@@ -2246,8 +2375,8 @@ def test_runtime_models_endpoint_requires_key_when_enabled(monkeypatch: pytest.M
     assert response.status_code == 401
     error = response.json()["error"]
     assert error["type"] == "runtime_auth_required"
-    assert error["request_id"] == response.headers["X-ForgeGate-Request-Id"]
-    assert response.headers["X-ForgeGate-Correlation-Id"] == error["request_id"]
+    assert error["request_id"] == response.headers["X-ForgeFrame-Request-Id"]
+    assert response.headers["X-ForgeFrame-Correlation-Id"] == error["request_id"]
 
 
 def test_responses_endpoint_rejects_invalid_temperature() -> None:
@@ -2267,7 +2396,7 @@ def test_responses_endpoint_rejects_unsupported_extra_control_fields() -> None:
     )
     assert response.status_code == 422
     error = response.json()["error"]
-    assert error["type"] == "invalid_request"
+    assert error["type"] == "unsupported_parameter"
     assert "reasoning" in error["message"]
     assert "store" in error["message"]
 
@@ -2412,8 +2541,8 @@ def test_responses_endpoint_rejects_input_image_file_ids() -> None:
 
 def test_chat_default_routing_prefers_vision_capable_provider_for_image_messages(monkeypatch: pytest.MonkeyPatch) -> None:
     captured: dict[str, object] = {}
-    monkeypatch.setenv("FORGEGATE_DEFAULT_MODEL", "forgegate-baseline-chat-v1")
-    monkeypatch.setenv("FORGEGATE_DEFAULT_PROVIDER", "forgegate_baseline")
+    monkeypatch.setenv("FORGEGATE_DEFAULT_MODEL", "forgeframe-baseline-chat-v1")
+    monkeypatch.setenv("FORGEGATE_DEFAULT_PROVIDER", "forgeframe_baseline")
     monkeypatch.setenv("FORGEGATE_OPENAI_API_KEY", "test-key")
     clear_runtime_dependency_caches()
 
@@ -2456,7 +2585,7 @@ def test_chat_endpoint_rejects_image_inputs_for_non_vision_requested_model() -> 
     response = local_client.post(
         "/v1/chat/completions",
         json={
-            "model": "forgegate-baseline-chat-v1",
+            "model": "forgeframe-baseline-chat-v1",
             "messages": [
                 {
                     "role": "user",
@@ -2539,7 +2668,7 @@ def test_responses_endpoint_rejects_image_inputs_for_non_vision_requested_model(
     response = local_client.post(
         "/v1/responses",
         json={
-            "model": "forgegate-baseline-chat-v1",
+            "model": "forgeframe-baseline-chat-v1",
             "input": [
                 {
                     "role": "user",
@@ -2643,8 +2772,16 @@ def test_responses_endpoint_includes_tool_call_output(monkeypatch: pytest.Monkey
     response = client.post("/v1/responses", json={"input": "hello", "model": "gpt-4.1-mini"})
     assert response.status_code == 200
     output = response.json()["output"]
-    assert any(item.get("type") == "tool_call" for item in output)
-    assert not any(item.get("type") == "output_text" and not str(item.get("text", "")).strip() for item in output)
+    assert output == [
+        {
+            "id": "call_1",
+            "type": "function_call",
+            "call_id": "call_1",
+            "name": "lookup",
+            "arguments": "{\"q\":\"x\"}",
+            "status": "completed",
+        }
+    ]
 
 
 def test_responses_stream_completed_payload_includes_tool_call_output(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -2670,8 +2807,12 @@ def test_responses_stream_completed_payload_includes_tool_call_output(monkeypatc
     completed = _sse_payload(raw, "response.completed")
     assert completed["output"] == [
         {
-            "type": "tool_call",
-            "tool_call": {"id": "call_1", "type": "function", "function": {"name": "lookup", "arguments": "{\"q\":\"forgegate\"}"}},
+            "id": "call_1",
+            "type": "function_call",
+            "call_id": "call_1",
+            "name": "lookup",
+            "arguments": "{\"q\":\"forgegate\"}",
+            "status": "completed",
         }
     ]
     assert completed["output_text"] == ""
@@ -2725,12 +2866,12 @@ def test_responses_stream_anthropic_tool_use_blocks_surface_as_tool_call_output(
     completed = _sse_payload(raw, "response.completed")
     assert completed["output"] == [
         {
-            "type": "tool_call",
-            "tool_call": {
-                "id": "toolu_1",
-                "type": "function",
-                "function": {"name": "lookup", "arguments": "{\"q\":\"forgegate\"}"},
-            },
+            "id": "toolu_1",
+            "type": "function_call",
+            "call_id": "toolu_1",
+            "name": "lookup",
+            "arguments": "{\"q\":\"forgegate\"}",
+            "status": "completed",
         }
     ]
     assert completed["output_text"] == ""

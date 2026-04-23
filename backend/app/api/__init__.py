@@ -1,1 +1,1 @@
-"""API router packages for ForgeGate runtime and admin surfaces."""
+"""API router packages for ForgeFrame runtime and admin surfaces."""
