@@ -71,6 +71,11 @@ if printf '%s\n' "${INSTALL_ARGS[@]}" | grep -qx -- '--dry-run'; then
   exit 0
 fi
 
+if [[ "$GUIDED" == "1" && "$SKIP_SYSTEMCTL" != "1" ]]; then
+  log "Guided install completed the service start, certificate request, and host smoke validation."
+  exit 0
+fi
+
 forgeframe_load_env_file "$ENV_FILE" || fail "Unable to load $ENV_FILE"
 
 public_contract_errors=()
@@ -90,8 +95,8 @@ fi
 
 if [[ "$SKIP_SYSTEMCTL" != "1" ]]; then
   forgeframe_command_exists systemctl || fail "systemctl is required for the normative bootstrap path."
-  systemctl enable --now forgeframe-api.service forgeframe-retention.timer
-  log "Enabled and started forgeframe-api.service plus forgeframe-retention.timer"
+  systemctl enable --now forgeframe-api.service forgeframe-worker.service forgeframe-retention.timer
+  log "Enabled and started forgeframe-api.service, forgeframe-worker.service, and forgeframe-retention.timer"
   if (( ${#public_contract_errors[@]} == 0 )); then
     systemctl enable --now forgeframe-http-helper.service
     log "Enabled and started forgeframe-http-helper.service"

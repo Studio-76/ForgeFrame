@@ -91,6 +91,10 @@ def test_guided_host_install_driver_collects_login_inputs_and_reassigns_non_publ
     assert "default_pg_port=\"5432\"" in install_script
     assert "npm ci" in install_script
     assert "npm install" in install_script
+    assert "start_guided_runtime_services" in install_script
+    assert "forgeframe-api.service forgeframe-worker.service" in install_script
+    assert 'bash "$INSTALL_ROOT/scripts/renew-certificates.sh"' in install_script
+    assert 'bash "$INSTALL_ROOT/scripts/host-smoke.sh"' in install_script
     assert "Frontend login:" in (ROOT / "scripts" / "bootstrap-forgeframe.sh").read_text(encoding="utf-8")
 
 

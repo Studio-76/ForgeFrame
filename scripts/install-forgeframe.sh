@@ -70,7 +70,7 @@ Options:
   --dry-run             Print the planned host-native installation without changing the host.
   --skip-python-env     Skip venv creation and backend dependency installation.
   --skip-frontend-build Skip frontend build installation checks.
-  --skip-systemctl      Skip daemon-reload after installing systemd units.
+  --skip-systemctl      Skip daemon-reload, service enable/start, certificate request, and smoke validation.
 EOF
 }
 
@@ -668,6 +668,46 @@ install_systemd_units() {
   if [[ "$used_embedded" == "1" ]]; then
     log "Completed systemd installation with embedded template fallback."
   fi
+}
+
+start_guided_runtime_services() {
+  [[ "$GUIDED" == "1" ]] || return 0
+  [[ "$SKIP_SYSTEMCTL" == "1" ]] && {
+    log "Skipping guided service enable/start because --skip-systemctl was provided."
+    return 0
+  }
+
+  forgeframe_command_exists systemctl || fail "systemctl is required to enable and start the guided host installation."
+  [[ "$(id -u)" -eq 0 ]] || fail "Guided service enable/start requires root. Re-run as root or pass --skip-systemctl."
+  forgeframe_load_env_file "$ENV_FILE" || fail "Unable to load $ENV_FILE before starting services."
+
+  log "Enabling and starting internal ForgeFrame services."
+  systemctl enable forgeframe-api.service forgeframe-worker.service >"$FORGEFRAME_NULL_DEVICE"
+  systemctl restart forgeframe-api.service || fail "Failed to start forgeframe-api.service. Check: journalctl -u forgeframe-api.service --no-pager -n 120"
+  systemctl restart forgeframe-worker.service || fail "Failed to start forgeframe-worker.service. Check: journalctl -u forgeframe-worker.service --no-pager -n 120"
+  systemctl enable --now forgeframe-retention.timer >"$FORGEFRAME_NULL_DEVICE" || fail "Failed to enable forgeframe-retention.timer."
+  log "Internal services are enabled and running."
+
+  log "Enabling ACME HTTP helper on port 80."
+  systemctl enable forgeframe-http-helper.service >"$FORGEFRAME_NULL_DEVICE"
+  systemctl restart forgeframe-http-helper.service || fail "Failed to start forgeframe-http-helper.service. Check: journalctl -u forgeframe-http-helper.service --no-pager -n 120"
+
+  log "Requesting or renewing the public TLS certificate for ${FORGEFRAME_PUBLIC_FQDN:-configured host}."
+  FORGEFRAME_ENV_FILE="$ENV_FILE" bash "$INSTALL_ROOT/scripts/renew-certificates.sh" || fail "Certificate request failed. Check ${FORGEFRAME_PUBLIC_TLS_LAST_ERROR_PATH:-the configured ACME last-error file} and journalctl -u forgeframe-http-helper.service."
+
+  log "Enabling and starting public HTTPS service plus ACME renewal timer."
+  systemctl enable forgeframe-public.service >"$FORGEFRAME_NULL_DEVICE"
+  systemctl restart forgeframe-public.service || fail "Failed to start forgeframe-public.service. Check: journalctl -u forgeframe-public.service --no-pager -n 120"
+  systemctl enable --now forgeframe-acme.timer >"$FORGEFRAME_NULL_DEVICE" || fail "Failed to enable forgeframe-acme.timer."
+
+  log "Running public host smoke validation."
+  FORGEFRAME_ENV_FILE="$ENV_FILE" bash "$INSTALL_ROOT/scripts/host-smoke.sh" || fail "Host smoke validation failed."
+  forgeframe_load_env_file "$ENV_FILE" || fail "Unable to reload $ENV_FILE after host smoke validation."
+
+  log "Guided installation completed with running services and public HTTPS validation."
+  log "Frontend login: https://${FORGEFRAME_PUBLIC_FQDN}/"
+  log "Admin user: ${FORGEFRAME_BOOTSTRAP_ADMIN_USERNAME:-admin}"
+  log "Admin password: ${FORGEFRAME_BOOTSTRAP_ADMIN_PASSWORD}"
 }
 
 require_runtime_install_tree() {
@@ -1925,14 +1965,23 @@ if [[ "$SKIP_SYSTEMCTL" != "1" ]]; then
   log "Ran systemctl daemon-reload"
 fi
 
+start_guided_runtime_services
+
 if [[ "$GUIDED" == "1" ]]; then
   log "Guided host-native installation artifacts are ready."
   log "Resolved ports: public HTTPS 443, ACME helper 80, internal API ${FORGEFRAME_PORT:-8080}, PostgreSQL ${FORGEFRAME_PG_HOST:-127.0.0.1}:${FORGEFRAME_PG_PORT:-5432}"
   log "forgeframe.env written to $ENV_FILE"
   log "Ignored .env mirrors written to $INSTALL_ROOT/.env.host, $INSTALL_ROOT/.env, and $INSTALL_ROOT/backend/.env"
   log "Local .env.example files written to $INSTALL_ROOT/.env.host.example, $INSTALL_ROOT/.env.example, and $INSTALL_ROOT/backend/.env.example"
+  if [[ "$SKIP_SYSTEMCTL" == "1" ]]; then
+    log "Services were installed but not started because --skip-systemctl was provided."
+  else
+    log "Services were enabled and started; certificate request and host smoke validation completed."
+  fi
 else
   log "Host-native installation artifacts are ready."
 fi
-log "Internal runtime path: systemctl enable --now forgeframe-api.service forgeframe-worker.service forgeframe-retention.timer"
-log "Public runtime path: replace FORGEFRAME_PUBLIC_FQDN and FORGEFRAME_PUBLIC_TLS_ACME_EMAIL in $ENV_FILE, then enable forgeframe-http-helper.service, run scripts/renew-certificates.sh, and start forgeframe-public.service plus forgeframe-acme.timer"
+if [[ "$GUIDED" != "1" || "$SKIP_SYSTEMCTL" == "1" ]]; then
+  log "Manual internal runtime path: systemctl enable --now forgeframe-api.service forgeframe-worker.service forgeframe-retention.timer"
+  log "Manual public runtime path: enable forgeframe-http-helper.service, run scripts/renew-certificates.sh, and start forgeframe-public.service plus forgeframe-acme.timer"
+fi
