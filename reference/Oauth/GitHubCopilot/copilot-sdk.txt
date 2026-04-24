@@ -1,0 +1,953 @@
+GitHub Copilot SDK - GitHub Docs
+
+Skip to main content
+
+GitHub Docs
+
+Version: Free, Pro, & Team
+
+Search or ask Copilot
+Search or askCopilot
+
+Select language: current language is English
+
+Search or ask Copilot
+Search or askCopilot
+
+Open menu
+
+Open Sidebar
+
+GitHub Copilot/
+
+How-tos/
+
+Copilot SDK
+
+Home
+
+GitHub Copilot
+
+Get started
+Quickstart
+
+What is GitHub Copilot?
+
+Plans
+
+Features
+
+Best practices
+
+Choose enterprise plan
+
+Achieve company goals
+
+Resources for approval
+
+Concepts
+Completions
+Code suggestions
+
+Code referencing
+
+Chat
+
+Agents
+Cloud agent
+About cloud agent
+
+Agent management
+
+Custom agents
+
+Hooks
+
+Access management
+
+MCP and cloud agent
+
+Risks and mitigations
+
+Copilot CLI
+About Copilot CLI
+
+Comparing CLI features
+
+Cancel and roll back
+
+About remote access
+
+Custom agents
+
+About CLI plugins
+
+Autonomous task completion
+
+Parallel task execution
+
+Researching with Copilot
+
+Session data
+
+LSP servers
+
+Context management
+
+Code review
+
+Copilot Memory
+
+Third-party agents
+
+OpenAI Codex
+
+Anthropic Claude
+
+Agent skills
+
+Enterprise management
+
+Spark
+
+Copilot usage metrics
+All articles
+
+Copilot usage metrics
+
+Prompting
+Prompt engineering
+
+Response customization
+
+Context
+MCP
+
+Spaces
+
+Repository indexing
+
+Content exclusion
+
+Tools
+AI tools
+
+About Copilot integrations
+
+Auto model selection
+
+Usage limits
+
+Billing
+Copilot requests
+
+Individual plans
+
+Billing for individuals
+
+Organizations and enterprises
+
+Premium request management
+
+Copilot-only enterprises
+
+Policies
+
+MCP management
+
+FedRAMP models
+
+Network settings
+
+Base and LTS models
+
+New features and models
+
+How-tos
+Copilot on GitHub
+Set up Copilot
+Enable Copilot
+Set up for self
+
+Set up for organization
+
+Set up for enterprise
+
+Set up a dedicated enterprise
+
+Set up for students
+
+Set up for teachers and OS maintainers
+
+Configure access to AI models
+
+Configure automatic review
+
+Configure runners
+
+Chat with Copilot
+Get started with chat
+
+Chat in GitHub
+
+Chat in Mobile
+
+Customize Copilot
+Customize Copilot overview
+
+Add custom instructions
+Add personal instructions
+
+Add repository instructions
+
+Add organization instructions
+
+Customize cloud agent
+Create custom agents
+
+Add agent skills
+
+Extend cloud agent with MCP
+
+Use hooks
+
+Customize the agent environment
+
+Customize the agent firewall
+
+Test custom agents
+
+Spaces
+Create Copilot Spaces
+
+Collaborate with others
+
+Copilot for GitHub tasks
+Use Copilot to create or update issues
+
+Create a PR summary
+
+Use the GitHub MCP Server from Copilot Chat
+
+Use Copilot agents
+Get started
+
+Kick off a task
+
+Research, plan, iterate
+
+Manage and track agents
+
+Copilot code review
+
+Review Copilot output
+
+Set up
+Set up for self
+
+Install Copilot extension
+
+Get code suggestions
+Get IDE code suggestions
+
+Find matching code
+
+Chat with Copilot
+Get started with Chat in your IDE
+
+Chat in IDE
+
+Chat in Windows Terminal
+
+Copilot CLI
+All articles
+
+Copilot CLI quickstart
+
+Copilot CLI best practices
+
+Set up Copilot CLI
+Install Copilot CLI
+
+Authenticate Copilot CLI
+
+Configure Copilot CLI
+
+Add LSP servers
+
+Troubleshoot Copilot CLI auth
+
+Allowing tools
+
+Steer a session remotely
+
+Automate with Copilot CLI
+Quickstart
+
+Run the CLI programmatically
+
+Automate with Actions
+
+Customize Copilot CLI
+Overview
+
+Add custom instructions
+
+Use hooks
+
+Add agent skills
+
+Add MCP servers
+
+Create custom agents
+
+Use your own model provider
+
+Plugins: Find and install
+
+Plugins: Create a plugin
+
+Plugins: Create a marketplace
+
+Connect to VS Code
+
+Use Copilot CLI agents
+Overview
+
+Delegate tasks to Copilot
+
+Invoke custom agents
+
+Steer agents
+
+Agentic code review
+
+Administer for enterprise
+
+Speed up task completion
+
+Manage pull requests
+
+Roll back changes
+
+Use session data
+
+Copilot SDK
+Quickstart
+
+Set up Copilot SDK
+Choosing a setup path
+
+Azure Managed Identity
+
+Backend services
+
+Bundled CLI
+
+GitHub OAuth
+
+Local CLI
+
+Scaling
+
+Authentication
+Authenticate Copilot SDK
+
+Bring your own key (BYOK)
+
+Use Copilot SDK
+Working with hooks
+
+Custom agents
+
+Image input
+
+MCP servers
+
+Session persistence
+
+Custom skills
+
+Steering and queueing
+
+Streaming events
+
+Use hooks
+Quickstart
+
+Pre-tool use
+
+Post-tool use
+
+User prompt submitted
+
+Session lifecycle
+
+Error handling
+
+Observability
+OpenTelemetry
+
+Integrations
+Microsoft Agent Framework
+
+Troubleshooting
+SDK and CLI compatibility
+
+Debug Copilot SDK
+
+Debug MCP servers
+
+Use Copilot agents
+Cloud agent
+Create a PR
+
+Track Copilot sessions
+
+Integrate cloud agent with Jira
+
+Integrate cloud agent with Slack
+
+Integrate cloud agent with Teams
+
+Integrate cloud agent with Linear
+
+Integrate cloud agent with Azure Boards
+
+Changing the AI model
+
+Configuring agent settings
+
+Create custom agents in your IDE
+
+Troubleshoot cloud agent
+
+Request a code review
+Use code review
+
+Copilot Memory
+
+Use AI models
+Change the chat model
+
+Change the completion model
+
+Provide context
+Use Copilot Spaces
+Use Copilot Spaces
+
+Use MCP in your IDE
+Extend Copilot Chat with MCP
+
+Set up the GitHub MCP Server
+
+Enterprise configuration
+
+Configure toolsets
+
+Use the GitHub MCP Server
+
+Change MCP registry
+
+Configure custom instructions
+Add repository instructions in your IDE
+
+Configure content exclusion
+Exclude content from Copilot
+
+Review changes
+
+Use Copilot for common tasks
+Use Copilot in the CLI
+
+Configure personal settings
+Configure network settings
+
+Configure in IDE
+
+Authenticate to GHE.com
+
+Manage and track spending
+Monitor premium requests
+
+Manage request allowances
+
+Manage company spending
+
+Manage your account
+Get started with a Copilot plan
+
+View and change your Copilot plan
+
+Disable Copilot Free
+
+Manage policies
+
+Administer Copilot
+Manage for organization
+Manage plan
+Cancel
+
+Manage access
+Grant access
+
+Manage requests for access
+
+Revoke access
+
+Manage network access
+
+Manage policies
+
+Add Copilot cloud agent
+
+Configure agent runners
+
+Prepare for custom agents
+
+Review activity
+Review user activity data
+
+Use your own API keys
+
+Manage for enterprise
+Manage plan
+Subscribe
+
+Cancel plan
+
+Upgrade plan
+
+Downgrade subscription
+
+Manage access
+Grant access
+
+Disable for organizations
+
+View license usage
+
+Manage network access
+
+Manage enterprise policies
+
+Manage agents
+Prepare for custom agents
+
+Monitor agentic activity
+
+Enable Copilot cloud agent
+
+Block Copilot cloud agent
+
+Manage Copilot code review
+
+Manage Spark
+
+Use your own API keys
+
+Review audit logs
+
+Manage MCP usage
+Configure MCP registry
+
+Configure MCP server access
+
+Download activity report
+
+View usage and adoption
+
+View code generation
+
+Troubleshoot Copilot
+Troubleshoot common issues
+
+View logs
+
+Troubleshoot firewall settings
+
+Troubleshoot network errors
+
+Troubleshoot Spark
+
+Reference
+Chat cheat sheet
+
+Customization cheat sheet
+
+AI models
+Supported models
+
+Model comparison
+
+Model hosting
+
+Copilot feature matrix
+
+Keyboard shortcuts
+
+Copilot CLI reference
+CLI command reference
+
+CLI plugin reference
+
+CLI programmatic reference
+
+ACP server
+
+CLI configuration directory
+
+Custom agents configuration
+
+Custom instructions support
+
+Hooks configuration
+
+Policy conflicts
+
+Copilot allowlist reference
+
+MCP allowlist enforcement
+
+Metrics data
+
+Copilot billing
+Billing cycle
+
+Seat assignment
+
+License changes
+
+Azure billing
+
+Agentic audit log events
+
+Agent session filters
+
+Review excluded files
+
+Copilot usage metrics
+Copilot usage metrics data
+
+Interpret usage metrics
+
+Reconciling Copilot usage metrics
+
+Copilot LoC metrics
+
+Example schema
+
+Tutorials
+All tutorials
+
+GitHub Copilot Chat Cookbook
+All prompts
+
+Communicate effectively
+Create templates
+
+Extract information
+
+Synthesize research
+
+Create diagrams
+
+Generate tables
+
+Debug errors
+Debug invalid JSON
+
+Handle API rate limits
+
+Diagnose test failures
+
+Analyze functionality
+Explore implementations
+
+Analyze feedback
+
+Refactor code
+Improve code readability
+
+Fix lint errors
+
+Refactor for optimization
+
+Refactor for sustainability
+
+Refactor design patterns
+
+Refactor data access layers
+
+Decouple business logic
+
+Handle cross-cutting
+
+Simplify inheritance hierarchies
+
+Fix database deadlocks
+
+Translate code
+
+Document code
+Create issues
+
+Document legacy code
+
+Explain legacy code
+
+Explain complex logic
+
+Sync documentation
+
+Write discussions or blog posts
+
+Testing code
+Generate unit tests
+
+Create mock objects
+
+Create end-to-end tests
+
+Update unit tests
+
+Analyze security
+Secure your repository
+
+Manage dependency updates
+
+Find vulnerabilities
+
+Customization library
+All customizations
+
+Custom instructions
+Your first custom instructions
+
+Concept explainer
+
+Debugging tutor
+
+Code reviewer
+
+GitHub Actions helper
+
+Pull request assistant
+
+Issue manager
+
+Accessibility auditor
+
+Testing automation
+
+Prompt files
+Your first prompt file
+
+Create README
+
+Onboarding plan
+
+Document API
+
+Review code
+
+Generate unit tests
+
+Custom agents
+Your first custom agent
+
+Implementation planner
+
+Bug fix teammate
+
+Cleanup specialist
+
+Cloud agent
+Get the best results
+
+Pilot cloud agent
+
+Improve a project
+
+Build guardrails
+
+Give access to resources
+
+Spark
+Your first spark
+
+Prompt tips
+
+Build and deploy apps
+
+Deploy from CLI
+
+Customize code review
+
+Enhance agent mode with MCP
+
+Compare AI models
+
+Speed up development work
+
+Roll out at scale
+Assign licenses
+Set up self-serve licenses
+
+Track usage and adoption
+
+Remind inactive users
+
+Establish AI managers
+
+Enable developers
+Drive adoption
+
+Integrate AI agents
+
+Drive downstream impact
+Increase test coverage
+
+Accelerate pull requests
+
+Reduce security debt
+
+Measure trial success
+
+Maintain codebase standards
+
+Explore a codebase
+
+Explore issues and discussions
+
+Explore pull requests
+
+Write tests
+
+Refactor code
+
+Optimize code reviews
+
+Reduce technical debt
+
+Review AI code
+
+Learn a new language
+
+Modernize legacy code
+
+Modernize Java applications
+
+Migrate a project
+
+Plan a project
+
+Vibe coding
+
+Upgrade projects
+
+Use hooks with Copilot CLI
+
+Responsible use
+Copilot inline suggestions
+
+Chat in your IDE
+
+Chat in GitHub
+
+Chat in GitHub Mobile
+
+Copilot CLI
+
+Copilot in Windows Terminal
+
+Copilot in GitHub Desktop
+
+Pull request summaries
+
+Commit message generation
+
+Code review
+
+Copilot cloud agent
+
+Spark
+
+Copilot Spaces
+
+GitHub Copilot/
+
+How-tos/
+
+Copilot SDK
+
+GitHub Copilot SDK
+
+Learn how to customize your Copilot experience using Copilot SDK.
+
+Getting started with Copilot SDK
+
+Learn how to install Copilot SDK and send your first message.
+
+Set up Copilot SDK
+
+Learn how to configure and deploy GitHub Copilot SDK for different environments.
+
+Authenticating with the Copilot SDK
+
+Choose the authentication method that best fits your deployment scenario for GitHub Copilot SDK.
+
+Use Copilot SDK
+
+Explore the capabilities you can add to your Copilot SDK application.
+
+Use hooks
+
+Customize the behavior of Copilot SDK sessions at key points in the conversation lifecycle using hooks.
+
+Observability for Copilot SDK
+
+Learn how to monitor and trace your Copilot SDK applications.
+
+Copilot SDK integrations
+
+Integrate Copilot SDK with third-party agent frameworks and orchestration platforms.
+
+Troubleshooting Copilot SDK
+
+Find solutions to common issues and resolve problems when using Copilot SDK.
+
+Help and support
+
+Did you find what you needed?
+
+ Yes No
+Privacy policy
+
+Help us make these docs great!
+
+All GitHub docs are open source. See something that's wrong or unclear? Submit a pull request.
+Make a contribution
+Learn how to contribute
+
+Still need help?
+
+Ask the GitHub community
+
+Contact support
+
+Legal
+
+© 2026 GitHub, Inc.
+
+Terms
+
+Privacy
+
+Status
+
+Pricing
+
+Expert services
+
+Blog

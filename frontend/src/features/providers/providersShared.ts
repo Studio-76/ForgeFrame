@@ -11,8 +11,11 @@ import type {
   HarnessProfile,
   HarnessTemplate,
   HealthConfig,
+  OpenAICompatibilitySignoffResponse,
   OauthOnboardingTarget,
   OauthTargetStatus,
+  ProviderCatalogEntry,
+  ProviderCatalogSummary,
   ProviderControlItem,
   ProductAxisTarget,
 } from "../../api/admin";
@@ -90,6 +93,9 @@ export type ProvidersPageData = {
   modelErrors: Record<string, number>;
   integrationErrors: Record<string, number>;
   profileErrors: Record<string, number>;
+  providerCatalog: ProviderCatalogEntry[];
+  providerCatalogSummary: ProviderCatalogSummary | null;
+  openaiCompatibilitySignoff: OpenAICompatibilitySignoffResponse | null;
   clients: ClientOpsRecord[];
   productAxisTargets: ProductAxisTarget[];
   oauthTargets: OauthTargetStatus[];

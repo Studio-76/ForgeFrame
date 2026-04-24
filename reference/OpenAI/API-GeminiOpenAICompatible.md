@@ -1,0 +1,2232 @@
+# API-GeminiOpenAICompatible.md
+
+> Reverse-engineered from the accessible source snapshots of `DaCHRIS/code-proxy` and `DaCHRIS/hermes-agent` on 2026-04-24.  
+> This describes implementation-relevant behavior found in those repos. It is not a statement that every flow is officially supported by the upstream vendor. Treat OAuth/account-token integrations especially carefully and verify vendor terms before production use.
+
+## hermes-agent Google AI Studio OpenAI-kompatibel
+
+Provider-ID: `gemini`  
+Base: `https://generativelanguage.googleapis.com/v1beta/openai`  
+Auth: `GOOGLE_API_KEY` oder `GEMINI_API_KEY`  
+Override: `GEMINI_BASE_URL`
+
+## Endpoint
+
+```http
+POST https://generativelanguage.googleapis.com/v1beta/openai/chat/completions
+Authorization: Bearer <api_key>
+Content-Type: application/json
+```
+
+Je nach Google-kompatibler OpenAI-API kann der API-Key auch SDK-seitig als `api_key` verwendet werden.
+
+## Abgrenzung
+
+Diese Datei beschreibt die OpenAI-kompatible Gemini-API aus Hermes. `API-Gemini.md` beschreibt zusaetzlich die native `generateContent`-Translation aus code-proxy.
+
+---
+
+## Offizielle Dokumentationsanreicherung: `OpenAI/API/GoogleGemini`
+
+> Ergänzt am 2026-04-24 03:20:42. Quelle ist das bereitgestellte `reference.zip`. Die zugehörigen `.txt`- und `.md`-Dateien wurden vollständig eingelesen. Für sehr große Textanlagen wird der Volltext in dieser ZIP-Fassung auf 40.000 Zeichen je Quelldatei begrenzt; die implementierungsrelevanten Extrakte oben bleiben vollständig aus allen Dateien erzeugt.
+
+### Offizieller Quellenindex aus Referenz-ZIP
+
+# Index – GoogleGemini
+
+Abrufdatum: `2026-04-24T05:09:30.736134+02:00`
+
+## Geladene Dokumente
+
+### OpenAI compatibility | Gemini API | Google AI for Developers
+- Quelle: Pflichtquelle
+- Original-URL: https://ai.google.dev/gemini-api/docs/openai
+- Bereinigte Download-URL: https://ai.google.dev/gemini-api/docs/openai
+- Lokale Datei(en): HTML: `openai.html`, Text: `openai.txt`
+- Abrufdatum: `2026-04-24T05:09:30.736134+02:00`
+- Zweck: Google Gemini OpenAI compatibility
+- Download-Werkzeug: `urllib`
+- HTTP-Status: `200`
+- Inhaltstyp: `text/html; charset=utf-8`
+
+### Erkannte URLs und Basisadressen
+
+- `https://ai.google.dev/gemini-api/docs/openai`
+- `https://generativelanguage.googleapis.com/v1beta/openai/`
+- `https://generativelanguage.googleapis.com/v1beta/openai/chat/completions`
+- `https://generativelanguage.googleapis.com/v1beta/openai/images/generations`
+- `https://generativelanguage.googleapis.com/v1beta/openai/videos`
+- `https://generativelanguage.googleapis.com/v1beta/openai/videos/VIDEO_ID`
+- `https://generativelanguage.googleapis.com/v1beta/openai`
+- `https://generativelanguage.googleapis.com/v1beta/openai/embeddings`
+- `https://generativelanguage.googleapis.com/v1beta/`
+- `https://generativelanguage.googleapis.com/v1beta/openai/models`
+- `https://generativelanguage.googleapis.com/v1beta/openai/models/gemini-3-flash-preview`
+
+### Erkannte Endpunkte / Pfade
+
+- `https://generativelanguage.googleapis.com/v1beta/openai/"`
+- `https://generativelanguage.googleapis.com/v1beta/openai/chat/completions"`
+- `https://generativelanguage.googleapis.com/v1beta/openai/":`
+- `https://generativelanguage.googleapis.com/v1beta/openai/images/generations"`
+- `/v1/videos`
+- `https://generativelanguage.googleapis.com/v1beta/openai/videos"`
+- `GET /v1/videos/{id}`
+- `https://generativelanguage.googleapis.com/v1beta/openai/videos/VIDEO_ID"`
+- `https://generativelanguage.googleapis.com/v1beta/openai"`
+- `https://generativelanguage.googleapis.com/v1beta/openai/embeddings"`
+- `/v1/chat/completions`
+- `/v1/embeddings`
+- `https://generativelanguage.googleapis.com/v1beta/"`
+- `https://generativelanguage.googleapis.com/v1beta/openai/models`
+- `https://generativelanguage.googleapis.com/v1beta/openai/models/gemini-3-flash-preview`
+
+### Erkannte Umgebungsvariablen / Konstanten
+
+- `REST`
+- `GEMINI_API_KEY`
+- `VIDEO_ID`
+- `JSONL`
+- `POST`
+- `IMAGE`
+- `HARM_CATEGORY_HATE_SPEECH`
+- `BLOCK_NONE`
+- `MY_API_KEY`
+
+### Implementierungsrelevante offizielle Extrakte
+
+
+---
+
+**Quelle `INDEX.md`**
+
+### OpenAI compatibility | Gemini API | Google AI for Developers
+- Quelle: Pflichtquelle
+
+---
+
+**Quelle `INDEX.md`**
+
+- Quelle: Pflichtquelle
+- Original-URL: https://ai.google.dev/gemini-api/docs/openai
+- Bereinigte Download-URL: https://ai.google.dev/gemini-api/docs/openai
+
+---
+
+**Quelle `INDEX.md`**
+
+- Original-URL: https://ai.google.dev/gemini-api/docs/openai
+- Bereinigte Download-URL: https://ai.google.dev/gemini-api/docs/openai
+- Lokale Datei(en): HTML: `openai.html`, Text: `openai.txt`
+
+---
+
+**Quelle `INDEX.md`**
+
+- Bereinigte Download-URL: https://ai.google.dev/gemini-api/docs/openai
+- Lokale Datei(en): HTML: `openai.html`, Text: `openai.txt`
+- Abrufdatum: `2026-04-24T05:09:30.736134+02:00`
+
+---
+
+**Quelle `INDEX.md`**
+
+- Abrufdatum: `2026-04-24T05:09:30.736134+02:00`
+- Zweck: Google Gemini OpenAI compatibility
+- Download-Werkzeug: `urllib`
+
+---
+
+**Quelle `openai.txt`**
+
+OpenAI compatibility  |  Gemini API  |  Google AI for Developers
+
+---
+
+**Quelle `openai.txt`**
+
+Get API key
+
+---
+
+**Quelle `openai.txt`**
+
+API keys
+
+---
+
+**Quelle `openai.txt`**
+
+Models
+
+---
+
+**Quelle `openai.txt`**
+
+All models
+
+---
+
+**Quelle `openai.txt`**
+
+Embeddings
+
+---
+
+**Quelle `openai.txt`**
+
+Function calling
+
+---
+
+**Quelle `openai.txt`**
+
+Tools
+
+---
+
+**Quelle `openai.txt`**
+
+Combine Tools and Function calling
+
+---
+
+**Quelle `openai.txt`**
+
+Get started using the GenAI SDK
+
+---
+
+**Quelle `openai.txt`**
+
+Tool use
+
+---
+
+**Quelle `openai.txt`**
+
+Ephemeral tokens
+
+---
+
+**Quelle `openai.txt`**
+
+OpenAI compatibility
+
+---
+
+**Quelle `openai.txt`**
+
+Token counting
+
+---
+
+**Quelle `openai.txt`**
+
+Vercel AI SDK
+
+---
+
+**Quelle `openai.txt`**
+
+Rate limits
+
+---
+
+**Quelle `openai.txt`**
+
+Billing info
+
+---
+
+**Quelle `openai.txt`**
+
+Migrate to Gen AI SDK
+
+---
+
+**Quelle `openai.txt`**
+
+OAuth authentication
+
+---
+
+**Quelle `openai.txt`**
+
+Gemini models are accessible using the OpenAI libraries (Python and TypeScript /
+Javascript) along with the REST API, by updating three lines of code
+
+---
+
+**Quelle `openai.txt`**
+
+Javascript) along with the REST API, by updating three lines of code
+and using your Gemini API key. If you
+aren't already using the OpenAI libraries, we recommend that you call the
+
+---
+
+**Quelle `openai.txt`**
+
+and using your Gemini API key. If you
+aren't already using the OpenAI libraries, we recommend that you call the
+Gemini API directly.
+
+---
+
+**Quelle `openai.txt`**
+
+from openai import OpenAI
+
+---
+
+**Quelle `openai.txt`**
+
+client = OpenAI(
+ api_key="GEMINI_API_KEY",
+
+---
+
+**Quelle `openai.txt`**
+
+api_key="GEMINI_API_KEY",
+ base_url="https://generativelanguage.googleapis.com/v1beta/openai/"
+)
+
+---
+
+**Quelle `openai.txt`**
+
+response = client.chat.completions.create(
+ model="gemini-3-flash-preview",
+
+---
+
+**Quelle `openai.txt`**
+
+import OpenAI from "openai";
+
+---
+
+**Quelle `openai.txt`**
+
+const openai = new OpenAI({
+ apiKey: "GEMINI_API_KEY",
+
+---
+
+**Quelle `openai.txt`**
+
+apiKey: "GEMINI_API_KEY",
+ baseURL: "https://generativelanguage.googleapis.com/v1beta/openai/"
+});
+
+---
+
+**Quelle `openai.txt`**
+
+const response = await openai.chat.completions.create({
+ model: "gemini-3-flash-preview",
+
+---
+
+**Quelle `openai.txt`**
+
+curl "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions" \
+ -H "Content-Type: application/json" \
+
+---
+
+**Quelle `openai.txt`**
+
+curl "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions" \
+ -H "Content-Type: application/json" \
+ -H "Authorization: Bearer $GEMINI_API_KEY" \
+
+---
+
+**Quelle `openai.txt`**
+
+-H "Content-Type: application/json" \
+ -H "Authorization: Bearer $GEMINI_API_KEY" \
+ -d '{
+
+---
+
+**Quelle `openai.txt`**
+
+api_key="GEMINI_API_KEY": Replace "GEMINI_API_KEY" with your actual Gemini
+API key, which you can get in Google AI Studio.
+
+---
+
+**Quelle `openai.txt`**
+
+base_url="https://generativelanguage.googleapis.com/v1beta/openai/": This
+tells the OpenAI library to send requests to the Gemini API endpoint instead of
+
+---
+
+**Quelle `openai.txt`**
+
+base_url="https://generativelanguage.googleapis.com/v1beta/openai/": This
+tells the OpenAI library to send requests to the Gemini API endpoint instead of
+the default URL.
+
+---
+
+**Quelle `openai.txt`**
+
+model="gemini-3-flash-preview": Choose a compatible Gemini model
+
+---
+
+**Quelle `openai.txt`**
+
+Gemini models are trained to think through complex problems, leading
+to significantly improved reasoning. The Gemini API comes with thinking
+
+---
+
+**Quelle `openai.txt`**
+
+Different Gemini models have different reasoning configurations, you can see how
+they map to OpenAI's reasoning efforts as follows:
+
+---
+
+**Quelle `openai.txt`**
+
+reasoning_effort (OpenAI)
+ thinking_level (Gemini 3.1 Pro)
+
+### Code-/Konfigurationsbeispiele aus offiziellen Dokumenten
+
+
+---
+
+**Quelle `openai.txt`**
+
+````text
+api_key="GEMINI_API_KEY",
+````
+
+---
+
+**Quelle `openai.txt`**
+
+````text
+base_url="https://generativelanguage.googleapis.com/v1beta/openai/"
+````
+
+---
+
+**Quelle `openai.txt`**
+
+````text
+curl "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions" \
+````
+
+---
+
+**Quelle `openai.txt`**
+
+````text
+api_key="GEMINI_API_KEY": Replace "GEMINI_API_KEY" with your actual Gemini
+````
+
+---
+
+**Quelle `openai.txt`**
+
+````text
+base_url="https://generativelanguage.googleapis.com/v1beta/openai/": This
+````
+
+---
+
+**Quelle `openai.txt`**
+
+````text
+base_url="https://generativelanguage.googleapis.com/v1beta/openai/",
+````
+
+---
+
+**Quelle `openai.txt`**
+
+````text
+curl "https://generativelanguage.googleapis.com/v1beta/openai/images/generations" \
+````
+
+---
+
+**Quelle `openai.txt`**
+
+````text
+curl "https://generativelanguage.googleapis.com/v1beta/openai/videos" \
+````
+
+---
+
+**Quelle `openai.txt`**
+
+````text
+curl "https://generativelanguage.googleapis.com/v1beta/openai/videos/VIDEO_ID" \
+````
+
+---
+
+**Quelle `openai.txt`**
+
+````text
+curl "https://generativelanguage.googleapis.com/v1beta/openai/embeddings" \
+````
+
+---
+
+**Quelle `openai.txt`**
+
+````text
+api_key=MY_API_KEY,
+````
+
+---
+
+**Quelle `openai.txt`**
+
+````text
+base_url="https://generativelanguage.googleapis.com/v1beta/"
+````
+
+---
+
+**Quelle `openai.txt`**
+
+````text
+curl https://generativelanguage.googleapis.com/v1beta/openai/models \
+````
+
+---
+
+**Quelle `openai.txt`**
+
+````text
+curl https://generativelanguage.googleapis.com/v1beta/openai/models/gemini-3-flash-preview \
+````
+
+## Textanlagen aus der offiziellen Dokumentation
+
+
+<details>
+<summary>Textanlage: <code>OpenAI/API/GoogleGemini/openai.txt</code></summary>
+
+````text
+OpenAI compatibility  |  Gemini API  |  Google AI for Developers
+
+ Skip to main content
+
+ /
+
+ English
+
+ Deutsch
+
+ Español – América Latina
+
+ Français
+
+ Indonesia
+
+ Italiano
+
+ Polski
+
+ Português – Brasil
+
+ Shqip
+
+ Tiếng Việt
+
+ Türkçe
+
+ Русский
+
+ עברית
+
+ العربيّة
+
+ فارسی
+
+ हिंदी
+
+ বাংলা
+
+ ภาษาไทย
+
+ 中文 – 简体
+
+ 中文 – 繁體
+
+ 日本語
+
+ 한국어
+
+ Get API key
+
+ Cookbook
+
+ Community
+
+ Sign in
+
+ Docs
+
+ API reference
+
+ Gemini API
+
+ Docs
+
+ API reference
+
+ Get API key
+
+ Cookbook
+
+ Community
+
+ Get started
+
+Overview
+
+Quickstart
+
+API keys
+
+Libraries
+
+Pricing
+
+Interactions API
+
+Coding agent setup
+
+ Models
+
+All models
+
+Gemini 3
+
+Nano Banana
+
+Veo
+
+Lyria 3
+
+Lyria RealTime
+
+Imagen
+
+Text-to-speech
+
+Embeddings
+
+Robotics
+
+ Core capabilities
+
+Text
+
+ Image
+
+Image generation 🍌
+
+Image understanding
+
+ Video
+
+Video generation
+
+Video understanding
+
+Documents
+
+ Speech and audio
+
+Speech generation
+
+Audio understanding
+
+ Thinking
+
+Thinking
+
+Thought signatures
+
+Structured outputs
+
+Function calling
+
+Long context
+
+ Agents
+
+Overview
+
+Deep Research Agent
+
+ Tools
+
+Overview
+
+Google Search
+
+Google Maps
+
+Code execution
+
+URL context
+
+Computer Use
+
+File Search
+
+Combine Tools and Function calling
+
+ Live API
+
+Overview
+
+ Get started
+
+Get started using the GenAI SDK
+
+Get started using raw WebSockets
+
+Capabilities
+
+Tool use
+
+Session management
+
+Ephemeral tokens
+
+Best practices
+
+ Optimization
+
+Overview
+
+Batch API
+
+Flex inference
+
+Priority inference
+
+Context caching
+
+ Guides
+
+ File input
+
+Input methods
+
+Files API
+
+OpenAI compatibility
+
+Media resolution
+
+Token counting
+
+Prompt engineering
+
+ Logs and datasets
+
+Get started with logs
+
+Data logging and sharing
+
+ Safety
+
+Safety settings
+
+Safety guidance
+
+ Frameworks
+
+LangChain & LangGraph
+
+CrewAI
+
+LlamaIndex
+
+Vercel AI SDK
+
+Temporal
+
+ Resources
+
+Release notes
+
+Deprecations
+
+Rate limits
+
+Billing info
+
+Migrate to Gen AI SDK
+
+API troubleshooting
+
+Partner and library integrations
+
+ Google AI Studio
+
+Quickstart
+
+Vibe code in Build mode
+
+Developing Full-Stack Apps
+
+Troubleshooting
+
+Access for Workspace users
+
+ Google Cloud Platform
+
+Gemini Enterprise Agent Platform Gemini API
+
+OAuth authentication
+
+ Policies
+
+Terms of service
+
+Available regions
+
+Abuse monitoring
+
+Feedback information
+
+ Gemini Deep Research is now available in preview with collaborative planning, visualization, MCP support, and more.
+
+ Home
+
+ Gemini API
+
+ Docs
+
+ Send feedback
+
+ OpenAI compatibility
+
+Gemini models are accessible using the OpenAI libraries (Python and TypeScript /
+Javascript) along with the REST API, by updating three lines of code
+and using your Gemini API key. If you
+aren't already using the OpenAI libraries, we recommend that you call the
+Gemini API directly.
+
+Python
+
+from openai import OpenAI
+
+client = OpenAI(
+ api_key="GEMINI_API_KEY",
+ base_url="https://generativelanguage.googleapis.com/v1beta/openai/"
+)
+
+response = client.chat.completions.create(
+ model="gemini-3-flash-preview",
+ messages=[
+ { "role": "system",
+ "content": "You are a helpful assistant."
+ },
+ {
+ "role": "user",
+ "content": "Explain to me how AI works"
+ }
+ ]
+)
+
+print(response.choices[0].message)
+
+JavaScript
+
+import OpenAI from "openai";
+
+const openai = new OpenAI({
+ apiKey: "GEMINI_API_KEY",
+ baseURL: "https://generativelanguage.googleapis.com/v1beta/openai/"
+});
+
+const response = await openai.chat.completions.create({
+ model: "gemini-3-flash-preview",
+ messages: [
+ { role: "system",
+ content: "You are a helpful assistant." 
+ },
+ {
+ role: "user",
+ content: "Explain to me how AI works",
+ },
+ ],
+});
+
+console.log(response.choices[0].message);
+
+REST
+
+curl "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions" \
+ -H "Content-Type: application/json" \
+ -H "Authorization: Bearer $GEMINI_API_KEY" \
+ -d '{
+ "model": "gemini-3-flash-preview",
+ "messages": [
+ {
+ "role": "user",
+ "content": "Explain to me how AI works"
+ }
+ ]
+ }'
+
+What changed? Just three lines!
+
+api_key="GEMINI_API_KEY": Replace "GEMINI_API_KEY" with your actual Gemini
+API key, which you can get in Google AI Studio.
+
+base_url="https://generativelanguage.googleapis.com/v1beta/openai/": This
+tells the OpenAI library to send requests to the Gemini API endpoint instead of
+the default URL.
+
+model="gemini-3-flash-preview": Choose a compatible Gemini model
+
+Thinking
+
+Gemini models are trained to think through complex problems, leading
+to significantly improved reasoning. The Gemini API comes with thinking
+parameters which give fine grain
+control over how much the model will think.
+
+Different Gemini models have different reasoning configurations, you can see how
+they map to OpenAI's reasoning efforts as follows:
+
+ reasoning_effort (OpenAI)
+ thinking_level (Gemini 3.1 Pro)
+ thinking_level (Gemini 3.1 Flash-Lite)
+ thinking_level (Gemini 3 Flash)
+ thinking_budget (Gemini 2.5)
+
+ minimal
+ low
+ minimal
+ minimal
+ 1,024
+
+ low
+ low
+ low
+ low
+ 1,024
+
+ medium
+ medium
+ medium
+ medium
+ 8,192
+
+ high
+ high
+ high
+ high
+ 24,576
+
+If no reasoning_effort is specified, Gemini uses the model's
+default level or budget.
+
+If you want to disable thinking, you can set reasoning_effort to "none" for
+2.5 models. Reasoning cannot be turned off for Gemini 2.5 Pro or 3 models.
+
+Python
+
+from openai import OpenAI
+
+client = OpenAI(
+ api_key="GEMINI_API_KEY",
+ base_url="https://generativelanguage.googleapis.com/v1beta/openai/"
+)
+
+response = client.chat.completions.create(
+ model="gemini-3-flash-preview",
+ reasoning_effort="low",
+ messages=[
+ { "role": "system",
+ "content": "You are a helpful assistant."
+ },
+ {
+ "role": "user",
+ "content": "Explain to me how AI works"
+ }
+ ]
+)
+
+print(response.choices[0].message)
+
+JavaScript
+
+import OpenAI from "openai";
+
+const openai = new OpenAI({
+ apiKey: "GEMINI_API_KEY",
+ baseURL: "https://generativelanguage.googleapis.com/v1beta/openai/"
+});
+
+const response = await openai.chat.completions.create({
+ model: "gemini-3-flash-preview",
+ reasoning_effort: "low",
+ messages: [
+ { role: "system",
+ content: "You are a helpful assistant." 
+ },
+ {
+ role: "user",
+ content: "Explain to me how AI works",
+ },
+ ],
+});
+
+console.log(response.choices[0].message);
+
+REST
+
+curl "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions" \
+ -H "Content-Type: application/json" \
+ -H "Authorization: Bearer $GEMINI_API_KEY" \
+ -d '{
+ "model": "gemini-3-flash-preview",
+ "reasoning_effort": "low",
+ "messages": [
+ {
+ "role": "user",
+ "content": "Explain to me how AI works"
+ }
+ ]
+ }'
+
+Gemini thinking models also produce thought summaries.
+You can use the extra_body field to include Gemini fields
+in your request.
+
+Note that reasoning_effort and thinking_level/thinking_budget overlap
+functionality, so they can't be used at the same time.
+
+Python
+
+from openai import OpenAI
+
+client = OpenAI(
+ api_key="GEMINI_API_KEY",
+ base_url="https://generativelanguage.googleapis.com/v1beta/openai/"
+)
+
+response = client.chat.completions.create(
+ model="gemini-3-flash-preview",
+ messages=[{"role": "user", "content": "Explain to me how AI works"}],
+ extra_body={
+ 'extra_body': {
+ "google": {
+ "thinking_config": {
+ "thinking_level": "low",
+ "include_thoughts": True
+ }
+ }
+ }
+ }
+)
+
+print(response.choices[0].message)
+
+JavaScript
+
+import OpenAI from "openai";
+
+const openai = new OpenAI({
+ apiKey: "GEMINI_API_KEY",
+ baseURL: "https://generativelanguage.googleapis.com/v1beta/openai/"
+});
+
+const response = await openai.chat.completions.create({
+ model: "gemini-3-flash-preview",
+ messages: [{role: "user", content: "Explain to me how AI works",}],
+ extra_body: {
+ "google": {
+ "thinking_config": {
+ "thinking_level": "low",
+ "include_thoughts": true
+ }
+ }
+ }
+});
+
+console.log(response.choices[0].message);
+
+REST
+
+curl "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions" \
+ -H "Content-Type: application/json" \
+ -H "Authorization: Bearer GEMINI_API_KEY" \
+ -d '{
+ "model": "gemini-3-flash-preview",
+ "messages": [{"role": "user", "content": "Explain to me how AI works"}],
+ "extra_body": {
+ "google": {
+ "thinking_config": {
+ "thinking_level": "low",
+ "include_thoughts": true
+ }
+ }
+ }
+ }'
+
+Gemini 3 supports OpenAI compatibility for thought signatures in chat completion
+APIs. You can find the full example on the thought signatures page.
+
+Streaming
+
+The Gemini API supports streaming responses.
+
+Python
+
+from openai import OpenAI
+
+client = OpenAI(
+ api_key="GEMINI_API_KEY",
+ base_url="https://generativelanguage.googleapis.com/v1beta/openai/"
+)
+
+response = client.chat.completions.create(
+ model="gemini-3-flash-preview",
+ messages=[
+ {
+ "role": "system",
+ "content": "You are a helpful assistant."
+ },
+ { "role": "user",
+ "content": "Hello!"
+ }
+ ],
+ stream=True
+)
+
+for chunk in response:
+ print(chunk.choices[0].delta)
+
+JavaScript
+
+import OpenAI from "openai";
+
+const openai = new OpenAI({
+ apiKey: "GEMINI_API_KEY",
+ baseURL: "https://generativelanguage.googleapis.com/v1beta/openai/"
+});
+
+async function main() {
+ const completion = await openai.chat.completions.create({
+ model: "gemini-3-flash-preview",
+ messages: [
+ {
+ "role": "system",
+ "content": "You are a helpful assistant."
+ },
+ {
+ "role": "user",
+ "content": "Hello!"
+ }
+ ],
+ stream: true,
+ });
+
+ for await (const chunk of completion) {
+ console.log(chunk.choices[0].delta.content);
+ }
+}
+
+main();
+
+REST
+
+curl "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions" \
+ -H "Content-Type: application/json" \
+ -H "Authorization: Bearer GEMINI_API_KEY" \
+ -d '{
+ "model": "gemini-3-flash-preview",
+ "messages": [
+ {"role": "user", "content": "Explain to me how AI works"}
+ ],
+ "stream": true
+ }'
+
+Function calling
+
+Function calling makes it easier for you to get structured data outputs from
+generative models and is supported in the Gemini API.
+
+Python
+
+from openai import OpenAI
+
+client = OpenAI(
+ api_key="GEMINI_API_KEY",
+ base_url="https://generativelanguage.googleapis.com/v1beta/openai/"
+)
+
+tools = [
+ {
+ "type": "function",
+ "function": {
+ "name": "get_weather",
+ "description": "Get the weather in a given location",
+ "parameters": {
+ "type": "object",
+ "properties": {
+ "location": {
+ "type": "string",
+ "description": "The city and state, e.g. Chicago, IL",
+ },
+ "unit": {"type": "string", "enum": ["celsius", "fahrenheit"]},
+ },
+ "required": ["location"],
+ },
+ }
+ }
+]
+
+messages = [{"role": "user", "content": "What's the weather like in Chicago today?"}]
+response = client.chat.completions.create(
+ model="gemini-3-flash-preview",
+ messages=messages,
+ tools=tools,
+ tool_choice="auto"
+)
+
+print(response)
+
+JavaScript
+
+import OpenAI from "openai";
+
+const openai = new OpenAI({
+ apiKey: "GEMINI_API_KEY",
+ baseURL: "https://generativelanguage.googleapis.com/v1beta/openai/"
+});
+
+async function main() {
+ const messages = [{"role": "user", "content": "What's the weather like in Chicago today?"}];
+ const tools = [
+ {
+ "type": "function",
+ "function": {
+ "name": "get_weather",
+ "description": "Get the weather in a given location",
+ "parameters": {
+ "type": "object",
+ "properties": {
+ "location": {
+ "type": "string",
+ "description": "The city and state, e.g. Chicago, IL",
+ },
+ "unit": {"type": "string", "enum": ["celsius", "fahrenheit"]},
+ },
+ "required": ["location"],
+ },
+ }
+ }
+ ];
+
+ const response = await openai.chat.completions.create({
+ model: "gemini-3-flash-preview",
+ messages: messages,
+ tools: tools,
+ tool_choice: "auto",
+ });
+
+ console.log(response);
+}
+
+main();
+
+REST
+
+curl "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions" \
+-H "Content-Type: application/json" \
+-H "Authorization: Bearer GEMINI_API_KEY" \
+-d '{
+ "model": "gemini-3-flash-preview",
+ "messages": [
+ {
+ "role": "user",
+ "content": "What'\''s the weather like in Chicago today?"
+ }
+ ],
+ "tools": [
+ {
+ "type": "function",
+ "function": {
+ "name": "get_weather",
+ "description": "Get the current weather in a given location",
+ "parameters": {
+ "type": "object",
+ "properties": {
+ "location": {
+ "type": "string",
+ "description": "The city and state, e.g. Chicago, IL"
+ },
+ "unit": {
+ "type": "string",
+ "enum": ["celsius", "fahrenheit"]
+ }
+ },
+ "required": ["location"]
+ }
+ }
+ }
+ ],
+ "tool_choice": "auto"
+}'
+
+Image understanding
+
+Gemini models are natively multimodal and provide best in class performance on
+many common vision tasks.
+
+Python
+
+import base64
+from openai import OpenAI
+
+client = OpenAI(
+ api_key="GEMINI_API_KEY",
+ base_url="https://generativelanguage.googleapis.com/v1beta/openai/"
+)
+
+# Function to encode the image
+def encode_image(image_path):
+ with open(image_path, "rb") as image_file:
+ return base64.b64encode(image_file.read()).decode('utf-8')
+
+# Getting the base64 string
+base64_image = encode_image("Path/to/agi/image.jpeg")
+
+response = client.chat.completions.create(
+ model="gemini-3-flash-preview",
+ messages=[
+ {
+ "role": "user",
+ "content": [
+ {
+ "type": "text",
+ "text": "What is in this image?",
+ },
+ {
+ "type": "image_url",
+ "image_url": {
+ "url": f"data:image/jpeg;base64,{base64_image}"
+ },
+ },
+ ],
+ }
+ ],
+)
+
+print(response.choices[0])
+
+JavaScript
+
+import OpenAI from "openai";
+import fs from 'fs/promises';
+
+const openai = new OpenAI({
+ apiKey: "GEMINI_API_KEY",
+ baseURL: "https://generativelanguage.googleapis.com/v1beta/openai/"
+});
+
+async function encodeImage(imagePath) {
+ try {
+ const imageBuffer = await fs.readFile(imagePath);
+ return imageBuffer.toString('base64');
+ } catch (error) {
+ console.error("Error encoding image:", error);
+ return null;
+ }
+}
+
+async function main() {
+ const imagePath = "Path/to/agi/image.jpeg";
+ const base64Image = await encodeImage(imagePath);
+
+ const messages = [
+ {
+ "role": "user",
+ "content": [
+ {
+ "type": "text",
+ "text": "What is in this image?",
+ },
+ {
+ "type": "image_url",
+ "image_url": {
+ "url": `data:image/jpeg;base64,${base64Image}`
+ },
+ },
+ ],
+ }
+ ];
+
+ try {
+ const response = await openai.chat.completions.create({
+ model: "gemini-3-flash-preview",
+ messages: messages,
+ });
+
+ console.log(response.choices[0]);
+ } catch (error) {
+ console.error("Error calling Gemini API:", error);
+ }
+}
+
+main();
+
+REST
+
+bash -c '
+ base64_image=$(base64 -i "Path/to/agi/image.jpeg");
+ curl "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions" \
+ -H "Content-Type: application/json" \
+ -H "Authorization: Bearer GEMINI_API_KEY" \
+ -d "{
+ \"model\": \"gemini-3-flash-preview\",
+ \"messages\": [
+ {
+ \"role\": \"user\",
+ \"content\": [
+ { \"type\": \"text\", \"text\": \"What is in this image?\" },
+ {
+ \"type\": \"image_url\",
+ \"image_url\": { \"url\": \"data:image/jpeg;base64,${base64_image}\" }
+ }
+ ]
+ }
+ ]
+ }"
+'
+
+Generate an image
+
+Generate an image using gemini-2.5-flash-image or gemini-3-pro-image-preview. Supported parameters include prompt, model, n, size, and response_format. Any other parameters not listed here or in the extra_body section will be silently ignored by the compatibility layer.
+
+You can enable Grounding with Google Search and configure safety settings
+using the extra_body parameter. See the extra_body section
+for available parameters. Grounding with Google Search is only available on Gemini 3 and newer models.
+
+Python
+
+import base64
+from openai import OpenAI
+from PIL import Image
+from io import BytesIO
+
+client = OpenAI(
+ api_key="GEMINI_API_KEY",
+ base_url="https://generativelanguage.googleapis.com/v1beta/openai/",
+)
+
+response = client.images.generate(
+ model="gemini-2.5-flash-image",
+ prompt="a portrait of a sheepadoodle wearing a cape",
+ response_format='b64_json',
+ n=1,
+)
+
+for image_data in response.data:
+ image = Image.open(BytesIO(base64.b64decode(image_data.b64_json)))
+ image.show()
+
+JavaScript
+
+import OpenAI from "openai";
+
+const openai = new OpenAI({
+ apiKey: "GEMINI_API_KEY",
+ baseURL: "https://generativelanguage.googleapis.com/v1beta/openai/",
+});
+
+async function main() {
+ const image = await openai.images.generate(
+ {
+ model: "gemini-2.5-flash-image",
+ prompt: "a portrait of a sheepadoodle wearing a cape",
+ response_format: "b64_json",
+ n: 1,
+ }
+ );
+
+ console.log(image.data);
+}
+
+main();
+
+REST
+
+curl "https://generativelanguage.googleapis.com/v1beta/openai/images/generations" \
+ -H "Content-Type: application/json" \
+ -H "Authorization: Bearer GEMINI_API_KEY" \
+ -d '{
+ "model": "gemini-2.5-flash-image",
+ "prompt": "a portrait of a sheepadoodle wearing a cape",
+ "response_format": "b64_json",
+ "n": 1,
+ }'
+
+Generate a video
+
+Generate a video using veo-3.1-generate-preview via the Sora-compatible
+/v1/videos endpoint. Supported top-level parameters are prompt and model. Additional parameters like duration_seconds, image, and aspect_ratio must be passed with extra_body. See the extra_body section
+for all available parameters.
+
+Video generation is a long-running operation that returns
+an operation ID you can poll for completion.
+
+Python
+
+from openai import OpenAI
+
+client = OpenAI(
+ api_key="GEMINI_API_KEY",
+ base_url="https://generativelanguage.googleapis.com/v1beta/openai/"
+)
+
+# Returns a Long Running Operation (status: processing)
+response = client.videos.create(
+ model="veo-3.1-generate-preview",
+ prompt="A cinematic drone shot of a waterfall",
+)
+
+print(f"Operation ID: {response.id}")
+print(f"Status: {response.status}")
+
+JavaScript
+
+import OpenAI from "openai";
+
+const openai = new OpenAI({
+ apiKey: "GEMINI_API_KEY",
+ baseURL: "https://generativelanguage.googleapis.com/v1beta/openai/"
+});
+
+async function main() {
+ // Returns a Long Running Operation (status: processing)
+ const response = await openai.videos.create({
+ model: "veo-3.1-generate-preview",
+ prompt: "A cinematic drone shot of a waterfall",
+ });
+
+ console.log(`Operation ID: ${response.id}`);
+ console.log(`Status: ${response.status}`);
+}
+
+main();
+
+REST
+
+curl "https://generativelanguage.googleapis.com/v1beta/openai/videos" \
+ -H "Authorization: Bearer $GEMINI_API_KEY" \
+ -F "model=veo-3.1-generate-preview" \
+ -F "prompt=A cinematic drone shot of a waterfall"
+
+Check video status
+
+Video generation is asynchronous. Use GET /v1/videos/{id} to poll the status
+and retrieve the final video URL when complete:
+
+Python
+
+import time
+from openai import OpenAI
+
+client = OpenAI(
+ api_key="GEMINI_API_KEY",
+ base_url="https://generativelanguage.googleapis.com/v1beta/openai/"
+)
+
+# Poll until video is ready
+video_id = response.id # From the create call
+while True:
+ video = client.videos.retrieve(video_id)
+ if video.status == "completed":
+ print(f"Video URL: {video.url}")
+ break
+ elif video.status == "failed":
+ print(f"Generation failed: {video.error}")
+ break
+ print(f"Status: {video.status}. Waiting...")
+ time.sleep(10)
+
+JavaScript
+
+import OpenAI from "openai";
+
+const openai = new OpenAI({
+ apiKey: "GEMINI_API_KEY",
+ baseURL: "https://generativelanguage.googleapis.com/v1beta/openai/"
+});
+
+async function main() {
+ // Poll until video is ready
+ const videoId = response.id; // From the create call
+ while (true) {
+ const video = await openai.videos.retrieve(videoId);
+ if (video.status === "completed") {
+ console.log(`Video URL: ${video.url}`);
+ break;
+ } else if (video.status === "failed") {
+ console.log(`Generation failed: ${video.error}`);
+ break;
+ }
+ console.log(`Status: ${video.status}. Waiting...`);
+ await new Promise(resolve => setTimeout(resolve, 10000));
+ }
+}
+
+main();
+
+REST
+
+curl "https://generativelanguage.googleapis.com/v1beta/openai/videos/VIDEO_ID" \
+ -H "Authorization: Bearer $GEMINI_API_KEY"
+
+Audio understanding
+
+Analyze audio input:
+
+Python
+
+import base64
+from openai import OpenAI
+
+client = OpenAI(
+ api_key="GEMINI_API_KEY",
+ base_url="https://generativelanguage.googleapis.com/v1beta/openai/"
+)
+
+with open("/path/to/your/audio/file.wav", "rb") as audio_file:
+ base64_audio = base64.b64encode(audio_file.read()).decode('utf-8')
+
+response = client.chat.completions.create(
+ model="gemini-3-flash-preview",
+ messages=[
+ {
+ "role": "user",
+ "content": [
+ {
+ "type": "text",
+ "text": "Transcribe this audio",
+ },
+ {
+ "type": "input_audio",
+ "input_audio": {
+ "data": base64_audio,
+ "format": "wav"
+ }
+ }
+ ],
+ }
+ ],
+)
+
+print(response.choices[0].message.content)
+
+JavaScript
+
+import fs from "fs";
+import OpenAI from "openai";
+
+const client = new OpenAI({
+ apiKey: "GEMINI_API_KEY",
+ baseURL: "https://generativelanguage.googleapis.com/v1beta/openai/",
+});
+
+const audioFile = fs.readFileSync("/path/to/your/audio/file.wav");
+const base64Audio = Buffer.from(audioFile).toString("base64");
+
+async function main() {
+ const response = await client.chat.completions.create({
+ model: "gemini-3-flash-preview",
+ messages: [
+ {
+ role: "user",
+ content: [
+ {
+ type: "text",
+ text: "Transcribe this audio",
+ },
+ {
+ type: "input_audio",
+ input_audio: {
+ data: base64Audio,
+ format: "wav",
+ },
+ },
+ ],
+ },
+ ],
+ });
+
+ console.log(response.choices[0].message.content);
+}
+
+main();
+
+REST
+Note: If you get an Argument list too long error, the encoding of your
+audio file might be too long for curl.
+
+bash -c '
+ base64_audio=$(base64 -i "/path/to/your/audio/file.wav");
+ curl "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions" \
+ -H "Content-Type: application/json" \
+ -H "Authorization: Bearer GEMINI_API_KEY" \
+ -d "{
+ \"model\": \"gemini-3-flash-preview\",
+ \"messages\": [
+ {
+ \"role\": \"user\",
+ \"content\": [
+ { \"type\": \"text\", \"text\": \"Transcribe this audio file.\" },
+ {
+ \"type\": \"input_audio\",
+ \"input_audio\": {
+ \"data\": \"${base64_audio}\",
+ \"format\": \"wav\"
+ }
+ }
+ ]
+ }
+ ]
+ }"
+'
+
+Structured output
+
+Gemini models can output JSON objects in any structure you define.
+
+Python
+
+from pydantic import BaseModel
+from openai import OpenAI
+
+client = OpenAI(
+ api_key="GEMINI_API_KEY",
+ base_url="https://generativelanguage.googleapis.com/v1beta/openai/"
+)
+
+class CalendarEvent(BaseModel):
+ name: str
+ date: str
+ participants: list[str]
+
+completion = client.beta.chat.completions.parse(
+ model="gemini-3-flash-preview",
+ messages=[
+ {"role": "system", "content": "Extract the event information."},
+ {"role": "user", "content": "John and Susan are going to an AI conference on Friday."},
+ ],
+ response_format=CalendarEvent,
+)
+
+print(completion.choices[0].message.parsed)
+
+JavaScript
+
+import OpenAI from "openai";
+import { zodResponseFormat } from "openai/helpers/zod";
+import { z } from "zod";
+
+const openai = new OpenAI({
+ apiKey: "GEMINI_API_KEY",
+ baseURL: "https://generativelanguage.googleapis.com/v1beta/openai"
+});
+
+const CalendarEvent = z.object({
+ name: z.string(),
+ date: z.string(),
+ participants: z.array(z.string()),
+});
+
+const completion = await openai.chat.completions.parse({
+ model: "gemini-3-flash-preview",
+ messages: [
+ { role: "system", content: "Extract the event information." },
+ { role: "user", content: "John and Susan are going to an AI conference on Friday" },
+ ],
+ response_format: zodResponseFormat(CalendarEvent, "event"),
+});
+
+const event = completion.choices[0].message.parsed;
+console.log(event);
+
+Embeddings
+
+Text embeddings measure the relatedness of text strings and can be generated
+using the Gemini API. You can use
+gemini-embedding-2-preview for multimodal embeddings or
+gemini-embedding-001 for text-only embeddings.
+
+Python
+
+from openai import OpenAI
+
+client = OpenAI(
+ api_key="GEMINI_API_KEY",
+ base_url="https://generativelanguage.googleapis.com/v1beta/openai/"
+)
+
+response = client.embeddings.create(
+ input="Your text string goes here",
+ model="gemini-embedding-2-preview"
+)
+
+print(response.data[0].embedding)
+
+JavaScript
+
+import OpenAI from "openai";
+
+const openai = new OpenAI({
+ apiKey: "GEMINI_API_KEY",
+ baseURL: "https://generativelanguage.googleapis.com/v1beta/openai/"
+});
+
+async function main() {
+ const embedding = await openai.embeddings.create({
+ model: "gemini-embedding-2-preview",
+ input: "Your text string goes here",
+ });
+
+ console.log(embedding);
+}
+
+main();
+
+REST
+
+curl "https://generativelanguage.googleapis.com/v1beta/openai/embeddings" \
+-H "Content-Type: application/json" \
+-H "Authorization: Bearer GEMINI_API_KEY" \
+-d '{
+ "input": "Your text string goes here",
+ "model": "gemini-embedding-2-preview"
+ }'
+
+Batch API
+
+You can create batch jobs, submit them, and check
+their status using the OpenAI library.
+
+You'll need to prepare the JSONL file in OpenAI input format. For example:
+
+{"custom_id": "request-1", "method": "POST", "url": "/v1/chat/completions", "body": {"model": "gemini-3-flash-preview", "messages": [{"role": "user", "content": "Tell me a one-sentence joke."}]}}
+{"custom_id": "request-2", "method": "POST", "url": "/v1/chat/completions", "body": {"model": "gemini-3-flash-preview", "messages": [{"role": "user", "content": "Why is the sky blue?"}]}}
+
+OpenAI compatibility for Batch supports creating a batch,
+monitoring job status, and viewing batch results.
+
+Compatibility for upload and download is currently not supported. Instead, the
+following example uses the genai client for uploading and downloading
+files, the same as when using the Gemini Batch API.
+
+Python
+
+from openai import OpenAI
+
+# Regular genai client for uploads & downloads
+from google import genai
+client = genai.Client()
+
+openai_client = OpenAI(
+ api_key="GEMINI_API_KEY",
+ base_url="https://generativelanguage.googleapis.com/v1beta/openai/"
+)
+
+# Upload the JSONL file in OpenAI input format, using regular genai SDK
+uploaded_file = client.files.upload(
+ file='my-batch-requests.jsonl',
+ config=types.UploadFileConfig(display_name='my-batch-requests', mime_type='jsonl')
+)
+
+# Create batch
+batch = openai_client.batches.create(
+ input_file_id=batch_input_file_id,
+ endpoint="/v1/chat/completions",
+ completion_window="24h"
+)
+
+# Wait for batch to finish (up to 24h)
+while True:
+ batch = client.batches.retrieve(batch.id)
+ if batch.status in ('completed', 'failed', 'cancelled', 'expired'):
+ break
+ print(f"Batch not finished. Current state: {batch.status}. Waiting 30 seconds...")
+ time.sleep(30)
+print(f"Batch finished: {batch}")
+
+# Download results in OpenAI output format, using regular genai SDK
+file_content = genai_client.files.download(file=batch.output_file_id).decode('utf-8')
+
+# See batch_output JSONL in OpenAI output format
+for line in file_content.splitlines():
+ print(line) 
+
+The OpenAI SDK also supports generating embeddings with the Batch API. To do so, switch out the
+create method's endpoint field for an embeddings endpoint, as well as the
+url and model keys in the JSONL file:
+
+# JSONL file using embeddings model and endpoint
+# {"custom_id": "request-1", "method": "POST", "url": "/v1/embeddings", "body": {"model": "ggemini-embedding-001", "messages": [{"role": "user", "content": "Tell me a one-sentence joke."}]}}
+# {"custom_id": "request-2", "method": "POST", "url": "/v1/embeddings", "body": {"model": "gemini-embedding-001", "messages": [{"role": "user", "content": "Why is the sky blue?"}]}}
+
+# ...
+
+# Create batch step with embeddings endpoint
+batch = openai_client.batches.create(
+ input_file_id=batch_input_file_id,
+ endpoint="/v1/embeddings",
+ completion_window="24h"
+)
+
+See the Batch embedding generation
+section of the OpenAI compatibility cookbook for a complete example.
+
+Flex and Priority inference
+
+The Gemini API matches OpenAI's service_tier parameter in name and logic,
+enforcing limits and gracefully directing traffic for both the Flex and Priority
+inference tiers.
+
+Python
+
+from openai import OpenAI
+
+client = OpenAI(
+ api_key="GEMINI_API_KEY",
+ base_url="https://generativelanguage.googleapis.com/v1beta/openai/"
+)
+
+completion = client.chat.completions.create(
+ model="gemini-3-flash-preview",
+ messages=[
+ {"role": "user", "content": "Write a short poem about clouds."}
+ ],
+ service_tier="priority" # Or service_tier="flex"
+)
+
+print(completion)
+
+When not explicitly assigned, service_tier defaults to standard, equivalent
+to default for OpenAI.
+Learn more about inference tiers in the Optimization documentation.
+
+Enable Gemini features with extra_body
+
+There are several features supported by Gemini that are not available in OpenAI
+models but can be enabled using the extra_body field.
+
+Parameter
+Type
+Endpoint
+Description
+
+cached_content
+Text
+Chat
+Corresponds to Gemini's general content cache.
+
+thinking_config
+Object
+Chat
+Corresponds to Gemini's ThinkingConfig.
+
+aspect_ratio
+Text
+Images
+Output aspect ratio (e.g., "16:9", "1:1", "9:16").
+
+generation_config
+Object
+Images
+Gemini generation config object (e.g., {"responseModalities": ["IMAGE"], "candidateCount": 2}).
+
+safety_settings
+List
+Images
+Custom safety threshold filters (e.g., [{"category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_NONE"}]).
+
+tools
+List
+Images
+Enables grounding (e.g., [{"google_search": {}}]). Only for gemini-3-pro-image-preview.
+
+aspect_ratio
+Text
+Video
+Dimensions of the output video (16:9 for landscape, 9:16 for portrait). Maps from size if not specified.
+
+resolution
+Text
+Video
+Output resolution (720p, 1080p, 4K). Note: 1080p and 4K trigger upsampler pipeline.
+
+duration_seconds
+Integer
+Video
+Generation length (values: 4, 6, 8). Must be 8 when using reference_images, interpolation, or extension.
+
+frame_rate
+Text
+Video
+Frame rate for video output (e.g., "24").
+
+input_reference
+Text
+Video
+Reference input for video generation.
+
+extend_video_id
+Text
+Video
+ID of an existing video to extend.
+
+negative_prompt
+Text
+Video
+Items to exclude (e.g., "shaky camera").
+
+seed
+Integer
+Video
+Integer for deterministic generation.
+
+style
+Text
+Video
+Visual styling (cinematic default, creative for social-media optimized).
+
+person_generation
+Text
+Video
+Controls generation of people (allow_adult, allow_all, dont_allow).
+
+reference_images
+List
+Video
+Up to 3 images for style/character reference (base64 assets).
+
+image
+Text
+Video
+Base64-encoded initial input image to condition the video generation.
+
+last_frame
+Object
+Video
+Final image for interpolation (requires image as first frame).
+
+Example using extra_body
+
+Here's an example of using extra_body to set cached_content:
+
+Python
+
+from openai import OpenAI
+
+client = OpenAI(
+ api_key=MY_API_KEY,
+ base_url="https://generativelanguage.googleapis.com/v1beta/"
+)
+
+stream = client.chat.completions.create(
+ model="gemini-3-flash-preview",
+ n=1,
+ messages=[
+ {
+ "role": "user",
+ "content": "Summarize the video"
+ }
+ ],
+ stream=True,
+ stream_options={'include_usage': True},
+ extra_body={
+ 'extra_body':
+ {
+ 'google': {
+ 'cached_content': "cachedContents/0000aaaa1111bbbb2222cccc3333dddd4444eeee"
+ }
+ }
+ }
+)
+
+for chunk in stream:
+ print(chunk)
+ print(chunk.usage.to_dict())
+
+List models
+
+Get a list of available Gemini models:
+
+Python
+
+from openai import OpenAI
+
+client = OpenAI(
+ api_key="GEMINI_API_KEY",
+ base_url="https://generativelanguage.googleapis.com/v1beta/openai/"
+)
+
+models = client.models.list()
+for model in models:
+ print(model.id)
+
+JavaScript
+
+import OpenAI from "openai";
+
+const openai = new OpenAI({
+ apiKey: "GEMINI_API_KEY",
+ baseURL: "https://generativelanguage.googleapis.com/v1beta/openai/",
+});
+
+async function main() {
+ const list = await openai.models.list();
+
+ for await (const model of list) {
+ console.log(model);
+ }
+}
+main();
+
+REST
+
+curl https://generativelanguage.googleapis.com/v1beta/openai/models \
+-H "Authorization: Bearer GEMINI_API_KEY"
+
+Retrieve a model
+
+Retrieve a Gemini model:
+
+Python
+
+from openai import OpenAI
+
+client = OpenAI(
+ api_key="GEMINI_API_KEY",
+ base_url="https://generativelanguage.googleapis.com/v1beta/openai/"
+)
+
+model = client.models.retrieve("gemini-3-flash-preview")
+print(model.id)
+
+JavaScript
+
+import OpenAI from "openai";
+
+const openai = new OpenAI({
+ apiKey: "GEMINI_API_KEY",
+ baseURL: "https://generativelanguage.googleapis.com/v1beta/openai/",
+});
+
+async function main() {
+ const model = await openai.models.retrieve("gemini-3-flash-preview");
+ console.log(model.id);
+}
+
+main();
+
+REST
+
+curl https://generativelanguage.googleapis.com/v1beta/openai/models/gemini-3-flash-preview \
+-H "Authorization: Bearer GEMINI_API_KEY"
+
+Current limitations
+
+Support for the OpenAI libraries is still in beta while we extend feature support.
+
+If you have questions about supported parameters, upcoming features, or run into
+any issues getting started with Gemini, join our Developer Forum.
+
+What's next
+
+Try our OpenAI Compatibility Colab to work through more detailed
+examples.
+
+ Send feedback
+
+Except as otherwise noted, the content of this page is licensed under the Creative Commons Attribution 4.0 License, and code samples are licensed under the Apache 2.0 License. For details, see the Google Developers Site Policies. Java is a registered trademark of Oracle and/or its affiliates.
+
+Last updated 2026-04-01 UTC.
+
+ Need to tell us more?
+
+ [[["Easy to understand","easyToUnderstand","thumb-up"],["Solved my problem","solvedMyProblem","thumb-up"],["Other","otherUp","thumb-up"]],[["Missing the information I need","missingTheInformationINeed","thumb-down"],["Too complicated / too many steps","tooComplicatedTooManySteps","thumb-down"],["Out of date","outOfDate","thumb-down"],["Samples / code issue","samplesCodeIssue","thumb-down"],["Other","otherDown","thumb-down"]],["Last updated 2026-04-01 UTC."],[],[]]
+
+ Terms
+
+ Privacy
+
+ Manage cookies
+
+ English
+
+ Deutsch
+
+ Español – América Latina
+
+ Français
+
+ Indonesia
+
+ Italiano
+
+ Polski
+
+ Português – Brasil
+
+ Shqip
+
+ Tiếng Việt
+
+ Türkçe
+
+ Русский
+
+ עברית
+
+ العربيّة
+
+ فارسی
+
+ हिंदी
+
+ বাংলা
+
+ ภาษาไทย
+
+ 中文 – 简体
+
+ 中文 – 繁體
+
+ 日本語
+
+ 한국어
+````
+
+</details>

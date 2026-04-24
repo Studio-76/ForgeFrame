@@ -1,0 +1,558 @@
+About the REST API - GitHub Docs
+
+Skip to main content
+
+GitHub Docs
+
+Version: Free, Pro, & Team
+
+Search or ask Copilot
+Search or askCopilot
+
+Select language: current language is English
+
+Search or ask Copilot
+Search or askCopilot
+
+Open menu
+
+Open Sidebar
+
+REST API/
+
+About the REST API/
+
+About the REST API
+
+Home
+
+REST API
+
+API Version: 2026-03-10 (latest)
+
+Quickstart
+
+About the REST API
+About the REST API
+
+Comparing GitHub's APIs
+
+API Versions
+
+Breaking changes
+
+OpenAPI description
+
+Using the REST API
+Getting started
+
+Rate limits
+
+Pagination
+
+Libraries
+
+Best practices
+
+Troubleshooting
+
+Timezones
+
+CORS and JSONP
+
+Issue event types
+
+GitHub event types
+
+Authentication
+Authenticating
+
+Keeping API credentials secure
+
+Endpoints for GitHub App installation tokens
+
+Endpoints for GitHub App user tokens
+
+Endpoints for fine-grained PATs
+
+Permissions for GitHub Apps
+
+Permissions for fine-grained PATs
+
+Guides
+Script with JavaScript
+
+Script with Ruby
+
+Discover resources for a user
+
+Delivering deployments
+
+Rendering data as graphs
+
+Working with comments
+
+Building a CI server
+
+Get started - Git database
+
+Get started - Checks
+
+Encrypt secrets
+
+Actions
+Artifacts
+
+Cache
+
+GitHub-hosted runners
+
+OIDC
+
+Permissions
+
+Secrets
+
+Self-hosted runner groups
+
+Self-hosted runners
+
+Variables
+
+Workflow jobs
+
+Workflow runs
+
+Workflows
+
+Activity
+Events
+
+Feeds
+
+Notifications
+
+Starring
+
+Watching
+
+Apps
+GitHub Apps
+
+Installations
+
+Marketplace
+
+OAuth authorizations
+
+Webhooks
+
+Billing
+Budgets
+
+Billing usage
+
+Branches
+Branches
+
+Protected branches
+
+Campaigns
+Security campaigns
+
+Checks
+Check runs
+
+Check suites
+
+Classroom
+Classroom
+
+Code scanning
+Code scanning
+
+Code security settings
+Configurations
+
+Codes of conduct
+Codes of conduct
+
+Codespaces
+Codespaces
+
+Organizations
+
+Organization secrets
+
+Machines
+
+Repository secrets
+
+User secrets
+
+Collaborators
+Collaborators
+
+Invitations
+
+Commits
+Commits
+
+Commit comments
+
+Commit statuses
+
+Copilot
+Copilot cloud agent management
+
+Copilot content exclusion management
+
+Copilot metrics
+
+Copilot usage metrics
+
+Copilot user management
+
+Credentials
+Revocation
+
+Dependabot
+Alerts
+
+Repository access
+
+Secrets
+
+Dependency graph
+Dependency review
+
+Dependency submission
+
+Software bill of materials (SBOM)
+
+Deploy keys
+Deploy keys
+
+Deployments
+Deployment branch policies
+
+Deployments
+
+Environments
+
+Protection rules
+
+Deployment statuses
+
+Emojis
+Emojis
+
+Enterprise teams
+Enterprise team members
+
+Enterprise team organizations
+
+Enterprise teams
+
+Gists
+Gists
+
+Comments
+
+Git database
+Blobs
+
+Commits
+
+References
+
+Tags
+
+Trees
+
+Gitignore
+Gitignore
+
+Interactions
+Organization
+
+Repository
+
+User
+
+Issues
+Assignees
+
+Comments
+
+Events
+
+Issue dependencies
+
+Issue field values
+
+Issues
+
+Labels
+
+Milestones
+
+Sub-issues
+
+Timeline
+
+Licenses
+Licenses
+
+Markdown
+Markdown
+
+Meta
+Meta
+
+Metrics
+Community
+
+Statistics
+
+Traffic
+
+Migrations
+Organizations
+
+Source endpoints
+
+Users
+
+Models
+Catalog
+
+Embeddings
+
+Inference
+
+Organizations
+API Insights
+
+Artifact metadata
+
+Artifact attestations
+
+Blocking users
+
+Custom properties
+
+Issue fields
+
+Issue types
+
+Members
+
+Network configurations
+
+Organization roles
+
+Organizations
+
+Outside collaborators
+
+Personal access tokens
+
+Rule suites
+
+Rules
+
+Security managers
+
+Webhooks
+
+Packages
+Packages
+
+Pages
+Pages
+
+Private registries
+Organization configurations
+
+Projects
+Draft Project items
+
+Project fields
+
+Project items
+
+Projects
+
+Project views
+
+Pull requests
+Pull requests
+
+Review comments
+
+Review requests
+
+Reviews
+
+Rate limit
+Rate limit
+
+Reactions
+Reactions
+
+Releases
+Releases
+
+Release assets
+
+Repositories
+Attestations
+
+Autolinks
+
+Contents
+
+Custom properties
+
+Forks
+
+Repositories
+
+Rule suites
+
+Rules
+
+Webhooks
+
+Search
+Search
+
+Secret scanning
+Push protection
+
+Secret scanning
+
+Security advisories
+Global security advisories
+
+Repository security advisories
+
+Teams
+Members
+
+Teams
+
+Users
+Attestations
+
+Blocking users
+
+Emails
+
+Followers
+
+GPG keys
+
+Git SSH keys
+
+Social accounts
+
+SSH signing keys
+
+Users
+
+REST API/
+
+About the REST API/
+
+About the REST API
+
+About the REST API
+
+Get oriented to the REST API documentation.
+
+Copy as Markdown
+
+In this article
+
+Getting started with the REST API
+
+Further reading
+
+You can use GitHub's API to build scripts and applications that automate processes, integrate with GitHub, and extend GitHub. For example, you could use the API to triage issues, build an analytics dashboard, or manage releases.
+
+Each REST API endpoint is documented individually, and the endpoints are categorized by the resource that they primarily affect. For example, you can find endpoints relating to issues in REST API endpoints for issues.
+
+Getting started with the REST API
+
+If you are new to REST APIs, you may find it helpful to refer to the Quickstart or Getting Started guide for an introduction. For more information, see:
+
+Quickstart for GitHub REST API
+
+Getting started with the REST API
+
+If you are familiar with REST APIs but new to GitHub's REST API, you may find it helpful to refer to the authentication documentation. For more information, see:
+
+Authenticating to the REST API
+
+If you are building scripts or applications that use the REST API, you may find some of the following guides helpful. For examples of scripting with the REST API, see:
+
+Scripting with the REST API and JavaScript
+
+Scripting with the REST API and Ruby
+
+Building a GitHub App that responds to webhook events
+
+Building a CLI with a GitHub App
+
+Automatically redelivering failed deliveries for a repository webhook
+
+For a list of libraries to facilitate scripting with the REST API, see Libraries for the REST API.
+
+If you are building scripts or applications that use the REST API, you might also be interested in using webhooks to get notified about events or a GitHub App to access resources on behalf of a user or in an organization. For more information, see About webhooks and Deciding when to build a GitHub App.
+
+Further reading
+
+Comparing GitHub's REST API and GraphQL API
+
+Best practices for using the REST API
+
+Keeping your API credentials secure
+
+Troubleshooting the REST API
+
+Help and support
+
+Did you find what you needed?
+
+ Yes No
+Privacy policy
+
+Help us make these docs great!
+
+All GitHub docs are open source. See something that's wrong or unclear? Submit a pull request.
+Make a contribution
+Learn how to contribute
+
+Still need help?
+
+Ask the GitHub community
+
+Contact support
+
+Legal
+
+© 2026 GitHub, Inc.
+
+Terms
+
+Privacy
+
+Status
+
+Pricing
+
+Expert services
+
+Blog

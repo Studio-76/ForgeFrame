@@ -279,6 +279,9 @@ export type ProviderControlPlaneResponse = {
   object: "provider_control_plane";
   instance?: InstanceRecord;
   providers: ProviderControlItem[];
+  provider_catalog?: ProviderCatalogEntry[];
+  provider_catalog_summary?: ProviderCatalogSummary;
+  openai_compatibility_signoff?: OpenAICompatibilitySignoffResponse;
   health_config: HealthConfig;
   notes: Record<string, unknown>;
 };
@@ -819,11 +822,205 @@ export type ProviderCapabilityEvidenceRecord = {
   live_probe: CapabilityEvidenceRecord;
 };
 
+export type ProviderCatalogEvidenceStatus =
+  | "missing"
+  | "observed"
+  | "failed"
+  | "skipped"
+  | "blocked-by-live-evidence";
+
+export type ProviderCatalogSignoffStatus =
+  | "not-requested"
+  | "blocked-by-live-evidence"
+  | "pending-review"
+  | "signed-off"
+  | "skipped";
+
+export type ProviderCatalogEvidenceClass =
+  | "docs_declared"
+  | "repo_observed"
+  | "unit_tested"
+  | "contract_tested"
+  | "live_probe_verified"
+  | "streaming_verified"
+  | "tool_calling_verified"
+  | "error_fidelity_verified"
+  | "credential_refresh_verified"
+  | "ui_operator_verified";
+
+export type ProviderCatalogEvidenceRecord = {
+  provider_id: string;
+  target_key?: string | null;
+  evidence_class: ProviderCatalogEvidenceClass;
+  status: ProviderCatalogEvidenceStatus;
+  source_kind: string;
+  source_ref?: string | null;
+  recorded_at?: string | null;
+  details: string;
+};
+
+export type ProviderCatalogSignoffRecord = {
+  provider_id: string;
+  target_key?: string | null;
+  status: ProviderCatalogSignoffStatus;
+  recorded_at?: string | null;
+  details: string;
+  evidence_basis: ProviderCatalogEvidenceClass[];
+};
+
+export type ProviderCatalogEntry = {
+  provider_id: string;
+  display_name: string;
+  raw_class: string;
+  provider_class:
+    | "openai_compatible"
+    | "openai_compatible_aggregator"
+    | "openai_compatible_local"
+    | "anthropic_messages"
+    | "gemini_native"
+    | "bedrock_converse"
+    | "oauth_account_runtime"
+    | "oauth_cli_bridge"
+    | "external_process"
+    | "agent_endpoint_compat"
+    | "client_config_reference"
+    | "unsupported_documented";
+  source_kind: "api_matrix" | "oauth_matrix" | "reference_only" | "runtime_surface";
+  source_docs: string[];
+  local_reference_paths: string[];
+  auth_modes_supported: string[];
+  api_modes_supported: string[];
+  primary_contracts: string[];
+  base_url_default?: string | null;
+  base_url_override_env?: string | null;
+  token_env_vars: string[];
+  model_name_policy: string;
+  streaming_support_claim: string;
+  tools_support_claim: string;
+  responses_support_claim: string;
+  product_axis: string;
+  runtime_provider_binding?: string | null;
+  oauth_target_binding?: string | null;
+  product_axis_binding?: string | null;
+  evidence_status: string;
+  maturity_status:
+    | "documented-only"
+    | "contract-ready"
+    | "adapter-ready-without-live-proof"
+    | "onboarding-only"
+    | "bridge-only"
+    | "partial-runtime"
+    | "runtime-ready"
+    | "fully-integrated";
+  live_signoff_status: ProviderCatalogSignoffStatus;
+  last_probe_at?: string | null;
+  live_signoff_at?: string | null;
+  signoff_notes?: string | null;
+  missing_evidence: string[];
+  safe_next_action: string;
+  evidence_log: ProviderCatalogEvidenceRecord[];
+  signoff_history: ProviderCatalogSignoffRecord[];
+};
+
+export type ProviderCatalogSummary = {
+  total_providers: number;
+  documented_only: number;
+  contract_ready: number;
+  adapter_ready_without_live_proof: number;
+  onboarding_only: number;
+  bridge_only: number;
+  partial_runtime: number;
+  runtime_ready: number;
+  fully_integrated: number;
+  blocked_live_signoffs: number;
+  pending_live_signoffs: number;
+  signed_off: number;
+};
+
+export type OpenAICompatibilityCorpusClass =
+  | "chat_simple"
+  | "chat_multimodal"
+  | "responses_simple"
+  | "responses_input_items"
+  | "streaming_chat"
+  | "streaming_responses"
+  | "tool_calling"
+  | "structured_output"
+  | "error_semantics"
+  | "unsupported_partial_fields"
+  | "model_listing"
+  | "files"
+  | "embeddings";
+
+export type OpenAICompatibilityStatus =
+  | "supported"
+  | "partial"
+  | "unsupported"
+  | "skipped"
+  | "blocked-by-live-evidence";
+
+export type OpenAICompatibilitySignoffRow = {
+  corpus_class: OpenAICompatibilityCorpusClass;
+  label: string;
+  status: OpenAICompatibilityStatus;
+  route?: string | null;
+  provider_axis?: string | null;
+  live_evidence_required: boolean;
+  deviation_reason?: string | null;
+  evidence_source: string;
+  last_verified_at?: string | null;
+  sample_request_id?: string | null;
+  raw_diff_summary?: string | null;
+  notes?: string | null;
+};
+
+export type OpenAICompatibilitySummary = {
+  total_checks: number;
+  supported: number;
+  partial: number;
+  unsupported: number;
+  skipped: number;
+  blocked_by_live_evidence: number;
+  signoff_claimable: boolean;
+  overall_status: "supported" | "partial" | "unsupported";
+};
+
+export type OpenAICompatibilitySignoffResponse = {
+  summary: OpenAICompatibilitySummary;
+  rows: OpenAICompatibilitySignoffRow[];
+  notes: string[];
+};
+
 export type HarnessTemplate = {
   id: string;
   label: string;
   integration_class: string;
   description: string;
+  profile_defaults?: {
+    provider_key: string;
+    label: string;
+    template_id?: string | null;
+    integration_class: "openai_compatible" | "templated_http" | "static_catalog";
+    endpoint_base_url: string;
+    auth_scheme: "none" | "bearer" | "api_key_header";
+    auth_header: string;
+    model_slug_policy?: "verbatim" | "prepend_prefix_if_missing";
+    model_prefix?: string;
+    models: string[];
+    request_mapping?: {
+      path: string;
+      path_join_policy?: "append" | "dedupe_openai_v1";
+      headers?: Record<string, string>;
+    };
+    capabilities?: {
+      streaming?: boolean;
+      tool_calling?: boolean;
+      vision?: boolean;
+      responses?: boolean;
+      embeddings?: boolean;
+      unsupported_features?: string[];
+    };
+  };
 };
 
 export type HarnessProfile = {

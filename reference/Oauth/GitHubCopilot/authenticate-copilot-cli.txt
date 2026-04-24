@@ -1,0 +1,1156 @@
+Authenticating GitHub Copilot CLI - GitHub Docs
+
+Skip to main content
+
+GitHub Docs
+
+Version: Free, Pro, & Team
+
+Search or ask Copilot
+Search or askCopilot
+
+Select language: current language is English
+
+Search or ask Copilot
+Search or askCopilot
+
+Open menu
+
+Open Sidebar
+
+GitHub Copilot/
+
+How-tos/
+
+Copilot CLI/
+
+Set up Copilot CLI/
+
+Authenticate Copilot CLI
+
+Home
+
+GitHub Copilot
+
+Get started
+Quickstart
+
+What is GitHub Copilot?
+
+Plans
+
+Features
+
+Best practices
+
+Choose enterprise plan
+
+Achieve company goals
+
+Resources for approval
+
+Concepts
+Completions
+Code suggestions
+
+Code referencing
+
+Chat
+
+Agents
+Cloud agent
+About cloud agent
+
+Agent management
+
+Custom agents
+
+Hooks
+
+Access management
+
+MCP and cloud agent
+
+Risks and mitigations
+
+Copilot CLI
+About Copilot CLI
+
+Comparing CLI features
+
+Cancel and roll back
+
+About remote access
+
+Custom agents
+
+About CLI plugins
+
+Autonomous task completion
+
+Parallel task execution
+
+Researching with Copilot
+
+Session data
+
+LSP servers
+
+Context management
+
+Code review
+
+Copilot Memory
+
+Third-party agents
+
+OpenAI Codex
+
+Anthropic Claude
+
+Agent skills
+
+Enterprise management
+
+Spark
+
+Copilot usage metrics
+All articles
+
+Copilot usage metrics
+
+Prompting
+Prompt engineering
+
+Response customization
+
+Context
+MCP
+
+Spaces
+
+Repository indexing
+
+Content exclusion
+
+Tools
+AI tools
+
+About Copilot integrations
+
+Auto model selection
+
+Usage limits
+
+Billing
+Copilot requests
+
+Individual plans
+
+Billing for individuals
+
+Organizations and enterprises
+
+Premium request management
+
+Copilot-only enterprises
+
+Policies
+
+MCP management
+
+FedRAMP models
+
+Network settings
+
+Base and LTS models
+
+New features and models
+
+How-tos
+Copilot on GitHub
+Set up Copilot
+Enable Copilot
+Set up for self
+
+Set up for organization
+
+Set up for enterprise
+
+Set up a dedicated enterprise
+
+Set up for students
+
+Set up for teachers and OS maintainers
+
+Configure access to AI models
+
+Configure automatic review
+
+Configure runners
+
+Chat with Copilot
+Get started with chat
+
+Chat in GitHub
+
+Chat in Mobile
+
+Customize Copilot
+Customize Copilot overview
+
+Add custom instructions
+Add personal instructions
+
+Add repository instructions
+
+Add organization instructions
+
+Customize cloud agent
+Create custom agents
+
+Add agent skills
+
+Extend cloud agent with MCP
+
+Use hooks
+
+Customize the agent environment
+
+Customize the agent firewall
+
+Test custom agents
+
+Spaces
+Create Copilot Spaces
+
+Collaborate with others
+
+Copilot for GitHub tasks
+Use Copilot to create or update issues
+
+Create a PR summary
+
+Use the GitHub MCP Server from Copilot Chat
+
+Use Copilot agents
+Get started
+
+Kick off a task
+
+Research, plan, iterate
+
+Manage and track agents
+
+Copilot code review
+
+Review Copilot output
+
+Set up
+Set up for self
+
+Install Copilot extension
+
+Get code suggestions
+Get IDE code suggestions
+
+Find matching code
+
+Chat with Copilot
+Get started with Chat in your IDE
+
+Chat in IDE
+
+Chat in Windows Terminal
+
+Copilot CLI
+All articles
+
+Copilot CLI quickstart
+
+Copilot CLI best practices
+
+Set up Copilot CLI
+Install Copilot CLI
+
+Authenticate Copilot CLI
+
+Configure Copilot CLI
+
+Add LSP servers
+
+Troubleshoot Copilot CLI auth
+
+Allowing tools
+
+Steer a session remotely
+
+Automate with Copilot CLI
+Quickstart
+
+Run the CLI programmatically
+
+Automate with Actions
+
+Customize Copilot CLI
+Overview
+
+Add custom instructions
+
+Use hooks
+
+Add agent skills
+
+Add MCP servers
+
+Create custom agents
+
+Use your own model provider
+
+Plugins: Find and install
+
+Plugins: Create a plugin
+
+Plugins: Create a marketplace
+
+Connect to VS Code
+
+Use Copilot CLI agents
+Overview
+
+Delegate tasks to Copilot
+
+Invoke custom agents
+
+Steer agents
+
+Agentic code review
+
+Administer for enterprise
+
+Speed up task completion
+
+Manage pull requests
+
+Roll back changes
+
+Use session data
+
+Copilot SDK
+Quickstart
+
+Set up Copilot SDK
+Choosing a setup path
+
+Azure Managed Identity
+
+Backend services
+
+Bundled CLI
+
+GitHub OAuth
+
+Local CLI
+
+Scaling
+
+Authentication
+Authenticate Copilot SDK
+
+Bring your own key (BYOK)
+
+Use Copilot SDK
+Working with hooks
+
+Custom agents
+
+Image input
+
+MCP servers
+
+Session persistence
+
+Custom skills
+
+Steering and queueing
+
+Streaming events
+
+Use hooks
+Quickstart
+
+Pre-tool use
+
+Post-tool use
+
+User prompt submitted
+
+Session lifecycle
+
+Error handling
+
+Observability
+OpenTelemetry
+
+Integrations
+Microsoft Agent Framework
+
+Troubleshooting
+SDK and CLI compatibility
+
+Debug Copilot SDK
+
+Debug MCP servers
+
+Use Copilot agents
+Cloud agent
+Create a PR
+
+Track Copilot sessions
+
+Integrate cloud agent with Jira
+
+Integrate cloud agent with Slack
+
+Integrate cloud agent with Teams
+
+Integrate cloud agent with Linear
+
+Integrate cloud agent with Azure Boards
+
+Changing the AI model
+
+Configuring agent settings
+
+Create custom agents in your IDE
+
+Troubleshoot cloud agent
+
+Request a code review
+Use code review
+
+Copilot Memory
+
+Use AI models
+Change the chat model
+
+Change the completion model
+
+Provide context
+Use Copilot Spaces
+Use Copilot Spaces
+
+Use MCP in your IDE
+Extend Copilot Chat with MCP
+
+Set up the GitHub MCP Server
+
+Enterprise configuration
+
+Configure toolsets
+
+Use the GitHub MCP Server
+
+Change MCP registry
+
+Configure custom instructions
+Add repository instructions in your IDE
+
+Configure content exclusion
+Exclude content from Copilot
+
+Review changes
+
+Use Copilot for common tasks
+Use Copilot in the CLI
+
+Configure personal settings
+Configure network settings
+
+Configure in IDE
+
+Authenticate to GHE.com
+
+Manage and track spending
+Monitor premium requests
+
+Manage request allowances
+
+Manage company spending
+
+Manage your account
+Get started with a Copilot plan
+
+View and change your Copilot plan
+
+Disable Copilot Free
+
+Manage policies
+
+Administer Copilot
+Manage for organization
+Manage plan
+Cancel
+
+Manage access
+Grant access
+
+Manage requests for access
+
+Revoke access
+
+Manage network access
+
+Manage policies
+
+Add Copilot cloud agent
+
+Configure agent runners
+
+Prepare for custom agents
+
+Review activity
+Review user activity data
+
+Use your own API keys
+
+Manage for enterprise
+Manage plan
+Subscribe
+
+Cancel plan
+
+Upgrade plan
+
+Downgrade subscription
+
+Manage access
+Grant access
+
+Disable for organizations
+
+View license usage
+
+Manage network access
+
+Manage enterprise policies
+
+Manage agents
+Prepare for custom agents
+
+Monitor agentic activity
+
+Enable Copilot cloud agent
+
+Block Copilot cloud agent
+
+Manage Copilot code review
+
+Manage Spark
+
+Use your own API keys
+
+Review audit logs
+
+Manage MCP usage
+Configure MCP registry
+
+Configure MCP server access
+
+Download activity report
+
+View usage and adoption
+
+View code generation
+
+Troubleshoot Copilot
+Troubleshoot common issues
+
+View logs
+
+Troubleshoot firewall settings
+
+Troubleshoot network errors
+
+Troubleshoot Spark
+
+Reference
+Chat cheat sheet
+
+Customization cheat sheet
+
+AI models
+Supported models
+
+Model comparison
+
+Model hosting
+
+Copilot feature matrix
+
+Keyboard shortcuts
+
+Copilot CLI reference
+CLI command reference
+
+CLI plugin reference
+
+CLI programmatic reference
+
+ACP server
+
+CLI configuration directory
+
+Custom agents configuration
+
+Custom instructions support
+
+Hooks configuration
+
+Policy conflicts
+
+Copilot allowlist reference
+
+MCP allowlist enforcement
+
+Metrics data
+
+Copilot billing
+Billing cycle
+
+Seat assignment
+
+License changes
+
+Azure billing
+
+Agentic audit log events
+
+Agent session filters
+
+Review excluded files
+
+Copilot usage metrics
+Copilot usage metrics data
+
+Interpret usage metrics
+
+Reconciling Copilot usage metrics
+
+Copilot LoC metrics
+
+Example schema
+
+Tutorials
+All tutorials
+
+GitHub Copilot Chat Cookbook
+All prompts
+
+Communicate effectively
+Create templates
+
+Extract information
+
+Synthesize research
+
+Create diagrams
+
+Generate tables
+
+Debug errors
+Debug invalid JSON
+
+Handle API rate limits
+
+Diagnose test failures
+
+Analyze functionality
+Explore implementations
+
+Analyze feedback
+
+Refactor code
+Improve code readability
+
+Fix lint errors
+
+Refactor for optimization
+
+Refactor for sustainability
+
+Refactor design patterns
+
+Refactor data access layers
+
+Decouple business logic
+
+Handle cross-cutting
+
+Simplify inheritance hierarchies
+
+Fix database deadlocks
+
+Translate code
+
+Document code
+Create issues
+
+Document legacy code
+
+Explain legacy code
+
+Explain complex logic
+
+Sync documentation
+
+Write discussions or blog posts
+
+Testing code
+Generate unit tests
+
+Create mock objects
+
+Create end-to-end tests
+
+Update unit tests
+
+Analyze security
+Secure your repository
+
+Manage dependency updates
+
+Find vulnerabilities
+
+Customization library
+All customizations
+
+Custom instructions
+Your first custom instructions
+
+Concept explainer
+
+Debugging tutor
+
+Code reviewer
+
+GitHub Actions helper
+
+Pull request assistant
+
+Issue manager
+
+Accessibility auditor
+
+Testing automation
+
+Prompt files
+Your first prompt file
+
+Create README
+
+Onboarding plan
+
+Document API
+
+Review code
+
+Generate unit tests
+
+Custom agents
+Your first custom agent
+
+Implementation planner
+
+Bug fix teammate
+
+Cleanup specialist
+
+Cloud agent
+Get the best results
+
+Pilot cloud agent
+
+Improve a project
+
+Build guardrails
+
+Give access to resources
+
+Spark
+Your first spark
+
+Prompt tips
+
+Build and deploy apps
+
+Deploy from CLI
+
+Customize code review
+
+Enhance agent mode with MCP
+
+Compare AI models
+
+Speed up development work
+
+Roll out at scale
+Assign licenses
+Set up self-serve licenses
+
+Track usage and adoption
+
+Remind inactive users
+
+Establish AI managers
+
+Enable developers
+Drive adoption
+
+Integrate AI agents
+
+Drive downstream impact
+Increase test coverage
+
+Accelerate pull requests
+
+Reduce security debt
+
+Measure trial success
+
+Maintain codebase standards
+
+Explore a codebase
+
+Explore issues and discussions
+
+Explore pull requests
+
+Write tests
+
+Refactor code
+
+Optimize code reviews
+
+Reduce technical debt
+
+Review AI code
+
+Learn a new language
+
+Modernize legacy code
+
+Modernize Java applications
+
+Migrate a project
+
+Plan a project
+
+Vibe coding
+
+Upgrade projects
+
+Use hooks with Copilot CLI
+
+Responsible use
+Copilot inline suggestions
+
+Chat in your IDE
+
+Chat in GitHub
+
+Chat in GitHub Mobile
+
+Copilot CLI
+
+Copilot in Windows Terminal
+
+Copilot in GitHub Desktop
+
+Pull request summaries
+
+Commit message generation
+
+Code review
+
+Copilot cloud agent
+
+Spark
+
+Copilot Spaces
+
+GitHub Copilot/
+
+How-tos/
+
+Copilot CLI/
+
+Set up Copilot CLI/
+
+Authenticate Copilot CLI
+
+Authenticating GitHub Copilot CLI
+
+Authenticate Copilot CLI so that you can use Copilot directly from the command line.
+
+Who can use this feature?
+
+GitHub Copilot CLI is available with all Copilot plans. If you receive Copilot from an organization, the Copilot CLI policy must be enabled in the organization's settings.
+
+Copy as Markdown
+
+In this article
+
+About authentication
+
+Unauthenticated use
+
+Authenticating with OAuth
+
+Authenticating with environment variables
+
+Authenticating with GitHub CLI
+
+Switching between accounts
+
+Signing out and removing credentials
+
+About authentication
+
+If you use your own LLM provider API keys (BYOK), GitHub authentication is not required.
+
+Authentication is required for any other GitHub Copilot CLI usage.
+
+When authentication is required, Copilot CLI supports three methods. The method you use depends on whether you are working interactively or in an automated environment.
+
+OAuth device flow: The default and recommended method for interactive use. When you run /login in Copilot CLI, the CLI generates a one-time code and directs you to authenticate in your browser. This is the simplest way to authenticate. See Authenticating with OAuth.
+
+Environment variables: Recommended for CI/CD pipelines, containers, and non-interactive environments. You set a supported token as an environment variable (COPILOT_GITHUB_TOKEN, GH_TOKEN, or GITHUB_TOKEN), and the CLI uses it automatically without prompting. See Authenticating with environment variables.
+
+GitHub CLI fallback: If you have GitHub CLI (gh) (note: the gh CLI, not copilot) installed and authenticated, Copilot CLI can use its token automatically. This is the lowest priority method and activates only when no other credentials are found. See Authenticating with GitHub CLI.
+
+Once authenticated, Copilot CLI remembers your login and automatically uses the token for all Copilot API requests. You can log in with multiple accounts, and the CLI will remember the last-used account. Token lifetime and expiration depend on how the token was created on your account or organization settings.
+
+Unauthenticated use
+
+If you configure Copilot CLI to use your own LLM provider API keys (BYOK), GitHub authentication is not required. Copilot CLI can connect directly to your configured provider without a GitHub account or token.
+
+However, without GitHub authentication, the following features are not available:
+
+/delegate: Requires Copilot cloud agent, which runs on GitHub's servers
+
+GitHub MCP server: Requires authentication to access GitHub APIs
+
+GitHub Code Search: Requires authentication to query GitHub's search index
+
+You can combine BYOK with GitHub authentication to get the best of both: your preferred model for AI responses, plus access to GitHub-hosted features like /delegate and code search.
+
+Offline mode
+
+If you set the COPILOT_OFFLINE environment variable to true, Copilot CLI runs without contacting GitHub's servers. In offline mode:
+
+No GitHub authentication is attempted.
+
+The CLI only makes network requests to your configured BYOK provider.
+
+Telemetry is fully disabled.
+
+Offline mode is only fully air-gapped if your BYOK provider is local or otherwise within the same isolated environment (for example, a model running on-premises with no external network access). If COPILOT_PROVIDER_BASE_URL points to a remote or internet-accessible endpoint, prompts and code context will still be sent over the network to that provider. Without offline mode, even when using BYOK without GitHub authentication, telemetry is still sent normally.
+
+Supported token types
+
+Token typePrefixSupportedNotes
+
+OAuth token (device flow)gho_YesDefault method via copilot login
+
+Fine-grained PATgithub_pat_YesMust include required permissions Copilot Requests
+
+GitHub App user-to-serverghu_YesVia environment variable
+
+Classic PATghp_NoNot supported by Copilot CLI
+
+How Copilot CLI stores credentials
+
+By default, the CLI stores your OAuth token in your operating system's keychain under the service name copilot-cli:
+
+PlatformKeychain
+
+macOSKeychain Access
+
+WindowsCredential Manager
+
+Linuxlibsecret (GNOME Keyring, KWallet)
+
+If the system keychain is unavailable—for example, on a headless Linux server without libsecret installed—the CLI prompts you to store the token in a plaintext configuration file at ~/.copilot/config.json.
+
+When you run a command, Copilot CLI checks for credentials in the following order:
+
+COPILOT_GITHUB_TOKEN environment variable
+
+GH_TOKEN environment variable
+
+GITHUB_TOKEN environment variable
+
+OAuth token from the system keychain
+
+GitHub CLI (gh auth token) fallback
+
+Note
+
+An environment variable silently overrides a stored OAuth token. If you set GH_TOKEN for another tool, the CLI uses that token instead of the OAuth token from copilot login. To avoid unexpected behavior, unset environment variables you do not intend the CLI to use.
+
+When you configure BYOK provider environment variables (for example, COPILOT_PROVIDER_BASE_URL, COPILOT_PROVIDER_API_KEY), Copilot CLI uses these for AI model requests regardless of your GitHub authentication status. GitHub tokens are only needed for GitHub-hosted features.
+
+Authenticating with OAuth
+
+The OAuth device flow is the default authentication method for interactive use. You can authenticate by running /login from Copilot CLI or copilot login from your terminal.
+
+Authenticate with /login
+
+From Copilot CLI, run /login.
+
+Bash/login
+/login
+
+Select the account you want to authenticate with. For GitHub Enterprise Cloud with data residency, enter the hostname of your instance
+
+What account do you want to log into?
+ 1. GitHub.com
+ 2. GitHub Enterprise Cloud with data residency (*.ghe.com)
+
+The CLI displays a one-time user code and automatically copies it to your clipboard and opens your browser.
+
+Waiting for authorization...
+Enter one-time code: 1234-5678 at https://github.com/login/device
+Press any key to copy to clipboard and open browser...
+
+Navigate to the verification URL at https://github.com/login/device if your browser did not open automatically.
+
+Paste the one-time code in the field on the page.
+
+If your organization uses SAML SSO, click Authorize next to each organization you want to grant access to.
+
+Review the requested permissions and click Authorize GitHub Copilot CLI.
+
+Return to your terminal. The CLI displays a success message when authentication is complete.
+
+Signed in successfully as Octocat. You can now use Copilot.
+
+Authenticate with copilot login
+
+From the terminal, run copilot login. If you are using GitHub Enterprise Cloud with data residency, pass the hostname of your instance.
+
+Bashcopilot login
+copilot login
+
+For GitHub Enterprise Cloud:
+
+Bashcopilot login --host HOSTNAME
+copilot login --host HOSTNAME
+
+The CLI displays a one-time user code and automatically copies it to your clipboard and opens your browser.
+
+To authenticate, visit https://github.com/login/device and enter code 1234-5678.
+
+Navigate to the verification URL at https://github.com/login/device if your browser did not open automatically.
+
+Paste the one-time code in the field on the page.
+
+If your organization uses SAML SSO, click Authorize next to each organization you want to grant access to.
+
+Review the requested permissions and click Authorize GitHub Copilot CLI.
+
+Return to your terminal. The CLI displays a success message when authentication is complete.
+
+Signed in successfully as Octocat.
+
+Authenticating with environment variables
+
+For non-interactive environments, you can authenticate by setting an environment variable with a supported token. This is ideal for CI/CD pipelines, containers, or headless servers.
+
+Visit Fine-grained personal access tokens.
+
+Under "Permissions," click Add permissions and select Copilot Requests.
+
+Click Generate token.
+
+Export the token in your terminal or environment configuration. Use the COPILOT_GITHUB_TOKEN, GH_TOKEN, or GITHUB_TOKEN environment variable (in order of precedence).
+
+Authenticating with GitHub CLI
+
+If you have GitHub CLI installed and authenticated, Copilot CLI can use its token as a fallback. This method has the lowest priority and activates only when no environment variables are set and no stored token is found.
+
+Verify that GitHub CLI is authenticated.
+
+Bashgh auth status
+gh auth status
+
+If you use GitHub Enterprise Cloud with data residency, verify the correct hostname is authenticated.
+
+Bashgh auth status --hostname HOSTNAME
+gh auth status --hostname HOSTNAME
+
+Run copilot. The Copilot CLI uses the GitHub CLI token automatically.
+
+Run /user to verify your authenticated account in the CLI.
+
+Switching between accounts
+
+Copilot CLI supports multiple accounts. You can list available accounts and switch between them from within the CLI.
+To list available accounts, run /user list from the Copilot CLI prompt.
+To switch to a different account, type /user switch on the prompt.
+
+To add another account, run copilot login from a new terminal session, or run the login command from within the CLI and authorize with the other account.
+
+Signing out and removing credentials
+
+To sign out, type /logout at the Copilot CLI prompt. This removes the locally stored token but does not revoke it on GitHub.
+
+To revoke the OAuth app authorization on GitHub and prevent it from being used elsewhere, follow these steps.
+
+Navigate to Settings > Applications > Authorized OAuth Apps.
+
+Navigate to your settings page:
+
+In the upper-right corner of any page on GitHub, click your profile picture.
+
+Click Settings.
+
+In the left sidebar, click Applications.
+
+Under Authorized OAuth Apps, click next to GitHub CLI to expand the menu and select Revoke.
+
+Help and support
+
+Did you find what you needed?
+
+ Yes No
+Privacy policy
+
+Help us make these docs great!
+
+All GitHub docs are open source. See something that's wrong or unclear? Submit a pull request.
+Make a contribution
+Learn how to contribute
+
+Still need help?
+
+Ask the GitHub community
+
+Contact support
+
+Legal
+
+© 2026 GitHub, Inc.
+
+Terms
+
+Privacy
+
+Status
+
+Pricing
+
+Expert services
+
+Blog

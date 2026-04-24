@@ -44,6 +44,7 @@ from app.governance.models import RuntimeGatewayIdentity, RuntimeRequestPathDeci
 from app.governance.service import GovernanceService, get_governance_service
 from app.responses.models import (
     NormalizedResponsesRequest,
+    build_message_output_item,
     build_response_object,
     build_response_output_items,
     new_response_created,
@@ -226,6 +227,32 @@ def _response_failed_payload(
         model=model,
         metadata=metadata,
         error={"code": error_code, "message": error_message},
+        native_mapping=native_mapping,
+    ).model_dump(mode="json")
+
+
+def _response_incomplete_payload(
+    *,
+    response_id: str,
+    created_at: int,
+    model: str | None,
+    metadata: dict[str, Any],
+    text: str,
+    reason: str,
+    native_mapping: dict[str, Any],
+) -> dict[str, object]:
+    output_text = text if text.strip() else ""
+    output = [build_message_output_item(output_text, status="incomplete")] if output_text else []
+    return build_response_object(
+        response_id=response_id,
+        created_at=created_at,
+        status="incomplete",
+        background=False,
+        model=model,
+        metadata=metadata,
+        output=output,
+        output_text=output_text,
+        incomplete_details={"reason": reason},
         native_mapping=native_mapping,
     ).model_dump(mode="json")
 
@@ -458,6 +485,40 @@ def create_response(
             )
         except Exception as exc:
             status_code, error_type, provider, message, extra = _provider_exception_to_http(exc)
+            failed_native_mapping = responses.build_sync_runtime_native_mapping(
+                request_path=runtime_route,
+                response_id=response_id,
+                stream=True,
+                requested_model=requested_model,
+                resolved_model=requested_model,
+                provider_key=provider,
+                lifecycle_status="failed",
+            )
+            failed_payload = _response_failed_payload(
+                response_id=response_id,
+                created_at=response_created,
+                model=requested_model,
+                metadata=normalized_request.metadata,
+                error_code=error_type,
+                error_message=message,
+                native_mapping=failed_native_mapping,
+            )
+            responses.save_response_snapshot(
+                response_id=response_id,
+                company_id=company_id,
+                instance_id=instance_id,
+                account_id=account_id,
+                request_path=runtime_route,
+                processing_mode="sync",
+                stream=True,
+                request=normalized_request,
+                body=failed_payload,
+                lifecycle_status="failed",
+                resolved_model=requested_model,
+                provider_key=provider,
+                error_json=failed_payload.get("error"),
+                native_mapping=failed_native_mapping,
+            )
             analytics.record_runtime_error(
                 provider=provider,
                 model=requested_model,
@@ -476,20 +537,20 @@ def create_response(
                 **extra,
             )
 
+        created_native_mapping = responses.build_sync_runtime_native_mapping(
+            request_path=runtime_route,
+            response_id=response_id,
+            stream=True,
+            requested_model=requested_model,
+            resolved_model=model,
+            provider_key=provider,
+        )
         created_payload = _response_in_progress_payload(
             response_id=response_id,
             created_at=response_created,
             model=model,
             metadata=normalized_request.metadata,
-            native_mapping=responses.build_sync_runtime_native_mapping(
-                request_path=runtime_route,
-                response_id=response_id,
-                stream=True,
-                requested_model=requested_model,
-                resolved_model=model,
-                provider_key=provider,
-                note="The streaming /v1/responses path is still on the OpenAI-compatible envelope and has not created a durable native ForgeFrame object.",
-            ),
+            native_mapping=created_native_mapping,
         )
         responses.save_response_snapshot(
             response_id=response_id,
@@ -504,10 +565,19 @@ def create_response(
             lifecycle_status="in_progress",
             resolved_model=model,
             provider_key=provider,
+            native_mapping=created_native_mapping,
         )
+        created_payload = responses.get_response(company_id=company_id, response_id=response_id)
 
         def _sse_body() -> Iterator[str]:
             collected = ""
+            terminal_state = False
+            responses.record_stream_event(
+                response_id=response_id,
+                company_id=company_id,
+                event_name="response.created",
+                payload=created_payload,
+            )
             yield (
                 "event: response.created\ndata: "
                 f"{JSONResponse(content=created_payload).body.decode()}\n\n"
@@ -515,10 +585,17 @@ def create_response(
             try:
                 for event in events:
                     if event.event == "delta":
+                        delta_payload = {"id": response_id, "delta": event.delta}
+                        responses.record_stream_event(
+                            response_id=response_id,
+                            company_id=company_id,
+                            event_name="response.output_text.delta",
+                            payload=delta_payload,
+                        )
                         collected += event.delta
                         yield (
                             "event: response.output_text.delta\ndata: "
-                            f"{JSONResponse(content={'id': response_id, 'delta': event.delta}).body.decode()}\n\n"
+                            f"{JSONResponse(content=delta_payload).body.decode()}\n\n"
                         )
                         continue
 
@@ -549,7 +626,7 @@ def create_response(
                                 requested_model=requested_model,
                                 resolved_model=model,
                                 provider_key=provider,
-                                note="The streaming /v1/responses path failed before any durable native ForgeFrame follow-object was created.",
+                                lifecycle_status="failed",
                             ),
                         )
                         responses.save_response_snapshot(
@@ -566,7 +643,16 @@ def create_response(
                             resolved_model=model,
                             provider_key=provider,
                             error_json=failed_payload.get("error"),
+                            native_mapping=failed_payload["metadata"]["forgeframe_native_mapping"],
                         )
+                        failed_payload = responses.get_response(company_id=company_id, response_id=response_id)
+                        responses.record_stream_event(
+                            response_id=response_id,
+                            company_id=company_id,
+                            event_name="response.error",
+                            payload=failed_payload,
+                        )
+                        terminal_state = True
                         yield (
                             "event: response.error\ndata: "
                             f"{JSONResponse(content=failed_payload).body.decode()}\n\n"
@@ -598,6 +684,7 @@ def create_response(
                                 requested_model=requested_model,
                                 resolved_model=model,
                                 provider_key=provider,
+                                lifecycle_status="completed",
                             ),
                         )
                         responses.save_response_snapshot(
@@ -613,12 +700,68 @@ def create_response(
                             lifecycle_status="completed",
                             resolved_model=model,
                             provider_key=provider,
+                            native_mapping=completed_payload["metadata"]["forgeframe_native_mapping"],
                         )
+                        completed_payload = responses.get_response(company_id=company_id, response_id=response_id)
+                        responses.record_stream_event(
+                            response_id=response_id,
+                            company_id=company_id,
+                            event_name="response.completed",
+                            payload=completed_payload,
+                        )
+                        terminal_state = True
                         yield (
                             "event: response.completed\ndata: "
                             f"{JSONResponse(content=completed_payload).body.decode()}\n\n"
                         )
                         break
+            except GeneratorExit:
+                if not terminal_state:
+                    incomplete_native_mapping = responses.build_sync_runtime_native_mapping(
+                        request_path=runtime_route,
+                        response_id=response_id,
+                        stream=True,
+                        requested_model=requested_model,
+                        resolved_model=model,
+                        provider_key=provider,
+                        lifecycle_status="incomplete",
+                    )
+                    incomplete_payload = _response_incomplete_payload(
+                        response_id=response_id,
+                        created_at=response_created,
+                        model=model,
+                        metadata=normalized_request.metadata,
+                        text=collected,
+                        reason="client_disconnect",
+                        native_mapping=incomplete_native_mapping,
+                    )
+                    responses.save_response_snapshot(
+                        response_id=response_id,
+                        company_id=company_id,
+                        instance_id=instance_id,
+                        account_id=account_id,
+                        request_path=runtime_route,
+                        processing_mode="sync",
+                        stream=True,
+                        request=normalized_request,
+                        body=incomplete_payload,
+                        lifecycle_status="incomplete",
+                        resolved_model=model,
+                        provider_key=provider,
+                        native_mapping=incomplete_native_mapping,
+                    )
+                    incomplete_payload = responses.get_response(company_id=company_id, response_id=response_id)
+                    responses.record_stream_event(
+                        response_id=response_id,
+                        company_id=company_id,
+                        event_name="response.disconnect",
+                        payload={
+                            "id": response_id,
+                            "reason": "client_disconnect",
+                            "output_text": collected,
+                        },
+                    )
+                raise
             except Exception as exc:
                 status_code, error_type, mapped_provider, message, _extra = _provider_exception_to_http(exc)
                 analytics.record_runtime_error(
@@ -646,7 +789,7 @@ def create_response(
                         requested_model=requested_model,
                         resolved_model=model,
                         provider_key=mapped_provider or provider,
-                        note="The streaming /v1/responses path failed before any durable native ForgeFrame follow-object was created.",
+                        lifecycle_status="failed",
                     ),
                 )
                 responses.save_response_snapshot(
@@ -663,7 +806,16 @@ def create_response(
                     resolved_model=model,
                     provider_key=mapped_provider or provider,
                     error_json=failed_payload.get("error"),
+                    native_mapping=failed_payload["metadata"]["forgeframe_native_mapping"],
                 )
+                failed_payload = responses.get_response(company_id=company_id, response_id=response_id)
+                responses.record_stream_event(
+                    response_id=response_id,
+                    company_id=company_id,
+                    event_name="response.error",
+                    payload=failed_payload,
+                )
+                terminal_state = True
                 yield (
                     "event: response.error\ndata: "
                     f"{JSONResponse(content=failed_payload).body.decode()}\n\n"
@@ -679,6 +831,35 @@ def create_response(
                 request_path_decision.request_path if request_path_decision is not None else None,
             ),
         )
+
+    initial_native_mapping = responses.build_sync_runtime_native_mapping(
+        request_path=runtime_route,
+        response_id=response_id,
+        stream=False,
+        requested_model=requested_model,
+        lifecycle_status="in_progress",
+    )
+    initial_payload = _response_in_progress_payload(
+        response_id=response_id,
+        created_at=response_created,
+        model=requested_model,
+        metadata=normalized_request.metadata,
+        native_mapping=initial_native_mapping,
+    )
+    responses.save_response_snapshot(
+        response_id=response_id,
+        company_id=company_id,
+        instance_id=instance_id,
+        account_id=account_id,
+        request_path=runtime_route,
+        processing_mode="sync",
+        stream=False,
+        request=normalized_request,
+        body=initial_payload,
+        lifecycle_status="in_progress",
+        resolved_model=requested_model,
+        native_mapping=initial_native_mapping,
+    )
 
     try:
         result, decision = dispatch.dispatch_chat(
@@ -717,7 +898,7 @@ def create_response(
                 stream=False,
                 requested_model=requested_model,
                 provider_key=provider,
-                note="The synchronous /v1/responses path failed before any durable native ForgeFrame follow-object was created.",
+                lifecycle_status="failed",
             ),
         )
         responses.save_response_snapshot(
@@ -734,6 +915,7 @@ def create_response(
             resolved_model=requested_model,
             provider_key=provider,
             error_json=failed_payload.get("error"),
+            native_mapping=failed_payload["metadata"]["forgeframe_native_mapping"],
         )
         return _error_response(
             status_code=status_code,
@@ -758,6 +940,7 @@ def create_response(
             requested_model=requested_model,
             resolved_model=result.model,
             provider_key=result.provider,
+            lifecycle_status="completed",
         ),
     )
     responses.save_response_snapshot(
@@ -773,7 +956,9 @@ def create_response(
         lifecycle_status="completed",
         resolved_model=result.model,
         provider_key=result.provider,
+        native_mapping=completed_payload["metadata"]["forgeframe_native_mapping"],
     )
+    completed_payload = responses.get_response(company_id=company_id, response_id=response_id)
     analytics.record_non_stream_result(
         result,
         client=client_identity,
@@ -823,6 +1008,25 @@ def get_response_input_items(
     )
     try:
         payload = responses.get_response_input_items(company_id=company_id, response_id=response_id)
+    except ResponseNotFoundError:
+        return _response_not_found(response_id)
+    return JSONResponse(content=payload)
+
+
+@router.get("/responses/{response_id}/native", response_model=None)
+def get_response_native_projection(
+    response_id: str,
+    settings: Settings = Depends(get_settings),
+    responses: ResponsesService = Depends(get_responses_service),
+    gateway_identity: RuntimeGatewayIdentity | None = Depends(get_runtime_gateway_identity),
+    _runtime_actor: RequestActor | None = Depends(require_runtime_permission("runtime.responses.read")),
+) -> object:
+    company_id = _runtime_company_id(
+        gateway_identity=gateway_identity,
+        settings=settings,
+    )
+    try:
+        payload = responses.get_response_native_projection(company_id=company_id, response_id=response_id)
     except ResponseNotFoundError:
         return _response_not_found(response_id)
     return JSONResponse(content=payload)

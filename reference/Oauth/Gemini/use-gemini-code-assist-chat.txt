@@ -1,0 +1,384 @@
+Use the Gemini Code Assist chat  |  Google for Developers
+
+ Skip to main content
+
+ Gemini Code Assist
+
+ /
+
+ English
+
+ Deutsch
+
+ Español
+
+ Español – América Latina
+
+ Français
+
+ Indonesia
+
+ Italiano
+
+ Polski
+
+ Português – Brasil
+
+ Tiếng Việt
+
+ Türkçe
+
+ Русский
+
+ עברית
+
+ العربيّة
+
+ فارسی
+
+ हिंदी
+
+ বাংলা
+
+ ภาษาไทย
+
+ 中文 – 简体
+
+ 中文 – 繁體
+
+ 日本語
+
+ 한국어
+
+ Sign in
+
+ Home
+
+ Guides
+
+ Resources
+
+ Gemini Code Assist
+
+ Home
+
+ Home
+
+ Guides
+
+ Resources
+
+ Discover
+
+Overview
+
+Gemini in Android Studio
+
+Gemini CLI
+
+ Privacy notices
+
+Terms of Service and Privacy Policies
+
+Gemini Code Assist for individuals privacy notice
+
+Supported languages, IDEs, and interfaces
+
+How Gemini Code Assist works
+
+Gemini 3 with Gemini Code Assist
+
+How Gemini Code Assist Standard and Enterprise use your data
+
+Responsible AI
+
+ Get started
+
+Set up Gemini Code Assist for individuals
+
+Use the Gemini Code Assist chat
+
+Set up Gemini Code Assist Standard and Enterprise
+
+ Code in IDEs
+
+Code features overview
+
+Code with Gemini Code Assist
+
+ Chat in IDEs
+
+Chat features overview
+
+Chat with Gemini Code Assist
+
+Agent mode overview
+
+Use the Gemini Code Assist agent mode
+
+ Use code customization (Enterprise)
+
+Code customization overview
+
+Configure code customization
+
+Use code customization
+
+Encrypt data with customer-managed encryption keys
+
+ Review code in GitHub
+
+Review GitHub code with Gemini Code Assist
+
+Set up Gemini Code Assist for GitHub
+
+Use Gemini Code Assist for GitHub
+
+Customize Gemini Code Assist behavior in GitHub
+
+Code review style guide
+
+ Configure
+
+Keyboard shortcuts
+
+Exclude files from Gemini Code Assist use
+
+Configure local codebase awareness
+
+Use pre-release features in Gemini Code Assist for VS Code
+
+Control Network Access with User Domain Restrictions
+
+ Standard and Enterprise
+
+Configure Gemini Code Assist logging
+
+Configure VPC Service Controls
+
+Turn off Gemini Code Assist
+
+ Troubleshoot
+
+Troubleshoot access to Gemini Code Assist features
+
+Provide feedback
+
+ Home
+
+ Products
+
+ Gemini Code Assist
+
+ Guides
+
+ Use the Gemini Code Assist chat
+
+ Stay organized with collections
+
+ Save and categorize content based on your preferences.
+
+Page Summary
+
+ outlined_flag
+
+Gemini Code Assist chat provides AI-powered assistance within your IDE using natural language prompts.
+
+You can open the Gemini Code Assist chat in both VS Code and IntelliJ IDEs to get explanations, suggestions, and guided workflows.
+
+Query history is available in IntelliJ but not in VS Code.
+
+Chat history can be cleared in both VS Code and IntelliJ to remove irrelevant context for future prompts.
+
+This document describes how to get AI-powered assistance in the
+Gemini Code Assist chat in your
+integrated development environment (IDE).
+
+Gemini Code Assist chat lets you write natural language statements
+or questions (called prompts) to get in-depth explanations of your code,
+suggested actions, or guided workflows that help you complete tasks quickly and
+efficiently without leaving the IDE.
+
+Open Gemini Code Assist chat
+
+To open Gemini Code Assist chat in the IDE:
+
+ VS Code 
+
+In the activity bar of your IDE, click
+spark
+Gemini Code Assist.
+
+In the Gemini Code Assist chat, enter a prompt and then click
+send
+Send.
+
+ IntelliJ 
+
+In the Gemini Code Assist tool window, enter a prompt and
+then click Submit.
+
+View query history
+
+ VS Code 
+
+If you want to re-use your previous prompts, you can find them in your
+Query History in the Gemini Code Assist tool window by clicking
+schedule Show Query History.
+
+ IntelliJ 
+
+If you want to re-use your previous prompts, you can find them in your
+Query History in the Gemini Code Assist tool window by clicking
+schedule Show Query History.
+
+Clear chat history
+
+Gemini Code Assist uses the chat history for additional context
+when responding to your prompts. If your chat history is no longer relevant to
+what you're trying to achieve, you can clear the chat history:
+
+ VS Code 
+
+In the Gemini Code Assist pane, click
+history Resume
+Previous Chat.
+
+When the previous chats appear in the Select chat menu, hold your
+pointer over the chat that you want to clear, and select Delete.
+
+Note: Your chat threads persist across IDE sessions until you clear your
+history.
+
+When prompted to confirm the deletion of the chat thread, select
+Delete.
+
+ IntelliJ 
+
+In the Gemini Code Assist tool window, click
+chat_bubble Recent
+Chats.
+
+When the previous chats appear in the Recent Chats menu, hold your
+pointer over the chat that you want to clear, and select
+delete Delete.
+
+Note: Your query and conversation history persist across IDE sessions
+until you clear the history.
+
+What's next
+
+For more information on using Gemini Code Assist in the IDE, see
+Code with Gemini Code Assist.
+
+Except as otherwise noted, the content of this page is licensed under the Creative Commons Attribution 4.0 License, and code samples are licensed under the Apache 2.0 License. For details, see the Google Developers Site Policies. Java is a registered trademark of Oracle and/or its affiliates.
+
+Last updated 2025-12-10 UTC.
+
+ [[["Easy to understand","easyToUnderstand","thumb-up"],["Solved my problem","solvedMyProblem","thumb-up"],["Other","otherUp","thumb-up"]],[["Missing the information I need","missingTheInformationINeed","thumb-down"],["Too complicated / too many steps","tooComplicatedTooManySteps","thumb-down"],["Out of date","outOfDate","thumb-down"],["Samples / code issue","samplesCodeIssue","thumb-down"],["Other","otherDown","thumb-down"]],["Last updated 2025-12-10 UTC."],[],[]]
+
+Connect
+
+ Blog
+
+ Bluesky
+
+ Instagram
+
+ LinkedIn
+
+ X (Twitter)
+
+ YouTube
+
+Programs
+
+ Google Developer Program
+
+ Google Developer Groups
+
+ Google Developer Experts
+
+ Accelerators
+
+ Google Cloud & NVIDIA
+
+Developer consoles
+
+ Google API Console
+
+ Google Cloud Platform Console
+
+ Google Play Console
+
+ Firebase Console
+
+ Actions on Google Console
+
+ Cast SDK Developer Console
+
+ Chrome Web Store Dashboard
+
+ Google Home Developer Console
+
+ Android
+
+ Chrome
+
+ Firebase
+
+ Google Cloud Platform
+
+ Google AI
+
+ All products
+
+ Terms
+
+ Privacy
+
+ Manage cookies
+
+ English
+
+ Deutsch
+
+ Español
+
+ Español – América Latina
+
+ Français
+
+ Indonesia
+
+ Italiano
+
+ Polski
+
+ Português – Brasil
+
+ Tiếng Việt
+
+ Türkçe
+
+ Русский
+
+ עברית
+
+ العربيّة
+
+ فارسی
+
+ हिंदी
+
+ বাংলা
+
+ ภาษาไทย
+
+ 中文 – 简体
+
+ 中文 – 繁體
+
+ 日本語
+
+ 한국어

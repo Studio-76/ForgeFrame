@@ -15,6 +15,7 @@ from sqlalchemy.orm import Mapped, Session, mapped_column, sessionmaker
 from app.control_plane.models import (
     ControlPlaneStateRecord,
     ManagedModelRecord,
+    ProviderCatalogRecord,
     ManagedProviderRecord,
     ManagedProviderTargetRecord,
     RoutingBudgetStateRecord,
@@ -36,7 +37,7 @@ from app.settings.config import Settings
 from app.storage.harness_repository import Base
 from app.tenancy import DEFAULT_BOOTSTRAP_TENANT_ID, normalize_tenant_id
 
-_CONTROL_PLANE_STATE_SCHEMA_VERSION = 5
+_CONTROL_PLANE_STATE_SCHEMA_VERSION = 6
 _LEGACY_STATE_KEY = "default"
 
 
@@ -250,6 +251,22 @@ class FileControlPlaneStateRepository:
                 changed = True
 
             normalized["schema_version"] = _CONTROL_PLANE_STATE_SCHEMA_VERSION
+
+        if version < 6 or "provider_catalog" not in normalized:
+            stored_catalog: list[ProviderCatalogRecord] = []
+            for raw_catalog in normalized.get("provider_catalog", []) or []:
+                if not isinstance(raw_catalog, dict):
+                    continue
+                try:
+                    stored_catalog.append(ProviderCatalogRecord(**raw_catalog))
+                except Exception:
+                    continue
+            normalized["provider_catalog"] = [
+                item.model_dump(mode="json")
+                for item in stored_catalog
+            ]
+            normalized["schema_version"] = _CONTROL_PLANE_STATE_SCHEMA_VERSION
+            changed = True
 
         if "updated_at" not in normalized:
             normalized["updated_at"] = ""

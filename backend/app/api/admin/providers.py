@@ -180,6 +180,9 @@ def list_provider_control_plane(
         "object": "provider_control_plane",
         "instance": instance.model_dump(mode="json"),
         "providers": providers,
+        "provider_catalog": [item.model_dump() for item in service.list_provider_catalog()],
+        "provider_catalog_summary": service.provider_catalog_summary().model_dump(),
+        "openai_compatibility_signoff": service.openai_compatibility_signoff(tenant_id=instance.tenant_id),
         "truth_axes": [item.model_dump() for item in truth_axes],
         "health_config": service.get_health_config().model_dump(),
         "bootstrap_readiness": bootstrap_readiness.model_dump() if bootstrap_readiness else None,
@@ -195,12 +198,30 @@ def list_provider_control_plane(
                 "openai_compatible_clients",
             ],
             "truth_contract": [
+                "provider_catalog",
                 "provider_truth",
                 "runtime_truth",
                 "harness_truth",
                 "ui_truth",
             ],
         },
+    }
+
+
+@router.get("/openai-compatibility/signoff")
+def openai_compatibility_signoff(
+    _admin: AuthenticatedAdmin = Depends(_require_provider_read),
+    instance: InstanceRecord = Depends(resolve_admin_instance_scope),
+    service: ControlPlaneService = Depends(get_control_plane_service),
+) -> dict[str, object]:
+    try:
+        payload = service.openai_compatibility_signoff(tenant_id=instance.tenant_id)
+    except TenantFilterRequiredError as exc:
+        return _admin_error(status.HTTP_400_BAD_REQUEST, "tenant_filter_required", str(exc))
+    return {
+        "status": "ok",
+        "instance": instance.model_dump(mode="json"),
+        **payload,
     }
 
 
@@ -481,7 +502,15 @@ def probe_all_oauth_account_targets(
     service: ControlPlaneService = Depends(get_control_plane_service),
 ) -> object:
     results = []
-    for provider_key in ["openai_codex", "gemini", "antigravity", "github_copilot", "claude_code"]:
+    for provider_key in [
+        "openai_codex",
+        "gemini",
+        "antigravity",
+        "github_copilot",
+        "claude_code",
+        "nous_oauth",
+        "qwen_oauth",
+    ]:
         try:
             results.append(service.probe_oauth_account_provider(provider_key).model_dump())
         except ValueError as exc:

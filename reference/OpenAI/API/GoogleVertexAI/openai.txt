@@ -1,0 +1,1679 @@
+OpenAI compatibility  |  Generative AI on Vertex AI  |  Google Cloud Documentation
+
+ Skip to main content
+
+ Technology areas
+
+ close
+
+ AI and ML
+
+ Application development
+
+ Application hosting
+
+ Compute
+
+ Data analytics and pipelines
+
+ Databases
+
+ Distributed, hybrid, and multicloud
+
+ Industry solutions
+
+ Migration
+
+ Networking
+
+ Observability and monitoring
+
+ Security
+
+ Storage
+
+ Cross-product tools
+
+ close
+
+ Access and resources management
+
+ Costs and usage management
+
+ Infrastructure as code
+
+ SDK, languages, frameworks, and tools
+
+ /
+
+ Console
+
+ English
+
+ Deutsch
+
+ Español
+
+ Español – América Latina
+
+ Français
+
+ Indonesia
+
+ Italiano
+
+ Português
+
+ Português – Brasil
+
+ עברית
+
+ 中文 – 简体
+
+ 中文 – 繁體
+
+ 日本語
+
+ 한국어
+
+ Sign in
+
+ Vertex AI
+
+ Generative AI on Vertex AI
+
+ Start free
+
+ Guides
+
+ API reference
+
+ Vertex AI Cookbook
+
+ Prompt gallery
+
+ Resources
+
+ FAQ
+
+ Pricing
+
+ Technology areas
+
+ More
+
+ Guides
+
+ API reference
+
+ Vertex AI Cookbook
+
+ Prompt gallery
+
+ Resources
+
+ FAQ
+
+ Pricing
+
+ Cross-product tools
+
+ More
+
+ Console
+
+ Discover
+
+Overview of Generative AI on Vertex AI
+
+Generative AI beginner's guide
+
+Glossary
+
+ Get started
+
+Quickstart
+
+Get an API key
+
+Configure application default credentials
+
+Vertex AI Studio quickstart
+
+Migrate from Google AI Studio to Vertex AI
+
+Deploy your Vertex AI Studio prompt as a web application
+
+Vertex AI Studio capabilities
+
+Get started with Gemini 3
+
+Gemini 3 prompting guide
+
+Google GenAI libraries
+
+Compatibility with OpenAI library
+
+ Vertex AI in express mode
+
+Overview
+
+Console tutorial
+
+API tutorial
+
+ Select models
+
+ Model Garden
+
+Overview of Model Garden
+
+Use models in Model Garden
+
+Test model capabilities
+
+ Google Models
+
+All Google models
+
+ Gemini
+
+Migrate to the latest Gemini models
+
+ Pro
+
+Gemini 3.1 Pro
+
+Gemini 3 Pro
+
+Gemini 3 Pro Image
+
+Gemini 2.5 Pro
+
+ Flash
+
+Gemini 3.1 Flash Image
+
+Gemini 3 Flash
+
+Gemini 2.5 Flash
+
+Gemini 2.5 Flash Image
+
+Gemini 2.5 Flash Live API
+
+Gemini 2.0 Flash
+
+ Flash-Lite
+
+Gemini 3.1 Flash-Lite
+
+Gemini 2.5 Flash-Lite
+
+Gemini 2.0 Flash-Lite
+
+ Embedding
+
+Gemini Embedding 2
+
+ Imagen
+
+Imagen 3
+
+Imagen 4
+
+Virtual Try-On
+
+Imagen 4.0 upscale Preview
+
+ Veo
+
+Veo 2
+
+Veo 3
+
+Veo 3.1
+
+ Lyria
+
+Lyria 2
+
+Lyria 3
+
+Model versions
+
+ Partner Models
+
+Partner models overview
+
+ Claude
+
+Overview
+
+Request predictions
+
+Batch predictions
+
+Prompt caching
+
+Count tokens
+
+Web search
+
+Safety classifiers
+
+ Model details
+
+Claude Opus 4.7
+
+Claude Sonnet 4.6
+
+Claude Opus 4.6
+
+Claude Opus 4.5
+
+Claude Sonnet 4.5
+
+Claude Opus 4.1
+
+Claude Haiku 4.5
+
+Claude Opus 4
+
+Claude Sonnet 4
+
+ Grok
+
+Overview
+
+Function calling
+
+Structured output
+
+Reasoning
+
+ Model details
+
+Grok 4.1 Fast
+
+Grok 4.20
+
+ Mistral AI
+
+Overview
+
+ Model details
+
+Mistral Medium 3
+
+Mistral OCR (25.05)
+
+Mistral Small 3.1 (25.03)
+
+Codestral 2
+
+Deploy partner models from Model Garden
+
+Model deprecations (MaaS)
+
+ Open Models
+
+Overview
+
+ DeepSeek
+
+Overview
+
+DeepSeek-V3.2
+
+DeepSeek-V3.1
+
+DeepSeek-R1-0528
+
+DeepSeek-OCR
+
+ Embedding (e5)
+
+Multilingual E5 Small
+
+Multilingual E5 Large
+
+ Google Gemma
+
+Model-as-a-Service (MaaS)
+
+Gemma-4-26B-A4B-IT MaaS
+
+Use Gemma
+
+Tutorial: Deploy and inference Gemma (GPU)
+
+Tutorial: Deploy and inference Gemma (TPU)
+
+ Kimi
+
+Overview
+
+Kimi K2 Thinking
+
+ Llama
+
+Overview
+
+Request predictions
+
+ Model details
+
+Llama 4 Maverick
+
+Llama 4 Scout
+
+Llama 3.3
+
+ MiniMax
+
+Overview
+
+MiniMax M2
+
+ OpenAI
+
+Overview
+
+OpenAI gpt-oss-120b
+
+OpenAI gpt-oss-20b
+
+ Qwen
+
+Overview
+
+Qwen 3 Next Instruct 80B
+
+Qwen 3 Next Thinking 80B
+
+Qwen 3 Coder
+
+Qwen 3 235B
+
+ ZAI.org
+
+Overview
+
+GLM 5
+
+GLM 4.7
+
+ Managed open models (MaaS)
+
+Overview
+
+Use open models via Model as a Service (MaaS)
+
+Grant access to open models
+
+ API
+
+Call MaaS APIs for open models
+
+Function calling
+
+Thinking
+
+Structured output
+
+Batch prediction
+
+ Self-deployed open models
+
+Overview
+
+ Deploy open models
+
+Deploy open models from Model Garden
+
+Deploy open models with prebuilt containers
+
+Deploy open models with a custom vLLM container
+
+Deploy models with custom weights
+
+Use Hugging Face Models
+
+ Tutorials
+
+Optimize model performance with advanced features in Model Garden
+
+Hex-LLM
+
+Comprehensive guide to vLLM for Text and Multimodal LLM Serving (GPU)
+
+vLLM TPU
+
+xDiT
+
+Deploy Llamma 3 models with SpotVM and Reservations
+
+ Build
+
+ Agents
+
+Vertex AI Agent Builder documentation
+
+ Prompt design
+
+Introduction to prompting
+
+ Prompting strategies
+
+Overview
+
+Give clear and specific instructions
+
+Use system instructions
+
+Include few-shot examples
+
+Add contextual information
+
+Structure prompts
+
+Compare prompts
+
+Instruct the model to explain its reasoning
+
+Break down complex tasks
+
+Experiment with parameter values
+
+Prompt iteration strategies
+
+ Task-specific prompt guidance
+
+Design multimodal prompts
+
+Design chat prompts
+
+Design medical text prompts
+
+ Capabilities
+
+ Safety
+
+Overview
+
+Responsible AI
+
+System instructions for safety
+
+Configure content filters
+
+Gemini for safety filtering and content moderation
+
+Abuse monitoring
+
+Process blocked responses
+
+Content Credentials
+
+ Text and code generation
+
+Text generation
+
+System instructions
+
+Function calling
+
+Structured output
+
+Content generation parameters
+
+Code execution
+
+Medical text
+
+ Image generation
+
+Overview
+
+ Image generation with Gemini
+
+Generate images with Gemini
+
+Edit images with Gemini
+
+Gemini image generation best practices
+
+Gemini image generation limitations
+
+Responsible AI and usage for Gemini image generation
+
+ Image generation with Imagen
+
+Generate images with Imagen
+
+ Edit images with Imagen
+
+Overview
+
+Insert objects into an image using inpaint
+
+Remove objects from an image using inpaint
+
+Expand the content of an image using outpaint
+
+Replace the background of an image
+
+ Configure Imagen parameters
+
+Configure Responsible AI safety settings
+
+Use prompt rewriter
+
+Set text prompt language
+
+Configure aspect ratio
+
+Set output resolution
+
+Omit content using a negative prompt
+
+Generate deterministic images
+
+ Generate images for retail and e-commerce
+
+Generate Virtual Try-On images
+
+ Customize images
+
+Subject customization
+
+Style customization
+
+Controlled Customization
+
+Instruct Customization
+
+Upscale images
+
+Prompt and image attribute guide
+
+Base64 encode and decode files
+
+Responsible AI and usage guidelines for Imagen
+
+ Video generation
+
+Introduction to Veo
+
+Text to video
+
+First frame image to video
+
+First and last frames to video
+
+Ingredients to videos with image references
+
+Extend videos
+
+Insert objects
+
+Remove objects
+
+Veo prompt guide
+
+Veo best practices
+
+Turn off Veo's prompt rewriter
+
+Responsible AI for Veo
+
+ Music generation
+
+Introduction to Lyria
+
+Generate music using Lyria
+
+Lyria prompt guide
+
+ Media analysis
+
+Image understanding
+
+Video understanding
+
+Audio understanding
+
+Document understanding
+
+Bounding box detection
+
+ Grounding
+
+Overview
+
+Grounding with Google Search
+
+Grounding with Google Maps
+
+Grounding with Vertex AI Search
+
+Grounding with your search API
+
+Grounding responses using RAG
+
+Grounding with Elasticsearch
+
+Grounding with Parallel Web Search
+
+Grounding with Exa Web Search
+
+Web Grounding for Enterprise
+
+URL context
+
+ Thinking
+
+Overview
+
+Thought signatures
+
+Computer Use
+
+ Live API
+
+Overview
+
+ Get started
+
+Get started using the Gen AI SDK
+
+Get started using WebSockets
+
+Get started using ADK
+
+Start and manage live sessions
+
+Send audio and video streams
+
+Configure language and voice
+
+Configure Gemini capabilities
+
+Best practices with Live API
+
+Troubleshooting Live API
+
+Demo apps and resources
+
+ Embeddings
+
+Overview
+
+ Text embeddings
+
+Get text embeddings
+
+Choose an embeddings task type
+
+Get multimodal embeddings
+
+Get batch embeddings inferences
+
+Translation
+
+Generate speech from text
+
+Transcribe speech
+
+ Development tools
+
+ Use AI-powered prompt writing tools
+
+Overview
+
+ Optimize prompts
+
+Overview
+
+Zero-shot optimizer
+
+Few-shot optimizer
+
+Data-driven optimizer
+
+Use prompt templates
+
+ RAG Engine
+
+RAG overview
+
+RAG quickstart
+
+RAG Engine billing
+
+ Deployment modes in RAG Engine
+
+Overview
+
+Managing Spanner mode
+
+Serverless mode
+
+Switching between modes
+
+Data ingestion
+
+ Supported models
+
+Generative models
+
+Embedding models
+
+ Document parsing
+
+Supported documents
+
+Fine-tune RAG transformations
+
+Use Document AI layout parser
+
+Use the LLM parser
+
+ Vector database choices in RAG
+
+Overview of vector database choices
+
+Use RagManagedDb with RAG
+
+Use Vertex AI Vector Search 2.0 with RAG
+
+Use Vertex AI Vector Search with RAG
+
+Use Feature Store with RAG
+
+Use Weaviate with RAG
+
+Use Pinecone with RAG
+
+Use Vertex AI Search with RAG
+
+Reranking for RAG
+
+Manage your RAG corpus
+
+Filter with metadata search
+
+Use CMEK with RAG
+
+RAG quotas
+
+Use RAG in Gemini Live API
+
+RAG Cross Corpus Retrieval
+
+ Tokenizer
+
+List and count tokens
+
+Use the Count Tokens API
+
+Multimodal datasets
+
+Use Vertex AI Search
+
+ Model tuning
+
+Introduction to tuning
+
+ Tuning Gemini models
+
+ Supervised fine-tuning
+
+About supervised fine-tuning
+
+Prepare your data
+
+Use supervised fine-tuning
+
+ Supported modalities
+
+Text tuning
+
+Document tuning
+
+Image tuning
+
+Audio tuning
+
+Video tuning
+
+Tune function calling
+
+ Preference tuning
+
+About preference tuning
+
+Prepare your data
+
+Use preference tuning
+
+Use tuning checkpoints
+
+Use continuous tuning
+
+Open models
+
+ Embeddings models
+
+Tune text embeddings models
+
+ Translation models
+
+About supervised fine-tuning
+
+Prepare your data
+
+Use supervised fine-tuning
+
+Tuning recommendations with LoRA and QLoRA
+
+ Migrate
+
+ Call Vertex AI models using OpenAI libraries
+
+Overview
+
+Authenticate
+
+Examples
+
+Migrate from OpenAI SDK
+
+ Evaluate
+
+Overview
+
+Tutorial: Perform evaluation using the console
+
+ Perform evaluation using the GenAI Client in Vertex AI SDK
+
+Tutorial: Evaluate models using the GenAI Client in Vertex AI SDK
+
+ Define your evaluation metrics
+
+Define your evaluation metrics
+
+Details for managed rubric-based metrics
+
+Prepare your evaluation dataset
+
+Run an evaluation
+
+View and interpret evaluation results
+
+Evaluate agents
+
+ Alternative evaluation methods
+
+ Evaluate using the evaluation module in Vertex AI SDK
+
+Tutorial: Perform evaluation using the evaluation module in Vertex AI SDK
+
+Define your evaluation metrics
+
+Prepare your evaluation dataset
+
+Run an evaluation
+
+Interpret evaluation results
+
+Templates for model-based metrics
+
+Evaluate agents
+
+Evaluate a judge model
+
+Configure a judge model
+
+Run AutoSxS pipeline
+
+Run a computation-based evaluation pipeline
+
+ Deploy
+
+Consumption options overview
+
+ Provisioned Throughput
+
+Provisioned Throughput overview
+
+Supported models
+
+Calculate Provisioned Throughput requirements
+
+Provisioned Throughput for Live API
+
+Provisioned Throughput for Veo 3 models
+
+Single Zone Provisioned Throughput
+
+Purchase Provisioned Throughput
+
+Use Provisioned Throughput
+
+ PayGo
+
+Standard PayGo
+
+Priority PayGo
+
+Flex PayGo
+
+ Batch inference
+
+Overview
+
+Create batch job from Cloud Storage
+
+Create batch job from BigQuery
+
+Resume an incomplete batch job
+
+Quotas and system limits
+
+ Cache reused prompt context
+
+Overview
+
+Create a context cache
+
+Use a context cache
+
+Get context cache information
+
+Update a context cache
+
+Delete a context cache
+
+Context cache for fine-tuned Gemini models
+
+Deploy generative AI models
+
+Troubleshooting error code 429
+
+Retry strategy
+
+ Administer
+
+Access control
+
+Networking
+
+Security controls
+
+Control access to Model Garden models
+
+Enable Data Access audit logs
+
+Save and share prompts
+
+Monitor models
+
+Monitor cost using custom metadata labels
+
+Request-response logging
+
+ Secure a gen AI app by using IAP
+
+Overview
+
+Set up your project and source repository
+
+Create a Cloud Run service
+
+Create a load balancer
+
+Configure IAP
+
+Test your IAP-secured app
+
+Clean up your project
+
+ Go to Vertex AI documentation
+
+Vertex AI documentation
+
+ AI and ML
+
+ Application development
+
+ Application hosting
+
+ Compute
+
+ Data analytics and pipelines
+
+ Databases
+
+ Distributed, hybrid, and multicloud
+
+ Industry solutions
+
+ Migration
+
+ Networking
+
+ Observability and monitoring
+
+ Security
+
+ Storage
+
+ Access and resources management
+
+ Costs and usage management
+
+ Infrastructure as code
+
+ SDK, languages, frameworks, and tools
+
+ Vertex AI is transitioning to become part of Gemini Enterprise Agent Platform. See the most up-to-date information in the Agent Platform documentation.
+
+ Home
+
+ Documentation
+
+ AI and ML
+
+ Vertex AI
+
+ Generative AI on Vertex AI
+
+ Guides
+
+ Send feedback
+
+ OpenAI compatibility
+
+ Stay organized with collections
+
+ Save and categorize content based on your preferences.
+
+Gemini models are accessible using the OpenAI libraries (Python and TypeScript /
+Javascript) along with the REST API. Only Google Cloud Auth is supported using
+the OpenAI library in Agent Platform. If you aren't already using the OpenAI
+libraries, we recommend that you call the
+Gemini API directly.
+If you are using OpenAI libraries and want to migrate to
+Agent Platform SDKs, see
+Migrate from OpenAI SDK to Google Gen AI SDK.
+
+Python
+
+import openai
+from google.auth import default
+import google.auth.transport.requests
+
+# TODO(developer): Update and un-comment below lines
+# project_id = "PROJECT_ID"
+# location = "global"
+
+# Programmatically get an access token
+credentials, _ = default(scopes=["https://www.googleapis.com/auth/cloud-platform"])
+credentials.refresh(google.auth.transport.requests.Request())
+
+# OpenAI Client
+client = openai.OpenAI(
+ base_url=f"https://aiplatform.googleapis.com/v1/projects/{project_id}/locations/{location}/endpoints/openapi",
+ api_key=credentials.token
+)
+
+response = client.chat.completions.create(
+ model="google/gemini-2.0-flash-001",
+ messages=[
+ {"role": "system", "content": "You are a helpful assistant."},
+ {"role": "user", "content": "Explain to me how AI works"}
+ ]
+)
+
+print(response.choices[0].message)
+
+What changed?
+
+api_key=credentials.token: To use Google Cloud authentication, get a
+Google Cloud auth token using the sample code.
+
+base_url: This tells the OpenAI library to send requests to Google Cloud
+instead of the default URL.
+
+model="google/gemini-2.0-flash-001": Choose a compatible Gemini
+model out of the models that Vertex hosts.
+
+Thinking
+
+Gemini 2.5 models are trained to think through complex problems,
+leading to significantly improved reasoning. The Gemini API comes with a
+"thinking budget" parameter
+which gives fine-grained control over how much the model will think.
+
+Unlike the Gemini API, the OpenAI API offers three levels of thinking control:
+"low", "medium", and "high", which are mapped behind the scenes to 1K, 8K, and
+24K thinking token budgets.
+
+Not specifying a reasoning effort at all is equivalent to not specifying a thinking budget.
+
+For more direct control of thinking budgets and other thinking-related configs from the OpenAI-compatible API, utilize extra_body.google.thinking_config.
+
+Python
+
+import openai
+from google.auth import default
+import google.auth.transport.requests
+
+# TODO(developer): Update and un-comment below lines
+# project_id = "PROJECT_ID"
+# location = "global"
+
+# # Programmatically get an access token
+credentials, _ = default(scopes=["https://www.googleapis.com/auth/cloud-platform"])
+credentials.refresh(google.auth.transport.requests.Request())
+
+# OpenAI Client
+client = openai.OpenAI(
+ base_url=f"https://aiplatform.googleapis.com/v1/projects/{project_id}/locations/{location}/endpoints/openapi",
+ api_key=credentials.token
+)
+
+response = client.chat.completions.create(
+ model="google/gemini-2.5-flash",
+ reasoning_effort="low",
+ messages=[
+ {"role": "system", "content": "You are a helpful assistant."},
+ {
+ "role": "user",
+ "content": "Explain to me how AI works"
+ }
+ ]
+)
+print(response.choices[0].message)
+
+Streaming
+
+The Gemini API supports
+streaming responses.
+
+Python
+
+import openai
+from google.auth import default
+import google.auth.transport.requests
+
+# TODO(developer): Update and un-comment below lines
+# project_id = "PROJECT_ID"
+# location = "global"
+
+credentials, _ = default(scopes=["https://www.googleapis.com/auth/cloud-platform"])
+credentials.refresh(google.auth.transport.requests.Request())
+
+client = openai.OpenAI(
+ base_url=f"https://aiplatform.googleapis.com/v1/projects/{project_id}/locations/{location}/endpoints/openapi",
+ api_key=credentials.token
+)
+response = client.chat.completions.create(
+ model="google/gemini-2.0-flash",
+ messages=[
+ {"role": "system", "content": "You are a helpful assistant."},
+ {"role": "user", "content": "Hello!"}
+ ],
+ stream=True
+)
+
+for chunk in response:
+ print(chunk.choices[0].delta)
+
+Function calling
+
+Function calling makes it easier to get structured data outputs from generative
+models and is supported in the Gemini API.
+
+Python
+
+import openai
+from google.auth import default
+import google.auth.transport.requests
+
+# TODO(developer): Update and un-comment below lines
+# project_id = "PROJECT_ID"
+# location = "global"
+
+credentials, _ = default(scopes=["https://www.googleapis.com/auth/cloud-platform"])
+credentials.refresh(google.auth.transport.requests.Request())
+
+client = openai.OpenAI(
+ base_url=f"https://aiplatform.googleapis.com/v1/projects/{project_id}/locations/{location}/endpoints/openapi",
+ api_key=credentials.token
+)
+
+tools = [
+ {
+ "type": "function",
+ "function": {
+ "name": "get_weather",
+ "description": "Get the weather in a given location",
+ "parameters": {
+ "type": "object",
+ "properties": {
+ "location": {
+ "type": "string",
+ "description": "The city and state, e.g. Chicago, IL",
+ },
+ "unit": {"type": "string", "enum": ["celsius", "fahrenheit"]},
+ },
+ "required": ["location"],
+ },
+ }
+ }
+]
+
+messages = [{"role": "user", "content": "What's the weather like in Chicago today?"}]
+response = client.chat.completions.create(
+ model="google/gemini-2.0-flash",
+ messages=messages,
+ tools=tools,
+ tool_choice="auto"
+)
+
+print(response)
+
+Image understanding
+
+Gemini models are natively multimodal and provide best in class
+performance on many common vision tasks.
+
+Python
+
+from google.auth import default
+import google.auth.transport.requests
+
+import base64
+from openai import OpenAI
+
+# TODO(developer): Update and un-comment below lines
+# project_id = "PROJECT_ID"
+# location = "global"
+
+# Programmatically get an access token
+credentials, _ = default(scopes=["https://www.googleapis.com/auth/cloud-platform"])
+credentials.refresh(google.auth.transport.requests.Request())
+
+# OpenAI Client
+client = openai.OpenAI(
+ base_url=f"https://aiplatform.googleapis.com/v1/projects/{project_id}/locations/{location}/endpoints/openapi",
+ api_key=credentials.token,
+)
+
+# Function to encode the image
+def encode_image(image_path):
+ with open(image_path, "rb") as image_file:
+ return base64.b64encode(image_file.read()).decode('utf-8')
+
+# Getting the base64 string
+# base64_image = encode_image("Path/to/image.jpeg")
+
+response = client.chat.completions.create(
+ model="google/gemini-2.0-flash",
+ messages=[
+ {
+ "role": "user",
+ "content": [
+ {
+ "type": "text",
+ "text": "What is in this image?",
+ },
+ {
+ "type": "image_url",
+ "image_url": {
+ "url": f"data:image/jpeg;base64,{base64_image}"
+ },
+ },
+ ],
+ }
+ ],
+)
+
+print(response.choices[0])
+
+Generate an image
+
+REST
+
+ After you
+ set up your environment,
+ you can use REST to test a text prompt. The following sample sends a request to the publisher
+ model endpoint.
+
+ Before using any of the request data,
+ make the following replacements:
+
+PROJECT_ID: Your project ID.
+
+To send your request, expand one of these options:
+
+curl (Linux, macOS, or Cloud Shell)
+
+ Note:
+ 
+ The following command assumes that you have logged in to
+ the gcloud CLI with your user account by running
+ gcloud init
+ or
+ gcloud auth login
+ 
+ , or by using Cloud Shell,
+ which automatically logs you into the gcloud CLI
+ .
+ You can check the currently active account by running
+ gcloud auth list.
+
+ Save the request body in a file named request.json.
+ Run the following command in the terminal to create or overwrite
+ this file in the current directory:
+
+cat > request.json << 'EOF'
+{
+ "model": "google/gemini-2.5-flash-image-preview",
+ "messages": [{
+ "role": "user",
+ "content": "Generate an image of a banana."
+ }],
+ "modalities": ["image", "text"]
+}
+EOF
+
+ Then execute the following command to send your REST request:
+
+curl -X POST \
+ -H "Authorization: Bearer $(gcloud auth print-access-token)" \
+ -H "Content-Type: application/json; charset=utf-8" \
+ -d @request.json \
+ "https://aiplatform.googleapis.com/v1/projects/PROJECT_ID/locations/global/endpoints/openapi/chat/completions"
+
+PowerShell (Windows)
+
+ Note:
+ 
+ The following command assumes that you have logged in to
+ the gcloud CLI with your user account by running
+ gcloud init
+ or
+ gcloud auth login
+ .
+ You can check the currently active account by running
+ gcloud auth list.
+
+ Save the request body in a file named request.json.
+ Run the following command in the terminal to create or overwrite
+ this file in the current directory:
+
+@'
+{
+ "model": "google/gemini-2.5-flash-image-preview",
+ "messages": [{
+ "role": "user",
+ "content": "Generate an image of a banana."
+ }],
+ "modalities": ["image", "text"]
+}
+'@ | Out-File -FilePath request.json -Encoding utf8
+
+ Then execute the following command to send your REST request:
+
+$cred = gcloud auth print-access-token
+$headers = @{ "Authorization" = "Bearer $cred" }
+
+Invoke-WebRequest `
+ -Method POST `
+ -Headers $headers `
+ -ContentType: "application/json; charset=utf-8" `
+ -InFile request.json `
+ -Uri "https://aiplatform.googleapis.com/v1/projects/PROJECT_ID/locations/global/endpoints/openapi/chat/completions" | Select-Object -Expand Content
+
+You should receive a JSON response similar to the following:
+
+{
+ "choices": [{
+ "finish_reason": "stop",
+ "index": 0,
+ "image": {
+ "data":"IMAGE_DATA",
+ "extra_content": {
+ "google": {
+ "mime_type":"image/png"
+ }
+ }
+ },
+ "content":"Here is an image of a banana: ",
+ "role":"assistant"
+ }],
+ "created":1757099999,
+ "id":"sample_response_id",
+ "model":"google/gemini-2.5-flash-image-preview",
+ "object":"chat.completion",
+ "system_fingerprint":"",
+ "usage": {
+ "completion_tokens":1299,
+ "prompt_tokens":7,
+ "total_tokens":1306
+ }
+}
+
+Audio understanding
+
+Analyze audio input:
+
+Python
+
+from google.auth import default
+import google.auth.transport.requests
+
+import base64
+from openai import OpenAI
+
+# TODO(developer): Update and un-comment below lines
+# project_id = "PROJECT_ID"
+# location = "global"
+
+# Programmatically get an access token
+credentials, _ = default(scopes=["https://www.googleapis.com/auth/cloud-platform"])
+credentials.refresh(google.auth.transport.requests.Request())
+
+# OpenAI Client
+client = openai.OpenAI(
+ base_url=f"https://aiplatform.googleapis.com/v1/projects/{project_id}/locations/{location}/endpoints/openapi",
+ api_key=credentials.token,
+)
+
+with open("/path/to/your/audio/file.wav", "rb") as audio_file:
+base64_audio = base64.b64encode(audio_file.read()).decode('utf-8')
+
+response = client.chat.completions.create(
+ model="gemini-2.0-flash",
+ messages=[
+ {
+ "role": "user",
+ "content": [
+ {
+ "type": "text",
+ "text": "Transcribe this audio",
+ },
+ {
+ "type": "input_audio",
+ "input_audio": {
+ "data": base64_audio,
+ "format": "wav"
+ }
+ }
+ ],
+ }
+ ],
+)
+
+print(response.choices[0].message.content)
+
+Structured output
+
+Gemini models can output JSON objects in any
+structure you define.
+
+Python
+
+from google.auth import default
+import google.auth.transport.requests
+
+from pydantic import BaseModel
+from openai import OpenAI
+
+# TODO(developer): Update and un-comment below lines
+# project_id = "PROJECT_ID"
+# location = "global"
+
+# Programmatically get an access token
+credentials, _ = default(scopes=["https://www.googleapis.com/auth/cloud-platform"])
+credentials.refresh(google.auth.transport.requests.Request())
+
+# OpenAI Client
+client = openai.OpenAI(
+ base_url=f"https://aiplatform.googleapis.com/v1/projects/{project_id}/locations/{location}/endpoints/openapi",
+ api_key=credentials.token,
+)
+
+class CalendarEvent(BaseModel):
+ name: str
+ date: str
+ participants: list[str]
+
+completion = client.beta.chat.completions.parse(
+ model="google/gemini-2.0-flash",
+ messages=[
+ {"role": "system", "content": "Extract the event information."},
+ {"role": "user", "content": "John and Susan are going to an AI conference on Friday."},
+ ],
+ response_format=CalendarEvent,
+)
+
+print(completion.choices[0].message.parsed)
+
+Current limitations
+
+Access tokens live for 1 hour by default. After expiration, they must be
+refreshed. See this code example
+for more information.
+
+What's next
+
+Unlock Gemini's potential using the Google Gen AI Libraries.
+
+See more examples using the Chat Completions API
+with the OpenAI-compatible syntax.
+
+See which Gemini models and parameters are supported
+in the Overview page.
+
+ Send feedback
+
+Except as otherwise noted, the content of this page is licensed under the Creative Commons Attribution 4.0 License, and code samples are licensed under the Apache 2.0 License. For details, see the Google Developers Site Policies. Java is a registered trademark of Oracle and/or its affiliates.
+
+Last updated 2026-04-22 UTC.
+
+ Need to tell us more?
+
+ [[["Easy to understand","easyToUnderstand","thumb-up"],["Solved my problem","solvedMyProblem","thumb-up"],["Other","otherUp","thumb-up"]],[["Hard to understand","hardToUnderstand","thumb-down"],["Incorrect information or sample code","incorrectInformationOrSampleCode","thumb-down"],["Missing the information/samples I need","missingTheInformationSamplesINeed","thumb-down"],["Other","otherDown","thumb-down"]],["Last updated 2026-04-22 UTC."],[],[]]
+
+Products and pricing
+
+ See all products
+
+ Google Cloud pricing
+
+ Google Cloud Marketplace
+
+ Contact sales
+
+Support
+
+ Community forums
+
+ Support
+
+ Release Notes
+
+ System status
+
+Resources
+
+ GitHub
+
+ Getting Started with Google Cloud
+
+ Code samples
+
+ Cloud Architecture Center
+
+ Training and Certification
+
+Engage
+
+ Blog
+
+ Events
+
+ X (Twitter)
+
+ Google Cloud on YouTube
+
+ Google Cloud Tech on YouTube
+
+ About Google
+
+ Privacy
+
+ Site terms
+
+ Google Cloud terms
+
+ Manage cookies
+
+ Our third decade of climate action: join us
+
+ Sign up for the Google Cloud newsletter
+
+ Subscribe
+
+ English
+
+ Deutsch
+
+ Español
+
+ Español – América Latina
+
+ Français
+
+ Indonesia
+
+ Italiano
+
+ Português
+
+ Português – Brasil
+
+ עברית
+
+ 中文 – 简体
+
+ 中文 – 繁體
+
+ 日本語
+
+ 한국어

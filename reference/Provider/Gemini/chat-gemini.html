@@ -1,0 +1,3257 @@
+
+
+
+
+
+
+
+
+
+<!doctype html>
+<html 
+      lang="en"
+      dir="ltr">
+  <head>
+    <meta name="google-signin-client-id" content="721724668570-nbkv1cfusk7kk4eni4pjvepaus73b13t.apps.googleusercontent.com"><meta name="google-signin-scope"
+          content="profile email https://www.googleapis.com/auth/developerprofiles https://www.googleapis.com/auth/developerprofiles.award https://www.googleapis.com/auth/devprofiles.full_control.firstparty"><meta property="og:site_name" content="Google for Developers">
+    <meta property="og:type" content="website"><meta name="theme-color" content="#1a73e8"><meta charset="utf-8">
+    <meta content="IE=Edge" http-equiv="X-UA-Compatible">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    
+
+    <link rel="manifest" href="/_pwa/developers/manifest.json"
+          crossorigin="use-credentials">
+    <link rel="preconnect" href="//www.gstatic.com" crossorigin>
+    <link rel="preconnect" href="//fonts.googleapis.com" crossorigin>
+    <link rel="preconnect" href="//www.google-analytics.com" crossorigin><link rel="stylesheet" href="//fonts.googleapis.com/css?family=Google+Sans:400,500|Roboto:400,400italic,500,500italic,700,700italic|Roboto+Mono:400,500,700&display=swap">
+      <link rel="stylesheet"
+            href="//fonts.googleapis.com/css2?family=Material+Icons&family=Material+Symbols+Outlined&display=block"><link rel="stylesheet" href="https://www.gstatic.com/devrel-devsite/prod/v579073a50c63499824df5a68b8922367066583d283ef78fdade1028efdb4ceb5/developers/css/app.css">
+      <link rel="shortcut icon" href="https://www.gstatic.com/devrel-devsite/prod/v579073a50c63499824df5a68b8922367066583d283ef78fdade1028efdb4ceb5/developers/images/favicon-new.png">
+    <link rel="apple-touch-icon" href="https://www.gstatic.com/devrel-devsite/prod/v579073a50c63499824df5a68b8922367066583d283ef78fdade1028efdb4ceb5/developers/images/touchicon-180-new.png"><link rel="canonical" href="https://developers.google.com/gemini-code-assist/docs/chat-gemini"><link rel="search" type="application/opensearchdescription+xml"
+            title="Google for Developers" href="https://developers.google.com/s/opensearch.xml">
+      <link rel="alternate" hreflang="en"
+          href="https://developers.google.com/gemini-code-assist/docs/chat-gemini" /><link rel="alternate" hreflang="x-default" href="https://developers.google.com/gemini-code-assist/docs/chat-gemini" /><link rel="alternate" hreflang="ar"
+          href="https://developers.google.com/gemini-code-assist/docs/chat-gemini?hl=ar" /><link rel="alternate" hreflang="bn"
+          href="https://developers.google.com/gemini-code-assist/docs/chat-gemini?hl=bn" /><link rel="alternate" hreflang="zh-Hans"
+          href="https://developers.google.com/gemini-code-assist/docs/chat-gemini?hl=zh-cn" /><link rel="alternate" hreflang="zh-Hant"
+          href="https://developers.google.com/gemini-code-assist/docs/chat-gemini?hl=zh-tw" /><link rel="alternate" hreflang="fa"
+          href="https://developers.google.com/gemini-code-assist/docs/chat-gemini?hl=fa" /><link rel="alternate" hreflang="fr"
+          href="https://developers.google.com/gemini-code-assist/docs/chat-gemini?hl=fr" /><link rel="alternate" hreflang="de"
+          href="https://developers.google.com/gemini-code-assist/docs/chat-gemini?hl=de" /><link rel="alternate" hreflang="he"
+          href="https://developers.google.com/gemini-code-assist/docs/chat-gemini?hl=he" /><link rel="alternate" hreflang="hi"
+          href="https://developers.google.com/gemini-code-assist/docs/chat-gemini?hl=hi" /><link rel="alternate" hreflang="id"
+          href="https://developers.google.com/gemini-code-assist/docs/chat-gemini?hl=id" /><link rel="alternate" hreflang="it"
+          href="https://developers.google.com/gemini-code-assist/docs/chat-gemini?hl=it" /><link rel="alternate" hreflang="ja"
+          href="https://developers.google.com/gemini-code-assist/docs/chat-gemini?hl=ja" /><link rel="alternate" hreflang="ko"
+          href="https://developers.google.com/gemini-code-assist/docs/chat-gemini?hl=ko" /><link rel="alternate" hreflang="pl"
+          href="https://developers.google.com/gemini-code-assist/docs/chat-gemini?hl=pl" /><link rel="alternate" hreflang="pt-BR"
+          href="https://developers.google.com/gemini-code-assist/docs/chat-gemini?hl=pt-br" /><link rel="alternate" hreflang="ru"
+          href="https://developers.google.com/gemini-code-assist/docs/chat-gemini?hl=ru" /><link rel="alternate" hreflang="es-419"
+          href="https://developers.google.com/gemini-code-assist/docs/chat-gemini?hl=es-419" /><link rel="alternate" hreflang="th"
+          href="https://developers.google.com/gemini-code-assist/docs/chat-gemini?hl=th" /><link rel="alternate" hreflang="tr"
+          href="https://developers.google.com/gemini-code-assist/docs/chat-gemini?hl=tr" /><link rel="alternate" hreflang="vi"
+          href="https://developers.google.com/gemini-code-assist/docs/chat-gemini?hl=vi" /><title>Chat with Gemini Code Assist &nbsp;|&nbsp; Google for Developers</title>
+
+<meta property="og:title" content="Chat with Gemini Code Assist &nbsp;|&nbsp; Google for Developers"><meta name="description" content="How to use the Gemini Code Assist chat features in an IDE.">
+  <meta property="og:description" content="How to use the Gemini Code Assist chat features in an IDE."><meta property="og:url" content="https://developers.google.com/gemini-code-assist/docs/chat-gemini"><meta property="og:image" content="https://www.gstatic.com/devrel-devsite/prod/v579073a50c63499824df5a68b8922367066583d283ef78fdade1028efdb4ceb5/developers/images/opengraph/google-blue.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="675"><meta property="og:locale" content="en"><meta name="twitter:card" content="summary_large_image"><script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "Article",
+    
+    "headline": "Chat with Gemini Code Assist"
+  }
+</script><script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    "itemListElement": [{
+      "@type": "ListItem",
+      "position": 1,
+      "name": "Gemini Code Assist",
+      "item": "https://developers.google.com/gemini-code-assist"
+    },{
+      "@type": "ListItem",
+      "position": 2,
+      "name": "Chat with Gemini Code Assist",
+      "item": "https://developers.google.com/gemini-code-assist/docs/chat-gemini"
+    }]
+  }
+  </script>
+  
+    
+    
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    
+
+    
+    
+
+    
+    
+    
+    
+    
+
+
+
+  
+
+    </head>
+  <body class="color-scheme--light"
+        template="page"
+        theme="google-blue"
+        type="article"
+        
+        
+        
+        layout="docs"
+        
+        
+        
+        
+        
+          
+            concierge='closed'
+          
+        
+        display-toc
+        pending>
+  
+    <devsite-progress type="indeterminate" id="app-progress"></devsite-progress>
+  
+  
+    <a href="#main-content" class="skip-link button">
+      
+      Skip to main content
+    </a>
+    <section class="devsite-wrapper">
+      <devsite-cookie-notification-bar></devsite-cookie-notification-bar>
+        <devsite-header role="banner">
+  
+    
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<div class="devsite-header--inner" data-nosnippet>
+  <div class="devsite-top-logo-row-wrapper-wrapper">
+    <div class="devsite-top-logo-row-wrapper">
+      <div class="devsite-top-logo-row">
+        <button type="button" id="devsite-hamburger-menu"
+          class="devsite-header-icon-button button-flat material-icons gc-analytics-event"
+          data-category="Site-Wide Custom Events"
+          data-label="Navigation menu button"
+          visually-hidden
+          aria-label="Open menu">
+        </button>
+        
+<div class="devsite-product-name-wrapper">
+
+  
+    
+  
+
+
+
+  
+  
+  <span class="devsite-product-name">
+    <ul class="devsite-breadcrumb-list"
+  >
+  
+  <li class="devsite-breadcrumb-item
+             ">
+    
+    
+    
+      
+      
+        
+  <a href="https://developers.google.com/gemini-code-assist"
+      
+        class="devsite-breadcrumb-link gc-analytics-event"
+      
+        data-category="Site-Wide Custom Events"
+      
+        data-label="Upper Header"
+      
+        data-value="1"
+      
+        track-type="globalNav"
+      
+        track-name="breadcrumb"
+      
+        track-metadata-position="1"
+      
+        track-metadata-eventdetail="Gemini Code Assist"
+      
+    >
+    
+          Gemini Code Assist
+        
+  </a>
+  
+      
+    
+  </li>
+  
+</ul>
+  </span>
+
+</div>
+        <div class="devsite-top-logo-row-middle">
+          <div class="devsite-header-upper-tabs">
+            
+           </div>
+          
+<devsite-search
+    enable-signin
+    enable-search
+    enable-suggestions
+      enable-query-completion
+    
+    enable-search-summaries
+    project-name="Gemini Code Assist"
+    tenant-name="Google for Developers"
+    project-scope="/gemini-code-assist"
+    url-scoped="https://developers.google.com/s/results/gemini-code-assist"
+    
+    
+    
+    >
+  <form class="devsite-search-form" action="https://developers.google.com/s/results" method="GET">
+    <div class="devsite-search-container">
+      <button type="button"
+              search-open
+              class="devsite-search-button devsite-header-icon-button button-flat material-icons"
+              
+              aria-label="Open search"></button>
+      <div class="devsite-searchbox">
+        <input
+          aria-activedescendant=""
+          aria-autocomplete="list"
+          
+          aria-label="Search"
+          aria-expanded="false"
+          aria-haspopup="listbox"
+          autocomplete="off"
+          class="devsite-search-field devsite-search-query"
+          name="q"
+          
+          placeholder="Search"
+          role="combobox"
+          type="text"
+          value=""
+          >
+          <div class="devsite-search-image material-icons" aria-hidden="true">
+            
+              <svg class="devsite-search-ai-image" width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <g clip-path="url(#clip0_6641_386)">
+                    <path d="M19.6 21L13.3 14.7C12.8 15.1 12.225 15.4167 11.575 15.65C10.925 15.8833 10.2333 16 9.5 16C7.68333 16 6.14167 15.375 4.875 14.125C3.625 12.8583 3 11.3167 3 9.5C3 7.68333 3.625 6.15 4.875 4.9C6.14167 3.63333 7.68333 3 9.5 3C10.0167 3 10.5167 3.05833 11 3.175C11.4833 3.275 11.9417 3.43333 12.375 3.65L10.825 5.2C10.6083 5.13333 10.3917 5.08333 10.175 5.05C9.95833 5.01667 9.73333 5 9.5 5C8.25 5 7.18333 5.44167 6.3 6.325C5.43333 7.19167 5 8.25 5 9.5C5 10.75 5.43333 11.8167 6.3 12.7C7.18333 13.5667 8.25 14 9.5 14C10.6667 14 11.6667 13.625 12.5 12.875C13.35 12.1083 13.8417 11.15 13.975 10H15.975C15.925 10.6333 15.7833 11.2333 15.55 11.8C15.3333 12.3667 15.05 12.8667 14.7 13.3L21 19.6L19.6 21ZM17.5 12C17.5 10.4667 16.9667 9.16667 15.9 8.1C14.8333 7.03333 13.5333 6.5 12 6.5C13.5333 6.5 14.8333 5.96667 15.9 4.9C16.9667 3.83333 17.5 2.53333 17.5 0.999999C17.5 2.53333 18.0333 3.83333 19.1 4.9C20.1667 5.96667 21.4667 6.5 23 6.5C21.4667 6.5 20.1667 7.03333 19.1 8.1C18.0333 9.16667 17.5 10.4667 17.5 12Z" fill="#5F6368"/>
+                  </g>
+                <defs>
+                <clipPath id="clip0_6641_386">
+                <rect width="24" height="24" fill="white"/>
+                </clipPath>
+                </defs>
+              </svg>
+            
+          </div>
+          <div class="devsite-search-shortcut-icon-container" aria-hidden="true">
+            <kbd class="devsite-search-shortcut-icon">/</kbd>
+          </div>
+      </div>
+    </div>
+  </form>
+  <button type="button"
+          search-close
+          class="devsite-search-button devsite-header-icon-button button-flat material-icons"
+          
+          aria-label="Close search"></button>
+</devsite-search>
+
+        </div>
+
+        
+
+          
+
+          
+
+          
+
+          
+
+          
+<devsite-language-selector>
+  <ul role="presentation">
+    
+    
+    <li role="presentation">
+      <a role="menuitem" lang="en"
+        >English</a>
+    </li>
+    
+    <li role="presentation">
+      <a role="menuitem" lang="de"
+        >Deutsch</a>
+    </li>
+    
+    <li role="presentation">
+      <a role="menuitem" lang="es"
+        >Español</a>
+    </li>
+    
+    <li role="presentation">
+      <a role="menuitem" lang="es_419"
+        >Español – América Latina</a>
+    </li>
+    
+    <li role="presentation">
+      <a role="menuitem" lang="fr"
+        >Français</a>
+    </li>
+    
+    <li role="presentation">
+      <a role="menuitem" lang="id"
+        >Indonesia</a>
+    </li>
+    
+    <li role="presentation">
+      <a role="menuitem" lang="it"
+        >Italiano</a>
+    </li>
+    
+    <li role="presentation">
+      <a role="menuitem" lang="pl"
+        >Polski</a>
+    </li>
+    
+    <li role="presentation">
+      <a role="menuitem" lang="pt_br"
+        >Português – Brasil</a>
+    </li>
+    
+    <li role="presentation">
+      <a role="menuitem" lang="vi"
+        >Tiếng Việt</a>
+    </li>
+    
+    <li role="presentation">
+      <a role="menuitem" lang="tr"
+        >Türkçe</a>
+    </li>
+    
+    <li role="presentation">
+      <a role="menuitem" lang="ru"
+        >Русский</a>
+    </li>
+    
+    <li role="presentation">
+      <a role="menuitem" lang="he"
+        >עברית</a>
+    </li>
+    
+    <li role="presentation">
+      <a role="menuitem" lang="ar"
+        >العربيّة</a>
+    </li>
+    
+    <li role="presentation">
+      <a role="menuitem" lang="fa"
+        >فارسی</a>
+    </li>
+    
+    <li role="presentation">
+      <a role="menuitem" lang="hi"
+        >हिंदी</a>
+    </li>
+    
+    <li role="presentation">
+      <a role="menuitem" lang="bn"
+        >বাংলা</a>
+    </li>
+    
+    <li role="presentation">
+      <a role="menuitem" lang="th"
+        >ภาษาไทย</a>
+    </li>
+    
+    <li role="presentation">
+      <a role="menuitem" lang="zh_cn"
+        >中文 – 简体</a>
+    </li>
+    
+    <li role="presentation">
+      <a role="menuitem" lang="zh_tw"
+        >中文 – 繁體</a>
+    </li>
+    
+    <li role="presentation">
+      <a role="menuitem" lang="ja"
+        >日本語</a>
+    </li>
+    
+    <li role="presentation">
+      <a role="menuitem" lang="ko"
+        >한국어</a>
+    </li>
+    
+  </ul>
+</devsite-language-selector>
+
+
+          
+
+        
+
+        
+          <devsite-user 
+                        
+                        
+                          enable-profiles
+                        
+                        
+                          fp-auth
+                        
+                        id="devsite-user">
+            
+              
+              <span class="button devsite-top-button" aria-hidden="true" visually-hidden>Sign in</span>
+            
+          </devsite-user>
+        
+        
+        
+      </div>
+    </div>
+  </div>
+
+
+
+  <div class="devsite-collapsible-section
+    ">
+    <div class="devsite-header-background">
+      
+        
+      
+      
+        <div class="devsite-doc-set-nav-row">
+          
+          
+            
+            
+  <devsite-tabs class="lower-tabs">
+
+    <nav class="devsite-tabs-wrapper" aria-label="Lower tabs">
+      
+        
+          <tab  >
+            
+    <a href="https://developers.google.com/gemini-code-assist"
+    class="devsite-tabs-content gc-analytics-event "
+      track-metadata-eventdetail="https://developers.google.com/gemini-code-assist"
+    
+       track-type="nav"
+       track-metadata-position="nav - home"
+       track-metadata-module="primary nav"
+       
+       
+         
+           data-category="Site-Wide Custom Events"
+         
+           data-label="Tab: Home"
+         
+           track-name="home"
+         
+       >
+    Home
+  
+    </a>
+    
+  
+          </tab>
+        
+      
+        
+          <tab  class="devsite-active">
+            
+    <a href="https://developers.google.com/gemini-code-assist/docs/overview"
+    class="devsite-tabs-content gc-analytics-event "
+      track-metadata-eventdetail="https://developers.google.com/gemini-code-assist/docs/overview"
+    
+       track-type="nav"
+       track-metadata-position="nav - guides"
+       track-metadata-module="primary nav"
+       aria-label="Guides, selected" 
+       
+         
+           data-category="Site-Wide Custom Events"
+         
+           data-label="Tab: Guides"
+         
+           track-name="guides"
+         
+       >
+    Guides
+  
+    </a>
+    
+  
+          </tab>
+        
+      
+        
+          <tab  >
+            
+    <a href="https://developers.google.com/gemini-code-assist/resources/faqs"
+    class="devsite-tabs-content gc-analytics-event "
+      track-metadata-eventdetail="https://developers.google.com/gemini-code-assist/resources/faqs"
+    
+       track-type="nav"
+       track-metadata-position="nav - resources"
+       track-metadata-module="primary nav"
+       
+       
+         
+           data-category="Site-Wide Custom Events"
+         
+           data-label="Tab: Resources"
+         
+           track-name="resources"
+         
+       >
+    Resources
+  
+    </a>
+    
+  
+          </tab>
+        
+      
+    </nav>
+
+  </devsite-tabs>
+
+          
+          
+        </div>
+      
+    </div>
+  </div>
+
+</div>
+
+
+
+  
+
+  
+</devsite-header>
+        <devsite-book-nav scrollbars >
+          
+            
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<div class="devsite-book-nav-filter"
+     >
+  <span class="filter-list-icon material-icons" aria-hidden="true"></span>
+  <input type="text"
+         placeholder="Filter"
+         
+         aria-label="Type to filter"
+         role="searchbox">
+  
+  <span class="filter-clear-button hidden"
+        data-title="Clear filter"
+        aria-label="Clear filter"
+        role="button"
+        tabindex="0"></span>
+</div>
+
+<nav class="devsite-book-nav devsite-nav nocontent" data-nosnippet
+     aria-label="Side menu">
+  <div class="devsite-mobile-header">
+    <button type="button"
+            id="devsite-close-nav"
+            class="devsite-header-icon-button button-flat material-icons gc-analytics-event"
+            data-category="Site-Wide Custom Events"
+            data-label="Close navigation"
+            aria-label="Close navigation">
+    </button>
+    <div class="devsite-product-name-wrapper">
+
+  
+    
+  
+
+
+  
+      <span class="devsite-product-name">
+        
+        
+        <ul class="devsite-breadcrumb-list"
+  >
+  
+  <li class="devsite-breadcrumb-item
+             ">
+    
+    
+    
+      
+      
+        
+  <a href="https://developers.google.com/gemini-code-assist"
+      
+        class="devsite-breadcrumb-link gc-analytics-event"
+      
+        data-category="Site-Wide Custom Events"
+      
+        data-label="Upper Header"
+      
+        data-value="1"
+      
+        track-type="globalNav"
+      
+        track-name="breadcrumb"
+      
+        track-metadata-position="1"
+      
+        track-metadata-eventdetail="Gemini Code Assist"
+      
+    >
+    
+          Gemini Code Assist
+        
+  </a>
+  
+      
+    
+  </li>
+  
+</ul>
+      </span>
+    
+
+</div>
+  </div>
+
+  <div class="devsite-book-nav-wrapper">
+    <div class="devsite-mobile-nav-top">
+      
+        <ul class="devsite-nav-list">
+          
+            <li class="devsite-nav-item">
+              
+  
+  <a href="/gemini-code-assist"
+    
+       class="devsite-nav-title gc-analytics-event
+              
+              devsite-nav-active"
+    
+
+    
+      
+        data-category="Site-Wide Custom Events"
+      
+        data-label="Tab: Home"
+      
+        track-name="home"
+      
+    
+     data-category="Site-Wide Custom Events"
+     data-label="Responsive Tab: Home"
+     track-type="globalNav"
+     track-metadata-eventDetail="globalMenu"
+     track-metadata-position="nav">
+  
+    <span class="devsite-nav-text" tooltip >
+      Home
+   </span>
+    
+  
+  </a>
+  
+
+  
+              
+                <ul class="devsite-nav-responsive-tabs">
+                  
+                    
+                    
+                    
+                    <li class="devsite-nav-item">
+                      
+  
+  <a href="/gemini-code-assist"
+    
+       class="devsite-nav-title gc-analytics-event
+              
+              "
+    
+
+    
+      
+        data-category="Site-Wide Custom Events"
+      
+        data-label="Tab: Home"
+      
+        track-name="home"
+      
+    
+     data-category="Site-Wide Custom Events"
+     data-label="Responsive Tab: Home"
+     track-type="globalNav"
+     track-metadata-eventDetail="globalMenu"
+     track-metadata-position="nav">
+  
+    <span class="devsite-nav-text" tooltip >
+      Home
+   </span>
+    
+  
+  </a>
+  
+
+  
+                    </li>
+                  
+                    
+                    
+                    
+                    <li class="devsite-nav-item">
+                      
+  
+  <a href="/gemini-code-assist/docs/overview"
+    
+       class="devsite-nav-title gc-analytics-event
+              
+              devsite-nav-active"
+    
+
+    
+      
+        data-category="Site-Wide Custom Events"
+      
+        data-label="Tab: Guides"
+      
+        track-name="guides"
+      
+    
+     data-category="Site-Wide Custom Events"
+     data-label="Responsive Tab: Guides"
+     track-type="globalNav"
+     track-metadata-eventDetail="globalMenu"
+     track-metadata-position="nav">
+  
+    <span class="devsite-nav-text" tooltip menu="_book">
+      Guides
+   </span>
+    
+  
+  </a>
+  
+
+  
+                    </li>
+                  
+                    
+                    
+                    
+                    <li class="devsite-nav-item">
+                      
+  
+  <a href="/gemini-code-assist/resources/faqs"
+    
+       class="devsite-nav-title gc-analytics-event
+              
+              "
+    
+
+    
+      
+        data-category="Site-Wide Custom Events"
+      
+        data-label="Tab: Resources"
+      
+        track-name="resources"
+      
+    
+     data-category="Site-Wide Custom Events"
+     data-label="Responsive Tab: Resources"
+     track-type="globalNav"
+     track-metadata-eventDetail="globalMenu"
+     track-metadata-position="nav">
+  
+    <span class="devsite-nav-text" tooltip >
+      Resources
+   </span>
+    
+  
+  </a>
+  
+
+  
+                    </li>
+                  
+                </ul>
+              
+            </li>
+          
+          
+          
+        </ul>
+      
+    </div>
+    
+      <div class="devsite-mobile-nav-bottom">
+        
+          
+          <ul class="devsite-nav-list" menu="_book">
+            <li class="devsite-nav-item
+           devsite-nav-heading"><div class="devsite-nav-title devsite-nav-title-no-path">
+        <span class="devsite-nav-text" tooltip>Discover</span>
+      </div></li>
+
+  <li class="devsite-nav-item"><a href="/gemini-code-assist/docs/overview"
+        class="devsite-nav-title"
+      ><span class="devsite-nav-text" tooltip>Overview</span></a></li>
+
+  <li class="devsite-nav-item"><a href="/gemini-code-assist/docs/android-studio-overview"
+        class="devsite-nav-title"
+      ><span class="devsite-nav-text" tooltip>Gemini in Android Studio</span></a></li>
+
+  <li class="devsite-nav-item"><a href="/gemini-code-assist/docs/gemini-cli"
+        class="devsite-nav-title"
+      ><span class="devsite-nav-text" tooltip>Gemini CLI</span></a></li>
+
+  <li class="devsite-nav-item
+           devsite-nav-expandable"><div class="devsite-expandable-nav">
+      <a class="devsite-nav-toggle" aria-hidden="true"></a><div class="devsite-nav-title devsite-nav-title-no-path" tabindex="0" role="button">
+        <span class="devsite-nav-text" tooltip>Privacy notices</span>
+      </div><ul class="devsite-nav-section"><li class="devsite-nav-item"><a href="/gemini-code-assist/resources/privacy-notices"
+        class="devsite-nav-title"
+      ><span class="devsite-nav-text" tooltip>Terms of Service and Privacy Policies</span></a></li><li class="devsite-nav-item"><a href="/gemini-code-assist/resources/privacy-notice-gemini-code-assist-individuals"
+        class="devsite-nav-title"
+      ><span class="devsite-nav-text" tooltip>Gemini Code Assist for individuals privacy notice</span></a></li></ul></div></li>
+
+  <li class="devsite-nav-item"><a href="/gemini-code-assist/docs/supported-languages"
+        class="devsite-nav-title"
+      ><span class="devsite-nav-text" tooltip>Supported languages, IDEs, and interfaces</span></a></li>
+
+  <li class="devsite-nav-item"><a href="/gemini-code-assist/docs/works"
+        class="devsite-nav-title"
+      ><span class="devsite-nav-text" tooltip>How Gemini Code Assist works</span></a></li>
+
+  <li class="devsite-nav-item
+           devsite-nav-preview"><a href="/gemini-code-assist/docs/gemini-3"
+        class="devsite-nav-title"
+      ><span class="devsite-nav-text" tooltip>Gemini 3 with Gemini Code Assist</span><span class="devsite-nav-icon material-icons"
+        data-icon="preview"
+        data-title="Preview"
+        aria-hidden="true"></span></a></li>
+
+  <li class="devsite-nav-item"><a href="/gemini-code-assist/docs/data-governance"
+        class="devsite-nav-title"
+      ><span class="devsite-nav-text" tooltip>How Gemini Code Assist Standard and Enterprise use your data</span></a></li>
+
+  <li class="devsite-nav-item"><a href="/gemini-code-assist/docs/responsible-ai"
+        class="devsite-nav-title"
+      ><span class="devsite-nav-text" tooltip>Responsible AI</span></a></li>
+
+  <li class="devsite-nav-item
+           devsite-nav-heading"><div class="devsite-nav-title devsite-nav-title-no-path">
+        <span class="devsite-nav-text" tooltip>Get started</span>
+      </div></li>
+
+  <li class="devsite-nav-item"><a href="/gemini-code-assist/docs/set-up-gemini"
+        class="devsite-nav-title"
+      ><span class="devsite-nav-text" tooltip>Set up Gemini Code Assist for individuals</span></a></li>
+
+  <li class="devsite-nav-item"><a href="/gemini-code-assist/docs/use-gemini-code-assist-chat"
+        class="devsite-nav-title"
+      ><span class="devsite-nav-text" tooltip>Use the Gemini Code Assist chat</span></a></li>
+
+  <li class="devsite-nav-item"><a href="https://docs.cloud.google.com/gemini/docs/codeassist/set-up-gemini"
+        class="devsite-nav-title"
+      ><span class="devsite-nav-text" tooltip>Set up Gemini Code Assist Standard and Enterprise</span></a></li>
+
+  <li class="devsite-nav-item
+           devsite-nav-heading"><div class="devsite-nav-title devsite-nav-title-no-path">
+        <span class="devsite-nav-text" tooltip>Code in IDEs</span>
+      </div></li>
+
+  <li class="devsite-nav-item"><a href="/gemini-code-assist/docs/code-overview"
+        class="devsite-nav-title"
+      ><span class="devsite-nav-text" tooltip>Code features overview</span></a></li>
+
+  <li class="devsite-nav-item"><a href="/gemini-code-assist/docs/write-code-gemini"
+        class="devsite-nav-title"
+      ><span class="devsite-nav-text" tooltip>Code with Gemini Code Assist</span></a></li>
+
+  <li class="devsite-nav-item
+           devsite-nav-heading"><div class="devsite-nav-title devsite-nav-title-no-path">
+        <span class="devsite-nav-text" tooltip>Chat in IDEs</span>
+      </div></li>
+
+  <li class="devsite-nav-item"><a href="/gemini-code-assist/docs/chat-overview"
+        class="devsite-nav-title"
+      ><span class="devsite-nav-text" tooltip>Chat features overview</span></a></li>
+
+  <li class="devsite-nav-item"><a href="/gemini-code-assist/docs/chat-gemini"
+        class="devsite-nav-title"
+      ><span class="devsite-nav-text" tooltip>Chat with Gemini Code Assist</span></a></li>
+
+  <li class="devsite-nav-item
+           devsite-nav-preview"><a href="/gemini-code-assist/docs/agent-mode"
+        class="devsite-nav-title"
+      ><span class="devsite-nav-text" tooltip>Agent mode overview</span><span class="devsite-nav-icon material-icons"
+        data-icon="preview"
+        data-title="Preview"
+        aria-hidden="true"></span></a></li>
+
+  <li class="devsite-nav-item
+           devsite-nav-preview"><a href="/gemini-code-assist/docs/use-agentic-chat-pair-programmer"
+        class="devsite-nav-title"
+      ><span class="devsite-nav-text" tooltip>Use the Gemini Code Assist agent mode</span><span class="devsite-nav-icon material-icons"
+        data-icon="preview"
+        data-title="Preview"
+        aria-hidden="true"></span></a></li>
+
+  <li class="devsite-nav-item
+           devsite-nav-heading"><div class="devsite-nav-title devsite-nav-title-no-path">
+        <span class="devsite-nav-text" tooltip>Use code customization (Enterprise)</span>
+      </div></li>
+
+  <li class="devsite-nav-item"><a href="/gemini-code-assist/docs/code-customization-overview"
+        class="devsite-nav-title"
+      ><span class="devsite-nav-text" tooltip>Code customization overview</span></a></li>
+
+  <li class="devsite-nav-item"><a href="/gemini-code-assist/docs/code-customization"
+        class="devsite-nav-title"
+      ><span class="devsite-nav-text" tooltip>Configure code customization</span></a></li>
+
+  <li class="devsite-nav-item"><a href="/gemini-code-assist/docs/use-code-customization"
+        class="devsite-nav-title"
+      ><span class="devsite-nav-text" tooltip>Use code customization</span></a></li>
+
+  <li class="devsite-nav-item"><a href="/gemini-code-assist/docs/encrypt-data-cmek"
+        class="devsite-nav-title"
+      ><span class="devsite-nav-text" tooltip>Encrypt data with customer-managed encryption keys</span></a></li>
+
+  <li class="devsite-nav-item
+           devsite-nav-heading"><div class="devsite-nav-title devsite-nav-title-no-path">
+        <span class="devsite-nav-text" tooltip>Review code in GitHub</span>
+      </div></li>
+
+  <li class="devsite-nav-item"><a href="/gemini-code-assist/docs/review-repo-code"
+        class="devsite-nav-title"
+      ><span class="devsite-nav-text" tooltip>Review GitHub code with Gemini Code Assist</span></a></li>
+
+  <li class="devsite-nav-item"><a href="/gemini-code-assist/docs/set-up-code-assist-github"
+        class="devsite-nav-title"
+      ><span class="devsite-nav-text" tooltip>Set up Gemini Code Assist for GitHub</span></a></li>
+
+  <li class="devsite-nav-item"><a href="/gemini-code-assist/docs/use-code-assist-github"
+        class="devsite-nav-title"
+      ><span class="devsite-nav-text" tooltip>Use Gemini Code Assist for GitHub</span></a></li>
+
+  <li class="devsite-nav-item"><a href="/gemini-code-assist/docs/customize-repo-review"
+        class="devsite-nav-title"
+      ><span class="devsite-nav-text" tooltip>Customize Gemini Code Assist behavior in GitHub</span></a></li>
+
+  <li class="devsite-nav-item"><a href="/gemini-code-assist/docs/code-review-style-guide"
+        class="devsite-nav-title"
+      ><span class="devsite-nav-text" tooltip>Code review style guide</span></a></li>
+
+  <li class="devsite-nav-item
+           devsite-nav-heading"><div class="devsite-nav-title devsite-nav-title-no-path">
+        <span class="devsite-nav-text" tooltip>Configure</span>
+      </div></li>
+
+  <li class="devsite-nav-item"><a href="/gemini-code-assist/docs/keyboard-shortcuts"
+        class="devsite-nav-title"
+      ><span class="devsite-nav-text" tooltip>Keyboard shortcuts</span></a></li>
+
+  <li class="devsite-nav-item"><a href="/gemini-code-assist/docs/create-aiexclude-file"
+        class="devsite-nav-title"
+      ><span class="devsite-nav-text" tooltip>Exclude files from Gemini Code Assist use</span></a></li>
+
+  <li class="devsite-nav-item"><a href="/gemini-code-assist/docs/configure-local-codebase-awareness"
+        class="devsite-nav-title"
+      ><span class="devsite-nav-text" tooltip>Configure local codebase awareness</span></a></li>
+
+  <li class="devsite-nav-item"><a href="/gemini-code-assist/docs/use-pre-release-features-gemini-code-assist"
+        class="devsite-nav-title"
+      ><span class="devsite-nav-text" tooltip>Use pre-release features in Gemini Code Assist for VS Code</span></a></li>
+
+  <li class="devsite-nav-item"><a href="/gemini-code-assist/docs/network-access"
+        class="devsite-nav-title"
+      ><span class="devsite-nav-text" tooltip>Control Network Access with User Domain Restrictions</span></a></li>
+
+  <li class="devsite-nav-item
+           devsite-nav-expandable"><div class="devsite-expandable-nav">
+      <a class="devsite-nav-toggle" aria-hidden="true"></a><div class="devsite-nav-title devsite-nav-title-no-path" tabindex="0" role="button">
+        <span class="devsite-nav-text" tooltip>Standard and Enterprise</span>
+      </div><ul class="devsite-nav-section"><li class="devsite-nav-item"><a href="/gemini-code-assist/docs/configure-logging"
+        class="devsite-nav-title"
+      ><span class="devsite-nav-text" tooltip>Configure Gemini Code Assist logging</span></a></li><li class="devsite-nav-item"><a href="/gemini-code-assist/docs/configure-vpc-service-controls"
+        class="devsite-nav-title"
+      ><span class="devsite-nav-text" tooltip>Configure VPC Service Controls</span></a></li><li class="devsite-nav-item"><a href="/gemini-code-assist/docs/turn-off-gemini"
+        class="devsite-nav-title"
+      ><span class="devsite-nav-text" tooltip>Turn off Gemini Code Assist</span></a></li></ul></div></li>
+
+  <li class="devsite-nav-item
+           devsite-nav-heading"><div class="devsite-nav-title devsite-nav-title-no-path">
+        <span class="devsite-nav-text" tooltip>Troubleshoot</span>
+      </div></li>
+
+  <li class="devsite-nav-item"><a href="/gemini-code-assist/docs/troubleshoot-code-assist"
+        class="devsite-nav-title"
+      ><span class="devsite-nav-text" tooltip>Troubleshoot access to Gemini Code Assist features</span></a></li>
+
+  <li class="devsite-nav-item"><a href="/gemini-code-assist/docs/feedback"
+        class="devsite-nav-title"
+      ><span class="devsite-nav-text" tooltip>Provide feedback</span></a></li>
+          </ul>
+        
+        
+          
+    
+  
+        
+        
+          
+    
+  
+    
+  
+    
+  
+        
+      </div>
+    
+  </div>
+</nav>
+          
+        </devsite-book-nav>
+      
+      <section id="gc-wrapper">
+        <main role="main" id="main-content" class="devsite-main-content"
+            
+              has-book-nav
+              has-sidebar
+            >
+          <div class="devsite-sidebar">
+            <div class="devsite-sidebar-content">
+                
+                <devsite-toc class="devsite-nav"
+                            role="navigation"
+                            aria-label="On this page"
+                            depth="2"
+                            scrollbars
+                            data-nosnippet
+                  ></devsite-toc>
+                <devsite-recommendations-sidebar class="nocontent devsite-nav" data-nosnippet>
+                </devsite-recommendations-sidebar>
+            </div>
+          </div>
+          <devsite-content>
+            
+              
+
+
+
+
+
+
+
+
+
+
+<article class="devsite-article">
+  
+  
+  
+  
+  
+
+  <div class="devsite-article-meta nocontent" role="navigation" data-nosnippet>
+    
+    
+    <ul class="devsite-breadcrumb-list"
+  
+    aria-label="Breadcrumb">
+  
+  <li class="devsite-breadcrumb-item
+             ">
+    
+    
+    
+      
+        
+  <a href="https://developers.google.com/"
+      
+        class="devsite-breadcrumb-link gc-analytics-event"
+      
+        data-category="Site-Wide Custom Events"
+      
+        data-label="Breadcrumbs"
+      
+        data-value="1"
+      
+        track-type="globalNav"
+      
+        track-name="breadcrumb"
+      
+        track-metadata-position="1"
+      
+        track-metadata-eventdetail=""
+      
+    >
+    
+          Home
+        
+  </a>
+  
+      
+    
+  </li>
+  
+  <li class="devsite-breadcrumb-item
+             ">
+    
+      
+      <div class="devsite-breadcrumb-guillemet material-icons" aria-hidden="true"></div>
+    
+    
+    
+      
+        
+  <a href="https://developers.google.com/products"
+      
+        class="devsite-breadcrumb-link gc-analytics-event"
+      
+        data-category="Site-Wide Custom Events"
+      
+        data-label="Breadcrumbs"
+      
+        data-value="2"
+      
+        track-type="globalNav"
+      
+        track-name="breadcrumb"
+      
+        track-metadata-position="2"
+      
+        track-metadata-eventdetail=""
+      
+    >
+    
+          Products
+        
+  </a>
+  
+      
+    
+  </li>
+  
+  <li class="devsite-breadcrumb-item
+             ">
+    
+      
+      <div class="devsite-breadcrumb-guillemet material-icons" aria-hidden="true"></div>
+    
+    
+    
+      
+        
+  <a href="https://developers.google.com/gemini-code-assist"
+      
+        class="devsite-breadcrumb-link gc-analytics-event"
+      
+        data-category="Site-Wide Custom Events"
+      
+        data-label="Breadcrumbs"
+      
+        data-value="3"
+      
+        track-type="globalNav"
+      
+        track-name="breadcrumb"
+      
+        track-metadata-position="3"
+      
+        track-metadata-eventdetail="Gemini Code Assist"
+      
+    >
+    
+          Gemini Code Assist
+        
+  </a>
+  
+      
+    
+  </li>
+  
+  <li class="devsite-breadcrumb-item
+             ">
+    
+      
+      <div class="devsite-breadcrumb-guillemet material-icons" aria-hidden="true"></div>
+    
+    
+    
+      
+        
+  <a href="https://developers.google.com/gemini-code-assist/docs/overview"
+      
+        class="devsite-breadcrumb-link gc-analytics-event"
+      
+        data-category="Site-Wide Custom Events"
+      
+        data-label="Breadcrumbs"
+      
+        data-value="4"
+      
+        track-type="globalNav"
+      
+        track-name="breadcrumb"
+      
+        track-metadata-position="4"
+      
+        track-metadata-eventdetail=""
+      
+    >
+    
+          Guides
+        
+  </a>
+  
+      
+    
+  </li>
+  
+</ul>
+    
+      
+    <devsite-thumb-rating position="header">
+    </devsite-thumb-rating>
+  
+    
+  </div>
+  
+    <h1 class="devsite-page-title" tabindex="-1">
+      Chat with Gemini Code Assist<devsite-actions hidden data-nosnippet><devsite-feature-tooltip
+      ack-key="AckCollectionsBookmarkTooltipDismiss"
+      analytics-category="Site-Wide Custom Events"
+      analytics-action-show="Callout Profile displayed"
+      analytics-action-close="Callout Profile dismissed"
+      analytics-label="Create Collection Callout"
+      class="devsite-page-bookmark-tooltip nocontent"
+      data-nosnippet
+      dismiss-button="true"
+      id="devsite-collections-dropdown"
+      
+      dismiss-button-text="Dismiss"
+
+      
+      close-button-text="Got it">
+
+    
+    
+      <devsite-bookmark></devsite-bookmark>
+    
+
+    <span slot="popout-heading">
+      
+      Stay organized with collections
+    </span>
+    <span slot="popout-contents">
+      
+      Save and categorize content based on your preferences.
+    </span>
+  </devsite-feature-tooltip>
+    <devsite-llm-tools></devsite-llm-tools></devsite-actions>
+  
+      
+    </h1>
+  <div class="devsite-page-title-meta"><devsite-view-release-notes></devsite-view-release-notes></div>
+  
+
+  <devsite-toc class="devsite-nav"
+    depth="2"
+    devsite-toc-embedded
+    >
+  </devsite-toc>
+  <div class="devsite-article-body clearfix
+  ">
+
+  
+    
+      <devsite-key-takeaways-panel role="region" aria-labelledby="key-takeaways-panel-title">
+  <div class="devsite-key-takeaways-panel-header" aria-labelledby="key-takeaways-panel-title" aria-expanded="false" role="button" tabindex="0">
+    
+    <img src="/_static/images/icons/spark.svg" alt="Spark icon" />
+    <div class="devsite-key-takeaways-panel-title">
+      
+      <h2 class="no-link hide-from-toc" id="key-takeaways-panel-title" data-tooltip="Generated with AI">Page Summary</h2>
+    </div>
+    <span
+      class="material-icons devsite-key-takeaways-panel-toggle-button" aria-hidden="true"></span>
+  </div>
+  <div class="devsite-key-takeaways-panel-content">
+    <devsite-feedback
+      product-id="5123748"
+      bucket="8963846920012181156"
+      disable-product-feedback>
+      <button
+        class="button-flat button-primary devsite-key-takeaways-report-button"
+        
+        data-title="Report Key Takeaways!"
+        
+        aria-label="Report Key Takeaways!">
+        <span
+          class="material-icons"
+          
+          aria-label="Report Key Takeaways!"
+          >outlined_flag</span
+        >
+      </button>
+    </devsite-feedback>
+    <ul class="devsite-key-takeaways-panel-list">
+      
+        <li>
+          <p>Gemini Code Assist is an AI-powered collaborator in your IDE that helps with coding tasks.</p>
+
+        </li>
+      
+        <li>
+          <p>You can use Gemini Code Assist to explain your code, generate code, manage project context, and create custom commands and rules.</p>
+
+        </li>
+      
+        <li>
+          <p>Gemini Code Assist supports VS Code and IntelliJ and other supported JetBrains IDEs.</p>
+
+        </li>
+      
+        <li>
+          <p>You can specify files, folders, and terminal output to provide context for Gemini Code Assist prompts.</p>
+
+        </li>
+      
+        <li>
+          <p>Gemini Code Assist allows managing chats, editing prompts, regenerating responses, and viewing code diffs.</p>
+
+        </li>
+      
+    </ul>
+  </div>
+</devsite-key-takeaways-panel>
+    
+    
+    
+
+<p></p>
+
+<p>This document describes how you can use <a href="/gemini-code-assist/docs/overview">Gemini Code Assist</a>,
+an AI-powered collaborator in your IDE, to help you do the following in VS Code
+or IntelliJ and other <a href="/gemini-code-assist/docs/supported-languages#supported_ides">supported JetBrains IDEs</a>:</p>
+
+<ul>
+<li>Receive guidance to help you solve problems with your code.</li>
+<li>Generate code for your project.</li>
+<li>Manage the context of your project by specifying files and folders.</li>
+<li>Create custom commands and rules.</li>
+</ul>
+
+<p>If you&#39;re using <a href="/gemini-code-assist/docs/overview#editions-overview">Gemini Code Assist Enterprise</a>, you
+can use <a href="/gemini-code-assist/docs/code-customization-overview">Code customization</a>,
+which lets you get code suggestions based on your organization&#39;s private
+codebase directly from Gemini Code Assist Enterprise. Learn
+<a href="/gemini-code-assist/docs/code-customization">how to configure code customization</a>.</p>
+
+
+
+<p>This document is intended for developers of all skill levels. It assumes you
+have working knowledge of VS Code or IntelliJ and other supported JetBrains
+IDEs. You can also use
+<a href="https://developer.android.com/studio/gemini/overview">Gemini in Android Studio</a>.</p>
+
+
+<aside class="note"><strong>Note:</strong><span> The behaviour of code generation, completion, and transformation are
+non-deterministic when used simultaneously with other plugins that either
+implement the same shortcuts and/or use the same platform API to process these
+actions.</span></aside>
+<h2 id="before_you_begin" data-text="Before you begin" tabindex="-1">Before you begin</h2>
+<div class="ds-selector-tabs" data-ds-scope="code-sample">
+<section><h3 id="vs-code" data-text=" VS Code " tabindex="-1"> VS Code </h3><ol>
+<li><p>
+ <a href="/gemini-code-assist/docs/set-up-gemini">Set up Gemini Code Assist for individuals</a>,
+ <a href="/gemini-code-assist/docs/set-up-gemini-standard-enterprise">Gemini Code Assist Standard</a>,
+ or <a href="/gemini-code-assist/docs/set-up-gemini-standard-enterprise">Gemini Code Assist Enterprise</a>
+  if you haven&#39;t already.</p></li>
+<li><p>Before testing Gemini Code Assist capabilities in your
+code file, make sure your file&#39;s coding language is supported. For more
+information on supported coding languages, see
+<a href="/gemini-code-assist/docs/supported-languages#coding-languages">Supported coding languages</a>.</p></li>
+<li><p>If you prefer to use your IDE behind a proxy, see
+<a href="https://code.visualstudio.com/docs/setup/network">Network Connections in Visual Studio Code</a>.</p></li>
+</ol></section>
+<section><h3 id="intellij" data-text=" IntelliJ " tabindex="-1"> IntelliJ </h3><ol>
+<li><p>
+ <a href="/gemini-code-assist/docs/set-up-gemini">Set up Gemini Code Assist for individuals</a>,
+ <a href="/gemini-code-assist/docs/set-up-gemini-standard-enterprise">Gemini Code Assist Standard</a>,
+ or <a href="/gemini-code-assist/docs/set-up-gemini-standard-enterprise">Gemini Code Assist Enterprise</a>
+  if you haven&#39;t already.</p></li>
+<li><p>Before testing Gemini Code Assist capabilities in your
+code file, make sure your file&#39;s coding language is supported. For more
+information on supported coding languages, see
+<a href="/gemini-code-assist/docs/supported-languages#coding-languages">Supported coding languages</a>.</p></li>
+<li><p>If you prefer to use your IDE behind a proxy, see
+<a href="https://www.jetbrains.com/help/idea/settings-http-proxy.html">HTTP Proxy</a>.</p></li>
+</ol></section>
+</div>
+<h2 id="chat" data-text="Use the Gemini Code Assist chat to explain your code" tabindex="-1">Use the Gemini Code Assist chat to explain your code</h2>
+
+<p>In this section, you prompt Gemini Code Assist to provide an
+explanation of your existing code.</p>
+<div class="ds-selector-tabs" data-ds-scope="code-sample">
+<section><h3 id="vs-code_1" data-text=" VS Code " tabindex="-1"> VS Code </h3><p>To get an explanation of your code, follow these steps:</p>
+
+<ol>
+<li><p>Open your code file.</p></li>
+<li><p>In the activity bar of your IDE, click
+<span class="google-symbols" translate="no">spark</span> <strong>Gemini Code
+Assist</strong>.</p></li>
+<li><p>In the <strong>Gemini Code Assist</strong> pane, enter the prompt <code translate="no" dir="ltr">Explain this code to
+me</code> and click <span class="google-symbols" translate="no">send</span>
+<strong>Send</strong>.</p>
+
+<p>Gemini Code Assist uses the code in your code file as a
+reference to your prompt and responds with an explanation of your code.</p>
+
+<p>To refer to a specific block of code instead of all the code in the file,
+you can select the block in your code file and then prompt
+Gemini Code Assist.</p></li>
+</ol></section>
+<section><h3 id="intellij_1" data-text=" IntelliJ " tabindex="-1"> IntelliJ </h3><p>To get an explanation of your code, follow these steps:</p>
+
+<ol>
+<li><p>In your IDE, open your code file.</p></li>
+<li><p>In the Gemini Code Assist tool window, enter the prompt
+<code translate="no" dir="ltr">Explain this code to me</code> and click <strong>Submit</strong>.</p></li>
+</ol>
+
+<p>Gemini Code Assist uses the code in your code file as a
+reference to your prompt and responds with an explanation of your code.</p>
+
+<p>If you only want an explanation of a certain part of your code, you can select
+certain code and then prompt Gemini Code Assist again.
+Gemini Code Assist will only use the selected code as a
+reference to its generated response.</p>
+
+<p>When Gemini Code Assist provides you with code in its
+response, you can select the following options listed at the end of its
+response:</p>
+
+<ul>
+<li><p><strong>Insert at Cursor</strong>: Inserts the generated code into your current
+file at your current cursor position.</p></li>
+<li><p><strong>Insert in New File</strong>: Opens a new file and inserts the generated
+code into the new file.</p>
+
+<p><img src="https://docs.cloud.google.com/code/docs/intellij/images/gemini-code-assist-code-actions.png" alt="Gemini lists code actions at the end of a generated code response." class="screenshot"> </p></li>
+</ul>
+
+<p>These options are available when Gemini Code Assist identifies
+the language used in your code block, and if this language is supported in
+your current IDE.</p>
+
+<p><strong>View query history</strong></p>
+
+<p>If you want to re-use your previous prompts, you can find them in your
+<strong>Query History</strong> in the <strong>Gemini Code Assist</strong> tool window by clicking
+<span class="google-symbols" translate="no">schedule</span> <strong>Show Query
+History</strong>.</p>
+
+<p><img src="https://docs.cloud.google.com/code/docs/intellij/images/gemini-code-assist-query-history.png" alt="Gemini Query History in the tool window." class="screenshot"> </p></section>
+</div>
+<h3 id="create_multiple_chats" data-text="Create multiple chats" tabindex="-1">Create multiple chats</h3>
+
+<p>You can create multiple chats with Gemini Code Assist which
+contain their own context separate from other chats. Your chat history shows
+your first chat and the last updated timestamp. There&#39;s a limit of 20 chats.
+Once you reach this limit, the oldest chat is automatically deleted when you add
+a new chat.</p>
+<div class="ds-selector-tabs" data-ds-scope="code-sample">
+<section><h3 id="vs-code_2" data-text=" VS Code " tabindex="-1"> VS Code </h3><ol>
+<li>To add a new chat, click <span class="google-symbols">add</span>
+<strong>New Chat</strong> and enter your prompt in the text field. After you enter the
+prompt, Gemini Code Assist creates the new chat.</li>
+<li>To access your previous chat, click
+<span class="google-symbols">history</span> <strong>Resume Previous Chat</strong>. A list
+of your chats appear. Select the chat that you want to view.</li>
+<li>To delete a chat thread, click <strong>Resume Previous Chat</strong> and then click
+<span class="google-symbols">delete</span> <strong>Delete</strong> next to the chat that
+you want to delete.</li>
+</ol></section>
+<section><h3 id="intellij_2" data-text=" IntelliJ " tabindex="-1"> IntelliJ </h3><ol>
+<li>To add a new chat, click <span class="google-symbols">add</span>
+<strong>New Chat</strong> and enter your prompt in the text field. After you enter the
+prompt, Gemini Code Assist creates the new chat.</li>
+<li>To access your previous chat, click
+<span class="google-symbols">chat_bubble</span> <strong>Recent Chats</strong>. A list of
+your chats appear. Select the chat that you want to view.</li>
+<li>To delete a chat thread, click <strong>Recent chats</strong> and then click
+<span class="google-symbols">delete</span> <strong>Delete</strong> next to the chat that
+you want to delete.</li>
+</ol></section>
+</div>
+<h3 id="clear_chat_history" data-text="Clear chat history" tabindex="-1">Clear chat history</h3>
+
+<p>Gemini Code Assist uses the chat history for additional context
+when responding to your prompts. If your chat history is no longer relevant, you
+can <a href="/gemini-code-assist/docs/use-gemini-code-assist-chat#clear-chat-history">clear the chat history</a>.</p>
+
+<h2 id="manage_your_chat" data-text="Manage your chat" tabindex="-1">Manage your chat</h2>
+
+<p>You can manage your Gemini Code Assist chat settings by doing the
+following:</p>
+
+<h3 id="configure_automatic_scrolling" data-text="Configure automatic scrolling" tabindex="-1">Configure automatic scrolling</h3>
+<div class="ds-selector-tabs" data-ds-scope="code-sample">
+<section><h3 id="vs-code_3" data-text=" VS Code " tabindex="-1"> VS Code </h3><p>By default, Gemini Code Assist automatically scrolls through
+your chat. To disable this behavior, perform the following tasks:</p>
+
+<ol>
+<li><p>Navigate to <strong>Settings</strong> > <strong>Extensions</strong> >
+<strong>Gemini Code Assist</strong>.</p></li>
+<li><p>Search for the <strong>Automatic Scrolling</strong> setting and unselect the checkbox.</p></li>
+</ol></section>
+<section><h3 id="intellij_3" data-text=" IntelliJ " tabindex="-1"> IntelliJ </h3><p>This feature isn&#39;t supported in Gemini Code Assist for
+IntelliJ and other JetBrains IDEs.</p></section>
+</div>
+<h3 id="stop_in-progress_chat" data-text="Stop in-progress chat" tabindex="-1">Stop in-progress chat</h3>
+<div class="ds-selector-tabs" data-ds-scope="code-sample">
+<section><h3 id="vs-code_4" data-text=" VS Code " tabindex="-1"> VS Code </h3><p>You can stop an in-progress chat response by pressing
+<span class="google-symbols">stop</span> <strong>Stop</strong>:</p>
+
+<p><img src="https://docs.cloud.google.com/gemini/images/vscode-stop-chat.png" alt="Button to stop in-progress VS Code Gemini Code Assist chat response" class="screenshot"> </p></section>
+<section><h3 id="intellij_4" data-text=" IntelliJ " tabindex="-1"> IntelliJ </h3><p>You can stop an in-progress chat response by pressing
+<span class="google-symbols">stop</span> <strong>Stop</strong>:</p>
+
+<p><img src="https://docs.cloud.google.com/gemini/images/intellij-stop-chat.png" alt="Button to stop in-progress IntelliJ Gemini Code Assist chat response" class="screenshot"> </p></section>
+</div>
+<h3 id="select-model" data-text="Select the model" tabindex="-1">Select the model</h3>
+
+<p>If you use <a href="/gemini-code-assist/docs/overview">Gemini Code Assist Standard or Enterprise</a>,
+or if you have a Google AI Pro or Ultra subscription, you can select the model
+that Gemini Code Assist uses when processing your prompts.</p>
+<div class="ds-selector-tabs" data-ds-scope="code-sample">
+<section><h3 id="vs-code_5" data-text=" VS Code " tabindex="-1"> VS Code </h3><ol>
+<li><p>In the Gemini Code Assist chat pane, click the model
+selector dropdown.</p></li>
+<li><p>Select the model that you want Gemini Code Assist to use.</p></li>
+</ol></section>
+<section><h3 id="intellij_5" data-text=" IntelliJ " tabindex="-1"> IntelliJ </h3><ol>
+<li><p>In the Gemini Code Assist chat pane, click the model
+selector dropdown.</p></li>
+<li><p>Select the model that you want Gemini Code Assist to use.</p></li>
+</ol></section>
+</div>
+<h3 id="edit_a_prior_prompt" data-text="Edit a prior prompt" tabindex="-1">Edit a prior prompt</h3>
+
+<p>When you edit a prior prompt, Gemini Code Assist regenerates the
+response to the edited prompt. To edit your prompt, follow these steps:</p>
+<div class="ds-selector-tabs" data-ds-scope="code-sample">
+<section><h3 id="vs-code_6" data-text=" VS Code " tabindex="-1"> VS Code </h3><ol>
+<li><p>In the chat pane, hold your pointer over the prompt that you want to
+edit.</p></li>
+<li><p>Click <span class="google-symbols">edit</span> <strong>Edit</strong>.</p>
+
+<p><img src="https://docs.cloud.google.com/gemini/images/vscode-edit-prompt.png" alt="Modify prompt in VS Code Gemini Code Assist." class="screenshot"> </p></li>
+<li><p>Make changes to your prompt and click <strong>Update</strong>.</p>
+
+<p>Gemini Code Assist generates a new response to your
+edited prompt.</p></li>
+</ol></section>
+<section><h3 id="intellij_6" data-text=" IntelliJ " tabindex="-1"> IntelliJ </h3><ol>
+<li><p>In the chat pane, hold your pointer over the prompt that you want to
+edit.</p></li>
+<li><p>Click <span class="google-symbols">edit</span> <strong>Edit</strong>.</p>
+
+<p><img src="https://docs.cloud.google.com/gemini/images/intellij-edit-prompt.png" alt="Modify prompt in IntelliJ Gemini Code Assist." class="screenshot"> </p></li>
+<li><p>Make changes to your prompt and click <strong>Update</strong>.</p>
+
+<p>Gemini Code Assist generates a new response to your
+edited prompt.</p></li>
+</ol></section>
+</div>
+<h3 id="regenerate_a_prompt_response" data-text="Regenerate a prompt response" tabindex="-1">Regenerate a prompt response</h3>
+
+<p>If preferred, you can regenerate a different response to your most recent
+prompt by following these steps:</p>
+<div class="ds-selector-tabs" data-ds-scope="code-sample">
+<section><h3 id="vs-code_7" data-text=" VS Code " tabindex="-1"> VS Code </h3><p>In the Gemini Code Assist Chat pane, at the bottom of your
+most recent response, click <span class="google-symbols">replay</span>
+<strong>Regenerate response</strong>.</p>
+
+<p>Gemini Code Assist re-evaluates your recent prompt and
+provides a new response.</p></section>
+<section><h3 id="intellij_7" data-text=" IntelliJ " tabindex="-1"> IntelliJ </h3><p>In the Gemini Code Assist Chat pane, at the bottom of your
+most recent response, click <span class="google-symbols">replay</span>
+<strong>Regenerate response</strong>.</p>
+
+<p>Gemini Code Assist re-evaluates your recent prompt and
+provides a new response.</p></section>
+</div>
+<h3 id="delete_prompt_and_response_pairs" data-text="Delete prompt and response pairs" tabindex="-1">Delete prompt and response pairs</h3>
+
+<p>To delete your prompt and Gemini Code Assist&#39;s response to that
+particular prompt, follow these steps:</p>
+<div class="ds-selector-tabs" data-ds-scope="code-sample">
+<section><h3 id="vs-code_8" data-text=" VS Code " tabindex="-1"> VS Code </h3><ol>
+<li><p>In the chat pane, hold your pointer over your prompt that you wish to
+remove.</p></li>
+<li><p>Click <strong>Delete</strong>.</p>
+
+<p><img src="https://docs.cloud.google.com/gemini/images/vscode-delete-prompt-response-pair.png" alt="Delete prompt and response pair in VS Code Gemini Code Assist." class="screenshot"> </p></li>
+<li><p>When prompted to confirm if you want to delete the prompt and response
+pair, select <strong>Delete</strong>. Otherwise, click <strong>Cancel</strong> to cancel the
+operation.</p>
+
+<p>Your prompt and response pair is removed from your chat history with
+Gemini Code Assist.</p></li>
+</ol></section>
+<section><h3 id="intellij_8" data-text=" IntelliJ " tabindex="-1"> IntelliJ </h3><ol>
+<li><p>In the chat pane, hold your pointer over your prompt that you wish to
+remove.</p></li>
+<li><p>Click <strong>Delete</strong>.</p>
+
+<p><img src="https://docs.cloud.google.com/gemini/images/intellij-delete-prompt-response-pair.png" alt="Delete prompt and response pair in IntelliJ Gemini Code Assist." class="screenshot"> </p></li>
+<li><p>When prompted to confirm if you want to delete the prompt and response
+pair, select <strong>Delete</strong>. Otherwise, click <strong>Cancel</strong> to cancel the
+operation.</p>
+
+<p>Your prompt and response pair is removed from your chat history with
+Gemini Code Assist.</p></li>
+</ol></section>
+</div>
+<h3 id="configure_code_preview_pane" data-text="Configure code preview pane" tabindex="-1">Configure code preview pane</h3>
+
+<p>By default, the code preview pane setting for Gemini Code Assist
+chat is enabled. With this setting enabled, the preview code block in the
+Gemini Code Assist chat shows the first 6 lines of code. You can
+expand and collapse code blocks.</p>
+
+<p>To change the default setting, perform the following tasks:</p>
+<div class="ds-selector-tabs" data-ds-scope="code-sample">
+<section><h3 id="vs-code_9" data-text=" VS Code " tabindex="-1"> VS Code </h3><ol>
+<li><p>In your IDE, navigate to <strong>Settings</strong> > <strong>Extensions</strong>
+> <strong>Gemini Code Assist</strong>.</p></li>
+<li><p>Search for the <strong>Default Code Block Display</strong> setting.</p></li>
+<li><p>Select one of the following options:</p>
+
+<ul>
+<li><p><strong>Expanded</strong>: Automatically expands all code blocks in
+Gemini Code Assist chat responses.</p></li>
+<li><p><strong>Preview</strong>: Only shows the first 6 lines of code in the code block. You
+must expand the code block in the Gemini Code Assist chat
+response to see the rest of the code. This is the default setting.</p></li>
+<li><p><strong>Collapse</strong>: Automatically collapses all code blocks in
+Gemini Code Assist chat responses.</p></li>
+</ul>
+
+<p>When the IDE reloads, the new setting takes effect.</p></li>
+</ol></section>
+<section><h3 id="intellij_9" data-text=" IntelliJ " tabindex="-1"> IntelliJ </h3><p>This feature is the default in IntelliJ Gemini Code Assist
+and other JetBrains IDEs and is not configurable.</p></section>
+</div>
+<h2 id="prompt_with_selected_code_using_chat" data-text="Prompt Gemini Code Assist with selected code using chat" tabindex="-1">Prompt Gemini Code Assist with selected code using chat</h2>
+
+<p>Gemini Code Assist can perform tasks or answer your questions
+based on the code that you select. To get generated code that&#39;s based on a
+prompt with selected code, follow these steps:</p>
+<div class="ds-selector-tabs" data-ds-scope="code-sample">
+<section><h3 id="vs-code_10" data-text=" VS Code " tabindex="-1"> VS Code </h3><ol>
+<li><p>In the activity bar, click
+<span class="google-symbols" translate="no">spark</span> <strong>Gemini Code
+Assist</strong> to open the <strong>Gemini Code Assist</strong> pane.</p></li>
+<li><p>In your code file, select a block of code.</p></li>
+<li><p>In the <strong>Gemini Code Assist</strong> pane text field, enter a prompt for the
+selected code.</p>
+
+<p>For example, select a function in your code and enter the prompt <code translate="no" dir="ltr">Write
+a unit test for this function</code>.</p>
+
+<p>Gemini uses your selected code as reference and responds to
+your prompt.</p></li>
+</ol></section>
+<section><h3 id="intellij_10" data-text=" IntelliJ " tabindex="-1"> IntelliJ </h3><ol>
+<li><p>In the activity bar, click <span class="google-symbols">spark</span>
+<strong>Gemini Code Assist</strong> to open the <strong>Gemini Code Assist</strong> tool window.</p></li>
+<li><p>In your code file, select a block of code.</p></li>
+<li><p>In the <strong>Gemini Code Assist</strong> tool window text field, enter a prompt for
+the selected code.</p>
+
+<p>For example, select a function in your code and enter the prompt <code translate="no" dir="ltr">Write a
+unit test for this function.</code></p>
+
+<p>Gemini Code Assist uses your selected code as reference and
+responds to your prompt.</p></li>
+</ol></section>
+</div>
+<h3 id="add_selected_code_snippets_to_context" data-text="Add selected code snippets to context" tabindex="-1">Add selected code snippets to context</h3>
+
+<p>You can select, attach, and direct Gemini Code Assist to focus on
+code snippets. Code snippet selection enables discrete analysis of smaller code
+blocks instead of entire files.</p>
+
+<p>When you select a code snippet in your code file,
+you can instruct Gemini Code Assist add the code snippet to the
+<a href="#manage-context">Context Drawer</a>.</p>
+
+<p>Anything selected in the editor window, but not yet added to the Context Drawer,
+is also automatically included in the context. Selected code snippets only show
+up for a single chat turn. They won&#39;t persist in the Context Drawer, but remain
+in your Gemini Code Assist chat history.</p>
+
+<p>In this section, you add a selected code snippet to your context and get an
+explanation about the code snippet from Gemini Code Assist:</p>
+<div class="ds-selector-tabs" data-ds-scope="code-sample">
+<section><h3 id="vs-code_11" data-text=" VS Code " tabindex="-1"> VS Code </h3><ol>
+<li><p>In your code file, select a code snippet.</p></li>
+<li><p>In the Gemini Code Assist Chat text field, click
+<strong>Add to Chat Context</strong>.</p>
+
+<p>Gemini Code Assist adds the selected code snippet to your
+Context Drawer.</p></li>
+<li><p>In the Gemini Code Assist Chat text field, enter the
+prompt <code translate="no" dir="ltr">what does this code do?</code>.</p>
+
+<p>Gemini Code Assist responds to your prompt based on your
+selected code snippet in the Context Drawer.</p></li>
+</ol></section>
+<section><h3 id="intellij_11" data-text=" IntelliJ " tabindex="-1"> IntelliJ </h3><ol>
+<li><p>In your code file, select a code snippet.</p></li>
+<li><p>Select the <span class="google-symbols" translate="no">spark</span>
+Gemini icon and then select <strong>Add Selected Text to Chat
+Context</strong> from the menu.</p>
+
+<p>The code snippet is added to your Context Drawer.</p></li>
+</ol></section>
+</div>
+<h2 id="prompt_with_selected_terminal_output_using_chat" data-text="Prompt Gemini Code Assist with selected terminal output using chat" tabindex="-1">Prompt Gemini Code Assist with selected terminal output using chat</h2>
+
+<p>Gemini Code Assist can perform tasks or answer your questions
+based on selected terminal output. To get an explanation of selected terminal
+output, follow these steps:</p>
+<div class="ds-selector-tabs" data-ds-scope="code-sample">
+<section><h3 id="vs-code_12" data-text=" VS Code " tabindex="-1"> VS Code </h3><ol>
+<li><p>In your IDE, open your terminal (<strong>View</strong> > <strong>Terminal</strong>).</p></li>
+<li><p>Select any terminal output.</p></li>
+<li><p>Right-click the selected terminal output and select <strong>Gemini Code Assist:
+Add to Chat Context</strong>.</p>
+
+<p>Gemini Code Assist adds your terminal output to the Context
+Drawer.</p></li>
+<li><p>In the Gemini Code Assist Chat text field, enter the
+prompt <code translate="no" dir="ltr">what does this do?</code>.</p>
+
+<p>Gemini Code Assist responds to your prompt based on your
+selected terminal output in the Context Drawer.</p></li>
+</ol></section>
+<section><h3 id="intellij_12" data-text=" IntelliJ " tabindex="-1"> IntelliJ </h3><ol>
+<li><p>In the Gemini Code Assist Chat text field, enter
+<code translate="no" dir="ltr">@terminal</code>.</p></li>
+<li><p>In the list that appears, under <strong>Terminals</strong>, select the terminal that
+you want to enquire about.</p>
+
+<p><img src="https://docs.cloud.google.com/gemini/images/intellij-select-terminal.png" alt="Select a terminal in IntelliJ." class="screenshot"> </p></li>
+<li><p>In the Gemini Code Assist Chat text field, enter the
+prompt <code translate="no" dir="ltr">what does this do?</code>.</p>
+
+<p>Gemini Code Assist responds to your prompt based on your
+selected terminal output.</p></li>
+</ol></section>
+</div>
+<h2 id="specify-context" data-text="Specify files and folders in your workspace context" tabindex="-1">Specify files and folders in your workspace context</h2>
+
+<p>By default, Gemini Code Assist uses the current open file as
+context. You can specify files or folders in your workspace for
+Gemini Code Assist to use as additional context. When you specify
+a folder, Gemini Code Assist uses the files in the folder as well
+as the files in subfolders as context.</p>
+<aside class="note"><strong>Note:</strong><span> When you include a folder, Gemini Code Assist selects up to
+the first 100 files it finds within the folder and its subfolders. If you
+require codebase awareness beyond this limit, you may want to consider use of
+<a href="/gemini-code-assist/docs/code-customization-overview">code customization</a>.</span></aside><div class="ds-selector-tabs" data-ds-scope="code-sample">
+<section><h3 id="vs-code_13" data-text=" VS Code " tabindex="-1"> VS Code </h3><p>To specify files or folders in your chat prompt, type <kbd>@</kbd> and select
+the file or folder you want to specify.</p>
+
+<p><img src="https://docs.cloud.google.com/gemini/images/vscode-local-codebase-awareness-specify-files-folders.png" alt="Specify files and folders with local codebase awareness for VS Code." class="screenshot"> </p>
+
+<p>To get an explanation on the differences of two files in your codebase, follow
+these steps:</p>
+
+<ol>
+<li><p>In the activity bar, click
+<span class="google-symbols" translate="no">spark</span> <strong>Gemini Code
+Assist</strong>.</p></li>
+<li><p>In the <strong>Gemini Code Assist</strong> pane, enter the prompt <code translate="no" dir="ltr">Explain the
+difference between @YOUR_FILE_NAME_1 and @YOUR_FILE_NAME_2</code> and press
+<kbd>Enter</kbd> (for Windows and Linux) or <kbd>Return</kbd> (for macOS), or
+<kbd>Tab</kbd>. You can also click the name of the file in the list to select
+the file. Clicking the file name adds the file to your prompt context and
+opens the file in your IDE.</p></li>
+</ol>
+
+<p>Gemini Code Assist responds to your prompt while using the
+two files you specified for context. Gemini Code Assist also
+includes the files you specified in <strong>Context Sources</strong>.</p>
+
+<p>Now that you&#39;ve specified those files, you can continue asking additional
+questions or prompts in the same chat history, without having to specify the
+files again.</p>
+
+<p>For example: In the <strong>Gemini Code Assist</strong> pane, enter the prompt <code translate="no" dir="ltr">How can I
+improve YOUR_FILE_NAME_1?</code> (without the <kbd>@</kbd> symbol) and press
+<kbd>Enter</kbd> (for Windows and Linux) or <kbd>Return</kbd> (for macOS).</p>
+
+<p>Gemini Code Assist responds to your enquiry about the file you
+specified in your prompt.</p>
+<aside class="note"><strong>Note:</strong><span> If you clear your chat history, Gemini Code Assist no
+longer uses your files for context and you must re-specify the files in the
+chat pane using the <kbd>@</kbd> symbol if you want to make more enquiries
+about the files.</span></aside></section>
+<section><h3 id="intellij_13" data-text=" IntelliJ " tabindex="-1"> IntelliJ </h3><p>To specify files or folders in your chat prompt, type
+<kbd>@</kbd> and select the files or folders you want to specify.</p>
+
+<p><img src="https://docs.cloud.google.com/gemini/images/intellij-local-codebase-awareness-specify-files-folders.png" alt="Specify files with local codebase awareness for IntelliJ." class="screenshot"> </p>
+
+<p>To get an explanation on the differences of two files in your codebase, follow
+these steps:</p>
+
+<ol>
+<li><p>In the activity bar, click
+<span class="google-symbols" translate="no">spark</span> <strong>Gemini Code
+Assist</strong>.</p></li>
+<li><p>In the <strong>Gemini Code Assist</strong> pane, enter the prompt <code translate="no" dir="ltr">Explain the
+difference between @YOUR_FILE_NAME_1 and @YOUR_FILE_NAME_2</code> and press
+<kbd>Enter</kbd> (for Windows and Linux) or <kbd>Return</kbd> (for macOS), or
+<kbd>Tab</kbd>. You can also click the name of the file in the list to select
+the file. Clicking the file name adds the file to your prompt context and
+opens the file in your IDE.</p></li>
+</ol>
+
+<p>Gemini Code Assist responds to your prompt while using the
+two files you specified for context. Gemini Code Assist also
+includes the files you specified in <strong>Context Sources</strong>.</p>
+
+<p>Now that you&#39;ve specified those files, you can continue asking additional
+questions or prompts in the same chat history, without having to specify them
+again.</p>
+
+<p>For example: In the <strong>Gemini Code Assist</strong> pane, enter the prompt <code translate="no" dir="ltr">How can I
+improve YOUR_FILE_NAME_1?</code> (without the <kbd>@</kbd> symbol) and press
+<kbd>Enter</kbd> (for Windows and Linux) or <kbd>Return</kbd> (for macOS).</p>
+
+<p>Gemini Code Assist responds to your enquiry about the file you
+specified in your prompt.</p>
+<aside class="note"><strong>Note:</strong><span> If you clear your chat history, Gemini Code Assist no
+longer uses your files for context and you must re-specify the files or
+folders in the chat pane using the <kbd>@</kbd> symbol if you want to make
+more enquiries about the files.</span></aside></section>
+</div>
+<h3 id="manage-context" data-text="Manage files and folders in the Context Drawer" tabindex="-1">Manage files and folders in the Context Drawer</h3>
+
+<p>After you <a href="#specify-context">specify a file or folder to be used as context for your Gemini Code Assist prompts</a>, these files and folders
+are placed in the <em>Context Drawer</em>, where you can view and remove them from the
+prompt context.</p>
+
+<p>To manage the files and folders in your Context Drawer, perform the following
+tasks:</p>
+<div class="ds-selector-tabs" data-ds-scope="code-sample">
+<section><h3 id="vs-code_14" data-text=" VS Code " tabindex="-1"> VS Code </h3><aside class="note"><strong>Note:</strong><span> Chats created with Gemini Code Assist for VS Code, prior
+to version <code translate="no" dir="ltr">2.34.0</code>, won&#39;t retain and display the saved context in the Context
+Drawer. This can lead to issues where the chat doesn&#39;t display the correct
+context. To build and retain context among chats, we recommend you clear chats
+prior to this version.</span></aside>
+<ol>
+<li><p>In the activity bar of your IDE, click
+<span class="google-symbols" translate="no">spark</span> <strong>Gemini Code
+Assist</strong>.</p></li>
+<li><p>To view the files and folders in your Context Drawer, click <strong>Context
+items</strong>.</p>
+
+<p><img src="https://docs.cloud.google.com/gemini/images/vscode-context-drawer.png" alt="Context Drawer for Gemini Code Assist for VS Code" class="screenshot"> </p></li>
+<li><p>To remove items from the Context Drawer, click
+<span class="google-symbols" translate="no">close</span> <strong>Remove</strong>.</p></li>
+</ol></section>
+<section><h3 id="intellij_14" data-text=" IntelliJ " tabindex="-1"> IntelliJ </h3><ol>
+<li><p>In the activity bar, click
+<span class="google-symbols" translate="no">spark</span> <strong>Gemini Code
+Assist.</strong></p></li>
+<li><p>To view the files and folders in your Context Drawer, click <strong>Context</strong>.</p>
+
+<p><img src="https://docs.cloud.google.com/gemini/images/intellij-context-drawer.png" alt="Context Drawer for Gemini Code Assist for IntelliJ" class="screenshot"> </p></li>
+<li><p>To remove files and folders from the Context Drawer, click
+<span class="google-symbols" translate="no">close</span> <strong>Remove</strong>.</p></li>
+</ol></section>
+</div>
+<h2 id="exclude_files_from_local_context" data-text="Exclude files from local context" tabindex="-1">Exclude files from local context</h2>
+
+<p>If files are specified in a <code translate="no" dir="ltr">.aiexclude</code> or <code translate="no" dir="ltr">.gitignore</code> file,
+Gemini Code Assist by default excludes them from local use in the
+context for code completion, code generation, code transformation, and chat.</p>
+
+<p>To learn how to exclude files from local use, see
+<a href="/gemini-code-assist/docs/create-aiexclude-file">Exclude files from Gemini Code Assist use</a>.</p>
+
+<h2 id="revert_to_a_checkpoint_in_chat" data-text="Revert to a checkpoint in chat" tabindex="-1">Revert to a checkpoint in chat</h2>
+
+<p>After applying the changes that Gemini Code Assist generates
+based on your prompt, you can choose to revert the modified code file(s) to a
+certain checkpoint, which reverts all of the applied changes to the code
+file(s).</p>
+
+<p>Reverting to a checkpoint does <em>not</em> revert manual changes that you may have
+made to the code file(s).</p>
+
+<p>To revert your code file to a checkpoint, follow these steps:</p>
+<div class="ds-selector-tabs" data-ds-scope="code-sample">
+<section><h3 id="vs-code_15" data-text=" VS Code " tabindex="-1"> VS Code </h3><p>In the Gemini Code Assist chat pane, click
+<span class="google-symbols">undo</span> <strong>Revert to checkpoint</strong>. This
+reverts your code file back to the checkpoint state before the edits were
+made.</p></section>
+<section><h3 id="intellij_15" data-text=" IntelliJ " tabindex="-1"> IntelliJ </h3><p>If you&#39;ve already clicked <span class="google-symbols">check</span> <strong>Accept
+changes</strong> for a chat generated code suggestion, then you have the option to
+rollback the changes using the <span class="google-symbols">undo</span>
+<strong>Rollback changes</strong> button:</p>
+
+<p>In the Gemini Code Assist chat pane, click
+<span class="google-symbols">undo</span> <strong>Rollback Changes</strong>. This reverts
+your code file back to the checkpoint state before the edits were made.</p>
+
+<p><img src="https://docs.cloud.google.com/gemini/images/intellij-revert-to-checkpoint.png" alt="Revert to checkpoint button in IntelliJ Gemini Code Assist."></p></section>
+</div>
+<h2 id="view_code_diffs" data-text="View code diffs" tabindex="-1">View code diffs</h2>
+
+<p>By default, Gemini Code Assist suggests changes to your code with
+a code diff. You can trigger this diff any time you ask
+Gemini Code Assist to make changes to your code.</p>
+
+<p>In this section, you prompt Gemini Code Assist to optimize your
+code file, view the diff in your code file, and accept or reject changes as
+preferred.</p>
+<div class="ds-selector-tabs" data-ds-scope="code-sample">
+<section><h3 id="vs-code_16" data-text=" VS Code " tabindex="-1"> VS Code </h3><ol>
+<li><p>With your code file opened, prompt Gemini Code Assist to
+<code translate="no" dir="ltr">optimize this file</code>. If you want to optimize multiple files and folders,
+prompt Gemini Code Assist to <code translate="no" dir="ltr">optimize @FILE1 and @FILE2</code>.</p>
+
+<p>Gemini Code Assist responds to your prompt with code change
+suggestions in the code file(s) along with an inline diff that illustrates
+these changes.</p></li>
+<li><p>In the code file, click
+<span class="google-symbols">check_small</span> <strong>Accept</strong> or
+<span class="google-symbols">close_small</span> <strong>Reject</strong>.</p>
+
+<p><img src="https://docs.cloud.google.com/gemini/images/vscode-accept-reject-diff.png" alt="Accept or reject suggested a single change in a file in VS Code Gemini Code Assist." class="screenshot"> </p></li>
+<li><p>If Gemini Code Assist suggests multiple changes throughout
+your code file(s), click <strong>View</strong> above the suggestion and then click
+<strong>Next</strong> or <strong>Previous</strong>, to cycles through the other suggestions.</p></li>
+<li><p>If you want to accept or reject all of the suggested changes, click
+<strong>Accept file</strong> or <strong>Reject file</strong>.</p>
+
+<p><img src="https://docs.cloud.google.com/gemini/images/vscode-accept-reject-file.png" alt="Accept or reject all changes in a file in VS Code Gemini Code Assist." class="screenshot"> </p></li>
+<li><p>You can also use the Quick Preview in the prompt response to accept or
+reject all suggestions across multiple code files.</p>
+
+<p><img src="https://docs.cloud.google.com/gemini/images/vscode-quick-preview.png" alt="Quick Preview in VS Code Gemini Code Assist." class="screenshot"> </p></li>
+</ol></section>
+<section><h3 id="intellij_16" data-text=" IntelliJ " tabindex="-1"> IntelliJ </h3><ol>
+<li><p>With your code file opened, prompt Gemini Code Assist to
+<code translate="no" dir="ltr">optimize this file</code>. If you want to optimize multiple files and
+folders prompt Gemini Code Assist to
+<code translate="no" dir="ltr">optimize @FILE1 and @FILE2</code>.</p>
+
+<p>Gemini Code Assist responds to your prompt with code
+change suggestions in the code file(s) along with an inline diff that
+illustrates these changes.</p></li>
+<li><p>In the code file, click
+<span class="google-symbols">check_small</span> <strong>Accept</strong> or
+<span class="google-symbols">undo</span> <strong>Reject</strong>.</p>
+
+<p><img src="https://docs.cloud.google.com/gemini/images/intellij-accept-reject-diff.png" alt="Accept or reject suggested a single change in a file in IntelliJ Gemini Code Assist." class="screenshot"> </p></li>
+<li><p>If Gemini Code Assist suggests multiple changes throughout
+your code file(s), click
+<span class="google-symbols">arrow_upward</span> or
+<span class="google-symbols">arrow_downward</span> to cycle
+through the other suggestions.</p>
+
+<p><img src="https://docs.cloud.google.com/gemini/images/intellij-cycle-diffs.png" alt="Cycle through changes in a file in IntelliJ Code Gemini Code Assist." class="screenshot"> </p></li>
+<li><p>You can also use the Quick Preview in the prompt response to accept or
+reject all suggestions across multiple code files.</p>
+
+<p><img src="https://docs.cloud.google.com/gemini/images/intellij-quick-preview.png" alt="Quick Preview in IntelliJ Code Gemini Code Assist." class="screenshot"> </p></li>
+</ol></section>
+</div>
+<h3 id="change_diff_view_settings" data-text="Change diff view settings" tabindex="-1">Change diff view settings</h3>
+<div class="ds-selector-tabs" data-ds-scope="code-sample">
+<section><h3 id="vs-code_17" data-text=" VS Code " tabindex="-1"> VS Code </h3><p>If you prefer, you can change this setting to have a separate diff view
+ window in your IDE by following these steps:</p>
+
+<ol>
+<li><p>In the activity bar, navigate to
+<span class="google-symbols">settings</span> <strong>Settings</strong> >
+<strong>Settings</strong>.</p></li>
+<li><p>In the <strong>User</strong> tab of the settings, navigate to <strong>Extensions</strong>
+> <strong>Gemini Code Assist</strong>.</p></li>
+<li><p>Scroll to the <strong>Geminicodeassist &gt; Chat: Change View</strong> setting.</p></li>
+<li><p>In the dropdown list, select one of the following options:</p>
+
+<ul>
+<li><p><strong>Inline suggestions</strong> (enabled by default): Code changes displayed in
+your code file.</p></li>
+<li><p><strong>Default diff view</strong>: Opens a new file with side-by-side code
+changes.</p></li>
+</ul></li>
+</ol></section>
+<section><h3 id="intellij_17" data-text=" IntelliJ " tabindex="-1"> IntelliJ </h3><ol>
+<li><p>In the chat response of the Gemini Code Assist sidebar Ask
+panel, click the <strong>Preview in diff mode</strong> button
+(<span class="google-symbols">compare_arrows</span>).</p>
+
+<p>A <strong>Side-by-side</strong> tab appears in the main coding pane.</p></li>
+<li><p>Click on the <strong>Side-by-side</strong> tab to view side-by-side code changes.</p></li>
+</ol></section>
+</div>
+<h2 id="outline" data-text="Generate and view a file outline" tabindex="-1">Generate and view a file outline</h2>
+
+<p>By default, Gemini Code Assist generates an outline for the file
+in focus in your IDE. Note that outlines don&#39;t persist between IDE sessions,
+which means a new outline is generated for a given file when you start a new
+session, unless you <a href="#outline-settings">disable automatic outline generation</a>.
+To view the outline generated by Gemini Code Assist, do the
+following:</p>
+<div class="ds-selector-tabs" data-ds-scope="code-sample">
+<section><h3 id="vs-code_18" data-text=" VS Code " tabindex="-1"> VS Code </h3><ol>
+<li><p>In the Explorer sidebar, click the
+<strong>Gemini Code Assist outline</strong> icon.</p>
+
+<p>The Gemini Code Assist outline pane opens.</p></li>
+<li><p>By default, the outline pane automatically generates an outline for the
+current file in focus.</p>
+
+<ul>
+<li>If you previously
+<a href="#outline-settings">disabled automatic outline generation</a>, click
+the <strong>Generate outline</strong> button to generate an outline for the current
+file in focus.</li>
+</ul></li>
+<li><p>(Optional): Click on a node in the outline to automatically
+scroll to that portion of the code file.</p></li>
+<li><p>(Optional): Click the <strong>Eye</strong> icon in the outline pane to
+display the outline in-line in the code file itself.</p></li>
+</ol>
+
+<p>When you make changes to a file that has an outline, a new outline is not
+automatically generated. Instead, an <strong>Obsolete</strong> banner appears at the
+bottom of the outline with an option to manually <strong>Refresh</strong> the outline.</p></section>
+<section><h3 id="intellij_18" data-text=" IntelliJ " tabindex="-1"> IntelliJ </h3><ol>
+<li><p>In the Gemini Code Assist chat pane, click the <strong>Outline</strong>
+tab.</p>
+
+<p>The outline for the active file appears in the tab.</p></li>
+<li><p>(Optional): Click the <strong>Eye</strong> icon associated with the file outline to
+display the outline in-line in the code file itself.</p></li>
+<li><p>(Optional): Click the <strong>Eye</strong> icon that appears next to the <strong>Outline</strong>
+tab to display all available outlines in-line in their respective code
+files.</p></li>
+</ol>
+
+<p>When you make changes to a file that has an outline, a new outline is not
+automatically generated. Instead, the option to manually <strong>Refresh outline</strong>
+becomes available in the <strong>Outline</strong> tab.</p></section>
+</div>
+<h3 id="outline-settings" data-text="Toggle automatic outline generation" tabindex="-1">Toggle automatic outline generation</h3>
+
+<p>To toggle automatic Gemini Code Assist outline generation of
+your code files, do the following:</p>
+<div class="ds-selector-tabs" data-ds-scope="code-sample">
+<section><h3 id="vs-code_19" data-text=" VS Code " tabindex="-1"> VS Code </h3><ol>
+<li><p>Navigate to <strong>Settings</strong> > <strong>User</strong> >
+<strong>Extensions</strong> > <strong>Gemini Code Assist</strong>.</p></li>
+<li><p>In the <strong>Gemini Code Assist</strong> window, toggle
+<strong>Outlines: Automatic Outline Generation</strong>.</p></li>
+</ol>
+
+<p>If you disable automatic outline generation, you can manually generate an
+outline for the file in focus by right-clicking in the file and selecting
+<strong>Gemini Code Assist</strong> > <strong>Outline current file</strong>,
+or by going to the <strong>Gemini Code Assist outline</strong> pane and
+clicking the <strong>Generate outline</strong> button.</p></section>
+<section><h3 id="intellij_19" data-text=" IntelliJ " tabindex="-1"> IntelliJ </h3><ol>
+<li><p>In your IDE, navigate to <strong>Settings</strong> > <strong>Tools</strong> >
+<strong>Gemini</strong>.</p></li>
+<li><p>In the <strong>Gemini settings</strong> window, toggle
+<strong>Enable automatic outline generation</strong>.</p></li>
+</ol>
+
+<p>If you disable automatic outline generation, you can manually generate an
+outline for the file in focus by going to the <strong>Outline</strong> tab and
+clicking <strong>Generate Outline</strong>.</p></section>
+</div>
+<h2 id="create_custom_commands" data-text="Create custom commands" tabindex="-1">Create custom commands</h2>
+
+<p>By default, Gemini Code Assist provides commands like
+<code translate="no" dir="ltr">/generate</code> for VS Code and <strong>Generate Code</strong> for IntelliJ and
+<a href="/gemini-code-assist/docs/supported-languages#supported_ides">other supported JetBrains IDEs</a>. You can also create your own
+custom commands to help you accomplish repetitive tasks faster in your IDE.</p>
+
+<p>In this section, you create a custom command called <code translate="no" dir="ltr">add-comments</code> that adds
+comments to the code in your code file. For IntelliJ and other supported
+JetBrains IDEs, you&#39;ll create, save, and execute the custom command from the
+Prompt Library, and from the in-editor prompt.</p>
+<div class="ds-selector-tabs" data-ds-scope="code-sample">
+<section><h3 id="vs-code_20" data-text=" VS Code " tabindex="-1"> VS Code </h3><ol>
+<li><p>In your code file, press <kbd>Control+I</kbd> (for Windows and Linux) or
+<kbd>Command+I</kbd> (for macOS) to open the
+<strong>Gemini Code Assist Quick Pick</strong> menu.</p></li>
+<li><p>In the menu, search for and select <strong>Preferences: Open Settings (UI)</strong>.</p></li>
+<li><p>In the <strong>Search settings</strong> field, enter <code translate="no" dir="ltr">Geminicodeassist: Custom
+Commands</code>.</p></li>
+<li><p>In the <strong>Custom Commands</strong> box, select <strong>Add Item</strong>.</p></li>
+<li><p>In the <strong>Item</strong> field, enter <code translate="no" dir="ltr">add-comments</code> as the name of the command.</p></li>
+<li><p>In the <strong>Value</strong> field, enter <code translate="no" dir="ltr">add comments to all functions without
+comments in my code</code> as the prompt.</p></li>
+<li><p>Click <strong>OK</strong>.</p></li>
+</ol>
+
+<p>You can now use the custom command <code translate="no" dir="ltr">add-comments</code> in your IDE. The command
+appears in the list of commands in the Gemini Code Assist
+Quick Pick menu (<kbd>Control+I</kbd> (for Windows and Linux) or
+<kbd>Command+I</kbd> (for macOS)).</p></section>
+<section><h3 id="intellij_20" data-text=" IntelliJ " tabindex="-1"> IntelliJ </h3><ol>
+<li><p>In your IDE, navigate to <strong>Settings</strong> > <strong>Tools</strong> >
+<strong>Gemini</strong> > <strong>Prompt Library</strong>.</p>
+
+<p><img src="https://docs.cloud.google.com/gemini/images/intellij-prompt-library.png" alt="Prompt Library for IntelliJ Gemini Code Assist" class="screenshot"> </p></li>
+<li><p>In the <strong>Prompt Library</strong> window, click
+<span class="google-symbols" translate="no">add</span> <strong>Add</strong>.</p></li>
+<li><p>Name your custom command <code translate="no" dir="ltr">add-comments</code>.</p></li>
+<li><p>In the Prompt Library&#39;s text box, enter the prompt:
+<code translate="no" dir="ltr">Add comments to all functions without comments in this code</code>.</p></li>
+<li><p>Select the <strong>Show in In-Editor Prompt</strong> checkbox if it&#39;s unselected.</p></li>
+<li><p>Click <strong>OK</strong> to save the custom command in the Prompt Library.</p></li>
+<li><p>In your code file, highlight the code that you want to modify.</p></li>
+<li><p>Right-click the highlighted code and navigate to <strong>Gemini</strong> >
+<strong>Prompt Library</strong> and then select the custom command <code translate="no" dir="ltr">add-comments</code>.</p>
+
+<p>Gemini Code Assist executes the <code translate="no" dir="ltr">add-comments</code> command and
+adds comments to your highlighted code.</p></li>
+</ol>
+
+<p>You can also invoke the custom command with the in-editor prompt by
+performing the following tasks:</p>
+
+<ol>
+<li><p>In your code file, highlight the code that you want to modify, and press
+<kbd>Alt+\</kbd> (for Windows and Linux) or <kbd>Cmd+\</kbd> (for macOS) to
+open the <strong>Gemini Code Assist Quick Pick</strong> menu.</p></li>
+<li><p>In the menu, select your custom command <code translate="no" dir="ltr">add-comments</code>.</p>
+
+<p>Gemini Code Assist executes the <code translate="no" dir="ltr">add-comments</code> command and
+adds comments to your highlighted code.</p></li>
+</ol>
+
+<p>In the Gemini Code Assist chat pane, you can type <kbd>@</kbd>
+to retrieve and use a saved prompt in your Prompt Library.</p></section>
+</div>
+<h2 id="create_rules" data-text="Create rules" tabindex="-1">Create rules</h2>
+
+<p>You can create rules for Gemini Code Assist to follow, and the
+rules are included in every chat prompt you enter.</p>
+
+<p>Rules in Gemini let you define your preferences, such as:</p>
+
+<ul>
+<li>Coding style</li>
+<li>Output formats</li>
+<li>Tech stack</li>
+<li>Language</li>
+</ul>
+
+<p>For example, you can create a rule such as &quot;Always give me concise responses in
+Kotlin.&quot;</p>
+
+
+<div class="ds-selector-tabs" data-ds-scope="code-sample">
+<section><h3 id="vs-code_21" data-text=" VS Code " tabindex="-1"> VS Code </h3><ol>
+<li><p>In your code file, press <kbd>Control+I</kbd> (for Windows and Linux) or
+<kbd>Command+I</kbd> (for macOS) to open the
+<strong>Gemini Code Assist Quick Pick</strong> menu.</p></li>
+<li><p>In the menu, search for and select <strong>Preferences: Open Settings (UI)</strong>.</p></li>
+<li><p>In the <strong>Search settings</strong> field, enter <code translate="no" dir="ltr">Geminicodeassist: Rules</code>.</p></li>
+<li><p>In the text field, enter a rule such as: <code translate="no" dir="ltr">Always generate unit tests when
+creating a new function</code>. You can also add one or more rules with multiple
+lines in the text field.</p>
+
+<p>After adding rules in the Rules settings,
+Gemini Code Assist considers the rule for every prompt or
+request you make.</p>
+
+<p>To remove the rule, delete the content from the Rules text field.</p></li>
+</ol></section>
+<section><h3 id="intellij_21" data-text=" IntelliJ " tabindex="-1"> IntelliJ </h3><aside class="note"><strong>Note:</strong><span> Rules aren&#39;t used in agent mode.</span></aside>
+<ol>
+<li>To create a rule, go to
+<strong>Settings &gt; Tools &gt; Gemini &gt; Prompt Library &gt; Rules</strong> and then edit the
+text in the editor.</li>
+<li><p>To set the scope of the rule, in the <strong>Scope</strong> drop-down, select <strong>IDE</strong>
+or <strong>Project</strong>.</p>
+
+<ul>
+<li>IDE-level rules are private to yourself and can be used across
+multiple projects.</li>
+<li>Project-level rules can be shared among teammates working on the same
+project.</li>
+</ul>
+
+<p>To share prompts across the team you must add the <code translate="no" dir="ltr">.idea</code> folder to the
+version control system.</p></li>
+</ol>
+
+<p>
+<div style="text-align: center;">
+
+  <img src="/static/gemini-code-assist/images/intellij-rules.png" alt="Create Gemini rules in IntelliJ">
+
+</div>
+</p></section>
+</div>
+<h2 id="known_issues" data-text="Known issues" tabindex="-1">Known issues</h2>
+
+<p>This section outlines the known issues of Gemini Code Assist:</p>
+<div class="ds-selector-tabs" data-ds-scope="code-sample">
+<section><h3 id="vs-code_22" data-text=" VS Code " tabindex="-1"> VS Code </h3><ul>
+<li><p><strong>Chat responses may be truncated when they include an updated version of a
+large open file</strong></p>
+
+<p>To work around this issue, select a smaller section of code and include an
+additional directive in the chat prompt, such as <code translate="no" dir="ltr">only output the selected
+code.</code></p></li>
+<li><p><strong>Vim: Cannot accept or dismiss code generation suggestions unless in
+insert mode</strong></p>
+
+<p>When using the Vim plugin in normal mode, you can&#39;t accept or dismiss code
+suggestions.</p>
+
+<p>To work around this issue, press <kbd>i</kbd> to enter insert mode, and
+then press <kbd>Tab</kbd> to accept the suggestion.</p></li>
+<li><p><strong>Vim: Inconsistent behavior when pressing <kbd>Esc</kbd> to dismiss
+suggestions</strong></p>
+
+<p>When you press <kbd>Esc</kbd>, both the IDE and
+Gemini Code Assist suggestions are dismissed. This behavior
+is different from the non-Vim behavior where pressing <kbd>Esc</kbd>
+re-triggers Gemini Code Assist.</p></li>
+<li><p><strong>Sign-in attempts keep timing out</strong></p>
+
+<p>If your sign-in attempts keep timing out, try adding the
+<code translate="no" dir="ltr">cloudcode.beta.forceOobLogin</code> setting to your <code translate="no" dir="ltr">settings.json</code> file:</p>
+<div></div><devsite-code><pre class="devsite-click-to-copy" translate="no" dir="ltr" is-upgraded syntax="JSON"><code translate="no" dir="ltr"><span class="devsite-syntax-w"> </span><span class="devsite-syntax-nt">"cloudcode.beta.forceOobLogin"</span><span class="devsite-syntax-p">:</span><span class="devsite-syntax-w"> </span><span class="devsite-syntax-kc">true</span>
+</code></pre></devsite-code></li>
+<li><p><strong>License recitation warnings don&#39;t persist across sessions</strong></p>
+
+<p>If license recitation warnings don&#39;t persist across sessions, refer to the
+persistent logs:</p>
+
+<ol>
+<li><p>Click <strong>View</strong> > <strong>Output</strong>.</p></li>
+<li><p>Select <strong>Gemini Code Assist - Citations</strong>.</p></li>
+</ol></li>
+<li><p><strong>Connectivity issues in the Gemini Code Assist output
+window</strong></p>
+
+<p>If you see a connection error or other connectivity problems in the
+Gemini Code Assist output window, try the following:</p>
+
+<ul>
+<li><p>Configure your firewall to allow access to <code translate="no" dir="ltr">oauth2.googleapis.com</code> and
+<code translate="no" dir="ltr">cloudaicompanion.googleapis.com</code>.</p></li>
+<li><p>Configure your firewall to allow communication over HTTP/2, which gRPC
+uses.</p></li>
+</ul>
+
+<p>You can use the <code translate="no" dir="ltr">grpc-health-probe</code> tool to test connectivity. A
+successful check results in the following output:</p>
+
+<p><code translate="no" dir="ltr">$ grpc-health-probe -addr cloudaicompanion.googleapis.com:443 -tls
+error: this server does not implement the grpc health protocol
+(grpc.health.v1.Health): GRPC target method can&#39;t be resolved</code></p>
+
+<p>An unsuccessful check results in the following output:</p>
+
+<p><code translate="no" dir="ltr">timeout: failed to connect service &quot;cloudaicompanion.googleapis.com:443&quot; within 1s</code></p>
+
+<p>To obtain more details, run the following before <code translate="no" dir="ltr">grpc-health-probe</code>:</p>
+<div></div><devsite-code><pre class="devsite-click-to-copy" translate="no" dir="ltr" is-upgraded><code translate="no" dir="ltr">export GRPC_GO_LOG_SEVERITY_LEVEL=info
+</code></pre></devsite-code></li>
+</ul>
+
+</section>
+<section><h3 id="intellij_22" data-text=" IntelliJ " tabindex="-1"> IntelliJ </h3><p>There are no known issues for Gemini Code Assist for IntelliJ
+and other supported JetBrains IDEs.</p></section>
+</div>
+<h2 id="leave_feedback" data-text="Leave feedback" tabindex="-1">Leave feedback</h2>
+
+<p>To leave feedback of your experience, see
+
+<a href="/gemini-code-assist/docs/feedback">Provide Gemini for Google Cloud feedback</a>.
+
+
+<h2 id="whats_next" data-text="What's next" tabindex="-1">What's next</h2>
+
+<ul>
+<li>Learn how to <a href="https://docs.cloud.google.com/gemini/docs/discover/write-prompts">write better prompts</a>.</li>
+<li>Learn about <a href="https://cloud.google.com/products/gemini/pricing">Gemini Code Assist Standard and Enterprise pricing</a>.</li>
+<li>Learn about <a href="https://docs.cloud.google.com/gemini/docs/codeassist/security-privacy-compliance">security, privacy, and compliance of Gemini Code Assist</a>.
+</li>
+<li>Learn <a href="/gemini-code-assist/docs/data-governance" track-type="productOverview" track-name="dataGovernanceLink" track-metadata-position="nextSteps" track-metadata-end-goal="how-gemini-uses-data">how Gemini for Google Cloud uses your data</a>.
+</li>
+</ul>
+
+
+  <link href="https://fonts.googleapis.com/css2?family=Google+Symbols" rel="stylesheet" data-page-link>
+  
+
+  
+</div>
+
+  
+    
+      <devsite-recommendations display="in-page" hidden yield>
+      </devsite-recommendations>
+    
+    
+      
+    <devsite-thumb-rating position="footer">
+    </devsite-thumb-rating>
+  
+       
+    
+    
+      <devsite-recommendations id="recommendations-link" yield></devsite-recommendations>
+    
+  
+
+  <div class="devsite-floating-action-buttons"></div></article>
+
+
+<devsite-content-footer class="nocontent" data-nosnippet>
+  <p>Except as otherwise noted, the content of this page is licensed under the <a href="https://creativecommons.org/licenses/by/4.0/">Creative Commons Attribution 4.0 License</a>, and code samples are licensed under the <a href="https://www.apache.org/licenses/LICENSE-2.0">Apache 2.0 License</a>. For details, see the <a href="https://developers.google.com/site-policies">Google Developers Site Policies</a>. Java is a registered trademark of Oracle and/or its affiliates.</p>
+  <p>Last updated 2026-03-24 UTC.</p>
+</devsite-content-footer>
+
+
+<devsite-notification
+>
+</devsite-notification>
+
+
+  
+<div class="devsite-content-data">
+  
+  
+    <template class="devsite-content-data-template">
+      [[["Easy to understand","easyToUnderstand","thumb-up"],["Solved my problem","solvedMyProblem","thumb-up"],["Other","otherUp","thumb-up"]],[["Missing the information I need","missingTheInformationINeed","thumb-down"],["Too complicated / too many steps","tooComplicatedTooManySteps","thumb-down"],["Out of date","outOfDate","thumb-down"],["Samples / code issue","samplesCodeIssue","thumb-down"],["Other","otherDown","thumb-down"]],["Last updated 2026-03-24 UTC."],[],[]]
+    </template>
+  
+</div>
+            
+          </devsite-content>
+        </main>
+        <devsite-footer-promos class="devsite-footer">
+          
+            
+          
+        </devsite-footer-promos>
+        <devsite-footer-linkboxes class="devsite-footer">
+          
+            
+<nav class="devsite-footer-linkboxes nocontent"
+     aria-label="Footer links"
+     data-nosnippet>
+  
+  <ul class="devsite-footer-linkboxes-list">
+    
+    <li class="devsite-footer-linkbox ">
+    <h3 class="devsite-footer-linkbox-heading no-link">Connect</h3>
+      <ul class="devsite-footer-linkbox-list">
+        
+        <li class="devsite-footer-linkbox-item">
+          
+          <a href="//googledevelopers.blogspot.com"
+             class="devsite-footer-linkbox-link gc-analytics-event"
+             data-category="Site-Wide Custom Events"
+            
+             data-label="Footer Link (index 1)"
+            >
+            
+          
+            Blog
+          
+          </a>
+          
+          
+        </li>
+        
+        <li class="devsite-footer-linkbox-item">
+          
+          <a href="https://goo.gle/3FReQXN"
+             class="devsite-footer-linkbox-link gc-analytics-event"
+             data-category="Site-Wide Custom Events"
+            
+             data-label="Footer Link (index 2)"
+            >
+            
+          
+            Bluesky
+          
+          </a>
+          
+          
+        </li>
+        
+        <li class="devsite-footer-linkbox-item">
+          
+          <a href="https://www.instagram.com/googlefordevs/"
+             class="devsite-footer-linkbox-link gc-analytics-event"
+             data-category="Site-Wide Custom Events"
+            
+             data-label="Footer Link (index 3)"
+            >
+            
+          
+            Instagram
+          
+          </a>
+          
+          
+        </li>
+        
+        <li class="devsite-footer-linkbox-item">
+          
+          <a href="https://www.linkedin.com/showcase/googledevelopers/"
+             class="devsite-footer-linkbox-link gc-analytics-event"
+             data-category="Site-Wide Custom Events"
+            
+             data-label="Footer Link (index 4)"
+            >
+            
+          
+            LinkedIn
+          
+          </a>
+          
+          
+        </li>
+        
+        <li class="devsite-footer-linkbox-item">
+          
+          <a href="//twitter.com/googledevs"
+             class="devsite-footer-linkbox-link gc-analytics-event"
+             data-category="Site-Wide Custom Events"
+            
+             data-label="Footer Link (index 5)"
+            >
+            
+          
+            X (Twitter)
+          
+          </a>
+          
+          
+        </li>
+        
+        <li class="devsite-footer-linkbox-item">
+          
+          <a href="//www.youtube.com/user/GoogleDevelopers"
+             class="devsite-footer-linkbox-link gc-analytics-event"
+             data-category="Site-Wide Custom Events"
+            
+             data-label="Footer Link (index 6)"
+            >
+            
+              
+              
+            
+          
+            YouTube
+          
+          </a>
+          
+          
+        </li>
+        
+      </ul>
+    </li>
+    
+    <li class="devsite-footer-linkbox ">
+    <h3 class="devsite-footer-linkbox-heading no-link">Programs</h3>
+      <ul class="devsite-footer-linkbox-list">
+        
+        <li class="devsite-footer-linkbox-item">
+          
+          <a href="/program"
+             class="devsite-footer-linkbox-link gc-analytics-event"
+             data-category="Site-Wide Custom Events"
+            
+             data-label="Footer Link (index 1)"
+            >
+            
+          
+            Google Developer Program
+          
+          </a>
+          
+          
+        </li>
+        
+        <li class="devsite-footer-linkbox-item">
+          
+          <a href="/community"
+             class="devsite-footer-linkbox-link gc-analytics-event"
+             data-category="Site-Wide Custom Events"
+            
+             data-label="Footer Link (index 2)"
+            >
+            
+          
+            Google Developer Groups
+          
+          </a>
+          
+          
+        </li>
+        
+        <li class="devsite-footer-linkbox-item">
+          
+          <a href="/community/experts"
+             class="devsite-footer-linkbox-link gc-analytics-event"
+             data-category="Site-Wide Custom Events"
+            
+             data-label="Footer Link (index 3)"
+            >
+            
+          
+            Google Developer Experts
+          
+          </a>
+          
+          
+        </li>
+        
+        <li class="devsite-footer-linkbox-item">
+          
+          <a href="/community/accelerators"
+             class="devsite-footer-linkbox-link gc-analytics-event"
+             data-category="Site-Wide Custom Events"
+            
+             data-label="Footer Link (index 4)"
+            >
+            
+          
+            Accelerators
+          
+          </a>
+          
+          
+        </li>
+        
+        <li class="devsite-footer-linkbox-item">
+          
+          <a href="/community/nvidia"
+             class="devsite-footer-linkbox-link gc-analytics-event"
+             data-category="Site-Wide Custom Events"
+            
+             data-label="Footer Link (index 5)"
+            >
+            
+              
+              
+            
+          
+            Google Cloud & NVIDIA
+          
+          </a>
+          
+          
+        </li>
+        
+      </ul>
+    </li>
+    
+    <li class="devsite-footer-linkbox ">
+    <h3 class="devsite-footer-linkbox-heading no-link">Developer consoles</h3>
+      <ul class="devsite-footer-linkbox-list">
+        
+        <li class="devsite-footer-linkbox-item">
+          
+          <a href="//console.developers.google.com"
+             class="devsite-footer-linkbox-link gc-analytics-event"
+             data-category="Site-Wide Custom Events"
+            
+             data-label="Footer Link (index 1)"
+            >
+            
+          
+            Google API Console
+          
+          </a>
+          
+          
+        </li>
+        
+        <li class="devsite-footer-linkbox-item">
+          
+          <a href="//console.cloud.google.com"
+             class="devsite-footer-linkbox-link gc-analytics-event"
+             data-category="Site-Wide Custom Events"
+            
+             data-label="Footer Link (index 2)"
+            >
+            
+          
+            Google Cloud Platform Console
+          
+          </a>
+          
+          
+        </li>
+        
+        <li class="devsite-footer-linkbox-item">
+          
+          <a href="//play.google.com/apps/publish"
+             class="devsite-footer-linkbox-link gc-analytics-event"
+             data-category="Site-Wide Custom Events"
+            
+             data-label="Footer Link (index 3)"
+            >
+            
+          
+            Google Play Console
+          
+          </a>
+          
+          
+        </li>
+        
+        <li class="devsite-footer-linkbox-item">
+          
+          <a href="//console.firebase.google.com"
+             class="devsite-footer-linkbox-link gc-analytics-event"
+             data-category="Site-Wide Custom Events"
+            
+             data-label="Footer Link (index 4)"
+            >
+            
+          
+            Firebase Console
+          
+          </a>
+          
+          
+        </li>
+        
+        <li class="devsite-footer-linkbox-item">
+          
+          <a href="//console.actions.google.com"
+             class="devsite-footer-linkbox-link gc-analytics-event"
+             data-category="Site-Wide Custom Events"
+            
+             data-label="Footer Link (index 5)"
+            >
+            
+          
+            Actions on Google Console
+          
+          </a>
+          
+          
+        </li>
+        
+        <li class="devsite-footer-linkbox-item">
+          
+          <a href="//cast.google.com/publish"
+             class="devsite-footer-linkbox-link gc-analytics-event"
+             data-category="Site-Wide Custom Events"
+            
+             data-label="Footer Link (index 6)"
+            >
+            
+          
+            Cast SDK Developer Console
+          
+          </a>
+          
+          
+        </li>
+        
+        <li class="devsite-footer-linkbox-item">
+          
+          <a href="//chrome.google.com/webstore/developer/dashboard"
+             class="devsite-footer-linkbox-link gc-analytics-event"
+             data-category="Site-Wide Custom Events"
+            
+             data-label="Footer Link (index 7)"
+            >
+            
+          
+            Chrome Web Store Dashboard
+          
+          </a>
+          
+          
+        </li>
+        
+        <li class="devsite-footer-linkbox-item">
+          
+          <a href="//console.home.google.com"
+             class="devsite-footer-linkbox-link gc-analytics-event"
+             data-category="Site-Wide Custom Events"
+            
+             data-label="Footer Link (index 8)"
+            >
+            
+              
+              
+            
+          
+            Google Home Developer Console
+          
+          </a>
+          
+          
+        </li>
+        
+      </ul>
+    </li>
+    
+  </ul>
+  
+</nav>
+          
+        </devsite-footer-linkboxes>
+        <devsite-footer-utility class="devsite-footer">
+          
+            
+
+<div class="devsite-footer-utility nocontent" data-nosnippet>
+  
+  
+  <nav class="devsite-footer-sites" aria-label="Other Google Developers websites">
+    <a href="https://developers.google.com/"
+       class="devsite-footer-sites-logo-link gc-analytics-event"
+       data-category="Site-Wide Custom Events"
+       data-label="Footer Google Developers Link">
+      <picture>
+        
+        <img class="devsite-footer-sites-logo"
+             src="https://www.gstatic.com/devrel-devsite/prod/v579073a50c63499824df5a68b8922367066583d283ef78fdade1028efdb4ceb5/developers/images/lockup-google-for-developers.svg"
+             loading="lazy"
+             alt="Google Developers">
+      </picture>
+    </a>
+    <ul class="devsite-footer-sites-list">
+      
+      <li class="devsite-footer-sites-item">
+        <a href="//developer.android.com"
+           class="devsite-footer-sites-link
+                  gc-analytics-event"
+           data-category="Site-Wide Custom Events"
+         
+           data-label="Footer Android Link"
+         
+         >
+          Android
+        </a>
+      </li>
+      
+      <li class="devsite-footer-sites-item">
+        <a href="//developer.chrome.com/home"
+           class="devsite-footer-sites-link
+                  gc-analytics-event"
+           data-category="Site-Wide Custom Events"
+         
+           data-label="Footer Chrome Link"
+         
+         >
+          Chrome
+        </a>
+      </li>
+      
+      <li class="devsite-footer-sites-item">
+        <a href="//firebase.google.com"
+           class="devsite-footer-sites-link
+                  gc-analytics-event"
+           data-category="Site-Wide Custom Events"
+         
+           data-label="Footer Firebase Link"
+         
+         >
+          Firebase
+        </a>
+      </li>
+      
+      <li class="devsite-footer-sites-item">
+        <a href="//cloud.google.com"
+           class="devsite-footer-sites-link
+                  gc-analytics-event"
+           data-category="Site-Wide Custom Events"
+         
+           data-label="Footer Google Cloud Platform Link"
+         
+         >
+          Google Cloud Platform
+        </a>
+      </li>
+      
+      <li class="devsite-footer-sites-item">
+        <a href="//ai.google.dev/"
+           class="devsite-footer-sites-link
+                  gc-analytics-event"
+           data-category="Site-Wide Custom Events"
+         
+           data-label="Footer Google AI Link"
+         
+         >
+          Google AI
+        </a>
+      </li>
+      
+      <li class="devsite-footer-sites-item">
+        <a href="/products"
+           class="devsite-footer-sites-link
+                  gc-analytics-event"
+           data-category="Site-Wide Custom Events"
+         
+           data-label="Footer All products Link"
+         
+         >
+          All products
+        </a>
+      </li>
+      
+    </ul>
+  </nav>
+  
+
+  
+  <nav class="devsite-footer-utility-links" aria-label="Utility links">
+    
+    <ul class="devsite-footer-utility-list">
+      
+      <li class="devsite-footer-utility-item
+                 ">
+        
+        
+        <a class="devsite-footer-utility-link gc-analytics-event"
+           href="/terms/site-terms"
+           data-category="Site-Wide Custom Events"
+           data-label="Footer Terms link"
+         >
+          Terms
+        </a>
+        
+      </li>
+      
+      <li class="devsite-footer-utility-item
+                 ">
+        
+        
+        <a class="devsite-footer-utility-link gc-analytics-event"
+           href="//policies.google.com/privacy"
+           data-category="Site-Wide Custom Events"
+           data-label="Footer Privacy link"
+         >
+          Privacy
+        </a>
+        
+      </li>
+      
+      <li class="devsite-footer-utility-item
+                 glue-cookie-notification-bar-control">
+        
+        
+        <a class="devsite-footer-utility-link gc-analytics-event"
+           href="#"
+           data-category="Site-Wide Custom Events"
+           data-label="Footer Manage cookies link"
+         
+           aria-hidden="true"
+         >
+          Manage cookies
+        </a>
+        
+      </li>
+      
+    </ul>
+    
+    
+<devsite-language-selector>
+  <ul role="presentation">
+    
+    
+    <li role="presentation">
+      <a role="menuitem" lang="en"
+        >English</a>
+    </li>
+    
+    <li role="presentation">
+      <a role="menuitem" lang="de"
+        >Deutsch</a>
+    </li>
+    
+    <li role="presentation">
+      <a role="menuitem" lang="es"
+        >Español</a>
+    </li>
+    
+    <li role="presentation">
+      <a role="menuitem" lang="es_419"
+        >Español – América Latina</a>
+    </li>
+    
+    <li role="presentation">
+      <a role="menuitem" lang="fr"
+        >Français</a>
+    </li>
+    
+    <li role="presentation">
+      <a role="menuitem" lang="id"
+        >Indonesia</a>
+    </li>
+    
+    <li role="presentation">
+      <a role="menuitem" lang="it"
+        >Italiano</a>
+    </li>
+    
+    <li role="presentation">
+      <a role="menuitem" lang="pl"
+        >Polski</a>
+    </li>
+    
+    <li role="presentation">
+      <a role="menuitem" lang="pt_br"
+        >Português – Brasil</a>
+    </li>
+    
+    <li role="presentation">
+      <a role="menuitem" lang="vi"
+        >Tiếng Việt</a>
+    </li>
+    
+    <li role="presentation">
+      <a role="menuitem" lang="tr"
+        >Türkçe</a>
+    </li>
+    
+    <li role="presentation">
+      <a role="menuitem" lang="ru"
+        >Русский</a>
+    </li>
+    
+    <li role="presentation">
+      <a role="menuitem" lang="he"
+        >עברית</a>
+    </li>
+    
+    <li role="presentation">
+      <a role="menuitem" lang="ar"
+        >العربيّة</a>
+    </li>
+    
+    <li role="presentation">
+      <a role="menuitem" lang="fa"
+        >فارسی</a>
+    </li>
+    
+    <li role="presentation">
+      <a role="menuitem" lang="hi"
+        >हिंदी</a>
+    </li>
+    
+    <li role="presentation">
+      <a role="menuitem" lang="bn"
+        >বাংলা</a>
+    </li>
+    
+    <li role="presentation">
+      <a role="menuitem" lang="th"
+        >ภาษาไทย</a>
+    </li>
+    
+    <li role="presentation">
+      <a role="menuitem" lang="zh_cn"
+        >中文 – 简体</a>
+    </li>
+    
+    <li role="presentation">
+      <a role="menuitem" lang="zh_tw"
+        >中文 – 繁體</a>
+    </li>
+    
+    <li role="presentation">
+      <a role="menuitem" lang="ja"
+        >日本語</a>
+    </li>
+    
+    <li role="presentation">
+      <a role="menuitem" lang="ko"
+        >한국어</a>
+    </li>
+    
+  </ul>
+</devsite-language-selector>
+
+  </nav>
+</div>
+          
+        </devsite-footer-utility>
+        <devsite-panel>
+          
+        </devsite-panel>
+        
+          <devsite-concierge
+  
+  
+    data-info-panel
+  
+  
+    data-ai-panel
+  
+  
+  
+  
+    data-api-explorer-panel
+  >
+</devsite-concierge>
+        
+      </section>
+      </section>
+    <devsite-sitemask></devsite-sitemask>
+    <devsite-snackbar></devsite-snackbar>
+    <devsite-tooltip ></devsite-tooltip>
+    <devsite-heading-link></devsite-heading-link>
+    <devsite-analytics>
+      
+        <script type="application/json" analytics>[{&#34;dimensions&#34;: {&#34;dimension1&#34;: &#34;Signed out&#34;, &#34;dimension11&#34;: false, &#34;dimension6&#34;: &#34;en&#34;, &#34;dimension4&#34;: &#34;Gemini Code Assist&#34;, &#34;dimension5&#34;: &#34;en&#34;, &#34;dimension3&#34;: false}, &#34;gaid&#34;: &#34;UA-24532603-1&#34;, &#34;metrics&#34;: {&#34;ratings_value&#34;: &#34;metric1&#34;, &#34;ratings_count&#34;: &#34;metric2&#34;}, &#34;purpose&#34;: 1}]</script>
+<script type="application/json" tag-management>{&#34;at&#34;: &#34;True&#34;, &#34;ga4&#34;: [{&#34;id&#34;: &#34;G-272J68FCRF&#34;, &#34;purpose&#34;: 1}], &#34;ga4p&#34;: [{&#34;id&#34;: &#34;G-272J68FCRF&#34;, &#34;purpose&#34;: 1}], &#34;gtm&#34;: [{&#34;id&#34;: &#34;GTM-T98GCPGN&#34;, &#34;purpose&#34;: 1}], &#34;parameters&#34;: {&#34;internalUser&#34;: &#34;False&#34;, &#34;language&#34;: {&#34;machineTranslated&#34;: &#34;False&#34;, &#34;requested&#34;: &#34;en&#34;, &#34;served&#34;: &#34;en&#34;}, &#34;pageType&#34;: &#34;article&#34;, &#34;projectName&#34;: &#34;Gemini Code Assist&#34;, &#34;signedIn&#34;: &#34;False&#34;, &#34;tenant&#34;: &#34;developers&#34;, &#34;recommendations&#34;: {&#34;sourcePage&#34;: &#34;&#34;, &#34;sourceType&#34;: 0, &#34;sourceRank&#34;: 0, &#34;sourceIdenticalDescriptions&#34;: 0, &#34;sourceTitleWords&#34;: 0, &#34;sourceDescriptionWords&#34;: 0, &#34;experiment&#34;: &#34;&#34;}, &#34;experiment&#34;: {&#34;ids&#34;: &#34;&#34;}}}</script>
+      
+    </devsite-analytics>
+    
+      <devsite-badger></devsite-badger>
+    
+    
+    
+    
+<script nonce="6jzCtS/iVYNwkEj340o0y4ClQBh34f">
+  
+  (function(d,e,v,s,i,t,E){d['GoogleDevelopersObject']=i;
+    t=e.createElement(v);t.async=1;t.src=s;E=e.getElementsByTagName(v)[0];
+    E.parentNode.insertBefore(t,E);})(window, document, 'script',
+    'https://www.gstatic.com/devrel-devsite/prod/v579073a50c63499824df5a68b8922367066583d283ef78fdade1028efdb4ceb5/developers/js/app_loader.js', '[1,"en",null,"/js/devsite_app_module.js","https://www.gstatic.com/devrel-devsite/prod/v579073a50c63499824df5a68b8922367066583d283ef78fdade1028efdb4ceb5","https://www.gstatic.com/devrel-devsite/prod/v579073a50c63499824df5a68b8922367066583d283ef78fdade1028efdb4ceb5/developers","https://developers-dot-devsite-v2-prod.appspot.com",null,null,["/_pwa/developers/manifest.json","https://www.gstatic.com/devrel-devsite/prod/v579073a50c63499824df5a68b8922367066583d283ef78fdade1028efdb4ceb5/images/video-placeholder.svg","https://www.gstatic.com/devrel-devsite/prod/v579073a50c63499824df5a68b8922367066583d283ef78fdade1028efdb4ceb5/developers/images/favicon-new.png","https://fonts.googleapis.com/css?family=Google+Sans:400,500|Roboto:400,400italic,500,500italic,700,700italic|Roboto+Mono:400,500,700&display=swap"],1,null,[1,6,8,12,14,17,21,25,50,52,63,70,75,76,80,87,91,92,93,97,98,100,101,102,103,104,105,107,108,109,110,112,113,116,117,118,120,122,124,125,126,127,129,130,131,132,133,134,135,136,138,140,141,147,148,149,151,152,156,157,158,159,161,163,164,168,169,170,179,180,182,183,186,191,193,196],"AIzaSyAP-jjEJBzmIyKR4F-3XITp8yM9T1gEEI8","AIzaSyB6xiKGDR5O3Ak2okS4rLkauxGUG7XP0hg","developers.google.com","AIzaSyAQk0fBONSGUqCNznf6Krs82Ap1-NV6J4o","AIzaSyCCxcqdrZ_7QMeLCRY20bh_SXdAYqy70KY",null,null,null,["Concierge__enable_devsite_llm_tools","Profiles__enable_targeted_hero","Experiments__reqs_query_experiments","Profiles__enable_completequiz_endpoint","Search__enable_ai_search_summaries_for_all","Search__enable_ai_search_summaries_restricted","Profiles__enable_playlist_community_acl","DevPro__enable_payments_first_batch","CloudShell__cloud_code_overflow_menu","Profiles__enable_dashboard_curated_recommendations","TpcFeatures__proxy_prod_host","MiscFeatureFlags__enable_framebox_badge_methods","MiscFeatureFlags__gdp_dashboard_reskin_enabled","DevPro__enable_devsite_captcha","Profiles__enable_user_type","Profiles__enable_public_developer_profiles","Profiles__enable_release_notes_notifications","DevPro__enable_devpro_offers","Cloud__enable_cloud_dlp_service","Concierge__enable_concierge","Concierge__enable_remove_info_panel_tags","Profiles__enable_developer_profiles_callout","Profiles__enable_stripe_subscription_management","Profiles__enable_developer_profile_benefits_ui_redesign","Search__enable_dynamic_content_confidential_banner","DevPro__enable_cloud_innovators_plus","DevPro__remove_eu_tax_intake_form","MiscFeatureFlags__enable_appearance_cookies","DevPro__enable_free_benefits","Concierge__enable_actions_menu","Search__enable_ai_search_summaries","DevPro__enable_vertex_credit_card","Profiles__enable_developer_profile_pages_as_content","MiscFeatureFlags__enable_firebase_utm","Search__enable_ai_eligibility_checks","Concierge__enable_concierge_restricted","DevPro__enable_code_assist","Concierge__enable_key_takeaways_new_ui","DevPro__enable_developer_subscriptions","Cloud__enable_free_trial_server_call","MiscFeatureFlags__fix_lower_breadcrumbs","MiscFeatureFlags__enable_explicit_template_dependencies","Profiles__enable_completecodelab_endpoint","Significatio__enable_by_tenant","TpcFeatures__enable_unmirrored_page_left_nav","MiscFeatureFlags__enable_project_variables","Profiles__enable_callout_notifications","Cloud__enable_llm_concierge_chat","DevPro__enable_enterprise","Profiles__enable_join_program_group_endpoint","DevPro__enable_nvidia_credits_card","Cloud__cache_serialized_dynamic_content","Profiles__enable_auto_apply_credits","Cloud__enable_cloudx_experiment_ids","CloudShell__cloud_shell_button","MiscFeatureFlags__enable_variable_operator","Cloud__fast_free_trial","EngEduTelemetry__enable_engedu_telemetry","MiscFeatureFlags__enable_variable_operator_index_yaml","MiscFeatureFlags__remove_cross_domain_tracking_params","Concierge__enable_pushui","Search__enable_suggestions_from_borg","DevPro__enable_google_payments_buyflow","Analytics__enable_clearcut_logging","SignIn__enable_l1_signup_flow","Profiles__enable_profile_collections","DevPro__enable_google_one_card","MiscFeatureFlags__developers_footer_image","MiscFeatureFlags__enable_view_transitions","DevPro__enable_embed_profile_creation","Search__enable_page_map","DevPro__enable_firebase_workspaces_card","Profiles__enable_awarding_url","Cloud__enable_cloud_shell_fte_user_flow","BookNav__enable_tenant_cache_key","Cloud__enable_legacy_calculator_redirect","Profiles__require_profile_eligibility_for_signin","DevPro__enable_g1_integration","Analytics__enable_devpro_interaction_logging","Concierge__enable_key_takeaways","MiscFeatureFlags__enable_explain_this_code","Profiles__enable_complete_playlist_endpoint","Profiles__enable_purchase_prompts","Cloud__enable_cloud_shell","Profiles__enable_recognition_badges","MiscFeatureFlags__developers_footer_dark_image","Profiles__enable_page_saving","DevPro__enable_credits_banner"],null,null,"AIzaSyBLEMok-5suZ67qRPzx0qUtbnLmyT_kCVE","https://developerscontentserving-pa.clients6.google.com","AIzaSyCM4QpTRSqP5qI4Dvjt4OAScIN8sOUlO-k","https://developerscontentsearch-pa.clients6.google.com",1,4,null,"https://developerprofiles-pa.clients6.google.com",[1,"developers","Google for Developers","developers.google.com",null,"developers-dot-devsite-v2-prod.appspot.com",null,null,[1,1,[1],null,null,null,null,null,null,null,null,[1],null,null,null,null,null,null,[1],[1,null,null,[1,20],"/recommendations/information"],null,null,null,[1,1,1],[1,1,null,1,1,null,null,["/meridian"]],[1,null,null,null,null,null,null,["/admob","/ad-manager/mobile-ads-sdk","/ml-kit"]],null,[null,["/meridian","/youtube/devices/"]],1,null,[1]],null,[null,null,null,null,null,null,"/images/lockup-new.svg","/images/touchicon-180-new.png",null,null,null,null,1,null,null,null,null,null,null,null,null,1,null,null,null,"/images/lockup-dark-theme-new.svg",[]],[],null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,[6,1,14,15,20,22,23,29,32,36],null,[[null,null,null,[3,7,10,2,39,17,4,32,24,11,12,13,34,15,25],null,null,[1,[["docType","Choose a content type",[["Tutorial",null,null,null,null,null,null,null,null,"Tutorial"],["Guide",null,null,null,null,null,null,null,null,"Guide"],["Sample",null,null,null,null,null,null,null,null,"Sample"]]],["product","Choose a product",[["Android",null,null,null,null,null,null,null,null,"Android"],["ARCore",null,null,null,null,null,null,null,null,"ARCore"],["ChromeOS",null,null,null,null,null,null,null,null,"ChromeOS"],["Firebase",null,null,null,null,null,null,null,null,"Firebase"],["Flutter",null,null,null,null,null,null,null,null,"Flutter"],["Assistant",null,null,null,null,null,null,null,null,"Google Assistant"],["GoogleCloud",null,null,null,null,null,null,null,null,"Google Cloud"],["GoogleMapsPlatform",null,null,null,null,null,null,null,null,"Google Maps Platform"],["GooglePay",null,null,null,null,null,null,null,null,"Google Pay & Google Wallet"],["GooglePlay",null,null,null,null,null,null,null,null,"Google Play"],["Tensorflow",null,null,null,null,null,null,null,null,"TensorFlow"]]],["category","Choose a topic",[["AiAndMachineLearning",null,null,null,null,null,null,null,null,"AI and Machine Learning"],["Data",null,null,null,null,null,null,null,null,"Data"],["Enterprise",null,null,null,null,null,null,null,null,"Enterprise"],["Gaming",null,null,null,null,null,null,null,null,"Gaming"],["Mobile",null,null,null,null,null,null,null,null,"Mobile"],["Web",null,null,null,null,null,null,null,null,"Web"]]]]]],[1,1],null,1],[[["UA-24532603-1"],["UA-22084204-5"],null,null,["UA-24532603-5"],["GTM-T98GCPGN"],null,[["G-272J68FCRF"],null,null,[["G-272J68FCRF",2]]],[["UA-24532603-1",2]],null,[["UA-24532603-5",2]],[["GTM-T98GCPGN",2]],1],[[13,10],[6,5],[11,8],[16,13],[12,9],[1,1],[3,2],[14,11],[5,4],[4,3],[15,12]],[[2,2],[1,1]]],null,4,null,null,null,null,null,null,null,null,null,null,null,null,null,"developers.devsite.google",null,null,null,null,null,[]],1,"pk_live_5170syrHvgGVmSx9sBrnWtA5luvk9BwnVcvIi7HizpwauFG96WedXsuXh790rtij9AmGllqPtMLfhe2RSwD6Pn38V00uBCydV4m",null,1,"https://developerscontentinsights-pa.clients6.google.com","AIzaSyCg-ZUslalsEbXMfIo9ZP8qufZgo3LSBDU","AIzaSyDxT0vkxnY_KeINtA4LSePJO-4MAZPMRsE","https://developers.clients6.google.com",["https://codeassist.google.com","https://code-assist-free-tier.corp.google.com"],null,"AIzaSyBQom12tzI-rybN7Sf-KfeL4nwm-Rf7PmI\n",null,null,"https://developers.googleapis.com"]')
+  
+</script>
+
+    <devsite-a11y-announce></devsite-a11y-announce>
+  </body>
+</html>

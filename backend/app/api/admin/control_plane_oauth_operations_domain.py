@@ -130,7 +130,15 @@ class ControlPlaneOAuthOperationsDomainMixin:
         return summary
 
     def oauth_account_operations_summary(self, tenant_id: str | None = None) -> dict[str, object]:
-        providers = ["openai_codex", "gemini", "antigravity", "github_copilot", "claude_code"]
+        providers = [
+            "openai_codex",
+            "gemini",
+            "antigravity",
+            "github_copilot",
+            "claude_code",
+            "nous_oauth",
+            "qwen_oauth",
+        ]
         effective_tenant_id = self._effective_oauth_tenant_id(tenant_id)
         operations = self._oauth_operations(effective_tenant_id)
         summary = self.oauth_operation_provider_summary(effective_tenant_id)

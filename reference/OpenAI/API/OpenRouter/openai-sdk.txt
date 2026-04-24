@@ -1,0 +1,195 @@
+OpenAI SDK Integration | OpenRouter SDK Support | OpenRouter | Documentation
+
+Search
+/
+Ask AI
+
+ModelsChatRankingsDocs
+
+DocsAPI ReferenceSDK Reference
+
+DocsAPI ReferenceSDK Reference
+
+Overview
+
+Quickstart
+
+Principles
+
+Models
+
+Multimodal
+
+Authentication
+
+FAQ
+
+Report Feedback
+
+Enterprise
+
+Models & Routing
+
+Model Fallbacks
+
+Provider Selection
+
+Auto Exacto
+
+Model Variants
+
+Routers
+
+Features
+
+Workspaces
+
+Presets
+
+Response Caching
+
+Tool Calling
+
+Server Tools
+
+Plugins
+
+Structured Outputs
+
+Message Transforms
+
+Zero Completion Insurance
+
+ZDR
+
+App Attribution
+
+Guardrails
+
+Service Tiers
+
+Input & Output Logging
+
+Broadcast
+
+Privacy
+
+Best Practices
+
+Guides
+
+Community
+Frameworks and Integrations Overview
+
+Awesome OpenRouter
+
+Effect AI SDK
+
+Arize
+
+LangChain
+
+LiveKit
+
+Langfuse
+
+Mastra
+
+OpenAI SDK
+
+Anthropic Agent SDK
+
+PydanticAI
+
+TanStack AI
+
+Vercel AI SDK
+
+Xcode
+
+Zapier
+
+Infisical
+
+Light
+
+On this page
+
+Using the OpenAI SDK
+
+Community
+
+OpenAI SDK
+
+Copy page
+
+Using OpenRouter with OpenAI SDK
+
+Using the OpenAI SDK
+
+Using pip install openai: github.
+
+Using npm i openai: github.
+
+You can also use
+Grit to
+automatically migrate your code. Simply run npx @getgrit/launcher openrouter.
+
+TypeScriptPython
+
+1import OpenAI from "openai"
+
+2
+
+3const openai = new OpenAI({
+
+4 baseURL: "https://openrouter.ai/api/v1",
+
+5 apiKey: "<OPENROUTER_API_KEY>",
+
+6 defaultHeaders: {
+
+7 "HTTP-Referer": "<YOUR_SITE_URL>", // Optional. Site URL for rankings on openrouter.ai.
+
+8 "X-OpenRouter-Title": "<YOUR_SITE_NAME>", // Optional. Site title for rankings on openrouter.ai.
+
+9 },
+
+10})
+
+11
+
+12async function main() {
+
+13 const completion = await openai.chat.completions.create({
+
+14 model: "openai/gpt-4o",
+
+15 messages: [
+
+16 { role: "user", content: "Say this is a test" }
+
+17 ],
+
+18 })
+
+19
+
+20 console.log(completion.choices[0].message)
+
+21}
+
+22main();
+
+Was this page helpful?
+YesNo
+
+Previous
+
+Anthropic Agent SDK
+
+Using OpenRouter with the Anthropic Agent SDK
+
+NextBuilt with
+
+ModelsChatRankingsDocs

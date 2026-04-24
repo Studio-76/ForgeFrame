@@ -3,6 +3,7 @@
 from app.harness.service import HarnessService, get_harness_service
 from app.providers.anthropic.adapter import AnthropicAdapter
 from app.providers.base import ProviderAdapter
+from app.providers.bedrock.adapter import BedrockAdapter
 from app.providers.forgeframe_baseline import ForgeFrameBaselineAdapter
 from app.providers.gemini.adapter import GeminiAdapter
 from app.providers.generic_harness.adapter import GenericHarnessAdapter
@@ -21,6 +22,7 @@ class ProviderRegistry:
             "openai_codex": OpenAICodexAdapter(settings),
             "gemini": GeminiAdapter(settings),
             "anthropic": AnthropicAdapter(settings),
+            "bedrock": BedrockAdapter(settings),
             "generic_harness": GenericHarnessAdapter(settings, harness),
             "ollama": OllamaAdapter(settings),
         }

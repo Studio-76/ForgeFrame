@@ -48,6 +48,7 @@ class AnthropicAdapter:
     def __init__(self, settings: Settings):
         self._settings = settings
         self._usage = UsageAccountingService(settings)
+        auth_mechanism = "bearer" if settings.anthropic_auth_mode == "bearer" else "api_key"
         self.capabilities = ProviderCapabilities(
             streaming=True,
             tool_calling=True,
@@ -56,7 +57,7 @@ class AnthropicAdapter:
             external=True,
             discovery_support=True,
             provider_axis="unmapped_native_runtime",
-            auth_mechanism="api_key",
+            auth_mechanism=auth_mechanism,
             verify_support=True,
             probe_support=True,
         )
@@ -65,7 +66,9 @@ class AnthropicAdapter:
         return self.readiness_reason() is None
 
     def readiness_reason(self) -> str | None:
-        if not self._settings.anthropic_api_key.strip():
+        if not self._active_auth_value().strip():
+            if self._settings.anthropic_auth_mode == "bearer":
+                return "FORGEFRAME_ANTHROPIC_BEARER_TOKEN is required when FORGEFRAME_ANTHROPIC_AUTH_MODE=bearer."
             return "FORGEFRAME_ANTHROPIC_API_KEY is required."
         if self._configured_base_url() is None:
             return "FORGEFRAME_ANTHROPIC_BASE_URL must be an absolute http(s) URL."
@@ -86,8 +89,8 @@ class AnthropicAdapter:
             finish_reason=self._normalize_stop_reason(data.get("stop_reason", "stop")),
             usage=usage,
             cost=cost,
-            credential_type="api_key",
-            auth_source="anthropic_api_key",
+            credential_type="oauth_access_token" if self._settings.anthropic_auth_mode == "bearer" else "api_key",
+            auth_source="anthropic_bearer_token" if self._settings.anthropic_auth_mode == "bearer" else "anthropic_api_key",
             tool_calls=tool_calls,
         )
 
@@ -106,12 +109,20 @@ class AnthropicAdapter:
             )
         endpoint = f"{base_url}/messages"
         headers = {
-            "x-api-key": self._settings.anthropic_api_key,
             "anthropic-version": self._settings.anthropic_version,
             "content-type": "application/json",
         }
+        if self._settings.anthropic_auth_mode == "bearer":
+            headers["authorization"] = f"Bearer {self._active_auth_value()}"
+        else:
+            headers["x-api-key"] = self._active_auth_value()
         headers.update(forgeframe_request_metadata_headers(request_metadata))
         return endpoint, headers
+
+    def _active_auth_value(self) -> str:
+        if self._settings.anthropic_auth_mode == "bearer":
+            return self._settings.anthropic_bearer_token.strip()
+        return self._settings.anthropic_api_key.strip()
 
     def _configured_base_url(self) -> str | None:
         base_url = self._settings.anthropic_base_url.strip()
@@ -500,8 +511,8 @@ class AnthropicAdapter:
             usage=usage,
             cost=cost,
             tool_calls=tool_calls,
-            credential_type="api_key",
-            auth_source="anthropic_api_key",
+            credential_type="oauth_access_token" if self._settings.anthropic_auth_mode == "bearer" else "api_key",
+            auth_source="anthropic_bearer_token" if self._settings.anthropic_auth_mode == "bearer" else "anthropic_api_key",
         )
 
     @staticmethod

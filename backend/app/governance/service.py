@@ -1321,6 +1321,27 @@ class GovernanceService:
             instance_id=instance.instance_id,
             tenant_id=instance.tenant_id,
         )
+        if (
+            not memberships
+            and role_allows(actor.role, "admin")
+            and str(instance.metadata.get("migration_source") or "") == "legacy_scope_autoprovision"
+        ):
+            user = next((item for item in self._state.admin_users if item.user_id == actor.user_id), None)
+            if user is not None and self._upsert_admin_membership(
+                user,
+                instance_id=instance.instance_id,
+                tenant_id=instance.tenant_id,
+                company_id=instance.company_id,
+                role=actor.role,
+                status="active",
+                created_by="system:legacy_scope_autoprovision",
+            ):
+                self._persist()
+                memberships = self._memberships_for_instance_scope(
+                    actor.user_id,
+                    instance_id=instance.instance_id,
+                    tenant_id=instance.tenant_id,
+                )
         if not memberships:
             return None
         return max(

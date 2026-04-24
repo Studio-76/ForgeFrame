@@ -1,0 +1,306 @@
+Models overview - Claude API Docs
+
+Cookie settings
+
+We use cookies to deliver and improve our services, analyze site usage, and if you agree, to customize or personalize your experience and market our services to you. You can read our Cookie Policy here.
+
+CustomizeCustomize Cookie SettingsRejectReject All CookiesAcceptAccept All Cookies
+
+Loading...
+
+Messages
+
+Build
+
+Admin
+
+Models & pricing
+
+Client SDKs
+
+API Reference
+
+English
+
+Log in
+
+Search...
+
+⌘K
+
+Models
+
+Models overviewChoosing a modelWhat's new in Claude Opus 4.7Migration guideModel deprecationsModel cardsSystem prompts
+
+Pricing
+
+Pricing
+
+Console
+
+Log in
+
+Models
+
+Models overview
+
+Loading...
+
+Loading...
+
+Loading...
+
+Loading...
+
+Loading...
+
+Loading...
+
+Loading...
+
+Loading...
+
+Loading...
+
+Loading...
+
+Loading...
+
+Loading...
+
+Loading...
+
+Loading...
+
+Loading...
+
+Loading...
+
+Solutions
+
+AI agents
+
+Code modernization
+
+Coding
+
+Customer support
+
+Education
+
+Financial services
+
+Government
+
+Life sciences
+
+Partners
+
+Amazon Bedrock
+
+Google Cloud's Vertex AI
+
+Learn
+
+Blog
+
+Courses
+
+Use cases
+
+Connectors
+
+Customer stories
+
+Engineering at Anthropic
+
+Events
+
+Powered by Claude
+
+Service partners
+
+Startups program
+
+Company
+
+Anthropic
+
+Careers
+
+Economic Futures
+
+Research
+
+News
+
+Responsible Scaling Policy
+
+Security and compliance
+
+Transparency
+
+Learn
+
+Blog
+
+Courses
+
+Use cases
+
+Connectors
+
+Customer stories
+
+Engineering at Anthropic
+
+Events
+
+Powered by Claude
+
+Service partners
+
+Startups program
+
+Help and security
+
+Availability
+
+Status
+
+Support
+
+Discord
+
+Terms and policies
+
+Privacy policy
+
+Responsible disclosure policy
+
+Terms of service: Commercial
+
+Terms of service: Consumer
+
+Usage policy
+
+Models
+
+Models overview
+
+Copy page
+
+Claude is a family of state-of-the-art large language models developed by Anthropic. This guide introduces the available models and compares their performance.
+
+Copy page
+
+Choosing a model
+
+If you're unsure which model to use, consider starting with Claude Opus 4.7 for the most complex tasks. It is our most capable generally available model, with a step-change improvement in agentic coding over Claude Opus 4.6.
+
+All current Claude models support text and image input, text output, multilingual capabilities, and vision. Models are available via the Claude API, Amazon Bedrock, Vertex AI, and Microsoft Foundry.
+
+Once you've picked a model, learn how to make your first API call.
+
+Latest models comparison
+
+FeatureClaude Opus 4.7Claude Sonnet 4.6Claude Haiku 4.5
+
+DescriptionOur most capable generally available model for complex reasoning and agentic codingThe best combination of speed and intelligenceThe fastest model with near-frontier intelligence
+
+Claude API IDclaude-opus-4-7claude-sonnet-4-6claude-haiku-4-5-20251001
+
+Claude API aliasclaude-opus-4-7claude-sonnet-4-6claude-haiku-4-5
+
+AWS Bedrock IDanthropic.claude-opus-4-73anthropic.claude-sonnet-4-6anthropic.claude-haiku-4-5-20251001-v1:0
+
+GCP Vertex AI IDclaude-opus-4-7claude-sonnet-4-6claude-haiku-4-5@20251001
+
+Pricing1$5 / input MTok
+$25 / output MTok$3 / input MTok
+$15 / output MTok$1 / input MTok
+$5 / output MTok
+
+Extended thinkingNoYesYes
+
+Adaptive thinkingYesYesNo
+
+Priority TierYesYesYes
+
+Comparative latencyModerateFastFastest
+
+Context window1M tokens1M tokens200k tokens
+
+Max output128k tokens64k tokens64k tokens
+
+Reliable knowledge cutoffJan 20262Aug 20252Feb 2025
+
+Training data cutoffJan 2026Jan 2026Jul 2025
+
+1 - See the pricing page for complete pricing information including batch API discounts, prompt caching rates, extended thinking costs, and vision processing fees.
+
+2 - Reliable knowledge cutoff indicates the date through which a model's knowledge is most extensive and reliable. Training data cutoff is the broader date range of training data used. For more information, see Anthropic's Transparency Hub.
+
+3 - Claude Opus 4.7 on AWS is available through Claude in Amazon Bedrock (the Messages-API Bedrock endpoint).
+
+Claude Mythos Preview is offered separately as a research preview model for defensive cybersecurity workflows as part of Project Glasswing. Access is invitation-only and there is no self-serve sign-up.
+
+Models with the same snapshot date (e.g., 20240620) are identical across all platforms and do not change. The snapshot date in the model name ensures consistency and allows developers to rely on stable performance across different environments.
+
+Starting with Claude Sonnet 4.5 and all subsequent models (including Claude Sonnet 4.6), AWS Bedrock offers two endpoint types: global endpoints (dynamic routing for maximum availability) and regional endpoints (guaranteed data routing through specific geographic regions). Google Vertex AI offers three endpoint types: global endpoints, multi-region endpoints (dynamic routing within a geographic area), and regional endpoints. For more information, see the third-party platform pricing section.
+
+You can query model capabilities and token limits programmatically with the Models API. The response includes max_input_tokens, max_tokens, and a capabilities object for every available model.
+
+The Max output values above apply to the synchronous Messages API. On the Message Batches API, Opus 4.7, Opus 4.6, and Sonnet 4.6 support up to 300k output tokens by using the output-300k-2026-03-24 beta header.
+
+Legacy models
+
+Prompt and output performance
+
+Claude 4 models excel in:
+
+Performance: Top-tier results in reasoning, coding, multilingual tasks, long-context handling, honesty, and image processing. See the Claude 4 blog post for more information.
+
+Engaging responses: Claude models are ideal for applications that require rich, human-like interactions.
+
+If you prefer more concise responses, you can adjust your prompts to guide the model toward the desired output length. Refer to the prompt engineering guides for details.
+
+For prompting best practices, see the prompting best practices guide.
+
+Output quality: When migrating from previous model generations to Claude 4, you may notice larger improvements in overall performance.
+
+Migrating to Claude Opus 4.7
+
+If you're currently using Claude Opus 4.6 or older Claude models, consider migrating to Claude Opus 4.7 to take advantage of improved intelligence and a step-change jump in agentic coding. For detailed migration instructions, see Migrating to Claude Opus 4.7.
+
+Get started with Claude
+
+If you're ready to start exploring what Claude can do for you, dive in! Whether you're a developer looking to integrate Claude into your applications or a user wanting to experience the power of AI firsthand, the following resources can help.
+
+Looking to chat with Claude? Visit claude.ai!
+
+Intro to Claude
+
+Explore Claude's capabilities and development flow.
+
+Quickstart
+
+Learn how to make your first API call in minutes.
+
+Claude Console
+
+Craft and test powerful prompts directly in your browser.
+
+If you have any questions or need assistance, don't hesitate to reach out to the support team or consult the Discord community.
+
+Was this page helpful?
+
+Choosing a model
+
+Latest models comparison
+
+Prompt and output performance
+
+Migrating to Claude Opus 4.7
+
+Get started with Claude

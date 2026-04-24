@@ -1,0 +1,391 @@
+Migration guides | Mistral Docs
+
+Docs & API
+
+Search docs
+
+⌘K
+
+Getting StartedModelsProductsDevelopersAdminAPI
+
+Search docs
+
+⌘K
+
+Toggle themeReach outTry Studio 
+
+Resources
+
+SDKs
+
+Cookbooks
+
+Error glossary
+
+Known limitations
+
+Observability integrations
+
+Deprecated features
+
+Changelog
+
+Migration guides
+
+Community
+
+Ambassadors
+
+Developers
+
+Resources
+
+Migration guides
+
+Migration guides
+
+These guides cover the specific code changes needed to switch from another provider to the Mistral API. The Mistral Chat Completions API follows the same request structure as OpenAI, so most migrations involve changing the client import, base URL, and model name. Choose your source platform below to see the exact steps and a working code example.
+
+From OpenAI
+
+From self-hosted Llama
+
+The Mistral API follows the same Chat Completions structure as the OpenAI API. For most applications, migration requires changing three things: the client import, the initialization call, and the model name.
+
+Migrate from OpenAI
+
+Copy section link
+Migrate from OpenAI
+
+Update the client
+
+PythonTypeScript
+
+Before (OpenAI):
+
+from openai import OpenAI
+
+client = OpenAI(api_key="sk-...")
+response = client.chat.completions.create(
+ model="gpt-4o",
+ messages=[{"role": "user", "content": "Hello"}],
+)
+
+from openai import OpenAI
+
+client = OpenAI(api_key="sk-...")
+response = client.chat.completions.create(
+ model="gpt-4o",
+ messages=[{"role": "user", "content": "Hello"}],
+)
+
+After (Mistral):
+
+from mistralai import Mistral
+
+client = Mistral(api_key="your_mistral_api_key")
+response = client.chat.complete(
+ model="mistral-large-latest",
+ messages=[{"role": "user", "content": "Hello"}],
+)
+
+from mistralai import Mistral
+
+client = Mistral(api_key="your_mistral_api_key")
+response = client.chat.complete(
+ model="mistral-large-latest",
+ messages=[{"role": "user", "content": "Hello"}],
+)
+
+Key differences
+
+OpenAIMistral
+
+Python clientopenai.OpenAImistralai.Mistral
+
+Chat methodclient.chat.completions.createclient.chat.complete
+
+Streaming methodclient.chat.completions.create(stream=True)client.chat.stream
+
+Base URLhttps://api.openai.com/v1https://api.mistral.ai/v1
+
+Model name mapping
+
+OpenAI modelMistral equivalent
+
+gpt-4omistral-large-latest
+
+gpt-4o-minimistral-small-latest
+
+text-embedding-3-smallmistral-embed
+
+Use the OpenAI-compatible base URL
+
+If your application uses an OpenAI-compatible client (LangChain, LlamaIndex, or any other third-party library), point it at the Mistral API by changing only the base URL and model name. No library swap required.
+
+from openai import OpenAI
+
+client = OpenAI(
+ api_key="your_mistral_api_key",
+ base_url="https://api.mistral.ai/v1",
+)
+
+response = client.chat.completions.create(
+ model="mistral-large-latest",
+ messages=[{"role": "user", "content": "Hello"}],
+)
+
+from openai import OpenAI
+
+client = OpenAI(
+ api_key="your_mistral_api_key",
+ base_url="https://api.mistral.ai/v1",
+)
+
+response = client.chat.completions.create(
+ model="mistral-large-latest",
+ messages=[{"role": "user", "content": "Hello"}],
+)
+
+Migrate from self-hosted Llama
+
+Copy section link
+Migrate from self-hosted Llama
+
+Tokenizer
+
+Mistral models use a different tokenizer than Llama. If you compute token counts manually or handle raw tokenization, update your tooling.
+
+Install the official Mistral tokenizer:
+
+pip install mistral-common
+
+pip install mistral-common
+
+Use it to tokenize text:
+
+from mistral_common.tokens.tokenizers.mistral import MistralTokenizer
+
+tokenizer = MistralTokenizer.v3()
+result = tokenizer.encode_chat_completion(
+ messages=[{"role": "user", "content": "Hello, world!"}]
+)
+print(result.tokens)
+
+from mistral_common.tokens.tokenizers.mistral import MistralTokenizer
+
+tokenizer = MistralTokenizer.v3()
+result = tokenizer.encode_chat_completion(
+ messages=[{"role": "user", "content": "Hello, world!"}]
+)
+print(result.tokens)
+
+Mistral models on Hugging Face are also compatible with the transformers library. Use apply_chat_template to handle formatting automatically.
+
+Prompt format
+
+warning
+
+Mistral models don't use the [INST] / [/INST] prompt format from Llama 2. Passing raw Llama 2-formatted strings to Mistral models produces degraded output. Update your prompt templates before testing.
+
+Use apply_chat_template to format prompts correctly:
+
+from transformers import AutoTokenizer
+
+tokenizer = AutoTokenizer.from_pretrained("mistralai/Mistral-7B-Instruct-v0.3")
+messages = [{"role": "user", "content": "Hello"}]
+formatted = tokenizer.apply_chat_template(messages, tokenize=False)
+
+from transformers import AutoTokenizer
+
+tokenizer = AutoTokenizer.from_pretrained("mistralai/Mistral-7B-Instruct-v0.3")
+messages = [{"role": "user", "content": "Hello"}]
+formatted = tokenizer.apply_chat_template(messages, tokenize=False)
+
+Model selection
+
+Self-hosted Llama modelMistral equivalent
+
+Llama 3 8B InstructMistral 7B Instruct (open-weight)
+
+Llama 3 70B InstructMixtral 8x22B Instruct (open-weight)
+
+Any self-hostedAPI: mistral-large-latest (managed)
+
+All Mistral open-weight models are available on Hugging Face under the Mistral license.
+
+Migrate to Python SDK v2
+
+Copy section link
+Migrate to Python SDK v2
+
+Version 2.0.0 of the Python SDK introduces a small number of breaking changes. All other APIs (chat, streaming, embeddings, agents, function calling, batch) are unchanged.
+
+Update the package
+
+SDK V1 corresponds to mistralai<2 and V2 to mistralai>=2. Run:
+
+pip install "mistralai>=2"
+
+pip install "mistralai>=2"
+
+Update the import path
+
+Before (V1):
+
+from mistralai import Mistral
+
+from mistralai import Mistral
+
+After (V2):
+
+from mistralai.client import Mistral
+
+from mistralai.client import Mistral
+
+Azure AI (if applicable)
+
+Before (V1):
+
+# pip install mistralai-azure>=1.0.0
+from mistralai_azure import MistralAzure
+
+client = MistralAzure(
+ azure_endpoint=os.environ["AZUREAI_ENDPOINT"],
+ azure_api_key=os.environ["AZUREAI_API_KEY"],
+)
+
+# pip install mistralai-azure>=1.0.0
+from mistralai_azure import MistralAzure
+
+client = MistralAzure(
+ azure_endpoint=os.environ["AZUREAI_ENDPOINT"],
+ azure_api_key=os.environ["AZUREAI_API_KEY"],
+)
+
+After (V2):
+
+# pip install mistralai>=2.0.0
+from mistralai.azure.client import MistralAzure
+
+client = MistralAzure(
+ server_url=os.environ["AZUREAI_ENDPOINT"],
+ api_key=os.environ["AZUREAI_API_KEY"],
+)
+
+# pip install mistralai>=2.0.0
+from mistralai.azure.client import MistralAzure
+
+client = MistralAzure(
+ server_url=os.environ["AZUREAI_ENDPOINT"],
+ api_key=os.environ["AZUREAI_API_KEY"],
+)
+
+Google Cloud / Vertex AI (if applicable)
+
+Before (V1):
+
+# pip install mistralai[gcp]
+from mistralai_gcp import MistralGoogleCloud
+
+client = MistralGoogleCloud(
+ region=os.environ["GOOGLE_CLOUD_REGION"],
+ project_id=os.environ["GOOGLE_CLOUD_PROJECT_ID"],
+)
+
+# pip install mistralai[gcp]
+from mistralai_gcp import MistralGoogleCloud
+
+client = MistralGoogleCloud(
+ region=os.environ["GOOGLE_CLOUD_REGION"],
+ project_id=os.environ["GOOGLE_CLOUD_PROJECT_ID"],
+)
+
+After (V2):
+
+# pip install mistralai>=2.0.0 (no separate package needed)
+from mistralai.gcp.client import MistralGCP
+
+# Auth is handled automatically via google.auth.default()
+# Region defaults to "europe-west4"; override if needed:
+# client = MistralGCP(region="us-central1", project_id="my-project")
+client = MistralGCP()
+
+# pip install mistralai>=2.0.0 (no separate package needed)
+from mistralai.gcp.client import MistralGCP
+
+# Auth is handled automatically via google.auth.default()
+# Region defaults to "europe-west4"; override if needed:
+# client = MistralGCP(region="us-central1", project_id="my-project")
+client = MistralGCP()
+
+Summary
+
+AreaV1V2
+
+Packagemistralai<2mistralai>=2
+
+Core importfrom mistralai import Mistralfrom mistralai.client import Mistral
+
+Azure importfrom mistralai_azure import MistralAzurefrom mistralai.azure.client import MistralAzure
+
+Azure constructorazure_endpoint=, azure_api_key=server_url=, api_key=
+
+GCP importfrom mistralai_gcp import MistralGoogleCloudfrom mistralai.gcp.client import MistralGCP
+
+GCP authGOOGLE_CLOUD_REGION + GOOGLE_CLOUD_PROJECT_ID env varsautomatic via google.auth.default()
+
+All other APIs—unchanged
+
+Common questions
+
+Copy section link
+Common questions
+
+Will my streaming implementation work without changes?
+
+Does Mistral support the OpenAI function calling format?
+
+What about system prompt behavior?
+
+Contents
+
+Migrate from OpenAI
+
+Migrate from self-hosted Llama
+
+Migrate to Python SDK v2
+
+Common questions
+
+Go to Top
+
+WHY MISTRAL
+
+About usOur customersCareersContact us
+
+EXPLORE
+
+AI SolutionsPartnersResearch
+
+DOCUMENTATION
+
+DocumentationAmbassadorsCookbooks
+
+BUILD
+
+StudioMistral VibeMistral CodeMistral ComputeTry the API
+
+LEGAL
+
+Terms of servicePrivacy policyLegal noticePrivacy ChoicesBrand
+
+COMMUNITY
+
+Discord↗X↗Github↗LinkedIn↗Ambassadors
+
+Mistral AI © 2026
+
+Toggle theme
+
+ChangelogStudio

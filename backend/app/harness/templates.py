@@ -7,6 +7,7 @@ from app.harness.models import (
     HarnessProviderProfile,
     HarnessTemplate,
 )
+from app.harness.openai_provider_presets import OPENAI_PROVIDER_PRESET_TEMPLATES
 
 
 BUILTIN_TEMPLATES: dict[str, HarnessTemplate] = {
@@ -117,4 +118,67 @@ BUILTIN_TEMPLATES: dict[str, HarnessTemplate] = {
             capabilities=HarnessCapabilityProfile(streaming=True, discovery_support=False, model_source="manual"),
         ),
     ),
+    "nous_oauth_bridge": HarnessTemplate(
+        id="nous_oauth_bridge",
+        label="Nous OAuth Bridge",
+        integration_class="openai_compatible",
+        description="OAuth/account bridge template for Nous Portal with separate runtime agent-key truth.",
+        profile_defaults=HarnessProviderProfile(
+            provider_key="nous_oauth_bridge",
+            label="Nous OAuth Bridge",
+            integration_class="openai_compatible",
+            endpoint_base_url="https://inference-api.nousresearch.com/v1",
+            auth_scheme="bearer",
+            model_slug_policy="infer_vendor_if_missing",
+            model_prefix="openai",
+            models=["openai/gpt-5.4"],
+            stream_mapping={"enabled": True},
+            capabilities=HarnessCapabilityProfile(
+                streaming=True,
+                tool_calling=True,
+                responses=False,
+                discovery_support=False,
+                model_source="manual",
+                unsupported_features=[
+                    "runtime requires minted agent key or equivalent live evidence",
+                    "live account/runtime proof remains blocked without portal credentials",
+                ],
+            ),
+        ),
+    ),
+    "qwen_oauth_bridge": HarnessTemplate(
+        id="qwen_oauth_bridge",
+        label="Qwen OAuth Bridge",
+        integration_class="openai_compatible",
+        description="OAuth/account bridge template for Qwen Portal with required QwenCode headers.",
+        profile_defaults=HarnessProviderProfile(
+            provider_key="qwen_oauth_bridge",
+            label="Qwen OAuth Bridge",
+            integration_class="openai_compatible",
+            endpoint_base_url="https://portal.qwen.ai/v1",
+            auth_scheme="bearer",
+            models=["qwen-max"],
+            request_mapping={
+                "headers": {
+                    "User-Agent": "QwenCode/0.14.1 (forgeframe; bridge)",
+                    "X-DashScope-CacheControl": "enable",
+                    "X-DashScope-UserAgent": "QwenCode/0.14.1 (forgeframe; bridge)",
+                    "X-DashScope-AuthType": "qwen-oauth",
+                }
+            },
+            stream_mapping={"enabled": True},
+            capabilities=HarnessCapabilityProfile(
+                streaming=True,
+                tool_calling=True,
+                responses=False,
+                discovery_support=False,
+                model_source="manual",
+                unsupported_features=[
+                    "portal-specific oauth headers required",
+                    "live account/runtime proof remains blocked without portal credentials",
+                ],
+            ),
+        ),
+    ),
+    **{template.id: template for template in OPENAI_PROVIDER_PRESET_TEMPLATES.values()},
 }

@@ -1,0 +1,152 @@
+How to Configure OpenAI Models with Continue | Continue Docs
+
+Search...⌘K
+
+DocsBlogSign in
+
+ChecksCLIIDE Extensions
+
+Getting Started
+
+InstallQuick StartCustomization Overview
+
+Features
+
+Agent
+
+Chat
+
+Autocomplete
+
+Edit
+
+Customize
+
+Customization OverviewModelsMCP serversRulesPrompts
+Model Providers
+Model Providers Overview
+Popular Providers
+AnthropicAzure AI FoundryAmazon BedrockGeminiHugging FaceInceptionLM StudioOllamaOpenRouterOpenAITetrate Agent Router ServiceVertex AI
+
+More Providers
+
+Model Roles
+
+Deep Dives
+Telemetry
+
+Reference
+
+config.yaml ReferenceMigrating Config to YAMLContinue Documentation MCP Serverconfig.json Reference (Deprecated)Context Providers (Deprecated)@Codebase (Deprecated)@Docs (Deprecated)
+
+Guides
+
+How to Understand Hub vs Local ConfigurationConfiguring Models, Rules, and ToolsCodebase and Documentation AwarenessUsing Plan Mode with ContinueUsing Ollama with Continue: A Developer's GuideUsing Instinct with Ollama in ContinueHow to Run Continue Without InternetHow to Build Custom Code RAGHow to Self-Host a Model
+
+Help
+
+FAQsTroubleshootingDocs Contributions
+
+Continue Hub (deprecated)
+
+Secrets
+
+Configs
+
+How to Configure OpenAI Models with Continue
+Copy page
+
+Discover OpenAI models here
+
+Get an API key from the OpenAI Console
+
+Configuration
+
+YAMLJSON (Deprecated)
+
+name: My Config
+version: 0.0.1
+schema: v1
+
+models:
+ - name: <MODEL_NAME>
+ provider: openai
+ model: <MODEL_ID>
+ apiKey: <YOUR_OPENAI_API_KEY>
+
+Check out a more advanced configuration here
+
+OpenAI API compatible providers
+
+OpenAI API compatible providers include
+
+KoboldCpp
+
+text-gen-webui
+
+FastChat
+
+LocalAI
+
+llama-cpp-python
+
+TensorRT-LLM
+
+vLLM
+
+BerriAI/litellm
+
+Tetrate Agent Router Service
+
+If you are using an OpenAI API compatible providers, you can change the apiBase like this:
+
+YAMLJSON (Deprecated)
+
+name: My Config
+version: 0.0.1
+schema: v1
+
+models:
+ - name: <OPENAI_API_COMPATIBLE_PROVIDER_MODEL>
+ provider: openai
+ model: <MODEL_NAME>
+ apiBase: http://localhost:8000/v1
+ apiKey: <YOUR_CUSTOM_API_KEY>
+
+How to Force Legacy Completions Endpoint Usage
+
+To force usage of completions instead of chat/completions endpoint you can set:
+
+YAMLJSON (Deprecated)
+
+name: My Config
+version: 0.0.1
+schema: v1
+
+models:
+ - name: <OPENAI_API_COMPATIBLE_PROVIDER_MODEL>
+ provider: openai
+ model: <MODEL_NAME>>
+ apiBase: http://localhost:8000/v1
+ useLegacyCompletionsEndpoint: true
+
+How to Disable the Responses API
+
+By default, Continue uses OpenAI's /responses endpoint for o-series and gpt-5 models. If you encounter "organization must be verified" errors related to reasoning summaries or streaming, you can force the use of /chat/completions instead:
+
+YAMLJSON (Deprecated)
+
+name: My Config
+version: 0.0.1
+schema: v1
+
+models:
+ - name: gpt-5
+ provider: openai
+ model: gpt-5
+ useResponsesApi: false
+
+OpenRouterTetrate Agent Router Service
+
+On this page
+ConfigurationOpenAI API compatible providersHow to Force Legacy Completions Endpoint UsageHow to Disable the Responses API

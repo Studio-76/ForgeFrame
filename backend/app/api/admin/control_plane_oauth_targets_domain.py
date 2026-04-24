@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import platform
 from datetime import UTC, datetime
 from typing import Literal
 
@@ -13,13 +14,42 @@ from app.auth.oauth.openai import resolve_codex_auth_state
 from app.harness import HarnessProviderProfile
 
 
+_NATIVE_OAUTH_TARGET_KEYS = ("openai_codex", "gemini")
+_BRIDGE_OAUTH_TARGET_KEYS = (
+    "antigravity",
+    "github_copilot",
+    "claude_code",
+    "nous_oauth",
+    "qwen_oauth",
+)
+_BRIDGE_OAUTH_TOKEN_ATTRS = {
+    "antigravity": "antigravity_oauth_access_token",
+    "github_copilot": "github_copilot_oauth_access_token",
+    "claude_code": "claude_code_oauth_access_token",
+    "nous_oauth": "nous_oauth_access_token",
+    "qwen_oauth": "qwen_oauth_access_token",
+}
+
+
+def _qwen_oauth_headers() -> dict[str, str]:
+    os_name = platform.system() or "unknown-os"
+    machine = platform.machine() or "unknown-arch"
+    user_agent = f"QwenCode/0.14.1 ({os_name}; {machine})"
+    return {
+        "User-Agent": user_agent,
+        "X-DashScope-CacheControl": "enable",
+        "X-DashScope-UserAgent": user_agent,
+        "X-DashScope-AuthType": "qwen-oauth",
+    }
+
+
 class ControlPlaneOAuthTargetsDomainMixin:
     @staticmethod
     def _oauth_target_contract_classification(
         provider_key: str,
         status: OAuthAccountTargetStatus,
     ) -> str:
-        if provider_key in {"openai_codex", "gemini"}:
+        if provider_key in _NATIVE_OAUTH_TARGET_KEYS:
             if status.readiness == "ready":
                 return "runtime-ready"
             if status.configured and status.runtime_bridge_enabled:
@@ -61,22 +91,90 @@ class ControlPlaneOAuthTargetsDomainMixin:
             return " Historical live probe evidence remains recorded from an earlier enabled state."
         return ""
 
+    def _bridge_oauth_target_config(self, provider_key: str) -> dict[str, object]:
+        if provider_key not in _BRIDGE_OAUTH_TARGET_KEYS:
+            raise ValueError(f"Unsupported bridge oauth/account target: {provider_key}")
+        return {
+            "token": getattr(self._settings, _BRIDGE_OAUTH_TOKEN_ATTRS[provider_key]),
+            "probe_enabled": getattr(self._settings, f"{provider_key}_probe_enabled"),
+            "bridge_enabled": getattr(self._settings, f"{provider_key}_bridge_profile_enabled"),
+            "base_url": getattr(self._settings, f"{provider_key}_probe_base_url"),
+            "model": getattr(self._settings, f"{provider_key}_probe_model"),
+            "runtime_agent_key": getattr(self._settings, "nous_oauth_runtime_agent_key", "") if provider_key == "nous_oauth" else "",
+        }
+
+    @staticmethod
+    def _bridge_oauth_target_session_reuse_strategy(provider_key: str) -> str:
+        if provider_key == "nous_oauth":
+            return (
+                "Portal access token proves account truth only; runtime should use a separately minted agent key "
+                "(Nous runtime key) "
+                "before the TTL floor, but ForgeFrame does not mint or refresh that key yet."
+            )
+        if provider_key == "qwen_oauth":
+            return (
+                "Pre-issued Qwen portal OAuth token is forwarded with required QwenCode/DashScope headers; "
+                "ForgeFrame does not own the upstream OAuth refresh cycle."
+            )
+        return (
+            "Pre-issued OAuth access token is forwarded through bridge/profile operations only; "
+            "no managed refresh or session reuse contract exists."
+        )
+
+    @staticmethod
+    def _bridge_oauth_target_operator_truth(provider_key: str) -> str:
+        if provider_key == "nous_oauth":
+            return (
+                "ForgeFrame can expose Nous account/onboarding truth and bridge profiles, but native runtime truth still "
+                "depends on a separately minted agent key (Nous runtime key) rather than flattening the account token into "
+                "a normal API key."
+            )
+        if provider_key == "qwen_oauth":
+            return (
+                "ForgeFrame treats Qwen as a portal-backed OAuth provider with mandatory QwenCode/DashScope headers; "
+                "no native runtime lane is shipped yet and DashScope API-key semantics must not replace that truth."
+            )
+        return (
+            "ForgeFrame can probe or sync bridge profiles for this target, but no native runtime lane is shipped for it "
+            "in the current release truth."
+        )
+
+    def _bridge_oauth_probe_headers(self, provider_key: str, token: str) -> dict[str, str]:
+        headers = {
+            "Authorization": f"Bearer {token}",
+            "Content-Type": "application/json",
+        }
+        if provider_key == "qwen_oauth":
+            headers.update(_qwen_oauth_headers())
+        return headers
+
+    def _bridge_oauth_profile_request_headers(self, provider_key: str) -> dict[str, str]:
+        if provider_key == "qwen_oauth":
+            return _qwen_oauth_headers()
+        return {}
+
     def _oauth_target_next_steps(self, provider_key: str, status: OAuthAccountTargetStatus) -> list[str]:
         steps: list[str] = []
         if not status.configured:
             steps.append(f"Configure credentials or OAuth access token for {provider_key}.")
         if not status.probe_enabled:
             steps.append(f"Enable live probe support for {provider_key}.")
-        if not status.runtime_bridge_enabled and provider_key in {"openai_codex", "gemini"}:
+        if not status.runtime_bridge_enabled and provider_key in _NATIVE_OAUTH_TARGET_KEYS:
             steps.append(f"Enable native runtime bridge for {provider_key}.")
-        if status.configured and status.evidence.live_probe.status != "observed" and provider_key in {"openai_codex", "gemini"}:
+        if status.configured and status.evidence.live_probe.status != "observed" and provider_key in _NATIVE_OAUTH_TARGET_KEYS:
             steps.append(f"Run an explicit live probe for {provider_key} so the control plane can promote the route beyond credentials-only readiness.")
-        if status.configured and status.evidence.runtime.status != "observed" and provider_key in {"openai_codex", "gemini"}:
+        if status.configured and status.evidence.runtime.status != "observed" and provider_key in _NATIVE_OAUTH_TARGET_KEYS:
             steps.append(f"Send a real runtime request through {provider_key} to record live non-stream evidence.")
-        if not status.harness_profile_enabled and provider_key in {"antigravity", "github_copilot", "claude_code"}:
+        if not status.harness_profile_enabled and provider_key in _BRIDGE_OAUTH_TARGET_KEYS:
             steps.append(f"Enable OAuth bridge profile sync for {provider_key}.")
+        if provider_key == "nous_oauth":
+            runtime_agent_key = str(self._bridge_oauth_target_config(provider_key)["runtime_agent_key"]).strip()
+            if not runtime_agent_key:
+                steps.append("Provide a minted Nous runtime agent key; account OAuth token alone must not be treated as runtime proof.")
+        if provider_key == "qwen_oauth":
+            steps.append("Keep the QwenCode/DashScope header set attached to every bridge probe and bridge profile request.")
         if not steps:
-            if provider_key in {"antigravity", "github_copilot", "claude_code"}:
+            if provider_key in _BRIDGE_OAUTH_TARGET_KEYS:
                 steps.append(
                     f"Keep {provider_key} positioned as onboarding/bridge-only; probe success does not promote it to native runtime-ready truth."
                 )
@@ -89,7 +187,7 @@ class ControlPlaneOAuthTargetsDomainMixin:
         provider_key: str,
         status: OAuthAccountTargetStatus,
     ) -> str:
-        if provider_key in {"openai_codex", "gemini"} and not ControlPlaneOAuthTargetsDomainMixin._native_oauth_bridge_path_enabled(status):
+        if provider_key in _NATIVE_OAUTH_TARGET_KEYS and not ControlPlaneOAuthTargetsDomainMixin._native_oauth_bridge_path_enabled(status):
             if status.evidence.runtime.status == "observed" and status.evidence.live_probe.status == "observed":
                 return "path_disabled_runtime_and_probe_evidenced"
             if status.evidence.runtime.status == "observed":
@@ -101,7 +199,7 @@ class ControlPlaneOAuthTargetsDomainMixin:
         if status.evidence.runtime.status == "observed":
             return "runtime_evidenced"
         if status.evidence.live_probe.status == "observed":
-            return "bridge_probe_evidenced" if provider_key in {"antigravity", "github_copilot", "claude_code"} else "probe_evidenced"
+            return "bridge_probe_evidenced" if provider_key in _BRIDGE_OAUTH_TARGET_KEYS else "probe_evidenced"
         if status.runtime_bridge_enabled and status.probe_enabled:
             return "runtime_path_configured"
         if status.harness_profile_enabled or status.probe_enabled:
@@ -112,10 +210,10 @@ class ControlPlaneOAuthTargetsDomainMixin:
 
     def list_oauth_account_target_statuses(self, tenant_id: str | None = None) -> list[dict[str, object]]:
         effective_tenant_id = self._effective_truth_projection_tenant_id(tenant_id)
-        providers = ["openai_codex", "gemini", "antigravity", "github_copilot", "claude_code"]
+        providers = [*_NATIVE_OAUTH_TARGET_KEYS, *_BRIDGE_OAUTH_TARGET_KEYS]
         statuses: list[dict[str, object]] = []
         for provider_key in providers:
-            if provider_key in {"antigravity", "github_copilot", "claude_code"}:
+            if provider_key in _BRIDGE_OAUTH_TARGET_KEYS:
                 statuses.append(self._oauth_target_status(provider_key, tenant_id=effective_tenant_id).model_dump())
                 continue
             status = self._native_oauth_target_status(provider_key, tenant_id=effective_tenant_id)
@@ -263,35 +361,52 @@ class ControlPlaneOAuthTargetsDomainMixin:
         *,
         tenant_id: str | None = None,
     ) -> OAuthAccountTargetStatus:
-        config = {
-            "antigravity": (
-                self._settings.antigravity_oauth_access_token,
-                self._settings.antigravity_probe_enabled,
-                self._settings.antigravity_bridge_profile_enabled,
-            ),
-            "github_copilot": (
-                self._settings.github_copilot_oauth_access_token,
-                self._settings.github_copilot_probe_enabled,
-                self._settings.github_copilot_bridge_profile_enabled,
-            ),
-            "claude_code": (
-                self._settings.claude_code_oauth_access_token,
-                self._settings.claude_code_probe_enabled,
-                self._settings.claude_code_bridge_profile_enabled,
-            ),
-        }
-        token, probe_enabled, bridge_enabled = config[provider_key]
+        config = self._bridge_oauth_target_config(provider_key)
+        token = str(config["token"])
+        probe_enabled = bool(config["probe_enabled"])
+        bridge_enabled = bool(config["bridge_enabled"])
+        runtime_agent_key = str(config["runtime_agent_key"])
         configured = bool(token.strip())
         evidence = self._provider_capability_evidence(provider_key, tenant_id=tenant_id)
         readiness: Literal["planned", "partial", "ready"] = "planned"
         reason = "OAuth/account credentials missing."
         if configured:
             readiness = "partial"
-            reason = "OAuth/account credentials configured; runtime truth remains onboarding/bridge-only until explicit live evidence exists."
+            if provider_key == "nous_oauth":
+                reason = (
+                    "Nous account token is configured, but runtime truth still depends on a separately minted agent key "
+                    "and explicit bridge evidence."
+                )
+            elif provider_key == "qwen_oauth":
+                reason = (
+                    "Qwen portal token is configured, but runtime truth remains onboarding/bridge-only until live evidence "
+                    "exists with the required QwenCode/DashScope headers."
+                )
+            else:
+                reason = "OAuth/account credentials configured; runtime truth remains onboarding/bridge-only until explicit live evidence exists."
         if configured and evidence.live_probe.status == "observed":
             reason = "Live probe evidence is recorded, but this target remains onboarding/bridge-only in the current release truth."
+        elif provider_key == "nous_oauth" and configured and bridge_enabled and not runtime_agent_key.strip():
+            reason = (
+                "Nous bridge knobs are enabled, but no minted runtime agent key is configured; account-token-only setup remains "
+                "onboarding/bridge-only."
+            )
         elif configured and (probe_enabled or bridge_enabled):
-            reason = "OAuth/account operational knobs are enabled, but this axis still remains onboarding/bridge-only in the current release truth."
+            if provider_key == "qwen_oauth":
+                reason = (
+                    "Qwen portal token is configured and bridge knobs are enabled, but runtime truth remains onboarding/bridge-only "
+                    "until live evidence exists with the required QwenCode/DashScope headers."
+                )
+            elif provider_key == "nous_oauth":
+                reason = (
+                    "Nous account token is configured and bridge knobs are enabled, but runtime truth still depends on a separately "
+                    "minted agent key and explicit bridge evidence."
+                )
+            else:
+                reason = (
+                    "OAuth/account operational knobs are enabled, but this axis still remains onboarding/bridge-only in the current "
+                    "release truth."
+                )
         contract_classification = "bridge-only" if configured or probe_enabled or bridge_enabled else "onboarding-only"
         return OAuthAccountTargetStatus(
             provider_key=provider_key,
@@ -303,11 +418,11 @@ class ControlPlaneOAuthTargetsDomainMixin:
             queue_lane=self._oauth_target_queue_lane(contract_classification),  # type: ignore[arg-type]
             parallelism_mode=self._oauth_target_parallelism_mode(contract_classification),  # type: ignore[arg-type]
             parallelism_limit=None,
-            session_reuse_strategy="Pre-issued OAuth access token is forwarded through bridge/profile operations only; no managed refresh or session reuse contract exists.",
+            session_reuse_strategy=self._bridge_oauth_target_session_reuse_strategy(provider_key),
             escalation_support="native_runtime_unavailable",
             cost_posture=self._oauth_target_cost_posture("oauth_account"),
             operator_surface="/oauth-targets",
-            operator_truth="ForgeFrame can probe or sync bridge profiles for this target, but no native runtime lane is shipped for it in the current release truth.",
+            operator_truth=self._bridge_oauth_target_operator_truth(provider_key),
             readiness=readiness,
             readiness_reason=reason,
             auth_kind="oauth_account",
@@ -472,7 +587,7 @@ class ControlPlaneOAuthTargetsDomainMixin:
             self._record_oauth_operation(provider_key, "probe", result.status, result.details, now)
             return result
 
-        if provider_key in {"antigravity", "github_copilot", "claude_code"}:
+        if provider_key in _BRIDGE_OAUTH_TARGET_KEYS:
             return self._probe_additional_oauth_target(provider_key, now=now)
 
         raise ValueError(f"Unsupported oauth/account probe provider: {provider_key}")
@@ -484,24 +599,11 @@ class ControlPlaneOAuthTargetsDomainMixin:
         now: str,
     ) -> OAuthAccountProbeResult:
         status = self._oauth_target_status(provider_key)
-        target_map = {
-            "antigravity": (
-                self._settings.antigravity_probe_base_url,
-                self._settings.antigravity_probe_model,
-                self._settings.antigravity_oauth_access_token,
-            ),
-            "github_copilot": (
-                self._settings.github_copilot_probe_base_url,
-                self._settings.github_copilot_probe_model,
-                self._settings.github_copilot_oauth_access_token,
-            ),
-            "claude_code": (
-                self._settings.claude_code_probe_base_url,
-                self._settings.claude_code_probe_model,
-                self._settings.claude_code_oauth_access_token,
-            ),
-        }
-        base_url, model, token = target_map[provider_key]
+        config = self._bridge_oauth_target_config(provider_key)
+        base_url = str(config["base_url"])
+        model = str(config["model"])
+        token = str(config["token"])
+        runtime_agent_key = str(config["runtime_agent_key"])
         if not status.configured:
             result = OAuthAccountProbeResult(
                 provider_key=provider_key,
@@ -524,6 +626,20 @@ class ControlPlaneOAuthTargetsDomainMixin:
             )
             self._record_oauth_operation(provider_key, "probe", result.status, result.details, now)
             return result
+        if provider_key == "nous_oauth" and not runtime_agent_key.strip():
+            result = OAuthAccountProbeResult(
+                provider_key=provider_key,
+                ready=True,
+                probe_mode="readiness_only",
+                status="warning",
+                details=(
+                    "Nous live probe skipped because no minted runtime agent key is configured; "
+                    "the account token alone must not be treated as runtime proof."
+                ),
+                checked_at=now,
+            )
+            self._record_oauth_operation(provider_key, "probe", result.status, result.details, now)
+            return result
         payload = {
             "model": model,
             "messages": [{"role": "user", "content": "health probe"}],
@@ -535,10 +651,10 @@ class ControlPlaneOAuthTargetsDomainMixin:
             response = httpx.post(
                 endpoint,
                 json=payload,
-                headers={
-                    "Authorization": f"Bearer {token}",
-                    "Content-Type": "application/json",
-                },
+                headers=self._bridge_oauth_probe_headers(
+                    provider_key,
+                    runtime_agent_key if provider_key == "nous_oauth" else token,
+                ),
                 timeout=self._settings.oauth_account_probe_timeout_seconds,
             )
         except httpx.RequestError as exc:
@@ -569,29 +685,15 @@ class ControlPlaneOAuthTargetsDomainMixin:
         return result
 
     def sync_oauth_account_bridge_profiles(self) -> dict[str, object]:
-        provider_configs = {
-            "antigravity": (
-                self._settings.antigravity_bridge_profile_enabled,
-                self._settings.antigravity_probe_base_url,
-                self._settings.antigravity_oauth_access_token,
-                self._settings.antigravity_probe_model,
-            ),
-            "github_copilot": (
-                self._settings.github_copilot_bridge_profile_enabled,
-                self._settings.github_copilot_probe_base_url,
-                self._settings.github_copilot_oauth_access_token,
-                self._settings.github_copilot_probe_model,
-            ),
-            "claude_code": (
-                self._settings.claude_code_bridge_profile_enabled,
-                self._settings.claude_code_probe_base_url,
-                self._settings.claude_code_oauth_access_token,
-                self._settings.claude_code_probe_model,
-            ),
-        }
         upserted: list[str] = []
         skipped: list[str] = []
-        for provider_key, (enabled, base_url, token, model) in provider_configs.items():
+        for provider_key in _BRIDGE_OAUTH_TARGET_KEYS:
+            config = self._bridge_oauth_target_config(provider_key)
+            enabled = bool(config["bridge_enabled"])
+            base_url = str(config["base_url"])
+            token = str(config["token"])
+            model = str(config["model"])
+            runtime_agent_key = str(config["runtime_agent_key"])
             if not enabled:
                 skipped.append(provider_key)
                 self._record_oauth_operation(
@@ -602,21 +704,51 @@ class ControlPlaneOAuthTargetsDomainMixin:
                     datetime.now(tz=UTC).isoformat(),
                 )
                 continue
+            if provider_key == "nous_oauth" and not runtime_agent_key.strip():
+                skipped.append(provider_key)
+                self._record_oauth_operation(
+                    provider_key,
+                    "bridge_sync",
+                    "skipped",
+                    "Nous bridge profile sync skipped because no minted runtime agent key is configured.",
+                    datetime.now(tz=UTC).isoformat(),
+                )
+                continue
             profile = HarnessProviderProfile(
-                provider_key=f"{provider_key}_oauth_bridge",
+                provider_key=f"{provider_key}_bridge",
                 label=f"{provider_key} OAuth Bridge",
                 integration_class="openai_compatible",
                 endpoint_base_url=base_url.rstrip("/"),
                 auth_scheme="bearer",
-                auth_value=token,
+                auth_value=runtime_agent_key if provider_key == "nous_oauth" else token,
                 enabled=True,
                 models=[model],
                 discovery_enabled=False,
+                template_id=f"{provider_key}_bridge",
+                model_slug_policy="infer_vendor_if_missing" if provider_key == "nous_oauth" else "verbatim",
+                model_prefix="openai" if provider_key == "nous_oauth" else "",
+                request_mapping={"headers": self._bridge_oauth_profile_request_headers(provider_key)},
                 stream_mapping={"enabled": True},
                 capabilities={
                     "streaming": True,
+                    "tool_calling": True,
                     "model_source": "manual",
                     "discovery_support": False,
+                    "unsupported_features": (
+                        [
+                            "runtime requires minted agent key or equivalent live evidence",
+                            "account-token-only setup remains blocked-by-live-evidence",
+                        ]
+                        if provider_key == "nous_oauth"
+                        else (
+                            [
+                                "QwenCode/DashScope headers must stay attached to every bridge request",
+                                "live runtime proof remains blocked without portal credentials",
+                            ]
+                            if provider_key == "qwen_oauth"
+                            else []
+                        )
+                    ),
                 },
             )
             self._harness.upsert_profile(profile)

@@ -1,0 +1,158 @@
+Resource Manager | Microsoft Learn
+
+ Skip to main content
+
+ Skip to Ask Learn chat experience
+
+This browser is no longer supported.
+
+ Upgrade to Microsoft Edge to take advantage of the latest features, security updates, and technical support.
+
+ Download Microsoft Edge
+
+ More info about Internet Explorer and Microsoft Edge
+
+ Table of contents 
+
+ Exit editor mode
+
+ Ask Learn
+
+ Ask Learn
+
+ Reading mode
+
+ Table of contents
+
+ Read in English
+
+ Add
+
+ Add to plan
+
+ Edit
+
+Share via
+
+ Facebook
+
+ x.com
+
+ LinkedIn
+
+ Email
+
+ Copy Markdown
+
+ Print
+
+ Note
+
+ Access to this page requires authorization. You can try signing in or changing directories.
+
+ Access to this page requires authorization. You can try changing directories.
+
+Resource Manager
+
+ Feedback
+
+ Summarize this article for me
+
+ In this article
+
+REST Operation Groups
+
+Operation Group
+
+Account Capability Hosts
+
+Account Connections
+
+Accounts
+
+Check Domain Availability
+
+Check Sku Availability
+
+Commitment Plans
+
+Commitment Tiers
+
+Defender For AI Settings
+
+Deleted Accounts
+
+Deployments
+
+Encryption Scopes
+
+Location Based Model Capacities
+
+Model Capacities
+
+Models
+
+Network Security Perimeter Configurations
+
+Operations
+
+Private Endpoint Connections
+
+Private Link Resources
+
+Project Capability Hosts
+
+Project Connections
+
+Projects
+
+Rai Blocklist Items
+
+Rai Blocklists
+
+Rai Content Filters
+
+Rai Policies
+
+Resource Skus
+
+Usages
+
+calculate Model Capacity
+
+ Additional resources
+
+ Last updated on 
+ 2025-08-26
+
+In this article
+
+ en-us
+
+ Your Privacy Choices
+
+ Theme
+
+ Light 
+
+ Dark 
+
+ High contrast 
+
+ AI Disclaimer
+
+ Previous Versions
+
+ Blog
+
+ Contribute
+
+ Privacy
+
+ Consumer Health Privacy
+
+ Terms of Use
+
+ Trademarks
+
+© Microsoft 2026

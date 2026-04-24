@@ -1,0 +1,108 @@
+{
+  "schema_version": 4,
+  "updated_at": "2026-04-24T05:04:18.167161+00:00",
+  "profiles": [
+    {
+      "provider_key": "openrouter",
+      "label": "OpenRouter",
+      "integration_class": "openai_compatible",
+      "endpoint_base_url": "https://openrouter.ai/api/v1",
+      "auth_scheme": "bearer",
+      "auth_value": "token",
+      "auth_header": "Authorization",
+      "template_id": "openai_provider_openrouter",
+      "model_slug_policy": "verbatim",
+      "model_prefix": "",
+      "enabled": true,
+      "models": [
+        "gpt-4o-mini"
+      ],
+      "discovery_enabled": false,
+      "request_mapping": {
+        "method": "POST",
+        "path": "/chat/completions",
+        "path_join_policy": "append",
+        "headers": {},
+        "body_template": {
+          "model": "{{model}}",
+          "messages": "{{messages}}",
+          "stream": "{{stream}}"
+        }
+      },
+      "response_mapping": {
+        "text_path": "choices.0.message.content",
+        "finish_reason_path": "choices.0.finish_reason",
+        "model_path": "model",
+        "prompt_tokens_path": "usage.prompt_tokens",
+        "completion_tokens_path": "usage.completion_tokens",
+        "total_tokens_path": "usage.total_tokens",
+        "tool_calls_path": "choices.0.message.tool_calls"
+      },
+      "error_mapping": {
+        "message_path": "error.message",
+        "type_path": "error.type"
+      },
+      "stream_mapping": {
+        "enabled": false,
+        "data_prefix": "data:",
+        "done_marker": "[DONE]",
+        "delta_path": "choices.0.delta.content",
+        "tool_calls_path": "choices.0.delta.tool_calls",
+        "finish_reason_path": "choices.0.finish_reason",
+        "usage_prompt_tokens_path": "usage.prompt_tokens",
+        "usage_completion_tokens_path": "usage.completion_tokens",
+        "usage_total_tokens_path": "usage.total_tokens"
+      },
+      "capabilities": {
+        "streaming": false,
+        "tool_calling": false,
+        "vision": false,
+        "responses": false,
+        "embeddings": false,
+        "discovery_support": false,
+        "model_source": "manual",
+        "unsupported_features": []
+      },
+      "created_at": "2026-04-24T05:04:02.866777+00:00",
+      "updated_at": "2026-04-24T05:04:18.166163+00:00",
+      "config_revision": 1,
+      "config_revision_parent": null,
+      "config_history": [],
+      "last_exported_at": null,
+      "last_imported_at": null,
+      "lifecycle_status": "draft",
+      "last_verified_at": null,
+      "last_verify_status": "never",
+      "last_probe_at": null,
+      "last_probe_status": "never",
+      "last_sync_at": null,
+      "last_sync_status": "never",
+      "last_sync_error": null,
+      "last_error": null,
+      "last_used_at": null,
+      "last_used_model": null,
+      "verify_success_count": 0,
+      "verify_failure_count": 0,
+      "probe_success_count": 0,
+      "probe_failure_count": 0,
+      "request_count": 0,
+      "stream_request_count": 0,
+      "total_tokens": 0,
+      "total_actual_cost": 0.0,
+      "total_hypothetical_cost": 0.0,
+      "total_avoided_cost": 0.0,
+      "needs_attention": false,
+      "model_inventory": [
+        {
+          "model": "gpt-4o-mini",
+          "source": "manual",
+          "active": true,
+          "status": "ready",
+          "readiness_reason": null,
+          "discovered_at": null,
+          "synced_at": null
+        }
+      ]
+    }
+  ]
+}

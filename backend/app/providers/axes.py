@@ -14,6 +14,7 @@ AuthMechanism = Literal[
     "oauth_account",
     "api_key",
     "hybrid_oauth_api_key",
+    "aws_sigv4",
     "none",
     "gateway_key",
     "bearer",

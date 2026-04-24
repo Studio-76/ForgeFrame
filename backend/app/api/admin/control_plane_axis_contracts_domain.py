@@ -3,6 +3,10 @@
 from __future__ import annotations
 
 from app.api.admin.control_plane_models import OAuthAccountTargetStatus, ProductAxisTarget
+from app.harness.templates import BUILTIN_TEMPLATES
+
+
+_LOCAL_EXACT_PROVIDER_KEYS = ("localai", "llama_cpp", "llama_cpp_python", "vllm")
 
 
 class ControlPlaneAxisContractsDomainMixin:
@@ -11,6 +15,71 @@ class ControlPlaneAxisContractsDomainMixin:
         if status.configured and status.probe_enabled and status.evidence.live_probe.status == "observed":
             return "ready"
         return "partial" if status.configured else "planned"
+
+    def _local_provider_target(
+        self,
+        provider_key: str,
+        *,
+        tenant_id: str | None = None,
+    ) -> ProductAxisTarget:
+        template_id = f"openai_provider_{provider_key}"
+        template = BUILTIN_TEMPLATES.get(template_id)
+        if template is None:
+            raise ValueError(f"Missing exact local provider template for {provider_key}")
+        profiles = [
+            profile
+            for profile in self._harness.list_profiles()
+            if profile.template_id == template_id and profile.enabled
+        ]
+        dispatchable_profiles = [profile for profile in profiles if profile.models]
+        capabilities = template.profile_defaults.capabilities
+        evidence = self._provider_capability_evidence(provider_key, tenant_id=tenant_id)
+        readiness = "partial" if profiles else "planned"
+        runtime_readiness = "partial" if dispatchable_profiles else "planned"
+        streaming_readiness = "partial" if dispatchable_profiles and capabilities.streaming else "planned"
+        verify_probe_readiness = "partial" if profiles else "planned"
+        contract_classification = "partial-runtime" if dispatchable_profiles else "onboarding-only"
+        profile_count = len(profiles)
+        dispatchable_count = len(dispatchable_profiles)
+        return ProductAxisTarget(
+            provider_key=provider_key,
+            provider_type="local",
+            product_axis="local_providers",
+            auth_model="none/local network" if template.profile_defaults.auth_scheme == "none" else template.profile_defaults.auth_scheme,
+            runtime_path=f"exact local harness template '{template_id}'",
+            contract_classification=contract_classification,
+            classification_reason=(
+                f"Exact local template '{template_id}' is shipped and {dispatchable_count} enabled profile(s) are dispatchable."
+                if dispatchable_profiles
+                else f"Exact local template '{template_id}' is shipped, but no enabled dispatchable profile is configured yet."
+            ),
+            technical_requirements=[
+                "An exact local harness profile must be enabled for this provider.",
+                "At least one enabled profile must own a concrete local model before runtime traffic can be routed.",
+                "Local-only policy binding, endpoint health, and model inventory must stay visible on the operator surface.",
+            ],
+            operator_surface="/providers#harness-control",
+            readiness=readiness,
+            readiness_score=62 if dispatchable_profiles else (42 if profiles else 24),
+            runtime_readiness=runtime_readiness,
+            streaming_readiness=streaming_readiness,
+            verify_probe_readiness=verify_probe_readiness,
+            ui_readiness="partial",
+            evidence=evidence,
+            health_semantics="local endpoint reachability + model inventory + local-only policy binding",
+            verify_probe_axis="exact local harness verify/probe path",
+            observability_axis="provider/model/profile/local endpoint errors",
+            ui_axis="provider catalog + harness control plane",
+            status_summary=(
+                f"{profile_count} enabled exact local profile(s) exist and {dispatchable_count} are dispatchable."
+                if profiles
+                else "Exact local template is shipped, but no enabled exact local profile exists yet."
+            ),
+            notes=(
+                f"Template claims: responses={capabilities.responses}, embeddings={capabilities.embeddings}, "
+                f"tool_calling={capabilities.tool_calling}, streaming={capabilities.streaming}. Live proof remains separate."
+            ),
+        )
 
     def product_axis_targets(self, tenant_id: str | None = None) -> list[dict[str, object]]:
         effective_tenant_id = self._effective_truth_projection_tenant_id(tenant_id)
@@ -36,6 +105,8 @@ class ControlPlaneAxisContractsDomainMixin:
         antigravity_status = self._oauth_target_status("antigravity", tenant_id=effective_tenant_id)
         copilot_status = self._oauth_target_status("github_copilot", tenant_id=effective_tenant_id)
         claude_code_status = self._oauth_target_status("claude_code", tenant_id=effective_tenant_id)
+        nous_oauth_status = self._oauth_target_status("nous_oauth", tenant_id=effective_tenant_id)
+        qwen_oauth_status = self._oauth_target_status("qwen_oauth", tenant_id=effective_tenant_id)
         codex_evidence = self._provider_capability_evidence("openai_codex", tenant_id=effective_tenant_id)
         gemini_evidence = self._provider_capability_evidence("gemini", tenant_id=effective_tenant_id)
         codex_oauth_status = self._native_oauth_target_status("openai_codex", tenant_id=effective_tenant_id)
@@ -301,6 +372,76 @@ class ControlPlaneAxisContractsDomainMixin:
                 notes="No default runtime truth for this axis yet; keep it positioned as onboarding or bridge-only.",
             ),
             ProductAxisTarget(
+                provider_key="nous_oauth",
+                provider_type="oauth_account",
+                product_axis="oauth_account_providers",
+                auth_model="oauth_account + minted runtime agent key",
+                runtime_path="generic openai-compatible harness with separate runtime credential truth",
+                contract_classification=(
+                    "bridge-only"
+                    if nous_oauth_status.configured or nous_oauth_status.probe_enabled or nous_oauth_status.harness_profile_enabled
+                    else "onboarding-only"
+                ),
+                classification_reason=(
+                    "Nous keeps a separate account-token and runtime-agent-key truth, so this release only ships onboarding/bridge semantics."
+                ),
+                technical_requirements=[
+                    "Portal/account token must be configured for onboarding and account truth.",
+                    "A separate minted runtime agent key must exist before bridge/runtime proof can be trusted.",
+                    "Probe or profile sync must not flatten the account token into API-key truth.",
+                ],
+                operator_surface="/oauth-targets",
+                readiness=nous_oauth_status.readiness,
+                readiness_score=58 if nous_oauth_status.readiness == "ready" else (42 if nous_oauth_status.readiness == "partial" else 22),
+                runtime_readiness="planned",
+                streaming_readiness="planned",
+                verify_probe_readiness=self._bridge_only_verify_probe_readiness(nous_oauth_status),
+                ui_readiness="partial",
+                evidence=nous_oauth_status.evidence.model_copy(deep=True),
+                health_semantics="portal auth + bridge credential separation",
+                verify_probe_axis="bridge probe only after minted runtime credential exists",
+                observability_axis="oauth account + bridge profile + runtime credential gap",
+                ui_axis="provider contract table + oauth onboarding",
+                status_summary=f"{nous_oauth_status.readiness_reason} Runtime remains onboarding/bridge-only in the current release truth.",
+                oauth_account_provider=True,
+                notes="Do not collapse Nous account OAuth into a normal API-key provider. Runtime proof depends on a separate agent key path.",
+            ),
+            ProductAxisTarget(
+                provider_key="qwen_oauth",
+                provider_type="oauth_account",
+                product_axis="oauth_account_providers",
+                auth_model="oauth_account with mandatory QwenCode headers",
+                runtime_path="generic openai-compatible harness with portal-specific request headers",
+                contract_classification=(
+                    "bridge-only"
+                    if qwen_oauth_status.configured or qwen_oauth_status.probe_enabled or qwen_oauth_status.harness_profile_enabled
+                    else "onboarding-only"
+                ),
+                classification_reason=(
+                    "Qwen OAuth remains a portal-backed bridge target; required QwenCode/DashScope headers block any flat API-key interpretation."
+                ),
+                technical_requirements=[
+                    "Portal OAuth token must be configured before probe or profile sync can run.",
+                    "Every bridge request must carry the required QwenCode/DashScope headers.",
+                    "Probe success records bridge evidence only and must not promote the target to native runtime-ready truth.",
+                ],
+                operator_surface="/oauth-targets",
+                readiness=qwen_oauth_status.readiness,
+                readiness_score=58 if qwen_oauth_status.readiness == "ready" else (42 if qwen_oauth_status.readiness == "partial" else 22),
+                runtime_readiness="planned",
+                streaming_readiness="planned",
+                verify_probe_readiness=self._bridge_only_verify_probe_readiness(qwen_oauth_status),
+                ui_readiness="partial",
+                evidence=qwen_oauth_status.evidence.model_copy(deep=True),
+                health_semantics="portal auth + header fidelity + bridge probe truth",
+                verify_probe_axis="bridge probe only with portal-specific headers",
+                observability_axis="oauth account + bridge profile + header correctness",
+                ui_axis="provider contract table + oauth onboarding",
+                status_summary=f"{qwen_oauth_status.readiness_reason} Runtime remains onboarding/bridge-only in the current release truth.",
+                oauth_account_provider=True,
+                notes="Treat Qwen OAuth as its own premium portal provider, not as a normal DashScope API-key route.",
+            ),
+            ProductAxisTarget(
                 provider_key="openai_compatible_generic",
                 provider_type="openai_compatible",
                 product_axis="openai_compatible_providers",
@@ -366,6 +507,10 @@ class ControlPlaneAxisContractsDomainMixin:
                 ),
                 notes="Dedicated Ollama axis is shipped as a first-class local contract with explicit runtime truth.",
             ),
+            *[
+                self._local_provider_target(provider_key, tenant_id=effective_tenant_id)
+                for provider_key in _LOCAL_EXACT_PROVIDER_KEYS
+            ],
             ProductAxisTarget(
                 provider_key="openai_client_compat",
                 provider_type="openai_compatible",

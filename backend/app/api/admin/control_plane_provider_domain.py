@@ -142,6 +142,7 @@ class ControlPlaneProviderDomainMixin:
             instance_id=self._instance.instance_id,
             providers=[item.model_copy(deep=True) for item in self.list_providers()],
             provider_targets=[item.model_copy(deep=True) for item in self.list_provider_targets()],
+            provider_catalog=[item.model_copy(deep=True) for item in self.list_provider_catalog()],
             routing_policies=[
                 item.model_copy(deep=True)
                 for item in getattr(self, "_routing_policies_state", {}).values()

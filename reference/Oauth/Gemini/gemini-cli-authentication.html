@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html lang="en-US">
+  <head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+
+<!-- Begin Jekyll SEO tag v2.8.0 -->
+<title>Gemini CLI Authentication Setup | gemini-cli</title>
+<meta name="generator" content="Jekyll v3.10.0" />
+<meta property="og:title" content="Gemini CLI Authentication Setup" />
+<meta property="og:locale" content="en_US" />
+<meta name="description" content="An open-source AI agent that brings the power of Gemini directly into your terminal." />
+<meta property="og:description" content="An open-source AI agent that brings the power of Gemini directly into your terminal." />
+<link rel="canonical" href="https://google-gemini.github.io/gemini-cli/docs/get-started/authentication.html" />
+<meta property="og:url" content="https://google-gemini.github.io/gemini-cli/docs/get-started/authentication.html" />
+<meta property="og:site_name" content="gemini-cli" />
+<meta property="og:type" content="website" />
+<meta name="twitter:card" content="summary" />
+<meta property="twitter:title" content="Gemini CLI Authentication Setup" />
+<script type="application/ld+json">
+{"@context":"https://schema.org","@type":"WebPage","description":"An open-source AI agent that brings the power of Gemini directly into your terminal.","headline":"Gemini CLI Authentication Setup","url":"https://google-gemini.github.io/gemini-cli/docs/get-started/authentication.html"}</script>
+<!-- End Jekyll SEO tag -->
+
+    <link rel="stylesheet" href="/gemini-cli/assets/css/style.css?v=34ba8be82192e9a689f491f78e0d40212f7ad059">
+    <!-- start custom head snippets, customize with your own _includes/head-custom.html file -->
+
+<!-- Setup Google Analytics -->
+
+
+
+<!-- You can set your favicon here -->
+<!-- link rel="shortcut icon" type="image/x-icon" href="/gemini-cli/favicon.ico" -->
+
+<!-- end custom head snippets -->
+
+  </head>
+  <body>
+    <div class="container-lg px-3 my-5 markdown-body">
+      
+      <h1><a href="https://google-gemini.github.io/gemini-cli/">gemini-cli</a></h1>
+      
+
+      <h1 id="gemini-cli-authentication-setup">Gemini CLI Authentication Setup</h1>
+
+<p>Gemini CLI requires authentication using Google’s services. Before using Gemini CLI, configure <strong>one</strong> of the following authentication methods:</p>
+
+<ul>
+  <li>Interactive mode:
+    <ul>
+      <li>Recommended: Login with Google</li>
+      <li>Use Gemini API key</li>
+      <li>Use Vertex AI</li>
+    </ul>
+  </li>
+  <li>Headless (non-interactive) mode</li>
+  <li>Google Cloud Shell</li>
+</ul>
+
+<h2 id="quick-check-running-in-google-cloud-shell">Quick Check: Running in Google Cloud Shell?</h2>
+
+<p>If you are running the Gemini CLI within a Google Cloud Shell environment, authentication is typically automatic using your Cloud Shell credentials.</p>
+
+<h2 id="authenticate-in-interactive-mode">Authenticate in Interactive mode</h2>
+
+<p>When you run Gemini CLI through the command-line, Gemini CLI will provide the following options:</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="o">&gt;</span> 1. Login with Google
+<span class="o">&gt;</span> 2. Use Gemini API key
+<span class="o">&gt;</span> 3. Vertex AI
+</code></pre></div></div>
+
+<p>The following sections provide instructions for each of these authentication options.</p>
+
+<h3 id="recommended-login-with-google">Recommended: Login with Google</h3>
+
+<p>If you are running Gemini CLI on your local machine, the simplest method is logging in with your Google account.</p>
+
+<blockquote>
+  <p><strong>Important:</strong> Use this method if you are a <strong>Google AI Pro</strong> or <strong>Google AI Ultra</strong> subscriber.</p>
+</blockquote>
+
+<ol>
+  <li>
+    <p>Select <strong>Login with Google</strong>. Gemini CLI will open a login prompt using your web browser.</p>
+
+    <p>If you are a <strong>Google AI Pro</strong> or <strong>Google AI Ultra</strong> subscriber, login with the Google account associated with your subscription.</p>
+  </li>
+  <li>
+    <p>Follow the on-screen instructions. Your credentials will be cached locally for future sessions.</p>
+
+    <blockquote>
+      <p><strong>Note:</strong> This method requires a web browser on a machine that can communicate with the terminal running the CLI (e.g., your local machine). The browser will be redirected to a <code class="language-plaintext highlighter-rouge">localhost</code> URL that the CLI listens on during setup.</p>
+    </blockquote>
+  </li>
+</ol>
+
+<h4 id="optional-set-your-google_cloud_project">(Optional) Set your GOOGLE_CLOUD_PROJECT</h4>
+
+<p>When you log in using a Google account, you may be prompted to select a <code class="language-plaintext highlighter-rouge">GOOGLE_CLOUD_PROJECT</code>.</p>
+
+<p>This can be necessary if you are:</p>
+
+<ul>
+  <li>Using a Google Workspace account.</li>
+  <li>Using a Gemini Code Assist license from the Google Developer Program.</li>
+  <li>Using a license from a Gemini Code Assist subscription.</li>
+  <li>Using the product outside the <a href="https://developers.google.com/gemini-code-assist/resources/available-locations">supported regions</a> for free individual usage.</li>
+  <li>A Google account holder under the age of 18.</li>
+</ul>
+
+<p>If you fall into one of these categories, you must:</p>
+
+<ol>
+  <li>Have a Google Cloud Project ID.</li>
+  <li><a href="https://cloud.google.com/gemini/docs/discover/set-up-gemini#enable-api">Enable the Gemini for Cloud API</a>.</li>
+  <li><a href="https://cloud.google.com/gemini/docs/discover/set-up-gemini#grant-iam">Configure necessary IAM access permissions</a>.</li>
+</ol>
+
+<p>To set the project ID, export the <code class="language-plaintext highlighter-rouge">GOOGLE_CLOUD_PROJECT</code> environment variable:</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># Replace YOUR_PROJECT_ID with your actual Google Cloud Project ID</span>
+<span class="nb">export </span><span class="nv">GOOGLE_CLOUD_PROJECT</span><span class="o">=</span><span class="s2">"YOUR_PROJECT_ID"</span>
+</code></pre></div></div>
+
+<p>To make this setting persistent, see <a href="#persisting-environment-variables">Persisting Environment Variables</a>.</p>
+
+<h3 id="use-gemini-api-key">Use Gemini API Key</h3>
+
+<p>If you don’t want to authenticate using your Google account, you can use an API key from Google AI Studio.</p>
+
+<ol>
+  <li>Obtain your API key from <a href="https://aistudio.google.com/app/apikey">Google AI Studio</a>.</li>
+  <li>
+    <p>Set the <code class="language-plaintext highlighter-rouge">GEMINI_API_KEY</code> environment variable:</p>
+
+    <div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># Replace YOUR_GEMINI_API_KEY with the key from AI Studio</span>
+<span class="nb">export </span><span class="nv">GEMINI_API_KEY</span><span class="o">=</span><span class="s2">"YOUR_GEMINI_API_KEY"</span>
+</code></pre></div>    </div>
+  </li>
+</ol>
+
+<p>To make this setting persistent, see <a href="#persisting-environment-variables">Persisting Environment Variables</a>.</p>
+
+<blockquote>
+  <p><strong>Warning:</strong> Treat API keys, especially for services like Gemini, as sensitive credentials. Protect them to prevent unauthorized access and potential misuse of the service under your account.</p>
+</blockquote>
+
+<h3 id="use-vertex-ai">Use Vertex AI</h3>
+
+<p>If you intend to use Google Cloud’s Vertex AI platform, you have several authentication options:</p>
+
+<ul>
+  <li>Application Default Credentials (ADC) and <code class="language-plaintext highlighter-rouge">gcloud</code>.</li>
+  <li>A Service Account JSON key.</li>
+  <li>A Google Cloud API key.</li>
+</ul>
+
+<h4 id="first-set-required-environment-variables">First: Set required environment variables</h4>
+
+<p>Regardless of your method of authentication, you’ll typically need to set the following variables: <code class="language-plaintext highlighter-rouge">GOOGLE_CLOUD_PROJECT</code> and <code class="language-plaintext highlighter-rouge">GOOGLE_CLOUD_LOCATION</code>.</p>
+
+<p>To set these variables:</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># Replace with your project ID and desired location (e.g., us-central1)</span>
+<span class="nb">export </span><span class="nv">GOOGLE_CLOUD_PROJECT</span><span class="o">=</span><span class="s2">"YOUR_PROJECT_ID"</span>
+<span class="nb">export </span><span class="nv">GOOGLE_CLOUD_LOCATION</span><span class="o">=</span><span class="s2">"YOUR_PROJECT_LOCATION"</span>
+</code></pre></div></div>
+
+<h4 id="a-vertex-ai---application-default-credentials-adc-using-gcloud">A. Vertex AI - Application Default Credentials (ADC) using <code class="language-plaintext highlighter-rouge">gcloud</code></h4>
+
+<p>Consider this method of authentication if you have Google Cloud CLI installed.</p>
+
+<blockquote>
+  <p><strong>Note:</strong> If you have previously set <code class="language-plaintext highlighter-rouge">GOOGLE_API_KEY</code> or <code class="language-plaintext highlighter-rouge">GEMINI_API_KEY</code>, you must unset them to use ADC:</p>
+</blockquote>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nb">unset </span>GOOGLE_API_KEY GEMINI_API_KEY
+</code></pre></div></div>
+
+<ol>
+  <li>Ensure you have a Google Cloud project and Vertex AI API is enabled.</li>
+  <li>
+    <p>Log in to Google Cloud:</p>
+
+    <div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code>gcloud auth application-default login
+</code></pre></div>    </div>
+
+    <p>See <a href="https://cloud.google.com/docs/authentication/provide-credentials-adc">Set up Application Default Credentials</a> for details.</p>
+  </li>
+  <li>Ensure <code class="language-plaintext highlighter-rouge">GOOGLE_CLOUD_PROJECT</code> and <code class="language-plaintext highlighter-rouge">GOOGLE_CLOUD_LOCATION</code> are set.</li>
+</ol>
+
+<h4 id="b-vertex-ai---service-account-json-key">B. Vertex AI - Service Account JSON key</h4>
+
+<p>Consider this method of authentication in non-interactive environments, CI/CD, or if your organization restricts user-based ADC or API key creation.</p>
+
+<blockquote>
+  <p><strong>Note:</strong> If you have previously set <code class="language-plaintext highlighter-rouge">GOOGLE_API_KEY</code> or <code class="language-plaintext highlighter-rouge">GEMINI_API_KEY</code>, you must unset them:</p>
+</blockquote>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nb">unset </span>GOOGLE_API_KEY GEMINI_API_KEY
+</code></pre></div></div>
+
+<ol>
+  <li><a href="https://cloud.google.com/iam/docs/keys-create-delete">Create a service account and key</a> and download the provided JSON file. Assign the “Vertex AI User” role to the service account.</li>
+  <li>
+    <p>Set the <code class="language-plaintext highlighter-rouge">GOOGLE_APPLICATION_CREDENTIALS</code> environment variable to the JSON file’s absolute path:</p>
+
+    <div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># Replace /path/to/your/keyfile.json with the actual path</span>
+<span class="nb">export </span><span class="nv">GOOGLE_APPLICATION_CREDENTIALS</span><span class="o">=</span><span class="s2">"/path/to/your/keyfile.json"</span>
+</code></pre></div>    </div>
+  </li>
+  <li>Ensure <code class="language-plaintext highlighter-rouge">GOOGLE_CLOUD_PROJECT</code> and <code class="language-plaintext highlighter-rouge">GOOGLE_CLOUD_LOCATION</code> are set.</li>
+</ol>
+
+<blockquote>
+  <p><strong>Warning:</strong> Protect your service account key file as it provides access to your resources.</p>
+</blockquote>
+
+<h4 id="c-vertex-ai---google-cloud-api-key">C. Vertex AI - Google Cloud API key</h4>
+
+<ol>
+  <li>Obtain a Google Cloud API key: <a href="https://cloud.google.com/vertex-ai/generative-ai/docs/start/api-keys?usertype=newuser">Get an API Key</a>.</li>
+  <li>
+    <p>Set the <code class="language-plaintext highlighter-rouge">GOOGLE_API_KEY</code> environment variable:</p>
+
+    <div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># Replace YOUR_GOOGLE_API_KEY with your Vertex AI API key</span>
+<span class="nb">export </span><span class="nv">GOOGLE_API_KEY</span><span class="o">=</span><span class="s2">"YOUR_GOOGLE_API_KEY"</span>
+</code></pre></div>    </div>
+
+    <blockquote>
+      <p><strong>Note:</strong> If you see errors like <code class="language-plaintext highlighter-rouge">"API keys are not supported by this API..."</code>, your organization might restrict API key usage for this service. Try the <a href="#b-vertex-ai-service-account-json-key">Service Account JSON Key</a> or <a href="#a-vertex-ai-application-default-credentials-adc-using-gcloud">ADC</a> methods instead.</p>
+    </blockquote>
+  </li>
+</ol>
+
+<p>To make any of these Vertex AI environment variable settings persistent, see <a href="#persisting-environment-variables">Persisting Environment Variables</a>.</p>
+
+<h2 id="persisting-environment-variables">Persisting Environment Variables</h2>
+
+<p>To avoid setting environment variables in every terminal session, you can:</p>
+
+<ol>
+  <li>
+    <p><strong>Add your environment variables to your shell configuration file:</strong> Append the <code class="language-plaintext highlighter-rouge">export ...</code> commands to your shell’s startup file (e.g., <code class="language-plaintext highlighter-rouge">~/.bashrc</code>, <code class="language-plaintext highlighter-rouge">~/.zshrc</code>, or <code class="language-plaintext highlighter-rouge">~/.profile</code>) and reload your shell (e.g., <code class="language-plaintext highlighter-rouge">source ~/.bashrc</code>).</p>
+
+    <div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># Example for .bashrc</span>
+<span class="nb">echo</span> <span class="s1">'export GOOGLE_CLOUD_PROJECT="YOUR_PROJECT_ID"'</span> <span class="o">&gt;&gt;</span> ~/.bashrc
+<span class="nb">source</span> ~/.bashrc
+</code></pre></div>    </div>
+
+    <blockquote>
+      <p><strong>Warning:</strong> Be advised that when you export API keys or service account paths in your shell configuration file, any process executed from the shell can potentially read them.</p>
+    </blockquote>
+  </li>
+  <li>
+    <p><strong>Use a <code class="language-plaintext highlighter-rouge">.env</code> file:</strong> Create a <code class="language-plaintext highlighter-rouge">.gemini/.env</code> file in your project directory or home directory. Gemini CLI automatically loads variables from the first <code class="language-plaintext highlighter-rouge">.env</code> file it finds, searching up from the current directory, then in <code class="language-plaintext highlighter-rouge">~/.gemini/.env</code> or <code class="language-plaintext highlighter-rouge">~/.env</code>. <code class="language-plaintext highlighter-rouge">.gemini/.env</code> is recommended.</p>
+
+    <p>Example for user-wide settings:</p>
+
+    <div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nb">mkdir</span> <span class="nt">-p</span> ~/.gemini
+<span class="nb">cat</span> <span class="o">&gt;&gt;</span> ~/.gemini/.env <span class="o">&lt;&lt;</span><span class="sh">'</span><span class="no">EOF</span><span class="sh">'
+GOOGLE_CLOUD_PROJECT="your-project-id"
+# Add other variables like GEMINI_API_KEY as needed
+</span><span class="no">EOF
+</span></code></pre></div>    </div>
+
+    <p>Variables are loaded from the first file found, not merged.</p>
+  </li>
+</ol>
+
+<h2 id="non-interactive-mode--headless-environments">Non-interactive mode / headless environments</h2>
+
+<p>Non-interative mode / headless environments will use your existing authentication method, if an existing authentication credential is cached.</p>
+
+<p>If you have not already logged in with an authentication credential (such as a Google account), you <strong>must</strong> configure authentication using environment variables:</p>
+
+<ol>
+  <li><strong>Gemini API Key:</strong> Set <code class="language-plaintext highlighter-rouge">GEMINI_API_KEY</code>.</li>
+  <li><strong>Vertex AI:</strong>
+    <ul>
+      <li>Set <code class="language-plaintext highlighter-rouge">GOOGLE_GENAI_USE_VERTEXAI=true</code>.</li>
+      <li><strong>With Google Cloud API Key:</strong> Set <code class="language-plaintext highlighter-rouge">GOOGLE_API_KEY</code>.</li>
+      <li><strong>With ADC:</strong> Ensure ADC is configured (e.g., via a service account with <code class="language-plaintext highlighter-rouge">GOOGLE_APPLICATION_CREDENTIALS</code>) and set <code class="language-plaintext highlighter-rouge">GOOGLE_CLOUD_PROJECT</code> and <code class="language-plaintext highlighter-rouge">GOOGLE_CLOUD_LOCATION</code>.</li>
+    </ul>
+  </li>
+</ol>
+
+<p>The CLI will exit with an error in non-interactive mode if no suitable environment variables are found.</p>
+
+<h2 id="whats-next">What’s next?</h2>
+
+<p>Your authentication method affects your quotas, pricing, Terms of Service, and privacy notices. Review the following pages to learn more:</p>
+
+<ul>
+  <li><a href="/gemini-cli/docs/quota-and-pricing.html">Gemini CLI: Quotas and Pricing</a>.</li>
+  <li><a href="/gemini-cli/docs/tos-privacy.html">Gemini CLI: Terms of Service and Privacy Notice</a>.</li>
+</ul>
+
+
+      
+      <div class="footer border-top border-gray-light mt-5 pt-3 text-right text-gray">
+        This site is open source. <a href="https://github.com/google-gemini/gemini-cli/edit/main/docs/get-started/authentication.md">Improve this page</a>.
+      </div>
+      
+    </div>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/anchor-js/4.1.0/anchor.min.js" integrity="sha256-lZaRhKri35AyJSypXXs4o6OPFTbTmUoltBbDCbdzegg=" crossorigin="anonymous"></script>
+    <script>anchors.add();</script>
+  </body>
+</html>

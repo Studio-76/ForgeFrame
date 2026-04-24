@@ -1,0 +1,437 @@
+Admin API overview - Claude API Docs
+
+Cookie settings
+
+We use cookies to deliver and improve our services, analyze site usage, and if you agree, to customize or personalize your experience and market our services to you. You can read our Cookie Policy here.
+
+CustomizeCustomize Cookie SettingsRejectReject All CookiesAcceptAccept All Cookies
+
+Loading...
+
+Messages
+
+Build
+
+Admin
+
+Models & pricing
+
+Client SDKs
+
+API Reference
+
+English
+
+Log in
+
+Search...
+
+⌘K
+
+Administration
+
+Admin API overviewWorkspacesData residencyAPI and data retention
+
+Monitoring
+
+Claude Code Analytics APIUsage and Cost API
+
+3rd-party platforms
+
+Amazon BedrockAmazon Bedrock (legacy)Microsoft FoundryVertex AI
+
+Console
+
+Log in
+
+Administration
+
+Admin API overview
+
+Loading...
+
+Loading...
+
+Loading...
+
+Loading...
+
+Loading...
+
+Loading...
+
+Loading...
+
+Loading...
+
+Loading...
+
+Loading...
+
+Loading...
+
+Loading...
+
+Loading...
+
+Loading...
+
+Loading...
+
+Loading...
+
+Solutions
+
+AI agents
+
+Code modernization
+
+Coding
+
+Customer support
+
+Education
+
+Financial services
+
+Government
+
+Life sciences
+
+Partners
+
+Amazon Bedrock
+
+Google Cloud's Vertex AI
+
+Learn
+
+Blog
+
+Courses
+
+Use cases
+
+Connectors
+
+Customer stories
+
+Engineering at Anthropic
+
+Events
+
+Powered by Claude
+
+Service partners
+
+Startups program
+
+Company
+
+Anthropic
+
+Careers
+
+Economic Futures
+
+Research
+
+News
+
+Responsible Scaling Policy
+
+Security and compliance
+
+Transparency
+
+Learn
+
+Blog
+
+Courses
+
+Use cases
+
+Connectors
+
+Customer stories
+
+Engineering at Anthropic
+
+Events
+
+Powered by Claude
+
+Service partners
+
+Startups program
+
+Help and security
+
+Availability
+
+Status
+
+Support
+
+Discord
+
+Terms and policies
+
+Privacy policy
+
+Responsible disclosure policy
+
+Terms of service: Commercial
+
+Terms of service: Consumer
+
+Usage policy
+
+Administration
+
+Admin API overview
+
+Copy page
+
+Copy page
+
+The Admin API is unavailable for individual accounts. To collaborate with teammates and add members, set up your organization in Console → Settings → Organization.
+
+The Admin API allows you to programmatically manage your organization's resources, including organization members, workspaces, and API keys. This provides programmatic control over administrative tasks that would otherwise require manual configuration in the Claude Console.
+
+The Admin API requires special access
+
+The Admin API requires a special Admin API key (starting with sk-ant-admin...) that differs from standard API keys. Only organization members with the admin role can provision Admin API keys through the Claude Console.
+
+How the Admin API works
+
+When you use the Admin API:
+
+You make requests using your Admin API key in the x-api-key header
+
+The API allows you to manage:
+
+Organization members and their roles
+
+Organization member invites
+
+Workspaces and their members
+
+API keys
+
+This is useful for:
+
+Automating user onboarding/offboarding
+
+Programmatically managing workspace access
+
+Monitoring and managing API key usage
+
+Organization roles and permissions
+
+There are five organization-level roles. See more details in the API Console roles and permissions article.
+
+RolePermissions
+
+userCan use Workbench
+
+claude_code_userCan use Workbench and Claude Code
+
+developerCan use Workbench and manage API keys
+
+billingCan use Workbench and manage billing details
+
+adminCan do all of the above, plus manage users
+
+Key concepts
+
+Organization Members
+
+You can list organization members, update member roles, and remove members.
+
+cURL
+
+# List organization members
+curl "https://api.anthropic.com/v1/organizations/users?limit=10" \
+ --header "anthropic-version: 2023-06-01" \
+ --header "x-api-key: $ANTHROPIC_ADMIN_KEY"
+
+# Update member role
+curl "https://api.anthropic.com/v1/organizations/users/{user_id}" \
+ --header "anthropic-version: 2023-06-01" \
+ --header "x-api-key: $ANTHROPIC_ADMIN_KEY" \
+ --data '{"role": "developer"}'
+
+# Remove member
+curl --request DELETE "https://api.anthropic.com/v1/organizations/users/{user_id}" \
+ --header "anthropic-version: 2023-06-01" \
+ --header "x-api-key: $ANTHROPIC_ADMIN_KEY"
+
+Organization Invites
+
+You can invite users to organizations and manage those invites.
+
+cURL
+
+# Create invite
+curl --request POST "https://api.anthropic.com/v1/organizations/invites" \
+ --header "anthropic-version: 2023-06-01" \
+ --header "x-api-key: $ANTHROPIC_ADMIN_KEY" \
+ --data '{
+ "email": "[email protected]",
+ "role": "developer"
+ }'
+
+# List invites
+curl "https://api.anthropic.com/v1/organizations/invites?limit=10" \
+ --header "anthropic-version: 2023-06-01" \
+ --header "x-api-key: $ANTHROPIC_ADMIN_KEY"
+
+# Delete invite
+curl --request DELETE "https://api.anthropic.com/v1/organizations/invites/{invite_id}" \
+ --header "anthropic-version: 2023-06-01" \
+ --header "x-api-key: $ANTHROPIC_ADMIN_KEY"
+
+Workspaces
+
+For a comprehensive guide to workspaces, including Console and API examples, see Workspaces.
+
+Workspace Members
+
+Manage user access to specific workspaces:
+
+cURL
+
+# Add member to workspace
+curl --request POST "https://api.anthropic.com/v1/organizations/workspaces/{workspace_id}/members" \
+ --header "anthropic-version: 2023-06-01" \
+ --header "x-api-key: $ANTHROPIC_ADMIN_KEY" \
+ --data '{
+ "user_id": "user_xxx",
+ "workspace_role": "workspace_developer"
+ }'
+
+# List workspace members
+curl "https://api.anthropic.com/v1/organizations/workspaces/{workspace_id}/members?limit=10" \
+ --header "anthropic-version: 2023-06-01" \
+ --header "x-api-key: $ANTHROPIC_ADMIN_KEY"
+
+# Update member role
+curl --request POST "https://api.anthropic.com/v1/organizations/workspaces/{workspace_id}/members/{user_id}" \
+ --header "anthropic-version: 2023-06-01" \
+ --header "x-api-key: $ANTHROPIC_ADMIN_KEY" \
+ --data '{
+ "workspace_role": "workspace_admin"
+ }'
+
+# Remove member from workspace
+curl --request DELETE "https://api.anthropic.com/v1/organizations/workspaces/{workspace_id}/members/{user_id}" \
+ --header "anthropic-version: 2023-06-01" \
+ --header "x-api-key: $ANTHROPIC_ADMIN_KEY"
+
+API Keys
+
+Monitor and manage API keys:
+
+cURL
+
+# List API keys
+curl "https://api.anthropic.com/v1/organizations/api_keys?limit=10&status=active&workspace_id=wrkspc_xxx" \
+ --header "anthropic-version: 2023-06-01" \
+ --header "x-api-key: $ANTHROPIC_ADMIN_KEY"
+
+# Update API key
+curl --request POST "https://api.anthropic.com/v1/organizations/api_keys/{api_key_id}" \
+ --header "anthropic-version: 2023-06-01" \
+ --header "x-api-key: $ANTHROPIC_ADMIN_KEY" \
+ --data '{
+ "status": "inactive",
+ "name": "New Key Name"
+ }'
+
+Accessing organization info
+
+Get information about your organization programmatically with the /v1/organizations/me endpoint.
+
+For example:
+
+cURL
+
+curl "https://api.anthropic.com/v1/organizations/me" \
+ --header "anthropic-version: 2023-06-01" \
+ --header "x-api-key: $ADMIN_API_KEY"
+
+{
+ "id": "12345678-1234-5678-1234-567812345678",
+ "type": "organization",
+ "name": "Organization Name"
+}
+
+This endpoint is useful for programmatically determining which organization an Admin API key belongs to.
+
+For complete parameter details and response schemas, see the Organization Info API reference.
+
+Usage and cost reports
+
+Track your organization's usage and costs with the Usage and Cost API.
+
+Claude Code analytics
+
+Monitor developer productivity and Claude Code adoption with the Claude Code Analytics API.
+
+Best practices
+
+To effectively use the Admin API:
+
+Use meaningful names and descriptions for workspaces and API keys
+
+Implement proper error handling for failed operations
+
+Regularly audit member roles and permissions
+
+Clean up unused workspaces and expired invites
+
+Monitor API key usage and rotate keys periodically
+
+FAQ
+
+What permissions are needed to use the Admin API?
+
+Can I create new API keys through the Admin API?
+
+What happens to API keys when removing a user?
+
+Can organization admins be removed via the API?
+
+How long do organization invites last?
+
+For workspace-specific questions, see the Workspaces FAQ.
+
+Was this page helpful?
+
+How the Admin API works
+
+Organization roles and permissions
+
+Key concepts
+
+Organization Members
+
+Organization Invites
+
+Workspaces
+
+Workspace Members
+
+API Keys
+
+Accessing organization info
+
+Usage and cost reports
+
+Claude Code analytics
+
+Best practices
+
+FAQ

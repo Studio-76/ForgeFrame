@@ -1,0 +1,1081 @@
+# API-Perplexity.md
+
+> Reverse-engineered from the accessible source snapshots of `DaCHRIS/code-proxy` and `DaCHRIS/hermes-agent` on 2026-04-24.  
+> This describes implementation-relevant behavior found in those repos. It is not a statement that every flow is officially supported by the upstream vendor. Treat OAuth/account-token integrations especially carefully and verify vendor terms before production use.
+
+## Provider
+
+- Hermes Provider-ID: `perplexity`
+- Anzeige: Perplexity
+- Typ: OpenAI-kompatibel
+- Base URL: `https://api.perplexity.ai/v1 bzw. base https://api.perplexity.ai`
+- Auth: Bearer API key
+
+## Grundschema
+
+Soweit der Provider OpenAI-kompatibel ist:
+
+```http
+POST <base_url>/chat/completions
+Authorization: Bearer <token>
+Content-Type: application/json
+```
+
+Wenn die Base URL bereits auf `/v1` endet, wird direkt `/chat/completions` angehaengt. Im code-proxy-Generic-Provider wird dagegen intern immer `<baseURL>/v1/chat/completions` gebaut; dort muss `baseURL` entsprechend ohne `/v1` gesetzt sein.
+
+## Modellformat
+
+Nur als inferBaseURL in code-proxy sichtbar.
+
+## ForgeFrame-Adapterhinweise
+
+- Felder: `provider_id`, `base_url`, `api_key_env_vars`, `auth_type`, `model_normalization`, `api_mode`.
+- Fuer Aggregatoren (`openrouter`, `nous`, `ai-gateway`, `kilocode`) Vendor-Slugs erhalten oder automatisch ergaenzen.
+- Fuer native Provider wie Anthropic, Copilot, DeepSeek oder OpenCode Sonderregeln aus `model_normalize.py` beachten.
+- Streaming als SSE `data:` implementieren, Non-Streaming als OpenAI-Response normalisieren.
+
+---
+
+## Offizielle Dokumentationsanreicherung: `OpenAI/API/Perplexity`
+
+> Ergänzt am 2026-04-24 03:20:42. Quelle ist das bereitgestellte `reference.zip`. Die zugehörigen `.txt`- und `.md`-Dateien wurden vollständig eingelesen. Für sehr große Textanlagen wird der Volltext in dieser ZIP-Fassung auf 40.000 Zeichen je Quelldatei begrenzt; die implementierungsrelevanten Extrakte oben bleiben vollständig aus allen Dateien erzeugt.
+
+### Offizieller Quellenindex aus Referenz-ZIP
+
+# Index – Perplexity
+
+Abrufdatum: `2026-04-24T05:05:37.927618+02:00`
+
+## Geladene Dokumente
+
+### OpenAI SDK Compatibility - Perplexity
+- Quelle: Pflichtquelle
+- Original-URL: https://docs.perplexity.ai/docs/sonar/openai-compatibility
+- Bereinigte Download-URL: https://docs.perplexity.ai/docs/sonar/openai-compatibility
+- Lokale Datei(en): HTML: `sonar-openai-compatibility.html`, Text: `sonar-openai-compatibility.txt`
+- Abrufdatum: `2026-04-24T05:05:37.927618+02:00`
+- Zweck: Perplexity Sonar OpenAI compatibility
+- Download-Werkzeug: `urllib`
+- HTTP-Status: `200`
+- Inhaltstyp: `text/html; charset=utf-8`
+- Hinweise: Seite wirkt teilweise clientseitig gerendert; Snapshot ist best effort.
+
+### Erkannte URLs und Basisadressen
+
+- `https://docs.perplexity.ai/docs/sonar/openai-compatibility`
+- `https://api.perplexity.ai`
+- `https://api.perplexity.ai:`
+- `https://example.com/ai-news`
+
+### Erkannte Endpunkte / Pfade
+
+- `POST /v1/sonar`
+- `POST /chat/completions`
+- `/chat/completions`
+- `POST /v1/sonarPOST`
+- `/chat/completionsBoth`
+- `POST /v1/async/sonarPOST`
+- `/async/chat/completionsBoth`
+- `/v1/sonar`
+
+### Erkannte Umgebungsvariablen / Konstanten
+
+- `POST`
+- `PERPLEXITY_API_KEY`
+
+### Implementierungsrelevante offizielle Extrakte
+
+
+---
+
+**Quelle `INDEX.md`**
+
+### OpenAI SDK Compatibility - Perplexity
+- Quelle: Pflichtquelle
+
+---
+
+**Quelle `INDEX.md`**
+
+- Quelle: Pflichtquelle
+- Original-URL: https://docs.perplexity.ai/docs/sonar/openai-compatibility
+- Bereinigte Download-URL: https://docs.perplexity.ai/docs/sonar/openai-compatibility
+
+---
+
+**Quelle `INDEX.md`**
+
+- Original-URL: https://docs.perplexity.ai/docs/sonar/openai-compatibility
+- Bereinigte Download-URL: https://docs.perplexity.ai/docs/sonar/openai-compatibility
+- Lokale Datei(en): HTML: `sonar-openai-compatibility.html`, Text: `sonar-openai-compatibility.txt`
+
+---
+
+**Quelle `INDEX.md`**
+
+- Bereinigte Download-URL: https://docs.perplexity.ai/docs/sonar/openai-compatibility
+- Lokale Datei(en): HTML: `sonar-openai-compatibility.html`, Text: `sonar-openai-compatibility.txt`
+- Abrufdatum: `2026-04-24T05:05:37.927618+02:00`
+
+---
+
+**Quelle `INDEX.md`**
+
+- Abrufdatum: `2026-04-24T05:05:37.927618+02:00`
+- Zweck: Perplexity Sonar OpenAI compatibility
+- Download-Werkzeug: `urllib`
+
+---
+
+**Quelle `sonar-openai-compatibility.txt`**
+
+OpenAI SDK Compatibility - Perplexity
+
+---
+
+**Quelle `sonar-openai-compatibility.txt`**
+
+OpenAI SDK Compatibility
+
+---
+
+**Quelle `sonar-openai-compatibility.txt`**
+
+Tools & Integrations
+
+---
+
+**Quelle `sonar-openai-compatibility.txt`**
+
+Perplexity SDK
+
+---
+
+**Quelle `sonar-openai-compatibility.txt`**
+
+Models & Configuration
+
+---
+
+**Quelle `sonar-openai-compatibility.txt`**
+
+OpenAI Compatibility
+
+---
+
+**Quelle `sonar-openai-compatibility.txt`**
+
+Models
+
+---
+
+**Quelle `sonar-openai-compatibility.txt`**
+
+Embeddings API
+
+---
+
+**Quelle `sonar-openai-compatibility.txt`**
+
+Standard Embeddings
+
+---
+
+**Quelle `sonar-openai-compatibility.txt`**
+
+Contextualized Embeddings
+
+---
+
+**Quelle `sonar-openai-compatibility.txt`**
+
+API Groups & Billing
+
+---
+
+**Quelle `sonar-openai-compatibility.txt`**
+
+API Key Management
+
+---
+
+**Quelle `sonar-openai-compatibility.txt`**
+
+Rate Limits & Usage Tiers
+
+---
+
+**Quelle `sonar-openai-compatibility.txt`**
+
+Setting Up the OpenAI SDK
+
+---
+
+**Quelle `sonar-openai-compatibility.txt`**
+
+Basic Usage
+
+---
+
+**Quelle `sonar-openai-compatibility.txt`**
+
+Streaming
+
+---
+
+**Quelle `sonar-openai-compatibility.txt`**
+
+Standard OpenAI Parameters
+
+---
+
+**Quelle `sonar-openai-compatibility.txt`**
+
+Endpoint Mapping
+
+---
+
+**Quelle `sonar-openai-compatibility.txt`**
+
+Standard OpenAI Fields
+
+---
+
+**Quelle `sonar-openai-compatibility.txt`**
+
+Recommended: Perplexity SDK
+
+---
+
+**Quelle `sonar-openai-compatibility.txt`**
+
+Use OpenAI SDKs with the Sonar API by changing the base URL and API key
+
+---
+
+**Quelle `sonar-openai-compatibility.txt`**
+
+Perplexity’s Sonar API is fully compatible with OpenAI’s Chat Completions format. You can use your existing OpenAI client libraries with the Sonar API by simply changing the base URL and providing your Perplexity API key.
+
+---
+
+**Quelle `sonar-openai-compatibility.txt`**
+
+Endpoint Note: Perplexity’s canonical Sonar API endpoint is POST /v1/sonar. For OpenAI SDK compatibility, POST /chat/completions is also accepted as an alias — the OpenAI SDK automatically routes client.chat.completions.create() to /chat/completions, which Perplexity handles seamlessly. No SDK changes are needed beyond setting the base URL.
+
+---
+
+**Quelle `sonar-openai-compatibility.txt`**
+
+We recommend using the Perplexity SDK for the best experience with full type safety, enhanced features, and preset support. Use OpenAI SDKs if you’re already integrated and need drop-in compatibility.
+
+---
+
+**Quelle `sonar-openai-compatibility.txt`**
+
+Use the OpenAI SDK with Perplexity’s Sonar API:
+
+---
+
+**Quelle `sonar-openai-compatibility.txt`**
+
+import os
+from openai import OpenAI
+
+---
+
+**Quelle `sonar-openai-compatibility.txt`**
+
+client = OpenAI(
+ api_key=os.environ.get("PERPLEXITY_API_KEY"),
+
+---
+
+**Quelle `sonar-openai-compatibility.txt`**
+
+api_key=os.environ.get("PERPLEXITY_API_KEY"),
+ base_url="https://api.perplexity.ai"
+)
+
+---
+
+**Quelle `sonar-openai-compatibility.txt`**
+
+completion = client.chat.completions.create(
+ model="sonar-pro",
+
+---
+
+**Quelle `sonar-openai-compatibility.txt`**
+
+import OpenAI from 'openai';
+
+---
+
+**Quelle `sonar-openai-compatibility.txt`**
+
+const client = new OpenAI({
+ apiKey: process.env.PERPLEXITY_API_KEY,
+
+---
+
+**Quelle `sonar-openai-compatibility.txt`**
+
+apiKey: process.env.PERPLEXITY_API_KEY,
+ baseURL: "https://api.perplexity.ai"
+});
+
+---
+
+**Quelle `sonar-openai-compatibility.txt`**
+
+const completion = await client.chat.completions.create({
+ model: "sonar-pro",
+
+---
+
+**Quelle `sonar-openai-compatibility.txt`**
+
+Configure OpenAI SDKs to work with Perplexity by setting the base_url to https://api.perplexity.ai:
+
+---
+
+**Quelle `sonar-openai-compatibility.txt`**
+
+Important: Use base_url="https://api.perplexity.ai" for the Sonar API.
+
+---
+
+**Quelle `sonar-openai-compatibility.txt`**
+
+Perplexity’s Sonar API is fully compatible with OpenAI’s Chat Completions interface.
+
+---
+
+**Quelle `sonar-openai-compatibility.txt`**
+
+Streaming works exactly like OpenAI’s API:
+
+---
+
+**Quelle `sonar-openai-compatibility.txt`**
+
+stream = client.chat.completions.create(
+ model="sonar-pro",
+
+---
+
+**Quelle `sonar-openai-compatibility.txt`**
+
+],
+ stream=True
+)
+
+---
+
+**Quelle `sonar-openai-compatibility.txt`**
+
+for chunk in stream:
+ if chunk.choices[0].delta.content:
+
+### Code-/Konfigurationsbeispiele aus offiziellen Dokumenten
+
+
+---
+
+**Quelle `sonar-openai-compatibility.txt`**
+
+````text
+api_key=os.environ.get("PERPLEXITY_API_KEY"),
+````
+
+---
+
+**Quelle `sonar-openai-compatibility.txt`**
+
+````text
+base_url="https://api.perplexity.ai"
+````
+
+---
+
+**Quelle `sonar-openai-compatibility.txt`**
+
+````text
+Configure OpenAI SDKs to work with Perplexity by setting the base_url to https://api.perplexity.ai:
+````
+
+---
+
+**Quelle `sonar-openai-compatibility.txt`**
+
+````text
+Important: Use base_url="https://api.perplexity.ai" for the Sonar API.
+````
+
+---
+
+**Quelle `sonar-openai-compatibility.txt`**
+
+````text
+When using the OpenAI SDK, client.chat.completions.create() sends requests to /chat/completions. Perplexity accepts this path as an alias for /v1/sonar, so no SDK configuration changes are needed beyond base_url.
+````
+
+---
+
+**Quelle `sonar-openai-compatibility.txt`**
+
+````text
+base_url="https://api.perplexity.ai" # Correct
+````
+
+## Textanlagen aus der offiziellen Dokumentation
+
+
+<details>
+<summary>Textanlage: <code>OpenAI/API/Perplexity/sonar-openai-compatibility.txt</code></summary>
+
+````text
+OpenAI SDK Compatibility - Perplexity
+
+Skip to main content
+
+Perplexity home page
+
+Docs
+
+Cookbook
+
+API Reference
+
+Search...
+
+Navigation
+
+Features
+
+OpenAI SDK Compatibility
+
+Search
+
+⌘K
+
+Community
+
+Blog
+
+Changelog
+
+Getting Started
+
+Overview
+
+Quickstart
+
+Pricing
+
+Tools & Integrations
+
+Perplexity SDK
+
+Quickstart
+
+Guides
+
+Agent API
+
+Quickstart
+
+Models & Configuration
+
+Features
+
+OpenAI Compatibility
+
+Search API
+
+Quickstart
+
+Filters
+
+Best Practices
+
+Sonar API
+
+Quickstart
+
+Models
+
+Features
+
+Core Features
+
+Search Filters
+
+Media & Attachments
+
+Pro Search
+
+OpenAI SDK Compatibility
+
+Embeddings API
+
+Quickstart
+
+Standard Embeddings
+
+Contextualized Embeddings
+
+Best Practices
+
+Admin & Management
+
+API Groups & Billing
+
+API Key Management
+
+Rate Limits & Usage Tiers
+
+AWS Marketplace
+
+Resources
+
+API Roadmap
+
+Privacy & Security
+
+Frequently Asked Questions
+
+System Status
+
+Changelog
+
+Get in Touch
+
+Perplexity Crawlers
+
+On this page
+
+Overview
+
+Quick Start
+
+Configuration
+
+Setting Up the OpenAI SDK
+
+Basic Usage
+
+Streaming
+
+Perplexity-Specific Parameters
+
+API Compatibility
+
+Standard OpenAI Parameters
+
+Perplexity-Specific Parameters
+
+Endpoint Mapping
+
+Response Structure
+
+Standard OpenAI Fields
+
+Perplexity-Specific Fields
+
+Best Practices
+
+Recommended: Perplexity SDK
+
+Next Steps
+
+Features
+
+OpenAI SDK Compatibility
+
+Copy page
+
+Use OpenAI SDKs with the Sonar API by changing the base URL and API key
+
+Copy page
+
+​
+
+Overview
+
+Perplexity’s Sonar API is fully compatible with OpenAI’s Chat Completions format. You can use your existing OpenAI client libraries with the Sonar API by simply changing the base URL and providing your Perplexity API key.
+
+Endpoint Note: Perplexity’s canonical Sonar API endpoint is POST /v1/sonar. For OpenAI SDK compatibility, POST /chat/completions is also accepted as an alias — the OpenAI SDK automatically routes client.chat.completions.create() to /chat/completions, which Perplexity handles seamlessly. No SDK changes are needed beyond setting the base URL.
+
+We recommend using the Perplexity SDK for the best experience with full type safety, enhanced features, and preset support. Use OpenAI SDKs if you’re already integrated and need drop-in compatibility.
+
+​
+
+Quick Start
+
+Use the OpenAI SDK with Perplexity’s Sonar API:
+
+ Python
+
+ TypeScript
+
+import os
+from openai import OpenAI
+
+client = OpenAI(
+ api_key=os.environ.get("PERPLEXITY_API_KEY"),
+ base_url="https://api.perplexity.ai"
+)
+
+completion = client.chat.completions.create(
+ model="sonar-pro",
+ messages=[
+ {"role": "user", "content": "What breakthroughs in fusion energy have been announced this year?"}
+ ]
+)
+
+print(completion.choices[0].message.content)
+
+import OpenAI from 'openai';
+
+const client = new OpenAI({
+ apiKey: process.env.PERPLEXITY_API_KEY,
+ baseURL: "https://api.perplexity.ai"
+});
+
+const completion = await client.chat.completions.create({
+ model: "sonar-pro",
+ messages: [
+ { role: "user", content: "What breakthroughs in fusion energy have been announced this year?" }
+ ]
+});
+
+console.log(completion.choices[0].message.content);
+
+​
+
+Configuration
+
+​
+
+Setting Up the OpenAI SDK
+
+Configure OpenAI SDKs to work with Perplexity by setting the base_url to https://api.perplexity.ai:
+
+ Python
+
+ TypeScript
+
+import os
+from openai import OpenAI
+
+client = OpenAI(
+ api_key=os.environ.get("PERPLEXITY_API_KEY"),
+ base_url="https://api.perplexity.ai"
+)
+
+import OpenAI from 'openai';
+
+const client = new OpenAI({
+ apiKey: process.env.PERPLEXITY_API_KEY,
+ baseURL: "https://api.perplexity.ai"
+});
+
+Important: Use base_url="https://api.perplexity.ai" for the Sonar API.
+
+​
+
+Basic Usage
+
+Perplexity’s Sonar API is fully compatible with OpenAI’s Chat Completions interface.
+
+ Python
+
+ TypeScript
+
+import os
+from openai import OpenAI
+
+client = OpenAI(
+ api_key=os.environ.get("PERPLEXITY_API_KEY"),
+ base_url="https://api.perplexity.ai"
+)
+
+completion = client.chat.completions.create(
+ model="sonar-pro",
+ messages=[
+ {"role": "user", "content": "What breakthroughs in fusion energy have been announced this year?"}
+ ]
+)
+
+print(completion.choices[0].message.content)
+
+import OpenAI from 'openai';
+
+const client = new OpenAI({
+ apiKey: process.env.PERPLEXITY_API_KEY,
+ baseURL: "https://api.perplexity.ai"
+});
+
+const completion = await client.chat.completions.create({
+ model: "sonar-pro",
+ messages: [
+ { role: "user", content: "What breakthroughs in fusion energy have been announced this year?" }
+ ]
+});
+
+console.log(completion.choices[0].message.content);
+
+​
+
+Streaming
+
+Streaming works exactly like OpenAI’s API:
+
+ Python
+
+ TypeScript
+
+import os
+from openai import OpenAI
+
+client = OpenAI(
+ api_key=os.environ.get("PERPLEXITY_API_KEY"),
+ base_url="https://api.perplexity.ai"
+)
+
+stream = client.chat.completions.create(
+ model="sonar-pro",
+ messages=[
+ {"role": "user", "content": "What breakthroughs in fusion energy have been announced this year?"}
+ ],
+ stream=True
+)
+
+for chunk in stream:
+ if chunk.choices[0].delta.content:
+ print(chunk.choices[0].delta.content, end="", flush=True)
+
+import OpenAI from 'openai';
+
+const client = new OpenAI({
+ apiKey: process.env.PERPLEXITY_API_KEY,
+ baseURL: "https://api.perplexity.ai"
+});
+
+const stream = await client.chat.completions.create({
+ model: "sonar-pro",
+ messages: [
+ { role: "user", content: "What breakthroughs in fusion energy have been announced this year?" }
+ ],
+ stream: true
+});
+
+for await (const chunk of stream) {
+ if (chunk.choices[0]?.delta?.content) {
+ process.stdout.write(chunk.choices[0].delta.content);
+ }
+}
+
+​
+
+Perplexity-Specific Parameters
+
+Add Perplexity-specific search parameters using extra_body (Python) or direct parameters (TypeScript):
+
+ Python
+
+ TypeScript
+
+import os
+from openai import OpenAI
+
+client = OpenAI(
+ api_key=os.environ.get("PERPLEXITY_API_KEY"),
+ base_url="https://api.perplexity.ai"
+)
+
+completion = client.chat.completions.create(
+ model="sonar-pro",
+ messages=[
+ {"role": "user", "content": "Latest climate research findings"}
+ ],
+ extra_body={
+ "search_domain_filter": ["nature.com", "science.org"],
+ "search_recency_filter": "month"
+ }
+)
+
+print(completion.choices[0].message.content)
+print(f"Sources: {len(completion.search_results)} articles found")
+
+import OpenAI from 'openai';
+
+const client = new OpenAI({
+ apiKey: process.env.PERPLEXITY_API_KEY,
+ baseURL: "https://api.perplexity.ai"
+});
+
+const completion = await client.chat.completions.create({
+ model: "sonar-pro",
+ messages: [
+ { role: "user", content: "Latest climate research findings" }
+ ],
+ search_domain_filter: ["nature.com", "science.org"],
+ search_recency_filter: "month"
+} as any);
+
+console.log(completion.choices[0].message.content);
+console.log(`Sources: ${(completion as any).search_results.length} articles found`);
+
+​
+
+API Compatibility
+
+​
+
+Standard OpenAI Parameters
+
+These parameters work exactly the same as OpenAI’s API:
+
+model - Model name (use Perplexity model names like sonar-pro)
+
+messages - Chat messages array
+
+max_tokens - Maximum tokens in response
+
+stream - Enable streaming responses
+
+temperature - Response randomness (0-2)
+
+top_p - Nucleus sampling parameter
+
+response_format - Response format specification
+
+​
+
+Perplexity-Specific Parameters
+
+Sonar API supports additional search and response parameters:
+
+search_domain_filter - Limit or exclude specific domains
+
+search_recency_filter - Filter by content recency (“day”, “week”, “month”, “year”)
+
+return_images - Include image URLs in response
+
+return_related_questions - Include related questions
+
+search_mode - “web” (default) or “academic” mode selector
+
+enable_search_classifier - Let AI decide when to search
+
+disable_search - Turn off web search completely
+
+See Sonar API Reference for complete parameter details.
+
+​
+
+Endpoint Mapping
+
+MethodPerplexity EndpointOpenAI EquivalentNotes
+
+client.chat.completions.create()POST /v1/sonarPOST /chat/completionsBoth paths accepted by Perplexity for compatibility
+
+client.async_.chat.completions.create()POST /v1/async/sonarPOST /async/chat/completionsBoth paths accepted by Perplexity for compatibility
+
+When using the OpenAI SDK, client.chat.completions.create() sends requests to /chat/completions. Perplexity accepts this path as an alias for /v1/sonar, so no SDK configuration changes are needed beyond base_url.
+
+​
+
+Response Structure
+
+Perplexity responses match OpenAI’s format exactly, with additional fields:
+
+​
+
+Standard OpenAI Fields
+
+choices[0].message.content - The AI-generated response
+
+model - The model name used
+
+usage - Token consumption details
+
+id, created, object - Standard response metadata
+
+​
+
+Perplexity-Specific Fields
+
+search_results - Array of web sources with title, url, and date
+
+citations - Array of citation URLs referenced in the response
+
+Example Response:
+
+{
+ "id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+ "model": "sonar-pro",
+ "created": 1234567890,
+ "choices": [
+ {
+ "index": 0,
+ "message": {
+ "role": "assistant",
+ "content": "The latest developments in AI include..."
+ },
+ "finish_reason": "stop"
+ }
+ ],
+ "usage": {
+ "prompt_tokens": 12,
+ "completion_tokens": 315,
+ "total_tokens": 327
+ },
+ "search_results": [
+ {
+ "title": "Latest AI Developments",
+ "url": "https://example.com/ai-news",
+ "date": "2025-02-01"
+ }
+ ],
+ "citations": [
+ "https://example.com/ai-news"
+ ]
+}
+
+​
+
+Best Practices
+
+1
+
+Use the correct base URL
+
+Always use https://api.perplexity.ai for the Sonar API.
+
+client = OpenAI(
+ api_key=os.environ.get("PERPLEXITY_API_KEY"),
+ base_url="https://api.perplexity.ai" # Correct
+)
+
+2
+
+Handle errors gracefully
+
+Use the OpenAI SDK’s error handling:
+
+import os
+from openai import OpenAI, APIError, RateLimitError
+
+client = OpenAI(
+ api_key=os.environ.get("PERPLEXITY_API_KEY"),
+ base_url="https://api.perplexity.ai"
+)
+
+try:
+ completion = client.chat.completions.create(
+ model="sonar-pro",
+ messages=[{"role": "user", "content": "Hello"}]
+ )
+except RateLimitError:
+ print("Rate limit exceeded, please retry later")
+except APIError as e:
+ print(f"API error: {e.message}")
+
+3
+
+Use streaming for better UX
+
+Stream responses for real-time user experience:
+
+stream = client.chat.completions.create(
+ model="sonar-pro",
+ messages=[{"role": "user", "content": "Long query..."}],
+ stream=True
+)
+
+for chunk in stream:
+ if chunk.choices[0].delta.content:
+ print(chunk.choices[0].delta.content, end="", flush=True)
+
+4
+
+Access search results
+
+Use the search_results field to get accurate source URLs:
+
+completion = client.chat.completions.create(
+ model="sonar-pro",
+ messages=[{"role": "user", "content": "Latest AI news"}]
+)
+
+# Access search results
+for result in completion.search_results:
+ print(f"{result['title']}: {result['url']}")
+
+​
+
+Recommended: Perplexity SDK
+
+We recommend using Perplexity’s native SDKs for the best developer experience:
+
+Type safety - Full TypeScript/Python type definitions for all parameters
+
+Enhanced features - Direct access to all Perplexity-specific features
+
+Better error messages - Perplexity-specific error handling
+
+Simpler setup - No need to configure base URLs
+
+See the Perplexity SDK Guide for details.
+
+​
+
+Next Steps
+
+Sonar Quickstart
+
+Get started with Sonar API using OpenAI SDKs.
+
+Sonar API Features
+
+Learn best practices for prompting and using the Sonar API.
+
+API Reference
+
+View complete API documentation for the Sonar endpoint.
+
+Search Filters
+
+Learn how to control search behavior with filters and parameters.
+
+Was this page helpful?
+
+YesNo
+
+Pro Search Classifier
+
+Previous
+
+Embeddings API
+
+Next
+
+⌘I
+
+xdiscordwebsite
+
+Powered byThis documentation is built and hosted on Mintlify, a developer documentation platform
+
+Assistant
+
+Responses are generated using AI and may contain mistakes.
+
+Suggestions
+What is the Agent API?Which Agent API model should I use?How do I create an API key?
+````
+
+</details>

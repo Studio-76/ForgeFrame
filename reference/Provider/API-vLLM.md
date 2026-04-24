@@ -1,0 +1,9361 @@
+# API-vLLM
+
+> Neu erzeugt aus offiziellen Referenzdokumentationen. Falls kein Reverse-Engineering-Dokument vorhanden war, enthält diese Datei primär offizielle Schnittstelleninformationen und Implementierungshinweise.
+
+
+---
+
+## Offizielle Dokumentationsanreicherung: `OpenAI/API/vLLM`
+
+> Ergänzt am 2026-04-24 03:20:42. Quelle ist das bereitgestellte `reference.zip`. Die zugehörigen `.txt`- und `.md`-Dateien wurden vollständig eingelesen. Für sehr große Textanlagen wird der Volltext in dieser ZIP-Fassung auf 40.000 Zeichen je Quelldatei begrenzt; die implementierungsrelevanten Extrakte oben bleiben vollständig aus allen Dateien erzeugt.
+
+### Offizieller Quellenindex aus Referenz-ZIP
+
+# Index – vLLM
+
+Abrufdatum: `2026-04-24T05:05:37.927618+02:00`
+
+## Geladene Dokumente
+
+### OpenAI-Compatible Server - vLLM
+- Quelle: Pflichtquelle
+- Original-URL: https://docs.vllm.ai/en/stable/serving/openai_compatible_server/
+- Bereinigte Download-URL: https://docs.vllm.ai/en/stable/serving/openai_compatible_server/
+- Lokale Datei(en): HTML: `openai-compatible-server.html`, Text: `openai-compatible-server.txt`
+- Abrufdatum: `2026-04-24T05:05:37.927618+02:00`
+- Zweck: vLLM OpenAI compatible server
+- Download-Werkzeug: `urllib`
+- HTTP-Status: `200`
+- Inhaltstyp: `text/html; charset=utf-8`
+- Hinweise: Seite wirkt teilweise clientseitig gerendert; Snapshot ist best effort.
+
+### Erkannte URLs und Basisadressen
+
+- `https://docs.vllm.ai/en/stable/serving/openai_compatible_server/`
+- `http://localhost:8000/v1`
+- `http://localhost:8000/v1/audio/transcriptions`
+- `https://en.wikipedia.org/wiki/Log_probability`
+- `https://en.wikipedia.org/wiki/List_of_ISO_639-1_codes`
+- `http://localhost:8000/generative_scoring`
+
+### Erkannte Endpunkte / Pfade
+
+- `http://localhost:8000/v1"`
+- `/v1/completions`
+- `/v1/responses`
+- `/v1/chat/completions`
+- `/v1/embeddings`
+- `/v1/audio/transcriptions`
+- `/v1/audio/translations`
+- `/v1/realtime`
+- `/tokenize`
+- `/detokenize`
+- `/score`
+- `/v1/score`
+- `/rerank`
+- `/v1/rerank`
+- `/v2/rerank`
+- `/chat`
+- `/Llama-Guard-3-1B`
+- `/online_serving/openai_responses_client_with_tools.py`
+- `/decoder`
+- `http://localhost:8000/v1/audio/transcriptions"`
+- `/whisper-large-v3-turbo`
+- `//host/v1/realtime`
+- `/generative_scoring`
+- `/Qwen3-0.6B`
+
+### Erkannte Umgebungsvariablen / Konstanten
+
+- `NCCL`
+- `RLHF`
+- `NVIDIA`
+- `KAITO`
+- `W8A8`
+- `GGUF`
+- `INT4`
+- `W4A16`
+- `INT8`
+- `EAGLE`
+- `CUDA`
+- `AXK1`
+- `TODO`
+- `NOTE`
+- `VLLM`
+- `VLLM_MAX_AUDIO_CLIP_FILESIZE_MB`
+- `FLAC`
+- `MPEG`
+- `MPGA`
+- `WEBM`
+- `POST`
+- `PCM16`
+
+### Implementierungsrelevante offizielle Extrakte
+
+
+---
+
+**Quelle `INDEX.md`**
+
+### OpenAI-Compatible Server - vLLM
+- Quelle: Pflichtquelle
+
+---
+
+**Quelle `INDEX.md`**
+
+- Quelle: Pflichtquelle
+- Original-URL: https://docs.vllm.ai/en/stable/serving/openai_compatible_server/
+- Bereinigte Download-URL: https://docs.vllm.ai/en/stable/serving/openai_compatible_server/
+
+---
+
+**Quelle `INDEX.md`**
+
+- Original-URL: https://docs.vllm.ai/en/stable/serving/openai_compatible_server/
+- Bereinigte Download-URL: https://docs.vllm.ai/en/stable/serving/openai_compatible_server/
+- Lokale Datei(en): HTML: `openai-compatible-server.html`, Text: `openai-compatible-server.txt`
+
+---
+
+**Quelle `INDEX.md`**
+
+- Bereinigte Download-URL: https://docs.vllm.ai/en/stable/serving/openai_compatible_server/
+- Lokale Datei(en): HTML: `openai-compatible-server.html`, Text: `openai-compatible-server.txt`
+- Abrufdatum: `2026-04-24T05:05:37.927618+02:00`
+
+---
+
+**Quelle `INDEX.md`**
+
+- Abrufdatum: `2026-04-24T05:05:37.927618+02:00`
+- Zweck: vLLM OpenAI compatible server
+- Download-Werkzeug: `urllib`
+
+---
+
+**Quelle `openai-compatible-server.txt`**
+
+OpenAI-Compatible Server - vLLM 
+ Skip to content
+
+---
+
+**Quelle `openai-compatible-server.txt`**
+
+OpenAI-Compatible Server
+
+---
+
+**Quelle `openai-compatible-server.txt`**
+
+Offline Inference Offline Inference 
+ Async LLM Streaming
+
+---
+
+**Quelle `openai-compatible-server.txt`**
+
+Chat With Tools
+
+---
+
+**Quelle `openai-compatible-server.txt`**
+
+Offline Inference with the OpenAI Batch file format
+
+---
+
+**Quelle `openai-compatible-server.txt`**
+
+Vision Language
+
+---
+
+**Quelle `openai-compatible-server.txt`**
+
+Vision Language Multi Image
+
+---
+
+**Quelle `openai-compatible-server.txt`**
+
+Batched Chat Completions
+
+---
+
+**Quelle `openai-compatible-server.txt`**
+
+Gradio OpenAI Chatbot Webserver
+
+---
+
+**Quelle `openai-compatible-server.txt`**
+
+OpenAI Chat Completion Client For Multimodal
+
+---
+
+**Quelle `openai-compatible-server.txt`**
+
+OpenAI Chat Completion Client With Tools
+
+---
+
+**Quelle `openai-compatible-server.txt`**
+
+OpenAI Chat Completion Client With Tools Required
+
+---
+
+**Quelle `openai-compatible-server.txt`**
+
+OpenAI Chat Completion Client With Tools Xlam
+
+---
+
+**Quelle `openai-compatible-server.txt`**
+
+OpenAI Chat Completion Client With Tools Xlam Streaming
+
+---
+
+**Quelle `openai-compatible-server.txt`**
+
+OpenAI Chat Completion Tool Calls With Reasoning
+
+---
+
+**Quelle `openai-compatible-server.txt`**
+
+OpenAI Chat Completion With Reasoning
+
+---
+
+**Quelle `openai-compatible-server.txt`**
+
+OpenAI Chat Completion With Reasoning Streaming
+
+---
+
+**Quelle `openai-compatible-server.txt`**
+
+OpenAI Lid Client
+
+---
+
+**Quelle `openai-compatible-server.txt`**
+
+OpenAI Realtime Client
+
+---
+
+**Quelle `openai-compatible-server.txt`**
+
+OpenAI Realtime Microphone Client
+
+---
+
+**Quelle `openai-compatible-server.txt`**
+
+OpenAI Responses Client
+
+---
+
+**Quelle `openai-compatible-server.txt`**
+
+OpenAI Responses Client With Mcp Tools
+
+---
+
+**Quelle `openai-compatible-server.txt`**
+
+OpenAI Responses Client With Tools
+
+---
+
+**Quelle `openai-compatible-server.txt`**
+
+OpenAI Transcription Client
+
+---
+
+**Quelle `openai-compatible-server.txt`**
+
+OpenAI Translation Client
+
+---
+
+**Quelle `openai-compatible-server.txt`**
+
+Prompt Embed Inference With OpenAI Client
+
+---
+
+**Quelle `openai-compatible-server.txt`**
+
+Streamlit OpenAI Chatbot Webserver
+
+---
+
+**Quelle `openai-compatible-server.txt`**
+
+Token Generation Client
+
+---
+
+**Quelle `openai-compatible-server.txt`**
+
+Token Classify
+
+---
+
+**Quelle `openai-compatible-server.txt`**
+
+Token Embed
+
+---
+
+**Quelle `openai-compatible-server.txt`**
+
+Usage Stats Collection
+
+---
+
+**Quelle `openai-compatible-server.txt`**
+
+OpenAI-Compatible Server OpenAI-Compatible Server Table of contents 
+ Supported APIs
+
+---
+
+**Quelle `openai-compatible-server.txt`**
+
+Extra HTTP Headers
+
+---
+
+**Quelle `openai-compatible-server.txt`**
+
+API Reference 
+ Completions API 
+ Extra parameters
+
+---
+
+**Quelle `openai-compatible-server.txt`**
+
+Responses API 
+ Extra parameters
+
+---
+
+**Quelle `openai-compatible-server.txt`**
+
+Tokenizer API
+
+---
+
+**Quelle `openai-compatible-server.txt`**
+
+Finding Token IDs
+
+---
+
+**Quelle `openai-compatible-server.txt`**
+
+Hugging Face Inference Endpoints
+
+---
+
+**Quelle `openai-compatible-server.txt`**
+
+Streamlit
+
+---
+
+**Quelle `openai-compatible-server.txt`**
+
+Environment Variables
+
+### Code-/Konfigurationsbeispiele aus offiziellen Dokumenten
+
+
+---
+
+**Quelle `openai-compatible-server.txt`**
+
+````text
+base_url="http://localhost:8000/v1",
+````
+
+---
+
+**Quelle `openai-compatible-server.txt`**
+
+````text
+api_key="token-abc123",
+````
+
+---
+
+**Quelle `openai-compatible-server.txt`**
+
+````text
+curl -X POST "http://localhost:8000/v1/audio/transcriptions" \
+````
+
+---
+
+**Quelle `openai-compatible-server.txt`**
+
+````text
+curl -X POST http://localhost:8000/generative_scoring \
+````
+
+## Textanlagen aus der offiziellen Dokumentation
+
+
+<details>
+<summary>Textanlage: <code>OpenAI/API/vLLM/openai-compatible-server.txt</code></summary>
+
+````text
+OpenAI-Compatible Server - vLLM 
+ Skip to content 
+
+ vLLM 
+ 
+ OpenAI-Compatible Server 
+
+ Initializing search 
+
+ GitHub 
+
+ Home 
+ 
+ User Guide 
+ 
+ Developer Guide 
+ 
+ Benchmarking 
+ 
+ API Reference 
+ 
+ CLI Reference 
+ 
+ Community 
+
+ vLLM 
+
+ GitHub 
+
+ Home 
+
+ User Guide 
+ User Guide 
+ Getting Started Getting Started 
+ Quickstart 
+
+ Installation 
+ Installation 
+ GPU 
+ 
+ CPU 
+ 
+ TPU 
+
+ Examples 
+ Examples 
+ Basic Basic 
+ Offline Inference 
+ 
+ Online Serving 
+
+ Observability Observability 
+ Monitoring Dashboards 
+ 
+ Metrics 
+ 
+ Setup OpenTelemetry POC 
+ 
+ Prometheus and Grafana 
+
+ Offline Inference Offline Inference 
+ Async LLM Streaming 
+ 
+ Audio Language 
+ 
+ Automatic Prefix Caching 
+ 
+ Batch LLM Inference 
+ 
+ Chat With Tools 
+ 
+ Context Extension 
+ 
+ Data Parallel 
+ 
+ Disaggregated Prefill V1 
+ 
+ Disaggregated Prefill 
+ 
+ Encoder Decoder Multimodal 
+ 
+ Extract Hidden States 
+ 
+ KV Load Failure Recovery Test 
+ 
+ LLM Engine Example 
+ 
+ LLM Engine Reset Kv 
+ 
+ Load Sharded State 
+ 
+ Custom Logits Processors 
+ 
+ LoRA With Quantization Inference 
+ 
+ Mistral-Small 
+ 
+ MLPSpeculator 
+ 
+ MultiLoRA Inference 
+ 
+ Offline Inference with the OpenAI Batch file format 
+ 
+ Pause Resume 
+ 
+ Prefix Caching 
+ 
+ Prefix Caching Flexkv 
+ 
+ Prompt Embed Inference 
+ 
+ Qwen2.5-Omni Offline Inference Examples 
+ 
+ Qwen3 Omni 
+ 
+ Qwen 1M 
+ 
+ Reproducibility 
+ 
+ Routed Experts E2E 
+ 
+ Run One Batch 
+ 
+ Save Sharded State 
+ 
+ Simple Profiling 
+ 
+ Skip Loading Weights In Engine Init 
+ 
+ Spec Decode 
+ 
+ Structured Outputs 
+ 
+ Torchrun Dp Example 
+ 
+ Torchrun Example 
+ 
+ Vision Language 
+ 
+ Vision Language Multi Image 
+
+ Online Serving Online Serving 
+ API Client 
+ 
+ Batched Chat Completions 
+ 
+ Helm Charts 
+ 
+ Data Parallel Pause Resume 
+ 
+ Disaggregated Encoder 
+ 
+ Disaggregated Prefill 
+ 
+ Disaggregated Serving 
+ 
+ Disaggregated Serving P2P NCCL Xpyd 
+ 
+ Ec Both Encoder 
+ 
+ Elastic Ep 
+ 
+ Gradio OpenAI Chatbot Webserver 
+ 
+ Gradio Webserver 
+ 
+ Kv Events Subscriber 
+ 
+ Multi-Node-Serving 
+ 
+ Multi Instance Data Parallel 
+ 
+ OpenAI Chat Completion Client For Multimodal 
+ 
+ OpenAI Chat Completion Client With Tools 
+ 
+ OpenAI Chat Completion Client With Tools Required 
+ 
+ OpenAI Chat Completion Client With Tools Xlam 
+ 
+ OpenAI Chat Completion Client With Tools Xlam Streaming 
+ 
+ OpenAI Chat Completion Tool Calls With Reasoning 
+ 
+ OpenAI Chat Completion With Reasoning 
+ 
+ OpenAI Chat Completion With Reasoning Streaming 
+ 
+ OpenAI Lid Client 
+ 
+ OpenAI Realtime Client 
+ 
+ OpenAI Realtime Microphone Client 
+ 
+ OpenAI Responses Client 
+ 
+ OpenAI Responses Client With Mcp Tools 
+ 
+ OpenAI Responses Client With Tools 
+ 
+ OpenAI Transcription Client 
+ 
+ OpenAI Translation Client 
+ 
+ Prompt Embed Inference With OpenAI Client 
+ 
+ Ray Serve Deepseek 
+ 
+ Retrieval Augmented Generation With Langchain 
+ 
+ Retrieval Augmented Generation With Llamaindex 
+ 
+ Run Cluster 
+ 
+ Sagemaker-Entrypoint 
+ 
+ Streamlit OpenAI Chatbot Webserver 
+ 
+ Structured Outputs 
+ 
+ Token Generation Client 
+ 
+ Utils 
+
+ Others Others 
+ LMCache Examples 
+ 
+ Logging Configuration 
+ 
+ Tensorize vLLM Model 
+
+ Pooling Pooling 
+ Classify 
+ 
+ Embed 
+ 
+ Plugin 
+ 
+ Pooling 
+ 
+ Score 
+ 
+ Token Classify 
+ 
+ Token Embed 
+
+ RL RL 
+ RLHF Async New APIs 
+ 
+ RLHF Http IPC 
+ 
+ RLHF Http NCCL 
+ 
+ RLHF IPC 
+ 
+ RLHF NCCL 
+ 
+ RLHF NCCL Fsdp Ep 
+
+ General General 
+ vLLM V1 
+ 
+ Frequently Asked Questions 
+ 
+ Production Metrics 
+ 
+ Reproducibility 
+ 
+ Security 
+ 
+ Troubleshooting 
+ 
+ Usage Stats Collection 
+
+ Inference and Serving Inference and Serving 
+ Offline Inference 
+ 
+ OpenAI-Compatible Server OpenAI-Compatible Server Table of contents 
+ Supported APIs 
+ 
+ Chat Template 
+ 
+ Extra Parameters 
+ 
+ Extra HTTP Headers 
+ 
+ Offline API Documentation 
+ 
+ API Reference 
+ Completions API 
+ Extra parameters 
+
+ Chat API 
+ Extra parameters 
+
+ Responses API 
+ Extra parameters 
+
+ Transcriptions API 
+ API Enforced Limits 
+ 
+ Uploading Audio Files 
+ 
+ Extra Parameters 
+
+ Translations API 
+ Extra Parameters 
+
+ Realtime API 
+ Audio Format 
+ 
+ Protocol Overview 
+ 
+ Client → Server Events 
+ 
+ Server → Client Events 
+ 
+ Example Clients 
+
+ Tokenizer API 
+ 
+ Generative Scoring API 
+ Example 
+ 
+ How it works 
+ 
+ Finding Token IDs 
+
+ Ray Serve LLM 
+
+ Context Parallel Deployment 
+ 
+ Data Parallel Deployment 
+ 
+ Troubleshooting distributed deployments 
+ 
+ Expert Parallel Deployment 
+ 
+ Parallelism and Scaling 
+ 
+ Integrations Integrations 
+ Claude Code 
+ 
+ LangChain 
+ 
+ LlamaIndex 
+
+ Deployment Deployment 
+ Using Docker 
+ 
+ Using Kubernetes 
+ 
+ Using Nginx 
+ 
+ Frameworks Frameworks 
+ Anyscale 
+ 
+ AnythingLLM 
+ 
+ AutoGen 
+ 
+ BentoML 
+ 
+ Cerebrium 
+ 
+ Chatbox 
+ 
+ Dify 
+ 
+ dstack 
+ 
+ Haystack 
+ 
+ Helm 
+ 
+ Hugging Face Inference Endpoints 
+ 
+ LiteLLM 
+ 
+ Lobe Chat 
+ 
+ LWS 
+ 
+ Modal 
+ 
+ Open WebUI 
+ 
+ Retrieval-Augmented Generation 
+ 
+ RunPod 
+ 
+ SkyPilot 
+ 
+ Streamlit 
+ 
+ NVIDIA Triton 
+
+ Integrations Integrations 
+ AIBrix 
+ 
+ NVIDIA Dynamo 
+ 
+ KAITO 
+ 
+ KServe 
+ 
+ Kthena 
+ 
+ KubeAI 
+ 
+ KubeRay 
+ 
+ Llama Stack 
+ 
+ llm-d 
+ 
+ llmaz 
+ 
+ Production stack 
+
+ Training Training 
+ Async Reinforcement Learning 
+ 
+ Reinforcement Learning from Human Feedback 
+ 
+ Transformers Reinforcement Learning 
+
+ Weight Transfer 
+ Weight Transfer 
+ Base Class and Custom Engines 
+ 
+ IPC Engine 
+ 
+ NCCL Engine 
+
+ Configuration 
+ Configuration 
+ Conserving Memory 
+ 
+ Engine Arguments 
+ 
+ Environment Variables 
+ 
+ Model Resolution 
+ 
+ Optimization and Tuning 
+ 
+ Server Arguments 
+ 
+ TPU 
+
+ Models Models 
+ Supported Models 
+ 
+ Generative Models 
+
+ Pooling Models 
+ Pooling Models 
+ Classification Usages 
+ 
+ Embedding Usages 
+ 
+ Reward Usages 
+ 
+ Scoring Usages 
+ 
+ Specific Model Examples 
+ 
+ Token Classification Usages 
+ 
+ Token Embedding Usages 
+
+ Extensions Extensions 
+ Loading model weights with fastsafetensors 
+ 
+ Loading Model Weights with InstantTensor 
+ 
+ Loading models with Run:ai Model Streamer 
+ 
+ Loading models with CoreWeave's Tensorizer 
+
+ Hardware Supported Models Hardware Supported Models 
+ CPU - Intel® Xeon® 
+ 
+ XPU - Intel® GPUs 
+ 
+ TPU 
+
+ Features 
+ Features 
+ Automatic Prefix Caching 
+ 
+ Batch Invariance 
+ 
+ Custom Arguments 
+ 
+ Custom Logits Processors 
+ 
+ Disaggregated Encoder 
+ 
+ Disaggregated Prefilling (experimental) 
+ 
+ Interleaved Thinking 
+ 
+ LoRA Adapters 
+ 
+ MooncakeConnector Usage Guide 
+ 
+ Multimodal Inputs 
+ 
+ NixlConnector Compatibility Matrix 
+ 
+ NixlConnector Usage Guide 
+ 
+ Prompt Embedding Inputs 
+ 
+ Reasoning Outputs 
+ 
+ Sleep Mode 
+ 
+ Structured Outputs 
+ 
+ Tool Calling 
+
+ Quantization 
+ Quantization 
+ AutoAWQ 
+ 
+ BitsAndBytes 
+ 
+ FP8 W8A8 
+ 
+ GGUF 
+ 
+ GPTQModel 
+ 
+ Intel Quantization Support 
+ 
+ INT4 W4A16 
+ 
+ INT8 W8A8 
+ 
+ LLM Compressor 
+ 
+ NVIDIA Model Optimizer 
+ 
+ Online Quantization 
+ 
+ Quantized KV Cache 
+ 
+ AMD Quark 
+ 
+ TorchAO 
+
+ Speculative Decoding 
+ Speculative Decoding 
+ Draft Models 
+ 
+ EAGLE Draft Models 
+ 
+ MLP Draft Models 
+ 
+ MTP (Multi-Token Prediction) 
+ 
+ N-Gram Speculation 
+ 
+ Parallel Draft Models 
+ 
+ vLLM-Project/Speculators 
+ 
+ Suffix Decoding 
+
+ Developer Guide 
+ Developer Guide 
+ General General 
+ Deprecation Policy 
+ 
+ Dockerfile 
+ 
+ Editing Agent Instructions 
+ 
+ Incremental Compilation Workflow 
+ 
+ Profiling vLLM 
+ 
+ Vulnerability Management 
+
+ Model Implementation 
+ Model Implementation 
+ Basic Model 
+ 
+ Registering a Model 
+ 
+ Unit Testing 
+ 
+ Multi-Modal Support 
+ 
+ Speech-to-Text (Transcription/Translation) Support 
+
+ CI CI 
+ CI Failures 
+ 
+ Nightly Builds of vLLM Wheels 
+ 
+ Update PyTorch version on vLLM OSS CI/CD 
+
+ Design Documents Design Documents 
+ Plugins Plugins 
+ IO Processor Plugins 
+ 
+ LoRA Resolver Plugins 
+ 
+ Plugin System 
+
+ Architecture Overview 
+ 
+ Attention Backend Feature Support 
+ 
+ CUDA Graphs 
+ 
+ Vision Encoder (ViT) CUDA Graphs 
+ 
+ CustomOp 
+ 
+ Dual Batch Overlap 
+ 
+ How to debug the vLLM-torch.compile integration 
+ 
+ Fused MoE Modular Kernel 
+ 
+ Fusion torch.compile passes 
+ 
+ Integration with Hugging Face 
+ 
+ Hybrid KV Cache Manager 
+ 
+ Logits Processors 
+ 
+ Metrics 
+ 
+ Multi-Modal Data Processing 
+ 
+ Model Runner V2 Design Document 
+ 
+ Fused MoE Kernel Features 
+ 
+ Python Multiprocessing 
+ 
+ Optimization Levels 
+ 
+ P2P NCCL Connector 
+ 
+ Paged Attention 
+ 
+ Automatic Prefix Caching 
+ 
+ torch.compile integration 
+ 
+ torch.compile with Multimodal Encoders 
+
+ Benchmarking 
+ Benchmarking 
+ Benchmark CLI 
+ 
+ Parameter Sweeps 
+ 
+ Performance Dashboard 
+
+ API Reference 
+ API Reference 
+ 
+ vllm 
+ vllm 
+ beam_search 
+ 
+ collect_env 
+ 
+ connections 
+ 
+ env_override 
+ 
+ envs 
+ 
+ exceptions 
+ 
+ forward_context 
+ 
+ logger 
+ 
+ logits_process 
+ 
+ logprobs 
+ 
+ model_inspection 
+ 
+ outputs 
+ 
+ pooling_params 
+ 
+ sampling_params 
+ 
+ scalar_type 
+ 
+ scripts 
+ 
+ sequence 
+ 
+ tasks 
+ 
+ version 
+
+ assets 
+ assets 
+ audio 
+ 
+ base 
+ 
+ image 
+ 
+ video 
+
+ benchmarks 
+ benchmarks 
+ latency 
+ 
+ mm_processor 
+ 
+ plot 
+ 
+ serve 
+ 
+ startup 
+ 
+ throughput 
+
+ datasets 
+ datasets 
+ create_txt_slices_dataset 
+ 
+ datasets 
+ 
+ utils 
+
+ lib 
+ lib 
+ endpoint_request_func 
+ 
+ ready_checker 
+ 
+ utils 
+
+ sweep 
+ sweep 
+ cli 
+ 
+ param_sweep 
+ 
+ plot 
+ 
+ plot_pareto 
+ 
+ serve 
+ 
+ serve_workload 
+ 
+ server 
+ 
+ startup 
+ 
+ utils 
+
+ compilation 
+ compilation 
+ backends 
+ 
+ base_static_graph 
+ 
+ caching 
+ 
+ codegen 
+ 
+ compiler_interface 
+ 
+ counter 
+ 
+ cuda_graph 
+ 
+ decorators 
+ 
+ monitor 
+ 
+ partition_rules 
+ 
+ piecewise_backend 
+ 
+ wrapper 
+
+ passes 
+ passes 
+ fx_utils 
+ 
+ inductor_pass 
+ 
+ pass_manager 
+ 
+ vllm_inductor_pass 
+
+ fusion 
+ fusion 
+ act_quant_fusion 
+ 
+ allreduce_rms_fusion 
+ 
+ attn_quant_fusion 
+ 
+ collective_fusion 
+ 
+ matcher_utils 
+ 
+ minimax_qk_norm_fusion 
+ 
+ mla_attn_quant_fusion 
+ 
+ qk_norm_rope_fusion 
+ 
+ rms_quant_fusion 
+ 
+ rocm_aiter_fusion 
+ 
+ rope_kvcache_fusion 
+ 
+ sequence_parallelism 
+
+ ir 
+ ir 
+ lowering_pass 
+
+ utility 
+ utility 
+ fix_functionalization 
+ 
+ noop_elimination 
+ 
+ post_cleanup 
+ 
+ scatter_split_replace 
+ 
+ split_coalescing 
+
+ config 
+ config 
+ attention 
+ 
+ cache 
+ 
+ compilation 
+ 
+ device 
+ 
+ ec_transfer 
+ 
+ kernel 
+ 
+ kv_events 
+ 
+ kv_transfer 
+ 
+ load 
+ 
+ lora 
+ 
+ mamba 
+ 
+ model 
+ 
+ model_arch 
+ 
+ multimodal 
+ 
+ observability 
+ 
+ offload 
+ 
+ parallel 
+ 
+ pooler 
+ 
+ profiler 
+ 
+ quantization 
+ 
+ reasoning 
+ 
+ scheduler 
+ 
+ speculative 
+ 
+ speech_to_text 
+ 
+ structured_outputs 
+ 
+ utils 
+ 
+ vllm 
+ 
+ weight_transfer 
+
+ device_allocator 
+ device_allocator 
+ cumem 
+
+ distributed 
+ distributed 
+ communication_op 
+ 
+ kv_events 
+ 
+ parallel_state 
+ 
+ stateless_coordinator 
+ 
+ utils 
+
+ device_communicators 
+ device_communicators 
+ all2all 
+ 
+ all_reduce_utils 
+ 
+ base_device_communicator 
+ 
+ cpu_communicator 
+ 
+ cuda_communicator 
+ 
+ cuda_wrapper 
+ 
+ custom_all_reduce 
+ 
+ flashinfer_all_reduce 
+ 
+ mnnvl_compat 
+ 
+ pynccl 
+ 
+ pynccl_allocator 
+ 
+ pynccl_wrapper 
+ 
+ quick_all_reduce 
+ 
+ ray_communicator 
+ 
+ shm_broadcast 
+ 
+ shm_object_storage 
+ 
+ symm_mem 
+ 
+ xpu_communicator 
+
+ ec_transfer 
+ ec_transfer 
+ ec_transfer_state 
+
+ ec_connector 
+ ec_connector 
+ base 
+ 
+ example_connector 
+ 
+ factory 
+
+ elastic_ep 
+ elastic_ep 
+ elastic_execute 
+ 
+ elastic_state 
+ 
+ standby_state 
+
+ eplb 
+ eplb 
+ async_worker 
+ 
+ eplb_communicator 
+ 
+ eplb_state 
+ 
+ eplb_utils 
+ 
+ rebalance_execute 
+
+ policy 
+ policy 
+ abstract 
+ 
+ default 
+
+ kv_transfer 
+ kv_transfer 
+ kv_transfer_state 
+
+ kv_connector 
+ kv_connector 
+ base 
+ 
+ factory 
+ 
+ utils 
+
+ v1 
+ v1 
+ base 
+ 
+ decode_bench_connector 
+ 
+ example_connector 
+ 
+ example_hidden_states_connector 
+ 
+ flexkv_connector 
+ 
+ lmcache_connector 
+ 
+ lmcache_mp_connector 
+ 
+ metrics 
+ 
+ multi_connector 
+ 
+ offloading_connector 
+ 
+ simple_cpu_offload_connector 
+ 
+ ssm_conv_transfer_utils 
+
+ hf3fs 
+ hf3fs 
+ hf3fs_client 
+ 
+ hf3fs_connector 
+ 
+ hf3fs_metadata_server 
+
+ utils 
+ utils 
+ common 
+ 
+ gather_scatter_helper 
+ 
+ hf3fs_mock_client 
+
+ lmcache_integration 
+ lmcache_integration 
+ multi_process_adapter 
+ 
+ utils 
+ 
+ vllm_v1_adapter 
+
+ mooncake 
+ mooncake 
+ mooncake_connector 
+ 
+ mooncake_utils 
+
+ moriio 
+ moriio 
+ moriio_common 
+ 
+ moriio_connector 
+ 
+ moriio_engine 
+
+ nixl 
+ nixl 
+ connector 
+ 
+ metadata 
+ 
+ scheduler 
+ 
+ stats 
+ 
+ utils 
+ 
+ worker 
+
+ offloading 
+ offloading 
+ common 
+ 
+ metrics 
+ 
+ scheduler 
+ 
+ worker 
+
+ p2p 
+ p2p 
+ p2p_nccl_connector 
+ 
+ p2p_nccl_engine 
+ 
+ tensor_memory_pool 
+
+ weight_transfer 
+ weight_transfer 
+ base 
+ 
+ factory 
+ 
+ ipc_engine 
+ 
+ nccl_engine 
+ 
+ packed_tensor 
+
+ engine 
+ engine 
+ arg_utils 
+ 
+ async_llm_engine 
+ 
+ llm_engine 
+ 
+ protocol 
+
+ entrypoints 
+ entrypoints 
+ api_server 
+ 
+ chat_utils 
+ 
+ constants 
+ 
+ grpc_server 
+ 
+ launcher 
+ 
+ llm 
+ 
+ logger 
+ 
+ ssl 
+ 
+ utils 
+
+ anthropic 
+ anthropic 
+ api_router 
+ 
+ protocol 
+ 
+ serving 
+
+ cli 
+ cli 
+ collect_env 
+ 
+ launch 
+ 
+ main 
+ 
+ openai 
+ 
+ run_batch 
+ 
+ serve 
+ 
+ types 
+
+ benchmark 
+ benchmark 
+ base 
+ 
+ latency 
+ 
+ main 
+ 
+ mm_processor 
+ 
+ serve 
+ 
+ startup 
+ 
+ sweep 
+ 
+ throughput 
+
+ mcp 
+ mcp 
+ tool 
+ 
+ tool_server 
+
+ openai 
+ openai 
+ api_server 
+ 
+ cli_args 
+ 
+ orca_metrics 
+ 
+ run_batch 
+ 
+ server_utils 
+ 
+ utils 
+
+ chat_completion 
+ chat_completion 
+ api_router 
+ 
+ batch_serving 
+ 
+ protocol 
+ 
+ serving 
+ 
+ stream_harmony 
+
+ completion 
+ completion 
+ api_router 
+ 
+ protocol 
+ 
+ serving 
+
+ engine 
+ engine 
+ protocol 
+ 
+ serving 
+
+ generate 
+ generate 
+ api_router 
+ 
+ factories 
+
+ generative_scoring 
+ generative_scoring 
+ api_router 
+ 
+ serving 
+
+ models 
+ models 
+ api_router 
+ 
+ protocol 
+ 
+ serving 
+
+ parser 
+ parser 
+ harmony_utils 
+ 
+ responses_parser 
+
+ realtime 
+ realtime 
+ api_router 
+ 
+ connection 
+ 
+ metrics 
+ 
+ protocol 
+ 
+ serving 
+
+ responses 
+ responses 
+ api_router 
+ 
+ context 
+ 
+ harmony 
+ 
+ protocol 
+ 
+ serving 
+ 
+ streaming_events 
+ 
+ utils 
+
+ speech_to_text 
+ speech_to_text 
+ api_router 
+ 
+ protocol 
+ 
+ serving 
+ 
+ speech_to_text 
+
+ pooling 
+ pooling 
+ factories 
+ 
+ typing 
+ 
+ utils 
+
+ base 
+ base 
+ io_processor 
+ 
+ protocol 
+ 
+ serving 
+
+ classify 
+ classify 
+ api_router 
+ 
+ io_processor 
+ 
+ protocol 
+ 
+ serving 
+
+ embed 
+ embed 
+ api_router 
+ 
+ io_processor 
+ 
+ protocol 
+ 
+ serving 
+
+ pooling 
+ pooling 
+ api_router 
+ 
+ io_processor 
+ 
+ protocol 
+ 
+ serving 
+
+ scoring 
+ scoring 
+ api_router 
+ 
+ io_processor 
+ 
+ protocol 
+ 
+ serving 
+ 
+ typing 
+ 
+ utils 
+
+ sagemaker 
+ sagemaker 
+ api_router 
+
+ serve 
+ serve 
+ 
+ cache 
+ cache 
+ api_router 
+
+ disagg 
+ disagg 
+ api_router 
+ 
+ mm_serde 
+ 
+ protocol 
+ 
+ serving 
+
+ elastic_ep 
+ elastic_ep 
+ api_router 
+ 
+ middleware 
+
+ instrumentator 
+ instrumentator 
+ basic 
+ 
+ health 
+ 
+ metrics 
+ 
+ offline_docs 
+ 
+ server_info 
+
+ lora 
+ lora 
+ api_router 
+ 
+ protocol 
+
+ profile 
+ profile 
+ api_router 
+
+ render 
+ render 
+ api_router 
+ 
+ serving 
+
+ rlhf 
+ rlhf 
+ api_router 
+
+ rpc 
+ rpc 
+ api_router 
+
+ sleep 
+ sleep 
+ api_router 
+
+ tokenize 
+ tokenize 
+ api_router 
+ 
+ protocol 
+ 
+ serving 
+
+ inputs 
+ inputs 
+ engine 
+ 
+ llm 
+ 
+ preprocess 
+
+ ir 
+ ir 
+ op 
+ 
+ util 
+
+ ops 
+ ops 
+ layernorm 
+
+ kernels 
+ kernels 
+ aiter_ops 
+ 
+ oink_ops 
+ 
+ vllm_c 
+ 
+ xpu_ops 
+
+ helion 
+ helion 
+ config_manager 
+ 
+ register 
+ 
+ utils 
+
+ ops 
+ ops 
+ silu_mul_fp8 
+
+ logging_utils 
+ logging_utils 
+ access_log_filter 
+ 
+ dump_input 
+ 
+ formatter 
+ 
+ lazy 
+ 
+ log_time 
+ 
+ torch_tensor 
+
+ lora 
+ lora 
+ lora_model 
+ 
+ lora_weights 
+ 
+ model_manager 
+ 
+ peft_helper 
+ 
+ request 
+ 
+ resolver 
+ 
+ utils 
+ 
+ worker_manager 
+
+ layers 
+ layers 
+ base 
+ 
+ base_linear 
+ 
+ column_parallel_linear 
+ 
+ fused_moe 
+ 
+ logits_processor 
+ 
+ replicated_linear 
+ 
+ row_parallel_linear 
+ 
+ utils 
+ 
+ vocal_parallel_embedding 
+
+ ops 
+ ops 
+ 
+ torch_ops 
+ torch_ops 
+ lora_ops 
+
+ triton_ops 
+ triton_ops 
+ fp8_kernel_utils 
+ 
+ fused_moe_lora_fp8_op 
+ 
+ fused_moe_lora_op 
+ 
+ kernel_utils 
+ 
+ lora_expand_fp8_op 
+ 
+ lora_expand_op 
+ 
+ lora_kernel_metadata 
+ 
+ lora_shrink_fp8_op 
+ 
+ lora_shrink_op 
+ 
+ utils 
+
+ xpu_ops 
+ xpu_ops 
+ lora_ops 
+
+ punica_wrapper 
+ punica_wrapper 
+ punica_base 
+ 
+ punica_cpu 
+ 
+ punica_gpu 
+ 
+ punica_selector 
+ 
+ punica_xpu 
+ 
+ utils 
+
+ model_executor 
+ model_executor 
+ custom_op 
+ 
+ parameter 
+ 
+ utils 
+
+ kernels 
+ kernels 
+ 
+ linear 
+ linear 
+ base 
+
+ mixed_precision 
+ mixed_precision 
+ allspark 
+ 
+ conch 
+ 
+ cpu 
+ 
+ cutlass 
+ 
+ dynamic_4bit 
+ 
+ exllama 
+ 
+ MPLinearKernel 
+ 
+ machete 
+ 
+ marlin 
+ 
+ triton_w4a16 
+ 
+ xpu 
+
+ mxfp8 
+ mxfp8 
+ emulation 
+ 
+ flashinfer 
+ 
+ Mxfp8LinearKernel 
+ 
+ marlin 
+ 
+ xpu 
+
+ nvfp4 
+ nvfp4 
+ base 
+ 
+ cutlass 
+ 
+ emulation 
+ 
+ fbgemm 
+ 
+ flashinfer 
+ 
+ marlin 
+
+ scaled_mm 
+ scaled_mm 
+ aiter 
+ 
+ BlockScaledMMLinearKernel 
+ 
+ cpu 
+ 
+ cutlass 
+ 
+ deep_gemm 
+ 
+ flashinfer 
+ 
+ marlin 
+ 
+ pytorch 
+ 
+ rocm 
+ 
+ ScaledMMLinearKernel 
+ 
+ triton 
+ 
+ xpu 
+
+ layers 
+ layers 
+ activation 
+ 
+ attention_layer_base 
+ 
+ batch_invariant 
+ 
+ conv 
+ 
+ kda 
+ 
+ layernorm 
+ 
+ lightning_attn 
+ 
+ linear 
+ 
+ logits_processor 
+ 
+ mla 
+ 
+ resampler 
+ 
+ sparse_attn_indexer 
+ 
+ utils 
+ 
+ vocab_parallel_embedding 
+
+ attention 
+ attention 
+ attention 
+ 
+ chunked_local_attention 
+ 
+ cross_attention 
+ 
+ encoder_only_attention 
+ 
+ kv_transfer_utils 
+ 
+ mla_attention 
+ 
+ mm_encoder_attention 
+ 
+ static_sink_attention 
+
+ fla 
+ fla 
+ 
+ ops 
+ ops 
+ chunk 
+ 
+ chunk_delta_h 
+ 
+ chunk_o 
+ 
+ chunk_scaled_dot_kkt 
+ 
+ cumsum 
+ 
+ fused_gdn_prefill_post_conv 
+ 
+ fused_recurrent 
+ 
+ fused_sigmoid_gating 
+ 
+ index 
+ 
+ kda 
+ 
+ l2norm 
+ 
+ layernorm_guard 
+ 
+ op 
+ 
+ solve_tril 
+ 
+ utils 
+ 
+ wy_fast 
+
+ fused_moe 
+ fused_moe 
+ activation 
+ 
+ all2all_utils 
+ 
+ config 
+ 
+ cpu_fused_moe 
+ 
+ cutlass_moe 
+ 
+ deep_gemm_utils 
+ 
+ fallback 
+ 
+ flashinfer_cutlass_moe 
+ 
+ fused_batched_moe 
+ 
+ fused_marlin_moe 
+ 
+ fused_moe 
+ 
+ fused_moe_method_base 
+ 
+ fused_moe_modular_method 
+ 
+ layer 
+ 
+ modular_kernel 
+ 
+ moe_align_block_size 
+ 
+ moe_permute_unpermute 
+ 
+ mori_prepare_finalize 
+ 
+ nixl_ep_prepare_finalize 
+ 
+ rocm_aiter_fused_moe 
+ 
+ routed_experts_capturer 
+ 
+ shared_fused_moe 
+ 
+ topk_weight_and_reduce 
+ 
+ triton_cutlass_moe 
+ 
+ triton_deep_gemm_moe 
+ 
+ unquantized_fused_moe_method 
+ 
+ utils 
+ 
+ xpu_fused_moe 
+
+ experts 
+ experts 
+ batched_deep_gemm_moe 
+ 
+ deep_gemm_moe 
+ 
+ flashinfer_cutedsl_batched_moe 
+ 
+ flashinfer_cutedsl_moe 
+ 
+ gpt_oss_triton_kernels_moe 
+ 
+ trtllm_bf16_moe 
+ 
+ trtllm_fp8_moe 
+ 
+ trtllm_mxfp4_moe 
+ 
+ trtllm_nvfp4_moe 
+
+ oracle 
+ oracle 
+ fp8 
+ 
+ int8 
+ 
+ mxfp4 
+ 
+ mxfp8 
+ 
+ nvfp4 
+ 
+ unquantized 
+
+ prepare_finalize 
+ prepare_finalize 
+ deepep_ht 
+ 
+ deepep_ll 
+ 
+ flashinfer_nvlink_one_sided 
+ 
+ flashinfer_nvlink_two_sided 
+ 
+ naive_dp_ep 
+ 
+ no_dp_ep 
+
+ router 
+ router 
+ base_router 
+ 
+ custom_routing_router 
+ 
+ fused_moe_router 
+ 
+ fused_topk_bias_router 
+ 
+ fused_topk_router 
+ 
+ gate_linear 
+ 
+ grouped_topk_router 
+ 
+ router_factory 
+ 
+ routing_simulator_router 
+ 
+ zero_expert_router 
+
+ runner 
+ runner 
+ default_moe_runner 
+ 
+ moe_runner 
+ 
+ moe_runner_base 
+ 
+ moe_runner_factory 
+ 
+ shared_experts 
+
+ mamba 
+ mamba 
+ abstract 
+ 
+ gdn_linear_attn 
+ 
+ lamport_workspace 
+ 
+ linear_attn 
+ 
+ mamba_mixer 
+ 
+ mamba_mixer2 
+ 
+ mamba_utils 
+ 
+ short_conv 
+
+ ops 
+ ops 
+ causal_conv1d 
+ 
+ layernorm_gated 
+ 
+ mamba_ssm 
+ 
+ ssd_bmm 
+ 
+ ssd_chunk_scan 
+ 
+ ssd_chunk_state 
+ 
+ ssd_combined 
+ 
+ ssd_state_passing 
+ 
+ ssu_dispatch 
+ 
+ triton_helpers 
+
+ pooler 
+ pooler 
+ abstract 
+ 
+ activations 
+ 
+ common 
+ 
+ special 
+
+ seqwise 
+ seqwise 
+ heads 
+ 
+ methods 
+ 
+ poolers 
+
+ tokwise 
+ tokwise 
+ heads 
+ 
+ methods 
+ 
+ poolers 
+
+ quantization 
+ quantization 
+ awq 
+ 
+ awq_marlin 
+ 
+ awq_triton 
+ 
+ base_config 
+ 
+ bitsandbytes 
+ 
+ cpu_wna16 
+ 
+ experts_int8 
+ 
+ fbgemm_fp8 
+ 
+ fp8 
+ 
+ fp_quant 
+ 
+ gguf 
+ 
+ gptq 
+ 
+ gptq_marlin 
+ 
+ inc 
+ 
+ input_quant_fp8 
+ 
+ kv_cache 
+ 
+ modelopt 
+ 
+ moe_wna16 
+ 
+ mxfp4 
+ 
+ mxfp8 
+ 
+ qutlass_utils 
+ 
+ schema 
+ 
+ torchao 
+
+ compressed_tensors 
+ compressed_tensors 
+ compressed_tensors 
+ 
+ triton_scaled_mm 
+ 
+ utils 
+
+ compressed_tensors_moe 
+ compressed_tensors_moe 
+ compressed_tensors_moe 
+ 
+ compressed_tensors_moe_w4a4_mxfp4 
+ 
+ compressed_tensors_moe_w4a4_nvfp4 
+ 
+ compressed_tensors_moe_w4a8_fp8 
+ 
+ compressed_tensors_moe_w4a8_int8 
+ 
+ compressed_tensors_moe_w8a8_fp8 
+ 
+ compressed_tensors_moe_w8a8_int8 
+ 
+ compressed_tensors_moe_w8a8_mxfp8 
+ 
+ compressed_tensors_moe_wna16 
+ 
+ compressed_tensors_moe_wna16_marlin 
+
+ schemes 
+ schemes 
+ compressed_tensors_24 
+ 
+ compressed_tensors_scheme 
+ 
+ compressed_tensors_w4a4_nvfp4 
+ 
+ compressed_tensors_w4a8_fp8 
+ 
+ compressed_tensors_w4a8_int 
+ 
+ compressed_tensors_w4a16_mxfp4 
+ 
+ compressed_tensors_w4a16_nvfp4 
+ 
+ compressed_tensors_w8a8_fp8 
+ 
+ compressed_tensors_w8a8_int8 
+ 
+ compressed_tensors_w8a8_mxfp8 
+ 
+ compressed_tensors_w8a16_fp8 
+ 
+ compressed_tensors_wNa16 
+
+ transform 
+ transform 
+ linear 
+ 
+ module 
+ 
+ utils 
+
+ schemes 
+ schemes 
+ linear_qutlass_nvfp4 
+
+ online 
+ online 
+ base 
+ 
+ fp8 
+ 
+ int8 
+ 
+ moe_base 
+
+ quark 
+ quark 
+ quark 
+ 
+ quark_moe 
+ 
+ utils 
+
+ schemes 
+ schemes 
+ quark_ocp_mx 
+ 
+ quark_scheme 
+ 
+ quark_w4a8_mxfp4_fp8 
+ 
+ quark_w8a8_fp8 
+ 
+ quark_w8a8_int8 
+
+ turboquant 
+ turboquant 
+ centroids 
+ 
+ config 
+ 
+ quantizer 
+
+ utils 
+ utils 
+ allspark_utils 
+ 
+ flashinfer_fp4_moe 
+ 
+ flashinfer_mxint4_moe 
+ 
+ flashinfer_utils 
+ 
+ fp8_utils 
+ 
+ gptq_utils 
+ 
+ int8_utils 
+ 
+ layer_utils 
+ 
+ machete_utils 
+ 
+ marlin_utils 
+ 
+ marlin_utils_fp4 
+ 
+ marlin_utils_fp8 
+ 
+ marlin_utils_test 
+ 
+ mxfp4_utils 
+ 
+ mxfp6_utils 
+ 
+ mxfp8_utils 
+ 
+ nvfp4_emulation_utils 
+ 
+ nvfp4_utils 
+ 
+ ocp_mx_utils 
+ 
+ quant_utils 
+ 
+ w8a8_utils 
+
+ rotary_embedding 
+ rotary_embedding 
+ base 
+ 
+ common 
+ 
+ deepseek_scaling_rope 
+ 
+ dual_chunk_rope 
+ 
+ dynamic_ntk_alpha_rope 
+ 
+ dynamic_ntk_scaling_rope 
+ 
+ ernie45_vl_rope 
+ 
+ fope 
+ 
+ gemma4_rope 
+ 
+ linear_scaling_rope 
+ 
+ llama3_rope 
+ 
+ llama4_vision_rope 
+ 
+ mrope 
+ 
+ mrope_interleaved 
+ 
+ ntk_scaling_rope 
+ 
+ phi3_long_rope_scaled_rope 
+ 
+ telechat3_scaling_rope 
+ 
+ xdrope 
+ 
+ yarn_scaling_rope 
+
+ model_loader 
+ model_loader 
+ base_loader 
+ 
+ bitsandbytes_loader 
+ 
+ default_loader 
+ 
+ dummy_loader 
+ 
+ ep_weight_filter 
+ 
+ gguf_loader 
+ 
+ runai_streamer_loader 
+ 
+ sharded_state_loader 
+ 
+ tensorizer 
+ 
+ tensorizer_loader 
+ 
+ utils 
+ 
+ weight_utils 
+
+ reload 
+ reload 
+ layerwise 
+ 
+ meta 
+ 
+ sanitize 
+ 
+ torchao_decorator 
+ 
+ types 
+ 
+ utils 
+
+ models 
+ models 
+ AXK1 
+ 
+ adapters 
+ 
+ afmoe 
+ 
+ aimv2 
+ 
+ apertus 
+ 
+ arcee 
+ 
+ arctic 
+ 
+ aria 
+ 
+ audioflamingo3 
+ 
+ aya_vision 
+ 
+ bagel 
+ 
+ baichuan 
+ 
+ bailing_moe 
+ 
+ bailing_moe_linear 
+ 
+ bamba 
+ 
+ bee 
+ 
+ bert 
+ 
+ bert_with_rope 
+ 
+ blip 
+ 
+ blip2 
+ 
+ bloom 
+ 
+ chameleon 
+ 
+ chatglm 
+ 
+ cheers 
+ 
+ clip 
+ 
+ cohere2_vision 
+ 
+ cohere_asr 
+ 
+ colbert 
+ 
+ colmodernvbert 
+ 
+ colpali 
+ 
+ colqwen3 
+ 
+ colqwen3_5 
+ 
+ commandr 
+ 
+ config 
+ 
+ conformer_encoder 
+ 
+ dbrx 
+ 
+ deepencoder 
+ 
+ deepencoder2 
+ 
+ deepseek_eagle 
+ 
+ deepseek_eagle3 
+ 
+ deepseek_mtp 
+ 
+ deepseek_ocr 
+ 
+ deepseek_ocr2 
+ 
+ deepseek_v2 
+ 
+ deepseek_vl2 
+ 
+ dots1 
+ 
+ dots_ocr 
+ 
+ eagle2_5_vl 
+ 
+ ernie 
+ 
+ ernie45 
+ 
+ ernie45_moe 
+ 
+ ernie45_vl 
+ 
+ ernie45_vl_moe 
+ 
+ ernie_mtp 
+ 
+ exaone 
+ 
+ exaone4 
+ 
+ exaone4_5 
+ 
+ exaone4_5_mtp 
+ 
+ exaone_moe 
+ 
+ exaone_moe_mtp 
+ 
+ extract_hidden_states 
+ 
+ fairseq2_llama 
+ 
+ falcon 
+ 
+ falcon_h1 
+ 
+ fireredasr2 
+ 
+ fireredlid 
+ 
+ flex_olmo 
+ 
+ funasr 
+ 
+ funaudiochat 
+ 
+ fuyu 
+ 
+ gemma 
+ 
+ gemma2 
+ 
+ gemma3 
+ 
+ gemma3_mm 
+ 
+ gemma3n 
+ 
+ gemma3n_audio_utils 
+ 
+ gemma3n_mm 
+ 
+ gemma4 
+ 
+ gemma4_mm 
+ 
+ glm 
+ 
+ glm4 
+ 
+ glm4_1v 
+ 
+ glm4_moe 
+ 
+ glm4_moe_lite 
+ 
+ glm4_moe_lite_mtp 
+ 
+ glm4_moe_mtp 
+ 
+ glm4v 
+ 
+ glm_ocr 
+ 
+ glm_ocr_mtp 
+ 
+ glmasr 
+ 
+ glmasr_utils 
+ 
+ gpt2 
+ 
+ gpt_bigcode 
+ 
+ gpt_j 
+ 
+ gpt_neox 
+ 
+ gpt_oss 
+ 
+ granite 
+ 
+ granite_speech 
+ 
+ granitemoe 
+ 
+ granitemoehybrid 
+ 
+ granitemoeshared 
+ 
+ gritlm 
+ 
+ grok1 
+ 
+ h2ovl 
+ 
+ hunyuan_v1 
+ 
+ hunyuan_vision 
+ 
+ hyperclovax 
+ 
+ hyperclovax_vision 
+ 
+ hyperclovax_vision_v2 
+ 
+ idefics2_vision_model 
+ 
+ idefics3 
+ 
+ interfaces 
+ 
+ interfaces_base 
+ 
+ intern_vit 
+ 
+ internlm2 
+ 
+ internlm2_ve 
+ 
+ interns1 
+ 
+ interns1_pro 
+ 
+ interns1_vit 
+ 
+ internvl 
+ 
+ iquest_loopcoder 
+ 
+ isaac 
+ 
+ jais 
+ 
+ jais2 
+ 
+ jamba 
+ 
+ jina 
+ 
+ jina_vl 
+ 
+ kanana_v 
+ 
+ keye 
+ 
+ keye_vl1_5 
+ 
+ kimi_audio 
+ 
+ kimi_k25 
+ 
+ kimi_k25_vit 
+ 
+ kimi_linear 
+ 
+ kimi_vl 
+ 
+ lfm2 
+ 
+ lfm2_moe 
+ 
+ lfm2_siglip2 
+ 
+ lfm2_vl 
+ 
+ lightonocr 
+ 
+ llama 
+ 
+ llama4 
+ 
+ llama4_eagle 
+ 
+ llama_eagle 
+ 
+ llama_eagle3 
+ 
+ llava 
+ 
+ llava_next 
+ 
+ llava_next_video 
+ 
+ llava_onevision 
+ 
+ longcat_flash 
+ 
+ longcat_flash_mtp 
+ 
+ mamba 
+ 
+ mamba2 
+ 
+ medusa 
+ 
+ midashenglm 
+ 
+ mimo 
+ 
+ mimo_mtp 
+ 
+ mimo_v2_flash 
+ 
+ minicpm 
+ 
+ minicpm3 
+ 
+ minicpm_eagle 
+ 
+ minicpmo 
+ 
+ minicpmv 
+ 
+ minimax_m2 
+ 
+ minimax_text_01 
+ 
+ minimax_vl_01 
+ 
+ mistral 
+ 
+ mistral3 
+ 
+ mistral_large_3 
+ 
+ mistral_large_3_eagle 
+ 
+ mixtral 
+ 
+ mllama4 
+ 
+ mlp_speculator 
+ 
+ modernbert 
+ 
+ module_mapping 
+ 
+ molmo 
+ 
+ molmo2 
+ 
+ moonvit 
+ 
+ mpt 
+ 
+ musicflamingo 
+ 
+ nano_nemotron_vl 
+ 
+ nemotron 
+ 
+ nemotron_h 
+ 
+ nemotron_h_mtp 
+ 
+ nemotron_nas 
+ 
+ nemotron_parse 
+ 
+ nemotron_vl 
+ 
+ nvlm_d 
+ 
+ olmo 
+ 
+ olmo2 
+ 
+ olmo_hybrid 
+ 
+ olmoe 
+ 
+ opencua 
+ 
+ openpangu 
+ 
+ openpangu_mtp 
+ 
+ openpangu_vl 
+ 
+ opt 
+ 
+ orion 
+ 
+ ouro 
+ 
+ ovis 
+ 
+ ovis2_5 
+ 
+ paddleocr_vl 
+ 
+ paligemma 
+ 
+ parakeet 
+ 
+ param2moe 
+ 
+ persimmon 
+ 
+ phi 
+ 
+ phi3 
+ 
+ phi3v 
+ 
+ phi4mm 
+ 
+ phi4mm_audio 
+ 
+ phi4mm_utils 
+ 
+ phi4siglip 
+ 
+ phimoe 
+ 
+ pixtral 
+ 
+ plamo2 
+ 
+ plamo3 
+ 
+ qwen 
+ 
+ qwen2 
+ 
+ qwen2_5_omni_thinker 
+ 
+ qwen2_5_vl 
+ 
+ qwen2_audio 
+ 
+ qwen2_moe 
+ 
+ qwen2_rm 
+ 
+ qwen2_vl 
+ 
+ qwen3 
+ 
+ qwen3_5 
+ 
+ qwen3_5_mtp 
+ 
+ qwen3_asr 
+ 
+ qwen3_asr_forced_aligner 
+ 
+ qwen3_asr_realtime 
+ 
+ qwen3_dflash 
+ 
+ qwen3_moe 
+ 
+ qwen3_next 
+ 
+ qwen3_next_mtp 
+ 
+ qwen3_omni_moe_thinker 
+ 
+ qwen3_vl 
+ 
+ qwen3_vl_moe 
+ 
+ qwen_vl 
+ 
+ radio 
+ 
+ registry 
+ 
+ roberta 
+ 
+ rvl 
+ 
+ sarvam 
+ 
+ seed_oss 
+ 
+ siglip 
+ 
+ siglip2navit 
+ 
+ skyworkr1v 
+ 
+ smolvlm 
+ 
+ solar 
+ 
+ stablelm 
+ 
+ starcoder2 
+ 
+ step1 
+ 
+ step3_text 
+ 
+ step3_vl 
+ 
+ step3p5 
+ 
+ step3p5_mtp 
+ 
+ step_vl 
+ 
+ tarsier 
+ 
+ telechat2 
+ 
+ teleflm 
+ 
+ terratorch 
+ 
+ ultravox 
+ 
+ utils 
+ 
+ vision 
+ 
+ voxtral 
+ 
+ voxtral_realtime 
+ 
+ voyage 
+ 
+ whisper 
+ 
+ whisper_causal 
+ 
+ whisper_utils 
+ 
+ zamba2 
+
+ transformers 
+ transformers 
+ base 
+ 
+ causal 
+ 
+ legacy 
+ 
+ moe 
+ 
+ multimodal 
+ 
+ pooling 
+ 
+ utils 
+
+ offloader 
+ offloader 
+ base 
+ 
+ prefetch 
+ 
+ prefetch_ops 
+ 
+ uva 
+
+ warmup 
+ warmup 
+ deep_gemm_warmup 
+ 
+ kernel_warmup 
+
+ multimodal 
+ multimodal 
+ audio 
+ 
+ cache 
+ 
+ encoder_budget 
+ 
+ evs 
+ 
+ hasher 
+ 
+ image 
+ 
+ inputs 
+ 
+ parse 
+ 
+ registry 
+ 
+ utils 
+ 
+ video 
+
+ media 
+ media 
+ audio 
+ 
+ base 
+ 
+ connector 
+ 
+ image 
+ 
+ video 
+
+ processing 
+ processing 
+ context 
+ 
+ dummy_inputs 
+ 
+ inputs 
+ 
+ processor 
+
+ parser 
+ parser 
+ abstract_parser 
+ 
+ minimax_m2_parser 
+ 
+ parser_manager 
+
+ platforms 
+ platforms 
+ cpu 
+ 
+ cuda 
+ 
+ interface 
+ 
+ rocm 
+ 
+ tpu 
+ 
+ xpu 
+ 
+ zen_cpu 
+
+ plugins 
+ plugins 
+ 
+ io_processors 
+ io_processors 
+ interface 
+
+ lora_resolvers 
+ lora_resolvers 
+ filesystem_resolver 
+ 
+ hf_hub_resolver 
+
+ profiler 
+ profiler 
+ layerwise_profile 
+ 
+ utils 
+ 
+ wrapper 
+
+ ray 
+ ray 
+ lazy_utils 
+ 
+ ray_env 
+
+ reasoning 
+ reasoning 
+ abs_reasoning_parsers 
+ 
+ basic_parsers 
+ 
+ deepseek_r1_reasoning_parser 
+ 
+ deepseek_v3_reasoning_parser 
+ 
+ ernie45_reasoning_parser 
+ 
+ gemma4_reasoning_parser 
+ 
+ gemma4_utils 
+ 
+ gptoss_reasoning_parser 
+ 
+ granite_reasoning_parser 
+ 
+ hunyuan_a13b_reasoning_parser 
+ 
+ identity_reasoning_parser 
+ 
+ kimi_k2_reasoning_parser 
+ 
+ minimax_m2_reasoning_parser 
+ 
+ mistral_reasoning_parser 
+ 
+ nemotron_v3_reasoning_parser 
+ 
+ olmo3_reasoning_parser 
+ 
+ qwen3_reasoning_parser 
+ 
+ seedoss_reasoning_parser 
+ 
+ step3_reasoning_parser 
+ 
+ step3p5_reasoning_parser 
+
+ renderers 
+ renderers 
+ base 
+ 
+ deepseek_v32 
+ 
+ embed_utils 
+ 
+ grok2 
+ 
+ hf 
+ 
+ mistral 
+ 
+ params 
+ 
+ registry 
+ 
+ terratorch 
+
+ inputs 
+ inputs 
+ preprocess 
+ 
+ tokenize 
+
+ tokenizers 
+ tokenizers 
+ deepseek_v32 
+ 
+ deepseek_v32_encoding 
+ 
+ detokenizer_utils 
+ 
+ grok2 
+ 
+ hf 
+ 
+ kimi_audio 
+ 
+ mistral 
+ 
+ protocol 
+ 
+ qwen_vl 
+ 
+ registry 
+
+ tool_parsers 
+ tool_parsers 
+ abstract_tool_parser 
+ 
+ deepseekv3_tool_parser 
+ 
+ deepseekv31_tool_parser 
+ 
+ deepseekv32_tool_parser 
+ 
+ ernie45_tool_parser 
+ 
+ functiongemma_tool_parser 
+ 
+ gemma4_tool_parser 
+ 
+ gemma4_utils 
+ 
+ gigachat3_tool_parser 
+ 
+ glm4_moe_tool_parser 
+ 
+ glm47_moe_tool_parser 
+ 
+ granite4_tool_parser 
+ 
+ granite_20b_fc_tool_parser 
+ 
+ granite_tool_parser 
+ 
+ hermes_tool_parser 
+ 
+ hunyuan_a13b_tool_parser 
+ 
+ internlm2_tool_parser 
+ 
+ jamba_tool_parser 
+ 
+ kimi_k2_tool_parser 
+ 
+ llama4_pythonic_tool_parser 
+ 
+ llama_tool_parser 
+ 
+ longcat_tool_parser 
+ 
+ minimax_m2_tool_parser 
+ 
+ minimax_tool_parser 
+ 
+ mistral_tool_parser 
+ 
+ olmo3_tool_parser 
+ 
+ openai_tool_parser 
+ 
+ phi4mini_tool_parser 
+ 
+ pythonic_tool_parser 
+ 
+ qwen3coder_tool_parser 
+ 
+ qwen3xml_tool_parser 
+ 
+ seed_oss_tool_parser 
+ 
+ step3_tool_parser 
+ 
+ step3p5_tool_parser 
+ 
+ utils 
+ 
+ xlam_tool_parser 
+
+ tracing 
+ tracing 
+ otel 
+ 
+ utils 
+
+ transformers_utils 
+ transformers_utils 
+ config 
+ 
+ config_parser_base 
+ 
+ dynamic_module 
+ 
+ gguf_utils 
+ 
+ model_arch_config_convertor 
+ 
+ processor 
+ 
+ repo_utils 
+ 
+ runai_utils 
+ 
+ s3_utils 
+ 
+ tokenizer 
+ 
+ utils 
+
+ chat_templates 
+ chat_templates 
+ registry 
+
+ configs 
+ configs 
+ AXK1 
+ 
+ afmoe 
+ 
+ arctic 
+ 
+ bagel 
+ 
+ chatglm 
+ 
+ cheers 
+ 
+ colmodernvbert 
+ 
+ colpali 
+ 
+ colqwen3 
+ 
+ deepseek_vl2 
+ 
+ dotsocr 
+ 
+ eagle 
+ 
+ extract_hidden_states 
+ 
+ falcon 
+ 
+ fireredlid 
+ 
+ flex_olmo 
+ 
+ funaudiochat 
+ 
+ hunyuan_vl 
+ 
+ hyperclovax 
+ 
+ isaac 
+ 
+ jais 
+ 
+ kimi_k25 
+ 
+ kimi_linear 
+ 
+ kimi_vl 
+ 
+ lfm2_moe 
+ 
+ medusa 
+ 
+ midashenglm 
+ 
+ mistral 
+ 
+ mlp_speculator 
+ 
+ moonvit 
+ 
+ nemotron 
+ 
+ nemotron_h 
+ 
+ olmo_hybrid 
+ 
+ ovis 
+ 
+ parakeet 
+ 
+ qwen3_5 
+ 
+ qwen3_5_moe 
+ 
+ qwen3_asr 
+ 
+ qwen3_next 
+ 
+ radio 
+ 
+ step3_vl 
+ 
+ step3p5 
+ 
+ tarsier2 
+ 
+ ultravox 
+
+ speculators 
+ speculators 
+ algos 
+ 
+ base 
+
+ processors 
+ processors 
+ bagel 
+ 
+ cheers 
+ 
+ cohere_asr 
+ 
+ deepseek_ocr 
+ 
+ deepseek_vl2 
+ 
+ fireredasr2 
+ 
+ fireredlid 
+ 
+ funasr 
+ 
+ glm4v 
+ 
+ h2ovl 
+ 
+ hunyuan_vl 
+ 
+ hunyuan_vl_image 
+ 
+ internvl 
+ 
+ isaac 
+ 
+ kimi_audio 
+ 
+ kimi_k25 
+ 
+ nano_nemotron_vl 
+ 
+ nemotron_vl 
+ 
+ nvlm_d 
+ 
+ ovis 
+ 
+ ovis2_5 
+ 
+ pixtral 
+ 
+ qwen3_asr 
+ 
+ qwen_vl 
+ 
+ step3_vl 
+ 
+ voxtral 
+
+ triton_utils 
+ triton_utils 
+ allocation 
+ 
+ importing 
+
+ usage 
+ usage 
+ usage_lib 
+
+ utils 
+ utils 
+ argparse_utils 
+ 
+ async_utils 
+ 
+ cache 
+ 
+ collection_utils 
+ 
+ counter 
+ 
+ cpu_resource_utils 
+ 
+ cpu_triton_utils 
+ 
+ deep_gemm 
+ 
+ flashinfer 
+ 
+ func_utils 
+ 
+ gc_utils 
+ 
+ hashing 
+ 
+ import_utils 
+ 
+ jsontree 
+ 
+ math_utils 
+ 
+ mem_constants 
+ 
+ mem_utils 
+ 
+ mistral 
+ 
+ multi_stream_utils 
+ 
+ nccl 
+ 
+ network_utils 
+ 
+ numa_utils 
+ 
+ nvtx_pytorch_hooks 
+ 
+ ompmultiprocessing 
+ 
+ platform_utils 
+ 
+ print_utils 
+ 
+ profiling 
+ 
+ registry 
+ 
+ serial_utils 
+ 
+ system_utils 
+ 
+ tensor_schema 
+ 
+ torch_utils 
+ 
+ tqdm_utils 
+
+ v1 
+ v1 
+ cudagraph_dispatcher 
+ 
+ kv_cache_interface 
+ 
+ outputs 
+ 
+ request 
+ 
+ serial_utils 
+ 
+ utils 
+
+ attention 
+ attention 
+ backend 
+ 
+ selector 
+
+ backends 
+ backends 
+ cpu_attn 
+ 
+ fa_utils 
+ 
+ flash_attn 
+ 
+ flash_attn_diffkv 
+ 
+ flashinfer 
+ 
+ flex_attention 
+ 
+ gdn_attn 
+ 
+ linear_attn 
+ 
+ mamba1_attn 
+ 
+ mamba2_attn 
+ 
+ mamba_attn 
+ 
+ registry 
+ 
+ rocm_aiter_fa 
+ 
+ rocm_aiter_unified_attn 
+ 
+ rocm_attn 
+ 
+ short_conv_attn 
+ 
+ tree_attn 
+ 
+ triton_attn 
+ 
+ turboquant_attn 
+ 
+ utils 
+
+ mla 
+ mla 
+ aiter_triton_mla 
+ 
+ cutlass_mla 
+ 
+ flashattn_mla 
+ 
+ flashinfer_mla 
+ 
+ flashinfer_mla_sparse 
+ 
+ flashmla 
+ 
+ flashmla_sparse 
+ 
+ indexer 
+ 
+ rocm_aiter_mla 
+ 
+ rocm_aiter_mla_sparse 
+ 
+ sparse_utils 
+ 
+ triton_mla 
+ 
+ xpu_mla_sparse 
+
+ ops 
+ ops 
+ chunked_prefill_paged_decode 
+ 
+ common 
+ 
+ dcp_alltoall 
+ 
+ flashmla 
+ 
+ merge_attn_states 
+ 
+ paged_attn 
+ 
+ prefix_prefill 
+ 
+ rocm_aiter_mla_sparse 
+ 
+ triton_decode_attention 
+ 
+ triton_merge_attn_states 
+ 
+ triton_prefill_attention 
+ 
+ triton_reshape_and_cache_flash 
+ 
+ triton_turboquant_decode 
+ 
+ triton_turboquant_store 
+ 
+ triton_unified_attention 
+ 
+ vit_attn_wrappers 
+ 
+ xpu_mla_sparse 
+
+ core 
+ core 
+ block_pool 
+ 
+ encoder_cache_manager 
+ 
+ kv_cache_coordinator 
+ 
+ kv_cache_manager 
+ 
+ kv_cache_metrics 
+ 
+ kv_cache_utils 
+ 
+ single_type_kv_cache_manager 
+
+ sched 
+ sched 
+ async_scheduler 
+ 
+ interface 
+ 
+ output 
+ 
+ request_queue 
+ 
+ scheduler 
+ 
+ utils 
+
+ engine 
+ engine 
+ async_llm 
+ 
+ coordinator 
+ 
+ core 
+ 
+ core_client 
+ 
+ detokenizer 
+ 
+ exceptions 
+ 
+ input_processor 
+ 
+ llm_engine 
+ 
+ logprobs 
+ 
+ output_processor 
+ 
+ parallel_sampling 
+ 
+ tensor_ipc 
+ 
+ utils 
+
+ executor 
+ executor 
+ abstract 
+ 
+ multiproc_executor 
+ 
+ ray_env_utils 
+ 
+ ray_executor 
+ 
+ ray_executor_v2 
+ 
+ ray_utils 
+ 
+ uniproc_executor 
+
+ kv_offload 
+ kv_offload 
+ abstract 
+ 
+ factory 
+ 
+ mediums 
+ 
+ reuse_manager 
+ 
+ spec 
+
+ cpu 
+ cpu 
+ manager 
+ 
+ shared_offload_region 
+ 
+ spec 
+
+ policies 
+ policies 
+ abstract 
+ 
+ arc 
+ 
+ lru 
+
+ worker 
+ worker 
+ cpu_gpu 
+ 
+ worker 
+
+ metrics 
+ metrics 
+ loggers 
+ 
+ perf 
+ 
+ prometheus 
+ 
+ ray_wrappers 
+ 
+ reader 
+ 
+ stats 
+ 
+ utils 
+
+ pool 
+ pool 
+ late_interaction 
+ 
+ metadata 
+
+ sample 
+ sample 
+ metadata 
+ 
+ rejection_sampler 
+ 
+ sampler 
+
+ logits_processor 
+ logits_processor 
+ builtin 
+ 
+ interface 
+ 
+ state 
+
+ ops 
+ ops 
+ bad_words 
+ 
+ logprobs 
+ 
+ penalties 
+ 
+ topk_topp_sampler 
+ 
+ topk_topp_triton 
+
+ simple_kv_offload 
+ simple_kv_offload 
+ copy_backend 
+ 
+ cuda_mem_ops 
+ 
+ manager 
+ 
+ metadata 
+ 
+ worker 
+
+ spec_decode 
+ spec_decode 
+ dflash 
+ 
+ draft_model 
+ 
+ eagle 
+ 
+ extract_hidden_states 
+ 
+ medusa 
+ 
+ metadata 
+ 
+ metrics 
+ 
+ ngram_proposer 
+ 
+ ngram_proposer_gpu 
+ 
+ suffix_decoding 
+ 
+ utils 
+
+ structured_output 
+ structured_output 
+ backend_guidance 
+ 
+ backend_lm_format_enforcer 
+ 
+ backend_outlines 
+ 
+ backend_types 
+ 
+ backend_xgrammar 
+ 
+ request 
+ 
+ utils 
+
+ worker 
+ worker 
+ block_table 
+ 
+ cp_utils 
+ 
+ cpu_model_runner 
+ 
+ cpu_worker 
+ 
+ dp_utils 
+ 
+ ec_connector_model_runner_mixin 
+ 
+ encoder_cudagraph 
+ 
+ encoder_cudagraph_defs 
+ 
+ gpu_input_batch 
+ 
+ gpu_model_runner 
+ 
+ gpu_ubatch_wrapper 
+ 
+ gpu_worker 
+ 
+ kv_connector_model_runner_mixin 
+ 
+ lora_model_runner_mixin 
+ 
+ mamba_utils 
+ 
+ tpu_input_batch 
+ 
+ ubatch_utils 
+ 
+ ubatching 
+ 
+ utils 
+ 
+ worker_base 
+ 
+ workspace 
+ 
+ xpu_model_runner 
+ 
+ xpu_worker 
+
+ gpu 
+ gpu 
+ async_utils 
+ 
+ attn_utils 
+ 
+ block_table 
+ 
+ buffer_utils 
+ 
+ cp_utils 
+ 
+ cudagraph_utils 
+ 
+ dp_utils 
+ 
+ eplb_utils 
+ 
+ input_batch 
+ 
+ kv_connector 
+ 
+ lora_utils 
+ 
+ model_runner 
+ 
+ pp_utils 
+ 
+ states 
+ 
+ structured_outputs 
+ 
+ warmup 
+
+ metrics 
+ metrics 
+ logits 
+
+ mm 
+ mm 
+ encoder_cache 
+ 
+ encoder_runner 
+ 
+ rope 
+
+ model_states 
+ model_states 
+ default 
+ 
+ interface 
+ 
+ whisper 
+
+ pool 
+ pool 
+ late_interaction_runner 
+ 
+ pooling_runner 
+
+ sample 
+ sample 
+ bad_words 
+ 
+ gumbel 
+ 
+ logit_bias 
+ 
+ logprob 
+ 
+ min_p 
+ 
+ output 
+ 
+ penalties 
+ 
+ prompt_logprob 
+ 
+ sampler 
+ 
+ states 
+
+ spec_decode 
+ spec_decode 
+ probabilistic_rejection_sampler_utils 
+ 
+ rejection_sampler 
+ 
+ synthetic_rejection_sampler_utils 
+ 
+ utils 
+
+ eagle 
+ eagle 
+ cudagraph 
+ 
+ eagle3_utils 
+ 
+ speculator 
+ 
+ utils 
+
+ CLI Reference 
+ CLI Reference 
+ vllm serve 
+ 
+ vllm chat 
+ 
+ vllm complete 
+ 
+ vllm run-batch 
+ 
+ vllm bench vllm bench 
+ vllm bench latency 
+ 
+ vllm bench mm-processor 
+ 
+ vllm bench serve 
+ 
+ vllm bench sweep plot 
+ 
+ vllm bench sweep plot_pareto 
+ 
+ vllm bench sweep serve 
+ 
+ vllm bench sweep serve_workload 
+ 
+ vllm bench throughput 
+
+ Community Community 
+ Contact Us 
+ 
+ Meetups 
+ 
+ Sponsors 
+ 
+ Governance Governance 
+ Collaboration Policy 
+ 
+ Committers 
+ 
+ Governance Process 
+
+ Blog 
+ 
+ Forum 
+ 
+ Slack 
+
+ Table of contents 
+ Supported APIs 
+ 
+ Chat Template 
+ 
+ Extra Parameters 
+ 
+ Extra HTTP Headers 
+ 
+ Offline API Documentation 
+ 
+ API Reference 
+ Completions API 
+ Extra parameters 
+
+ Chat API 
+ Extra parameters 
+
+ Responses API 
+ Extra parameters 
+
+ Transcriptions API 
+ API Enforced Limits 
+ 
+ Uploading Audio Files 
+ 
+ Extra Parameters 
+
+ Translations API 
+ Extra Parameters 
+
+ Realtime API 
+ Audio Format 
+ 
+ Protocol Overview 
+ 
+ Client → Server Events 
+ 
+ Server → Client Events 
+ 
+ Example Clients 
+
+ Tokenizer API 
+ 
+ Generative Scoring API 
+ Example 
+ 
+ How it works 
+ 
+ Finding Token IDs 
+
+ Ray Serve LLM 
+
+ Home 
+ 
+ User Guide 
+ 
+ Inference and Serving 
+
+OpenAI-Compatible Server¶
+ 
+vLLM provides an HTTP server that implements OpenAI's Completions API, Chat API, and more! This functionality lets you serve models and interact with them using an HTTP client.
+ 
+In your terminal, you can install vLLM, then start the server with the vllm serve command. (You can also use our Docker image.)
+ 
+vllm serve NousResearch/Meta-Llama-3-8B-Instruct \
+ --dtype auto \
+ --api-key token-abc123
+
+To call the server, in your preferred text editor, create a script that uses an HTTP client. Include any messages that you want to send to the model. Then run that script. Below is an example script using the official OpenAI Python client.
+ Code 
+from openai import OpenAI
+client = OpenAI(
+ base_url="http://localhost:8000/v1",
+ api_key="token-abc123",
+)
+
+completion = client.chat.completions.create(
+ model="NousResearch/Meta-Llama-3-8B-Instruct",
+ messages=[
+ {"role": "user", "content": "Hello!"},
+ ],
+)
+
+print(completion.choices[0].message)
+
+Tip
+ 
+vLLM supports some parameters that are not supported by OpenAI, top_k for example. You can pass these parameters to vLLM using the OpenAI client in the extra_body parameter of your requests, i.e. extra_body={"top_k": 50} for top_k.
+
+Important
+ 
+By default, the server applies generation_config.json from the Hugging Face model repository if it exists. This means the default values of certain sampling parameters can be overridden by those recommended by the model creator.
+ 
+To disable this behavior, please pass --generation-config vllm when launching the server.
+
+Supported APIs¶
+ 
+We currently support the following OpenAI APIs:
+ 
+Completions API (/v1/completions) 
+Only applicable to text generation models.
+ 
+Note: suffix parameter is not supported.
+
+Responses API (/v1/responses) 
+Only applicable to text generation models.
+
+Chat Completions API (/v1/chat/completions) 
+Only applicable to text generation models with a chat template.
+ 
+Note: user parameter is ignored.
+ 
+Note: Setting the parallel_tool_calls parameter to false ensures vLLM only returns zero or one tool call per request. Setting it to true (the default) allows returning more than one tool call per request. There is no guarantee more than one tool call will be returned if this is set to true, as that behavior is model dependent and not all models are designed to support parallel tool calls.
+
+Embeddings API (/v1/embeddings) 
+Only applicable to embedding models.
+
+Transcriptions API (/v1/audio/transcriptions) 
+Only applicable to Automatic Speech Recognition (ASR) models.
+
+Translation API (/v1/audio/translations) 
+Only applicable to Automatic Speech Recognition (ASR) models.
+
+Realtime API (/v1/realtime) 
+Only applicable to Automatic Speech Recognition (ASR) models.
+
+In addition, we have the following custom APIs:
+ 
+Tokenizer API (/tokenize, /detokenize) 
+Applicable to any model with a tokenizer.
+
+pooling API (/pooling) 
+Applicable to all pooling models.
+
+Classification API (/classify) 
+Only applicable to classification models.
+
+Cohere Embed API (/v2/embed) 
+Compatible with Cohere's Embed API
+ 
+Works with any embedding model, including multimodal models.
+
+Score API (/score, /v1/score) 
+Applicable to score models (cross-encoder, bi-encoder, late-interaction).
+
+Generative Scoring API (/generative_scoring) 
+Applicable to CausalLM models (task "generate").
+ 
+Computes next-token probabilities for specified label_token_ids.
+
+Rerank API (/rerank, /v1/rerank, /v2/rerank) 
+Implements Jina AI's v1 rerank API
+ 
+Also compatible with Cohere's v1 & v2 rerank APIs
+ 
+Jina and Cohere's APIs are very similar; Jina's includes extra information in the rerank endpoint's response.
+
+Chat Template¶
+ 
+In order for the language model to support chat protocol, vLLM requires the model to include a chat template in its tokenizer configuration. The chat template is a Jinja2 template that specifies how roles, messages, and other chat-specific tokens are encoded in the input.
+ 
+An example chat template for NousResearch/Meta-Llama-3-8B-Instruct can be found here
+ 
+Some mode
+
+...[gekürzt in diesem Bundle: 29435 weitere Zeichen in der Quelldatei]
+````
+
+</details>
+
+## Nachtrag: ungekürzte vollständige Textanlagen
+
+<details>
+<summary>VOLLSTÄNDIGE ungekürzte Textanlage: <code>OpenAI/API/vLLM/openai-compatible-server.txt</code></summary>
+
+````text
+OpenAI-Compatible Server - vLLM 
+ Skip to content 
+
+ vLLM 
+ 
+ OpenAI-Compatible Server 
+
+ Initializing search 
+
+ GitHub 
+
+ Home 
+ 
+ User Guide 
+ 
+ Developer Guide 
+ 
+ Benchmarking 
+ 
+ API Reference 
+ 
+ CLI Reference 
+ 
+ Community 
+
+ vLLM 
+
+ GitHub 
+
+ Home 
+
+ User Guide 
+ User Guide 
+ Getting Started Getting Started 
+ Quickstart 
+
+ Installation 
+ Installation 
+ GPU 
+ 
+ CPU 
+ 
+ TPU 
+
+ Examples 
+ Examples 
+ Basic Basic 
+ Offline Inference 
+ 
+ Online Serving 
+
+ Observability Observability 
+ Monitoring Dashboards 
+ 
+ Metrics 
+ 
+ Setup OpenTelemetry POC 
+ 
+ Prometheus and Grafana 
+
+ Offline Inference Offline Inference 
+ Async LLM Streaming 
+ 
+ Audio Language 
+ 
+ Automatic Prefix Caching 
+ 
+ Batch LLM Inference 
+ 
+ Chat With Tools 
+ 
+ Context Extension 
+ 
+ Data Parallel 
+ 
+ Disaggregated Prefill V1 
+ 
+ Disaggregated Prefill 
+ 
+ Encoder Decoder Multimodal 
+ 
+ Extract Hidden States 
+ 
+ KV Load Failure Recovery Test 
+ 
+ LLM Engine Example 
+ 
+ LLM Engine Reset Kv 
+ 
+ Load Sharded State 
+ 
+ Custom Logits Processors 
+ 
+ LoRA With Quantization Inference 
+ 
+ Mistral-Small 
+ 
+ MLPSpeculator 
+ 
+ MultiLoRA Inference 
+ 
+ Offline Inference with the OpenAI Batch file format 
+ 
+ Pause Resume 
+ 
+ Prefix Caching 
+ 
+ Prefix Caching Flexkv 
+ 
+ Prompt Embed Inference 
+ 
+ Qwen2.5-Omni Offline Inference Examples 
+ 
+ Qwen3 Omni 
+ 
+ Qwen 1M 
+ 
+ Reproducibility 
+ 
+ Routed Experts E2E 
+ 
+ Run One Batch 
+ 
+ Save Sharded State 
+ 
+ Simple Profiling 
+ 
+ Skip Loading Weights In Engine Init 
+ 
+ Spec Decode 
+ 
+ Structured Outputs 
+ 
+ Torchrun Dp Example 
+ 
+ Torchrun Example 
+ 
+ Vision Language 
+ 
+ Vision Language Multi Image 
+
+ Online Serving Online Serving 
+ API Client 
+ 
+ Batched Chat Completions 
+ 
+ Helm Charts 
+ 
+ Data Parallel Pause Resume 
+ 
+ Disaggregated Encoder 
+ 
+ Disaggregated Prefill 
+ 
+ Disaggregated Serving 
+ 
+ Disaggregated Serving P2P NCCL Xpyd 
+ 
+ Ec Both Encoder 
+ 
+ Elastic Ep 
+ 
+ Gradio OpenAI Chatbot Webserver 
+ 
+ Gradio Webserver 
+ 
+ Kv Events Subscriber 
+ 
+ Multi-Node-Serving 
+ 
+ Multi Instance Data Parallel 
+ 
+ OpenAI Chat Completion Client For Multimodal 
+ 
+ OpenAI Chat Completion Client With Tools 
+ 
+ OpenAI Chat Completion Client With Tools Required 
+ 
+ OpenAI Chat Completion Client With Tools Xlam 
+ 
+ OpenAI Chat Completion Client With Tools Xlam Streaming 
+ 
+ OpenAI Chat Completion Tool Calls With Reasoning 
+ 
+ OpenAI Chat Completion With Reasoning 
+ 
+ OpenAI Chat Completion With Reasoning Streaming 
+ 
+ OpenAI Lid Client 
+ 
+ OpenAI Realtime Client 
+ 
+ OpenAI Realtime Microphone Client 
+ 
+ OpenAI Responses Client 
+ 
+ OpenAI Responses Client With Mcp Tools 
+ 
+ OpenAI Responses Client With Tools 
+ 
+ OpenAI Transcription Client 
+ 
+ OpenAI Translation Client 
+ 
+ Prompt Embed Inference With OpenAI Client 
+ 
+ Ray Serve Deepseek 
+ 
+ Retrieval Augmented Generation With Langchain 
+ 
+ Retrieval Augmented Generation With Llamaindex 
+ 
+ Run Cluster 
+ 
+ Sagemaker-Entrypoint 
+ 
+ Streamlit OpenAI Chatbot Webserver 
+ 
+ Structured Outputs 
+ 
+ Token Generation Client 
+ 
+ Utils 
+
+ Others Others 
+ LMCache Examples 
+ 
+ Logging Configuration 
+ 
+ Tensorize vLLM Model 
+
+ Pooling Pooling 
+ Classify 
+ 
+ Embed 
+ 
+ Plugin 
+ 
+ Pooling 
+ 
+ Score 
+ 
+ Token Classify 
+ 
+ Token Embed 
+
+ RL RL 
+ RLHF Async New APIs 
+ 
+ RLHF Http IPC 
+ 
+ RLHF Http NCCL 
+ 
+ RLHF IPC 
+ 
+ RLHF NCCL 
+ 
+ RLHF NCCL Fsdp Ep 
+
+ General General 
+ vLLM V1 
+ 
+ Frequently Asked Questions 
+ 
+ Production Metrics 
+ 
+ Reproducibility 
+ 
+ Security 
+ 
+ Troubleshooting 
+ 
+ Usage Stats Collection 
+
+ Inference and Serving Inference and Serving 
+ Offline Inference 
+ 
+ OpenAI-Compatible Server OpenAI-Compatible Server Table of contents 
+ Supported APIs 
+ 
+ Chat Template 
+ 
+ Extra Parameters 
+ 
+ Extra HTTP Headers 
+ 
+ Offline API Documentation 
+ 
+ API Reference 
+ Completions API 
+ Extra parameters 
+
+ Chat API 
+ Extra parameters 
+
+ Responses API 
+ Extra parameters 
+
+ Transcriptions API 
+ API Enforced Limits 
+ 
+ Uploading Audio Files 
+ 
+ Extra Parameters 
+
+ Translations API 
+ Extra Parameters 
+
+ Realtime API 
+ Audio Format 
+ 
+ Protocol Overview 
+ 
+ Client → Server Events 
+ 
+ Server → Client Events 
+ 
+ Example Clients 
+
+ Tokenizer API 
+ 
+ Generative Scoring API 
+ Example 
+ 
+ How it works 
+ 
+ Finding Token IDs 
+
+ Ray Serve LLM 
+
+ Context Parallel Deployment 
+ 
+ Data Parallel Deployment 
+ 
+ Troubleshooting distributed deployments 
+ 
+ Expert Parallel Deployment 
+ 
+ Parallelism and Scaling 
+ 
+ Integrations Integrations 
+ Claude Code 
+ 
+ LangChain 
+ 
+ LlamaIndex 
+
+ Deployment Deployment 
+ Using Docker 
+ 
+ Using Kubernetes 
+ 
+ Using Nginx 
+ 
+ Frameworks Frameworks 
+ Anyscale 
+ 
+ AnythingLLM 
+ 
+ AutoGen 
+ 
+ BentoML 
+ 
+ Cerebrium 
+ 
+ Chatbox 
+ 
+ Dify 
+ 
+ dstack 
+ 
+ Haystack 
+ 
+ Helm 
+ 
+ Hugging Face Inference Endpoints 
+ 
+ LiteLLM 
+ 
+ Lobe Chat 
+ 
+ LWS 
+ 
+ Modal 
+ 
+ Open WebUI 
+ 
+ Retrieval-Augmented Generation 
+ 
+ RunPod 
+ 
+ SkyPilot 
+ 
+ Streamlit 
+ 
+ NVIDIA Triton 
+
+ Integrations Integrations 
+ AIBrix 
+ 
+ NVIDIA Dynamo 
+ 
+ KAITO 
+ 
+ KServe 
+ 
+ Kthena 
+ 
+ KubeAI 
+ 
+ KubeRay 
+ 
+ Llama Stack 
+ 
+ llm-d 
+ 
+ llmaz 
+ 
+ Production stack 
+
+ Training Training 
+ Async Reinforcement Learning 
+ 
+ Reinforcement Learning from Human Feedback 
+ 
+ Transformers Reinforcement Learning 
+
+ Weight Transfer 
+ Weight Transfer 
+ Base Class and Custom Engines 
+ 
+ IPC Engine 
+ 
+ NCCL Engine 
+
+ Configuration 
+ Configuration 
+ Conserving Memory 
+ 
+ Engine Arguments 
+ 
+ Environment Variables 
+ 
+ Model Resolution 
+ 
+ Optimization and Tuning 
+ 
+ Server Arguments 
+ 
+ TPU 
+
+ Models Models 
+ Supported Models 
+ 
+ Generative Models 
+
+ Pooling Models 
+ Pooling Models 
+ Classification Usages 
+ 
+ Embedding Usages 
+ 
+ Reward Usages 
+ 
+ Scoring Usages 
+ 
+ Specific Model Examples 
+ 
+ Token Classification Usages 
+ 
+ Token Embedding Usages 
+
+ Extensions Extensions 
+ Loading model weights with fastsafetensors 
+ 
+ Loading Model Weights with InstantTensor 
+ 
+ Loading models with Run:ai Model Streamer 
+ 
+ Loading models with CoreWeave's Tensorizer 
+
+ Hardware Supported Models Hardware Supported Models 
+ CPU - Intel® Xeon® 
+ 
+ XPU - Intel® GPUs 
+ 
+ TPU 
+
+ Features 
+ Features 
+ Automatic Prefix Caching 
+ 
+ Batch Invariance 
+ 
+ Custom Arguments 
+ 
+ Custom Logits Processors 
+ 
+ Disaggregated Encoder 
+ 
+ Disaggregated Prefilling (experimental) 
+ 
+ Interleaved Thinking 
+ 
+ LoRA Adapters 
+ 
+ MooncakeConnector Usage Guide 
+ 
+ Multimodal Inputs 
+ 
+ NixlConnector Compatibility Matrix 
+ 
+ NixlConnector Usage Guide 
+ 
+ Prompt Embedding Inputs 
+ 
+ Reasoning Outputs 
+ 
+ Sleep Mode 
+ 
+ Structured Outputs 
+ 
+ Tool Calling 
+
+ Quantization 
+ Quantization 
+ AutoAWQ 
+ 
+ BitsAndBytes 
+ 
+ FP8 W8A8 
+ 
+ GGUF 
+ 
+ GPTQModel 
+ 
+ Intel Quantization Support 
+ 
+ INT4 W4A16 
+ 
+ INT8 W8A8 
+ 
+ LLM Compressor 
+ 
+ NVIDIA Model Optimizer 
+ 
+ Online Quantization 
+ 
+ Quantized KV Cache 
+ 
+ AMD Quark 
+ 
+ TorchAO 
+
+ Speculative Decoding 
+ Speculative Decoding 
+ Draft Models 
+ 
+ EAGLE Draft Models 
+ 
+ MLP Draft Models 
+ 
+ MTP (Multi-Token Prediction) 
+ 
+ N-Gram Speculation 
+ 
+ Parallel Draft Models 
+ 
+ vLLM-Project/Speculators 
+ 
+ Suffix Decoding 
+
+ Developer Guide 
+ Developer Guide 
+ General General 
+ Deprecation Policy 
+ 
+ Dockerfile 
+ 
+ Editing Agent Instructions 
+ 
+ Incremental Compilation Workflow 
+ 
+ Profiling vLLM 
+ 
+ Vulnerability Management 
+
+ Model Implementation 
+ Model Implementation 
+ Basic Model 
+ 
+ Registering a Model 
+ 
+ Unit Testing 
+ 
+ Multi-Modal Support 
+ 
+ Speech-to-Text (Transcription/Translation) Support 
+
+ CI CI 
+ CI Failures 
+ 
+ Nightly Builds of vLLM Wheels 
+ 
+ Update PyTorch version on vLLM OSS CI/CD 
+
+ Design Documents Design Documents 
+ Plugins Plugins 
+ IO Processor Plugins 
+ 
+ LoRA Resolver Plugins 
+ 
+ Plugin System 
+
+ Architecture Overview 
+ 
+ Attention Backend Feature Support 
+ 
+ CUDA Graphs 
+ 
+ Vision Encoder (ViT) CUDA Graphs 
+ 
+ CustomOp 
+ 
+ Dual Batch Overlap 
+ 
+ How to debug the vLLM-torch.compile integration 
+ 
+ Fused MoE Modular Kernel 
+ 
+ Fusion torch.compile passes 
+ 
+ Integration with Hugging Face 
+ 
+ Hybrid KV Cache Manager 
+ 
+ Logits Processors 
+ 
+ Metrics 
+ 
+ Multi-Modal Data Processing 
+ 
+ Model Runner V2 Design Document 
+ 
+ Fused MoE Kernel Features 
+ 
+ Python Multiprocessing 
+ 
+ Optimization Levels 
+ 
+ P2P NCCL Connector 
+ 
+ Paged Attention 
+ 
+ Automatic Prefix Caching 
+ 
+ torch.compile integration 
+ 
+ torch.compile with Multimodal Encoders 
+
+ Benchmarking 
+ Benchmarking 
+ Benchmark CLI 
+ 
+ Parameter Sweeps 
+ 
+ Performance Dashboard 
+
+ API Reference 
+ API Reference 
+ 
+ vllm 
+ vllm 
+ beam_search 
+ 
+ collect_env 
+ 
+ connections 
+ 
+ env_override 
+ 
+ envs 
+ 
+ exceptions 
+ 
+ forward_context 
+ 
+ logger 
+ 
+ logits_process 
+ 
+ logprobs 
+ 
+ model_inspection 
+ 
+ outputs 
+ 
+ pooling_params 
+ 
+ sampling_params 
+ 
+ scalar_type 
+ 
+ scripts 
+ 
+ sequence 
+ 
+ tasks 
+ 
+ version 
+
+ assets 
+ assets 
+ audio 
+ 
+ base 
+ 
+ image 
+ 
+ video 
+
+ benchmarks 
+ benchmarks 
+ latency 
+ 
+ mm_processor 
+ 
+ plot 
+ 
+ serve 
+ 
+ startup 
+ 
+ throughput 
+
+ datasets 
+ datasets 
+ create_txt_slices_dataset 
+ 
+ datasets 
+ 
+ utils 
+
+ lib 
+ lib 
+ endpoint_request_func 
+ 
+ ready_checker 
+ 
+ utils 
+
+ sweep 
+ sweep 
+ cli 
+ 
+ param_sweep 
+ 
+ plot 
+ 
+ plot_pareto 
+ 
+ serve 
+ 
+ serve_workload 
+ 
+ server 
+ 
+ startup 
+ 
+ utils 
+
+ compilation 
+ compilation 
+ backends 
+ 
+ base_static_graph 
+ 
+ caching 
+ 
+ codegen 
+ 
+ compiler_interface 
+ 
+ counter 
+ 
+ cuda_graph 
+ 
+ decorators 
+ 
+ monitor 
+ 
+ partition_rules 
+ 
+ piecewise_backend 
+ 
+ wrapper 
+
+ passes 
+ passes 
+ fx_utils 
+ 
+ inductor_pass 
+ 
+ pass_manager 
+ 
+ vllm_inductor_pass 
+
+ fusion 
+ fusion 
+ act_quant_fusion 
+ 
+ allreduce_rms_fusion 
+ 
+ attn_quant_fusion 
+ 
+ collective_fusion 
+ 
+ matcher_utils 
+ 
+ minimax_qk_norm_fusion 
+ 
+ mla_attn_quant_fusion 
+ 
+ qk_norm_rope_fusion 
+ 
+ rms_quant_fusion 
+ 
+ rocm_aiter_fusion 
+ 
+ rope_kvcache_fusion 
+ 
+ sequence_parallelism 
+
+ ir 
+ ir 
+ lowering_pass 
+
+ utility 
+ utility 
+ fix_functionalization 
+ 
+ noop_elimination 
+ 
+ post_cleanup 
+ 
+ scatter_split_replace 
+ 
+ split_coalescing 
+
+ config 
+ config 
+ attention 
+ 
+ cache 
+ 
+ compilation 
+ 
+ device 
+ 
+ ec_transfer 
+ 
+ kernel 
+ 
+ kv_events 
+ 
+ kv_transfer 
+ 
+ load 
+ 
+ lora 
+ 
+ mamba 
+ 
+ model 
+ 
+ model_arch 
+ 
+ multimodal 
+ 
+ observability 
+ 
+ offload 
+ 
+ parallel 
+ 
+ pooler 
+ 
+ profiler 
+ 
+ quantization 
+ 
+ reasoning 
+ 
+ scheduler 
+ 
+ speculative 
+ 
+ speech_to_text 
+ 
+ structured_outputs 
+ 
+ utils 
+ 
+ vllm 
+ 
+ weight_transfer 
+
+ device_allocator 
+ device_allocator 
+ cumem 
+
+ distributed 
+ distributed 
+ communication_op 
+ 
+ kv_events 
+ 
+ parallel_state 
+ 
+ stateless_coordinator 
+ 
+ utils 
+
+ device_communicators 
+ device_communicators 
+ all2all 
+ 
+ all_reduce_utils 
+ 
+ base_device_communicator 
+ 
+ cpu_communicator 
+ 
+ cuda_communicator 
+ 
+ cuda_wrapper 
+ 
+ custom_all_reduce 
+ 
+ flashinfer_all_reduce 
+ 
+ mnnvl_compat 
+ 
+ pynccl 
+ 
+ pynccl_allocator 
+ 
+ pynccl_wrapper 
+ 
+ quick_all_reduce 
+ 
+ ray_communicator 
+ 
+ shm_broadcast 
+ 
+ shm_object_storage 
+ 
+ symm_mem 
+ 
+ xpu_communicator 
+
+ ec_transfer 
+ ec_transfer 
+ ec_transfer_state 
+
+ ec_connector 
+ ec_connector 
+ base 
+ 
+ example_connector 
+ 
+ factory 
+
+ elastic_ep 
+ elastic_ep 
+ elastic_execute 
+ 
+ elastic_state 
+ 
+ standby_state 
+
+ eplb 
+ eplb 
+ async_worker 
+ 
+ eplb_communicator 
+ 
+ eplb_state 
+ 
+ eplb_utils 
+ 
+ rebalance_execute 
+
+ policy 
+ policy 
+ abstract 
+ 
+ default 
+
+ kv_transfer 
+ kv_transfer 
+ kv_transfer_state 
+
+ kv_connector 
+ kv_connector 
+ base 
+ 
+ factory 
+ 
+ utils 
+
+ v1 
+ v1 
+ base 
+ 
+ decode_bench_connector 
+ 
+ example_connector 
+ 
+ example_hidden_states_connector 
+ 
+ flexkv_connector 
+ 
+ lmcache_connector 
+ 
+ lmcache_mp_connector 
+ 
+ metrics 
+ 
+ multi_connector 
+ 
+ offloading_connector 
+ 
+ simple_cpu_offload_connector 
+ 
+ ssm_conv_transfer_utils 
+
+ hf3fs 
+ hf3fs 
+ hf3fs_client 
+ 
+ hf3fs_connector 
+ 
+ hf3fs_metadata_server 
+
+ utils 
+ utils 
+ common 
+ 
+ gather_scatter_helper 
+ 
+ hf3fs_mock_client 
+
+ lmcache_integration 
+ lmcache_integration 
+ multi_process_adapter 
+ 
+ utils 
+ 
+ vllm_v1_adapter 
+
+ mooncake 
+ mooncake 
+ mooncake_connector 
+ 
+ mooncake_utils 
+
+ moriio 
+ moriio 
+ moriio_common 
+ 
+ moriio_connector 
+ 
+ moriio_engine 
+
+ nixl 
+ nixl 
+ connector 
+ 
+ metadata 
+ 
+ scheduler 
+ 
+ stats 
+ 
+ utils 
+ 
+ worker 
+
+ offloading 
+ offloading 
+ common 
+ 
+ metrics 
+ 
+ scheduler 
+ 
+ worker 
+
+ p2p 
+ p2p 
+ p2p_nccl_connector 
+ 
+ p2p_nccl_engine 
+ 
+ tensor_memory_pool 
+
+ weight_transfer 
+ weight_transfer 
+ base 
+ 
+ factory 
+ 
+ ipc_engine 
+ 
+ nccl_engine 
+ 
+ packed_tensor 
+
+ engine 
+ engine 
+ arg_utils 
+ 
+ async_llm_engine 
+ 
+ llm_engine 
+ 
+ protocol 
+
+ entrypoints 
+ entrypoints 
+ api_server 
+ 
+ chat_utils 
+ 
+ constants 
+ 
+ grpc_server 
+ 
+ launcher 
+ 
+ llm 
+ 
+ logger 
+ 
+ ssl 
+ 
+ utils 
+
+ anthropic 
+ anthropic 
+ api_router 
+ 
+ protocol 
+ 
+ serving 
+
+ cli 
+ cli 
+ collect_env 
+ 
+ launch 
+ 
+ main 
+ 
+ openai 
+ 
+ run_batch 
+ 
+ serve 
+ 
+ types 
+
+ benchmark 
+ benchmark 
+ base 
+ 
+ latency 
+ 
+ main 
+ 
+ mm_processor 
+ 
+ serve 
+ 
+ startup 
+ 
+ sweep 
+ 
+ throughput 
+
+ mcp 
+ mcp 
+ tool 
+ 
+ tool_server 
+
+ openai 
+ openai 
+ api_server 
+ 
+ cli_args 
+ 
+ orca_metrics 
+ 
+ run_batch 
+ 
+ server_utils 
+ 
+ utils 
+
+ chat_completion 
+ chat_completion 
+ api_router 
+ 
+ batch_serving 
+ 
+ protocol 
+ 
+ serving 
+ 
+ stream_harmony 
+
+ completion 
+ completion 
+ api_router 
+ 
+ protocol 
+ 
+ serving 
+
+ engine 
+ engine 
+ protocol 
+ 
+ serving 
+
+ generate 
+ generate 
+ api_router 
+ 
+ factories 
+
+ generative_scoring 
+ generative_scoring 
+ api_router 
+ 
+ serving 
+
+ models 
+ models 
+ api_router 
+ 
+ protocol 
+ 
+ serving 
+
+ parser 
+ parser 
+ harmony_utils 
+ 
+ responses_parser 
+
+ realtime 
+ realtime 
+ api_router 
+ 
+ connection 
+ 
+ metrics 
+ 
+ protocol 
+ 
+ serving 
+
+ responses 
+ responses 
+ api_router 
+ 
+ context 
+ 
+ harmony 
+ 
+ protocol 
+ 
+ serving 
+ 
+ streaming_events 
+ 
+ utils 
+
+ speech_to_text 
+ speech_to_text 
+ api_router 
+ 
+ protocol 
+ 
+ serving 
+ 
+ speech_to_text 
+
+ pooling 
+ pooling 
+ factories 
+ 
+ typing 
+ 
+ utils 
+
+ base 
+ base 
+ io_processor 
+ 
+ protocol 
+ 
+ serving 
+
+ classify 
+ classify 
+ api_router 
+ 
+ io_processor 
+ 
+ protocol 
+ 
+ serving 
+
+ embed 
+ embed 
+ api_router 
+ 
+ io_processor 
+ 
+ protocol 
+ 
+ serving 
+
+ pooling 
+ pooling 
+ api_router 
+ 
+ io_processor 
+ 
+ protocol 
+ 
+ serving 
+
+ scoring 
+ scoring 
+ api_router 
+ 
+ io_processor 
+ 
+ protocol 
+ 
+ serving 
+ 
+ typing 
+ 
+ utils 
+
+ sagemaker 
+ sagemaker 
+ api_router 
+
+ serve 
+ serve 
+ 
+ cache 
+ cache 
+ api_router 
+
+ disagg 
+ disagg 
+ api_router 
+ 
+ mm_serde 
+ 
+ protocol 
+ 
+ serving 
+
+ elastic_ep 
+ elastic_ep 
+ api_router 
+ 
+ middleware 
+
+ instrumentator 
+ instrumentator 
+ basic 
+ 
+ health 
+ 
+ metrics 
+ 
+ offline_docs 
+ 
+ server_info 
+
+ lora 
+ lora 
+ api_router 
+ 
+ protocol 
+
+ profile 
+ profile 
+ api_router 
+
+ render 
+ render 
+ api_router 
+ 
+ serving 
+
+ rlhf 
+ rlhf 
+ api_router 
+
+ rpc 
+ rpc 
+ api_router 
+
+ sleep 
+ sleep 
+ api_router 
+
+ tokenize 
+ tokenize 
+ api_router 
+ 
+ protocol 
+ 
+ serving 
+
+ inputs 
+ inputs 
+ engine 
+ 
+ llm 
+ 
+ preprocess 
+
+ ir 
+ ir 
+ op 
+ 
+ util 
+
+ ops 
+ ops 
+ layernorm 
+
+ kernels 
+ kernels 
+ aiter_ops 
+ 
+ oink_ops 
+ 
+ vllm_c 
+ 
+ xpu_ops 
+
+ helion 
+ helion 
+ config_manager 
+ 
+ register 
+ 
+ utils 
+
+ ops 
+ ops 
+ silu_mul_fp8 
+
+ logging_utils 
+ logging_utils 
+ access_log_filter 
+ 
+ dump_input 
+ 
+ formatter 
+ 
+ lazy 
+ 
+ log_time 
+ 
+ torch_tensor 
+
+ lora 
+ lora 
+ lora_model 
+ 
+ lora_weights 
+ 
+ model_manager 
+ 
+ peft_helper 
+ 
+ request 
+ 
+ resolver 
+ 
+ utils 
+ 
+ worker_manager 
+
+ layers 
+ layers 
+ base 
+ 
+ base_linear 
+ 
+ column_parallel_linear 
+ 
+ fused_moe 
+ 
+ logits_processor 
+ 
+ replicated_linear 
+ 
+ row_parallel_linear 
+ 
+ utils 
+ 
+ vocal_parallel_embedding 
+
+ ops 
+ ops 
+ 
+ torch_ops 
+ torch_ops 
+ lora_ops 
+
+ triton_ops 
+ triton_ops 
+ fp8_kernel_utils 
+ 
+ fused_moe_lora_fp8_op 
+ 
+ fused_moe_lora_op 
+ 
+ kernel_utils 
+ 
+ lora_expand_fp8_op 
+ 
+ lora_expand_op 
+ 
+ lora_kernel_metadata 
+ 
+ lora_shrink_fp8_op 
+ 
+ lora_shrink_op 
+ 
+ utils 
+
+ xpu_ops 
+ xpu_ops 
+ lora_ops 
+
+ punica_wrapper 
+ punica_wrapper 
+ punica_base 
+ 
+ punica_cpu 
+ 
+ punica_gpu 
+ 
+ punica_selector 
+ 
+ punica_xpu 
+ 
+ utils 
+
+ model_executor 
+ model_executor 
+ custom_op 
+ 
+ parameter 
+ 
+ utils 
+
+ kernels 
+ kernels 
+ 
+ linear 
+ linear 
+ base 
+
+ mixed_precision 
+ mixed_precision 
+ allspark 
+ 
+ conch 
+ 
+ cpu 
+ 
+ cutlass 
+ 
+ dynamic_4bit 
+ 
+ exllama 
+ 
+ MPLinearKernel 
+ 
+ machete 
+ 
+ marlin 
+ 
+ triton_w4a16 
+ 
+ xpu 
+
+ mxfp8 
+ mxfp8 
+ emulation 
+ 
+ flashinfer 
+ 
+ Mxfp8LinearKernel 
+ 
+ marlin 
+ 
+ xpu 
+
+ nvfp4 
+ nvfp4 
+ base 
+ 
+ cutlass 
+ 
+ emulation 
+ 
+ fbgemm 
+ 
+ flashinfer 
+ 
+ marlin 
+
+ scaled_mm 
+ scaled_mm 
+ aiter 
+ 
+ BlockScaledMMLinearKernel 
+ 
+ cpu 
+ 
+ cutlass 
+ 
+ deep_gemm 
+ 
+ flashinfer 
+ 
+ marlin 
+ 
+ pytorch 
+ 
+ rocm 
+ 
+ ScaledMMLinearKernel 
+ 
+ triton 
+ 
+ xpu 
+
+ layers 
+ layers 
+ activation 
+ 
+ attention_layer_base 
+ 
+ batch_invariant 
+ 
+ conv 
+ 
+ kda 
+ 
+ layernorm 
+ 
+ lightning_attn 
+ 
+ linear 
+ 
+ logits_processor 
+ 
+ mla 
+ 
+ resampler 
+ 
+ sparse_attn_indexer 
+ 
+ utils 
+ 
+ vocab_parallel_embedding 
+
+ attention 
+ attention 
+ attention 
+ 
+ chunked_local_attention 
+ 
+ cross_attention 
+ 
+ encoder_only_attention 
+ 
+ kv_transfer_utils 
+ 
+ mla_attention 
+ 
+ mm_encoder_attention 
+ 
+ static_sink_attention 
+
+ fla 
+ fla 
+ 
+ ops 
+ ops 
+ chunk 
+ 
+ chunk_delta_h 
+ 
+ chunk_o 
+ 
+ chunk_scaled_dot_kkt 
+ 
+ cumsum 
+ 
+ fused_gdn_prefill_post_conv 
+ 
+ fused_recurrent 
+ 
+ fused_sigmoid_gating 
+ 
+ index 
+ 
+ kda 
+ 
+ l2norm 
+ 
+ layernorm_guard 
+ 
+ op 
+ 
+ solve_tril 
+ 
+ utils 
+ 
+ wy_fast 
+
+ fused_moe 
+ fused_moe 
+ activation 
+ 
+ all2all_utils 
+ 
+ config 
+ 
+ cpu_fused_moe 
+ 
+ cutlass_moe 
+ 
+ deep_gemm_utils 
+ 
+ fallback 
+ 
+ flashinfer_cutlass_moe 
+ 
+ fused_batched_moe 
+ 
+ fused_marlin_moe 
+ 
+ fused_moe 
+ 
+ fused_moe_method_base 
+ 
+ fused_moe_modular_method 
+ 
+ layer 
+ 
+ modular_kernel 
+ 
+ moe_align_block_size 
+ 
+ moe_permute_unpermute 
+ 
+ mori_prepare_finalize 
+ 
+ nixl_ep_prepare_finalize 
+ 
+ rocm_aiter_fused_moe 
+ 
+ routed_experts_capturer 
+ 
+ shared_fused_moe 
+ 
+ topk_weight_and_reduce 
+ 
+ triton_cutlass_moe 
+ 
+ triton_deep_gemm_moe 
+ 
+ unquantized_fused_moe_method 
+ 
+ utils 
+ 
+ xpu_fused_moe 
+
+ experts 
+ experts 
+ batched_deep_gemm_moe 
+ 
+ deep_gemm_moe 
+ 
+ flashinfer_cutedsl_batched_moe 
+ 
+ flashinfer_cutedsl_moe 
+ 
+ gpt_oss_triton_kernels_moe 
+ 
+ trtllm_bf16_moe 
+ 
+ trtllm_fp8_moe 
+ 
+ trtllm_mxfp4_moe 
+ 
+ trtllm_nvfp4_moe 
+
+ oracle 
+ oracle 
+ fp8 
+ 
+ int8 
+ 
+ mxfp4 
+ 
+ mxfp8 
+ 
+ nvfp4 
+ 
+ unquantized 
+
+ prepare_finalize 
+ prepare_finalize 
+ deepep_ht 
+ 
+ deepep_ll 
+ 
+ flashinfer_nvlink_one_sided 
+ 
+ flashinfer_nvlink_two_sided 
+ 
+ naive_dp_ep 
+ 
+ no_dp_ep 
+
+ router 
+ router 
+ base_router 
+ 
+ custom_routing_router 
+ 
+ fused_moe_router 
+ 
+ fused_topk_bias_router 
+ 
+ fused_topk_router 
+ 
+ gate_linear 
+ 
+ grouped_topk_router 
+ 
+ router_factory 
+ 
+ routing_simulator_router 
+ 
+ zero_expert_router 
+
+ runner 
+ runner 
+ default_moe_runner 
+ 
+ moe_runner 
+ 
+ moe_runner_base 
+ 
+ moe_runner_factory 
+ 
+ shared_experts 
+
+ mamba 
+ mamba 
+ abstract 
+ 
+ gdn_linear_attn 
+ 
+ lamport_workspace 
+ 
+ linear_attn 
+ 
+ mamba_mixer 
+ 
+ mamba_mixer2 
+ 
+ mamba_utils 
+ 
+ short_conv 
+
+ ops 
+ ops 
+ causal_conv1d 
+ 
+ layernorm_gated 
+ 
+ mamba_ssm 
+ 
+ ssd_bmm 
+ 
+ ssd_chunk_scan 
+ 
+ ssd_chunk_state 
+ 
+ ssd_combined 
+ 
+ ssd_state_passing 
+ 
+ ssu_dispatch 
+ 
+ triton_helpers 
+
+ pooler 
+ pooler 
+ abstract 
+ 
+ activations 
+ 
+ common 
+ 
+ special 
+
+ seqwise 
+ seqwise 
+ heads 
+ 
+ methods 
+ 
+ poolers 
+
+ tokwise 
+ tokwise 
+ heads 
+ 
+ methods 
+ 
+ poolers 
+
+ quantization 
+ quantization 
+ awq 
+ 
+ awq_marlin 
+ 
+ awq_triton 
+ 
+ base_config 
+ 
+ bitsandbytes 
+ 
+ cpu_wna16 
+ 
+ experts_int8 
+ 
+ fbgemm_fp8 
+ 
+ fp8 
+ 
+ fp_quant 
+ 
+ gguf 
+ 
+ gptq 
+ 
+ gptq_marlin 
+ 
+ inc 
+ 
+ input_quant_fp8 
+ 
+ kv_cache 
+ 
+ modelopt 
+ 
+ moe_wna16 
+ 
+ mxfp4 
+ 
+ mxfp8 
+ 
+ qutlass_utils 
+ 
+ schema 
+ 
+ torchao 
+
+ compressed_tensors 
+ compressed_tensors 
+ compressed_tensors 
+ 
+ triton_scaled_mm 
+ 
+ utils 
+
+ compressed_tensors_moe 
+ compressed_tensors_moe 
+ compressed_tensors_moe 
+ 
+ compressed_tensors_moe_w4a4_mxfp4 
+ 
+ compressed_tensors_moe_w4a4_nvfp4 
+ 
+ compressed_tensors_moe_w4a8_fp8 
+ 
+ compressed_tensors_moe_w4a8_int8 
+ 
+ compressed_tensors_moe_w8a8_fp8 
+ 
+ compressed_tensors_moe_w8a8_int8 
+ 
+ compressed_tensors_moe_w8a8_mxfp8 
+ 
+ compressed_tensors_moe_wna16 
+ 
+ compressed_tensors_moe_wna16_marlin 
+
+ schemes 
+ schemes 
+ compressed_tensors_24 
+ 
+ compressed_tensors_scheme 
+ 
+ compressed_tensors_w4a4_nvfp4 
+ 
+ compressed_tensors_w4a8_fp8 
+ 
+ compressed_tensors_w4a8_int 
+ 
+ compressed_tensors_w4a16_mxfp4 
+ 
+ compressed_tensors_w4a16_nvfp4 
+ 
+ compressed_tensors_w8a8_fp8 
+ 
+ compressed_tensors_w8a8_int8 
+ 
+ compressed_tensors_w8a8_mxfp8 
+ 
+ compressed_tensors_w8a16_fp8 
+ 
+ compressed_tensors_wNa16 
+
+ transform 
+ transform 
+ linear 
+ 
+ module 
+ 
+ utils 
+
+ schemes 
+ schemes 
+ linear_qutlass_nvfp4 
+
+ online 
+ online 
+ base 
+ 
+ fp8 
+ 
+ int8 
+ 
+ moe_base 
+
+ quark 
+ quark 
+ quark 
+ 
+ quark_moe 
+ 
+ utils 
+
+ schemes 
+ schemes 
+ quark_ocp_mx 
+ 
+ quark_scheme 
+ 
+ quark_w4a8_mxfp4_fp8 
+ 
+ quark_w8a8_fp8 
+ 
+ quark_w8a8_int8 
+
+ turboquant 
+ turboquant 
+ centroids 
+ 
+ config 
+ 
+ quantizer 
+
+ utils 
+ utils 
+ allspark_utils 
+ 
+ flashinfer_fp4_moe 
+ 
+ flashinfer_mxint4_moe 
+ 
+ flashinfer_utils 
+ 
+ fp8_utils 
+ 
+ gptq_utils 
+ 
+ int8_utils 
+ 
+ layer_utils 
+ 
+ machete_utils 
+ 
+ marlin_utils 
+ 
+ marlin_utils_fp4 
+ 
+ marlin_utils_fp8 
+ 
+ marlin_utils_test 
+ 
+ mxfp4_utils 
+ 
+ mxfp6_utils 
+ 
+ mxfp8_utils 
+ 
+ nvfp4_emulation_utils 
+ 
+ nvfp4_utils 
+ 
+ ocp_mx_utils 
+ 
+ quant_utils 
+ 
+ w8a8_utils 
+
+ rotary_embedding 
+ rotary_embedding 
+ base 
+ 
+ common 
+ 
+ deepseek_scaling_rope 
+ 
+ dual_chunk_rope 
+ 
+ dynamic_ntk_alpha_rope 
+ 
+ dynamic_ntk_scaling_rope 
+ 
+ ernie45_vl_rope 
+ 
+ fope 
+ 
+ gemma4_rope 
+ 
+ linear_scaling_rope 
+ 
+ llama3_rope 
+ 
+ llama4_vision_rope 
+ 
+ mrope 
+ 
+ mrope_interleaved 
+ 
+ ntk_scaling_rope 
+ 
+ phi3_long_rope_scaled_rope 
+ 
+ telechat3_scaling_rope 
+ 
+ xdrope 
+ 
+ yarn_scaling_rope 
+
+ model_loader 
+ model_loader 
+ base_loader 
+ 
+ bitsandbytes_loader 
+ 
+ default_loader 
+ 
+ dummy_loader 
+ 
+ ep_weight_filter 
+ 
+ gguf_loader 
+ 
+ runai_streamer_loader 
+ 
+ sharded_state_loader 
+ 
+ tensorizer 
+ 
+ tensorizer_loader 
+ 
+ utils 
+ 
+ weight_utils 
+
+ reload 
+ reload 
+ layerwise 
+ 
+ meta 
+ 
+ sanitize 
+ 
+ torchao_decorator 
+ 
+ types 
+ 
+ utils 
+
+ models 
+ models 
+ AXK1 
+ 
+ adapters 
+ 
+ afmoe 
+ 
+ aimv2 
+ 
+ apertus 
+ 
+ arcee 
+ 
+ arctic 
+ 
+ aria 
+ 
+ audioflamingo3 
+ 
+ aya_vision 
+ 
+ bagel 
+ 
+ baichuan 
+ 
+ bailing_moe 
+ 
+ bailing_moe_linear 
+ 
+ bamba 
+ 
+ bee 
+ 
+ bert 
+ 
+ bert_with_rope 
+ 
+ blip 
+ 
+ blip2 
+ 
+ bloom 
+ 
+ chameleon 
+ 
+ chatglm 
+ 
+ cheers 
+ 
+ clip 
+ 
+ cohere2_vision 
+ 
+ cohere_asr 
+ 
+ colbert 
+ 
+ colmodernvbert 
+ 
+ colpali 
+ 
+ colqwen3 
+ 
+ colqwen3_5 
+ 
+ commandr 
+ 
+ config 
+ 
+ conformer_encoder 
+ 
+ dbrx 
+ 
+ deepencoder 
+ 
+ deepencoder2 
+ 
+ deepseek_eagle 
+ 
+ deepseek_eagle3 
+ 
+ deepseek_mtp 
+ 
+ deepseek_ocr 
+ 
+ deepseek_ocr2 
+ 
+ deepseek_v2 
+ 
+ deepseek_vl2 
+ 
+ dots1 
+ 
+ dots_ocr 
+ 
+ eagle2_5_vl 
+ 
+ ernie 
+ 
+ ernie45 
+ 
+ ernie45_moe 
+ 
+ ernie45_vl 
+ 
+ ernie45_vl_moe 
+ 
+ ernie_mtp 
+ 
+ exaone 
+ 
+ exaone4 
+ 
+ exaone4_5 
+ 
+ exaone4_5_mtp 
+ 
+ exaone_moe 
+ 
+ exaone_moe_mtp 
+ 
+ extract_hidden_states 
+ 
+ fairseq2_llama 
+ 
+ falcon 
+ 
+ falcon_h1 
+ 
+ fireredasr2 
+ 
+ fireredlid 
+ 
+ flex_olmo 
+ 
+ funasr 
+ 
+ funaudiochat 
+ 
+ fuyu 
+ 
+ gemma 
+ 
+ gemma2 
+ 
+ gemma3 
+ 
+ gemma3_mm 
+ 
+ gemma3n 
+ 
+ gemma3n_audio_utils 
+ 
+ gemma3n_mm 
+ 
+ gemma4 
+ 
+ gemma4_mm 
+ 
+ glm 
+ 
+ glm4 
+ 
+ glm4_1v 
+ 
+ glm4_moe 
+ 
+ glm4_moe_lite 
+ 
+ glm4_moe_lite_mtp 
+ 
+ glm4_moe_mtp 
+ 
+ glm4v 
+ 
+ glm_ocr 
+ 
+ glm_ocr_mtp 
+ 
+ glmasr 
+ 
+ glmasr_utils 
+ 
+ gpt2 
+ 
+ gpt_bigcode 
+ 
+ gpt_j 
+ 
+ gpt_neox 
+ 
+ gpt_oss 
+ 
+ granite 
+ 
+ granite_speech 
+ 
+ granitemoe 
+ 
+ granitemoehybrid 
+ 
+ granitemoeshared 
+ 
+ gritlm 
+ 
+ grok1 
+ 
+ h2ovl 
+ 
+ hunyuan_v1 
+ 
+ hunyuan_vision 
+ 
+ hyperclovax 
+ 
+ hyperclovax_vision 
+ 
+ hyperclovax_vision_v2 
+ 
+ idefics2_vision_model 
+ 
+ idefics3 
+ 
+ interfaces 
+ 
+ interfaces_base 
+ 
+ intern_vit 
+ 
+ internlm2 
+ 
+ internlm2_ve 
+ 
+ interns1 
+ 
+ interns1_pro 
+ 
+ interns1_vit 
+ 
+ internvl 
+ 
+ iquest_loopcoder 
+ 
+ isaac 
+ 
+ jais 
+ 
+ jais2 
+ 
+ jamba 
+ 
+ jina 
+ 
+ jina_vl 
+ 
+ kanana_v 
+ 
+ keye 
+ 
+ keye_vl1_5 
+ 
+ kimi_audio 
+ 
+ kimi_k25 
+ 
+ kimi_k25_vit 
+ 
+ kimi_linear 
+ 
+ kimi_vl 
+ 
+ lfm2 
+ 
+ lfm2_moe 
+ 
+ lfm2_siglip2 
+ 
+ lfm2_vl 
+ 
+ lightonocr 
+ 
+ llama 
+ 
+ llama4 
+ 
+ llama4_eagle 
+ 
+ llama_eagle 
+ 
+ llama_eagle3 
+ 
+ llava 
+ 
+ llava_next 
+ 
+ llava_next_video 
+ 
+ llava_onevision 
+ 
+ longcat_flash 
+ 
+ longcat_flash_mtp 
+ 
+ mamba 
+ 
+ mamba2 
+ 
+ medusa 
+ 
+ midashenglm 
+ 
+ mimo 
+ 
+ mimo_mtp 
+ 
+ mimo_v2_flash 
+ 
+ minicpm 
+ 
+ minicpm3 
+ 
+ minicpm_eagle 
+ 
+ minicpmo 
+ 
+ minicpmv 
+ 
+ minimax_m2 
+ 
+ minimax_text_01 
+ 
+ minimax_vl_01 
+ 
+ mistral 
+ 
+ mistral3 
+ 
+ mistral_large_3 
+ 
+ mistral_large_3_eagle 
+ 
+ mixtral 
+ 
+ mllama4 
+ 
+ mlp_speculator 
+ 
+ modernbert 
+ 
+ module_mapping 
+ 
+ molmo 
+ 
+ molmo2 
+ 
+ moonvit 
+ 
+ mpt 
+ 
+ musicflamingo 
+ 
+ nano_nemotron_vl 
+ 
+ nemotron 
+ 
+ nemotron_h 
+ 
+ nemotron_h_mtp 
+ 
+ nemotron_nas 
+ 
+ nemotron_parse 
+ 
+ nemotron_vl 
+ 
+ nvlm_d 
+ 
+ olmo 
+ 
+ olmo2 
+ 
+ olmo_hybrid 
+ 
+ olmoe 
+ 
+ opencua 
+ 
+ openpangu 
+ 
+ openpangu_mtp 
+ 
+ openpangu_vl 
+ 
+ opt 
+ 
+ orion 
+ 
+ ouro 
+ 
+ ovis 
+ 
+ ovis2_5 
+ 
+ paddleocr_vl 
+ 
+ paligemma 
+ 
+ parakeet 
+ 
+ param2moe 
+ 
+ persimmon 
+ 
+ phi 
+ 
+ phi3 
+ 
+ phi3v 
+ 
+ phi4mm 
+ 
+ phi4mm_audio 
+ 
+ phi4mm_utils 
+ 
+ phi4siglip 
+ 
+ phimoe 
+ 
+ pixtral 
+ 
+ plamo2 
+ 
+ plamo3 
+ 
+ qwen 
+ 
+ qwen2 
+ 
+ qwen2_5_omni_thinker 
+ 
+ qwen2_5_vl 
+ 
+ qwen2_audio 
+ 
+ qwen2_moe 
+ 
+ qwen2_rm 
+ 
+ qwen2_vl 
+ 
+ qwen3 
+ 
+ qwen3_5 
+ 
+ qwen3_5_mtp 
+ 
+ qwen3_asr 
+ 
+ qwen3_asr_forced_aligner 
+ 
+ qwen3_asr_realtime 
+ 
+ qwen3_dflash 
+ 
+ qwen3_moe 
+ 
+ qwen3_next 
+ 
+ qwen3_next_mtp 
+ 
+ qwen3_omni_moe_thinker 
+ 
+ qwen3_vl 
+ 
+ qwen3_vl_moe 
+ 
+ qwen_vl 
+ 
+ radio 
+ 
+ registry 
+ 
+ roberta 
+ 
+ rvl 
+ 
+ sarvam 
+ 
+ seed_oss 
+ 
+ siglip 
+ 
+ siglip2navit 
+ 
+ skyworkr1v 
+ 
+ smolvlm 
+ 
+ solar 
+ 
+ stablelm 
+ 
+ starcoder2 
+ 
+ step1 
+ 
+ step3_text 
+ 
+ step3_vl 
+ 
+ step3p5 
+ 
+ step3p5_mtp 
+ 
+ step_vl 
+ 
+ tarsier 
+ 
+ telechat2 
+ 
+ teleflm 
+ 
+ terratorch 
+ 
+ ultravox 
+ 
+ utils 
+ 
+ vision 
+ 
+ voxtral 
+ 
+ voxtral_realtime 
+ 
+ voyage 
+ 
+ whisper 
+ 
+ whisper_causal 
+ 
+ whisper_utils 
+ 
+ zamba2 
+
+ transformers 
+ transformers 
+ base 
+ 
+ causal 
+ 
+ legacy 
+ 
+ moe 
+ 
+ multimodal 
+ 
+ pooling 
+ 
+ utils 
+
+ offloader 
+ offloader 
+ base 
+ 
+ prefetch 
+ 
+ prefetch_ops 
+ 
+ uva 
+
+ warmup 
+ warmup 
+ deep_gemm_warmup 
+ 
+ kernel_warmup 
+
+ multimodal 
+ multimodal 
+ audio 
+ 
+ cache 
+ 
+ encoder_budget 
+ 
+ evs 
+ 
+ hasher 
+ 
+ image 
+ 
+ inputs 
+ 
+ parse 
+ 
+ registry 
+ 
+ utils 
+ 
+ video 
+
+ media 
+ media 
+ audio 
+ 
+ base 
+ 
+ connector 
+ 
+ image 
+ 
+ video 
+
+ processing 
+ processing 
+ context 
+ 
+ dummy_inputs 
+ 
+ inputs 
+ 
+ processor 
+
+ parser 
+ parser 
+ abstract_parser 
+ 
+ minimax_m2_parser 
+ 
+ parser_manager 
+
+ platforms 
+ platforms 
+ cpu 
+ 
+ cuda 
+ 
+ interface 
+ 
+ rocm 
+ 
+ tpu 
+ 
+ xpu 
+ 
+ zen_cpu 
+
+ plugins 
+ plugins 
+ 
+ io_processors 
+ io_processors 
+ interface 
+
+ lora_resolvers 
+ lora_resolvers 
+ filesystem_resolver 
+ 
+ hf_hub_resolver 
+
+ profiler 
+ profiler 
+ layerwise_profile 
+ 
+ utils 
+ 
+ wrapper 
+
+ ray 
+ ray 
+ lazy_utils 
+ 
+ ray_env 
+
+ reasoning 
+ reasoning 
+ abs_reasoning_parsers 
+ 
+ basic_parsers 
+ 
+ deepseek_r1_reasoning_parser 
+ 
+ deepseek_v3_reasoning_parser 
+ 
+ ernie45_reasoning_parser 
+ 
+ gemma4_reasoning_parser 
+ 
+ gemma4_utils 
+ 
+ gptoss_reasoning_parser 
+ 
+ granite_reasoning_parser 
+ 
+ hunyuan_a13b_reasoning_parser 
+ 
+ identity_reasoning_parser 
+ 
+ kimi_k2_reasoning_parser 
+ 
+ minimax_m2_reasoning_parser 
+ 
+ mistral_reasoning_parser 
+ 
+ nemotron_v3_reasoning_parser 
+ 
+ olmo3_reasoning_parser 
+ 
+ qwen3_reasoning_parser 
+ 
+ seedoss_reasoning_parser 
+ 
+ step3_reasoning_parser 
+ 
+ step3p5_reasoning_parser 
+
+ renderers 
+ renderers 
+ base 
+ 
+ deepseek_v32 
+ 
+ embed_utils 
+ 
+ grok2 
+ 
+ hf 
+ 
+ mistral 
+ 
+ params 
+ 
+ registry 
+ 
+ terratorch 
+
+ inputs 
+ inputs 
+ preprocess 
+ 
+ tokenize 
+
+ tokenizers 
+ tokenizers 
+ deepseek_v32 
+ 
+ deepseek_v32_encoding 
+ 
+ detokenizer_utils 
+ 
+ grok2 
+ 
+ hf 
+ 
+ kimi_audio 
+ 
+ mistral 
+ 
+ protocol 
+ 
+ qwen_vl 
+ 
+ registry 
+
+ tool_parsers 
+ tool_parsers 
+ abstract_tool_parser 
+ 
+ deepseekv3_tool_parser 
+ 
+ deepseekv31_tool_parser 
+ 
+ deepseekv32_tool_parser 
+ 
+ ernie45_tool_parser 
+ 
+ functiongemma_tool_parser 
+ 
+ gemma4_tool_parser 
+ 
+ gemma4_utils 
+ 
+ gigachat3_tool_parser 
+ 
+ glm4_moe_tool_parser 
+ 
+ glm47_moe_tool_parser 
+ 
+ granite4_tool_parser 
+ 
+ granite_20b_fc_tool_parser 
+ 
+ granite_tool_parser 
+ 
+ hermes_tool_parser 
+ 
+ hunyuan_a13b_tool_parser 
+ 
+ internlm2_tool_parser 
+ 
+ jamba_tool_parser 
+ 
+ kimi_k2_tool_parser 
+ 
+ llama4_pythonic_tool_parser 
+ 
+ llama_tool_parser 
+ 
+ longcat_tool_parser 
+ 
+ minimax_m2_tool_parser 
+ 
+ minimax_tool_parser 
+ 
+ mistral_tool_parser 
+ 
+ olmo3_tool_parser 
+ 
+ openai_tool_parser 
+ 
+ phi4mini_tool_parser 
+ 
+ pythonic_tool_parser 
+ 
+ qwen3coder_tool_parser 
+ 
+ qwen3xml_tool_parser 
+ 
+ seed_oss_tool_parser 
+ 
+ step3_tool_parser 
+ 
+ step3p5_tool_parser 
+ 
+ utils 
+ 
+ xlam_tool_parser 
+
+ tracing 
+ tracing 
+ otel 
+ 
+ utils 
+
+ transformers_utils 
+ transformers_utils 
+ config 
+ 
+ config_parser_base 
+ 
+ dynamic_module 
+ 
+ gguf_utils 
+ 
+ model_arch_config_convertor 
+ 
+ processor 
+ 
+ repo_utils 
+ 
+ runai_utils 
+ 
+ s3_utils 
+ 
+ tokenizer 
+ 
+ utils 
+
+ chat_templates 
+ chat_templates 
+ registry 
+
+ configs 
+ configs 
+ AXK1 
+ 
+ afmoe 
+ 
+ arctic 
+ 
+ bagel 
+ 
+ chatglm 
+ 
+ cheers 
+ 
+ colmodernvbert 
+ 
+ colpali 
+ 
+ colqwen3 
+ 
+ deepseek_vl2 
+ 
+ dotsocr 
+ 
+ eagle 
+ 
+ extract_hidden_states 
+ 
+ falcon 
+ 
+ fireredlid 
+ 
+ flex_olmo 
+ 
+ funaudiochat 
+ 
+ hunyuan_vl 
+ 
+ hyperclovax 
+ 
+ isaac 
+ 
+ jais 
+ 
+ kimi_k25 
+ 
+ kimi_linear 
+ 
+ kimi_vl 
+ 
+ lfm2_moe 
+ 
+ medusa 
+ 
+ midashenglm 
+ 
+ mistral 
+ 
+ mlp_speculator 
+ 
+ moonvit 
+ 
+ nemotron 
+ 
+ nemotron_h 
+ 
+ olmo_hybrid 
+ 
+ ovis 
+ 
+ parakeet 
+ 
+ qwen3_5 
+ 
+ qwen3_5_moe 
+ 
+ qwen3_asr 
+ 
+ qwen3_next 
+ 
+ radio 
+ 
+ step3_vl 
+ 
+ step3p5 
+ 
+ tarsier2 
+ 
+ ultravox 
+
+ speculators 
+ speculators 
+ algos 
+ 
+ base 
+
+ processors 
+ processors 
+ bagel 
+ 
+ cheers 
+ 
+ cohere_asr 
+ 
+ deepseek_ocr 
+ 
+ deepseek_vl2 
+ 
+ fireredasr2 
+ 
+ fireredlid 
+ 
+ funasr 
+ 
+ glm4v 
+ 
+ h2ovl 
+ 
+ hunyuan_vl 
+ 
+ hunyuan_vl_image 
+ 
+ internvl 
+ 
+ isaac 
+ 
+ kimi_audio 
+ 
+ kimi_k25 
+ 
+ nano_nemotron_vl 
+ 
+ nemotron_vl 
+ 
+ nvlm_d 
+ 
+ ovis 
+ 
+ ovis2_5 
+ 
+ pixtral 
+ 
+ qwen3_asr 
+ 
+ qwen_vl 
+ 
+ step3_vl 
+ 
+ voxtral 
+
+ triton_utils 
+ triton_utils 
+ allocation 
+ 
+ importing 
+
+ usage 
+ usage 
+ usage_lib 
+
+ utils 
+ utils 
+ argparse_utils 
+ 
+ async_utils 
+ 
+ cache 
+ 
+ collection_utils 
+ 
+ counter 
+ 
+ cpu_resource_utils 
+ 
+ cpu_triton_utils 
+ 
+ deep_gemm 
+ 
+ flashinfer 
+ 
+ func_utils 
+ 
+ gc_utils 
+ 
+ hashing 
+ 
+ import_utils 
+ 
+ jsontree 
+ 
+ math_utils 
+ 
+ mem_constants 
+ 
+ mem_utils 
+ 
+ mistral 
+ 
+ multi_stream_utils 
+ 
+ nccl 
+ 
+ network_utils 
+ 
+ numa_utils 
+ 
+ nvtx_pytorch_hooks 
+ 
+ ompmultiprocessing 
+ 
+ platform_utils 
+ 
+ print_utils 
+ 
+ profiling 
+ 
+ registry 
+ 
+ serial_utils 
+ 
+ system_utils 
+ 
+ tensor_schema 
+ 
+ torch_utils 
+ 
+ tqdm_utils 
+
+ v1 
+ v1 
+ cudagraph_dispatcher 
+ 
+ kv_cache_interface 
+ 
+ outputs 
+ 
+ request 
+ 
+ serial_utils 
+ 
+ utils 
+
+ attention 
+ attention 
+ backend 
+ 
+ selector 
+
+ backends 
+ backends 
+ cpu_attn 
+ 
+ fa_utils 
+ 
+ flash_attn 
+ 
+ flash_attn_diffkv 
+ 
+ flashinfer 
+ 
+ flex_attention 
+ 
+ gdn_attn 
+ 
+ linear_attn 
+ 
+ mamba1_attn 
+ 
+ mamba2_attn 
+ 
+ mamba_attn 
+ 
+ registry 
+ 
+ rocm_aiter_fa 
+ 
+ rocm_aiter_unified_attn 
+ 
+ rocm_attn 
+ 
+ short_conv_attn 
+ 
+ tree_attn 
+ 
+ triton_attn 
+ 
+ turboquant_attn 
+ 
+ utils 
+
+ mla 
+ mla 
+ aiter_triton_mla 
+ 
+ cutlass_mla 
+ 
+ flashattn_mla 
+ 
+ flashinfer_mla 
+ 
+ flashinfer_mla_sparse 
+ 
+ flashmla 
+ 
+ flashmla_sparse 
+ 
+ indexer 
+ 
+ rocm_aiter_mla 
+ 
+ rocm_aiter_mla_sparse 
+ 
+ sparse_utils 
+ 
+ triton_mla 
+ 
+ xpu_mla_sparse 
+
+ ops 
+ ops 
+ chunked_prefill_paged_decode 
+ 
+ common 
+ 
+ dcp_alltoall 
+ 
+ flashmla 
+ 
+ merge_attn_states 
+ 
+ paged_attn 
+ 
+ prefix_prefill 
+ 
+ rocm_aiter_mla_sparse 
+ 
+ triton_decode_attention 
+ 
+ triton_merge_attn_states 
+ 
+ triton_prefill_attention 
+ 
+ triton_reshape_and_cache_flash 
+ 
+ triton_turboquant_decode 
+ 
+ triton_turboquant_store 
+ 
+ triton_unified_attention 
+ 
+ vit_attn_wrappers 
+ 
+ xpu_mla_sparse 
+
+ core 
+ core 
+ block_pool 
+ 
+ encoder_cache_manager 
+ 
+ kv_cache_coordinator 
+ 
+ kv_cache_manager 
+ 
+ kv_cache_metrics 
+ 
+ kv_cache_utils 
+ 
+ single_type_kv_cache_manager 
+
+ sched 
+ sched 
+ async_scheduler 
+ 
+ interface 
+ 
+ output 
+ 
+ request_queue 
+ 
+ scheduler 
+ 
+ utils 
+
+ engine 
+ engine 
+ async_llm 
+ 
+ coordinator 
+ 
+ core 
+ 
+ core_client 
+ 
+ detokenizer 
+ 
+ exceptions 
+ 
+ input_processor 
+ 
+ llm_engine 
+ 
+ logprobs 
+ 
+ output_processor 
+ 
+ parallel_sampling 
+ 
+ tensor_ipc 
+ 
+ utils 
+
+ executor 
+ executor 
+ abstract 
+ 
+ multiproc_executor 
+ 
+ ray_env_utils 
+ 
+ ray_executor 
+ 
+ ray_executor_v2 
+ 
+ ray_utils 
+ 
+ uniproc_executor 
+
+ kv_offload 
+ kv_offload 
+ abstract 
+ 
+ factory 
+ 
+ mediums 
+ 
+ reuse_manager 
+ 
+ spec 
+
+ cpu 
+ cpu 
+ manager 
+ 
+ shared_offload_region 
+ 
+ spec 
+
+ policies 
+ policies 
+ abstract 
+ 
+ arc 
+ 
+ lru 
+
+ worker 
+ worker 
+ cpu_gpu 
+ 
+ worker 
+
+ metrics 
+ metrics 
+ loggers 
+ 
+ perf 
+ 
+ prometheus 
+ 
+ ray_wrappers 
+ 
+ reader 
+ 
+ stats 
+ 
+ utils 
+
+ pool 
+ pool 
+ late_interaction 
+ 
+ metadata 
+
+ sample 
+ sample 
+ metadata 
+ 
+ rejection_sampler 
+ 
+ sampler 
+
+ logits_processor 
+ logits_processor 
+ builtin 
+ 
+ interface 
+ 
+ state 
+
+ ops 
+ ops 
+ bad_words 
+ 
+ logprobs 
+ 
+ penalties 
+ 
+ topk_topp_sampler 
+ 
+ topk_topp_triton 
+
+ simple_kv_offload 
+ simple_kv_offload 
+ copy_backend 
+ 
+ cuda_mem_ops 
+ 
+ manager 
+ 
+ metadata 
+ 
+ worker 
+
+ spec_decode 
+ spec_decode 
+ dflash 
+ 
+ draft_model 
+ 
+ eagle 
+ 
+ extract_hidden_states 
+ 
+ medusa 
+ 
+ metadata 
+ 
+ metrics 
+ 
+ ngram_proposer 
+ 
+ ngram_proposer_gpu 
+ 
+ suffix_decoding 
+ 
+ utils 
+
+ structured_output 
+ structured_output 
+ backend_guidance 
+ 
+ backend_lm_format_enforcer 
+ 
+ backend_outlines 
+ 
+ backend_types 
+ 
+ backend_xgrammar 
+ 
+ request 
+ 
+ utils 
+
+ worker 
+ worker 
+ block_table 
+ 
+ cp_utils 
+ 
+ cpu_model_runner 
+ 
+ cpu_worker 
+ 
+ dp_utils 
+ 
+ ec_connector_model_runner_mixin 
+ 
+ encoder_cudagraph 
+ 
+ encoder_cudagraph_defs 
+ 
+ gpu_input_batch 
+ 
+ gpu_model_runner 
+ 
+ gpu_ubatch_wrapper 
+ 
+ gpu_worker 
+ 
+ kv_connector_model_runner_mixin 
+ 
+ lora_model_runner_mixin 
+ 
+ mamba_utils 
+ 
+ tpu_input_batch 
+ 
+ ubatch_utils 
+ 
+ ubatching 
+ 
+ utils 
+ 
+ worker_base 
+ 
+ workspace 
+ 
+ xpu_model_runner 
+ 
+ xpu_worker 
+
+ gpu 
+ gpu 
+ async_utils 
+ 
+ attn_utils 
+ 
+ block_table 
+ 
+ buffer_utils 
+ 
+ cp_utils 
+ 
+ cudagraph_utils 
+ 
+ dp_utils 
+ 
+ eplb_utils 
+ 
+ input_batch 
+ 
+ kv_connector 
+ 
+ lora_utils 
+ 
+ model_runner 
+ 
+ pp_utils 
+ 
+ states 
+ 
+ structured_outputs 
+ 
+ warmup 
+
+ metrics 
+ metrics 
+ logits 
+
+ mm 
+ mm 
+ encoder_cache 
+ 
+ encoder_runner 
+ 
+ rope 
+
+ model_states 
+ model_states 
+ default 
+ 
+ interface 
+ 
+ whisper 
+
+ pool 
+ pool 
+ late_interaction_runner 
+ 
+ pooling_runner 
+
+ sample 
+ sample 
+ bad_words 
+ 
+ gumbel 
+ 
+ logit_bias 
+ 
+ logprob 
+ 
+ min_p 
+ 
+ output 
+ 
+ penalties 
+ 
+ prompt_logprob 
+ 
+ sampler 
+ 
+ states 
+
+ spec_decode 
+ spec_decode 
+ probabilistic_rejection_sampler_utils 
+ 
+ rejection_sampler 
+ 
+ synthetic_rejection_sampler_utils 
+ 
+ utils 
+
+ eagle 
+ eagle 
+ cudagraph 
+ 
+ eagle3_utils 
+ 
+ speculator 
+ 
+ utils 
+
+ CLI Reference 
+ CLI Reference 
+ vllm serve 
+ 
+ vllm chat 
+ 
+ vllm complete 
+ 
+ vllm run-batch 
+ 
+ vllm bench vllm bench 
+ vllm bench latency 
+ 
+ vllm bench mm-processor 
+ 
+ vllm bench serve 
+ 
+ vllm bench sweep plot 
+ 
+ vllm bench sweep plot_pareto 
+ 
+ vllm bench sweep serve 
+ 
+ vllm bench sweep serve_workload 
+ 
+ vllm bench throughput 
+
+ Community Community 
+ Contact Us 
+ 
+ Meetups 
+ 
+ Sponsors 
+ 
+ Governance Governance 
+ Collaboration Policy 
+ 
+ Committers 
+ 
+ Governance Process 
+
+ Blog 
+ 
+ Forum 
+ 
+ Slack 
+
+ Table of contents 
+ Supported APIs 
+ 
+ Chat Template 
+ 
+ Extra Parameters 
+ 
+ Extra HTTP Headers 
+ 
+ Offline API Documentation 
+ 
+ API Reference 
+ Completions API 
+ Extra parameters 
+
+ Chat API 
+ Extra parameters 
+
+ Responses API 
+ Extra parameters 
+
+ Transcriptions API 
+ API Enforced Limits 
+ 
+ Uploading Audio Files 
+ 
+ Extra Parameters 
+
+ Translations API 
+ Extra Parameters 
+
+ Realtime API 
+ Audio Format 
+ 
+ Protocol Overview 
+ 
+ Client → Server Events 
+ 
+ Server → Client Events 
+ 
+ Example Clients 
+
+ Tokenizer API 
+ 
+ Generative Scoring API 
+ Example 
+ 
+ How it works 
+ 
+ Finding Token IDs 
+
+ Ray Serve LLM 
+
+ Home 
+ 
+ User Guide 
+ 
+ Inference and Serving 
+
+OpenAI-Compatible Server¶
+ 
+vLLM provides an HTTP server that implements OpenAI's Completions API, Chat API, and more! This functionality lets you serve models and interact with them using an HTTP client.
+ 
+In your terminal, you can install vLLM, then start the server with the vllm serve command. (You can also use our Docker image.)
+ 
+vllm serve NousResearch/Meta-Llama-3-8B-Instruct \
+ --dtype auto \
+ --api-key token-abc123
+
+To call the server, in your preferred text editor, create a script that uses an HTTP client. Include any messages that you want to send to the model. Then run that script. Below is an example script using the official OpenAI Python client.
+ Code 
+from openai import OpenAI
+client = OpenAI(
+ base_url="http://localhost:8000/v1",
+ api_key="token-abc123",
+)
+
+completion = client.chat.completions.create(
+ model="NousResearch/Meta-Llama-3-8B-Instruct",
+ messages=[
+ {"role": "user", "content": "Hello!"},
+ ],
+)
+
+print(completion.choices[0].message)
+
+Tip
+ 
+vLLM supports some parameters that are not supported by OpenAI, top_k for example. You can pass these parameters to vLLM using the OpenAI client in the extra_body parameter of your requests, i.e. extra_body={"top_k": 50} for top_k.
+
+Important
+ 
+By default, the server applies generation_config.json from the Hugging Face model repository if it exists. This means the default values of certain sampling parameters can be overridden by those recommended by the model creator.
+ 
+To disable this behavior, please pass --generation-config vllm when launching the server.
+
+Supported APIs¶
+ 
+We currently support the following OpenAI APIs:
+ 
+Completions API (/v1/completions) 
+Only applicable to text generation models.
+ 
+Note: suffix parameter is not supported.
+
+Responses API (/v1/responses) 
+Only applicable to text generation models.
+
+Chat Completions API (/v1/chat/completions) 
+Only applicable to text generation models with a chat template.
+ 
+Note: user parameter is ignored.
+ 
+Note: Setting the parallel_tool_calls parameter to false ensures vLLM only returns zero or one tool call per request. Setting it to true (the default) allows returning more than one tool call per request. There is no guarantee more than one tool call will be returned if this is set to true, as that behavior is model dependent and not all models are designed to support parallel tool calls.
+
+Embeddings API (/v1/embeddings) 
+Only applicable to embedding models.
+
+Transcriptions API (/v1/audio/transcriptions) 
+Only applicable to Automatic Speech Recognition (ASR) models.
+
+Translation API (/v1/audio/translations) 
+Only applicable to Automatic Speech Recognition (ASR) models.
+
+Realtime API (/v1/realtime) 
+Only applicable to Automatic Speech Recognition (ASR) models.
+
+In addition, we have the following custom APIs:
+ 
+Tokenizer API (/tokenize, /detokenize) 
+Applicable to any model with a tokenizer.
+
+pooling API (/pooling) 
+Applicable to all pooling models.
+
+Classification API (/classify) 
+Only applicable to classification models.
+
+Cohere Embed API (/v2/embed) 
+Compatible with Cohere's Embed API
+ 
+Works with any embedding model, including multimodal models.
+
+Score API (/score, /v1/score) 
+Applicable to score models (cross-encoder, bi-encoder, late-interaction).
+
+Generative Scoring API (/generative_scoring) 
+Applicable to CausalLM models (task "generate").
+ 
+Computes next-token probabilities for specified label_token_ids.
+
+Rerank API (/rerank, /v1/rerank, /v2/rerank) 
+Implements Jina AI's v1 rerank API
+ 
+Also compatible with Cohere's v1 & v2 rerank APIs
+ 
+Jina and Cohere's APIs are very similar; Jina's includes extra information in the rerank endpoint's response.
+
+Chat Template¶
+ 
+In order for the language model to support chat protocol, vLLM requires the model to include a chat template in its tokenizer configuration. The chat template is a Jinja2 template that specifies how roles, messages, and other chat-specific tokens are encoded in the input.
+ 
+An example chat template for NousResearch/Meta-Llama-3-8B-Instruct can be found here
+ 
+Some models do not provide a chat template even though they are instruction/chat fine-tuned. For those models, you can manually specify their chat template in the --chat-template parameter with the file path to the chat template, or the template in string form. Without a chat template, the server will not be able to process chat and all chat requests will error.
+ 
+vllm serve <model> --chat-template ./path-to-chat-template.jinja
+
+vLLM community provides a set of chat templates for popular models. You can find them under the examples directory.
+ 
+With the inclusion of multi-modal chat APIs, the OpenAI spec now accepts chat messages in a new format which specifies both a type and a text field. An example is provided below:
+ 
+completion = client.chat.completions.create(
+ model="NousResearch/Meta-Llama-3-8B-Instruct",
+ messages=[
+ {
+ "role": "user",
+ "content": [
+ {"type": "text", "text": "Classify this sentiment: vLLM is wonderful!"},
+ ],
+ },
+ ],
+)
+
+Most chat templates for LLMs expect the content field to be a string, but there are some newer models like meta-llama/Llama-Guard-3-1B that expect the content to be formatted according to the OpenAI schema in the request. vLLM provides best-effort support to detect this automatically, which is logged as a string like "Detected the chat template content format to be...", and internally converts incoming requests to match the detected format, which can be one of:
+ 
+"string": A string. 
+Example: "Hello world"
+
+"openai": A list of dictionaries, similar to OpenAI schema. 
+Example: [{"type": "text", "text": "Hello world!"}]
+
+If the result is not what you expect, you can set the --chat-template-content-format CLI argument to override which format to use.
+ 
+Extra Parameters¶
+ 
+vLLM supports a set of parameters that are not part of the OpenAI API. In order to use them, you can pass them as extra parameters in the OpenAI client. Or directly merge them into the JSON payload if you are using HTTP call directly.
+ 
+completion = client.chat.completions.create(
+ model="NousResearch/Meta-Llama-3-8B-Instruct",
+ messages=[
+ {"role": "user", "content": "Classify this sentiment: vLLM is wonderful!"},
+ ],
+ extra_body={
+ "structured_outputs": {"choice": ["positive", "negative"]},
+ },
+)
+
+Extra HTTP Headers¶
+ 
+Only X-Request-Id HTTP request header is supported for now. It can be enabled with --enable-request-id-headers.
+ Code 
+completion = client.chat.completions.create(
+ model="NousResearch/Meta-Llama-3-8B-Instruct",
+ messages=[
+ {"role": "user", "content": "Classify this sentiment: vLLM is wonderful!"},
+ ],
+ extra_headers={
+ "x-request-id": "sentiment-classification-00001",
+ },
+)
+print(completion._request_id)
+
+completion = client.completions.create(
+ model="NousResearch/Meta-Llama-3-8B-Instruct",
+ prompt="A robot may not injure a human being",
+ extra_headers={
+ "x-request-id": "completion-test",
+ },
+)
+print(completion._request_id)
+
+Offline API Documentation¶
+ 
+The FastAPI /docs endpoint requires an internet connection by default. To enable offline access in air-gapped environments, use the --enable-offline-docs flag:
+ 
+vllm serve NousResearch/Meta-Llama-3-8B-Instruct --enable-offline-docs
+
+API Reference¶
+ 
+Completions API¶
+ 
+Our Completions API is compatible with OpenAI's Completions API; you can use the official OpenAI Python client to interact with it.
+ 
+Code example: examples/basic/online_serving/openai_completion_client.py
+ 
+Extra parameters¶
+ 
+The following sampling parameters are supported.
+ Code 
+ use_beam_search: bool = False
+ top_k: int | None = None
+ min_p: float | None = None
+ repetition_penalty: float | None = None
+ length_penalty: float = 1.0
+ stop_token_ids: list[int] | None = []
+ include_stop_str_in_output: bool = False
+ ignore_eos: bool = False
+ min_tokens: int = 0
+ skip_special_tokens: bool = True
+ spaces_between_special_tokens: bool = True
+ truncate_prompt_tokens: Annotated[int, Field(ge=-1, le=_INT64_MAX)] | None = None
+ allowed_token_ids: list[int] | None = None
+ prompt_logprobs: int | None = None
+
+The following extra parameters are supported:
+ Code 
+ prompt_embeds: bytes | list[bytes] | None = None
+ add_special_tokens: bool = Field(
+ default=True,
+ description=(
+ "If true (the default), special tokens (e.g. BOS) will be added to "
+ "the prompt."
+ ),
+ )
+ response_format: AnyResponseFormat | None = Field(
+ default=None,
+ description=(
+ "Similar to chat completion, this parameter specifies the format "
+ "of output. Only {'type': 'json_object'}, {'type': 'json_schema'}"
+ ", {'type': 'structural_tag'}, or {'type': 'text' } is supported."
+ ),
+ )
+ structured_outputs: StructuredOutputsParams | None = Field(
+ default=None,
+ description="Additional kwargs for structured outputs",
+ )
+ priority: int = Field(
+ default=0,
+ ge=_INT64_MIN,
+ le=_INT64_MAX,
+ description=(
+ "The priority of the request (lower means earlier handling; "
+ "default: 0). Any priority other than 0 will raise an error "
+ "if the served model does not use priority scheduling."
+ ),
+ )
+ request_id: str = Field(
+ default_factory=random_uuid,
+ description=(
+ "The request_id related to this request. If the caller does "
+ "not set it, a random_uuid will be generated. This id is used "
+ "through out the inference process and return in response."
+ ),
+ )
+
+ return_tokens_as_token_ids: bool | None = Field(
+ default=None,
+ description=(
+ "If specified with 'logprobs', tokens are represented "
+ " as strings of the form 'token_id:{token_id}' so that tokens "
+ "that are not JSON-encodable can be identified."
+ ),
+ )
+ return_token_ids: bool | None = Field(
+ default=None,
+ description=(
+ "If specified, the result will include token IDs alongside the "
+ "generated text. In streaming mode, prompt_token_ids is included "
+ "only in the first chunk, and token_ids contains the delta tokens "
+ "for each chunk. This is useful for debugging or when you "
+ "need to map generated text back to input tokens."
+ ),
+ )
+
+ cache_salt: str | None = Field(
+ default=None,
+ description=(
+ "If specified, the prefix cache will be salted with the provided "
+ "string to prevent an attacker to guess prompts in multi-user "
+ "environments. The salt should be random, protected from "
+ "access by 3rd parties, and long enough to be "
+ "unpredictable (e.g., 43 characters base64-encoded, corresponding "
+ "to 256 bit)."
+ ),
+ )
+
+ kv_transfer_params: dict[str, Any] | None = Field(
+ default=None,
+ description="KVTransfer parameters used for disaggregated serving.",
+ )
+
+ vllm_xargs: dict[str, str | int | float] | None = Field(
+ default=None,
+ description=(
+ "Additional request parameters with string or "
+ "numeric values, used by custom extensions."
+ ),
+ )
+
+ repetition_detection: RepetitionDetectionParams | None = Field(
+ default=None,
+ description="Parameters for detecting repetitive N-gram patterns "
+ "in output tokens. If such repetition is detected, generation will "
+ "be ended early. LLMs can sometimes generate repetitive, unhelpful "
+ "token patterns, stopping only when they hit the maximum output length "
+ "(e.g. 'abcdabcdabcd...' or '\\emoji \\emoji \\emoji ...'). This feature "
+ "can detect such behavior and terminate early, saving time and tokens.",
+ )
+
+Chat API¶
+ 
+Our Chat API is compatible with OpenAI's Chat Completions API; you can use the official OpenAI Python client to interact with it.
+ 
+We support both Vision- and Audio-related parameters; see our Multimodal Inputs guide for more information.
+ 
+Note: image_url.detail parameter is not supported.
+ 
+Code example: examples/basic/online_serving/openai_chat_completion_client.py
+ 
+Extra parameters¶
+ 
+The following sampling parameters are supported.
+ Code 
+ use_beam_search: bool = False
+ top_k: int | None = None
+ min_p: float | None = None
+ repetition_penalty: float | None = None
+ length_penalty: float = 1.0
+ stop_token_ids: list[int] | None = []
+ include_stop_str_in_output: bool = False
+ ignore_eos: bool = False
+ min_tokens: int = 0
+ skip_special_tokens: bool = True
+ spaces_between_special_tokens: bool = True
+ truncate_prompt_tokens: Annotated[int, Field(ge=-1, le=_INT64_MAX)] | None = None
+ prompt_logprobs: int | None = None
+ allowed_token_ids: list[int] | None = None
+ bad_words: list[str] = Field(default_factory=list)
+
+The following extra parameters are supported:
+ Code 
+ echo: bool = Field(
+ default=False,
+ description=(
+ "If true, the new message will be prepended with the last message "
+ "if they belong to the same role."
+ ),
+ )
+ add_generation_prompt: bool = Field(
+ default=True,
+ description=(
+ "If true, the generation prompt will be added to the chat template. "
+ "This is a parameter used by chat template in tokenizer config of the "
+ "model."
+ ),
+ )
+ continue_final_message: bool = Field(
+ default=False,
+ description=(
+ "If this is set, the chat will be formatted so that the final "
+ "message in the chat is open-ended, without any EOS tokens. The "
+ "model will continue this message rather than starting a new one. "
+ 'This allows you to "prefill" part of the model\'s response for it. '
+ "Cannot be used at the same time as `add_generation_prompt`."
+ ),
+ )
+ add_special_tokens: bool = Field(
+ default=False,
+ description=(
+ "If true, special tokens (e.g. BOS) will be added to the prompt "
+ "on top of what is added by the chat template. "
+ "For most models, the chat template takes care of adding the "
+ "special tokens so this should be set to false (as is the "
+ "default)."
+ ),
+ )
+ documents: list[dict[str, str]] | None = Field(
+ default=None,
+ description=(
+ "A list of dicts representing documents that will be accessible to "
+ "the model if it is performing RAG (retrieval-augmented generation)."
+ " If the template does not support RAG, this argument will have no "
+ "effect. We recommend that each document should be a dict containing "
+ '"title" and "text" keys.'
+ ),
+ )
+ chat_template: str | None = Field(
+ default=None,
+ description=(
+ "A Jinja template to use for this conversion. "
+ "As of transformers v4.44, default chat template is no longer "
+ "allowed, so you must provide a chat template if the tokenizer "
+ "does not define one."
+ ),
+ )
+ chat_template_kwargs: dict[str, Any] | None = Field(
+ default=None,
+ description=(
+ "Additional keyword args to pass to the template renderer. "
+ "Will be accessible by the chat template."
+ ),
+ )
+ media_io_kwargs: dict[str, dict[str, Any]] | None = Field(
+ default=None,
+ description=(
+ "Additional kwargs to pass to the media IO connectors, "
+ "keyed by modality. Merged with engine-level media_io_kwargs."
+ ),
+ )
+ mm_processor_kwargs: dict[str, Any] | None = Field(
+ default=None,
+ description=("Additional kwargs to pass to the HF processor."),
+ )
+ structured_outputs: StructuredOutputsParams | None = Field(
+ default=None,
+ description="Additional kwargs for structured outputs",
+ )
+ priority: int = Field(
+ default=0,
+ ge=_INT64_MIN,
+ le=_INT64_MAX,
+ description=(
+ "The priority of the request (lower means earlier handling; "
+ "default: 0). Any priority other than 0 will raise an error "
+ "if the served model does not use priority scheduling."
+ ),
+ )
+ request_id: str = Field(
+ default_factory=random_uuid,
+ description=(
+ "The request_id related to this request. If the caller does "
+ "not set it, a random_uuid will be generated. This id is used "
+ "through out the inference process and return in response."
+ ),
+ )
+
+ return_tokens_as_token_ids: bool | None = Field(
+ default=None,
+ description=(
+ "If specified with 'logprobs', tokens are represented "
+ " as strings of the form 'token_id:{token_id}' so that tokens "
+ "that are not JSON-encodable can be identified."
+ ),
+ )
+ return_token_ids: bool | None = Field(
+ default=None,
+ description=(
+ "If specified, the result will include token IDs alongside the "
+ "generated text. In streaming mode, prompt_token_ids is included "
+ "only in the first chunk, and token_ids contains the delta tokens "
+ "for each chunk. This is useful for debugging or when you "
+ "need to map generated text back to input tokens."
+ ),
+ )
+
+ cache_salt: str | None = Field(
+ default=None,
+ description=(
+ "If specified, the prefix cache will be salted with the provided "
+ "string to prevent an attacker to guess prompts in multi-user "
+ "environments. The salt should be random, protected from "
+ "access by 3rd parties, and long enough to be "
+ "unpredictable (e.g., 43 characters base64-encoded, corresponding "
+ "to 256 bit)."
+ ),
+ )
+
+ kv_transfer_params: dict[str, Any] | None = Field(
+ default=None,
+ description="KVTransfer parameters used for disaggregated serving.",
+ )
+
+ vllm_xargs: dict[str, str | int | float | list[str | int | float]] | None = Field(
+ default=None,
+ description=(
+ "Additional request parameters with (list of) string or "
+ "numeric values, used by custom extensions."
+ ),
+ )
+
+ repetition_detection: RepetitionDetectionParams | None = Field(
+ default=None,
+ description="Parameters for detecting repetitive N-gram patterns "
+ "in output tokens. If such repetition is detected, generation will "
+ "be ended early. LLMs can sometimes generate repetitive, unhelpful "
+ "token patterns, stopping only when they hit the maximum output length "
+ "(e.g. 'abcdabcdabcd...' or '\\emoji \\emoji \\emoji ...'). This feature "
+ "can detect such behavior and terminate early, saving time and tokens.",
+ )
+
+Responses API¶
+ 
+Our Responses API is compatible with OpenAI's Responses API; you can use the official OpenAI Python client to interact with it.
+ 
+Code example: examples/online_serving/openai_responses_client_with_tools.py
+ 
+Extra parameters¶
+ 
+The following extra parameters in the request object are supported:
+ Code 
+ request_id: str = Field(
+ default_factory=lambda: f"resp_{random_uuid()}",
+ description=(
+ "The request_id related to this request. If the caller does "
+ "not set it, a random_uuid will be generated. This id is used "
+ "through out the inference process and return in response."
+ ),
+ )
+ media_io_kwargs: dict[str, dict[str, Any]] | None = Field(
+ default=None,
+ description=(
+ "Additional kwargs to pass to the media IO connectors, "
+ "keyed by modality. Merged with engine-level media_io_kwargs."
+ ),
+ )
+ mm_processor_kwargs: dict[str, Any] | None = Field(
+ default=None,
+ description=("Additional kwargs to pass to the HF processor."),
+ )
+ priority: int = Field(
+ default=0,
+ ge=_INT64_MIN,
+ le=_INT64_MAX,
+ description=(
+ "The priority of the request (lower means earlier handling; "
+ "default: 0). Any priority other than 0 will raise an error "
+ "if the served model does not use priority scheduling."
+ ),
+ )
+ cache_salt: str | None = Field(
+ default=None,
+ description=(
+ "If specified, the prefix cache will be salted with the provided "
+ "string to prevent an attacker to guess prompts in multi-user "
+ "environments. The salt should be random, protected from "
+ "access by 3rd parties, and long enough to be "
+ "unpredictable (e.g., 43 characters base64-encoded, corresponding "
+ "to 256 bit)."
+ ),
+ )
+
+ enable_response_messages: bool = Field(
+ default=False,
+ description=(
+ "Dictates whether or not to return messages as part of the "
+ "response object. Currently only supported for non-background."
+ ),
+ )
+ # similar to input_messages / output_messages in ResponsesResponse
+ # we take in previous_input_messages (ie in harmony format)
+ # this cannot be used in conjunction with previous_response_id
+ # TODO: consider supporting non harmony messages as well
+ previous_input_messages: list[OpenAIHarmonyMessage | dict] | None = None
+ structured_outputs: StructuredOutputsParams | None = Field(
+ default=None,
+ description="Additional kwargs for structured outputs",
+ )
+
+ repetition_penalty: float | None = None
+ seed: int | None = Field(None, ge=_INT64_MIN, le=_INT64_MAX)
+ stop: str | list[str] | None = []
+ ignore_eos: bool = False
+ vllm_xargs: dict[str, str | int | float | list[str | int | float]] | None = Field(
+ default=None,
+ description=(
+ "Additional request parameters with (list of) string or "
+ "numeric values, used by custom extensions."
+ ),
+ )
+ kv_transfer_params: dict[str, Any] | None = Field(
+ default=None,
+ description="KVTransfer parameters used for disaggregated serving.",
+ )
+
+The following extra parameters in the response object are supported:
+ Code 
+ # These are populated when enable_response_messages is set to True
+ # NOTE: custom serialization is needed
+ # see serialize_input_messages and serialize_output_messages
+ input_messages: ResponseInputOutputMessage | None = Field(
+ default=None,
+ description=(
+ "If enable_response_messages, we can show raw token input to model."
+ ),
+ )
+ output_messages: ResponseInputOutputMessage | None = Field(
+ default=None,
+ description=(
+ "If enable_response_messages, we can show raw token output of model."
+ ),
+ )
+
+Transcriptions API¶
+ 
+Our Transcriptions API is compatible with OpenAI's Transcriptions API; you can use the official OpenAI Python client to interact with it.
+
+Note
+ 
+To use the Transcriptions API, please install with extra audio dependencies using pip install vllm[audio].
+
+Code example: examples/online_serving/openai_transcription_client.py
+ 
+NOTE: beam search is currently supported in the transcriptions endpoint for encoder-decoder multimodal models, e.g., whisper, but highly inefficient as work for handling the encoder/decoder cache is actively ongoing. This is an active point of ongoing optimization and will be handled properly in the very near future.
+ 
+API Enforced Limits¶
+ 
+Set the maximum audio file size (in MB) that VLLM will accept, via the VLLM_MAX_AUDIO_CLIP_FILESIZE_MB environment variable. Default is 25 MB.
+ 
+Uploading Audio Files¶
+ 
+The Transcriptions API supports uploading audio files in various formats including FLAC, MP3, MP4, MPEG, MPGA, M4A, OGG, WAV, and WEBM.
+ 
+Using OpenAI Python Client:
+ Code 
+from openai import OpenAI
+
+client = OpenAI(
+ base_url="http://localhost:8000/v1",
+ api_key="token-abc123",
+)
+
+# Upload audio file from disk
+with open("audio.mp3", "rb") as audio_file:
+ transcription = client.audio.transcriptions.create(
+ model="openai/whisper-large-v3-turbo",
+ file=audio_file,
+ language="en",
+ response_format="verbose_json",
+ )
+
+print(transcription.text)
+
+Using curl with multipart/form-data:
+ Code 
+curl -X POST "http://localhost:8000/v1/audio/transcriptions" \
+ -H "Authorization: Bearer token-abc123" \
+ -F "[email protected]" \
+ -F "model=openai/whisper-large-v3-turbo" \
+ -F "language=en" \
+ -F "response_format=verbose_json"
+
+Supported Parameters:
+ 
+file: The audio file to transcribe (required)
+ 
+model: The model to use for transcription (required)
+ 
+language: The language code (e.g., "en", "zh") (optional)
+ 
+prompt: Optional text to guide the transcription style (optional)
+ 
+response_format: Format of the response ("json", "text") (optional)
+ 
+temperature: Sampling temperature between 0 and 1 (optional)
+ 
+For the complete list of supported parameters including sampling parameters and vLLM extensions, see the protocol definitions.
+ 
+Response Format:
+ 
+For verbose_json response format:
+ Code 
+{
+ "text": "Hello, this is a transcription of the audio file.",
+ "language": "en",
+ "duration": 5.42,
+ "segments": [
+ {
+ "id": 0,
+ "seek": 0,
+ "start": 0.0,
+ "end": 2.5,
+ "text": "Hello, this is a transcription",
+ "tokens": [50364, 938, 428, 307, 275, 28347],
+ "temperature": 0.0,
+ "avg_logprob": -0.245,
+ "compression_ratio": 1.235,
+ "no_speech_prob": 0.012
+ }
+ ]
+}
+
+Currently “verbose_json” response format doesn’t support no_speech_prob.
+ 
+Extra Parameters¶
+ 
+The following sampling parameters are supported.
+ Code 
+ use_beam_search: bool = False
+ """Whether or not beam search should be used."""
+
+ n: int = 1
+ """The number of beams to be used in beam search."""
+
+ length_penalty: float = 1.0
+ """Length penalty to be used for beam search."""
+
+ include_stop_str_in_output: bool = False
+ """Whether to include the stop strings in output text."""
+
+ temperature: float = Field(default=0.0)
+ """The sampling temperature, between 0 and 1.
+
+ Higher values like 0.8 will make the output more random, while lower values
+ like 0.2 will make it more focused / deterministic. If set to 0, the model
+ will use [log probability](https://en.wikipedia.org/wiki/Log_probability)
+ to automatically increase the temperature until certain thresholds are hit.
+ """
+
+ top_p: float | None = None
+ """Enables nucleus (top-p) sampling, where tokens are selected from the
+ smallest possible set whose cumulative probability exceeds `p`.
+ """
+
+ top_k: int | None = None
+ """Limits sampling to the `k` most probable tokens at each step."""
+
+ min_p: float | None = None
+ """Filters out tokens with a probability lower than `min_p`, ensuring a
+ minimum likelihood threshold during sampling.
+ """
+
+ seed: int | None = Field(None, ge=_LONG_INFO.min, le=_LONG_INFO.max)
+ """The seed to use for sampling."""
+
+ frequency_penalty: float | None = 0.0
+ """The frequency penalty to use for sampling."""
+
+ repetition_penalty: float | None = None
+ """The repetition penalty to use for sampling."""
+
+ presence_penalty: float | None = 0.0
+ """The presence penalty to use for sampling."""
+
+ max_completion_tokens: int | None = None
+ """The maximum number of tokens to generate."""
+
+The following extra parameters are supported:
+ Code 
+ # Flattened stream option to simplify form data.
+ stream_include_usage: bool | None = False
+ stream_continuous_usage_stats: bool | None = False
+
+ vllm_xargs: dict[str, str | int | float | bool] | None = Field(
+ default=None,
+ description=(
+ "Additional request parameters with string or "
+ "numeric values, used by custom extensions."
+ ),
+ )
+
+Translations API¶
+ 
+Our Translation API is compatible with OpenAI's Translations API; you can use the official OpenAI Python client to interact with it. Whisper models can translate audio from one of the 55 non-English supported languages into English. Please mind that the popular openai/whisper-large-v3-turbo model does not support translating.
+
+Note
+ 
+To use the Translation API, please install with extra audio dependencies using pip install vllm[audio].
+
+Code example: examples/online_serving/openai_translation_client.py
+ 
+Extra Parameters¶
+ 
+The following sampling parameters are supported.
+ 
+ use_beam_search: bool = False
+ """Whether or not beam search should be used."""
+
+ n: int = 1
+ """The number of beams to be used in beam search."""
+
+ length_penalty: float = 1.0
+ """Length penalty to be used for beam search."""
+
+ include_stop_str_in_output: bool = False
+ """Whether to include the stop strings in output text."""
+
+ seed: int | None = Field(None, ge=_LONG_INFO.min, le=_LONG_INFO.max)
+ """The seed to use for sampling."""
+
+ temperature: float = Field(default=0.0)
+ """The sampling temperature, between 0 and 1.
+
+ Higher values like 0.8 will make the output more random, while lower values
+ like 0.2 will make it more focused / deterministic. If set to 0, the model
+ will use [log probability](https://en.wikipedia.org/wiki/Log_probability)
+ to automatically increase the temperature until certain thresholds are hit.
+ """
+
+The following extra parameters are supported:
+ 
+ language: str | None = None
+ """The language of the input audio we translate from.
+
+ Supplying the input language in
+ [ISO-639-1](https://en.wikipedia.org/wiki/List_of_ISO_639-1_codes) format
+ will improve accuracy.
+ """
+
+ to_language: str | None = None
+ """The language of the input audio we translate to.
+
+ Please note that this is not supported by all models, refer to the specific
+ model documentation for more details.
+ For instance, Whisper only supports `to_language=en`.
+ """
+
+ stream: bool | None = False
+ """Custom field not present in the original OpenAI definition. When set,
+ it will enable output to be streamed in a similar fashion as the Chat
+ Completion endpoint.
+ """
+ # Flattened stream option to simplify form data.
+ stream_include_usage: bool | None = False
+ stream_continuous_usage_stats: bool | None = False
+
+ max_completion_tokens: int | None = None
+ """The maximum number of tokens to generate."""
+
+Realtime API¶
+ 
+The Realtime API provides WebSocket-based streaming audio transcription, allowing real-time speech-to-text as audio is being recorded.
+
+Note
+ 
+To use the Realtime API, please install with extra audio dependencies using uv pip install vllm[audio].
+
+Audio Format¶
+ 
+Audio must be sent as base64-encoded PCM16 audio at 16kHz sample rate, mono channel.
+ 
+Protocol Overview¶
+ 
+Client connects to ws://host/v1/realtime
+ 
+Server sends session.created event
+ 
+Client optionally sends session.update with model/params
+ 
+Client sends input_audio_buffer.commit when ready
+ 
+Client sends input_audio_buffer.append events with base64 PCM16 chunks
+ 
+Server sends transcription.delta events with incremental text
+ 
+Server sends transcription.done with final text + usage
+ 
+Repeat from step 5 for next utterance
+ 
+Optionally, client sends input_audio_buffer.commit with final=True to signal audio input is finished. Useful when streaming audio files
+ 
+Client → Server Events¶
+ 
+ Event Description 
+ 
+ input_audio_buffer.append Send base64-encoded audio chunk: {"type": "input_audio_buffer.append", "audio": "<base64>"} 
+ 
+ input_audio_buffer.commit Trigger transcription processing or end: {"type": "input_audio_buffer.commit", "final": bool} 
+ 
+ session.update Configure session: {"type": "session.update", "model": "model-name"} 
+ 
+Server → Client Events¶
+ 
+ Event Description 
+ 
+ session.created Connection established with session ID and timestamp 
+ 
+ transcription.delta Incremental transcription text: {"type": "transcription.delta", "delta": "text"} 
+ 
+ transcription.done Final transcription with usage stats 
+ 
+ error Error notification with message and optional code 
+ 
+Example Clients¶
+ 
+openai_realtime_client.py - Upload and transcribe an audio file
+ 
+openai_realtime_microphone_client.py - Gradio demo for live microphone transcription
+ 
+Tokenizer API¶
+ 
+Our Tokenizer API is a simple wrapper over HuggingFace-style tokenizers. It consists of two endpoints:
+ 
+/tokenize corresponds to calling tokenizer.encode().
+ 
+/detokenize corresponds to calling tokenizer.decode().
+ 
+Generative Scoring API¶
+ 
+The /generative_scoring endpoint uses a CausalLM model (e.g., Llama, Qwen, Mistral) to compute the probability of specified token IDs appearing as the next token. Each item (document) is concatenated with the query to form a prompt, and the model predicts how likely each label token is as the next token after that prompt. This lets you score items against a query — for example, asking "Is this the capital of France?" and scoring each city by how likely the model is to answer "Yes".
+ 
+This endpoint is automatically available when the server is started with a generative model (task "generate"). It is separate from the pooling-based Score API, which uses cross-encoder, bi-encoder, or late-interaction models.
+ 
+Requirements:
+ 
+The label_token_ids parameter is required and must contain at least 1 token ID.
+ 
+When 2 label tokens are provided, the score equals P(label_token_ids[0]) / (P(label_token_ids[0]) + P(label_token_ids[1])) (softmax over the two labels).
+ 
+When more labels are provided, the score is the softmax-normalized probability of the first label token across all label tokens.
+ 
+Example¶
+ 
+curl -X POST http://localhost:8000/generative_scoring \
+ -H "Content-Type: application/json" \
+ -d '{
+ "model": "Qwen/Qwen3-0.6B",
+ "query": "Is this city the capital of France?",
+ "items": ["Paris", "London", "Berlin"],
+ "label_token_ids": [9454, 2753]
+ }'
+
+Here, each item is appended to the query to form prompts like "Is this city the capital of France? Paris", "... London", etc. The model then predicts the next token, and the score reflects the probability of "Yes" (token 9454) vs "No" (token 2753).
+ Response 
+{
+ "id": "generative-scoring-abc123",
+ "object": "list",
+ "created": 1234567890,
+ "model": "Qwen/Qwen3-0.6B",
+ "data": [
+ {"index": 0, "object": "score", "score": 0.95},
+ {"index": 1, "object": "score", "score": 0.12},
+ {"index": 2, "object": "score", "score": 0.08}
+ ],
+ "usage": {"prompt_tokens": 45, "total_tokens": 48, "completion_tokens": 3}
+}
+
+How it works¶
+ 
+Prompt Construction: For each item, builds prompt = query + item (or item + query if item_first=true)
+ 
+Forward Pass: Runs the model on each prompt to get next-token logits
+ 
+Probability Extraction: Extracts logprobs for the specified label_token_ids
+ 
+Softmax Normalization: Applies softmax over only the label tokens (when apply_softmax=true)
+ 
+Score: Returns the normalized probability of the first label token
+ 
+Finding Token IDs¶
+ 
+To find the token IDs for your labels, use the tokenizer:
+ 
+from transformers import AutoTokenizer
+
+tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen3-0.6B")
+yes_id = tokenizer.encode("Yes", add_special_tokens=False)[0]
+no_id = tokenizer.encode("No", add_special_tokens=False)[0]
+print(f"Yes: {yes_id}, No: {no_id}")
+
+Ray Serve LLM¶
+ 
+Ray Serve LLM enables scalable, production-grade serving of the vLLM engine. It integrates tightly with vLLM and extends it with features such as auto-scaling, load balancing, and back-pressure.
+ 
+Key capabilities:
+ 
+Exposes an OpenAI-compatible HTTP API as well as a Pythonic API.
+ 
+Scales from a single GPU to a multi-node cluster without code changes.
+ 
+Provides observability and autoscaling policies through Ray dashboards and metrics.
+ 
+The following example shows how to deploy a large model like DeepSeek R1 with Ray Serve LLM: examples/online_serving/ray_serve_deepseek.py.
+ 
+Learn more about Ray Serve LLM with the official Ray Serve LLM documentation.
+ April 18, 2026 
+
+ Back to top 
+
+ Made with Material for MkDocs
+````
+
+</details>
+

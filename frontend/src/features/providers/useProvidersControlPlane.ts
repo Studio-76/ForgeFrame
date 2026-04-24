@@ -108,6 +108,9 @@ export function useProvidersControlPlane(
   const [modelErrors, setModelErrors] = useState<Record<string, number>>({});
   const [integrationErrors, setIntegrationErrors] = useState<Record<string, number>>({});
   const [profileErrors, setProfileErrors] = useState<Record<string, number>>({});
+  const [providerCatalog, setProviderCatalog] = useState<ProvidersPageData["providerCatalog"]>([]);
+  const [providerCatalogSummary, setProviderCatalogSummary] = useState<ProvidersPageData["providerCatalogSummary"]>(null);
+  const [openaiCompatibilitySignoff, setOpenAICompatibilitySignoff] = useState<ProvidersPageData["openaiCompatibilitySignoff"]>(null);
   const [clients, setClients] = useState<ProvidersPageData["clients"]>([]);
   const [productAxisTargets, setProductAxisTargets] = useState<ProvidersPageData["productAxisTargets"]>([]);
   const [oauthTargets, setOauthTargets] = useState<ProvidersPageData["oauthTargets"]>([]);
@@ -210,6 +213,9 @@ export function useProvidersControlPlane(
       setModelErrors(Object.fromEntries(usage.aggregations.errors_by_model.map((item) => [String(item.model), Number(item.errors)])));
       setIntegrationErrors(Object.fromEntries(usage.aggregations.errors_by_integration.map((item) => [String(item.integration_key), Number(item.errors)])));
       setProfileErrors(Object.fromEntries(usage.aggregations.errors_by_profile.map((item) => [String(item.profile_key), Number(item.errors)])));
+      setProviderCatalog(payload.provider_catalog ?? []);
+      setProviderCatalogSummary(payload.provider_catalog_summary ?? null);
+      setOpenAICompatibilitySignoff(payload.openai_compatibility_signoff ?? null);
       setProviderLabelDrafts(Object.fromEntries(payload.providers.map((provider) => [provider.provider, provider.label])));
       setState("success");
     } catch (actionError) {
@@ -476,6 +482,9 @@ export function useProvidersControlPlane(
     modelErrors,
     integrationErrors,
     profileErrors,
+    providerCatalog,
+    providerCatalogSummary,
+    openaiCompatibilitySignoff,
     clients,
     productAxisTargets,
     oauthTargets,

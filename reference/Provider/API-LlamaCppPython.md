@@ -1,0 +1,1681 @@
+# API-LlamaCppPython
+
+> Neu erzeugt aus offiziellen Referenzdokumentationen. Falls kein Reverse-Engineering-Dokument vorhanden war, enthält diese Datei primär offizielle Schnittstelleninformationen und Implementierungshinweise.
+
+
+---
+
+## Offizielle Dokumentationsanreicherung: `OpenAI/API/LlamaCppPython`
+
+> Ergänzt am 2026-04-24 03:20:42. Quelle ist das bereitgestellte `reference.zip`. Die zugehörigen `.txt`- und `.md`-Dateien wurden vollständig eingelesen. Für sehr große Textanlagen wird der Volltext in dieser ZIP-Fassung auf 40.000 Zeichen je Quelldatei begrenzt; die implementierungsrelevanten Extrakte oben bleiben vollständig aus allen Dateien erzeugt.
+
+### Offizieller Quellenindex aus Referenz-ZIP
+
+# Index – LlamaCppPython
+
+Abrufdatum: `2026-04-24T05:05:37.927618+02:00`
+
+## Geladene Dokumente
+
+### OpenAI Compatible Web Server - llama-cpp-python
+- Quelle: Pflichtquelle
+- Original-URL: https://llama-cpp-python.readthedocs.io/en/latest/server/
+- Bereinigte Download-URL: https://llama-cpp-python.readthedocs.io/en/latest/server/
+- Lokale Datei(en): HTML: `server.html`, Text: `server.txt`
+- Abrufdatum: `2026-04-24T05:05:37.927618+02:00`
+- Zweck: llama-cpp-python server docs
+- Download-Werkzeug: `urllib`
+- HTTP-Status: `200`
+- Inhaltstyp: `text/html; charset=utf-8`
+
+### Erkannte URLs und Basisadressen
+
+- `https://llama-cpp-python.readthedocs.io/en/latest/server/`
+- `http://<host`
+
+### Erkannte Endpunkte / Pfade
+
+- `http://<host>:<port>/v1"`
+- `/OpenHermes-2.5-Mistral-7B-GGUF/openhermes-2.5-mistral-7b.Q4_K_M.gguf`
+- `/ggml_llava-v1.5-7b/ggml-model-q4_k.gguf`
+- `/ggml_llava-v1.5-7b/mmproj-model-f16.gguf`
+- `/mistral-7b-v0.1-GGUF/ggml-model-Q4_K.gguf`
+- `/replit-code-v1_5-3b-GGUF/replit-code-v1_5-3b.Q4_0.gguf`
+
+### Erkannte Umgebungsvariablen / Konstanten
+
+- `NOTE`
+- `MODEL`
+- `GGUF`
+- `CONFIG_FILE`
+- `Q4_K_M`
+- `Q4_K`
+- `Q4_0`
+- `HTTPS`
+- `LLAMA_SPLIT_MODE_LAYER`
+- `TRUE`
+- `LLAMA_DEFAULT_SEED`
+- `LLAMA_ROPE_SCALING_TYPE_UNSPECIFIED`
+- `NUMA`
+- `CLIP`
+
+### Implementierungsrelevante offizielle Extrakte
+
+
+---
+
+**Quelle `INDEX.md`**
+
+### OpenAI Compatible Web Server - llama-cpp-python
+- Quelle: Pflichtquelle
+
+---
+
+**Quelle `INDEX.md`**
+
+- Quelle: Pflichtquelle
+- Original-URL: https://llama-cpp-python.readthedocs.io/en/latest/server/
+- Bereinigte Download-URL: https://llama-cpp-python.readthedocs.io/en/latest/server/
+
+---
+
+**Quelle `INDEX.md`**
+
+- Original-URL: https://llama-cpp-python.readthedocs.io/en/latest/server/
+- Bereinigte Download-URL: https://llama-cpp-python.readthedocs.io/en/latest/server/
+- Lokale Datei(en): HTML: `server.html`, Text: `server.txt`
+
+---
+
+**Quelle `server.txt`**
+
+OpenAI Compatible Web Server - llama-cpp-python
+
+---
+
+**Quelle `server.txt`**
+
+OpenAI Compatible Web Server
+
+---
+
+**Quelle `server.txt`**
+
+Function Calling
+
+---
+
+**Quelle `server.txt`**
+
+Multimodal Models
+
+---
+
+**Quelle `server.txt`**
+
+models
+
+---
+
+**Quelle `server.txt`**
+
+ModelSettings
+
+---
+
+**Quelle `server.txt`**
+
+embedding
+
+---
+
+**Quelle `server.txt`**
+
+last_n_tokens_size
+
+---
+
+**Quelle `server.txt`**
+
+hf_tokenizer_config_path
+
+---
+
+**Quelle `server.txt`**
+
+draft_model_num_pred_tokens
+
+---
+
+**Quelle `server.txt`**
+
+OpenAI Compatible Server
+
+---
+
+**Quelle `server.txt`**
+
+llama-cpp-python offers an OpenAI API compatible web server.
+
+---
+
+**Quelle `server.txt`**
+
+This web server can be used to serve local models and easily connect them to existing clients.
+
+---
+
+**Quelle `server.txt`**
+
+NOTE: All server options are also available as environment variables. For example, --model can be set by setting the MODEL environment variable.
+
+---
+
+**Quelle `server.txt`**
+
+Check out the server config reference below settings for more information on the available options.
+CLI arguments and environment variables are available for all of the fields defined in ServerSettings and ModelSettings
+
+---
+
+**Quelle `server.txt`**
+
+You'll first need to download one of the available code completion models in GGUF format:
+
+---
+
+**Quelle `server.txt`**
+
+Then you'll need to run the OpenAI compatible web server with a increased context size substantially for GitHub Copilot requests:
+
+---
+
+**Quelle `server.txt`**
+
+"github.copilot.advanced": {
+ "debug.testOverrideProxyUrl": "http://<host>:<port>",
+ "debug.overrideProxyUrl": "http://<host>:<port>"
+
+---
+
+**Quelle `server.txt`**
+
+"debug.testOverrideProxyUrl": "http://<host>:<port>",
+ "debug.overrideProxyUrl": "http://<host>:<port>"
+ }
+
+---
+
+**Quelle `server.txt`**
+
+llama-cpp-python supports structured function calling based on a JSON schema.
+Function calling is completely compatible with the OpenAI function calling API and can be used by connecting with the official OpenAI Python client.
+
+---
+
+**Quelle `server.txt`**
+
+You'll first need to download one of the available function calling models in GGUF format:
+
+---
+
+**Quelle `server.txt`**
+
+functionary
+
+---
+
+**Quelle `server.txt`**
+
+Then when you run the server you'll need to also specify either functionary-v1 or functionary-v2 chat_format.
+
+---
+
+**Quelle `server.txt`**
+
+Note that since functionary requires a HF Tokenizer due to discrepancies between llama.cpp and HuggingFace's tokenizers as mentioned here, you will need to pass in the path to the tokenizer too. The tokenizer files are already included in the respective HF repositories hosting the gguf files.
+
+---
+
+**Quelle `server.txt`**
+
+python3 -m llama_cpp.server --model <model_path_to_functionary_v2_model> --chat_format functionary-v2 --hf_pretrained_model_name_or_path <model_path_to_functionary_v2_tokenizer>
+
+---
+
+**Quelle `server.txt`**
+
+Check out this example notebook for a walkthrough of some interesting use cases for function calling.
+
+---
+
+**Quelle `server.txt`**
+
+llama-cpp-python supports the llava1.5 family of multi-modal models which allow the language model to
+read information from both text and images.
+
+---
+
+**Quelle `server.txt`**
+
+You'll first need to download one of the available multi-modal models in GGUF format:
+
+---
+
+**Quelle `server.txt`**
+
+Then when you run the server you'll need to also specify the path to the clip model used for image embedding and the llava-1-5 chat_format
+
+---
+
+**Quelle `server.txt`**
+
+Then you can just use the OpenAI API as normal
+
+---
+
+**Quelle `server.txt`**
+
+from openai import OpenAI
+
+---
+
+**Quelle `server.txt`**
+
+client = OpenAI(base_url="http://<host>:<port>/v1", api_key="sk-xxx")
+response = client.chat.completions.create(
+
+---
+
+**Quelle `server.txt`**
+
+client = OpenAI(base_url="http://<host>:<port>/v1", api_key="sk-xxx")
+response = client.chat.completions.create(
+ model="gpt-4-vision-preview",
+
+---
+
+**Quelle `server.txt`**
+
+response = client.chat.completions.create(
+ model="gpt-4-vision-preview",
+ messages=[
+
+---
+
+**Quelle `server.txt`**
+
+The server supports configuration via a JSON config file that can be passed using the --config_file parameter or the CONFIG_FILE environment variable.
+
+---
+
+**Quelle `server.txt`**
+
+Config files support all of the server and model options supported by the cli and environment variables however instead of only a single model the config file can specify multiple models.
+
+---
+
+**Quelle `server.txt`**
+
+The server supports routing requests to multiple models based on the model parameter in the request which matches against the model_alias in the config file.
+
+---
+
+**Quelle `server.txt`**
+
+At the moment only a single model is loaded into memory at, the server will automatically load and unload models as needed.
+
+---
+
+**Quelle `server.txt`**
+
+"port": 8080,
+ "models": [
+ {
+
+---
+
+**Quelle `server.txt`**
+
+{
+ "model": "models/OpenHermes-2.5-Mistral-7B-GGUF/openhermes-2.5-mistral-7b.Q4_K_M.gguf",
+ "model_alias": "gpt-3.5-turbo",
+
+### Code-/Konfigurationsbeispiele aus offiziellen Dokumenten
+
+
+---
+
+**Quelle `server.txt`**
+
+````text
+api_key
+````
+
+---
+
+**Quelle `server.txt`**
+
+````text
+pip install llama-cpp-python[server]
+````
+
+---
+
+**Quelle `server.txt`**
+
+````text
+client = OpenAI(base_url="http://<host>:<port>/v1", api_key="sk-xxx")
+````
+
+---
+
+**Quelle `server.txt`**
+
+````text
+api_key: Optional[str] = Field(
+````
+
+---
+
+**Quelle `server.txt`**
+
+````text
+api_key = Field(default=None, description='API key for authentication. If set all requests need to be authenticated.')
+````
+
+## Textanlagen aus der offiziellen Dokumentation
+
+
+<details>
+<summary>Textanlage: <code>OpenAI/API/LlamaCppPython/server.txt</code></summary>
+
+````text
+OpenAI Compatible Web Server - llama-cpp-python
+
+ Skip to content
+
+ llama-cpp-python
+
+ OpenAI Compatible Web Server
+
+ Initializing search
+
+ GitHub
+
+ llama-cpp-python
+
+ GitHub
+
+ Getting Started
+
+ Installation Guides
+
+ Installation Guides
+
+ macOS (Metal)
+
+ API Reference
+
+ OpenAI Compatible Web Server
+
+ OpenAI Compatible Web Server
+
+ Table of contents
+
+ Setup
+
+ Installation
+
+ Running the server
+
+ Server options
+
+ Guides
+
+ Code Completion
+
+ Function Calling
+
+ Multimodal Models
+
+ Configuration and Multi-Model Support
+
+ Server Options Reference
+
+ ConfigFileSettings
+
+ models
+
+ ServerSettings
+
+ host
+
+ port
+
+ ssl_keyfile
+
+ ssl_certfile
+
+ api_key
+
+ interrupt_requests
+
+ disable_ping_events
+
+ root_path
+
+ ModelSettings
+
+ model
+
+ model_alias
+
+ n_gpu_layers
+
+ split_mode
+
+ main_gpu
+
+ tensor_split
+
+ vocab_only
+
+ use_mmap
+
+ use_mlock
+
+ kv_overrides
+
+ rpc_servers
+
+ seed
+
+ n_ctx
+
+ n_batch
+
+ n_ubatch
+
+ n_threads
+
+ n_threads_batch
+
+ rope_scaling_type
+
+ rope_freq_base
+
+ rope_freq_scale
+
+ yarn_ext_factor
+
+ yarn_attn_factor
+
+ yarn_beta_fast
+
+ yarn_beta_slow
+
+ yarn_orig_ctx
+
+ mul_mat_q
+
+ logits_all
+
+ embedding
+
+ offload_kqv
+
+ flash_attn
+
+ last_n_tokens_size
+
+ lora_base
+
+ lora_path
+
+ numa
+
+ chat_format
+
+ clip_model_path
+
+ cache
+
+ cache_type
+
+ cache_size
+
+ hf_tokenizer_config_path
+
+ hf_pretrained_model_name_or_path
+
+ hf_model_repo_id
+
+ draft_model
+
+ draft_model_num_pred_tokens
+
+ type_k
+
+ type_v
+
+ verbose
+
+ set_dynamic_defaults
+
+ Changelog
+
+ Table of contents
+
+ Setup
+
+ Installation
+
+ Running the server
+
+ Server options
+
+ Guides
+
+ Code Completion
+
+ Function Calling
+
+ Multimodal Models
+
+ Configuration and Multi-Model Support
+
+ Server Options Reference
+
+ ConfigFileSettings
+
+ models
+
+ ServerSettings
+
+ host
+
+ port
+
+ ssl_keyfile
+
+ ssl_certfile
+
+ api_key
+
+ interrupt_requests
+
+ disable_ping_events
+
+ root_path
+
+ ModelSettings
+
+ model
+
+ model_alias
+
+ n_gpu_layers
+
+ split_mode
+
+ main_gpu
+
+ tensor_split
+
+ vocab_only
+
+ use_mmap
+
+ use_mlock
+
+ kv_overrides
+
+ rpc_servers
+
+ seed
+
+ n_ctx
+
+ n_batch
+
+ n_ubatch
+
+ n_threads
+
+ n_threads_batch
+
+ rope_scaling_type
+
+ rope_freq_base
+
+ rope_freq_scale
+
+ yarn_ext_factor
+
+ yarn_attn_factor
+
+ yarn_beta_fast
+
+ yarn_beta_slow
+
+ yarn_orig_ctx
+
+ mul_mat_q
+
+ logits_all
+
+ embedding
+
+ offload_kqv
+
+ flash_attn
+
+ last_n_tokens_size
+
+ lora_base
+
+ lora_path
+
+ numa
+
+ chat_format
+
+ clip_model_path
+
+ cache
+
+ cache_type
+
+ cache_size
+
+ hf_tokenizer_config_path
+
+ hf_pretrained_model_name_or_path
+
+ hf_model_repo_id
+
+ draft_model
+
+ draft_model_num_pred_tokens
+
+ type_k
+
+ type_v
+
+ verbose
+
+ set_dynamic_defaults
+
+OpenAI Compatible Server
+
+llama-cpp-python offers an OpenAI API compatible web server.
+
+This web server can be used to serve local models and easily connect them to existing clients.
+
+Setup
+
+Installation
+
+The server can be installed by running the following command:
+
+pip install llama-cpp-python[server]
+
+Running the server
+
+The server can then be started by running the following command:
+
+python3 -m llama_cpp.server --model <model_path>
+
+Server options
+
+For a full list of options, run:
+
+python3 -m llama_cpp.server --help
+
+NOTE: All server options are also available as environment variables. For example, --model can be set by setting the MODEL environment variable.
+
+Check out the server config reference below settings for more information on the available options.
+CLI arguments and environment variables are available for all of the fields defined in ServerSettings and ModelSettings 
+
+Additionally the server supports configuration check out the configuration section for more information and examples.
+
+Guides
+
+Code Completion
+
+llama-cpp-python supports code completion via GitHub Copilot.
+
+NOTE: Without GPU acceleration this is unlikely to be fast enough to be usable.
+
+You'll first need to download one of the available code completion models in GGUF format:
+
+replit-code-v1_5-GGUF
+
+Then you'll need to run the OpenAI compatible web server with a increased context size substantially for GitHub Copilot requests:
+
+python3 -m llama_cpp.server --model <model_path> --n_ctx 16192
+
+Then just update your settings in .vscode/settings.json to point to your code completion server:
+
+{
+ // ...
+ "github.copilot.advanced": {
+ "debug.testOverrideProxyUrl": "http://<host>:<port>",
+ "debug.overrideProxyUrl": "http://<host>:<port>"
+ }
+ // ...
+}
+
+Function Calling
+
+llama-cpp-python supports structured function calling based on a JSON schema.
+Function calling is completely compatible with the OpenAI function calling API and can be used by connecting with the official OpenAI Python client.
+
+You'll first need to download one of the available function calling models in GGUF format:
+
+functionary
+
+Then when you run the server you'll need to also specify either functionary-v1 or functionary-v2 chat_format.
+
+Note that since functionary requires a HF Tokenizer due to discrepancies between llama.cpp and HuggingFace's tokenizers as mentioned here, you will need to pass in the path to the tokenizer too. The tokenizer files are already included in the respective HF repositories hosting the gguf files.
+
+python3 -m llama_cpp.server --model <model_path_to_functionary_v2_model> --chat_format functionary-v2 --hf_pretrained_model_name_or_path <model_path_to_functionary_v2_tokenizer>
+
+Check out this example notebook for a walkthrough of some interesting use cases for function calling.
+
+Multimodal Models
+
+llama-cpp-python supports the llava1.5 family of multi-modal models which allow the language model to
+read information from both text and images.
+
+You'll first need to download one of the available multi-modal models in GGUF format:
+
+llava-v1.5-7b
+
+llava-v1.5-13b
+
+bakllava-1-7b
+
+llava-v1.6-34b
+
+moondream2
+
+Then when you run the server you'll need to also specify the path to the clip model used for image embedding and the llava-1-5 chat_format
+
+python3 -m llama_cpp.server --model <model_path> --clip_model_path <clip_model_path> --chat_format llava-1-5
+
+Then you can just use the OpenAI API as normal
+
+from openai import OpenAI
+
+client = OpenAI(base_url="http://<host>:<port>/v1", api_key="sk-xxx")
+response = client.chat.completions.create(
+ model="gpt-4-vision-preview",
+ messages=[
+ {
+ "role": "user",
+ "content": [
+ {
+ "type": "image_url",
+ "image_url": {
+ "url": "<image_url>"
+ },
+ },
+ {"type": "text", "text": "What does the image say"},
+ ],
+ }
+ ],
+)
+print(response)
+
+Configuration and Multi-Model Support
+
+The server supports configuration via a JSON config file that can be passed using the --config_file parameter or the CONFIG_FILE environment variable.
+
+python3 -m llama_cpp.server --config_file <config_file>
+
+Config files support all of the server and model options supported by the cli and environment variables however instead of only a single model the config file can specify multiple models.
+
+The server supports routing requests to multiple models based on the model parameter in the request which matches against the model_alias in the config file.
+
+At the moment only a single model is loaded into memory at, the server will automatically load and unload models as needed.
+
+{
+ "host": "0.0.0.0",
+ "port": 8080,
+ "models": [
+ {
+ "model": "models/OpenHermes-2.5-Mistral-7B-GGUF/openhermes-2.5-mistral-7b.Q4_K_M.gguf",
+ "model_alias": "gpt-3.5-turbo",
+ "chat_format": "chatml",
+ "n_gpu_layers": -1,
+ "offload_kqv": true,
+ "n_threads": 12,
+ "n_batch": 512,
+ "n_ctx": 2048
+ },
+ {
+ "model": "models/OpenHermes-2.5-Mistral-7B-GGUF/openhermes-2.5-mistral-7b.Q4_K_M.gguf",
+ "model_alias": "gpt-4",
+ "chat_format": "chatml",
+ "n_gpu_layers": -1,
+ "offload_kqv": true,
+ "n_threads": 12,
+ "n_batch": 512,
+ "n_ctx": 2048
+ },
+ {
+ "model": "models/ggml_llava-v1.5-7b/ggml-model-q4_k.gguf",
+ "model_alias": "gpt-4-vision-preview",
+ "chat_format": "llava-1-5",
+ "clip_model_path": "models/ggml_llava-v1.5-7b/mmproj-model-f16.gguf",
+ "n_gpu_layers": -1,
+ "offload_kqv": true,
+ "n_threads": 12,
+ "n_batch": 512,
+ "n_ctx": 2048
+ },
+ {
+ "model": "models/mistral-7b-v0.1-GGUF/ggml-model-Q4_K.gguf",
+ "model_alias": "text-davinci-003",
+ "n_gpu_layers": -1,
+ "offload_kqv": true,
+ "n_threads": 12,
+ "n_batch": 512,
+ "n_ctx": 2048
+ },
+ {
+ "model": "models/replit-code-v1_5-3b-GGUF/replit-code-v1_5-3b.Q4_0.gguf",
+ "model_alias": "copilot-codex",
+ "n_gpu_layers": -1,
+ "offload_kqv": true,
+ "n_threads": 12,
+ "n_batch": 1024,
+ "n_ctx": 9216
+ }
+ ]
+}
+
+The config file format is defined by the ConfigFileSettings class.
+
+Server Options Reference
+
+ llama_cpp.server.settings.ConfigFileSettings
+
+ Bases: ServerSettings
+
+Configuration file format settings.
+
+ Source code in llama_cpp/server/settings.py
+
+237
+238
+239
+240
+
+class ConfigFileSettings(ServerSettings):
+ """Configuration file format settings."""
+
+ models: List[ModelSettings] = Field(default=[], description="Model configs")
+
+ models = Field(default=[], description='Model configs')
+
+ class-attribute
+ instance-attribute
+
+ llama_cpp.server.settings.ServerSettings
+
+ Bases: BaseSettings
+
+Server settings used to configure the FastAPI and Uvicorn server.
+
+ Source code in llama_cpp/server/settings.py
+
+202
+203
+204
+205
+206
+207
+208
+209
+210
+211
+212
+213
+214
+215
+216
+217
+218
+219
+220
+221
+222
+223
+224
+225
+226
+227
+228
+229
+230
+
+class ServerSettings(BaseSettings):
+ """Server settings used to configure the FastAPI and Uvicorn server."""
+
+ # Uvicorn Settings
+ host: str = Field(default="localhost", description="Listen address")
+ port: int = Field(default=8000, description="Listen port")
+ ssl_keyfile: Optional[str] = Field(
+ default=None, description="SSL key file for HTTPS"
+ )
+ ssl_certfile: Optional[str] = Field(
+ default=None, description="SSL certificate file for HTTPS"
+ )
+ # FastAPI Settings
+ api_key: Optional[str] = Field(
+ default=None,
+ description="API key for authentication. If set all requests need to be authenticated.",
+ )
+ interrupt_requests: bool = Field(
+ default=True,
+ description="Whether to interrupt requests when a new request is received.",
+ )
+ disable_ping_events: bool = Field(
+ default=False,
+ description="Disable EventSource pings (may be needed for some clients).",
+ )
+ root_path: str = Field(
+ default="",
+ description="The root path for the server. Useful when running behind a reverse proxy.",
+ )
+
+ host = Field(default='localhost', description='Listen address')
+
+ class-attribute
+ instance-attribute
+
+ port = Field(default=8000, description='Listen port')
+
+ class-attribute
+ instance-attribute
+
+ ssl_keyfile = Field(default=None, description='SSL key file for HTTPS')
+
+ class-attribute
+ instance-attribute
+
+ ssl_certfile = Field(default=None, description='SSL certificate file for HTTPS')
+
+ class-attribute
+ instance-attribute
+
+ api_key = Field(default=None, description='API key for authentication. If set all requests need to be authenticated.')
+
+ class-attribute
+ instance-attribute
+
+ interrupt_requests = Field(default=True, description='Whether to interrupt requests when a new request is received.')
+
+ class-attribute
+ instance-attribute
+
+ disable_ping_events = Field(default=False, description='Disable EventSource pings (may be needed for some clients).')
+
+ class-attribute
+ instance-attribute
+
+ root_path = Field(default='', description='The root path for the server. Useful when running behind a reverse proxy.')
+
+ class-attribute
+ instance-attribute
+
+ llama_cpp.server.settings.ModelSettings
+
+ Bases: BaseSettings
+
+Model settings used to load a Llama model.
+
+ Source code in llama_cpp/server/settings.py
+
+ 17
+ 18
+ 19
+ 20
+ 21
+ 22
+ 23
+ 24
+ 25
+ 26
+ 27
+ 28
+ 29
+ 30
+ 31
+ 32
+ 33
+ 34
+ 35
+ 36
+ 37
+ 38
+ 39
+ 40
+ 41
+ 42
+ 43
+ 44
+ 45
+ 46
+ 47
+ 48
+ 49
+ 50
+ 51
+ 52
+ 53
+ 54
+ 55
+ 56
+ 57
+ 58
+ 59
+ 60
+ 61
+ 62
+ 63
+ 64
+ 65
+ 66
+ 67
+ 68
+ 69
+ 70
+ 71
+ 72
+ 73
+ 74
+ 75
+ 76
+ 77
+ 78
+ 79
+ 80
+ 81
+ 82
+ 83
+ 84
+ 85
+ 86
+ 87
+ 88
+ 89
+ 90
+ 91
+ 92
+ 93
+ 94
+ 95
+ 96
+ 97
+ 98
+ 99
+100
+101
+102
+103
+104
+105
+106
+107
+108
+109
+110
+111
+112
+113
+114
+115
+116
+117
+118
+119
+120
+121
+122
+123
+124
+125
+126
+127
+128
+129
+130
+131
+132
+133
+134
+135
+136
+137
+138
+139
+140
+141
+142
+143
+144
+145
+146
+147
+148
+149
+150
+151
+152
+153
+154
+155
+156
+157
+158
+159
+160
+161
+162
+163
+164
+165
+166
+167
+168
+169
+170
+171
+172
+173
+174
+175
+176
+177
+178
+179
+180
+181
+182
+183
+184
+185
+186
+187
+188
+189
+190
+191
+192
+193
+194
+195
+196
+197
+198
+199
+
+class ModelSettings(BaseSettings):
+ """Model settings used to load a Llama model."""
+
+ model: str = Field(
+ description="The path to the model to use for generating completions."
+ )
+ model_alias: Optional[str] = Field(
+ default=None,
+ description="The alias of the model to use for generating completions.",
+ )
+ # Model Params
+ n_gpu_layers: int = Field(
+ default=0,
+ ge=-1,
+ description="The number of layers to put on the GPU. The rest will be on the CPU. Set -1 to move all to GPU.",
+ )
+ split_mode: int = Field(
+ default=llama_cpp.LLAMA_SPLIT_MODE_LAYER,
+ description="The split mode to use.",
+ )
+ main_gpu: int = Field(
+ default=0,
+ ge=0,
+ description="Main GPU to use.",
+ )
+ tensor_split: Optional[List[float]] = Field(
+ default=None,
+ description="Split layers across multiple GPUs in proportion.",
+ )
+ vocab_only: bool = Field(
+ default=False, description="Whether to only return the vocabulary."
+ )
+ use_mmap: bool = Field(
+ default=llama_cpp.llama_supports_mmap(),
+ description="Use mmap.",
+ )
+ use_mlock: bool = Field(
+ default=llama_cpp.llama_supports_mlock(),
+ description="Use mlock.",
+ )
+ kv_overrides: Optional[List[str]] = Field(
+ default=None,
+ description="List of model kv overrides in the format key=type:value where type is one of (bool, int, float). Valid true values are (true, TRUE, 1), otherwise false.",
+ )
+ rpc_servers: Optional[str] = Field(
+ default=None,
+ description="comma seperated list of rpc servers for offloading",
+ )
+ # Context Params
+ seed: int = Field(
+ default=llama_cpp.LLAMA_DEFAULT_SEED, description="Random seed. -1 for random."
+ )
+ n_ctx: int = Field(default=2048, ge=0, description="The context size.")
+ n_batch: int = Field(
+ default=512, ge=1, description="The batch size to use per eval."
+ )
+ n_ubatch: int = Field(
+ default=512, ge=1, description="The physical batch size used by llama.cpp"
+ )
+ n_threads: int = Field(
+ default=max(multiprocessing.cpu_count() // 2, 1),
+ ge=1,
+ description="The number of threads to use. Use -1 for max cpu threads",
+ )
+ n_threads_batch: int = Field(
+ default=max(multiprocessing.cpu_count(), 1),
+ ge=0,
+ description="The number of threads to use when batch processing. Use -1 for max cpu threads",
+ )
+ rope_scaling_type: int = Field(
+ default=llama_cpp.LLAMA_ROPE_SCALING_TYPE_UNSPECIFIED
+ )
+ rope_freq_base: float = Field(default=0.0, description="RoPE base frequency")
+ rope_freq_scale: float = Field(
+ default=0.0, description="RoPE frequency scaling factor"
+ )
+ yarn_ext_factor: float = Field(default=-1.0)
+ yarn_attn_factor: float = Field(default=1.0)
+ yarn_beta_fast: float = Field(default=32.0)
+ yarn_beta_slow: float = Field(default=1.0)
+ yarn_orig_ctx: int = Field(default=0)
+ mul_mat_q: bool = Field(
+ default=True, description="if true, use experimental mul_mat_q kernels"
+ )
+ logits_all: bool = Field(default=True, description="Whether to return logits.")
+ embedding: bool = Field(default=False, description="Whether to use embeddings.")
+ offload_kqv: bool = Field(
+ default=True, description="Whether to offload kqv to the GPU."
+ )
+ flash_attn: bool = Field(
+ default=False, description="Whether to use flash attention."
+ )
+ # Sampling Params
+ last_n_tokens_size: int = Field(
+ default=64,
+ ge=0,
+ description="Last n tokens to keep for repeat penalty calculation.",
+ )
+ # LoRA Params
+ lora_base: Optional[str] = Field(
+ default=None,
+ description="Optional path to base model, useful if using a quantized base model and you want to apply LoRA to an f16 model.",
+ )
+ lora_path: Optional[str] = Field(
+ default=None,
+ description="Path to a LoRA file to apply to the model.",
+ )
+ # Backend Params
+ numa: Union[bool, int] = Field(
+ default=False,
+ description="Enable NUMA support.",
+ )
+ # Chat Format Params
+ chat_format: Optional[str] = Field(
+ default=None,
+ description="Chat format to use.",
+ )
+ clip_model_path: Optional[str] = Field(
+ default=None,
+ description="Path to a CLIP model to use for multi-modal chat completion.",
+ )
+ # Cache Params
+ cache: bool = Field(
+ default=False,
+ description="Use a cache to reduce processing times for evaluated prompts.",
+ )
+ cache_type: Literal["ram", "disk"] = Field(
+ default="ram",
+ description="The type of cache to use. Only used if cache is True.",
+ )
+ cache_size: int = Field(
+ default=2 << 30,
+ description="The size of the cache in bytes. Only used if cache is True.",
+ )
+ # Tokenizer Options
+ hf_tokenizer_config_path: Optional[str] = Field(
+ default=None,
+ description="The path to a HuggingFace tokenizer_config.json file.",
+ )
+ hf_pretrained_model_name_or_path: Optional[str] = Field(
+ default=None,
+ description="The model name or path to a pretrained HuggingFace tokenizer model. Same as you would pass to AutoTokenizer.from_pretrained().",
+ )
+ # Loading from HuggingFace Model Hub
+ hf_model_repo_id: Optional[str] = Field(
+ default=None,
+ description="The model repo id to use for the HuggingFace tokenizer model.",
+ )
+ # Speculative Decoding
+ draft_model: Optional[str] = Field(
+ default=None,
+ description="Method to use for speculative decoding. One of (prompt-lookup-decoding).",
+ )
+ draft_model_num_pred_tokens: int = Field(
+ default=10,
+ description="Number of tokens to predict using the draft model.",
+ )
+ # KV Cache Quantization
+ type_k: Optional[int] = Field(
+ default=None,
+ description="Type of the key cache quantization.",
+ )
+ type_v: Optional[int] = Field(
+ default=None,
+ description="Type of the value cache quantization.",
+ )
+ # Misc
+ verbose: bool = Field(
+ default=True, description="Whether to print debug information."
+ )
+
+ @model_validator(
+ mode="before"
+ ) # pre=True to ensure this runs before any other validation
+ def set_dynamic_defaults(self) -> Self:
+ # If n_threads or n_threads_batch is -1, set it to multiprocessing.cpu_count()
+ cpu_count = multiprocessing.cpu_count()
+ values = cast(Dict[str, int], self)
+ if values.get("n_threads", 0) == -1:
+ values["n_threads"] = cpu_count
+ if values.get("n_threads_batch", 0) == -1:
+ values["n_threads_batch"] = cpu_count
+ return self
+
+ model = Field(description='The path to the model to use for generating completions.')
+
+ class-attribute
+ instance-attribute
+
+ model_alias = Field(default=None, description='The alias of the model to use for generating completions.')
+
+ class-attribute
+ instance-attribute
+
+ n_gpu_layers = Field(default=0, ge=(-1), description='The number of layers to put on the GPU. The rest will be on the CPU. Set -1 to move all to GPU.')
+
+ class-attribute
+ instance-attribute
+
+ split_mode = Field(default=(llama_cpp.LLAMA_SPLIT_MODE_LAYER), description='The split mode to use.')
+
+ class-attribute
+ instance-attribute
+
+ main_gpu = Field(default=0, ge=0, description='Main GPU to use.')
+
+ class-attribute
+ instance-attribute
+
+ tensor_split = Field(default=None, description='Split layers across multiple GPUs in proportion.')
+
+ class-attribute
+ instance-attribute
+
+ vocab_only = Field(default=False, description='Whether to only return the vocabulary.')
+
+ class-attribute
+ instance-attribute
+
+ use_mmap = Field(default=(llama_cpp.llama_supports_mmap()), description='Use mmap.')
+
+ class-attribute
+ instance-attribute
+
+ use_mlock = Field(default=(llama_cpp.llama_supports_mlock()), description='Use mlock.')
+
+ class-attribute
+ instance-attribute
+
+ kv_overrides = Field(default=None, description='List of model kv overrides in the format key=type:value where type is one of (bool, int, float). Valid true values are (true, TRUE, 1), otherwise false.')
+
+ class-attribute
+ instance-attribute
+
+ rpc_servers = Field(default=None, description='comma seperated list of rpc servers for offloading')
+
+ class-attribute
+ instance-attribute
+
+ seed = Field(default=(llama_cpp.LLAMA_DEFAULT_SEED), description='Random seed. -1 for random.')
+
+ class-attribute
+ instance-attribute
+
+ n_ctx = Field(default=2048, ge=0, description='The context size.')
+
+ class-attribute
+ instance-attribute
+
+ n_batch = Field(default=512, ge=1, description='The batch size to use per eval.')
+
+ class-attribute
+ instance-attribute
+
+ n_ubatch = Field(default=512, ge=1, description='The physical batch size used by llama.cpp')
+
+ class-attribute
+ instance-attribute
+
+ n_threads = Field(default=(max(multiprocessing.cpu_count() // 2, 1)), ge=1, description='The number of threads to use. Use -1 for max cpu threads')
+
+ class-attribute
+ instance-attribute
+
+ n_threads_batch = Field(default=(max(multiprocessing.cpu_count(), 1)), ge=0, description='The number of threads to use when batch processing. Use -1 for max cpu threads')
+
+ class-attribute
+ instance-attribute
+
+ rope_scaling_type = Field(default=(llama_cpp.LLAMA_ROPE_SCALING_TYPE_UNSPECIFIED))
+
+ class-attribute
+ instance-attribute
+
+ rope_freq_base = Field(default=0.0, description='RoPE base frequency')
+
+ class-attribute
+ instance-attribute
+
+ rope_freq_scale = Field(default=0.0, description='RoPE frequency scaling factor')
+
+ class-attribute
+ instance-attribute
+
+ yarn_ext_factor = Field(default=(-1.0))
+
+ class-attribute
+ instance-attribute
+
+ yarn_attn_factor = Field(default=1.0)
+
+ class-attribute
+ instance-attribute
+
+ yarn_beta_fast = Field(default=32.0)
+
+ class-attribute
+ instance-attribute
+
+ yarn_beta_slow = Field(default=1.0)
+
+ class-attribute
+ instance-attribute
+
+ yarn_orig_ctx = Field(default=0)
+
+ class-attribute
+ instance-attribute
+
+ mul_mat_q = Field(default=True, description='if true, use experimental mul_mat_q kernels')
+
+ class-attribute
+ instance-attribute
+
+ logits_all = Field(default=True, description='Whether to return logits.')
+
+ class-attribute
+ instance-attribute
+
+ embedding = Field(default=False, description='Whether to use embeddings.')
+
+ class-attribute
+ instance-attribute
+
+ offload_kqv = Field(default=True, description='Whether to offload kqv to the GPU.')
+
+ class-attribute
+ instance-attribute
+
+ flash_attn = Field(default=False, description='Whether to use flash attention.')
+
+ class-attribute
+ instance-attribute
+
+ last_n_tokens_size = Field(default=64, ge=0, description='Last n tokens to keep for repeat penalty calculation.')
+
+ class-attribute
+ instance-attribute
+
+ lora_base = Field(default=None, description='Optional path to base model, useful if using a quantized base model and you want to apply LoRA to an f16 model.')
+
+ class-attribute
+ instance-attribute
+
+ lora_path = Field(default=None, description='Path to a LoRA file to apply to the model.')
+
+ class-attribute
+ instance-attribute
+
+ numa = Field(default=False, description='Enable NUMA support.')
+
+ class-attribute
+ instance-attribute
+
+ chat_format = Field(default=None, description='Chat format to use.')
+
+ class-attribute
+ instance-attribute
+
+ clip_model_path = Field(default=None, description='Path to a CLIP model to use for multi-modal chat completion.')
+
+ class-attribute
+ instance-attribute
+
+ cache = Field(default=False, description='Use a cache to reduce processing times for evaluated prompts.')
+
+ class-attribute
+ instance-attribute
+
+ cache_type = Field(default='ram', description='The type of cache to use. Only used if cache is True.')
+
+ class-attribute
+ instance-attribute
+
+ cache_size = Field(default=(2 << 30), description='The size of the cache in bytes. Only used if cache is True.')
+
+ class-attribute
+ instance-attribute
+
+ hf_tokenizer_config_path = Field(default=None, description='The path to a HuggingFace tokenizer_config.json file.')
+
+ class-attribute
+ instance-attribute
+
+ hf_pretrained_model_name_or_path = Field(default=None, description='The model name or path to a pretrained HuggingFace tokenizer model. Same as you would pass to AutoTokenizer.from_pretrained().')
+
+ class-attribute
+ instance-attribute
+
+ hf_model_repo_id = Field(default=None, description='The model repo id to use for the HuggingFace tokenizer model.')
+
+ class-attribute
+ instance-attribute
+
+ draft_model = Field(default=None, description='Method to use for speculative decoding. One of (prompt-lookup-decoding).')
+
+ class-attribute
+ instance-attribute
+
+ draft_model_num_pred_tokens = Field(default=10, description='Number of tokens to predict using the draft model.')
+
+ class-attribute
+ instance-attribute
+
+ type_k = Field(default=None, description='Type of the key cache quantization.')
+
+ class-attribute
+ instance-attribute
+
+ type_v = Field(default=None, description='Type of the value cache quantization.')
+
+ class-attribute
+ instance-attribute
+
+ verbose = Field(default=True, description='Whether to print debug information.')
+
+ class-attribute
+ instance-attribute
+
+ set_dynamic_defaults()
+
+ Source code in llama_cpp/server/settings.py
+
+188
+189
+190
+191
+192
+193
+194
+195
+196
+197
+198
+199
+
+@model_validator(
+ mode="before"
+) # pre=True to ensure this runs before any other validation
+def set_dynamic_defaults(self) -> Self:
+ # If n_threads or n_threads_batch is -1, set it to multiprocessing.cpu_count()
+ cpu_count = multiprocessing.cpu_count()
+ values = cast(Dict[str, int], self)
+ if values.get("n_threads", 0) == -1:
+ values["n_threads"] = cpu_count
+ if values.get("n_threads_batch", 0) == -1:
+ values["n_threads_batch"] = cpu_count
+ return self
+
+ Made with
+ 
+ Material for MkDocs
+````
+
+</details>

@@ -1,0 +1,1264 @@
+# API-OpenWebUI
+
+> Neu erzeugt aus offiziellen Referenzdokumentationen. Falls kein Reverse-Engineering-Dokument vorhanden war, enthält diese Datei primär offizielle Schnittstelleninformationen und Implementierungshinweise.
+
+
+---
+
+## Offizielle Dokumentationsanreicherung: `OpenAI/API/OpenWebUI`
+
+> Ergänzt am 2026-04-24 03:20:42. Quelle ist das bereitgestellte `reference.zip`. Die zugehörigen `.txt`- und `.md`-Dateien wurden vollständig eingelesen. Für sehr große Textanlagen wird der Volltext in dieser ZIP-Fassung auf 40.000 Zeichen je Quelldatei begrenzt; die implementierungsrelevanten Extrakte oben bleiben vollständig aus allen Dateien erzeugt.
+
+### Offizieller Quellenindex aus Referenz-ZIP
+
+# Index – OpenWebUI
+
+Abrufdatum: `2026-04-24T05:05:37.927618+02:00`
+
+## Geladene Dokumente
+
+### OpenAI-Compatible / Open WebUI
+- Quelle: Pflichtquelle
+- Original-URL: https://docs.openwebui.com/getting-started/quick-start/connect-a-provider/starting-with-openai-compatible/
+- Bereinigte Download-URL: https://docs.openwebui.com/getting-started/quick-start/connect-a-provider/starting-with-openai-compatible/
+- Lokale Datei(en): HTML: `starting-with-openai-compatible.html`, Text: `starting-with-openai-compatible.txt`
+- Abrufdatum: `2026-04-24T05:05:37.927618+02:00`
+- Zweck: Open WebUI OpenAI-compatible provider
+- Download-Werkzeug: `urllib`
+- HTTP-Status: `200`
+- Inhaltstyp: `text/html; charset=utf-8`
+
+### Erkannte URLs und Basisadressen
+
+- `https://docs.openwebui.com/getting-started/quick-start/connect-a-provider/starting-with-openai-compatible/`
+- `https://api.anthropic.com/v1`
+- `https://generativelanguage.googleapis.com/v1beta/openai`
+- `https://api.deepseek.com/v1`
+- `https://api.mistral.ai/v1`
+- `https://api.groq.com/openai/v1`
+- `https://api.perplexity.ai`
+- `https://api.minimax.io/v1`
+- `https://openrouter.ai/api/v1`
+- `https://github.com/aws-samples/bedrock-access-gateway`
+- `http://localhost:8000/docs.`
+- `http://host.docker.internal:8000/api/v1.`
+- `http://localhost:8000`
+- `https://bedrock-mantle.us-east-1.api.aws/v1`
+- `https://my-resource.openai.azure.com`
+- `https://my-resource.openai.azure.com/openai/v1`
+- `http://localhost:4000/v1`
+- `http://localhost:10000/v1`
+- `http://localhost:8000/api/v1`
+- `http://localhost:8000/api/v1.`
+- `http://localhost:1234/v1`
+- `http://localhost:8000/v1`
+- `http://localhost:8080/v1`
+- `http://localhost:12434/engines/llama.cpp/v1`
+
+### Erkannte Endpunkte / Pfade
+
+- `/models`
+- `https://api.anthropic.com/v1`
+- `https://generativelanguage.googleapis.com/v1beta/openai`
+- `https://api.deepseek.com/v1`
+- `https://api.mistral.ai/v1`
+- `https://api.groq.com/openai/v1`
+- `https://api.minimax.io/v1`
+- `https://openrouter.ai/api/v1`
+- `/modelslist_inference_profiles`
+- `/models/{model_id}list_inference_profiles`
+- `/chat/completionsconverse`
+- `/embeddingsinvoke_model`
+- `http://host.docker.internal:8000/api/v1`
+- `https://bedrock-mantle.us-east-1.api.aws/v1`
+- `https://my-resource.openai.azure.com/openai/v1`
+- `/openai/v1`
+- `http://localhost:4000/v1`
+- `http://localhost:10000/v1`
+- `http://localhost:8000/api/v1`
+- `http://localhost:1234/v1`
+- `http://localhost:8000/v1`
+- `http://localhost:8080/v1`
+- `http://localhost:12434/engines/llama.cpp/v1`
+- `/v1/modelsGETRecommendedUsed`
+- `/v1/chat/completionsPOSTYesThe`
+- `/v1/embeddingsPOSTNoRequired`
+- `/v1/audio/speechPOSTNoRequired`
+- `/v1/audio/transcriptionsPOSTNoRequired`
+- `/Whisper`
+- `/v1/images/generationsPOSTNoRequired`
+
+### Erkannte Umgebungsvariablen / Konstanten
+
+- `ENABLE_BASE_MODELS_CACHE`
+- `AWS_ACCESS_KEY_ID`
+- `AWS_SECRET_ACCESS_KEY`
+- `AWS_SESSION_TOKEN`
+- `AWS_REGION`
+- `DEFAULT_API_KEYS`
+- `AWS_BEDROCK_REGIONS`
+- `ENABLE_DOCS`
+- `YOUR_STDAPI_URL`
+- `API_KEY`
+- `YOUR_STDAPI_KEY`
+- `OPENAI_API_BASE_URL`
+- `OPENAI_API_KEY`
+- `TASK_MODEL_EXTERNAL`
+- `RAG_EMBEDDING_ENGINE`
+- `RAG_OPENAI_API_BASE_URL`
+- `RAG_OPENAI_API_KEY`
+- `RAG_EMBEDDING_MODEL`
+- `ENABLE_IMAGE_GENERATION`
+- `IMAGE_GENERATION_ENGINE`
+- `IMAGES_OPENAI_API_BASE_URL`
+- `IMAGES_OPENAI_API_KEY`
+- `IMAGE_GENERATION_MODEL`
+- `ENABLE_IMAGE_EDIT`
+- `IMAGE_EDIT_ENGINE`
+- `IMAGES_EDIT_OPENAI_API_BASE_URL`
+- `IMAGES_EDIT_OPENAI_API_KEY`
+- `IMAGE_EDIT_MODEL`
+- `AUDIO_STT_ENGINE`
+- `AUDIO_STT_OPENAI_API_BASE_URL`
+- `AUDIO_STT_OPENAI_API_KEY`
+- `AUDIO_STT_MODEL`
+- `AUDIO_TTS_ENGINE`
+- `AUDIO_TTS_OPENAI_API_BASE_URL`
+- `AUDIO_TTS_OPENAI_API_KEY`
+- `AUDIO_TTS_MODEL`
+- `DEFAULT_TTS_LANGUAGE`
+- `RBAC`
+- `GGUF`
+- `ONNX`
+- `AIOHTTP_CLIENT_TIMEOUT_MODEL_LIST`
+- `DALL`
+
+### Implementierungsrelevante offizielle Extrakte
+
+
+---
+
+**Quelle `INDEX.md`**
+
+### OpenAI-Compatible / Open WebUI
+- Quelle: Pflichtquelle
+
+---
+
+**Quelle `INDEX.md`**
+
+- Quelle: Pflichtquelle
+- Original-URL: https://docs.openwebui.com/getting-started/quick-start/connect-a-provider/starting-with-openai-compatible/
+- Bereinigte Download-URL: https://docs.openwebui.com/getting-started/quick-start/connect-a-provider/starting-with-openai-compatible/
+
+---
+
+**Quelle `INDEX.md`**
+
+- Original-URL: https://docs.openwebui.com/getting-started/quick-start/connect-a-provider/starting-with-openai-compatible/
+- Bereinigte Download-URL: https://docs.openwebui.com/getting-started/quick-start/connect-a-provider/starting-with-openai-compatible/
+- Lokale Datei(en): HTML: `starting-with-openai-compatible.html`, Text: `starting-with-openai-compatible.txt`
+
+---
+
+**Quelle `INDEX.md`**
+
+- Bereinigte Download-URL: https://docs.openwebui.com/getting-started/quick-start/connect-a-provider/starting-with-openai-compatible/
+- Lokale Datei(en): HTML: `starting-with-openai-compatible.html`, Text: `starting-with-openai-compatible.txt`
+- Abrufdatum: `2026-04-24T05:05:37.927618+02:00`
+
+---
+
+**Quelle `INDEX.md`**
+
+- Abrufdatum: `2026-04-24T05:05:37.927618+02:00`
+- Zweck: Open WebUI OpenAI-compatible provider
+- Download-Werkzeug: `urllib`
+
+---
+
+**Quelle `starting-with-openai-compatible.txt`**
+
+OpenAI-Compatible / Open WebUI
+
+---
+
+**Quelle `starting-with-openai-compatible.txt`**
+
+OpenAI
+
+---
+
+**Quelle `starting-with-openai-compatible.txt`**
+
+OpenAI-Compatible
+
+---
+
+**Quelle `starting-with-openai-compatible.txt`**
+
+Functions
+
+---
+
+**Quelle `starting-with-openai-compatible.txt`**
+
+Open Responses
+
+---
+
+**Quelle `starting-with-openai-compatible.txt`**
+
+Essentials for Open WebUI
+
+---
+
+**Quelle `starting-with-openai-compatible.txt`**
+
+Open WebUI connects to any server or provider that implements the OpenAI-compatible API. This guide covers how to set up connections for popular cloud providers and local servers.
+
+---
+
+**Quelle `starting-with-openai-compatible.txt`**
+
+For OpenAI itself (or Azure OpenAI), see the dedicated OpenAI guide.
+
+---
+
+**Quelle `starting-with-openai-compatible.txt`**
+
+Open WebUI is built around Standard Protocols. Instead of building specific modules for every individual AI provider (which leads to inconsistent behavior and configuration bloat), Open WebUI focuses on protocols like the OpenAI Chat Completions Protocol.
+
+---
+
+**Quelle `starting-with-openai-compatible.txt`**
+
+This means that while Open WebUI handles the interface and tools, it expects your backend to follow the universal Chat Completions standard.
+
+---
+
+**Quelle `starting-with-openai-compatible.txt`**
+
+We Support Protocols: Any provider that follows widely adopted API standards is natively supported. We also have experimental support for Open Responses.
+
+---
+
+**Quelle `starting-with-openai-compatible.txt`**
+
+When you add a connection, Open WebUI verifies it by calling the provider's /models endpoint using a standard Bearer token. Some providers do not implement the /models endpoint at all or use non-standard authentication for it. In these cases:
+
+---
+
+**Quelle `starting-with-openai-compatible.txt`**
+
+This does not mean the provider is incompatible — chat completions will still work.
+
+---
+
+**Quelle `starting-with-openai-compatible.txt`**
+
+Providers with known /models issues:
+
+---
+
+**Quelle `starting-with-openai-compatible.txt`**
+
+Provider/models works?Action Needed
+
+---
+
+**Quelle `starting-with-openai-compatible.txt`**
+
+GitHub ModelsNo — uses non-standard pathAdd model IDs manually to the whitelist
+
+---
+
+**Quelle `starting-with-openai-compatible.txt`**
+
+PerplexityNo — endpoint doesn't existAdd model IDs manually to the whitelist
+
+---
+
+**Quelle `starting-with-openai-compatible.txt`**
+
+MiniMaxNo — endpoint doesn't existAdd model IDs manually to the whitelist
+
+---
+
+**Quelle `starting-with-openai-compatible.txt`**
+
+OpenRouterYes — but returns thousands of modelsStrongly recommend adding a filtered allowlist
+
+---
+
+**Quelle `starting-with-openai-compatible.txt`**
+
+How to add models manually: In the connection settings, find Model IDs (Filter), type the model ID, and click the + icon, then save. The models will then appear in your model selector even though the connection verification showed an error.
+
+---
+
+**Quelle `starting-with-openai-compatible.txt`**
+
+Go to ⚙️ Admin Settings → Connections → OpenAI.
+
+---
+
+**Quelle `starting-with-openai-compatible.txt`**
+
+Fill in the URL and API Key for your provider (see tabs below). The URL field will suggest common provider endpoints as you type.
+
+---
+
+**Quelle `starting-with-openai-compatible.txt`**
+
+If your provider doesn't support /models auto-detection, add your model IDs to the Model IDs (Filter) allowlist.
+
+---
+
+**Quelle `starting-with-openai-compatible.txt`**
+
+Azure OpenAI
+
+---
+
+**Quelle `starting-with-openai-compatible.txt`**
+
+Anthropic (Claude) offers an OpenAI-compatible endpoint. Open WebUI includes a built-in compatibility layer that automatically detects Anthropic URLs and handles model discovery — just plug in your API key and models are auto-detected. Note that this is intended for testing and comparison — for production use with full Claude features (PDF processing, citations, extended thinking, prompt caching), Anthropic recommends their native API.
+
+---
+
+**Quelle `starting-with-openai-compatible.txt`**
+
+URLhttps://api.anthropic.com/v1
+
+---
+
+**Quelle `starting-with-openai-compatible.txt`**
+
+API KeyYour Anthropic API key from console.anthropic.com
+
+---
+
+**Quelle `starting-with-openai-compatible.txt`**
+
+Model IDsAuto-detected — leave empty or filter to specific models
+
+---
+
+**Quelle `starting-with-openai-compatible.txt`**
+
+Google Gemini provides an OpenAI-compatible endpoint that works well with Open WebUI.
+
+---
+
+**Quelle `starting-with-openai-compatible.txt`**
+
+URLhttps://generativelanguage.googleapis.com/v1beta/openai
+
+---
+
+**Quelle `starting-with-openai-compatible.txt`**
+
+API KeyYour Gemini API key from aistudio.google.com
+
+---
+
+**Quelle `starting-with-openai-compatible.txt`**
+
+The URL must be exactly https://generativelanguage.googleapis.com/v1beta/openai — without a trailing slash. A trailing slash will break the /models endpoint call.
+
+---
+
+**Quelle `starting-with-openai-compatible.txt`**
+
+DeepSeek is fully OpenAI-compatible with working /models auto-detection.
+
+---
+
+**Quelle `starting-with-openai-compatible.txt`**
+
+URLhttps://api.deepseek.com/v1
+
+---
+
+**Quelle `starting-with-openai-compatible.txt`**
+
+API KeyYour API key from platform.deepseek.com
+
+---
+
+**Quelle `starting-with-openai-compatible.txt`**
+
+Mistral AI is fully OpenAI-compatible with working /models auto-detection.
+
+---
+
+**Quelle `starting-with-openai-compatible.txt`**
+
+URLhttps://api.mistral.ai/v1
+
+---
+
+**Quelle `starting-with-openai-compatible.txt`**
+
+API KeyYour API key from console.mistral.ai
+
+---
+
+**Quelle `starting-with-openai-compatible.txt`**
+
+Groq provides extremely fast inference via an OpenAI-compatible API.
+
+---
+
+**Quelle `starting-with-openai-compatible.txt`**
+
+URLhttps://api.groq.com/openai/v1
+
+### Code-/Konfigurationsbeispiele aus offiziellen Dokumenten
+
+
+---
+
+**Quelle `starting-with-openai-compatible.txt`**
+
+````text
+OPENAI_API_KEY=your_bedrock_api_key
+````
+
+---
+
+**Quelle `starting-with-openai-compatible.txt`**
+
+````text
+Replace your_bedrock_api_key with the Amazon Bedrock API key you created.
+````
+
+---
+
+**Quelle `starting-with-openai-compatible.txt`**
+
+````text
+pip install litellm
+````
+
+## Textanlagen aus der offiziellen Dokumentation
+
+
+<details>
+<summary>Textanlage: <code>OpenAI/API/OpenWebUI/starting-with-openai-compatible.txt</code></summary>
+
+````text
+OpenAI-Compatible / Open WebUI
+
+Skip to main content
+
+Open WebUIBlog
+
+GitHubDiscord
+
+🏡 Home
+
+🚀 Getting Started
+
+Quick Start
+
+Connect a Provider
+
+Ollama
+
+OpenAI
+
+Anthropic (Claude)
+
+Llama.cpp
+
+vLLM
+
+OpenAI-Compatible
+
+Functions
+
+Open Responses
+
+Connect an Agent
+
+Understanding Settings
+
+Essentials for Open WebUI
+
+Sharing Open WebUI
+
+Updating Open WebUI
+
+Advanced Topics
+
+📖 Reference
+
+⭐ Features
+
+🛠️ Troubleshooting
+
+🏢 Open WebUI for Enterprise
+
+🎓 Tutorials
+
+❓ FAQ
+
+🛣️ Roadmap
+
+🛡️ Security Policy
+
+🤝 Contributing
+
+💖 Sponsorships
+
+🎨 Brand Guidelines
+
+⚖️ Open WebUI License
+
+🎯 Our Mission
+
+👥 Our Team
+
+🚀 Getting Started
+
+Quick Start
+
+Connect a Provider
+
+OpenAI-Compatible
+
+On this page
+
+OpenAI-Compatible
+
+Overview​
+
+Open WebUI connects to any server or provider that implements the OpenAI-compatible API. This guide covers how to set up connections for popular cloud providers and local servers.
+
+For OpenAI itself (or Azure OpenAI), see the dedicated OpenAI guide.
+
+Protocol-Oriented Design​
+
+Open WebUI is built around Standard Protocols. Instead of building specific modules for every individual AI provider (which leads to inconsistent behavior and configuration bloat), Open WebUI focuses on protocols like the OpenAI Chat Completions Protocol.
+
+This means that while Open WebUI handles the interface and tools, it expects your backend to follow the universal Chat Completions standard.
+
+We Support Protocols: Any provider that follows widely adopted API standards is natively supported. We also have experimental support for Open Responses.
+
+We Avoid Proprietary APIs: We do not implement provider-specific, non-standard APIs in the core to maintain a universal, maintainable codebase. For unsupported providers, use a pipe or a middleware proxy like LiteLLM or OpenRouter to bridge them.
+
+For a detailed explanation of this architectural decision, see our FAQ on protocol support.
+
+Important: Connection Verification May Fail for Some Providers
+
+When you add a connection, Open WebUI verifies it by calling the provider's /models endpoint using a standard Bearer token. Some providers do not implement the /models endpoint at all or use non-standard authentication for it. In these cases:
+
+The connection verification will fail with an error (e.g., 400, 401 or 403).
+
+This does not mean the provider is incompatible — chat completions will still work.
+
+You just need to manually add model names to the Model IDs (Filter) allowlist in the connection settings.
+
+Providers with known /models issues:
+
+Provider/models works?Action Needed
+
+AnthropicYes — built-in compatibility layerAuto-detection works
+
+GitHub ModelsNo — uses non-standard pathAdd model IDs manually to the whitelist
+
+PerplexityNo — endpoint doesn't existAdd model IDs manually to the whitelist
+
+MiniMaxNo — endpoint doesn't existAdd model IDs manually to the whitelist
+
+OpenRouterYes — but returns thousands of modelsStrongly recommend adding a filtered allowlist
+
+Google GeminiYesAuto-detection works
+
+DeepSeekYesAuto-detection works
+
+MistralYesAuto-detection works
+
+GroqYesAuto-detection works
+
+How to add models manually: In the connection settings, find Model IDs (Filter), type the model ID, and click the + icon, then save. The models will then appear in your model selector even though the connection verification showed an error.
+
+Step 1: Add Your Provider Connection​
+
+Open Open WebUI in your browser.
+
+Go to ⚙️ Admin Settings → Connections → OpenAI.
+
+Click ➕ Add Connection.
+
+Fill in the URL and API Key for your provider (see tabs below). The URL field will suggest common provider endpoints as you type.
+
+If your provider doesn't support /models auto-detection, add your model IDs to the Model IDs (Filter) allowlist.
+
+Click Save.
+
+tip
+
+If running Open WebUI in Docker and your model server is on the host machine, replace localhost with host.docker.internal in the URL.
+
+Enable/Disable Connections
+
+Each connection has a toggle switch that lets you enable or disable it without deleting the connection. This is useful for temporarily deactivating a provider while preserving its configuration.
+
+Cloud Providers​
+
+Anthropic
+
+Google Gemini
+
+DeepSeek
+
+Mistral
+
+Groq
+
+Perplexity
+
+MiniMax
+
+OpenRouter
+
+Amazon Bedrock
+
+Azure OpenAI
+
+LiteLLM
+
+tip
+
+See the dedicated Anthropic (Claude) guide for a full step-by-step walkthrough.
+
+Anthropic (Claude) offers an OpenAI-compatible endpoint. Open WebUI includes a built-in compatibility layer that automatically detects Anthropic URLs and handles model discovery — just plug in your API key and models are auto-detected. Note that this is intended for testing and comparison — for production use with full Claude features (PDF processing, citations, extended thinking, prompt caching), Anthropic recommends their native API.
+
+SettingValue
+
+URLhttps://api.anthropic.com/v1
+
+API KeyYour Anthropic API key from console.anthropic.com
+
+Model IDsAuto-detected — leave empty or filter to specific models
+
+Google Gemini provides an OpenAI-compatible endpoint that works well with Open WebUI.
+
+SettingValue
+
+URLhttps://generativelanguage.googleapis.com/v1beta/openai
+
+API KeyYour Gemini API key from aistudio.google.com
+
+Model IDsAuto-detected — leave empty or filter to specific models
+
+No trailing slash
+
+The URL must be exactly https://generativelanguage.googleapis.com/v1beta/openai — without a trailing slash. A trailing slash will break the /models endpoint call.
+
+DeepSeek is fully OpenAI-compatible with working /models auto-detection.
+
+SettingValue
+
+URLhttps://api.deepseek.com/v1
+
+API KeyYour API key from platform.deepseek.com
+
+Model IDsAuto-detected (e.g., deepseek-chat, deepseek-reasoner)
+
+Mistral AI is fully OpenAI-compatible with working /models auto-detection.
+
+SettingValue
+
+URLhttps://api.mistral.ai/v1
+
+API KeyYour API key from console.mistral.ai
+
+Model IDsAuto-detected (e.g., mistral-large-latest, codestral-latest, mistral-small-latest)
+
+Groq provides extremely fast inference via an OpenAI-compatible API.
+
+SettingValue
+
+URLhttps://api.groq.com/openai/v1
+
+API KeyYour API key from console.groq.com
+
+Model IDsAuto-detected (e.g., llama-3.3-70b-versatile, deepseek-r1-distill-llama-70b)
+
+Perplexity offers search-augmented AI models via an OpenAI-compatible chat completions endpoint.
+
+SettingValue
+
+URLhttps://api.perplexity.ai
+
+API KeyYour API key from perplexity.ai/settings (under API tab)
+
+Model IDsRequired — add manually (e.g., sonar-pro, sonar-reasoning-pro, sonar-deep-research)
+
+caution
+
+Perplexity does not have a /models endpoint. You must manually add model IDs to the allowlist. Some Perplexity models may also reject certain parameters like stop or frequency_penalty.
+
+MiniMax is a leading AI company providing high-performance coding-focused models. Their latest model, MiniMax M2.5, is specifically optimized for coding, reasoning, and multi-turn dialogue. Their Coding Plan subscription is significantly more cost-effective for high-frequency programming than standard pay-as-you-go pricing.
+
+SettingValue
+
+URLhttps://api.minimax.io/v1
+
+API KeyYour Coding Plan API key (see Step 2 below)
+
+Model IDsRequired — add manually (e.g., MiniMax-M2.5)
+
+Step 1: Subscribe to a MiniMax Coding Plan
+
+Visit the MiniMax Coding Plan Subscription page.
+
+Choose a plan that fits your needs (e.g., the Starter plan for $10/month).
+
+Complete the subscription process.
+
+info
+
+The Starter plan provides 100 "prompts" every 5 hours. One prompt is roughly equivalent to 15 requests, offering substantial value compared to token-based billing. See the MiniMax Coding Plan Official Documentation for details.
+
+Step 2: Obtain Your Coding Plan API Key
+
+Once subscribed, you need your specialized API Key.
+
+Navigate to the Account/Coding Plan page.
+
+Click on Reset & Copy to generate and copy your API Key.
+
+Safely store this key in a password manager.
+
+info
+
+This API Key is exclusive to the Coding Plan and is not interchangeable with standard pay-as-you-go API Keys.
+
+Step 3: Configure Connection in Open WebUI
+
+Open Open WebUI and navigate to Admin Panel > Settings > Connections.
+
+Click the + (plus) icon under the OpenAI API section.
+
+Enter the URL and API Key from the table above.
+
+Important: MiniMax does not expose a /models endpoint, so you must add the model manually.
+
+In the Model IDs (Filter), type MiniMax-M2.5 and click the + icon.
+
+Click Verify Connection (you should see a success alert).
+
+Click Save.
+
+Step 4: Start Chatting
+
+Select MiniMax-M2.5 from the model dropdown and start chatting. Reasoning and thinking work by default without any additional configuration.
+
+OpenRouter aggregates hundreds of models from multiple providers behind a single API.
+
+SettingValue
+
+URLhttps://openrouter.ai/api/v1
+
+API KeyYour API key from openrouter.ai/keys
+
+Model IDsStrongly recommended — add a filtered allowlist
+
+tip
+
+OpenRouter exposes thousands of models, which will clutter your model selector and slow down the admin panel. We strongly recommend:
+
+Use an allowlist — add only the specific model IDs you need (e.g., anthropic/claude-sonnet-4-5, google/gemini-2.5-pro).
+
+Enable model caching via Settings > Connections > Cache Base Model List or ENABLE_BASE_MODELS_CACHE=True. Without caching, page loads can take 10-15+ seconds. See the Performance Guide for more details.
+
+Amazon Bedrock is a fully managed AWS service that provides access to foundation models from leading AI companies (Anthropic, Meta, Mistral, Cohere, Stability AI, Amazon, and more) through a single API.
+
+There are multiple OpenAI-compatible ways to connect Open WebUI to AWS Bedrock:
+
+Bedrock Access Gateway (BAG)
+
+stdapi.ai
+
+LiteLLM with its Bedrock provider (LiteLLM is not dedicated to AWS).
+
+Bedrock Mantle - AWS native solution, no installation required
+
+Feature Comparison​
+
+CapabilityBedrock Access Gateway (BAG)stdapi.aiLiteLLM (Bedrock provider)AWS Bedrock Mantle
+
+Automatic models discovery✅✅—✅
+
+Chat completion✅✅✅✅
+
+Embeddings✅✅✅—
+
+Text to speech—✅——
+
+Speech to text—✅——
+
+Image generation—✅✅—
+
+Image editing—✅——
+
+Models from multiple regions—✅✅—
+
+No installation required———✅
+
+LicenseMITAGPL or CommercialMIT or CommercialAWS Service
+
+Solution 1: Bedrock Access Gateway (BAG)​
+
+Prerequisites
+
+An active AWS account
+
+An active AWS Access Key and Secret Key
+
+IAM permissions in AWS to enable Bedrock models (or already enabled models)
+
+Docker installed on your system
+
+Step 1: Configure the Bedrock Access Gateway
+
+The BAG is a proxy developed by AWS that wraps around the native Bedrock SDK and exposes OpenAI-compatible endpoints. Here's the endpoint mapping:
+
+OpenAI EndpointBedrock Method
+
+/modelslist_inference_profiles
+
+/models/{model_id}list_inference_profiles
+
+/chat/completionsconverse or converse_stream
+
+/embeddingsinvoke_model
+
+Set up the BAG from the Bedrock Access Gateway repo:
+
+git clone https://github.com/aws-samples/bedrock-access-gateway
+cd bedrock-access-gateway
+# Use the ECS Dockerfile
+mv Dockerfile_ecs Dockerfile
+docker build . -f Dockerfile -t bedrock-gateway
+docker run -e AWS_ACCESS_KEY_ID=$AWS_ACCESS_KEY_ID \
+ -e AWS_SECRET_ACCESS_KEY=$AWS_SECRET_ACCESS_KEY \
+ -e AWS_SESSION_TOKEN=$AWS_SESSION_TOKEN \
+ -e AWS_REGION=us-east-1 \
+ -d -p 8000:80 bedrock-gateway
+
+Verify the gateway is running by visiting the Swagger page at http://localhost:8000/docs.
+
+Troubleshooting: Container Exits Immediately
+
+If the container starts and immediately exits (especially on Windows), check the logs with docker logs <container_id>. If you see Python/Uvicorn errors, this is likely a Python 3.13 compatibility issue. Edit the Dockerfile before building and change python:3.13-slim to python:3.12-slim, then rebuild.
+
+Step 2: Add Connection in Open WebUI
+
+Under the Admin Panel, go to Settings → Connections.
+
+Use the + button to add a new connection under OpenAI.
+
+For the URL, use http://host.docker.internal:8000/api/v1.
+
+For the API Key, the default key defined in BAG is bedrock (you can change this via DEFAULT_API_KEYS in BAG settings).
+
+Click Verify Connection — you should see a "Server connection verified" alert.
+
+Other Helpful Tutorials
+
+Connecting Open WebUI to AWS Bedrock
+
+Using Amazon Bedrock with Open WebUI for Sensitive Data
+
+Solution 2: stdapi.ai​
+
+stdapi.ai is an OpenAI-compatible API gateway you deploy in your AWS account, or run locally using Docker.
+
+Open WebUI connects to it as if it were OpenAI, and stdapi.ai routes requests to Bedrock and other AWS AI services such as Amazon Polly and Transcribe. It also supports multi-region access to Bedrock, making it easier to reach more models that may only be available in specific AWS regions.
+
+Deploying on AWS
+
+stdapi.ai provides a full Terraform sample that provisions Open WebUI on ECS Fargate, connects it to stdapi.ai, and includes supporting services like Elasticache Valkey, Aurora PostgreSQL with vector extension, SearXNG, and Playwright.
+This method handles both the stdapi.ai and Open WebUI configuration:
+
+stdapi.ai Documentation - Open WebUI integration
+
+stdapi-ai GitHub - Open WebUI Terraform sample
+
+stdapi.ai also provides documentation and Terraform samples to deploy it independently if you prefer to connect it to an existing Open WebUI instance.
+
+stdapi.ai Documentation - Getting started
+
+Deploying Locally
+
+stdapi.ai also provides a Docker image for local usage.
+
+Here is a minimal command to run it using your AWS access key:
+
+docker run \
+ -e AWS_ACCESS_KEY_ID=$AWS_ACCESS_KEY_ID \
+ -e AWS_SECRET_ACCESS_KEY=$AWS_SECRET_ACCESS_KEY \
+ -e AWS_SESSION_TOKEN=$AWS_SESSION_TOKEN \
+ -e AWS_BEDROCK_REGIONS=us-east-1,us-west-2 \
+ -e ENABLE_DOCS=true \
+ --rm \
+ -p 8000:8000 \
+ ghcr.io/stdapi-ai/stdapi.ai-community:latest
+
+The application is now available at http://localhost:8000 (use it as YOUR_STDAPI_URL in the Open WebUI configuration below).
+
+The AWS_BEDROCK_REGIONS variable lets you select regions where you want to load models, in this case us-east-1 and us-west-2.
+
+If you pass the ENABLE_DOCS=true variable, an interactive Swagger documentation page is available at http://localhost:8000/docs.
+
+API_KEY=my_secret_password can also be used to set a custom API key for the application (defaults to no API key required). This is highly recommended if the server is reachable from elsewhere. Use this API key as YOUR_STDAPI_KEY in the Open WebUI configuration below.
+
+Many other configuration options are available; see the documentation for more information.
+
+Open WebUI Configuration
+
+Open WebUI is configured via environment variables, and you can also set the same values from the Open WebUI admin panel.
+
+Use the same stdapi.ai key for all *_OPENAI_API_KEY entries.
+
+Core connection (chat + background tasks):
+
+OPENAI_API_BASE_URL=YOUR_STDAPI_URL/v1
+OPENAI_API_KEY=YOUR_STDAPI_KEY
+# Use a fast, low-cost chat model for `TASK_MODEL_EXTERNAL`.
+TASK_MODEL_EXTERNAL=amazon.nova-micro-v1:0
+
+RAG embeddings:
+
+RAG_EMBEDDING_ENGINE=openai
+RAG_OPENAI_API_BASE_URL=YOUR_STDAPI_URL/v1
+RAG_OPENAI_API_KEY=YOUR_STDAPI_KEY
+RAG_EMBEDDING_MODEL=cohere.embed-v4:0
+
+Image generation:
+
+ENABLE_IMAGE_GENERATION=true
+IMAGE_GENERATION_ENGINE=openai
+IMAGES_OPENAI_API_BASE_URL=YOUR_STDAPI_URL/v1
+IMAGES_OPENAI_API_KEY=YOUR_STDAPI_KEY
+IMAGE_GENERATION_MODEL=stability.stable-image-core-v1:1
+
+Image editing:
+
+ENABLE_IMAGE_EDIT=true
+IMAGE_EDIT_ENGINE=openai
+IMAGES_EDIT_OPENAI_API_BASE_URL=YOUR_STDAPI_URL/v1
+IMAGES_EDIT_OPENAI_API_KEY=YOUR_STDAPI_KEY
+IMAGE_EDIT_MODEL=stability.stable-image-control-structure-v1:0
+
+Speech to text (STT):
+
+AUDIO_STT_ENGINE=openai
+AUDIO_STT_OPENAI_API_BASE_URL=YOUR_STDAPI_URL/v1
+AUDIO_STT_OPENAI_API_KEY=YOUR_STDAPI_KEY
+AUDIO_STT_MODEL=amazon.transcribe
+
+Text to speech (TTS):
+
+AUDIO_TTS_ENGINE=openai
+AUDIO_TTS_OPENAI_API_BASE_URL=YOUR_STDAPI_URL/v1
+AUDIO_TTS_OPENAI_API_KEY=YOUR_STDAPI_KEY
+AUDIO_TTS_MODEL=amazon.polly-neural
+
+If you see inconsistent auto-detection for TTS languages, set a fixed language in stdapi.ai (for example, DEFAULT_TTS_LANGUAGE=en-US).
+
+Solution 3: AWS Bedrock Mantle​
+
+Bedrock Mantle is an AWS-native solution that provides an OpenAI-compatible API endpoint for Amazon Bedrock without requiring any additional infrastructure or installation. This makes it the simplest integration option for accessing Bedrock models.
+
+Key Advantages
+
+No installation required - Uses AWS-managed endpoints directly
+
+Simple configuration - Just requires an API key
+
+Native AWS integration - Fully managed by AWS
+
+Limitations
+
+Chat completion only - Does not support embeddings, image generation, or other features
+
+Subset of models - Only provides access to a limited selection of Bedrock models (Open weight models)
+
+Single region - Does not support multi-region access
+
+Prerequisites
+
+An active AWS account
+
+An Amazon Bedrock API key (create one from the AWS console)
+
+IAM permissions to use Bedrock models (recommended: AmazonBedrockMantleInferenceAccess IAM policy)
+
+Configuration
+
+Configure Open WebUI using environment variables:
+
+OPENAI_API_BASE_URL=https://bedrock-mantle.us-east-1.api.aws/v1
+OPENAI_API_KEY=your_bedrock_api_key
+
+Replace your_bedrock_api_key with the Amazon Bedrock API key you created.
+
+Replace us-east-1 in the URL with your preferred AWS region (e.g., us-west-2, eu-west-1, etc.).
+
+You can also set the same values from the Open WebUI admin panel.
+
+For more information, see the Bedrock Mantle documentation.
+
+Start using Bedrock Base Models​
+
+You should now see all your Bedrock models available!
+
+Azure OpenAI provides enterprise-grade OpenAI hosting through Microsoft Azure.
+
+To add an Azure OpenAI connection, you need to switch the provider type in the connection dialog:
+
+In the connection form, find the Provider Type button (it says OpenAI by default).
+
+Click it to toggle it to Azure OpenAI.
+
+Fill in the settings below.
+
+SettingValue
+
+Provider TypeClick to switch to Azure OpenAI
+
+URLYour Azure endpoint (e.g., https://my-resource.openai.azure.com)
+
+API Versione.g., 2024-02-15-preview
+
+API KeyYour Azure API Key
+
+Model IDsRequired — add your specific Deployment Names (e.g., my-gpt4-deployment)
+
+info
+
+Azure OpenAI uses deployment names as model IDs, not standard OpenAI model names. You must add your deployment names to the Model IDs allowlist.
+
+Two Azure URL Formats
+
+Azure offers two URL formats:
+
+Legacy (deployment-based): https://my-resource.openai.azure.com — Open WebUI rewrites the URL to /openai/deployments/{model}/... and adds the api-version query parameter automatically.
+
+v1 format: https://my-resource.openai.azure.com/openai/v1 — the model stays in the request body (like standard OpenAI) and no api-version parameter is needed.
+
+If your base URL ends with /openai/v1, Open WebUI skips the deployment URL rewriting and routes requests directly. Use whichever format your Azure resource supports.
+
+For advanced keyless authentication using Azure Entra ID (RBAC, Workload Identity, Managed Identity), see the Azure OpenAI with EntraID tutorial.
+
+LiteLLM is a proxy server that provides a unified OpenAI-compatible API across 100+ LLM providers (Anthropic, Google, Azure, AWS Bedrock, Cohere, and more). It translates between provider-specific APIs and the OpenAI standard.
+
+SettingValue
+
+URLhttp://localhost:4000/v1 (default LiteLLM proxy port)
+
+API KeyYour LiteLLM proxy key (if configured)
+
+Model IDsAuto-detected from your LiteLLM configuration
+
+Quick setup:
+
+pip install litellm
+litellm --model gpt-4 --port 4000
+
+For production deployments, configure models via litellm_config.yaml. See the LiteLLM docs for details.
+
+tip
+
+LiteLLM is useful as a universal bridge when you want to use a provider that doesn't natively support the OpenAI API standard, or when you want to load-balance across multiple providers.
+
+Security Recommendation: Key Scope
+
+For multi-user deployments, avoid using provider management/master keys for your main Open WebUI connection.
+
+Prefer least-privilege provider credentials (inference-scoped keys where supported). This reduces blast radius if users invoke provider-specific endpoints through OpenAI-compatible integrations.
+
+Local Servers​
+
+Llama.cpp
+
+Lemonade
+
+LM Studio
+
+vLLM
+
+LocalAI
+
+Docker Model Runner
+
+Llama.cpp runs efficient, quantized GGUF models locally with an OpenAI-compatible API server. See the dedicated Llama.cpp guide for full setup instructions (installation, model download, server startup).
+
+SettingValue
+
+URLhttp://localhost:10000/v1 (or your configured port)
+
+API KeyLeave blank
+
+Quick start:
+
+./llama-server --model /path/to/model.gguf --port 10000 --ctx-size 1024 --n-gpu-layers 40
+
+Lemonade is a plug-and-play ONNX-based OpenAI-compatible server for Windows.
+
+SettingValue
+
+URLhttp://localhost:8000/api/v1
+
+API KeyLeave blank
+
+Getting started with Lemonade:
+
+Download the latest .exe installer.
+
+Run Lemonade_Server_Installer.exe.
+
+Install and download a model using Lemonade's installer.
+
+Once running, your API endpoint will be http://localhost:8000/api/v1.
+
+See their docs for details.
+
+Then add the connection in Open WebUI using the URL and API Key above:
+
+LM Studio provides a local OpenAI-compatible server with a GUI for model management.
+
+SettingValue
+
+URLhttp://localhost:1234/v1
+
+API KeyLeave blank (or lm-studio as placeholder)
+
+Start the server in LM Studio via the "Local Server" tab before connecting.
+
+vLLM is a high-throughput inference engine with an OpenAI-compatible server. See the dedicated vLLM guide for full setup instructions.
+
+SettingValue
+
+URLhttp://localhost:8000/v1 (default vLLM port)
+
+API KeyLeave blank (unless configured)
+
+LocalAI is a drop-in OpenAI-compatible replacement that runs models locally.
+
+SettingValue
+
+URLhttp://localhost:8080/v1
+
+API KeyLeave blank
+
+Docker Model Runner runs AI models directly in Docker containers.
+
+SettingValue
+
+URLhttp://localhost:12434/engines/llama.cpp/v1
+
+API KeyLeave blank
+
+See the Docker Model Runner docs for setup instructions.
+
+Connection Timeout Configuration
+
+If your server is slow to start or you're connecting over a high-latency network, you can adjust the model list fetch timeout:
+
+# Adjust timeout for slower connections (default is 10 seconds)
+AIOHTTP_CLIENT_TIMEOUT_MODEL_LIST=5
+
+If you've saved an unreachable URL and the UI becomes unresponsive, see the Model List Loading Issues troubleshooting guide for recovery options.
+
+Required API Endpoints​
+
+To ensure full compatibility with Open WebUI, your server should implement the following OpenAI-standard endpoints:
+
+EndpointMethodRequired?Purpose
+
+/v1/modelsGETRecommendedUsed for model discovery and selecting models in the UI. If not available, add models to the allowlist manually.
+
+/v1/chat/completionsPOSTYesThe core endpoint for chat, supporting streaming and parameters like temperature.
+
+/v1/embeddingsPOSTNoRequired if you want to use this provider for RAG (Retrieval Augmented Generation).
+
+/v1/audio/speechPOSTNoRequired for Text-to-Speech (TTS) functionality.
+
+/v1/audio/transcriptionsPOSTNoRequired for Speech-to-Text (STT/Whisper) functionality.
+
+/v1/images/generationsPOSTNoRequired for Image Generation (DALL-E) functionality.
+
+Supported Parameters​
+
+Open WebUI passes standard OpenAI parameters such as temperature, top_p, max_tokens (or max_completion_tokens), stop, seed, and logit_bias. It also supports Tool Use (Function Calling) if your model and server support the tools and tool_choice parameters.
+
+Step 2: Start Chatting!​
+
+Select your connected provider's model in the chat menu and get started!
+
+That's it! Whether you choose a cloud provider or a local server, you can manage multiple connections — all from within Open WebUI.
+
+🚀 Enjoy building your perfect AI setup!
+
+This content is for informational purposes only and does not constitute a warranty, guarantee, or contractual commitment. Open WebUI is provided "as is." See your license for applicable terms.
+
+Edit this page
+
+Previous
+
+vLLM
+
+Next
+
+Functions
+
+Overview
+
+Protocol-Oriented Design
+
+Step 1: Add Your Provider Connection
+Cloud Providers
+
+Local Servers
+
+Required API Endpoints
+Supported Parameters
+
+Step 2: Start Chatting!
+
+Docs
+
+Getting Started
+
+FAQ
+
+Help Improve The Docs
+
+Community
+
+GitHub
+
+Discord
+
+Reddit
+
+𝕏
+
+More
+
+Release Notes
+
+About
+
+Report a Vulnerability / Responsible Disclosure
+````
+
+</details>

@@ -133,6 +133,7 @@ class Settings(BaseSettings):
     openai_codex_enabled: bool = True
     gemini_enabled: bool = True
     anthropic_enabled: bool = False
+    bedrock_enabled: bool = False
     generic_harness_enabled: bool = True
     generic_harness_allow_model_fallback: bool = False
     ollama_enabled: bool = True
@@ -162,11 +163,20 @@ class Settings(BaseSettings):
     gemini_timeout_seconds: int = 45
 
     anthropic_api_key: str = ""
+    anthropic_auth_mode: Literal["api_key", "bearer"] = "api_key"
+    anthropic_bearer_token: str = ""
     anthropic_base_url: str = "https://api.anthropic.com/v1"
     anthropic_timeout_seconds: int = 45
     anthropic_version: str = "2023-06-01"
     anthropic_probe_model: str = "claude-3-5-sonnet-latest"
     anthropic_discovered_models: tuple[str, ...] = ("claude-3-5-sonnet-latest",)
+
+    bedrock_base_url: str = "https://bedrock-runtime.us-east-1.amazonaws.com"
+    bedrock_region: str = "us-east-1"
+    bedrock_access_key_id: str = ""
+    bedrock_secret_access_key: str = ""
+    bedrock_session_token: str = ""
+    bedrock_timeout_seconds: int = 45
 
     # Bridge-only OAuth/account targets are not runtime providers. Their
     # operator controls are explicit probe/profile toggles instead of generic
@@ -188,6 +198,20 @@ class Settings(BaseSettings):
     claude_code_probe_base_url: str = "https://api.claudecode.example/v1"
     claude_code_probe_model: str = "claude-code"
     claude_code_bridge_profile_enabled: bool = False
+
+    nous_oauth_access_token: str = ""
+    nous_oauth_runtime_agent_key: str = ""
+    nous_oauth_probe_enabled: bool = False
+    nous_oauth_probe_base_url: str = "https://inference-api.nousresearch.com/v1"
+    nous_oauth_probe_model: str = "openai/gpt-5.4"
+    nous_oauth_bridge_profile_enabled: bool = False
+    nous_oauth_agent_key_min_ttl_seconds: int = 1800
+
+    qwen_oauth_access_token: str = ""
+    qwen_oauth_probe_enabled: bool = False
+    qwen_oauth_probe_base_url: str = "https://portal.qwen.ai/v1"
+    qwen_oauth_probe_model: str = "qwen-max"
+    qwen_oauth_bridge_profile_enabled: bool = False
 
     ollama_base_url: str = "http://127.0.0.1:11434/v1"
     ollama_default_model: str = "llama3.2"
@@ -310,6 +334,7 @@ class Settings(BaseSettings):
             "openai_codex": self.openai_codex_enabled,
             "gemini": self.gemini_enabled,
             "anthropic": self.anthropic_enabled,
+            "bedrock": self.bedrock_enabled,
             "generic_harness": self.generic_harness_enabled,
             "ollama": self.ollama_enabled,
         }

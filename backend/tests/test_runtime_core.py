@@ -1850,7 +1850,21 @@ def test_responses_endpoint_persists_response_and_allows_retrieval() -> None:
     native_mapping = created["metadata"]["forgeframe_native_mapping"]
     assert native_mapping["contract_surface"] == "openai_responses"
     assert native_mapping["processing_mode"] == "sync"
-    assert native_mapping["objects"] == []
+    assert native_mapping["primary_native_object_kind"] == "response"
+    object_kinds = [item["kind"] for item in native_mapping["objects"]]
+    assert object_kinds.count("response") == 1
+    assert "response_item" in object_kinds
+    assert native_mapping["objects"][0] == {
+        "kind": "response",
+        "object_id": created["id"],
+        "relation": "primary_follow_object",
+        "lifecycle_state": "completed",
+        "label": None,
+        "details": {
+            "requested_model": None,
+            "resolved_model": created["model"],
+        },
+    }
     assert native_mapping["commands"] == []
     assert native_mapping["notes"]
 

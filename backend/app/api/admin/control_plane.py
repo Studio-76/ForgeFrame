@@ -11,6 +11,8 @@ from app.api.admin.control_plane_axis_contracts_domain import ControlPlaneAxisCo
 from app.api.admin.control_plane_bootstrap_domain import ControlPlaneBootstrapDomainMixin
 from app.api.admin.control_plane_harness_domain import ControlPlaneHarnessDomainMixin
 from app.api.admin.control_plane_health_domain import ControlPlaneHealthDomainMixin
+from app.api.admin.control_plane_openai_compat_domain import ControlPlaneOpenAICompatibilityDomainMixin
+from app.api.admin.control_plane_provider_catalog_domain import ControlPlaneProviderCatalogDomainMixin
 from app.api.admin.control_plane_models import (
     HealthConfigUpdateRequest,
     OAuthAccountProbeResult,
@@ -52,6 +54,8 @@ from app.usage.service import UsageAccountingService
 
 class ControlPlaneService(
     ControlPlaneProviderDomainMixin,
+    ControlPlaneProviderCatalogDomainMixin,
+    ControlPlaneOpenAICompatibilityDomainMixin,
     ControlPlaneTargetsDomainMixin,
     ControlPlaneRoutingDomainMixin,
     ControlPlaneAxisContractsDomainMixin,
@@ -98,6 +102,9 @@ class ControlPlaneService(
         )
         if self._last_bootstrap_readiness is None:
             self._last_bootstrap_readiness = self._build_bootstrap_readiness_report()
+        self._provider_catalog_state = self._materialize_provider_catalog(
+            stored_state.provider_catalog if stored_state else None
+        )
         self._provider_targets_state = self._load_provider_targets(
             stored_state.provider_targets if stored_state else None
         )

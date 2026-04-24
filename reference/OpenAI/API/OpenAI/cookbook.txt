@@ -1,0 +1,1777 @@
+Cookbook
+
+ Home 
+
+ API 
+
+Docs
+ 
+ Guides and concepts for the OpenAI API 
+
+API reference
+ 
+ Endpoints, parameters, and responses 
+
+ Codex 
+
+Docs
+ 
+ Guides, concepts, and product docs for Codex 
+
+Use cases
+ 
+ Example workflows and tasks teams hand to Codex 
+
+ ChatGPT 
+
+Apps SDK
+ 
+ Build apps to extend ChatGPT 
+
+Commerce
+ 
+ Build commerce flows in ChatGPT 
+
+ Resources 
+
+Showcase
+ 
+ Demo apps to get inspired 
+
+Blog
+ 
+ Learnings and experiences from developers 
+
+Cookbook
+ 
+ Notebook examples for building with OpenAI models 
+
+Learn
+ 
+ Docs, videos, and demo apps for building with OpenAI 
+
+Community
+ 
+ Programs, meetups, and support for builders 
+
+ Start searching 
+ 
+API Dashboard
+
+ Search the cookbook 
+
+Search docs
+
+Suggested
+
+responses createreasoning_effortrealtimeprompt caching
+
+ Primary navigation 
+ API API Reference Codex ChatGPT Resources 
+
+Search docs
+
+Suggested
+
+responses createreasoning_effortrealtimeprompt caching
+
+ Get started 
+ 
+ Overview 
+
+ Quickstart 
+
+ Models 
+
+ Pricing 
+
+ Libraries 
+
+ Latest: GPT-5.4 
+
+ Prompt guidance 
+
+ Core concepts 
+ 
+ Text generation 
+
+ Code generation 
+
+ Images and vision 
+
+ Audio and speech 
+
+ Structured output 
+
+ Function calling 
+
+ Responses API 
+
+ Using tools 
+
+ Agents SDK 
+ 
+ Overview 
+
+ Quickstart 
+
+ Agent definitions 
+
+ Models and providers 
+
+ Running agents 
+
+ Sandbox agents 
+
+ Orchestration 
+
+ Guardrails 
+
+ Results and state 
+
+ Integrations and observability 
+
+ Evaluate agent workflows 
+
+ Voice agents 
+
+ Agent Builder 
+ Overview 
+
+ Node reference 
+
+ Safety in building agents 
+
+ ChatKit 
+ Overview 
+
+ Customize 
+
+ Widgets 
+
+ Actions 
+
+ Advanced integrations 
+
+ Tools 
+ 
+ Web search 
+
+ MCP and Connectors 
+
+ Skills 
+
+ Shell 
+
+ Computer use 
+
+ File search and retrieval 
+ File search 
+
+ Retrieval 
+
+ Tool search 
+
+ More tools 
+ Apply Patch 
+
+ Local shell 
+
+ Image generation 
+
+ Code interpreter 
+
+ Run and scale 
+ 
+ Conversation state 
+
+ Background mode 
+
+ Streaming 
+
+ WebSocket mode 
+
+ Webhooks 
+
+ File inputs 
+
+ Context management 
+ Compaction 
+
+ Counting tokens 
+
+ Prompt caching 
+
+ Prompting 
+ Overview 
+
+ Prompt engineering 
+
+ Citation formatting 
+
+ Reasoning 
+ Reasoning models 
+
+ Reasoning best practices 
+
+ Evaluation 
+ 
+ Getting started 
+
+ Working with evals 
+
+ Prompt optimizer 
+
+ External models 
+
+ Best practices 
+
+ Realtime API 
+ 
+ Overview 
+
+ Connect 
+ WebRTC 
+
+ WebSocket 
+
+ SIP 
+
+ Usage 
+ Using realtime models 
+
+ Managing conversations 
+
+ MCP servers 
+
+ Webhooks and server-side controls 
+
+ Managing costs 
+
+ Realtime transcription 
+
+ Voice agents 
+
+ Model optimization 
+ 
+ Optimization cycle 
+
+ Fine-tuning 
+ Supervised fine-tuning 
+
+ Vision fine-tuning 
+
+ Direct preference optimization 
+
+ Reinforcement fine-tuning 
+
+ RFT use cases 
+
+ Best practices 
+
+ Graders 
+
+ Specialized models 
+ 
+ Image generation 
+
+ Video generation 
+
+ Text to speech 
+
+ Speech to text 
+
+ Deep research 
+
+ Embeddings 
+
+ Moderation 
+
+ Going live 
+ 
+ Production best practices 
+
+ Latency optimization 
+ Overview 
+
+ Predicted Outputs 
+
+ Priority processing 
+
+ Cost optimization 
+ Overview 
+
+ Batch 
+
+ Flex processing 
+
+ Accuracy optimization 
+
+ Safety 
+ Safety best practices 
+
+ Safety checks 
+
+ Cybersecurity checks 
+
+ Under 18 API Guidance 
+
+ Legacy APIs 
+ 
+ Assistants API 
+ Migration guide 
+
+ Deep dive 
+
+ Tools 
+
+ Resources 
+ 
+ Terms and policies 
+
+ Changelog 
+
+ Your data 
+
+ Permissions 
+
+ Rate limits 
+
+ Deprecations 
+
+ MCP for deep research 
+
+ Developer mode 
+
+ ChatGPT Actions 
+ Introduction 
+
+ Getting started 
+
+ Actions library 
+
+ Authentication 
+
+ Production 
+
+ Data retrieval 
+
+ Sending files 
+
+ Docs Use cases 
+
+ Getting Started 
+ 
+ Overview 
+
+ Quickstart 
+
+ Explore use cases 
+
+ Pricing 
+
+ Concepts 
+ Prompting 
+
+ Customization 
+
+ Memories 
+ Chronicle 
+
+ Sandboxing 
+
+ Subagents 
+
+ Workflows 
+
+ Models 
+
+ Cyber Safety 
+
+ Using Codex 
+ 
+ App 
+ Overview 
+
+ Features 
+
+ Settings 
+
+ Review 
+
+ Automations 
+
+ Worktrees 
+
+ Local Environments 
+
+ In-app browser 
+
+ Computer Use 
+
+ Commands 
+
+ Windows 
+
+ Troubleshooting 
+
+ IDE Extension 
+ Overview 
+
+ Features 
+
+ Settings 
+
+ IDE Commands 
+
+ Slash commands 
+
+ CLI 
+ Overview 
+
+ Features 
+
+ Command Line Options 
+
+ Slash commands 
+
+ Web 
+ Overview 
+
+ Environments 
+
+ Internet Access 
+
+ Integrations 
+ GitHub 
+
+ Slack 
+
+ Linear 
+
+ Codex Security 
+ Overview 
+
+ Setup 
+
+ Improving the threat model 
+
+ FAQ 
+
+ Configuration 
+ 
+ Config File 
+ Config Basics 
+
+ Advanced Config 
+
+ Config Reference 
+
+ Sample Config 
+
+ Speed 
+
+ Rules 
+
+ Hooks 
+
+ AGENTS.md 
+
+ MCP 
+
+ Plugins 
+ Overview 
+
+ Build plugins 
+
+ Skills 
+
+ Subagents 
+
+ Administration 
+ 
+ Authentication 
+
+ Agent approvals & security 
+
+ Remote connections 
+
+ Enterprise 
+ Admin Setup 
+
+ Governance 
+
+ Managed configuration 
+
+ Windows 
+
+ Automation 
+ 
+ Non-interactive Mode 
+
+ Codex SDK 
+
+ App Server 
+
+ MCP Server 
+
+ GitHub Action 
+
+ Learn 
+ 
+ Best practices 
+
+ Videos 
+
+ Community 
+
+ Blog 
+ Using skills to accelerate OSS maintenance 
+
+ Building frontend UIs with Codex and Figma 
+
+ View all 
+
+ Cookbooks 
+ Codex Prompting Guide 
+
+ Modernizing your Codebase with Codex 
+
+ View all 
+
+ Building AI Teams 
+
+ Releases 
+ 
+ Changelog 
+
+ Feature Maturity 
+
+ Open Source 
+
+ Home 
+
+ Collections 
+
+ Apps SDK Commerce 
+
+ Home 
+
+ Quickstart 
+
+ Core Concepts 
+ 
+ MCP Apps in ChatGPT 
+
+ MCP Server 
+
+ UX principles 
+
+ UI guidelines 
+
+ Plan 
+ 
+ Research use cases 
+
+ Define tools 
+
+ Design components 
+
+ Build 
+ 
+ Set up your server 
+
+ Build your ChatGPT UI 
+
+ Authenticate users 
+
+ Manage state 
+
+ Monetize your app 
+
+ Examples 
+
+ Deploy 
+ 
+ Deploy your app 
+
+ Connect from ChatGPT 
+
+ Test your integration 
+
+ Submit your app 
+
+ Guides 
+ 
+ Optimize Metadata 
+
+ Security & Privacy 
+
+ Troubleshooting 
+
+ Resources 
+ 
+ Changelog 
+
+ App submission guidelines 
+
+ Reference 
+
+ Home 
+
+ Guides 
+ 
+ Get started 
+
+ Best practices 
+
+ File Upload 
+ 
+ Overview 
+
+ Products 
+
+ API 
+ 
+ Overview 
+
+ Feeds 
+
+ Products 
+
+ Promotions 
+
+ Showcase Blog Cookbook Learn Community 
+
+ Home 
+
+ API examples 
+
+ All posts 
+
+ Recent 
+ 
+ How Perplexity Brought Voice Search to Millions Using the Realtime API 
+
+ Designing delightful frontends with GPT-5.4 
+
+ From prompts to products: One year of Responses 
+
+ Using skills to accelerate OSS maintenance 
+
+ Building frontend UIs with Codex and Figma 
+
+ Topics 
+ 
+ General 
+
+ API 
+
+ Apps SDK 
+
+ Audio 
+
+ Codex 
+
+ Home 
+
+ Topics 
+ 
+ Agents 
+
+ Evals 
+
+ Multimodal 
+
+ Text 
+
+ Guardrails 
+
+ Optimization 
+
+ ChatGPT 
+
+ Codex 
+
+ gpt-oss 
+
+ Contribute 
+ 
+ Cookbook on GitHub 
+
+ Home 
+
+ Docs MCP 
+
+ Categories 
+ 
+ Demo apps 
+
+ Videos 
+
+ Topics 
+ 
+ Agents 
+
+ Audio & Voice 
+
+ Computer Use 
+
+ Codex 
+
+ Evals 
+
+ gpt-oss 
+
+ Fine-tuning 
+
+ Image generation 
+
+ Scaling 
+
+ Tools 
+
+ Video generation 
+
+ Community 
+
+ Programs 
+ 
+ Codex Ambassadors 
+
+ Codex for Students 
+
+ Codex for Open Source 
+
+ Events 
+ 
+ Meetups 
+
+ Hackathon Support 
+
+ Forum 
+
+ Discord 
+
+API Dashboard
+
+ Home 
+
+Topics
+ 
+ Agents 
+
+ Evals 
+
+ Multimodal 
+
+ Text 
+
+ Guardrails 
+
+ Optimization 
+
+ ChatGPT 
+
+ Codex 
+
+ gpt-oss 
+
+Contribute
+ 
+ Cookbook on GitHub 
+
+Cookbook
+
+Recipes to help you build with OpenAI models.
+
+EvalsResponses APIPrompting Guide
+
+Featured
+
+Building resilient prompts using an evaluation flywheel
+
+Evals
+
+Eval Driven System Design - From Prototype to Production
+
+CompletionsEvalsFunctionsResponses
+
+Exploring Model Graders for Reinforcement Fine-Tuning
+
+Fine-tuning
+
+Multi-Tool Orchestration with RAG approach using OpenAI's Responses API
+
+FunctionsResponses
+
+Web Search and States with Responses API
+
+FunctionsResponses
+
+Building a Voice Assistant with the Agents SDK
+
+AudioResponsesSpeech
+
+Popular
+
+Web Search and States with Responses API
+
+FunctionsResponses
+
+MCP-Powered Agentic Voice Framework
+
+Agents SDKFunctions
+
+Doing RAG on PDFs using File Search in the Responses API
+
+FunctionsResponses
+
+Introduction to Structured Outputs
+
+CompletionsFunctions
+
+Using reasoning for data validation
+
+CompletionsReasoning
+
+How to call functions with chat models
+
+CompletionsFunctions
+
+All235
+
+Filter
+
+Building workspace agents in ChatGPT to complete repeatable, end-to-end work
+
+ChatGPT
+Apr 22, 2026
+GPT Image Generation Models Prompting Guide
+
+ImagesVision
+Apr 21, 2026
+Computer Use Agents in Daytona Sandboxes
+
+Agents SDK
+Apr 19, 2026
+Migrate a Legacy Codebase with Sandbox Agents
+
+Agents SDKEvals
+Apr 7, 2026
+Sora 2 Prompting Guide
+
+Mar 12, 2026
+Getting the Most out of GPT-5.4 for Vision and Document Understanding
+
+ImagesVision
+Mar 6, 2026
+Realtime Prompting Guide
+
+AudioResponsesSpeech
+Feb 25, 2026
+Codex Prompting Guide
+
+CodexResponses
+Feb 25, 2026
+Building Governed AI Agents - A Practical Guide to Agentic Scaffolding
+
+EvalsGuardrails
+Feb 23, 2026
+Prompt Caching 201
+
+LatencyResponses
+Feb 18, 2026
+Skills in OpenAI API
+
+Responses
+Feb 10, 2026
+Image Evals for Image Generation and Editing Use Cases
+
+EvalsImagesVision
+Jan 29, 2026
+Realtime Eval Guide
+
+AudioEvalsResponsesSpeech
+Jan 25, 2026
+Build your own content fact checker with gpt-oss-120B, Cerebras, and Parallel
+
+gpt-ossOpen ModelsReasoning
+Jan 13, 2026
+Context Engineering for Personalization - State Management with Long-Term Memory Notes using OpenAI Agents SDK
+
+Agents SDK
+Jan 5, 2026
+Prompt Personalities
+
+Jan 5, 2026
+Gpt-image-1.5 Prompting Guide
+
+ImagesVision
+Dec 16, 2025
+OpenAI Compliance Logs Platform quickstart
+
+ChatGPT
+Dec 11, 2025
+GPT-5.2 Prompting Guide
+
+Dec 11, 2025
+Transcribing User Audio with a Separate Realtime Request
+
+AudioSpeech
+Nov 20, 2025
+Modernizing your Codebase with Codex
+
+Codex
+Nov 19, 2025
+Build a coding agent with GPT 5.1
+
+Agents SDK
+Nov 13, 2025
+GPT-5.1 Prompting Guide
+
+Nov 13, 2025
+Self-Evolving Agents - A Cookbook for Autonomous Agent Retraining
+
+Evals
+Nov 4, 2025
+User guide for gpt-oss-safeguard
+
+gpt-ossGuardrailsOpen Models
+Oct 29, 2025
+Build Code Review with the Codex SDK
+
+Codex
+Oct 21, 2025
+Build, deploy, and optimize agentic workflows with AgentKit
+
+Evals
+Oct 17, 2025
+Building with Realtime Mini
+
+Oct 11, 2025
+Using PLANS.md for multi-hour problem solving
+
+Codex
+Oct 7, 2025
+Building resilient prompts using an evaluation flywheel
+
+Evals
+Oct 6, 2025
+Building Consistent Workflows with Codex CLI & Agents SDK
+
+Agents SDKCodex
+Oct 1, 2025
+Use Codex CLI to automatically fix CI failures
+
+Codex
+Sep 30, 2025
+GPT-5 Troubleshooting Guide
+
+Sep 17, 2025
+Context Engineering - Short-Term Memory Management with Sessions from OpenAI Agents SDK
+
+Agents SDK
+Sep 9, 2025
+Automating Code Quality and Security Fixes with Codex CLI on GitLab
+
+Codex
+Aug 29, 2025
+Fine-tune gpt-oss for better Korean language performance
+
+gpt-ossOpen Models
+Aug 26, 2025
+Using Evals API on Audio Inputs
+
+AudioEvals
+Aug 13, 2025
+Verifying gpt-oss implementations
+
+gpt-ossOpen Models
+Aug 11, 2025
+How to run gpt-oss locally with LM Studio
+
+gpt-ossOpen Models
+Aug 7, 2025
+GPT-5 Prompt Migration and Improvement Using the New Optimizer
+
+ReasoningResponses
+Aug 7, 2025
+GPT-5 prompting guide
+
+ReasoningResponses
+Aug 7, 2025
+Frontend coding with GPT-5
+
+ReasoningResponses
+Aug 7, 2025
+GPT-5 New Params and Tools
+
+FunctionsReasoning
+Aug 7, 2025
+How to run gpt-oss-20b on Google Colab
+
+gpt-ossOpen Models
+Aug 6, 2025
+Using NVIDIA TensorRT-LLM to run gpt-oss-20b
+
+gpt-ossOpen Models
+Aug 5, 2025
+Fine-tuning with gpt-oss and Hugging Face Transformers
+
+gpt-ossOpen Models
+Aug 5, 2025
+How to handle the raw chain of thought in gpt-oss
+
+gpt-ossOpen Models
+Aug 5, 2025
+How to run gpt-oss with Transformers
+
+gpt-ossOpen Models
+Aug 5, 2025
+How to run gpt-oss with vLLM
+
+gpt-ossOpen Models
+Aug 5, 2025
+How to run gpt-oss locally with Ollama
+
+gpt-ossOpen Models
+Aug 5, 2025
+OpenAI Harmony Response Format
+
+gpt-ossOpenAI harmonyOpen Models
+Aug 5, 2025
+Temporal Agents with Knowledge Graphs
+
+FunctionsResponses
+Jul 22, 2025
+Generate images with high input fidelity
+
+Images
+Jul 17, 2025
+Using Evals API on Image Inputs
+
+EvalsImages
+Jul 15, 2025
+Optimize Prompts
+
+Agents SDKCompletionsResponses
+Jul 14, 2025
+Building a Supply-Chain Copilot with OpenAI Agent SDK and Databricks MCP Servers
+
+Agents SDK
+Jul 8, 2025
+Prompt Migration Guide
+
+CompletionsResponses
+Jun 26, 2025
+Introduction to deep research in the OpenAI API
+
+Responses
+Jun 25, 2025
+Deep Research API with the Agents SDK
+
+Agents SDK
+Jun 25, 2025
+Building a Deep Research MCP Server
+
+Agents SDKResponses
+Jun 25, 2025
+Automate Jira ↔ GitHub with Codex
+
+Codex
+Jun 21, 2025
+Fine-Tuning Techniques - Choosing Between SFT, DPO, and RFT (With a Guide to DPO)
+
+Fine-tuning
+Jun 18, 2025
+MCP-Powered Agentic Voice Framework
+
+Agents SDKFunctions
+Jun 17, 2025
+Evals API Use-case - MCP Evaluation
+
+EvalsResponses
+Jun 9, 2025
+Evals API Use-case - Structured Outputs Evaluation
+
+EvalsResponses
+Jun 9, 2025
+Evals API Use-case - Tools Evaluation
+
+EvalsResponses
+Jun 9, 2025
+Evals API Use-case - Web Search Evaluation
+
+EvalsResponses
+Jun 9, 2025
+Eval Driven System Design - From Prototype to Production
+
+CompletionsEvalsFunctionsResponses
+Jun 2, 2025
+Selecting a Model Based on Stripe Conversion – A Practical Eval for Startups
+
+Evals
+Jun 2, 2025
+Practical guide to data-intensive apps with the Realtime API
+
+AudioSpeech
+May 29, 2025
+Multi-Agent Portfolio Collaboration with OpenAI Agents SDK
+
+Agents SDKFunctionsResponses
+May 28, 2025
+o3/o4-mini Function Calling Guide
+
+FunctionsReasoningResponses
+May 26, 2025
+Exploring Model Graders for Reinforcement Fine-Tuning
+
+Fine-tuning
+May 23, 2025
+Reinforcement Fine-Tuning for Conversational Reasoning with the OpenAI API
+
+EvalsFine-tuning
+May 21, 2025
+Guide to Using the Responses API's MCP Tool
+
+May 21, 2025
+Image Understanding with RAG
+
+ImagesResponsesVision
+May 16, 2025
+Evals API Use-case - Responses Evaluation
+
+EvalsResponses
+May 13, 2025
+Better performance from reasoning models using the Responses API
+
+FunctionsResponses
+May 11, 2025
+Context Summarization with Realtime API
+
+AudioSpeechTiktoken
+May 10, 2025
+Practical Guide for Model Selection for Real‑World Use Cases
+
+FunctionsResponses
+May 7, 2025
+ElatoAI - Realtime Speech AI Agents for ESP32 on Arduino
+
+AudioSpeech
+May 1, 2025
+Parallel Agents with the OpenAI Agents SDK
+
+Agents SDK
+May 1, 2025
+Comparing Speech-to-Text Methods with the OpenAI API
+
+Agents SDKAudioSpeech
+Apr 29, 2025
+Handling Function Calls with Reasoning Models
+
+FunctionsReasoningResponses
+Apr 25, 2025
+Robust question answering with Chroma and OpenAI
+
+CompletionsEmbeddings
+Apr 23, 2025
+Generate images with GPT Image
+
+Images
+Apr 23, 2025
+Processing and narrating a video with GPT-4.1-mini's visual capabilities and GPT-4o TTS API
+
+ResponsesSpeechVision
+Apr 22, 2025
+GPT-4.1 Prompting Guide
+
+Responses
+Apr 14, 2025
+Evals API Use-case - Detecting prompt regressions
+
+CompletionsEvals
+Apr 8, 2025
+Evals API Use-case - Bulk model and prompt experimentation
+
+CompletionsEvals
+Apr 8, 2025
+Evals API Use-case - Monitoring stored completions
+
+CompletionsEvals
+Apr 8, 2025
+GPT Actions library - Salesforce & Gong
+
+ChatGPT
+Apr 7, 2025
+Evaluating Agents with Langfuse
+
+Agents SDKEvals
+Mar 31, 2025
+Multi-Tool Orchestration with RAG approach using OpenAI's Responses API
+
+FunctionsResponses
+Mar 28, 2025
+Building a Voice Assistant with the Agents SDK
+
+AudioResponsesSpeech
+Mar 27, 2025
+Multi-Language One-Way Translation with the Realtime API
+
+AudioSpeech
+Mar 24, 2025
+Automating Dispute Management with Agents SDK and Stripe API
+
+Agents SDKFunctionsResponses
+Mar 17, 2025
+Web Search and States with Responses API
+
+FunctionsResponses
+Mar 11, 2025
+Doing RAG on PDFs using File Search in the Responses API
+
+FunctionsResponses
+Mar 11, 2025
+Build Your Own Code Interpreter - Dynamic Tool Generation and Execution With o3-mini
+
+Completions
+Feb 3, 2025
+How to handle rate limits
+
+CompletionsEmbeddings
+Jan 22, 2025
+How to use the Usage API and Cost API to monitor your OpenAI usage
+
+Cost APIUsage API
+Jan 14, 2025
+Reasoning over Code Quality and Security in GitHub Pull Requests
+
+CompletionsReasoning
+Dec 24, 2024
+Using GPT4 Vision with Function Calling
+
+ChatVision
+Dec 13, 2024
+Embedding Wikipedia articles for search
+
+CompletionsEmbeddings
+Nov 26, 2024
+GPT Actions library - Tray.ai APIM
+
+ChatGPT
+Nov 26, 2024
+GPT Actions library - Google Calendar
+
+ChatGPT
+Nov 22, 2024
+GPT Actions library - Workday
+
+ChatGPT
+Nov 20, 2024
+Optimizing Retrieval-Augmented Generation using GPT-4o Vision Modality
+
+CompletionsVision
+Nov 12, 2024
+Pinecone Vector Database and Retool Workflow with GPT Actions
+
+ChatGPTEmbeddings
+Nov 11, 2024
+Vision Fine-tuning on GPT-4o for Visual Question Answering
+
+CompletionsFine-tuningVision
+Nov 1, 2024
+Steering Text-to-Speech for more dynamic audio generation
+
+AudioCompletions
+Nov 1, 2024
+Enhance your prompts with meta prompting
+
+CompletionsReasoning
+Oct 23, 2024
+GPT Actions library - GitHub
+
+ChatGPT
+Oct 23, 2024
+Voice Translation into Different Languages
+
+AudioCompletions
+Oct 21, 2024
+Leveraging model distillation to fine-tune a model
+
+CompletionsFine-tuning
+Oct 16, 2024
+Custom LLM as a Judge to Detect Hallucinations with Braintrust
+
+CompletionsEvals
+Oct 14, 2024
+Orchestrating Agents: Routines and Handoffs
+
+CompletionsFunctions
+Oct 10, 2024
+GPT Actions library - Google Ads via Adzviser
+
+ChatGPT
+Oct 10, 2024
+Prompt Caching 101
+
+CompletionsLatency
+Oct 1, 2024
+How to parse PDF docs for RAG
+
+EmbeddingsVision
+Sep 29, 2024
+Using chained calls for o1 structured outputs
+
+CompletionsReasoning
+Sep 26, 2024
+Building a Bring Your Own Browser (BYOB) Tool for Web Browsing and Summarization
+
+Completions
+Sep 26, 2024
+GPT Actions library - Canvas Learning Management System
+
+ChatGPT
+Sep 17, 2024
+Using reasoning for data validation
+
+CompletionsReasoning
+Sep 12, 2024
+Using reasoning for routine generation
+
+CompletionsReasoning
+Sep 12, 2024
+GPT Actions library - Retool Workflow
+
+ChatGPT
+Aug 28, 2024
+GPT Actions library - Snowflake Middleware
+
+ChatGPT
+Aug 14, 2024
+GPT Actions library - Snowflake Direct
+
+ChatGPT
+Aug 13, 2024
+GPT Actions library (Middleware) - Google Cloud Function
+
+ChatGPT
+Aug 11, 2024
+GPT Actions library - Google Drive
+
+ChatGPT
+Aug 11, 2024
+GPT Actions library - AWS Redshift
+
+ChatGPT
+Aug 9, 2024
+GPT Actions library - AWS Middleware
+
+ChatGPT
+Aug 9, 2024
+Structured Outputs for Multi-Agent Systems
+
+CompletionsFunctions
+Aug 6, 2024
+Introduction to Structured Outputs
+
+CompletionsFunctions
+Aug 6, 2024
+GPT Actions library - Zapier
+
+ChatGPT
+Aug 5, 2024
+GPT Actions library - Box
+
+ChatGPT
+Aug 2, 2024
+GCP BigQuery Vector Search with GCP Functions and GPT Actions in ChatGPT
+
+ChatGPTCompletionsEmbeddingsTiktoken
+Aug 2, 2024
+GPT Actions library - Confluence
+
+ChatGPT
+Jul 31, 2024
+GPT Actions library - SQL Database
+
+ChatGPT
+Jul 31, 2024
+GPT Actions library - Notion
+
+ChatGPT
+Jul 25, 2024
+GPT Actions library - Gmail
+
+ChatGPT
+Jul 24, 2024
+GPT Actions library - Jira
+
+ChatGPT
+Jul 24, 2024
+How to fine-tune chat models
+
+CompletionsFine-tuning
+Jul 23, 2024
+How to combine GPT4o mini with RAG to create a clothing matchmaker app
+
+EmbeddingsVision
+Jul 18, 2024
+Using GPT4o mini to tag and caption images
+
+EmbeddingsVision
+Jul 18, 2024
+Introduction to GPT-4o and GPT-4o mini
+
+CompletionsVisionWhisper
+Jul 18, 2024
+GPT Actions library - Salesforce
+
+ChatGPT
+Jul 18, 2024
+GPT Actions library - Outlook
+
+ChatGPT
+Jul 15, 2024
+GPT Actions library - getting started
+
+ChatGPT
+Jul 9, 2024
+GPT Actions library - BigQuery
+
+ChatGPT
+Jul 9, 2024
+Data Extraction and Transformation in ELT Workflows using GPT-4o as an OCR Alternative
+
+CompletionsVision
+Jul 9, 2024
+Azure AI Search with Azure Functions and GPT Actions in ChatGPT
+
+ChatGPTCompletionsEmbeddingsTiktoken
+Jul 8, 2024
+Developing Hallucination Guardrails
+
+Guardrails
+May 29, 2024
+GPT Actions library - Sharepoint (Return Docs)
+
+ChatGPT
+May 24, 2024
+GPT Actions library - Sharepoint (Return Text)
+
+ChatGPT
+May 24, 2024
+GPT Actions library (Middleware) - Azure Functions
+
+ChatGPT
+May 24, 2024
+Using tool required for customer service
+
+CompletionsFunctions
+May 1, 2024
+Batch processing with the Batch API
+
+BatchCompletions
+Apr 24, 2024
+Summarizing Long Documents
+
+Chat
+Apr 19, 2024
+Synthetic data generation (Part 1)
+
+Completions
+Apr 10, 2024
+CLIP embeddings to improve multimodal RAG with GPT-4 Vision
+
+EmbeddingsVision
+Apr 10, 2024
+Getting Started with OpenAI Evals
+
+Completions
+Mar 21, 2024
+How to use the moderation API
+
+Moderation
+Mar 5, 2024
+How to evaluate LLMs for SQL generation
+
+Guardrails
+Jan 23, 2024
+Using logprobs
+
+Completions
+Dec 20, 2023
+How to implement LLM guardrails
+
+Guardrails
+Dec 19, 2023
+Creating slides with the Assistants API and DALL·E 3
+
+AssistantsDALL-E
+Dec 8, 2023
+RAG with a Graph database
+
+CompletionsEmbeddings
+Dec 8, 2023
+Supabase Vector Database
+
+Embeddings
+Dec 4, 2023
+Semantic search using Supabase Vector
+
+Embeddings
+Dec 4, 2023
+MongoDB Atlas Vector Search
+
+CompletionsEmbeddings
+Nov 21, 2023
+Semantic search using MongoDB Atlas Vector Search and OpenAI
+
+CompletionsEmbeddings
+Nov 21, 2023
+Assistants API Overview (Python SDK)
+
+AssistantsFunctions
+Nov 10, 2023
+Fine tuning for function calling
+
+CompletionsFine-tuningFunctions
+Nov 7, 2023
+What's new with DALL·E 3?
+
+DALL-E
+Nov 6, 2023
+How to make your completions outputs consistent with the new seed parameter
+
+Completions
+Nov 6, 2023
+Evaluate RAG with LlamaIndex
+
+CompletionsEmbeddings
+Nov 6, 2023
+Named Entity Recognition to Enrich Text
+
+CompletionsFunctions
+Oct 20, 2023
+Function calling with an OpenAPI specification
+
+CompletionsFunctions
+Oct 15, 2023
+How to build an agent with the OpenAI Node.js SDK
+
+CompletionsFunctions
+Oct 5, 2023
+Fine-tuning OpenAI models with Weights & Biases
+
+CompletionsFine-tuningTiktoken
+Oct 4, 2023
+OpenAI API Monitoring with Weights & Biases Weave
+
+CompletionsTiktoken
+Oct 4, 2023
+Question answering with LangChain, Deep Lake, & OpenAI
+
+Embeddings
+Sep 30, 2023
+Neon as a vector database
+
+Embeddings
+Sep 28, 2023
+Vector similarity search using Neon Postgres
+
+Embeddings
+Sep 28, 2023
+How to automate AWS tasks with function calling
+
+CompletionsEmbeddingsFunctions
+Sep 27, 2023
+Azure Chat Completion models with your own data (preview)
+
+Completions
+Sep 11, 2023
+Azure AI Search as a vector database for OpenAI embeddings
+
+Embeddings
+Sep 11, 2023
+Using Tair as a vector database for OpenAI embeddings
+
+Embeddings
+Sep 11, 2023
+Question answering with Langchain, Tair and OpenAI
+
+CompletionsEmbeddingsTiktoken
+Sep 11, 2023
+Fine-Tuning for retrieval augmented generation (RAG) with Qdrant
+
+CompletionsEmbeddingsFine-tuning
+Sep 4, 2023
+What makes documentation good
+
+Sep 1, 2023
+Philosophy with vector embeddings, OpenAI and Cassandra / Astra DB
+
+CompletionsEmbeddings
+Aug 29, 2023
+Philosophy with vector embeddings, OpenAI and Cassandra / Astra DB
+
+CompletionsEmbeddings
+Aug 29, 2023
+Cassandra / Astra DB
+
+Embeddings
+Aug 29, 2023
+Elasticsearch
+
+CompletionsEmbeddings
+Aug 29, 2023
+Retrieval augmented generation using Elasticsearch and OpenAI
+
+CompletionsEmbeddings
+Aug 29, 2023
+Semantic search using Elasticsearch and OpenAI
+
+Embeddings
+Aug 29, 2023
+Data preparation and analysis for chat model fine-tuning
+
+CompletionsFine-tuningTiktoken
+Aug 22, 2023
+How to evaluate a summarization task
+
+CompletionsEmbeddings
+Aug 16, 2023
+Function calling for nearby places: Leveraging the Google Places API and customer profiles
+
+CompletionsFunctions
+Aug 11, 2023
+Addressing transcription misspellings: prompt vs post-processing
+
+CompletionsWhisper
+Aug 11, 2023
+Enhancing Whisper transcriptions: pre- & post-processing techniques
+
+Whisper
+Aug 11, 2023
+Azure functions example
+
+CompletionsFunctions
+Jul 21, 2023
+Visualizing the embeddings in Kangas
+
+Embeddings
+Jul 11, 2023
+Using PolarDB-PG as a vector database for OpenAI embeddings
+
+Embeddings
+Jul 11, 2023
+Search reranking with cross-encoders
+
+CompletionsEmbeddings
+Jun 28, 2023
+Vector databases
+
+Embeddings
+Jun 28, 2023
+Using Chroma for embeddings search
+
+Embeddings
+Jun 28, 2023
+Using MyScale for embeddings search
+
+Embeddings
+Jun 28, 2023
+Using Pinecone for embeddings search
+
+Embeddings
+Jun 28, 2023
+Using Qdrant for embeddings search
+
+Embeddings
+Jun 28, 2023
+Using Redis for embeddings search
+
+Embeddings
+Jun 28, 2023
+Using Typesense for embeddings search
+
+Embeddings
+Jun 28, 2023
+Using Weaviate for embeddings search
+
+Embeddings
+Jun 28, 2023
+Whisper prompting guide
+
+CompletionsWhisper
+Jun 27, 2023
+Financial document analysis with LlamaIndex
+
+CompletionsEmbeddings
+Jun 22, 2023
+Question answering using a search API and re-ranking
+
+CompletionsEmbeddings
+Jun 16, 2023
+How to use functions with a knowledge base
+
+CompletionsFunctions
+Jun 14, 2023
+How to call functions with chat models
+
+CompletionsFunctions
+Jun 13, 2023
+Semantic search with SingleStoreDB
+
+CompletionsEmbeddings
+May 22, 2023
+SingleStoreDB
+
+CompletionsEmbeddings
+May 22, 2023
+Using Weaviate with generative OpenAI module for generative search
+
+CompletionsEmbeddings
+May 22, 2023
+Unit test writing using a multi-step prompt with legacy Completions
+
+Completions
+May 19, 2023
+How to create dynamic masks with DALL·E and Segment Anything
+
+DALL-E
+May 19, 2023
+Using Hologres as a vector database for OpenAI embeddings
+
+Embeddings
+May 19, 2023
+Running hybrid VSS queries with Redis and OpenAI
+
+Embeddings
+May 11, 2023
+Redis as a context store with Chat Completions
+
+CompletionsEmbeddings
+May 11, 2023
+Kusto as a vector database for embeddings
+
+Embeddings
+May 10, 2023
+Kusto as a vector database
+
+Embeddings
+May 10, 2023
+Redis vectors as JSON with OpenAI
+
+Embeddings
+May 10, 2023
+Question answering with Langchain, AnalyticDB and OpenAI
+
+EmbeddingsTiktoken
+May 5, 2023
+How to build a tool-using agent with LangChain
+
+CompletionsEmbeddings
+May 2, 2023
+Using MyScale as a vector database for OpenAI embeddings
+
+Embeddings
+May 1, 2023

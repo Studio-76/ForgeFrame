@@ -1,0 +1,319 @@
+OAuth apps - GitHub Docs
+
+Skip to main content
+
+GitHub Docs
+
+Version: Free, Pro, & Team
+
+Search or ask Copilot
+Search or askCopilot
+
+Select language: current language is English
+
+Search or ask Copilot
+Search or askCopilot
+
+Open menu
+
+Open Sidebar
+
+Apps/
+
+OAuth apps
+
+Home
+
+Apps
+
+Overview
+
+Using GitHub Apps
+About using apps
+
+Install from Marketplace for user
+
+Install from Marketplace for org
+
+Install from third party
+
+Install your own app
+
+Request for org
+
+Authorize
+
+Approve new permissions
+
+Review your authorizations
+
+Review installations
+
+Privileged apps
+
+Creating GitHub Apps
+About creating GitHub Apps
+About creating apps
+
+GitHub App versus other options
+
+Best practices
+
+Migrate from OAuth apps
+
+Registering a GitHub App
+Register a GitHub App
+
+Callback URL
+
+Setup URL
+
+Permissions
+
+Webhooks
+
+Visibility
+
+Rate limits
+
+Custom badge
+
+Authenticate with a GitHub App
+About authentication
+
+Authenticate as an app
+
+Authenticate as an installation
+
+Authenticate on behalf of users
+
+Manage private keys
+
+Generate a JWT
+
+Generate an installation access token
+
+Generate a user access token
+
+Refresh user access tokens
+
+Authenticate in Actions workflow
+
+Writing code for a GitHub App
+About writing GitHub App code
+
+Quickstart
+
+Respond to webhooks
+
+Build a "Login" button
+
+Build a CLI
+
+Build CI checks
+
+Sharing GitHub Apps
+Share your app
+
+Share with GHES
+
+App manifest
+
+App query parameters
+
+Maintaining GitHub Apps
+Modify app settings
+
+Activate optional features
+
+GitHub App managers
+
+Manage allowed IP addresses
+
+Suspend an installation
+
+Transfer ownership
+
+Delete your app
+
+GitHub Marketplace
+Overview
+About GitHub Marketplace for apps
+
+About marketplace badges
+
+Publisher verification
+
+Create Marketplace apps
+Listing requirements
+
+Security best practice
+
+Customer experience best practice
+
+View listing metrics
+
+View listing transactions
+
+Marketplace API usage
+REST API
+
+Webhook events
+
+Testing your app
+
+New purchases & free trials
+
+Handling plan changes
+
+Plan cancellations
+
+List an app on the Marketplace
+Draft an app listing
+
+Write listing descriptions
+
+Set listing pricing plans
+
+Webhooks for plan changes
+
+Submit your listing
+
+Delete your listing
+
+Sell apps on the Marketplace
+Pricing plans for apps
+
+Billing customers
+
+Receive payment
+
+OAuth apps
+Using OAuth apps
+Install app personal account
+
+Install app organization
+
+Authorizing OAuth apps
+
+Review OAuth apps
+
+Third-party applications
+
+Privileged apps
+
+Building OAuth apps
+GitHub Apps & OAuth apps
+
+Rate limits
+
+Creating an OAuth app
+
+Authenticate with an OAuth app
+
+Authorizing OAuth apps
+
+Scopes for OAuth apps
+
+Create custom badges
+
+Best practices
+
+Maintaining OAuth apps
+Modifying an OAuth app
+
+Activate optional features
+
+Transfer ownership
+
+Troubleshoot authorization
+
+Troubleshoot token request
+
+Deleting an OAuth app
+
+Apps/
+
+OAuth apps
+
+OAuth apps
+
+Learn how to build and maintain OAuth apps.
+
+Using OAuth apps
+Installing an OAuth app in your personal account
+
+Installing an OAuth app in your organization
+
+Authorizing OAuth apps
+
+Reviewing your authorized OAuth apps
+
+Connecting with third-party applications
+
+Privileged OAuth apps
+
+Building OAuth apps
+Differences between GitHub Apps and OAuth apps
+
+Rate limits for OAuth apps
+
+Creating an OAuth app
+
+Authenticating to the REST API with an OAuth app
+
+Authorizing OAuth apps
+
+Scopes for OAuth apps
+
+Creating a custom badge for your OAuth app
+
+Best practices for creating an OAuth app
+
+Maintaining OAuth apps
+Modifying an OAuth app
+
+Activating optional features for OAuth apps
+
+Transferring ownership of an OAuth app
+
+Troubleshooting authorization request errors
+
+Troubleshooting OAuth app access token request errors
+
+Deleting an OAuth app
+
+Help and support
+
+Did you find what you needed?
+
+ Yes No
+Privacy policy
+
+Help us make these docs great!
+
+All GitHub docs are open source. See something that's wrong or unclear? Submit a pull request.
+Make a contribution
+Learn how to contribute
+
+Still need help?
+
+Ask the GitHub community
+
+Contact support
+
+Legal
+
+© 2026 GitHub, Inc.
+
+Terms
+
+Privacy
+
+Status
+
+Pricing
+
+Expert services
+
+Blog

@@ -1,0 +1,366 @@
+Gemini CLI  |  Gemini Code Assist  |  Google for Developers
+
+ Skip to main content
+
+ Gemini Code Assist
+
+ /
+
+ English
+
+ Deutsch
+
+ Español
+
+ Español – América Latina
+
+ Français
+
+ Indonesia
+
+ Italiano
+
+ Polski
+
+ Português – Brasil
+
+ Tiếng Việt
+
+ Türkçe
+
+ Русский
+
+ עברית
+
+ العربيّة
+
+ فارسی
+
+ हिंदी
+
+ বাংলা
+
+ ภาษาไทย
+
+ 中文 – 简体
+
+ 中文 – 繁體
+
+ 日本語
+
+ 한국어
+
+ Sign in
+
+ Home
+
+ Guides
+
+ Resources
+
+ Gemini Code Assist
+
+ Home
+
+ Home
+
+ Guides
+
+ Resources
+
+ Discover
+
+Overview
+
+Gemini in Android Studio
+
+Gemini CLI
+
+ Privacy notices
+
+Terms of Service and Privacy Policies
+
+Gemini Code Assist for individuals privacy notice
+
+Supported languages, IDEs, and interfaces
+
+How Gemini Code Assist works
+
+Gemini 3 with Gemini Code Assist
+
+How Gemini Code Assist Standard and Enterprise use your data
+
+Responsible AI
+
+ Get started
+
+Set up Gemini Code Assist for individuals
+
+Use the Gemini Code Assist chat
+
+Set up Gemini Code Assist Standard and Enterprise
+
+ Code in IDEs
+
+Code features overview
+
+Code with Gemini Code Assist
+
+ Chat in IDEs
+
+Chat features overview
+
+Chat with Gemini Code Assist
+
+Agent mode overview
+
+Use the Gemini Code Assist agent mode
+
+ Use code customization (Enterprise)
+
+Code customization overview
+
+Configure code customization
+
+Use code customization
+
+Encrypt data with customer-managed encryption keys
+
+ Review code in GitHub
+
+Review GitHub code with Gemini Code Assist
+
+Set up Gemini Code Assist for GitHub
+
+Use Gemini Code Assist for GitHub
+
+Customize Gemini Code Assist behavior in GitHub
+
+Code review style guide
+
+ Configure
+
+Keyboard shortcuts
+
+Exclude files from Gemini Code Assist use
+
+Configure local codebase awareness
+
+Use pre-release features in Gemini Code Assist for VS Code
+
+Control Network Access with User Domain Restrictions
+
+ Standard and Enterprise
+
+Configure Gemini Code Assist logging
+
+Configure VPC Service Controls
+
+Turn off Gemini Code Assist
+
+ Troubleshoot
+
+Troubleshoot access to Gemini Code Assist features
+
+Provide feedback
+
+ Home
+
+ Products
+
+ Gemini Code Assist
+
+ Guides
+
+ Gemini CLI
+
+ Stay organized with collections
+
+ Save and categorize content based on your preferences.
+
+Page Summary
+
+ outlined_flag
+
+The Gemini command line interface (CLI) is an open source AI agent that provides access to Gemini directly in your terminal.
+
+The Gemini CLI uses a reason and act (ReAct) loop with your built-in tools and local or remote MCP servers to complete complex use cases like fixing bugs, creating new features, and improving test coverage.
+
+Gemini Code Assist for individuals, Standard, and Enterprise each provide quotas for using the Gemini CLI, shared with Gemini Code Assist agent mode.
+
+The Gemini CLI is available without additional setup in Cloud Shell or can be set up in other environments.
+
+Gemini Code Assist agent mode in VS Code is powered by Gemini CLI and offers a subset of its functionality directly within the chat in your IDE.
+
+The Gemini command line interface (CLI) is an open source
+AI agent that provides access to Gemini directly in your terminal. The
+Gemini CLI uses a reason and act (ReAct) loop with your built-in tools
+and local or remote MCP servers to complete complex use cases like fixing bugs,
+creating new features, and improving test coverage. While the Gemini
+CLI excels at coding, it's also a versatile local utility that you can use for
+a wide range of tasks, from content generation and problem solving to deep
+research and task management.
+
+Each Gemini Code Assist edition
+provides quotas for using the
+Gemini CLI. Note that these quotas are shared between Gemini
+CLI and Gemini Code Assist agent mode. Gemini
+CLI also supports using a Gemini API key to
+pay as you go.
+
+The Gemini CLI is available without additional setup in
+Cloud Shell. To get
+started with Gemini CLI in other environments, see the
+Gemini CLI documentation.
+
+Privacy
+
+For users of Gemini Code Assist Standard and Enterprise, the
+data protection and privacy practices described in
+Security, privacy, and compliance for Gemini Code Assist Standard and Enterprise
+also apply to Gemini CLI.
+
+For users of Gemini Code Assist for individuals, the data protection
+and privacy practices described in the
+Gemini Code Assist Privacy Notice for individuals
+also apply to Gemini CLI.
+
+Gemini Code Assist agent mode (Preview)
+
+Gemini Code Assist agent mode in VS Code is powered by
+Gemini CLI. A subset of Gemini CLI functionality is
+available directly in the Gemini Code Assist chat within VS Code.
+
+The following Gemini CLI features are available in
+Gemini Code Assist for VS Code.
+
+Model Context Protocol (MCP) servers
+
+Gemini CLI commands: /memory, /stats, /tools,
+/mcp
+
+Yolo mode
+
+built-in tools like grep, terminal, file read or file write
+
+Web search
+
+Web fetch
+
+What's next
+
+Read more about Gemini CLI documentation.
+
+Download and install Gemini CLI.
+
+Except as otherwise noted, the content of this page is licensed under the Creative Commons Attribution 4.0 License, and code samples are licensed under the Apache 2.0 License. For details, see the Google Developers Site Policies. Java is a registered trademark of Oracle and/or its affiliates.
+
+Last updated 2026-02-02 UTC.
+
+ [[["Easy to understand","easyToUnderstand","thumb-up"],["Solved my problem","solvedMyProblem","thumb-up"],["Other","otherUp","thumb-up"]],[["Missing the information I need","missingTheInformationINeed","thumb-down"],["Too complicated / too many steps","tooComplicatedTooManySteps","thumb-down"],["Out of date","outOfDate","thumb-down"],["Samples / code issue","samplesCodeIssue","thumb-down"],["Other","otherDown","thumb-down"]],["Last updated 2026-02-02 UTC."],[],[]]
+
+Connect
+
+ Blog
+
+ Bluesky
+
+ Instagram
+
+ LinkedIn
+
+ X (Twitter)
+
+ YouTube
+
+Programs
+
+ Google Developer Program
+
+ Google Developer Groups
+
+ Google Developer Experts
+
+ Accelerators
+
+ Google Cloud & NVIDIA
+
+Developer consoles
+
+ Google API Console
+
+ Google Cloud Platform Console
+
+ Google Play Console
+
+ Firebase Console
+
+ Actions on Google Console
+
+ Cast SDK Developer Console
+
+ Chrome Web Store Dashboard
+
+ Google Home Developer Console
+
+ Android
+
+ Chrome
+
+ Firebase
+
+ Google Cloud Platform
+
+ Google AI
+
+ All products
+
+ Terms
+
+ Privacy
+
+ Manage cookies
+
+ English
+
+ Deutsch
+
+ Español
+
+ Español – América Latina
+
+ Français
+
+ Indonesia
+
+ Italiano
+
+ Polski
+
+ Português – Brasil
+
+ Tiếng Việt
+
+ Türkçe
+
+ Русский
+
+ עברית
+
+ العربيّة
+
+ فارسی
+
+ हिंदी
+
+ বাংলা
+
+ ภาษาไทย
+
+ 中文 – 简体
+
+ 中文 – 繁體
+
+ 日本語
+
+ 한국어

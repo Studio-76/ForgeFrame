@@ -47,7 +47,7 @@ def test_file_control_plane_repository_upgrades_legacy_model_payload(tmp_path: P
     state = repository.load_state()
 
     assert state is not None
-    assert state.schema_version == 3
+    assert state.schema_version == 6
     model = state.providers[0].managed_models[0]
     assert model.owned_by == "ForgeFrame"
     assert model.display_name == "forgeframe-baseline-chat-v1"

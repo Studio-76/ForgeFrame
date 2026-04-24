@@ -9,13 +9,19 @@ from pathlib import Path
 from typing import Any
 
 import httpx
+from pydantic import BaseModel
 
 from app.harness.models import (
+    HarnessCapabilityProfile,
+    HarnessErrorMapping,
     HarnessImportRequest,
     HarnessModelInventoryItem,
     HarnessPreviewRequest,
     HarnessProfileRecord,
     HarnessProviderProfile,
+    HarnessRequestMapping,
+    HarnessResponseMapping,
+    HarnessStreamMapping,
     HarnessVerificationRequest,
     HarnessVerificationResult,
     HarnessVerificationRun,
@@ -43,6 +49,7 @@ class HarnessService:
                 "label": template.label,
                 "integration_class": template.integration_class,
                 "description": template.description,
+                "profile_defaults": redact_sensitive_payload(template.profile_defaults.model_dump()),
             }
             for template in BUILTIN_TEMPLATES.values()
         ]
@@ -50,6 +57,51 @@ class HarnessService:
     @staticmethod
     def _config_snapshot_from_profile(profile: HarnessProviderProfile | HarnessProfileRecord) -> dict[str, Any]:
         return HarnessProviderProfile(**profile.model_dump()).model_dump()
+
+    @staticmethod
+    def _is_default_model(model: Any, default_model: Any) -> bool:
+        try:
+            return model.model_dump() == default_model.model_dump()
+        except Exception:
+            return model == default_model
+
+    def _resolve_profile_from_template(
+        self,
+        profile: HarnessProviderProfile,
+    ) -> HarnessProviderProfile:
+        template_id = (profile.template_id or "").strip()
+        template = self._lookup_template(template_id)
+        if template is None:
+            return profile
+
+        resolved = template.profile_defaults.model_copy(deep=True)
+        resolved = self._merge_explicit_model(resolved, profile)
+        resolved.template_id = template_id
+        return HarnessProviderProfile(**resolved.model_dump())
+
+    @staticmethod
+    def _lookup_template(template_id: str) -> Any | None:
+        if not template_id:
+            return None
+        template = BUILTIN_TEMPLATES.get(template_id)
+        if template is not None:
+            return template
+        for candidate in BUILTIN_TEMPLATES.values():
+            if candidate.id == template_id:
+                return candidate
+        return None
+
+    def _merge_explicit_model(self, baseline: BaseModel, override: BaseModel) -> BaseModel:
+        merged = baseline.model_copy(deep=True)
+        update: dict[str, Any] = {}
+        for field_name in override.model_fields_set:
+            incoming_value = getattr(override, field_name)
+            baseline_value = getattr(merged, field_name)
+            if isinstance(baseline_value, BaseModel) and isinstance(incoming_value, BaseModel):
+                update[field_name] = self._merge_explicit_model(baseline_value, incoming_value)
+            else:
+                update[field_name] = incoming_value
+        return merged.model_copy(update=update)
 
     def _history_entry(self, profile: HarnessProfileRecord) -> dict[str, Any]:
         return {
@@ -59,9 +111,10 @@ class HarnessService:
         }
 
     def upsert_profile(self, profile: HarnessProviderProfile) -> HarnessProfileRecord:
-        record = HarnessProfileRecord(**profile.model_dump())
+        resolved_profile = self._resolve_profile_from_template(profile)
+        record = HarnessProfileRecord(**resolved_profile.model_dump())
         try:
-            existing = self.get_profile(profile.provider_key)
+            existing = self.get_profile(resolved_profile.provider_key)
         except ValueError:
             existing = None
         if existing is None:
@@ -126,11 +179,12 @@ class HarnessService:
         request_metadata: dict[str, str] | None = None,
     ) -> dict[str, Any]:
         profile = self.get_profile(payload.provider_key)
+        resolved_model = self._resolve_model_slug(profile, payload.model)
         rendered_messages = list(payload.messages) if payload.messages else [{"role": "user", "content": payload.message}]
         request_payload = self._render_template(
             profile.request_mapping.body_template,
             {
-                "model": payload.model,
+                "model": resolved_model,
                 "messages": rendered_messages,
                 "stream": payload.stream,
                 "tools": payload.tools,
@@ -150,7 +204,11 @@ class HarnessService:
             request_payload["max_tokens"] = payload.max_output_tokens
         if payload.metadata and "metadata" not in request_payload:
             request_payload["metadata"] = payload.metadata
-        endpoint = f"{profile.endpoint_base_url.rstrip('/')}{profile.request_mapping.path}"
+        endpoint = self._join_endpoint_url(
+            profile.endpoint_base_url,
+            profile.request_mapping.path,
+            profile.request_mapping.path_join_policy,
+        )
         headers = self._build_headers(profile)
         headers.update(profile.request_mapping.headers)
         headers.update(forgeframe_request_metadata_headers(request_metadata))
@@ -590,6 +648,59 @@ class HarnessService:
         elif profile.auth_scheme == "api_key_header" and profile.auth_value.strip():
             headers[profile.auth_header] = profile.auth_value
         return headers
+
+    @staticmethod
+    def _join_endpoint_url(base_url: str, path: str, join_policy: str) -> str:
+        normalized_base = base_url.rstrip("/")
+        normalized_path = path if path.startswith("/") else f"/{path}"
+        if join_policy == "dedupe_openai_v1":
+            if normalized_base.endswith("/v1") and normalized_path.startswith("/v1/"):
+                normalized_path = normalized_path[3:]
+            elif normalized_base.endswith("/openai/v1") and normalized_path.startswith("/openai/v1/"):
+                normalized_path = normalized_path[len("/openai/v1") :]
+        return f"{normalized_base}{normalized_path}"
+
+    @staticmethod
+    def _resolve_model_slug(profile: HarnessProviderProfile, model: str) -> str:
+        normalized_model = str(model or "").strip()
+        if "/" in normalized_model:
+            return normalized_model
+        if profile.model_slug_policy == "infer_vendor_if_missing":
+            inferred_vendor = HarnessService._infer_aggregator_vendor(normalized_model)
+            if inferred_vendor:
+                return f"{inferred_vendor}/{normalized_model}"
+        if profile.model_slug_policy == "prepend_prefix_if_missing":
+            prefix = profile.model_prefix.strip().strip("/")
+            if prefix and normalized_model:
+                return f"{prefix}/{normalized_model}"
+        return normalized_model
+
+    @staticmethod
+    def _infer_aggregator_vendor(model: str) -> str | None:
+        lowered = model.lower()
+        vendor_prefix_pairs = (
+            ("claude", "anthropic"),
+            ("gpt-", "openai"),
+            ("o1", "openai"),
+            ("o3", "openai"),
+            ("o4", "openai"),
+            ("text-embedding", "openai"),
+            ("omni-moderation", "openai"),
+            ("gemini", "google"),
+            ("moonshot", "moonshotai"),
+            ("kimi", "moonshotai"),
+            ("qwen", "qwen"),
+            ("grok", "x-ai"),
+            ("glm", "z-ai"),
+            ("deepseek", "deepseek"),
+            ("mistral", "mistral"),
+            ("codestral", "mistral"),
+            ("sonar", "perplexity"),
+        )
+        for prefix, vendor in vendor_prefix_pairs:
+            if lowered.startswith(prefix):
+                return vendor
+        return None
 
     def _render_template(self, template: Any, values: dict[str, Any]) -> Any:
         if isinstance(template, dict):

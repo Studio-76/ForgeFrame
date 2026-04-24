@@ -5,6 +5,7 @@ import type { AdminSessionUser } from "../src/api/admin";
 import {
   ExpansionTargetsSection,
   HarnessControlSection,
+  ProviderCatalogSection,
   ProviderInventorySection,
   ProvidersOverviewSection,
 } from "../src/features/providers/ProvidersSections";
@@ -185,6 +186,91 @@ function createData(sessionOverrides: Partial<AdminSessionUser> = {}): Providers
     modelErrors: {},
     integrationErrors: {},
     profileErrors: {},
+    providerCatalog: [
+      {
+        provider_id: "azure_openai",
+        display_name: "Azure OpenAI / Foundry",
+        raw_class: "openai_compatible_special",
+        provider_class: "openai_compatible",
+        source_kind: "api_matrix",
+        source_docs: ["API-AzureOpenAI.md"],
+        local_reference_paths: ["reference/Provider/API-AzureOpenAI.md"],
+        auth_modes_supported: ["api_key", "entra_token"],
+        api_modes_supported: ["chat_completions", "responses"],
+        primary_contracts: ["/openai/v1/chat/completions", "/openai/v1/responses"],
+        base_url_default: null,
+        base_url_override_env: null,
+        token_env_vars: ["AZURE_OPENAI_API_KEY"],
+        model_name_policy: "caller-supplied provider model identifier",
+        streaming_support_claim: "documented",
+        tools_support_claim: "documented",
+        responses_support_claim: "documented",
+        product_axis: "openai_compatible_providers",
+        runtime_provider_binding: null,
+        oauth_target_binding: null,
+        product_axis_binding: "openai_compatible_generic",
+        evidence_status: "repo_observed",
+        maturity_status: "contract-ready",
+        live_signoff_status: "blocked-by-live-evidence",
+        last_probe_at: null,
+        live_signoff_at: null,
+        signoff_notes: "Missing live evidence blocks any truthful signoff for this provider row.",
+        missing_evidence: ["live probe", "streaming", "tool calling"],
+        safe_next_action: "Use the generic OpenAI-compatible or client-compat framework and then collect live evidence for this exact provider.",
+        evidence_log: [
+          {
+            provider_id: "azure_openai",
+            evidence_class: "docs_declared",
+            status: "observed",
+            source_kind: "api_matrix",
+            source_ref: "API-AzureOpenAI.md",
+            recorded_at: "2026-04-24T10:00:00Z",
+            details: "Provider is declared in the V9 provider documentation package.",
+          },
+          {
+            provider_id: "azure_openai",
+            evidence_class: "repo_observed",
+            status: "observed",
+            source_kind: "repo_harness",
+            source_ref: "generic_harness",
+            recorded_at: "2026-04-24T10:00:00Z",
+            details: "Generic OpenAI-compatible provider framework exists through the harness adapter and onboarding surface.",
+          },
+          {
+            provider_id: "azure_openai",
+            evidence_class: "live_probe_verified",
+            status: "blocked-by-live-evidence",
+            source_kind: "repo_harness",
+            source_ref: "generic_harness",
+            recorded_at: "2026-04-24T10:00:00Z",
+            details: "Generic framework exists, but this exact provider has no live probe evidence yet.",
+          },
+        ],
+        signoff_history: [
+          {
+            provider_id: "azure_openai",
+            status: "blocked-by-live-evidence",
+            recorded_at: "2026-04-24T10:00:00Z",
+            details: "Missing live evidence blocks any truthful signoff for this provider row.",
+            evidence_basis: ["live_probe_verified", "streaming_verified", "tool_calling_verified"],
+          },
+        ],
+      },
+    ],
+    providerCatalogSummary: {
+      total_providers: 1,
+      documented_only: 0,
+      contract_ready: 1,
+      adapter_ready_without_live_proof: 0,
+      onboarding_only: 0,
+      bridge_only: 0,
+      partial_runtime: 0,
+      runtime_ready: 0,
+      fully_integrated: 0,
+      blocked_live_signoffs: 1,
+      pending_live_signoffs: 0,
+      signed_off: 0,
+    },
     clients: [],
     productAxisTargets: [
       {
@@ -264,6 +350,7 @@ function createData(sessionOverrides: Partial<AdminSessionUser> = {}): Providers
 describe("Provider readiness axes", () => {
   it("renders runtime and streaming readiness separately in the inventory and matrix", () => {
     const markup = renderToStaticMarkup(<ProviderInventorySection data={createData()} actions={createActions()} />);
+    const catalogMarkup = renderToStaticMarkup(<ProviderCatalogSection data={createData()} />);
     const inventoryReadinessDetail = "contract=runtime ready · runtime axis=ready · streaming axis=partial · provider axis=wired · compatibility depth=validated";
     const matrixReadinessDetail = "compatibility depth=validated · contract=runtime ready · runtime axis=partial · streaming axis=ready · provider axis=wired";
     const inventoryProofDetail = "harness proof=proven · proven profiles=generic_openai_like";
@@ -283,6 +370,10 @@ describe("Provider readiness axes", () => {
     expect(markup.split(matrixReadinessDetail)).toHaveLength(2);
     expect(markup).not.toContain("compatibility depth=validated · contract=runtime ready · runtime axis=ready · streaming axis=partial · provider axis=wired");
     expect(markup).not.toContain("contract=runtime ready · runtime axis=partial · streaming axis=ready · provider axis=wired · compatibility depth=validated");
+    expect(catalogMarkup).toContain("Azure OpenAI / Foundry (azure_openai)");
+    expect(catalogMarkup).toContain("maturity contract ready");
+    expect(catalogMarkup).toContain("signoff blocked by live evidence");
+    expect(catalogMarkup).toContain("missing evidence: live probe | streaming | tool calling");
   });
 
   it("uses warning tones for partial readiness and needs-attention states", () => {

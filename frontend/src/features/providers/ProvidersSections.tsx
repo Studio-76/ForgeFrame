@@ -4,6 +4,8 @@ import type {
   CapabilityEvidenceRecord,
   HarnessProfile,
   HealthConfig,
+  OpenAICompatibilityStatus,
+  ProviderCatalogEntry,
   ProviderCapabilityEvidenceRecord,
 } from "../../api/admin";
 import type { ProvidersPageActions, ProvidersPageData } from "./providersShared";
@@ -135,6 +137,53 @@ function toneFromProofStatus(status: "none" | "partial" | "proven"): Tone {
     return "warning";
   }
   return "neutral";
+}
+
+function toneFromCatalogMaturity(
+  status: ProviderCatalogEntry["maturity_status"],
+): Tone {
+  if (status === "runtime-ready" || status === "fully-integrated") {
+    return "success";
+  }
+  if (status === "partial-runtime" || status === "contract-ready" || status === "adapter-ready-without-live-proof") {
+    return "warning";
+  }
+  if (status === "documented-only" || status === "bridge-only" || status === "onboarding-only") {
+    return "neutral";
+  }
+  return "neutral";
+}
+
+function toneFromCatalogSignoff(
+  status: ProviderCatalogEntry["live_signoff_status"],
+): Tone {
+  if (status === "signed-off") {
+    return "success";
+  }
+  if (status === "pending-review") {
+    return "warning";
+  }
+  if (status === "blocked-by-live-evidence") {
+    return "danger";
+  }
+  return "neutral";
+}
+
+function toneFromOpenAICompatibilityStatus(status: OpenAICompatibilityStatus): Tone {
+  if (status === "supported") {
+    return "success";
+  }
+  if (status === "partial") {
+    return "warning";
+  }
+  if (status === "unsupported" || status === "blocked-by-live-evidence") {
+    return "danger";
+  }
+  return "neutral";
+}
+
+function formatCatalogLabel(value: string): string {
+  return value.replaceAll("_", " ").replaceAll("-", " ");
 }
 
 function formatEvidenceSource(source: CapabilityEvidenceRecord["source"]): string {
@@ -372,7 +421,33 @@ export function OperationResultSection({ data, actions }: SectionProps) {
 export function HarnessControlSection({ data, actions }: SectionProps) {
   const availableTemplates = data.templates.filter((template) => template.integration_class === data.newHarness.integration_class);
   const selectedTemplateValue = availableTemplates.some((template) => template.id === data.newHarness.template_id) ? data.newHarness.template_id : "";
+  const selectedTemplate = availableTemplates.find((template) => template.id === selectedTemplateValue);
   const lastFailedRun = asRecord(data.runOps.last_failed_run);
+
+  const applyTemplateDefaults = (templateId: string, integrationClass = data.newHarness.integration_class) => {
+    const template = data.templates.find((item) => item.id === templateId);
+    if (!template?.profile_defaults) {
+      actions.setNewHarness((current) => ({
+        ...current,
+        integration_class: integrationClass,
+        template_id: templateId,
+      }));
+      return;
+    }
+    const defaults = template.profile_defaults;
+    actions.setNewHarness((current) => ({
+      ...current,
+      provider_key: defaults.provider_key || current.provider_key,
+      label: defaults.label || current.label,
+      template_id: template.id,
+      integration_class: defaults.integration_class,
+      endpoint_base_url: defaults.endpoint_base_url || current.endpoint_base_url,
+      auth_scheme: defaults.auth_scheme,
+      auth_header: defaults.auth_header || current.auth_header,
+      models: defaults.models.join(", "),
+      stream_enabled: Boolean(defaults.capabilities?.streaming),
+    }));
+  };
 
   return (
     <>
@@ -391,7 +466,11 @@ export function HarnessControlSection({ data, actions }: SectionProps) {
             <ul className="fg-list">
               {data.templates.map((template) => (
                 <li key={template.id}>
-                  {template.label} ({template.id}) · class={template.integration_class} · {template.description}
+                  {template.label} ({template.id}) · class={template.integration_class}
+                  {template.profile_defaults?.endpoint_base_url ? ` · base=${template.profile_defaults.endpoint_base_url}` : ""}
+                  {template.profile_defaults?.models?.length ? ` · model=${template.profile_defaults.models[0]}` : ""}
+                  {template.profile_defaults?.model_slug_policy ? ` · slug=${template.profile_defaults.model_slug_policy}` : ""}
+                  {template.description ? ` · ${template.description}` : ""}
                 </li>
               ))}
             </ul>
@@ -424,10 +503,14 @@ export function HarnessControlSection({ data, actions }: SectionProps) {
                     onChange={(event) => {
                       const integrationClass = event.target.value as HarnessProfile["integration_class"];
                       const fallbackTemplate = data.templates.find((template) => template.integration_class === integrationClass)?.id ?? "";
+                      if (fallbackTemplate) {
+                        applyTemplateDefaults(fallbackTemplate, integrationClass);
+                        return;
+                      }
                       actions.setNewHarness((current) => ({
                         ...current,
                         integration_class: integrationClass,
-                        template_id: fallbackTemplate,
+                        template_id: "",
                       }));
                     }}
                   >
@@ -440,7 +523,7 @@ export function HarnessControlSection({ data, actions }: SectionProps) {
                   Template
                   <select
                     value={selectedTemplateValue}
-                    onChange={(event) => actions.setNewHarness((current) => ({ ...current, template_id: event.target.value }))}
+                    onChange={(event) => applyTemplateDefaults(event.target.value)}
                   >
                     <option value="">none</option>
                     {availableTemplates.map((template) => (
@@ -450,6 +533,11 @@ export function HarnessControlSection({ data, actions }: SectionProps) {
                     ))}
                   </select>
                 </label>
+                {selectedTemplate?.profile_defaults?.capabilities?.unsupported_features?.length ? (
+                  <p className="fg-note">
+                    preset unsupported features: {selectedTemplate.profile_defaults.capabilities.unsupported_features.join(" | ")}
+                  </p>
+                ) : null}
                 <label>
                   Endpoint base URL
                   <input
@@ -929,6 +1017,170 @@ export function ProviderInventorySection({ data, actions }: SectionProps) {
         </ul>
       </SectionCard>
     </>
+  );
+}
+
+export function ProviderCatalogSection({ data }: { data: ProvidersPageData }) {
+  const summary = data.providerCatalogSummary;
+
+  return (
+    <SectionCard
+      title="Provider Contract Catalog"
+      description="This catalog is the V9 provider truth backlog: docs-declared contract rows, current repo surface, missing proof, and blocked live signoff are separated so documentation cannot masquerade as runtime support."
+    >
+      {summary ? (
+        <div className="fg-grid fg-grid-compact fg-mb-md">
+          <MetricTile label="Catalog rows" value={formatMetric(summary.total_providers)} note={`${formatMetric(summary.documented_only)} documented only`} />
+          <MetricTile label="Contract ready" value={formatMetric(summary.contract_ready)} note={`${formatMetric(summary.adapter_ready_without_live_proof)} adapter ready without live proof`} />
+          <MetricTile label="Runtime ready" value={formatMetric(summary.runtime_ready)} note={`${formatMetric(summary.partial_runtime)} partial runtime`} />
+          <MetricTile label="Live signoff blocked" value={formatMetric(summary.blocked_live_signoffs)} note={`${formatMetric(summary.pending_live_signoffs)} pending review`} />
+        </div>
+      ) : null}
+
+      <div className="fg-card-grid">
+        {data.providerCatalog.map((entry) => {
+          const latestEvidence = ["docs_declared", "repo_observed", "live_probe_verified", "streaming_verified", "tool_calling_verified"].map(
+            (evidenceClass) => entry.evidence_log.filter((item) => item.evidence_class === evidenceClass).at(-1),
+          );
+          const latestSignoff = entry.signoff_history.at(-1);
+          return (
+            <article key={entry.provider_id} className="fg-subcard">
+              <div className="fg-panel-heading">
+                <div>
+                  <h4>
+                    {entry.display_name} ({entry.provider_id})
+                  </h4>
+                  <p className="fg-muted">
+                    class={formatCatalogLabel(entry.provider_class)} · raw={entry.raw_class} · axis={formatProviderAxis(entry.product_axis)}
+                  </p>
+                </div>
+                <div className="fg-actions">
+                  <TonePill label={`maturity ${formatCatalogLabel(entry.maturity_status)}`} tone={toneFromCatalogMaturity(entry.maturity_status)} />
+                  <TonePill label={`signoff ${formatCatalogLabel(entry.live_signoff_status)}`} tone={toneFromCatalogSignoff(entry.live_signoff_status)} />
+                  <TonePill label={`evidence ${formatCatalogLabel(entry.evidence_status)}`} tone={entry.evidence_status === "repo_observed" || entry.evidence_status === "live_probe_verified" ? "success" : "neutral"} />
+                </div>
+              </div>
+
+              <div className="fg-detail-grid">
+                <p>
+                  auth modes={entry.auth_modes_supported.length > 0 ? joinList(entry.auth_modes_supported) : "none"} · api modes=
+                  {entry.api_modes_supported.length > 0 ? joinList(entry.api_modes_supported) : "none"}
+                </p>
+                <p>
+                  runtime binding={entry.runtime_provider_binding ?? "-"} · oauth binding={entry.oauth_target_binding ?? "-"} · axis binding=
+                  {entry.product_axis_binding ?? "-"}
+                </p>
+                <p>
+                  streaming claim={entry.streaming_support_claim} · tools claim={entry.tools_support_claim} · responses claim=
+                  {entry.responses_support_claim}
+                </p>
+                <p>
+                  base URL={entry.base_url_default ?? "-"} · override env={entry.base_url_override_env ?? "-"} · token env=
+                  {entry.token_env_vars.length > 0 ? joinList(entry.token_env_vars) : "-"}
+                </p>
+                <p>
+                  source docs={entry.source_docs.length > 0 ? joinList(entry.source_docs) : "-"} · local refs={formatMetric(entry.local_reference_paths.length)}
+                </p>
+                <p>safe next action: {entry.safe_next_action}</p>
+                {entry.missing_evidence.length > 0 ? <p className="fg-note">missing evidence: {entry.missing_evidence.join(" | ")}</p> : null}
+                {entry.signoff_notes ? <p className="fg-note">signoff note: {entry.signoff_notes}</p> : null}
+              </div>
+
+              <details className="fg-mt-sm">
+                <summary>Current contract vs evidence</summary>
+                <ul className="fg-list">
+                  {latestEvidence.map((item, index) =>
+                    item ? (
+                      <li key={`${item.evidence_class}-${index}`}>
+                        {formatCatalogLabel(item.evidence_class)} · status={formatCatalogLabel(item.status)} · source={formatCatalogLabel(item.source_kind)} · recorded=
+                        {formatTimestamp(item.recorded_at)} · details={item.details}
+                      </li>
+                    ) : null,
+                  )}
+                </ul>
+                {latestSignoff ? (
+                  <p className="fg-note">
+                    latest signoff={formatCatalogLabel(latestSignoff.status)} · recorded={formatTimestamp(latestSignoff.recorded_at)} · details=
+                    {latestSignoff.details}
+                  </p>
+                ) : null}
+              </details>
+            </article>
+          );
+        })}
+      </div>
+    </SectionCard>
+  );
+}
+
+export function OpenAICompatibilitySection({ data }: { data: ProvidersPageData }) {
+  const signoff = data.openaiCompatibilitySignoff;
+
+  if (!signoff) {
+    return (
+      <SectionCard
+        title="OpenAI Compatibility Signoff"
+        description="This surface stays explicit about what is verified, partial, blocked by missing live evidence, or entirely absent."
+      >
+        <p className="fg-muted">No compatibility signoff payload is currently available for this instance.</p>
+      </SectionCard>
+    );
+  }
+
+  const summary = signoff.summary;
+
+  return (
+    <SectionCard
+      title="OpenAI Compatibility Signoff"
+      description="This is the hard corpus-level compatibility truth for the current instance. Runtime evidence and known deviations are separated so `/v1/responses` cannot quietly borrow green status from chat-only paths."
+    >
+      <div className="fg-grid fg-grid-compact fg-mb-md">
+        <MetricTile label="Corpus checks" value={formatMetric(summary.total_checks)} note={`${formatMetric(summary.supported)} supported`} />
+        <MetricTile label="Partial" value={formatMetric(summary.partial)} note={`${formatMetric(summary.blocked_by_live_evidence)} blocked by live evidence`} />
+        <MetricTile label="Unsupported" value={formatMetric(summary.unsupported)} note={`${formatMetric(summary.skipped)} skipped`} />
+        <MetricTile
+          label="Overall"
+          value={formatCatalogLabel(summary.overall_status)}
+          note={summary.signoff_claimable ? "signoff claimable" : "signoff not claimable"}
+        />
+      </div>
+
+      <div className="fg-card-grid">
+        {signoff.rows.map((row) => (
+          <article key={row.corpus_class} className="fg-subcard">
+            <div className="fg-panel-heading">
+              <div>
+                <h4>{row.label}</h4>
+                <p className="fg-muted">
+                  {row.corpus_class} · route={row.route ?? "-"} · axis={row.provider_axis ?? "-"}
+                </p>
+              </div>
+              <div className="fg-actions">
+                <TonePill label={formatCatalogLabel(row.status)} tone={toneFromOpenAICompatibilityStatus(row.status)} />
+                <TonePill label={row.live_evidence_required ? "live evidence required" : "repo truth allowed"} tone={row.live_evidence_required ? "warning" : "neutral"} />
+              </div>
+            </div>
+
+            <div className="fg-detail-grid">
+              <p>evidence source={row.evidence_source}</p>
+              <p>last verified={formatTimestamp(row.last_verified_at)} · sample request={row.sample_request_id ?? "-"}</p>
+              <p>deviation reason: {row.deviation_reason ?? "none"}</p>
+              <p>raw diff summary: {row.raw_diff_summary ?? "none"}</p>
+              {row.notes ? <p className="fg-note">{row.notes}</p> : null}
+            </div>
+          </article>
+        ))}
+      </div>
+
+      <div className="fg-subcard fg-mt-sm">
+        <h4>Operator notes</h4>
+        <ul className="fg-list">
+          {signoff.notes.map((note) => (
+            <li key={note}>{note}</li>
+          ))}
+        </ul>
+      </div>
+    </SectionCard>
   );
 }
 

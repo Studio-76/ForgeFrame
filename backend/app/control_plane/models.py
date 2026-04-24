@@ -93,6 +93,184 @@ class ManagedProviderTargetRecord(BaseModel):
     stale_since: str | None = None
 
 
+ProviderCatalogClass = Literal[
+    "openai_compatible",
+    "openai_compatible_aggregator",
+    "openai_compatible_local",
+    "anthropic_messages",
+    "gemini_native",
+    "bedrock_converse",
+    "oauth_account_runtime",
+    "oauth_cli_bridge",
+    "external_process",
+    "agent_endpoint_compat",
+    "client_config_reference",
+    "unsupported_documented",
+]
+
+ProviderCatalogMaturityStatus = Literal[
+    "documented-only",
+    "contract-ready",
+    "adapter-ready-without-live-proof",
+    "onboarding-only",
+    "bridge-only",
+    "partial-runtime",
+    "runtime-ready",
+    "fully-integrated",
+]
+
+ProviderCatalogEvidenceClass = Literal[
+    "docs_declared",
+    "repo_observed",
+    "unit_tested",
+    "contract_tested",
+    "live_probe_verified",
+    "streaming_verified",
+    "tool_calling_verified",
+    "error_fidelity_verified",
+    "credential_refresh_verified",
+    "ui_operator_verified",
+]
+
+ProviderCatalogEvidenceStatus = Literal[
+    "missing",
+    "observed",
+    "failed",
+    "skipped",
+    "blocked-by-live-evidence",
+]
+
+ProviderCatalogSignoffStatus = Literal[
+    "not-requested",
+    "blocked-by-live-evidence",
+    "pending-review",
+    "signed-off",
+    "skipped",
+]
+
+ProviderCatalogSourceKind = Literal["api_matrix", "oauth_matrix", "reference_only", "runtime_surface"]
+
+
+class ProviderCatalogEvidenceRecord(BaseModel):
+    provider_id: str
+    target_key: str | None = None
+    evidence_class: ProviderCatalogEvidenceClass
+    status: ProviderCatalogEvidenceStatus = "missing"
+    source_kind: str = "unknown"
+    source_ref: str | None = None
+    recorded_at: str | None = None
+    details: str = ""
+
+
+class ProviderCatalogSignoffRecord(BaseModel):
+    provider_id: str
+    target_key: str | None = None
+    status: ProviderCatalogSignoffStatus = "not-requested"
+    recorded_at: str | None = None
+    details: str = ""
+    evidence_basis: list[ProviderCatalogEvidenceClass] = Field(default_factory=list)
+
+
+class ProviderCatalogRecord(BaseModel):
+    provider_id: str
+    display_name: str
+    raw_class: str
+    provider_class: ProviderCatalogClass
+    source_kind: ProviderCatalogSourceKind
+    source_docs: list[str] = Field(default_factory=list)
+    local_reference_paths: list[str] = Field(default_factory=list)
+    auth_modes_supported: list[str] = Field(default_factory=list)
+    api_modes_supported: list[str] = Field(default_factory=list)
+    primary_contracts: list[str] = Field(default_factory=list)
+    base_url_default: str | None = None
+    base_url_override_env: str | None = None
+    token_env_vars: list[str] = Field(default_factory=list)
+    model_name_policy: str = "provider-defined"
+    streaming_support_claim: str = "unknown"
+    tools_support_claim: str = "unknown"
+    responses_support_claim: str = "unknown"
+    product_axis: str = "unknown"
+    runtime_provider_binding: str | None = None
+    oauth_target_binding: str | None = None
+    product_axis_binding: str | None = None
+    evidence_status: str = "none"
+    maturity_status: ProviderCatalogMaturityStatus = "documented-only"
+    live_signoff_status: ProviderCatalogSignoffStatus = "not-requested"
+    last_probe_at: str | None = None
+    live_signoff_at: str | None = None
+    signoff_notes: str | None = None
+    missing_evidence: list[str] = Field(default_factory=list)
+    safe_next_action: str = "No action calculated yet."
+    evidence_log: list[ProviderCatalogEvidenceRecord] = Field(default_factory=list)
+    signoff_history: list[ProviderCatalogSignoffRecord] = Field(default_factory=list)
+
+
+class ProviderCatalogSummaryRecord(BaseModel):
+    total_providers: int = 0
+    documented_only: int = 0
+    contract_ready: int = 0
+    adapter_ready_without_live_proof: int = 0
+    onboarding_only: int = 0
+    bridge_only: int = 0
+    partial_runtime: int = 0
+    runtime_ready: int = 0
+    fully_integrated: int = 0
+    blocked_live_signoffs: int = 0
+    pending_live_signoffs: int = 0
+    signed_off: int = 0
+
+
+OpenAICompatibilityCorpusClass = Literal[
+    "chat_simple",
+    "chat_multimodal",
+    "responses_simple",
+    "responses_input_items",
+    "streaming_chat",
+    "streaming_responses",
+    "tool_calling",
+    "structured_output",
+    "error_semantics",
+    "unsupported_partial_fields",
+    "model_listing",
+    "files",
+    "embeddings",
+]
+
+OpenAICompatibilityStatus = Literal[
+    "supported",
+    "partial",
+    "unsupported",
+    "skipped",
+    "blocked-by-live-evidence",
+]
+
+
+class OpenAICompatibilitySignoffRecord(BaseModel):
+    corpus_class: OpenAICompatibilityCorpusClass
+    label: str
+    status: OpenAICompatibilityStatus = "unsupported"
+    route: str | None = None
+    provider_axis: str | None = None
+    live_evidence_required: bool = False
+    deviation_reason: str | None = None
+    evidence_source: str = "repo_gap"
+    last_verified_at: str | None = None
+    sample_request_id: str | None = None
+    raw_diff_summary: str | None = None
+    notes: str | None = None
+
+
+class OpenAICompatibilitySummaryRecord(BaseModel):
+    total_checks: int = 0
+    supported: int = 0
+    partial: int = 0
+    unsupported: int = 0
+    skipped: int = 0
+    blocked_by_live_evidence: int = 0
+    signoff_claimable: bool = False
+    overall_status: Literal["supported", "partial", "unsupported"] = "unsupported"
+
+
 RoutingClassificationLabel = Literal["simple", "non_simple"]
 RoutingExecutionLane = Literal["sync_interactive", "queued_background"]
 RoutingPolicyStage = Literal["preferred", "fallback", "escalation", "requested_model", "blocked"]
@@ -355,10 +533,11 @@ class ProviderTruthAxesRecord(BaseModel):
 
 
 class ControlPlaneStateRecord(BaseModel):
-    schema_version: int = 5
+    schema_version: int = 6
     instance_id: str = DEFAULT_BOOTSTRAP_TENANT_ID
     providers: list[ManagedProviderRecord] = Field(default_factory=list)
     provider_targets: list[ManagedProviderTargetRecord] = Field(default_factory=list)
+    provider_catalog: list[ProviderCatalogRecord] = Field(default_factory=list)
     routing_policies: list[RoutingPolicyRecord] = Field(default_factory=list)
     routing_budget_state: RoutingBudgetStateRecord = Field(default_factory=RoutingBudgetStateRecord)
     routing_circuits: list[RoutingCircuitStateRecord] = Field(default_factory=list)

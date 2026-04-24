@@ -191,8 +191,14 @@ def test_admin_provider_product_axis_targets_endpoint_available() -> None:
     targets = payload["targets"]
     assert any(item["provider_key"] == "ollama" for item in targets)
     assert any(item["provider_key"] == "openai_codex" for item in targets)
+    assert any(item["provider_key"] == "nous_oauth" for item in targets)
+    assert any(item["provider_key"] == "qwen_oauth" for item in targets)
+    assert any(item["provider_key"] == "localai" for item in targets)
     codex = next(item for item in targets if item["provider_key"] == "openai_codex")
     antigravity = next(item for item in targets if item["provider_key"] == "antigravity")
+    nous_oauth = next(item for item in targets if item["provider_key"] == "nous_oauth")
+    qwen_oauth = next(item for item in targets if item["provider_key"] == "qwen_oauth")
+    localai = next(item for item in targets if item["provider_key"] == "localai")
     client_axis = next(item for item in targets if item["provider_key"] == "openai_client_compat")
     assert codex["product_axis"] == "oauth_account_providers"
     assert codex["contract_classification"] in {"partial-runtime", "runtime-ready", "onboarding-only"}
@@ -201,6 +207,12 @@ def test_admin_provider_product_axis_targets_endpoint_available() -> None:
     assert "readiness_score" in codex
     assert antigravity["runtime_readiness"] == "planned"
     assert antigravity["contract_classification"] in {"bridge-only", "onboarding-only"}
+    assert nous_oauth["provider_type"] == "oauth_account"
+    assert "agent key" in nous_oauth["notes"]
+    assert qwen_oauth["provider_type"] == "oauth_account"
+    assert "QwenCode" in qwen_oauth["classification_reason"]
+    assert localai["provider_type"] == "local"
+    assert localai["contract_classification"] in {"partial-runtime", "onboarding-only"}
     assert client_axis["contract_classification"] == "partial-runtime"
     assert client_axis["classification_reason"].startswith("The public OpenAI-compatible surface is live")
 
@@ -463,7 +475,7 @@ def test_admin_provider_truth_and_oauth_targets_keep_gemini_non_ready_when_bridg
     assert gemini_truth["runtime_readiness"] == "partial"
     assert gemini_truth["evidence"]["runtime"]["status"] == "observed"
     assert gemini_truth["evidence"]["live_probe"]["status"] == "observed"
-    assert gemini_truth["readiness_reason"] == "FORGEGATE_GEMINI_PROBE_BASE_URL must be an absolute http(s) URL."
+    assert gemini_truth["readiness_reason"] == "FORGEFRAME_GEMINI_PROBE_BASE_URL must be an absolute http(s) URL."
 
     targets_response = client.get("/admin/providers/oauth-account/targets", headers=headers)
     assert targets_response.status_code == 200
@@ -473,7 +485,7 @@ def test_admin_provider_truth_and_oauth_targets_keep_gemini_non_ready_when_bridg
     assert gemini_target["probe_enabled"] is True
     assert gemini_target["evidence"]["runtime"]["status"] == "observed"
     assert gemini_target["evidence"]["live_probe"]["status"] == "observed"
-    assert gemini_target["readiness_reason"] == "FORGEGATE_GEMINI_PROBE_BASE_URL must be an absolute http(s) URL."
+    assert gemini_target["readiness_reason"] == "FORGEFRAME_GEMINI_PROBE_BASE_URL must be an absolute http(s) URL."
 
 
 def test_admin_product_axis_targets_keep_gemini_probe_truth_partial_when_bridge_base_url_is_invalid(
@@ -520,7 +532,7 @@ def test_admin_product_axis_targets_keep_gemini_probe_truth_partial_when_bridge_
     assert gemini_target["readiness_score"] == 46
     assert gemini_target["evidence"]["runtime"]["status"] == "observed"
     assert gemini_target["evidence"]["live_probe"]["status"] == "observed"
-    assert gemini_target["status_summary"] == "FORGEGATE_GEMINI_PROBE_BASE_URL must be an absolute http(s) URL."
+    assert gemini_target["status_summary"] == "FORGEFRAME_GEMINI_PROBE_BASE_URL must be an absolute http(s) URL."
 
 
 def test_admin_gemini_product_axis_and_oauth_targets_honor_tenant_id(
@@ -631,7 +643,7 @@ def test_admin_provider_truth_and_oauth_targets_keep_codex_non_ready_when_bridge
     assert codex_truth["runtime_readiness"] == "partial"
     assert codex_truth["evidence"]["runtime"]["status"] == "observed"
     assert codex_truth["evidence"]["live_probe"]["status"] == "observed"
-    assert codex_truth["readiness_reason"] == "FORGEGATE_OPENAI_CODEX_BASE_URL must be an absolute http(s) URL."
+    assert codex_truth["readiness_reason"] == "FORGEFRAME_OPENAI_CODEX_BASE_URL must be an absolute http(s) URL."
 
     targets_response = client.get("/admin/providers/oauth-account/targets", headers=headers)
     assert targets_response.status_code == 200
@@ -641,7 +653,7 @@ def test_admin_provider_truth_and_oauth_targets_keep_codex_non_ready_when_bridge
     assert codex_target["probe_enabled"] is True
     assert codex_target["evidence"]["runtime"]["status"] == "observed"
     assert codex_target["evidence"]["live_probe"]["status"] == "observed"
-    assert codex_target["readiness_reason"] == "FORGEGATE_OPENAI_CODEX_BASE_URL must be an absolute http(s) URL."
+    assert codex_target["readiness_reason"] == "FORGEFRAME_OPENAI_CODEX_BASE_URL must be an absolute http(s) URL."
 
 
 def test_admin_product_axis_targets_keep_codex_probe_truth_partial_when_bridge_base_url_is_invalid(
@@ -688,7 +700,7 @@ def test_admin_product_axis_targets_keep_codex_probe_truth_partial_when_bridge_b
     assert codex_target["readiness_score"] == 48
     assert codex_target["evidence"]["runtime"]["status"] == "observed"
     assert codex_target["evidence"]["live_probe"]["status"] == "observed"
-    assert codex_target["status_summary"] == "FORGEGATE_OPENAI_CODEX_BASE_URL must be an absolute http(s) URL."
+    assert codex_target["status_summary"] == "FORGEFRAME_OPENAI_CODEX_BASE_URL must be an absolute http(s) URL."
 
 
 def test_admin_oauth_account_targets_keep_bridge_only_targets_partial_even_after_probe_evidence(
@@ -776,11 +788,15 @@ def test_admin_oauth_operations_summary_honors_api_key_mode_for_native_targets(
     operations = response.json()["operations"]
     codex = next(item for item in operations if item["provider_key"] == "openai_codex")
     gemini = next(item for item in operations if item["provider_key"] == "gemini")
+    nous = next(item for item in operations if item["provider_key"] == "nous_oauth")
+    qwen = next(item for item in operations if item["provider_key"] == "qwen_oauth")
 
     assert codex["configured"] is True
     assert gemini["configured"] is True
     assert codex["bridge_profile_enabled"] is False
     assert gemini["bridge_profile_enabled"] is False
+    assert nous["configured"] is False
+    assert qwen["configured"] is False
 
 
 def test_admin_provider_truth_and_product_axis_targets_promote_native_oauth_axes_only_after_recorded_evidence(
@@ -908,12 +924,83 @@ def test_admin_oauth_account_targets_and_bridge_sync_endpoints_available() -> No
     targets_payload = targets_response.json()
     assert targets_payload["status"] == "ok"
     assert any(item["provider_key"] == "antigravity" for item in targets_payload["targets"])
+    assert any(item["provider_key"] == "nous_oauth" for item in targets_payload["targets"])
+    assert any(item["provider_key"] == "qwen_oauth" for item in targets_payload["targets"])
 
     sync_response = client.post("/admin/providers/oauth-account/bridge-profiles/sync", json={}, headers=headers)
     assert sync_response.status_code == 200
     sync_payload = sync_response.json()
     assert sync_payload["status"] == "ok"
     assert "upserted_profiles" in sync_payload
+
+
+def test_admin_oauth_account_targets_capture_nous_and_qwen_truth(
+    monkeypatch,
+) -> None:
+    monkeypatch.setenv("FORGEGATE_NOUS_OAUTH_ACCESS_TOKEN", "nous-account-token")
+    monkeypatch.setenv("FORGEGATE_NOUS_OAUTH_PROBE_ENABLED", "true")
+    monkeypatch.setenv("FORGEGATE_NOUS_OAUTH_BRIDGE_PROFILE_ENABLED", "true")
+    monkeypatch.setenv("FORGEGATE_QWEN_OAUTH_ACCESS_TOKEN", "qwen-account-token")
+    monkeypatch.setenv("FORGEGATE_QWEN_OAUTH_PROBE_ENABLED", "true")
+    clear_runtime_dependency_caches()
+    get_control_plane_service.cache_clear()
+
+    targets_response = client.get("/admin/providers/oauth-account/targets", headers=_admin_headers())
+    assert targets_response.status_code == 200
+    targets = {item["provider_key"]: item for item in targets_response.json()["targets"]}
+    assert "nous_oauth" in targets
+    assert "qwen_oauth" in targets
+    assert "minted agent key" in targets["nous_oauth"]["operator_truth"]
+    assert "QwenCode" in targets["qwen_oauth"]["operator_truth"]
+    assert "QwenCode/DashScope headers" in targets["qwen_oauth"]["readiness_reason"]
+
+    onboarding_response = client.get("/admin/providers/oauth-account/onboarding", headers=_admin_headers())
+    assert onboarding_response.status_code == 200
+    onboarding = {item["provider_key"]: item for item in onboarding_response.json()["targets"]}
+    assert any("minted Nous runtime agent key" in step for step in onboarding["nous_oauth"]["next_steps"])
+    assert any("QwenCode/DashScope header set" in step for step in onboarding["qwen_oauth"]["next_steps"])
+
+
+def test_admin_oauth_bridge_profile_sync_applies_qwen_headers_and_skips_nous_without_runtime_agent_key(
+    monkeypatch,
+) -> None:
+    monkeypatch.setenv("FORGEGATE_NOUS_OAUTH_ACCESS_TOKEN", "nous-account-token")
+    monkeypatch.setenv("FORGEGATE_NOUS_OAUTH_BRIDGE_PROFILE_ENABLED", "true")
+    monkeypatch.delenv("FORGEGATE_NOUS_OAUTH_RUNTIME_AGENT_KEY", raising=False)
+    monkeypatch.setenv("FORGEGATE_QWEN_OAUTH_ACCESS_TOKEN", "qwen-account-token")
+    monkeypatch.setenv("FORGEGATE_QWEN_OAUTH_BRIDGE_PROFILE_ENABLED", "true")
+    clear_runtime_dependency_caches()
+    get_control_plane_service.cache_clear()
+
+    sync_response = client.post(
+        "/admin/providers/oauth-account/bridge-profiles/sync",
+        json={},
+        headers=_admin_headers(),
+    )
+    assert sync_response.status_code == 200
+    payload = sync_response.json()
+    assert "qwen_oauth_bridge" in payload["upserted_profiles"]
+    assert "nous_oauth" in payload["skipped"]
+
+    service = get_control_plane_service()
+    qwen_profile = next(profile for profile in service.list_harness_profiles() if profile.provider_key == "qwen_oauth_bridge")
+    assert qwen_profile.request_mapping.headers["X-DashScope-AuthType"] == "qwen-oauth"
+    assert qwen_profile.request_mapping.headers["X-DashScope-CacheControl"] == "enable"
+    assert qwen_profile.auth_value == "qwen-account-token"
+
+
+def test_admin_product_axis_targets_include_exact_local_provider_rows() -> None:
+    response = client.get("/admin/providers/product-axis-targets", headers=_admin_headers())
+    assert response.status_code == 200
+    targets = {item["provider_key"]: item for item in response.json()["targets"]}
+
+    for provider_key in ("localai", "llama_cpp", "llama_cpp_python", "vllm"):
+        assert provider_key in targets
+        row = targets[provider_key]
+        assert row["provider_type"] == "local"
+        assert row["product_axis"] == "local_providers"
+        assert row["operator_surface"] == "/providers#harness-control"
+        assert row["contract_classification"] in {"onboarding-only", "partial-runtime"}
 
 
 def test_admin_dashboard_and_security_modules_available() -> None:

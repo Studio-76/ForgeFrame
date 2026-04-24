@@ -1,0 +1,160 @@
+Inference API - REST API Reference | xAI Docs
+
+Docs
+
+REST API
+
+gRPC
+
+Pricing
+
+Search
+
+⌘K
+
+Toggle theme
+
+Inference API
+
+Overview
+
+Chat
+
+Images
+
+Videos
+
+Voice
+
+Models
+
+Batches
+
+Other
+
+Legacy & Deprecated
+
+Collections API
+
+Overview
+
+Collection Management
+
+Search in Collections
+
+Files API
+
+Overview
+
+Upload
+
+Manage
+
+Download
+
+Management API
+
+Overview
+
+Using Management API
+
+Accounts and Authorization
+
+Billing Management
+
+Audit Logs
+
+API Console
+
+Loading...
+
+DocsREST APIgRPCPricing
+
+Inference API
+
+Overview
+
+Chat
+
+Images
+
+Videos
+
+Voice
+
+Models
+
+Batches
+
+Other
+
+Legacy & Deprecated
+
+Collections API
+
+Overview
+
+Collection Management
+
+Search in Collections
+
+Files API
+
+Overview
+
+Upload
+
+Manage
+
+Download
+
+Management API
+
+Overview
+
+Using Management API
+
+Accounts and Authorization
+
+Billing Management
+
+Audit Logs
+
+API Console
+
+Loading...
+
+Inference API
+
+Inference REST API Overview
+
+Copy for LLMView as Markdown
+
+The xAI Inference REST API is a robust, high-performance RESTful interface designed for seamless integration into existing systems.
+It offers advanced AI capabilities with full compatibility with the OpenAI REST API.
+
+The base for all routes is at https://api.x.ai. For all routes, you have to authenticate with the header Authorization: Bearer <your xAI API key>.
+
+Chat
+
+Images
+
+Videos
+
+Voice
+
+Models
+
+Files
+
+Batches
+
+Other
+
+Legacy & Deprecated
+
+Did you find this page helpful?
+
+ Yes No
+
+Last updated: March 6, 2026

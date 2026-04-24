@@ -8,7 +8,9 @@ import { InstanceScopeCard } from "../components/InstanceScopeCard";
 import { PageIntro } from "../components/PageIntro";
 import {
   ExpansionTargetsSection,
+  OpenAICompatibilitySection,
   OperationResultSection,
+  ProviderCatalogSection,
   ProviderInventorySection,
   ProvidersOverviewSection,
 } from "../features/providers/ProvidersSections";
@@ -94,6 +96,12 @@ export function ProvidersPage() {
         <OperationResultSection data={data} actions={actions} />
         <div id="provider-health-runs">
           <ProviderInventorySection data={data} actions={actions} />
+        </div>
+        <div id="provider-catalog">
+          <ProviderCatalogSection data={data} />
+        </div>
+        <div id="provider-openai-compatibility">
+          <OpenAICompatibilitySection data={data} />
         </div>
         <div id="expansion-targets">
           <ExpansionTargetsSection data={data} actions={actions} />

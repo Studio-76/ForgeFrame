@@ -69,6 +69,9 @@ function createData(access: ProvidersAccessState): ProvidersPageData {
     modelErrors: {},
     integrationErrors: {},
     profileErrors: {},
+    providerCatalog: [],
+    providerCatalogSummary: null,
+    openaiCompatibilitySignoff: null,
     clients: [],
     productAxisTargets: [],
     oauthTargets: [],
@@ -135,6 +138,8 @@ describe("Providers page hierarchy", () => {
     expect(markup).toContain("href=\"/harness\"");
     expect(markup).toContain(">Provider Health &amp; Runs<");
     expect(markup).toContain(">Control-Plane Summary</h3>");
+    expect(markup).toContain(">Provider Contract Catalog</h3>");
+    expect(markup).toContain(">OpenAI Compatibility Signoff</h3>");
     expect(markup).toContain("Admin mutations enabled");
     expect(markup).toContain("Sync all providers");
     expect(markup).toContain("Providers Control Plane");

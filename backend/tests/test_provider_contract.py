@@ -1,3 +1,5 @@
+import json
+
 import httpx
 import pytest
 
@@ -5,6 +7,7 @@ from app.auth.oauth.openai import resolve_codex_auth_state
 from app.api.admin.control_plane import get_control_plane_service
 from app.auth.oauth.gemini import resolve_gemini_auth_state
 from app.providers.anthropic.adapter import AnthropicAdapter
+from app.providers.bedrock.adapter import BedrockAdapter
 from app.providers.base import (
     ChatDispatchRequest,
     ProviderCapabilities,
@@ -58,7 +61,7 @@ def test_openai_provider_capabilities_and_readiness() -> None:
 def test_openai_provider_reports_invalid_base_url_as_not_ready() -> None:
     adapter = OpenAIAPIAdapter(Settings(openai_api_key="abc", openai_api_base_url="not-a-url"))
     assert adapter.is_ready() is False
-    assert adapter.readiness_reason() == "FORGEGATE_OPENAI_API_BASE_URL must be an absolute http(s) URL."
+    assert adapter.readiness_reason() == "FORGEFRAME_OPENAI_API_BASE_URL must be an absolute http(s) URL."
 
 
 def test_anthropic_provider_axis_stays_outside_current_product_axes() -> None:
@@ -66,11 +69,23 @@ def test_anthropic_provider_axis_stays_outside_current_product_axes() -> None:
     assert adapter.capabilities.provider_axis == "unmapped_native_runtime"
 
 
+def test_anthropic_provider_supports_bearer_mode_without_flattening_to_api_key() -> None:
+    adapter = AnthropicAdapter(
+        Settings(
+            anthropic_auth_mode="bearer",
+            anthropic_bearer_token="oauth-token",
+        )
+    )
+
+    assert adapter.capabilities.auth_mechanism == "bearer"
+    assert adapter.is_ready() is True
+
+
 @pytest.mark.parametrize("base_url", ("", "not-a-url"))
 def test_anthropic_provider_reports_invalid_base_url_as_not_ready(base_url: str) -> None:
     adapter = AnthropicAdapter(Settings(anthropic_api_key="anthropic-key", anthropic_base_url=base_url))
     assert adapter.is_ready() is False
-    assert adapter.readiness_reason() == "FORGEGATE_ANTHROPIC_BASE_URL must be an absolute http(s) URL."
+    assert adapter.readiness_reason() == "FORGEFRAME_ANTHROPIC_BASE_URL must be an absolute http(s) URL."
 
 
 def test_gemini_provider_reports_invalid_probe_base_url_as_not_ready() -> None:
@@ -83,7 +98,7 @@ def test_gemini_provider_reports_invalid_probe_base_url_as_not_ready() -> None:
         )
     )
     assert adapter.is_ready() is False
-    assert adapter.readiness_reason() == "FORGEGATE_GEMINI_PROBE_BASE_URL must be an absolute http(s) URL."
+    assert adapter.readiness_reason() == "FORGEFRAME_GEMINI_PROBE_BASE_URL must be an absolute http(s) URL."
 
 
 def test_codex_provider_reports_invalid_bridge_base_url_as_not_ready() -> None:
@@ -96,7 +111,90 @@ def test_codex_provider_reports_invalid_bridge_base_url_as_not_ready() -> None:
         )
     )
     assert adapter.is_ready() is False
-    assert adapter.readiness_reason() == "FORGEGATE_OPENAI_CODEX_BASE_URL must be an absolute http(s) URL."
+    assert adapter.readiness_reason() == "FORGEFRAME_OPENAI_CODEX_BASE_URL must be an absolute http(s) URL."
+
+
+def test_bedrock_provider_reports_invalid_base_url_as_not_ready() -> None:
+    adapter = BedrockAdapter(
+        Settings(
+            bedrock_enabled=True,
+            bedrock_access_key_id="AKIAEXAMPLE",
+            bedrock_secret_access_key="secret",
+            bedrock_base_url="not-a-url",
+        )
+    )
+    assert adapter.is_ready() is False
+    assert adapter.readiness_reason() == "FORGEFRAME_BEDROCK_BASE_URL must be an absolute http(s) URL."
+
+
+def test_bedrock_adapter_signs_converse_request(monkeypatch) -> None:
+    captured: dict[str, object] = {}
+
+    class _MockResponse:
+        status_code = 200
+        headers = {"content-type": "application/json"}
+        text = "ok"
+
+        @staticmethod
+        def json() -> dict:
+            return {
+                "output": {"message": {"content": [{"text": "bedrock-ok"}]}},
+                "stopReason": "end_turn",
+                "usage": {"inputTokens": 4, "outputTokens": 2, "totalTokens": 6},
+            }
+
+    def _mock_post(url, **kwargs):
+        captured["url"] = url
+        captured["headers"] = kwargs.get("headers", {})
+        captured["content"] = kwargs.get("content", b"")
+        return _MockResponse()
+
+    monkeypatch.setattr("app.providers.bedrock.adapter.httpx.post", _mock_post)
+    adapter = BedrockAdapter(
+        Settings(
+            bedrock_enabled=True,
+            bedrock_access_key_id="AKIAEXAMPLE",
+            bedrock_secret_access_key="secret",
+            bedrock_region="us-east-1",
+        )
+    )
+    result = adapter.create_chat_completion(
+        ChatDispatchRequest(
+            model="anthropic.claude-3-5-sonnet-20240620-v1:0",
+            messages=[
+                {"role": "system", "content": "Follow policy."},
+                {"role": "user", "content": "Hello"},
+            ],
+            request_metadata={
+                "request_id": "req_bedrock_1",
+                "correlation_id": "corr_bedrock_1",
+                "trace_id": "trace_bedrock_1",
+                "span_id": "span_bedrock_1",
+                "route": "/v1/chat/completions",
+            },
+            response_controls={
+                "temperature": 0.2,
+                "max_output_tokens": 42,
+                "metadata": {"tenant": "tenant_a"},
+            },
+        )
+    )
+
+    assert result.content == "bedrock-ok"
+    assert result.finish_reason == "stop"
+    assert result.credential_type == "aws_sigv4"
+    assert str(captured["url"]).endswith("/model/anthropic.claude-3-5-sonnet-20240620-v1%3A0/converse")
+
+    headers = captured["headers"]
+    assert headers["Authorization"].startswith("AWS4-HMAC-SHA256 ")
+    assert headers["X-ForgeFrame-Request-Id"] == "req_bedrock_1"
+    assert headers["X-ForgeFrame-Correlation-Id"] == "corr_bedrock_1"
+
+    payload = json.loads(captured["content"].decode("utf-8"))
+    assert payload["system"] == [{"text": "Follow policy."}]
+    assert payload["messages"] == [{"role": "user", "content": [{"text": "Hello"}]}]
+    assert payload["inferenceConfig"] == {"temperature": 0.2, "maxTokens": 42}
+    assert payload["requestMetadata"] == {"tenant": "tenant_a"}
 
 
 def test_openai_adapter_forwards_request_metadata_as_headers(monkeypatch) -> None:
@@ -222,6 +320,51 @@ def test_anthropic_adapter_forwards_request_metadata_as_headers(monkeypatch) -> 
     )
 
     _assert_forwarded_request_metadata(captured["headers"])
+    assert captured["headers"]["x-api-key"] == "anthropic-key"
+    assert captured["headers"]["anthropic-version"] == "2023-06-01"
+
+
+def test_anthropic_adapter_uses_bearer_header_when_bearer_mode_is_selected(monkeypatch) -> None:
+    captured: dict[str, object] = {}
+
+    class _MockResponse:
+        status_code = 200
+        headers = {"content-type": "application/json"}
+        text = "ok"
+
+        @staticmethod
+        def json() -> dict:
+            return {
+                "model": "claude-sonnet-4-20250514",
+                "content": [{"type": "text", "text": "ok"}],
+                "usage": {"input_tokens": 2, "output_tokens": 1},
+                "stop_reason": "end_turn",
+            }
+
+    def _mock_post(*args, **kwargs):
+        captured["headers"] = kwargs.get("headers", {})
+        return _MockResponse()
+
+    monkeypatch.setattr("app.providers.anthropic.adapter.httpx.post", _mock_post)
+    adapter = AnthropicAdapter(
+        Settings(
+            anthropic_auth_mode="bearer",
+            anthropic_bearer_token="oauth-token",
+        )
+    )
+    result = adapter.create_chat_completion(
+        ChatDispatchRequest(
+            model="claude-sonnet-4-20250514",
+            messages=[{"role": "user", "content": "hello"}],
+        )
+    )
+
+    headers = captured["headers"]
+    assert headers["authorization"] == "Bearer oauth-token"
+    assert "x-api-key" not in headers
+    assert headers["anthropic-version"] == "2023-06-01"
+    assert result.credential_type == "oauth_access_token"
+    assert result.auth_source == "anthropic_bearer_token"
 
 
 def test_anthropic_adapter_translates_data_url_image_blocks_to_messages_api(monkeypatch) -> None:
@@ -428,6 +571,7 @@ def test_anthropic_stream_forwards_request_metadata_as_headers(monkeypatch) -> N
     )
 
     _assert_forwarded_request_metadata(captured["headers"])
+    assert captured["headers"]["x-api-key"] == "anthropic-key"
 
 
 def test_anthropic_adapter_maps_tool_use_to_openai_tool_calls(monkeypatch) -> None:

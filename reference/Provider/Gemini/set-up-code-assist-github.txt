@@ -1,0 +1,491 @@
+Set up Gemini Code Assist on GitHub  |  Google for Developers
+
+ Skip to main content
+
+ Gemini Code Assist
+
+ /
+
+ English
+
+ Deutsch
+
+ Español
+
+ Español – América Latina
+
+ Français
+
+ Indonesia
+
+ Italiano
+
+ Polski
+
+ Português – Brasil
+
+ Tiếng Việt
+
+ Türkçe
+
+ Русский
+
+ עברית
+
+ العربيّة
+
+ فارسی
+
+ हिंदी
+
+ বাংলা
+
+ ภาษาไทย
+
+ 中文 – 简体
+
+ 中文 – 繁體
+
+ 日本語
+
+ 한국어
+
+ Sign in
+
+ Home
+
+ Guides
+
+ Resources
+
+ Gemini Code Assist
+
+ Home
+
+ Home
+
+ Guides
+
+ Resources
+
+ Discover
+
+Overview
+
+Gemini in Android Studio
+
+Gemini CLI
+
+ Privacy notices
+
+Terms of Service and Privacy Policies
+
+Gemini Code Assist for individuals privacy notice
+
+Supported languages, IDEs, and interfaces
+
+How Gemini Code Assist works
+
+Gemini 3 with Gemini Code Assist
+
+How Gemini Code Assist Standard and Enterprise use your data
+
+Responsible AI
+
+ Get started
+
+Set up Gemini Code Assist for individuals
+
+Use the Gemini Code Assist chat
+
+Set up Gemini Code Assist Standard and Enterprise
+
+ Code in IDEs
+
+Code features overview
+
+Code with Gemini Code Assist
+
+ Chat in IDEs
+
+Chat features overview
+
+Chat with Gemini Code Assist
+
+Agent mode overview
+
+Use the Gemini Code Assist agent mode
+
+ Use code customization (Enterprise)
+
+Code customization overview
+
+Configure code customization
+
+Use code customization
+
+Encrypt data with customer-managed encryption keys
+
+ Review code in GitHub
+
+Review GitHub code with Gemini Code Assist
+
+Set up Gemini Code Assist for GitHub
+
+Use Gemini Code Assist for GitHub
+
+Customize Gemini Code Assist behavior in GitHub
+
+Code review style guide
+
+ Configure
+
+Keyboard shortcuts
+
+Exclude files from Gemini Code Assist use
+
+Configure local codebase awareness
+
+Use pre-release features in Gemini Code Assist for VS Code
+
+Control Network Access with User Domain Restrictions
+
+ Standard and Enterprise
+
+Configure Gemini Code Assist logging
+
+Configure VPC Service Controls
+
+Turn off Gemini Code Assist
+
+ Troubleshoot
+
+Troubleshoot access to Gemini Code Assist features
+
+Provide feedback
+
+ Home
+
+ Products
+
+ Gemini Code Assist
+
+ Guides
+
+ Set up Gemini Code Assist on GitHub
+
+ Stay organized with collections
+
+ Save and categorize content based on your preferences.
+
+Page Summary
+
+ outlined_flag
+
+Gemini Code Assist on GitHub is a Gemini-powered agent that summarizes pull requests and provides code reviews.
+
+You need a GitHub account and one or more repositories to set up Gemini Code Assist on GitHub.
+
+Setting up Gemini Code Assist on GitHub involves installing the app and selecting repositories, with different steps for consumer and enterprise versions.
+
+For the enterprise version, specific IAM roles may be required for setup within Google Cloud.
+
+This page shows you how to set up
+Gemini Code Assist on GitHub,
+a Gemini-powered agent that automatically summarizes pull
+requests and provides in-depth code reviews.
+
+Before you begin
+
+To set up Gemini Code Assist on GitHub, make sure you
+do the following:
+
+Consumer
+
+Have a GitHub organization or personal account.
+
+Note: The consumer version of Gemini Code Assist on
+GitHub doesn't support organizations that enable private
+connectivity.
+
+Have one or more GitHub repositories that you want to enable
+Gemini Code Assist on GitHub on.
+
+If you don't have such a repository, you can create a fork of
+our sample repository
+to use.
+
+Enterprise
+
+Have a GitHub organization or personal account.
+
+Have one or more GitHub repositories that you want to enable
+Gemini Code Assist on GitHub on.
+
+If you don't have such a repository, you can create a fork of
+our sample repository
+to use.
+
+Ask your administrator to grant
+you the Service Usage Admin role
+and the geminicodeassistmanagement.scmConnectionAdmin role.
+
+Important: The geminicodeassistmanagement.scmConnectionAdmin role
+can't be granted using the Google Cloud console. Use the Google Cloud CLI
+instead.
+
+Alternatively, if you have the Admin or Owner basic roles,
+you have the necessary IAM permissions to complete the
+setup for the enterprise version.
+
+Ensure that the Google Cloud project you use during setup is
+connected to a valid billing account.
+
+Install Gemini Code Assist on GitHub
+
+The following steps show you how to set up Gemini Code Assist
+on GitHub. Click the relevant tab for the version you want to set up,
+either the consumer version or enterprise version.
+
+Consumer
+
+Go to the Gemini Code Assist
+app page.
+
+Sign in to your GitHub account if you haven't already.
+
+Click Install.
+
+A prompt to install the Gemini Code Assist app for a user
+or organization is displayed.
+
+When prompted to install the Gemini Code Assist app for a
+user or organization, select the organization you intend to use it on.
+
+After you've installed the Gemini Code Assist app for
+your GitHub organization, you're prompted to select the
+repositories to enable the Code Review integration.
+
+You're redirected to the Admin Console for the
+Gemini Code Assist app.
+
+Login with your GitHub account.
+
+Select a GitHub organization or personal account from the
+drop-down menu.
+
+Review and accept the Google Terms of Service, Generative AI Prohibited
+Use Policy and Privacy Policy, and then click Complete setup.
+
+Gemini Code Assist is added to the pull requests within
+your selected repositories.
+
+After creation, Gemini Code Assist provides suggestions to
+your code review every time the pull request author or other human reviewers
+add comments with the /gemini tag on the pull request.
+
+Gemini Code Assist is now active for all the pull
+requests within your selected repositories.
+
+Enterprise
+
+Preview
+
+This feature is subject to the "Pre-GA Offerings Terms" in the General
+ Service Terms section of the
+ Service Specific Terms for Google Cloud.
+ Pre-GA features are available "as is" and might have limited support. For
+ more information, see the
+ Google Cloud launch stage descriptions.
+
+In the Google Cloud console, go to the Gemini Code Assist
+Agents & Tools page.
+
+Go to Agents & Tools 
+
+If you haven't previously enabled the Developer Connect API,
+you see a caution banner that prompts you to enable the API. If this
+happens, click the Enable button associated with the banner, and
+click the Enable button in the dialog window that appears.
+
+In the Agents section, locate the
+Code Assist Source Code Management card, and click Enable.
+
+The Enable Code Assist Source Code Management pane opens.
+
+In the Gemini Code Assist Management API section, click Enable.
+
+In the Select a connection section, click the Connection
+drop-down.
+
+In the drop-down, click Create new connection.
+
+The Link Git repositories via Developer Connect pane opens.
+
+Note: Gemini Code Assist on GitHub creates the
+Developer Connect connection in us-east1 and doesn't support
+using existing connections you might have for other features, such as
+code customization.
+
+In the Provider drop-down, select the GitHub provider you
+are using.
+
+In the Name field, enter a name for your connection.
+
+Click Continue.
+
+The Request GitHub OAuth token dialog window open.
+
+After reading the disclaimer, click I understand and continue.
+
+In the Install Gemini Code Assist page, click the account you want to
+install the app in.
+
+Choose whether to install the app for All repositories or
+Only select repositories.
+
+Click Install.
+
+Follow the GitHub steps to authenticate to GitHub.
+
+Once access is confirmed, the dialog window closes and you return to the
+Link Git repositories via Developer Connect pane.
+
+In the Link repositories section, click the Repositories
+drop-down, select the repositories you want to link, and click Ok.
+
+Note: If you create a new GitHub repository in the future and
+want to add it to the linked repositories in your connection, you must
+use Developer Connect
+to do so.
+
+Click Link.
+
+In the Select a connection drop-down, select the connection you
+created.
+
+Click Done.
+
+Gemini Code Assist is now active for all the pull
+requests within your selected repositories.
+
+What's next
+
+Learn more about Gemini Code Assist in GitHub.
+
+Use Gemini Code Assist in GitHub.
+
+Learn how to
+customize Gemini Code Assist on GitHub behavior.
+
+Except as otherwise noted, the content of this page is licensed under the Creative Commons Attribution 4.0 License, and code samples are licensed under the Apache 2.0 License. For details, see the Google Developers Site Policies. Java is a registered trademark of Oracle and/or its affiliates.
+
+Last updated 2026-03-23 UTC.
+
+ [[["Easy to understand","easyToUnderstand","thumb-up"],["Solved my problem","solvedMyProblem","thumb-up"],["Other","otherUp","thumb-up"]],[["Missing the information I need","missingTheInformationINeed","thumb-down"],["Too complicated / too many steps","tooComplicatedTooManySteps","thumb-down"],["Out of date","outOfDate","thumb-down"],["Samples / code issue","samplesCodeIssue","thumb-down"],["Other","otherDown","thumb-down"]],["Last updated 2026-03-23 UTC."],[],[]]
+
+Connect
+
+ Blog
+
+ Bluesky
+
+ Instagram
+
+ LinkedIn
+
+ X (Twitter)
+
+ YouTube
+
+Programs
+
+ Google Developer Program
+
+ Google Developer Groups
+
+ Google Developer Experts
+
+ Accelerators
+
+ Google Cloud & NVIDIA
+
+Developer consoles
+
+ Google API Console
+
+ Google Cloud Platform Console
+
+ Google Play Console
+
+ Firebase Console
+
+ Actions on Google Console
+
+ Cast SDK Developer Console
+
+ Chrome Web Store Dashboard
+
+ Google Home Developer Console
+
+ Android
+
+ Chrome
+
+ Firebase
+
+ Google Cloud Platform
+
+ Google AI
+
+ All products
+
+ Terms
+
+ Privacy
+
+ Manage cookies
+
+ English
+
+ Deutsch
+
+ Español
+
+ Español – América Latina
+
+ Français
+
+ Indonesia
+
+ Italiano
+
+ Polski
+
+ Português – Brasil
+
+ Tiếng Việt
+
+ Türkçe
+
+ Русский
+
+ עברית
+
+ العربيّة
+
+ فارسی
+
+ हिंदी
+
+ বাংলা
+
+ ภาษาไทย
+
+ 中文 – 简体
+
+ 中文 – 繁體
+
+ 日本語
+
+ 한국어

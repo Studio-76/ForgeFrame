@@ -13,6 +13,7 @@ IntegrationClass = Literal["openai_compatible", "templated_http", "static_catalo
 class HarnessRequestMapping(BaseModel):
     method: Literal["POST", "GET"] = "POST"
     path: str = "/chat/completions"
+    path_join_policy: Literal["append", "dedupe_openai_v1"] = "append"
     headers: dict[str, str] = Field(default_factory=dict)
     body_template: dict[str, Any] = Field(
         default_factory=lambda: {
@@ -54,8 +55,11 @@ class HarnessCapabilityProfile(BaseModel):
     streaming: bool = False
     tool_calling: bool = False
     vision: bool = False
+    responses: bool = False
+    embeddings: bool = False
     discovery_support: bool = False
     model_source: Literal["static", "manual", "discovered", "templated"] = "manual"
+    unsupported_features: list[str] = Field(default_factory=list)
 
 
 class HarnessProviderProfile(BaseModel):
@@ -67,6 +71,8 @@ class HarnessProviderProfile(BaseModel):
     auth_value: str = ""
     auth_header: str = "Authorization"
     template_id: str | None = None
+    model_slug_policy: Literal["verbatim", "prepend_prefix_if_missing", "infer_vendor_if_missing"] = "verbatim"
+    model_prefix: str = ""
     enabled: bool = True
     models: list[str] = Field(default_factory=list)
     discovery_enabled: bool = False

@@ -9,6 +9,11 @@ from pydantic import BaseModel, Field
 NATIVE_MAPPING_METADATA_KEY = "forgeframe_native_mapping"
 
 NativeProductObjectKind = Literal[
+    "response",
+    "response_item",
+    "response_tool_call",
+    "response_tool_output",
+    "response_stream_event",
     "conversation",
     "thread",
     "participant",
