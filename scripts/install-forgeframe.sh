@@ -365,7 +365,7 @@ postgres_url_keys = {
 def scrub_postgres_url(value: str) -> str:
     stripped = value.strip().strip("'").strip('"')
     if not stripped:
-        return "postgresql://forgeframe:replace-with-a-generated-postgres-password@127.0.0.1:5432/forgeframe"
+        return "postgresql+psycopg://forgeframe:replace-with-a-generated-postgres-password@127.0.0.1:5432/forgeframe"
     scheme = "postgresql"
     if "://" in stripped:
         candidate_scheme = stripped.split("://", 1)[0].strip()
@@ -755,13 +755,13 @@ FORGEFRAME_PG_USER=forgeframe
 FORGEFRAME_PG_PASSWORD=replace-with-a-generated-postgres-password
 FORGEFRAME_PG_CONTAINER_NAME=
 FORGEFRAME_PG_CLUSTER_NAME=forgeframe
-FORGEFRAME_POSTGRES_URL=postgresql://forgeframe:replace-with-a-generated-postgres-password@127.0.0.1:5432/forgeframe
-FORGEFRAME_HARNESS_POSTGRES_URL=postgresql://forgeframe:replace-with-a-generated-postgres-password@127.0.0.1:5432/forgeframe
-FORGEFRAME_CONTROL_PLANE_POSTGRES_URL=postgresql://forgeframe:replace-with-a-generated-postgres-password@127.0.0.1:5432/forgeframe
-FORGEFRAME_OBSERVABILITY_POSTGRES_URL=postgresql://forgeframe:replace-with-a-generated-postgres-password@127.0.0.1:5432/forgeframe
-FORGEFRAME_GOVERNANCE_POSTGRES_URL=postgresql://forgeframe:replace-with-a-generated-postgres-password@127.0.0.1:5432/forgeframe
-FORGEFRAME_INSTANCES_POSTGRES_URL=postgresql://forgeframe:replace-with-a-generated-postgres-password@127.0.0.1:5432/forgeframe
-FORGEFRAME_EXECUTION_POSTGRES_URL=postgresql://forgeframe:replace-with-a-generated-postgres-password@127.0.0.1:5432/forgeframe
+FORGEFRAME_POSTGRES_URL=postgresql+psycopg://forgeframe:replace-with-a-generated-postgres-password@127.0.0.1:5432/forgeframe
+FORGEFRAME_HARNESS_POSTGRES_URL=postgresql+psycopg://forgeframe:replace-with-a-generated-postgres-password@127.0.0.1:5432/forgeframe
+FORGEFRAME_CONTROL_PLANE_POSTGRES_URL=postgresql+psycopg://forgeframe:replace-with-a-generated-postgres-password@127.0.0.1:5432/forgeframe
+FORGEFRAME_OBSERVABILITY_POSTGRES_URL=postgresql+psycopg://forgeframe:replace-with-a-generated-postgres-password@127.0.0.1:5432/forgeframe
+FORGEFRAME_GOVERNANCE_POSTGRES_URL=postgresql+psycopg://forgeframe:replace-with-a-generated-postgres-password@127.0.0.1:5432/forgeframe
+FORGEFRAME_INSTANCES_POSTGRES_URL=postgresql+psycopg://forgeframe:replace-with-a-generated-postgres-password@127.0.0.1:5432/forgeframe
+FORGEFRAME_EXECUTION_POSTGRES_URL=postgresql+psycopg://forgeframe:replace-with-a-generated-postgres-password@127.0.0.1:5432/forgeframe
 FORGEFRAME_EXECUTION_WORKER_INSTANCE_ID=
 FORGEFRAME_EXECUTION_WORKER_COMPANY_ID=
 FORGEFRAME_EXECUTION_WORKER_KEY=forgeframe-worker
@@ -1087,13 +1087,13 @@ provision_native_postgres() {
   pg_ctlcluster "$version" "$cluster_name" start >"$FORGEFRAME_NULL_DEVICE" || fail "Failed to start PostgreSQL cluster '$cluster_name'."
   wait_for_tcp_endpoint "127.0.0.1" "$INSTALLER_PG_PORT" 60 "Native PostgreSQL cluster"
 
-  run_postgres_superuser psql -d postgres -v ON_ERROR_STOP=1 -v ff_user="$INSTALLER_PG_USER" -v ff_password="$INSTALLER_PG_PASSWORD" <<'SQL' >"$FORGEFRAME_NULL_DEVICE"
+  run_postgres_superuser psql -p "$INSTALLER_PG_PORT" -d postgres -v ON_ERROR_STOP=1 -v ff_user="$INSTALLER_PG_USER" -v ff_password="$INSTALLER_PG_PASSWORD" <<'SQL' >"$FORGEFRAME_NULL_DEVICE"
 SELECT format('CREATE ROLE %I LOGIN PASSWORD %L', :'ff_user', :'ff_password')
 WHERE NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = :'ff_user') \gexec
 SELECT format('ALTER ROLE %I WITH LOGIN PASSWORD %L', :'ff_user', :'ff_password') \gexec
 SQL
 
-  run_postgres_superuser psql -d postgres -v ON_ERROR_STOP=1 -v ff_db="$INSTALLER_PG_DB" -v ff_user="$INSTALLER_PG_USER" <<'SQL' >"$FORGEFRAME_NULL_DEVICE"
+  run_postgres_superuser psql -p "$INSTALLER_PG_PORT" -d postgres -v ON_ERROR_STOP=1 -v ff_db="$INSTALLER_PG_DB" -v ff_user="$INSTALLER_PG_USER" <<'SQL' >"$FORGEFRAME_NULL_DEVICE"
 SELECT format('CREATE DATABASE %I OWNER %I', :'ff_db', :'ff_user')
 WHERE NOT EXISTS (SELECT 1 FROM pg_database WHERE datname = :'ff_db') \gexec
 SQL
@@ -1513,6 +1513,11 @@ export FORGEFRAME_INSTALL_PG_CONTAINER_NAME="$INSTALLER_PG_CONTAINER_NAME"
 export FORGEFRAME_INSTALL_PG_CLUSTER_NAME="$INSTALLER_PG_CLUSTER_NAME"
 export FORGEFRAME_INSTALL_OLLAMA_BASE_URL="$INSTALLER_OLLAMA_BASE_URL"
 export FORGEFRAME_INSTALL_PYTHON_BIN="$SELECTED_PYTHON_BIN"
+if [[ "$SKIP_PYTHON_ENV" != "1" ]]; then
+  export FORGEFRAME_INSTALL_RUNTIME_PYTHON_BIN="$INSTALL_ROOT/.venv/bin/python"
+else
+  export FORGEFRAME_INSTALL_RUNTIME_PYTHON_BIN="$SELECTED_PYTHON_BIN"
+fi
 export FORGEFRAME_INSTALL_ALLOW_FILE_STORAGE="$ALLOW_FILE_STORAGE"
 
 python3 - "$ENV_FILE" "$INSTALL_ROOT" "$CONFIG_DIR" "$STATE_DIR" <<'PY'
@@ -1658,7 +1663,7 @@ def split_postgres_url(value: str):
 
 
 def build_postgres_url(user: str, password: str, host: str, port: str, database: str) -> str:
-    return "postgresql://{user}:{password}@{host}:{port}/{database}".format(
+    return "postgresql+psycopg://{user}:{password}@{host}:{port}/{database}".format(
         user=quote(user, safe=""),
         password=quote(password, safe=""),
         host=host_for_url(host),
@@ -1710,7 +1715,11 @@ bootstrap_password = secure_bootstrap_password(
     os.environ.get("FORGEFRAME_INSTALL_ADMIN_PASSWORD", ""),
 )
 bootstrap_username = (os.environ.get("FORGEFRAME_INSTALL_ADMIN_USERNAME", "").strip() or entries.get("FORGEFRAME_BOOTSTRAP_ADMIN_USERNAME", "").strip() or "admin")
-selected_python_bin = os.environ.get("FORGEFRAME_INSTALL_PYTHON_BIN", "").strip() or entries.get("FORGEFRAME_PYTHON_BIN", "").strip()
+selected_python_bin = (
+    os.environ.get("FORGEFRAME_INSTALL_RUNTIME_PYTHON_BIN", "").strip()
+    or os.environ.get("FORGEFRAME_INSTALL_PYTHON_BIN", "").strip()
+    or entries.get("FORGEFRAME_PYTHON_BIN", "").strip()
+)
 
 if guided:
     pg_mode = os.environ.get("FORGEFRAME_INSTALL_PG_MODE", "").strip() or entries.get("FORGEFRAME_PG_MODE", "").strip() or "native"

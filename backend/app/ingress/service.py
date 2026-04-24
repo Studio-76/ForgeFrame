@@ -87,10 +87,16 @@ def _load_certificate_status(settings: Settings) -> TlsCertificateStatus:
             last_error=f"{type(exc).__name__}: {exc}",
         )
 
-    def _join_name(parts: list[tuple[str, str]] | tuple[tuple[str, str], ...] | None) -> str | None:
+    def _join_name(parts: object) -> str | None:
         if not parts:
             return None
-        return ", ".join(f"{key}={value}" for key, value in parts)
+        pairs: list[str] = []
+        for item in parts:
+            if isinstance(item, (list, tuple)) and len(item) == 1 and isinstance(item[0], (list, tuple)):
+                item = item[0]
+            if isinstance(item, (list, tuple)) and len(item) >= 2:
+                pairs.append(f"{item[0]}={item[1]}")
+        return ", ".join(pairs) if pairs else str(parts)
 
     valid_from = decoded.get("notBefore")
     valid_to = decoded.get("notAfter")

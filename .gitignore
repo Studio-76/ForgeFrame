@@ -56,6 +56,8 @@ pip-wheel-metadata/
 venv/
 ENV/
 env/
+!deploy/env/
+!deploy/env/forgeframe-host.env.example
 
 # -------------------------
 # Python tooling

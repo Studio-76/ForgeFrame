@@ -77,6 +77,7 @@ CREATE TABLE IF NOT EXISTS memory_entries (
     metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    CONSTRAINT memory_entries_company_id_id_uq UNIQUE (company_id, id),
     CONSTRAINT memory_entries_company_source_fk
         FOREIGN KEY (company_id, source_id) REFERENCES knowledge_sources (company_id, id) ON DELETE SET NULL,
     CONSTRAINT memory_entries_company_contact_fk
@@ -99,8 +100,6 @@ CREATE TABLE IF NOT EXISTS memory_entries (
     CONSTRAINT memory_entries_deleted_status_ck CHECK (deleted_at IS NULL OR status = 'deleted')
 );
 
-CREATE UNIQUE INDEX IF NOT EXISTS memory_entries_company_id_id_uq
-    ON memory_entries (company_id, id);
 CREATE INDEX IF NOT EXISTS memory_entries_instance_status_idx
     ON memory_entries (instance_id, status, updated_at);
 CREATE INDEX IF NOT EXISTS memory_entries_company_links_idx

@@ -1,7 +1,5 @@
 from pathlib import Path
 
-import pytest
-
 from app.settings.config import Settings
 
 
@@ -21,20 +19,20 @@ def _file_backend_settings(**overrides: object) -> Settings:
     return Settings(**defaults)
 
 
-def test_settings_reject_placeholder_public_https_contract_values_for_integrated_acme() -> None:
-    with pytest.raises(ValueError, match="FORGEFRAME_PUBLIC_FQDN"):
-        _file_backend_settings(
-            public_tls_mode="integrated_acme",
-            public_fqdn="replace-with-public-fqdn.example.invalid",
-            public_tls_acme_email="ops@example.com",
-        )
+def test_settings_allow_placeholder_public_https_contract_values_for_readiness_reporting() -> None:
+    fqdn_placeholder = _file_backend_settings(
+        public_tls_mode="integrated_acme",
+        public_fqdn="replace-with-public-fqdn.example.invalid",
+        public_tls_acme_email="ops@example.com",
+    )
+    email_placeholder = _file_backend_settings(
+        public_tls_mode="integrated_acme",
+        public_fqdn="forgeframe.example.com",
+        public_tls_acme_email="replace-with-acme-email@example.invalid",
+    )
 
-    with pytest.raises(ValueError, match="FORGEFRAME_PUBLIC_TLS_ACME_EMAIL"):
-        _file_backend_settings(
-            public_tls_mode="integrated_acme",
-            public_fqdn="forgeframe.example.com",
-            public_tls_acme_email="replace-with-acme-email@example.invalid",
-        )
+    assert fqdn_placeholder.public_fqdn == "replace-with-public-fqdn.example.invalid"
+    assert email_placeholder.public_tls_acme_email == "replace-with-acme-email@example.invalid"
 
 
 def test_host_env_example_defaults_to_normative_public_https_contract() -> None:

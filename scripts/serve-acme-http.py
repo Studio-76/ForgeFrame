@@ -20,7 +20,7 @@ class AcmeHelperHandler(BaseHTTPRequestHandler):
         parsed = urlsplit(self.path)
         if parsed.path.startswith("/.well-known/acme-challenge/"):
             relative = parsed.path.removeprefix("/.well-known/acme-challenge/")
-            target = WEBROOT / relative
+            target = WEBROOT / ".well-known" / "acme-challenge" / relative
             if target.exists() and target.is_file():
                 payload = target.read_bytes()
                 self.send_response(200)

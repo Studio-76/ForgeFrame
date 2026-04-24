@@ -7,6 +7,7 @@ from pathlib import Path
 import re
 
 from sqlalchemy import text
+from sqlalchemy.engine import make_url
 
 from app.settings.config import Settings
 from app.storage.db import build_postgres_engine
@@ -33,6 +34,10 @@ _CREATE_INDEX_STATEMENT = re.compile(
     """,
     re.IGNORECASE | re.DOTALL | re.VERBOSE,
 )
+
+
+def _redact_database_url(database_url: str) -> str:
+    return make_url(database_url).render_as_string(hide_password=True)
 
 
 @dataclass(frozen=True)
@@ -298,7 +303,7 @@ def apply_storage_migrations(database_url: str) -> dict[str, object]:
             applied_versions.append(migration.version)
 
     return {
-        "database_url": database_url,
+        "database_url": _redact_database_url(database_url),
         "applied_versions": applied_versions,
         "skipped_versions": skipped_versions,
         "latest_version": migrations[-1].version if migrations else 0,

@@ -112,6 +112,7 @@ CREATE TABLE IF NOT EXISTS inbox_items (
     metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    CONSTRAINT inbox_items_company_id_id_uq UNIQUE (company_id, id),
     CONSTRAINT inbox_items_company_conversation_fk
         FOREIGN KEY (company_id, conversation_id) REFERENCES conversations (company_id, id) ON DELETE SET NULL,
     CONSTRAINT inbox_items_company_thread_fk
