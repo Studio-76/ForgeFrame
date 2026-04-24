@@ -29,6 +29,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     document.documentElement.dataset.theme = mode;
+    document.documentElement.classList.toggle("dark", mode === "dark");
     window.localStorage.setItem(THEME_STORAGE_KEY, mode);
     window.localStorage.removeItem(LEGACY_THEME_STORAGE_KEY);
   }, [mode]);

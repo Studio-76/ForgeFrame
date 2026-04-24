@@ -1,14 +1,14 @@
 import { useEffect, useState } from "react";
-import { Link, NavLink, Navigate, Outlet, useLocation } from "react-router-dom";
+import { Navigate, Outlet, useLocation } from "react-router-dom";
 
 import { clearAdminToken, fetchAdminSession, getAdminToken, logoutAdmin, type AdminSessionUser } from "../api/admin";
+import { AppShell } from "../components/layout/AppShell";
+import { LoadingState } from "../components/ui/StateBlocks";
 import { getSessionRouteState } from "./authRouting";
-import { CONTROL_PLANE_ROUTES, getControlPlaneNavigation, isHrefCurrent } from "./navigation";
-import { getInstanceIdFromSearchParams, withQueryParams } from "./tenantScope";
-import { useTheme } from "../theme/ThemeProvider";
+import { CONTROL_PLANE_ROUTES, getControlPlaneNavigation } from "./navigation";
+import { getInstanceIdFromSearchParams } from "./tenantScope";
 
 export function App() {
-  const { mode, toggleMode } = useTheme();
   const location = useLocation();
   const [session, setSession] = useState<AdminSessionUser | null>(null);
   const [sessionError, setSessionError] = useState<string>("");
@@ -73,108 +73,42 @@ export function App() {
     setSession((current) => (current ? { ...current, must_rotate_password: false } : current));
   };
 
-  const passwordRotationNavigation = (
-    <nav aria-label="Password rotation navigation" className="fg-card fg-auth-nav">
-      <div className="fg-panel-heading">
-        <div>
-          <h3>Password Rotation Required</h3>
-          <p className="fg-muted">This session can only rotate its password or log out until the temporary secret is replaced.</p>
-        </div>
-      </div>
-      <NavLink className="fg-nav-link" to={CONTROL_PLANE_ROUTES.passwordRotation}>
-        Rotate password
-      </NavLink>
-    </nav>
-  );
+  const passwordRotationNavigation = [{
+    label: "Session",
+    description: "Temporary admin sessions can only rotate their password or log out.",
+    links: [{
+      label: "Rotate password",
+      to: CONTROL_PLANE_ROUTES.passwordRotation,
+      description: "Replace the temporary admin password before opening the full control plane.",
+    }],
+  }];
 
-  const controlPlaneNavigation = (
-    <nav aria-label="Control-plane navigation" className="fg-section-nav">
-      {navigationSections.map((section) => (
-        <section key={section.label} className="fg-section-card">
-          <div className="fg-section-card-header">
-            <h3>{section.label}</h3>
-            <p className="fg-muted">{section.description}</p>
-          </div>
-          <div className="fg-section-links">
-            {section.links.map((link) => {
-              const scopedTo = withQueryParams(link.to, { instanceId });
-              const isCurrent = isHrefCurrent(location.pathname, location.hash, scopedTo);
-              const className = `fg-section-link${isCurrent ? " is-current" : ""}${link.disabled ? " is-disabled" : ""}`;
-
-              if (link.disabled) {
-                return (
-                  <div key={`${section.label}-${link.to}`} aria-disabled="true" className={className}>
-                    <div className="fg-section-link-copy">
-                      <span className="fg-section-link-label">{link.label}</span>
-                      <span className="fg-muted">{link.description}</span>
-                    </div>
-                    {link.badge ? <span className="fg-pill">{link.badge}</span> : null}
-                  </div>
-                );
-              }
-
-              return (
-                <Link key={`${section.label}-${link.to}`} className={className} to={scopedTo}>
-                  <div className="fg-section-link-copy">
-                    <span className="fg-section-link-label">{link.label}</span>
-                    <span className="fg-muted">{link.description}</span>
-                  </div>
-                  {link.badge ? <span className="fg-pill">{link.badge}</span> : null}
-                </Link>
-              );
-            })}
-          </div>
-        </section>
-      ))}
-    </nav>
-  );
+  const shellNavigation = routeState.shellMode === "password_rotation" ? passwordRotationNavigation : navigationSections;
 
   return (
-    <div className="fg-shell fg-page">
-      <header className="fg-row fg-row-spread">
-        <div className="fg-page-header">
-          <h1>ForgeFrame — Autonomous AI Runtime Platform</h1>
-          <p className="fg-muted">UI-first Control Plane mit Auth, Accounts, Runtime Keys, Observability und Provider-Operatorik.</p>
-          <p className="fg-muted">
-            {session ? `Signed in as ${session.display_name} (${session.role})` : "No active admin session."}
-          </p>
-          {session?.must_rotate_password ? (
-            <p className="fg-danger">Password rotation required before ForgeFrame will open the standard control-plane routes.</p>
-          ) : null}
-          {sessionError ? <p className="fg-danger">{sessionError}</p> : null}
+    <AppShell
+      navigationSections={shellNavigation}
+      instanceId={instanceId}
+      session={session}
+      sessionError={sessionError}
+      onLogout={() => void onLogout()}
+    >
+      {session?.must_rotate_password ? (
+        <div className="ff-session-banner" data-tone="warning">
+          Password rotation required before ForgeFrame will open the standard control-plane routes.
         </div>
-        <div className="fg-actions">
-          <button type="button" onClick={toggleMode}>
-            Theme: {mode === "dark" ? "Dark (Default)" : "Light"}
-          </button>
-          {session ? (
-            <button type="button" onClick={() => void onLogout()}>
-              Logout
-            </button>
-          ) : null}
-        </div>
-      </header>
-
-      {routeState.loading
-        ? null
-        : routeState.shellMode === "password_rotation"
-          ? passwordRotationNavigation
-          : routeState.shellMode === "control_plane"
-            ? controlPlaneNavigation
-            : null}
-
-      <main>
-        {routeState.loading ? (
-          <article className="fg-card" style={{ maxWidth: "40rem" }}>
-            <h2>Restoring Admin Session</h2>
-            <p className="fg-muted">Checking the current admin session and its policy gates before opening the control plane.</p>
-          </article>
-        ) : routeState.redirectTo ? (
-          <Navigate replace to={routeState.redirectTo} />
-        ) : (
-          <Outlet context={{ session, sessionReady, markPasswordRotationComplete, replaceSession: setSession }} />
-        )}
-      </main>
-    </div>
+      ) : null}
+      {sessionError ? <div className="ff-session-banner" data-tone="danger">{sessionError}</div> : null}
+      {routeState.loading ? (
+        <LoadingState
+          title="Restoring Admin Session"
+          description="Checking the current admin session and policy gates before opening the control plane."
+        />
+      ) : routeState.redirectTo ? (
+        <Navigate replace to={routeState.redirectTo} />
+      ) : (
+        <Outlet context={{ session, sessionReady, markPasswordRotationComplete, replaceSession: setSession }} />
+      )}
+    </AppShell>
   );
 }
