@@ -44,9 +44,9 @@ __pycache__/
 .coverage.*
 htmlcov/
 
-dist/
-build/
-site/
+/dist/
+/build/
+/site/
 .eggs/
 *.egg
 *.egg-info/
@@ -55,7 +55,7 @@ pip-wheel-metadata/
 .venv/
 venv/
 ENV/
-env/
+/env/
 !deploy/env/
 !deploy/env/forgeframe-host.env.example
 
@@ -110,9 +110,11 @@ frontend/.cache/
 # Logs / temp files
 # -------------------------
 *.log
-logs/
-tmp/
-temp/
+/logs/
+!frontend/src/features/logs/
+!frontend/src/features/logs/LogsPage.tsx
+/tmp/
+/temp/
 
 # -------------------------
 # Docker / local runtime leftovers
