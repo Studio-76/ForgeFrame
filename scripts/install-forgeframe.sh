@@ -241,6 +241,119 @@ ensure_system_dependencies() {
   esac
 }
 
+write_local_env_mirrors() {
+  local mirror_paths=(
+    "$INSTALL_ROOT/.env.host"
+    "$INSTALL_ROOT/.env"
+    "$INSTALL_ROOT/backend/.env"
+  )
+  local mirror_path
+
+  [[ -f "$ENV_FILE" ]] || fail "Cannot mirror installer environment because $ENV_FILE does not exist."
+
+  for mirror_path in "${mirror_paths[@]}"; do
+    mkdir -p "$(dirname "$mirror_path")"
+    cp "$ENV_FILE" "$mirror_path"
+    chmod 600 "$mirror_path"
+    if [[ "$(id -u)" -eq 0 ]]; then
+      chown "$SYSTEM_USER:$SYSTEM_GROUP" "$mirror_path"
+    fi
+    log "Wrote ignored runtime env mirror $mirror_path"
+  done
+}
+
+write_local_env_examples() {
+  local example_paths=(
+    "$INSTALL_ROOT/.env.host.example"
+    "$INSTALL_ROOT/.env.example"
+    "$INSTALL_ROOT/backend/.env.example"
+  )
+  local example_path
+
+  [[ -f "$ENV_FILE" ]] || fail "Cannot render local env examples because $ENV_FILE does not exist."
+
+  for example_path in "${example_paths[@]}"; do
+    mkdir -p "$(dirname "$example_path")"
+    python3 - "$ENV_FILE" "$example_path" <<'PY'
+import sys
+from pathlib import Path
+from urllib.parse import quote, unquote, urlsplit, urlunsplit
+
+source_path = Path(sys.argv[1])
+target_path = Path(sys.argv[2])
+lines = source_path.read_text(encoding="utf-8").splitlines()
+
+secret_placeholders = {
+    "FORGEFRAME_BOOTSTRAP_ADMIN_PASSWORD": "replace-with-a-generated-bootstrap-password",
+    "FORGEFRAME_PG_PASSWORD": "replace-with-a-generated-postgres-password",
+    "FORGEFRAME_OPENAI_API_KEY": "replace-with-openai-api-key",
+    "FORGEFRAME_OPENAI_CODEX_API_KEY": "replace-with-openai-codex-api-key",
+    "FORGEFRAME_OPENAI_CODEX_OAUTH_ACCESS_TOKEN": "replace-with-openai-codex-oauth-access-token",
+    "FORGEFRAME_GEMINI_API_KEY": "replace-with-gemini-api-key",
+    "FORGEFRAME_GEMINI_OAUTH_ACCESS_TOKEN": "replace-with-gemini-oauth-access-token",
+    "FORGEFRAME_ANTHROPIC_API_KEY": "replace-with-anthropic-api-key",
+    "FORGEFRAME_ANTHROPIC_BEARER_TOKEN": "replace-with-anthropic-bearer-token",
+    "FORGEFRAME_BEDROCK_ACCESS_KEY_ID": "replace-with-bedrock-access-key-id",
+    "FORGEFRAME_BEDROCK_SECRET_ACCESS_KEY": "replace-with-bedrock-secret-access-key",
+    "FORGEFRAME_BEDROCK_SESSION_TOKEN": "replace-with-bedrock-session-token",
+    "FORGEFRAME_ANTIGRAVITY_OAUTH_ACCESS_TOKEN": "replace-with-antigravity-oauth-access-token",
+    "FORGEFRAME_GITHUB_COPILOT_OAUTH_ACCESS_TOKEN": "replace-with-github-copilot-oauth-access-token",
+    "FORGEFRAME_CLAUDE_CODE_OAUTH_ACCESS_TOKEN": "replace-with-claude-code-oauth-access-token",
+    "FORGEFRAME_NOUS_OAUTH_ACCESS_TOKEN": "replace-with-nous-oauth-access-token",
+    "FORGEFRAME_NOUS_OAUTH_RUNTIME_AGENT_KEY": "replace-with-nous-runtime-agent-key",
+    "FORGEFRAME_QWEN_OAUTH_ACCESS_TOKEN": "replace-with-qwen-oauth-access-token",
+}
+postgres_url_keys = {
+    "FORGEFRAME_POSTGRES_URL",
+    "FORGEFRAME_HARNESS_POSTGRES_URL",
+    "FORGEFRAME_CONTROL_PLANE_POSTGRES_URL",
+    "FORGEFRAME_OBSERVABILITY_POSTGRES_URL",
+    "FORGEFRAME_GOVERNANCE_POSTGRES_URL",
+    "FORGEFRAME_INSTANCES_POSTGRES_URL",
+    "FORGEFRAME_EXECUTION_POSTGRES_URL",
+}
+
+
+def scrub_postgres_url(value: str) -> str:
+    stripped = value.strip().strip("'").strip('"')
+    if not stripped:
+        return "postgresql://forgeframe:replace-with-a-generated-postgres-password@127.0.0.1:5432/forgeframe"
+    parts = urlsplit(stripped)
+    username = unquote(parts.username) if parts.username else "forgeframe"
+    password = "replace-with-a-generated-postgres-password"
+    hostname = parts.hostname or "127.0.0.1"
+    port = f":{parts.port}" if parts.port else ""
+    netloc = f"{quote(username, safe='')}:{quote(password, safe='')}@{hostname}{port}"
+    path = parts.path or "/forgeframe"
+    return urlunsplit((parts.scheme or "postgresql", netloc, path, parts.query, parts.fragment))
+
+
+updated_lines: list[str] = []
+for raw_line in lines:
+    line = raw_line.strip()
+    if not line or line.startswith("#") or "=" not in raw_line:
+      updated_lines.append(raw_line)
+      continue
+
+    key, _, raw_value = raw_line.partition("=")
+    normalized_key = key.strip()
+    value = raw_value.strip()
+    if normalized_key in postgres_url_keys:
+        value = scrub_postgres_url(value)
+    elif normalized_key in secret_placeholders:
+        value = secret_placeholders[normalized_key]
+    updated_lines.append(f"{normalized_key}={value}")
+
+target_path.write_text("\n".join(updated_lines) + "\n", encoding="utf-8")
+PY
+    chmod 644 "$example_path"
+    if [[ "$(id -u)" -eq 0 ]]; then
+      chown "$SYSTEM_USER:$SYSTEM_GROUP" "$example_path"
+    fi
+    log "Wrote local env example $example_path"
+  done
+}
+
 require_valid_port() {
   local value="$1"
   local label="$2"
@@ -1086,6 +1199,8 @@ env_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 PY
 
 forgeframe_load_env_file "$ENV_FILE" || fail "Unable to load $ENV_FILE after writing installer values."
+write_local_env_mirrors
+write_local_env_examples
 
 INSTALLER_PG_MODE="${INSTALLER_PG_MODE:-${FORGEFRAME_PG_MODE:-native}}"
 INSTALLER_PG_HOST="${INSTALLER_PG_HOST:-${FORGEFRAME_PG_HOST:-127.0.0.1}}"
@@ -1156,6 +1271,8 @@ if [[ "$GUIDED" == "1" ]]; then
   log "Guided host-native installation artifacts are ready."
   log "Resolved ports: public HTTPS 443, ACME helper 80, internal API ${FORGEFRAME_PORT:-8080}, PostgreSQL ${FORGEFRAME_PG_HOST:-127.0.0.1}:${FORGEFRAME_PG_PORT:-5432}"
   log "forgeframe.env written to $ENV_FILE"
+  log "Ignored .env mirrors written to $INSTALL_ROOT/.env.host, $INSTALL_ROOT/.env, and $INSTALL_ROOT/backend/.env"
+  log "Local .env.example files written to $INSTALL_ROOT/.env.host.example, $INSTALL_ROOT/.env.example, and $INSTALL_ROOT/backend/.env.example"
 else
   log "Host-native installation artifacts are ready."
 fi

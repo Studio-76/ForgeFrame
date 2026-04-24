@@ -71,6 +71,14 @@ def test_guided_host_install_driver_collects_login_inputs_and_reassigns_non_publ
     assert "Bootstrap admin username" in install_script
     assert "collect_default_install_inputs" in install_script
     assert "ensure_system_dependencies" in install_script
+    assert "write_local_env_mirrors" in install_script
+    assert "write_local_env_examples" in install_script
+    assert "$INSTALL_ROOT/.env.host" in install_script
+    assert "$INSTALL_ROOT/.env" in install_script
+    assert "$INSTALL_ROOT/backend/.env" in install_script
+    assert "$INSTALL_ROOT/.env.host.example" in install_script
+    assert "$INSTALL_ROOT/.env.example" in install_script
+    assert "$INSTALL_ROOT/backend/.env.example" in install_script
     assert "python3-venv" in install_script
     assert "setup_20.x" in install_script
     assert "pg_createcluster" in install_script
