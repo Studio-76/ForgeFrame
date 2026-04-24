@@ -241,6 +241,22 @@ ensure_system_dependencies() {
   esac
 }
 
+normalize_installer_value() {
+  local raw="${1-}"
+
+  raw="${raw//$'\r'/}"
+  raw="${raw//$'\n'/}"
+  raw="${raw#"${raw%%[![:space:]]*}"}"
+  raw="${raw%"${raw##*[![:space:]]}"}"
+  if [[ "${#raw}" -ge 2 && "$raw" == \"*\" && "$raw" == *\" ]]; then
+    raw="${raw:1:${#raw}-2}"
+  elif [[ "${#raw}" -ge 2 && "$raw" == \'*\' && "$raw" == *\' ]]; then
+    raw="${raw:1:${#raw}-2}"
+  fi
+
+  printf '%s\n' "$raw"
+}
+
 write_local_env_mirrors() {
   local mirror_paths=(
     "$INSTALL_ROOT/.env.host"
@@ -1074,17 +1090,17 @@ provision_managed_postgres() {
 }
 
 guided_collect_inputs() {
-  local default_fqdn="${FORGEFRAME_PUBLIC_FQDN:-}"
-  local default_acme_email="${FORGEFRAME_PUBLIC_TLS_ACME_EMAIL:-}"
-  local default_admin_username="${FORGEFRAME_BOOTSTRAP_ADMIN_USERNAME:-admin}"
-  local default_api_port="${FORGEFRAME_PORT:-8080}"
-  local default_pg_mode="${FORGEFRAME_PG_MODE:-native}"
-  local default_pg_host="${FORGEFRAME_PG_HOST:-127.0.0.1}"
-  local default_pg_port="${FORGEFRAME_PG_PORT:-5432}"
-  local default_pg_db="${FORGEFRAME_PG_DB:-forgeframe}"
-  local default_pg_user="${FORGEFRAME_PG_USER:-forgeframe}"
-  local default_pg_container="${FORGEFRAME_PG_CONTAINER_NAME:-forgeframe-postgres}"
-  local default_pg_cluster="${FORGEFRAME_PG_CLUSTER_NAME:-forgeframe}"
+  local default_fqdn="$(normalize_installer_value "${FORGEFRAME_PUBLIC_FQDN:-}")"
+  local default_acme_email="$(normalize_installer_value "${FORGEFRAME_PUBLIC_TLS_ACME_EMAIL:-}")"
+  local default_admin_username="$(normalize_installer_value "${FORGEFRAME_BOOTSTRAP_ADMIN_USERNAME:-admin}")"
+  local default_api_port="$(normalize_installer_value "${FORGEFRAME_PORT:-8080}")"
+  local default_pg_mode="$(normalize_installer_value "${FORGEFRAME_PG_MODE:-native}")"
+  local default_pg_host="$(normalize_installer_value "${FORGEFRAME_PG_HOST:-127.0.0.1}")"
+  local default_pg_port="$(normalize_installer_value "${FORGEFRAME_PG_PORT:-5432}")"
+  local default_pg_db="$(normalize_installer_value "${FORGEFRAME_PG_DB:-forgeframe}")"
+  local default_pg_user="$(normalize_installer_value "${FORGEFRAME_PG_USER:-forgeframe}")"
+  local default_pg_container="$(normalize_installer_value "${FORGEFRAME_PG_CONTAINER_NAME:-forgeframe-postgres}")"
+  local default_pg_cluster="$(normalize_installer_value "${FORGEFRAME_PG_CLUSTER_NAME:-forgeframe}")"
   local configure_ollama
   local ollama_host
   local ollama_port
@@ -1103,6 +1119,13 @@ guided_collect_inputs() {
   if ! [[ "$default_pg_port" =~ ^[0-9]+$ ]]; then
     default_pg_port="5432"
   fi
+  case "$default_pg_mode" in
+    native|existing|docker)
+      ;;
+    *)
+      default_pg_mode="native"
+      ;;
+  esac
 
   printf '\n'
   log "Guided host-native installation"
@@ -1161,17 +1184,31 @@ guided_collect_inputs() {
 }
 
 collect_default_install_inputs() {
-  local default_api_port="${FORGEFRAME_PORT:-8080}"
-  local default_pg_mode="${FORGEFRAME_PG_MODE:-native}"
-  local default_pg_host="${FORGEFRAME_PG_HOST:-127.0.0.1}"
-  local default_pg_port="${FORGEFRAME_PG_PORT:-5432}"
-  local default_pg_db="${FORGEFRAME_PG_DB:-forgeframe}"
-  local default_pg_user="${FORGEFRAME_PG_USER:-forgeframe}"
-  local default_pg_container="${FORGEFRAME_PG_CONTAINER_NAME:-forgeframe-postgres}"
-  local default_pg_cluster="${FORGEFRAME_PG_CLUSTER_NAME:-forgeframe}"
+  local default_api_port="$(normalize_installer_value "${FORGEFRAME_PORT:-8080}")"
+  local default_pg_mode="$(normalize_installer_value "${FORGEFRAME_PG_MODE:-native}")"
+  local default_pg_host="$(normalize_installer_value "${FORGEFRAME_PG_HOST:-127.0.0.1}")"
+  local default_pg_port="$(normalize_installer_value "${FORGEFRAME_PG_PORT:-5432}")"
+  local default_pg_db="$(normalize_installer_value "${FORGEFRAME_PG_DB:-forgeframe}")"
+  local default_pg_user="$(normalize_installer_value "${FORGEFRAME_PG_USER:-forgeframe}")"
+  local default_pg_container="$(normalize_installer_value "${FORGEFRAME_PG_CONTAINER_NAME:-forgeframe-postgres}")"
+  local default_pg_cluster="$(normalize_installer_value "${FORGEFRAME_PG_CLUSTER_NAME:-forgeframe}")"
 
   require_enforced_port 80 "Public HTTP helper"
   require_enforced_port 443 "Public HTTPS"
+
+  if ! [[ "$default_api_port" =~ ^[0-9]+$ ]]; then
+    default_api_port="8080"
+  fi
+  if ! [[ "$default_pg_port" =~ ^[0-9]+$ ]]; then
+    default_pg_port="5432"
+  fi
+  case "$default_pg_mode" in
+    native|existing|docker)
+      ;;
+    *)
+      default_pg_mode="native"
+      ;;
+  esac
 
   INSTALLER_API_PORT="$(resolve_shifted_port "$default_api_port" "ForgeFrame internal API")"
   INSTALLER_PG_MODE="$default_pg_mode"

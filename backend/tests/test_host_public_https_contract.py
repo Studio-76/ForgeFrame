@@ -77,6 +77,7 @@ def test_guided_host_install_driver_collects_login_inputs_and_reassigns_non_publ
     assert "Completed systemd installation with embedded template fallback." in install_script
     assert "require_runtime_install_tree" in install_script
     assert "missing required runtime artifacts" in install_script
+    assert "normalize_installer_value" in install_script
     assert "write_local_env_mirrors" in install_script
     assert "write_local_env_examples" in install_script
     assert "$INSTALL_ROOT/.env.host" in install_script
@@ -89,6 +90,7 @@ def test_guided_host_install_driver_collects_login_inputs_and_reassigns_non_publ
     assert "setup_20.x" in install_script
     assert "pg_createcluster" in install_script
     assert "except ValueError" in install_script
+    assert "default_pg_port=\"5432\"" in install_script
     assert "npm ci" in install_script
     assert "npm install" in install_script
     assert "Frontend login:" in (ROOT / "scripts" / "bootstrap-forgeframe.sh").read_text(encoding="utf-8")
