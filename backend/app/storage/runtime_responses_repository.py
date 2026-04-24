@@ -102,6 +102,11 @@ class RuntimeResponseORM(Base):
         nullable=False,
         default=dict,
     )
+    native_mapping: Mapped[dict[str, Any]] = mapped_column(
+        JSONB().with_variant(JSON(), "sqlite"),
+        nullable=False,
+        default=dict,
+    )
     response_body: Mapped[dict[str, Any]] = mapped_column(
         JSONB().with_variant(JSON(), "sqlite"),
         nullable=False,

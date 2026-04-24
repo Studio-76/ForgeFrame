@@ -11,7 +11,9 @@ from sqlalchemy import text
 from app.settings.config import Settings
 from app.storage.db import build_postgres_engine
 
-_MIGRATION_TABLE = "forgegate_schema_migrations"
+_PRIMARY_MIGRATION_TABLE = "forgeframe_schema_migrations"
+_LEGACY_MIGRATION_TABLE = "forgegate_schema_migrations"
+_MIGRATION_TABLES = (_PRIMARY_MIGRATION_TABLE, _LEGACY_MIGRATION_TABLE)
 _CREATE_INDEX_STATEMENT = re.compile(
     r"""
     ^\s*
@@ -232,23 +234,26 @@ def apply_storage_migrations(database_url: str) -> dict[str, object]:
     skipped_versions: list[int] = []
 
     with engine.begin() as connection:
-        connection.execute(
-            text(
-                f"""
-                CREATE TABLE IF NOT EXISTS {_MIGRATION_TABLE} (
-                    version INTEGER PRIMARY KEY,
-                    name VARCHAR(255) NOT NULL,
-                    applied_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        for migration_table in _MIGRATION_TABLES:
+            connection.execute(
+                text(
+                    f"""
+                    CREATE TABLE IF NOT EXISTS {migration_table} (
+                        version INTEGER PRIMARY KEY,
+                        name VARCHAR(255) NOT NULL,
+                        applied_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+                    )
+                    """
                 )
-                """
             )
-        )
-        existing_versions = {
-            row[0]
-            for row in connection.execute(
-                text(f"SELECT version FROM {_MIGRATION_TABLE} ORDER BY version ASC")
+        existing_versions: set[int] = set()
+        for migration_table in _MIGRATION_TABLES:
+            existing_versions.update(
+                int(row[0])
+                for row in connection.execute(
+                    text(f"SELECT version FROM {migration_table} ORDER BY version ASC")
+                )
             )
-        }
         for migration in migrations:
             if migration.version in existing_versions:
                 skipped_versions.append(migration.version)
@@ -279,15 +284,17 @@ def apply_storage_migrations(database_url: str) -> dict[str, object]:
                         f"index on missing relation {target.relation_name}"
                     )
                 connection.exec_driver_sql(statement)
-            connection.execute(
-                text(
-                    f"""
-                    INSERT INTO {_MIGRATION_TABLE} (version, name)
-                    VALUES (:version, :name)
-                    """
-                ),
-                {"version": migration.version, "name": migration.name},
-            )
+            for migration_table in _MIGRATION_TABLES:
+                connection.execute(
+                    text(
+                        f"""
+                        INSERT INTO {migration_table} (version, name)
+                        VALUES (:version, :name)
+                        ON CONFLICT (version) DO NOTHING
+                        """
+                    ),
+                    {"version": migration.version, "name": migration.name},
+                )
             applied_versions.append(migration.version)
 
     return {

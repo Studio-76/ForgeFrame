@@ -23,6 +23,7 @@ const OnboardingPage = lazy(async () => import("./pages/OnboardingPage").then((m
 const HarnessPage = lazy(async () => import("./pages/HarnessPage").then((module) => ({ default: module.HarnessPage })));
 const IngressTlsPage = lazy(async () => import("./pages/IngressTlsPage").then((module) => ({ default: module.IngressTlsPage })));
 const PluginsPage = lazy(async () => import("./pages/PluginsPage").then((module) => ({ default: module.PluginsPage })));
+const RecoveryPage = lazy(async () => import("./pages/RecoveryPage").then((module) => ({ default: module.RecoveryPage })));
 const ApprovalsPage = lazy(async () => import("./pages/ApprovalsPage").then((module) => ({ default: module.ApprovalsPage })));
 const DispatchPage = lazy(async () => import("./pages/DispatchPage").then((module) => ({ default: module.DispatchPage })));
 const ExecutionPage = lazy(async () => import("./pages/ExecutionPage").then((module) => ({ default: module.ExecutionPage })));
@@ -33,10 +34,13 @@ const TasksPage = lazy(async () => import("./pages/TasksPage").then((module) => 
 const RemindersPage = lazy(async () => import("./pages/RemindersPage").then((module) => ({ default: module.RemindersPage })));
 const AutomationsPage = lazy(async () => import("./pages/AutomationsPage").then((module) => ({ default: module.AutomationsPage })));
 const NotificationsPage = lazy(async () => import("./pages/NotificationsPage").then((module) => ({ default: module.NotificationsPage })));
+const AgentsPage = lazy(async () => import("./pages/AgentsPage").then((module) => ({ default: module.AgentsPage })));
 const ChannelsPage = lazy(async () => import("./pages/ChannelsPage").then((module) => ({ default: module.ChannelsPage })));
 const ContactsPage = lazy(async () => import("./pages/ContactsPage").then((module) => ({ default: module.ContactsPage })));
 const KnowledgeSourcesPage = lazy(async () => import("./pages/KnowledgeSourcesPage").then((module) => ({ default: module.KnowledgeSourcesPage })));
 const MemoryPage = lazy(async () => import("./pages/MemoryPage").then((module) => ({ default: module.MemoryPage })));
+const LearningPage = lazy(async () => import("./pages/LearningPage").then((module) => ({ default: module.LearningPage })));
+const SkillsPage = lazy(async () => import("./pages/SkillsPage").then((module) => ({ default: module.SkillsPage })));
 const AssistantProfilesPage = lazy(async () => import("./pages/AssistantProfilesPage").then((module) => ({ default: module.AssistantProfilesPage })));
 const QueuesPage = lazy(async () => import("./pages/QueuesPage").then((module) => ({ default: module.QueuesPage })));
 const ReleaseValidationPage = lazy(async () => import("./pages/ReleaseValidationPage").then((module) => ({ default: module.ReleaseValidationPage })));
@@ -90,6 +94,7 @@ const router = createBrowserRouter([
       { path: "plugins", element: lazyRoute(<PluginsPage />) },
       { path: "ingress-tls", element: lazyRoute(<IngressTlsPage />) },
       { path: "release-validation", element: lazyRoute(<ReleaseValidationPage />) },
+      { path: "recovery", element: lazyRoute(<RecoveryPage />) },
       { path: "accounts", element: <AccountsPage /> },
       { path: "api-keys", element: <ApiKeysPage /> },
       { path: "approvals", element: lazyRoute(<ApprovalsPage />) },
@@ -102,10 +107,13 @@ const router = createBrowserRouter([
       { path: "reminders", element: lazyRoute(<RemindersPage />) },
       { path: "automations", element: lazyRoute(<AutomationsPage />) },
       { path: "notifications", element: lazyRoute(<NotificationsPage />) },
+      { path: "agents", element: lazyRoute(<AgentsPage />) },
       { path: "channels", element: lazyRoute(<ChannelsPage />) },
       { path: "contacts", element: lazyRoute(<ContactsPage />) },
       { path: "knowledge-sources", element: lazyRoute(<KnowledgeSourcesPage />) },
       { path: "memory", element: lazyRoute(<MemoryPage />) },
+      { path: "learning", element: lazyRoute(<LearningPage />) },
+      { path: "skills", element: lazyRoute(<SkillsPage />) },
       { path: "assistant-profiles", element: lazyRoute(<AssistantProfilesPage />) },
       { path: "workspaces", element: lazyRoute(<WorkspacesPage />) },
       { path: "artifacts", element: lazyRoute(<ArtifactsPage />) },

@@ -16,6 +16,7 @@ export const CONTROL_PLANE_ROUTES = {
   plugins: "/plugins",
   ingressTls: "/ingress-tls",
   releaseValidation: "/release-validation",
+  recovery: "/recovery",
   providerHealthRuns: "/providers#provider-health-runs",
   accounts: "/accounts",
   apiKeys: "/api-keys",
@@ -29,10 +30,13 @@ export const CONTROL_PLANE_ROUTES = {
   reminders: "/reminders",
   automations: "/automations",
   notifications: "/notifications",
+  agents: "/agents",
   channels: "/channels",
   contacts: "/contacts",
   knowledgeSources: "/knowledge-sources",
   memory: "/memory",
+  learning: "/learning",
+  skills: "/skills",
   assistantProfiles: "/assistant-profiles",
   workspaces: "/workspaces",
   artifacts: "/artifacts",
@@ -200,6 +204,11 @@ const NAVIGATION_SECTIONS: NavigationSection[] = [
         description: "Jump directly to the live provider inventory and run posture.",
       },
       {
+        label: "Recovery / Backup / Restore",
+        to: CONTROL_PLANE_ROUTES.recovery,
+        description: "Backup target classes, restore evidence, freshness, and source-identity truth.",
+      },
+      {
         label: "Health",
         to: CONTROL_PLANE_ROUTES.health,
         description: "Runtime readiness, provider health posture, and observability signal-path truth.",
@@ -256,6 +265,11 @@ const NAVIGATION_SECTIONS: NavigationSection[] = [
         description: "Delivery and outbox surface with preview, retry, reject, and fallback truth.",
       },
       {
+        label: "Agents",
+        to: CONTROL_PLANE_ROUTES.agents,
+        description: "Instance-scoped agent registry with the required Operator, participation posture, and assistant-profile linkage.",
+      },
+      {
         label: "Channels",
         to: CONTROL_PLANE_ROUTES.channels,
         description: "Delivery channel inventory with fallback posture and recent notification linkage.",
@@ -274,6 +288,16 @@ const NAVIGATION_SECTIONS: NavigationSection[] = [
         label: "Memory",
         to: CONTROL_PLANE_ROUTES.memory,
         description: "Correctable and deletable context records with scope, sensitivity, and work-interaction links.",
+      },
+      {
+        label: "Learning",
+        to: CONTROL_PLANE_ROUTES.learning,
+        description: "Learning-event review, promotion decisions, and explainability for memory and skill promotion.",
+      },
+      {
+        label: "Skills",
+        to: CONTROL_PLANE_ROUTES.skills,
+        description: "Versioned skill registry with activation state, provenance, scope, and usage telemetry.",
       },
       {
         label: "Assistant Profiles",
@@ -342,10 +366,13 @@ export function getControlPlaneNavigation(session: AdminSessionUser | null): Nav
             || link.to === CONTROL_PLANE_ROUTES.reminders
             || link.to === CONTROL_PLANE_ROUTES.automations
             || link.to === CONTROL_PLANE_ROUTES.notifications
+            || link.to === CONTROL_PLANE_ROUTES.agents
             || link.to === CONTROL_PLANE_ROUTES.channels
             || link.to === CONTROL_PLANE_ROUTES.contacts
             || link.to === CONTROL_PLANE_ROUTES.knowledgeSources
             || link.to === CONTROL_PLANE_ROUTES.memory
+            || link.to === CONTROL_PLANE_ROUTES.learning
+            || link.to === CONTROL_PLANE_ROUTES.skills
             || link.to === CONTROL_PLANE_ROUTES.assistantProfiles
             || link.to === CONTROL_PLANE_ROUTES.workspaces
             || link.to === CONTROL_PLANE_ROUTES.artifacts
@@ -371,10 +398,13 @@ export function getControlPlaneNavigation(session: AdminSessionUser | null): Nav
           || link.to === CONTROL_PLANE_ROUTES.reminders
           || link.to === CONTROL_PLANE_ROUTES.automations
           || link.to === CONTROL_PLANE_ROUTES.notifications
+          || link.to === CONTROL_PLANE_ROUTES.agents
           || link.to === CONTROL_PLANE_ROUTES.channels
           || link.to === CONTROL_PLANE_ROUTES.contacts
           || link.to === CONTROL_PLANE_ROUTES.knowledgeSources
           || link.to === CONTROL_PLANE_ROUTES.memory
+          || link.to === CONTROL_PLANE_ROUTES.learning
+          || link.to === CONTROL_PLANE_ROUTES.skills
           || link.to === CONTROL_PLANE_ROUTES.assistantProfiles
           || link.to === CONTROL_PLANE_ROUTES.workspaces
           || link.to === CONTROL_PLANE_ROUTES.artifacts

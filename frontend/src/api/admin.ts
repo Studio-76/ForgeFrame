@@ -71,6 +71,146 @@ export type InstanceRecord = {
   updated_at: string;
 };
 
+export type AgentRoleKind = "operator" | "specialist" | "reviewer" | "worker" | "observer";
+export type AgentStatus = "active" | "paused" | "archived";
+export type AgentParticipationMode = "direct" | "mentioned_only" | "roundtable" | "handoff_only";
+
+export type AgentSummary = {
+  agent_id: string;
+  instance_id: string;
+  company_id: string;
+  display_name: string;
+  default_name: string;
+  role_kind: AgentRoleKind;
+  status: AgentStatus;
+  participation_mode: AgentParticipationMode;
+  allowed_targets: string[];
+  assistant_profile_id?: string | null;
+  is_default_operator: boolean;
+  metadata: Record<string, unknown>;
+  created_at: string;
+  updated_at: string;
+};
+
+export type AgentDetail = AgentSummary & {
+  assistant_profile?: RecordLink | null;
+};
+
+export type SkillScope = "instance" | "agent";
+export type SkillStatus = "draft" | "review" | "active" | "archived";
+export type SkillActivationStatus = "active" | "inactive" | "archived";
+export type SkillUsageOutcome = "success" | "blocked" | "error";
+
+export type SkillVersionRecord = {
+  version_id: string;
+  skill_id: string;
+  instance_id: string;
+  company_id: string;
+  version_number: number;
+  status: SkillStatus;
+  summary: string;
+  instruction_core: string;
+  provenance: Record<string, unknown>;
+  activation_conditions: Record<string, unknown>;
+  metadata: Record<string, unknown>;
+  created_at: string;
+};
+
+export type SkillActivationRecord = {
+  activation_id: string;
+  skill_id: string;
+  version_id: string;
+  instance_id: string;
+  company_id: string;
+  scope: SkillScope;
+  scope_agent_id?: string | null;
+  status: SkillActivationStatus;
+  activation_conditions: Record<string, unknown>;
+  activated_by_type: string;
+  activated_by_id?: string | null;
+  activated_at: string;
+  deactivated_at?: string | null;
+  metadata: Record<string, unknown>;
+};
+
+export type SkillUsageEventRecord = {
+  usage_event_id: string;
+  skill_id: string;
+  version_id: string;
+  activation_id?: string | null;
+  instance_id: string;
+  company_id: string;
+  agent_id?: string | null;
+  run_id?: string | null;
+  conversation_id?: string | null;
+  outcome: SkillUsageOutcome;
+  details: Record<string, unknown>;
+  created_at: string;
+};
+
+export type SkillSummary = {
+  skill_id: string;
+  instance_id: string;
+  company_id: string;
+  display_name: string;
+  summary: string;
+  scope: SkillScope;
+  scope_agent_id?: string | null;
+  current_version_number: number;
+  status: SkillStatus;
+  provenance: Record<string, unknown>;
+  activation_conditions: Record<string, unknown>;
+  instruction_core: string;
+  telemetry: Record<string, unknown>;
+  metadata: Record<string, unknown>;
+  last_used_at?: string | null;
+  active_activation_count: number;
+  created_at: string;
+  updated_at: string;
+};
+
+export type SkillDetail = SkillSummary & {
+  scope_agent?: RecordLink | null;
+  versions: SkillVersionRecord[];
+  activations: SkillActivationRecord[];
+  recent_usage: SkillUsageEventRecord[];
+};
+
+export type LearningTriggerKind = "run_completion" | "session_rotation" | "pattern_detected" | "operator_action";
+export type LearningDecision = "discard" | "history_only" | "boot_memory" | "durable_memory" | "skill_draft" | "review_required";
+export type LearningStatus = "pending" | "applied" | "discarded" | "review_required";
+
+export type LearningEventSummary = {
+  learning_event_id: string;
+  instance_id: string;
+  company_id: string;
+  trigger_kind: LearningTriggerKind;
+  suggested_decision: LearningDecision;
+  status: LearningStatus;
+  summary: string;
+  explanation: string;
+  agent_id?: string | null;
+  run_id?: string | null;
+  conversation_id?: string | null;
+  evidence: Record<string, unknown>;
+  proposed_memory: Record<string, unknown>;
+  proposed_skill: Record<string, unknown>;
+  promoted_memory_id?: string | null;
+  promoted_skill_id?: string | null;
+  human_override: boolean;
+  decision_note?: string | null;
+  created_at: string;
+  decided_at?: string | null;
+};
+
+export type LearningEventDetail = LearningEventSummary & {
+  agent?: RecordLink | null;
+  run?: RecordLink | null;
+  conversation?: RecordLink | null;
+  promoted_memory?: RecordLink | null;
+  promoted_skill?: RecordLink | null;
+};
+
 export type PluginSecurityPosture = {
   allowed_roles: Array<"viewer" | "operator" | "admin" | "owner">;
   admin_approval_required: boolean;
@@ -152,6 +292,9 @@ export type AdminModelRegisterRecord = {
   category: string;
   routing_key: string;
   capabilities: Record<string, unknown>;
+  execution_traits: Record<string, unknown>;
+  policy_flags: Record<string, unknown>;
+  economic_profile: Record<string, unknown>;
   source: string;
   discovery_status: string;
   runtime_status: string;
@@ -220,6 +363,10 @@ export type ProviderTargetRecord = {
   auth_type: string;
   credential_type: string;
   capability_profile: Record<string, unknown>;
+  technical_capabilities: Record<string, unknown>;
+  execution_traits: Record<string, unknown>;
+  policy_flags: Record<string, unknown>;
+  economic_profile: Record<string, unknown>;
   cost_class: string;
   latency_class: string;
   enabled: boolean;
@@ -466,6 +613,171 @@ export type IngressTlsStatusResponse = {
   checked_at: string;
 };
 
+export type RecoveryBackupTargetClass =
+  | "local_secondary_disk"
+  | "second_host"
+  | "nas_share"
+  | "offsite_copy"
+  | "object_storage";
+
+export type RecoveryProtectedDataClass =
+  | "database"
+  | "artifact_metadata"
+  | "blob_contents"
+  | "configuration_state"
+  | "secret_metadata";
+
+export type RecoverySourceIdentity = {
+  source_database: string;
+  cluster_system_identifier: string;
+  deployment_slug: string;
+  public_fqdn: string;
+  metadata: Record<string, unknown>;
+};
+
+export type RecoveryPolicyValidation = {
+  state: "ok" | "warning" | "blocked";
+  reasons: string[];
+  target_locator: string;
+  checked_at: string;
+};
+
+export type RecoveryBackupReportRecord = {
+  report_id: string;
+  policy_id: string;
+  status: "ok" | "warning" | "failed";
+  protected_data_classes: RecoveryProtectedDataClass[];
+  source_identity: RecoverySourceIdentity;
+  target_locator: string;
+  backup_path: string;
+  manifest_path: string;
+  byte_size?: number | null;
+  checksum_sha256?: string | null;
+  source_identity_match: boolean;
+  coverage_match: boolean;
+  mismatch_reasons: string[];
+  raw_report: Record<string, unknown>;
+  created_at: string;
+  imported_at: string;
+  notes: string;
+};
+
+export type RecoveryRestoreReportRecord = {
+  report_id: string;
+  policy_id: string;
+  status: "ok" | "warning" | "failed";
+  protected_data_classes: RecoveryProtectedDataClass[];
+  source_identity: RecoverySourceIdentity;
+  validated_source_identities: RecoverySourceIdentity[];
+  restored_database: string;
+  tables_compared: number;
+  source_identity_match: boolean;
+  coverage_match: boolean;
+  mismatch_reasons: string[];
+  raw_report: Record<string, unknown>;
+  created_at: string;
+  imported_at: string;
+  notes: string;
+};
+
+export type RecoveryBackupPolicyRecord = {
+  policy_id: string;
+  label: string;
+  status: "active" | "paused";
+  target_class: RecoveryBackupTargetClass;
+  target_label: string;
+  target_config: Record<string, unknown>;
+  protected_data_classes: RecoveryProtectedDataClass[];
+  expected_source_identity: RecoverySourceIdentity;
+  schedule_hint: string;
+  max_backup_age_hours: number;
+  max_restore_age_hours: number;
+  notes: string;
+  created_at: string;
+  updated_at: string;
+};
+
+export type RecoveryUpgradeSnapshot = {
+  captured_at?: string | null;
+  source_identity: RecoverySourceIdentity;
+  migration_version?: number | null;
+  applied_migration_versions: number[];
+  critical_object_counts: Record<string, number>;
+  queue_state_counts: Record<string, number>;
+  database_targets: Array<Record<string, unknown>>;
+};
+
+export type RecoveryUpgradeReportRecord = {
+  report_id: string;
+  release_id: string;
+  target_version: string;
+  status: "ok" | "warning" | "failed";
+  upgrade_result: "succeeded" | "failed" | "rolled_back" | "partial_failure";
+  rollback_classification: string;
+  failure_classification: string;
+  bootstrap_recovery_state: string;
+  before_snapshot: RecoveryUpgradeSnapshot;
+  after_snapshot: RecoveryUpgradeSnapshot;
+  no_loss_ok: boolean;
+  queue_drain_ok: boolean;
+  source_identity_stable: boolean;
+  mismatch_reasons: string[];
+  raw_report: Record<string, unknown>;
+  created_at: string;
+  imported_at: string;
+  notes: string;
+};
+
+export type RecoveryUpgradePosture = {
+  total_reports: number;
+  latest_release_id?: string | null;
+  latest_target_version?: string | null;
+  latest_status?: "ok" | "warning" | "failed" | null;
+  latest_upgrade_result?: "succeeded" | "failed" | "rolled_back" | "partial_failure" | null;
+  latest_created_at?: string | null;
+  latest_imported_at?: string | null;
+  latest_no_loss_ok: boolean;
+  latest_queue_drain_ok: boolean;
+  latest_source_identity_stable: boolean;
+  runtime_status: "ok" | "warning" | "blocked";
+  blockers: string[];
+};
+
+export type RecoveryPolicySummary = {
+  policy: RecoveryBackupPolicyRecord;
+  validation: RecoveryPolicyValidation;
+  latest_backup?: RecoveryBackupReportRecord | null;
+  latest_restore?: RecoveryRestoreReportRecord | null;
+  backup_fresh: boolean;
+  restore_fresh: boolean;
+  source_identity_verified: boolean;
+  mismatches: string[];
+  overall_status: "ok" | "warning" | "blocked";
+};
+
+export type RecoveryOverviewResponse = {
+  status: "ok";
+  summary: {
+    total_policies: number;
+    active_policies: number;
+    healthy_policies: number;
+    warning_policies: number;
+    blocked_policies: number;
+    fresh_backup_policies: number;
+    fresh_restore_policies: number;
+    source_identity_verified_policies: number;
+    target_classes_present: RecoveryBackupTargetClass[];
+    missing_target_classes: RecoveryBackupTargetClass[];
+    protected_data_classes_present: RecoveryProtectedDataClass[];
+    missing_protected_data_classes: RecoveryProtectedDataClass[];
+    runtime_status: "ok" | "warning" | "blocked";
+    checked_at: string;
+  };
+  upgrade_posture: RecoveryUpgradePosture;
+  recent_upgrades: RecoveryUpgradeReportRecord[];
+  policies: RecoveryPolicySummary[];
+};
+
 
 export type ProductAxisTarget = {
   provider_key: string;
@@ -483,6 +795,7 @@ export type ProductAxisTarget = {
   streaming_readiness: "planned" | "partial" | "ready";
   verify_probe_readiness: "planned" | "partial" | "ready";
   ui_readiness: "planned" | "partial" | "ready";
+  evidence: ProviderCapabilityEvidenceRecord;
   health_semantics: string;
   verify_probe_axis: string;
   observability_axis: string;
@@ -490,6 +803,20 @@ export type ProductAxisTarget = {
   status_summary: string;
   oauth_account_provider: boolean;
   notes: string;
+};
+
+export type CapabilityEvidenceRecord = {
+  status: "missing" | "observed" | "failed";
+  source: "none" | "oauth_probe" | "runtime_non_stream" | "runtime_stream" | "runtime_tool_call";
+  recorded_at?: string | null;
+  details: string;
+};
+
+export type ProviderCapabilityEvidenceRecord = {
+  runtime: CapabilityEvidenceRecord;
+  streaming: CapabilityEvidenceRecord;
+  tool_calling: CapabilityEvidenceRecord;
+  live_probe: CapabilityEvidenceRecord;
 };
 
 export type HarnessTemplate = {
@@ -674,6 +1001,19 @@ export type RuntimeKey = {
   updated_at: string;
   last_used_at?: string | null;
   rotated_from?: string | null;
+  allowed_request_paths?: Array<"smart_routing" | "pinned_target" | "local_only" | "queue_background" | "blocked" | "review_required">;
+  default_request_path?: "smart_routing" | "pinned_target" | "local_only" | "queue_background" | "blocked" | "review_required";
+  pinned_target_key?: string | null;
+  local_only_policy?: "prefer_local" | "require_local_target";
+  review_required_conditions?: string[];
+};
+
+export type RuntimeKeyRequestPathPolicy = {
+  allowed_request_paths: Array<"smart_routing" | "pinned_target" | "local_only" | "queue_background" | "blocked" | "review_required">;
+  default_request_path: "smart_routing" | "pinned_target" | "local_only" | "queue_background" | "blocked" | "review_required";
+  pinned_target_key?: string | null;
+  local_only_policy?: "prefer_local" | "require_local_target";
+  review_required_conditions?: string[];
 };
 
 export type MutableSettingEntry = {
@@ -715,6 +1055,7 @@ export type CompatibilityMatrixRow = {
   ui_models: number;
   proof_status: "none" | "partial" | "proven";
   proven_profile_keys: string[];
+  evidence: ProviderCapabilityEvidenceRecord;
   notes: string;
 };
 
@@ -738,7 +1079,7 @@ export type OauthTargetStatus = {
   auth_kind: "oauth_account" | "api_key";
   oauth_mode?: string | null;
   oauth_flow_support?: string | null;
-  evidence: Record<string, unknown>;
+  evidence: ProviderCapabilityEvidenceRecord;
 };
 
 export type OauthOnboardingTarget = OauthTargetStatus & {
@@ -1111,6 +1452,53 @@ export type InboxSummary = {
   updated_at: string;
 };
 
+export type ConversationParticipantKind = "agent" | "user" | "contact" | "system";
+export type ConversationParticipantStatus = "active" | "mentioned" | "roundtable" | "handoff_pending" | "review_requested" | "blocked" | "archived";
+export type ConversationMentionStatus = "active" | "acknowledged" | "resolved";
+export type ConversationEventType = "mention_event" | "handoff_event" | "review_request_event" | "blocker_event" | "roundtable_event";
+
+export type ConversationParticipantRecord = {
+  participant_id: string;
+  conversation_id: string;
+  thread_id?: string | null;
+  participant_kind: ConversationParticipantKind;
+  participant_status: ConversationParticipantStatus;
+  agent_id?: string | null;
+  participant_ref?: string | null;
+  display_label: string;
+  metadata: Record<string, unknown>;
+  created_at: string;
+  updated_at: string;
+};
+
+export type ConversationMentionRecord = {
+  mention_id: string;
+  conversation_id: string;
+  thread_id: string;
+  message_id: string;
+  agent_id: string;
+  token: string;
+  agent_display_name: string;
+  status: ConversationMentionStatus;
+  metadata: Record<string, unknown>;
+  created_at: string;
+};
+
+export type ConversationEventRecord = {
+  event_id: string;
+  conversation_id: string;
+  thread_id: string;
+  source_message_id?: string | null;
+  event_type: ConversationEventType;
+  source_agent_id?: string | null;
+  target_agent_id?: string | null;
+  related_object_type?: string | null;
+  related_object_id?: string | null;
+  summary: string;
+  metadata: Record<string, unknown>;
+  created_at: string;
+};
+
 export type ConversationSummary = {
   conversation_id: string;
   instance_id: string;
@@ -1132,6 +1520,10 @@ export type ConversationSummary = {
   session_count: number;
   message_count: number;
   inbox_count: number;
+  participant_count: number;
+  mention_count: number;
+  event_count: number;
+  participant_agent_ids: string[];
   latest_message_at?: string | null;
   created_at: string;
   updated_at: string;
@@ -1142,6 +1534,9 @@ export type ConversationDetail = ConversationSummary & {
   sessions: ConversationSessionRecord[];
   messages: ConversationMessageRecord[];
   inbox_items: InboxSummary[];
+  participants: ConversationParticipantRecord[];
+  mentions: ConversationMentionRecord[];
+  events: ConversationEventRecord[];
 };
 
 export type InboxDetail = InboxSummary & {
@@ -1321,6 +1716,9 @@ export type MemoryStatus = "active" | "corrected" | "deleted";
 
 export type MemorySensitivity = "normal" | "sensitive" | "restricted";
 
+export type MemoryTruthState = "active" | "corrected" | "revoked" | "superseded" | "expired" | "deleted";
+export type MemorySourceTrustClass = "human_verified" | "operator_verified" | "runtime_inferred" | "external_unverified";
+
 export type RecordLink = {
   record_id: string;
   label: string;
@@ -1380,10 +1778,14 @@ export type MemorySummary = {
   title: string;
   body: string;
   status: MemoryStatus;
+  truth_state: MemoryTruthState;
+  source_trust_class: MemorySourceTrustClass;
   visibility_scope: VisibilityScope;
   sensitivity: MemorySensitivity;
   correction_note?: string | null;
   supersedes_memory_id?: string | null;
+  learned_from_event_id?: string | null;
+  human_override: boolean;
   expires_at?: string | null;
   deleted_at?: string | null;
   metadata: Record<string, unknown>;
@@ -1645,6 +2047,57 @@ export type ExecutionRunCommandView = {
   completed_at?: string | null;
 };
 
+export type ForgeFrameNativeObjectRef = {
+  kind: string;
+  object_id: string;
+  relation: string;
+  lifecycle_state?: string | null;
+  label?: string | null;
+  details: Record<string, unknown>;
+};
+
+export type ForgeFrameNativeEvent = {
+  event_kind: string;
+  related_object_kind?: string | null;
+  related_object_id?: string | null;
+  status?: string | null;
+  details: Record<string, unknown>;
+};
+
+export type ForgeFrameNativeCommand = {
+  command_kind: string;
+  command_id?: string | null;
+  status?: string | null;
+  actor_type?: string | null;
+  actor_id?: string | null;
+  details: Record<string, unknown>;
+};
+
+export type ForgeFrameNativeView = {
+  view_kind: string;
+  available: boolean;
+  label?: string | null;
+  details: Record<string, unknown>;
+};
+
+export type RuntimeNativeMapping = {
+  object: "forgeframe.native_mapping";
+  mapping_version: string;
+  contract_surface: string;
+  request_path: string;
+  response_id?: string | null;
+  processing_mode: string;
+  stream: boolean;
+  background: boolean;
+  primary_native_object_kind?: string | null;
+  objects: ForgeFrameNativeObjectRef[];
+  events: ForgeFrameNativeEvent[];
+  commands: ForgeFrameNativeCommand[];
+  views: ForgeFrameNativeView[];
+  route_context: Record<string, unknown>;
+  notes: string[];
+};
+
 export type ExecutionRunOutboxView = {
   id: string;
   event_type: string;
@@ -1684,6 +2137,7 @@ export type ExecutionRunDetail = ExecutionRunSummary & {
   outbox: ExecutionRunOutboxView[];
   workspace?: WorkspaceSummary | null;
   artifacts: ArtifactRecord[];
+  native_mapping?: RuntimeNativeMapping | null;
 };
 
 export type ExecutionReplayAuditReference = {
@@ -2034,6 +2488,286 @@ export function updateInstance(instanceId: string, payload: {
   });
 }
 
+export function fetchAgents(
+  instanceId?: string | null,
+  filters: {
+    status?: AgentStatus | "all";
+    limit?: number;
+  } = {},
+) {
+  return fetchJson<{ status: string; instance?: InstanceRecord; agents: AgentSummary[] }>(
+    appendQueryParams(appendTenantScope("/admin/agents", undefined, instanceId), {
+      status: filters.status && filters.status !== "all" ? filters.status : null,
+      limit: filters.limit ?? 100,
+    }),
+  );
+}
+
+export function fetchAgentDetail(agentId: string, instanceId?: string | null) {
+  return fetchJson<{ status: string; agent: AgentDetail }>(
+    appendTenantScope(`/admin/agents/${encodeURIComponent(agentId)}`, undefined, instanceId),
+  );
+}
+
+export function createAgent(
+  instanceId: string | null | undefined,
+  payload: {
+    agent_id?: string | null;
+    display_name: string;
+    default_name?: string | null;
+    role_kind?: AgentRoleKind;
+    status?: AgentStatus;
+    participation_mode?: AgentParticipationMode;
+    allowed_targets?: string[];
+    assistant_profile_id?: string | null;
+    is_default_operator?: boolean;
+    metadata?: Record<string, unknown>;
+  },
+) {
+  return fetchJson<{ status: string; agent: AgentDetail }>(appendTenantScope("/admin/agents", undefined, instanceId), {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function updateAgent(
+  instanceId: string | null | undefined,
+  agentId: string,
+  payload: {
+    display_name?: string;
+    default_name?: string | null;
+    role_kind?: AgentRoleKind | null;
+    status?: AgentStatus | null;
+    participation_mode?: AgentParticipationMode | null;
+    allowed_targets?: string[] | null;
+    assistant_profile_id?: string | null;
+    is_default_operator?: boolean | null;
+    metadata?: Record<string, unknown>;
+  },
+) {
+  return fetchJson<{ status: string; agent: AgentDetail }>(
+    appendTenantScope(`/admin/agents/${encodeURIComponent(agentId)}`, undefined, instanceId),
+    {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    },
+  );
+}
+
+export function archiveAgent(
+  instanceId: string | null | undefined,
+  agentId: string,
+  payload: {
+    replacement_agent_id?: string | null;
+    reason?: string | null;
+  },
+) {
+  return fetchJson<{ status: string; agent: AgentDetail }>(
+    appendTenantScope(`/admin/agents/${encodeURIComponent(agentId)}/archive`, undefined, instanceId),
+    {
+      method: "POST",
+      body: JSON.stringify(payload),
+    },
+  );
+}
+
+export function fetchSkills(
+  instanceId?: string | null,
+  filters: {
+    status?: SkillStatus | "all";
+    scope?: SkillScope | "all";
+    limit?: number;
+  } = {},
+) {
+  return fetchJson<{ status: string; instance?: InstanceRecord; skills: SkillSummary[] }>(
+    appendQueryParams(appendTenantScope("/admin/skills", undefined, instanceId), {
+      status: filters.status && filters.status !== "all" ? filters.status : null,
+      scope: filters.scope && filters.scope !== "all" ? filters.scope : null,
+      limit: filters.limit ?? 100,
+    }),
+  );
+}
+
+export function fetchSkillDetail(skillId: string, instanceId?: string | null) {
+  return fetchJson<{ status: string; skill: SkillDetail }>(
+    appendTenantScope(`/admin/skills/${encodeURIComponent(skillId)}`, undefined, instanceId),
+  );
+}
+
+export function createSkill(
+  instanceId: string | null | undefined,
+  payload: {
+    skill_id?: string | null;
+    display_name: string;
+    summary?: string;
+    scope?: SkillScope;
+    scope_agent_id?: string | null;
+    status?: SkillStatus;
+    provenance?: Record<string, unknown>;
+    activation_conditions?: Record<string, unknown>;
+    instruction_core: string;
+    metadata?: Record<string, unknown>;
+  },
+) {
+  return fetchJson<{ status: string; skill: SkillDetail }>(appendTenantScope("/admin/skills", undefined, instanceId), {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function updateSkill(
+  instanceId: string | null | undefined,
+  skillId: string,
+  payload: {
+    display_name?: string;
+    summary?: string;
+    scope?: SkillScope | null;
+    scope_agent_id?: string | null;
+    status?: SkillStatus | null;
+    provenance?: Record<string, unknown>;
+    activation_conditions?: Record<string, unknown>;
+    instruction_core?: string;
+    metadata?: Record<string, unknown>;
+  },
+) {
+  return fetchJson<{ status: string; skill: SkillDetail }>(
+    appendTenantScope(`/admin/skills/${encodeURIComponent(skillId)}`, undefined, instanceId),
+    {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    },
+  );
+}
+
+export function activateSkill(
+  instanceId: string | null | undefined,
+  skillId: string,
+  payload: {
+    version_id?: string | null;
+    scope?: SkillScope | null;
+    scope_agent_id?: string | null;
+    activation_conditions?: Record<string, unknown>;
+    metadata?: Record<string, unknown>;
+  },
+) {
+  return fetchJson<{ status: string; skill: SkillDetail }>(
+    appendTenantScope(`/admin/skills/${encodeURIComponent(skillId)}/activate`, undefined, instanceId),
+    {
+      method: "POST",
+      body: JSON.stringify(payload),
+    },
+  );
+}
+
+export function archiveSkill(instanceId: string | null | undefined, skillId: string) {
+  return fetchJson<{ status: string; skill: SkillDetail }>(
+    appendTenantScope(`/admin/skills/${encodeURIComponent(skillId)}/archive`, undefined, instanceId),
+    {
+      method: "POST",
+      body: "{}",
+    },
+  );
+}
+
+export function recordSkillUsage(
+  instanceId: string | null | undefined,
+  skillId: string,
+  payload: {
+    version_id?: string | null;
+    activation_id?: string | null;
+    agent_id?: string | null;
+    run_id?: string | null;
+    conversation_id?: string | null;
+    outcome: SkillUsageOutcome;
+    details?: Record<string, unknown>;
+  },
+) {
+  return fetchJson<{ status: string; skill: SkillDetail }>(
+    appendTenantScope(`/admin/skills/${encodeURIComponent(skillId)}/usage-events`, undefined, instanceId),
+    {
+      method: "POST",
+      body: JSON.stringify(payload),
+    },
+  );
+}
+
+export function fetchLearningEvents(
+  instanceId?: string | null,
+  filters: {
+    status?: LearningStatus | "all";
+    triggerKind?: LearningTriggerKind | "all";
+    limit?: number;
+  } = {},
+) {
+  return fetchJson<{ status: string; instance?: InstanceRecord; events: LearningEventSummary[] }>(
+    appendQueryParams(appendTenantScope("/admin/learning", undefined, instanceId), {
+      status: filters.status && filters.status !== "all" ? filters.status : null,
+      triggerKind: filters.triggerKind && filters.triggerKind !== "all" ? filters.triggerKind : null,
+      limit: filters.limit ?? 100,
+    }),
+  );
+}
+
+export function fetchLearningEventDetail(eventId: string, instanceId?: string | null) {
+  return fetchJson<{ status: string; event: LearningEventDetail }>(
+    appendTenantScope(`/admin/learning/${encodeURIComponent(eventId)}`, undefined, instanceId),
+  );
+}
+
+export function createLearningEvent(
+  instanceId: string | null | undefined,
+  payload: {
+    trigger_kind: LearningTriggerKind;
+    summary: string;
+    explanation?: string;
+    suggested_decision?: LearningDecision;
+    agent_id?: string | null;
+    run_id?: string | null;
+    conversation_id?: string | null;
+    evidence?: Record<string, unknown>;
+    proposed_memory?: Record<string, unknown>;
+    proposed_skill?: Record<string, unknown>;
+  },
+) {
+  return fetchJson<{ status: string; event: LearningEventDetail }>(
+    appendTenantScope("/admin/learning", undefined, instanceId),
+    {
+      method: "POST",
+      body: JSON.stringify(payload),
+    },
+  );
+}
+
+export function scanLearningPatterns(instanceId: string | null | undefined) {
+  return fetchJson<{ status: string; events: LearningEventSummary[] }>(
+    appendTenantScope("/admin/learning/pattern-scan", undefined, instanceId),
+    {
+      method: "POST",
+      body: "{}",
+    },
+  );
+}
+
+export function decideLearningEvent(
+  instanceId: string | null | undefined,
+  eventId: string,
+  payload: {
+    decision: LearningDecision;
+    decision_note?: string | null;
+    human_override?: boolean;
+    memory_payload?: Record<string, unknown>;
+    skill_payload?: Record<string, unknown>;
+  },
+) {
+  return fetchJson<{ status: string; event: LearningEventDetail }>(
+    appendTenantScope(`/admin/learning/${encodeURIComponent(eventId)}/decide`, undefined, instanceId),
+    {
+      method: "POST",
+      body: JSON.stringify(payload),
+    },
+  );
+}
+
 export function fetchPlugins(instanceId?: string | null) {
   return fetchJson<PluginCatalogResponse>(appendTenantScope("/admin/plugins", undefined, instanceId));
 }
@@ -2129,8 +2863,38 @@ export function fetchRuntimeKeys(instanceId?: string | null) {
   return fetchJson<{ status: string; keys: RuntimeKey[] }>(appendTenantScope("/admin/keys/", undefined, instanceId));
 }
 
-export function createRuntimeKey(instanceId: string | null | undefined, payload: { label: string; account_id?: string | null; scopes?: string[] }) {
-  return fetchJson<{ status: string; issued: { key_id: string; instance_id?: string | null; tenant_id?: string | null; token: string; prefix: string; account_id: string | null; label: string; scopes: string[]; created_at: string } }>(
+export function createRuntimeKey(
+  instanceId: string | null | undefined,
+  payload: {
+    label: string;
+    account_id?: string | null;
+    scopes?: string[];
+    allowed_request_paths?: RuntimeKeyRequestPathPolicy["allowed_request_paths"];
+    default_request_path?: RuntimeKeyRequestPathPolicy["default_request_path"];
+    pinned_target_key?: string | null;
+    local_only_policy?: RuntimeKeyRequestPathPolicy["local_only_policy"];
+    review_required_conditions?: string[];
+  },
+) {
+  return fetchJson<{
+    status: string;
+    issued: {
+      key_id: string;
+      instance_id?: string | null;
+      tenant_id?: string | null;
+      token: string;
+      prefix: string;
+      account_id: string | null;
+      label: string;
+      scopes: string[];
+      created_at: string;
+      allowed_request_paths?: RuntimeKeyRequestPathPolicy["allowed_request_paths"];
+      default_request_path?: RuntimeKeyRequestPathPolicy["default_request_path"];
+      pinned_target_key?: string | null;
+      local_only_policy?: RuntimeKeyRequestPathPolicy["local_only_policy"];
+      review_required_conditions?: string[];
+    };
+  }>(
     appendTenantScope("/admin/keys/", undefined, instanceId),
     {
       method: "POST",
@@ -2154,6 +2918,26 @@ export function setRuntimeKeyStatus(instanceId: string | null | undefined, keyId
     method: "POST",
     body: "{}",
   });
+}
+
+export function fetchRuntimeKeyRequestPathPolicy(instanceId: string | null | undefined, keyId: string) {
+  return fetchJson<{ status: string; policy: RuntimeKeyRequestPathPolicy }>(
+    appendTenantScope(`/admin/keys/${encodeURIComponent(keyId)}/request-path-policy`, undefined, instanceId),
+  );
+}
+
+export function updateRuntimeKeyRequestPathPolicy(
+  instanceId: string | null | undefined,
+  keyId: string,
+  payload: RuntimeKeyRequestPathPolicy,
+) {
+  return fetchJson<{ status: string; key: RuntimeKey }>(
+    appendTenantScope(`/admin/keys/${encodeURIComponent(keyId)}/request-path-policy`, undefined, instanceId),
+    {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    },
+  );
 }
 
 export function fetchMutableSettings() {
@@ -2546,6 +3330,7 @@ export function fetchConversations(
   filters: {
     status?: ConversationStatus | "all";
     triageStatus?: TriageStatus | "all";
+    agentId?: string | null;
     limit?: number;
   } = {},
 ) {
@@ -2553,6 +3338,7 @@ export function fetchConversations(
     appendQueryParams(appendTenantScope("/admin/conversations", undefined, instanceId), {
       status: filters.status && filters.status !== "all" ? filters.status : null,
       triageStatus: filters.triageStatus && filters.triageStatus !== "all" ? filters.triageStatus : null,
+      agentId: filters.agentId?.trim() ? filters.agentId.trim() : null,
       limit: filters.limit ?? 100,
     }),
   );
@@ -2585,6 +3371,8 @@ export function createConversation(
     initial_continuity_key?: string | null;
     initial_message_role?: ConversationMessageRole;
     initial_message_body: string;
+    participant_agent_ids?: string[];
+    initial_mention_agent_ids?: string[];
     create_inbox_entry?: boolean;
     inbox_title?: string | null;
     inbox_summary?: string | null;
@@ -2639,6 +3427,11 @@ export function appendConversationMessage(
     continuity_key?: string | null;
     message_role?: ConversationMessageRole;
     body: string;
+    mention_agent_ids?: string[];
+    handoff_to_agent_id?: string | null;
+    review_request_agent_id?: string | null;
+    blocker_agent_id?: string | null;
+    roundtable_agent_ids?: string[];
     structured_payload?: Record<string, unknown>;
   },
 ) {
@@ -3394,6 +4187,22 @@ export function deleteMemoryEntry(
   );
 }
 
+export function revokeMemoryEntry(
+  instanceId: string | null | undefined,
+  memoryId: string,
+  payload: {
+    revocation_note: string;
+  },
+) {
+  return fetchJson<{ status: string; action: string; memory: MemoryDetail }>(
+    appendTenantScope(`/admin/memory/${encodeURIComponent(memoryId)}/revoke`, undefined, instanceId),
+    {
+      method: "POST",
+      body: JSON.stringify(payload),
+    },
+  );
+}
+
 export function fetchAssistantProfiles(
   instanceId?: string | null,
   filters: {
@@ -4004,5 +4813,87 @@ export function renewIngressTls() {
   return fetchJson<{ status: string; renewal: Record<string, unknown> }>("/admin/ingress/tls/renew", {
     method: "POST",
     body: "{}",
+  });
+}
+
+export function fetchRecoveryOverview(): Promise<RecoveryOverviewResponse> {
+  return fetchJson<RecoveryOverviewResponse>("/admin/recovery/");
+}
+
+export function createRecoveryBackupPolicy(payload: {
+  policy_id?: string | null;
+  label: string;
+  status?: "active" | "paused";
+  target_class: RecoveryBackupTargetClass;
+  target_label?: string;
+  target_config?: Record<string, unknown>;
+  protected_data_classes?: RecoveryProtectedDataClass[];
+  expected_source_identity?: Partial<RecoverySourceIdentity>;
+  schedule_hint?: string;
+  max_backup_age_hours?: number;
+  max_restore_age_hours?: number;
+  notes?: string;
+}) {
+  return fetchJson<{ status: string; policy: RecoveryPolicySummary }>("/admin/recovery/backup-policies", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function updateRecoveryBackupPolicy(policyId: string, payload: {
+  label?: string;
+  status?: "active" | "paused";
+  target_label?: string;
+  target_config?: Record<string, unknown>;
+  protected_data_classes?: RecoveryProtectedDataClass[];
+  expected_source_identity?: Partial<RecoverySourceIdentity>;
+  schedule_hint?: string;
+  max_backup_age_hours?: number;
+  max_restore_age_hours?: number;
+  notes?: string;
+}) {
+  return fetchJson<{ status: string; policy: RecoveryPolicySummary }>(`/admin/recovery/backup-policies/${encodeURIComponent(policyId)}`, {
+    method: "PATCH",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function importRecoveryBackupReport(payload: {
+  policy_id: string;
+  status?: "ok" | "warning" | "failed";
+  manifest: Record<string, unknown>;
+  protected_data_classes?: RecoveryProtectedDataClass[];
+  notes?: string;
+  reported_at?: string | null;
+}) {
+  return fetchJson<{ status: string; report: RecoveryBackupReportRecord; policy: RecoveryPolicySummary }>("/admin/recovery/backup-reports/import", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function importRecoveryRestoreReport(payload: {
+  policy_id: string;
+  status?: "ok" | "warning" | "failed";
+  report: Record<string, unknown>;
+  protected_data_classes?: RecoveryProtectedDataClass[];
+  notes?: string;
+  reported_at?: string | null;
+}) {
+  return fetchJson<{ status: string; report: RecoveryRestoreReportRecord; policy: RecoveryPolicySummary }>("/admin/recovery/restore-reports/import", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function importRecoveryUpgradeReport(payload: {
+  status?: "ok" | "warning" | "failed" | null;
+  report: Record<string, unknown>;
+  notes?: string;
+  reported_at?: string | null;
+}) {
+  return fetchJson<{ status: string; report: RecoveryUpgradeReportRecord; upgrade_posture: RecoveryUpgradePosture }>("/admin/recovery/upgrade-reports/import", {
+    method: "POST",
+    body: JSON.stringify(payload),
   });
 }

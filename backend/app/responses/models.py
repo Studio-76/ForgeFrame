@@ -8,6 +8,7 @@ from uuid import uuid4
 
 from pydantic import BaseModel, Field
 
+from app.product_taxonomy import RuntimeNativeMapping, attach_runtime_native_mapping
 from app.usage.models import CostBreakdown, TokenUsage
 
 ResponseProcessingMode = Literal["sync", "background"]
@@ -128,6 +129,7 @@ def build_response_object(
     cost: CostBreakdown | dict[str, Any] | None = None,
     error: ResponseError | dict[str, Any] | None = None,
     incomplete_details: dict[str, Any] | None = None,
+    native_mapping: RuntimeNativeMapping | dict[str, Any] | None = None,
 ) -> ResponseObject:
     normalized_error: ResponseError | None
     if error is None:
@@ -151,5 +153,5 @@ def build_response_object(
         output_text=output_text,
         usage=normalized_usage,
         cost=normalized_cost,
-        metadata=dict(metadata or {}),
+        metadata=attach_runtime_native_mapping(dict(metadata or {}), native_mapping),
     )

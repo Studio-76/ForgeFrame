@@ -3,6 +3,7 @@ from pathlib import Path
 from app.control_plane import ControlPlaneStateRecord
 from app.core.model_registry import ModelRegistry
 from app.settings.config import Settings
+from app.storage.control_plane_repository import FileControlPlaneStateRepository, ControlPlaneStatePaths
 
 
 def test_model_registry_default_model_is_available() -> None:
@@ -88,7 +89,10 @@ def test_model_registry_repairs_persisted_state_with_new_anthropic_bootstrap_mod
     registry = ModelRegistry(settings)
 
     assert registry.has_model("claude-3-5-sonnet-latest") is True
-    repaired_state = ControlPlaneStateRecord.model_validate_json(state_path.read_text(encoding="utf-8"))
+    repaired_state = FileControlPlaneStateRepository(
+        paths=ControlPlaneStatePaths(state_path=state_path),
+    ).load_state()
+    assert repaired_state is not None
     anthropic_provider = next(provider for provider in repaired_state.providers if provider.provider == "anthropic")
     assert {model.id for model in anthropic_provider.managed_models} == {"claude-3-5-sonnet-latest"}
 

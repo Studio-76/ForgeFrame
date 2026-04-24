@@ -8,6 +8,7 @@ from .security import require_admin_session
 def build_admin_router() -> APIRouter:
     # Import routers lazily so execution/governance dependencies can safely import
     # individual admin submodules without triggering a package-level circular import.
+    from .agents import router as agents_router
     from .accounts import router as accounts_router
     from .assistant_profiles import router as assistant_profiles_router
     from .artifacts import router as artifacts_router
@@ -24,6 +25,7 @@ def build_admin_router() -> APIRouter:
     from .instances import router as instances_router
     from .knowledge_sources import router as knowledge_sources_router
     from .keys import router as keys_router
+    from .learning import router as learning_router
     from .logs import router as logs_router
     from .memory import router as memory_router
     from .models import router as models_router
@@ -31,10 +33,12 @@ def build_admin_router() -> APIRouter:
     from .plugins import router as plugins_router
     from .provider_targets import router as provider_targets_router
     from .providers import router as providers_router
+    from .recovery import router as recovery_router
     from .reminders import router as reminders_router
     from .routing import router as routing_router
     from .security_admin import router as security_admin_router
     from .settings import router as settings_router
+    from .skills import router as skills_router
     from .tasks import router as tasks_router
     from .usage import router as usage_router
     from .workspaces import router as workspaces_router
@@ -43,6 +47,7 @@ def build_admin_router() -> APIRouter:
     router.include_router(auth_router)
     router.include_router(dashboard_router)
     router.include_router(instances_router, dependencies=[Depends(require_admin_session)])
+    router.include_router(agents_router, dependencies=[Depends(require_admin_session)])
     router.include_router(models_router, dependencies=[Depends(require_admin_session)])
     router.include_router(provider_targets_router, dependencies=[Depends(require_admin_session)])
     router.include_router(routing_router, dependencies=[Depends(require_admin_session)])
@@ -56,9 +61,12 @@ def build_admin_router() -> APIRouter:
     router.include_router(contacts_router, dependencies=[Depends(require_admin_session)])
     router.include_router(knowledge_sources_router, dependencies=[Depends(require_admin_session)])
     router.include_router(memory_router, dependencies=[Depends(require_admin_session)])
+    router.include_router(learning_router, dependencies=[Depends(require_admin_session)])
+    router.include_router(skills_router, dependencies=[Depends(require_admin_session)])
     router.include_router(conversations_router, dependencies=[Depends(require_admin_session)])
     router.include_router(execution_router, dependencies=[Depends(require_admin_session)])
     router.include_router(ingress_router, dependencies=[Depends(require_admin_session)])
+    router.include_router(recovery_router, dependencies=[Depends(require_admin_session)])
     router.include_router(inbox_router, dependencies=[Depends(require_admin_session)])
     router.include_router(providers_router, dependencies=[Depends(require_admin_session)])
     router.include_router(plugins_router, dependencies=[Depends(require_admin_session)])

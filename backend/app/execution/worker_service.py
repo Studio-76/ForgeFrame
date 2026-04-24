@@ -16,6 +16,7 @@ from app.core.routing import RoutingBudgetExceededError, RoutingCircuitOpenError
 from app.execution.service import ClaimResult, ExecutionTransitionService
 from app.instances.service import InstanceService, get_instance_service
 from app.providers import ProviderError, ProviderRegistry
+from app.product_taxonomy import NativeEventRecord, NativeProductObjectRef, RuntimeNativeMapping
 from app.request_metadata import merge_request_metadata
 from app.responses.models import build_response_object, build_response_output_items
 from app.responses.service import QueuedResponseExecutionPayload, ResponseNotFoundError, ResponsesService
@@ -433,7 +434,13 @@ class ExecutionWorkerService:
         )
 
     @staticmethod
-    def _in_progress_body(payload: QueuedResponseExecutionPayload) -> dict[str, Any]:
+    def _in_progress_body(
+        payload: QueuedResponseExecutionPayload,
+        *,
+        run_id: str,
+        attempt_id: str,
+        execution_lane: str,
+    ) -> dict[str, Any]:
         return build_response_object(
             response_id=payload.response_id,
             created_at=payload.created_at,
@@ -441,6 +448,14 @@ class ExecutionWorkerService:
             background=True,
             model=payload.request.model,
             metadata=payload.request.metadata,
+            native_mapping=ExecutionWorkerService._background_native_mapping(
+                payload,
+                run_id=run_id,
+                attempt_id=attempt_id,
+                run_state="executing",
+                operator_state="executing",
+                execution_lane=execution_lane,
+            ),
         ).model_dump(mode="json")
 
     @staticmethod
@@ -452,6 +467,7 @@ class ExecutionWorkerService:
         tool_calls: list[dict[str, Any]] | None,
         usage: Any,
         cost: Any,
+        native_mapping: dict[str, Any],
     ) -> dict[str, Any]:
         output, output_text = build_response_output_items(text=text, tool_calls=tool_calls)
         return build_response_object(
@@ -465,6 +481,7 @@ class ExecutionWorkerService:
             output_text=output_text,
             usage=usage,
             cost=cost,
+            native_mapping=native_mapping,
         ).model_dump(mode="json")
 
     @staticmethod
@@ -474,6 +491,7 @@ class ExecutionWorkerService:
         error_code: str,
         error_message: str,
         retry_delay_seconds: int | None,
+        native_mapping: dict[str, Any],
     ) -> dict[str, Any]:
         return build_response_object(
             response_id=payload.response_id,
@@ -488,6 +506,7 @@ class ExecutionWorkerService:
                 "error_message": error_message,
                 "retry_delay_seconds": retry_delay_seconds,
             },
+            native_mapping=native_mapping,
         ).model_dump(mode="json")
 
     @staticmethod
@@ -496,6 +515,7 @@ class ExecutionWorkerService:
         *,
         error_code: str,
         error_message: str,
+        native_mapping: dict[str, Any],
     ) -> dict[str, Any]:
         return build_response_object(
             response_id=payload.response_id,
@@ -505,6 +525,7 @@ class ExecutionWorkerService:
             model=payload.request.model,
             metadata=payload.request.metadata,
             error={"code": error_code, "message": error_message},
+            native_mapping=native_mapping,
         ).model_dump(mode="json")
 
     @staticmethod
@@ -530,6 +551,102 @@ class ExecutionWorkerService:
             service_kind="worker",
         )
         return context.with_duration(duration_ms)
+
+    @staticmethod
+    def _background_native_mapping(
+        payload: QueuedResponseExecutionPayload,
+        *,
+        run_id: str,
+        attempt_id: str | None,
+        run_state: str,
+        operator_state: str | None,
+        execution_lane: str | None,
+        resolved_model: str | None = None,
+        provider_key: str | None = None,
+        event_kind: str | None = None,
+        event_status: str | None = None,
+        event_details: dict[str, Any] | None = None,
+        note: str | None = None,
+    ) -> dict[str, Any]:
+        previous = (
+            RuntimeNativeMapping.model_validate(payload.native_mapping)
+            if payload.native_mapping
+            else RuntimeNativeMapping(
+                request_path=payload.request_path,
+                response_id=payload.response_id,
+                processing_mode="background",
+                stream=False,
+                background=True,
+                primary_native_object_kind="run",
+                notes=[
+                    "This background /v1/responses path created durable ForgeFrame execution objects instead of completing inline on the OpenAI-compatible surface."
+                ],
+            )
+        )
+        events = list(previous.events)
+        if event_kind:
+            events.append(
+                NativeEventRecord(
+                    event_kind=event_kind,  # type: ignore[arg-type]
+                    related_object_kind="run",
+                    related_object_id=run_id,
+                    status=event_status,
+                    details=dict(event_details or {}),
+                )
+            )
+        route_context = dict(previous.route_context)
+        route_context.update(
+            {
+                "run_id": run_id,
+                "attempt_id": attempt_id,
+                "run_state": run_state,
+                "operator_state": operator_state,
+                "execution_lane": execution_lane,
+                "resolved_model": resolved_model,
+                "provider_key": provider_key,
+            }
+        )
+        notes = list(previous.notes)
+        if note and note not in notes:
+            notes.append(note)
+        objects = [
+            NativeProductObjectRef(
+                kind="run",
+                object_id=run_id,
+                relation="primary_follow_object",
+                lifecycle_state=run_state,
+                details={
+                    "operator_state": operator_state,
+                    "execution_lane": execution_lane,
+                },
+            )
+        ]
+        if attempt_id:
+            objects.append(
+                NativeProductObjectRef(
+                    kind="dispatch_job",
+                    object_id=attempt_id,
+                    relation="dispatch_attempt",
+                    lifecycle_state=run_state,
+                    details={
+                        "operator_state": operator_state,
+                    },
+                )
+            )
+        return RuntimeNativeMapping(
+            request_path=previous.request_path,
+            response_id=previous.response_id,
+            processing_mode="background",
+            stream=previous.stream,
+            background=True,
+            primary_native_object_kind="run",
+            objects=objects,
+            events=events,
+            commands=previous.commands,
+            views=previous.views,
+            route_context=route_context,
+            notes=notes,
+        ).model_dump(mode="json")
 
     @staticmethod
     def _failure_status_code(exc: Exception, *, error_code: str, retryable: bool) -> int:
@@ -702,12 +819,36 @@ class ExecutionWorkerService:
             raise
 
         if payload is not None:
+            operator_state = "retry_scheduled" if failure.retry_scheduled else (
+                "quarantined" if failure.run_state in {"dead_lettered", "timed_out"} else "failed"
+            )
+            native_mapping = self._background_native_mapping(
+                payload,
+                run_id=claim.run_id,
+                attempt_id=failure.next_attempt_id if failure.retry_scheduled else claim.attempt_id,
+                run_state=failure.run_state,
+                operator_state=operator_state,
+                execution_lane=execution_lane,
+                event_kind="retried_transition" if failure.retry_scheduled else "blocker_event",
+                event_status="queued" if failure.retry_scheduled else "open",
+                event_details={
+                    "error_code": error_code,
+                    "retry_delay_seconds": failure.retry_delay_seconds,
+                    "dead_letter_reason": failure.dead_letter_reason,
+                },
+                note=(
+                    "ForgeFrame scheduled a durable retry transition for this background response."
+                    if failure.retry_scheduled
+                    else "The background execution ended in a blocked or terminal ForgeFrame run state."
+                ),
+            )
             if failure.retry_scheduled:
                 body = self._retry_scheduled_body(
                     payload,
                     error_code=error_code,
                     error_message=error_message,
                     retry_delay_seconds=failure.retry_delay_seconds,
+                    native_mapping=native_mapping,
                 )
                 lifecycle_status = "queued"
                 error_json = {
@@ -721,6 +862,7 @@ class ExecutionWorkerService:
                     payload,
                     error_code=error_code,
                     error_message=error_message,
+                    native_mapping=native_mapping,
                 )
                 lifecycle_status = "failed"
                 error_json = {"code": error_code, "message": error_message}
@@ -871,7 +1013,12 @@ class ExecutionWorkerService:
                 processing_mode="background",
                 stream=False,
                 request=payload.request,
-                body=self._in_progress_body(payload),
+                body=self._in_progress_body(
+                    payload,
+                    run_id=claim.run_id,
+                    attempt_id=claim.attempt_id,
+                    execution_lane=claim.execution_lane,
+                ),
                 lifecycle_status="in_progress",
                 execution_run_id=claim.run_id,
                 now=current_time,
@@ -896,6 +1043,17 @@ class ExecutionWorkerService:
                 tool_calls=dispatch_result.tool_calls,
                 usage=dispatch_result.usage,
                 cost=dispatch_result.cost,
+                native_mapping=self._background_native_mapping(
+                    payload,
+                    run_id=claim.run_id,
+                    attempt_id=claim.attempt_id,
+                    run_state="succeeded",
+                    operator_state="completed",
+                    execution_lane=claim.execution_lane,
+                    resolved_model=dispatch_result.model,
+                    provider_key=dispatch_result.provider,
+                    note="The background execution completed and the OpenAI-compatible response now maps to durable run and dispatch objects.",
+                ),
             )
             self._responses.save_response_snapshot(
                 response_id=payload.response_id,

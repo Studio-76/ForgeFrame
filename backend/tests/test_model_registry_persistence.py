@@ -3,6 +3,7 @@ from pathlib import Path
 
 from app.core.model_registry import ModelRegistry
 from app.settings.config import Settings
+from app.tenancy import DEFAULT_BOOTSTRAP_TENANT_ID
 
 
 def test_model_registry_bootstraps_control_plane_state_when_missing(monkeypatch, tmp_path: Path) -> None:
@@ -17,7 +18,7 @@ def test_model_registry_bootstraps_control_plane_state_when_missing(monkeypatch,
     assert state_path.exists()
 
     payload = json.loads(state_path.read_text(encoding="utf-8"))
-    instance_state = payload["states"]["bootstrap"]
+    instance_state = payload["states"][DEFAULT_BOOTSTRAP_TENANT_ID]
     providers = instance_state["providers"]
     baseline_provider = next(item for item in providers if item["provider"] == "forgeframe_baseline")
     assert any(model["id"] == settings.default_model for model in baseline_provider["managed_models"])
@@ -136,7 +137,7 @@ def test_model_registry_keeps_provider_specific_models_distinct_when_ids_overlap
         json.dumps(
             {
                 "schema_version": 3,
-                "instance_id": "bootstrap",
+                "instance_id": DEFAULT_BOOTSTRAP_TENANT_ID,
                 "providers": [
                     {
                         "provider": "openai_api",
@@ -184,7 +185,7 @@ def test_model_registry_keeps_provider_specific_models_distinct_when_ids_overlap
                         "model_id": "shared-model",
                         "model_routing_key": "openai_api/shared-model",
                         "label": "OpenAI · shared-model",
-                        "instance_id": "bootstrap",
+                        "instance_id": DEFAULT_BOOTSTRAP_TENANT_ID,
                     },
                     {
                         "target_key": "generic_harness::shared-model",
@@ -192,7 +193,7 @@ def test_model_registry_keeps_provider_specific_models_distinct_when_ids_overlap
                         "model_id": "shared-model",
                         "model_routing_key": "generic_harness/shared-model",
                         "label": "Generic Harness · shared-model",
-                        "instance_id": "bootstrap",
+                        "instance_id": DEFAULT_BOOTSTRAP_TENANT_ID,
                     },
                 ],
                 "health_config": {

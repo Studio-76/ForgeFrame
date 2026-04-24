@@ -11,6 +11,7 @@ from app.public_surface import (
     ROOT_SURFACE_KIND,
     NORMATIVE_HTTPS_HOST,
     NORMATIVE_HTTPS_PORT,
+    has_configured_public_fqdn,
     has_integrated_tls_automation,
     has_linux_host_installation_artifacts,
     resolve_repo_relative_path,
@@ -29,6 +30,7 @@ class ControlPlaneBootstrapDomainMixin:
         host_install_script = root_dir / "scripts" / "install-forgeframe.sh"
         host_smoke_script = root_dir / "scripts" / "host-smoke.sh"
         host_backup_restore_smoke = root_dir / "scripts" / "host-backup-restore-smoke.sh"
+        upgrade_proof_script = root_dir / "scripts" / "recovery-upgrade-proof.py"
         systemd_dir = root_dir / "deploy" / "systemd"
         host_env_template = root_dir / "deploy" / "env" / "forgeframe-host.env.example"
         ingress_status = build_ingress_tls_status(self._settings)
@@ -102,6 +104,11 @@ class ControlPlaneBootstrapDomainMixin:
                 details="scripts/backup-forgeframe.sh + scripts/restore-forgeframe.sh + scripts/host-backup-restore-smoke.sh",
             ),
             ControlPlaneBootstrapCheck(
+                id="upgrade_recovery_proof_driver",
+                ok=upgrade_proof_script.exists(),
+                details=str(upgrade_proof_script),
+            ),
+            ControlPlaneBootstrapCheck(
                 id="host_smoke_driver",
                 ok=host_smoke_script.exists(),
                 details=str(host_smoke_script),
@@ -154,7 +161,7 @@ class ControlPlaneBootstrapDomainMixin:
             ),
             ControlPlaneBootstrapCheck(
                 id="public_fqdn_configured",
-                ok=bool(self._settings.public_fqdn.strip()),
+                ok=bool(has_configured_public_fqdn(self._settings.public_fqdn)),
                 details=self._settings.public_fqdn.strip() or "missing",
             ),
             ControlPlaneBootstrapCheck(
@@ -208,10 +215,11 @@ class ControlPlaneBootstrapDomainMixin:
         ready = all(item.ok for item in checks)
         next_steps = [
             "Run scripts/install-forgeframe.sh on the Linux host, populate forgeframe.env with reachable PostgreSQL URLs, and enable the installed systemd units.",
-            "Populate /etc/forgeframe/forgeframe.env with reachable PostgreSQL URLs and bootstrap credentials, then enable forgeframe-api.service and forgeframe-retention.timer.",
-            "Expose the operator UI on / and keep /v1 plus /admin on the same HTTPS origin instead of the current /app-only delivery.",
-            "Implement integrated ACME or Let's Encrypt automation with a dedicated port-80 helper listener and renewal monitoring.",
+            "Populate /etc/forgeframe/forgeframe.env with the real public FQDN, ACME operator email, reachable PostgreSQL URLs, and bootstrap credentials before enabling public services.",
+            "Enable forgeframe-http-helper.service, issue certificates with scripts/renew-certificates.sh, and then start forgeframe-public.service plus forgeframe-acme.timer on the Linux host.",
+            "Keep the operator UI on / and /v1 plus /admin on the same HTTPS origin; any HTTP-only or local-only exposure stays a classified exception, not the default product path.",
             "Treat compose/bootstrap scripts as an alternative path only; they no longer prove the normative Linux-host deployment.",
+            "Capture a pre-upgrade checkpoint with scripts/recovery-upgrade-proof.py before releases and import the post-upgrade no-loss report into Recovery / Backup / Restore.",
             "After the public HTTPS origin exists, rerun host-smoke plus host-backup-restore-smoke end to end.",
         ]
         return ControlPlaneBootstrapReadinessReport(

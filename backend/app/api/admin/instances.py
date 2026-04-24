@@ -9,6 +9,8 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
 from app.api.admin.security import require_admin_session, require_admin_write_session
+from app.agents.dependencies import get_agent_admin_service
+from app.agents.service import AgentAdminService
 from app.governance.models import AuthenticatedAdmin
 from app.governance.service import GovernanceService, get_governance_service
 from app.instances.service import InstanceService, get_instance_service
@@ -90,6 +92,7 @@ def create_instance(
     admin: AuthenticatedAdmin = Depends(require_admin_write_session),
     service: InstanceService = Depends(get_instance_service),
     governance: GovernanceService = Depends(get_governance_service),
+    agents: AgentAdminService = Depends(get_agent_admin_service),
 ) -> object:
     try:
         active_instance = service.resolve_instance(
@@ -114,6 +117,7 @@ def create_instance(
         role="owner" if creator_membership.role == "owner" else "admin",
         actor=admin,
     )
+    agents.ensure_default_operator(instance=instance)
     return {"status": "ok", "instance": instance.model_dump(mode="json")}
 
 

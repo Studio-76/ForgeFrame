@@ -39,6 +39,15 @@ ElevatedAccessGateStatus = ApprovalStatus
 ElevatedAccessIssuanceStatus = Literal["pending", "issued"]
 SecretRotationTargetType = Literal["provider", "harness_profile"]
 SecretRotationKind = Literal["manual_env_rotation", "oauth_token_rotation", "api_key_rotation", "harness_profile_rotation"]
+RuntimeRequestPathType = Literal[
+    "smart_routing",
+    "pinned_target",
+    "local_only",
+    "queue_background",
+    "blocked",
+    "review_required",
+]
+LocalOnlyPolicy = Literal["prefer_local", "require_local_target"]
 
 
 class AdminUserRecord(BaseModel):
@@ -177,6 +186,11 @@ class RuntimeKeyRecord(BaseModel):
     revoked_at: str | None = None
     revoked_reason: str | None = None
     created_by: str | None = None
+    allowed_request_paths: list[RuntimeRequestPathType] = Field(default_factory=lambda: ["smart_routing"])
+    default_request_path: RuntimeRequestPathType = "smart_routing"
+    pinned_target_key: str | None = None
+    local_only_policy: LocalOnlyPolicy = "require_local_target"
+    review_required_conditions: list[str] = Field(default_factory=list)
 
 
 class IssuedApiKey(BaseModel):
@@ -189,6 +203,11 @@ class IssuedApiKey(BaseModel):
     label: str
     scopes: list[str] = Field(default_factory=list)
     created_at: str
+    allowed_request_paths: list[RuntimeRequestPathType] = Field(default_factory=list)
+    default_request_path: RuntimeRequestPathType = "smart_routing"
+    pinned_target_key: str | None = None
+    local_only_policy: LocalOnlyPolicy = "require_local_target"
+    review_required_conditions: list[str] = Field(default_factory=list)
 
 
 class RuntimeGatewayIdentity(BaseModel):
@@ -203,6 +222,21 @@ class RuntimeGatewayIdentity(BaseModel):
     client_id: str
     consumer: str
     integration: str = "runtime_gateway"
+    allowed_request_paths: list[RuntimeRequestPathType] = Field(default_factory=list)
+    default_request_path: RuntimeRequestPathType = "smart_routing"
+    pinned_target_key: str | None = None
+    local_only_policy: LocalOnlyPolicy = "require_local_target"
+    review_required_conditions: list[str] = Field(default_factory=list)
+
+
+class RuntimeRequestPathDecision(BaseModel):
+    request_path: RuntimeRequestPathType
+    default_request_path: RuntimeRequestPathType
+    allowed_request_paths: list[RuntimeRequestPathType] = Field(default_factory=list)
+    pinned_target_key: str | None = None
+    local_only_policy: LocalOnlyPolicy = "require_local_target"
+    review_required_conditions: list[str] = Field(default_factory=list)
+    selected_via: Literal["default", "header"] = "default"
 
 
 class MutableSettingRecord(BaseModel):

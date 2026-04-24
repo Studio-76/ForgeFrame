@@ -36,11 +36,13 @@ def list_public_runtime_models(
     identity: RuntimeGatewayIdentity | None,
     stream: bool = False,
     tools: list[dict] | None = None,
+    route_context: dict[str, str] | None = None,
 ) -> list[RuntimeModel]:
     models = routing.list_runtime_usable_models(
         stream=stream,
         tools=tools,
         allowed_providers=allowed_provider_set(identity),
+        route_context=route_context,
     )
     return _filter_public_runtime_inventory(models, get_settings())
 
@@ -51,6 +53,7 @@ def list_public_runtime_model_ids(
     identity: RuntimeGatewayIdentity | None,
     stream: bool = False,
     tools: list[dict] | None = None,
+    route_context: dict[str, str] | None = None,
 ) -> list[str]:
     return [
         model.id
@@ -59,6 +62,7 @@ def list_public_runtime_model_ids(
             identity=identity,
             stream=stream,
             tools=tools,
+            route_context=route_context,
         )
     ]
 

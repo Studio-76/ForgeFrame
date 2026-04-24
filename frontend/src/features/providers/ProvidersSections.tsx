@@ -1,6 +1,11 @@
 import type { ReactNode } from "react";
 
-import type { HarnessProfile, HealthConfig } from "../../api/admin";
+import type {
+  CapabilityEvidenceRecord,
+  HarnessProfile,
+  HealthConfig,
+  ProviderCapabilityEvidenceRecord,
+} from "../../api/admin";
 import type { ProvidersPageActions, ProvidersPageData } from "./providersShared";
 import {
   asRecord,
@@ -130,6 +135,42 @@ function toneFromProofStatus(status: "none" | "partial" | "proven"): Tone {
     return "warning";
   }
   return "neutral";
+}
+
+function formatEvidenceSource(source: CapabilityEvidenceRecord["source"]): string {
+  return source.replaceAll("_", " ");
+}
+
+function EvidenceSummary({
+  evidence,
+  title = "Evidence & Proof",
+  description,
+}: {
+  evidence: ProviderCapabilityEvidenceRecord;
+  title?: string;
+  description?: string;
+}) {
+  const entries: Array<{ label: string; value: CapabilityEvidenceRecord }> = [
+    { label: "runtime", value: evidence.runtime },
+    { label: "streaming", value: evidence.streaming },
+    { label: "tool calling", value: evidence.tool_calling },
+    { label: "live probe", value: evidence.live_probe },
+  ];
+
+  return (
+    <div className="fg-subcard fg-mt-sm">
+      <h4>{title}</h4>
+      {description ? <p className="fg-muted">{description}</p> : null}
+      <ul className="fg-list">
+        {entries.map((entry) => (
+          <li key={entry.label}>
+            {entry.label} · status={entry.value.status} · source={formatEvidenceSource(entry.value.source)} · recorded=
+            {formatTimestamp(entry.value.recorded_at)} · details={entry.value.details}
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
 }
 
 function ReadinessAxisPills({
@@ -865,8 +906,13 @@ export function ProviderInventorySection({ data, actions }: SectionProps) {
                 <p>
                   proof={row.proof_status} · proven profiles={row.proven_profile_keys.length > 0 ? joinList(row.proven_profile_keys) : "-"}
                 </p>
-                <p className="fg-muted">{row.notes}</p>
+                <p>typed deviations / unsupported notes: {row.notes}</p>
               </div>
+              <EvidenceSummary
+                evidence={row.evidence}
+                title="Compatibility evidence"
+                description="The public OpenAI-compatible contract stays partial until these proof axes are observed instead of merely configured."
+              />
             </article>
           ))}
         </div>
@@ -944,11 +990,21 @@ export function ExpansionTargetsSection({ data, actions }: SectionProps) {
                 </p>
                 <p>classification reason: {target.classification_reason}</p>
                 <p>onboarding status: {target.status_summary}</p>
+                <p>
+                  health semantics={target.health_semantics} · verify/probe contract={target.verify_probe_axis}
+                </p>
+                <p>
+                  observability axis={target.observability_axis} · ui coverage={target.ui_axis}
+                </p>
                 {target.technical_requirements.length > 0 ? (
                   <p>technical requirements: {target.technical_requirements.join(" | ")}</p>
                 ) : null}
                 <p className="fg-muted">{target.notes}</p>
               </div>
+              <EvidenceSummary
+                evidence={target.evidence}
+                description="Configured onboarding is not enough. These recorded proof axes decide whether a premium or compatibility slice can claim runtime depth."
+              />
               {target.provider_type === "oauth_account" && data.access.canMutate ? (
                 <div className="fg-actions fg-mt-sm">
                   <button type="button" onClick={() => void actions.probeOauthTarget(target.provider_key)}>
@@ -985,6 +1041,19 @@ export function ExpansionTargetsSection({ data, actions }: SectionProps) {
                   {toStringValue(target.provider_key)} · auth={toStringValue(target.auth_kind)} · session reuse=
                   {toStringValue(target.session_reuse_strategy)} · escalation={toStringValue(target.escalation_support)} · truth=
                   {toStringValue(target.operator_truth)}
+                </li>
+              ))}
+            </ul>
+          </div>
+
+          <div className="fg-subcard">
+            <h4>Probe and runtime evidence</h4>
+            <ul className="fg-list">
+              {data.oauthTargets.map((target) => (
+                <li key={`${toStringValue(target.provider_key)}-evidence`}>
+                  {toStringValue(target.provider_key)} · probe={target.evidence.live_probe.status} ({target.evidence.live_probe.details}) · runtime=
+                  {target.evidence.runtime.status} ({target.evidence.runtime.details}) · streaming={target.evidence.streaming.status} (
+                  {target.evidence.streaming.details}) · tool={target.evidence.tool_calling.status} ({target.evidence.tool_calling.details})
                 </li>
               ))}
             </ul>
@@ -1035,7 +1104,10 @@ export function ExpansionTargetsSection({ data, actions }: SectionProps) {
         </ul>
       </SectionCard>
 
-      <SectionCard title="Docker-First Bootstrap Readiness" description="Bootstrap checks show what the backend currently verifies before operators assume the environment is usable.">
+      <SectionCard
+        title="Host / Public Bootstrap Readiness"
+        description="Bootstrap checks show what the backend currently verifies for the host-native and public HTTPS product path before operators assume the environment is usable."
+      >
         {data.bootstrapReadiness ? (
           <div className="fg-grid">
             <div className="fg-subcard">

@@ -9,6 +9,14 @@ from typing import TYPE_CHECKING, Any
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.execution.service import ExecutionTransitionService
+from app.product_taxonomy import (
+    NativeCommandRecord,
+    NativeProductObjectRef,
+    RuntimeNativeMapping,
+    attach_runtime_native_mapping,
+    extract_runtime_native_mapping,
+    normalize_runtime_native_mapping,
+)
 from app.responses.models import (
     NormalizedResponsesRequest,
     ResponseObject,
@@ -53,6 +61,7 @@ class QueuedResponseExecutionPayload:
     created_at: int
     current_body: dict[str, Any]
     request: NormalizedResponsesRequest
+    native_mapping: dict[str, Any]
 
 
 class ResponsesService:
@@ -107,6 +116,108 @@ class ResponsesService:
         if request.metadata:
             controls["metadata"] = dict(request.metadata)
         return controls
+
+    @staticmethod
+    def build_sync_runtime_native_mapping(
+        *,
+        request_path: str,
+        response_id: str,
+        stream: bool,
+        requested_model: str | None,
+        resolved_model: str | None = None,
+        provider_key: str | None = None,
+        note: str | None = None,
+    ) -> dict[str, Any]:
+        notes = [note] if note else []
+        if not notes:
+            notes.append(
+                "This synchronous /v1/responses path preserved the OpenAI outer contract and did not create a durable native ForgeFrame follow-object."
+            )
+        return RuntimeNativeMapping(
+            request_path=request_path,
+            response_id=response_id,
+            processing_mode="sync",
+            stream=stream,
+            background=False,
+            route_context={
+                "requested_model": requested_model,
+                "resolved_model": resolved_model,
+                "provider_key": provider_key,
+            },
+            notes=notes,
+        ).model_dump(mode="json")
+
+    @staticmethod
+    def build_background_admission_native_mapping(
+        *,
+        request_path: str,
+        response_id: str,
+        requested_model: str | None,
+        command_id: str,
+        run_id: str,
+        attempt_id: str | None,
+        run_state: str,
+        operator_state: str | None,
+        execution_lane: str | None,
+        outbox_event: str | None,
+    ) -> dict[str, Any]:
+        objects = [
+            NativeProductObjectRef(
+                kind="run",
+                object_id=run_id,
+                relation="primary_follow_object",
+                lifecycle_state=run_state,
+                details={
+                    "operator_state": operator_state,
+                    "execution_lane": execution_lane,
+                },
+            )
+        ]
+        if attempt_id:
+            objects.append(
+                NativeProductObjectRef(
+                    kind="dispatch_job",
+                    object_id=attempt_id,
+                    relation="dispatch_attempt",
+                    lifecycle_state=run_state,
+                    details={
+                        "operator_state": operator_state,
+                        "outbox_event": outbox_event,
+                    },
+                )
+            )
+        return RuntimeNativeMapping(
+            request_path=request_path,
+            response_id=response_id,
+            processing_mode="background",
+            stream=False,
+            background=True,
+            primary_native_object_kind="run",
+            objects=objects,
+            commands=[
+                NativeCommandRecord(
+                    command_kind="start_run",
+                    command_id=command_id,
+                    status="accepted",
+                    actor_type="system",
+                    details={
+                        "run_id": run_id,
+                        "attempt_id": attempt_id,
+                        "raw_command_type": "create",
+                    },
+                )
+            ],
+            route_context={
+                "requested_model": requested_model,
+                "run_id": run_id,
+                "attempt_id": attempt_id,
+                "execution_lane": execution_lane,
+                "outbox_event": outbox_event,
+            },
+            notes=[
+                "This background /v1/responses path created durable ForgeFrame execution objects instead of completing inline on the OpenAI-compatible surface."
+            ],
+        ).model_dump(mode="json")
 
     @classmethod
     def _unsupported_parameter(cls, field: str, message: str | None = None) -> ResponsesRequestValidationError:
@@ -424,6 +535,18 @@ class ResponsesService:
             background=True,
             model=request.model,
             metadata=request.metadata,
+            native_mapping=self.build_background_admission_native_mapping(
+                request_path=request_path,
+                response_id=response_id,
+                requested_model=request.model,
+                command_id=execution_result.command_id,
+                run_id=execution_result.run_id,
+                attempt_id=execution_result.attempt_id,
+                run_state=execution_result.run_state,
+                operator_state=execution_result.operator_state,
+                execution_lane=execution_result.execution_lane,
+                outbox_event=execution_result.outbox_event,
+            ),
         )
         self.save_response_snapshot(
             response_id=response_id,
@@ -458,10 +581,19 @@ class ResponsesService:
         provider_key: str | None = None,
         error_json: dict[str, Any] | None = None,
         execution_run_id: str | None = None,
+        native_mapping: RuntimeNativeMapping | dict[str, Any] | None = None,
         now: datetime | None = None,
     ) -> None:
         current_time = self._now(now)
         completed_at = current_time if lifecycle_status in {"completed", "failed", "incomplete"} else None
+        normalized_native_mapping = normalize_runtime_native_mapping(native_mapping)
+        if not normalized_native_mapping:
+            normalized_native_mapping = extract_runtime_native_mapping(body.get("metadata"))
+        stored_body = dict(body)
+        stored_body["metadata"] = attach_runtime_native_mapping(
+            stored_body.get("metadata") if isinstance(stored_body.get("metadata"), dict) else {},
+            normalized_native_mapping,
+        )
         with self._session_factory() as session, session.begin():
             record = session.get(RuntimeResponseORM, response_id)
             if record is None:
@@ -485,7 +617,8 @@ class ResponsesService:
                     request_metadata=dict(request.metadata),
                     request_controls=self.response_controls_for_request(request),
                     request_client=dict(request.client),
-                    response_body=dict(body),
+                    native_mapping=normalized_native_mapping,
+                    response_body=stored_body,
                     error_json=dict(error_json) if error_json else None,
                     execution_run_id=execution_run_id,
                     created_at=current_time,
@@ -510,7 +643,8 @@ class ResponsesService:
             record.request_metadata = dict(request.metadata)
             record.request_controls = self.response_controls_for_request(request)
             record.request_client = dict(request.client)
-            record.response_body = dict(body)
+            record.native_mapping = normalized_native_mapping or dict(record.native_mapping or {})
+            record.response_body = stored_body
             record.error_json = dict(error_json) if error_json else None
             record.execution_run_id = execution_run_id or record.execution_run_id
             record.updated_at = current_time
@@ -572,6 +706,7 @@ class ResponsesService:
                 created_at=created_at,
                 current_body=dict(record.response_body),
                 request=request,
+                native_mapping=dict(record.native_mapping or extract_runtime_native_mapping(record.response_body.get("metadata"))),
             )
 
     def get_response(self, *, company_id: str, response_id: str) -> dict[str, Any]:
@@ -579,7 +714,12 @@ class ResponsesService:
             record = session.get(RuntimeResponseORM, response_id)
             if record is None or record.company_id != company_id:
                 raise ResponseNotFoundError(f"Response '{response_id}' was not found for company '{company_id}'.")
-            return dict(record.response_body)
+            body = dict(record.response_body)
+            body["metadata"] = attach_runtime_native_mapping(
+                body.get("metadata") if isinstance(body.get("metadata"), dict) else {},
+                dict(record.native_mapping or {}),
+            )
+            return body
 
     def get_response_input_items(self, *, company_id: str, response_id: str) -> dict[str, Any]:
         with self._session_factory() as session:

@@ -188,18 +188,28 @@ if bootstrap_password in {"", "replace-with-a-generated-bootstrap-password", "fo
 set_or_add("FORGEFRAME_HOST", entries.get("FORGEFRAME_HOST", "127.0.0.1") or "127.0.0.1")
 set_or_add("FORGEFRAME_PORT", entries.get("FORGEFRAME_PORT", "8080") or "8080")
 set_or_add("FORGEFRAME_FRONTEND_DIST_PATH", f"{install_root}/frontend/dist")
+set_or_add(
+    "FORGEFRAME_PUBLIC_FQDN",
+    entries.get("FORGEFRAME_PUBLIC_FQDN", "replace-with-public-fqdn.example.invalid")
+    or "replace-with-public-fqdn.example.invalid",
+)
 set_or_add("FORGEFRAME_PUBLIC_HTTPS_HOST", entries.get("FORGEFRAME_PUBLIC_HTTPS_HOST", "0.0.0.0") or "0.0.0.0")
 set_or_add("FORGEFRAME_PUBLIC_HTTPS_PORT", entries.get("FORGEFRAME_PUBLIC_HTTPS_PORT", "443") or "443")
 set_or_add("FORGEFRAME_PUBLIC_HTTP_HELPER_HOST", entries.get("FORGEFRAME_PUBLIC_HTTP_HELPER_HOST", "0.0.0.0") or "0.0.0.0")
 set_or_add("FORGEFRAME_PUBLIC_HTTP_HELPER_PORT", entries.get("FORGEFRAME_PUBLIC_HTTP_HELPER_PORT", "80") or "80")
 set_or_add("FORGEFRAME_PUBLIC_ADMIN_BASE", entries.get("FORGEFRAME_PUBLIC_ADMIN_BASE", "/admin") or "/admin")
-set_or_add("FORGEFRAME_PUBLIC_TLS_MODE", entries.get("FORGEFRAME_PUBLIC_TLS_MODE", "disabled") or "disabled")
+set_or_add("FORGEFRAME_PUBLIC_TLS_MODE", entries.get("FORGEFRAME_PUBLIC_TLS_MODE", "integrated_acme") or "integrated_acme")
 set_or_add("FORGEFRAME_PUBLIC_TLS_CERT_PATH", entries.get("FORGEFRAME_PUBLIC_TLS_CERT_PATH", f"{config_dir}/tls/live/fullchain.pem") or f"{config_dir}/tls/live/fullchain.pem")
 set_or_add("FORGEFRAME_PUBLIC_TLS_KEY_PATH", entries.get("FORGEFRAME_PUBLIC_TLS_KEY_PATH", f"{config_dir}/tls/live/privkey.pem") or f"{config_dir}/tls/live/privkey.pem")
 set_or_add("FORGEFRAME_PUBLIC_TLS_WEBROOT_PATH", entries.get("FORGEFRAME_PUBLIC_TLS_WEBROOT_PATH", f"{state_dir}/acme-webroot") or f"{state_dir}/acme-webroot")
 set_or_add("FORGEFRAME_PUBLIC_TLS_STATE_PATH", entries.get("FORGEFRAME_PUBLIC_TLS_STATE_PATH", f"{state_dir}/tls") or f"{state_dir}/tls")
 set_or_add("FORGEFRAME_PUBLIC_TLS_LAST_ERROR_PATH", entries.get("FORGEFRAME_PUBLIC_TLS_LAST_ERROR_PATH", f"{state_dir}/tls/last_error.txt") or f"{state_dir}/tls/last_error.txt")
 set_or_add("FORGEFRAME_PUBLIC_TLS_RENEWAL_WINDOW_DAYS", entries.get("FORGEFRAME_PUBLIC_TLS_RENEWAL_WINDOW_DAYS", "30") or "30")
+set_or_add(
+    "FORGEFRAME_PUBLIC_TLS_ACME_EMAIL",
+    entries.get("FORGEFRAME_PUBLIC_TLS_ACME_EMAIL", "replace-with-acme-email@example.invalid")
+    or "replace-with-acme-email@example.invalid",
+)
 set_or_add("FORGEFRAME_PUBLIC_TLS_ACME_DIRECTORY_URL", entries.get("FORGEFRAME_PUBLIC_TLS_ACME_DIRECTORY_URL", "https://acme-v02.api.letsencrypt.org/directory") or "https://acme-v02.api.letsencrypt.org/directory")
 set_or_add("FORGEFRAME_BOOTSTRAP_ADMIN_PASSWORD", bootstrap_password)
 set_or_add("FORGEFRAME_POSTGRES_URL", base_url)
@@ -266,5 +276,5 @@ if [[ "$SKIP_SYSTEMCTL" != "1" ]]; then
 fi
 
 log "Host-native installation artifacts are ready."
-log "Next internal path: systemctl enable --now forgeframe-api.service forgeframe-worker.service forgeframe-retention.timer"
-log "Next public path after FQDN/TLS configuration: systemctl enable --now forgeframe-http-helper.service forgeframe-acme.timer forgeframe-public.service"
+log "Internal runtime path: systemctl enable --now forgeframe-api.service forgeframe-worker.service forgeframe-retention.timer"
+log "Public runtime path: replace FORGEFRAME_PUBLIC_FQDN and FORGEFRAME_PUBLIC_TLS_ACME_EMAIL in $ENV_FILE, then enable forgeframe-http-helper.service, run scripts/renew-certificates.sh, and start forgeframe-public.service plus forgeframe-acme.timer"

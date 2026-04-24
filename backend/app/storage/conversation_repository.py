@@ -11,8 +11,12 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from app.conversations.models import (
     CONVERSATION_STATUSES,
+    CONVERSATION_EVENT_TYPES,
     INBOX_STATUSES,
     MESSAGE_ROLES,
+    MENTION_STATUSES,
+    PARTICIPANT_KINDS,
+    PARTICIPANT_STATUSES,
     SESSION_KINDS,
     THREAD_STATUSES,
     TRIAGE_STATUSES,
@@ -215,3 +219,133 @@ class InboxItemORM(Base):
     )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, nullable=False)
+
+
+class ConversationParticipantORM(Base):
+    __tablename__ = "conversation_participants"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["company_id", "conversation_id"],
+            ["conversations.company_id", "conversations.id"],
+            name="conversation_participants_company_conversation_fk",
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["company_id", "thread_id"],
+            ["conversation_threads.company_id", "conversation_threads.id"],
+            name="conversation_participants_company_thread_fk",
+            ondelete="SET NULL",
+        ),
+        _enum_check("conversation_participants_kind_ck", "participant_kind", PARTICIPANT_KINDS),
+        _enum_check("conversation_participants_status_ck", "participant_status", PARTICIPANT_STATUSES),
+        Index("conversation_participants_company_conversation_idx", "company_id", "conversation_id", "updated_at"),
+        Index("conversation_participants_company_agent_idx", "company_id", "agent_id", "updated_at"),
+    )
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    company_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    conversation_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    thread_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    participant_kind: Mapped[str] = mapped_column(String(32), nullable=False)
+    participant_status: Mapped[str] = mapped_column(String(32), nullable=False, default="active")
+    agent_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    participant_ref: Mapped[str | None] = mapped_column(String(191), nullable=True)
+    display_label: Mapped[str] = mapped_column(String(191), nullable=False)
+    metadata_json: Mapped[dict[str, Any]] = mapped_column(
+        "metadata",
+        JSONB().with_variant(JSON(), "sqlite"),
+        default=dict,
+        nullable=False,
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, nullable=False)
+
+
+class ConversationMentionORM(Base):
+    __tablename__ = "conversation_mentions"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["company_id", "conversation_id"],
+            ["conversations.company_id", "conversations.id"],
+            name="conversation_mentions_company_conversation_fk",
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["company_id", "thread_id"],
+            ["conversation_threads.company_id", "conversation_threads.id"],
+            name="conversation_mentions_company_thread_fk",
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["company_id", "message_id"],
+            ["conversation_messages.company_id", "conversation_messages.id"],
+            name="conversation_mentions_company_message_fk",
+            ondelete="CASCADE",
+        ),
+        _enum_check("conversation_mentions_status_ck", "status", MENTION_STATUSES),
+        Index("conversation_mentions_company_agent_idx", "company_id", "agent_id", "created_at"),
+        Index("conversation_mentions_company_message_idx", "company_id", "message_id"),
+    )
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    company_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    conversation_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    thread_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    message_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    agent_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    token: Mapped[str] = mapped_column(String(191), nullable=False)
+    agent_display_name: Mapped[str] = mapped_column(String(191), nullable=False)
+    status: Mapped[str] = mapped_column(String(32), nullable=False, default="active")
+    metadata_json: Mapped[dict[str, Any]] = mapped_column(
+        "metadata",
+        JSONB().with_variant(JSON(), "sqlite"),
+        default=dict,
+        nullable=False,
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, nullable=False)
+
+
+class ConversationEventORM(Base):
+    __tablename__ = "conversation_events"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["company_id", "conversation_id"],
+            ["conversations.company_id", "conversations.id"],
+            name="conversation_events_company_conversation_fk",
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["company_id", "thread_id"],
+            ["conversation_threads.company_id", "conversation_threads.id"],
+            name="conversation_events_company_thread_fk",
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["company_id", "source_message_id"],
+            ["conversation_messages.company_id", "conversation_messages.id"],
+            name="conversation_events_company_message_fk",
+            ondelete="SET NULL",
+        ),
+        _enum_check("conversation_events_type_ck", "event_type", CONVERSATION_EVENT_TYPES),
+        Index("conversation_events_company_conversation_idx", "company_id", "conversation_id", "created_at"),
+        Index("conversation_events_company_target_agent_idx", "company_id", "target_agent_id", "created_at"),
+    )
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    company_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    conversation_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    thread_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    source_message_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    event_type: Mapped[str] = mapped_column(String(32), nullable=False)
+    source_agent_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    target_agent_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    related_object_type: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    related_object_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    summary: Mapped[str] = mapped_column(Text, nullable=False)
+    metadata_json: Mapped[dict[str, Any]] = mapped_column(
+        "metadata",
+        JSONB().with_variant(JSON(), "sqlite"),
+        default=dict,
+        nullable=False,
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, nullable=False)

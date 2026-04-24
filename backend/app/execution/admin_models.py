@@ -19,6 +19,7 @@ from app.execution.models import (
     RunOutboxPublishState,
     RunState,
 )
+from app.product_taxonomy import RuntimeNativeMapping
 from app.workspaces.models import WorkspaceSummary
 
 
@@ -102,6 +103,7 @@ class ExecutionRunDetail(ExecutionRunSummary):
     outbox: list[ExecutionRunOutboxView] = Field(default_factory=list)
     workspace: WorkspaceSummary | None = None
     artifacts: list[ArtifactRecord] = Field(default_factory=list)
+    native_mapping: RuntimeNativeMapping | None = None
 
 
 class ExecutionReplayAuditReference(BaseModel):

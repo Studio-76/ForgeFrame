@@ -29,6 +29,12 @@ MemoryStatus = Literal["active", "corrected", "deleted"]
 MEMORY_SENSITIVITIES = ("normal", "sensitive", "restricted")
 MemorySensitivity = Literal["normal", "sensitive", "restricted"]
 
+MEMORY_TRUTH_STATES = ("active", "corrected", "revoked", "superseded", "expired", "deleted")
+MemoryTruthState = Literal["active", "corrected", "revoked", "superseded", "expired", "deleted"]
+
+MEMORY_SOURCE_TRUST_CLASSES = ("human_verified", "operator_verified", "runtime_inferred", "external_unverified")
+MemorySourceTrustClass = Literal["human_verified", "operator_verified", "runtime_inferred", "external_unverified"]
+
 
 class RecordLink(BaseModel):
     record_id: str
@@ -89,10 +95,14 @@ class MemorySummary(BaseModel):
     title: str
     body: str
     status: MemoryStatus
+    truth_state: MemoryTruthState = "active"
+    source_trust_class: MemorySourceTrustClass = "operator_verified"
     visibility_scope: VisibilityScope
     sensitivity: MemorySensitivity
     correction_note: str | None = None
     supersedes_memory_id: str | None = None
+    learned_from_event_id: str | None = None
+    human_override: bool = False
     expires_at: datetime | None = None
     deleted_at: datetime | None = None
     metadata: dict[str, Any] = Field(default_factory=dict)
@@ -184,7 +194,10 @@ class CreateMemory(BaseModel):
     body: str = Field(min_length=1, max_length=4000)
     visibility_scope: VisibilityScope = "team"
     sensitivity: MemorySensitivity = "normal"
+    source_trust_class: MemorySourceTrustClass = "operator_verified"
     correction_note: str | None = Field(default=None, max_length=4000)
+    learned_from_event_id: str | None = Field(default=None, max_length=64)
+    human_override: bool = False
     expires_at: datetime | None = None
     metadata: dict[str, Any] = Field(default_factory=dict)
 
@@ -201,7 +214,10 @@ class UpdateMemory(BaseModel):
     body: str | None = Field(default=None, min_length=1, max_length=4000)
     visibility_scope: VisibilityScope | None = None
     sensitivity: MemorySensitivity | None = None
+    source_trust_class: MemorySourceTrustClass | None = None
     correction_note: str | None = Field(default=None, max_length=4000)
+    learned_from_event_id: str | None = Field(default=None, max_length=64)
+    human_override: bool | None = None
     expires_at: datetime | None = None
     metadata: dict[str, Any] | None = None
 
@@ -213,6 +229,7 @@ class CorrectMemory(BaseModel):
     memory_kind: MemoryKind | None = None
     visibility_scope: VisibilityScope | None = None
     sensitivity: MemorySensitivity | None = None
+    source_trust_class: MemorySourceTrustClass | None = None
     expires_at: datetime | None = None
     metadata: dict[str, Any] | None = None
 
@@ -221,7 +238,10 @@ class DeleteMemory(BaseModel):
     deletion_note: str | None = Field(default=None, max_length=4000)
 
 
+class RevokeMemory(BaseModel):
+    revocation_note: str = Field(min_length=1, max_length=4000)
+
+
 class MemoryActionResult(BaseModel):
     memory: MemoryDetail
     action: str
-

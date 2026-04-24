@@ -24,6 +24,7 @@ from app.knowledge.models import (
     MemoryActionResult,
     MemoryDetail,
     MemorySummary,
+    RevokeMemory,
     RecordLink,
     UpdateContact,
     UpdateKnowledgeSource,
@@ -181,6 +182,11 @@ class KnowledgeContextAdminService:
         )
 
     def _memory_summary(self, row: MemoryEntryORM) -> MemorySummary:
+        truth_state = row.truth_state
+        if row.status == "deleted":
+            truth_state = "deleted"
+        elif row.expires_at is not None and row.expires_at <= self._now():
+            truth_state = "expired"
         return MemorySummary(
             memory_id=row.id,
             instance_id=row.instance_id,
@@ -195,10 +201,14 @@ class KnowledgeContextAdminService:
             title=row.title,
             body=row.body,
             status=row.status,  # type: ignore[arg-type]
+            truth_state=truth_state,  # type: ignore[arg-type]
+            source_trust_class=row.source_trust_class,  # type: ignore[arg-type]
             visibility_scope=row.visibility_scope,  # type: ignore[arg-type]
             sensitivity=row.sensitivity,  # type: ignore[arg-type]
             correction_note=row.correction_note,
             supersedes_memory_id=row.supersedes_memory_id,
+            learned_from_event_id=row.learned_from_event_id,
+            human_override=row.human_override,
             expires_at=row.expires_at,
             deleted_at=row.deleted_at,
             metadata=dict(row.metadata_json or {}),
@@ -554,9 +564,13 @@ class KnowledgeContextAdminService:
                     title=payload.title.strip(),
                     body=payload.body.strip(),
                     status="active",
+                    truth_state="active",
+                    source_trust_class=payload.source_trust_class,
                     visibility_scope=payload.visibility_scope,
                     sensitivity=payload.sensitivity,
                     correction_note=payload.correction_note,
+                    learned_from_event_id=payload.learned_from_event_id,
+                    human_override=payload.human_override,
                     expires_at=payload.expires_at,
                     metadata_json=dict(payload.metadata),
                     created_at=self._now(),
@@ -605,7 +619,10 @@ class KnowledgeContextAdminService:
             row.body = payload.body.strip() if payload.body is not None else row.body
             row.visibility_scope = payload.visibility_scope or row.visibility_scope
             row.sensitivity = payload.sensitivity or row.sensitivity
+            row.source_trust_class = payload.source_trust_class or row.source_trust_class
             row.correction_note = payload.correction_note if payload.correction_note is not None else row.correction_note
+            row.learned_from_event_id = payload.learned_from_event_id if payload.learned_from_event_id is not None else row.learned_from_event_id
+            row.human_override = payload.human_override if payload.human_override is not None else row.human_override
             row.expires_at = payload.expires_at if payload.expires_at is not None else row.expires_at
             row.metadata_json = dict(payload.metadata) if payload.metadata is not None else dict(row.metadata_json or {})
             row.updated_at = self._now()
@@ -627,7 +644,9 @@ class KnowledgeContextAdminService:
             now = self._now()
             corrected_memory_id = self._new_id("memory")
             row.status = "corrected"
+            row.truth_state = "superseded"
             row.correction_note = payload.correction_note
+            row.human_override = True
             row.updated_at = now
             session.add(
                 MemoryEntryORM(
@@ -644,10 +663,14 @@ class KnowledgeContextAdminService:
                     title=payload.title.strip(),
                     body=payload.body.strip(),
                     status="active",
+                    truth_state="active",
+                    source_trust_class=payload.source_trust_class or "human_verified",
                     visibility_scope=payload.visibility_scope or row.visibility_scope,
                     sensitivity=payload.sensitivity or row.sensitivity,
                     correction_note=payload.correction_note,
                     supersedes_memory_id=row.id,
+                    learned_from_event_id=row.learned_from_event_id,
+                    human_override=True,
                     expires_at=payload.expires_at if payload.expires_at is not None else row.expires_at,
                     metadata_json=dict(payload.metadata) if payload.metadata is not None else dict(row.metadata_json or {}),
                     created_at=now,
@@ -668,6 +691,7 @@ class KnowledgeContextAdminService:
             row = self._load_memory(session, instance=instance, memory_id=memory_id)
             now = self._now()
             row.status = "deleted"
+            row.truth_state = "deleted"
             row.deleted_at = now
             if payload.deletion_note:
                 row.correction_note = payload.deletion_note
@@ -681,3 +705,20 @@ class KnowledgeContextAdminService:
         ), memory_id=memory_id)
         return MemoryActionResult(memory=memory, action="delete")
 
+    def revoke_memory(self, *, instance: InstanceRecord, memory_id: str, payload: RevokeMemory) -> MemoryActionResult:
+        with self._session_factory() as session, session.begin():
+            row = self._load_memory(session, instance=instance, memory_id=memory_id)
+            if row.status == "deleted":
+                raise ValueError("Deleted memory entries cannot be revoked.")
+            row.truth_state = "revoked"
+            row.correction_note = payload.revocation_note
+            row.human_override = True
+            row.updated_at = self._now()
+        memory = self.get_memory(instance=instance, actor=AuthenticatedAdmin(
+            session_id="system",
+            user_id="system",
+            username="system",
+            display_name="system",
+            role="admin",
+        ), memory_id=memory_id)
+        return MemoryActionResult(memory=memory, action="revoke")

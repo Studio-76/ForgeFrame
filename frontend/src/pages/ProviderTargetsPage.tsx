@@ -16,6 +16,13 @@ import { PageIntro } from "../components/PageIntro";
 
 type LoadState = "idle" | "loading" | "success" | "error";
 
+function formatRecordEntries(values: Record<string, unknown>): string {
+  const entries = Object.entries(values ?? {});
+  return entries.length > 0
+    ? entries.map(([key, value]) => `${key}=${String(value)}`).join(" · ")
+    : "none";
+}
+
 export function ProviderTargetsPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const { session, sessionReady } = useAppSession();
@@ -88,7 +95,7 @@ export function ProviderTargetsPage() {
       <PageIntro
         eyebrow="Routing"
         title="Provider Targets"
-        description="Instance-bound provider targets are the real routing objects. This surface keeps target enablement, priority, queue eligibility, and runtime posture explicit."
+        description="Instance-bound provider targets are the real routing objects. This surface keeps target enablement, priority, technical capabilities, execution traits, policy flags, and economic posture explicit."
         question="Which targets are actually eligible for this instance right now, and in what order will routing consider them?"
         links={[
           {
@@ -132,7 +139,7 @@ export function ProviderTargetsPage() {
         <div className="fg-panel-heading">
           <div>
             <h3>Instance-Bound Target Register</h3>
-            <p className="fg-muted">Targets are listed with runtime posture, priority, capability flags, and fallback/escalation shape.</p>
+            <p className="fg-muted">Targets are listed with runtime posture, priority, separated capability/trait/policy/economic axes, and fallback/escalation shape.</p>
           </div>
           <div className="fg-actions">
             <span className="fg-pill" data-tone={state === "success" ? "success" : state === "error" ? "danger" : "neutral"}>
@@ -187,6 +194,10 @@ export function ProviderTargetsPage() {
                   <p>
                     stream={String(target.stream_capable)} · tools={String(target.tool_capable)} · vision={String(target.vision_capable)}
                   </p>
+                  <p>technical capabilities={formatRecordEntries(target.technical_capabilities ?? {})}</p>
+                  <p>execution traits={formatRecordEntries(target.execution_traits ?? {})}</p>
+                  <p>policy flags={formatRecordEntries(target.policy_flags ?? {})}</p>
+                  <p>economic profile={formatRecordEntries(target.economic_profile ?? {})}</p>
                   <p>
                     health={target.health_status} · availability={target.availability_status} · provider enabled={String(target.provider_enabled)} · model active={String(target.model_active)}
                   </p>

@@ -8,6 +8,7 @@ const {
   fetchInstancesMock,
   fetchBootstrapReadinessMock,
   fetchIngressTlsStatusMock,
+  fetchRecoveryOverviewMock,
   fetchRuntimeHealthMock,
   fetchProviderControlPlaneMock,
   fetchRoutingControlPlaneMock,
@@ -15,6 +16,7 @@ const {
   fetchInstancesMock: vi.fn(),
   fetchBootstrapReadinessMock: vi.fn(),
   fetchIngressTlsStatusMock: vi.fn(),
+  fetchRecoveryOverviewMock: vi.fn(),
   fetchRuntimeHealthMock: vi.fn(),
   fetchProviderControlPlaneMock: vi.fn(),
   fetchRoutingControlPlaneMock: vi.fn(),
@@ -28,6 +30,7 @@ vi.mock("../src/api/admin", async () => {
     fetchInstances: fetchInstancesMock,
     fetchBootstrapReadiness: fetchBootstrapReadinessMock,
     fetchIngressTlsStatus: fetchIngressTlsStatusMock,
+    fetchRecoveryOverview: fetchRecoveryOverviewMock,
     fetchRuntimeHealth: fetchRuntimeHealthMock,
     fetchProviderControlPlane: fetchProviderControlPlaneMock,
     fetchRoutingControlPlane: fetchRoutingControlPlaneMock,
@@ -162,6 +165,41 @@ beforeEach(() => {
       critical_count: 0,
     },
   });
+  fetchRecoveryOverviewMock.mockResolvedValue({
+    status: "ok",
+    summary: {
+      total_policies: 1,
+      active_policies: 1,
+      healthy_policies: 1,
+      warning_policies: 0,
+      blocked_policies: 0,
+      fresh_backup_policies: 1,
+      fresh_restore_policies: 1,
+      source_identity_verified_policies: 1,
+      target_classes_present: ["local_secondary_disk"],
+      missing_target_classes: ["second_host", "nas_share", "offsite_copy", "object_storage"],
+      protected_data_classes_present: ["database"],
+      missing_protected_data_classes: ["artifact_metadata", "blob_contents", "configuration_state", "secret_metadata"],
+      runtime_status: "ok",
+      checked_at: "2026-04-23T08:43:00Z",
+    },
+    upgrade_posture: {
+      total_reports: 0,
+      latest_release_id: null,
+      latest_target_version: null,
+      latest_status: null,
+      latest_upgrade_result: null,
+      latest_created_at: null,
+      latest_imported_at: null,
+      latest_no_loss_ok: false,
+      latest_queue_drain_ok: false,
+      latest_source_identity_stable: false,
+      runtime_status: "blocked",
+      blockers: ["upgrade_evidence_missing"],
+    },
+    recent_upgrades: [],
+    policies: [],
+  });
   fetchProviderControlPlaneMock.mockResolvedValue({
     status: "ok",
     object: "provider_control_plane",
@@ -259,12 +297,14 @@ describe("setup module pages", () => {
 
     expect(fetchBootstrapReadinessMock).toHaveBeenCalled();
     expect(fetchRuntimeHealthMock).toHaveBeenCalled();
+    expect(fetchRecoveryOverviewMock).toHaveBeenCalled();
     expect(fetchProviderControlPlaneMock).toHaveBeenCalledWith("instance_alpha");
     expect(fetchRoutingControlPlaneMock).toHaveBeenCalledWith("instance_alpha");
     expect(container.textContent).toContain("Release / Validation");
     expect(container.textContent).toContain("Gate summary");
     expect(container.textContent).toContain("Current blockers");
     expect(container.textContent).toContain("root_ui_on_slash");
+    expect(container.textContent).toContain("Upgrade integrity is not green");
     expect(container.textContent).toContain("Open Ingress / TLS / Certificates");
   });
 });

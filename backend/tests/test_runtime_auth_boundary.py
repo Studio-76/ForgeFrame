@@ -24,6 +24,27 @@ def _issue_unbound_runtime_key(client: TestClient, *, scopes: list[str]) -> dict
     return response.json()["issued"]
 
 
+def test_runtime_rejects_x_api_key_fallback_when_bearer_is_required(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("FORGEGATE_RUNTIME_AUTH_REQUIRED", "true")
+    clear_runtime_dependency_caches()
+    get_governance_service.cache_clear()
+
+    client = TestClient(app)
+    issued = _issue_unbound_runtime_key(client, scopes=["models:read"])
+
+    response = client.get(
+        "/v1/models",
+        headers={"x-api-key": str(issued["token"])},
+    )
+
+    assert response.status_code == 401
+    error = response.json()["error"]
+    assert error["type"] == "missing_bearer"
+    assert error["message"] == "Runtime requests must use Authorization: Bearer <api-key>."
+
+
 def _issue_stale_account_runtime_key(
     client: TestClient,
     *,

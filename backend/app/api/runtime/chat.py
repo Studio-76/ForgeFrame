@@ -22,8 +22,10 @@ from app.api.runtime.dependencies import (
     get_model_registry,
     get_routing_service,
     get_runtime_gateway_identity,
+    get_runtime_request_path_decision,
     require_runtime_permission,
     get_settings,
+    runtime_request_path_metadata,
 )
 from app.api.runtime.schemas import ChatCompletionsRequest, normalize_chat_messages
 from app.core.dispatch import DispatchService
@@ -37,7 +39,7 @@ from app.core.routing import (
 )
 from app.core.streaming import provider_events_to_sse
 from app.governance.errors import RuntimeAuthorizationError
-from app.governance.models import RuntimeGatewayIdentity
+from app.governance.models import RuntimeGatewayIdentity, RuntimeRequestPathDecision
 from app.governance.service import GovernanceService, get_governance_service
 from app.providers import (
     ProviderAuthenticationError,
@@ -88,12 +90,18 @@ def _error_response(*, status_code: int, error_type: str, message: str, **extra:
     return response
 
 
-def _routing_headers(decision_id: str | None, target_key: str | None = None) -> dict[str, str]:
+def _routing_headers(
+    decision_id: str | None,
+    target_key: str | None = None,
+    request_path: str | None = None,
+) -> dict[str, str]:
     headers: dict[str, str] = {}
     if decision_id:
         headers["X-ForgeFrame-Routing-Decision"] = decision_id
     if target_key:
         headers["X-ForgeFrame-Routing-Target"] = target_key
+    if request_path:
+        headers["X-ForgeFrame-Request-Path"] = request_path
     return headers
 
 
@@ -210,7 +218,6 @@ def _resolve_client_identity(
             payload.client.get("client_id")
             or request.headers.get("x-forgeframe-client")
             or request.headers.get("x-forgegate-client")
-            or request.headers.get("x-api-key")
             or request.headers.get("user-agent")
             or "unknown_client"
         ),
@@ -253,6 +260,7 @@ def create_chat_completion(
     dispatch: DispatchService = Depends(get_dispatch_service),
     settings: Settings = Depends(get_settings),
     gateway_identity: RuntimeGatewayIdentity | None = Depends(get_runtime_gateway_identity),
+    request_path_decision: RuntimeRequestPathDecision | None = Depends(get_runtime_request_path_decision),
     governance: GovernanceService = Depends(get_governance_service),
     routing: RoutingService = Depends(get_routing_service),
     _runtime_actor: RequestActor | None = Depends(require_runtime_permission("runtime.chat.write")),
@@ -283,6 +291,14 @@ def create_chat_completion(
         gateway_identity=gateway_identity,
         settings=settings,
     )
+    path_metadata = runtime_request_path_metadata(request_path_decision)
+    runtime_request_metadata = merge_request_metadata(runtime_request_metadata, path_metadata)
+    if request_path_decision is not None and request_path_decision.request_path == "queue_background":
+        return _error_response(
+            status_code=status.HTTP_409_CONFLICT,
+            error_type="request_path_blocked",
+            message="Queue-background runtime keys must use /v1/responses.",
+        )
     completion_id = new_chat_completion_id()
     completion_created = new_chat_completion_created()
     requested_model = payload.model
@@ -319,6 +335,7 @@ def create_chat_completion(
         public_model_ids = list_public_runtime_model_ids(
             routing=routing,
             identity=gateway_identity,
+            route_context=path_metadata,
         )
         analytics.record_runtime_error(
             provider=None,
@@ -356,6 +373,7 @@ def create_chat_completion(
             available_models=public_model_ids if public_model_ids is not None else list_public_runtime_model_ids(
                 routing=routing,
                 identity=gateway_identity,
+                route_context=path_metadata,
             ),
         )
 
@@ -433,7 +451,11 @@ def create_chat_completion(
             return StreamingResponse(
                 _sse_body(),
                 media_type="text/event-stream",
-                headers=_routing_headers(decision.decision_id, decision.resolved_target.target_key),
+                headers=_routing_headers(
+                    decision.decision_id,
+                    decision.resolved_target.target_key,
+                    request_path_decision.request_path if request_path_decision is not None else None,
+                ),
             )
 
         result, decision = dispatch.dispatch_chat(
@@ -478,5 +500,9 @@ def create_chat_completion(
             completion_id=completion_id,
             created=completion_created,
         ),
-        headers=_routing_headers(decision.decision_id, decision.resolved_target.target_key),
+        headers=_routing_headers(
+            decision.decision_id,
+            decision.resolved_target.target_key,
+            request_path_decision.request_path if request_path_decision is not None else None,
+        ),
     )

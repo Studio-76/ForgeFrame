@@ -247,6 +247,116 @@ function RunExplainabilityCard({ detail }: { detail: ExecutionRunDetail }) {
   );
 }
 
+function NativeRuntimeMappingCard({ detail }: { detail: ExecutionRunDetail }) {
+  const mapping = detail.native_mapping;
+
+  return (
+    <article className="fg-subcard">
+      <div className="fg-panel-heading">
+        <div>
+          <h4>Native runtime mapping</h4>
+          <p className="fg-muted">ForgeFrame shows the native object, event, command, and view taxonomy behind this runtime or execution path instead of hiding it behind OpenAI-shaped envelopes.</p>
+        </div>
+        <span className="fg-pill" data-tone={mapping ? "success" : "warning"}>
+          {mapping ? "Mapping recorded" : "Mapping missing"}
+        </span>
+      </div>
+
+      {!mapping ? (
+        <p className="fg-muted">No native runtime mapping was recorded for this run detail.</p>
+      ) : (
+        <div className="fg-stack">
+          <ul className="fg-list">
+            <li>Contract surface: {mapping.contract_surface}</li>
+            <li>Request path: {mapping.request_path}</li>
+            <li>Primary native object: {mapping.primary_native_object_kind ?? "Not declared"}</li>
+            <li>Response ID: {mapping.response_id ?? "Not attached"}</li>
+            <li>Processing mode: {mapping.processing_mode}</li>
+          </ul>
+
+          <div className="fg-card-grid">
+            <article className="fg-subcard">
+              <h5>Objects</h5>
+              {mapping.objects.length === 0 ? (
+                <p className="fg-muted">No native objects were recorded.</p>
+              ) : (
+                <ul className="fg-list">
+                  {mapping.objects.map((item) => (
+                    <li key={`${item.kind}:${item.object_id}`}>
+                      {item.kind} · {item.object_id} · {item.relation} · {item.lifecycle_state ?? "state not recorded"}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </article>
+
+            <article className="fg-subcard">
+              <h5>Events</h5>
+              {mapping.events.length === 0 ? (
+                <p className="fg-muted">No native events were recorded.</p>
+              ) : (
+                <ul className="fg-list">
+                  {mapping.events.map((item, index) => (
+                    <li key={`${item.event_kind}:${item.related_object_id ?? index}`}>
+                      {item.event_kind} · {item.related_object_kind ?? "object not recorded"} · {item.status ?? "status not recorded"}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </article>
+
+            <article className="fg-subcard">
+              <h5>Commands</h5>
+              {mapping.commands.length === 0 ? (
+                <p className="fg-muted">No canonical native commands were recorded.</p>
+              ) : (
+                <ul className="fg-list">
+                  {mapping.commands.map((item, index) => (
+                    <li key={`${item.command_kind}:${item.command_id ?? index}`}>
+                      {item.command_kind} · {item.command_id ?? "no command id"} · {item.status ?? "status not recorded"}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </article>
+
+            <article className="fg-subcard">
+              <h5>Views</h5>
+              {mapping.views.length === 0 ? (
+                <p className="fg-muted">No native views were recorded.</p>
+              ) : (
+                <ul className="fg-list">
+                  {mapping.views.map((item, index) => (
+                    <li key={`${item.view_kind}:${item.label ?? index}`}>
+                      {item.view_kind} · {item.available ? "available" : "unavailable"} · {item.label ?? "unlabeled"}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </article>
+          </div>
+
+          {mapping.notes.length > 0 ? (
+            <article className="fg-subcard">
+              <h5>Notes</h5>
+              <ul className="fg-list">
+                {mapping.notes.map((note) => (
+                  <li key={note}>{note}</li>
+                ))}
+              </ul>
+            </article>
+          ) : null}
+
+          <details>
+            <summary>Raw native mapping payload</summary>
+            <pre>{formatJson(mapping)}</pre>
+          </details>
+        </div>
+      )}
+    </article>
+  );
+}
+
 export function ScopeFilterCard({
   instanceId,
   companyId,
@@ -690,6 +800,7 @@ export function ExecutionRunsSection({
               </div>
 
               <RunExplainabilityCard detail={detail} />
+              <NativeRuntimeMappingCard detail={detail} />
 
               <article className="fg-subcard">
                 <div className="fg-panel-heading">

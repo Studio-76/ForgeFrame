@@ -31,12 +31,14 @@ export function buildConversationPath(options: {
   conversationId?: string | null;
   status?: string | null;
   triageStatus?: string | null;
+  agentId?: string | null;
 } = {}): string {
   return buildScopedPath(CONTROL_PLANE_ROUTES.conversations, {
     instanceId: options.instanceId,
     conversationId: options.conversationId,
     status: options.status,
     triageStatus: options.triageStatus,
+    agentId: options.agentId,
   });
 }
 
@@ -155,6 +157,32 @@ export function buildMemoryPath(options: {
     memoryId: options.memoryId,
     status: options.status,
     visibilityScope: options.visibilityScope,
+  });
+}
+
+export function buildLearningPath(options: {
+  instanceId?: string | null;
+  eventId?: string | null;
+  status?: string | null;
+  triggerKind?: string | null;
+} = {}): string {
+  return buildScopedPath(CONTROL_PLANE_ROUTES.learning, {
+    instanceId: options.instanceId,
+    eventId: options.eventId,
+    status: options.status,
+    triggerKind: options.triggerKind,
+  });
+}
+
+export function buildAgentsPath(options: {
+  instanceId?: string | null;
+  agentId?: string | null;
+  status?: string | null;
+} = {}): string {
+  return buildScopedPath(CONTROL_PLANE_ROUTES.agents, {
+    instanceId: options.instanceId,
+    agentId: options.agentId,
+    status: options.status,
   });
 }
 

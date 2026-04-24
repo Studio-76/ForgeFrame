@@ -4,9 +4,11 @@ import { Link, useSearchParams } from "react-router-dom";
 import {
   appendConversationMessage,
   createConversation,
+  fetchAgents,
   fetchConversationDetail,
   fetchConversations,
   fetchInstances,
+  type AgentSummary,
   updateConversation,
   type ConversationDetail,
   type ConversationMessageRole,
@@ -18,7 +20,13 @@ import {
 } from "../api/admin";
 import { roleAllows, sessionHasAnyInstancePermission } from "../app/adminAccess";
 import { CONTROL_PLANE_ROUTES } from "../app/navigation";
-import { buildArtifactsPath, buildConversationPath, buildInboxPath, buildWorkspacePath } from "../app/workInteractionRoutes";
+import {
+  buildAgentsPath,
+  buildArtifactsPath,
+  buildConversationPath,
+  buildInboxPath,
+  buildWorkspacePath,
+} from "../app/workInteractionRoutes";
 import { useAppSession } from "../app/session";
 import { PageIntro } from "../components/PageIntro";
 
@@ -48,6 +56,8 @@ const DEFAULT_CREATE_FORM = {
   initialContinuityKey: "",
   initialMessageRole: "user" as ConversationMessageRole,
   initialMessageBody: "",
+  participantAgentIds: [] as string[],
+  initialMentionAgentIds: [] as string[],
   createInboxEntry: "yes" as "yes" | "no",
   inboxTitle: "",
   inboxSummary: "",
@@ -79,6 +89,11 @@ const DEFAULT_APPEND_FORM = {
   messageRole: "operator" as ConversationMessageRole,
   structuredPayloadJson: "{}",
   body: "",
+  mentionAgentIds: [] as string[],
+  handoffToAgentId: "",
+  reviewRequestAgentId: "",
+  blockerAgentId: "",
+  roundtableAgentIds: [] as string[],
 };
 
 function parseJsonObject(rawValue: string, fieldLabel: string): Record<string, unknown> {
@@ -109,6 +124,7 @@ export function ConversationsPage() {
   const selectedConversationId = searchParams.get("conversationId")?.trim() ?? "";
   const statusFilter = (searchParams.get("status")?.trim() as ConversationStatus | "all" | "") || "all";
   const triageFilter = (searchParams.get("triageStatus")?.trim() as TriageStatus | "all" | "") || "all";
+  const agentFilter = searchParams.get("agentId")?.trim() ?? "";
 
   const canRead = sessionReady && (
     sessionHasAnyInstancePermission(session, "execution.read")
@@ -118,6 +134,8 @@ export function ConversationsPage() {
 
   const [instancesState, setInstancesState] = useState<LoadState>("idle");
   const [instances, setInstances] = useState<Array<{ instance_id: string; display_name: string }>>([]);
+  const [agentsState, setAgentsState] = useState<LoadState>("idle");
+  const [agents, setAgents] = useState<AgentSummary[]>([]);
   const [listState, setListState] = useState<LoadState>("idle");
   const [detailState, setDetailState] = useState<LoadState>("idle");
   const [conversations, setConversations] = useState<ConversationSummary[]>([]);
@@ -178,6 +196,39 @@ export function ConversationsPage() {
 
   useEffect(() => {
     if (!canRead || !instanceId) {
+      setAgents([]);
+      setAgentsState("idle");
+      return;
+    }
+
+    let cancelled = false;
+    setAgentsState("loading");
+
+    void fetchAgents(instanceId, { status: "all", limit: 100 })
+      .then((payload) => {
+        if (cancelled) {
+          return;
+        }
+        setAgents(payload.agents);
+        setAgentsState("success");
+        setError("");
+      })
+      .catch((loadError: unknown) => {
+        if (cancelled) {
+          return;
+        }
+        setAgents([]);
+        setAgentsState("error");
+        setError(loadError instanceof Error ? loadError.message : "Agent registry could not be loaded for conversation routing.");
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [canRead, instanceId, refreshNonce]);
+
+  useEffect(() => {
+    if (!canRead || !instanceId) {
       setListState("idle");
       setConversations([]);
       setDetail(null);
@@ -190,6 +241,7 @@ export function ConversationsPage() {
     void fetchConversations(instanceId, {
       status: statusFilter,
       triageStatus: triageFilter,
+      agentId: agentFilter || null,
       limit: 100,
     })
       .then((payload) => {
@@ -226,7 +278,7 @@ export function ConversationsPage() {
     return () => {
       cancelled = true;
     };
-  }, [canRead, instanceId, refreshNonce, selectedConversationId, statusFilter, triageFilter]);
+  }, [agentFilter, canRead, instanceId, refreshNonce, selectedConversationId, statusFilter, triageFilter]);
 
   useEffect(() => {
     if (!canRead || !instanceId || !selectedConversationId) {
@@ -291,6 +343,11 @@ export function ConversationsPage() {
       body: "",
       structuredPayloadJson: "{}",
       continuityKey: "",
+      mentionAgentIds: [],
+      handoffToAgentId: "",
+      reviewRequestAgentId: "",
+      blockerAgentId: "",
+      roundtableAgentIds: [],
     }));
   }, [detail]);
 
@@ -322,6 +379,8 @@ export function ConversationsPage() {
         initial_continuity_key: createForm.initialContinuityKey.trim() || null,
         initial_message_role: createForm.initialMessageRole,
         initial_message_body: createForm.initialMessageBody.trim(),
+        participant_agent_ids: createForm.participantAgentIds,
+        initial_mention_agent_ids: createForm.initialMentionAgentIds,
         create_inbox_entry: createForm.createInboxEntry === "yes",
         inbox_title: createForm.inboxTitle.trim() || null,
         inbox_summary: createForm.inboxSummary.trim() || null,
@@ -392,6 +451,11 @@ export function ConversationsPage() {
         continuity_key: appendForm.continuityKey.trim() || null,
         message_role: appendForm.messageRole,
         body: appendForm.body.trim(),
+        mention_agent_ids: appendForm.mentionAgentIds,
+        handoff_to_agent_id: appendForm.handoffToAgentId.trim() || null,
+        review_request_agent_id: appendForm.reviewRequestAgentId.trim() || null,
+        blocker_agent_id: appendForm.blockerAgentId.trim() || null,
+        roundtable_agent_ids: appendForm.roundtableAgentIds,
         structured_payload: parseJsonObject(appendForm.structuredPayloadJson, "Structured payload"),
       });
       setAppendForm((current) => ({
@@ -401,6 +465,11 @@ export function ConversationsPage() {
         body: "",
         structuredPayloadJson: "{}",
         continuityKey: "",
+        mentionAgentIds: [],
+        handoffToAgentId: "",
+        reviewRequestAgentId: "",
+        blockerAgentId: "",
+        roundtableAgentIds: [],
       }));
       setMessage(`Conversation ${payload.conversation.conversation_id} extended.`);
       setRefreshNonce((current) => current + 1);
@@ -450,6 +519,14 @@ export function ConversationsPage() {
     );
   }
 
+  const selectableAgents = agents.filter((agent) => agent.status !== "archived");
+  const resolveAgentLabel = (agentId: string | null | undefined) => {
+    if (!agentId) {
+      return "Unassigned";
+    }
+    return agents.find((agent) => agent.agent_id === agentId)?.display_name ?? agentId;
+  };
+
   return (
     <section className="fg-page">
       <PageIntro
@@ -479,8 +556,17 @@ export function ConversationsPage() {
             <h3>Scope and filter</h3>
             <p className="fg-muted">Choose the instance boundary, then constrain the conversation inventory by lifecycle and triage posture.</p>
           </div>
-          <span className="fg-pill" data-tone={instancesState === "success" ? "success" : instancesState === "error" ? "danger" : "neutral"}>
-            {instancesState}
+          <span
+            className="fg-pill"
+            data-tone={
+              instancesState === "error" || agentsState === "error"
+                ? "danger"
+                : instancesState === "success" && agentsState !== "loading"
+                  ? "success"
+                  : "neutral"
+            }
+          >
+            instances {instancesState} · agents {agentsState}
           </span>
         </div>
         <div className="fg-inline-form">
@@ -545,6 +631,29 @@ export function ConversationsPage() {
               ))}
             </select>
           </label>
+          <label>
+            Agent lens
+            <select
+              aria-label="Conversation agent filter"
+              value={agentFilter}
+              onChange={(event) => updateRoute((next) => {
+                const nextAgentId = event.target.value;
+                if (nextAgentId) {
+                  next.set("agentId", nextAgentId);
+                } else {
+                  next.delete("agentId");
+                }
+                next.delete("conversationId");
+              })}
+            >
+              <option value="">all agents</option>
+              {agents.map((agent) => (
+                <option key={agent.agent_id} value={agent.agent_id}>
+                  {agent.display_name} ({agent.agent_id})
+                </option>
+              ))}
+            </select>
+          </label>
         </div>
       </article>
 
@@ -588,6 +697,7 @@ export function ConversationsPage() {
                   <div className="fg-detail-grid">
                     <span className="fg-muted">{conversation.status} · {conversation.priority} priority · inbox {conversation.inbox_count}</span>
                     <span className="fg-muted">threads {conversation.thread_count} · sessions {conversation.session_count} · messages {conversation.message_count}</span>
+                    <span className="fg-muted">participants {conversation.participant_count} · mentions {conversation.mention_count} · events {conversation.event_count}</span>
                   </div>
                 </button>
               ))}
@@ -619,6 +729,9 @@ export function ConversationsPage() {
                     <li>Status: {detail.status}</li>
                     <li>Triage: {detail.triage_status}</li>
                     <li>Priority: {detail.priority}</li>
+                    <li>Participants: {detail.participant_count}</li>
+                    <li>Mentions: {detail.mention_count}</li>
+                    <li>Agent events: {detail.event_count}</li>
                     <li>Latest message: {detail.latest_message_at ?? "Not recorded"}</li>
                   </ul>
                 </article>
@@ -648,6 +761,79 @@ export function ConversationsPage() {
               </article>
 
               <div className="fg-card-grid">
+                <article className="fg-subcard">
+                  <h4>Agent participation</h4>
+                  {detail.participants.length === 0 ? <p className="fg-muted">No agent participants were recorded.</p> : (
+                    <ul className="fg-list">
+                      {detail.participants.map((participant) => (
+                        <li key={participant.participant_id}>
+                          <Link
+                            className="fg-nav-link"
+                            to={buildConversationPath({
+                              instanceId,
+                              conversationId: detail.conversation_id,
+                              agentId: participant.agent_id ?? undefined,
+                            })}
+                          >
+                            {participant.display_label}
+                          </Link>
+                          {" · "}{participant.participant_kind}
+                          {" · "}{participant.participant_status}
+                          {participant.thread_id ? ` · thread ${participant.thread_id}` : ""}
+                          {participant.agent_id ? (
+                            <>
+                              {" · "}
+                              <Link className="fg-nav-link" to={buildAgentsPath({ instanceId, agentId: participant.agent_id })}>
+                                Open agent
+                              </Link>
+                            </>
+                          ) : null}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </article>
+                <article className="fg-subcard">
+                  <h4>Mentions</h4>
+                  {detail.mentions.length === 0 ? <p className="fg-muted">No structured mentions were recorded.</p> : (
+                    <ul className="fg-list">
+                      {detail.mentions.map((mention) => (
+                        <li key={mention.mention_id}>
+                          <Link
+                            className="fg-nav-link"
+                            to={buildConversationPath({
+                              instanceId,
+                              conversationId: detail.conversation_id,
+                              agentId: mention.agent_id,
+                            })}
+                          >
+                            {mention.token}
+                          </Link>
+                          {" · "}{mention.agent_display_name}
+                          {" · "}{mention.status}
+                          {" · message "}<span className="fg-code">{mention.message_id}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </article>
+                <article className="fg-subcard">
+                  <h4>Agent events</h4>
+                  {detail.events.length === 0 ? <p className="fg-muted">No structured handoff, review, blocker, or roundtable events were recorded.</p> : (
+                    <ul className="fg-list">
+                      {detail.events.map((eventItem) => (
+                        <li key={eventItem.event_id}>
+                          <strong>{eventItem.summary}</strong>
+                          {" · "}{eventItem.event_type}
+                          {eventItem.target_agent_id ? ` · ${resolveAgentLabel(eventItem.target_agent_id)}` : ""}
+                          {eventItem.related_object_type && eventItem.related_object_id
+                            ? ` · ${eventItem.related_object_type}:${eventItem.related_object_id}`
+                            : ""}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </article>
                 <article className="fg-subcard">
                   <h4>Threads</h4>
                   {detail.threads.length === 0 ? <p className="fg-muted">No threads were recorded.</p> : (
@@ -797,6 +983,44 @@ export function ConversationsPage() {
               <label>
                 Continuity key
                 <input value={createForm.initialContinuityKey} onChange={(event) => setCreateForm((current) => ({ ...current, initialContinuityKey: event.target.value }))} placeholder="assistant-review-1" />
+              </label>
+            </div>
+            <div className="fg-card-grid">
+              <label>
+                Participants
+                <select
+                  multiple
+                  size={Math.min(Math.max(selectableAgents.length, 3), 6)}
+                  value={createForm.participantAgentIds}
+                  onChange={(event) => setCreateForm((current) => ({
+                    ...current,
+                    participantAgentIds: Array.from(event.target.selectedOptions, (option) => option.value),
+                  }))}
+                >
+                  {selectableAgents.map((agent) => (
+                    <option key={agent.agent_id} value={agent.agent_id}>
+                      {agent.display_name} ({agent.role_kind})
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                Initial mentions
+                <select
+                  multiple
+                  size={Math.min(Math.max(selectableAgents.length, 3), 6)}
+                  value={createForm.initialMentionAgentIds}
+                  onChange={(event) => setCreateForm((current) => ({
+                    ...current,
+                    initialMentionAgentIds: Array.from(event.target.selectedOptions, (option) => option.value),
+                  }))}
+                >
+                  {selectableAgents.map((agent) => (
+                    <option key={agent.agent_id} value={agent.agent_id}>
+                      @{agent.display_name}
+                    </option>
+                  ))}
+                </select>
               </label>
             </div>
             <label>
@@ -960,6 +1184,88 @@ export function ConversationsPage() {
                   Thread title
                   <input value={appendForm.threadTitle} onChange={(event) => setAppendForm((current) => ({ ...current, threadTitle: event.target.value }))} placeholder="Follow-up" />
                 </label>
+                <div className="fg-card-grid">
+                  <label>
+                    Mention agents
+                    <select
+                      multiple
+                      size={Math.min(Math.max(selectableAgents.length, 3), 6)}
+                      value={appendForm.mentionAgentIds}
+                      onChange={(event) => setAppendForm((current) => ({
+                        ...current,
+                        mentionAgentIds: Array.from(event.target.selectedOptions, (option) => option.value),
+                      }))}
+                    >
+                      {selectableAgents.map((agent) => (
+                        <option key={agent.agent_id} value={agent.agent_id}>
+                          @{agent.display_name}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label>
+                    Roundtable agents
+                    <select
+                      multiple
+                      size={Math.min(Math.max(selectableAgents.length, 3), 6)}
+                      value={appendForm.roundtableAgentIds}
+                      onChange={(event) => setAppendForm((current) => ({
+                        ...current,
+                        roundtableAgentIds: Array.from(event.target.selectedOptions, (option) => option.value),
+                      }))}
+                    >
+                      {selectableAgents.map((agent) => (
+                        <option key={agent.agent_id} value={agent.agent_id}>
+                          {agent.display_name}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                </div>
+                <div className="fg-grid fg-grid-compact">
+                  <label>
+                    Handoff to
+                    <select
+                      value={appendForm.handoffToAgentId}
+                      onChange={(event) => setAppendForm((current) => ({ ...current, handoffToAgentId: event.target.value }))}
+                    >
+                      <option value="">none</option>
+                      {selectableAgents.map((agent) => (
+                        <option key={agent.agent_id} value={agent.agent_id}>
+                          {agent.display_name}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label>
+                    Review request
+                    <select
+                      value={appendForm.reviewRequestAgentId}
+                      onChange={(event) => setAppendForm((current) => ({ ...current, reviewRequestAgentId: event.target.value }))}
+                    >
+                      <option value="">none</option>
+                      {selectableAgents.map((agent) => (
+                        <option key={agent.agent_id} value={agent.agent_id}>
+                          {agent.display_name}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label>
+                    Blocker owner
+                    <select
+                      value={appendForm.blockerAgentId}
+                      onChange={(event) => setAppendForm((current) => ({ ...current, blockerAgentId: event.target.value }))}
+                    >
+                      <option value="">none</option>
+                      {selectableAgents.map((agent) => (
+                        <option key={agent.agent_id} value={agent.agent_id}>
+                          {agent.display_name}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                </div>
                 <label>
                   Structured payload JSON
                   <textarea rows={4} value={appendForm.structuredPayloadJson} onChange={(event) => setAppendForm((current) => ({ ...current, structuredPayloadJson: event.target.value }))} />

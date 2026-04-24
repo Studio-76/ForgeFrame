@@ -8,6 +8,7 @@ import {
   fetchInstances,
   fetchMemoryDetail,
   fetchMemoryEntries,
+  revokeMemoryEntry,
   updateMemoryEntry,
   type MemoryDetail,
   type MemoryKind,
@@ -21,6 +22,8 @@ import {
   buildContactPath,
   buildConversationPath,
   buildKnowledgeSourcePath,
+  buildMemoryPath,
+  buildLearningPath,
   buildNotificationPath,
   buildTaskPath,
   buildWorkspacePath,
@@ -84,6 +87,10 @@ const DEFAULT_DELETE_FORM = {
   deletionNote: "",
 };
 
+const DEFAULT_REVOKE_FORM = {
+  revocationNote: "",
+};
+
 export function MemoryPage() {
   const { session, sessionReady } = useAppSession();
   const { canRead, canMutate } = getWorkInteractionAccess(session, sessionReady);
@@ -104,10 +111,12 @@ export function MemoryPage() {
   const [editForm, setEditForm] = useState(DEFAULT_EDIT_FORM);
   const [correctionForm, setCorrectionForm] = useState(DEFAULT_CORRECTION_FORM);
   const [deleteForm, setDeleteForm] = useState(DEFAULT_DELETE_FORM);
+  const [revokeForm, setRevokeForm] = useState(DEFAULT_REVOKE_FORM);
   const [savingCreate, setSavingCreate] = useState(false);
   const [savingUpdate, setSavingUpdate] = useState(false);
   const [savingCorrection, setSavingCorrection] = useState(false);
   const [savingDelete, setSavingDelete] = useState(false);
+  const [savingRevoke, setSavingRevoke] = useState(false);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
   const [refreshNonce, setRefreshNonce] = useState(0);
@@ -242,6 +251,7 @@ export function MemoryPage() {
       setEditForm(DEFAULT_EDIT_FORM);
       setCorrectionForm(DEFAULT_CORRECTION_FORM);
       setDeleteForm(DEFAULT_DELETE_FORM);
+      setRevokeForm(DEFAULT_REVOKE_FORM);
       return;
     }
 
@@ -272,6 +282,7 @@ export function MemoryPage() {
       metadataJson: JSON.stringify(detail.metadata, null, 2),
     });
     setDeleteForm(DEFAULT_DELETE_FORM);
+    setRevokeForm(DEFAULT_REVOKE_FORM);
   }, [detail]);
 
   const handleCreate = async (event: FormEvent<HTMLFormElement>) => {
@@ -400,6 +411,29 @@ export function MemoryPage() {
       setError(saveError instanceof Error ? saveError.message : "Memory deletion failed.");
     } finally {
       setSavingDelete(false);
+    }
+  };
+
+  const handleRevoke = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!canMutate || !instanceId || !detail) {
+      return;
+    }
+
+    setSavingRevoke(true);
+    setError("");
+    setMessage("");
+    try {
+      const payload = await revokeMemoryEntry(instanceId, detail.memory_id, {
+        revocation_note: revokeForm.revocationNote.trim(),
+      });
+      setMessage(`Memory entry ${payload.memory.memory_id} revoked.`);
+      setRefreshNonce((current) => current + 1);
+      setRevokeForm(DEFAULT_REVOKE_FORM);
+    } catch (saveError) {
+      setError(saveError instanceof Error ? saveError.message : "Memory revocation failed.");
+    } finally {
+      setSavingRevoke(false);
     }
   };
 
@@ -566,6 +600,7 @@ export function MemoryPage() {
                   </div>
                   <div className="fg-detail-grid">
                     <span className="fg-muted">{memory.memory_kind} · {memory.visibility_scope} · {memory.sensitivity}</span>
+                    <span className="fg-muted">truth {memory.truth_state} · trust {memory.source_trust_class}{memory.human_override ? " · human override" : ""}</span>
                     <span className="fg-muted">{memory.contact_id ?? memory.source_id ?? "unlinked"}</span>
                   </div>
                 </button>
@@ -593,10 +628,14 @@ export function MemoryPage() {
                 <ul className="fg-list">
                   <li>Kind: {detail.memory_kind}</li>
                   <li>Status: {detail.status}</li>
+                  <li>Truth state: {detail.truth_state}</li>
+                  <li>Source trust: {detail.source_trust_class}</li>
+                  <li>Human override: {detail.human_override ? "yes" : "no"}</li>
                   <li>Visibility: {detail.visibility_scope}</li>
                   <li>Sensitivity: {detail.sensitivity}</li>
                   <li>Correction note: {detail.correction_note ?? "None"}</li>
                   <li>Supersedes: {detail.supersedes_memory_id ?? "None"}</li>
+                  <li>Learned from event: {detail.learned_from_event_id ?? "None"}</li>
                   <li>Expires at: {detail.expires_at ?? "Not scheduled"}</li>
                   <li>Deleted at: {detail.deleted_at ?? "Not deleted"}</li>
                 </ul>
@@ -608,6 +647,33 @@ export function MemoryPage() {
               </article>
 
               <div className="fg-card-grid">
+                <article className="fg-subcard">
+                  <h4>Truth maintenance</h4>
+                  <ul className="fg-list">
+                    <li>Truth state: {detail.truth_state}</li>
+                    <li>Source trust class: {detail.source_trust_class}</li>
+                    <li>Human override: {detail.human_override ? "Applied" : "No"}</li>
+                    <li>Learned from event: {detail.learned_from_event_id ?? "Not linked"}</li>
+                  </ul>
+                  <div className="fg-actions">
+                    {detail.learned_from_event_id ? (
+                      <Link
+                        className="fg-nav-link"
+                        to={buildLearningPath({ instanceId, eventId: detail.learned_from_event_id })}
+                      >
+                        Open learning event
+                      </Link>
+                    ) : null}
+                    {detail.supersedes_memory_id ? (
+                      <Link
+                        className="fg-nav-link"
+                        to={buildMemoryPath({ instanceId, memoryId: detail.supersedes_memory_id })}
+                      >
+                        Open superseded memory
+                      </Link>
+                    ) : null}
+                  </div>
+                </article>
                 <article className="fg-subcard">
                   <h4>Source linkage</h4>
                   {detail.source ? (
@@ -923,6 +989,26 @@ export function MemoryPage() {
                 <div className="fg-actions">
                   <button type="submit" disabled={!canMutate || savingDelete}>
                     {savingDelete ? "Deleting memory" : "Delete memory"}
+                  </button>
+                </div>
+              </form>
+
+              <form className="fg-stack" onSubmit={handleRevoke}>
+                <h4>Revoke memory</h4>
+                <label>
+                  Revocation note
+                  <input
+                    value={revokeForm.revocationNote}
+                    onChange={(event) => setRevokeForm({ revocationNote: event.target.value })}
+                    placeholder="Reason for revocation"
+                  />
+                </label>
+                <div className="fg-actions">
+                  <button
+                    type="submit"
+                    disabled={!canMutate || savingRevoke || !revokeForm.revocationNote.trim() || detail.status === "deleted"}
+                  >
+                    {savingRevoke ? "Revoking memory" : "Revoke memory"}
                   </button>
                 </div>
               </form>

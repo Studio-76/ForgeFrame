@@ -13,6 +13,9 @@ class RuntimeModel(BaseModel):
     category: str = "general"
     routing_key: str | None = None
     capabilities: dict[str, object] = Field(default_factory=dict)
+    execution_traits: dict[str, object] = Field(default_factory=dict)
+    policy_flags: dict[str, object] = Field(default_factory=dict)
+    economic_profile: dict[str, object] = Field(default_factory=dict)
     active: bool = True
     source: Literal["static", "discovered", "manual", "templated"] = "static"
     discovery_status: str = "catalog"
@@ -40,6 +43,10 @@ class RuntimeTarget(BaseModel):
     auth_type: str
     credential_type: str
     capability_profile: dict[str, object] = Field(default_factory=dict)
+    technical_capabilities: dict[str, object] = Field(default_factory=dict)
+    execution_traits: dict[str, object] = Field(default_factory=dict)
+    policy_flags: dict[str, object] = Field(default_factory=dict)
+    economic_profile: dict[str, object] = Field(default_factory=dict)
     cost_class: str = "medium"
     latency_class: str = "medium"
     enabled: bool = True

@@ -21,6 +21,7 @@ from app.control_plane.models import (
     RoutingCircuitStateRecord,
     RoutingPolicyRecord,
 )
+from app.control_plane.profile_taxonomy import build_legacy_capability_profile, split_legacy_capability_profile
 from app.control_plane.routing_defaults import (
     build_default_routing_policies,
     merge_routing_circuits,
@@ -35,7 +36,7 @@ from app.settings.config import Settings
 from app.storage.harness_repository import Base
 from app.tenancy import DEFAULT_BOOTSTRAP_TENANT_ID, normalize_tenant_id
 
-_CONTROL_PLANE_STATE_SCHEMA_VERSION = 4
+_CONTROL_PLANE_STATE_SCHEMA_VERSION = 5
 _LEGACY_STATE_KEY = "default"
 
 
@@ -200,6 +201,55 @@ class FileControlPlaneStateRepository:
                 normalized["routing_decisions"] = []
             normalized["schema_version"] = _CONTROL_PLANE_STATE_SCHEMA_VERSION
             changed = True
+
+        if version < 5:
+            for provider in normalized.get("providers", []):
+                if not isinstance(provider, dict):
+                    continue
+                provider_name = str(provider.get("provider") or "")
+                for model in provider.get("managed_models", []):
+                    if not isinstance(model, dict):
+                        continue
+                    technical_capabilities, execution_traits, policy_flags, economic_profile = split_legacy_capability_profile(
+                        provider=provider_name,
+                        capability_profile=model.get("capabilities") if isinstance(model.get("capabilities"), dict) else {},
+                    )
+                    if "capabilities" not in model or not isinstance(model.get("capabilities"), dict):
+                        model["capabilities"] = technical_capabilities
+                    if "execution_traits" not in model:
+                        model["execution_traits"] = execution_traits
+                    if "policy_flags" not in model:
+                        model["policy_flags"] = policy_flags
+                    if "economic_profile" not in model:
+                        model["economic_profile"] = economic_profile
+                    changed = True
+
+            for target in normalized.get("provider_targets", []):
+                if not isinstance(target, dict):
+                    continue
+                provider_name = str(target.get("provider") or "")
+                technical_capabilities, execution_traits, policy_flags, economic_profile = split_legacy_capability_profile(
+                    provider=provider_name,
+                    capability_profile=target.get("capability_profile") if isinstance(target.get("capability_profile"), dict) else {},
+                    cost_class=str(target.get("cost_class") or "medium"),
+                    latency_class=str(target.get("latency_class") or "medium"),
+                )
+                if "technical_capabilities" not in target:
+                    target["technical_capabilities"] = technical_capabilities
+                if "execution_traits" not in target:
+                    target["execution_traits"] = execution_traits
+                if "policy_flags" not in target:
+                    target["policy_flags"] = policy_flags
+                if "economic_profile" not in target:
+                    target["economic_profile"] = economic_profile
+                if "capability_profile" not in target or not isinstance(target.get("capability_profile"), dict):
+                    target["capability_profile"] = build_legacy_capability_profile(
+                        technical_capabilities=technical_capabilities,
+                        execution_traits=execution_traits,
+                    )
+                changed = True
+
+            normalized["schema_version"] = _CONTROL_PLANE_STATE_SCHEMA_VERSION
 
         if "updated_at" not in normalized:
             normalized["updated_at"] = ""

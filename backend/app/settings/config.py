@@ -9,6 +9,7 @@ from typing import Any, Literal, get_origin
 from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from app.public_surface import has_configured_public_acme_email, has_configured_public_fqdn
 from app.tenancy import DEFAULT_BOOTSTRAP_TENANT_ID
 
 PRIMARY_ENV_PREFIX = "FORGEFRAME_"
@@ -295,9 +296,9 @@ class Settings(BaseSettings):
                 self._validate_postgres_target(backend_name, database_url)
 
         if self.public_tls_mode == "integrated_acme":
-            if not self.public_fqdn.strip():
+            if not has_configured_public_fqdn(self.public_fqdn):
                 raise ValueError("FORGEFRAME_PUBLIC_FQDN must be set when integrated ACME/TLS mode is enabled.")
-            if not self.public_tls_acme_email.strip():
+            if not has_configured_public_acme_email(self.public_tls_acme_email):
                 raise ValueError("FORGEFRAME_PUBLIC_TLS_ACME_EMAIL must be set when integrated ACME/TLS mode is enabled.")
 
         return self

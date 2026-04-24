@@ -9,6 +9,7 @@ from app.control_plane import ControlPlaneStateRecord
 from app.api.runtime.dependencies import clear_runtime_dependency_caches
 from app.main import app
 from app.providers import ChatDispatchResult, ProviderStreamEvent
+from app.storage.control_plane_repository import ControlPlaneStatePaths, FileControlPlaneStateRepository
 from app.usage.analytics import get_usage_analytics_store
 from app.usage.events import ClientIdentity
 from app.usage.models import CostBreakdown, TokenUsage
@@ -144,7 +145,10 @@ def test_anthropic_only_bootstrap_repairs_persisted_state_before_runtime_readine
     assert anthropic_provider["model_count"] == 1
     assert anthropic_provider["models"][0]["id"] == "claude-3-5-sonnet-latest"
 
-    repaired_state = ControlPlaneStateRecord.model_validate_json(state_path.read_text(encoding="utf-8"))
+    repaired_state = FileControlPlaneStateRepository(
+        paths=ControlPlaneStatePaths(state_path=state_path),
+    ).load_state()
+    assert repaired_state is not None
     repaired_provider = next(provider for provider in repaired_state.providers if provider.provider == "anthropic")
     assert {model.id for model in repaired_provider.managed_models} == {"claude-3-5-sonnet-latest"}
 

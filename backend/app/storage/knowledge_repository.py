@@ -14,8 +14,10 @@ from app.knowledge.models import (
     KNOWLEDGE_SOURCE_KINDS,
     KNOWLEDGE_SOURCE_STATUSES,
     MEMORY_KINDS,
+    MEMORY_SOURCE_TRUST_CLASSES,
     MEMORY_SENSITIVITIES,
     MEMORY_STATUSES,
+    MEMORY_TRUTH_STATES,
     VISIBILITY_SCOPES,
 )
 from app.storage.harness_repository import Base
@@ -150,6 +152,8 @@ class MemoryEntryORM(Base):
         CheckConstraint("supersedes_memory_id IS NULL OR supersedes_memory_id <> id", name="memory_entries_supersedes_self_ck"),
         _enum_check("memory_entries_kind_ck", "memory_kind", MEMORY_KINDS),
         _enum_check("memory_entries_status_ck", "status", MEMORY_STATUSES),
+        _enum_check("memory_entries_truth_state_ck", "truth_state", MEMORY_TRUTH_STATES),
+        _enum_check("memory_entries_source_trust_class_ck", "source_trust_class", MEMORY_SOURCE_TRUST_CLASSES),
         _enum_check("memory_entries_visibility_ck", "visibility_scope", VISIBILITY_SCOPES),
         _enum_check("memory_entries_sensitivity_ck", "sensitivity", MEMORY_SENSITIVITIES),
         CheckConstraint("deleted_at IS NULL OR status = 'deleted'", name="memory_entries_deleted_status_ck"),
@@ -171,10 +175,14 @@ class MemoryEntryORM(Base):
     title: Mapped[str] = mapped_column(String(191), nullable=False)
     body: Mapped[str] = mapped_column(Text, nullable=False)
     status: Mapped[str] = mapped_column(String(32), nullable=False, default="active")
+    truth_state: Mapped[str] = mapped_column(String(32), nullable=False, default="active")
+    source_trust_class: Mapped[str] = mapped_column(String(32), nullable=False, default="operator_verified")
     visibility_scope: Mapped[str] = mapped_column(String(32), nullable=False, default="team")
     sensitivity: Mapped[str] = mapped_column(String(32), nullable=False, default="normal")
     correction_note: Mapped[str | None] = mapped_column(Text, nullable=True)
     supersedes_memory_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    learned_from_event_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    human_override: Mapped[bool] = mapped_column(default=False, nullable=False)
     expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     metadata_json: Mapped[dict[str, Any]] = mapped_column(

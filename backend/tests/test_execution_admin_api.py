@@ -218,6 +218,10 @@ def test_admin_execution_runs_expose_dead_letter_detail() -> None:
     assert payload["attempts"][0]["attempt_state"] == "dead_lettered"
     assert payload["result_summary"]["error_code"] == "provider_authentication_error"
     assert any(item["event_type"] == "dead_letter" for item in payload["outbox"])
+    assert payload["native_mapping"]["contract_surface"] == "forgeframe_execution"
+    assert payload["native_mapping"]["primary_native_object_kind"] == "run"
+    assert any(item["kind"] == "run" for item in payload["native_mapping"]["objects"])
+    assert any(item["event_kind"] == "blocker_event" for item in payload["native_mapping"]["events"])
 
 
 def test_admin_execution_replay_persists_reason_and_audit_event() -> None:

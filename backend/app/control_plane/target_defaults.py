@@ -5,6 +5,13 @@ from __future__ import annotations
 from collections.abc import Iterable
 
 from app.control_plane.models import ManagedModelRecord, ManagedProviderRecord, ManagedProviderTargetRecord
+from app.control_plane.profile_taxonomy import (
+    build_legacy_capability_profile,
+    provider_economic_profile,
+    provider_execution_traits,
+    provider_policy_flags,
+    provider_technical_capabilities,
+)
 from app.tenancy import DEFAULT_BOOTSTRAP_TENANT_ID
 
 
@@ -53,96 +60,20 @@ def provider_credential_type(provider: str) -> str:
 
 
 def provider_cost_class(provider: str) -> str:
-    return {
-        "forgeframe_baseline": "baseline",
-        "ollama": "low",
-        "generic_harness": "medium",
-        "gemini": "medium",
-        "openai_codex": "high",
-        "openai_api": "high",
-        "anthropic": "premium",
-    }.get(provider, "medium")
+    return str(provider_economic_profile(provider).get("cost_class", "medium"))
 
 
 def provider_latency_class(provider: str) -> str:
-    return {
-        "forgeframe_baseline": "low",
-        "ollama": "low",
-        "generic_harness": "medium",
-        "openai_api": "medium",
-        "openai_codex": "medium",
-        "gemini": "medium",
-        "anthropic": "medium",
-    }.get(provider, "medium")
+    return str(provider_economic_profile(provider).get("latency_class", "medium"))
 
 
 def provider_capability_defaults(provider: str) -> dict[str, object]:
-    defaults = {
-        "forgeframe_baseline": {
-            "streaming": True,
-            "tool_calling": False,
-            "vision": False,
-            "queue_eligible": False,
-            "execution_lane": "sync_interactive",
-            "capability_profile": "baseline_simple",
-        },
-        "openai_api": {
-            "streaming": True,
-            "tool_calling": True,
-            "vision": True,
-            "queue_eligible": True,
-            "execution_lane": "sync_interactive",
-            "capability_profile": "general_premium",
-        },
-        "openai_codex": {
-            "streaming": True,
-            "tool_calling": True,
-            "vision": False,
-            "queue_eligible": True,
-            "execution_lane": "sync_interactive",
-            "capability_profile": "coding_premium",
-        },
-        "gemini": {
-            "streaming": True,
-            "tool_calling": True,
-            "vision": True,
-            "queue_eligible": True,
-            "execution_lane": "sync_interactive",
-            "capability_profile": "multimodal_general",
-        },
-        "anthropic": {
-            "streaming": True,
-            "tool_calling": True,
-            "vision": True,
-            "queue_eligible": True,
-            "execution_lane": "sync_interactive",
-            "capability_profile": "multimodal_general",
-        },
-        "generic_harness": {
-            "streaming": False,
-            "tool_calling": False,
-            "vision": False,
-            "queue_eligible": True,
-            "execution_lane": "sync_or_async",
-            "capability_profile": "bridge_runtime",
-        },
-        "ollama": {
-            "streaming": True,
-            "tool_calling": False,
-            "vision": False,
-            "queue_eligible": True,
-            "execution_lane": "sync_or_async",
-            "capability_profile": "local_runtime",
-        },
-    }
-    return dict(defaults.get(provider, {
-        "streaming": False,
-        "tool_calling": False,
-        "vision": False,
-        "queue_eligible": False,
-        "execution_lane": "sync_interactive",
-        "capability_profile": "unknown",
-    }))
+    technical = provider_technical_capabilities(provider)
+    execution = provider_execution_traits(provider)
+    return build_legacy_capability_profile(
+        technical_capabilities=technical,
+        execution_traits=execution,
+    )
 
 
 def ensure_model_registry_metadata(model: ManagedModelRecord, provider_label: str, provider_name: str) -> ManagedModelRecord:
@@ -155,7 +86,13 @@ def ensure_model_registry_metadata(model: ManagedModelRecord, provider_label: st
     if not model.routing_key:
         model.routing_key = build_model_routing_key(provider_name, model.id)
     if not model.capabilities:
-        model.capabilities = provider_capability_defaults(provider_name)
+        model.capabilities = provider_technical_capabilities(provider_name)
+    if not model.execution_traits:
+        model.execution_traits = provider_execution_traits(provider_name)
+    if not model.policy_flags:
+        model.policy_flags = provider_policy_flags(provider_name)
+    if not model.economic_profile:
+        model.economic_profile = provider_economic_profile(provider_name)
     return model
 
 
@@ -190,11 +127,18 @@ def build_default_target_record(
     default_model: str | None = None,
     default_provider: str | None = None,
 ) -> ManagedProviderTargetRecord:
-    capabilities = provider_capability_defaults(provider.provider)
-    queue_eligible = bool(capabilities.get("queue_eligible", False))
-    stream_capable = bool(capabilities.get("streaming", False))
-    tool_capable = bool(capabilities.get("tool_calling", False))
-    vision_capable = bool(capabilities.get("vision", False))
+    technical_capabilities = provider_technical_capabilities(provider.provider)
+    execution_traits = provider_execution_traits(provider.provider)
+    policy_flags = provider_policy_flags(provider.provider)
+    economic_profile = provider_economic_profile(provider.provider)
+    legacy_capability_profile = build_legacy_capability_profile(
+        technical_capabilities=technical_capabilities,
+        execution_traits=execution_traits,
+    )
+    queue_eligible = bool(execution_traits.get("queue_eligible", False))
+    stream_capable = bool(technical_capabilities.get("streaming", False))
+    tool_capable = bool(technical_capabilities.get("tool_calling", False))
+    vision_capable = bool(technical_capabilities.get("vision", False))
     readiness_status = "ready" if model.runtime_status == "ready" else ("partial" if model.active else "unavailable")
     return ManagedProviderTargetRecord(
         target_key=build_target_key(provider.provider, model.id),
@@ -206,7 +150,11 @@ def build_default_target_record(
         product_axis=provider_product_axis(provider.provider),
         auth_type=provider_auth_type(provider.provider),
         credential_type=provider_credential_type(provider.provider),
-        capability_profile=dict(capabilities),
+        capability_profile=legacy_capability_profile,
+        technical_capabilities=dict(technical_capabilities),
+        execution_traits=dict(execution_traits),
+        policy_flags=dict(policy_flags),
+        economic_profile=dict(economic_profile),
         cost_class=provider_cost_class(provider.provider),
         latency_class=provider_latency_class(provider.provider),
         enabled=model.active and provider.enabled,
@@ -278,6 +226,10 @@ def merge_targets_with_defaults(
         existing.auth_type = default_target.auth_type
         existing.credential_type = default_target.credential_type
         existing.capability_profile = dict(default_target.capability_profile)
+        existing.technical_capabilities = dict(default_target.technical_capabilities)
+        existing.execution_traits = dict(default_target.execution_traits)
+        existing.policy_flags = dict(default_target.policy_flags)
+        existing.economic_profile = dict(default_target.economic_profile)
         existing.cost_class = default_target.cost_class
         existing.latency_class = default_target.latency_class
         existing.stream_capable = default_target.stream_capable

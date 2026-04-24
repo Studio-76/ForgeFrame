@@ -372,6 +372,67 @@ def test_memory_correction_and_delete_preserve_linkage_and_status_truth() -> Non
     assert deleted_list.json()["memory"][0]["memory_id"] == corrected_memory_id
 
 
+def test_memory_revoke_marks_truth_state_and_human_override() -> None:
+    client = TestClient(app)
+    headers = _admin_headers(client)
+    instance_id = _create_instance(client, headers, instance_id="instance_memory_revoke", company_id="company_memory_revoke")
+    source_id = _create_source(
+        client,
+        headers,
+        instance_id=instance_id,
+        source_kind="mail",
+        label="Revocation mailbox",
+        connection_target="mailbox://revocation",
+    )
+    contact_id = _create_contact(
+        client,
+        headers,
+        instance_id=instance_id,
+        source_id=source_id,
+        display_name="Revocation Contact",
+        contact_ref="contact://revocation/contact",
+    )
+
+    created_memory = client.post(
+        "/admin/memory",
+        headers=headers,
+        params=_instance_scope(instance_id),
+        json={
+            "source_id": source_id,
+            "contact_id": contact_id,
+            "memory_kind": "fact",
+            "title": "Temporary runtime fact",
+            "body": "This fact must be revoked after operator review.",
+            "visibility_scope": "team",
+            "sensitivity": "normal",
+            "source_trust_class": "runtime_inferred",
+        },
+    )
+    assert created_memory.status_code == 201
+    memory_id = created_memory.json()["memory"]["memory_id"]
+
+    revoked = client.post(
+        f"/admin/memory/{memory_id}/revoke",
+        headers=headers,
+        params=_instance_scope(instance_id),
+        json={"revocation_note": "Runtime signal was invalid."},
+    )
+    assert revoked.status_code == 200
+    payload = revoked.json()["memory"]
+    assert revoked.json()["action"] == "revoke"
+    assert payload["truth_state"] == "revoked"
+    assert payload["human_override"] is True
+    assert payload["correction_note"] == "Runtime signal was invalid."
+
+    detail = client.get(
+        f"/admin/memory/{memory_id}",
+        headers=headers,
+        params=_instance_scope(instance_id),
+    )
+    assert detail.status_code == 200
+    assert detail.json()["memory"]["truth_state"] == "revoked"
+
+
 def test_contacts_sources_and_memory_are_hard_scoped_to_the_selected_instance() -> None:
     client = TestClient(app)
     headers = _admin_headers(client)

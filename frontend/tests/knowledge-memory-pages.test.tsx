@@ -20,6 +20,7 @@ const {
   updateMemoryEntryMock,
   correctMemoryEntryMock,
   deleteMemoryEntryMock,
+  revokeMemoryEntryMock,
 } = vi.hoisted(() => ({
   fetchInstancesMock: vi.fn(),
   fetchContactsMock: vi.fn(),
@@ -36,6 +37,7 @@ const {
   updateMemoryEntryMock: vi.fn(),
   correctMemoryEntryMock: vi.fn(),
   deleteMemoryEntryMock: vi.fn(),
+  revokeMemoryEntryMock: vi.fn(),
 }));
 
 vi.mock("../src/api/admin", async () => {
@@ -58,6 +60,7 @@ vi.mock("../src/api/admin", async () => {
     updateMemoryEntry: updateMemoryEntryMock,
     correctMemoryEntry: correctMemoryEntryMock,
     deleteMemoryEntry: deleteMemoryEntryMock,
+    revokeMemoryEntry: revokeMemoryEntryMock,
   };
 });
 
@@ -145,10 +148,14 @@ function createMemorySummary(overrides: Partial<MemorySummary> = {}): MemorySumm
     title: "Pricing preference",
     body: "Customer prefers a reviewed pricing response before send.",
     status: "active",
+    truth_state: "active",
+    source_trust_class: "operator_verified",
     visibility_scope: "team",
     sensitivity: "sensitive",
     correction_note: null,
     supersedes_memory_id: null,
+    learned_from_event_id: "learning_alpha",
+    human_override: false,
     expires_at: "2026-04-24T10:00:00Z",
     deleted_at: null,
     metadata: {},
@@ -239,6 +246,22 @@ function setControlValue(control: HTMLInputElement | HTMLTextAreaElement | HTMLS
   const setter = Object.getOwnPropertyDescriptor(prototype, "value")?.set;
   setter?.call(control, value);
   control.dispatchEvent(new Event(control.tagName === "SELECT" ? "change" : "input", { bubbles: true }));
+}
+
+function getControlByLabel(scope: ParentNode, labelText: string): HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement {
+  const normalizedTarget = labelText.replace(/\s+/g, " ").trim().toLowerCase();
+  const label = Array.from(scope.querySelectorAll("label"))
+    .map((item) => ({
+      element: item,
+      text: item.textContent?.replace(/\s+/g, " ").trim().toLowerCase() ?? "",
+    }))
+    .filter((item) => item.text.startsWith(normalizedTarget))
+    .sort((left, right) => left.text.length - right.text.length)[0]?.element;
+  const control = label?.querySelector("input, textarea, select");
+  if (!control) {
+    throw new Error(`Control with label '${labelText}' not found.`);
+  }
+  return control as HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement;
 }
 
 function getFormByText(text: string) {
@@ -362,6 +385,14 @@ beforeEach(() => {
     memory: createMemoryDetail({
       status: "deleted",
       deleted_at: "2026-04-23T12:00:00Z",
+    }),
+  });
+  revokeMemoryEntryMock.mockResolvedValue({
+    status: "ok",
+    action: "revoke",
+    memory: createMemoryDetail({
+      truth_state: "revoked",
+      correction_note: "Revoked after operator review",
     }),
   });
 
@@ -558,35 +589,36 @@ describe("knowledge and memory pages", () => {
     expect(fetchMemoryDetailMock).toHaveBeenCalledWith("memory_alpha", "instance_alpha");
     expect(container.textContent).toContain("Pricing preference");
     expect(container.textContent).toContain("Delete memory");
+    expect(container.textContent).toContain("Truth maintenance");
 
     const taskLink = Array.from(container.querySelectorAll("a")).find((link) => link.textContent === "Open task");
     expect(taskLink?.getAttribute("href")).toBe("/tasks?instanceId=instance_alpha&taskId=task_alpha");
+    const learningLink = Array.from(container.querySelectorAll("a")).find((link) => link.textContent === "Open learning event");
+    expect(learningLink?.getAttribute("href")).toBe("/learning?instanceId=instance_alpha&eventId=learning_alpha");
 
     const createForm = getFormByText("Create memory entry");
     const saveForm = getFormByText("Save memory");
     const correctForm = getFormByText("Correct memory");
     const deleteForm = getFormByText("Delete memory");
+    const revokeForm = getFormByText("Revoke memory");
 
-    const createInputs = Array.from(createForm?.querySelectorAll("input") ?? []);
-    const createTextareas = Array.from(createForm?.querySelectorAll("textarea") ?? []);
-    const createSelects = Array.from(createForm?.querySelectorAll("select") ?? []);
     const createButton = getButtonByText(createForm!, "Create memory entry");
 
     await act(async () => {
-      setControlValue(createInputs[0] as HTMLInputElement, "memory_beta");
-      setControlValue(createInputs[1] as HTMLInputElement, "source_mail_primary");
-      setControlValue(createInputs[2] as HTMLInputElement, "contact_alpha");
-      setControlValue(createInputs[3] as HTMLInputElement, "conversation_alpha");
-      setControlValue(createInputs[4] as HTMLInputElement, "task_alpha");
-      setControlValue(createInputs[5] as HTMLInputElement, "notification_alpha");
-      setControlValue(createInputs[6] as HTMLInputElement, "ws_alpha");
-      setControlValue(createSelects[0] as HTMLSelectElement, "constraint");
-      setControlValue(createSelects[1] as HTMLSelectElement, "restricted");
-      setControlValue(createSelects[2] as HTMLSelectElement, "restricted");
-      setControlValue(createInputs[7] as HTMLInputElement, "2026-04-25T10:00:00Z");
-      setControlValue(createInputs[8] as HTMLInputElement, "Escalation preference");
-      setControlValue(createInputs[9] as HTMLInputElement, "Initial note");
-      setControlValue(createTextareas[0] as HTMLTextAreaElement, "Escalate if no approval arrives by noon.");
+      setControlValue(getControlByLabel(createForm, "Memory ID"), "memory_beta");
+      setControlValue(getControlByLabel(createForm, "Source ID"), "source_mail_primary");
+      setControlValue(getControlByLabel(createForm, "Contact ID"), "contact_alpha");
+      setControlValue(getControlByLabel(createForm, "Conversation ID"), "conversation_alpha");
+      setControlValue(getControlByLabel(createForm, "Task ID"), "task_alpha");
+      setControlValue(getControlByLabel(createForm, "Notification ID"), "notification_alpha");
+      setControlValue(getControlByLabel(createForm, "Workspace ID"), "ws_alpha");
+      setControlValue(getControlByLabel(createForm, "Memory kind"), "constraint");
+      setControlValue(getControlByLabel(createForm, "Visibility"), "restricted");
+      setControlValue(getControlByLabel(createForm, "Sensitivity"), "restricted");
+      setControlValue(getControlByLabel(createForm, "Expires at"), "2026-04-25T10:00:00Z");
+      setControlValue(getControlByLabel(createForm, "Title"), "Escalation preference");
+      setControlValue(getControlByLabel(createForm, "Correction note"), "Initial note");
+      setControlValue(getControlByLabel(createForm, "Body"), "Escalate if no approval arrives by noon.");
       createButton!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     });
     await flushEffects();
@@ -608,25 +640,22 @@ describe("knowledge and memory pages", () => {
       expires_at: "2026-04-25T10:00:00Z",
     }));
 
-    const saveInputs = Array.from(saveForm?.querySelectorAll("input") ?? []);
-    const saveTextareas = Array.from(saveForm?.querySelectorAll("textarea") ?? []);
-    const saveSelects = Array.from(saveForm?.querySelectorAll("select") ?? []);
     const saveButton = getButtonByText(saveForm!, "Save memory");
 
     await act(async () => {
-      setControlValue(saveInputs[0] as HTMLInputElement, "source_mail_primary");
-      setControlValue(saveInputs[1] as HTMLInputElement, "contact_alpha");
-      setControlValue(saveInputs[2] as HTMLInputElement, "conversation_alpha");
-      setControlValue(saveInputs[3] as HTMLInputElement, "task_alpha");
-      setControlValue(saveInputs[4] as HTMLInputElement, "notification_alpha");
-      setControlValue(saveInputs[5] as HTMLInputElement, "ws_alpha");
-      setControlValue(saveSelects[0] as HTMLSelectElement, "summary");
-      setControlValue(saveSelects[1] as HTMLSelectElement, "team");
-      setControlValue(saveSelects[2] as HTMLSelectElement, "sensitive");
-      setControlValue(saveInputs[6] as HTMLInputElement, "2026-04-26T09:00:00Z");
-      setControlValue(saveInputs[7] as HTMLInputElement, "Manual refinement");
-      setControlValue(saveInputs[8] as HTMLInputElement, "Pricing preference updated");
-      setControlValue(saveTextareas[0] as HTMLTextAreaElement, "Updated memory after operator review.");
+      setControlValue(getControlByLabel(saveForm, "Source ID"), "source_mail_primary");
+      setControlValue(getControlByLabel(saveForm, "Contact ID"), "contact_alpha");
+      setControlValue(getControlByLabel(saveForm, "Conversation ID"), "conversation_alpha");
+      setControlValue(getControlByLabel(saveForm, "Task ID"), "task_alpha");
+      setControlValue(getControlByLabel(saveForm, "Notification ID"), "notification_alpha");
+      setControlValue(getControlByLabel(saveForm, "Workspace ID"), "ws_alpha");
+      setControlValue(getControlByLabel(saveForm, "Memory kind"), "summary");
+      setControlValue(getControlByLabel(saveForm, "Visibility"), "team");
+      setControlValue(getControlByLabel(saveForm, "Sensitivity"), "sensitive");
+      setControlValue(getControlByLabel(saveForm, "Expires at"), "2026-04-26T09:00:00Z");
+      setControlValue(getControlByLabel(saveForm, "Correction note"), "Manual refinement");
+      setControlValue(getControlByLabel(saveForm, "Title"), "Pricing preference updated");
+      setControlValue(getControlByLabel(saveForm, "Body"), "Updated memory after operator review.");
       saveButton!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     });
     await flushEffects();
@@ -641,19 +670,16 @@ describe("knowledge and memory pages", () => {
       expires_at: "2026-04-26T09:00:00Z",
     }));
 
-    const correctInputs = Array.from(correctForm?.querySelectorAll("input") ?? []);
-    const correctTextareas = Array.from(correctForm?.querySelectorAll("textarea") ?? []);
-    const correctSelects = Array.from(correctForm?.querySelectorAll("select") ?? []);
     const correctButton = getButtonByText(correctForm!, "Correct memory");
 
     await act(async () => {
-      setControlValue(correctInputs[0] as HTMLInputElement, "Pricing preference corrected");
-      setControlValue(correctTextareas[0] as HTMLTextAreaElement, "Corrected context body.");
-      setControlValue(correctInputs[1] as HTMLInputElement, "Corrected after operator review");
-      setControlValue(correctSelects[0] as HTMLSelectElement, "preference");
-      setControlValue(correctSelects[1] as HTMLSelectElement, "restricted");
-      setControlValue(correctSelects[2] as HTMLSelectElement, "restricted");
-      setControlValue(correctInputs[2] as HTMLInputElement, "2026-04-27T09:00:00Z");
+      setControlValue(getControlByLabel(correctForm, "Title"), "Pricing preference corrected");
+      setControlValue(getControlByLabel(correctForm, "Body"), "Corrected context body.");
+      setControlValue(getControlByLabel(correctForm, "Correction note"), "Corrected after operator review");
+      setControlValue(getControlByLabel(correctForm, "Memory kind"), "preference");
+      setControlValue(getControlByLabel(correctForm, "Visibility"), "restricted");
+      setControlValue(getControlByLabel(correctForm, "Sensitivity"), "restricted");
+      setControlValue(getControlByLabel(correctForm, "Expires at"), "2026-04-27T09:00:00Z");
       correctButton!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     });
     await flushEffects();
@@ -668,17 +694,28 @@ describe("knowledge and memory pages", () => {
       expires_at: "2026-04-27T09:00:00Z",
     }));
 
-    const deleteInputs = Array.from(deleteForm?.querySelectorAll("input") ?? []);
     const deleteButton = getButtonByText(deleteForm!, "Delete memory");
 
     await act(async () => {
-      setControlValue(deleteInputs[0] as HTMLInputElement, "Memory no longer valid");
+      setControlValue(getControlByLabel(deleteForm, "Deletion note"), "Memory no longer valid");
       deleteButton!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     });
     await flushEffects();
 
     expect(deleteMemoryEntryMock).toHaveBeenCalledWith("instance_alpha", "memory_alpha", {
       deletion_note: "Memory no longer valid",
+    });
+
+    const revokeButton = getButtonByText(revokeForm!, "Revoke memory");
+
+    await act(async () => {
+      setControlValue(getControlByLabel(revokeForm!, "Revocation note"), "Memory derived from invalid source");
+      revokeButton.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    await flushEffects();
+
+    expect(revokeMemoryEntryMock).toHaveBeenCalledWith("instance_alpha", "memory_alpha", {
+      revocation_note: "Memory derived from invalid source",
     });
   });
 });

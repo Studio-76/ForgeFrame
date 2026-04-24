@@ -445,7 +445,7 @@ class ExecutionTransitionService:
     def _json_value(cls, value: Any) -> Any:
         if isinstance(value, datetime):
             if value.tzinfo is None:
-                raise ValueError("timestamps must be timezone-aware")
+                value = value.replace(tzinfo=UTC)
             return value.astimezone(UTC).isoformat()
         if isinstance(value, dict):
             return {str(key): cls._json_value(item) for key, item in value.items() if item is not None}

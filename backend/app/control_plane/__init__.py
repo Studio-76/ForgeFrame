@@ -27,6 +27,14 @@ from app.control_plane.models import (
     ProviderUiTruthRecord,
     RuntimeProviderTruthRecord,
 )
+from app.control_plane.profile_taxonomy import (
+    build_legacy_capability_profile,
+    provider_economic_profile,
+    provider_execution_traits,
+    provider_policy_flags,
+    provider_technical_capabilities,
+    split_legacy_capability_profile,
+)
 
 __all__ = [
     "CapabilityEvidenceRecord",
@@ -54,4 +62,10 @@ __all__ = [
     "ProviderTruthAxesRecord",
     "ProviderUiTruthRecord",
     "RuntimeProviderTruthRecord",
+    "build_legacy_capability_profile",
+    "provider_economic_profile",
+    "provider_execution_traits",
+    "provider_policy_flags",
+    "provider_technical_capabilities",
+    "split_legacy_capability_profile",
 ]

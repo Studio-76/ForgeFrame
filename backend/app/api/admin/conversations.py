@@ -24,6 +24,7 @@ def _error(status_code: int, error_type: str, message: str) -> JSONResponse:
 def list_conversations(
     status_filter: str | None = Query(default=None, alias="status"),
     triage_status: str | None = Query(default=None, alias="triageStatus"),
+    agent_id: str | None = Query(default=None, alias="agentId"),
     limit: int = 100,
     _admin: AuthenticatedAdmin = Depends(require_admin_role("operator")),
     instance: InstanceRecord = Depends(resolve_admin_instance_scope),
@@ -33,6 +34,7 @@ def list_conversations(
         instance=instance,
         status=status_filter,
         triage_status=triage_status,
+        agent_id=agent_id,
         limit=limit,
     )
     return {

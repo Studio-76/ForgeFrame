@@ -92,6 +92,23 @@ def test_build_ingress_tls_status_reports_normative_public_https_only_when_all_c
     assert status.public_origin == "https://forgeframe.example.com"
 
 
+def test_build_ingress_tls_status_treats_placeholder_public_contract_values_as_missing(monkeypatch) -> None:
+    settings = _base_settings(
+        public_tls_mode="manual",
+        public_fqdn="replace-with-public-fqdn.example.invalid",
+        public_tls_acme_email="replace-with-acme-email@example.invalid",
+    )
+    monkeypatch.setattr("app.ingress.service._resolve_dns", lambda fqdn, port: (False, []))
+    monkeypatch.setattr("app.ingress.service._load_certificate_status", lambda current: _certificate_status())
+    monkeypatch.setattr("app.ingress.service.has_integrated_tls_automation", lambda repo_root: True)
+
+    status = build_ingress_tls_status(settings)
+
+    assert status.fqdn is None
+    assert status.public_origin is None
+    assert "public_fqdn_missing" in status.blockers
+
+
 def test_ingress_admin_api_requires_auth_and_returns_operator_truth(monkeypatch) -> None:
     client = TestClient(app)
     expected = IngressTlsStatus(

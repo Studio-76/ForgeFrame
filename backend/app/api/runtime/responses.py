@@ -25,8 +25,10 @@ from app.api.runtime.dependencies import (
     get_responses_service,
     get_routing_service,
     get_runtime_gateway_identity,
+    get_runtime_request_path_decision,
     get_settings,
     require_runtime_permission,
+    runtime_request_path_metadata,
 )
 from app.api.runtime.errors import (
     public_background_error_type,
@@ -38,7 +40,7 @@ from app.core.dispatch import DispatchService
 from app.core.model_registry import ModelRegistry
 from app.core.routing import RoutingService
 from app.governance.errors import RuntimeAuthorizationError
-from app.governance.models import RuntimeGatewayIdentity
+from app.governance.models import RuntimeGatewayIdentity, RuntimeRequestPathDecision
 from app.governance.service import GovernanceService, get_governance_service
 from app.responses.models import (
     NormalizedResponsesRequest,
@@ -77,7 +79,6 @@ def _resolve_client_identity(
             payload.client.get("client_id")
             or request.headers.get("x-forgeframe-client")
             or request.headers.get("x-forgegate-client")
-            or request.headers.get("x-api-key")
             or request.headers.get("user-agent")
             or "unknown_client"
         ),
@@ -163,6 +164,7 @@ def _response_in_progress_payload(
     created_at: int,
     model: str | None,
     metadata: dict[str, Any],
+    native_mapping: dict[str, Any],
 ) -> dict[str, object]:
     return build_response_object(
         response_id=response_id,
@@ -171,6 +173,7 @@ def _response_in_progress_payload(
         background=False,
         model=model,
         metadata=metadata,
+        native_mapping=native_mapping,
     ).model_dump(mode="json")
 
 
@@ -184,6 +187,7 @@ def _response_completed_payload(
     tool_calls: list[dict[str, Any]] | None,
     usage: Any,
     cost: Any,
+    native_mapping: dict[str, Any],
 ) -> dict[str, object]:
     output, output_text = build_response_output_items(
         text=text,
@@ -200,6 +204,7 @@ def _response_completed_payload(
         output_text=output_text,
         usage=usage,
         cost=cost,
+        native_mapping=native_mapping,
     ).model_dump(mode="json")
 
 
@@ -211,6 +216,7 @@ def _response_failed_payload(
     metadata: dict[str, Any],
     error_code: str,
     error_message: str,
+    native_mapping: dict[str, Any],
 ) -> dict[str, object]:
     return build_response_object(
         response_id=response_id,
@@ -220,6 +226,7 @@ def _response_failed_payload(
         model=model,
         metadata=metadata,
         error={"code": error_code, "message": error_message},
+        native_mapping=native_mapping,
     ).model_dump(mode="json")
 
 
@@ -237,6 +244,7 @@ def create_response(
     responses: ResponsesService = Depends(get_responses_service),
     settings: Settings = Depends(get_settings),
     gateway_identity: RuntimeGatewayIdentity | None = Depends(get_runtime_gateway_identity),
+    request_path_decision: RuntimeRequestPathDecision | None = Depends(get_runtime_request_path_decision),
     governance: GovernanceService = Depends(get_governance_service),
     _runtime_actor: RequestActor | None = Depends(require_runtime_permission("runtime.responses.write")),
 ) -> object:
@@ -272,6 +280,27 @@ def create_response(
         settings=settings,
     )
     account_id = _runtime_account_id(gateway_identity)
+    path_metadata = runtime_request_path_metadata(request_path_decision)
+    normalized_request = normalized_request.model_copy(
+        update={
+            "metadata": merge_request_metadata(normalized_request.metadata, path_metadata),
+            "background": (
+                True
+                if request_path_decision is not None and request_path_decision.request_path == "queue_background"
+                else normalized_request.background
+            ),
+        }
+    )
+    if (
+        request_path_decision is not None
+        and request_path_decision.request_path == "queue_background"
+        and normalized_request.stream
+    ):
+        return _error_response(
+            status_code=status.HTTP_409_CONFLICT,
+            error_type="request_path_blocked",
+            message="Queue-background runtime path cannot be combined with stream=true.",
+        )
     runtime_request_metadata = merge_request_metadata(
         telemetry_context.as_request_metadata(),
         normalized_request.metadata,
@@ -316,6 +345,7 @@ def create_response(
         public_model_ids = list_public_runtime_model_ids(
             routing=routing,
             identity=gateway_identity,
+            route_context=path_metadata,
         )
         analytics.record_runtime_error(
             provider=None,
@@ -353,6 +383,7 @@ def create_response(
             available_models=public_model_ids if public_model_ids is not None else list_public_runtime_model_ids(
                 routing=routing,
                 identity=gateway_identity,
+                route_context=path_metadata,
             ),
         )
 
@@ -387,7 +418,10 @@ def create_response(
         return JSONResponse(
             status_code=status.HTTP_202_ACCEPTED,
             content=response.model_dump(mode="json"),
-            headers={"Location": f"{settings.api_base}/responses/{response.id}"},
+            headers={
+                "Location": f"{settings.api_base}/responses/{response.id}",
+                "X-ForgeFrame-Request-Path": request_path_decision.request_path if request_path_decision is not None else "queue_background",
+            },
         )
 
     try:
@@ -447,6 +481,15 @@ def create_response(
             created_at=response_created,
             model=model,
             metadata=normalized_request.metadata,
+            native_mapping=responses.build_sync_runtime_native_mapping(
+                request_path=runtime_route,
+                response_id=response_id,
+                stream=True,
+                requested_model=requested_model,
+                resolved_model=model,
+                provider_key=provider,
+                note="The streaming /v1/responses path is still on the OpenAI-compatible envelope and has not created a durable native ForgeFrame object.",
+            ),
         )
         responses.save_response_snapshot(
             response_id=response_id,
@@ -499,6 +542,15 @@ def create_response(
                             metadata=normalized_request.metadata,
                             error_code=error_code,
                             error_message=public_runtime_provider_message(event.error_type),
+                            native_mapping=responses.build_sync_runtime_native_mapping(
+                                request_path=runtime_route,
+                                response_id=response_id,
+                                stream=True,
+                                requested_model=requested_model,
+                                resolved_model=model,
+                                provider_key=provider,
+                                note="The streaming /v1/responses path failed before any durable native ForgeFrame follow-object was created.",
+                            ),
                         )
                         responses.save_response_snapshot(
                             response_id=response_id,
@@ -539,6 +591,14 @@ def create_response(
                             tool_calls=list(event.tool_calls or []),
                             usage=event.usage or {},
                             cost=event.cost or {},
+                            native_mapping=responses.build_sync_runtime_native_mapping(
+                                request_path=runtime_route,
+                                response_id=response_id,
+                                stream=True,
+                                requested_model=requested_model,
+                                resolved_model=model,
+                                provider_key=provider,
+                            ),
                         )
                         responses.save_response_snapshot(
                             response_id=response_id,
@@ -579,6 +639,15 @@ def create_response(
                     metadata=normalized_request.metadata,
                     error_code=error_type,
                     error_message=message,
+                    native_mapping=responses.build_sync_runtime_native_mapping(
+                        request_path=runtime_route,
+                        response_id=response_id,
+                        stream=True,
+                        requested_model=requested_model,
+                        resolved_model=model,
+                        provider_key=mapped_provider or provider,
+                        note="The streaming /v1/responses path failed before any durable native ForgeFrame follow-object was created.",
+                    ),
                 )
                 responses.save_response_snapshot(
                     response_id=response_id,
@@ -604,7 +673,11 @@ def create_response(
         return StreamingResponse(
             _sse_body(),
             media_type="text/event-stream",
-            headers=_routing_headers(decision.decision_id, decision.resolved_target.target_key),
+            headers=_routing_headers(
+                decision.decision_id,
+                decision.resolved_target.target_key,
+                request_path_decision.request_path if request_path_decision is not None else None,
+            ),
         )
 
     try:
@@ -638,6 +711,14 @@ def create_response(
             metadata=normalized_request.metadata,
             error_code=error_type,
             error_message=message,
+            native_mapping=responses.build_sync_runtime_native_mapping(
+                request_path=runtime_route,
+                response_id=response_id,
+                stream=False,
+                requested_model=requested_model,
+                provider_key=provider,
+                note="The synchronous /v1/responses path failed before any durable native ForgeFrame follow-object was created.",
+            ),
         )
         responses.save_response_snapshot(
             response_id=response_id,
@@ -670,6 +751,14 @@ def create_response(
         tool_calls=result.tool_calls,
         usage=result.usage,
         cost=result.cost,
+        native_mapping=responses.build_sync_runtime_native_mapping(
+            request_path=runtime_route,
+            response_id=response_id,
+            stream=False,
+            requested_model=requested_model,
+            resolved_model=result.model,
+            provider_key=result.provider,
+        ),
     )
     responses.save_response_snapshot(
         response_id=response_id,
@@ -693,7 +782,11 @@ def create_response(
     )
     return JSONResponse(
         content=completed_payload,
-        headers=_routing_headers(decision.decision_id, decision.resolved_target.target_key),
+        headers=_routing_headers(
+            decision.decision_id,
+            decision.resolved_target.target_key,
+            request_path_decision.request_path if request_path_decision is not None else None,
+        ),
     )
 
 

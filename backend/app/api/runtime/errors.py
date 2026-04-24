@@ -8,7 +8,10 @@ _RUNTIME_AUTH_MESSAGES: dict[str, str] = {
     "forbidden": "Runtime key is not permitted to access this route.",
     "gateway_account_inactive": "Runtime key cannot access runtime APIs in its current state.",
     "invalid_runtime_key": "Runtime key is invalid or expired.",
+    "missing_bearer": "Runtime requests must use Authorization: Bearer <api-key>.",
     "provider_not_allowed": "Requested model is not available for this runtime key.",
+    "request_path_blocked": "Runtime request path is blocked for this API key.",
+    "request_path_review_required": "Runtime request path requires review before execution.",
     "runtime_key_unbound": "Runtime key must be bound to a gateway account before it can access runtime APIs.",
     "runtime_auth_required": "Runtime authentication is required.",
 }

@@ -18,7 +18,7 @@ from app.execution.dependencies import (
     get_execution_transition_service,
 )
 from app.governance.errors import RuntimeAuthorizationError
-from app.governance.models import RuntimeGatewayIdentity
+from app.governance.models import RuntimeGatewayIdentity, RuntimeRequestPathDecision
 from app.governance.service import GovernanceService, get_governance_service
 from app.providers import ProviderRegistry
 from app.settings.config import Settings, get_settings
@@ -39,10 +39,17 @@ def get_runtime_gateway_identity(
     bearer_token = ""
     if authorization.lower().startswith("bearer "):
         bearer_token = authorization.split(" ", 1)[1].strip()
-    token = bearer_token or request.headers.get("x-api-key", "").strip()
     request_id = _request_id(request)
+    if settings.runtime_auth_required and not bearer_token:
+        raise_route_guard_violation(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            code="missing_bearer",
+            message=public_runtime_auth_message("missing_bearer"),
+            details={},
+            request_id=request_id,
+        )
     try:
-        identity = governance.authenticate_runtime_key(token) if token else None
+        identity = governance.authenticate_runtime_key(bearer_token) if bearer_token else None
     except RuntimeAuthorizationError as exc:
         raise_route_guard_violation(
             status_code=exc.status_code,
@@ -51,7 +58,7 @@ def get_runtime_gateway_identity(
             details={},
             request_id=request_id,
         )
-    if token and identity is None:
+    if bearer_token and identity is None:
         raise_route_guard_violation(
             status_code=status.HTTP_401_UNAUTHORIZED,
             code="invalid_runtime_key",
@@ -68,6 +75,49 @@ def get_runtime_gateway_identity(
             request_id=request_id,
         )
     return identity
+
+
+def get_runtime_request_path_decision(
+    request: Request,
+    gateway_identity: RuntimeGatewayIdentity | None = Depends(get_runtime_gateway_identity),
+    governance: GovernanceService = Depends(get_governance_service),
+) -> RuntimeRequestPathDecision | None:
+    if gateway_identity is None:
+        return None
+    requested_path = (
+        request.headers.get("x-forgeframe-request-path", "").strip()
+        or request.headers.get("x-forgegate-request-path", "").strip()
+        or None
+    )
+    try:
+        return governance.resolve_runtime_request_path(
+            identity=gateway_identity,
+            requested_path=requested_path,
+            runtime_route=request.url.path,
+        )
+    except RuntimeAuthorizationError as exc:
+        raise_route_guard_violation(
+            status_code=exc.status_code,
+            code=exc.error_type,
+            message=public_runtime_auth_message(exc.error_type),
+            details={},
+            request_id=_request_id(request),
+        )
+
+
+def runtime_request_path_metadata(
+    decision: RuntimeRequestPathDecision | None,
+) -> dict[str, str]:
+    if decision is None:
+        return {}
+    metadata = {
+        "request_path_policy": decision.request_path,
+        "default_request_path": decision.default_request_path,
+        "request_path_selected_via": decision.selected_via,
+    }
+    if decision.pinned_target_key:
+        metadata["pinned_target_key"] = decision.pinned_target_key
+    return metadata
 
 
 def _request_id(request: Request) -> str:
@@ -216,7 +266,9 @@ __all__ = [
     "get_dispatch_service",
     "get_responses_service",
     "get_runtime_gateway_identity",
+    "get_runtime_request_path_decision",
     "get_runtime_request_actor",
     "require_runtime_permission",
+    "runtime_request_path_metadata",
     "clear_runtime_dependency_caches",
 ]

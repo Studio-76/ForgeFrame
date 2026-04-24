@@ -248,6 +248,77 @@ function createRunDetail(overrides: Partial<ExecutionRunDetail> = {}): Execution
         updated_at: "2026-04-21T21:02:10Z",
       },
     ],
+    native_mapping: {
+      object: "forgeframe.native_mapping",
+      mapping_version: "2026-04-v1",
+      contract_surface: "forgeframe_execution",
+      request_path: "/admin/execution/runs/run_alpha",
+      response_id: "resp_alpha",
+      processing_mode: "background",
+      stream: false,
+      background: true,
+      primary_native_object_kind: "run",
+      objects: [
+        {
+          kind: "run",
+          object_id: "run_alpha",
+          relation: "primary_object",
+          lifecycle_state: "dead_lettered",
+          details: {
+            operator_state: "quarantined",
+            execution_lane: "background_agentic",
+          },
+        },
+        {
+          kind: "dispatch_job",
+          object_id: "attempt_alpha",
+          relation: "current_attempt",
+          lifecycle_state: "dead_lettered",
+          details: {
+            operator_state: "quarantined",
+            lease_status: "released",
+          },
+        },
+      ],
+      events: [
+        {
+          event_kind: "blocker_event",
+          related_object_kind: "run",
+          related_object_id: "run_alpha",
+          status: "dead_lettered",
+          details: {
+            status_reason: "terminal_failure",
+          },
+        },
+      ],
+      commands: [
+        {
+          command_kind: "start_run",
+          command_id: "command_alpha",
+          status: "completed",
+          actor_type: "agent",
+          actor_id: "agent_backend",
+          details: {
+            raw_command_type: "create",
+          },
+        },
+      ],
+      views: [
+        {
+          view_kind: "action_preview",
+          available: true,
+          label: "Preview package",
+          details: {
+            artifact_id: "artifact_preview",
+          },
+        },
+      ],
+      route_context: {
+        run_id: "run_alpha",
+        execution_lane: "background_agentic",
+      },
+      notes: ["This execution run is the durable native follow-object behind a background /v1/responses request."],
+    },
     ...overrides,
   };
 }
@@ -494,6 +565,11 @@ describe("Execution page operator workflow", () => {
     expect(container.textContent).toContain("Routing decision");
     expect(container.textContent).toContain("Blocked after premium provider authentication failure.");
     expect(container.textContent).toContain("Wake gate");
+    expect(container.textContent).toContain("Native runtime mapping");
+    expect(container.textContent).toContain("forgeframe_execution");
+    expect(container.textContent).toContain("dispatch_job");
+    expect(container.textContent).toContain("blocker_event");
+    expect(container.textContent).toContain("action_preview");
     expect(container.textContent).toContain("Raw result summary payload");
 
     const workspaceLink = Array.from(container.querySelectorAll("a")).find((link) => link.textContent === "ws_alpha");

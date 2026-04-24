@@ -20,6 +20,8 @@ from app.public_surface import (
     NORMATIVE_HTTPS_HOST,
     NORMATIVE_HTTPS_PORT,
     NORMATIVE_HTTP_HELPER_PORT,
+    has_configured_public_acme_email,
+    has_configured_public_fqdn,
     has_integrated_tls_automation,
 )
 from app.settings.config import Settings
@@ -127,7 +129,8 @@ def _resolve_dns(fqdn: str | None, port: int) -> tuple[bool, list[str]]:
 
 
 def build_ingress_tls_status(settings: Settings) -> IngressTlsStatus:
-    dns_resolves, resolved_addresses = _resolve_dns(settings.public_fqdn.strip() or None, settings.public_https_port)
+    configured_fqdn = settings.public_fqdn.strip() if has_configured_public_fqdn(settings.public_fqdn) else ""
+    dns_resolves, resolved_addresses = _resolve_dns(configured_fqdn or None, settings.public_https_port)
     certificate = _load_certificate_status(settings)
     repo_root = Path(__file__).resolve().parents[3]
     integrated_tls = has_integrated_tls_automation(repo_root)
@@ -148,9 +151,11 @@ def build_ingress_tls_status(settings: Settings) -> IngressTlsStatus:
         blockers.append("tls_mode_disabled")
     elif settings.public_tls_mode != "integrated_acme":
         blockers.append("tls_mode_not_integrated_acme")
-    if not settings.public_fqdn.strip():
+    if not configured_fqdn:
         blockers.append("public_fqdn_missing")
-    if not dns_resolves:
+    if settings.public_tls_mode == "integrated_acme" and not has_configured_public_acme_email(settings.public_tls_acme_email):
+        blockers.append("public_tls_acme_email_missing")
+    if configured_fqdn and not dns_resolves:
         blockers.append("public_fqdn_dns_unresolved")
     if not integrated_tls:
         blockers.append("integrated_tls_automation_missing")
@@ -158,11 +163,11 @@ def build_ingress_tls_status(settings: Settings) -> IngressTlsStatus:
         blockers.append("certificate_material_missing")
 
     public_origin = None
-    if settings.public_fqdn.strip():
-        public_origin = f"https://{settings.public_fqdn.strip()}"
+    if configured_fqdn:
+        public_origin = f"https://{configured_fqdn}"
 
     return IngressTlsStatus(
-        fqdn=settings.public_fqdn.strip() or None,
+        fqdn=configured_fqdn or None,
         public_origin=public_origin,
         frontend_root_path=FRONTEND_MOUNT_PATH,
         runtime_api_base=settings.api_base,

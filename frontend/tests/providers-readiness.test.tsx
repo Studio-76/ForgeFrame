@@ -56,6 +56,46 @@ function createSession(overrides: Partial<AdminSessionUser> = {}): AdminSessionU
   };
 }
 
+function createEvidence(
+  overrides: Partial<{
+    runtime: Partial<{ status: "missing" | "observed" | "failed"; source: string; recorded_at: string | null; details: string }>;
+    streaming: Partial<{ status: "missing" | "observed" | "failed"; source: string; recorded_at: string | null; details: string }>;
+    tool_calling: Partial<{ status: "missing" | "observed" | "failed"; source: string; recorded_at: string | null; details: string }>;
+    live_probe: Partial<{ status: "missing" | "observed" | "failed"; source: string; recorded_at: string | null; details: string }>;
+  }> = {},
+) {
+  return {
+    runtime: {
+      status: "observed" as const,
+      source: "runtime_non_stream" as const,
+      recorded_at: "2026-04-21T20:00:00Z",
+      details: "Runtime request proof recorded.",
+      ...overrides.runtime,
+    },
+    streaming: {
+      status: "missing" as const,
+      source: "none" as const,
+      recorded_at: null,
+      details: "No streaming proof recorded yet.",
+      ...overrides.streaming,
+    },
+    tool_calling: {
+      status: "observed" as const,
+      source: "runtime_tool_call" as const,
+      recorded_at: "2026-04-21T20:05:00Z",
+      details: "Tool-calling proof recorded.",
+      ...overrides.tool_calling,
+    },
+    live_probe: {
+      status: "observed" as const,
+      source: "oauth_probe" as const,
+      recorded_at: "2026-04-21T20:10:00Z",
+      details: "Probe evidence recorded.",
+      ...overrides.live_probe,
+    },
+  };
+}
+
 function createData(sessionOverrides: Partial<AdminSessionUser> = {}): ProvidersPageData {
   return {
     state: "success",
@@ -168,6 +208,11 @@ function createData(sessionOverrides: Partial<AdminSessionUser> = {}): Providers
         verify_probe_axis: "partial",
         observability_axis: "partial",
         ui_axis: "partial",
+        evidence: createEvidence({
+          runtime: { status: "missing", source: "none", recorded_at: null, details: "No native runtime proof recorded for this bridge slice." },
+          streaming: { status: "missing", source: "none", recorded_at: null, details: "No streaming bridge proof recorded." },
+          tool_calling: { status: "missing", source: "none", recorded_at: null, details: "No tool-calling proof recorded." },
+        }),
         notes: "Needs another bridge probe before runtime confidence improves.",
         oauth_account_provider: true,
       },
@@ -195,6 +240,7 @@ function createData(sessionOverrides: Partial<AdminSessionUser> = {}): Providers
         ui_models: 12,
         proof_status: "proven",
         proven_profile_keys: ["generic_openai_like"],
+        evidence: createEvidence(),
         notes: "Matrix keeps both readiness axes visible.",
       },
     ],
@@ -316,6 +362,11 @@ describe("Provider readiness axes", () => {
         cost_posture: "avoided-cost is tracked while direct provider billing stays outside ForgeFrame.",
         operator_surface: "/oauth-targets",
         operator_truth: "ForgeFrame can probe or sync bridge profiles for this target, but no native runtime lane is shipped for it in the current release truth.",
+        evidence: createEvidence({
+          runtime: { status: "missing", source: "none", recorded_at: null, details: "No native runtime proof recorded for this target." },
+          streaming: { status: "missing", source: "none", recorded_at: null, details: "No streaming proof recorded for this target." },
+          tool_calling: { status: "missing", source: "none", recorded_at: null, details: "No tool-calling proof recorded for this target." },
+        }),
       },
     ];
     data.oauthOnboarding = [
@@ -338,7 +389,11 @@ describe("Provider readiness axes", () => {
         auth_kind: "oauth_account",
         oauth_mode: null,
         oauth_flow_support: null,
-        evidence: {},
+        evidence: createEvidence({
+          runtime: { status: "missing", source: "none", recorded_at: null, details: "No native runtime proof recorded for this target." },
+          streaming: { status: "missing", source: "none", recorded_at: null, details: "No streaming proof recorded for this target." },
+          tool_calling: { status: "missing", source: "none", recorded_at: null, details: "No tool-calling proof recorded for this target." },
+        }),
         operational_depth: "bridge_probe_evidenced",
         readiness_reason: "Live probe evidence is recorded, but this target remains onboarding/bridge-only in the current release truth.",
         next_steps: ["Keep github_copilot positioned as onboarding/bridge-only; probe success does not promote it to native runtime-ready truth."],
@@ -349,6 +404,9 @@ describe("Provider readiness axes", () => {
 
     expect(markup).toContain("onboarding ready");
     expect(markup).toContain("onboarding status=partial");
+    expect(markup).toContain("Evidence &amp; Proof");
+    expect(markup).toContain("observability axis=partial");
+    expect(markup).toContain("live probe · status=observed");
     expect(markup).not.toContain("readiness=partial");
   });
 

@@ -19,6 +19,9 @@ class ManagedModelRecord(BaseModel):
     category: str = "general"
     routing_key: str | None = None
     capabilities: dict[str, object] = Field(default_factory=dict)
+    execution_traits: dict[str, object] = Field(default_factory=dict)
+    policy_flags: dict[str, object] = Field(default_factory=dict)
+    economic_profile: dict[str, object] = Field(default_factory=dict)
     runtime_status: Literal["planned", "partial", "ready", "failed", "stale", "unavailable"] = "planned"
     availability_status: Literal["unknown", "healthy", "degraded", "unavailable", "stale"] = "unknown"
     status_reason: str | None = None
@@ -65,6 +68,10 @@ class ManagedProviderTargetRecord(BaseModel):
     auth_type: str = "unknown"
     credential_type: str = "unknown"
     capability_profile: dict[str, object] = Field(default_factory=dict)
+    technical_capabilities: dict[str, object] = Field(default_factory=dict)
+    execution_traits: dict[str, object] = Field(default_factory=dict)
+    policy_flags: dict[str, object] = Field(default_factory=dict)
+    economic_profile: dict[str, object] = Field(default_factory=dict)
     cost_class: str = "medium"
     latency_class: str = "medium"
     enabled: bool = True
@@ -348,7 +355,7 @@ class ProviderTruthAxesRecord(BaseModel):
 
 
 class ControlPlaneStateRecord(BaseModel):
-    schema_version: int = 4
+    schema_version: int = 5
     instance_id: str = DEFAULT_BOOTSTRAP_TENANT_ID
     providers: list[ManagedProviderRecord] = Field(default_factory=list)
     provider_targets: list[ManagedProviderTargetRecord] = Field(default_factory=list)

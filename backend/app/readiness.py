@@ -11,9 +11,11 @@ from pydantic import BaseModel
 
 from app.public_surface import (
     NORMATIVE_HTTPS_HOST,
+    NORMATIVE_HTTP_HELPER_PORT,
     NORMATIVE_HTTPS_PORT,
     FRONTEND_MOUNT_PATH,
     ROOT_SURFACE_KIND,
+    has_configured_public_fqdn,
     has_integrated_tls_automation,
     has_linux_host_installation_artifacts,
     resolve_repo_relative_path,
@@ -64,6 +66,8 @@ PUBLIC_READINESS_ID_MAP = {
     "tls_mode_classification": "tls_certificate_management",
     "tls_certificate_management": "tls_certificate_management",
     "linux_host_runtime": "deployment_posture",
+    "backup_restore_protection": "recovery_protection",
+    "upgrade_no_loss_protection": "upgrade_integrity",
     "observability_backend": "observability",
 }
 PUBLIC_READINESS_DISPLAY_ORDER = (
@@ -76,6 +80,8 @@ PUBLIC_READINESS_DISPLAY_ORDER = (
     "public_origin_contract",
     "tls_certificate_management",
     "deployment_posture",
+    "recovery_protection",
+    "upgrade_integrity",
     "observability",
 )
 
@@ -412,7 +418,7 @@ def _build_public_surface_checks(
         ),
         RuntimeReadinessCheck(
             id="public_fqdn_configured",
-            ok=bool(settings.public_fqdn.strip()),
+            ok=bool(has_configured_public_fqdn(settings.public_fqdn)),
             severity="warning",
             details=settings.public_fqdn.strip() or "missing",
         ),
@@ -483,6 +489,7 @@ def build_runtime_readiness_report(
 ) -> RuntimeReadinessReport:
     from app.core.model_registry import ModelRegistry
     from app.providers import ProviderRegistry
+    from app.recovery.dependencies import get_recovery_admin_service
 
     checks = list(startup_checks or [])
     registry = ModelRegistry(settings)
@@ -570,6 +577,32 @@ def build_runtime_readiness_report(
             ok=bool(settings.observability_storage_backend.strip()),
             severity="warning",
             details=observability_details,
+        )
+    )
+    recovery_overview = get_recovery_admin_service().list_overview()
+    checks.append(
+        RuntimeReadinessCheck(
+            id="backup_restore_protection",
+            ok=recovery_overview.summary.runtime_status == "ok",
+            severity="warning",
+            details=(
+                f"policies={recovery_overview.summary.total_policies}:"
+                f"fresh_backups={recovery_overview.summary.fresh_backup_policies}:"
+                f"fresh_restores={recovery_overview.summary.fresh_restore_policies}:"
+                f"blocked={recovery_overview.summary.blocked_policies}"
+            ),
+        )
+    )
+    checks.append(
+        RuntimeReadinessCheck(
+            id="upgrade_no_loss_protection",
+            ok=recovery_overview.upgrade_posture.runtime_status == "ok",
+            severity="warning",
+            details=(
+                f"reports={recovery_overview.upgrade_posture.total_reports}:"
+                f"latest_release={recovery_overview.upgrade_posture.latest_release_id or 'missing'}:"
+                f"status={recovery_overview.upgrade_posture.runtime_status}"
+            ),
         )
     )
     checks.extend(_build_public_surface_checks(settings=settings, app=app))

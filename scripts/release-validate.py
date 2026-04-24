@@ -195,10 +195,13 @@ def main() -> int:
     start_script = _read_text(SCRIPTS_DIR / "start-forgeframe.sh")
     bootstrap_script = _read_text(SCRIPTS_DIR / "bootstrap-forgeframe.sh")
     install_script = _read_text(SCRIPTS_DIR / "install-forgeframe.sh")
+    host_env_example = _read_text(ROOT_DIR / "deploy" / "env" / "forgeframe-host.env.example")
+    host_smoke_script = _read_text(SCRIPTS_DIR / "host-smoke.sh")
     backup_script = _read_text(SCRIPTS_DIR / "backup-forgeframe.sh")
     restore_script = _read_text(SCRIPTS_DIR / "restore-forgeframe.sh")
     public_start_script = SCRIPTS_DIR / "start-public-forgeframe.sh"
     http_helper_script = SCRIPTS_DIR / "start-http-helper.sh"
+    upgrade_proof_script = SCRIPTS_DIR / "recovery-upgrade-proof.py"
 
     steps = [
         _gate(
@@ -214,6 +217,16 @@ def main() -> int:
             "missing_install_script_or_systemd_units",
         ),
         _gate(
+            "host_env_public_contract_defaults",
+            (
+                "FORGEFRAME_PUBLIC_FQDN=replace-with-public-fqdn.example.invalid" in host_env_example
+                and "FORGEFRAME_PUBLIC_TLS_MODE=integrated_acme" in host_env_example
+                and "FORGEFRAME_PUBLIC_TLS_ACME_EMAIL=replace-with-acme-email@example.invalid" in host_env_example
+            ),
+            "host_env_defaults_to_normative_public_https_contract",
+            "host_env_still_defaults_to_limited_exception_or_missing_public_contract_placeholders",
+        ),
+        _gate(
             "host_native_bootstrap_driver",
             "docker compose" not in bootstrap_script and "docker compose" not in install_script,
             "bootstrap_driver_is_host_native",
@@ -226,6 +239,12 @@ def main() -> int:
             "backup_restore_scripts_still_depend_on_compose",
         ),
         _gate(
+            "upgrade_recovery_proof_driver",
+            upgrade_proof_script.exists(),
+            "upgrade_recovery_proof_driver_present",
+            "upgrade_recovery_proof_driver_missing",
+        ),
+        _gate(
             "integrated_tls_automation_artifacts",
             has_integrated_tls_automation(ROOT_DIR),
             "integrated_tls_automation_present",
@@ -236,6 +255,31 @@ def main() -> int:
             public_start_script.exists() and http_helper_script.exists(),
             "public_listener_drivers_present",
             "public_listener_drivers_missing",
+        ),
+        _gate(
+            "bootstrap_public_https_driver",
+            all(
+                token in bootstrap_script
+                for token in (
+                    "forgeframe-http-helper.service",
+                    "scripts/renew-certificates.sh",
+                    "forgeframe-public.service",
+                    "forgeframe-acme.timer",
+                )
+            ),
+            "bootstrap_wires_public_https_services",
+            "bootstrap_missing_public_https_service_wiring",
+        ),
+        _gate(
+            "host_smoke_public_origin_contract",
+            (
+                'http://127.0.0.1:${FORGEFRAME_PORT:-8080}' not in host_smoke_script
+                and 'https://%s\\n' in host_smoke_script
+                and 'Root UI did not respond' in host_smoke_script
+                and 'Runtime API is not reachable on the same public origin' in host_smoke_script
+            ),
+            "host_smoke_defaults_to_public_https_and_same_origin_checks",
+            "host_smoke_still_defaults_to_local_http_or_skips_root_same_origin_checks",
         ),
         _gate(
             "public_ui_root_contract",

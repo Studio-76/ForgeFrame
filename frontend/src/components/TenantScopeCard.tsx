@@ -34,7 +34,7 @@ export function TenantScopeCard({
   onTenantChange,
 }: TenantScopeCardProps) {
   const selectedAccount = accounts.find((account) => account.account_id === tenantId) ?? null;
-  const selectedLabel = selectedAccount?.label ?? tenantId ?? "All runtime tenants";
+  const selectedLabel = selectedAccount?.label ?? tenantId ?? "All runtime tenant / organization scopes";
   const scopeTone = getScopeTone(tenantId, tenantFilterRequired);
   const hasAccountOptions = accounts.length > 0;
 
@@ -42,9 +42,9 @@ export function TenantScopeCard({
     <article className="fg-card">
       <div className="fg-panel-heading">
         <div>
-          <h3>Runtime Tenant Scope</h3>
+          <h3>Runtime Tenant / Organization Scope</h3>
           <p className="fg-muted">
-            ForgeGate keys tenant-scoped observability to runtime accounts. Pick the account scope when mixed tenant history makes the shared
+            ForgeFrame binds runtime account evidence to a tenant or organization boundary when shared history makes the
             {` ${surfaceLabel} `}view ambiguous.
           </p>
         </div>
@@ -61,7 +61,7 @@ export function TenantScopeCard({
             disabled={!accountsLoaded && !hasAccountOptions}
             onChange={(event) => onTenantChange(event.target.value || null)}
           >
-            <option value="">All runtime tenants</option>
+            <option value="">All runtime tenant / organization scopes</option>
             {accounts.map((account) => (
               <option key={account.account_id} value={account.account_id}>
                 {account.label} ({account.account_id})
@@ -81,32 +81,33 @@ export function TenantScopeCard({
 
       {tenantFilterRequired ? (
         <p className="fg-note fg-mt-md">
-          Mixed runtime history spans multiple tenants, so ForgeGate will not invent a global {surfaceLabel} snapshot. Select a runtime account
-          scope to continue.
+          Mixed runtime history spans multiple tenant or organization boundaries, so ForgeFrame will not invent a global {surfaceLabel}
+          snapshot. Select a runtime account scope to continue.
         </p>
       ) : tenantId ? (
         <p className="fg-note fg-mt-md">
-          This {surfaceLabel} view is filtered to the selected runtime tenant. Shared provider, error, and audit evidence should now match that
-          account boundary.
+          This {surfaceLabel} view is filtered to the selected runtime tenant or organization scope. Shared provider, error, and audit evidence
+          should now match that account boundary.
         </p>
       ) : (
         <p className="fg-note fg-mt-md">
-          Global scope stays available when the recorded history is unambiguous. Switch to a runtime account scope when you need tenant-specific
-          KPIs, alerts, or audit evidence.
+          Global scope stays available when the recorded history is unambiguous. Switch to a runtime account scope when you need tenant- or
+          organization-specific KPIs, alerts, or audit evidence.
         </p>
       )}
 
-      {!accountsLoaded && !hasAccountOptions ? <p className="fg-muted">Loading runtime account inventory for the tenant scope selector.</p> : null}
+      {!accountsLoaded && !hasAccountOptions ? <p className="fg-muted">Loading runtime account inventory for the tenant / organization scope selector.</p> : null}
       {accountsLoaded && !hasAccountOptions ? (
         <p className="fg-muted">
-          No runtime accounts exist yet, so there is no tenant-specific scope to select. Create one on Accounts if this environment needs
-          per-tenant observability slices.
+          No runtime accounts exist yet, so there is no tenant- or organization-specific scope to select. Create one on Accounts if this
+          environment needs per-tenant observability slices.
         </p>
       ) : null}
       {accountsError ? <p className="fg-danger">{accountsError}</p> : null}
       {tenantId && !selectedAccount ? (
         <p className="fg-danger">
-          The selected tenant scope is not present in the current runtime account inventory. Clear the scope or confirm the account still exists.
+          The selected tenant / organization scope is not present in the current runtime account inventory. Clear the scope or confirm the
+          account still exists.
         </p>
       ) : null}
     </article>

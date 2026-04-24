@@ -40,6 +40,7 @@ from app.governance.models import (
     MutableSettingRecord,
     SecretRotationEventRecord,
     RuntimeGatewayIdentity,
+    RuntimeRequestPathDecision,
     RuntimeKeyRecord,
 )
 from app.settings.config import Settings, get_settings
@@ -99,6 +100,7 @@ _INSTANCE_PERMISSION_KEYS_BY_ROLE: dict[str, frozenset[str]] = {
     "admin": frozenset(
         {
             "instance.read",
+            "instance.write",
             "providers.read",
             "providers.write",
             "provider_targets.read",
@@ -133,6 +135,14 @@ _INSTANCE_PERMISSION_KEYS_BY_ROLE: dict[str, frozenset[str]] = {
     "viewer": frozenset({"instance.read", "audit.read", "settings.read"}),
 }
 _ADMIN_ROLE_RANK = {"viewer": 0, "operator": 1, "admin": 2, "owner": 3}
+_RUNTIME_REQUEST_PATHS = {
+    "smart_routing",
+    "pinned_target",
+    "local_only",
+    "queue_background",
+    "blocked",
+    "review_required",
+}
 
 
 class GovernanceService:
@@ -382,6 +392,58 @@ class GovernanceService:
             return None
         normalized = str(value).strip()
         return normalized or None
+
+    @staticmethod
+    def _normalize_runtime_request_paths(values: list[object] | None) -> list[str]:
+        if not values:
+            return ["smart_routing"]
+        normalized: list[str] = []
+        for value in values:
+            candidate = str(value).strip().lower()
+            if not candidate:
+                continue
+            if candidate not in _RUNTIME_REQUEST_PATHS:
+                raise ValueError(f"Unsupported runtime request path '{candidate}'.")
+            if candidate not in normalized:
+                normalized.append(candidate)
+        return normalized or ["smart_routing"]
+
+    @classmethod
+    def _normalize_runtime_request_policy(
+        cls,
+        *,
+        allowed_request_paths: list[object] | None,
+        default_request_path: object | None,
+        pinned_target_key: object | None,
+        local_only_policy: object | None,
+        review_required_conditions: list[object] | None,
+    ) -> dict[str, object]:
+        allowed = cls._normalize_runtime_request_paths(allowed_request_paths)
+        requested_default = str(default_request_path or "").strip().lower() or "smart_routing"
+        if requested_default not in _RUNTIME_REQUEST_PATHS:
+            raise ValueError(f"Unsupported default runtime request path '{requested_default}'.")
+        if requested_default not in allowed:
+            allowed = [requested_default, *allowed]
+
+        normalized_pinned_target = cls._normalize_scope_value(pinned_target_key)
+        normalized_local_only = str(local_only_policy or "").strip().lower() or "require_local_target"
+        if normalized_local_only not in {"prefer_local", "require_local_target"}:
+            raise ValueError(f"Unsupported local_only policy '{normalized_local_only}'.")
+        normalized_review_conditions = [
+            condition
+            for condition in (
+                cls._normalize_scope_value(item)
+                for item in (review_required_conditions or [])
+            )
+            if condition is not None
+        ]
+        return {
+            "allowed_request_paths": allowed,
+            "default_request_path": requested_default,
+            "pinned_target_key": normalized_pinned_target,
+            "local_only_policy": normalized_local_only,
+            "review_required_conditions": normalized_review_conditions,
+        }
 
     @staticmethod
     def _role_rank(role: str) -> int:
@@ -2630,12 +2692,24 @@ class GovernanceService:
         scopes: list[str],
         actor: AuthenticatedAdmin,
         rotated_from: str | None = None,
+        allowed_request_paths: list[object] | None = None,
+        default_request_path: object | None = None,
+        pinned_target_key: object | None = None,
+        local_only_policy: object | None = None,
+        review_required_conditions: list[object] | None = None,
     ) -> IssuedApiKey:
         now = self._now_iso()
         normalized_account_id = self._normalize_scope_value(account_id)
         account = self._find_account_by_id(normalized_account_id)
         if normalized_account_id is not None and account is None:
             raise ValueError(f"Account '{normalized_account_id}' not found.")
+        request_path_policy = self._normalize_runtime_request_policy(
+            allowed_request_paths=allowed_request_paths,
+            default_request_path=default_request_path,
+            pinned_target_key=pinned_target_key,
+            local_only_policy=local_only_policy,
+            review_required_conditions=review_required_conditions,
+        )
 
         normalized_instance_id = self._normalize_instance_scope(
             account.instance_id if account is not None else instance_id
@@ -2675,6 +2749,11 @@ class GovernanceService:
             last_rotated_at=now,
             rotated_from=rotated_from,
             created_by=actor.user_id,
+            allowed_request_paths=request_path_policy["allowed_request_paths"],  # type: ignore[arg-type]
+            default_request_path=request_path_policy["default_request_path"],  # type: ignore[arg-type]
+            pinned_target_key=request_path_policy["pinned_target_key"],  # type: ignore[arg-type]
+            local_only_policy=request_path_policy["local_only_policy"],  # type: ignore[arg-type]
+            review_required_conditions=request_path_policy["review_required_conditions"],  # type: ignore[arg-type]
         )
         self._state.runtime_keys.append(record)
         self._append_audit(
@@ -2691,6 +2770,9 @@ class GovernanceService:
                 "account_id": normalized_account_id,
                 "scopes": record.scopes,
                 "expires_at": record.expires_at,
+                "default_request_path": record.default_request_path,
+                "allowed_request_paths": list(record.allowed_request_paths),
+                "pinned_target_key": record.pinned_target_key,
             },
         )
         self._persist()
@@ -2704,6 +2786,11 @@ class GovernanceService:
             label=record.label,
             scopes=record.scopes,
             created_at=record.created_at,
+            allowed_request_paths=list(record.allowed_request_paths),
+            default_request_path=record.default_request_path,
+            pinned_target_key=record.pinned_target_key,
+            local_only_policy=record.local_only_policy,
+            review_required_conditions=list(record.review_required_conditions),
         )
 
     def rotate_runtime_key(
@@ -2730,6 +2817,11 @@ class GovernanceService:
             scopes=current.scopes,
             actor=actor,
             rotated_from=current.key_id,
+            allowed_request_paths=list(current.allowed_request_paths),
+            default_request_path=current.default_request_path,
+            pinned_target_key=current.pinned_target_key,
+            local_only_policy=current.local_only_policy,
+            review_required_conditions=list(current.review_required_conditions),
         )
         self._append_audit(
             actor_type="admin_user",
@@ -2784,6 +2876,57 @@ class GovernanceService:
         self._persist()
         return record
 
+    def update_runtime_key_request_path_policy(
+        self,
+        key_id: str,
+        *,
+        actor: AuthenticatedAdmin,
+        instance_id: str | None = None,
+        allowed_request_paths: list[object] | None = None,
+        default_request_path: object | None = None,
+        pinned_target_key: object | None = None,
+        local_only_policy: object | None = None,
+        review_required_conditions: list[object] | None = None,
+    ) -> RuntimeKeyRecord:
+        record = next((item for item in self._state.runtime_keys if item.key_id == key_id), None)
+        if record is None:
+            raise ValueError(f"Runtime key '{key_id}' not found.")
+        if instance_id is not None and self._normalize_instance_scope(record.instance_id) != self._normalize_instance_scope(instance_id):
+            raise ValueError(f"Runtime key '{key_id}' is not bound to instance '{instance_id}'.")
+        policy = self._normalize_runtime_request_policy(
+            allowed_request_paths=allowed_request_paths if allowed_request_paths is not None else list(record.allowed_request_paths),
+            default_request_path=default_request_path if default_request_path is not None else record.default_request_path,
+            pinned_target_key=pinned_target_key,
+            local_only_policy=local_only_policy if local_only_policy is not None else record.local_only_policy,
+            review_required_conditions=review_required_conditions if review_required_conditions is not None else list(record.review_required_conditions),
+        )
+        record.allowed_request_paths = policy["allowed_request_paths"]  # type: ignore[assignment]
+        record.default_request_path = policy["default_request_path"]  # type: ignore[assignment]
+        record.pinned_target_key = policy["pinned_target_key"]  # type: ignore[assignment]
+        record.local_only_policy = policy["local_only_policy"]  # type: ignore[assignment]
+        record.review_required_conditions = policy["review_required_conditions"]  # type: ignore[assignment]
+        record.updated_at = self._now_iso()
+        self._append_audit(
+            actor_type="admin_user",
+            actor_id=actor.user_id,
+            action="runtime_key_request_path_policy_update",
+            target_type="runtime_key",
+            target_id=record.key_id,
+            status="ok",
+            details=f"Runtime key '{record.label}' request-path policy updated.",
+            instance_id=record.instance_id,
+            tenant_id=record.tenant_id,
+            metadata={
+                "allowed_request_paths": list(record.allowed_request_paths),
+                "default_request_path": record.default_request_path,
+                "pinned_target_key": record.pinned_target_key,
+                "local_only_policy": record.local_only_policy,
+                "review_required_conditions": list(record.review_required_conditions),
+            },
+        )
+        self._persist()
+        return record
+
     def authenticate_runtime_key(self, token: str) -> RuntimeGatewayIdentity | None:
         if not token.strip():
             return None
@@ -2831,6 +2974,126 @@ class GovernanceService:
             scopes=list(record.scopes),
             client_id=record.prefix,
             consumer=account.label,
+            integration="runtime_gateway",
+            allowed_request_paths=list(record.allowed_request_paths),
+            default_request_path=record.default_request_path,
+            pinned_target_key=record.pinned_target_key,
+            local_only_policy=record.local_only_policy,
+            review_required_conditions=list(record.review_required_conditions),
+        )
+
+    def resolve_runtime_request_path(
+        self,
+        *,
+        identity: RuntimeGatewayIdentity,
+        requested_path: str | None = None,
+        runtime_route: str | None = None,
+    ) -> RuntimeRequestPathDecision:
+        allowed = self._normalize_runtime_request_paths(list(identity.allowed_request_paths))
+        normalized_default = self._normalize_runtime_request_policy(
+            allowed_request_paths=allowed,
+            default_request_path=identity.default_request_path,
+            pinned_target_key=identity.pinned_target_key,
+            local_only_policy=identity.local_only_policy,
+            review_required_conditions=list(identity.review_required_conditions),
+        )
+        selected_via = "default"
+        if requested_path and requested_path.strip():
+            candidate = requested_path.strip().lower()
+            if candidate not in _RUNTIME_REQUEST_PATHS:
+                raise RuntimeAuthorizationError(
+                    status_code=403,
+                    error_type="request_path_blocked",
+                    message=f"Runtime request path '{candidate}' is not supported.",
+                    details={},
+                )
+            selected = candidate
+            selected_via = "header"
+        else:
+            selected = str(normalized_default["default_request_path"])
+
+        if selected not in allowed:
+            self._append_audit(
+                actor_type="runtime_key",
+                actor_id=identity.key_id,
+                action="runtime_request_path_denied",
+                target_type="runtime_route",
+                target_id=runtime_route,
+                status="failed",
+                details=f"Runtime request path '{selected}' is not allowed for key '{identity.key_id}'.",
+                metadata={
+                    "runtime_key_id": identity.key_id,
+                    "requested_path": selected,
+                    "allowed_request_paths": list(allowed),
+                    "runtime_route": runtime_route,
+                },
+            )
+            self._persist()
+            raise RuntimeAuthorizationError(
+                status_code=403,
+                error_type="request_path_blocked",
+                message=f"Runtime request path '{selected}' is blocked for this API key.",
+                details={},
+            )
+        if selected == "blocked":
+            self._append_audit(
+                actor_type="runtime_key",
+                actor_id=identity.key_id,
+                action="runtime_request_path_blocked",
+                target_type="runtime_route",
+                target_id=runtime_route,
+                status="failed",
+                details=f"Runtime request path '{selected}' blocked the request.",
+                metadata={
+                    "runtime_key_id": identity.key_id,
+                    "allowed_request_paths": list(allowed),
+                    "runtime_route": runtime_route,
+                },
+            )
+            self._persist()
+            raise RuntimeAuthorizationError(
+                status_code=403,
+                error_type="request_path_blocked",
+                message="Runtime request path is blocked for this API key.",
+                details={},
+            )
+        if selected == "review_required":
+            self._append_audit(
+                actor_type="runtime_key",
+                actor_id=identity.key_id,
+                action="runtime_request_path_review_required",
+                target_type="runtime_route",
+                target_id=runtime_route,
+                status="warning",
+                details=f"Runtime request path '{selected}' requires operator review.",
+                metadata={
+                    "runtime_key_id": identity.key_id,
+                    "review_required_conditions": list(identity.review_required_conditions),
+                    "runtime_route": runtime_route,
+                },
+            )
+            self._persist()
+            raise RuntimeAuthorizationError(
+                status_code=403,
+                error_type="request_path_review_required",
+                message="Runtime request path requires review before execution.",
+                details={},
+            )
+        if selected == "pinned_target" and not self._normalize_scope_value(identity.pinned_target_key):
+            raise RuntimeAuthorizationError(
+                status_code=403,
+                error_type="request_path_blocked",
+                message="Pinned-target request path is configured without a target binding.",
+                details={},
+            )
+        return RuntimeRequestPathDecision(
+            request_path=selected,  # type: ignore[arg-type]
+            default_request_path=str(normalized_default["default_request_path"]),  # type: ignore[arg-type]
+            allowed_request_paths=list(allowed),  # type: ignore[arg-type]
+            pinned_target_key=self._normalize_scope_value(identity.pinned_target_key),
+            local_only_policy=str(normalized_default["local_only_policy"]),  # type: ignore[arg-type]
+            review_required_conditions=list(identity.review_required_conditions),
+            selected_via=selected_via,  # type: ignore[arg-type]
         )
 
     def list_setting_overrides(self) -> list[MutableSettingRecord]:

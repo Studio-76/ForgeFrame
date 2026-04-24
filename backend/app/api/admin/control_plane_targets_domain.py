@@ -5,6 +5,7 @@ from __future__ import annotations
 from app.api.admin.control_plane_models import ProviderTargetUpdateRequest
 from app.api.runtime.dependencies import clear_runtime_dependency_caches
 from app.control_plane import ManagedProviderTargetRecord, ManagedProviderTargetUiRecord
+from app.control_plane.profile_taxonomy import build_legacy_capability_profile, split_legacy_capability_profile
 from app.control_plane.target_defaults import (
     build_default_targets_from_providers,
     merge_targets_with_defaults,
@@ -70,14 +71,33 @@ class ControlPlaneTargetsDomainMixin:
                 if health_record.readiness_reason:
                     target.status_reason = health_record.readiness_reason
             if runtime_truth is not None:
-                target.capability_profile = {
-                    **target.capability_profile,
-                    **runtime_truth.capabilities,
-                }
-                target.stream_capable = bool(runtime_truth.capabilities.get("streaming", target.stream_capable))
-                target.tool_capable = runtime_truth.tool_calling_level == "full" or bool(runtime_truth.capabilities.get("tool_calling", target.tool_capable))
-                target.vision_capable = bool(runtime_truth.capabilities.get("vision", target.vision_capable))
-                target.queue_eligible = bool(target.capability_profile.get("queue_eligible", target.queue_eligible))
+                technical_capabilities, execution_traits, policy_flags, economic_profile = split_legacy_capability_profile(
+                    provider=target.provider,
+                    capability_profile={
+                        **target.capability_profile,
+                        **target.technical_capabilities,
+                        **target.execution_traits,
+                        **target.policy_flags,
+                        **target.economic_profile,
+                        **runtime_truth.capabilities,
+                    },
+                    cost_class=target.cost_class,
+                    latency_class=target.latency_class,
+                )
+                target.technical_capabilities = technical_capabilities
+                target.execution_traits = execution_traits
+                target.policy_flags = policy_flags
+                target.economic_profile = economic_profile
+                target.capability_profile = build_legacy_capability_profile(
+                    technical_capabilities=technical_capabilities,
+                    execution_traits=execution_traits,
+                )
+                target.stream_capable = bool(target.technical_capabilities.get("streaming", target.stream_capable))
+                target.tool_capable = runtime_truth.tool_calling_level == "full" or bool(
+                    target.technical_capabilities.get("tool_calling", target.tool_capable)
+                )
+                target.vision_capable = bool(target.technical_capabilities.get("vision", target.vision_capable))
+                target.queue_eligible = bool(target.execution_traits.get("queue_eligible", target.queue_eligible))
                 if runtime_truth.ready and target.enabled and target.readiness_status != "unavailable":
                     target.readiness_status = "ready"
                 elif target.readiness_status != "unavailable":
@@ -157,6 +177,9 @@ class ControlPlaneTargetsDomainMixin:
                         "category": model.category,
                         "routing_key": model.routing_key,
                         "capabilities": dict(model.capabilities),
+                        "execution_traits": dict(model.execution_traits),
+                        "policy_flags": dict(model.policy_flags),
+                        "economic_profile": dict(model.economic_profile),
                         "source": model.source,
                         "discovery_status": model.discovery_status,
                         "runtime_status": model.runtime_status,
@@ -187,6 +210,7 @@ class ControlPlaneTargetsDomainMixin:
             target.priority = payload.priority
         if payload.queue_eligible is not None:
             target.queue_eligible = payload.queue_eligible
+            target.execution_traits["queue_eligible"] = payload.queue_eligible
             target.capability_profile["queue_eligible"] = payload.queue_eligible
         if payload.fallback_allowed is not None:
             target.fallback_allowed = payload.fallback_allowed

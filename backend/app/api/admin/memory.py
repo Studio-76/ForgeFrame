@@ -10,7 +10,7 @@ from app.api.admin.security import require_admin_mutation_role, require_admin_ro
 from app.governance.models import AuthenticatedAdmin
 from app.instances.models import InstanceRecord
 from app.knowledge.dependencies import get_knowledge_context_admin_service
-from app.knowledge.models import CorrectMemory, CreateMemory, DeleteMemory, UpdateMemory
+from app.knowledge.models import CorrectMemory, CreateMemory, DeleteMemory, RevokeMemory, UpdateMemory
 from app.knowledge.service import KnowledgeContextAdminService
 
 router = APIRouter(prefix="/memory", tags=["admin-memory"])
@@ -107,6 +107,23 @@ def delete_memory(
 ) -> object:
     try:
         result = service.delete_memory(instance=instance, memory_id=memory_id, payload=payload)
+    except ValueError as exc:
+        error_type = "memory_not_found" if "not found" in str(exc) else "memory_invalid"
+        code = status.HTTP_404_NOT_FOUND if error_type == "memory_not_found" else status.HTTP_409_CONFLICT
+        return _error(code, error_type, str(exc))
+    return {"status": "ok", "action": result.action, "memory": result.memory.model_dump(mode="json")}
+
+
+@router.post("/{memory_id}/revoke")
+def revoke_memory(
+    memory_id: str,
+    payload: RevokeMemory,
+    _admin: AuthenticatedAdmin = Depends(require_admin_mutation_role("admin")),
+    instance: InstanceRecord = Depends(resolve_admin_instance_scope),
+    service: KnowledgeContextAdminService = Depends(get_knowledge_context_admin_service),
+) -> object:
+    try:
+        result = service.revoke_memory(instance=instance, memory_id=memory_id, payload=payload)
     except ValueError as exc:
         error_type = "memory_not_found" if "not found" in str(exc) else "memory_invalid"
         code = status.HTTP_404_NOT_FOUND if error_type == "memory_not_found" else status.HTTP_409_CONFLICT

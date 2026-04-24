@@ -72,6 +72,26 @@ forgeframe_load_env_file() {
   forgeframe_warn_legacy_env_prefixes
 }
 
+forgeframe_is_placeholder_value() {
+  local value="${1:-}"
+  local normalized
+
+  normalized="$(printf '%s' "$value" | tr '[:upper:]' '[:lower:]' | xargs)"
+  [[ -z "$normalized" ]] && return 0
+  [[ "$normalized" == replace-with-* ]] && return 0
+  [[ "$normalized" == *".example.invalid" ]] && return 0
+  [[ "$normalized" == *"@example.invalid" ]] && return 0
+  return 1
+}
+
+forgeframe_has_configured_public_fqdn() {
+  ! forgeframe_is_placeholder_value "${FORGEFRAME_PUBLIC_FQDN:-}"
+}
+
+forgeframe_has_configured_public_acme_email() {
+  ! forgeframe_is_placeholder_value "${FORGEFRAME_PUBLIC_TLS_ACME_EMAIL:-}"
+}
+
 forgeframe_prepare_compose_env() {
   local env_file="$1"
 

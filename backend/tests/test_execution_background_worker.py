@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from datetime import UTC, datetime
 from pathlib import Path
 from types import SimpleNamespace
@@ -136,7 +137,7 @@ def _instance(company_id: str = "company_alpha") -> InstanceRecord:
 
 
 def test_background_worker_processes_response_queue_and_updates_worker_registry(tmp_path: Path) -> None:
-    _transitions, responses, worker, _admin, session_factory, fake_dispatch, fake_analytics = _services(tmp_path)
+    _transitions, responses, worker, admin, session_factory, fake_dispatch, fake_analytics = _services(tmp_path)
     request = NormalizedResponsesRequest(
         model="gpt-4.1-mini",
         instructions="Answer tersely.",
@@ -195,13 +196,14 @@ def test_background_worker_processes_response_queue_and_updates_worker_registry(
     with session_factory() as session:
         run = session.get(RunORM, run_id)
         response_row = session.execute(
-            text("SELECT lifecycle_status, instance_id, resolved_model, provider_key FROM runtime_responses WHERE id = :response_id"),
+            text("SELECT lifecycle_status, instance_id, resolved_model, provider_key, native_mapping FROM runtime_responses WHERE id = :response_id"),
             {"response_id": response.id},
         ).one()
         worker_row = session.execute(
             text("SELECT worker_state, active_attempts, current_run_id, current_attempt_id, last_completed_at, last_error_code FROM execution_workers WHERE company_id = :company_id AND worker_key = :worker_key"),
             {"company_id": "company_alpha", "worker_key": "worker_alpha"},
         ).one()
+    detail = admin.get_run_detail(instance=_instance(), run_id=run_id)
 
     assert run is not None
     assert run.state == "succeeded"
@@ -211,13 +213,21 @@ def test_background_worker_processes_response_queue_and_updates_worker_registry(
     assert run.result_summary["routing"]["selected_target_key"] == "openai_api::gpt-4.1-mini"
     assert run.result_summary["dispatch"]["stage"] == "completed"
     assert run.result_summary["wake_gate"]["claim_allowed"] is True
-    assert tuple(response_row) == ("completed", "instance_alpha", "gpt-4.1-mini", "openai_api")
+    assert tuple(response_row[:4]) == ("completed", "instance_alpha", "gpt-4.1-mini", "openai_api")
+    native_mapping = json.loads(response_row[4]) if isinstance(response_row[4], str) else response_row[4]
+    assert native_mapping["primary_native_object_kind"] == "run"
+    assert native_mapping["route_context"]["resolved_model"] == "gpt-4.1-mini"
+    assert native_mapping["route_context"]["provider_key"] == "openai_api"
     assert worker_row[0] == "idle"
     assert worker_row[1] == 0
     assert worker_row[2] is None
     assert worker_row[3] is None
     assert worker_row[4] is not None
     assert worker_row[5] is None
+    assert detail.native_mapping is not None
+    assert detail.native_mapping.contract_surface == "forgeframe_execution"
+    assert detail.native_mapping.primary_native_object_kind == "run"
+    assert detail.native_mapping.objects[0].kind == "run"
 
 
 def test_dispatch_snapshot_surfaces_registered_idle_workers_without_lease_inference(tmp_path: Path) -> None:

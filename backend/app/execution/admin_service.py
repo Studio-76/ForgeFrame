@@ -10,6 +10,7 @@ from datetime import UTC, datetime
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.artifacts.models import ArtifactRecord
 from app.execution.admin_models import (
     ExecutionDispatchAttemptView,
     ExecutionDispatchSnapshot,
@@ -27,7 +28,21 @@ from app.execution.admin_models import (
 )
 from app.instances.models import InstanceRecord
 from app.execution.service import ExecutionTransitionService
-from app.storage.execution_repository import ExecutionWorkerORM, RunAttemptORM, RunCommandORM, RunORM, RunOutboxORM
+from app.product_taxonomy import (
+    NativeCommandRecord,
+    NativeEventRecord,
+    NativeProductObjectRef,
+    NativeViewRecord,
+    RuntimeNativeMapping,
+)
+from app.storage.execution_repository import (
+    ExecutionWorkerORM,
+    RunApprovalLinkORM,
+    RunAttemptORM,
+    RunCommandORM,
+    RunORM,
+    RunOutboxORM,
+)
 from app.workspaces.service import WorkInteractionAdminService
 
 SessionFactory = Callable[[], Session]
@@ -103,6 +118,228 @@ class ExecutionAdminService:
         )
 
     @staticmethod
+    def _native_command_kind(command_type: str) -> str | None:
+        return {
+            "create": "start_run",
+            "retry": "start_run",
+            "restart_from_scratch": "start_run",
+            "interrupt": "cancel_run",
+            "cancel": "cancel_run",
+            "escalate": "escalate_run",
+            "approval_resume": "approve",
+            "approval_reject": "reject",
+        }.get(command_type)
+
+    @classmethod
+    def _build_native_mapping(
+        cls,
+        *,
+        instance: InstanceRecord,
+        run: RunORM,
+        attempts: list[RunAttemptORM],
+        commands: list[RunCommandORM],
+        outbox: list[RunOutboxORM],
+        approval_links: list[RunApprovalLinkORM],
+        artifacts: list[ArtifactRecord],
+    ) -> RuntimeNativeMapping:
+        current_attempt = next((item for item in attempts if item.id == run.current_attempt_id), None)
+        if current_attempt is None and attempts:
+            current_attempt = attempts[0]
+
+        objects: list[NativeProductObjectRef] = [
+            NativeProductObjectRef(
+                kind="run",
+                object_id=run.id,
+                relation="primary_object",
+                lifecycle_state=run.state,
+                details={
+                    "operator_state": run.operator_state,
+                    "execution_lane": run.execution_lane,
+                    "run_kind": run.run_kind,
+                },
+            )
+        ]
+        if current_attempt is not None:
+            objects.append(
+                NativeProductObjectRef(
+                    kind="dispatch_job",
+                    object_id=current_attempt.id,
+                    relation="current_attempt",
+                    lifecycle_state=current_attempt.attempt_state,
+                    details={
+                        "operator_state": current_attempt.operator_state,
+                        "lease_status": current_attempt.lease_status,
+                        "attempt_no": current_attempt.attempt_no,
+                    },
+                )
+            )
+        for approval_link in approval_links:
+            objects.append(
+                NativeProductObjectRef(
+                    kind="approval",
+                    object_id=approval_link.approval_id,
+                    relation="approval_gate",
+                    lifecycle_state=approval_link.gate_status,
+                    details={
+                        "approval_link_id": approval_link.id,
+                        "resume_disposition": approval_link.resume_disposition,
+                    },
+                )
+            )
+        for artifact in artifacts:
+            objects.append(
+                NativeProductObjectRef(
+                    kind="artifact",
+                    object_id=artifact.artifact_id,
+                    relation="run_artifact",
+                    lifecycle_state=artifact.status,
+                    label=artifact.label,
+                    details={
+                        "artifact_type": artifact.artifact_type,
+                        "workspace_id": artifact.workspace_id,
+                    },
+                )
+            )
+
+        native_commands: list[NativeCommandRecord] = []
+        native_events: list[NativeEventRecord] = []
+        for command in commands:
+            native_kind = cls._native_command_kind(command.command_type)
+            if native_kind is not None:
+                native_commands.append(
+                    NativeCommandRecord(
+                        command_kind=native_kind,  # type: ignore[arg-type]
+                        command_id=command.id,
+                        status=command.command_status,
+                        actor_type=command.actor_type,
+                        actor_id=command.actor_id,
+                        details={
+                            "raw_command_type": command.command_type,
+                            "accepted_transition": command.accepted_transition,
+                        },
+                    )
+                )
+            if command.command_type in {"resume", "approval_resume"}:
+                native_events.append(
+                    NativeEventRecord(
+                        event_kind="resumed_transition",
+                        related_object_kind="run",
+                        related_object_id=run.id,
+                        status=command.command_status,
+                        details={"command_id": command.id, "raw_command_type": command.command_type},
+                    )
+                )
+            elif command.command_type in {"retry", "restart_from_scratch"}:
+                native_events.append(
+                    NativeEventRecord(
+                        event_kind="retried_transition",
+                        related_object_kind="run",
+                        related_object_id=run.id,
+                        status=command.command_status,
+                        details={"command_id": command.id, "raw_command_type": command.command_type},
+                    )
+                )
+            elif command.command_type == "escalate":
+                native_events.append(
+                    NativeEventRecord(
+                        event_kind="escalated_transition",
+                        related_object_kind="run",
+                        related_object_id=run.id,
+                        status=command.command_status,
+                        details={"command_id": command.id, "raw_command_type": command.command_type},
+                    )
+                )
+
+        for entry in outbox:
+            if entry.event_type == "approval_notify":
+                native_events.append(
+                    NativeEventRecord(
+                        event_kind="review_request_event",
+                        related_object_kind="approval",
+                        related_object_id=str(entry.payload.get("approval_id") or run.current_approval_link_id or ""),
+                        status=entry.publish_state,
+                        details={"outbox_id": entry.id, "attempt_id": entry.attempt_id},
+                    )
+                )
+
+        if run.state in {"waiting_on_approval", "retry_backoff", "failed", "timed_out", "dead_lettered"} or run.operator_state in {
+            "paused",
+            "quarantined",
+            "failed",
+            "waiting_on_approval",
+            "retry_scheduled",
+        }:
+            native_events.append(
+                NativeEventRecord(
+                    event_kind="blocker_event",
+                    related_object_kind="run",
+                    related_object_id=run.id,
+                    status=run.state,
+                    details={
+                        "operator_state": run.operator_state,
+                        "status_reason": run.status_reason,
+                        "failure_class": run.failure_class,
+                    },
+                )
+            )
+
+        views: list[NativeViewRecord] = []
+        preview_artifact = next(
+            (
+                artifact
+                for artifact in artifacts
+                if artifact.status == "active" and artifact.artifact_type in {"preview_link", "external_action_preview"}
+            ),
+            None,
+        )
+        if preview_artifact is not None:
+            views.append(
+                NativeViewRecord(
+                    view_kind="action_preview",
+                    available=True,
+                    label=preview_artifact.label,
+                    details={
+                        "artifact_id": preview_artifact.artifact_id,
+                        "preview_url": preview_artifact.preview_url,
+                    },
+                )
+            )
+
+        result_summary = run.result_summary if isinstance(run.result_summary, dict) else {}
+        response_id = result_summary.get("response_id") if isinstance(result_summary.get("response_id"), str) else None
+        notes = []
+        if run.run_kind == "responses_background":
+            notes.append(
+                "This execution run is the durable native follow-object behind a background /v1/responses request."
+            )
+        else:
+            notes.append(
+                "This execution view exposes ForgeFrame-native objects, events, commands, and views without hiding them behind runtime-only labels."
+            )
+
+        return RuntimeNativeMapping(
+            contract_surface="forgeframe_execution",
+            request_path=f"/admin/execution/runs/{run.id}",
+            response_id=response_id,
+            processing_mode="background",
+            background=run.run_kind == "responses_background",
+            primary_native_object_kind="run",
+            objects=objects,
+            events=native_events,
+            commands=native_commands,
+            views=views,
+            route_context={
+                "instance_id": instance.instance_id,
+                "company_id": instance.company_id,
+                "run_id": run.id,
+                "workspace_id": run.workspace_id,
+                "issue_id": run.issue_id,
+                "execution_lane": run.execution_lane,
+            },
+            notes=notes,
+        )
+
+    @staticmethod
     def _replay_target_attempt_no(
         run: RunORM,
         latest_command: RunCommandORM | None,
@@ -175,6 +412,16 @@ class ExecutionAdminService:
                 .where(RunOutboxORM.company_id == instance.company_id, RunOutboxORM.run_id == run_id)
                 .order_by(RunOutboxORM.created_at.desc())
             ).scalars().all()
+            approval_links = session.execute(
+                select(RunApprovalLinkORM)
+                .where(RunApprovalLinkORM.company_id == instance.company_id, RunApprovalLinkORM.run_id == run_id)
+                .order_by(RunApprovalLinkORM.opened_at.desc())
+            ).scalars().all()
+            artifacts = self._work.list_artifacts_for_target(
+                company_id=instance.company_id,
+                target_kind="run",
+                target_id=run_id,
+            )
 
             summary = self._map_run_summary(session, run, instance=instance)
             return ExecutionRunDetail(
@@ -187,10 +434,15 @@ class ExecutionAdminService:
                     if run.workspace_id
                     else None
                 ),
-                artifacts=self._work.list_artifacts_for_target(
-                    company_id=instance.company_id,
-                    target_kind="run",
-                    target_id=run_id,
+                artifacts=artifacts,
+                native_mapping=self._build_native_mapping(
+                    instance=instance,
+                    run=run,
+                    attempts=attempts,
+                    commands=commands,
+                    outbox=outbox,
+                    approval_links=approval_links,
+                    artifacts=artifacts,
                 ),
             )
 

@@ -30,9 +30,9 @@ globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 const adminSession: AdminSessionUser = {
   session_id: "session-admin",
   user_id: "user-admin",
-  username: "admin",
-  display_name: "Admin",
-  role: "admin",
+  username: "owner",
+  display_name: "Owner",
+  role: "owner",
 };
 
 function createInstanceRecord(overrides: Partial<InstanceRecord> = {}): InstanceRecord {
@@ -144,6 +144,7 @@ describe("Instances page", () => {
     expect(container.textContent).toContain("Alpha Instance");
     expect(container.textContent).toContain("Create Instance");
     expect(container.textContent).toContain("Edit Selected Instance");
+    expect(container.textContent).toContain("Tenant / Organization scope");
   });
 
   it("creates a new instance and refreshes the inventory around the new selection", async () => {
@@ -172,7 +173,7 @@ describe("Instances page", () => {
     const inputs = Array.from(container.querySelectorAll("input"));
     const textareas = Array.from(container.querySelectorAll("textarea"));
     const selects = Array.from(container.querySelectorAll("select"));
-    const createButton = Array.from(container.querySelectorAll("button")).find((button) => button.textContent?.includes("Create instance"));
+    const forms = Array.from(container.querySelectorAll("form"));
 
     await act(async () => {
       setControlValue(inputs[0] as HTMLInputElement, "instance_beta");
@@ -182,7 +183,7 @@ describe("Instances page", () => {
       setControlValue(inputs[3] as HTMLInputElement, "company_beta");
       setControlValue(selects[0] as HTMLSelectElement, "container_optional");
       setControlValue(selects[1] as HTMLSelectElement, "edge_admission");
-      createButton!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      forms[0]?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
     });
     await flushEffects();
 
@@ -205,7 +206,7 @@ describe("Instances page", () => {
     const inputs = Array.from(container.querySelectorAll("input"));
     const textareas = Array.from(container.querySelectorAll("textarea"));
     const selects = Array.from(container.querySelectorAll("select"));
-    const saveButton = Array.from(container.querySelectorAll("button")).find((button) => button.textContent?.includes("Save instance"));
+    const forms = Array.from(container.querySelectorAll("form"));
 
     await act(async () => {
       setControlValue(inputs[4] as HTMLInputElement, "Alpha Instance Updated");
@@ -213,7 +214,7 @@ describe("Instances page", () => {
       setControlValue(selects[2] as HTMLSelectElement, "disabled");
       setControlValue(selects[3] as HTMLSelectElement, "container_optional");
       setControlValue(selects[4] as HTMLSelectElement, "edge_admission");
-      saveButton!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      forms[1]?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
     });
     await flushEffects();
 

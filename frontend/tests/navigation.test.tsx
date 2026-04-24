@@ -55,6 +55,7 @@ describe("control-plane navigation", () => {
     const executionLink = operations?.links.find((link) => link.label === "Execution Review");
     const queuesLink = operations?.links.find((link) => link.label === "Queues");
     const dispatchLink = operations?.links.find((link) => link.label === "Dispatch");
+    const recoveryLink = operations?.links.find((link) => link.label === "Recovery / Backup / Restore");
     const healthLink = operations?.links.find((link) => link.label === "Health");
     const usageLink = operations?.links.find((link) => link.label === "Usage");
     const costsLink = operations?.links.find((link) => link.label === "Costs");
@@ -91,6 +92,8 @@ describe("control-plane navigation", () => {
     expect(queuesLink?.badge).toBeUndefined();
     expect(dispatchLink?.to).toBe("/dispatch");
     expect(dispatchLink?.badge).toBeUndefined();
+    expect(recoveryLink?.to).toBe("/recovery");
+    expect(recoveryLink?.badge).toBeUndefined();
     expect(healthLink?.to).toBe("/health-status");
     expect(usageLink?.to).toBe("/usage");
     expect(costsLink?.to).toBe("/costs");

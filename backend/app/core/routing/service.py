@@ -269,8 +269,8 @@ class RoutingService:
             exclusion_reasons.append("target_disabled")
 
         if classification.label == "non_simple" and str(
-            target.capability_profile.get("capability_profile", "")
-        ) == "baseline_simple":
+            target.execution_traits.get("task_complexity_floor", "")
+        ) == "simple_only":
             exclusion_reasons.append("non_simple_capability_floor_not_met")
 
         if policy.require_queue_eligible and not target.queue_eligible:
@@ -325,10 +325,10 @@ class RoutingService:
                 score += 4
         if policy.prefer_low_latency:
             score += _LATENCY_CLASS_SCORE.get(target.latency_class, 8)
-            reasons.append(f"latency_profile:{target.latency_class}")
+            reasons.append(f"economic_profile_latency:{target.latency_class}")
         else:
             score += _COST_CLASS_SCORE.get(target.cost_class, 8)
-            reasons.append(f"cost_profile:{target.cost_class}")
+            reasons.append(f"economic_profile_cost:{target.cost_class}")
         if classification.label == "simple" and target.cost_class in {"baseline", "low"}:
             score += 12
             reasons.append("simple_cost_floor_match")
@@ -488,6 +488,7 @@ class RoutingService:
                 "classification": classification.label,
                 "policy_stage": policy_stage,
                 "error_type": error_type,
+                "request_path_policy": selection_basis.get("request_path_policy"),
                 "candidate_count": len(candidates),
                 "excluded_count": len([candidate for candidate in candidates if candidate.exclusion_reasons]),
             },
@@ -558,6 +559,7 @@ class RoutingService:
                 "policy_stage": policy_stage,
                 "selected_target": resolved_target.target_key,
                 "execution_lane": policy.execution_lane,
+                "request_path_policy": selection_basis.get("request_path_policy"),
                 "fallback_used": fallback_used,
                 "candidate_count": len(enriched_candidates),
                 "excluded_count": len(
@@ -599,8 +601,22 @@ class RoutingService:
         *,
         requested_model: str | None,
         allowed_providers: set[str] | None,
+        route_context: dict[str, str] | None = None,
     ) -> list[RuntimeTarget]:
         targets = self._registry.list_active_targets()
+        selected_request_path = str((route_context or {}).get("request_path_policy") or "smart_routing").strip().lower()
+        pinned_target_key = str((route_context or {}).get("pinned_target_key") or "").strip() or None
+        if selected_request_path == "local_only":
+            targets = [target for target in targets if self._is_local_target(target)]
+        if selected_request_path == "pinned_target":
+            if pinned_target_key is None:
+                raise RoutingNoCandidateError("Pinned-target runtime path is configured without a target binding.")
+            target = self._registry.get_target(pinned_target_key)
+            if target is None or not target.enabled:
+                raise RoutingNoCandidateError(
+                    f"Pinned target '{pinned_target_key}' is not active for this instance."
+                )
+            targets = [target]
         if allowed_providers is not None:
             targets = [target for target in targets if target.provider in allowed_providers]
         if requested_model is None:
@@ -689,6 +705,7 @@ class RoutingService:
         tools: list[dict] | None = None,
         require_vision: bool = False,
         allowed_providers: set[str] | None = None,
+        route_context: dict[str, str] | None = None,
     ) -> list[RuntimeModel]:
         state = self._load_state()
         health_index = self._health_index(state)
@@ -699,9 +716,18 @@ class RoutingService:
             stream=stream,
         )
         policy = self._policy_for_classification(state, classification.label)
+        selected_request_path = str((route_context or {}).get("request_path_policy") or "smart_routing").strip().lower()
+        if selected_request_path == "queue_background":
+            policy = policy.model_copy(
+                update={
+                    "execution_lane": "queued_background",
+                    "require_queue_eligible": True,
+                }
+            )
         budget_evaluation = evaluate_routing_budget_state(
             state.routing_budget_state,
             instance_id=self._instance_id,
+            route_context=route_context,
         )
         budget_state = budget_evaluation.budget_state.model_copy(
             update={
@@ -717,6 +743,7 @@ class RoutingService:
         for target in self._candidate_pool(
             requested_model=None,
             allowed_providers=allowed_providers,
+            route_context=route_context,
         ):
             candidate = self._evaluate_candidate(
                 target,
@@ -772,6 +799,14 @@ class RoutingService:
             response_controls=response_controls,
         )
         policy = self._policy_for_classification(state, classification.label)
+        selected_request_path = str((route_context or {}).get("request_path_policy") or "smart_routing").strip().lower()
+        if selected_request_path == "queue_background":
+            policy = policy.model_copy(
+                update={
+                    "execution_lane": "queued_background",
+                    "require_queue_eligible": True,
+                }
+            )
         budget_evaluation = evaluate_routing_budget_state(
             state.routing_budget_state,
             instance_id=self._instance_id,
@@ -788,6 +823,7 @@ class RoutingService:
         target_pool = self._candidate_pool(
             requested_model=requested_model,
             allowed_providers=allowed_providers,
+            route_context=route_context,
         )
 
         all_candidates = [
@@ -831,6 +867,7 @@ class RoutingService:
             ],
             "allowed_providers": sorted(allowed_providers) if allowed_providers is not None else None,
             "route_context": dict(route_context or {}),
+            "request_path_policy": selected_request_path,
         }
 
         if budget_state.hard_blocked:
@@ -842,7 +879,9 @@ class RoutingService:
                 )
                 for candidate in all_candidates
             ]
-            summary = budget_evaluation.hard_block_reason or "Routing is hard-blocked by the current budget posture."
+            summary = "Routing is hard-blocked by the current budget posture."
+            if budget_evaluation.hard_block_reason:
+                summary = f"{summary} Reason: {budget_evaluation.hard_block_reason}."
             self._persist_blocked_decision(
                 state=state,
                 requested_model=requested_model,

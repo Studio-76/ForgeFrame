@@ -1847,6 +1847,12 @@ def test_responses_endpoint_persists_response_and_allows_retrieval() -> None:
     fetch_response = client.get(f"/v1/responses/{created['id']}")
     assert fetch_response.status_code == 200
     assert fetch_response.json() == created
+    native_mapping = created["metadata"]["forgeframe_native_mapping"]
+    assert native_mapping["contract_surface"] == "openai_responses"
+    assert native_mapping["processing_mode"] == "sync"
+    assert native_mapping["objects"] == []
+    assert native_mapping["commands"] == []
+    assert native_mapping["notes"]
 
     input_items_response = client.get(f"/v1/responses/{created['id']}/input_items")
     assert input_items_response.status_code == 200
@@ -1875,6 +1881,11 @@ def test_responses_endpoint_background_path_returns_queued_response_and_location
     assert body["status"] == "queued"
     assert body["background"] is True
     assert body["output"] == []
+    native_mapping = body["metadata"]["forgeframe_native_mapping"]
+    assert native_mapping["primary_native_object_kind"] == "run"
+    assert native_mapping["processing_mode"] == "background"
+    assert native_mapping["objects"][0]["kind"] == "run"
+    assert native_mapping["commands"][0]["command_kind"] == "start_run"
     assert response.headers["Location"] == f"/v1/responses/{body['id']}"
 
     queued = client.get(response.headers["Location"])
@@ -2374,7 +2385,7 @@ def test_runtime_models_endpoint_requires_key_when_enabled(monkeypatch: pytest.M
     response = secure_client.get("/v1/models")
     assert response.status_code == 401
     error = response.json()["error"]
-    assert error["type"] == "runtime_auth_required"
+    assert error["type"] == "missing_bearer"
     assert error["request_id"] == response.headers["X-ForgeFrame-Request-Id"]
     assert response.headers["X-ForgeFrame-Correlation-Id"] == error["request_id"]
 

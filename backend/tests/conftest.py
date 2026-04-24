@@ -2,10 +2,27 @@
 
 import os
 
+_EARLY_TEST_BOOTSTRAP_ADMIN_PASSWORD = "ForgeFrame-Test-Admin-Secret-123"
+os.environ.setdefault("FORGEGATE_BOOTSTRAP_ADMIN_PASSWORD", _EARLY_TEST_BOOTSTRAP_ADMIN_PASSWORD)
+os.environ.setdefault("FORGEFRAME_BOOTSTRAP_ADMIN_PASSWORD", _EARLY_TEST_BOOTSTRAP_ADMIN_PASSWORD)
+os.environ.setdefault("FORGEGATE_HARNESS_STORAGE_BACKEND", "file")
+os.environ.setdefault("FORGEFRAME_HARNESS_STORAGE_BACKEND", "file")
+os.environ.setdefault("FORGEGATE_CONTROL_PLANE_STORAGE_BACKEND", "file")
+os.environ.setdefault("FORGEFRAME_CONTROL_PLANE_STORAGE_BACKEND", "file")
+os.environ.setdefault("FORGEGATE_GOVERNANCE_STORAGE_BACKEND", "file")
+os.environ.setdefault("FORGEFRAME_GOVERNANCE_STORAGE_BACKEND", "file")
+os.environ.setdefault("FORGEGATE_OBSERVABILITY_STORAGE_BACKEND", "file")
+os.environ.setdefault("FORGEFRAME_OBSERVABILITY_STORAGE_BACKEND", "file")
+os.environ.setdefault("FORGEGATE_INSTANCES_STORAGE_BACKEND", "file")
+os.environ.setdefault("FORGEFRAME_INSTANCES_STORAGE_BACKEND", "file")
+os.environ.setdefault("FORGEGATE_RUNTIME_AUTH_REQUIRED", "false")
+os.environ.setdefault("FORGEFRAME_RUNTIME_AUTH_REQUIRED", "false")
+
 import pytest
 from fastapi.testclient import TestClient
 
 from app.api.admin.control_plane import get_control_plane_service
+from app.agents.dependencies import clear_agent_admin_service_cache
 from app.assistant_profiles.dependencies import clear_assistant_profile_admin_service_cache
 from app.execution.dependencies import clear_execution_dependency_caches
 from app.api.runtime.dependencies import clear_runtime_dependency_caches
@@ -14,15 +31,18 @@ from app.governance.service import get_governance_service
 from app.harness.service import get_harness_service
 from app.instances.service import clear_instance_service_cache
 from app.knowledge.dependencies import clear_knowledge_context_admin_service_cache
+from app.learning.dependencies import clear_learning_admin_service_cache
 from app.plugins.dependencies import clear_plugin_catalog_service_cache
 from app.readiness import reset_runtime_readiness_state
+from app.recovery.dependencies import clear_recovery_admin_service_cache
 from app.settings.config import get_settings
+from app.skills.dependencies import clear_skill_admin_service_cache
 from app.tasks.dependencies import clear_task_automation_admin_service_cache
 from app.usage.analytics import get_usage_analytics_store
 from app.workspaces.dependencies import clear_work_interaction_admin_service_cache
 from app.main import app
 
-TEST_BOOTSTRAP_ADMIN_PASSWORD = "ForgeFrame-Test-Admin-Secret-123"
+TEST_BOOTSTRAP_ADMIN_PASSWORD = _EARLY_TEST_BOOTSTRAP_ADMIN_PASSWORD
 _ROTATED_TEST_PASSWORD_SUFFIX = "-rotated"
 
 
@@ -64,6 +84,12 @@ def login_headers_allowing_password_rotation(
         assert rotation.status_code == 200
         for env_key in persist_password_env_keys:
             os.environ[env_key] = rotated_password
+        response = client.post(
+            "/admin/auth/login",
+            json={"username": username, "password": rotated_password},
+        )
+        assert response.status_code == 201
+        headers = {"Authorization": f"Bearer {response.json()['access_token']}"}
     return headers
 
 
@@ -128,8 +154,12 @@ def _reset_runtime_caches(tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
     clear_work_interaction_admin_service_cache()
     clear_task_automation_admin_service_cache()
     clear_knowledge_context_admin_service_cache()
+    clear_agent_admin_service_cache()
+    clear_skill_admin_service_cache()
+    clear_learning_admin_service_cache()
     clear_assistant_profile_admin_service_cache()
     clear_plugin_catalog_service_cache()
+    clear_recovery_admin_service_cache()
     reset_runtime_readiness_state(app)
 
 

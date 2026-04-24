@@ -15,6 +15,18 @@ function formatList(values: string[]): string {
   return values.length > 0 ? values.join(", ") : "none";
 }
 
+function formatRecordKeys(values: Record<string, unknown>): string {
+  const keys = Object.keys(values ?? {});
+  return keys.length > 0 ? keys.join(", ") : "none";
+}
+
+function formatRecordEntries(values: Record<string, unknown>): string {
+  const entries = Object.entries(values ?? {});
+  return entries.length > 0
+    ? entries.map(([key, value]) => `${key}=${String(value)}`).join(" · ")
+    : "none";
+}
+
 export function ModelsPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const { session } = useAppSession();
@@ -89,7 +101,7 @@ export function ModelsPage() {
           ...(selectedInstance ? [{ label: `Instance scope: ${selectedInstance.display_name}`, tone: "success" as const }] : []),
           ...(session ? [{ label: `Session: ${session.role}`, tone: session.read_only ? "warning" as const : "neutral" as const }] : []),
         ]}
-        note="A model entry without routing key, capability profile, target coverage, or live availability truth is not treated as complete here."
+        note="A model entry without routing key, separated capability/trait/policy/economic truth, target coverage, or live availability evidence is not treated as complete here."
       />
       <InstanceScopeCard
         instanceId={instanceId}
@@ -105,7 +117,7 @@ export function ModelsPage() {
         <div className="fg-panel-heading">
           <div>
             <h3>Persistent Model Register</h3>
-            <p className="fg-muted">Routing keys, capability profiles, availability, and target coverage are shown directly from the admin register.</p>
+            <p className="fg-muted">Routing keys, technical capabilities, execution traits, policy flags, economic profile, availability, and target coverage are shown directly from the admin register.</p>
           </div>
           <span className="fg-pill" data-tone={state === "success" ? "success" : state === "error" ? "danger" : "neutral"}>
             {state}
@@ -144,7 +156,10 @@ export function ModelsPage() {
                   <p>
                     category={model.category} · owned_by={model.owned_by} · target coverage={model.active_target_count}/{model.target_count}
                   </p>
-                  <p>capabilities={formatList(Object.keys(model.capabilities ?? {}))}</p>
+                  <p>technical capabilities={formatRecordKeys(model.capabilities ?? {})}</p>
+                  <p>execution traits={formatRecordEntries(model.execution_traits ?? {})}</p>
+                  <p>policy flags={formatRecordEntries(model.policy_flags ?? {})}</p>
+                  <p>economic profile={formatRecordEntries(model.economic_profile ?? {})}</p>
                   <p>target keys={formatList(model.target_keys)}</p>
                   {model.status_reason ? <p className="fg-note">reason: {model.status_reason}</p> : null}
                 </div>

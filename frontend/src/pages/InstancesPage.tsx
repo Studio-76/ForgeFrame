@@ -171,7 +171,7 @@ export function InstancesPage() {
         eyebrow="Setup"
         title="Instances"
         description="Top-level instance registry for scope bindings, deployment posture, and the canonical control-plane boundary."
-        question="Which instance owns this environment, and do its tenant and execution scopes still match the runtime truth?"
+        question="Which instance owns this environment, and do its tenant or organization plus execution scopes still match the runtime truth?"
         links={[
           { label: "Instances", to: CONTROL_PLANE_ROUTES.instances, description: "Stay on the instance inventory and binding surface." },
           { label: "Command Center", to: CONTROL_PLANE_ROUTES.dashboard, description: "Open the dashboard once the target instance is confirmed." },
@@ -183,7 +183,7 @@ export function InstancesPage() {
           { label: `${instances.length} instance${instances.length === 1 ? "" : "s"}`, tone: instances.length > 0 ? "success" : "warning" },
           { label: canMutate ? "Admin mutation enabled" : "Read only", tone: canMutate ? "success" : "neutral" },
         ]}
-        note="This surface is the product boundary, not a cosmetic label editor. Tenant and execution scopes must resolve back to a real ForgeFrame instance."
+        note="This surface is the product boundary, not a cosmetic label editor. Tenant or organization and execution scopes must resolve back to a real ForgeFrame instance."
       />
 
       {error ? <p className="fg-danger">{error}</p> : null}
@@ -194,7 +194,7 @@ export function InstancesPage() {
           <div className="fg-panel-heading">
             <div>
               <h3>Instance Inventory</h3>
-              <p className="fg-muted">Every entry is a top-level ForgeFrame instance with its own tenant and execution scope bindings.</p>
+              <p className="fg-muted">Every entry is a top-level ForgeFrame instance with its own tenant or organization and execution scope bindings.</p>
             </div>
             <span className="fg-pill" data-tone={loadState === "success" ? "success" : loadState === "error" ? "danger" : "neutral"}>
               {loadState}
@@ -235,7 +235,7 @@ export function InstancesPage() {
           <div className="fg-panel-heading">
             <div>
               <h3>Create Instance</h3>
-              <p className="fg-muted">Create a new top-level instance boundary with explicit tenant and execution scope bindings.</p>
+              <p className="fg-muted">Create a new top-level instance boundary with explicit tenant or organization and execution scope bindings.</p>
             </div>
             <span className="fg-pill" data-tone={canMutate ? "success" : "warning"}>{canMutate ? "Writable" : "Admin only"}</span>
           </div>
@@ -253,7 +253,7 @@ export function InstancesPage() {
               <textarea rows={4} value={createForm.description} onChange={(event) => setCreateForm((current) => ({ ...current, description: event.target.value }))} />
             </label>
             <label>
-              Tenant scope
+              Tenant / Organization scope
               <input value={createForm.tenant_id} onChange={(event) => setCreateForm((current) => ({ ...current, tenant_id: event.target.value }))} placeholder="customer-prod" />
             </label>
             <label>
@@ -290,7 +290,7 @@ export function InstancesPage() {
           <div className="fg-panel-heading">
             <div>
               <h3>Edit Selected Instance</h3>
-              <p className="fg-muted">Mutations must preserve a coherent instance boundary. Tenant and execution scopes cannot silently drift.</p>
+              <p className="fg-muted">Mutations must preserve a coherent instance boundary. Tenant or organization and execution scopes cannot silently drift.</p>
             </div>
             <span className="fg-pill" data-tone="neutral">{selectedInstance.instance_id}</span>
           </div>
@@ -305,7 +305,7 @@ export function InstancesPage() {
             </label>
             <div className="fg-grid fg-grid-compact">
               <label>
-                Tenant scope
+                Tenant / Organization scope
                 <input value={typeof editForm.tenant_id === "string" ? editForm.tenant_id : ""} onChange={(event) => setEditForm((current) => ({ ...current, tenant_id: event.target.value }))} />
               </label>
               <label>

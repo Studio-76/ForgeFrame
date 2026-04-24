@@ -3,10 +3,12 @@ import { Link, useSearchParams } from "react-router-dom";
 
 import {
   fetchBootstrapReadiness,
+  fetchRecoveryOverview,
   fetchProviderControlPlane,
   fetchRoutingControlPlane,
   fetchRuntimeHealth,
   type ProviderControlPlaneResponse,
+  type RecoveryOverviewResponse,
   type RoutingControlPlaneResponse,
   type RuntimeHealthResponse,
 } from "../api/admin";
@@ -26,6 +28,7 @@ export function ReleaseValidationPage() {
   const [error, setError] = useState<string | null>(null);
   const [bootstrap, setBootstrap] = useState<{ ready: boolean; checks: Array<Record<string, unknown>>; next_steps: string[] } | null>(null);
   const [runtimeHealth, setRuntimeHealth] = useState<RuntimeHealthResponse | null>(null);
+  const [recovery, setRecovery] = useState<RecoveryOverviewResponse | null>(null);
   const [providers, setProviders] = useState<ProviderControlPlaneResponse | null>(null);
   const [routing, setRouting] = useState<RoutingControlPlaneResponse | null>(null);
 
@@ -45,9 +48,10 @@ export function ReleaseValidationPage() {
       setState("loading");
       setError(null);
       try {
-        const [bootstrapPayload, runtimePayload, providersPayload, routingPayload] = await Promise.all([
+        const [bootstrapPayload, runtimePayload, recoveryPayload, providersPayload, routingPayload] = await Promise.all([
           fetchBootstrapReadiness(),
           fetchRuntimeHealth(),
+          fetchRecoveryOverview(),
           fetchProviderControlPlane(instanceId),
           fetchRoutingControlPlane(instanceId),
         ]);
@@ -56,6 +60,7 @@ export function ReleaseValidationPage() {
         }
         setBootstrap(bootstrapPayload);
         setRuntimeHealth(runtimePayload);
+        setRecovery(recoveryPayload);
         setProviders(providersPayload);
         setRouting(routingPayload);
         setState("success");
@@ -65,6 +70,7 @@ export function ReleaseValidationPage() {
         }
         setBootstrap(null);
         setRuntimeHealth(null);
+        setRecovery(null);
         setProviders(null);
         setRouting(null);
         setState("error");
@@ -81,9 +87,13 @@ export function ReleaseValidationPage() {
   const readyProviders = (providers?.providers ?? []).filter((provider) => provider.ready && provider.runtime_readiness === "ready");
   const blockedChecks = (bootstrap?.checks ?? []).filter((check) => check.ok !== true);
   const openCircuits = (routing?.circuits ?? []).filter((circuit) => circuit.state === "open");
+  const recoveryBlocked = recovery?.summary.runtime_status !== "ok";
+  const upgradeBlocked = recovery?.upgrade_posture.runtime_status !== "ok";
   const releaseReady = Boolean(
     bootstrap?.ready
     && runtimeHealth?.readiness.accepting_traffic
+    && !recoveryBlocked
+    && !upgradeBlocked
     && readyProviders.length > 0
     && routing
     && !routing.budget.hard_blocked
@@ -122,7 +132,7 @@ export function ReleaseValidationPage() {
       {state === "loading" ? <article className="fg-card"><p className="fg-muted">Loading release gates.</p></article> : null}
       {error ? <p className="fg-danger">{error}</p> : null}
 
-      {state === "success" && bootstrap && runtimeHealth && providers && routing ? (
+      {state === "success" && bootstrap && runtimeHealth && recovery && providers && routing ? (
         <div className="fg-grid">
           <article className="fg-card">
             <div className="fg-panel-heading">
@@ -134,6 +144,8 @@ export function ReleaseValidationPage() {
             <ul className="fg-list">
               <li>Bootstrap ready: {String(bootstrap.ready)}</li>
               <li>Runtime accepting traffic: {String(runtimeHealth.readiness.accepting_traffic)}</li>
+              <li>Recovery runtime status: {recovery.summary.runtime_status}</li>
+              <li>Upgrade integrity status: {recovery.upgrade_posture.runtime_status}</li>
               <li>Ready providers: {readyProviders.length}</li>
               <li>Budget hard blocked: {String(routing.budget.hard_blocked)}</li>
               <li>Open circuits: {openCircuits.length}</li>
@@ -148,13 +160,15 @@ export function ReleaseValidationPage() {
               </div>
             </div>
             <ul className="fg-list">
-              {blockedChecks.length === 0 && runtimeHealth.readiness.accepting_traffic && readyProviders.length > 0 && !routing.budget.hard_blocked && openCircuits.length === 0 ? (
+              {blockedChecks.length === 0 && runtimeHealth.readiness.accepting_traffic && !recoveryBlocked && !upgradeBlocked && readyProviders.length > 0 && !routing.budget.hard_blocked && openCircuits.length === 0 ? (
                 <li>No current blockers detected in the shipped gate signals.</li>
               ) : null}
               {blockedChecks.slice(0, 6).map((check) => (
                 <li key={String(check.id)}>{String(check.id)}: {String(check.details)}</li>
               ))}
               {!runtimeHealth.readiness.accepting_traffic ? <li>Runtime health is not currently accepting traffic.</li> : null}
+              {recoveryBlocked ? <li>Recovery posture is not green: {recovery.summary.runtime_status}.</li> : null}
+              {upgradeBlocked ? <li>Upgrade integrity is not green: {recovery.upgrade_posture.runtime_status} · {recovery.upgrade_posture.blockers.join(", ") || "missing evidence"}.</li> : null}
               {readyProviders.length === 0 ? <li>No provider route is currently runtime-ready for the selected scope.</li> : null}
               {routing.budget.hard_blocked ? <li>Routing budget is hard blocked.</li> : null}
               {openCircuits.map((circuit) => (
@@ -172,6 +186,7 @@ export function ReleaseValidationPage() {
             </div>
             <div className="fg-stack">
               <Link className="fg-nav-link" to={CONTROL_PLANE_ROUTES.onboarding}>Open Bootstrap / Readiness</Link>
+              <Link className="fg-nav-link" to={CONTROL_PLANE_ROUTES.recovery}>Open Recovery / Backup / Restore</Link>
               <Link className="fg-nav-link" to={CONTROL_PLANE_ROUTES.ingressTls}>Open Ingress / TLS / Certificates</Link>
               <Link className="fg-nav-link" to={withInstanceScope(CONTROL_PLANE_ROUTES.providers, instanceId)}>Open Providers</Link>
               <Link className="fg-nav-link" to={withInstanceScope(CONTROL_PLANE_ROUTES.routing, instanceId)}>Open Routing</Link>

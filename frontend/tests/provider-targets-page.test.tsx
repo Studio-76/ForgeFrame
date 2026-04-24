@@ -33,6 +33,14 @@ const operatorSession: AdminSessionUser = {
   username: "operator",
   display_name: "Operator",
   role: "operator",
+  active_instance_id: "instance_alpha",
+  instance_permissions: {
+    instance_alpha: [
+      "instance.read",
+      "provider_targets.read",
+      "provider_targets.write",
+    ],
+  },
 };
 
 function createInstanceRecord(overrides: Partial<InstanceRecord> = {}): InstanceRecord {
@@ -101,6 +109,10 @@ beforeEach(() => {
         auth_type: "api_key",
         credential_type: "api_key_secret",
         capability_profile: { streaming: true, tool_calling: true, queue_eligible: true },
+        technical_capabilities: { streaming: true, tool_calling: true, vision: true },
+        execution_traits: { queue_eligible: true, task_complexity_floor: "general" },
+        policy_flags: { fallback_allowed: true, premium_policy_gate: false },
+        economic_profile: { cost_class: "high", latency_class: "medium", quality_tier: "premium" },
         cost_class: "high",
         latency_class: "medium",
         enabled: true,

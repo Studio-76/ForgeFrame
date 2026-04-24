@@ -367,6 +367,11 @@ class FileGovernanceRepository:
                 key.get("instance_id") or tenant_scope,
                 fallback_tenant_id=tenant_scope,
             )
+            key["allowed_request_paths"] = list(key.get("allowed_request_paths") or ["smart_routing"])
+            key["default_request_path"] = str(key.get("default_request_path") or "smart_routing")
+            key["pinned_target_key"] = key.get("pinned_target_key")
+            key["local_only_policy"] = str(key.get("local_only_policy") or "require_local_target")
+            key["review_required_conditions"] = list(key.get("review_required_conditions") or [])
             upgraded_keys.append(key)
         normalized["runtime_keys"] = upgraded_keys
 
@@ -798,6 +803,11 @@ class PostgresGovernanceRepository:
                         "instance_id": key.instance_id,
                         "tenant_id": key.tenant_id,
                         "legacy_account_id": key.account_id,
+                        "allowed_request_paths": list(key.allowed_request_paths),
+                        "default_request_path": key.default_request_path,
+                        "pinned_target_key": key.pinned_target_key,
+                        "local_only_policy": key.local_only_policy,
+                        "review_required_conditions": list(key.review_required_conditions),
                         "last_rotated_at": key.last_rotated_at,
                         "revoked_at": key.revoked_at,
                         "revoked_reason": key.revoked_reason,
@@ -1260,6 +1270,11 @@ class PostgresGovernanceRepository:
                     updated_at=row.updated_at.isoformat(),
                     expires_at=self._iso(row.expires_at),
                     last_used_at=self._iso(row.last_used_at),
+                    allowed_request_paths=list(attrs.get("allowed_request_paths", ["smart_routing"])),
+                    default_request_path=str(attrs.get("default_request_path", "smart_routing")),
+                    pinned_target_key=attrs.get("pinned_target_key"),
+                    local_only_policy=str(attrs.get("local_only_policy", "require_local_target")),
+                    review_required_conditions=list(attrs.get("review_required_conditions", [])),
                     last_rotated_at=attrs.get("last_rotated_at"),
                     rotated_from=row.rotated_from_credential_id,
                     revoked_at=attrs.get("revoked_at"),

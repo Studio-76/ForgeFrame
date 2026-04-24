@@ -13,7 +13,10 @@ from app.approvals.models import parse_shared_approval_id
 from app.conversations.models import (
     AppendConversationMessage,
     ConversationDetail,
+    ConversationEventRecord,
     ConversationMessageRecord,
+    ConversationMentionRecord,
+    ConversationParticipantRecord,
     ConversationSessionRecord,
     ConversationSummary,
     ConversationThreadSummary,
@@ -25,15 +28,20 @@ from app.conversations.models import (
     UpdateInboxItem,
 )
 from app.instances.models import InstanceRecord
+from app.storage.agent_repository import AgentORM
 from app.storage.artifact_repository import ArtifactORM
 from app.storage.conversation_repository import (
     ConversationMessageORM,
+    ConversationEventORM,
+    ConversationMentionORM,
     ConversationORM,
+    ConversationParticipantORM,
     ConversationSessionORM,
     ConversationThreadORM,
     InboxItemORM,
 )
 from app.storage.execution_repository import RunApprovalLinkORM, RunORM
+from app.storage.learning_repository import LearningEventORM
 from app.storage.workspace_repository import WorkspaceORM
 
 SessionFactory = Callable[[], Session]
@@ -104,6 +112,54 @@ class ConversationInboxAdminService:
         )
 
     @staticmethod
+    def _participant_record(row: ConversationParticipantORM) -> ConversationParticipantRecord:
+        return ConversationParticipantRecord(
+            participant_id=row.id,
+            conversation_id=row.conversation_id,
+            thread_id=row.thread_id,
+            participant_kind=row.participant_kind,  # type: ignore[arg-type]
+            participant_status=row.participant_status,  # type: ignore[arg-type]
+            agent_id=row.agent_id,
+            participant_ref=row.participant_ref,
+            display_label=row.display_label,
+            metadata=dict(row.metadata_json or {}),
+            created_at=row.created_at,
+            updated_at=row.updated_at,
+        )
+
+    @staticmethod
+    def _mention_record(row: ConversationMentionORM) -> ConversationMentionRecord:
+        return ConversationMentionRecord(
+            mention_id=row.id,
+            conversation_id=row.conversation_id,
+            thread_id=row.thread_id,
+            message_id=row.message_id,
+            agent_id=row.agent_id,
+            token=row.token,
+            agent_display_name=row.agent_display_name,
+            status=row.status,  # type: ignore[arg-type]
+            metadata=dict(row.metadata_json or {}),
+            created_at=row.created_at,
+        )
+
+    @staticmethod
+    def _event_record(row: ConversationEventORM) -> ConversationEventRecord:
+        return ConversationEventRecord(
+            event_id=row.id,
+            conversation_id=row.conversation_id,
+            thread_id=row.thread_id,
+            source_message_id=row.source_message_id,
+            event_type=row.event_type,  # type: ignore[arg-type]
+            source_agent_id=row.source_agent_id,
+            target_agent_id=row.target_agent_id,
+            related_object_type=row.related_object_type,
+            related_object_id=row.related_object_id,
+            summary=row.summary,
+            metadata=dict(row.metadata_json or {}),
+            created_at=row.created_at,
+        )
+
+    @staticmethod
     def _inbox_summary(row: InboxItemORM) -> InboxSummary:
         return InboxSummary(
             inbox_id=row.id,
@@ -127,6 +183,74 @@ class ConversationInboxAdminService:
             created_at=row.created_at,
             updated_at=row.updated_at,
         )
+
+    @staticmethod
+    def _load_agent(session: Session, *, instance: InstanceRecord, agent_id: str) -> AgentORM:
+        agent = session.get(AgentORM, agent_id)
+        if agent is None or agent.company_id != instance.company_id or agent.instance_id != instance.instance_id:
+            raise ValueError(f"Agent '{agent_id}' was not found.")
+        if agent.status != "active":
+            raise ValueError(f"Agent '{agent_id}' is not active.")
+        return agent
+
+    def _upsert_agent_participant(
+        self,
+        session: Session,
+        *,
+        instance: InstanceRecord,
+        conversation_id: str,
+        thread_id: str | None,
+        agent_id: str,
+        participant_status: str,
+        metadata: dict[str, object] | None = None,
+    ) -> ConversationParticipantORM:
+        agent = self._load_agent(session, instance=instance, agent_id=agent_id)
+        existing = next(
+            (
+                row
+                for row in session.new
+                if isinstance(row, ConversationParticipantORM)
+                and row.company_id == instance.company_id
+                and row.conversation_id == conversation_id
+                and row.agent_id == agent_id
+            ),
+            None,
+        )
+        if existing is None:
+            existing = session.execute(
+                select(ConversationParticipantORM).where(
+                    ConversationParticipantORM.company_id == instance.company_id,
+                    ConversationParticipantORM.conversation_id == conversation_id,
+                    ConversationParticipantORM.agent_id == agent_id,
+                )
+            ).scalars().first()
+        now = self._now()
+        if existing is not None:
+            existing.thread_id = thread_id or existing.thread_id
+            existing.participant_status = participant_status
+            existing.display_label = agent.display_name
+            merged_metadata = dict(existing.metadata_json or {})
+            if metadata:
+                merged_metadata.update(metadata)
+            existing.metadata_json = merged_metadata
+            existing.updated_at = now
+            return existing
+        row = ConversationParticipantORM(
+            id=self._new_id("participant"),
+            company_id=instance.company_id,
+            conversation_id=conversation_id,
+            thread_id=thread_id,
+            participant_kind="agent",
+            participant_status=participant_status,
+            agent_id=agent.id,
+            participant_ref=f"agent://{instance.instance_id}/{agent.id}",
+            display_label=agent.display_name,
+            metadata_json=dict(metadata or {}),
+            created_at=now,
+            updated_at=now,
+        )
+        session.add(row)
+        return row
 
     def _conversation_summary(self, session: Session, row: ConversationORM) -> ConversationSummary:
         thread_count = session.scalar(
@@ -153,6 +277,24 @@ class ConversationInboxAdminService:
                 InboxItemORM.conversation_id == row.id,
             )
         ) or 0
+        participant_rows = session.execute(
+            select(ConversationParticipantORM).where(
+                ConversationParticipantORM.company_id == row.company_id,
+                ConversationParticipantORM.conversation_id == row.id,
+            )
+        ).scalars().all()
+        mention_count = session.scalar(
+            select(func.count()).select_from(ConversationMentionORM).where(
+                ConversationMentionORM.company_id == row.company_id,
+                ConversationMentionORM.conversation_id == row.id,
+            )
+        ) or 0
+        event_count = session.scalar(
+            select(func.count()).select_from(ConversationEventORM).where(
+                ConversationEventORM.company_id == row.company_id,
+                ConversationEventORM.conversation_id == row.id,
+            )
+        ) or 0
         return ConversationSummary(
             conversation_id=row.id,
             instance_id=row.instance_id,
@@ -174,6 +316,10 @@ class ConversationInboxAdminService:
             session_count=int(session_count),
             message_count=int(message_count),
             inbox_count=int(inbox_count),
+            participant_count=len(participant_rows),
+            mention_count=int(mention_count),
+            event_count=int(event_count),
+            participant_agent_ids=[item.agent_id for item in participant_rows if item.agent_id],
             latest_message_at=row.latest_message_at,
             created_at=row.created_at,
             updated_at=row.updated_at,
@@ -257,6 +403,7 @@ class ConversationInboxAdminService:
         instance: InstanceRecord,
         status: str | None = None,
         triage_status: str | None = None,
+        agent_id: str | None = None,
         limit: int = 100,
     ) -> list[ConversationSummary]:
         with self._session_factory() as session:
@@ -268,9 +415,34 @@ class ConversationInboxAdminService:
                 stmt = stmt.where(ConversationORM.status == status)
             if triage_status is not None:
                 stmt = stmt.where(ConversationORM.triage_status == triage_status)
-            rows = session.execute(
-                stmt.order_by(ConversationORM.updated_at.desc()).limit(max(1, min(limit, 200)))
-            ).scalars().all()
+            rows = session.execute(stmt.order_by(ConversationORM.updated_at.desc())).scalars().all()
+            if agent_id is not None:
+                rows = [
+                    row
+                    for row in rows
+                    if session.execute(
+                        select(ConversationParticipantORM).where(
+                            ConversationParticipantORM.company_id == instance.company_id,
+                            ConversationParticipantORM.conversation_id == row.id,
+                            ConversationParticipantORM.agent_id == agent_id,
+                        )
+                    ).scalars().first() is not None
+                    or session.execute(
+                        select(ConversationMentionORM).where(
+                            ConversationMentionORM.company_id == instance.company_id,
+                            ConversationMentionORM.conversation_id == row.id,
+                            ConversationMentionORM.agent_id == agent_id,
+                        )
+                    ).scalars().first() is not None
+                    or session.execute(
+                        select(ConversationEventORM).where(
+                            ConversationEventORM.company_id == instance.company_id,
+                            ConversationEventORM.conversation_id == row.id,
+                            ConversationEventORM.target_agent_id == agent_id,
+                        )
+                    ).scalars().first() is not None
+                ]
+            rows = rows[: max(1, min(limit, 200))]
             return [self._conversation_summary(session, row) for row in rows]
 
     def get_conversation(self, *, instance: InstanceRecord, conversation_id: str) -> ConversationDetail:
@@ -310,6 +482,30 @@ class ConversationInboxAdminService:
                 )
                 .order_by(InboxItemORM.updated_at.desc())
             ).scalars().all()
+            participant_rows = session.execute(
+                select(ConversationParticipantORM)
+                .where(
+                    ConversationParticipantORM.company_id == instance.company_id,
+                    ConversationParticipantORM.conversation_id == conversation_id,
+                )
+                .order_by(ConversationParticipantORM.updated_at.desc())
+            ).scalars().all()
+            mention_rows = session.execute(
+                select(ConversationMentionORM)
+                .where(
+                    ConversationMentionORM.company_id == instance.company_id,
+                    ConversationMentionORM.conversation_id == conversation_id,
+                )
+                .order_by(ConversationMentionORM.created_at.desc())
+            ).scalars().all()
+            event_rows = session.execute(
+                select(ConversationEventORM)
+                .where(
+                    ConversationEventORM.company_id == instance.company_id,
+                    ConversationEventORM.conversation_id == conversation_id,
+                )
+                .order_by(ConversationEventORM.created_at.desc())
+            ).scalars().all()
 
             return ConversationDetail(
                 **summary.model_dump(),
@@ -345,6 +541,9 @@ class ConversationInboxAdminService:
                 ],
                 messages=[self._message_record(message) for message in message_rows],
                 inbox_items=[self._inbox_summary(item) for item in inbox_rows],
+                participants=[self._participant_record(item) for item in participant_rows],
+                mentions=[self._mention_record(item) for item in mention_rows],
+                events=[self._event_record(item) for item in event_rows],
             )
 
     def _create_inbox_row(
@@ -394,6 +593,227 @@ class ConversationInboxAdminService:
         session.add(row)
         return row
 
+    def _create_learning_event_for_session_rotation(
+        self,
+        session: Session,
+        *,
+        instance: InstanceRecord,
+        conversation_id: str,
+        thread_id: str,
+        session_id: str,
+    ) -> None:
+        session.add(
+            LearningEventORM(
+                id=self._new_id("learning"),
+                instance_id=instance.instance_id,
+                company_id=instance.company_id,
+                trigger_kind="session_rotation",
+                suggested_decision="review_required",
+                status="pending",
+                summary="Session rotation created a new conversation continuity boundary.",
+                explanation="ForgeFrame opened a new conversation session and persisted a learning-review item for memory or skill promotion.",
+                conversation_id=conversation_id,
+                evidence_json={
+                    "thread_id": thread_id,
+                    "session_id": session_id,
+                    "trigger": "conversation_session_rotation",
+                },
+                proposed_memory_json={
+                    "memory_kind": "summary",
+                    "title": "Session rotation summary candidate",
+                    "body": "Review whether this session boundary should produce durable memory.",
+                },
+                proposed_skill_json={},
+                created_at=self._now(),
+            )
+        )
+
+    def _create_agent_event(
+        self,
+        session: Session,
+        *,
+        instance: InstanceRecord,
+        conversation_id: str,
+        thread_id: str,
+        source_message_id: str,
+        event_type: str,
+        target_agent_id: str | None,
+        related_object_type: str | None,
+        related_object_id: str | None,
+        summary: str,
+        metadata: dict[str, object] | None = None,
+    ) -> None:
+        session.add(
+            ConversationEventORM(
+                id=self._new_id("convevent"),
+                company_id=instance.company_id,
+                conversation_id=conversation_id,
+                thread_id=thread_id,
+                source_message_id=source_message_id,
+                event_type=event_type,
+                source_agent_id=None,
+                target_agent_id=target_agent_id,
+                related_object_type=related_object_type,
+                related_object_id=related_object_id,
+                summary=summary,
+                metadata_json=dict(metadata or {}),
+                created_at=self._now(),
+            )
+        )
+
+    def _apply_message_agent_links(
+        self,
+        session: Session,
+        *,
+        instance: InstanceRecord,
+        conversation_id: str,
+        thread_id: str,
+        message_id: str,
+        mention_agent_ids: list[str],
+        handoff_to_agent_id: str | None,
+        review_request_agent_id: str | None,
+        blocker_agent_id: str | None,
+        roundtable_agent_ids: list[str],
+    ) -> None:
+        for agent_id in mention_agent_ids:
+            agent = self._load_agent(session, instance=instance, agent_id=agent_id)
+            self._upsert_agent_participant(
+                session,
+                instance=instance,
+                conversation_id=conversation_id,
+                thread_id=thread_id,
+                agent_id=agent.id,
+                participant_status="mentioned",
+                metadata={"message_id": message_id},
+            )
+            session.add(
+                ConversationMentionORM(
+                    id=self._new_id("mention"),
+                    company_id=instance.company_id,
+                    conversation_id=conversation_id,
+                    thread_id=thread_id,
+                    message_id=message_id,
+                    agent_id=agent.id,
+                    token=f"@{agent.display_name}",
+                    agent_display_name=agent.display_name,
+                    status="active",
+                    metadata_json={},
+                    created_at=self._now(),
+                )
+            )
+            self._create_agent_event(
+                session,
+                instance=instance,
+                conversation_id=conversation_id,
+                thread_id=thread_id,
+                source_message_id=message_id,
+                event_type="mention_event",
+                target_agent_id=agent.id,
+                related_object_type="mention",
+                related_object_id=agent.id,
+                summary=f"Mentioned @{agent.display_name}",
+            )
+        if handoff_to_agent_id:
+            handoff_agent = self._load_agent(session, instance=instance, agent_id=handoff_to_agent_id)
+            self._upsert_agent_participant(
+                session,
+                instance=instance,
+                conversation_id=conversation_id,
+                thread_id=thread_id,
+                agent_id=handoff_agent.id,
+                participant_status="handoff_pending",
+                metadata={"message_id": message_id},
+            )
+            self._create_agent_event(
+                session,
+                instance=instance,
+                conversation_id=conversation_id,
+                thread_id=thread_id,
+                source_message_id=message_id,
+                event_type="handoff_event",
+                target_agent_id=handoff_agent.id,
+                related_object_type="agent",
+                related_object_id=handoff_agent.id,
+                summary=f"Handoff requested to {handoff_agent.display_name}",
+            )
+        if review_request_agent_id:
+            review_agent = self._load_agent(session, instance=instance, agent_id=review_request_agent_id)
+            self._upsert_agent_participant(
+                session,
+                instance=instance,
+                conversation_id=conversation_id,
+                thread_id=thread_id,
+                agent_id=review_agent.id,
+                participant_status="review_requested",
+                metadata={"message_id": message_id},
+            )
+            self._create_agent_event(
+                session,
+                instance=instance,
+                conversation_id=conversation_id,
+                thread_id=thread_id,
+                source_message_id=message_id,
+                event_type="review_request_event",
+                target_agent_id=review_agent.id,
+                related_object_type="agent",
+                related_object_id=review_agent.id,
+                summary=f"Review requested from {review_agent.display_name}",
+            )
+        if blocker_agent_id:
+            blocker_agent = self._load_agent(session, instance=instance, agent_id=blocker_agent_id)
+            self._upsert_agent_participant(
+                session,
+                instance=instance,
+                conversation_id=conversation_id,
+                thread_id=thread_id,
+                agent_id=blocker_agent.id,
+                participant_status="blocked",
+                metadata={"message_id": message_id},
+            )
+            self._create_agent_event(
+                session,
+                instance=instance,
+                conversation_id=conversation_id,
+                thread_id=thread_id,
+                source_message_id=message_id,
+                event_type="blocker_event",
+                target_agent_id=blocker_agent.id,
+                related_object_type="agent",
+                related_object_id=blocker_agent.id,
+                summary=f"Blocker escalated to {blocker_agent.display_name}",
+            )
+        unique_roundtable_agents = []
+        for agent_id in roundtable_agent_ids:
+            if agent_id not in unique_roundtable_agents:
+                unique_roundtable_agents.append(agent_id)
+        if unique_roundtable_agents:
+            labels: list[str] = []
+            for agent_id in unique_roundtable_agents:
+                agent = self._load_agent(session, instance=instance, agent_id=agent_id)
+                labels.append(agent.display_name)
+                self._upsert_agent_participant(
+                    session,
+                    instance=instance,
+                    conversation_id=conversation_id,
+                    thread_id=thread_id,
+                    agent_id=agent.id,
+                    participant_status="roundtable",
+                    metadata={"message_id": message_id},
+                )
+            self._create_agent_event(
+                session,
+                instance=instance,
+                conversation_id=conversation_id,
+                thread_id=thread_id,
+                source_message_id=message_id,
+                event_type="roundtable_event",
+                target_agent_id=None,
+                related_object_type="agents",
+                related_object_id=",".join(unique_roundtable_agents),
+                summary=f"Roundtable requested with {', '.join(labels)}",
+                metadata={"agent_ids": unique_roundtable_agents},
+            )
+
     def create_conversation(
         self,
         *,
@@ -419,6 +839,7 @@ class ConversationInboxAdminService:
             now = self._now()
             thread_id = self._new_id("thread")
             session_id = self._new_id("session")
+            message_id = self._new_id("message")
             row = ConversationORM(
                 id=conversation_id,
                 instance_id=instance.instance_id,
@@ -469,7 +890,7 @@ class ConversationInboxAdminService:
             )
             session.add(
                 ConversationMessageORM(
-                    id=self._new_id("message"),
+                    id=message_id,
                     company_id=instance.company_id,
                     conversation_id=conversation_id,
                     thread_id=thread_id,
@@ -481,6 +902,28 @@ class ConversationInboxAdminService:
                     structured_payload_json={},
                     created_at=now,
                 )
+            )
+            for agent_id in payload.participant_agent_ids:
+                self._upsert_agent_participant(
+                    session,
+                    instance=instance,
+                    conversation_id=conversation_id,
+                    thread_id=thread_id,
+                    agent_id=agent_id,
+                    participant_status="active",
+                    metadata={"source": "conversation_create"},
+                )
+            self._apply_message_agent_links(
+                session,
+                instance=instance,
+                conversation_id=conversation_id,
+                thread_id=thread_id,
+                message_id=message_id,
+                mention_agent_ids=payload.initial_mention_agent_ids,
+                handoff_to_agent_id=None,
+                review_request_agent_id=None,
+                blocker_agent_id=None,
+                roundtable_agent_ids=[],
             )
             if payload.create_inbox_entry:
                 self._create_inbox_row(
@@ -583,6 +1026,7 @@ class ConversationInboxAdminService:
                 conversation.active_thread_id = thread.id
 
             session_row: ConversationSessionORM | None = None
+            started_new_session = False
             if payload.session_id is not None:
                 session_row = session.get(ConversationSessionORM, payload.session_id)
                 if session_row is None or session_row.company_id != instance.company_id or session_row.conversation_id != conversation_id:
@@ -605,6 +1049,7 @@ class ConversationInboxAdminService:
                     started_at=now,
                 )
                 session.add(session_row)
+                started_new_session = True
             else:
                 session_row = session.execute(
                     select(ConversationSessionORM)
@@ -628,10 +1073,12 @@ class ConversationInboxAdminService:
                         started_at=now,
                     )
                     session.add(session_row)
+                    started_new_session = True
 
+            message_id = self._new_id("message")
             session.add(
                 ConversationMessageORM(
-                    id=self._new_id("message"),
+                    id=message_id,
                     company_id=instance.company_id,
                     conversation_id=conversation_id,
                     thread_id=thread.id,
@@ -644,6 +1091,26 @@ class ConversationInboxAdminService:
                     created_at=now,
                 )
             )
+            self._apply_message_agent_links(
+                session,
+                instance=instance,
+                conversation_id=conversation_id,
+                thread_id=thread.id,
+                message_id=message_id,
+                mention_agent_ids=payload.mention_agent_ids,
+                handoff_to_agent_id=payload.handoff_to_agent_id,
+                review_request_agent_id=payload.review_request_agent_id,
+                blocker_agent_id=payload.blocker_agent_id,
+                roundtable_agent_ids=payload.roundtable_agent_ids,
+            )
+            if started_new_session and session_row is not None:
+                self._create_learning_event_for_session_rotation(
+                    session,
+                    instance=instance,
+                    conversation_id=conversation_id,
+                    thread_id=thread.id,
+                    session_id=session_row.id,
+                )
             thread.latest_message_at = now
             thread.updated_at = now
             conversation.latest_message_at = now
