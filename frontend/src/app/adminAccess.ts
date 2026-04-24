@@ -29,6 +29,7 @@ const LEGACY_INSTANCE_PERMISSIONS_BY_ROLE: Record<AdminRole, readonly AdminPermi
   ],
   admin: [
     "instance.read",
+    "instance.write",
     "providers.read",
     "providers.write",
     "provider_targets.read",
@@ -57,7 +58,7 @@ const LEGACY_INSTANCE_PERMISSIONS_BY_ROLE: Record<AdminRole, readonly AdminPermi
     "audit.read",
     "settings.read",
   ],
-  viewer: ["instance.read", "audit.read", "settings.read"],
+  viewer: ["instance.read", "settings.read"],
 };
 
 export function roleAllows(role: AdminRole | null | undefined, requiredRole: AdminRole): boolean {
