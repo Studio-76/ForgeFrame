@@ -1,5 +1,30 @@
 #!/usr/bin/env bash
 
+forgeframe_null_device() {
+  local fallback="${TMPDIR:-/tmp}/forgeframe-discard"
+  local probe_error="${TMPDIR:-/tmp}/forgeframe-dev-null-probe.err"
+
+  if ( : > /dev/null ) 2>"$probe_error"; then
+    rm -f "$probe_error"
+    printf '%s\n' "/dev/null"
+    return 0
+  fi
+
+  : > "$fallback"
+  rm -f "$probe_error"
+  printf '%s\n' "$fallback"
+}
+
+forgeframe_command_exists() {
+  local command_name="$1"
+  local null_device="${FORGEFRAME_NULL_DEVICE:-}"
+
+  if [[ -z "$null_device" ]]; then
+    null_device="$(forgeframe_null_device)"
+  fi
+  command -v "$command_name" >"$null_device" 2>&1
+}
+
 forgeframe_default_env_file() {
   local root_dir="$1"
 
@@ -76,7 +101,9 @@ forgeframe_is_placeholder_value() {
   local value="${1:-}"
   local normalized
 
-  normalized="$(printf '%s' "$value" | tr '[:upper:]' '[:lower:]' | xargs)"
+  normalized="$(printf '%s' "$value" | tr '[:upper:]' '[:lower:]')"
+  normalized="${normalized#"${normalized%%[![:space:]]*}"}"
+  normalized="${normalized%"${normalized##*[![:space:]]}"}"
   [[ -z "$normalized" ]] && return 0
   [[ "$normalized" == replace-with-* ]] && return 0
   [[ "$normalized" == *".example.invalid" ]] && return 0
@@ -259,7 +286,7 @@ print(f"fg-admin-{secrets.token_urlsafe(18)}")
 PY
   )" || return 1
 
-  curl -sS -o /dev/null -X POST "${base_url}/admin/auth/rotate-password" \
+  curl -sS -o "${FORGEFRAME_NULL_DEVICE:-$(forgeframe_null_device)}" -X POST "${base_url}/admin/auth/rotate-password" \
     -H "$(cat "$auth_header_file")" \
     -H 'Content-Type: application/json' \
     -d "{\"current_password\":\"${FORGEFRAME_BOOTSTRAP_ADMIN_PASSWORD}\",\"new_password\":\"${new_password}\"}" || return 1

@@ -4,6 +4,7 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 # shellcheck source=./lib/forgeframe-env.sh
 source "$ROOT_DIR/scripts/lib/forgeframe-env.sh"
+FORGEFRAME_NULL_DEVICE="$(forgeframe_null_device)"
 
 log() {
   printf "[forgeframe-public] %s\n" "$*" >&2
@@ -29,7 +30,7 @@ PYTHON_BIN="${FORGEFRAME_PYTHON_BIN:-}"
 if [[ -z "$PYTHON_BIN" ]]; then
   if [[ -x "$ROOT_DIR/.venv/bin/python" ]]; then
     PYTHON_BIN="$ROOT_DIR/.venv/bin/python"
-  elif command -v python3 >/dev/null 2>&1; then
+  elif forgeframe_command_exists python3; then
     PYTHON_BIN="$(command -v python3)"
   else
     fail "python3 is required."

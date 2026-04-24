@@ -1,0 +1,20 @@
+[Unit]
+Description=ForgeFrame retention maintenance
+After=network-online.target
+Wants=network-online.target
+ConditionPathExists=/opt/ForgeFrame/.install/etc/forgeframe.env
+
+[Service]
+Type=oneshot
+User=root
+Group=root
+WorkingDirectory=/opt/ForgeFrame
+Environment=FORGEFRAME_ENV_FILE=/opt/ForgeFrame/.install/etc/forgeframe.env
+ExecStart=/opt/ForgeFrame/.venv/bin/python /opt/ForgeFrame/scripts/run-history-retention.py --apply
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=full
+ReadWritePaths=/opt/ForgeFrame/.install/lib /opt/ForgeFrame/backend/.forgeframe
+StandardOutput=journal
+StandardError=journal

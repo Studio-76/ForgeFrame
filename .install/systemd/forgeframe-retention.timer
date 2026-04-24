@@ -1,0 +1,11 @@
+[Unit]
+Description=Run ForgeFrame retention maintenance every hour
+
+[Timer]
+OnBootSec=15m
+OnUnitActiveSec=1h
+Unit=forgeframe-retention.service
+Persistent=true
+
+[Install]
+WantedBy=timers.target

@@ -4,6 +4,7 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 # shellcheck source=./lib/forgeframe-env.sh
 source "$ROOT_DIR/scripts/lib/forgeframe-env.sh"
+FORGEFRAME_NULL_DEVICE="$(forgeframe_null_device)"
 
 ENV_FILE="$(forgeframe_default_env_file "$ROOT_DIR")"
 if [[ -f "$ENV_FILE" ]]; then
@@ -13,7 +14,7 @@ fi
 log() { printf '[forgeframe-acme] %s\n' "$*" >&2; }
 fail() { printf '[forgeframe-acme][ERROR] %s\n' "$*" >&2; exit 1; }
 
-command -v certbot >/dev/null 2>&1 || fail "certbot is required."
+forgeframe_command_exists certbot || fail "certbot is required."
 : "${FORGEFRAME_PUBLIC_FQDN:?FORGEFRAME_PUBLIC_FQDN must be set}"
 : "${FORGEFRAME_PUBLIC_TLS_ACME_EMAIL:?FORGEFRAME_PUBLIC_TLS_ACME_EMAIL must be set}"
 : "${FORGEFRAME_PUBLIC_TLS_WEBROOT_PATH:?FORGEFRAME_PUBLIC_TLS_WEBROOT_PATH must be set}"

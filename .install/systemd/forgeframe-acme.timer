@@ -1,0 +1,11 @@
+[Unit]
+Description=Run ForgeFrame ACME renewal every 12 hours
+
+[Timer]
+OnBootSec=10m
+OnUnitActiveSec=12h
+Unit=forgeframe-acme.service
+Persistent=true
+
+[Install]
+WantedBy=timers.target

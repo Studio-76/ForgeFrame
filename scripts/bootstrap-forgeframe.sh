@@ -4,15 +4,26 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 # shellcheck source=./lib/forgeframe-env.sh
 source "$ROOT_DIR/scripts/lib/forgeframe-env.sh"
+FORGEFRAME_NULL_DEVICE="$(forgeframe_null_device)"
 
 ENV_FILE="${FORGEFRAME_ENV_FILE:-/etc/forgeframe/forgeframe.env}"
 SKIP_SYSTEMCTL="${FORGEFRAME_BOOTSTRAP_SKIP_SYSTEMCTL:-0}"
 ALLOW_LIMITED_EXCEPTION="${FORGEFRAME_BOOTSTRAP_ALLOW_LIMITED_EXCEPTION:-0}"
 INSTALL_ARGS=()
 GUIDED=0
+LOCAL_API_PID=""
 
 log() { printf "[forgeframe-bootstrap] %s\n" "$*"; }
 fail() { printf "[forgeframe-bootstrap][ERROR] %s\n" "$*" >&2; exit 1; }
+
+start_local_api_without_systemd() {
+  local log_file="${FORGEFRAME_BOOTSTRAP_LOCAL_API_LOG:-$ROOT_DIR/.install/log/forgeframe-api-local.log}"
+
+  mkdir -p "$(dirname "$log_file")"
+  FORGEFRAME_ENV_FILE="$ENV_FILE" "$ROOT_DIR/scripts/start-forgeframe.sh" >"$log_file" 2>&1 <"$FORGEFRAME_NULL_DEVICE" &
+  LOCAL_API_PID="$!"
+  log "Started local ForgeFrame API without systemd as PID $LOCAL_API_PID; log: $log_file"
+}
 
 while [[ "$#" -gt 0 ]]; do
   case "$1" in
@@ -41,8 +52,8 @@ while [[ "$#" -gt 0 ]]; do
 done
 
 [[ "$(uname -s)" == "Linux" ]] || fail "The normative bootstrap path is Linux host-native only."
-command -v python3 >/dev/null 2>&1 || fail "python3 is required."
-command -v curl >/dev/null 2>&1 || fail "curl is required."
+forgeframe_command_exists python3 || fail "python3 is required."
+forgeframe_command_exists curl || fail "curl is required."
 
 if [[ "$GUIDED" == "1" && "$SKIP_SYSTEMCTL" != "1" && "$(id -u)" -ne 0 ]]; then
   fail "Guided bootstrap needs root so ForgeFrame can claim ports 80 and 443, install systemd units, and leave the operator UI login-ready."
@@ -78,7 +89,7 @@ if (( ${#public_contract_errors[@]} > 0 )) && [[ "$ALLOW_LIMITED_EXCEPTION" != "
 fi
 
 if [[ "$SKIP_SYSTEMCTL" != "1" ]]; then
-  command -v systemctl >/dev/null 2>&1 || fail "systemctl is required for the normative bootstrap path."
+  forgeframe_command_exists systemctl || fail "systemctl is required for the normative bootstrap path."
   systemctl enable --now forgeframe-api.service forgeframe-retention.timer
   log "Enabled and started forgeframe-api.service plus forgeframe-retention.timer"
   if (( ${#public_contract_errors[@]} == 0 )); then
@@ -92,6 +103,7 @@ if [[ "$SKIP_SYSTEMCTL" != "1" ]]; then
   fi
 else
   log "Skipping systemctl enable/start because FORGEFRAME_BOOTSTRAP_SKIP_SYSTEMCTL=1"
+  start_local_api_without_systemd
 fi
 
 log "Running host-native smoke validation..."

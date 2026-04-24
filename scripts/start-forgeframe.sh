@@ -4,6 +4,7 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 # shellcheck source=./lib/forgeframe-env.sh
 source "$ROOT_DIR/scripts/lib/forgeframe-env.sh"
+FORGEFRAME_NULL_DEVICE="$(forgeframe_null_device)"
 
 log() {
   printf "[forgeframe-startup] %s\n" "$*" >&2
@@ -24,9 +25,9 @@ PYTHON_BIN="${FORGEFRAME_PYTHON_BIN:-}"
 if [[ -z "$PYTHON_BIN" ]]; then
   if [[ -x "$ROOT_DIR/.venv/bin/python" ]]; then
     PYTHON_BIN="$ROOT_DIR/.venv/bin/python"
-  elif command -v python3 >/dev/null 2>&1; then
+  elif forgeframe_command_exists python3; then
     PYTHON_BIN="$(command -v python3)"
-  elif command -v python >/dev/null 2>&1; then
+  elif forgeframe_command_exists python; then
     PYTHON_BIN="$(command -v python)"
   else
     fail "Neither FORGEFRAME_PYTHON_BIN nor a local python interpreter is available."
@@ -37,6 +38,11 @@ MIGRATION_ATTEMPTS="${FORGEFRAME_STARTUP_MIGRATION_ATTEMPTS:-10}"
 MIGRATION_DELAY_SECONDS="${FORGEFRAME_STARTUP_MIGRATION_DELAY_SECONDS:-2}"
 DEFAULT_HOST="${FORGEFRAME_HOST:-127.0.0.1}"
 DEFAULT_PORT="${FORGEFRAME_PORT:-8080}"
+
+if [[ "${FORGEFRAME_LIMITED_STDLIB_RUNTIME:-0}" == "1" ]]; then
+  log "Starting limited stdlib runtime because FORGEFRAME_LIMITED_STDLIB_RUNTIME=1"
+  exec "$PYTHON_BIN" "$ROOT_DIR/scripts/serve-limited-forgeframe.py"
+fi
 
 for ((attempt = 1; attempt <= MIGRATION_ATTEMPTS; attempt++)); do
   if migration_report="$("$PYTHON_BIN" "$ROOT_DIR/scripts/apply-storage-migrations.py" 2>&1)"; then
