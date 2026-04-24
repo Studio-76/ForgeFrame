@@ -15,6 +15,8 @@ STATE_DIR="${FORGEFRAME_STATE_DIR:-/var/lib/forgeframe}"
 LOG_DIR="${FORGEFRAME_LOG_DIR:-/var/log/forgeframe}"
 UNIT_DIR="${FORGEFRAME_SYSTEMD_UNIT_DIR:-/etc/systemd/system}"
 ENV_FILE="${FORGEFRAME_ENV_FILE:-$CONFIG_DIR/forgeframe.env}"
+ENV_FILE_EXPLICIT=0
+[[ -n "${FORGEFRAME_ENV_FILE:-}" ]] && ENV_FILE_EXPLICIT=1
 SYSTEM_USER="${FORGEFRAME_SYSTEM_USER:-forgeframe}"
 SYSTEM_GROUP="${FORGEFRAME_SYSTEM_GROUP:-forgeframe}"
 SKIP_SYSTEM_DEPS="${FORGEFRAME_INSTALL_SKIP_SYSTEM_DEPS:-0}"
@@ -378,7 +380,11 @@ def scrub_postgres_url(value: str) -> str:
     hostname = parts.hostname or "127.0.0.1"
     if ":" in hostname and not hostname.startswith("["):
         hostname = f"[{hostname}]"
-    port = f":{parts.port}" if parts.port else ""
+    try:
+        parsed_port = parts.port
+    except ValueError:
+        return f"{scheme}://forgeframe:replace-with-a-generated-postgres-password@127.0.0.1:5432/forgeframe"
+    port = f":{parsed_port}" if parsed_port else ""
     netloc = f"{quote(username, safe='')}:{quote(password, safe='')}@{hostname}{port}"
     path = parts.path or "/forgeframe"
     return urlunsplit((parts.scheme or scheme, netloc, path, parts.query, parts.fragment))
@@ -1322,6 +1328,7 @@ while [[ "$#" -gt 0 ]]; do
       ;;
     --env-file)
       ENV_FILE="$2"
+      ENV_FILE_EXPLICIT=1
       shift 2
       ;;
     --system-user)
@@ -1392,6 +1399,9 @@ CONFIG_DIR="$(python3 -c 'from pathlib import Path; import sys; print(Path(sys.a
 STATE_DIR="$(python3 -c 'from pathlib import Path; import sys; print(Path(sys.argv[1]).expanduser().resolve())' "$STATE_DIR")"
 LOG_DIR="$(python3 -c 'from pathlib import Path; import sys; print(Path(sys.argv[1]).expanduser().resolve())' "$LOG_DIR")"
 UNIT_DIR="$(python3 -c 'from pathlib import Path; import sys; print(Path(sys.argv[1]).expanduser().resolve())' "$UNIT_DIR")"
+if [[ "$ENV_FILE_EXPLICIT" != "1" ]]; then
+  ENV_FILE="$CONFIG_DIR/forgeframe.env"
+fi
 ENV_FILE="$(python3 -c 'from pathlib import Path; import sys; print(Path(sys.argv[1]).expanduser().resolve())' "$ENV_FILE")"
 
 if [[ "$DRY_RUN" == "1" ]]; then
@@ -1532,6 +1542,85 @@ def secure_pg_password(existing: str, requested: str) -> str:
     return generate_token("fg-pg-")
 
 
+def normalize_host_value(host: str) -> str:
+    normalized = host.strip()
+    if normalized.startswith("[") and normalized.endswith("]"):
+        return normalized[1:-1]
+    if normalized.startswith("["):
+        return normalized[1:]
+    if normalized.endswith("]"):
+        return normalized[:-1]
+    return normalized
+
+
+def host_for_url(host: str) -> str:
+    normalized = normalize_host_value(host)
+    if ":" in normalized:
+        return f"[{normalized}]"
+    return normalized
+
+
+def repair_unbracketed_ipv6_netloc(value: str) -> str:
+    prefix, separator, rest = value.partition("://")
+    if not separator:
+        return value
+
+    netloc_end = len(rest)
+    for delimiter in ("/", "?", "#"):
+        delimiter_index = rest.find(delimiter)
+        if delimiter_index != -1:
+            netloc_end = min(netloc_end, delimiter_index)
+
+    netloc = rest[:netloc_end]
+    suffix = rest[netloc_end:]
+    if "[" in netloc or "]" in netloc:
+        return value
+
+    userinfo, at, hostport = netloc.rpartition("@")
+    if hostport.count(":") < 2:
+        return value
+
+    host, port_separator, port_candidate = hostport.rpartition(":")
+    port = ""
+    if port_separator and port_candidate.isdigit():
+        port = f":{port_candidate}"
+    else:
+        host = hostport
+
+    if not host:
+        return value
+
+    repaired_netloc = f"[{host}]{port}"
+    if at:
+        repaired_netloc = f"{userinfo}@{repaired_netloc}"
+    return f"{prefix}://{repaired_netloc}{suffix}"
+
+
+def split_postgres_url(value: str):
+    candidates = [repair_unbracketed_ipv6_netloc(value)]
+    if candidates[0] != value:
+        candidates.append(value)
+
+    for candidate in candidates:
+        try:
+            parts = urlsplit(candidate)
+            _ = parts.port
+        except ValueError:
+            continue
+        return parts, candidate
+    return None, ""
+
+
+def build_postgres_url(user: str, password: str, host: str, port: str, database: str) -> str:
+    return "postgresql://{user}:{password}@{host}:{port}/{database}".format(
+        user=quote(user, safe=""),
+        password=quote(password, safe=""),
+        host=host_for_url(host),
+        port=port,
+        database=quote(database, safe=""),
+    )
+
+
 def configure_limited_file_storage() -> None:
     set_or_add("FORGEFRAME_LIMITED_STDLIB_RUNTIME", "1")
     set_or_add("FORGEFRAME_HARNESS_STORAGE_BACKEND", "file")
@@ -1551,15 +1640,22 @@ def configure_limited_file_storage() -> None:
 
 
 def configure_postgres_storage(base_url: str) -> None:
+    if pg_mode == "file":
+        configure_limited_file_storage()
+        return
+
     set_or_add("FORGEFRAME_HARNESS_STORAGE_BACKEND", "postgresql")
     set_or_add("FORGEFRAME_CONTROL_PLANE_STORAGE_BACKEND", "postgresql")
     set_or_add("FORGEFRAME_OBSERVABILITY_STORAGE_BACKEND", "postgresql")
     set_or_add("FORGEFRAME_GOVERNANCE_STORAGE_BACKEND", "postgresql")
     set_or_add("FORGEFRAME_INSTANCES_STORAGE_BACKEND", "postgresql")
-    if pg_mode == "file":
-        configure_limited_file_storage()
-    else:
-        configure_postgres_storage(base_url)
+    set_or_add("FORGEFRAME_POSTGRES_URL", base_url)
+    set_or_add("FORGEFRAME_HARNESS_POSTGRES_URL", base_url)
+    set_or_add("FORGEFRAME_CONTROL_PLANE_POSTGRES_URL", base_url)
+    set_or_add("FORGEFRAME_OBSERVABILITY_POSTGRES_URL", base_url)
+    set_or_add("FORGEFRAME_GOVERNANCE_POSTGRES_URL", base_url)
+    set_or_add("FORGEFRAME_INSTANCES_POSTGRES_URL", base_url)
+    set_or_add("FORGEFRAME_EXECUTION_POSTGRES_URL", base_url)
 
 
 existing_pg_url = entries.get("FORGEFRAME_POSTGRES_URL", "")
@@ -1577,13 +1673,8 @@ if guided:
     pg_db = os.environ.get("FORGEFRAME_INSTALL_PG_DB", "").strip() or entries.get("FORGEFRAME_PG_DB", "").strip() or "forgeframe"
     pg_user = os.environ.get("FORGEFRAME_INSTALL_PG_USER", "").strip() or entries.get("FORGEFRAME_PG_USER", "").strip() or "forgeframe"
     pg_password = secure_pg_password(entries.get("FORGEFRAME_PG_PASSWORD", ""), os.environ.get("FORGEFRAME_INSTALL_PG_PASSWORD", ""))
-    base_url = "postgresql://{user}:{password}@{host}:{port}/{database}".format(
-        user=quote(pg_user, safe=""),
-        password=quote(pg_password, safe=""),
-        host=pg_host,
-        port=pg_port,
-        database=quote(pg_db, safe=""),
-    )
+    pg_host = normalize_host_value(pg_host)
+    base_url = build_postgres_url(pg_user, pg_password, pg_host, pg_port, pg_db)
     set_or_add("FORGEFRAME_PG_MODE", pg_mode)
     set_or_add("FORGEFRAME_PG_HOST", pg_host)
     set_or_add("FORGEFRAME_PG_PORT", pg_port)
@@ -1628,21 +1719,17 @@ else:
     pg_user = os.environ.get("FORGEFRAME_INSTALL_PG_USER", "").strip() or entries.get("FORGEFRAME_PG_USER", "").strip() or "forgeframe"
     existing_pg_password = entries.get("FORGEFRAME_PG_PASSWORD", "")
     if existing_pg_url:
-        parts = urlsplit(existing_pg_url)
-        pg_host = os.environ.get("FORGEFRAME_INSTALL_PG_HOST", "").strip() or entries.get("FORGEFRAME_PG_HOST", "").strip() or parts.hostname or pg_host
-        pg_port = os.environ.get("FORGEFRAME_INSTALL_PG_PORT", "").strip() or entries.get("FORGEFRAME_PG_PORT", "").strip() or (str(parts.port) if parts.port else pg_port)
-        pg_db = os.environ.get("FORGEFRAME_INSTALL_PG_DB", "").strip() or entries.get("FORGEFRAME_PG_DB", "").strip() or (unquote(parts.path.lstrip("/")) if parts.path else pg_db)
-        pg_user = os.environ.get("FORGEFRAME_INSTALL_PG_USER", "").strip() or entries.get("FORGEFRAME_PG_USER", "").strip() or (unquote(parts.username) if parts.username else pg_user)
-        existing_pg_password = existing_pg_password or (unquote(parts.password) if parts.password else "")
+        parts, existing_pg_url = split_postgres_url(existing_pg_url)
+        if parts:
+            pg_host = os.environ.get("FORGEFRAME_INSTALL_PG_HOST", "").strip() or entries.get("FORGEFRAME_PG_HOST", "").strip() or parts.hostname or pg_host
+            pg_port = os.environ.get("FORGEFRAME_INSTALL_PG_PORT", "").strip() or entries.get("FORGEFRAME_PG_PORT", "").strip() or (str(parts.port) if parts.port else pg_port)
+            pg_db = os.environ.get("FORGEFRAME_INSTALL_PG_DB", "").strip() or entries.get("FORGEFRAME_PG_DB", "").strip() or (unquote(parts.path.lstrip("/")) if parts.path else pg_db)
+            pg_user = os.environ.get("FORGEFRAME_INSTALL_PG_USER", "").strip() or entries.get("FORGEFRAME_PG_USER", "").strip() or (unquote(parts.username) if parts.username else pg_user)
+            existing_pg_password = existing_pg_password or (unquote(parts.password) if parts.password else "")
     pg_password = secure_pg_password(existing_pg_password, os.environ.get("FORGEFRAME_INSTALL_PG_PASSWORD", ""))
+    pg_host = normalize_host_value(pg_host)
     if "replace-with-a-generated-postgres-password" in existing_pg_url or "replace-with-postgresql-url" in existing_pg_url or not existing_pg_url:
-        base_url = "postgresql://{user}:{password}@{host}:{port}/{database}".format(
-            user=quote(pg_user, safe=""),
-            password=quote(pg_password, safe=""),
-            host=pg_host,
-            port=pg_port,
-            database=quote(pg_db, safe=""),
-        )
+        base_url = build_postgres_url(pg_user, pg_password, pg_host, pg_port, pg_db)
     else:
         base_url = existing_pg_url
 
