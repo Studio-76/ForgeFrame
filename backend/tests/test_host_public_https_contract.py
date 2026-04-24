@@ -71,6 +71,8 @@ def test_guided_host_install_driver_collects_login_inputs_and_reassigns_non_publ
     assert "Bootstrap admin username" in install_script
     assert "collect_default_install_inputs" in install_script
     assert "ensure_system_dependencies" in install_script
+    assert "install_host_env_template" in install_script
+    assert "embedded host-native environment template" in install_script
     assert "write_local_env_mirrors" in install_script
     assert "write_local_env_examples" in install_script
     assert "$INSTALL_ROOT/.env.host" in install_script
