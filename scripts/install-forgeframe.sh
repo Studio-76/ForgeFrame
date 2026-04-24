@@ -1889,11 +1889,27 @@ fi
 
 if [[ "$SKIP_FRONTEND_BUILD" != "1" ]]; then
   if [[ ! -f "$INSTALL_ROOT/frontend/dist/index.html" ]]; then
+    frontend_log="$LOG_DIR/frontend-build.log"
+    mkdir -p "$LOG_DIR"
+    : >"$frontend_log"
     forgeframe_command_exists npm || fail "npm is required to build the frontend dist."
     if [[ -f "$INSTALL_ROOT/frontend/package-lock.json" || -f "$INSTALL_ROOT/frontend/npm-shrinkwrap.json" ]]; then
-      (cd "$INSTALL_ROOT/frontend" && npm ci >"$FORGEFRAME_NULL_DEVICE" && npm run build >"$FORGEFRAME_NULL_DEVICE")
+      log "Installing frontend dependencies with npm ci (log: $frontend_log)"
+      if ! (cd "$INSTALL_ROOT/frontend" && npm ci) >>"$frontend_log" 2>&1; then
+        tail -80 "$frontend_log" >&2 || true
+        fail "Frontend dependency installation failed with npm ci. Full log: $frontend_log"
+      fi
     else
-      (cd "$INSTALL_ROOT/frontend" && npm install >"$FORGEFRAME_NULL_DEVICE" && npm run build >"$FORGEFRAME_NULL_DEVICE")
+      log "Installing frontend dependencies with npm install (log: $frontend_log)"
+      if ! (cd "$INSTALL_ROOT/frontend" && npm install) >>"$frontend_log" 2>&1; then
+        tail -80 "$frontend_log" >&2 || true
+        fail "Frontend dependency installation failed with npm install. Full log: $frontend_log"
+      fi
+    fi
+    log "Building frontend dist (log: $frontend_log)"
+    if ! (cd "$INSTALL_ROOT/frontend" && npm run build) >>"$frontend_log" 2>&1; then
+      tail -80 "$frontend_log" >&2 || true
+      fail "Frontend build failed. Full log: $frontend_log"
     fi
     log "Built frontend dist into $INSTALL_ROOT/frontend/dist"
   else
