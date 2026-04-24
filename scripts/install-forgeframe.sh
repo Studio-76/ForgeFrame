@@ -1057,6 +1057,7 @@ provision_native_postgres() {
   local cluster_name="$INSTALLER_PG_CLUSTER_NAME"
   local existing_line=""
   local existing_port=""
+  local existing_status=""
 
   validate_pg_identifier "$INSTALLER_PG_USER" "PostgreSQL role"
   validate_pg_identifier "$INSTALLER_PG_DB" "PostgreSQL database"
@@ -1069,8 +1070,14 @@ provision_native_postgres() {
 
   if [[ -n "$existing_line" ]]; then
     existing_port="$(awk '{print $3}' <<<"$existing_line")"
+    existing_status="$(awk '{print $4}' <<<"$existing_line")"
     if [[ "$existing_port" != "$INSTALLER_PG_PORT" ]]; then
-      fail "Native PostgreSQL cluster '$cluster_name' already exists on port $existing_port, not the requested $INSTALLER_PG_PORT."
+      if [[ "$existing_status" == "down" ]] && forgeframe_command_exists pg_conftool; then
+        pg_conftool "$version" "$cluster_name" set port "$INSTALLER_PG_PORT" >"$FORGEFRAME_NULL_DEVICE" || fail "Failed to update PostgreSQL cluster '$cluster_name' to port $INSTALLER_PG_PORT."
+        log "Updated native PostgreSQL cluster '$cluster_name' from port $existing_port to $INSTALLER_PG_PORT."
+      else
+        fail "Native PostgreSQL cluster '$cluster_name' already exists on port $existing_port, not the requested $INSTALLER_PG_PORT."
+      fi
     fi
   else
     forgeframe_command_exists pg_createcluster || fail "pg_createcluster is required to provision a native PostgreSQL cluster."
@@ -1081,15 +1088,9 @@ provision_native_postgres() {
   wait_for_tcp_endpoint "127.0.0.1" "$INSTALLER_PG_PORT" 60 "Native PostgreSQL cluster"
 
   run_postgres_superuser psql -d postgres -v ON_ERROR_STOP=1 -v ff_user="$INSTALLER_PG_USER" -v ff_password="$INSTALLER_PG_PASSWORD" <<'SQL' >"$FORGEFRAME_NULL_DEVICE"
-DO $do$
-BEGIN
-  IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = :'ff_user') THEN
-    EXECUTE format('CREATE ROLE %I LOGIN PASSWORD %L', :'ff_user', :'ff_password');
-  ELSE
-    EXECUTE format('ALTER ROLE %I WITH LOGIN PASSWORD %L', :'ff_user', :'ff_password');
-  END IF;
-END
-$do$;
+SELECT format('CREATE ROLE %I LOGIN PASSWORD %L', :'ff_user', :'ff_password')
+WHERE NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = :'ff_user') \gexec
+SELECT format('ALTER ROLE %I WITH LOGIN PASSWORD %L', :'ff_user', :'ff_password') \gexec
 SQL
 
   run_postgres_superuser psql -d postgres -v ON_ERROR_STOP=1 -v ff_db="$INSTALLER_PG_DB" -v ff_user="$INSTALLER_PG_USER" <<'SQL' >"$FORGEFRAME_NULL_DEVICE"
@@ -1300,6 +1301,50 @@ collect_default_install_inputs() {
   esac
 }
 
+reconcile_install_ports_after_dependencies() {
+  local existing_line
+  local existing_port
+  local existing_status
+  local resolved_pg_port
+
+  INSTALLER_API_PORT="$(resolve_shifted_port "$INSTALLER_API_PORT" "ForgeFrame internal API")"
+
+  case "$INSTALLER_PG_MODE" in
+    native)
+      if forgeframe_command_exists pg_lsclusters; then
+        existing_line="$(pg_lsclusters --no-header 2>"$FORGEFRAME_NULL_DEVICE" | awk -v name="$INSTALLER_PG_CLUSTER_NAME" '$2 == name {print; exit}')"
+        if [[ -n "$existing_line" ]]; then
+          existing_port="$(awk '{print $3}' <<<"$existing_line")"
+          existing_status="$(awk '{print $4}' <<<"$existing_line")"
+          if [[ "$existing_status" == "down" ]] && port_is_occupied "$existing_port"; then
+            resolved_pg_port="$(resolve_shifted_port "$existing_port" "Native PostgreSQL cluster")"
+            log "Native PostgreSQL cluster '$INSTALLER_PG_CLUSTER_NAME' is down on occupied port $existing_port; re-resolved to $resolved_pg_port."
+            INSTALLER_PG_PORT="$resolved_pg_port"
+          else
+            if [[ "$existing_port" != "$INSTALLER_PG_PORT" ]]; then
+              log "Reusing existing native PostgreSQL cluster '$INSTALLER_PG_CLUSTER_NAME' on port $existing_port."
+            fi
+            INSTALLER_PG_PORT="$existing_port"
+          fi
+          return 0
+        fi
+      fi
+      resolved_pg_port="$(resolve_shifted_port "$INSTALLER_PG_PORT" "Native PostgreSQL cluster")"
+      if [[ "$resolved_pg_port" != "$INSTALLER_PG_PORT" ]]; then
+        log "Native PostgreSQL port re-resolved to $resolved_pg_port after host dependency installation."
+        INSTALLER_PG_PORT="$resolved_pg_port"
+      fi
+      ;;
+    docker)
+      resolved_pg_port="$(resolve_shifted_port "$INSTALLER_PG_PORT" "Managed PostgreSQL")"
+      if [[ "$resolved_pg_port" != "$INSTALLER_PG_PORT" ]]; then
+        log "Managed PostgreSQL host port re-resolved to $resolved_pg_port after host dependency installation."
+        INSTALLER_PG_PORT="$resolved_pg_port"
+      fi
+      ;;
+  esac
+}
+
 while [[ "$#" -gt 0 ]]; do
   case "$1" in
     --guided)
@@ -1450,6 +1495,7 @@ if [[ "$INSTALLER_PG_MODE" == "file" && "$ALLOW_FILE_STORAGE" == "1" ]]; then
   log "Limited file/SQLite storage selected; skipping Python dependency install and frontend build for the stdlib bootstrap runtime."
 fi
 ensure_system_dependencies
+reconcile_install_ports_after_dependencies
 
 export FORGEFRAME_INSTALL_GUIDED="$GUIDED"
 export FORGEFRAME_INSTALL_PUBLIC_FQDN="$INSTALLER_PUBLIC_FQDN"
@@ -1728,7 +1774,7 @@ else:
             existing_pg_password = existing_pg_password or (unquote(parts.password) if parts.password else "")
     pg_password = secure_pg_password(existing_pg_password, os.environ.get("FORGEFRAME_INSTALL_PG_PASSWORD", ""))
     pg_host = normalize_host_value(pg_host)
-    if "replace-with-a-generated-postgres-password" in existing_pg_url or "replace-with-postgresql-url" in existing_pg_url or not existing_pg_url:
+    if pg_mode in {"native", "docker"} or "replace-with-a-generated-postgres-password" in existing_pg_url or "replace-with-postgresql-url" in existing_pg_url or not existing_pg_url:
         base_url = build_postgres_url(pg_user, pg_password, pg_host, pg_port, pg_db)
     else:
         base_url = existing_pg_url

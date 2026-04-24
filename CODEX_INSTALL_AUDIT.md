@@ -84,3 +84,8 @@ Reasoning:
   - Patch applied: installer now uses `apt-get -o APT::Sandbox::User=root`, captures apt output, and fails explicitly when package indexes cannot be refreshed instead of continuing into misleading PostgreSQL or dependency errors.
   - Verification command: `FORGEFRAME_BOOTSTRAP_ALLOW_LIMITED_EXCEPTION=1 FORGEFRAME_INSTALL_PG_MODE=native scripts/bootstrap-forgeframe.sh --config-dir /opt/ForgeFrame/.install/etc-native --state-dir /opt/ForgeFrame/.install/lib-native --log-dir /opt/ForgeFrame/.install/log-native --unit-dir /opt/ForgeFrame/.install/systemd-native --env-file /opt/ForgeFrame/.install/etc-native/forgeframe.env --skip-systemctl --skip-system-user`
   - Verification result: clean blocking error at apt preflight: `Native PostgreSQL installation requires working DNS/network access to Ubuntu package sources.`
+- Native PostgreSQL role provisioning syntax fix:
+  - Operator reported `ERROR: syntax error at or near ":"` at `rolname = :'ff_user'`.
+  - Root cause: the installer used `psql` variable interpolation inside a dollar-quoted `DO` block; `psql` does not expand variables inside quoted SQL bodies, so PostgreSQL received `:'ff_user'` literally.
+  - Patch applied: replaced the PL/pgSQL `DO` block with `SELECT format(...) ... \gexec` statements outside dollar quotes. Role creation remains idempotent and the role is always updated with `LOGIN PASSWORD`.
+  - Verification: `bash -n scripts/install-forgeframe.sh scripts/bootstrap-forgeframe.sh scripts/lib/forgeframe-env.sh` passed; installer dry-run passed with sandbox-local paths. A live PostgreSQL execution could not be run in this environment because `psql` is not installed here.
