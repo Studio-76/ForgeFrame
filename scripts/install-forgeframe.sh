@@ -47,7 +47,7 @@ INSTALLER_PG_CONTAINER_NAME=""
 INSTALLER_PG_CLUSTER_NAME=""
 INSTALLER_OLLAMA_BASE_URL=""
 
-log() { printf '[forgeframe-install] %s\n' "$*"; }
+log() { printf '[forgeframe-install] %s\n' "$*" >&2; }
 fail() { printf '[forgeframe-install][ERROR] %s\n' "$*" >&2; exit 1; }
 
 usage() {
