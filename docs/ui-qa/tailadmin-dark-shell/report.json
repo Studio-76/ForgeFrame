@@ -1,0 +1,152 @@
+{
+  "consoleErrors": [],
+  "report": [
+    {
+      "name": "dashboard",
+      "url": "/dashboard?instanceId=instance_alpha",
+      "metrics": {
+        "title": "ForgeFrame — Autonomous AI Runtime Platform",
+        "bodyOverflowX": false,
+        "overflowers": [],
+        "clippedText": [],
+        "mainBg": "rgb(11, 16, 27)",
+        "hasSidebar": true,
+        "hasTopbar": true,
+        "cardCount": 6,
+        "tableWrapCount": 0
+      }
+    },
+    {
+      "name": "logs",
+      "url": "/logs?instanceId=instance_alpha",
+      "metrics": {
+        "title": "ForgeFrame — Autonomous AI Runtime Platform",
+        "bodyOverflowX": false,
+        "overflowers": [],
+        "clippedText": [],
+        "mainBg": "rgb(11, 16, 27)",
+        "hasSidebar": true,
+        "hasTopbar": true,
+        "cardCount": 8,
+        "tableWrapCount": 1
+      }
+    },
+    {
+      "name": "usage",
+      "url": "/usage?instanceId=instance_alpha",
+      "metrics": {
+        "title": "ForgeFrame — Autonomous AI Runtime Platform",
+        "bodyOverflowX": false,
+        "overflowers": [],
+        "clippedText": [],
+        "mainBg": "rgb(11, 16, 27)",
+        "hasSidebar": true,
+        "hasTopbar": true,
+        "cardCount": 10,
+        "tableWrapCount": 0
+      }
+    },
+    {
+      "name": "onboarding",
+      "url": "/onboarding?instanceId=instance_alpha",
+      "metrics": {
+        "title": "ForgeFrame — Autonomous AI Runtime Platform",
+        "bodyOverflowX": false,
+        "overflowers": [],
+        "clippedText": [],
+        "mainBg": "rgb(11, 16, 27)",
+        "hasSidebar": true,
+        "hasTopbar": true,
+        "cardCount": 6,
+        "tableWrapCount": 0
+      }
+    },
+    {
+      "name": "audit-history",
+      "url": "/logs?instanceId=instance_alpha#audit-history",
+      "metrics": {
+        "title": "ForgeFrame — Autonomous AI Runtime Platform",
+        "bodyOverflowX": false,
+        "overflowers": [],
+        "clippedText": [],
+        "mainBg": "rgb(11, 16, 27)",
+        "hasSidebar": true,
+        "hasTopbar": true,
+        "cardCount": 8,
+        "tableWrapCount": 1
+      }
+    },
+    {
+      "name": "audit-export",
+      "url": "/logs?instanceId=instance_alpha#audit-export",
+      "metrics": {
+        "title": "ForgeFrame — Autonomous AI Runtime Platform",
+        "bodyOverflowX": false,
+        "overflowers": [],
+        "clippedText": [],
+        "mainBg": "rgb(11, 16, 27)",
+        "hasSidebar": true,
+        "hasTopbar": true,
+        "cardCount": 8,
+        "tableWrapCount": 1
+      }
+    },
+    {
+      "name": "settings",
+      "url": "/settings?instanceId=instance_alpha",
+      "metrics": {
+        "title": "ForgeFrame — Autonomous AI Runtime Platform",
+        "bodyOverflowX": false,
+        "overflowers": [],
+        "clippedText": [],
+        "mainBg": "rgb(11, 16, 27)",
+        "hasSidebar": true,
+        "hasTopbar": true,
+        "cardCount": 4,
+        "tableWrapCount": 0
+      }
+    },
+    {
+      "name": "menu-notifications-desktop",
+      "url": "/dashboard?instanceId=instance_alpha",
+      "metrics": {
+        "visible": true,
+        "clipped": false
+      }
+    },
+    {
+      "name": "menu-user-desktop",
+      "url": "/dashboard?instanceId=instance_alpha",
+      "metrics": {
+        "visible": true,
+        "clipped": false
+      }
+    },
+    {
+      "name": "mobile-navigation-open",
+      "url": "/dashboard?instanceId=instance_alpha",
+      "metrics": {
+        "visible": true,
+        "clipped": false
+      }
+    },
+    {
+      "name": "mobile-dashboard",
+      "url": "/dashboard?instanceId=instance_alpha",
+      "metrics": {
+        "overflowX": false,
+        "width": 390,
+        "client": 390
+      }
+    },
+    {
+      "name": "mobile-logs",
+      "url": "/logs?instanceId=instance_alpha#audit-history",
+      "metrics": {
+        "overflowX": false,
+        "width": 390,
+        "client": 390
+      }
+    }
+  ]
+}
