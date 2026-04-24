@@ -1036,10 +1036,14 @@ class ExecutionWorkerService:
                 request_metadata=request_metadata,
                 response_controls=self._responses.response_controls_for_request(payload.request),
             )
+            normalized_output_text = self._responses.normalize_output_text_for_request(
+                payload.request,
+                dispatch_result.content,
+            )
             completed_body = self._completed_body(
                 payload,
                 model=dispatch_result.model,
-                text=dispatch_result.content,
+                text=normalized_output_text,
                 tool_calls=dispatch_result.tool_calls,
                 usage=dispatch_result.usage,
                 cost=dispatch_result.cost,

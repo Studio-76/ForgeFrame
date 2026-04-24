@@ -33,6 +33,7 @@ class NormalizedResponsesRequest(BaseModel):
     client: dict[str, str] = Field(default_factory=dict)
     max_output_tokens: int | None = None
     temperature: float | None = None
+    text: dict[str, Any] | None = None
 
 
 class ResponseObject(BaseModel):

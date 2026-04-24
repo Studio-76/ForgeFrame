@@ -1,6 +1,6 @@
 # V9 Provider GAP Report
 
-Generated at: `2026-04-24T06:13:49.144952+00:00`
+Generated at: `2026-04-24T08:13:40.302269+00:00`
 
 ## Provider Catalog Summary
 
@@ -18,10 +18,10 @@ Generated at: `2026-04-24T06:13:49.144952+00:00`
 ## OpenAI Compatibility Summary
 
 - overall status: `partial`
-- supported: `1`
-- partial: `2`
-- unsupported: `3`
-- blocked by live evidence: `7`
+- supported: `6`
+- partial: `6`
+- unsupported: `0`
+- blocked by live evidence: `1`
 - signoff claimable: `False`
 
 ## Provider Gaps
@@ -74,21 +74,29 @@ Generated at: `2026-04-24T06:13:49.144952+00:00`
 
 ## Compatibility Gaps
 
-- `chat_simple`: status=`blocked-by-live-evidence`, route=`/v1/chat/completions`, evidence=`backend/tests/test_runtime_core.py`, reason=`The chat-compatible runtime surface exists, but no recorded non-stream runtime evidence exists for this tenant.`
 - `chat_multimodal`: status=`blocked-by-live-evidence`, route=`/v1/chat/completions`, evidence=`backend/tests/test_runtime_core.py`, reason=`Vision-capable provider claims exist, but no class-specific multimodal chat evidence is recorded.`
-- `responses_simple`: status=`blocked-by-live-evidence`, route=`/v1/responses`, evidence=`backend/tests/test_native_responses_runtime_contract.py`, reason=`No completed /v1/responses runtime evidence is recorded for this tenant.`
-- `responses_input_items`: status=`blocked-by-live-evidence`, route=`/v1/responses`, evidence=`backend/tests/test_native_responses_runtime_contract.py`, reason=`No recorded structured input_items runtime evidence is stored yet.`
-- `streaming_chat`: status=`blocked-by-live-evidence`, route=`/v1/chat/completions`, evidence=`backend/tests/test_runtime_core.py`, reason=`The streaming chat surface exists, but no recorded stream runtime evidence exists for this tenant.`
-- `streaming_responses`: status=`blocked-by-live-evidence`, route=`/v1/responses`, evidence=`backend/tests/test_native_responses_runtime_contract.py`, reason=`No recorded streaming /v1/responses runtime evidence is stored yet.`
-- `tool_calling`: status=`blocked-by-live-evidence`, route=`/v1/responses`, evidence=`backend/tests/test_native_responses_runtime_contract.py`, reason=`No recorded runtime tool-calling evidence exists for the public compatibility surface.`
-- `structured_output`: status=`unsupported`, route=`/v1/responses`, evidence=`repo_gap`, reason=`No release-grade structured-output contract is implemented on the public responses surface.`
-- `error_semantics`: status=`partial`, route=`/v1/responses`, evidence=`backend/tests/test_external_openai_path.py`, reason=`Typed public error mapping exists in code and tests, but no recent runtime error sample is recorded for this tenant.`
+- `responses_simple`: status=`partial`, route=`/v1/responses`, evidence=`runtime_response_projection+backend/tests/test_native_responses_runtime_contract.py`, reason=`Native response persistence exists, but request dispatch still translates native input into chat messages before provider execution.`
+- `responses_input_items`: status=`partial`, route=`/v1/responses`, evidence=`runtime_response_projection+backend/tests/test_native_responses_runtime_contract.py`, reason=`Structured input_items are persisted natively, but execution still routes through chat-message translation rather than a provider-native responses contract.`
+- `streaming_responses`: status=`partial`, route=`/v1/responses`, evidence=`runtime_stream_projection+backend/tests/test_native_responses_runtime_contract.py`, reason=`Streaming response events are persisted natively, but the provider-execution path still terminates in chat-compatible event translation.`
+- `tool_calling`: status=`partial`, route=`/v1/responses`, evidence=`runtime_tool_projection+backend/tests/test_native_responses_runtime_contract.py`, reason=`Tool calls and tool outputs are persisted natively, but they are still emitted through chat/tool compatibility translation rather than a fully provider-native responses loop.`
 - `model_listing`: status=`partial`, route=`/v1/models`, evidence=`backend/tests/test_runtime_core.py+scripts/compose-client-compat-signoff.sh`, reason=`Public model inventory exists and is tested, but no dedicated signoff runner currently records fresh `/v1/models` evidence into operator history.`
-- `files`: status=`unsupported`, route=`/v1/files`, evidence=`repo_gap`, reason=`No public files surface is wired on the current ForgeFrame compatibility layer.`
-- `embeddings`: status=`unsupported`, route=`/v1/embeddings`, evidence=`repo_gap`, reason=`No public embeddings surface is wired on the current ForgeFrame compatibility layer.`
+- `files`: status=`partial`, route=`/v1/files`, evidence=`runtime_files_projection+backend/tests/test_runtime_core.py`, reason=`Public file upload/list/retrieve/delete/content APIs are shipped, but cross-surface parity beyond the current compatibility slice remains partial.`
+
+## Local Report Evidence Seeding
+
+- `chat_simple`: `ok` (status=200)
+- `streaming_chat`: `ok` (status=200)
+- `responses_simple`: `ok` (status=200)
+- `responses_input_items_and_tools`: `ok` (status=200)
+- `structured_output`: `ok` (status=200)
+- `streaming_responses`: `ok` (status=200)
+- `error_semantics`: `ok` (status=404)
+- `files`: `ok` (status=201)
+- `embeddings`: `ok` (status=200)
 
 ## Method
 
 - Report is computed from the local ForgeFrame control-plane, provider catalog seed, harness state, observability state, and OpenAI compatibility signoff projection.
+- Before rendering, the report runner sends best-effort local baseline traffic through the public compatibility surface so repo-local evidence for chat/responses/files/embeddings can appear when those paths are actually wired.
 - Missing credentials or missing live traffic remain blocked-by-live-evidence and are not promoted to green.
 - This report is a repo/runtime projection from the local workspace, not a claim of globally verified production signoff.

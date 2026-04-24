@@ -36,7 +36,19 @@ class ResponsesRequest(BaseModel):
     background: bool = False
     tools: list[dict[str, Any]] = Field(default_factory=list)
     tool_choice: str | dict[str, Any] | None = None
+    text: dict[str, Any] | None = None
     metadata: dict[str, Any] = Field(default_factory=dict)
+    client: dict[str, str] = Field(default_factory=dict)
+
+
+class EmbeddingsRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    model: str | None = None
+    input: Any
+    encoding_format: Literal["float", "base64"] | None = None
+    dimensions: int | None = None
+    user: str | None = None
     client: dict[str, str] = Field(default_factory=dict)
 
 

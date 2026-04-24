@@ -8,6 +8,8 @@ from app.core.tool_calling import validate_tools_and_choice
 from app.providers import (
     ChatDispatchRequest,
     ChatDispatchResult,
+    EmbeddingDispatchRequest,
+    EmbeddingDispatchResult,
     ProviderNotReadyError,
     ProviderRegistry,
     ProviderStreamEvent,
@@ -73,6 +75,44 @@ class DispatchService:
             raise ProviderUnsupportedFeatureError(adapter.provider_name, "tool_calling")
 
         return adapter.create_chat_completion(request), decision
+
+    def dispatch_embeddings(
+        self,
+        requested_model: str | None,
+        *,
+        input_items: list[object],
+        encoding_format: str = "float",
+        dimensions: int | None = None,
+        allowed_providers: set[str] | None = None,
+        request_metadata: dict[str, str] | None = None,
+    ) -> tuple[EmbeddingDispatchResult, RouteDecision]:
+        decision = self._routing.resolve_model(
+            requested_model,
+            messages=[],
+            stream=False,
+            tools=None,
+            require_vision=False,
+            allowed_providers=allowed_providers,
+            route_context=request_metadata,
+            required_capabilities={"embeddings"},
+            decision_source="runtime_dispatch",
+        )
+        adapter = self._providers.get(decision.resolved_model.provider)
+        if not bool(getattr(adapter.capabilities, "embeddings", False)):
+            raise ProviderUnsupportedFeatureError(adapter.provider_name, "embeddings")
+        if not adapter.is_ready():
+            raise ProviderNotReadyError(adapter.provider_name, adapter.readiness_reason())
+        create_embeddings = getattr(adapter, "create_embeddings", None)
+        if not callable(create_embeddings):
+            raise ProviderUnsupportedFeatureError(adapter.provider_name, "embeddings")
+        request = EmbeddingDispatchRequest(
+            model=decision.resolved_model.id,
+            input_items=list(input_items),
+            encoding_format="base64" if encoding_format == "base64" else "float",
+            dimensions=dimensions,
+            request_metadata=request_metadata or {},
+        )
+        return create_embeddings(request), decision
 
     def dispatch_chat_stream(
         self,

@@ -1,8 +1,15 @@
 from __future__ import annotations
 
+import base64
 import os
+import sys
 from datetime import UTC, datetime
 from pathlib import Path
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
+BACKEND_ROOT = REPO_ROOT / "backend"
+if str(BACKEND_ROOT) not in sys.path:
+    sys.path.insert(0, str(BACKEND_ROOT))
 
 os.environ.setdefault("FORGEFRAME_BOOTSTRAP_ADMIN_PASSWORD", "report-bootstrap")
 os.environ.setdefault("FORGEFRAME_HARNESS_STORAGE_BACKEND", "file")
@@ -10,12 +17,16 @@ os.environ.setdefault("FORGEFRAME_CONTROL_PLANE_STORAGE_BACKEND", "file")
 os.environ.setdefault("FORGEFRAME_OBSERVABILITY_STORAGE_BACKEND", "file")
 os.environ.setdefault("FORGEFRAME_GOVERNANCE_STORAGE_BACKEND", "file")
 os.environ.setdefault("FORGEFRAME_INSTANCES_STORAGE_BACKEND", "file")
+os.environ.setdefault("FORGEFRAME_DEFAULT_PROVIDER", "forgeframe_baseline")
+os.environ.setdefault("FORGEFRAME_DEFAULT_MODEL", "forgeframe-baseline-chat-v1")
 
 from app.api.admin.control_plane import ControlPlaneService
+from app.api.runtime.dependencies import clear_runtime_dependency_caches
 from app.core.model_registry import ModelRegistry
 from app.harness.service import HarnessService
 from app.harness.store import HarnessStore
 from app.instances.service import InstanceService
+from app.main import app
 from app.providers import ProviderRegistry
 from app.settings.config import Settings
 from app.storage.control_plane_repository import get_control_plane_state_repository
@@ -24,6 +35,7 @@ from app.storage.instance_repository import get_instance_repository
 from app.storage.oauth_operations_repository import get_oauth_operations_repository
 from app.storage.observability_repository import get_observability_repository
 from app.usage.analytics import UsageAnalyticsStore
+from fastapi.testclient import TestClient
 
 
 def _build_settings() -> Settings:
@@ -68,7 +80,212 @@ def _build_service(settings: Settings) -> ControlPlaneService:
     )
 
 
-def _render_report(service: ControlPlaneService) -> str:
+def _seed_local_compatibility_evidence() -> list[str]:
+    clear_runtime_dependency_caches()
+    client = TestClient(app)
+    results: list[str] = []
+
+    def _record(name: str, ok: bool, detail: str) -> None:
+        state = "ok" if ok else "failed"
+        results.append(f"- `{name}`: `{state}` ({detail})")
+
+    def _admin_headers() -> dict[str, str]:
+        bootstrap_password = os.environ["FORGEFRAME_BOOTSTRAP_ADMIN_PASSWORD"]
+        active_password = bootstrap_password
+        response = client.post(
+            "/admin/auth/login",
+            json={"username": "admin", "password": active_password},
+        )
+        if response.status_code == 401:
+            active_password = f"{bootstrap_password}-rotated"
+            response = client.post(
+                "/admin/auth/login",
+                json={"username": "admin", "password": active_password},
+            )
+        if response.status_code != 201:
+            raise RuntimeError(f"admin login failed with status={response.status_code}")
+        payload = response.json()
+        access_token = str(payload["access_token"])
+        headers = {"Authorization": f"Bearer {access_token}"}
+        if payload.get("user", {}).get("must_rotate_password") is True:
+            rotated_password = f"{bootstrap_password}-rotated"
+            rotate = client.post(
+                "/admin/auth/rotate-password",
+                headers=headers,
+                json={"current_password": active_password, "new_password": rotated_password},
+            )
+            if rotate.status_code != 200:
+                raise RuntimeError(f"admin password rotation failed with status={rotate.status_code}")
+            relogin = client.post(
+                "/admin/auth/login",
+                json={"username": "admin", "password": rotated_password},
+            )
+            if relogin.status_code != 201:
+                raise RuntimeError(f"admin relogin failed with status={relogin.status_code}")
+            access_token = str(relogin.json()["access_token"])
+            headers = {"Authorization": f"Bearer {access_token}"}
+        return headers
+
+    def _ensure_runtime_headers(admin_headers: dict[str, str]) -> tuple[dict[str, str], str | None]:
+        accounts_response = client.get("/admin/accounts/", headers=admin_headers)
+        if accounts_response.status_code != 200:
+            raise RuntimeError(f"account listing failed with status={accounts_response.status_code}")
+        accounts = list(accounts_response.json().get("accounts", []))
+        account = next((item for item in accounts if str(item.get("label") or "") == "V9 Report Seed"), None)
+        if account is None:
+            create_account = client.post(
+                "/admin/accounts/",
+                headers=admin_headers,
+                json={
+                    "label": "V9 Report Seed",
+                    "provider_bindings": ["forgeframe_baseline"],
+                    "notes": "Local compatibility evidence seed for the V9 provider gap report.",
+                },
+            )
+            if create_account.status_code != 201:
+                raise RuntimeError(f"account creation failed with status={create_account.status_code}")
+            account = create_account.json()["account"]
+        else:
+            bindings = {str(item) for item in account.get("provider_bindings", [])}
+            if "forgeframe_baseline" not in bindings or str(account.get("status") or "") != "active":
+                update_account = client.patch(
+                    f"/admin/accounts/{account['account_id']}",
+                    headers=admin_headers,
+                    json={
+                        "provider_bindings": sorted(bindings | {"forgeframe_baseline"}),
+                        "status": "active",
+                    },
+                )
+                if update_account.status_code != 200:
+                    raise RuntimeError(f"account patch failed with status={update_account.status_code}")
+                account = update_account.json()["account"]
+
+        issue_key = client.post(
+            "/admin/keys/",
+            headers=admin_headers,
+            json={
+                "label": "V9 Report Seed",
+                "account_id": account["account_id"],
+                "scopes": ["models:read", "chat:write", "responses:write"],
+                "allowed_request_paths": ["smart_routing"],
+                "default_request_path": "smart_routing",
+                "local_only_policy": "require_local_target",
+            },
+        )
+        if issue_key.status_code != 201:
+            raise RuntimeError(f"runtime key issue failed with status={issue_key.status_code}")
+        issued = issue_key.json()["issued"]
+        return {"Authorization": f"Bearer {issued['token']}"}, str(issued["key_id"])
+
+    runtime_key_id: str | None = None
+    try:
+        admin_headers = _admin_headers()
+        runtime_headers, runtime_key_id = _ensure_runtime_headers(admin_headers)
+
+        response = client.post(
+            "/v1/chat/completions",
+            json={"messages": [{"role": "user", "content": "compat chat"}]},
+            headers=runtime_headers,
+        )
+        _record("chat_simple", response.status_code == 200, f"status={response.status_code}")
+
+        with client.stream(
+            "POST",
+            "/v1/chat/completions",
+            json={"messages": [{"role": "user", "content": "compat chat stream"}], "stream": True},
+            headers=runtime_headers,
+        ) as stream_response:
+            stream_body = "".join(stream_response.iter_text())
+            _record(
+                "streaming_chat",
+                stream_response.status_code == 200 and "[DONE]" in stream_body,
+                f"status={stream_response.status_code}",
+            )
+
+        response = client.post(
+            "/v1/responses",
+            json={"input": "compat responses"},
+            headers=runtime_headers,
+        )
+        _record("responses_simple", response.status_code == 200, f"status={response.status_code}")
+
+        response = client.post(
+            "/v1/responses",
+            json={
+                "input": [
+                    {"type": "message", "role": "user", "content": [{"type": "input_text", "text": "compat tool input"}]},
+                    {"type": "function_call", "call_id": "call_in", "name": "lookup", "arguments": "{\"q\":\"forgeframe\"}"},
+                    {"type": "function_call_output", "call_id": "call_in", "output": "lookup result"},
+                ],
+            },
+            headers=runtime_headers,
+        )
+        _record("responses_input_items_and_tools", response.status_code == 200, f"status={response.status_code}")
+
+        response = client.post(
+            "/v1/responses",
+            json={
+                "input": "compat structured output",
+                "text": {"format": {"type": "json_object"}},
+            },
+            headers=runtime_headers,
+        )
+        _record("structured_output", response.status_code == 200, f"status={response.status_code}")
+
+        with client.stream(
+            "POST",
+            "/v1/responses",
+            json={"input": "compat responses stream", "stream": True},
+            headers=runtime_headers,
+        ) as stream_response:
+            stream_body = "".join(stream_response.iter_text())
+            _record(
+                "streaming_responses",
+                stream_response.status_code == 200 and "response.completed" in stream_body,
+                f"status={stream_response.status_code}",
+            )
+
+        response = client.post(
+            "/v1/responses",
+            json={"input": "compat error", "model": "missing-model-for-signoff"},
+            headers=runtime_headers,
+        )
+        _record("error_semantics", response.status_code == 404, f"status={response.status_code}")
+
+        response = client.post(
+            "/v1/files",
+            json={
+                "purpose": "assistants",
+                "filename": "compat.txt",
+                "content_type": "text/plain",
+                "content_base64": base64.b64encode(b"forgeframe compatibility file").decode("ascii"),
+            },
+            headers=runtime_headers,
+        )
+        _record("files", response.status_code == 201, f"status={response.status_code}")
+
+        response = client.post(
+            "/v1/embeddings",
+            json={"input": "compat embeddings proof"},
+            headers=runtime_headers,
+        )
+        _record("embeddings", response.status_code == 200, f"status={response.status_code}")
+    except Exception as exc:
+        _record("seed_setup", False, str(exc))
+    finally:
+        if runtime_key_id is not None:
+            try:
+                admin_headers = _admin_headers()
+                client.post(f"/admin/keys/{runtime_key_id}/revoke", headers=admin_headers)
+            except Exception:
+                pass
+        client.close()
+        clear_runtime_dependency_caches()
+
+    return results
+
+
+def _render_report(service: ControlPlaneService, seed_results: list[str]) -> str:
     generated_at = datetime.now(tz=UTC).isoformat()
     catalog = [item.model_dump(mode="json") for item in service.list_provider_catalog()]
     catalog_summary = service.provider_catalog_summary().model_dump(mode="json")
@@ -130,9 +347,14 @@ def _render_report(service: ControlPlaneService) -> str:
         "",
         *(compatibility_lines or ["- none"]),
         "",
+        "## Local Report Evidence Seeding",
+        "",
+        *(seed_results or ["- none"]),
+        "",
         "## Method",
         "",
         "- Report is computed from the local ForgeFrame control-plane, provider catalog seed, harness state, observability state, and OpenAI compatibility signoff projection.",
+        "- Before rendering, the report runner sends best-effort local baseline traffic through the public compatibility surface so repo-local evidence for chat/responses/files/embeddings can appear when those paths are actually wired.",
         "- Missing credentials or missing live traffic remain blocked-by-live-evidence and are not promoted to green.",
         "- This report is a repo/runtime projection from the local workspace, not a claim of globally verified production signoff.",
     ]
@@ -140,12 +362,12 @@ def _render_report(service: ControlPlaneService) -> str:
 
 
 def main() -> None:
-    repo_root = Path(__file__).resolve().parents[1]
-    report_path = repo_root / "docs" / "v9-provider-work" / "V9_PROVIDER_GAP_REPORT.md"
+    report_path = REPO_ROOT / "docs" / "v9-provider-work" / "V9_PROVIDER_GAP_REPORT.md"
     settings = _build_settings()
+    seed_results = _seed_local_compatibility_evidence()
     service = _build_service(settings)
     report_path.parent.mkdir(parents=True, exist_ok=True)
-    report_path.write_text(_render_report(service), encoding="utf-8")
+    report_path.write_text(_render_report(service, seed_results), encoding="utf-8")
     print(report_path)
 
 

@@ -146,6 +146,7 @@ class HarnessPreviewRequest(BaseModel):
     temperature: float | None = None
     max_output_tokens: int | None = None
     metadata: dict[str, Any] = Field(default_factory=dict)
+    response_format: dict[str, Any] | None = None
 
 
 class HarnessVerificationResult(BaseModel):

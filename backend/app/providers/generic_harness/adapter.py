@@ -11,6 +11,8 @@ from app.core.message_features import messages_require_vision
 from app.providers.base import (
     ChatDispatchRequest,
     ChatDispatchResult,
+    EmbeddingDispatchRequest,
+    EmbeddingDispatchResult,
     ProviderBadRequestError,
     ProviderCapabilities,
     ProviderConflictError,
@@ -88,6 +90,7 @@ class GenericHarnessAdapter:
                 "tool_calling_level": "partial" if supports_tool_calling else "none",
                 "vision": supports_vision,
                 "vision_level": "partial" if supports_vision else "none",
+                "embeddings": any(self._profile_supports_embeddings(profile) for profile in runtime_profiles),
                 "discovery_support": supports_discovery,
                 "auth_mechanism": self._aggregate_auth_mechanism(auth_mechanisms),
                 "auth_mechanisms": auth_mechanisms,
@@ -95,6 +98,7 @@ class GenericHarnessAdapter:
                 "streaming_profile_count": sum(1 for profile in runtime_profiles if self._profile_supports_streaming(profile)),
                 "tool_calling_profile_count": sum(1 for profile in runtime_profiles if self._profile_supports_tool_calling(profile)),
                 "vision_profile_count": sum(1 for profile in runtime_profiles if self._profile_supports_vision(profile)),
+                "embeddings_profile_count": sum(1 for profile in runtime_profiles if self._profile_supports_embeddings(profile)),
             }
         )
         return capabilities
@@ -106,6 +110,7 @@ class GenericHarnessAdapter:
         require_streaming: bool = False,
         require_tool_calling: bool = False,
         require_vision: bool = False,
+        require_embeddings: bool = False,
     ) -> tuple[bool, str | None]:
         if not self.is_ready():
             return False, self.readiness_reason() or "harness_not_ready"
@@ -119,6 +124,8 @@ class GenericHarnessAdapter:
             return False, "tool_calling_not_enabled_in_profile"
         if require_vision and not self._profile_supports_vision(profile):
             return False, "vision_not_enabled_in_profile"
+        if require_embeddings and not self._profile_supports_embeddings(profile):
+            return False, "embeddings_not_enabled_in_profile"
         return True, None
 
     def create_chat_completion(self, request: ChatDispatchRequest) -> ChatDispatchResult:
@@ -142,6 +149,7 @@ class GenericHarnessAdapter:
                     temperature=response_controls.get("temperature"),
                     max_output_tokens=response_controls.get("max_output_tokens"),
                     metadata=response_controls.get("metadata"),
+                    response_format=response_controls.get("response_format"),
                     request_metadata=getattr(request, "request_metadata", {}),
                 ),
             )
@@ -191,6 +199,7 @@ class GenericHarnessAdapter:
                     temperature=response_controls.get("temperature"),
                     max_output_tokens=response_controls.get("max_output_tokens"),
                     metadata=response_controls.get("metadata"),
+                    response_format=response_controls.get("response_format"),
                     request_metadata=getattr(request, "request_metadata", {}),
                 ),
             )
@@ -221,6 +230,45 @@ class GenericHarnessAdapter:
             mapped = self._map_harness_error(str(exc))
             yield ProviderStreamEvent(event="error", error_type=mapped.error_type)
             return
+
+    def create_embeddings(self, request: EmbeddingDispatchRequest) -> EmbeddingDispatchResult:
+        if not self.is_ready():
+            raise ProviderConfigurationError(self.provider_name, self.readiness_reason() or "Harness not ready")
+        profile = self._profile_for_model(request.model)
+        if not self._profile_supports_embeddings(profile):
+            raise ProviderUnsupportedFeatureError(self.provider_name, "embeddings")
+        try:
+            parsed = self._harness.execute_embeddings(
+                profile.provider_key,
+                model=request.model,
+                input_items=list(request.input_items),
+                encoding_format=request.encoding_format,
+                dimensions=request.dimensions,
+                request_metadata=getattr(request, "request_metadata", {}),
+            )
+        except RuntimeError as exc:
+            raise self._map_harness_error(str(exc)) from exc
+        usage = TokenUsage(
+            input_tokens=int(parsed.get("prompt_tokens", 0) or 0),
+            output_tokens=0,
+            total_tokens=int(parsed.get("total_tokens", 0) or 0),
+        )
+        if usage.total_tokens == 0:
+            usage = usage.model_copy(update={"total_tokens": usage.input_tokens})
+        cost = self._usage.costs_for_provider(provider=self.provider_name, usage=usage)
+        embeddings: list[object] = []
+        for item in parsed.get("data", []):
+            if isinstance(item, dict) and "embedding" in item:
+                embeddings.append(item["embedding"])
+        return EmbeddingDispatchResult(
+            model=str(parsed.get("model", request.model)),
+            provider=self.provider_name,
+            embeddings=embeddings,
+            usage=usage,
+            cost=cost,
+            credential_type="harness_template",
+            auth_source=profile.integration_class,
+        )
 
     @staticmethod
     def _harness_execution_kwargs(method: object, **kwargs: Any) -> dict[str, Any]:
@@ -260,6 +308,10 @@ class GenericHarnessAdapter:
     @staticmethod
     def _profile_supports_vision(profile: Any) -> bool:
         return bool(profile.capabilities.vision)
+
+    @staticmethod
+    def _profile_supports_embeddings(profile: Any) -> bool:
+        return bool(profile.capabilities.embeddings)
 
     @staticmethod
     def _profile_supports_discovery(profile: Any) -> bool:

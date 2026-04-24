@@ -9,6 +9,7 @@ ENV_FILE="${FORGEFRAME_ENV_FILE:-/etc/forgeframe/forgeframe.env}"
 SKIP_SYSTEMCTL="${FORGEFRAME_BOOTSTRAP_SKIP_SYSTEMCTL:-0}"
 ALLOW_LIMITED_EXCEPTION="${FORGEFRAME_BOOTSTRAP_ALLOW_LIMITED_EXCEPTION:-0}"
 INSTALL_ARGS=()
+GUIDED=0
 
 log() { printf "[forgeframe-bootstrap] %s\n" "$*"; }
 fail() { printf "[forgeframe-bootstrap][ERROR] %s\n" "$*" >&2; exit 1; }
@@ -21,6 +22,11 @@ while [[ "$#" -gt 0 ]]; do
       ;;
     --skip-systemctl)
       SKIP_SYSTEMCTL=1
+      shift
+      ;;
+    --guided)
+      GUIDED=1
+      INSTALL_ARGS+=("--guided")
       shift
       ;;
     --dry-run)
@@ -37,6 +43,10 @@ done
 [[ "$(uname -s)" == "Linux" ]] || fail "The normative bootstrap path is Linux host-native only."
 command -v python3 >/dev/null 2>&1 || fail "python3 is required."
 command -v curl >/dev/null 2>&1 || fail "curl is required."
+
+if [[ "$GUIDED" == "1" && "$SKIP_SYSTEMCTL" != "1" && "$(id -u)" -ne 0 ]]; then
+  fail "Guided bootstrap needs root so ForgeFrame can claim ports 80 and 443, install systemd units, and leave the operator UI login-ready."
+fi
 
 if [[ "$SKIP_SYSTEMCTL" == "1" ]]; then
   INSTALL_ARGS+=("--skip-systemctl")
@@ -99,3 +109,13 @@ else
   log "Bootstrap completed in limited exception mode."
   log "Public HTTPS remains intentionally blocked until the FQDN, ACME operator email, certificates, and public services are configured."
 fi
+
+forgeframe_load_env_file "$ENV_FILE" || fail "Unable to reload $ENV_FILE after bootstrap."
+if (( ${#public_contract_errors[@]} == 0 )); then
+  log "Frontend login: https://${FORGEFRAME_PUBLIC_FQDN}/"
+else
+  log "Frontend login: ${FORGEFRAME_SMOKE_BASE_URL:-http://127.0.0.1:${FORGEFRAME_PORT:-8080}}/"
+fi
+log "Admin user: ${FORGEFRAME_BOOTSTRAP_ADMIN_USERNAME:-admin}"
+log "Admin password: ${FORGEFRAME_BOOTSTRAP_ADMIN_PASSWORD}"
+log "Environment file: $ENV_FILE"

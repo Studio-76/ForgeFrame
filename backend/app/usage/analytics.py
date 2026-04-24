@@ -188,6 +188,46 @@ class UsageAnalyticsStore:
         )
         self._repository.append_usage_event(event)
 
+    def record_embedding_result(
+        self,
+        *,
+        provider: str,
+        model: str,
+        usage: TokenUsage,
+        cost: CostBreakdown,
+        credential_type: str,
+        auth_source: str,
+        client: ClientIdentity | None = None,
+        context: TelemetryContext | None = None,
+        request_metadata: dict[str, object] | dict[str, str] | None = None,
+    ) -> None:
+        identity = client or ClientIdentity()
+        resolved_tenant_id = self._tenant_id(identity.tenant_id)
+        event = UsageEvent(
+            tenant_id=resolved_tenant_id,
+            provider=provider,
+            model=model,
+            credential_type=credential_type,
+            auth_source=auth_source,
+            route=context.route if context is not None else None,
+            client_id=identity.client_id,
+            consumer=identity.consumer,
+            integration=identity.integration,
+            traffic_type="runtime",
+            stream_mode="non_stream",
+            tool_call_count=0,
+            input_tokens=usage.input_tokens,
+            output_tokens=0,
+            total_tokens=usage.total_tokens,
+            actual_cost=cost.actual_cost,
+            hypothetical_cost=cost.hypothetical_cost,
+            avoided_cost=cost.avoided_cost,
+            **self._context_fields(context),
+            **self._scope_fields(request_metadata),
+            created_at=self._now_iso(),
+        )
+        self._repository.append_usage_event(event)
+
     def record_runtime_error(
         self,
         *,

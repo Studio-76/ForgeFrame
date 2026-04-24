@@ -14,6 +14,8 @@ import httpx
 from app.providers.base import (
     ChatDispatchRequest,
     ChatDispatchResult,
+    EmbeddingDispatchRequest,
+    EmbeddingDispatchResult,
     ProviderAuthenticationError,
     ProviderBadRequestError,
     ProviderCapabilities,
@@ -45,7 +47,7 @@ from app.usage.service import UsageAccountingService
 
 class OpenAIAPIAdapter:
     provider_name = "openai_api"
-    capabilities = ProviderCapabilities(streaming=True, tool_calling=True, tool_calling_level="full", vision=True, external=True)
+    capabilities = ProviderCapabilities(streaming=True, tool_calling=True, tool_calling_level="full", vision=True, embeddings=True, external=True)
 
     def __init__(self, settings: Settings):
         self._settings = settings
@@ -132,6 +134,47 @@ class OpenAIAPIAdapter:
 
         yield from self._call_stream_chat_completion(payload, request.messages, request.request_metadata)
 
+    def create_embeddings(self, request: EmbeddingDispatchRequest) -> EmbeddingDispatchResult:
+        reason = self.readiness_reason()
+        if reason:
+            raise ProviderConfigurationError(self.provider_name, reason)
+
+        payload: dict[str, object] = {
+            "model": request.model,
+            "input": request.input_items,
+        }
+        if request.encoding_format:
+            payload["encoding_format"] = request.encoding_format
+        if request.dimensions is not None:
+            payload["dimensions"] = request.dimensions
+
+        response_payload = self._post_json("/embeddings", payload, request.request_metadata)
+        data = response_payload.get("data")
+        if not isinstance(data, list):
+            raise ProviderProtocolError(self.provider_name, "OpenAI embeddings payload is missing a valid data array.")
+
+        embeddings: list[object] = []
+        for item in data:
+            if not isinstance(item, dict):
+                raise ProviderProtocolError(self.provider_name, "OpenAI embeddings payload contains a malformed data item.")
+            embedding = item.get("embedding")
+            if not isinstance(embedding, (list, str)):
+                raise ProviderProtocolError(self.provider_name, "OpenAI embeddings payload contains an invalid embedding item.")
+            embeddings.append(embedding)
+
+        usage = self._usage_from_payload(dict(response_payload.get("usage") or {}))
+        usage = usage.model_copy(update={"output_tokens": 0, "total_tokens": usage.input_tokens})
+        cost = self._usage_accounting.costs_for_provider(provider=self.provider_name, usage=usage)
+        return EmbeddingDispatchResult(
+            model=str(response_payload.get("model", request.model)),
+            provider=self.provider_name,
+            embeddings=embeddings,
+            usage=usage,
+            cost=cost,
+            credential_type="api_key",
+            auth_source="openai_api_key",
+        )
+
     def _call_post_chat_completion(self, payload: dict, request_metadata: dict[str, str]) -> dict:
         signature = inspect.signature(self._post_chat_completion)
         if "request_metadata" in signature.parameters:
@@ -150,13 +193,20 @@ class OpenAIAPIAdapter:
         return self._stream_chat_completion(payload, messages)
 
     def _endpoint_and_headers(self, request_metadata: dict[str, str] | None = None) -> tuple[str, dict[str, str]]:
+        return self._endpoint_and_headers_for_path("/chat/completions", request_metadata)
+
+    def _endpoint_and_headers_for_path(
+        self,
+        path: str,
+        request_metadata: dict[str, str] | None = None,
+    ) -> tuple[str, dict[str, str]]:
         base_url = self._configured_base_url()
         if base_url is None:  # pragma: no cover - guarded by readiness checks
             raise ProviderConfigurationError(
                 self.provider_name,
                 "FORGEFRAME_OPENAI_API_BASE_URL must be an absolute http(s) URL.",
             )
-        endpoint = f"{base_url}/chat/completions"
+        endpoint = f"{base_url}{path}"
         headers = {
             "Authorization": f"Bearer {self._settings.openai_api_key}",
             "Content-Type": "application/json",
@@ -173,7 +223,15 @@ class OpenAIAPIAdapter:
         return base_url.rstrip("/")
 
     def _post_chat_completion(self, payload: dict, request_metadata: dict[str, str] | None = None) -> dict:
-        endpoint, headers = self._endpoint_and_headers(request_metadata)
+        return self._post_json("/chat/completions", payload, request_metadata)
+
+    def _post_json(
+        self,
+        path: str,
+        payload: dict,
+        request_metadata: dict[str, str] | None = None,
+    ) -> dict:
+        endpoint, headers = self._endpoint_and_headers_for_path(path, request_metadata)
 
         try:
             response = httpx.post(

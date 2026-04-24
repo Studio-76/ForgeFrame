@@ -87,8 +87,11 @@ class OpenAICodexAdapter:
         require_streaming: bool,
         require_tool_calling: bool,
         require_vision: bool,
+        require_embeddings: bool = False,
     ) -> tuple[bool, str | None]:
         del model_id, require_streaming, require_tool_calling
+        if require_embeddings:
+            return False, "embeddings_unsupported"
         if require_vision:
             return False, "vision_unsupported"
         if not self._settings.openai_codex_bridge_enabled:

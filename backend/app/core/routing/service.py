@@ -183,6 +183,7 @@ class RoutingService:
         require_streaming: bool,
         require_tool_calling: bool,
         require_vision: bool,
+        require_embeddings: bool = False,
     ) -> tuple[bool, str | None]:
         try:
             adapter = self._providers.get(target.provider)
@@ -197,6 +198,7 @@ class RoutingService:
                 require_streaming=require_streaming,
                 require_tool_calling=require_tool_calling,
                 require_vision=require_vision,
+                require_embeddings=require_embeddings,
             )
         except Exception:
             return False, "dispatchability_check_failed"
@@ -228,6 +230,7 @@ class RoutingService:
             "streaming_missing",
             "tool_calling_missing",
             "vision_missing",
+            "embeddings_missing",
             "model_dispatch_unavailable",
             "non_simple_capability_floor_not_met",
             "queue_eligibility_required",
@@ -248,6 +251,7 @@ class RoutingService:
         require_streaming: bool,
         require_tool_calling: bool,
         require_vision: bool,
+        required_capabilities: set[str] | None,
         health_index: dict[tuple[str, str], str],
         status_cache: dict[str, dict[str, object]] | None = None,
         strict_requested_model: bool = False,
@@ -265,6 +269,12 @@ class RoutingService:
             exclusion_reasons.append("tool_calling_missing")
         if require_vision and not target.vision_capable:
             exclusion_reasons.append("vision_missing")
+        for capability in sorted(required_capabilities or set()):
+            provider_capability = bool(provider_status.get("capabilities", {}).get(capability, False))
+            target_capability = bool(target.technical_capabilities.get(capability, False))
+            model_capability = bool(target.model.capabilities.get(capability, False))
+            if not (provider_capability or target_capability or model_capability):
+                exclusion_reasons.append(f"{capability}_missing")
         if not target.enabled:
             exclusion_reasons.append("target_disabled")
 
@@ -292,6 +302,7 @@ class RoutingService:
             require_streaming=require_streaming,
             require_tool_calling=require_tool_calling,
             require_vision=require_vision,
+            require_embeddings=bool(required_capabilities and "embeddings" in required_capabilities),
         )
         if not dispatchable:
             exclusion_reasons.append(f"model_dispatch_unavailable:{dispatch_reason or 'unknown'}")
@@ -754,6 +765,7 @@ class RoutingService:
                 require_streaming=stream,
                 require_tool_calling=bool(tools),
                 require_vision=require_vision,
+                required_capabilities=None,
                 health_index=health_index,
                 status_cache=status_cache,
                 strict_requested_model=False,
@@ -787,6 +799,7 @@ class RoutingService:
         allowed_providers: set[str] | None = None,
         route_context: dict[str, str] | None = None,
         response_controls: dict[str, object] | None = None,
+        required_capabilities: set[str] | None = None,
         decision_source: str = "runtime_dispatch",
     ) -> RouteDecision:
         state = self._load_state()
@@ -836,6 +849,7 @@ class RoutingService:
                 require_streaming=stream,
                 require_tool_calling=bool(tools),
                 require_vision=require_vision,
+                required_capabilities=required_capabilities,
                 health_index=health_index,
                 status_cache=status_cache,
                 strict_requested_model=requested_model is not None,
@@ -847,6 +861,7 @@ class RoutingService:
                 "streaming": stream,
                 "tool_calling": bool(tools),
                 "vision": require_vision,
+                "required_capabilities": sorted(required_capabilities or set()),
             },
             "policy": policy.model_dump(mode="json"),
             "budget_state": budget_state.model_dump(mode="json"),

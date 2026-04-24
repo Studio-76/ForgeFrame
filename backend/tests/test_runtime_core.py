@@ -1,5 +1,6 @@
 import json
 import os
+import base64
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
@@ -2548,20 +2549,141 @@ def test_responses_endpoint_accepts_single_input_text_object() -> None:
     assert body["output_text"]
 
 
-def test_responses_endpoint_rejects_input_image_file_ids() -> None:
+def test_responses_endpoint_supports_structured_output_json_object() -> None:
     response = client.post(
         "/v1/responses",
         json={
+            "input": "hello structured object",
+            "text": {"format": {"type": "json_object"}},
+        },
+    )
+    assert response.status_code == 200
+    body = response.json()
+    parsed = json.loads(body["output_text"])
+    assert isinstance(parsed, dict)
+    assert parsed["reply"] == "hello structured object"
+
+
+def test_responses_endpoint_supports_structured_output_json_schema() -> None:
+    response = client.post(
+        "/v1/responses",
+        json={
+            "input": "hello structured schema",
+            "text": {
+                "format": {
+                    "type": "json_schema",
+                    "name": "structured_contract",
+                    "schema": {
+                        "type": "object",
+                        "properties": {
+                            "reply": {"type": "string"},
+                            "approved": {"type": "boolean"},
+                        },
+                        "required": ["reply", "approved"],
+                        "additionalProperties": False,
+                    },
+                }
+            },
+        },
+    )
+    assert response.status_code == 200
+    body = response.json()
+    parsed = json.loads(body["output_text"])
+    assert parsed == {"reply": "hello structured schema", "approved": True}
+
+
+def test_embeddings_endpoint_returns_runtime_embedding_payload() -> None:
+    response = client.post(
+        "/v1/embeddings",
+        json={"input": "embed me", "encoding_format": "float"},
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["object"] == "list"
+    assert body["data"][0]["object"] == "embedding"
+    assert isinstance(body["data"][0]["embedding"], list)
+    assert body["usage"]["prompt_tokens"] >= 0
+
+
+def test_files_endpoint_upload_list_get_content_and_delete() -> None:
+    upload = client.post(
+        "/v1/files",
+        json={
+            "purpose": "assistants",
+            "filename": "contract.txt",
+            "content_type": "text/plain",
+            "content_base64": base64.b64encode(b"forgeframe file contract").decode("ascii"),
+        },
+    )
+    assert upload.status_code == 201
+    file_id = upload.json()["id"]
+
+    listing = client.get("/v1/files")
+    assert listing.status_code == 200
+    assert any(item["id"] == file_id for item in listing.json()["data"])
+
+    metadata = client.get(f"/v1/files/{file_id}")
+    assert metadata.status_code == 200
+    assert metadata.json()["filename"] == "contract.txt"
+
+    content = client.get(f"/v1/files/{file_id}/content")
+    assert content.status_code == 200
+    assert content.content == b"forgeframe file contract"
+
+    deleted = client.delete(f"/v1/files/{file_id}")
+    assert deleted.status_code == 200
+    assert deleted.json() == {"id": file_id, "object": "file", "deleted": True}
+
+    missing = client.get(f"/v1/files/{file_id}")
+    assert missing.status_code == 404
+    assert missing.json()["error"]["type"] == "file_not_found"
+
+
+def test_responses_endpoint_accepts_input_image_file_ids(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("FORGEGATE_OPENAI_API_KEY", "test-key")
+    clear_runtime_dependency_caches()
+
+    def _fake_post(self, payload: dict) -> dict:
+        del self
+        image_url = payload["messages"][0]["content"][0]["image_url"]["url"]
+        assert image_url.startswith("data:image/png;base64,")
+        return {
+            "model": "gpt-4.1-mini",
+            "usage": {"prompt_tokens": 6, "completion_tokens": 2, "total_tokens": 8},
+            "choices": [{"message": {"role": "assistant", "content": "image accepted"}, "finish_reason": "stop"}],
+        }
+
+    monkeypatch.setattr(OpenAIAPIAdapter, "_post_chat_completion", _fake_post)
+
+    upload = client.post(
+        "/v1/files",
+        json={
+            "purpose": "vision",
+            "filename": "image.png",
+            "content_type": "image/png",
+            "content_base64": base64.b64encode(b"\x89PNG\r\n\x1a\nforgeframe").decode("ascii"),
+        },
+    )
+    assert upload.status_code == 201
+    file_id = upload.json()["id"]
+
+    response = client.post(
+        "/v1/responses",
+        json={
+            "model": "gpt-4.1-mini",
             "input": [
                 {
                     "role": "user",
-                    "content": [{"type": "input_image", "file_id": "file_123"}],
+                    "content": [
+                        {"type": "input_image", "file_id": file_id},
+                        {"type": "input_text", "text": "describe"},
+                    ],
                 }
             ]
         },
     )
-    assert response.status_code == 422
-    assert response.json()["error"]["type"] == "unsupported_input"
+    assert response.status_code == 200
+    assert response.json()["output_text"] == "image accepted"
 
 
 def test_chat_default_routing_prefers_vision_capable_provider_for_image_messages(monkeypatch: pytest.MonkeyPatch) -> None:

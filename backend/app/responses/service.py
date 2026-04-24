@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
@@ -63,6 +64,18 @@ class ResponseNotFoundError(RuntimeError):
     """Raised when a response record does not exist in the company scope."""
 
 
+class ResponseStructuredOutputValidationError(RuntimeError):
+    """Raised when provider output violates the requested structured-output contract."""
+
+    def __init__(self, message: str) -> None:
+        self.provider = "runtime"
+        self.error_type = "provider_protocol_error"
+        self.message = message
+        self.upstream_status_code = 502
+        self.retryable = False
+        super().__init__(message)
+
+
 @dataclass(frozen=True)
 class QueuedResponseExecutionPayload:
     response_id: str
@@ -85,7 +98,6 @@ class ResponsesService:
         "max_tool_calls": "max_tool_calls is not implemented on the ForgeFrame responses path.",
         "parallel_tool_calls": "parallel_tool_calls is not implemented on the ForgeFrame responses path.",
         "reasoning": "reasoning controls are not implemented on the ForgeFrame responses path.",
-        "text": "text format controls are not implemented on the ForgeFrame responses path.",
     }
 
     _CONTENT_BLOCK_TYPES = {"input_text", "text", "output_text", "input_image", "image_url"}
@@ -125,7 +137,58 @@ class ResponsesService:
             controls["temperature"] = request.temperature
         if request.metadata:
             controls["metadata"] = dict(request.metadata)
+        if request.text:
+            response_format = request.text.get("format")
+            if isinstance(response_format, dict) and response_format:
+                controls["response_format"] = dict(response_format)
         return controls
+
+    @classmethod
+    def _normalize_text_configuration(cls, text_payload: Any) -> dict[str, Any] | None:
+        if text_payload is None:
+            return None
+        if not isinstance(text_payload, dict):
+            raise ResponsesRequestValidationError(
+                error_type="invalid_request",
+                message="text must be an object when provided.",
+                status_code=400,
+                param="text",
+            )
+        format_payload = text_payload.get("format")
+        if not isinstance(format_payload, dict):
+            raise ResponsesRequestValidationError(
+                error_type="invalid_request",
+                message="text.format must be an object when provided.",
+                status_code=400,
+                param="text.format",
+            )
+        format_type = str(format_payload.get("type", "") or "").strip()
+        if format_type == "json_object":
+            return {"format": {"type": "json_object"}}
+        if format_type == "json_schema":
+            schema_payload = format_payload.get("schema")
+            if not isinstance(schema_payload, dict):
+                raise ResponsesRequestValidationError(
+                    error_type="invalid_request",
+                    message="text.format.schema must be an object for json_schema structured output.",
+                    status_code=400,
+                    param="text.format.schema",
+                )
+            normalized_format: dict[str, Any] = {
+                "type": "json_schema",
+                "name": str(format_payload.get("name") or "forgeframe_structured_output"),
+                "schema": schema_payload,
+            }
+            if "strict" in format_payload:
+                normalized_format["strict"] = bool(format_payload.get("strict"))
+            return {"format": normalized_format}
+        raise ResponsesRequestValidationError(
+            error_type="unsupported_parameter",
+            message=f"Unsupported text.format.type '{format_type or 'unknown'}' on the ForgeFrame responses path.",
+            status_code=422,
+            param="text.format.type",
+            code="unsupported_parameter",
+        )
 
     @staticmethod
     def build_sync_runtime_native_mapping(
@@ -270,40 +333,32 @@ class ResponsesService:
         if block_type in {"input_text", "text", "output_text"}:
             return {"type": "input_text", "text": str(block.get("text", "") or "")}
 
-        if block.get("file_id") is not None:
-            raise ResponsesRequestValidationError(
-                error_type="unsupported_input",
-                message="Responses image inputs on the current runtime path require image_url or data URLs; file_id is not supported.",
-                status_code=422,
-                param="input.file_id",
-            )
-
         raw_image_url = block.get("image_url", block.get("url"))
+        raw_file_id = block.get("file_id")
         if isinstance(raw_image_url, dict):
             if raw_image_url.get("file_id") is not None:
-                raise ResponsesRequestValidationError(
-                    error_type="unsupported_input",
-                    message="Responses image inputs on the current runtime path require image_url or data URLs; file_id is not supported.",
-                    status_code=422,
-                    param="input.image_url.file_id",
-                )
+                raw_file_id = raw_image_url.get("file_id")
             image_url = str(raw_image_url.get("url", "") or "").strip()
             detail = raw_image_url.get("detail", block.get("detail"))
         else:
             image_url = str(raw_image_url or "").strip()
             detail = block.get("detail")
-        if not image_url:
+        file_id = str(raw_file_id or "").strip()
+        if not image_url and not file_id:
             raise ResponsesRequestValidationError(
                 error_type="unsupported_input",
-                message="Responses image input blocks must include a non-empty image_url.",
+                message="Responses image input blocks must include a non-empty image_url or file_id.",
                 status_code=422,
                 param="input.image_url",
             )
 
         normalized: dict[str, Any] = {
             "type": "input_image",
-            "image_url": image_url,
         }
+        if image_url:
+            normalized["image_url"] = image_url
+        if file_id:
+            normalized["file_id"] = file_id
         if detail is not None:
             normalized["detail"] = detail
         return normalized
@@ -458,7 +513,101 @@ class ResponsesService:
                     return True
                 if block_type == "input_image" and str(block.get("image_url", "") or "").strip():
                     return True
+                if block_type == "input_image" and str(block.get("file_id", "") or "").strip():
+                    return True
         return False
+
+    @staticmethod
+    def _validate_schema_subset(value: Any, schema: dict[str, Any], *, path: str = "$") -> None:
+        enum_values = schema.get("enum")
+        if isinstance(enum_values, list) and value not in enum_values:
+            raise ResponseStructuredOutputValidationError(f"Structured output at {path} is not one of the allowed enum values.")
+
+        schema_type = schema.get("type")
+        if isinstance(schema_type, list):
+            valid = False
+            for candidate_type in schema_type:
+                try:
+                    ResponsesService._validate_schema_subset(value, {"type": candidate_type, **{k: v for k, v in schema.items() if k != "type"}}, path=path)
+                    valid = True
+                    break
+                except ResponseStructuredOutputValidationError:
+                    continue
+            if not valid:
+                raise ResponseStructuredOutputValidationError(f"Structured output at {path} does not match any allowed schema type.")
+            return
+
+        if schema_type == "object":
+            if not isinstance(value, dict):
+                raise ResponseStructuredOutputValidationError(f"Structured output at {path} must be an object.")
+            properties = schema.get("properties")
+            if not isinstance(properties, dict):
+                properties = {}
+            required = schema.get("required")
+            if isinstance(required, list):
+                for key in required:
+                    if str(key) not in value:
+                        raise ResponseStructuredOutputValidationError(f"Structured output is missing required property '{key}' at {path}.")
+            if schema.get("additionalProperties") is False:
+                extra = sorted(set(value) - set(properties))
+                if extra:
+                    raise ResponseStructuredOutputValidationError(f"Structured output at {path} contains unsupported properties: {', '.join(extra)}.")
+            for key, subschema in properties.items():
+                if key in value and isinstance(subschema, dict):
+                    ResponsesService._validate_schema_subset(value[key], subschema, path=f"{path}.{key}")
+            return
+
+        if schema_type == "array":
+            if not isinstance(value, list):
+                raise ResponseStructuredOutputValidationError(f"Structured output at {path} must be an array.")
+            item_schema = schema.get("items")
+            if isinstance(item_schema, dict):
+                for index, item in enumerate(value):
+                    ResponsesService._validate_schema_subset(item, item_schema, path=f"{path}[{index}]")
+            return
+
+        if schema_type == "string" and not isinstance(value, str):
+            raise ResponseStructuredOutputValidationError(f"Structured output at {path} must be a string.")
+        if schema_type == "integer" and (not isinstance(value, int) or isinstance(value, bool)):
+            raise ResponseStructuredOutputValidationError(f"Structured output at {path} must be an integer.")
+        if schema_type == "number" and not isinstance(value, (int, float)):
+            raise ResponseStructuredOutputValidationError(f"Structured output at {path} must be a number.")
+        if schema_type == "boolean" and not isinstance(value, bool):
+            raise ResponseStructuredOutputValidationError(f"Structured output at {path} must be a boolean.")
+        if schema_type == "null" and value is not None:
+            raise ResponseStructuredOutputValidationError(f"Structured output at {path} must be null.")
+
+    @classmethod
+    def normalize_output_text_for_request(cls, request: NormalizedResponsesRequest, output_text: str) -> str:
+        if not request.text:
+            return output_text
+        format_payload = request.text.get("format")
+        if not isinstance(format_payload, dict):
+            return output_text
+        format_type = str(format_payload.get("type", "") or "")
+        try:
+            parsed = json.loads(output_text)
+        except json.JSONDecodeError as exc:
+            raise ResponseStructuredOutputValidationError("Provider output is not valid JSON for the requested structured-output format.") from exc
+        if format_type == "json_object":
+            if not isinstance(parsed, dict):
+                raise ResponseStructuredOutputValidationError("Structured output requested json_object but provider returned a non-object JSON value.")
+            return json.dumps(parsed, ensure_ascii=True, separators=(",", ":"))
+        if format_type == "json_schema":
+            schema_payload = format_payload.get("schema")
+            if not isinstance(schema_payload, dict):
+                raise ResponseStructuredOutputValidationError("Structured output json_schema request is missing a usable schema payload.")
+            try:
+                import jsonschema  # type: ignore[import-not-found]
+            except ImportError:
+                cls._validate_schema_subset(parsed, schema_payload)
+            else:
+                try:
+                    jsonschema.validate(parsed, schema_payload)
+                except jsonschema.ValidationError as exc:  # type: ignore[attr-defined]
+                    raise ResponseStructuredOutputValidationError(f"Structured output does not satisfy the requested schema: {exc.message}") from exc
+            return json.dumps(parsed, ensure_ascii=True, separators=(",", ":"))
+        return output_text
 
     def normalize_request(self, payload: ResponsesRequest) -> NormalizedResponsesRequest:
         extras = dict(getattr(payload, "model_extra", None) or {})
@@ -515,6 +664,8 @@ class ResponsesService:
                 param="input",
             )
 
+        text_configuration = self._normalize_text_configuration(payload.text)
+
         return NormalizedResponsesRequest(
             model=payload.model,
             instructions=payload.instructions,
@@ -527,6 +678,7 @@ class ResponsesService:
             client=dict(payload.client or {}),
             max_output_tokens=payload.max_output_tokens,
             temperature=payload.temperature,
+            text=text_configuration,
         )
 
     def create_background_response(

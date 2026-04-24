@@ -24,6 +24,7 @@ from app.api.runtime.dependencies import (
     get_model_registry,
     get_responses_service,
     get_routing_service,
+    get_runtime_files_service,
     get_runtime_gateway_identity,
     get_runtime_request_path_decision,
     get_settings,
@@ -51,7 +52,9 @@ from app.responses.models import (
     new_response_id,
 )
 from app.responses.service import ResponseNotFoundError, ResponsesRequestValidationError, ResponsesService
+from app.responses.service import ResponseStructuredOutputValidationError
 from app.responses.translation import response_input_items_to_chat_messages
+from app.runtime_files.service import RuntimeFileResolutionError, RuntimeFilesService
 from app.request_metadata import merge_request_metadata
 from app.settings.config import Settings
 from app.telemetry.context import telemetry_context_from_request
@@ -269,6 +272,7 @@ def create_response(
     dispatch: DispatchService = Depends(get_dispatch_service),
     routing: RoutingService = Depends(get_routing_service),
     responses: ResponsesService = Depends(get_responses_service),
+    runtime_files: RuntimeFilesService = Depends(get_runtime_files_service),
     settings: Settings = Depends(get_settings),
     gateway_identity: RuntimeGatewayIdentity | None = Depends(get_runtime_gateway_identity),
     request_path_decision: RuntimeRequestPathDecision | None = Depends(get_runtime_request_path_decision),
@@ -412,6 +416,29 @@ def create_response(
                 identity=gateway_identity,
                 route_context=path_metadata,
             ),
+        )
+
+    try:
+        normalized_request = runtime_files.materialize_response_input_files(
+            company_id=company_id,
+            request=normalized_request,
+        )
+    except RuntimeFileResolutionError as exc:
+        analytics.record_runtime_error(
+            provider=None,
+            model=requested_model,
+            client=client_identity,
+            route=runtime_route,
+            stream_mode=stream_mode,
+            error_type=exc.error_type,
+            status_code=exc.status_code,
+            context=telemetry_context.with_duration(_duration_ms(started_at)),
+            request_metadata=runtime_request_metadata,
+        )
+        return _error_response(
+            status_code=exc.status_code,
+            error_type=exc.error_type,
+            message=exc.message,
         )
 
     if normalized_request.background:
@@ -660,6 +687,69 @@ def create_response(
                         break
 
                     if event.event == "done":
+                        try:
+                            validated_text = responses.normalize_output_text_for_request(
+                                normalized_request,
+                                collected,
+                            )
+                        except ResponseStructuredOutputValidationError as exc:
+                            analytics.record_runtime_error(
+                                provider=provider,
+                                model=model,
+                                client=client_identity,
+                                route=runtime_route,
+                                stream_mode="stream",
+                                error_type=exc.error_type,
+                                status_code=exc.upstream_status_code,
+                                context=telemetry_context.with_duration(_duration_ms(started_at)),
+                                request_metadata=response_request_metadata,
+                            )
+                            failed_payload = _response_failed_payload(
+                                response_id=response_id,
+                                created_at=response_created,
+                                model=model,
+                                metadata=normalized_request.metadata,
+                                error_code=exc.error_type,
+                                error_message=exc.message,
+                                native_mapping=responses.build_sync_runtime_native_mapping(
+                                    request_path=runtime_route,
+                                    response_id=response_id,
+                                    stream=True,
+                                    requested_model=requested_model,
+                                    resolved_model=model,
+                                    provider_key=provider,
+                                    lifecycle_status="failed",
+                                ),
+                            )
+                            responses.save_response_snapshot(
+                                response_id=response_id,
+                                company_id=company_id,
+                                instance_id=instance_id,
+                                account_id=account_id,
+                                request_path=runtime_route,
+                                processing_mode="sync",
+                                stream=True,
+                                request=normalized_request,
+                                body=failed_payload,
+                                lifecycle_status="failed",
+                                resolved_model=model,
+                                provider_key=provider,
+                                error_json=failed_payload.get("error"),
+                                native_mapping=failed_payload["metadata"]["forgeframe_native_mapping"],
+                            )
+                            failed_payload = responses.get_response(company_id=company_id, response_id=response_id)
+                            responses.record_stream_event(
+                                response_id=response_id,
+                                company_id=company_id,
+                                event_name="response.error",
+                                payload=failed_payload,
+                            )
+                            terminal_state = True
+                            yield (
+                                "event: response.error\ndata: "
+                                f"{JSONResponse(content=failed_payload).body.decode()}\n\n"
+                            )
+                            break
                         analytics.record_stream_done_event(
                             provider=provider,
                             model=model,
@@ -673,7 +763,7 @@ def create_response(
                             created_at=response_created,
                             model=model,
                             metadata=normalized_request.metadata,
-                            text=collected,
+                            text=validated_text,
                             tool_calls=list(event.tool_calls or []),
                             usage=event.usage or {},
                             cost=event.cost or {},
@@ -924,12 +1014,65 @@ def create_response(
             **extra,
         )
 
+    try:
+        normalized_output_text = responses.normalize_output_text_for_request(normalized_request, result.content)
+    except ResponseStructuredOutputValidationError as exc:
+        analytics.record_runtime_error(
+            provider=result.provider,
+            model=result.model,
+            client=client_identity,
+            route=runtime_route,
+            stream_mode="non_stream",
+            error_type=exc.error_type,
+            status_code=exc.upstream_status_code,
+            context=telemetry_context.with_duration(_duration_ms(started_at)),
+            request_metadata=response_request_metadata,
+        )
+        failed_payload = _response_failed_payload(
+            response_id=response_id,
+            created_at=response_created,
+            model=result.model,
+            metadata=normalized_request.metadata,
+            error_code=exc.error_type,
+            error_message=exc.message,
+            native_mapping=responses.build_sync_runtime_native_mapping(
+                request_path=runtime_route,
+                response_id=response_id,
+                stream=False,
+                requested_model=requested_model,
+                resolved_model=result.model,
+                provider_key=result.provider,
+                lifecycle_status="failed",
+            ),
+        )
+        responses.save_response_snapshot(
+            response_id=response_id,
+            company_id=company_id,
+            instance_id=instance_id,
+            account_id=account_id,
+            request_path=runtime_route,
+            processing_mode="sync",
+            stream=False,
+            request=normalized_request,
+            body=failed_payload,
+            lifecycle_status="failed",
+            resolved_model=result.model,
+            provider_key=result.provider,
+            error_json=failed_payload.get("error"),
+            native_mapping=failed_payload["metadata"]["forgeframe_native_mapping"],
+        )
+        return _error_response(
+            status_code=exc.upstream_status_code,
+            error_type=exc.error_type,
+            message=exc.message,
+        )
+
     completed_payload = _response_completed_payload(
         response_id=response_id,
         created_at=response_created,
         model=result.model,
         metadata=normalized_request.metadata,
-        text=result.content,
+        text=normalized_output_text,
         tool_calls=result.tool_calls,
         usage=result.usage,
         cost=result.cost,

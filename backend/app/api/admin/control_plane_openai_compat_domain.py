@@ -15,6 +15,7 @@ from app.storage.runtime_responses_repository import (
     NativeResponseToolCallORM,
     RuntimeResponseORM,
 )
+from app.storage.runtime_files_repository import RuntimeFileORM
 
 
 _OPENAI_CORPUS_LABELS: dict[str, str] = {
@@ -215,6 +216,31 @@ class ControlPlaneOpenAICompatibilityDomainMixin:
                 return recent[response_id]
         return None
 
+    def _latest_structured_output_response(
+        self,
+        *,
+        company_id: str,
+    ) -> RuntimeResponseORM | None:
+        for record in self._recent_runtime_responses(company_id=company_id, stream=None):
+            response_format = dict(record.request_controls or {}).get("response_format")
+            if isinstance(response_format, dict) and response_format:
+                return record
+        return None
+
+    def _latest_runtime_file(
+        self,
+        *,
+        company_id: str,
+    ) -> RuntimeFileORM | None:
+        session_factory = get_execution_session_factory()
+        with session_factory() as session:
+            return (
+                session.query(RuntimeFileORM)
+                .filter(RuntimeFileORM.company_id == company_id)
+                .order_by(RuntimeFileORM.created_at.desc())
+                .first()
+            )
+
     @staticmethod
     def _signoff_summary(rows: list[OpenAICompatibilitySignoffRecord]) -> OpenAICompatibilitySummaryRecord:
         summary = OpenAICompatibilitySummaryRecord(total_checks=len(rows))
@@ -280,9 +306,16 @@ class ControlPlaneOpenAICompatibilityDomainMixin:
         )
         latest_response = next(iter(self._recent_runtime_responses(company_id=company_id, stream=False)), None)
         structured_response = self._latest_response_with_structured_input(company_id=company_id)
+        structured_output_response = self._latest_structured_output_response(company_id=company_id)
         tool_response = self._latest_response_with_tool_calls(company_id=company_id)
         streaming_response = self._latest_streaming_response_with_events(company_id=company_id)
         native_items_response = self._latest_response_with_native_items(company_id=company_id)
+        runtime_file = self._latest_runtime_file(company_id=company_id)
+        embeddings_usage = self._latest_route_event(
+            usage_events,
+            route="/v1/embeddings",
+            stream_mode="non_stream",
+        )
 
         any_vision_provider = any(
             bool(axis.runtime.capabilities.get("vision")) or str(axis.runtime.capabilities.get("vision_level", "")) not in {"", "none"}
@@ -426,12 +459,26 @@ class ControlPlaneOpenAICompatibilityDomainMixin:
             ),
             self._signoff_row(
                 "structured_output",
-                status="unsupported",
+                status="supported" if structured_output_response is not None else "blocked-by-live-evidence",
                 route="/v1/responses",
                 provider_axis="openai_compatible_clients",
-                deviation_reason="No release-grade structured-output contract is implemented on the public responses surface.",
-                evidence_source="repo_gap",
-                raw_diff_summary="Responses text.format / schema-driven structured output remains unimplemented.",
+                live_evidence_required=True,
+                deviation_reason=(
+                    None
+                    if structured_output_response is not None
+                    else "Structured-output controls are wired on `/v1/responses`, but no completed runtime evidence is recorded for this tenant yet."
+                ),
+                evidence_source=(
+                    "runtime_response_projection+backend/tests/test_runtime_core.py"
+                    if structured_output_response is not None
+                    else "backend/tests/test_runtime_core.py"
+                ),
+                last_verified_at=getattr(structured_output_response, "updated_at", None).isoformat() if structured_output_response is not None and getattr(structured_output_response, "updated_at", None) is not None else None,
+                raw_diff_summary=(
+                    None
+                    if structured_output_response is not None
+                    else "Structured-output runtime proof is missing for the current tenant."
+                ),
             ),
             self._signoff_row(
                 "error_semantics",
@@ -477,21 +524,46 @@ class ControlPlaneOpenAICompatibilityDomainMixin:
             ),
             self._signoff_row(
                 "files",
-                status="unsupported",
+                status="partial" if runtime_file is not None else "blocked-by-live-evidence",
                 route="/v1/files",
                 provider_axis="openai_compatible_clients",
-                deviation_reason="No public files surface is wired on the current ForgeFrame compatibility layer.",
-                evidence_source="repo_gap",
-                raw_diff_summary="File upload/list/retrieve APIs are absent.",
+                live_evidence_required=True,
+                deviation_reason=(
+                    "Public file upload/list/retrieve/delete/content APIs are shipped, but cross-surface parity beyond the current compatibility slice remains partial."
+                    if runtime_file is not None
+                    else "The public files surface is wired, but no uploaded runtime file evidence is recorded for this tenant yet."
+                ),
+                evidence_source=(
+                    "runtime_files_projection+backend/tests/test_runtime_core.py"
+                    if runtime_file is not None
+                    else "backend/tests/test_runtime_core.py"
+                ),
+                last_verified_at=getattr(runtime_file, "updated_at", None).isoformat() if runtime_file is not None and getattr(runtime_file, "updated_at", None) is not None else None,
+                raw_diff_summary=(
+                    "Core file APIs exist, but broader file-purpose parity remains intentionally partial."
+                    if runtime_file is not None
+                    else "No runtime file evidence is present yet."
+                ),
             ),
             self._signoff_row(
                 "embeddings",
-                status="unsupported",
+                status="supported" if embeddings_usage is not None else "blocked-by-live-evidence",
                 route="/v1/embeddings",
                 provider_axis="openai_compatible_clients",
-                deviation_reason="No public embeddings surface is wired on the current ForgeFrame compatibility layer.",
-                evidence_source="repo_gap",
-                raw_diff_summary="Embeddings remain provider-reference material, not a shipped public runtime API.",
+                live_evidence_required=True,
+                deviation_reason=(
+                    None
+                    if embeddings_usage is not None
+                    else "The public embeddings surface is wired, but no recorded embeddings runtime usage exists for this tenant yet."
+                ),
+                evidence_source="runtime_usage" if embeddings_usage is not None else "backend/tests/test_runtime_core.py",
+                last_verified_at=getattr(embeddings_usage, "created_at", None),
+                sample_request_id=getattr(embeddings_usage, "request_id", None),
+                raw_diff_summary=(
+                    None
+                    if embeddings_usage is not None
+                    else "Embeddings runtime proof is missing for the current tenant."
+                ),
             ),
         ]
 

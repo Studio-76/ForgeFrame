@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import base64
+import struct
 from collections.abc import Iterator, Mapping
 from typing import Literal, Protocol
 
@@ -15,6 +17,7 @@ class ProviderCapabilities(BaseModel):
     streaming: bool = False
     tool_calling: bool = False
     vision: bool = False
+    embeddings: bool = False
     external: bool = True
     oauth_required: bool = False
     discovery_support: bool = False
@@ -47,6 +50,24 @@ class ChatDispatchResult(BaseModel):
     tool_calls: list[dict] = Field(default_factory=list)
 
 
+class EmbeddingDispatchRequest(BaseModel):
+    model: str
+    input_items: list[object] = Field(default_factory=list)
+    encoding_format: Literal["float", "base64"] = "float"
+    dimensions: int | None = None
+    request_metadata: dict[str, str] = Field(default_factory=dict)
+
+
+class EmbeddingDispatchResult(BaseModel):
+    model: str
+    provider: str
+    embeddings: list[object] = Field(default_factory=list)
+    usage: TokenUsage = Field(default_factory=TokenUsage)
+    cost: CostBreakdown = Field(default_factory=CostBreakdown)
+    credential_type: str = "internal"
+    auth_source: str = "internal"
+
+
 class ProviderStreamEvent(BaseModel):
     event: Literal["delta", "done", "error"]
     delta: str = ""
@@ -74,7 +95,17 @@ def openai_compatible_response_controls(response_controls: Mapping[str, object] 
     metadata = response_controls.get("metadata")
     if isinstance(metadata, dict) and metadata:
         controls["metadata"] = metadata
+    response_format = response_controls.get("response_format")
+    if isinstance(response_format, dict) and response_format:
+        controls["response_format"] = dict(response_format)
     return controls
+
+
+def floats_to_base64_embedding(values: list[float]) -> str:
+    """Encode an embedding vector into an OpenAI-style base64 payload."""
+
+    packed = struct.pack(f"<{len(values)}f", *values)
+    return base64.b64encode(packed).decode("ascii")
 
 
 class ProviderAdapter(Protocol):
@@ -86,6 +117,9 @@ class ProviderAdapter(Protocol):
 
     def stream_chat_completion(self, request: ChatDispatchRequest) -> Iterator[ProviderStreamEvent]:
         """Dispatch a stream chat completion request to an upstream provider."""
+
+    def create_embeddings(self, request: EmbeddingDispatchRequest) -> EmbeddingDispatchResult:
+        """Dispatch an embeddings request to an upstream provider."""
 
     def is_ready(self) -> bool:
         """Return whether this adapter is currently configured for runtime use."""

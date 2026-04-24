@@ -3,6 +3,8 @@
 from .base import (
     ChatDispatchRequest,
     ChatDispatchResult,
+    EmbeddingDispatchRequest,
+    EmbeddingDispatchResult,
     ProviderAdapter,
     ProviderAuthenticationError,
     ProviderBadRequestError,
@@ -57,6 +59,8 @@ __all__ = [
     "AdapterCallMetadata",
     "ChatDispatchRequest",
     "ChatDispatchResult",
+    "EmbeddingDispatchRequest",
+    "EmbeddingDispatchResult",
     "NormalizedProviderError",
     "ProviderAdapter",
     "ProviderCancelRequest",

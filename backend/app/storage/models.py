@@ -41,6 +41,7 @@ from app.storage.recovery_repository import (
     RecoveryUpgradeReportORM,
 )
 from app.storage.runtime_responses_repository import RuntimeResponseORM
+from app.storage.runtime_files_repository import RuntimeFileORM
 from app.storage.skill_repository import SkillActivationORM, SkillORM, SkillUsageEventORM, SkillVersionORM
 from app.storage.tasking_repository import (
     AutomationORM,
@@ -96,6 +97,7 @@ __all__ = [
     "RunOutboxORM",
     "RunSecretBindingORM",
     "RuntimeResponseORM",
+    "RuntimeFileORM",
     "SkillActivationORM",
     "SkillORM",
     "SkillUsageEventORM",

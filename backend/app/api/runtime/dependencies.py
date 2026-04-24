@@ -13,14 +13,15 @@ from app.core.model_registry import ModelRegistry
 from app.core.routing import RoutingService
 from app.execution.dependencies import (
     clear_execution_dependency_caches,
-    get_execution_responses_service,
     get_execution_session_factory,
+    get_execution_responses_service,
     get_execution_transition_service,
 )
 from app.governance.errors import RuntimeAuthorizationError
 from app.governance.models import RuntimeGatewayIdentity, RuntimeRequestPathDecision
 from app.governance.service import GovernanceService, get_governance_service
 from app.providers import ProviderRegistry
+from app.runtime_files.service import RuntimeFilesService
 from app.settings.config import Settings, get_settings
 from app.tenancy import normalize_tenant_id
 
@@ -182,6 +183,11 @@ def get_responses_service():
     return get_execution_responses_service()
 
 
+@lru_cache(maxsize=1)
+def get_runtime_files_service() -> RuntimeFilesService:
+    return RuntimeFilesService(get_execution_session_factory())
+
+
 def get_runtime_request_actor(
     request: Request,
     gateway_identity: RuntimeGatewayIdentity | None = Depends(get_runtime_gateway_identity),
@@ -250,6 +256,7 @@ def clear_runtime_dependency_caches() -> None:
     _build_dispatch_service.cache_clear()
     get_provider_registry.cache_clear()
     clear_execution_dependency_caches()
+    get_runtime_files_service.cache_clear()
 
 
 get_model_registry.cache_clear = _build_model_registry.cache_clear  # type: ignore[attr-defined]
@@ -265,6 +272,7 @@ __all__ = [
     "get_provider_registry",
     "get_dispatch_service",
     "get_responses_service",
+    "get_runtime_files_service",
     "get_runtime_gateway_identity",
     "get_runtime_request_path_decision",
     "get_runtime_request_actor",

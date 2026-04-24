@@ -192,6 +192,7 @@ class HarnessService:
                 "temperature": payload.temperature,
                 "max_output_tokens": payload.max_output_tokens,
                 "metadata": payload.metadata,
+                "response_format": payload.response_format,
             },
         )
         if payload.tools and "tools" not in request_payload:
@@ -204,6 +205,8 @@ class HarnessService:
             request_payload["max_tokens"] = payload.max_output_tokens
         if payload.metadata and "metadata" not in request_payload:
             request_payload["metadata"] = payload.metadata
+        if payload.response_format and "response_format" not in request_payload:
+            request_payload["response_format"] = payload.response_format
         endpoint = self._join_endpoint_url(
             profile.endpoint_base_url,
             profile.request_mapping.path,
@@ -513,6 +516,7 @@ class HarnessService:
         temperature: float | None = None,
         max_output_tokens: int | None = None,
         metadata: dict[str, Any] | None = None,
+        response_format: dict[str, Any] | None = None,
         request_metadata: dict[str, str] | None = None,
     ) -> dict[str, Any]:
         profile = self.get_profile(provider_key)
@@ -527,6 +531,7 @@ class HarnessService:
                 temperature=temperature,
                 max_output_tokens=max_output_tokens,
                 metadata=metadata or {},
+                response_format=response_format,
             ),
             request_metadata=request_metadata,
         )
@@ -553,6 +558,7 @@ class HarnessService:
         temperature: float | None = None,
         max_output_tokens: int | None = None,
         metadata: dict[str, Any] | None = None,
+        response_format: dict[str, Any] | None = None,
         request_metadata: dict[str, str] | None = None,
     ):
         from app.providers.openai_streaming import (
@@ -574,6 +580,7 @@ class HarnessService:
                 temperature=temperature,
                 max_output_tokens=max_output_tokens,
                 metadata=metadata or {},
+                response_format=response_format,
             ),
             request_metadata=request_metadata,
         )
@@ -627,6 +634,73 @@ class HarnessService:
             "usage": usage,
             "content": collected,
             "tool_calls": finalize_openai_tool_calls(tool_call_chunks),
+        }
+
+    def execute_embeddings(
+        self,
+        provider_key: str,
+        *,
+        model: str,
+        input_items: list[object],
+        encoding_format: str = "float",
+        dimensions: int | None = None,
+        request_metadata: dict[str, str] | None = None,
+    ) -> dict[str, Any]:
+        profile = self.get_profile(provider_key)
+        if not profile.capabilities.embeddings:
+            raise RuntimeError("Harness profile embeddings capability is not enabled.")
+
+        endpoint = self._join_endpoint_url(
+            profile.endpoint_base_url,
+            "/embeddings",
+            profile.request_mapping.path_join_policy,
+        )
+        headers = self._build_headers(profile)
+        headers.update(forgeframe_request_metadata_headers(request_metadata))
+        payload: dict[str, Any] = {
+            "model": self._resolve_model_slug(profile, model),
+            "input": input_items,
+        }
+        if encoding_format:
+            payload["encoding_format"] = encoding_format
+        if dimensions is not None:
+            payload["dimensions"] = dimensions
+
+        try:
+            response = httpx.post(endpoint, headers=headers, json=payload, timeout=30)
+        except httpx.RequestError as exc:
+            raise RuntimeError(f"Harness connection failure: {exc}") from exc
+        if response.status_code >= 400:
+            raise RuntimeError(f"Harness provider rejected embeddings request ({response.status_code}): {response.text[:300]}")
+        parsed = response.json()
+        data = parsed.get("data")
+        if not isinstance(data, list):
+            raise RuntimeError("Harness embeddings response is missing a valid data array.")
+        usage_payload = dict(parsed.get("usage") or {})
+        prompt_tokens = int(usage_payload.get("prompt_tokens", usage_payload.get("input_tokens", 0)) or 0)
+        total_tokens = int(usage_payload.get("total_tokens", prompt_tokens) or prompt_tokens)
+        self._store.record_profile_usage(provider_key=provider_key, model=model, stream=False, total_tokens=total_tokens)
+        self._store.record_run(
+            HarnessVerificationRun(
+                provider_key=provider_key,
+                integration_class=profile.integration_class,
+                model=model,
+                mode="runtime_non_stream",
+                status="ok",
+                success=True,
+                steps=[{"step": "embeddings_request", "status": "ok"}],
+                executed_at=self._now_iso(),
+                client_id="runtime",
+                consumer="runtime",
+                integration="generic_harness_embeddings",
+            )
+        )
+        return {
+            "model": parsed.get("model", model),
+            "data": data,
+            "prompt_tokens": prompt_tokens,
+            "total_tokens": total_tokens,
+            "raw": parsed,
         }
 
     def _parse_non_stream_response(self, profile: HarnessProfileRecord, payload: dict[str, Any], *, model: str) -> dict[str, Any]:

@@ -1,4 +1,5 @@
 import os
+import base64
 
 from fastapi.testclient import TestClient
 
@@ -58,6 +59,15 @@ def test_openai_compatibility_signoff_reports_evidence_without_false_green() -> 
     )
     assert responses_response.status_code == 200
 
+    structured_response = client.post(
+        "/v1/responses",
+        json={
+            "input": "compat structured output",
+            "text": {"format": {"type": "json_object"}},
+        },
+    )
+    assert structured_response.status_code == 200
+
     with client.stream(
         "POST",
         "/v1/responses",
@@ -72,6 +82,23 @@ def test_openai_compatibility_signoff_reports_evidence_without_false_green() -> 
         json={"input": "compat error", "model": "missing-model-for-signoff"},
     )
     assert missing_model.status_code == 404
+
+    file_upload = client.post(
+        "/v1/files",
+        json={
+            "purpose": "assistants",
+            "filename": "compat.txt",
+            "content_type": "text/plain",
+            "content_base64": base64.b64encode(b"forgeframe compatibility file").decode("ascii"),
+        },
+    )
+    assert file_upload.status_code == 201
+
+    embeddings_response = client.post(
+        "/v1/embeddings",
+        json={"input": "compat embeddings proof"},
+    )
+    assert embeddings_response.status_code == 200
 
     signoff = client.get(
         "/admin/providers/openai-compatibility/signoff",
@@ -92,8 +119,9 @@ def test_openai_compatibility_signoff_reports_evidence_without_false_green() -> 
     assert rows["responses_simple"]["status"] == "partial"
     assert rows["responses_input_items"]["status"] == "partial"
     assert rows["streaming_responses"]["status"] == "partial"
+    assert rows["structured_output"]["status"] == "supported"
     assert rows["error_semantics"]["status"] == "supported"
     assert rows["unsupported_partial_fields"]["status"] == "supported"
-    assert rows["files"]["status"] == "unsupported"
-    assert rows["embeddings"]["status"] == "unsupported"
+    assert rows["files"]["status"] == "partial"
+    assert rows["embeddings"]["status"] == "supported"
     assert "translation layer" in rows["responses_simple"]["raw_diff_summary"]

@@ -43,6 +43,8 @@ def test_host_env_example_defaults_to_normative_public_https_contract() -> None:
     assert "FORGEFRAME_PUBLIC_FQDN=replace-with-public-fqdn.example.invalid" in env_example
     assert "FORGEFRAME_PUBLIC_TLS_MODE=integrated_acme" in env_example
     assert "FORGEFRAME_PUBLIC_TLS_ACME_EMAIL=replace-with-acme-email@example.invalid" in env_example
+    assert "FORGEFRAME_PG_MODE=native" in env_example
+    assert "FORGEFRAME_PG_CLUSTER_NAME=forgeframe" in env_example
 
 
 def test_bootstrap_driver_wires_public_https_services_before_normative_smoke() -> None:
@@ -52,6 +54,27 @@ def test_bootstrap_driver_wires_public_https_services_before_normative_smoke() -
     assert 'bash "$ROOT_DIR/scripts/renew-certificates.sh"' in bootstrap_script
     assert "forgeframe-public.service forgeframe-acme.timer" in bootstrap_script
     assert "Normative bootstrap path is blocked" in bootstrap_script
+
+
+def test_guided_host_install_driver_collects_login_inputs_and_reassigns_non_public_ports() -> None:
+    install_script = (ROOT / "scripts" / "install-forgeframe.sh").read_text(encoding="utf-8")
+
+    assert "--guided" in install_script
+    assert "Public HTTPS stays fixed on 443" in install_script
+    assert "Public HTTP helper" in install_script
+    assert "must remain fixed" in install_script
+    assert "PORT_INCREMENT" in install_script
+    assert "switching to" in install_script
+    assert "PostgreSQL mode [native/existing/docker]" in install_script
+    assert "Native PostgreSQL cluster name" in install_script
+    assert "Managed PostgreSQL container name" in install_script
+    assert "Bootstrap admin username" in install_script
+    assert "collect_default_install_inputs" in install_script
+    assert "ensure_system_dependencies" in install_script
+    assert "python3-venv" in install_script
+    assert "setup_20.x" in install_script
+    assert "pg_createcluster" in install_script
+    assert "Frontend login:" in (ROOT / "scripts" / "bootstrap-forgeframe.sh").read_text(encoding="utf-8")
 
 
 def test_host_smoke_defaults_to_public_https_origin_and_same_origin_checks() -> None:

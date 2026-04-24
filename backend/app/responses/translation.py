@@ -11,6 +11,10 @@ def _normalize_chat_content_block(block: dict[str, Any]) -> dict[str, Any]:
         return {"type": "text", "text": str(block.get("text", "") or "")}
     if block_type in {"input_image", "image_url"}:
         image_url = str(block.get("image_url") or block.get("url") or "").strip()
+        if not image_url:
+            file_id = str(block.get("file_id") or "").strip()
+            if file_id:
+                raise ValueError(f"Responses input_image file '{file_id}' was not materialized before provider translation.")
         payload: dict[str, Any] = {"type": "image_url", "image_url": {"url": image_url}}
         detail = block.get("detail")
         if detail is not None:

@@ -195,11 +195,13 @@ forgeframe_update_env_value() {
 
   python3 - "$env_file" "$key" "$value" <<'PY'
 import sys
+import shlex
 from pathlib import Path
 
 path = Path(sys.argv[1])
 key = sys.argv[2]
 value = sys.argv[3]
+rendered_value = shlex.quote(value)
 
 lines = path.read_text(encoding="utf-8").splitlines()
 for index, line in enumerate(lines):
@@ -208,10 +210,10 @@ for index, line in enumerate(lines):
         continue
     existing_key, _, _ = line.partition("=")
     if existing_key.strip() == key:
-        lines[index] = f"{key}={value}"
+        lines[index] = f"{key}={rendered_value}"
         break
 else:
-    lines.append(f"{key}={value}")
+    lines.append(f"{key}={rendered_value}")
 
 path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 PY
