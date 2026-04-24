@@ -318,14 +318,24 @@ def scrub_postgres_url(value: str) -> str:
     stripped = value.strip().strip("'").strip('"')
     if not stripped:
         return "postgresql://forgeframe:replace-with-a-generated-postgres-password@127.0.0.1:5432/forgeframe"
-    parts = urlsplit(stripped)
+    scheme = "postgresql"
+    if "://" in stripped:
+        candidate_scheme = stripped.split("://", 1)[0].strip()
+        if candidate_scheme:
+            scheme = candidate_scheme
+    try:
+        parts = urlsplit(stripped)
+    except ValueError:
+        return f"{scheme}://forgeframe:replace-with-a-generated-postgres-password@127.0.0.1:5432/forgeframe"
     username = unquote(parts.username) if parts.username else "forgeframe"
     password = "replace-with-a-generated-postgres-password"
     hostname = parts.hostname or "127.0.0.1"
+    if ":" in hostname and not hostname.startswith("["):
+        hostname = f"[{hostname}]"
     port = f":{parts.port}" if parts.port else ""
     netloc = f"{quote(username, safe='')}:{quote(password, safe='')}@{hostname}{port}"
     path = parts.path or "/forgeframe"
-    return urlunsplit((parts.scheme or "postgresql", netloc, path, parts.query, parts.fragment))
+    return urlunsplit((parts.scheme or scheme, netloc, path, parts.query, parts.fragment))
 
 
 updated_lines: list[str] = []
@@ -352,6 +362,289 @@ PY
     fi
     log "Wrote local env example $example_path"
   done
+}
+
+render_embedded_systemd_template() {
+  local unit_name="$1"
+
+  case "$unit_name" in
+    forgeframe-acme.service)
+      cat <<'EOF'
+[Unit]
+Description=ForgeFrame ACME certificate renewal
+After=network-online.target forgeframe-http-helper.service
+Wants=network-online.target
+ConditionPathExists=@@ENV_FILE@@
+
+[Service]
+Type=oneshot
+User=root
+Group=root
+WorkingDirectory=@@INSTALL_ROOT@@
+Environment=FORGEFRAME_ENV_FILE=@@ENV_FILE@@
+ExecStart=@@INSTALL_ROOT@@/scripts/renew-certificates.sh
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=full
+ReadWritePaths=@@STATE_DIR@@
+StandardOutput=journal
+StandardError=journal
+EOF
+      ;;
+    forgeframe-acme.timer)
+      cat <<'EOF'
+[Unit]
+Description=Run ForgeFrame ACME renewal every 12 hours
+
+[Timer]
+OnBootSec=10m
+OnUnitActiveSec=12h
+Unit=forgeframe-acme.service
+Persistent=true
+
+[Install]
+WantedBy=timers.target
+EOF
+      ;;
+    forgeframe-api.service)
+      cat <<'EOF'
+[Unit]
+Description=ForgeFrame API runtime
+After=network-online.target
+Wants=network-online.target
+ConditionPathExists=@@ENV_FILE@@
+
+[Service]
+Type=simple
+User=@@SYSTEM_USER@@
+Group=@@SYSTEM_GROUP@@
+WorkingDirectory=@@INSTALL_ROOT@@
+Environment=FORGEFRAME_ENV_FILE=@@ENV_FILE@@
+Environment=FORGEFRAME_RUNTIME_MODE=host_native
+ExecStart=@@INSTALL_ROOT@@/scripts/start-forgeframe.sh
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=full
+ReadWritePaths=@@STATE_DIR@@ @@INSTALL_ROOT@@/backend/.forgeframe
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
+EOF
+      ;;
+    forgeframe-http-helper.service)
+      cat <<'EOF'
+[Unit]
+Description=ForgeFrame ACME helper listener on port 80
+After=network-online.target
+Wants=network-online.target
+ConditionPathExists=@@ENV_FILE@@
+
+[Service]
+Type=simple
+User=root
+Group=root
+WorkingDirectory=@@INSTALL_ROOT@@
+Environment=FORGEFRAME_ENV_FILE=@@ENV_FILE@@
+ExecStart=@@INSTALL_ROOT@@/scripts/start-http-helper.sh
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=full
+ReadWritePaths=@@STATE_DIR@@
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
+EOF
+      ;;
+    forgeframe-public.service)
+      cat <<'EOF'
+[Unit]
+Description=ForgeFrame public HTTPS listener
+After=network-online.target
+Wants=network-online.target
+ConditionPathExists=@@ENV_FILE@@
+
+[Service]
+Type=simple
+User=root
+Group=root
+WorkingDirectory=@@INSTALL_ROOT@@
+Environment=FORGEFRAME_ENV_FILE=@@ENV_FILE@@
+ExecStart=@@INSTALL_ROOT@@/scripts/start-public-forgeframe.sh
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=full
+ReadWritePaths=@@STATE_DIR@@ @@INSTALL_ROOT@@/backend/.forgeframe
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
+EOF
+      ;;
+    forgeframe-retention.service)
+      cat <<'EOF'
+[Unit]
+Description=ForgeFrame retention maintenance
+After=network-online.target
+Wants=network-online.target
+ConditionPathExists=@@ENV_FILE@@
+
+[Service]
+Type=oneshot
+User=@@SYSTEM_USER@@
+Group=@@SYSTEM_GROUP@@
+WorkingDirectory=@@INSTALL_ROOT@@
+Environment=FORGEFRAME_ENV_FILE=@@ENV_FILE@@
+ExecStart=@@INSTALL_ROOT@@/.venv/bin/python @@INSTALL_ROOT@@/scripts/run-history-retention.py --apply
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=full
+ReadWritePaths=@@STATE_DIR@@ @@INSTALL_ROOT@@/backend/.forgeframe
+StandardOutput=journal
+StandardError=journal
+EOF
+      ;;
+    forgeframe-retention.timer)
+      cat <<'EOF'
+[Unit]
+Description=Run ForgeFrame retention maintenance every hour
+
+[Timer]
+OnBootSec=15m
+OnUnitActiveSec=1h
+Unit=forgeframe-retention.service
+Persistent=true
+
+[Install]
+WantedBy=timers.target
+EOF
+      ;;
+    forgeframe-worker.service)
+      cat <<'EOF'
+[Unit]
+Description=ForgeFrame execution worker
+After=network-online.target forgeframe-api.service
+Wants=network-online.target
+ConditionPathExists=@@ENV_FILE@@
+
+[Service]
+Type=simple
+User=@@SYSTEM_USER@@
+Group=@@SYSTEM_GROUP@@
+WorkingDirectory=@@INSTALL_ROOT@@
+Environment=FORGEFRAME_ENV_FILE=@@ENV_FILE@@
+Environment=FORGEFRAME_RUNTIME_MODE=host_native
+ExecStart=@@INSTALL_ROOT@@/.venv/bin/python @@INSTALL_ROOT@@/scripts/run-execution-worker.py
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=full
+ReadWritePaths=@@STATE_DIR@@ @@INSTALL_ROOT@@/backend/.forgeframe
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
+EOF
+      ;;
+    *)
+      fail "No embedded systemd template is available for $unit_name"
+      ;;
+  esac
+}
+
+install_systemd_units() {
+  local unit_name
+  local template_path
+  local target_path
+  local used_embedded=0
+  local units=(
+    forgeframe-acme.service
+    forgeframe-acme.timer
+    forgeframe-api.service
+    forgeframe-http-helper.service
+    forgeframe-public.service
+    forgeframe-retention.service
+    forgeframe-retention.timer
+    forgeframe-worker.service
+  )
+
+  for unit_name in "${units[@]}"; do
+    target_path="$UNIT_DIR/$unit_name"
+    template_path="$SYSTEMD_TEMPLATE_DIR/$unit_name"
+    if [[ -f "$template_path" ]]; then
+      sed \
+        -e "s#@@INSTALL_ROOT@@#$INSTALL_ROOT#g" \
+        -e "s#@@ENV_FILE@@#$ENV_FILE#g" \
+        -e "s#@@STATE_DIR@@#$STATE_DIR#g" \
+        -e "s#@@LOG_DIR@@#$LOG_DIR#g" \
+        -e "s#@@SYSTEM_USER@@#$SYSTEM_USER#g" \
+        -e "s#@@SYSTEM_GROUP@@#$SYSTEM_GROUP#g" \
+        "$template_path" >"$target_path"
+      log "Installed $unit_name to $target_path"
+      continue
+    fi
+
+    used_embedded=1
+    render_embedded_systemd_template "$unit_name" | sed \
+      -e "s#@@INSTALL_ROOT@@#$INSTALL_ROOT#g" \
+      -e "s#@@ENV_FILE@@#$ENV_FILE#g" \
+      -e "s#@@STATE_DIR@@#$STATE_DIR#g" \
+      -e "s#@@LOG_DIR@@#$LOG_DIR#g" \
+      -e "s#@@SYSTEM_USER@@#$SYSTEM_USER#g" \
+      -e "s#@@SYSTEM_GROUP@@#$SYSTEM_GROUP#g" >"$target_path"
+    log "Installed embedded $unit_name to $target_path because $template_path was not available"
+  done
+
+  if [[ "$used_embedded" == "1" ]]; then
+    log "Completed systemd installation with embedded template fallback."
+  fi
+}
+
+require_runtime_install_tree() {
+  local missing=()
+  local required_paths=(
+    "$INSTALL_ROOT/scripts/start-forgeframe.sh"
+    "$INSTALL_ROOT/scripts/start-public-forgeframe.sh"
+    "$INSTALL_ROOT/scripts/start-http-helper.sh"
+    "$INSTALL_ROOT/scripts/renew-certificates.sh"
+    "$INSTALL_ROOT/scripts/run-history-retention.py"
+    "$INSTALL_ROOT/scripts/run-execution-worker.py"
+    "$INSTALL_ROOT/scripts/apply-storage-migrations.py"
+    "$INSTALL_ROOT/scripts/serve-acme-http.py"
+    "$INSTALL_ROOT/backend/pyproject.toml"
+    "$INSTALL_ROOT/backend/app/main.py"
+  )
+  local path
+
+  for path in "${required_paths[@]}"; do
+    if [[ ! -e "$path" ]]; then
+      missing+=("$path")
+    fi
+  done
+
+  if [[ ! -f "$INSTALL_ROOT/frontend/dist/index.html" && ! -f "$INSTALL_ROOT/frontend/package.json" ]]; then
+    missing+=("$INSTALL_ROOT/frontend/dist/index.html|$INSTALL_ROOT/frontend/package.json")
+  fi
+
+  (( ${#missing[@]} == 0 )) || fail "Install root $INSTALL_ROOT is missing required runtime artifacts: ${missing[*]}"
 }
 
 install_host_env_template() {
@@ -1003,11 +1296,10 @@ if [[ "$DRY_RUN" == "1" ]]; then
   exit 0
 fi
 
-[[ -d "$SYSTEMD_TEMPLATE_DIR" ]] || fail "Missing systemd template directory: $SYSTEMD_TEMPLATE_DIR"
-
 mkdir -p "$CONFIG_DIR" "$STATE_DIR" "$LOG_DIR" "$UNIT_DIR"
 mkdir -p "$INSTALL_ROOT/backend/.forgeframe"
 mkdir -p "$STATE_DIR/acme-webroot" "$STATE_DIR/tls" "$CONFIG_DIR/tls/live"
+require_runtime_install_tree
 
 if [[ "$(id -u)" -eq 0 ]]; then
   if ! getent group "$SYSTEM_GROUP" >/dev/null 2>&1; then
@@ -1315,26 +1607,18 @@ fi
 if [[ "$SKIP_FRONTEND_BUILD" != "1" ]]; then
   if [[ ! -f "$INSTALL_ROOT/frontend/dist/index.html" ]]; then
     command -v npm >/dev/null 2>&1 || fail "npm is required to build the frontend dist."
-    (cd "$INSTALL_ROOT/frontend" && npm ci >/dev/null && npm run build >/dev/null)
+    if [[ -f "$INSTALL_ROOT/frontend/package-lock.json" || -f "$INSTALL_ROOT/frontend/npm-shrinkwrap.json" ]]; then
+      (cd "$INSTALL_ROOT/frontend" && npm ci >/dev/null && npm run build >/dev/null)
+    else
+      (cd "$INSTALL_ROOT/frontend" && npm install >/dev/null && npm run build >/dev/null)
+    fi
     log "Built frontend dist into $INSTALL_ROOT/frontend/dist"
   else
     log "Using existing frontend dist at $INSTALL_ROOT/frontend/dist"
   fi
 fi
 
-for template in "$SYSTEMD_TEMPLATE_DIR"/*.service "$SYSTEMD_TEMPLATE_DIR"/*.timer; do
-  [[ -f "$template" ]] || continue
-  target="$UNIT_DIR/$(basename "$template")"
-  sed \
-    -e "s#@@INSTALL_ROOT@@#$INSTALL_ROOT#g" \
-    -e "s#@@ENV_FILE@@#$ENV_FILE#g" \
-    -e "s#@@STATE_DIR@@#$STATE_DIR#g" \
-    -e "s#@@LOG_DIR@@#$LOG_DIR#g" \
-    -e "s#@@SYSTEM_USER@@#$SYSTEM_USER#g" \
-    -e "s#@@SYSTEM_GROUP@@#$SYSTEM_GROUP#g" \
-    "$template" >"$target"
-  log "Installed $(basename "$template") to $target"
-done
+install_systemd_units
 
 if [[ "$SKIP_SYSTEMCTL" != "1" ]]; then
   command -v systemctl >/dev/null 2>&1 || fail "systemctl is required for the normative host-native install path."
