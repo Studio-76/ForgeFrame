@@ -203,6 +203,21 @@ class ControlPlaneBootstrapDomainMixin:
                 ),
             ),
             ControlPlaneBootstrapCheck(
+                id="public_fqdn_tls_evidence",
+                ok=(
+                    bool(has_configured_public_fqdn(self._settings.public_fqdn))
+                    and ingress_status.dns_resolves
+                    and ingress_status.certificate.present
+                    and ingress_status.mode_classification == "normative_public_https"
+                ),
+                details=(
+                    f"fqdn={'ok' if has_configured_public_fqdn(self._settings.public_fqdn) else 'missing'};"
+                    f"dns={'ok' if ingress_status.dns_resolves else 'missing'};"
+                    f"cert={'ok' if ingress_status.certificate.present else 'missing'};"
+                    f"mode={ingress_status.mode_classification}"
+                ),
+            ),
+            ControlPlaneBootstrapCheck(
                 id="linux_host_installation",
                 ok=has_linux_host_installation_artifacts(root_dir),
                 details=(

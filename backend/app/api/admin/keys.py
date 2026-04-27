@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
+
+import httpx
 from fastapi import APIRouter, Depends, Request, status
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
@@ -12,12 +15,14 @@ from app.api.admin.security import require_admin_mutation_role
 from app.governance.models import AuthenticatedAdmin
 from app.governance.service import GovernanceService, get_governance_service
 from app.instances.models import InstanceRecord
+from app.instances.service import InstanceService, get_instance_service
 
 router = APIRouter(prefix="/keys", tags=["admin-keys"])
 _RUNTIME_KEY_IDEMPOTENCY_MESSAGE = (
     "Idempotency-Key is not supported for runtime key issuance, rotation, or status mutations until ForgeFrame "
     "defines replay-safe redaction for secret-bearing key-admin responses."
 )
+_ONBOARDING_LAST_FIRST_SUCCESS_PROBE_KEY = "onboarding_last_first_success_probe"
 
 
 class RuntimeKeyCreateRequest(BaseModel):
@@ -37,6 +42,13 @@ class RuntimeKeyRequestPathPolicyRequest(BaseModel):
     pinned_target_key: str | None = None
     local_only_policy: str = "require_local_target"
     review_required_conditions: list[str] = Field(default_factory=list)
+
+
+class RuntimeKeyFirstSuccessProbeRequest(BaseModel):
+    runtime_key: str = Field(min_length=1)
+    chat_probe: bool = True
+    model: str | None = None
+    message: str = "ForgeFrame first success probe"
 
 
 @router.get("/")
@@ -201,3 +213,126 @@ def update_runtime_key_request_path_policy(
         status_code = 404 if error_type == "runtime_key_not_found" else 422
         return JSONResponse(status_code=status_code, content={"error": {"type": error_type, "message": str(exc)}})
     return {"status": "ok", "key": key.model_dump()}
+
+
+@router.post("/first-success/probe")
+async def run_runtime_key_first_success_probe(
+    payload: RuntimeKeyFirstSuccessProbeRequest,
+    request: Request,
+    instance: InstanceRecord = Depends(resolve_admin_instance_scope),
+    service: GovernanceService = Depends(get_governance_service),
+    instance_service: InstanceService = Depends(get_instance_service),
+) -> dict[str, object]:
+    runtime_key = payload.runtime_key.strip()
+    identity = service.authenticate_runtime_key(runtime_key)
+    executed_at = datetime.now(tz=UTC).isoformat()
+
+    if identity is None:
+        return JSONResponse(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            content={
+                "error": {
+                    "type": "runtime_key_invalid",
+                    "message": "Runtime key is invalid, expired, or not active.",
+                }
+            },
+        )
+
+    if identity.instance_id != instance.instance_id:
+        return JSONResponse(
+            status_code=status.HTTP_409_CONFLICT,
+            content={
+                "error": {
+                    "type": "runtime_key_instance_mismatch",
+                    "message": (
+                        f"Runtime key is scoped to instance '{identity.instance_id}', "
+                        f"but onboarding is scoped to '{instance.instance_id}'."
+                    ),
+                }
+            },
+        )
+
+    models_probe: dict[str, object] = {
+        "attempted": True,
+        "ok": False,
+        "status_code": None,
+        "model_count": 0,
+        "error": None,
+    }
+    chat_probe: dict[str, object] = {
+        "attempted": False,
+        "ok": False,
+        "status_code": None,
+        "model": None,
+        "error": None,
+    }
+
+    headers = {
+        "Authorization": f"Bearer {runtime_key}",
+        "Content-Type": "application/json",
+    }
+
+    models_payload: dict[str, object] | None = None
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=request.app), base_url="http://forgeframe.local") as client:
+        try:
+            models_response = await client.get("/v1/models", headers=headers)
+            models_probe["status_code"] = models_response.status_code
+            if models_response.status_code < 400:
+                models_payload = models_response.json()
+                models = models_payload.get("data") if isinstance(models_payload, dict) else []
+                if isinstance(models, list):
+                    models_probe["model_count"] = len(models)
+                models_probe["ok"] = True
+            else:
+                models_probe["error"] = models_response.text[:500]
+        except Exception as exc:  # pragma: no cover - defensive runtime boundary
+            models_probe["error"] = str(exc)
+
+        if payload.chat_probe and not bool(models_probe["ok"]):
+            requested_model = payload.model.strip() if payload.model else ""
+            if not requested_model and isinstance(models_payload, dict):
+                data = models_payload.get("data")
+                if isinstance(data, list) and data:
+                    candidate = data[0]
+                    if isinstance(candidate, dict) and isinstance(candidate.get("id"), str):
+                        requested_model = candidate["id"]
+            if not requested_model:
+                requested_model = "forgeframe-baseline-chat-v1"
+
+            chat_probe["attempted"] = True
+            chat_probe["model"] = requested_model
+            try:
+                chat_response = await client.post(
+                    "/v1/chat/completions",
+                    headers=headers,
+                    json={
+                        "model": requested_model,
+                        "messages": [{"role": "user", "content": payload.message.strip() or "ForgeFrame first success probe"}],
+                        "stream": False,
+                    },
+                )
+                chat_probe["status_code"] = chat_response.status_code
+                if chat_response.status_code < 400:
+                    chat_probe["ok"] = True
+                else:
+                    chat_probe["error"] = chat_response.text[:500]
+            except Exception as exc:  # pragma: no cover - defensive runtime boundary
+                chat_probe["error"] = str(exc)
+
+    success = bool(models_probe["ok"] or chat_probe["ok"])
+    probe = {
+        "runtime_key_id": identity.key_id,
+        "instance_id": identity.instance_id,
+        "tenant_id": identity.tenant_id,
+        "models_probe": models_probe,
+        "chat_probe": chat_probe,
+        "success": success,
+        "executed_at": executed_at,
+    }
+    metadata = dict(instance.metadata)
+    metadata[_ONBOARDING_LAST_FIRST_SUCCESS_PROBE_KEY] = probe
+    instance_service.update_instance(instance.instance_id, metadata=metadata)
+    return {
+        "status": "ok",
+        "probe": probe,
+    }

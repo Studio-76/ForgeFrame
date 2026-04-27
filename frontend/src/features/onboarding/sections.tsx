@@ -1,56 +1,153 @@
 import type { FormEvent } from "react";
 import { Link } from "react-router-dom";
 
+import type { RuntimeKeyFirstSuccessProbeResponse } from "../../api/admin";
 import { withInstanceScope } from "../../app/tenantScope";
 import type {
   ChecklistLink,
-  ChecklistStep,
   ChecklistTone,
   OnboardingInterviewEvaluation,
   OnboardingInterviewState,
+  OperatingModelDescriptor,
+  WizardStepStatus,
 } from "./helpers";
+import { OPERATING_MODEL_DESCRIPTORS, type OnboardingOperatingModel } from "./helpers";
+
+type WizardStep = {
+  id: string;
+  title: string;
+  status: WizardStepStatus;
+  summary: string;
+  detail: string;
+  blockers: string[];
+  links: ChecklistLink[];
+};
+
+type ProviderConnectionRow = {
+  provider: string;
+  label: string;
+  connectionStatus: "local" | "api-key" | "bridge-only" | "unsupported" | "onboarding-only";
+  detail: string;
+  tone: ChecklistTone;
+};
 
 type OnboardingContentProps = {
   error: string;
   loading: boolean;
-  liveTrafficReady: boolean;
-  completedSteps: number;
-  overallTone: ChecklistTone;
-  goLiveLinks: ChecklistLink[];
-  runtimeReadyProviderCount: number | string;
-  activeRuntimeKeyCount: number | string;
-  currentSessionLabel: string;
-  steps: ChecklistStep[];
   instanceId: string | null;
+  steps: WizardStep[];
   interview: OnboardingInterviewState;
   interviewEvaluation: OnboardingInterviewEvaluation;
+  persistedInterviewEvaluation: OnboardingInterviewEvaluation;
+  operatingModelDescriptor: OperatingModelDescriptor;
   canPersistOnboarding: boolean;
+  canConfigureRouting: boolean;
+  canIssueRuntimeAccess: boolean;
   hasSelectedInstance: boolean;
   savePending: boolean;
   saveError: string;
   saveMessage: string;
   onInterviewSave: (event: FormEvent<HTMLFormElement>) => void;
   onInterviewFieldChange: <K extends keyof OnboardingInterviewState>(field: K, value: OnboardingInterviewState[K]) => void;
-  firstSuccessTone: ChecklistTone;
-  firstSuccessLabel: string;
-  firstSuccessSummary: string;
-  firstSuccessDetail: string;
-  firstSuccessLinks: ChecklistLink[];
+  operatorAgentLabel: string | null;
+  providerRows: ProviderConnectionRow[];
+  routingChoice: "simple" | "non_simple";
+  routingPending: boolean;
+  routingError: string;
+  routingMessage: string;
+  onRoutingChoiceChange: (value: "simple" | "non_simple") => void;
+  onApplyRoutingChoice: () => void;
+  runtimeKeyCount: number;
+  issueKeyPending: boolean;
+  issueKeyError: string;
+  issueKeyMessage: string;
+  issuedRuntimeToken: string;
+  onIssueRuntimeKey: () => void;
+  runtimeKeyTokenInput: string;
+  onRuntimeKeyTokenInputChange: (value: string) => void;
+  firstSuccessPending: boolean;
+  firstSuccessError: string;
+  firstSuccessResult: RuntimeKeyFirstSuccessProbeResponse["probe"] | null;
+  onRunFirstSuccessProbe: () => void;
+  tlsEvidenceReady: boolean;
+  tlsEvidenceCheckedAt: string | null;
+  tlsEvidenceBlockers: string[];
+  goLiveSummary: string;
+  goLiveBlockers: string[];
 };
 
-type InterviewFieldProps = {
+function toneForWizardStatus(status: WizardStepStatus): ChecklistTone {
+  switch (status) {
+    case "done":
+      return "success";
+    case "current":
+      return "warning";
+    case "blocked":
+      return "danger";
+    case "skipped":
+    default:
+      return "neutral";
+  }
+}
+
+function statusLabel(status: WizardStepStatus): string {
+  switch (status) {
+    case "done":
+      return "done";
+    case "current":
+      return "current";
+    case "blocked":
+      return "blocked";
+    case "skipped":
+    default:
+      return "skipped";
+  }
+}
+
+type InterviewFieldsProps = {
   disabled: boolean;
   hasSelectedInstance: boolean;
   interview: OnboardingInterviewState;
+  operatingModelDescriptor: OperatingModelDescriptor;
   onInterviewFieldChange: <K extends keyof OnboardingInterviewState>(field: K, value: OnboardingInterviewState[K]) => void;
 };
 
-function InterviewFields({ disabled, hasSelectedInstance, interview, onInterviewFieldChange }: InterviewFieldProps) {
+function InterviewFields({
+  disabled,
+  hasSelectedInstance,
+  interview,
+  operatingModelDescriptor,
+  onInterviewFieldChange,
+}: InterviewFieldsProps) {
   return (
     <>
       <article className="fg-subcard">
-        <h4>1. Instance boundary</h4>
-        <p className="fg-muted">Record the first real instance instead of leaving onboarding as an unbound checklist.</p>
+        <h4>Betriebsart</h4>
+        <div className="fg-grid fg-grid-compact">
+          {OPERATING_MODEL_DESCRIPTORS.map((item) => (
+            <label key={item.key}>
+              <input
+                type="radio"
+                name="operatingModel"
+                value={item.key}
+                checked={interview.operatingModel === item.key}
+                disabled={disabled}
+                onChange={(event) => onInterviewFieldChange("operatingModel", event.target.value as OnboardingOperatingModel)}
+              />
+              {item.label}
+            </label>
+          ))}
+        </div>
+        <p className="fg-muted">{operatingModelDescriptor.description}</p>
+        <ul className="fg-list">
+          <li>Interner Modus: {operatingModelDescriptor.internalMode}</li>
+          <li>Tenant-Erfordernis: {operatingModelDescriptor.tenantRequirement}</li>
+          <li>Rollenmodell: {operatingModelDescriptor.roleModel}</li>
+        </ul>
+      </article>
+
+      <article className="fg-subcard">
+        <h4>Instanz und Scope</h4>
         <div className="fg-grid fg-grid-compact">
           <label>
             Instance ID
@@ -72,18 +169,6 @@ function InterviewFields({ disabled, hasSelectedInstance, interview, onInterview
               placeholder="Customer Production"
             />
           </label>
-        </div>
-        <label>
-          Description
-          <textarea
-            name="description"
-            rows={3}
-            value={interview.description}
-            disabled={disabled}
-            onChange={(event) => onInterviewFieldChange("description", event.target.value)}
-          />
-        </label>
-        <div className="fg-grid fg-grid-compact">
           <label>
             Tenant scope
             <input
@@ -108,8 +193,7 @@ function InterviewFields({ disabled, hasSelectedInstance, interview, onInterview
       </article>
 
       <article className="fg-subcard">
-        <h4>2. Linux / HTTPS operating posture</h4>
-        <p className="fg-muted">Capture whether this stack is on the normative public HTTPS path or a visibly limited evaluation posture.</p>
+        <h4>Normative HTTPS Pfad</h4>
         <div className="fg-grid fg-grid-compact">
           <label>
             Operating mode
@@ -149,21 +233,6 @@ function InterviewFields({ disabled, hasSelectedInstance, interview, onInterview
               <option value="local_only">local_only</option>
             </select>
           </label>
-          <label>
-            PostgreSQL mode
-            <select
-              name="postgresMode"
-              value={interview.postgresMode}
-              disabled={disabled}
-              onChange={(event) => onInterviewFieldChange("postgresMode", event.target.value as OnboardingInterviewState["postgresMode"])}
-            >
-              <option value="native_host">native_host</option>
-              <option value="dedicated_container">dedicated_container</option>
-              <option value="external_managed">external_managed</option>
-            </select>
-          </label>
-        </div>
-        <div className="fg-grid fg-grid-compact">
           <label>
             Public FQDN
             <input
@@ -228,7 +297,7 @@ function InterviewFields({ disabled, hasSelectedInstance, interview, onInterview
               disabled={disabled}
               onChange={(event) => onInterviewFieldChange("dnsReady", event.target.checked)}
             />
-            DNS is ready for the recorded FQDN
+            DNS ready
           </label>
           <label>
             <input
@@ -238,7 +307,7 @@ function InterviewFields({ disabled, hasSelectedInstance, interview, onInterview
               disabled={disabled}
               onChange={(event) => onInterviewFieldChange("port80Ready", event.target.checked)}
             />
-            Port 80 is reachable for ACME / redirect only
+            Port 80 reachable
           </label>
           <label>
             <input
@@ -248,7 +317,7 @@ function InterviewFields({ disabled, hasSelectedInstance, interview, onInterview
               disabled={disabled}
               onChange={(event) => onInterviewFieldChange("port443Ready", event.target.checked)}
             />
-            Port 443 is reachable for the primary HTTPS listener
+            Port 443 reachable
           </label>
           <label>
             <input
@@ -258,197 +327,7 @@ function InterviewFields({ disabled, hasSelectedInstance, interview, onInterview
               disabled={disabled}
               onChange={(event) => onInterviewFieldChange("certificateAutoRenew", event.target.checked)}
             />
-            Automatic certificate renewal is enabled
-          </label>
-        </div>
-      </article>
-
-      <article className="fg-subcard">
-        <h4>3. Runtime direction and routing defaults</h4>
-        <p className="fg-muted">Persist the initial execution posture instead of leaving provider direction, autonomy, and lane preference implicit.</p>
-        <div className="fg-grid fg-grid-compact">
-          <label>
-            Provider / client direction
-            <select
-              name="providerDirection"
-              value={interview.providerDirection}
-              disabled={disabled}
-              onChange={(event) => onInterviewFieldChange("providerDirection", event.target.value as OnboardingInterviewState["providerDirection"])}
-            >
-              <option value="mixed_control_plane">mixed_control_plane</option>
-              <option value="oauth_account_providers">oauth_account_providers</option>
-              <option value="openai_compatible_clients">openai_compatible_clients</option>
-              <option value="local_first">local_first</option>
-            </select>
-          </label>
-          <label>
-            Autonomy mode
-            <select
-              name="autonomyMode"
-              value={interview.autonomyMode}
-              disabled={disabled}
-              onChange={(event) => onInterviewFieldChange("autonomyMode", event.target.value as OnboardingInterviewState["autonomyMode"])}
-            >
-              <option value="operator_assist">operator_assist</option>
-              <option value="bounded_autonomy">bounded_autonomy</option>
-              <option value="autonomous_worker">autonomous_worker</option>
-            </select>
-          </label>
-          <label>
-            Routing default
-            <select
-              name="routingDefault"
-              value={interview.routingDefault}
-              disabled={disabled}
-              onChange={(event) => onInterviewFieldChange("routingDefault", event.target.value as OnboardingInterviewState["routingDefault"])}
-            >
-              <option value="local_first">local_first</option>
-              <option value="balanced">balanced</option>
-              <option value="premium_capable">premium_capable</option>
-            </select>
-          </label>
-          <label>
-            Runtime driver mode
-            <select
-              name="runtimeDriverMode"
-              value={interview.runtimeDriverMode}
-              disabled={disabled}
-              onChange={(event) => onInterviewFieldChange("runtimeDriverMode", event.target.value as OnboardingInterviewState["runtimeDriverMode"])}
-            >
-              <option value="embedded_control_plane">embedded_control_plane</option>
-              <option value="remote_runtime_driver">remote_runtime_driver</option>
-            </select>
-          </label>
-          <label>
-            Edge admission mode
-            <select
-              name="edgeAdmissionMode"
-              value={interview.edgeAdmissionMode}
-              disabled={disabled}
-              onChange={(event) => onInterviewFieldChange("edgeAdmissionMode", event.target.value as OnboardingInterviewState["edgeAdmissionMode"])}
-            >
-              <option value="disabled">disabled</option>
-              <option value="enabled">enabled</option>
-            </select>
-          </label>
-          <label>
-            <input
-              type="checkbox"
-              name="allowPremiumEscalation"
-              checked={interview.allowPremiumEscalation}
-              disabled={disabled}
-              onChange={(event) => onInterviewFieldChange("allowPremiumEscalation", event.target.checked)}
-            />
-            Premium escalation is allowed
-          </label>
-        </div>
-      </article>
-
-      <article className="fg-subcard">
-        <h4>4. Work interaction and first-success plan</h4>
-        <p className="fg-muted">Record how the first productive interaction should happen instead of pushing work interaction into hidden follow-up settings.</p>
-        <div className="fg-grid fg-grid-compact">
-          <label>
-            Work-interaction mode
-            <select
-              name="workInteractionMode"
-              value={interview.workInteractionMode}
-              disabled={disabled}
-              onChange={(event) => onInterviewFieldChange("workInteractionMode", event.target.value as OnboardingInterviewState["workInteractionMode"])}
-            >
-              <option value="control_plane_only">control_plane_only</option>
-              <option value="ops_assistant">ops_assistant</option>
-              <option value="team_assistant">team_assistant</option>
-              <option value="personal_assistant">personal_assistant</option>
-            </select>
-          </label>
-          <label>
-            Assistant specialization
-            <select
-              name="assistantMode"
-              value={interview.assistantMode}
-              disabled={disabled}
-              onChange={(event) => onInterviewFieldChange("assistantMode", event.target.value as OnboardingInterviewState["assistantMode"])}
-            >
-              <option value="none">none</option>
-              <option value="ops">ops</option>
-              <option value="team">team</option>
-              <option value="personal">personal</option>
-            </select>
-          </label>
-          <label>
-            First success action
-            <select
-              name="firstSuccessAction"
-              value={interview.firstSuccessAction}
-              disabled={disabled}
-              onChange={(event) => onInterviewFieldChange("firstSuccessAction", event.target.value as OnboardingInterviewState["firstSuccessAction"])}
-            >
-              <option value="provider_verification">provider_verification</option>
-              <option value="runtime_request">runtime_request</option>
-              <option value="artifact_review">artifact_review</option>
-              <option value="operator_handoff">operator_handoff</option>
-            </select>
-          </label>
-          <label>
-            First artifact
-            <select
-              name="firstArtifact"
-              value={interview.firstArtifact}
-              disabled={disabled}
-              onChange={(event) => onInterviewFieldChange("firstArtifact", event.target.value as OnboardingInterviewState["firstArtifact"])}
-            >
-              <option value="provider_preview">provider_preview</option>
-              <option value="runtime_response">runtime_response</option>
-              <option value="execution_trace">execution_trace</option>
-              <option value="audit_evidence">audit_evidence</option>
-            </select>
-          </label>
-          <label>
-            Operator surface
-            <select
-              name="operatorSurface"
-              value={interview.operatorSurface}
-              disabled={disabled}
-              onChange={(event) => onInterviewFieldChange("operatorSurface", event.target.value as OnboardingInterviewState["operatorSurface"])}
-            >
-              <option value="providers">providers</option>
-              <option value="dashboard">dashboard</option>
-              <option value="usage">usage</option>
-              <option value="logs">logs</option>
-            </select>
-          </label>
-        </div>
-        <div className="fg-grid fg-grid-compact">
-          <label>
-            <input
-              type="checkbox"
-              name="inboxEnabled"
-              checked={interview.inboxEnabled}
-              disabled={disabled}
-              onChange={(event) => onInterviewFieldChange("inboxEnabled", event.target.checked)}
-            />
-            Inbox / triage path enabled
-          </label>
-          <label>
-            <input
-              type="checkbox"
-              name="tasksEnabled"
-              checked={interview.tasksEnabled}
-              disabled={disabled}
-              onChange={(event) => onInterviewFieldChange("tasksEnabled", event.target.checked)}
-            />
-            Tasks / follow-ups enabled
-          </label>
-          <label>
-            <input
-              type="checkbox"
-              name="notificationsEnabled"
-              checked={interview.notificationsEnabled}
-              disabled={disabled}
-              onChange={(event) => onInterviewFieldChange("notificationsEnabled", event.target.checked)}
-            />
-            Notifications / outbox expectation enabled
+            Auto renew enabled
           </label>
         </div>
       </article>
@@ -459,229 +338,300 @@ function InterviewFields({ disabled, hasSelectedInstance, interview, onInterview
 export function OnboardingContent({
   error,
   loading,
-  liveTrafficReady,
-  completedSteps,
-  overallTone,
-  goLiveLinks,
-  runtimeReadyProviderCount,
-  activeRuntimeKeyCount,
-  currentSessionLabel,
-  steps,
   instanceId,
+  steps,
   interview,
   interviewEvaluation,
+  persistedInterviewEvaluation,
+  operatingModelDescriptor,
   canPersistOnboarding,
+  canConfigureRouting,
+  canIssueRuntimeAccess,
   hasSelectedInstance,
   savePending,
   saveError,
   saveMessage,
   onInterviewSave,
   onInterviewFieldChange,
-  firstSuccessTone,
-  firstSuccessLabel,
-  firstSuccessSummary,
-  firstSuccessDetail,
-  firstSuccessLinks,
+  operatorAgentLabel,
+  providerRows,
+  routingChoice,
+  routingPending,
+  routingError,
+  routingMessage,
+  onRoutingChoiceChange,
+  onApplyRoutingChoice,
+  runtimeKeyCount,
+  issueKeyPending,
+  issueKeyError,
+  issueKeyMessage,
+  issuedRuntimeToken,
+  onIssueRuntimeKey,
+  runtimeKeyTokenInput,
+  onRuntimeKeyTokenInputChange,
+  firstSuccessPending,
+  firstSuccessError,
+  firstSuccessResult,
+  onRunFirstSuccessProbe,
+  tlsEvidenceReady,
+  tlsEvidenceCheckedAt,
+  tlsEvidenceBlockers,
+  goLiveSummary,
+  goLiveBlockers,
 }: OnboardingContentProps) {
-  const totalSteps = steps.length;
+  const stepOneCardEvaluation = hasSelectedInstance ? persistedInterviewEvaluation : interviewEvaluation;
+
+  if (loading) {
+    return (
+      <article className="fg-card">
+        <h3>Loading wizard state</h3>
+      </article>
+    );
+  }
 
   return (
     <>
       {error ? <p className="fg-danger">{error}</p> : null}
 
-      {loading ? (
-        <article className="fg-card">
-          <h3>Loading setup signals</h3>
-          <p className="fg-muted">ForgeFrame is checking bootstrap readiness, provider verification, runtime access inventory, and the current session scope.</p>
-        </article>
-      ) : null}
-
-      {!loading ? (
-        <>
-          <article className="fg-card">
-            <div className="fg-panel-heading">
-              <div>
-                <h3>Guided onboarding interview</h3>
-                <p className="fg-muted">
-                  Persist the first instance, operating mode, TLS posture, routing defaults, and work-interaction intent instead of leaving setup as a read-only checklist.
-                </p>
-              </div>
-              <div className="fg-actions">
-                <span className="fg-pill" data-tone={interviewEvaluation.tone}>
-                  {interviewEvaluation.statusLabel}
-                </span>
-                <span className="fg-pill" data-tone={canPersistOnboarding ? "success" : "warning"}>
-                  {canPersistOnboarding ? "Writable" : "Admin handoff"}
+      <article className="fg-card">
+        <div className="fg-panel-heading">
+          <h3>Onboarding Wizard</h3>
+        </div>
+        <ol className="fg-checklist">
+          {steps.map((step) => (
+            <li key={step.id} className="fg-subcard fg-checklist-step">
+              <div className="fg-panel-heading">
+                <div>
+                  <h4>{step.title}</h4>
+                  <p className="fg-muted">{step.summary}</p>
+                </div>
+                <span className="fg-pill" data-tone={toneForWizardStatus(step.status)}>
+                  {statusLabel(step.status)}
                 </span>
               </div>
-            </div>
+              <p className="fg-muted">{step.detail}</p>
+              {step.blockers.length > 0 ? (
+                <ul className="fg-list">
+                  {step.blockers.map((blocker) => (
+                    <li key={`${step.id}-${blocker}`}>{blocker}</li>
+                  ))}
+                </ul>
+              ) : null}
+              {step.links.length > 0 ? (
+                <div className="fg-actions">
+                  {step.links.map((link) => (
+                    <Link key={`${step.id}-${link.label}`} className="fg-nav-link" to={withInstanceScope(link.to, instanceId)}>
+                      {link.label}
+                    </Link>
+                  ))}
+                </div>
+              ) : null}
+            </li>
+          ))}
+        </ol>
+      </article>
 
-            <p className="fg-muted">{interviewEvaluation.summary}</p>
-            <p className="fg-muted">{interviewEvaluation.detail}</p>
+      <article className="fg-card">
+        <div className="fg-panel-heading">
+          <h3>1) Betriebsart und erste Instanz</h3>
+          <span className="fg-pill" data-tone={stepOneCardEvaluation.tone}>
+            {stepOneCardEvaluation.statusLabel}
+          </span>
+        </div>
+        <p className="fg-muted">{stepOneCardEvaluation.summary}</p>
+        <p className="fg-muted">{stepOneCardEvaluation.detail}</p>
+        {stepOneCardEvaluation.blockers.length > 0 ? (
+          <ul className="fg-list">
+            {stepOneCardEvaluation.blockers.map((blocker) => (
+              <li key={blocker.code}>
+                {blocker.code}: {blocker.message}
+              </li>
+            ))}
+          </ul>
+        ) : null}
+        {saveError ? <p className="fg-danger">{saveError}</p> : null}
+        {saveMessage ? <p>{saveMessage}</p> : null}
 
-            {saveError ? <p className="fg-danger">{saveError}</p> : null}
-            {saveMessage ? <p>{saveMessage}</p> : null}
+        <form className="fg-stack" onSubmit={onInterviewSave}>
+          <InterviewFields
+            disabled={!canPersistOnboarding}
+            hasSelectedInstance={hasSelectedInstance}
+            interview={interview}
+            operatingModelDescriptor={operatingModelDescriptor}
+            onInterviewFieldChange={onInterviewFieldChange}
+          />
+          <div className="fg-actions">
+            <button type="submit" disabled={!canPersistOnboarding || savePending}>
+              {savePending ? "Saving onboarding state" : hasSelectedInstance ? "Save onboarding state" : "Create first instance"}
+            </button>
+          </div>
+        </form>
+      </article>
 
-            {interviewEvaluation.blockers.length > 0 ? (
-              <ul className="fg-list">
-                {interviewEvaluation.blockers.map((blocker) => (
-                  <li key={blocker.code}>
-                    <strong>{blocker.code}</strong>: {blocker.message}
-                  </li>
-                ))}
-              </ul>
-            ) : null}
+      <article className="fg-card">
+        <div className="fg-panel-heading">
+          <h3>2) Operator-Agent</h3>
+        </div>
+        <p className="fg-muted">
+          {operatorAgentLabel
+            ? `Default operator product object detected: ${operatorAgentLabel}.`
+            : "Default operator agent is still missing for the selected instance."}
+        </p>
+        <div className="fg-actions">
+          <Link className="fg-nav-link" to={withInstanceScope("/instances", instanceId)}>Open Instances</Link>
+          <Link className="fg-nav-link" to={withInstanceScope("/agents", instanceId)}>Open Agents</Link>
+        </div>
+      </article>
 
-            <form className="fg-stack" onSubmit={onInterviewSave}>
-              <InterviewFields
-                disabled={!canPersistOnboarding}
-                hasSelectedInstance={hasSelectedInstance}
-                interview={interview}
-                onInterviewFieldChange={onInterviewFieldChange}
-              />
-              <div className="fg-actions">
-                <button type="submit" disabled={!canPersistOnboarding || savePending}>
-                  {savePending
-                    ? (hasSelectedInstance ? "Saving onboarding truth" : "Creating first instance")
-                    : (hasSelectedInstance ? "Save onboarding truth" : "Create first instance")}
-                </button>
+      <article className="fg-card">
+        <div className="fg-panel-heading">
+          <h3>3) Provider / Target-Erstauswahl</h3>
+        </div>
+        <p className="fg-muted">Connection status is classified from real control-plane truth: local, API-key, bridge-only, onboarding-only, unsupported.</p>
+        <div className="fg-grid fg-grid-compact">
+          {providerRows.map((provider) => (
+            <article className="fg-subcard" key={provider.provider}>
+              <div className="fg-panel-heading">
+                <h4>{provider.label}</h4>
+                <span className="fg-pill" data-tone={provider.tone}>{provider.connectionStatus}</span>
               </div>
-            </form>
-          </article>
+              <p className="fg-muted">{provider.detail}</p>
+            </article>
+          ))}
+        </div>
+        <div className="fg-actions">
+          <Link className="fg-nav-link" to={withInstanceScope("/providers", instanceId)}>Open Providers</Link>
+          <Link className="fg-nav-link" to={withInstanceScope("/provider-targets", instanceId)}>Open Provider Targets</Link>
+        </div>
+      </article>
 
-          <article className="fg-card">
-            <div className="fg-panel-heading">
-              <div>
-                <h3>First success and work interaction</h3>
-                <p className="fg-muted">The onboarding flow now records the intended first operator win and the baseline work-interaction posture.</p>
-              </div>
-              <span className="fg-pill" data-tone={firstSuccessTone}>
-                {firstSuccessLabel}
-              </span>
-            </div>
-            <p className="fg-muted">{firstSuccessSummary}</p>
-            <p className="fg-muted">{firstSuccessDetail}</p>
-            <div className="fg-grid fg-grid-compact">
-              <article className="fg-kpi">
-                <span className="fg-muted">Operator surface</span>
-                <strong>{interview.operatorSurface}</strong>
-              </article>
-              <article className="fg-kpi">
-                <span className="fg-muted">Assistant mode</span>
-                <strong>{interview.assistantMode}</strong>
-              </article>
-              <article className="fg-kpi">
-                <span className="fg-muted">Work interaction</span>
-                <strong>{interview.workInteractionMode}</strong>
-              </article>
-              <article className="fg-kpi">
-                <span className="fg-muted">Inbox / Tasks / Notifications</span>
-                <strong>{`${interview.inboxEnabled ? "yes" : "no"} / ${interview.tasksEnabled ? "yes" : "no"} / ${interview.notificationsEnabled ? "yes" : "no"}`}</strong>
-              </article>
-            </div>
-            {firstSuccessLinks.length > 0 ? (
-              <div className="fg-actions">
-                {firstSuccessLinks.map((link) => (
-                  <Link key={`first-success-${link.label}`} className="fg-nav-link" to={withInstanceScope(link.to, instanceId)}>
-                    {link.label}
-                  </Link>
-                ))}
-              </div>
-            ) : null}
-          </article>
+      <article className="fg-card">
+        <div className="fg-panel-heading">
+          <h3>4) Routing default</h3>
+        </div>
+        <div className="fg-grid fg-grid-compact">
+          <label>
+            <input
+              type="radio"
+              name="routingChoice"
+              value="simple"
+              checked={routingChoice === "simple"}
+              onChange={() => onRoutingChoiceChange("simple")}
+            />
+            simple billig/lokal
+          </label>
+          <label>
+            <input
+              type="radio"
+              name="routingChoice"
+              value="non_simple"
+              checked={routingChoice === "non_simple"}
+              onChange={() => onRoutingChoiceChange("non_simple")}
+            />
+            non-simple Premium/OAuth
+          </label>
+        </div>
+        {routingError ? <p className="fg-danger">{routingError}</p> : null}
+        {routingMessage ? <p>{routingMessage}</p> : null}
+        <div className="fg-actions">
+          <button type="button" onClick={onApplyRoutingChoice} disabled={!canConfigureRouting || routingPending}>
+            {routingPending ? "Applying routing defaults" : "Apply routing defaults"}
+          </button>
+          <Link className="fg-nav-link" to={withInstanceScope("/routing", instanceId)}>Open Routing</Link>
+        </div>
+      </article>
 
-          <article className="fg-card">
-            <div className="fg-panel-heading">
-              <div>
-                <h3>Setup status</h3>
-                <p className="fg-muted">
-                  {liveTrafficReady
-                    ? "The control plane has interview truth, bootstrap, provider, and runtime access coverage to hand off into operations monitoring."
-                    : "The checklist still exposes the next missing step or handoff instead of ending on raw onboarding lists."}
-                </p>
-              </div>
-              <div className="fg-actions">
-                <span className="fg-pill" data-tone={overallTone}>
-                  {liveTrafficReady ? "Ready for live traffic" : `${completedSteps}/${totalSteps} steps complete`}
-                </span>
-                {goLiveLinks.map((link) => (
-                  <Link key={link.label} className="fg-nav-link" to={withInstanceScope(link.to, instanceId)}>
-                    {link.label}
-                  </Link>
-                ))}
-              </div>
-            </div>
-            <div className="fg-grid fg-grid-compact">
-              <article className="fg-kpi">
-                <span className="fg-muted">Checklist progress</span>
-                <strong className="fg-kpi-value">{completedSteps}/{totalSteps}</strong>
-              </article>
-              <article className="fg-kpi">
-                <span className="fg-muted">Runtime-ready providers</span>
-                <strong className="fg-kpi-value">{runtimeReadyProviderCount}</strong>
-              </article>
-              <article className="fg-kpi">
-                <span className="fg-muted">Active runtime keys</span>
-                <strong className="fg-kpi-value">{activeRuntimeKeyCount}</strong>
-              </article>
-              <article className="fg-kpi">
-                <span className="fg-muted">Current session</span>
-                <strong>{currentSessionLabel}</strong>
-              </article>
-            </div>
-          </article>
+      <article className="fg-card">
+        <div className="fg-panel-heading">
+          <h3>5) Runtime key issuance</h3>
+        </div>
+        <p className="fg-muted">Active runtime keys: {runtimeKeyCount}</p>
+        {issueKeyError ? <p className="fg-danger">{issueKeyError}</p> : null}
+        {issueKeyMessage ? <p>{issueKeyMessage}</p> : null}
+        {issuedRuntimeToken ? (
+          <p><code>{issuedRuntimeToken}</code></p>
+        ) : null}
+        <div className="fg-actions">
+          <button type="button" onClick={onIssueRuntimeKey} disabled={!canIssueRuntimeAccess || issueKeyPending}>
+            {issueKeyPending ? "Issuing runtime key" : "Issue runtime key"}
+          </button>
+          <Link className="fg-nav-link" to={withInstanceScope("/api-keys", instanceId)}>Open API Keys</Link>
+        </div>
+      </article>
 
-          <article className="fg-card">
-            <div className="fg-panel-heading">
-              <div>
-                <h3>Sequenced setup checklist</h3>
-                <p className="fg-muted">The order stays explicit: interview truth first, then bootstrap, provider verification, runtime access issuance, and the go-live handoff.</p>
-              </div>
-            </div>
+      <article className="fg-card">
+        <div className="fg-panel-heading">
+          <h3>6) FQDN / TLS evidence</h3>
+          <span className="fg-pill" data-tone={tlsEvidenceReady ? "success" : "danger"}>
+            {tlsEvidenceReady ? "done" : "blocked"}
+          </span>
+        </div>
+        <p className="fg-muted">
+          {tlsEvidenceReady
+            ? `API evidence confirms FQDN and TLS readiness.${tlsEvidenceCheckedAt ? ` Last check ${tlsEvidenceCheckedAt}.` : ""}`
+            : "FQDN/TLS remains blocked until bootstrap API checks show DNS, HTTPS listener, and certificate evidence."}
+        </p>
+        {tlsEvidenceBlockers.length > 0 ? (
+          <ul className="fg-list">
+            {tlsEvidenceBlockers.map((blocker) => (
+              <li key={blocker}>{blocker}</li>
+            ))}
+          </ul>
+        ) : null}
+        <div className="fg-actions">
+          <Link className="fg-nav-link" to={withInstanceScope("/ingress-tls", instanceId)}>Open Ingress TLS</Link>
+        </div>
+      </article>
 
-            <ol className="fg-checklist">
-              {steps.map((step) => (
-                <li key={step.id} className="fg-subcard fg-checklist-step">
-                  <div className="fg-panel-heading">
-                    <div className="fg-row">
-                      <span className="fg-checklist-index" aria-hidden="true">
-                        {step.step}
-                      </span>
-                      <div className="fg-checklist-copy">
-                        <h4>{step.title}</h4>
-                        <p className="fg-muted">{step.summary}</p>
-                      </div>
-                    </div>
-                    <span className="fg-pill" data-tone={step.tone}>
-                      {step.statusLabel}
-                    </span>
-                  </div>
+      <article className="fg-card">
+        <div className="fg-panel-heading">
+          <h3>7) First success probe</h3>
+          <span className="fg-pill" data-tone={firstSuccessResult?.success ? "success" : "warning"}>
+            {firstSuccessResult?.success ? "done" : "current"}
+          </span>
+        </div>
+        <label>
+          Runtime key token
+          <input
+            name="runtimeKeyTokenInput"
+            value={runtimeKeyTokenInput}
+            onChange={(event) => onRuntimeKeyTokenInputChange(event.target.value)}
+            placeholder="fg_live_..."
+          />
+        </label>
+        {firstSuccessError ? <p className="fg-danger">{firstSuccessError}</p> : null}
+        {firstSuccessResult ? (
+          <ul className="fg-list">
+            <li>/v1/models: {firstSuccessResult.models_probe.ok ? "ok" : "failed"} ({firstSuccessResult.models_probe.status_code ?? "n/a"})</li>
+            <li>/v1/chat/completions: {firstSuccessResult.chat_probe.ok ? "ok" : firstSuccessResult.chat_probe.attempted ? "failed" : "not attempted"} ({firstSuccessResult.chat_probe.status_code ?? "n/a"})</li>
+            <li>Executed at: {firstSuccessResult.executed_at.replace("T", " ").replace("Z", " UTC")}</li>
+          </ul>
+        ) : null}
+        <div className="fg-actions">
+          <button type="button" onClick={onRunFirstSuccessProbe} disabled={firstSuccessPending || !runtimeKeyTokenInput.trim()}>
+            {firstSuccessPending ? "Running first success probe" : "Run first success probe"}
+          </button>
+        </div>
+      </article>
 
-                  <p className="fg-muted">{step.detail}</p>
-
-                  {step.blockers.length > 0 ? (
-                    <ul className="fg-list">
-                      {step.blockers.map((blocker) => (
-                        <li key={blocker}>{blocker}</li>
-                      ))}
-                    </ul>
-                  ) : null}
-
-                  {step.links.length > 0 ? (
-                    <div className="fg-actions">
-                      {step.links.map((link) => (
-                        <Link key={`${step.id}-${link.label}`} className="fg-nav-link" to={withInstanceScope(link.to, instanceId)}>
-                          {link.label}
-                        </Link>
-                      ))}
-                    </div>
-                  ) : null}
-                </li>
-              ))}
-            </ol>
-          </article>
-        </>
-      ) : null}
+      <article className="fg-card">
+        <div className="fg-panel-heading">
+          <h3>8) Go-live summary</h3>
+        </div>
+        <p className="fg-muted">{goLiveSummary}</p>
+        {goLiveBlockers.length > 0 ? (
+          <ul className="fg-list">
+            {goLiveBlockers.map((blocker) => (
+              <li key={blocker}>{blocker}</li>
+            ))}
+          </ul>
+        ) : (
+          <p>Instance, provider, routing, runtime key, TLS evidence, and first-success probe are all in place.</p>
+        )}
+        <div className="fg-actions">
+          <Link className="fg-nav-link" to={withInstanceScope("/dashboard", instanceId)}>Open Dashboard</Link>
+        </div>
+      </article>
     </>
   );
 }

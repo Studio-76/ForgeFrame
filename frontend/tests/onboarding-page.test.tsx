@@ -13,6 +13,11 @@ const {
   fetchOauthOnboardingMock,
   fetchProviderControlPlaneMock,
   fetchRuntimeKeysMock,
+  fetchRoutingControlPlaneMock,
+  fetchAgentsMock,
+  updateRoutingPolicyMock,
+  createRuntimeKeyMock,
+  runRuntimeKeyFirstSuccessProbeMock,
 } = vi.hoisted(() => ({
   fetchInstancesMock: vi.fn(),
   createInstanceMock: vi.fn(),
@@ -22,11 +27,15 @@ const {
   fetchOauthOnboardingMock: vi.fn(),
   fetchProviderControlPlaneMock: vi.fn(),
   fetchRuntimeKeysMock: vi.fn(),
+  fetchRoutingControlPlaneMock: vi.fn(),
+  fetchAgentsMock: vi.fn(),
+  updateRoutingPolicyMock: vi.fn(),
+  createRuntimeKeyMock: vi.fn(),
+  runRuntimeKeyFirstSuccessProbeMock: vi.fn(),
 }));
 
 vi.mock("../src/api/admin", async () => {
   const actual = await vi.importActual<typeof import("../src/api/admin")>("../src/api/admin");
-
   return {
     ...actual,
     fetchInstances: fetchInstancesMock,
@@ -37,16 +46,15 @@ vi.mock("../src/api/admin", async () => {
     fetchOauthOnboarding: fetchOauthOnboardingMock,
     fetchProviderControlPlane: fetchProviderControlPlaneMock,
     fetchRuntimeKeys: fetchRuntimeKeysMock,
+    fetchRoutingControlPlane: fetchRoutingControlPlaneMock,
+    fetchAgents: fetchAgentsMock,
+    updateRoutingPolicy: updateRoutingPolicyMock,
+    createRuntimeKey: createRuntimeKeyMock,
+    runRuntimeKeyFirstSuccessProbe: runRuntimeKeyFirstSuccessProbeMock,
   };
 });
 
-import type {
-  AdminSessionUser,
-  GatewayAccount,
-  InstanceRecord,
-  ProviderControlItem,
-  RuntimeKey,
-} from "../src/api/admin";
+import type { AdminSessionUser, InstanceRecord } from "../src/api/admin";
 import { OnboardingPage } from "../src/pages/OnboardingPage";
 import { withAppContext } from "./testContext";
 
@@ -56,61 +64,14 @@ function createSession(overrides: Partial<AdminSessionUser>): AdminSessionUser {
   return {
     session_id: "session-test",
     user_id: "user-test",
-    username: "ops-user",
-    display_name: "Ops User",
-    role: "operator",
+    username: "admin",
+    display_name: "Admin",
+    role: "admin",
     session_type: "standard",
     read_only: false,
     must_rotate_password: false,
     ...overrides,
   };
-}
-
-function createOnboardingMetadata(overrides: Record<string, unknown> = {}) {
-  return {
-    onboarding_v4: {
-      operating_mode: "normative_public_https",
-      postgres_mode: "native_host",
-      fqdn: "forgeframe.example.com",
-      dns_ready: true,
-      port_80_ready: true,
-      port_443_ready: true,
-      tls_mode: "lets_encrypt",
-      certificate_status: "issued",
-      certificate_auto_renew: true,
-      helper_port_80_mode: "acme_redirect_only",
-      provider_direction: "mixed_control_plane",
-      autonomy_mode: "bounded_autonomy",
-      routing_default: "balanced",
-      allow_premium_escalation: true,
-      runtime_driver_mode: "embedded_control_plane",
-      edge_admission_mode: "disabled",
-      work_interaction_mode: "ops_assistant",
-      inbox_enabled: true,
-      tasks_enabled: true,
-      notifications_enabled: true,
-      assistant_mode: "ops",
-      first_success_action: "provider_verification",
-      first_artifact: "provider_preview",
-      operator_surface: "providers",
-      ...overrides,
-    },
-  };
-}
-
-function createLimitedOnboardingMetadata(overrides: Record<string, unknown> = {}) {
-  return createOnboardingMetadata({
-    operating_mode: "limited_evaluation",
-    fqdn: "",
-    dns_ready: false,
-    port_80_ready: false,
-    port_443_ready: false,
-    tls_mode: "disabled",
-    certificate_status: "manual",
-    certificate_auto_renew: false,
-    helper_port_80_mode: "not_available",
-    ...overrides,
-  });
 }
 
 function createInstanceRecord(overrides: Partial<InstanceRecord> = {}): InstanceRecord {
@@ -125,114 +86,149 @@ function createInstanceRecord(overrides: Partial<InstanceRecord> = {}): Instance
     deployment_mode: "linux_host_native",
     exposure_mode: "same_origin",
     is_default: true,
-    metadata: createOnboardingMetadata(),
+    metadata: {
+      onboarding_v4: {
+        operating_model: "team_company",
+        operating_mode: "normative_public_https",
+        routing_default: "local_first",
+        fqdn: "forgeframe.example.com",
+        dns_ready: true,
+        port_80_ready: true,
+        port_443_ready: true,
+        tls_mode: "lets_encrypt",
+        certificate_status: "issued",
+        certificate_auto_renew: true,
+        helper_port_80_mode: "acme_redirect_only",
+      },
+    },
     created_at: "2026-04-21T09:50:00Z",
     updated_at: "2026-04-21T09:50:00Z",
     ...overrides,
   };
 }
 
-function createBootstrapReadiness(ready = true) {
+function createOnboardingMetadata(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+  return {
+    operating_model: "team_company",
+    operating_mode: "normative_public_https",
+    routing_default: "local_first",
+    fqdn: "forgeframe.example.com",
+    dns_ready: true,
+    port_80_ready: true,
+    port_443_ready: true,
+    tls_mode: "lets_encrypt",
+    certificate_status: "issued",
+    certificate_auto_renew: true,
+    helper_port_80_mode: "acme_redirect_only",
+    ...overrides,
+  };
+}
+
+function createFirstSuccessProbe(overrides: Record<string, unknown> = {}) {
+  return {
+    runtime_key_id: "key-1",
+    instance_id: "instance_alpha",
+    tenant_id: "tenant_alpha",
+    models_probe: {
+      attempted: true,
+      ok: true,
+      status_code: 200,
+      model_count: 2,
+      error: null,
+    },
+    chat_probe: {
+      attempted: false,
+      ok: false,
+      status_code: null,
+      model: null,
+      error: null,
+    },
+    success: true,
+    executed_at: "2026-04-21T10:40:00Z",
+    ...overrides,
+  };
+}
+
+type RoutingPolicyOverride = Partial<{
+  execution_lane: "sync_interactive" | "queued_background";
+  prefer_local: boolean;
+  prefer_low_latency: boolean;
+  allow_premium: boolean;
+  allow_fallback: boolean;
+  allow_escalation: boolean;
+  require_queue_eligible: boolean;
+  preferred_target_keys: string[];
+  fallback_target_keys: string[];
+  escalation_target_keys: string[];
+}>;
+
+function createRoutingControlPlanePayload(
+  nonSimpleApplied = false,
+  overrides?: {
+    simple?: RoutingPolicyOverride;
+    non_simple?: RoutingPolicyOverride;
+  },
+) {
   return {
     status: "ok",
-    ready,
-    checks: [
-      { id: "compose_file", ok: true, details: "docker/docker-compose.yml" },
-      { id: "env_compose", ok: true, details: ".env.compose" },
-      { id: "postgres_url", ok: ready, details: "FORGEFRAME_HARNESS_POSTGRES_URL" },
-    ],
-    next_steps: ["Run ./scripts/bootstrap-forgeframe.sh."],
-    checked_at: "2026-04-21T10:00:00Z",
-  };
-}
-
-function createProvider(overrides: Partial<ProviderControlItem> = {}): ProviderControlItem {
-  return {
-    provider: "openai_codex",
-    label: "OpenAI Codex",
-    enabled: true,
-    integration_class: "native",
-    template_id: null,
-    config: {},
-    ready: true,
-    readiness_reason: null,
-    contract_classification: "runtime-ready",
-    capabilities: {},
-    tool_calling_level: "full",
-    compatibility_depth: "validated",
-    runtime_readiness: "ready",
-    streaming_readiness: "ready",
-    provider_axis: "oauth_account_providers",
-    auth_mechanism: "oauth",
-    oauth_required: true,
-    oauth_mode: "oauth",
-    discovery_supported: false,
-    model_count: 1,
-    models: [
+    object: "routing_control_plane",
+    policies: [
       {
-        id: "codex-mini-latest",
-        source: "static",
-        discovery_status: "listed",
-        active: true,
-        health_status: "healthy",
-        last_seen_at: "2026-04-21T10:05:00Z",
-        last_probe_at: "2026-04-21T10:05:00Z",
+        classification: "simple",
+        display_name: "Simple",
+        description: "",
+        execution_lane: "sync_interactive",
+        prefer_local: true,
+        prefer_low_latency: true,
+        allow_premium: false,
+        allow_fallback: true,
+        allow_escalation: false,
+        require_queue_eligible: false,
+        preferred_target_keys: [],
+        fallback_target_keys: [],
+        escalation_target_keys: [],
+        ...overrides?.simple,
+      },
+      {
+        classification: "non_simple",
+        display_name: "Non simple",
+        description: "",
+        execution_lane: "queued_background",
+        prefer_local: !nonSimpleApplied,
+        prefer_low_latency: false,
+        allow_premium: nonSimpleApplied,
+        allow_fallback: true,
+        allow_escalation: nonSimpleApplied,
+        require_queue_eligible: false,
+        preferred_target_keys: [],
+        fallback_target_keys: [],
+        escalation_target_keys: [],
+        ...overrides?.non_simple,
       },
     ],
-    last_sync_at: "2026-04-21T10:10:00Z",
-    last_sync_status: "ok",
-    harness_profile_count: 0,
-    harness_run_count: 0,
-    harness_needs_attention_count: 0,
-    harness_proof_status: "none",
-    harness_proven_profile_keys: [],
-    oauth_failure_count: 0,
-    oauth_last_probe: { executed_at: "2026-04-21T10:15:00Z" },
-    oauth_last_bridge_sync: null,
-    ...overrides,
+    budget: { hard_blocked: false, blocked_cost_classes: [], scopes: [], anomalies: [] },
+    circuits: [],
+    targets: [],
+    recent_decisions: [],
+    summary: {},
   };
 }
 
-function createAccount(overrides: Partial<GatewayAccount> = {}): GatewayAccount {
+function createOperatorAgent(instanceId: string, companyId: string) {
   return {
-    account_id: "acct-1",
-    label: "Primary runtime account",
-    status: "active",
-    provider_bindings: ["openai_codex"],
-    notes: "",
-    created_at: "2026-04-21T10:20:00Z",
-    updated_at: "2026-04-21T10:20:00Z",
-    runtime_key_count: 1,
-    ...overrides,
-  };
-}
-
-function createKey(overrides: Partial<RuntimeKey> = {}): RuntimeKey {
-  return {
-    key_id: "key-1",
-    account_id: "acct-1",
-    label: "Primary runtime key",
-    prefix: "fg_live_123",
-    scopes: ["models:read", "chat:write", "responses:write"],
-    status: "active",
+    agent_id: `agent_${instanceId}`,
+    instance_id: instanceId,
+    company_id: companyId,
+    display_name: "Operator",
+    default_name: "Operator",
+    role_kind: "operator" as const,
+    status: "active" as const,
+    participation_mode: "direct" as const,
+    allowed_targets: [],
+    is_default_operator: true,
+    metadata: {},
     created_at: "2026-04-21T10:25:00Z",
     updated_at: "2026-04-21T10:25:00Z",
-    ...overrides,
-  };
-}
-
-function createOauthTarget(overrides: Record<string, unknown> = {}): Record<string, unknown> {
-  return {
-    provider_key: "openai_codex",
-    readiness: "ready",
-    configured: true,
-    next_steps: ["Codex is operational; verify UI and runtime behavior against live upstreams."],
-    operational_depth: "runtime_evidenced",
-    evidence: {
-      live_probe: { status: "missing" },
-      runtime: { status: "observed", details: "Live runtime traffic is recorded for this provider." },
-    },
-    ...overrides,
   };
 }
 
@@ -264,10 +260,14 @@ async function renderOnboardingPage(session: AdminSessionUser, path = "/onboardi
   await flushEffects();
 }
 
-function collectLinkHrefs(): string[] {
-  return Array.from(container.querySelectorAll("a"))
-    .map((link) => link.getAttribute("href"))
-    .filter((href): href is string => Boolean(href));
+async function remountOnboardingPage(session: AdminSessionUser, path = "/onboarding") {
+  if (root) {
+    await act(async () => {
+      root?.unmount();
+    });
+    root = null;
+  }
+  await renderOnboardingPage(session, path);
 }
 
 function getField<T extends Element>(selector: string): T {
@@ -290,7 +290,7 @@ function setElementValue(element: HTMLInputElement | HTMLTextAreaElement | HTMLS
 }
 
 async function changeTextControl(name: string, value: string) {
-  const field = getField<HTMLInputElement | HTMLTextAreaElement>(`[name="${name}"]`);
+  const field = getField<HTMLInputElement>(`[name="${name}"]`);
   await act(async () => {
     setElementValue(field, value);
     field.dispatchEvent(new Event("input", { bubbles: true }));
@@ -306,13 +306,59 @@ async function changeSelect(name: string, value: string) {
   });
 }
 
-async function changeCheckbox(name: string, checked: boolean) {
-  const field = getField<HTMLInputElement>(`input[name="${name}"]`);
+async function changeInstanceScope(value: string) {
+  const field = container.querySelector(".fg-inline-form select");
+  if (!(field instanceof HTMLSelectElement)) {
+    throw new Error("Instance scope select not found");
+  }
   await act(async () => {
-    if (field.checked !== checked) {
-      field.click();
-    }
+    setElementValue(field, value);
+    field.dispatchEvent(new Event("change", { bubbles: true }));
   });
+  await flushEffects();
+}
+
+async function clickButton(text: string) {
+  const button = Array.from(container.querySelectorAll("button")).find((item) => item.textContent?.includes(text));
+  if (!button) {
+    throw new Error(`Button not found: ${text}`);
+  }
+  await act(async () => {
+    (button as HTMLButtonElement).click();
+  });
+  await flushEffects();
+}
+
+function getWizardStepCard(title: string): HTMLElement {
+  const heading = Array.from(container.querySelectorAll(".fg-checklist-step h4")).find((item) => item.textContent?.trim() === title);
+  if (!(heading instanceof HTMLElement)) {
+    throw new Error(`Wizard step not found: ${title}`);
+  }
+  const card = heading.closest(".fg-checklist-step");
+  if (!(card instanceof HTMLElement)) {
+    throw new Error(`Wizard step card not found: ${title}`);
+  }
+  return card;
+}
+
+function getWizardStepStatus(title: string): string {
+  const status = getWizardStepCard(title).querySelector(".fg-pill");
+  if (!(status instanceof HTMLElement)) {
+    throw new Error(`Wizard step status not found: ${title}`);
+  }
+  return status.textContent?.trim() ?? "";
+}
+
+function getPageCard(title: string): HTMLElement {
+  const heading = Array.from(container.querySelectorAll(".fg-card h3")).find((item) => item.textContent?.trim() === title);
+  if (!(heading instanceof HTMLElement)) {
+    throw new Error(`Page card not found: ${title}`);
+  }
+  const card = heading.closest(".fg-card");
+  if (!(card instanceof HTMLElement)) {
+    throw new Error(`Page card wrapper not found: ${title}`);
+  }
+  return card;
 }
 
 async function submitInterviewForm() {
@@ -338,11 +384,49 @@ beforeEach(() => {
     status: "ok",
     instance: createInstanceRecord(),
   });
-  fetchBootstrapReadinessMock.mockResolvedValue(createBootstrapReadiness(true));
+  fetchBootstrapReadinessMock.mockResolvedValue({
+    status: "ok",
+    ready: true,
+    checks: [
+      { id: "public_fqdn_configured", ok: true },
+      { id: "public_dns_resolution", ok: true },
+      { id: "public_https_listener", ok: true },
+      { id: "certificate_material", ok: true },
+      { id: "tls_mode_classification", ok: true },
+      { id: "tls_certificate_management", ok: true },
+    ],
+    checked_at: "2026-04-21T10:00:00Z",
+    next_steps: [],
+  });
   fetchProviderControlPlaneMock.mockResolvedValue({
     status: "ok",
     object: "provider_control_plane",
-    providers: [createProvider()],
+    providers: [
+      {
+        provider: "openai_api",
+        label: "OpenAI API",
+        enabled: true,
+        integration_class: "native",
+        template_id: null,
+        config: {},
+        ready: true,
+        readiness_reason: null,
+        contract_classification: "runtime-ready",
+        capabilities: {},
+        runtime_readiness: "ready",
+        streaming_readiness: "ready",
+        oauth_required: false,
+        discovery_supported: true,
+        model_count: 1,
+        models: [],
+        last_sync_at: "2026-04-21T10:00:00Z",
+        last_sync_status: "ok",
+        harness_proof_status: "none",
+        harness_proven_profile_keys: [],
+        provider_axis: "openai_compatible_providers",
+        auth_mechanism: "api_key",
+      },
+    ],
     health_config: {
       provider_health_enabled: true,
       model_health_enabled: true,
@@ -352,17 +436,62 @@ beforeEach(() => {
     },
     notes: {},
   });
-  fetchOauthOnboardingMock.mockResolvedValue({
-    status: "ok",
-    targets: [createOauthTarget()],
-  });
-  fetchAccountsMock.mockResolvedValue({
-    status: "ok",
-    accounts: [createAccount()],
-  });
+  fetchOauthOnboardingMock.mockResolvedValue({ status: "ok", targets: [] });
+  fetchAccountsMock.mockResolvedValue({ status: "ok", accounts: [] });
   fetchRuntimeKeysMock.mockResolvedValue({
     status: "ok",
-    keys: [createKey()],
+    keys: [{
+      key_id: "key-1",
+      account_id: null,
+      label: "Primary key",
+      prefix: "fg_live_123",
+      scopes: ["models:read", "chat:write", "responses:write"],
+      status: "active",
+      created_at: "2026-04-21T10:25:00Z",
+      updated_at: "2026-04-21T10:25:00Z",
+    }],
+  });
+  fetchRoutingControlPlaneMock.mockResolvedValue(createRoutingControlPlanePayload(false));
+  fetchAgentsMock.mockResolvedValue({
+    status: "ok",
+    agents: [createOperatorAgent("instance_alpha", "company_alpha")],
+  });
+  updateRoutingPolicyMock.mockResolvedValue({ status: "ok" });
+  createRuntimeKeyMock.mockResolvedValue({
+    status: "ok",
+    issued: {
+      key_id: "key-2",
+      token: "fg_live_new_token",
+      prefix: "fg_live_new",
+      account_id: null,
+      label: "Onboarding First Success Key",
+      scopes: ["models:read", "chat:write", "responses:write"],
+      created_at: "2026-04-21T10:25:00Z",
+    },
+  });
+  runRuntimeKeyFirstSuccessProbeMock.mockResolvedValue({
+    status: "ok",
+    probe: {
+      runtime_key_id: "key-2",
+      instance_id: "instance_alpha",
+      tenant_id: "tenant_alpha",
+      models_probe: {
+        attempted: true,
+        ok: true,
+        status_code: 200,
+        model_count: 2,
+        error: null,
+      },
+      chat_probe: {
+        attempted: false,
+        ok: false,
+        status_code: null,
+        model: null,
+        error: null,
+      },
+      success: true,
+      executed_at: "2026-04-21T10:40:00Z",
+    },
   });
 
   container = document.createElement("div");
@@ -374,364 +503,27 @@ afterEach(() => {
   if (!root) {
     return;
   }
-
   act(() => {
     root?.unmount();
   });
   root = null;
 });
 
-describe("Onboarding page checklist", () => {
-  it("shows the go-live success state for standard admin sessions when onboarding truth is normative", async () => {
-    await renderOnboardingPage(createSession({ role: "admin", username: "admin", display_name: "Admin" }));
+describe("Onboarding wizard", () => {
+  it("renders wizard-first onboarding with operating-model mapping and operator visibility", async () => {
+    await renderOnboardingPage(createSession({ role: "admin" }));
 
-    expect(fetchBootstrapReadinessMock).toHaveBeenCalledTimes(1);
-    expect(fetchProviderControlPlaneMock).toHaveBeenCalledTimes(1);
-    expect(fetchOauthOnboardingMock).toHaveBeenCalledTimes(1);
-    expect(fetchAccountsMock).toHaveBeenCalledTimes(1);
-    expect(fetchRuntimeKeysMock).toHaveBeenCalledTimes(1);
-
-    expect(container.textContent).toContain("Admin setup actions enabled");
-    expect(container.textContent).toContain("Normative path recorded");
-    expect(container.textContent).toContain("Ready for live traffic");
-    expect(container.textContent).toContain("ForgeFrame is ready for live traffic from the current control-plane view.");
-    expect(container.textContent).toContain("1/1 configured OAuth/account targets have live probe or runtime evidence.");
-    expect(container.textContent).toContain("Checklist progress");
-    expect(container.textContent).toContain("5/5");
-    expect(container.textContent).toContain("Open Dashboard");
+    expect(container.textContent).toContain("Onboarding Wizard");
+    expect(container.textContent).toContain("Nur ich");
+    expect(container.textContent).toContain("Mein Team / meine Firma");
+    expect(container.textContent).toContain("Mehrere Kunden / Organisationen");
+    expect(container.textContent).toContain("Default operator product object detected: Operator.");
+    expect(container.textContent).toContain("local, API-key, bridge-only, onboarding-only, unsupported");
   });
 
-  it("threads instance scope through onboarding fetches and checklist links", async () => {
-    await renderOnboardingPage(
-      createSession({ role: "admin", username: "admin", display_name: "Admin" }),
-      "/onboarding?instanceId=instance_alpha",
-    );
-
-    expect(fetchInstancesMock).toHaveBeenCalledTimes(1);
-    expect(fetchProviderControlPlaneMock).toHaveBeenCalledWith("instance_alpha");
-    expect(fetchOauthOnboardingMock).toHaveBeenCalledWith("instance_alpha");
-    expect(fetchAccountsMock).toHaveBeenCalledWith("instance_alpha");
-    expect(fetchRuntimeKeysMock).toHaveBeenCalledWith("instance_alpha");
-    expect(container.textContent).toContain("Instance scope: Alpha Instance");
-    expect(container.textContent).toContain("Current binding: tenant tenant_alpha");
-
-    const hrefs = collectLinkHrefs();
-    expect(hrefs).toContain("/onboarding?instanceId=instance_alpha");
-    expect(hrefs).toContain("/providers?instanceId=instance_alpha");
-    expect(hrefs).toContain("/accounts?instanceId=instance_alpha");
-    expect(hrefs).toContain("/api-keys?instanceId=instance_alpha");
-    expect(hrefs).toContain("/dashboard?instanceId=instance_alpha");
-    expect(hrefs).toContain("/providers?instanceId=instance_alpha#provider-health-runs");
-  });
-
-  it("counts bridge-only probe evidence without treating the target as live-provider proof", async () => {
-    fetchProviderControlPlaneMock.mockResolvedValueOnce({
-      status: "ok",
-      object: "provider_control_plane",
-      providers: [],
-      health_config: {
-        provider_health_enabled: true,
-        model_health_enabled: true,
-        interval_seconds: 300,
-        probe_mode: "discovery",
-        selected_models: [],
-      },
-      notes: {},
-    });
-    fetchOauthOnboardingMock.mockResolvedValueOnce({
-      status: "ok",
-      targets: [
-        {
-          provider_key: "github_copilot",
-          readiness: "partial",
-          configured: true,
-          readiness_reason: "Live probe evidence is recorded, but this target remains onboarding/bridge-only in the current release truth.",
-          operational_depth: "bridge_probe_evidenced",
-          evidence: {
-            live_probe: {
-              status: "observed",
-              details: "GitHub Copilot bridge probe succeeded.",
-            },
-            runtime: {
-              status: "missing",
-            },
-          },
-          next_steps: ["Keep github_copilot positioned as onboarding/bridge-only; probe success does not promote it to native runtime-ready truth."],
-        },
-      ],
-    });
-    fetchAccountsMock.mockResolvedValueOnce({
-      status: "ok",
-      accounts: [],
-    });
-    fetchRuntimeKeysMock.mockResolvedValueOnce({
-      status: "ok",
-      keys: [],
-    });
-
-    await renderOnboardingPage(createSession({ role: "admin", username: "admin", display_name: "Admin" }));
-
-    expect(container.textContent).toContain("Provider onboarding is visible, but no route is ready for live traffic yet.");
-    expect(container.textContent).toContain("0 runtime-ready provider routes, 0 eligible for live go-live proof. 1/1 configured OAuth/account targets have live probe or runtime evidence.");
-    expect(container.textContent).toContain("Provider verification still blocks go-live.");
-    expect(container.textContent).not.toContain("At least one provider route is verified for live runtime traffic.");
-  });
-
-  it("shows the admin runtime-access handoff for operator sessions", async () => {
-    fetchAccountsMock.mockResolvedValueOnce({
-      status: "ok",
-      accounts: [],
-    });
-    fetchRuntimeKeysMock.mockResolvedValueOnce({
-      status: "ok",
-      keys: [],
-    });
-
-    await renderOnboardingPage(createSession({ role: "operator", username: "operator", display_name: "Operator" }));
-
-    expect(container.textContent).toContain("Operator setup with admin handoff");
-    expect(container.textContent).toContain("Runtime access still needs an admin handoff.");
-    expect(container.textContent).toContain("Go-live needs an admin handoff before the first key can be issued.");
-    expect(container.textContent).toContain("Issue a global key on API Keys, or create an account first only if the first key should be tied to a specific runtime identity.");
-    expect(container.textContent).not.toContain("Create the first account before issuing a runtime key.");
-  });
-
-  it("keeps the checklist visible but permission-limited for viewers", async () => {
-    fetchAccountsMock.mockResolvedValueOnce({
-      status: "ok",
-      accounts: [],
-    });
-    fetchRuntimeKeysMock.mockResolvedValueOnce({
-      status: "ok",
-      keys: [],
-    });
-
-    await renderOnboardingPage(createSession({ role: "viewer", username: "viewer", display_name: "Viewer" }));
-
-    expect(container.textContent).toContain("Viewer access");
-    expect(container.textContent).toContain("Viewer sessions can inspect the full checklist, but provider verification requires an operator or admin, and onboarding persistence plus runtime access issuance require an admin.");
-    expect(container.textContent).toContain("Handoff required");
-  });
-
-  it("shows read-only setup visibility for restricted sessions", async () => {
-    await renderOnboardingPage(createSession({
-      role: "admin",
-      username: "readonly-admin",
-      display_name: "Read Only Admin",
-      read_only: true,
-      session_type: "impersonation",
-    }));
-
-    expect(container.textContent).toContain("Read only session");
-    expect(container.textContent).toContain("Read-only sessions can inspect bootstrap, provider, runtime access, and onboarding posture, but they cannot persist changes or complete verification and issuance.");
-  });
-
-  it("does not treat the ForgeFrame baseline smoke path as live provider verification", async () => {
-    fetchProviderControlPlaneMock.mockResolvedValueOnce({
-      status: "ok",
-      object: "provider_control_plane",
-      providers: [
-        createProvider({
-          provider: "forgeframe_baseline",
-          label: "ForgeFrame Baseline",
-          integration_class: "internal",
-          tool_calling_level: "none",
-          compatibility_depth: "constrained",
-          provider_axis: "openai_compatible_provider",
-          auth_mechanism: "internal",
-          oauth_required: false,
-          oauth_mode: null,
-          models: [
-            {
-              id: "forgeframe-baseline-chat-v1",
-              source: "static",
-              discovery_status: "listed",
-              active: true,
-              health_status: "healthy",
-              last_seen_at: "2026-04-21T10:05:00Z",
-              last_probe_at: "2026-04-21T10:05:00Z",
-            },
-          ],
-        }),
-      ],
-      health_config: {
-        provider_health_enabled: true,
-        model_health_enabled: true,
-        interval_seconds: 300,
-        probe_mode: "discovery",
-        selected_models: [],
-      },
-      notes: {},
-    });
-    fetchOauthOnboardingMock.mockResolvedValueOnce({
-      status: "ok",
-      targets: [],
-    });
-    fetchAccountsMock.mockResolvedValueOnce({
-      status: "ok",
-      accounts: [],
-    });
-    fetchRuntimeKeysMock.mockResolvedValueOnce({
-      status: "ok",
-      keys: [createKey({ account_id: null, label: "Global runtime key" })],
-    });
-
-    await renderOnboardingPage(createSession({ role: "admin", username: "admin", display_name: "Admin" }));
-
-    expect(container.textContent).toContain("Only internal smoke routes are runtime-ready; a real provider still needs live verification.");
-    expect(container.textContent).toContain("1 runtime-ready provider routes, 0 eligible for live go-live proof.");
-    expect(container.textContent).toContain("ForgeFrame baseline is runtime-ready for internal smoke checks, but it does not count as verified live provider coverage for go-live.");
-    expect(container.textContent).toContain("Provider verification still blocks go-live.");
-    expect(container.textContent).not.toContain("ForgeFrame is ready for live traffic from the current control-plane view.");
-  });
-
-  it("counts bridge-only OAuth targets with probe evidence even when onboarding readiness stays partial", async () => {
-    fetchOauthOnboardingMock.mockResolvedValueOnce({
-      status: "ok",
-      targets: [
-        createOauthTarget({
-          provider_key: "antigravity",
-          readiness: "partial",
-          operational_depth: "bridge_probe_evidenced",
-          next_steps: [
-            "Keep antigravity positioned as onboarding/bridge-only; probe success does not promote it to native runtime-ready truth.",
-          ],
-          evidence: {
-            live_probe: {
-              status: "observed",
-              details: "Live probe evidence is recorded, but this target remains onboarding/bridge-only in the current release truth.",
-            },
-            runtime: { status: "missing" },
-          },
-        }),
-      ],
-    });
-
-    await renderOnboardingPage(createSession({ role: "admin", username: "admin", display_name: "Admin" }));
-
-    expect(container.textContent).toContain("1/1 configured OAuth/account targets have live probe or runtime evidence.");
-    expect(container.textContent).not.toContain("0/1 configured OAuth/account targets have live probe or runtime evidence.");
-    expect(container.textContent).not.toContain("configured OAuth/account targets are ready.");
-  });
-
-  it("treats a global runtime key as a valid runtime access path", async () => {
-    fetchAccountsMock.mockResolvedValueOnce({
-      status: "ok",
-      accounts: [],
-    });
-    fetchRuntimeKeysMock.mockResolvedValueOnce({
-      status: "ok",
-      keys: [createKey({ account_id: null, label: "Global runtime key" })],
-    });
-
-    await renderOnboardingPage(createSession({ role: "admin", username: "admin", display_name: "Admin" }));
-
-    expect(container.textContent).toContain("At least one runtime key covers the default runtime route scopes.");
-    expect(container.textContent).toContain("0 active runtime accounts. 1 active runtime keys. 1 global key is not bound to an account. 1 key covers the default route set (models:read, chat:write, responses:write).");
-    expect(container.textContent).not.toContain("Create the first account before issuing a runtime key.");
-  });
-
-  it("keeps restricted-scope active keys from satisfying runtime-access readiness or go-live", async () => {
-    fetchAccountsMock.mockResolvedValueOnce({
-      status: "ok",
-      accounts: [],
-    });
-    fetchRuntimeKeysMock.mockResolvedValueOnce({
-      status: "ok",
-      keys: [createKey({ account_id: null, label: "Global runtime key", scopes: ["models:read"] })],
-    });
-
-    await renderOnboardingPage(createSession({ role: "admin", username: "admin", display_name: "Admin" }));
-
-    expect(container.textContent).toContain("Partial access");
-    expect(container.textContent).toContain("Active runtime keys exist, but none can send live write traffic yet.");
-    expect(container.textContent).toContain("Active runtime keys exist, but none currently permit live write traffic on `/v1/chat/completions` or `/v1/responses`.");
-    expect(container.textContent).toContain("Global runtime key: missing chat:write, responses:write for the default go-live route set.");
-    expect(container.textContent).toContain("Runtime key scope coverage still blocks go-live.");
-    expect(container.textContent).not.toContain("ForgeFrame is ready for live traffic from the current control-plane view.");
-  });
-
-  it("blocks go-live when a full-scope account-bound key cannot reach the verified provider", async () => {
-    fetchAccountsMock.mockResolvedValueOnce({
-      status: "ok",
-      accounts: [createAccount({ provider_bindings: ["openai_api"] })],
-    });
-    fetchRuntimeKeysMock.mockResolvedValueOnce({
-      status: "ok",
-      keys: [createKey({ account_id: "acct-1", label: "Bound full-scope key" })],
-    });
-
-    await renderOnboardingPage(createSession({ role: "admin", username: "admin", display_name: "Admin" }));
-
-    expect(container.textContent).toContain("At least one runtime key covers the default runtime route scopes.");
-    expect(container.textContent).toContain("Current account provider bindings do not yet line up with the verified live provider set.");
-    expect(container.textContent).toContain("Provider-binding reachability still blocks go-live.");
-    expect(container.textContent).toContain("At least one full-scope runtime key must be able to reach a verified live provider through its current account bindings before go-live.");
-    expect(container.textContent).toContain("Bound full-scope key: account bindings allow openai_api, while the verified live provider set is openai_codex.");
-    expect(container.textContent).toContain("Open Accounts");
-    expect(container.textContent).not.toContain("ForgeFrame is ready for live traffic from the current control-plane view.");
-  });
-
-  it("persists onboarding truth on an existing instance and clears typed blockers once normative data is saved", async () => {
+  it("creates the first instance from the wizard when inventory is empty", async () => {
     fetchInstancesMock
-      .mockResolvedValueOnce({
-        status: "ok",
-        instances: [createInstanceRecord({ metadata: createLimitedOnboardingMetadata(), updated_at: "2026-04-21T09:50:00Z" })],
-      })
-      .mockResolvedValueOnce({
-        status: "ok",
-        instances: [createInstanceRecord({ metadata: createOnboardingMetadata({ fqdn: "customer.example.com" }), updated_at: "2026-04-21T11:15:00Z" })],
-      });
-    updateInstanceMock.mockResolvedValueOnce({
-      status: "ok",
-      instance: createInstanceRecord({ metadata: createOnboardingMetadata({ fqdn: "customer.example.com" }), updated_at: "2026-04-21T11:15:00Z" }),
-    });
-
-    await renderOnboardingPage(createSession({ role: "admin", username: "admin", display_name: "Admin" }));
-
-    expect(container.textContent).toContain("limited_mode_selected");
-
-    await changeSelect("operatingMode", "normative_public_https");
-    await changeTextControl("fqdn", "customer.example.com");
-    await changeSelect("tlsMode", "lets_encrypt");
-    await changeSelect("certificateStatus", "issued");
-    await changeSelect("helperPort80Mode", "acme_redirect_only");
-    await changeCheckbox("dnsReady", true);
-    await changeCheckbox("port80Ready", true);
-    await changeCheckbox("port443Ready", true);
-    await changeCheckbox("certificateAutoRenew", true);
-    await submitInterviewForm();
-
-    expect(updateInstanceMock).toHaveBeenCalledWith("instance_alpha", expect.objectContaining({
-      display_name: "Alpha Instance",
-      tenant_id: "tenant_alpha",
-      company_id: "company_alpha",
-      deployment_mode: "linux_host_native",
-      exposure_mode: "same_origin",
-      metadata: expect.objectContaining({
-        onboarding_v4: expect.objectContaining({
-          operating_mode: "normative_public_https",
-          fqdn: "customer.example.com",
-          dns_ready: true,
-          port_80_ready: true,
-          port_443_ready: true,
-          tls_mode: "lets_encrypt",
-          certificate_status: "issued",
-          certificate_auto_renew: true,
-        }),
-      }),
-    }));
-    expect(container.textContent).toContain("Onboarding truth for Alpha Instance saved.");
-    expect(container.textContent).toContain("Ready for live traffic");
-    expect(container.textContent).not.toContain("limited_mode_selected");
-  });
-
-  it("creates the first instance from onboarding when the catalog is empty", async () => {
-    fetchInstancesMock
-      .mockResolvedValueOnce({
-        status: "ok",
-        instances: [],
-      })
+      .mockResolvedValueOnce({ status: "ok", instances: [] })
       .mockResolvedValueOnce({
         status: "ok",
         instances: [createInstanceRecord({
@@ -740,7 +532,6 @@ describe("Onboarding page checklist", () => {
           display_name: "Customer Production",
           tenant_id: "customer-prod",
           company_id: "customer-prod",
-          metadata: createOnboardingMetadata({ fqdn: "customer.example.com" }),
         })],
       });
     createInstanceMock.mockResolvedValueOnce({
@@ -751,25 +542,15 @@ describe("Onboarding page checklist", () => {
         display_name: "Customer Production",
         tenant_id: "customer-prod",
         company_id: "customer-prod",
-        metadata: createOnboardingMetadata({ fqdn: "customer.example.com" }),
       }),
     });
 
-    await renderOnboardingPage(createSession({ role: "admin", username: "admin", display_name: "Admin" }));
-
+    await renderOnboardingPage(createSession({ role: "admin" }));
     await changeTextControl("instanceId", "customer-prod");
     await changeTextControl("displayName", "Customer Production");
     await changeTextControl("tenantId", "customer-prod");
     await changeTextControl("companyId", "customer-prod");
     await changeSelect("operatingMode", "normative_public_https");
-    await changeTextControl("fqdn", "customer.example.com");
-    await changeSelect("tlsMode", "lets_encrypt");
-    await changeSelect("helperPort80Mode", "acme_redirect_only");
-    await changeCheckbox("dnsReady", true);
-    await changeCheckbox("port80Ready", true);
-    await changeCheckbox("port443Ready", true);
-    await changeSelect("certificateStatus", "issued");
-    await changeCheckbox("certificateAutoRenew", true);
     await submitInterviewForm();
 
     expect(createInstanceMock).toHaveBeenCalledWith(expect.objectContaining({
@@ -777,15 +558,310 @@ describe("Onboarding page checklist", () => {
       display_name: "Customer Production",
       tenant_id: "customer-prod",
       company_id: "customer-prod",
-      deployment_mode: "linux_host_native",
-      exposure_mode: "same_origin",
+    }));
+    expect(container.textContent).toContain("First instance Customer Production created and onboarding state saved.");
+  });
+
+  it("applies non-simple routing defaults and runs first-success probe", async () => {
+    await renderOnboardingPage(createSession({ role: "admin" }));
+
+    await act(async () => {
+      const radio = getField<HTMLInputElement>('input[name="routingChoice"][value="non_simple"]');
+      radio.click();
+    });
+    await clickButton("Apply routing defaults");
+
+    expect(updateRoutingPolicyMock).toHaveBeenCalledWith("simple", expect.any(Object), null);
+    expect(updateRoutingPolicyMock).toHaveBeenCalledWith("non_simple", expect.objectContaining({ allow_premium: true }), null);
+    expect(updateInstanceMock).toHaveBeenCalledWith("instance_alpha", expect.objectContaining({
       metadata: expect.objectContaining({
         onboarding_v4: expect.objectContaining({
-          fqdn: "customer.example.com",
-          operating_mode: "normative_public_https",
+          routing_default: "premium_capable",
         }),
       }),
     }));
-    expect(container.textContent).toContain("First instance Customer Production created and onboarding truth saved.");
+    expect(container.textContent).toContain("Routing defaults saved as non-simple");
+
+    await clickButton("Issue runtime key");
+    expect(createRuntimeKeyMock).toHaveBeenCalledTimes(1);
+    expect(container.textContent).toContain("fg_live_new_token");
+
+    await clickButton("Run first success probe");
+    expect(runRuntimeKeyFirstSuccessProbeMock).toHaveBeenCalledWith(null, expect.objectContaining({
+      runtime_key: "fg_live_new_token",
+      chat_probe: true,
+    }));
+    expect(container.textContent).toContain("/v1/models: ok (200)");
+  });
+
+  it("keeps persisted first-success proof after probing and switching away and back", async () => {
+    let currentInstances = [
+      createInstanceRecord({
+        metadata: {
+          onboarding_v4: createOnboardingMetadata(),
+        },
+      }),
+      createInstanceRecord({
+        instance_id: "instance_beta",
+        slug: "instance-beta",
+        display_name: "Beta Instance",
+        tenant_id: "tenant_beta",
+        company_id: "company_beta",
+        is_default: false,
+        metadata: {
+          onboarding_v4: createOnboardingMetadata(),
+        },
+      }),
+    ];
+    fetchInstancesMock.mockImplementation(async () => ({
+      status: "ok",
+      instances: currentInstances,
+    }));
+    fetchAgentsMock.mockImplementation(async (scopeInstanceId?: string | null) => ({
+      status: "ok",
+      agents: scopeInstanceId === "instance_beta"
+        ? [createOperatorAgent("instance_beta", "company_beta")]
+        : [createOperatorAgent("instance_alpha", "company_alpha")],
+    }));
+    runRuntimeKeyFirstSuccessProbeMock.mockImplementation(async () => {
+      currentInstances = [
+        createInstanceRecord({
+          metadata: {
+            onboarding_v4: createOnboardingMetadata(),
+            onboarding_last_first_success_probe: createFirstSuccessProbe(),
+          },
+        }),
+        createInstanceRecord({
+          instance_id: "instance_beta",
+          slug: "instance-beta",
+          display_name: "Beta Instance",
+          tenant_id: "tenant_beta",
+          company_id: "company_beta",
+          is_default: false,
+          metadata: {
+            onboarding_v4: createOnboardingMetadata(),
+          },
+        }),
+      ];
+      return {
+        status: "ok",
+        probe: createFirstSuccessProbe(),
+      };
+    });
+
+    await renderOnboardingPage(createSession({ role: "admin" }), "/onboarding?instanceId=instance_alpha");
+
+    expect(getWizardStepStatus("First Success Probe")).toBe("blocked");
+
+    await changeTextControl("runtimeKeyTokenInput", "fg_live_alpha_probe");
+    await clickButton("Run first success probe");
+
+    expect(fetchInstancesMock).toHaveBeenCalledTimes(2);
+    expect(getWizardStepStatus("First Success Probe")).toBe("done");
+    expect(container.textContent).toContain("Executed at: 2026-04-21 10:40:00 UTC");
+
+    await changeInstanceScope("instance_beta");
+    expect(getWizardStepStatus("First Success Probe")).toBe("blocked");
+
+    await changeInstanceScope("instance_alpha");
+    expect(getWizardStepStatus("First Success Probe")).toBe("done");
+    expect(container.textContent).toContain("Executed at: 2026-04-21 10:40:00 UTC");
+  });
+
+  it("keeps routing step blocked until backend truth matches the persisted non-simple intent", async () => {
+    const instanceWithPersistedNonSimpleIntent = createInstanceRecord({
+      metadata: {
+        onboarding_v4: createOnboardingMetadata({
+          routing_default: "premium_capable",
+        }),
+        onboarding_last_first_success_probe: createFirstSuccessProbe(),
+      },
+    });
+    let currentRoutingControlPlane = createRoutingControlPlanePayload(false);
+    fetchInstancesMock.mockImplementation(async () => ({
+      status: "ok",
+      instances: [instanceWithPersistedNonSimpleIntent],
+    }));
+    fetchRoutingControlPlaneMock.mockImplementation(async () => currentRoutingControlPlane);
+
+    await renderOnboardingPage(createSession({ role: "admin" }), "/onboarding?instanceId=instance_alpha");
+
+    expect(getField<HTMLInputElement>('input[name="routingChoice"][value="non_simple"]').checked).toBe(true);
+    expect(getWizardStepCard("Routing simple/non-simple").textContent).toContain("non-simple Premium/OAuth selected");
+    expect(getWizardStepStatus("Routing simple/non-simple")).toBe("blocked");
+    expect(getWizardStepCard("Routing simple/non-simple").textContent).toContain("Apply routing defaults from this wizard step.");
+    expect(getWizardStepStatus("Go-Live Zusammenfassung")).toBe("blocked");
+    expect(getWizardStepCard("Go-Live Zusammenfassung").textContent).toContain("Routing defaults are not aligned with the chosen simple/non-simple decision.");
+
+    currentRoutingControlPlane = createRoutingControlPlanePayload(true, {
+      non_simple: {
+        allow_escalation: false,
+      },
+    });
+    await remountOnboardingPage(createSession({ role: "admin" }), "/onboarding?instanceId=instance_alpha");
+
+    expect(getWizardStepStatus("Routing simple/non-simple")).toBe("blocked");
+    expect(getWizardStepCard("Routing simple/non-simple").textContent).toContain("Apply routing defaults from this wizard step.");
+    expect(getWizardStepStatus("Go-Live Zusammenfassung")).toBe("blocked");
+    expect(getWizardStepCard("Go-Live Zusammenfassung").textContent).toContain("Routing defaults are not aligned with the chosen simple/non-simple decision.");
+
+    currentRoutingControlPlane = createRoutingControlPlanePayload(true);
+    await remountOnboardingPage(createSession({ role: "admin" }), "/onboarding?instanceId=instance_alpha");
+
+    expect(getField<HTMLInputElement>('input[name="routingChoice"][value="non_simple"]').checked).toBe(true);
+    expect(getWizardStepCard("Routing simple/non-simple").textContent).toContain("non-simple Premium/OAuth selected");
+    expect(getWizardStepStatus("Routing simple/non-simple")).toBe("done");
+    expect(getWizardStepStatus("Go-Live Zusammenfassung")).toBe("done");
+  });
+
+  it("uses persisted normative onboarding truth for step 1 and go-live instead of unsaved draft edits", async () => {
+    fetchInstancesMock.mockResolvedValue({
+      status: "ok",
+      instances: [createInstanceRecord({
+        metadata: {
+          onboarding_v4: createOnboardingMetadata({
+            operating_mode: "limited_evaluation",
+          }),
+          onboarding_last_first_success_probe: createFirstSuccessProbe(),
+        },
+      })],
+    });
+
+    await renderOnboardingPage(createSession({ role: "admin" }));
+
+    expect(getWizardStepStatus("Betriebsart und Scope")).toBe("blocked");
+    expect(getWizardStepStatus("First Success Probe")).toBe("done");
+    expect(getWizardStepStatus("Go-Live Zusammenfassung")).toBe("blocked");
+    expect(getPageCard("1) Betriebsart und erste Instanz").textContent).toContain("Limited mode recorded");
+
+    await changeSelect("operatingMode", "normative_public_https");
+
+    expect(getWizardStepStatus("Betriebsart und Scope")).toBe("blocked");
+    expect(getWizardStepStatus("Go-Live Zusammenfassung")).toBe("blocked");
+    expect(getWizardStepCard("Betriebsart und Scope").textContent).toContain("limited_mode_selected");
+    expect(getWizardStepCard("Go-Live Zusammenfassung").textContent).toContain("limited_mode_selected");
+    expect(getPageCard("1) Betriebsart und erste Instanz").textContent).toContain("Limited mode recorded");
+    expect(getPageCard("1) Betriebsart und erste Instanz").textContent).not.toContain("Normative path recorded");
+  });
+
+  it("loads persisted first-success proof per instance and clears probe state when scope changes", async () => {
+    fetchInstancesMock.mockResolvedValue({
+      status: "ok",
+      instances: [
+        createInstanceRecord({
+          metadata: {
+            onboarding_v4: createOnboardingMetadata(),
+            onboarding_last_first_success_probe: createFirstSuccessProbe(),
+          },
+        }),
+        createInstanceRecord({
+          instance_id: "instance_beta",
+          slug: "instance-beta",
+          display_name: "Beta Instance",
+          tenant_id: "tenant_beta",
+          company_id: "company_beta",
+          is_default: false,
+          metadata: {
+            onboarding_v4: createOnboardingMetadata(),
+          },
+        }),
+      ],
+    });
+    fetchAgentsMock.mockImplementation(async (instanceId?: string | null) => ({
+      status: "ok",
+      agents: instanceId
+        ? [{
+            agent_id: `agent_${instanceId}`,
+            instance_id: instanceId,
+            company_id: instanceId === "instance_beta" ? "company_beta" : "company_alpha",
+            display_name: "Operator",
+            default_name: "Operator",
+            role_kind: "operator",
+            status: "active",
+            participation_mode: "direct",
+            allowed_targets: [],
+            is_default_operator: true,
+            metadata: {},
+            created_at: "2026-04-21T10:25:00Z",
+            updated_at: "2026-04-21T10:25:00Z",
+          }]
+        : [],
+    }));
+
+    await renderOnboardingPage(createSession({ role: "admin" }), "/onboarding?instanceId=instance_alpha");
+
+    expect(runRuntimeKeyFirstSuccessProbeMock).not.toHaveBeenCalled();
+    expect(getWizardStepStatus("First Success Probe")).toBe("done");
+    expect(container.textContent).toContain("/v1/models: ok (200)");
+
+    await clickButton("Issue runtime key");
+    expect(container.textContent).toContain("fg_live_new_token");
+
+    await changeTextControl("runtimeKeyTokenInput", "alpha-manual-token");
+    expect(getField<HTMLInputElement>('[name="runtimeKeyTokenInput"]').value).toBe("alpha-manual-token");
+
+    await changeInstanceScope("instance_beta");
+
+    expect(getWizardStepStatus("First Success Probe")).toBe("blocked");
+    expect(getField<HTMLInputElement>('[name="runtimeKeyTokenInput"]').value).toBe("");
+    expect(container.textContent).not.toContain("fg_live_new_token");
+    expect(container.textContent).not.toContain("Executed at: 2026-04-21 10:40:00 UTC");
+  });
+
+  it("shows bridge-only provider posture and TLS blockers when evidence is missing", async () => {
+    fetchProviderControlPlaneMock.mockResolvedValue({
+      status: "ok",
+      object: "provider_control_plane",
+      providers: [
+        {
+          provider: "github_copilot",
+          label: "GitHub Copilot",
+          enabled: true,
+          integration_class: "bridge",
+          template_id: null,
+          config: {},
+          ready: false,
+          readiness_reason: "Bridge probe exists but native runtime truth is missing.",
+          contract_classification: "bridge-only",
+          capabilities: {},
+          runtime_readiness: "partial",
+          streaming_readiness: "partial",
+          oauth_required: true,
+          discovery_supported: false,
+          model_count: 0,
+          models: [],
+          last_sync_at: null,
+          last_sync_status: "warning",
+          harness_proof_status: "none",
+          harness_proven_profile_keys: [],
+          provider_axis: "oauth_account_providers",
+          auth_mechanism: "oauth",
+        },
+      ],
+      health_config: {
+        provider_health_enabled: true,
+        model_health_enabled: true,
+        interval_seconds: 300,
+        probe_mode: "discovery",
+        selected_models: [],
+      },
+      notes: {},
+    });
+    fetchBootstrapReadinessMock.mockResolvedValue({
+      status: "ok",
+      ready: false,
+      checks: [
+        { id: "public_fqdn_configured", ok: false },
+        { id: "public_dns_resolution", ok: false },
+      ],
+      checked_at: "2026-04-21T10:00:00Z",
+      next_steps: [],
+    });
+
+    await renderOnboardingPage(createSession({ role: "admin" }));
+
+    expect(container.textContent).toContain("bridge-only");
+    expect(container.textContent).toContain("Bridge probe exists but native runtime truth is missing.");
+    expect(container.textContent).toContain("FQDN/TLS remains blocked until bootstrap API checks show DNS, HTTPS listener, and certificate evidence.");
   });
 });

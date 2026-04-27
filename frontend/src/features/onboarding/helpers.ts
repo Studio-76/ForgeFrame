@@ -3,6 +3,7 @@ import type {
   GatewayAccount,
   InstanceRecord,
   ProviderControlItem,
+  RuntimeKeyFirstSuccessProbeRecord,
   RuntimeKey,
 } from "../../api/admin";
 import {
@@ -12,6 +13,7 @@ import {
 } from "../../app/adminAccess";
 
 export type ChecklistTone = "success" | "warning" | "danger" | "neutral";
+export type WizardStepStatus = "done" | "current" | "blocked" | "skipped";
 
 export type BootstrapReadiness = {
   ready: boolean;
@@ -40,8 +42,20 @@ export type OnboardingAccessState = {
   badgeTone: ChecklistTone;
   detail: string;
   canVerifyProviders: boolean;
+  canConfigureRouting: boolean;
   canIssueRuntimeAccess: boolean;
   canPersistOnboarding: boolean;
+};
+
+export type OnboardingOperatingModel = "solo" | "team_company" | "multi_customer";
+
+export type OperatingModelDescriptor = {
+  key: OnboardingOperatingModel;
+  label: string;
+  internalMode: "single_operator" | "single_tenant_team" | "multi_tenant_control_plane";
+  tenantRequirement: "optional" | "required_single_tenant" | "required_multi_tenant";
+  roleModel: string;
+  description: string;
 };
 
 export type ChecklistLink = {
@@ -63,8 +77,10 @@ export type ChecklistStep = {
 
 export const DEFAULT_GO_LIVE_RUNTIME_SCOPES = ["models:read", "chat:write", "responses:write"] as const;
 export const ONBOARDING_METADATA_KEY = "onboarding_v4";
+export const ONBOARDING_LAST_FIRST_SUCCESS_PROBE_KEY = "onboarding_last_first_success_probe";
 
 export type OnboardingInterviewState = {
+  operatingModel: OnboardingOperatingModel;
   instanceId: string;
   displayName: string;
   description: string;
@@ -113,6 +129,33 @@ export type OnboardingInterviewEvaluation = {
   normativeReady: boolean;
   persistable: boolean;
 };
+
+export const OPERATING_MODEL_DESCRIPTORS: OperatingModelDescriptor[] = [
+  {
+    key: "solo",
+    label: "Nur ich",
+    internalMode: "single_operator",
+    tenantRequirement: "optional",
+    roleModel: "owner/admin/operator on one personal scope",
+    description: "Single-operator flow with optional tenant and company split.",
+  },
+  {
+    key: "team_company",
+    label: "Mein Team / meine Firma",
+    internalMode: "single_tenant_team",
+    tenantRequirement: "required_single_tenant",
+    roleModel: "owner/admin/operator/viewer in one tenant",
+    description: "Single-tenant team flow with scoped roles per company.",
+  },
+  {
+    key: "multi_customer",
+    label: "Mehrere Kunden / Organisationen",
+    internalMode: "multi_tenant_control_plane",
+    tenantRequirement: "required_multi_tenant",
+    roleModel: "owner/admin across tenants with tenant-scoped operators",
+    description: "Multi-tenant operations where tenant and company bindings are mandatory.",
+  },
+];
 
 export const INITIAL_SIGNALS: OnboardingSignals = {
   bootstrap: null,
@@ -214,6 +257,11 @@ function readString(record: Record<string, unknown> | null, key: string, fallbac
   return typeof value === "string" ? value : fallback;
 }
 
+function readNullableNumber(record: Record<string, unknown> | null, key: string): number | null {
+  const value = record?.[key];
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
 function hasObservedEvidence(value: unknown): boolean {
   const record = asRecord(value);
   return record !== null && toStringValue(record.status, "") === "observed";
@@ -223,11 +271,50 @@ function getStoredOnboardingRecord(instance: InstanceRecord | null): Record<stri
   return asRecord(instance?.metadata?.[ONBOARDING_METADATA_KEY]);
 }
 
+export function getStoredFirstSuccessProbe(instance: InstanceRecord | null): RuntimeKeyFirstSuccessProbeRecord | null {
+  const stored = asRecord(instance?.metadata?.[ONBOARDING_LAST_FIRST_SUCCESS_PROBE_KEY]);
+  const modelsProbe = asRecord(stored?.models_probe);
+  const chatProbe = asRecord(stored?.chat_probe);
+  const runtimeKeyId = readString(stored, "runtime_key_id");
+  const instanceId = readString(stored, "instance_id");
+  const tenantId = readString(stored, "tenant_id");
+  const executedAt = readString(stored, "executed_at");
+  if (!runtimeKeyId || !instanceId || !tenantId || !executedAt || !modelsProbe || !chatProbe) {
+    return null;
+  }
+  return {
+    runtime_key_id: runtimeKeyId,
+    instance_id: instanceId,
+    tenant_id: tenantId,
+    models_probe: {
+      attempted: readBoolean(modelsProbe, "attempted", false),
+      ok: readBoolean(modelsProbe, "ok", false),
+      status_code: readNullableNumber(modelsProbe, "status_code"),
+      model_count: readNullableNumber(modelsProbe, "model_count") ?? 0,
+      error: readString(modelsProbe, "error") || null,
+    },
+    chat_probe: {
+      attempted: readBoolean(chatProbe, "attempted", false),
+      ok: readBoolean(chatProbe, "ok", false),
+      status_code: readNullableNumber(chatProbe, "status_code"),
+      model: readString(chatProbe, "model") || null,
+      error: readString(chatProbe, "error") || null,
+    },
+    success: readBoolean(stored, "success", false),
+    executed_at: executedAt,
+  };
+}
+
+export function getOperatingModelDescriptor(model: OnboardingOperatingModel): OperatingModelDescriptor {
+  return OPERATING_MODEL_DESCRIPTORS.find((item) => item.key === model) ?? OPERATING_MODEL_DESCRIPTORS[0];
+}
+
 export function createOnboardingInterviewState(instance: InstanceRecord | null): OnboardingInterviewState {
   const stored = getStoredOnboardingRecord(instance);
   const inferredNormativeMode = instance?.deployment_mode === "linux_host_native" && instance.exposure_mode === "same_origin";
 
   return {
+    operatingModel: readChoice(stored, "operating_model", "team_company"),
     instanceId: instance?.instance_id ?? "",
     displayName: instance?.display_name ?? "",
     description: instance?.description ?? "",
@@ -263,7 +350,12 @@ export function createOnboardingInterviewState(instance: InstanceRecord | null):
 }
 
 export function buildOnboardingMetadata(state: OnboardingInterviewState): Record<string, unknown> {
+  const operatingModelDescriptor = getOperatingModelDescriptor(state.operatingModel);
   return {
+    operating_model: state.operatingModel,
+    operating_model_internal_mode: operatingModelDescriptor.internalMode,
+    tenant_requirement: operatingModelDescriptor.tenantRequirement,
+    role_model: operatingModelDescriptor.roleModel,
     operating_mode: state.operatingMode,
     postgres_mode: state.postgresMode,
     fqdn: state.fqdn.trim(),
@@ -307,6 +399,9 @@ export function formatOnboardingBlocker(blocker: OnboardingBlocker): string {
 
 export function evaluateOnboardingInterview(state: OnboardingInterviewState): OnboardingInterviewEvaluation {
   const blockers: OnboardingBlocker[] = [];
+  const operatingModelDescriptor = getOperatingModelDescriptor(state.operatingModel);
+  const tenantRequired = operatingModelDescriptor.tenantRequirement !== "optional";
+  const executionScopeRequired = operatingModelDescriptor.tenantRequirement !== "optional";
 
   if (!state.displayName.trim()) {
     blockers.push({
@@ -316,7 +411,7 @@ export function evaluateOnboardingInterview(state: OnboardingInterviewState): On
     });
   }
 
-  if (!state.tenantId.trim()) {
+  if (tenantRequired && !state.tenantId.trim()) {
     blockers.push({
       code: "tenant_scope_missing",
       tone: "danger",
@@ -324,7 +419,7 @@ export function evaluateOnboardingInterview(state: OnboardingInterviewState): On
     });
   }
 
-  if (!state.companyId.trim()) {
+  if (executionScopeRequired && !state.companyId.trim()) {
     blockers.push({
       code: "execution_scope_missing",
       tone: "danger",
@@ -453,7 +548,9 @@ export function evaluateOnboardingInterview(state: OnboardingInterviewState): On
   }
 
   const hasDanger = blockers.some((blocker) => blocker.tone === "danger");
-  const persistable = state.displayName.trim().length > 0 && state.tenantId.trim().length > 0 && state.companyId.trim().length > 0;
+  const persistable = state.displayName.trim().length > 0
+    && (!tenantRequired || state.tenantId.trim().length > 0)
+    && (!executionScopeRequired || state.companyId.trim().length > 0);
   const normativeReady = state.operatingMode === "normative_public_https" && !hasDanger;
 
   if (!persistable) {
@@ -461,7 +558,7 @@ export function evaluateOnboardingInterview(state: OnboardingInterviewState): On
       tone: "danger",
       statusLabel: "Identity incomplete",
       summary: "The onboarding interview is still missing the minimum instance identity and scope truth.",
-      detail: "ForgeFrame cannot persist a first instance boundary until display name, tenant scope, and execution scope are recorded.",
+      detail: "ForgeFrame cannot persist a first instance boundary until the required identity fields for the selected operating model are recorded.",
       blockers,
       normativeReady,
       persistable,
@@ -473,7 +570,7 @@ export function evaluateOnboardingInterview(state: OnboardingInterviewState): On
       tone: "success",
       statusLabel: "Normative path recorded",
       summary: "The onboarding interview records the public HTTPS operating model required by the target image.",
-      detail: `Instance ${state.displayName} is recorded as linux_host_native, same-origin, publicly exposed under ${state.fqdn.trim()} with Let's Encrypt and automated renewal.`,
+      detail: `Instance ${state.displayName} is recorded as ${operatingModelDescriptor.internalMode}, linux_host_native, same-origin, publicly exposed under ${state.fqdn.trim()} with Let's Encrypt and automated renewal.`,
       blockers,
       normativeReady,
       persistable,
@@ -558,6 +655,7 @@ export function accountAllowsProvider(account: GatewayAccount | undefined, provi
 
 export function getOnboardingAccess(session: AdminSessionUser | null, sessionReady: boolean): OnboardingAccessState {
   const canVerifyProviders = sessionCanMutateScopedOrAnyInstance(session, null, "providers.write");
+  const canConfigureRouting = sessionCanMutateScopedOrAnyInstance(session, null, "routing.write");
   const canPersistOnboarding = sessionCanMutateScopedOrAnyInstance(session, null, "instance.write");
   const canIssueRuntimeAccess = Boolean(session)
     && !session?.read_only
@@ -569,6 +667,7 @@ export function getOnboardingAccess(session: AdminSessionUser | null, sessionRea
       badgeTone: "neutral",
       detail: "ForgeFrame is checking how much of the setup flow this session can run.",
       canVerifyProviders: false,
+      canConfigureRouting: false,
       canIssueRuntimeAccess: false,
       canPersistOnboarding: false,
     };
@@ -580,6 +679,7 @@ export function getOnboardingAccess(session: AdminSessionUser | null, sessionRea
       badgeTone: "warning",
       detail: "Setup signals stay visible, but provider verification, runtime access issuance, and onboarding persistence require an authenticated operator or admin session.",
       canVerifyProviders: false,
+      canConfigureRouting: false,
       canIssueRuntimeAccess: false,
       canPersistOnboarding: false,
     };
@@ -591,6 +691,7 @@ export function getOnboardingAccess(session: AdminSessionUser | null, sessionRea
       badgeTone: "warning",
       detail: "Read-only sessions can inspect bootstrap, provider, runtime access, and onboarding posture, but they cannot persist changes or complete verification and issuance.",
       canVerifyProviders: false,
+      canConfigureRouting: false,
       canIssueRuntimeAccess: false,
       canPersistOnboarding: false,
     };
@@ -602,6 +703,7 @@ export function getOnboardingAccess(session: AdminSessionUser | null, sessionRea
       badgeTone: "warning",
       detail: "Viewer sessions can inspect the full checklist, but provider verification requires an operator or admin, and onboarding persistence plus runtime access issuance require an admin.",
       canVerifyProviders: false,
+      canConfigureRouting: false,
       canIssueRuntimeAccess: false,
       canPersistOnboarding: false,
     };
@@ -613,6 +715,7 @@ export function getOnboardingAccess(session: AdminSessionUser | null, sessionRea
       badgeTone: "success",
       detail: "Standard admin sessions can persist onboarding truth, verify providers, and issue the first runtime account or key from the linked governance routes.",
       canVerifyProviders,
+      canConfigureRouting,
       canIssueRuntimeAccess,
       canPersistOnboarding,
     };
@@ -623,6 +726,7 @@ export function getOnboardingAccess(session: AdminSessionUser | null, sessionRea
     badgeTone: "warning",
     detail: "Standard operator sessions can verify providers and inspect onboarding posture, but the first instance mutation and runtime access issuance still require an admin handoff.",
     canVerifyProviders,
+    canConfigureRouting,
     canIssueRuntimeAccess: false,
     canPersistOnboarding,
   };

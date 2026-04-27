@@ -1,14 +1,25 @@
-import { type FormEvent, useEffect, useState } from "react";
+import { type FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 
 import {
   createInstance,
+  createRuntimeKey,
   fetchAccounts,
+  fetchAgents,
   fetchBootstrapReadiness,
   fetchOauthOnboarding,
   fetchProviderControlPlane,
+  fetchRoutingControlPlane,
   fetchRuntimeKeys,
+  runRuntimeKeyFirstSuccessProbe,
   updateInstance,
+  updateRoutingPolicy,
+  type AgentSummary,
+  type GatewayAccount,
+  type ProviderControlItem,
+  type RoutingPolicyRecord,
+  type RuntimeKey,
+  type RuntimeKeyFirstSuccessProbeRecord,
 } from "../../api/admin";
 import { CONTROL_PLANE_ROUTES } from "../../app/navigation";
 import { useAppSession } from "../../app/session";
@@ -17,73 +28,222 @@ import { useInstanceCatalog } from "../../app/useInstanceCatalog";
 import { InstanceScopeCard } from "../../components/InstanceScopeCard";
 import { PageIntro } from "../../components/PageIntro";
 import {
-  accountAllowsProvider,
   createOnboardingInterviewState,
-  createStep,
-  DEFAULT_GO_LIVE_RUNTIME_SCOPES,
   evaluateOnboardingInterview,
-  formatOnboardingBlocker,
   formatTimestamp,
   getOnboardingAccess,
-  hasOauthTargetEvidence,
+  getOperatingModelDescriptor,
+  getStoredFirstSuccessProbe,
   hasProviderSetupSignal,
   humanizeToken,
-  INITIAL_SIGNALS,
-  isGlobalRuntimeKey,
-  isGoLiveRuntimeKey,
-  isLiveProviderProof,
-  isWriteCapableRuntimeKey,
-  maxTimestamp,
   mergeOnboardingMetadata,
-  missingGoLiveScopes,
-  recordTimestamp,
   toBooleanValue,
-  toStringArray,
   toStringValue,
-  type ChecklistLink,
   type ChecklistTone,
   type OnboardingInterviewState,
-  type OnboardingSignals,
+  type WizardStepStatus,
 } from "./helpers";
 import { OnboardingContent } from "./sections";
 
-function getOperatorSurfaceLink(surface: OnboardingInterviewState["operatorSurface"]): ChecklistLink {
-  switch (surface) {
-    case "dashboard":
-      return { label: "Open Dashboard", to: CONTROL_PLANE_ROUTES.dashboard };
-    case "usage":
-      return { label: "Open Usage & Costs", to: CONTROL_PLANE_ROUTES.usage };
-    case "logs":
-      return { label: "Open Errors & Activity", to: CONTROL_PLANE_ROUTES.logs };
-    case "providers":
-    default:
-      return { label: "Open Providers", to: CONTROL_PLANE_ROUTES.providers };
+type OnboardingSignals = {
+  bootstrap: { ready: boolean; checks: Array<Record<string, unknown>>; checked_at?: string } | null;
+  providers: ProviderControlItem[];
+  oauthTargets: Array<Record<string, unknown>>;
+  accounts: GatewayAccount[];
+  keys: RuntimeKey[];
+  routingPolicies: RoutingPolicyRecord[];
+  agents: AgentSummary[];
+  loaded: {
+    bootstrap: boolean;
+    providers: boolean;
+    oauthTargets: boolean;
+    accounts: boolean;
+    keys: boolean;
+    routing: boolean;
+    agents: boolean;
+  };
+};
+
+type ProviderConnectionRow = {
+  provider: string;
+  label: string;
+  connectionStatus: "local" | "api-key" | "bridge-only" | "unsupported" | "onboarding-only";
+  detail: string;
+  tone: ChecklistTone;
+};
+
+type WizardStepDefinition = {
+  id: string;
+  title: string;
+  done: boolean;
+  blocked: boolean;
+  summary: string;
+  detail: string;
+  blockers: string[];
+  links: Array<{ label: string; to: string }>;
+};
+
+type RoutingPolicyTuple = Pick<
+  RoutingPolicyRecord,
+  "prefer_local" | "prefer_low_latency" | "allow_premium" | "allow_fallback" | "allow_escalation" | "execution_lane"
+>;
+type RoutingWizardChoice = "simple" | "non_simple";
+
+const SIMPLE_POLICY_TUPLE: RoutingPolicyTuple = {
+  prefer_local: true,
+  prefer_low_latency: true,
+  allow_premium: false,
+  allow_fallback: true,
+  allow_escalation: false,
+  execution_lane: "sync_interactive",
+};
+
+const SIMPLE_MODE_NON_SIMPLE_POLICY_TUPLE: RoutingPolicyTuple = {
+  prefer_local: true,
+  prefer_low_latency: false,
+  allow_premium: false,
+  allow_fallback: true,
+  allow_escalation: false,
+  execution_lane: "queued_background",
+};
+
+const NON_SIMPLE_MODE_NON_SIMPLE_POLICY_TUPLE: RoutingPolicyTuple = {
+  prefer_local: false,
+  prefer_low_latency: false,
+  allow_premium: true,
+  allow_fallback: true,
+  allow_escalation: true,
+  execution_lane: "queued_background",
+};
+
+const ROUTING_DEFAULT_BY_CHOICE: Record<RoutingWizardChoice, OnboardingInterviewState["routingDefault"]> = {
+  simple: "local_first",
+  non_simple: "premium_capable",
+};
+
+function matchesRoutingPolicyTuple(
+  policy: RoutingPolicyRecord | undefined,
+  expected: RoutingPolicyTuple,
+): boolean {
+  if (!policy) {
+    return false;
   }
+  return policy.prefer_local === expected.prefer_local
+    && policy.prefer_low_latency === expected.prefer_low_latency
+    && policy.allow_premium === expected.allow_premium
+    && policy.allow_fallback === expected.allow_fallback
+    && policy.allow_escalation === expected.allow_escalation
+    && policy.execution_lane === expected.execution_lane;
 }
 
-function getFirstSuccessActionLink(action: OnboardingInterviewState["firstSuccessAction"]): ChecklistLink {
-  switch (action) {
-    case "runtime_request":
-      return { label: "Open API Keys", to: CONTROL_PLANE_ROUTES.apiKeys };
-    case "artifact_review":
-      return { label: "Open Errors & Activity", to: CONTROL_PLANE_ROUTES.logs };
-    case "operator_handoff":
-      return { label: "Open Command Center", to: CONTROL_PLANE_ROUTES.dashboard };
-    case "provider_verification":
-    default:
-      return { label: "Open Providers", to: CONTROL_PLANE_ROUTES.providers };
+function routingChoiceFromPersistedDefault(
+  value: OnboardingInterviewState["routingDefault"],
+): RoutingWizardChoice | null {
+  if (value === "local_first") {
+    return "simple";
   }
+  if (value === "premium_capable") {
+    return "non_simple";
+  }
+  return null;
 }
 
-function dedupeLinks(links: ChecklistLink[]): ChecklistLink[] {
-  const seen = new Set<string>();
-  return links.filter((link) => {
-    const key = `${link.label}:${link.to}`;
-    if (seen.has(key)) {
-      return false;
+const INITIAL_SIGNALS: OnboardingSignals = {
+  bootstrap: null,
+  providers: [],
+  oauthTargets: [],
+  accounts: [],
+  keys: [],
+  routingPolicies: [],
+  agents: [],
+  loaded: {
+    bootstrap: false,
+    providers: false,
+    oauthTargets: false,
+    accounts: false,
+    keys: false,
+    routing: false,
+    agents: false,
+  },
+};
+
+function classifyProviderConnection(provider: ProviderControlItem): ProviderConnectionRow {
+  if (provider.contract_classification === "unsupported") {
+    return {
+      provider: provider.provider,
+      label: provider.label,
+      connectionStatus: "unsupported",
+      detail: provider.readiness_reason ?? "Provider remains unsupported for production runtime use.",
+      tone: "danger",
+    };
+  }
+
+  if (provider.contract_classification === "bridge-only") {
+    return {
+      provider: provider.provider,
+      label: provider.label,
+      connectionStatus: "bridge-only",
+      detail: provider.readiness_reason ?? "OAuth bridge evidence exists, but this target is not promoted to native runtime-ready truth.",
+      tone: "warning",
+    };
+  }
+
+  if (provider.contract_classification === "onboarding-only") {
+    return {
+      provider: provider.provider,
+      label: provider.label,
+      connectionStatus: "onboarding-only",
+      detail: provider.readiness_reason ?? "Target remains onboarding-only and does not satisfy go-live provider requirements.",
+      tone: "warning",
+    };
+  }
+
+  const auth = (provider.auth_mechanism ?? "").toLowerCase();
+  if (auth.includes("internal") || auth.includes("local")) {
+    return {
+      provider: provider.provider,
+      label: provider.label,
+      connectionStatus: "local",
+      detail: provider.ready
+        ? "Local runtime path is connected and available."
+        : (provider.readiness_reason ?? "Local runtime path exists but still lacks full readiness evidence."),
+      tone: provider.ready ? "success" : "warning",
+    };
+  }
+
+  return {
+    provider: provider.provider,
+    label: provider.label,
+    connectionStatus: "api-key",
+    detail: provider.ready
+      ? "API-key or native credential runtime path is connected."
+      : (provider.readiness_reason ?? "Credential-based provider exists but is not runtime-ready yet."),
+    tone: provider.ready ? "success" : "warning",
+  };
+}
+
+function deriveWizardSteps(definitions: WizardStepDefinition[]) {
+  const firstIncompleteIndex = definitions.findIndex((step) => !step.done);
+  return definitions.map((step, index) => {
+    let status: WizardStepStatus = "done";
+    if (!step.done) {
+      if (index === firstIncompleteIndex) {
+        status = step.blocked ? "blocked" : "current";
+      } else if (step.blocked) {
+        status = "blocked";
+      } else {
+        status = "skipped";
+      }
     }
-    seen.add(key);
-    return true;
+    return {
+      id: step.id,
+      title: step.title,
+      status,
+      summary: step.summary,
+      detail: step.detail,
+      blockers: step.blockers,
+      links: step.links,
+    };
   });
 }
 
@@ -91,14 +251,34 @@ export function OnboardingPage() {
   const [signals, setSignals] = useState<OnboardingSignals>(INITIAL_SIGNALS);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
-  const [savePending, setSavePending] = useState(false);
-  const [saveError, setSaveError] = useState("");
-  const [saveMessage, setSaveMessage] = useState("");
   const [searchParams, setSearchParams] = useSearchParams();
   const { session, sessionReady } = useAppSession();
   const instanceId = getInstanceIdFromSearchParams(searchParams);
   const { instances, loadState, error: instancesError, selectedInstance, refresh } = useInstanceCatalog(instanceId);
+
   const [interview, setInterview] = useState<OnboardingInterviewState>(createOnboardingInterviewState(null));
+  const [savePending, setSavePending] = useState(false);
+  const [saveError, setSaveError] = useState("");
+  const [saveMessage, setSaveMessage] = useState("");
+
+  const [routingChoice, setRoutingChoice] = useState<RoutingWizardChoice>("simple");
+  const [routingChoiceDirty, setRoutingChoiceDirty] = useState(false);
+  const [routingPending, setRoutingPending] = useState(false);
+  const [routingError, setRoutingError] = useState("");
+  const [routingMessage, setRoutingMessage] = useState("");
+  const [routingIntentOverrides, setRoutingIntentOverrides] = useState<Record<string, RoutingWizardChoice>>({});
+
+  const [issueKeyPending, setIssueKeyPending] = useState(false);
+  const [issueKeyError, setIssueKeyError] = useState("");
+  const [issueKeyMessage, setIssueKeyMessage] = useState("");
+  const [issuedRuntimeToken, setIssuedRuntimeToken] = useState("");
+
+  const [runtimeKeyTokenInput, setRuntimeKeyTokenInput] = useState("");
+  const [firstSuccessPending, setFirstSuccessPending] = useState(false);
+  const [firstSuccessError, setFirstSuccessError] = useState("");
+  const [firstSuccessResult, setFirstSuccessResult] = useState<RuntimeKeyFirstSuccessProbeRecord | null>(null);
+  const selectedInstanceId = selectedInstance?.instance_id ?? null;
+  const selectedInstanceIdRef = useRef<string | null>(selectedInstanceId);
 
   const onInstanceChange = (nextInstanceId: string | null) => {
     const nextSearchParams = new URLSearchParams(searchParams);
@@ -111,81 +291,227 @@ export function OnboardingPage() {
   };
 
   useEffect(() => {
-    setInterview(createOnboardingInterviewState(selectedInstance));
+    const nextInterview = createOnboardingInterviewState(selectedInstance);
+    const persistedRoutingChoice = routingChoiceFromPersistedDefault(nextInterview.routingDefault);
+    const nextRoutingChoice = selectedInstance?.instance_id
+      ? (routingIntentOverrides[selectedInstance.instance_id] ?? persistedRoutingChoice)
+      : persistedRoutingChoice;
+    setInterview(nextInterview);
     setSaveError("");
+    setSaveMessage("");
+    setRoutingChoice(nextRoutingChoice ?? "simple");
+    setRoutingChoiceDirty(false);
   }, [selectedInstance?.instance_id, selectedInstance?.updated_at]);
 
   useEffect(() => {
-    let mounted = true;
+    selectedInstanceIdRef.current = selectedInstanceId;
+  }, [selectedInstanceId]);
 
-    const load = async () => {
-      const [
-        bootstrapResult,
-        providersResult,
-        oauthResult,
-        accountsResult,
-        keysResult,
-      ] = await Promise.allSettled([
-        fetchBootstrapReadiness(),
-        fetchProviderControlPlane(instanceId),
-        fetchOauthOnboarding(instanceId),
-        fetchAccounts(instanceId),
-        fetchRuntimeKeys(instanceId),
-      ]);
+  useEffect(() => {
+    setIssueKeyPending(false);
+    setIssueKeyError("");
+    setIssueKeyMessage("");
+    setIssuedRuntimeToken("");
+    setRuntimeKeyTokenInput("");
+    setFirstSuccessPending(false);
+    setFirstSuccessError("");
+    setFirstSuccessResult(getStoredFirstSuccessProbe(selectedInstance));
+  }, [selectedInstanceId]);
 
-      if (!mounted) {
-        return;
-      }
+  const loadSignals = useCallback(async () => {
+    setLoading(true);
+    const agentScopeInstanceId = instanceId ?? selectedInstance?.instance_id ?? null;
+    const requests: [
+      Promise<{ status: string; ready: boolean; checks: Array<Record<string, unknown>>; checked_at?: string }>,
+      Promise<{ status: "ok"; providers: ProviderControlItem[] }>,
+      Promise<{ status: string; targets: Array<Record<string, unknown>> }>,
+      Promise<{ status: string; accounts: GatewayAccount[] }>,
+      Promise<{ status: string; keys: RuntimeKey[] }>,
+      Promise<{ status: "ok"; policies: RoutingPolicyRecord[] }>,
+      Promise<{ status: string; agents: AgentSummary[] }>,
+    ] = [
+      fetchBootstrapReadiness(),
+      fetchProviderControlPlane(instanceId).then((payload) => ({ status: payload.status, providers: payload.providers })),
+      fetchOauthOnboarding(instanceId),
+      fetchAccounts(instanceId),
+      fetchRuntimeKeys(instanceId),
+      fetchRoutingControlPlane(instanceId).then((payload) => ({ status: payload.status, policies: payload.policies })),
+      agentScopeInstanceId ? fetchAgents(agentScopeInstanceId) : Promise.resolve({ status: "ok", agents: [] }),
+    ];
 
-      const nextSignals: OnboardingSignals = {
-        bootstrap: bootstrapResult.status === "fulfilled"
-          ? {
-              ready: Boolean(bootstrapResult.value.ready),
-              checks: bootstrapResult.value.checks ?? [],
-              next_steps: bootstrapResult.value.next_steps ?? [],
-              checked_at: bootstrapResult.value.checked_at,
-            }
-          : null,
-        providers: providersResult.status === "fulfilled" ? providersResult.value.providers ?? [] : [],
-        oauthTargets: oauthResult.status === "fulfilled" ? oauthResult.value.targets ?? [] : [],
-        accounts: accountsResult.status === "fulfilled" ? accountsResult.value.accounts ?? [] : [],
-        keys: keysResult.status === "fulfilled" ? keysResult.value.keys ?? [] : [],
-        loaded: {
-          bootstrap: bootstrapResult.status === "fulfilled",
-          providers: providersResult.status === "fulfilled",
-          oauthTargets: oauthResult.status === "fulfilled",
-          accounts: accountsResult.status === "fulfilled",
-          keys: keysResult.status === "fulfilled",
-        },
-      };
+    const [
+      bootstrapResult,
+      providersResult,
+      oauthResult,
+      accountsResult,
+      keysResult,
+      routingResult,
+      agentsResult,
+    ] = await Promise.allSettled(requests);
 
-      const failures = [
-        bootstrapResult.status === "rejected" ? "Bootstrap readiness did not load." : "",
-        providersResult.status === "rejected" ? "Provider control-plane truth did not load." : "",
-        oauthResult.status === "rejected" ? "OAuth onboarding targets did not load." : "",
-        accountsResult.status === "rejected" ? "Runtime account posture did not load." : "",
-        keysResult.status === "rejected" ? "Runtime key posture did not load." : "",
-      ].filter(Boolean);
-
-      setSignals(nextSignals);
-      setError(failures.join(" "));
-      setLoading(false);
+    const nextSignals: OnboardingSignals = {
+      bootstrap: bootstrapResult.status === "fulfilled"
+        ? {
+            ready: Boolean(bootstrapResult.value.ready),
+            checks: bootstrapResult.value.checks ?? [],
+            checked_at: bootstrapResult.value.checked_at,
+          }
+        : null,
+      providers: providersResult.status === "fulfilled" ? providersResult.value.providers ?? [] : [],
+      oauthTargets: oauthResult.status === "fulfilled" ? oauthResult.value.targets ?? [] : [],
+      accounts: accountsResult.status === "fulfilled" ? accountsResult.value.accounts ?? [] : [],
+      keys: keysResult.status === "fulfilled" ? keysResult.value.keys ?? [] : [],
+      routingPolicies: routingResult.status === "fulfilled" ? routingResult.value.policies ?? [] : [],
+      agents: agentsResult.status === "fulfilled" ? agentsResult.value.agents ?? [] : [],
+      loaded: {
+        bootstrap: bootstrapResult.status === "fulfilled",
+        providers: providersResult.status === "fulfilled",
+        oauthTargets: oauthResult.status === "fulfilled",
+        accounts: accountsResult.status === "fulfilled",
+        keys: keysResult.status === "fulfilled",
+        routing: routingResult.status === "fulfilled",
+        agents: agentsResult.status === "fulfilled",
+      },
     };
 
-    void load();
+    const failures = [
+      bootstrapResult.status === "rejected" ? "Bootstrap readiness did not load." : "",
+      providersResult.status === "rejected" ? "Provider control-plane truth did not load." : "",
+      oauthResult.status === "rejected" ? "OAuth onboarding truth did not load." : "",
+      accountsResult.status === "rejected" ? "Runtime account posture did not load." : "",
+      keysResult.status === "rejected" ? "Runtime key posture did not load." : "",
+      routingResult.status === "rejected" ? "Routing control-plane truth did not load." : "",
+      agentsResult.status === "rejected" ? "Agent inventory did not load." : "",
+    ].filter(Boolean);
 
-    return () => {
-      mounted = false;
-    };
-  }, [instanceId]);
+    setSignals(nextSignals);
+    setError(failures.join(" "));
+    setLoading(false);
+  }, [instanceId, selectedInstance?.instance_id]);
+
+  useEffect(() => {
+    void loadSignals();
+  }, [loadSignals]);
 
   const access = getOnboardingAccess(session, sessionReady);
+  const persistedInterview = useMemo(() => createOnboardingInterviewState(selectedInstance), [selectedInstance]);
   const interviewEvaluation = evaluateOnboardingInterview(interview);
+  const persistedInterviewEvaluation = evaluateOnboardingInterview(persistedInterview);
+  const operatingModelDescriptor = getOperatingModelDescriptor(interview.operatingModel);
+
+  const providerRows = useMemo(() => {
+    const eligibleProviders = signals.providers.filter(hasProviderSetupSignal);
+    if (eligibleProviders.length === 0) {
+      return [{
+        provider: "none",
+        label: "No configured provider",
+        connectionStatus: "onboarding-only" as const,
+        detail: "No provider target is configured yet for this instance scope.",
+        tone: "warning" as const,
+      }];
+    }
+    return eligibleProviders.map(classifyProviderConnection);
+  }, [signals.providers]);
+
+  const operatorAgent = useMemo(
+    () => signals.agents.find((agent) => agent.is_default_operator && agent.status === "active") ?? null,
+    [signals.agents],
+  );
+
+  const activeKeys = signals.keys.filter((key) => key.status === "active");
+  const connectedProviderRows = providerRows.filter((item) => item.tone === "success" && (item.connectionStatus === "local" || item.connectionStatus === "api-key"));
+  const providerReady = connectedProviderRows.length > 0;
+
+  const simplePolicy = signals.routingPolicies.find((policy) => policy.classification === "simple");
+  const nonSimplePolicy = signals.routingPolicies.find((policy) => policy.classification === "non_simple");
+  const persistedRoutingChoice = selectedInstanceId
+    ? (routingIntentOverrides[selectedInstanceId] ?? routingChoiceFromPersistedDefault(persistedInterview.routingDefault))
+    : routingChoiceFromPersistedDefault(persistedInterview.routingDefault);
+  const routingSimpleApplied = matchesRoutingPolicyTuple(simplePolicy, SIMPLE_POLICY_TUPLE)
+    && matchesRoutingPolicyTuple(nonSimplePolicy, SIMPLE_MODE_NON_SIMPLE_POLICY_TUPLE);
+  const routingNonSimpleApplied = matchesRoutingPolicyTuple(simplePolicy, SIMPLE_POLICY_TUPLE)
+    && matchesRoutingPolicyTuple(nonSimplePolicy, NON_SIMPLE_MODE_NON_SIMPLE_POLICY_TUPLE);
+  const routingChoiceFromPolicies = routingSimpleApplied
+    ? "simple"
+    : routingNonSimpleApplied
+      ? "non_simple"
+      : null;
+  const effectiveRoutingChoice = routingChoiceDirty ? routingChoice : (persistedRoutingChoice ?? routingChoice);
+  const routingChoiceApplied = !routingChoiceDirty && persistedRoutingChoice !== null && (
+    persistedRoutingChoice === "simple" ? routingSimpleApplied : routingNonSimpleApplied
+  );
+  const routingSummary = routingChoiceDirty
+    ? `${effectiveRoutingChoice === "simple" ? "simple billig/lokal" : "non-simple Premium/OAuth"} selected (unsaved)`
+    : persistedRoutingChoice
+      ? `${effectiveRoutingChoice === "simple" ? "simple billig/lokal" : "non-simple Premium/OAuth"} selected`
+      : "No routing default persisted yet";
+  const routingDetail = !persistedRoutingChoice
+    ? "Persist a routing decision from this wizard step before go-live validation can trust backend routing truth."
+    : routingChoiceApplied
+      ? "Routing policies match the persisted mode."
+      : routingChoiceFromPolicies && routingChoiceFromPolicies !== persistedRoutingChoice
+        ? `Routing policies currently match ${routingChoiceFromPolicies}, but the persisted onboarding intent for this instance is ${persistedRoutingChoice}.`
+        : "Routing policies are not yet aligned to the persisted mode.";
+
+  const bootstrapChecks = signals.bootstrap?.checks ?? [];
+  const bootstrapById = new Map(bootstrapChecks.map((check) => [toStringValue(check.id), Boolean(check.ok)]));
+  const tlsRequiredChecks = [
+    "public_fqdn_configured",
+    "public_dns_resolution",
+    "public_https_listener",
+    "certificate_material",
+    "tls_mode_classification",
+    "tls_certificate_management",
+  ];
+  const tlsEvidenceBlockers = tlsRequiredChecks
+    .filter((checkId) => bootstrapById.get(checkId) !== true)
+    .map((checkId) => `${humanizeToken(checkId)} is not proven by bootstrap API evidence.`);
+  const tlsEvidenceReady = signals.loaded.bootstrap && tlsEvidenceBlockers.length === 0;
+  const tlsEvidenceCheckedAt = formatTimestamp(signals.bootstrap?.checked_at ?? null);
+
+  const persistedOnboardingBlockers = selectedInstance
+    ? persistedInterviewEvaluation.blockers.map((item) => `${item.code}: ${item.message}`)
+    : [];
+  const persistedOnboardingReady = Boolean(selectedInstance) && persistedInterviewEvaluation.normativeReady;
+  const firstSuccessForSelectedInstance = selectedInstance && firstSuccessResult?.instance_id === selectedInstance.instance_id
+    ? firstSuccessResult
+    : null;
+  const firstSuccessReady = Boolean(firstSuccessForSelectedInstance?.success);
+  const goLiveReady = persistedOnboardingReady
+    && Boolean(selectedInstance)
+    && Boolean(operatorAgent)
+    && providerReady
+    && routingChoiceApplied
+    && activeKeys.length > 0
+    && tlsEvidenceReady
+    && firstSuccessReady;
+
+  const goLiveBlockers = [
+    ...(!persistedOnboardingReady
+      ? (persistedOnboardingBlockers.length > 0
+        ? persistedOnboardingBlockers
+        : ["Persisted onboarding truth is not normative public HTTPS ready for the selected instance."])
+      : []),
+    ...(!selectedInstance ? ["First instance is missing."] : []),
+    ...(selectedInstance && !operatorAgent ? ["Default Operator agent is missing for this instance."] : []),
+    ...(!providerReady ? ["Provider onboarding has no connected local/API-key runtime target yet."] : []),
+    ...(!routingChoiceApplied ? ["Routing defaults are not aligned with the chosen simple/non-simple decision."] : []),
+    ...(activeKeys.length === 0 ? ["No active runtime key exists."] : []),
+    ...(!tlsEvidenceReady ? tlsEvidenceBlockers : []),
+    ...(!firstSuccessReady ? ["First-success probe has not succeeded yet."] : []),
+  ];
 
   const handleInterviewFieldChange = <K extends keyof OnboardingInterviewState>(field: K, value: OnboardingInterviewState[K]) => {
     setInterview((current) => ({ ...current, [field]: value }));
     setSaveError("");
     setSaveMessage("");
+  };
+
+  const handleRoutingChoiceChange = (value: RoutingWizardChoice) => {
+    setRoutingChoice(value);
+    setRoutingChoiceDirty(value !== persistedRoutingChoice);
+    setRoutingError("");
+    setRoutingMessage("");
   };
 
   const handleInterviewSave = async (event: FormEvent<HTMLFormElement>) => {
@@ -194,15 +520,19 @@ export function OnboardingPage() {
       return;
     }
     if (!interviewEvaluation.persistable) {
-      setSaveError("Display name, tenant scope, and execution scope are mandatory before ForgeFrame can persist onboarding truth.");
+      setSaveError("Display name and required scope fields for the selected operating model are mandatory before persistence.");
       return;
     }
+
+    const defaultScopeSeed = interview.instanceId.trim() || selectedInstance?.instance_id || "forgeframe-default";
+    const tenantIdValue = interview.tenantId.trim() || selectedInstance?.tenant_id || defaultScopeSeed;
+    const companyIdValue = interview.companyId.trim() || selectedInstance?.company_id || defaultScopeSeed;
 
     const payload = {
       display_name: interview.displayName.trim(),
       description: interview.description.trim(),
-      tenant_id: interview.tenantId.trim(),
-      company_id: interview.companyId.trim(),
+      tenant_id: tenantIdValue,
+      company_id: companyIdValue,
       deployment_mode: interview.deploymentMode,
       exposure_mode: interview.exposureMode,
       metadata: mergeOnboardingMetadata(selectedInstance?.metadata ?? {}, interview),
@@ -211,7 +541,6 @@ export function OnboardingPage() {
     setSavePending(true);
     setSaveError("");
     setSaveMessage("");
-
     try {
       const result = selectedInstance
         ? await updateInstance(selectedInstance.instance_id, payload)
@@ -219,508 +548,258 @@ export function OnboardingPage() {
             instance_id: interview.instanceId.trim() ? interview.instanceId.trim() : null,
             ...payload,
           });
-
       await refresh();
       onInstanceChange(result.instance.instance_id);
       setSaveMessage(selectedInstance
-        ? `Onboarding truth for ${result.instance.display_name} saved.`
-        : `First instance ${result.instance.display_name} created and onboarding truth saved.`);
+        ? `Onboarding state for ${result.instance.display_name} saved.`
+        : `First instance ${result.instance.display_name} created and onboarding state saved.`);
+      await loadSignals();
     } catch (persistError) {
-      setSaveError(persistError instanceof Error ? persistError.message : "Onboarding truth could not be persisted.");
+      setSaveError(persistError instanceof Error ? persistError.message : "Onboarding state could not be persisted.");
     } finally {
       setSavePending(false);
     }
   };
 
-  const bootstrapChecks = signals.bootstrap?.checks ?? [];
-  const requiredBootstrapChecks = bootstrapChecks.filter((check) => toStringValue(check.id) !== "docker_host_hint");
-  const failedBootstrapChecks = requiredBootstrapChecks.filter((check) => !toBooleanValue(check.ok));
-  const bootstrapReady = Boolean(signals.bootstrap?.ready);
-  const bootstrapCheckedAt = formatTimestamp(signals.bootstrap?.checked_at ?? null);
+  const handleApplyRoutingChoice = async () => {
+    if (!access.canConfigureRouting) {
+      return;
+    }
+    const nextRoutingChoice = effectiveRoutingChoice;
+    const nextRoutingDefault = ROUTING_DEFAULT_BY_CHOICE[nextRoutingChoice];
+    setRoutingPending(true);
+    setRoutingError("");
+    setRoutingMessage("");
+    try {
+      if (nextRoutingChoice === "simple") {
+        await updateRoutingPolicy("simple", SIMPLE_POLICY_TUPLE, instanceId);
+        await updateRoutingPolicy("non_simple", SIMPLE_MODE_NON_SIMPLE_POLICY_TUPLE, instanceId);
+        setRoutingMessage("Routing defaults saved as simple (cheap/local first).");
+      } else {
+        await updateRoutingPolicy("simple", SIMPLE_POLICY_TUPLE, instanceId);
+        await updateRoutingPolicy("non_simple", NON_SIMPLE_MODE_NON_SIMPLE_POLICY_TUPLE, instanceId);
+        setRoutingMessage("Routing defaults saved as non-simple (premium/OAuth capable).");
+      }
+      if (selectedInstance) {
+        await updateInstance(selectedInstance.instance_id, {
+          metadata: mergeOnboardingMetadata(selectedInstance.metadata ?? {}, {
+            ...persistedInterview,
+            routingDefault: nextRoutingDefault,
+          }),
+        });
+        setRoutingIntentOverrides((current) => ({
+          ...current,
+          [selectedInstance.instance_id]: nextRoutingChoice,
+        }));
+      }
+      setInterview((current) => ({
+        ...current,
+        routingDefault: nextRoutingDefault,
+      }));
+      await loadSignals();
+      setRoutingChoice(nextRoutingChoice);
+      setRoutingChoiceDirty(false);
+    } catch (routingUpdateError) {
+      setRoutingError(routingUpdateError instanceof Error ? routingUpdateError.message : "Routing defaults could not be saved.");
+    } finally {
+      setRoutingPending(false);
+    }
+  };
 
-  const runtimeReadyProviders = signals.providers.filter((provider) => provider.ready && provider.runtime_readiness === "ready");
-  const liveReadyProviders = runtimeReadyProviders.filter(isLiveProviderProof);
-  const smokeOnlyReadyProviders = runtimeReadyProviders.filter((provider) => provider.provider === "forgeframe_baseline");
-  const providerSignals = signals.providers.filter(hasProviderSetupSignal);
-  const configuredOauthTargets = signals.oauthTargets.filter((target) => toBooleanValue(target.configured));
-  const evidencedOauthTargets = configuredOauthTargets.filter(hasOauthTargetEvidence);
-  const latestProviderEvidence = formatTimestamp(
-    maxTimestamp(
-      signals.providers.flatMap((provider) => [
-        provider.last_sync_at,
-        recordTimestamp(provider.oauth_last_probe ?? null),
-        recordTimestamp(provider.oauth_last_bridge_sync ?? null),
-        ...provider.models.flatMap((model) => [model.last_seen_at ?? null, model.last_probe_at ?? null]),
-      ]),
-    ),
-  );
-  const hasVerifiedProvider = liveReadyProviders.length > 0;
+  const handleIssueRuntimeKey = async () => {
+    if (!access.canIssueRuntimeAccess) {
+      return;
+    }
+    const scopeInstanceId = selectedInstanceIdRef.current;
+    setIssueKeyPending(true);
+    setIssueKeyError("");
+    setIssueKeyMessage("");
+    try {
+      const issued = await createRuntimeKey(instanceId, {
+        label: "Onboarding First Success Key",
+        scopes: ["models:read", "chat:write", "responses:write"],
+      });
+      if (selectedInstanceIdRef.current !== scopeInstanceId) {
+        return;
+      }
+      setIssuedRuntimeToken(issued.issued.token);
+      setRuntimeKeyTokenInput(issued.issued.token);
+      setIssueKeyMessage("Runtime key issued. Secret is shown once here for first-success probing.");
+      await loadSignals();
+    } catch (issueError) {
+      if (selectedInstanceIdRef.current !== scopeInstanceId) {
+        return;
+      }
+      setIssueKeyError(issueError instanceof Error ? issueError.message : "Runtime key could not be issued.");
+    } finally {
+      if (selectedInstanceIdRef.current === scopeInstanceId) {
+        setIssueKeyPending(false);
+      }
+    }
+  };
 
-  const activeAccounts = signals.accounts.filter((account) => account.status === "active");
-  const activeAccountIndex = new Map(activeAccounts.map((account) => [account.account_id, account]));
-  const activeKeys = signals.keys.filter((key) => key.status === "active");
-  const activeGlobalKeys = activeKeys.filter(isGlobalRuntimeKey);
-  const goLiveRuntimeKeys = activeKeys.filter(isGoLiveRuntimeKey);
-  const partialWriteRuntimeKeys = activeKeys.filter((key) => isWriteCapableRuntimeKey(key) && !isGoLiveRuntimeKey(key));
-  const restrictedRuntimeKeys = activeKeys.filter((key) => !isGoLiveRuntimeKey(key));
-  const leadingRestrictedRuntimeKey = restrictedRuntimeKeys[0] ?? null;
-  const verifiedProviderKeys = liveReadyProviders.map((provider) => provider.provider);
-  const providerReachableGoLiveKeys = goLiveRuntimeKeys.filter((key) => {
-    const accountId = key.account_id;
-    return accountId === null
-      ? verifiedProviderKeys.length > 0
-      : verifiedProviderKeys.some((providerKey) => accountAllowsProvider(activeAccountIndex.get(accountId), providerKey));
-  });
-  const blockedGoLiveKeys = goLiveRuntimeKeys.filter((key) => !providerReachableGoLiveKeys.includes(key));
-  const leadingBlockedGoLiveKey = blockedGoLiveKeys[0] ?? null;
-  const runtimeAccessRoute = CONTROL_PLANE_ROUTES.apiKeys;
-  const latestAccessUpdate = formatTimestamp(
-    maxTimestamp([
-      ...signals.accounts.map((account) => account.updated_at),
-      ...signals.keys.map((key) => key.updated_at),
-      ...signals.keys.map((key) => key.last_used_at ?? null),
-    ]),
-  );
-  const hasRuntimeAccess = activeKeys.length > 0;
-  const hasGoLiveRuntimeAccess = goLiveRuntimeKeys.length > 0;
-  const hasProviderReachableGoLiveKey = providerReachableGoLiveKeys.length > 0;
+  const handleRunFirstSuccessProbe = async () => {
+    const token = runtimeKeyTokenInput.trim();
+    if (!token) {
+      setFirstSuccessError("Runtime key token is required for first-success probing.");
+      return;
+    }
+    const scopeInstanceId = selectedInstanceIdRef.current;
+    setFirstSuccessPending(true);
+    setFirstSuccessError("");
+    try {
+      const result = await runRuntimeKeyFirstSuccessProbe(instanceId, {
+        runtime_key: token,
+        chat_probe: true,
+      });
+      await refresh();
+      if (selectedInstanceIdRef.current !== scopeInstanceId) {
+        return;
+      }
+      setFirstSuccessResult(result.probe);
+      await loadSignals();
+    } catch (probeError) {
+      if (selectedInstanceIdRef.current !== scopeInstanceId) {
+        return;
+      }
+      setFirstSuccessError(probeError instanceof Error ? probeError.message : "First-success probe failed.");
+    } finally {
+      if (selectedInstanceIdRef.current === scopeInstanceId) {
+        setFirstSuccessPending(false);
+      }
+    }
+  };
 
-  const interviewBlockers = interviewEvaluation.blockers.map(formatOnboardingBlocker);
-  const liveTrafficReady = interviewEvaluation.normativeReady && bootstrapReady && hasVerifiedProvider && hasProviderReachableGoLiveKey;
+  const steps = deriveWizardSteps([
+    {
+      id: "operating-model",
+      title: "Betriebsart und Scope",
+      done: persistedOnboardingReady,
+      blocked: Boolean(selectedInstance) ? !persistedOnboardingReady : !access.canPersistOnboarding,
+      summary: selectedInstance ? persistedInterviewEvaluation.summary : operatingModelDescriptor.label,
+      detail: selectedInstance
+        ? persistedInterviewEvaluation.detail
+        : `Internal mode ${operatingModelDescriptor.internalMode}; tenant requirement ${operatingModelDescriptor.tenantRequirement}.`,
+      blockers: selectedInstance ? persistedOnboardingBlockers : interviewEvaluation.blockers.map((item) => `${item.code}: ${item.message}`),
+      links: [{ label: "Open Onboarding", to: CONTROL_PLANE_ROUTES.onboarding }],
+    },
+    {
+      id: "instance-operator",
+      title: "Erste Instanz und Operator-Agent",
+      done: Boolean(selectedInstance) && Boolean(operatorAgent),
+      blocked: Boolean(selectedInstance) && signals.loaded.agents && !operatorAgent,
+      summary: selectedInstance ? `Instance ${selectedInstance.display_name}` : "No instance selected",
+      detail: operatorAgent
+        ? `Default operator found: ${operatorAgent.display_name}.`
+        : "Default operator product object is still missing.",
+      blockers: selectedInstance && !operatorAgent ? ["Default Operator agent must exist for this instance."] : [],
+      links: [
+        { label: "Open Instances", to: CONTROL_PLANE_ROUTES.instances },
+        { label: "Open Agents", to: CONTROL_PLANE_ROUTES.agents },
+      ],
+    },
+    {
+      id: "provider-targets",
+      title: "Provider/Target verbinden",
+      done: providerReady,
+      blocked: !Boolean(selectedInstance),
+      summary: providerReady ? "Connected provider target present" : "No connected local/API-key provider target yet",
+      detail: `${providerRows.length} provider classifications loaded from control-plane truth.`,
+      blockers: providerReady ? [] : ["At least one local or API-key provider target must be runtime-ready."],
+      links: [
+        { label: "Open Providers", to: CONTROL_PLANE_ROUTES.providers },
+        { label: "Open Provider Targets", to: CONTROL_PLANE_ROUTES.providerTargets },
+      ],
+    },
+    {
+      id: "routing-defaults",
+      title: "Routing simple/non-simple",
+      done: routingChoiceApplied,
+      blocked: !signals.loaded.routing || !access.canConfigureRouting || !routingChoiceApplied,
+      summary: routingSummary,
+      detail: routingDetail,
+      blockers: routingChoiceApplied ? [] : [access.canConfigureRouting ? "Apply routing defaults from this wizard step." : "Routing defaults need an operator/admin handoff."],
+      links: [{ label: "Open Routing", to: CONTROL_PLANE_ROUTES.routing }],
+    },
+    {
+      id: "runtime-key",
+      title: "Runtime-Key ausgeben",
+      done: activeKeys.length > 0,
+      blocked: !access.canIssueRuntimeAccess && activeKeys.length === 0,
+      summary: `${activeKeys.length} active runtime key(s)`,
+      detail: activeKeys.length > 0
+        ? "Runtime key inventory is active for this instance."
+        : "Issue the first runtime key from onboarding.",
+      blockers: activeKeys.length === 0 ? [access.canIssueRuntimeAccess ? "No active runtime key exists yet." : "Runtime key issuance needs an admin session."] : [],
+      links: [{ label: "Open API Keys", to: CONTROL_PLANE_ROUTES.apiKeys }],
+    },
+    {
+      id: "fqdn-tls",
+      title: "FQDN/TLS API evidence",
+      done: tlsEvidenceReady,
+      blocked: !tlsEvidenceReady,
+      summary: tlsEvidenceReady ? "FQDN/TLS checks proven by API evidence" : "FQDN/TLS evidence still missing",
+      detail: tlsEvidenceCheckedAt ? `Last bootstrap evidence at ${tlsEvidenceCheckedAt}.` : "Bootstrap check timestamp is unavailable.",
+      blockers: tlsEvidenceBlockers,
+      links: [{ label: "Open Ingress TLS", to: CONTROL_PLANE_ROUTES.ingressTls }],
+    },
+    {
+      id: "first-success",
+      title: "First Success Probe",
+      done: firstSuccessReady,
+      blocked: !runtimeKeyTokenInput.trim() && !firstSuccessReady,
+      summary: firstSuccessReady ? "Runtime probe succeeded" : "Runtime probe pending",
+      detail: firstSuccessForSelectedInstance
+        ? `Models probe: ${firstSuccessForSelectedInstance.models_probe.ok ? "ok" : "failed"}, chat probe: ${firstSuccessForSelectedInstance.chat_probe.ok ? "ok" : firstSuccessForSelectedInstance.chat_probe.attempted ? "failed" : "not attempted"}.`
+        : "Run the probe with a runtime key token to confirm /v1/models or chat success.",
+      blockers: firstSuccessReady ? [] : ["No successful first probe result is recorded yet."],
+      links: [],
+    },
+    {
+      id: "go-live",
+      title: "Go-Live Zusammenfassung",
+      done: goLiveReady,
+      blocked: !goLiveReady,
+      summary: goLiveReady ? "Ready for go-live" : "Not ready for go-live",
+      detail: goLiveReady
+        ? "Wizard confirms instance, operator, provider, routing, runtime key, TLS evidence, and first-success runtime probe."
+        : "Resolve the listed blockers before go-live handoff.",
+      blockers: goLiveBlockers,
+      links: [{ label: "Open Dashboard", to: CONTROL_PLANE_ROUTES.dashboard }],
+    },
+  ]);
 
-  const bootstrapBlockers = [
-    ...(!signals.loaded.bootstrap ? ["Bootstrap readiness is unavailable in this heartbeat."] : []),
-    ...failedBootstrapChecks.slice(0, 3).map((check) => `${humanizeToken(toStringValue(check.id))}: ${toStringValue(check.details)}`),
-  ];
-
-  const providerBlockers = [
-    ...(!signals.loaded.providers ? ["Provider control-plane truth is unavailable."] : []),
-    ...(!signals.loaded.oauthTargets ? ["OAuth onboarding target state is unavailable."] : []),
-    ...(!hasVerifiedProvider && providerSignals.length === 0 && configuredOauthTargets.length === 0
-      ? ["No provider verification signal is recorded yet. Open Providers or Harness to configure, verify, or probe the first live route."]
-      : []),
-    ...(!hasVerifiedProvider && smokeOnlyReadyProviders.length > 0
-      ? ["ForgeFrame baseline is runtime-ready for internal smoke checks, but it does not count as verified live provider coverage for go-live."]
-      : []),
-    ...signals.providers
-      .filter((provider) => hasProviderSetupSignal(provider) && !isLiveProviderProof(provider))
-      .slice(0, 2)
-      .map((provider) => provider.provider === "forgeframe_baseline"
-        ? `${provider.label}: internal ForgeFrame smoke path only; verify a real provider route before go-live.`
-        : `${provider.label}: ${provider.readiness_reason ?? "verification is still incomplete."}`),
-    ...signals.oauthTargets
-      .filter((target) => toStringValue(target.readiness) !== "ready")
-      .slice(0, 1)
-      .flatMap((target) => {
-        const nextSteps = toStringArray(target.next_steps);
-        if (nextSteps.length === 0) {
-          return [];
-        }
-        return [`${humanizeToken(toStringValue(target.provider_key))}: ${nextSteps[0]}`];
-      }),
-  ];
-
-  const runtimeAccessBlockers = [
-    ...(!signals.loaded.accounts ? ["Runtime account inventory is unavailable."] : []),
-    ...(!signals.loaded.keys ? ["Runtime key inventory is unavailable."] : []),
-    ...(!hasRuntimeAccess
-      ? [activeAccounts.length > 0
-        ? "No active runtime key exists yet. API Keys still shows the secret once at issuance; recovery is not implied later."
-        : "No active runtime key exists yet. Issue a global key on API Keys, or create an account first only if the first key should be tied to a specific runtime identity."]
-      : []),
-    ...(hasRuntimeAccess && !hasGoLiveRuntimeAccess
-      ? [
-          partialWriteRuntimeKeys.length > 0
-            ? "Active runtime keys exist, but no single key currently covers the default live route set (`models:read`, `chat:write`, `responses:write`)."
-            : "Active runtime keys exist, but none currently permit live write traffic on `/v1/chat/completions` or `/v1/responses`.",
-        ]
-      : []),
-    ...(hasRuntimeAccess && !hasGoLiveRuntimeAccess && leadingRestrictedRuntimeKey
-      ? [`${leadingRestrictedRuntimeKey.label}: missing ${missingGoLiveScopes(leadingRestrictedRuntimeKey).join(", ")} for the default go-live route set.`]
-      : []),
-    ...(hasRuntimeAccess && !hasGoLiveRuntimeAccess && !access.canIssueRuntimeAccess
-      ? ["This session can inspect runtime key coverage, but a standard admin session still has to widen scopes for the default go-live path."]
-      : []),
-    ...(!hasRuntimeAccess && !access.canIssueRuntimeAccess
-      ? ["This session can inspect runtime access posture, but a standard admin session still has to complete issuance."]
-      : []),
-    ...(hasVerifiedProvider && hasGoLiveRuntimeAccess && !hasProviderReachableGoLiveKey
-      ? ["Full-scope runtime keys exist, but none currently reach the verified live provider set through account provider bindings."]
-      : []),
-    ...(hasVerifiedProvider && hasGoLiveRuntimeAccess && !hasProviderReachableGoLiveKey && leadingBlockedGoLiveKey?.account_id
-      ? [(() => {
-          const account = activeAccountIndex.get(leadingBlockedGoLiveKey.account_id ?? "");
-          if (!account) {
-            return `${leadingBlockedGoLiveKey.label}: bound account is inactive or unavailable for the current provider reachability check.`;
-          }
-          const bindings = account.provider_bindings.length > 0 ? account.provider_bindings.join(", ") : "all providers";
-          return `${leadingBlockedGoLiveKey.label}: account bindings allow ${bindings}, while the verified live provider set is ${verifiedProviderKeys.join(", ")}.`;
-        })()]
-      : []),
-  ];
-
-  const operatorSurfaceLink = getOperatorSurfaceLink(interview.operatorSurface);
-  const firstSuccessActionLink = getFirstSuccessActionLink(interview.firstSuccessAction);
-  const firstSuccessLinks = dedupeLinks([firstSuccessActionLink, operatorSurfaceLink]);
-
-  let firstSuccessTone: ChecklistTone = "warning";
-  let firstSuccessLabel = "Pending";
-  let firstSuccessSummary = "";
-  let firstSuccessDetail = "";
-
-  if (interview.firstSuccessAction === "provider_verification") {
-    const ready = hasVerifiedProvider;
-    firstSuccessTone = ready ? "success" : signals.loaded.providers || signals.loaded.oauthTargets ? "warning" : "danger";
-    firstSuccessLabel = ready ? "Provider proof ready" : "Provider proof pending";
-    firstSuccessSummary = ready
-      ? "The selected first success action is already backed by a verified live provider route."
-      : "The selected first success action is still blocked by missing provider verification.";
-    firstSuccessDetail = ready
-      ? `${liveReadyProviders.length} live-ready provider route${liveReadyProviders.length === 1 ? "" : "s"} are recorded for the current instance.`
-      : "Use the dedicated Providers and Harness modules to produce a real provider verification signal instead of leaving onboarding on descriptive UI alone.";
-  } else if (interview.firstSuccessAction === "runtime_request") {
-    const ready = bootstrapReady && hasVerifiedProvider && hasProviderReachableGoLiveKey;
-    firstSuccessTone = ready ? "success" : signals.loaded.bootstrap && signals.loaded.providers && signals.loaded.keys ? "warning" : "danger";
-    firstSuccessLabel = ready ? "Runtime request ready" : "Runtime request blocked";
-    firstSuccessSummary = ready
-      ? "The selected first success action can already send a live runtime request through the current provider and key posture."
-      : "The selected first success action is still blocked by bootstrap, provider, or runtime access gaps.";
-    firstSuccessDetail = ready
-      ? `Bootstrap, provider verification, and at least one provider-reachable full-scope runtime key are already present.`
-      : "A first runtime request is only real once bootstrap, a verified provider route, and a provider-reachable full-scope runtime key exist at the same time.";
-  } else if (interview.firstSuccessAction === "artifact_review") {
-    const ready = runtimeReadyProviders.length > 0 || activeKeys.length > 0;
-    firstSuccessTone = ready ? "success" : signals.loaded.providers || signals.loaded.keys ? "warning" : "danger";
-    firstSuccessLabel = ready ? "Artifact path visible" : "Artifact path pending";
-    firstSuccessSummary = ready
-      ? "The selected first success action already has enough runtime or access truth to produce a reviewable artifact."
-      : "The selected first success action still lacks enough runtime or access truth to produce a real artifact.";
-    firstSuccessDetail = ready
-      ? `Runtime-ready providers: ${runtimeReadyProviders.length}. Active runtime keys: ${activeKeys.length}.`
-      : "Without runtime-ready providers or active runtime keys, the first artifact remains a promise instead of a product path.";
-  } else {
-    const ready = signals.loaded.bootstrap || signals.loaded.providers || signals.loaded.keys;
-    firstSuccessTone = ready ? "success" : "danger";
-    firstSuccessLabel = ready ? "Operator handoff ready" : "Operator handoff blocked";
-    firstSuccessSummary = ready
-      ? "The selected first success action already has a visible operator surface for the first handoff."
-      : "The selected first success action still lacks enough loaded truth for a real operator handoff.";
-    firstSuccessDetail = ready
-      ? `The chosen operator surface is ${interview.operatorSurface}, and the page already exposes live setup truth for that handoff.`
-      : "The operator surface cannot become the first success action until setup truth loads.";
-  }
-
-  const interviewStep = createStep(
-    1,
-    "Guided onboarding truth",
-    interviewEvaluation.statusLabel,
-    interviewEvaluation.tone,
-    interviewEvaluation.summary,
-    `${interviewEvaluation.detail}${selectedInstance ? ` Current instance: ${selectedInstance.display_name}.` : " No instance exists yet; save will create the first instance boundary."}`,
-    interviewBlockers,
-    dedupeLinks([
-      { label: "Open Instances", to: CONTROL_PLANE_ROUTES.instances },
-      operatorSurfaceLink,
-    ]),
-  );
-
-  const bootstrapStep = signals.loaded.bootstrap
-    ? createStep(
-        2,
-        "Bootstrap readiness",
-        bootstrapReady ? "Ready" : "Continue setup",
-        bootstrapReady ? "success" : "warning",
-        bootstrapReady
-          ? "Required bootstrap checks passed for the current control-plane posture."
-          : "Bootstrap prerequisites still need attention before ForgeFrame should take live traffic.",
-        `${requiredBootstrapChecks.length - failedBootstrapChecks.length}/${requiredBootstrapChecks.length || 0} required checks passed.${bootstrapCheckedAt ? ` Last checked ${bootstrapCheckedAt}.` : ""}`,
-        bootstrapReady ? [] : bootstrapBlockers,
-        [],
-      )
-    : createStep(
-        2,
-        "Bootstrap readiness",
-        "Signal unavailable",
-        "danger",
-        "Bootstrap readiness did not load in this heartbeat.",
-        "The checklist cannot confirm compose, storage, or observability bootstrap state right now.",
-        bootstrapBlockers,
-        [],
-      );
-
-  const providersStep = signals.loaded.providers || signals.loaded.oauthTargets
-    ? createStep(
-        3,
-        "Provider verification",
-        hasVerifiedProvider ? "Ready" : "Continue setup",
-        hasVerifiedProvider ? "success" : "warning",
-        hasVerifiedProvider
-          ? "At least one provider route is verified for live runtime traffic."
-          : smokeOnlyReadyProviders.length > 0
-            ? "Only internal smoke routes are runtime-ready; a real provider still needs live verification."
-            : "Provider onboarding is visible, but no route is ready for live traffic yet.",
-        `${runtimeReadyProviders.length} runtime-ready provider routes, ${liveReadyProviders.length} eligible for live go-live proof. ${evidencedOauthTargets.length}/${configuredOauthTargets.length} configured OAuth/account targets have live probe or runtime evidence.${smokeOnlyReadyProviders.length > 0 ? " Internal smoke routes stay visible here, but they do not satisfy the live-provider proof required for go-live." : ""}${latestProviderEvidence ? ` Latest provider evidence ${latestProviderEvidence}.` : " No verify/probe evidence is recorded yet."}${access.canVerifyProviders ? "" : " This session can inspect provider truth, but verify/probe and bridge actions still require an operator or admin session on Providers or Harness."}`,
-        hasVerifiedProvider ? providerBlockers.filter((item) => item.includes("unavailable")) : providerBlockers,
-        [
-          { label: "Open Providers", to: CONTROL_PLANE_ROUTES.providers },
-          { label: "Open Harness", to: CONTROL_PLANE_ROUTES.harness },
-        ],
-      )
-    : createStep(
-        3,
-        "Provider verification",
-        "Signal unavailable",
-        "danger",
-        "Provider onboarding signals did not load in this heartbeat.",
-        "The checklist cannot confirm current runtime/provider truth right now.",
-        providerBlockers,
-        [
-          { label: "Open Providers", to: CONTROL_PLANE_ROUTES.providers },
-          { label: "Open Harness", to: CONTROL_PLANE_ROUTES.harness },
-        ],
-      );
-
-  const runtimeAccessStep = signals.loaded.accounts || signals.loaded.keys
-    ? createStep(
-        4,
-        "Runtime access issuance",
-        hasGoLiveRuntimeAccess ? "Ready" : hasRuntimeAccess ? "Partial access" : access.canIssueRuntimeAccess ? "Continue setup" : "Admin handoff",
-        hasGoLiveRuntimeAccess ? "success" : "warning",
-        hasGoLiveRuntimeAccess
-          ? "At least one runtime key covers the default runtime route scopes."
-          : partialWriteRuntimeKeys.length > 0
-            ? "Active runtime keys exist, but scope coverage is still partial."
-            : hasRuntimeAccess
-              ? "Active runtime keys exist, but none can send live write traffic yet."
-              : access.canIssueRuntimeAccess
-                ? "Runtime access still needs the first active key."
-                : "Runtime access still needs an admin handoff.",
-        `${activeAccounts.length} active runtime accounts. ${activeKeys.length} active runtime keys.${activeGlobalKeys.length > 0 ? ` ${activeGlobalKeys.length} global key${activeGlobalKeys.length === 1 ? " is" : "s are"} not bound to an account.` : ""}${hasGoLiveRuntimeAccess ? ` ${goLiveRuntimeKeys.length} key${goLiveRuntimeKeys.length === 1 ? "" : "s"} cover${goLiveRuntimeKeys.length === 1 ? "s" : ""} the default route set (${DEFAULT_GO_LIVE_RUNTIME_SCOPES.join(", ")}).` : partialWriteRuntimeKeys.length > 0 ? ` ${partialWriteRuntimeKeys.length} key${partialWriteRuntimeKeys.length === 1 ? "" : "s"} can reach some live write traffic, but scope coverage is still partial.` : hasRuntimeAccess ? " Active keys remain restricted away from live write traffic." : ""}${hasVerifiedProvider && hasGoLiveRuntimeAccess && !hasProviderReachableGoLiveKey ? " Current account provider bindings do not yet line up with the verified live provider set." : ""}${latestAccessUpdate ? ` Latest access evidence ${latestAccessUpdate}.` : ""}${hasGoLiveRuntimeAccess ? "" : hasRuntimeAccess ? access.canIssueRuntimeAccess ? " Use API Keys to widen scopes until one key covers models, chat, and responses traffic for the default go-live path." : " Inspect API Keys here, then hand scope widening to a standard admin session before go-live." : access.canIssueRuntimeAccess ? activeAccounts.length > 0 ? " Issue the first key on API Keys, or keep Accounts optional unless the key should be tied to a specific runtime identity." : " Issue the first global key on API Keys, or create an account first only if the first key should be account-bound." : " Inspect Accounts and API Keys here, then hand the final issuance step to a standard admin session."}`,
-        hasGoLiveRuntimeAccess ? runtimeAccessBlockers.filter((item) => item.includes("unavailable")) : runtimeAccessBlockers,
-        [
-          { label: "Open Accounts", to: CONTROL_PLANE_ROUTES.accounts },
-          { label: "Open API Keys", to: CONTROL_PLANE_ROUTES.apiKeys },
-        ],
-      )
-    : createStep(
-        4,
-        "Runtime access issuance",
-        "Signal unavailable",
-        "danger",
-        "Runtime access posture did not load in this heartbeat.",
-        "The checklist cannot confirm current account or key issuance state right now.",
-        runtimeAccessBlockers,
-        [
-          { label: "Open Accounts", to: CONTROL_PLANE_ROUTES.accounts },
-          { label: "Open API Keys", to: CONTROL_PLANE_ROUTES.apiKeys },
-        ],
-      );
-
-  const goLiveBlockers = [
-    ...(!interviewEvaluation.normativeReady ? interviewBlockers : []),
-    ...(!bootstrapReady ? ["Bootstrap prerequisites are still incomplete."] : []),
-    ...(!hasVerifiedProvider ? [access.canVerifyProviders ? "Provider verification still needs to finish on Providers or Harness." : "Provider verification still needs an operator or admin handoff."] : []),
-    ...(!hasGoLiveRuntimeAccess ? [hasRuntimeAccess ? "At least one active runtime key still needs the default go-live scopes (`models:read`, `chat:write`, `responses:write`)." : access.canIssueRuntimeAccess ? "Issue the first active runtime key before declaring go-live." : "A standard admin session still has to complete runtime access issuance."] : []),
-    ...(hasVerifiedProvider && hasGoLiveRuntimeAccess && !hasProviderReachableGoLiveKey
-      ? ["At least one full-scope runtime key must be able to reach a verified live provider through its current account bindings before go-live."]
-      : []),
-    ...(hasVerifiedProvider && hasGoLiveRuntimeAccess && !hasProviderReachableGoLiveKey && leadingBlockedGoLiveKey?.account_id
-      ? [(() => {
-          const account = activeAccountIndex.get(leadingBlockedGoLiveKey.account_id ?? "");
-          if (!account) {
-            return `${leadingBlockedGoLiveKey.label}: bound account is inactive or unavailable for the current provider reachability check.`;
-          }
-          const bindings = account.provider_bindings.length > 0 ? account.provider_bindings.join(", ") : "all providers";
-          return `${leadingBlockedGoLiveKey.label}: account bindings allow ${bindings}, while the verified live provider set is ${verifiedProviderKeys.join(", ")}.`;
-        })()]
-      : []),
-  ];
-
-  const goLiveStep = createStep(
-    5,
-    "Go-live handoff",
-    liveTrafficReady ? "Ready for runtime" : (!hasRuntimeAccess && !access.canIssueRuntimeAccess) || (!hasVerifiedProvider && !access.canVerifyProviders) ? "Handoff required" : "Continue setup",
-    liveTrafficReady ? "success" : "warning",
-    liveTrafficReady
-      ? "ForgeFrame is ready for live traffic from the current control-plane view."
-      : !interviewEvaluation.normativeReady
-        ? "The normative public HTTPS product path is still blocked by missing or limited onboarding truth."
-        : !bootstrapReady
-          ? "Bootstrap still blocks the move from setup into operations."
-          : !hasVerifiedProvider
-            ? access.canVerifyProviders
-              ? "Provider verification still blocks go-live."
-              : "Provider verification needs a handoff before go-live."
-            : hasGoLiveRuntimeAccess && !hasProviderReachableGoLiveKey
-              ? "Provider-binding reachability still blocks go-live."
-              : hasRuntimeAccess
-                ? "Runtime key scope coverage still blocks go-live."
-                : access.canIssueRuntimeAccess
-                  ? "Runtime access issuance still blocks go-live."
-                  : "Go-live needs an admin handoff before the first key can be issued.",
-    liveTrafficReady
-      ? "Leave setup and move into the dashboard or provider health monitoring instead of staying on static onboarding lists."
-      : !interviewEvaluation.normativeReady
-        ? "ForgeFrame must keep the deviation visible here until the onboarding interview records the normative Linux and HTTPS operating path."
-        : !bootstrapReady
-          ? "Bootstrap still depends on the documented repo bootstrap and validation scripts when the backend does not expose control-plane automation for that step yet."
-        : !hasVerifiedProvider
-          ? access.canVerifyProviders
-              ? "Continue on Providers for runtime truth and on Harness for preview, verify, probe, or bridge checks."
-              : "Inspect provider truth here, then hand verification to an operator or admin on Providers or Harness."
-            : hasGoLiveRuntimeAccess && !hasProviderReachableGoLiveKey
-              ? access.canIssueRuntimeAccess
-                ? "Adjust Accounts and API Keys so one full-scope key can reach the verified live provider set, then return here for the final go-live call."
-                : "Inspect Accounts and API Keys here, then hand provider-binding alignment to a standard admin session before declaring go-live."
-              : hasRuntimeAccess
-                ? access.canIssueRuntimeAccess
-                  ? "Broaden one runtime key on API Keys until it covers models, chat, and responses traffic, then return here for the final go-live call."
-                  : "Inspect API Keys here, then hand scope widening to a standard admin session before declaring go-live."
-                : access.canIssueRuntimeAccess
-                  ? "Finish Accounts and API Keys issuance, then return here for the final go-live call."
-                  : "Inspect runtime access posture here, then hand issuance to a standard admin session before declaring go-live.",
-    liveTrafficReady ? [] : goLiveBlockers,
-    liveTrafficReady
-      ? [
-          { label: "Open Dashboard", to: CONTROL_PLANE_ROUTES.dashboard },
-          { label: "Open Provider Health & Runs", to: CONTROL_PLANE_ROUTES.providerHealthRuns },
-        ]
-      : !interviewEvaluation.normativeReady
-        ? dedupeLinks([
-            { label: "Open Instances", to: CONTROL_PLANE_ROUTES.instances },
-            operatorSurfaceLink,
-          ])
-        : !hasVerifiedProvider
-          ? [
-              { label: "Open Providers", to: CONTROL_PLANE_ROUTES.providers },
-              { label: "Open Harness", to: CONTROL_PLANE_ROUTES.harness },
-            ]
-          : hasGoLiveRuntimeAccess && !hasProviderReachableGoLiveKey
-            ? [
-                { label: "Open Accounts", to: CONTROL_PLANE_ROUTES.accounts },
-                { label: "Open API Keys", to: CONTROL_PLANE_ROUTES.apiKeys },
-              ]
-            : !hasGoLiveRuntimeAccess
-              ? [{ label: activeAccounts.length > 0 ? "Open API Keys" : "Open Accounts", to: runtimeAccessRoute }]
-              : [],
-  );
-
-  const steps = [interviewStep, bootstrapStep, providersStep, runtimeAccessStep, goLiveStep];
-  const completedSteps = steps.filter((step) => step.tone === "success").length;
-  const overallTone: ChecklistTone = liveTrafficReady
-    ? "success"
-    : loading
-      ? "neutral"
-      : interviewEvaluation.tone === "danger"
-      ? "danger"
-        : "warning";
-  const headerLinks = liveTrafficReady
-    ? [
-        {
-          label: "Guided Onboarding",
-          to: CONTROL_PLANE_ROUTES.onboarding,
-          description: "Review persisted onboarding truth and leave setup with a live runtime handoff.",
-        },
-        {
-          label: "Provider Health & Runs",
-          to: CONTROL_PLANE_ROUTES.providerHealthRuns,
-          description: "Confirm the live provider set from the runtime operations surface.",
-        },
-        {
-          label: "Dashboard",
-          to: CONTROL_PLANE_ROUTES.dashboard,
-          description: "Leave setup and move into routine monitoring.",
-          badge: "Go live",
-        },
-      ]
-    : !interviewEvaluation.normativeReady
-      ? [
-          {
-            label: "Guided Onboarding",
-            to: CONTROL_PLANE_ROUTES.onboarding,
-            description: "Persist the onboarding interview and close the normative infrastructure gaps first.",
-          },
-          {
-            label: "Instances",
-            to: CONTROL_PLANE_ROUTES.instances,
-            description: "Review the canonical instance registry and top-level scope bindings.",
-          },
-          {
-            label: "Providers",
-            to: CONTROL_PLANE_ROUTES.providers,
-            description: "Check live provider truth only after the normative operating path is recorded.",
-          },
-        ]
-      : !hasVerifiedProvider
-        ? [
-            {
-              label: "Guided Onboarding",
-              to: CONTROL_PLANE_ROUTES.onboarding,
-              description: "Keep the checklist open while provider verification and proof collection close.",
-            },
-            {
-              label: "Providers",
-              to: CONTROL_PLANE_ROUTES.providers,
-              description: "Review live provider runtime truth, compatibility, and expansion posture.",
-            },
-            {
-              label: "Harness",
-              to: CONTROL_PLANE_ROUTES.harness,
-              description: "Run preview, verify, probe, import/export, and proof checks for live provider routes.",
-            },
-          ]
-        : !hasGoLiveRuntimeAccess || !hasProviderReachableGoLiveKey
-          ? [
-              {
-                label: "Guided Onboarding",
-                to: CONTROL_PLANE_ROUTES.onboarding,
-                description: "Keep the checklist open while runtime access scope is aligned to the verified provider set.",
-              },
-              {
-                label: activeAccounts.length > 0 ? "API Keys" : "Accounts",
-                to: runtimeAccessRoute,
-                description: access.canIssueRuntimeAccess
-                  ? "Continue runtime access issuance from the live control-plane surface."
-                  : "Inspect runtime access posture here and hand the issuance step to an admin session.",
-                badge: access.canIssueRuntimeAccess ? undefined : "Handoff",
-              },
-              {
-                label: "Providers",
-                to: CONTROL_PLANE_ROUTES.providers,
-                description: "Re-check the verified provider set while access scope is being aligned.",
-              },
-            ]
-          : [
-              {
-                label: "Guided Onboarding",
-                to: CONTROL_PLANE_ROUTES.onboarding,
-                description: "Review final checklist truth before leaving setup.",
-              },
-              {
-                label: "API Keys",
-                to: runtimeAccessRoute,
-                description: "Confirm one runtime key can reach the verified live provider set.",
-              },
-              {
-                label: "Dashboard",
-                to: CONTROL_PLANE_ROUTES.dashboard,
-                description: "Use as the next operational destination once the checklist reaches the normative go-live state.",
-                badge: "Go live",
-              },
-            ];
+  const completedSteps = steps.filter((step) => step.status === "done").length;
+  const overallTone: ChecklistTone = goLiveReady ? "success" : "warning";
 
   return (
     <section className="fg-page">
       <PageIntro
         eyebrow="Setup"
-        title="Guided Onboarding and Go-Live"
-        description="Interview-backed onboarding truth for instance scope, Linux and HTTPS posture, provider verification, runtime access issuance, and the final go-live handoff."
-        question="What still blocks a real first instance and a real public runtime path?"
-        links={headerLinks}
+        title="Guided Onboarding Wizard"
+        description="Wizard-driven first go-live flow: operating model, first instance, operator agent, provider target, routing defaults, runtime key issuance, TLS evidence, and first success."
+        question="What blocks first live runtime traffic right now?"
+        links={[
+          {
+            label: "Onboarding",
+            to: CONTROL_PLANE_ROUTES.onboarding,
+            description: "Drive the wizard to a real go-live state.",
+          },
+          {
+            label: "Providers",
+            to: CONTROL_PLANE_ROUTES.providers,
+            description: "Verify provider readiness and target classifications.",
+          },
+          {
+            label: "Dashboard",
+            to: CONTROL_PLANE_ROUTES.dashboard,
+            description: "Use once go-live blockers are closed.",
+            badge: goLiveReady ? "Go live" : undefined,
+          },
+        ]}
         badges={[
           { label: access.badgeLabel, tone: access.badgeTone },
-          { label: interviewEvaluation.statusLabel, tone: interviewEvaluation.tone },
-          { label: liveTrafficReady ? "Ready for runtime" : "Normative path not ready", tone: overallTone },
+          { label: `${completedSteps}/${steps.length} wizard steps done`, tone: overallTone },
           ...(selectedInstance ? [{ label: `Instance scope: ${selectedInstance.display_name}`, tone: "success" as const }] : []),
         ]}
         note={access.detail}
@@ -732,36 +811,55 @@ export function OnboardingPage() {
         instances={instances}
         loadState={loadState}
         error={instancesError}
-        surfaceLabel="guided onboarding and go-live truth"
+        surfaceLabel="onboarding wizard"
         onInstanceChange={onInstanceChange}
       />
 
       <OnboardingContent
         error={error}
         loading={loading}
-        liveTrafficReady={liveTrafficReady}
-        completedSteps={completedSteps}
-        overallTone={overallTone}
-        goLiveLinks={goLiveStep.links}
-        runtimeReadyProviderCount={signals.loaded.providers || signals.loaded.oauthTargets ? runtimeReadyProviders.length : "?"}
-        activeRuntimeKeyCount={signals.loaded.keys ? activeKeys.length : "?"}
-        currentSessionLabel={access.badgeLabel}
-        steps={steps}
         instanceId={instanceId}
+        steps={steps}
         interview={interview}
         interviewEvaluation={interviewEvaluation}
+        persistedInterviewEvaluation={persistedInterviewEvaluation}
+        operatingModelDescriptor={operatingModelDescriptor}
         canPersistOnboarding={access.canPersistOnboarding}
+        canConfigureRouting={access.canConfigureRouting}
+        canIssueRuntimeAccess={access.canIssueRuntimeAccess}
         hasSelectedInstance={Boolean(selectedInstance)}
         savePending={savePending}
         saveError={saveError}
         saveMessage={saveMessage}
         onInterviewSave={handleInterviewSave}
         onInterviewFieldChange={handleInterviewFieldChange}
-        firstSuccessTone={firstSuccessTone}
-        firstSuccessLabel={firstSuccessLabel}
-        firstSuccessSummary={firstSuccessSummary}
-        firstSuccessDetail={firstSuccessDetail}
-        firstSuccessLinks={firstSuccessLinks}
+        operatorAgentLabel={operatorAgent?.display_name ?? null}
+        providerRows={providerRows}
+        routingChoice={effectiveRoutingChoice}
+        routingPending={routingPending}
+        routingError={routingError}
+        routingMessage={routingMessage}
+        onRoutingChoiceChange={handleRoutingChoiceChange}
+        onApplyRoutingChoice={handleApplyRoutingChoice}
+        runtimeKeyCount={activeKeys.length}
+        issueKeyPending={issueKeyPending}
+        issueKeyError={issueKeyError}
+        issueKeyMessage={issueKeyMessage}
+        issuedRuntimeToken={issuedRuntimeToken}
+        onIssueRuntimeKey={handleIssueRuntimeKey}
+        runtimeKeyTokenInput={runtimeKeyTokenInput}
+        onRuntimeKeyTokenInputChange={setRuntimeKeyTokenInput}
+        firstSuccessPending={firstSuccessPending}
+        firstSuccessError={firstSuccessError}
+        firstSuccessResult={firstSuccessForSelectedInstance}
+        onRunFirstSuccessProbe={handleRunFirstSuccessProbe}
+        tlsEvidenceReady={tlsEvidenceReady}
+        tlsEvidenceCheckedAt={tlsEvidenceCheckedAt}
+        tlsEvidenceBlockers={tlsEvidenceBlockers}
+        goLiveSummary={goLiveReady
+          ? "All onboarding wizard requirements are satisfied for go-live handoff."
+          : "Go-live remains blocked until the wizard closes every required step with API evidence."}
+        goLiveBlockers={goLiveBlockers}
       />
     </section>
   );

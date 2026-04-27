@@ -1213,6 +1213,33 @@ export type RuntimeKeyRequestPathPolicy = {
   review_required_conditions?: string[];
 };
 
+export type RuntimeKeyFirstSuccessProbeRecord = {
+  runtime_key_id: string;
+  instance_id: string;
+  tenant_id: string;
+  models_probe: {
+    attempted: boolean;
+    ok: boolean;
+    status_code: number | null;
+    model_count: number;
+    error: string | null;
+  };
+  chat_probe: {
+    attempted: boolean;
+    ok: boolean;
+    status_code: number | null;
+    model: string | null;
+    error: string | null;
+  };
+  success: boolean;
+  executed_at: string;
+};
+
+export type RuntimeKeyFirstSuccessProbeResponse = {
+  status: string;
+  probe: RuntimeKeyFirstSuccessProbeRecord;
+};
+
 export type MutableSettingEntry = {
   key: string;
   label: string;
@@ -3185,6 +3212,24 @@ export function updateRuntimeKeyRequestPathPolicy(
     appendTenantScope(`/admin/keys/${encodeURIComponent(keyId)}/request-path-policy`, undefined, instanceId),
     {
       method: "PATCH",
+      body: JSON.stringify(payload),
+    },
+  );
+}
+
+export function runRuntimeKeyFirstSuccessProbe(
+  instanceId: string | null | undefined,
+  payload: {
+    runtime_key: string;
+    chat_probe?: boolean;
+    model?: string | null;
+    message?: string;
+  },
+) {
+  return fetchJson<RuntimeKeyFirstSuccessProbeResponse>(
+    appendTenantScope("/admin/keys/first-success/probe", undefined, instanceId),
+    {
+      method: "POST",
       body: JSON.stringify(payload),
     },
   );

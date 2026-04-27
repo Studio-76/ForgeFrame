@@ -128,6 +128,7 @@ def update_instance(
     admin: AuthenticatedAdmin = Depends(require_admin_write_session),
     service: InstanceService = Depends(get_instance_service),
     governance: GovernanceService = Depends(get_governance_service),
+    agents: AgentAdminService = Depends(get_agent_admin_service),
 ) -> object:
     try:
         current = service.get_instance(instance_id)
@@ -147,4 +148,5 @@ def update_instance(
         error_type = "instance_not_found" if "was not found" in str(exc) else "instance_conflict"
         status_code = status.HTTP_404_NOT_FOUND if error_type == "instance_not_found" else status.HTTP_409_CONFLICT
         return _instance_error(status_code, error_type, str(exc))
+    agents.ensure_default_operator(instance=instance)
     return {"status": "ok", "instance": instance.model_dump(mode="json")}
