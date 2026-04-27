@@ -252,11 +252,6 @@ export function UsagePage() {
             description: "Use the live provider route when the signal looks provider-wide or readiness-related.",
           },
           {
-            label: "Errors & Activity",
-            to: CONTROL_PLANE_ROUTES.logs,
-            description: "Switch to incident shape, recent failures, and audit-adjacent activity when usage evidence points to a runtime problem.",
-          },
-          {
             label: "Client Investigation",
             to: `${CONTROL_PLANE_ROUTES.usage}#client-investigation`,
             description: "Stay on this route when the next question is client blast radius or cost concentration.",

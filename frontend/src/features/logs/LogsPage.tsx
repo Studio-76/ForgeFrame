@@ -21,6 +21,11 @@ import { getInstanceIdFromSearchParams, withInstanceScope, withQueryParams } fro
 import { useInstanceCatalog } from "../../app/useInstanceCatalog";
 import { InstanceScopeCard } from "../../components/InstanceScopeCard";
 import { PageIntro } from "../../components/PageIntro";
+import { AdvancedDiagnostics } from "../../components/ui/AdvancedDiagnostics";
+import { DetailPanel } from "../../components/ui/DetailPanel";
+import { EntityTable } from "../../components/ui/EntityTable";
+import { ErrorState, LoadingState, PermissionState } from "../../components/ui/StateBlocks";
+import { SummaryStrip } from "../../components/ui/SummaryStrip";
 
 type LoadState = "idle" | "loading" | "success" | "error";
 
@@ -349,6 +354,21 @@ export function LogsPage() {
     }
   };
 
+  const downloadLatestExport = () => {
+    if (!exportResult?.blob || typeof window === "undefined" || typeof URL.createObjectURL !== "function") {
+      setExportState("error");
+      setExportError("Latest export download is unsupported in this browser context.");
+      return;
+    }
+
+    const objectUrl = URL.createObjectURL(exportResult.blob);
+    const anchor = document.createElement("a");
+    anchor.href = objectUrl;
+    anchor.download = exportResult.filename;
+    anchor.click();
+    window.setTimeout(() => URL.revokeObjectURL(objectUrl), 0);
+  };
+
   const openDetail = (eventId: string) => {
     updateAuditParam("auditEvent", eventId);
   };
@@ -411,30 +431,70 @@ export function LogsPage() {
         onInstanceChange={onInstanceChange}
       />
 
-      {logsState === "loading" ? <article className="fg-card"><p className="fg-muted">Loading logs evidence.</p></article> : null}
-      {logsError ? <p className="fg-danger">{logsError}</p> : null}
+      {logsState === "loading" ? (
+        <LoadingState
+          title="Loading logs evidence."
+          description="ForgeFrame is restoring runtime signals, audit preview, and operability posture."
+        />
+      ) : null}
+      {logsError ? (
+        <ErrorState
+          title="Logs surface loading failed"
+          description={logsError}
+        />
+      ) : null}
 
       {logs ? (
-        <div className="fg-grid">
-          <article className="fg-card">
-            <div className="fg-panel-heading">
-              <div>
-                <h3>Audit Preview</h3>
-                <p className="fg-muted">Latest governance events available for the selected scope.</p>
-              </div>
-            </div>
-            <ul className="fg-list">
-              {logs.audit_preview.length === 0 ? <li>No audit events available.</li> : null}
-              {logs.audit_preview.slice(0, 8).map((item) => (
-                <li key={item.eventId}>
-                  {item.createdAt} - {item.actionLabel} - {item.statusLabel} - {item.summary}
-                </li>
-              ))}
-            </ul>
-            <Link className="fg-nav-link" to={historyPath}>
-              Open Audit History
-            </Link>
-          </article>
+        <>
+          <SummaryStrip
+            items={[
+              {
+                key: "audit-preview",
+                label: "Audit preview",
+                value: logs.audit_preview.length,
+                meta: "Latest governance events available for the selected scope.",
+              },
+              {
+                key: "retention-limit",
+                label: "Retention limit",
+                value: String(logs.audit_retention.eventLimit),
+                meta: logs.audit_retention.retentionLimited ? "Retention limited" : "Full retention window available",
+                status: logs.audit_retention.retentionLimited ? "partial" : "ready",
+              },
+              {
+                key: "operability",
+                label: "Operability",
+                value: logs.operability.ready ? "ready" : "review",
+                meta: "Logging and tracing signal-path checks.",
+                status: logs.operability.ready ? "ready" : "degraded",
+              },
+              {
+                key: "alerts",
+                label: "Alerts",
+                value: logs.alerts.length,
+                meta: logs.alerts.length > 0 ? "Current alert pressure detected." : "No active alerts.",
+                status: logs.alerts.length > 0 ? "degraded" : "ready",
+              },
+            ]}
+          />
+
+          <div className="fg-grid">
+            <EntityTable
+              title="Audit Preview"
+              description="Latest governance events available for the selected scope."
+              actions={<Link className="fg-nav-link" to={historyPath}>Open Audit History</Link>}
+              tableLabel="Audit preview"
+              columns={[
+                { key: "createdAt", header: "Created", render: (item) => item.createdAt },
+                { key: "actionLabel", header: "Action", render: (item) => item.actionLabel },
+                { key: "statusLabel", header: "Status", render: (item) => item.statusLabel },
+                { key: "summary", header: "Summary", render: (item) => item.summary },
+              ]}
+              rows={logs.audit_preview.slice(0, 8)}
+              rowKey={(item) => item.eventId}
+              emptyTitle="No audit events available."
+              emptyDescription="The logs endpoint is not returning previewable governance events for this scope."
+            />
 
           <article className="fg-card">
             <div className="fg-panel-heading">
@@ -490,7 +550,8 @@ export function LogsPage() {
             </ul>
             <pre>{JSON.stringify({ metrics: logs.operability.metrics, logging: logs.operability.logging, tracing: logs.operability.tracing }, null, 2)}</pre>
           </article>
-        </div>
+          </div>
+        </>
       ) : null}
 
       <article id="audit-export" className="fg-card">
@@ -548,7 +609,9 @@ export function LogsPage() {
             </ul>
             <div className="fg-actions fg-mt-sm">
               <Link className="fg-nav-link" to={exportEventPath}>Open export audit event</Link>
-              <a className="fg-nav-link" href="#" onClick={(event) => event.preventDefault()}>Download latest export again</a>
+              <button className="fg-nav-link" type="button" onClick={downloadLatestExport}>
+                Download latest export again
+              </button>
             </div>
           </article>
         ) : null}
@@ -564,10 +627,10 @@ export function LogsPage() {
         </div>
 
         {!canReadAudit ? (
-          <article className="fg-subcard">
-            <h4>Audit history is permission-limited</h4>
-            <p className="fg-muted">Audit history and detail require a standard operator or admin session. Viewer sessions stay on the logs overview only.</p>
-          </article>
+          <PermissionState
+            title="Audit history is permission-limited"
+            description="Audit history and detail require a standard operator or admin session. Viewer sessions stay on the logs overview only."
+          />
         ) : (
           <>
             <div className="fg-inline-form">
@@ -661,39 +724,49 @@ export function LogsPage() {
         )}
       </article>
 
-      {detailState === "loading" ? <article className="fg-card"><p className="fg-muted">Loading audit detail.</p></article> : null}
-      {detailError ? <p className="fg-danger">{detailError}</p> : null}
+      {detailState === "loading" ? (
+        <LoadingState
+          title="Loading audit detail."
+          description="ForgeFrame is restoring the selected audit event context."
+        />
+      ) : null}
+      {detailError ? (
+        <ErrorState
+          title="Audit detail loading failed"
+          description={detailError}
+        />
+      ) : null}
       {detail ? (
-        <article className="fg-card">
-          <div className="fg-panel-heading">
-            <div>
-              <h3>{detail.event.actionLabel}</h3>
-              <p className="fg-muted">{detail.summary}</p>
-            </div>
-            <span className="fg-pill" data-tone={detail.event.status === "ok" ? "success" : detail.event.status === "warning" ? "warning" : "danger"}>{detail.outcome}</span>
-          </div>
-          <div className="fg-card-grid">
-            <article className="fg-subcard">
-              <h4>Change context</h4>
-              <ul className="fg-list">
-                {detail.changeContext.length === 0 ? <li>{detail.changeContextUnavailable ? "Change context unavailable." : "No change context recorded."}</li> : null}
-                {detail.changeContext.map((item) => <li key={item.label}>{item.label}: {item.value}</li>)}
-              </ul>
-            </article>
-            <article className="fg-subcard">
-              <h4>Related links</h4>
-              <ul className="fg-list">
-                {detail.relatedLinks.map((link) => (
-                  <li key={`${link.label}-${link.href}`}>
-                    <Link to={withInstanceScope(link.href, instanceId)}>{link.label}</Link>
-                  </li>
-                ))}
-              </ul>
-            </article>
-          </div>
-          <h4>Raw metadata</h4>
-          <pre>{JSON.stringify(detail.rawMetadata, null, 2)}</pre>
-        </article>
+        <>
+          <DetailPanel
+            title={detail.event.actionLabel}
+            description={detail.summary}
+            status={detail.outcome}
+            statusKey={detail.event.status === "ok" ? "ready" : detail.event.status === "warning" ? "degraded" : "blocked"}
+          >
+            <h4>Change context</h4>
+            <ul className="fg-list">
+              {detail.changeContext.length === 0 ? <li>{detail.changeContextUnavailable ? "Change context unavailable." : "No change context recorded."}</li> : null}
+              {detail.changeContext.map((item) => <li key={item.label}>{item.label}: {item.value}</li>)}
+            </ul>
+            <h4>Related links</h4>
+            <ul className="fg-list">
+              {detail.relatedLinks.map((link) => (
+                <li key={`${link.label}-${link.href}`}>
+                  <Link to={withInstanceScope(link.href, instanceId)}>{link.label}</Link>
+                </li>
+              ))}
+            </ul>
+          </DetailPanel>
+          <AdvancedDiagnostics
+            title="Raw metadata"
+            description="Underlying audit event payload for troubleshooting and export verification."
+            status={detail.event.status === "ok" ? "ready" : detail.event.status === "warning" ? "degraded" : "blocked"}
+            statusKey={detail.event.status === "ok" ? "ready" : detail.event.status === "warning" ? "degraded" : "blocked"}
+          >
+            <pre>{JSON.stringify(detail.rawMetadata, null, 2)}</pre>
+          </AdvancedDiagnostics>
+        </>
       ) : null}
     </section>
   );

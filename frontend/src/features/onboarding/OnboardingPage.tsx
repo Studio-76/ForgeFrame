@@ -612,21 +612,33 @@ export function OnboardingPage() {
     : loading
       ? "neutral"
       : interviewEvaluation.tone === "danger"
-        ? "danger"
+      ? "danger"
         : "warning";
-
-  return (
-    <section className="fg-page">
-      <PageIntro
-        eyebrow="Setup"
-        title="Guided Onboarding and Go-Live"
-        description="Interview-backed onboarding truth for instance scope, Linux and HTTPS posture, provider verification, runtime access issuance, and the final go-live handoff."
-        question="What still blocks a real first instance and a real public runtime path?"
-        links={[
+  const headerLinks = liveTrafficReady
+    ? [
+        {
+          label: "Guided Onboarding",
+          to: CONTROL_PLANE_ROUTES.onboarding,
+          description: "Review persisted onboarding truth and leave setup with a live runtime handoff.",
+        },
+        {
+          label: "Provider Health & Runs",
+          to: CONTROL_PLANE_ROUTES.providerHealthRuns,
+          description: "Confirm the live provider set from the runtime operations surface.",
+        },
+        {
+          label: "Dashboard",
+          to: CONTROL_PLANE_ROUTES.dashboard,
+          description: "Leave setup and move into routine monitoring.",
+          badge: "Go live",
+        },
+      ]
+    : !interviewEvaluation.normativeReady
+      ? [
           {
             label: "Guided Onboarding",
             to: CONTROL_PLANE_ROUTES.onboarding,
-            description: "Persist the onboarding interview, read current runtime truth, and close the remaining go-live blockers.",
+            description: "Persist the onboarding interview and close the normative infrastructure gaps first.",
           },
           {
             label: "Instances",
@@ -636,30 +648,75 @@ export function OnboardingPage() {
           {
             label: "Providers",
             to: CONTROL_PLANE_ROUTES.providers,
-            description: "Review live provider runtime truth, compatibility, and expansion posture.",
+            description: "Check live provider truth only after the normative operating path is recorded.",
           },
-          {
-            label: "Harness",
-            to: CONTROL_PLANE_ROUTES.harness,
-            description: "Run preview, verify, probe, import/export, and proof checks for live provider routes.",
-          },
-          {
-            label: "API Keys",
-            to: runtimeAccessRoute,
-            description: access.canIssueRuntimeAccess
-              ? "Continue runtime access issuance from API Keys; Accounts stays optional unless the first key should be account-bound."
-              : "Inspect runtime access posture here and hand the issuance step to an admin session.",
-            badge: access.canIssueRuntimeAccess ? undefined : "Handoff",
-          },
-          {
-            label: "Dashboard",
-            to: CONTROL_PLANE_ROUTES.dashboard,
-            description: liveTrafficReady
-              ? "Leave setup and move into routine monitoring."
-              : "Use as the next operational destination once the checklist reaches the normative go-live state.",
-            badge: liveTrafficReady ? "Go live" : undefined,
-          },
-        ]}
+        ]
+      : !hasVerifiedProvider
+        ? [
+            {
+              label: "Guided Onboarding",
+              to: CONTROL_PLANE_ROUTES.onboarding,
+              description: "Keep the checklist open while provider verification and proof collection close.",
+            },
+            {
+              label: "Providers",
+              to: CONTROL_PLANE_ROUTES.providers,
+              description: "Review live provider runtime truth, compatibility, and expansion posture.",
+            },
+            {
+              label: "Harness",
+              to: CONTROL_PLANE_ROUTES.harness,
+              description: "Run preview, verify, probe, import/export, and proof checks for live provider routes.",
+            },
+          ]
+        : !hasGoLiveRuntimeAccess || !hasProviderReachableGoLiveKey
+          ? [
+              {
+                label: "Guided Onboarding",
+                to: CONTROL_PLANE_ROUTES.onboarding,
+                description: "Keep the checklist open while runtime access scope is aligned to the verified provider set.",
+              },
+              {
+                label: activeAccounts.length > 0 ? "API Keys" : "Accounts",
+                to: runtimeAccessRoute,
+                description: access.canIssueRuntimeAccess
+                  ? "Continue runtime access issuance from the live control-plane surface."
+                  : "Inspect runtime access posture here and hand the issuance step to an admin session.",
+                badge: access.canIssueRuntimeAccess ? undefined : "Handoff",
+              },
+              {
+                label: "Providers",
+                to: CONTROL_PLANE_ROUTES.providers,
+                description: "Re-check the verified provider set while access scope is being aligned.",
+              },
+            ]
+          : [
+              {
+                label: "Guided Onboarding",
+                to: CONTROL_PLANE_ROUTES.onboarding,
+                description: "Review final checklist truth before leaving setup.",
+              },
+              {
+                label: "API Keys",
+                to: runtimeAccessRoute,
+                description: "Confirm one runtime key can reach the verified live provider set.",
+              },
+              {
+                label: "Dashboard",
+                to: CONTROL_PLANE_ROUTES.dashboard,
+                description: "Use as the next operational destination once the checklist reaches the normative go-live state.",
+                badge: "Go live",
+              },
+            ];
+
+  return (
+    <section className="fg-page">
+      <PageIntro
+        eyebrow="Setup"
+        title="Guided Onboarding and Go-Live"
+        description="Interview-backed onboarding truth for instance scope, Linux and HTTPS posture, provider verification, runtime access issuance, and the final go-live handoff."
+        question="What still blocks a real first instance and a real public runtime path?"
+        links={headerLinks}
         badges={[
           { label: access.badgeLabel, tone: access.badgeTone },
           { label: interviewEvaluation.statusLabel, tone: interviewEvaluation.tone },

@@ -80,7 +80,13 @@ export function AppSidebar({ navigationSections, instanceId }: AppSidebarProps) 
                   }
 
                   return (
-                    <Link key={`${section.label}-${link.to}`} className={className} to={scopedTo} onClick={closeMobileSidebar}>
+                    <Link
+                      key={`${section.label}-${link.to}`}
+                      className={className}
+                      to={scopedTo}
+                      onClick={closeMobileSidebar}
+                      aria-current={isCurrent ? "page" : undefined}
+                    >
                       <span className="ff-sidebar-link-label">{link.label}</span>
                       {link.badge ? <span className="ff-mini-badge">{link.badge}</span> : null}
                     </Link>

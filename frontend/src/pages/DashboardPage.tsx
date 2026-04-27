@@ -14,6 +14,12 @@ import { getInstanceIdFromSearchParams, withInstanceScope } from "../app/tenantS
 import { useInstanceCatalog } from "../app/useInstanceCatalog";
 import { InstanceScopeCard } from "../components/InstanceScopeCard";
 import { PageIntro } from "../components/PageIntro";
+import { ActionBar } from "../components/ui/ActionBar";
+import { AdvancedDiagnostics } from "../components/ui/AdvancedDiagnostics";
+import { DetailPanel } from "../components/ui/DetailPanel";
+import { EntityTable } from "../components/ui/EntityTable";
+import { BlockedState, ErrorState, LoadingState } from "../components/ui/StateBlocks";
+import { SummaryStrip } from "../components/ui/SummaryStrip";
 
 type PrimaryAction = {
   title: string;
@@ -198,65 +204,152 @@ export function DashboardPage() {
         onInstanceChange={onInstanceChange}
       />
 
-      {error && !instanceFilterRequired ? <p className="fg-danger">{error}</p> : null}
+      {error && instanceFilterRequired ? (
+        <BlockedState
+          title="Selected instance is outside the current dashboard scope"
+          description={error}
+          status="blocked"
+        />
+      ) : null}
+      {error && !instanceFilterRequired ? (
+        <ErrorState
+          title="Dashboard loading failed"
+          description={error}
+        />
+      ) : null}
+      {!dashboard && !error ? (
+        <LoadingState
+          title="Loading dashboard truth"
+          description="ForgeFrame is restoring the command-center summary for the selected instance scope."
+        />
+      ) : null}
       {dashboard ? (
         <div className="fg-stack">
           {primaryAction ? (
-            <article className="fg-card">
-              <div className="fg-panel-heading">
-                <div>
-                  <h3>Primary Next Action</h3>
-                  <p className="fg-muted">{primaryAction.description}</p>
-                </div>
+            <ActionBar
+              title="Primary Next Action"
+              description={primaryAction.description}
+              actions={(
                 <Link className="fg-nav-link" to={withInstanceScope(primaryAction.to, instanceId)}>
                   Open route
                 </Link>
-              </div>
+              )}
+            >
               <p>
                 <strong>{primaryAction.title}</strong>
               </p>
-            </article>
+            </ActionBar>
           ) : null}
-          <div className="fg-grid fg-grid-compact">
-            {Object.entries(dashboard.kpis).map(([key, value]) => (
-              <article key={key} className="fg-kpi">
-                <span className="fg-muted">{key}</span>
-                <strong className="fg-kpi-value">{value}</strong>
-              </article>
-            ))}
+          <SummaryStrip
+            items={Object.entries(dashboard.kpis).map(([key, value]) => ({
+              key,
+              label: key.replaceAll("_", " "),
+              value,
+            }))}
+          />
+          <div className="ff-operator-layout">
+            <div className="ff-operator-main">
+              <EntityTable
+                title="Alerts"
+                description="Current runtime alerts and control-plane attention signals."
+                tableLabel="Dashboard alerts"
+                columns={[
+                  {
+                    key: "severity",
+                    header: "Severity",
+                    render: (row) => row.severity,
+                  },
+                  {
+                    key: "type",
+                    header: "Type",
+                    render: (row) => row.type,
+                  },
+                  {
+                    key: "message",
+                    header: "Message",
+                    render: (row) => row.message,
+                  },
+                ]}
+                rows={dashboard.alerts.map((alert, index) => ({
+                  _rowKey: `${String(alert.type)}-${index}`,
+                  severity: String(alert.severity),
+                  type: String(alert.type),
+                  message: String(alert.message),
+                }))}
+                rowKey={(row) => row._rowKey}
+                emptyTitle="No active alerts."
+                emptyDescription="The command center is not seeing active alert pressure for this scope."
+              />
+              <EntityTable
+                title="Needs Attention"
+                description="Provider and runtime paths that should be reviewed before the next operating cycle."
+                tableLabel="Dashboard attention queue"
+                columns={[
+                  {
+                    key: "item",
+                    header: "Attention item",
+                    render: (row) => row.item,
+                  },
+                ]}
+                rows={dashboard.needs_attention.map((item) => ({ item }))}
+                rowKey={(row) => row.item}
+                emptyTitle="No provider flagged."
+                emptyDescription="No provider or runtime path is currently flagged by the dashboard payload."
+              />
+            </div>
+            <div className="ff-operator-sidebar">
+              <DetailPanel
+                title="Governance posture"
+                description="Session-sensitive governance context and bootstrap posture for the current scope."
+                status={canManageSecurity ? "admin posture" : "read only"}
+                statusKey={canManageSecurity ? "ready" : "waiting_approval"}
+                sticky
+              >
+                <dl>
+                  <div>
+                    <dt>Instance scope</dt>
+                    <dd>{selectedInstance ? selectedInstance.display_name : "Default instance path"}</dd>
+                  </div>
+                  <div>
+                    <dt>Security route</dt>
+                    <dd>{governanceLabel}</dd>
+                  </div>
+                  <div>
+                    <dt>Approvals access</dt>
+                    <dd>{canReviewApprovals ? "Available" : "Operator or admin required"}</dd>
+                  </div>
+                  <div>
+                    <dt>Audit evidence route</dt>
+                    <dd>{auditHistoryRoute}</dd>
+                  </div>
+                </dl>
+                {canManageSecurity && dashboard.security ? (
+                  <>
+                    <h4>Security Bootstrap</h4>
+                    <ul className="fg-list">
+                      {Object.entries(dashboard.security).map(([key, value]) => (
+                        <li key={key}>
+                          {key}: {String(value)}
+                        </li>
+                      ))}
+                    </ul>
+                  </>
+                ) : (
+                  <p className="fg-muted">
+                    Security bootstrap detail stays scoped to sessions that can open mutable governance posture.
+                  </p>
+                )}
+              </DetailPanel>
+            </div>
           </div>
-          <div className="fg-grid">
-            <article className="fg-card">
-              <h3>Alerts</h3>
-              <ul className="fg-list">
-                {dashboard.alerts.length === 0 ? <li>No active alerts.</li> : null}
-                {dashboard.alerts.map((item, index) => (
-                  <li key={`${String(item.type)}-${index}`}>
-                    {String(item.severity)} · {String(item.type)} · {String(item.message)}
-                  </li>
-                ))}
-              </ul>
-            </article>
-            <article className="fg-card">
-              <h3>Needs Attention</h3>
-              <ul className="fg-list">
-                {dashboard.needs_attention.length === 0 ? <li>No provider flagged.</li> : null}
-                {dashboard.needs_attention.map((item) => <li key={item}>{item}</li>)}
-              </ul>
-            </article>
-          </div>
-          {canManageSecurity && dashboard.security ? (
-            <article className="fg-card">
-              <h3>Security Bootstrap</h3>
-              <ul className="fg-list">
-                {Object.entries(dashboard.security).map(([key, value]) => (
-                  <li key={key}>
-                    {key}: {String(value)}
-                  </li>
-                ))}
-              </ul>
-            </article>
-          ) : null}
+          <AdvancedDiagnostics
+            title="Advanced diagnostics"
+            description="Raw dashboard payload for operator troubleshooting and handoff."
+            status={dashboard.alerts.length > 0 ? "degraded" : "ready"}
+            statusKey={dashboard.alerts.length > 0 ? "degraded" : "ready"}
+          >
+            <pre>{JSON.stringify(dashboard, null, 2)}</pre>
+          </AdvancedDiagnostics>
         </div>
       ) : null}
     </section>

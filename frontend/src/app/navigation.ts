@@ -1,4 +1,5 @@
 import type { AdminSessionUser } from "../api/admin";
+import { withQueryParams } from "./tenantScope";
 import { sessionCanMutateScopedOrAnyInstance, sessionHasAnyInstancePermission } from "./adminAccess";
 
 export const CONTROL_PLANE_ROUTES = {
@@ -420,4 +421,25 @@ export function isHrefCurrent(pathname: string, hash: string, to: string): boole
   const targetHash = rawTargetHash ? `#${rawTargetHash}` : "";
 
   return pathname === targetPath && hash === targetHash;
+}
+
+export function findNavigationMatch(
+  sections: NavigationSection[],
+  pathname: string,
+  hash: string,
+  instanceId: string | null,
+) {
+  for (const section of sections) {
+    for (const link of section.links) {
+      if (link.disabled) {
+        continue;
+      }
+      const scopedTo = withQueryParams(link.to, { instanceId });
+      if (isHrefCurrent(pathname, hash, scopedTo)) {
+        return { section, link, to: scopedTo };
+      }
+    }
+  }
+
+  return null;
 }

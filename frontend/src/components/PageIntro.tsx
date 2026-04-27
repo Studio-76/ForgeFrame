@@ -2,10 +2,11 @@ import { Link, useLocation } from "react-router-dom";
 
 import { isHrefCurrent } from "../app/navigation";
 import { getInstanceIdFromSearchParams, withQueryParams } from "../app/tenantScope";
+import { PageHeader } from "./ui/PageHeader";
 
 type IntroBadge = {
   label: string;
-  tone?: "success" | "warning" | "danger" | "neutral";
+  tone?: "success" | "warning" | "danger" | "neutral" | "info";
 };
 
 export type PageIntroLink = {
@@ -20,68 +21,57 @@ type PageIntroProps = {
   eyebrow: string;
   title: string;
   description: string;
-  question: string;
-  links: PageIntroLink[];
+  question?: string;
+  links?: PageIntroLink[];
   badges?: IntroBadge[];
   note?: string;
 };
 
-export function PageIntro({ eyebrow, title, description, question, links, badges = [], note }: PageIntroProps) {
+export function PageIntro({ eyebrow, title, description, question, links = [], badges = [], note }: PageIntroProps) {
   const location = useLocation();
   const scopeSearchParams = new URLSearchParams(location.search);
   const instanceId = getInstanceIdFromSearchParams(scopeSearchParams);
 
   return (
-    <div className="fg-card fg-page-intro">
-      <div className="fg-panel-heading">
-        <div className="fg-page-header">
-          <span className="fg-section-label">{eyebrow}</span>
-          <h2>{title}</h2>
-          <p className="fg-muted">{description}</p>
-          <p className="fg-page-question">{question}</p>
-        </div>
-        {badges.length > 0 ? (
-          <div className="fg-actions">
-            {badges.map((badge) => (
-              <span key={badge.label} className="fg-pill" data-tone={badge.tone ?? "neutral"}>
-                {badge.label}
-              </span>
-            ))}
-          </div>
-        ) : null}
-      </div>
+    <PageHeader
+      eyebrow={eyebrow}
+      title={title}
+      description={description}
+      badges={badges}
+      actions={links.length > 0 ? (
+        <div className="ff-compact-link-row" aria-label="Related routes">
+          {links.map((link) => {
+            const scopedTo = withQueryParams(link.to, { instanceId });
+            const isCurrent = !link.disabled && isHrefCurrent(location.pathname, location.hash, scopedTo);
+            const className = `ff-compact-link${isCurrent ? " is-current" : ""}${link.disabled ? " is-disabled" : ""}`;
 
-      <div className="fg-wayfinding-grid">
-        {links.map((link) => {
-          const scopedTo = withQueryParams(link.to, { instanceId });
-          const isCurrent = !link.disabled && isHrefCurrent(location.pathname, location.hash, scopedTo);
-          const className = `fg-wayfinding-link${isCurrent ? " is-current" : ""}${link.disabled ? " is-disabled" : ""}`;
-
-          if (link.disabled) {
-            return (
-              <div key={`${link.label}-${link.to}`} className={className} aria-disabled="true">
-                <div className="fg-wayfinding-label">
-                  <strong>{link.label}</strong>
-                  {link.badge ? <span className="fg-pill">{link.badge}</span> : null}
+            if (link.disabled) {
+              return (
+                <div key={`${link.label}-${link.to}`} className={className} aria-disabled="true">
+                  <div className="ff-compact-link-copy">
+                    <span>{link.label}</span>
+                    <small>{link.description}</small>
+                  </div>
+                  {link.badge ? <small>{link.badge}</small> : null}
                 </div>
-                <span className="fg-muted">{link.description}</span>
-              </div>
+              );
+            }
+
+            return (
+              <Link key={`${link.label}-${link.to}`} className={className} to={scopedTo}>
+                <div className="ff-compact-link-copy">
+                  <span>{link.label}</span>
+                  <small>{link.description}</small>
+                </div>
+                {link.badge ? <small>{link.badge}</small> : null}
+              </Link>
             );
-          }
-
-          return (
-            <Link key={`${link.label}-${link.to}`} className={className} to={scopedTo}>
-              <div className="fg-wayfinding-label">
-                <strong>{link.label}</strong>
-                {link.badge ? <span className="fg-pill">{link.badge}</span> : null}
-              </div>
-              <span className="fg-muted">{link.description}</span>
-            </Link>
-          );
-        })}
-      </div>
-
-      {note ? <p className="fg-note">{note}</p> : null}
-    </div>
+          })}
+        </div>
+      ) : null}
+    >
+      {question ? <p className="ff-page-header-support">{question}</p> : null}
+      {note ? <p className="ff-page-header-note">{note}</p> : null}
+    </PageHeader>
   );
 }

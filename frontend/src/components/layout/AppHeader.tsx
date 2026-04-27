@@ -3,7 +3,7 @@ import { Link, useLocation, useNavigate } from "react-router-dom";
 
 import type { AdminSessionUser } from "../../api/admin";
 import type { NavigationSection } from "../../app/navigation";
-import { CONTROL_PLANE_ROUTES } from "../../app/navigation";
+import { CONTROL_PLANE_ROUTES, findNavigationMatch } from "../../app/navigation";
 import { withQueryParams } from "../../app/tenantScope";
 import { useTheme } from "../../theme/ThemeProvider";
 import { useSidebar } from "./SidebarContext";
@@ -80,21 +80,20 @@ export function AppHeader({ navigationSections, instanceId, session, sessionErro
     return () => window.removeEventListener("keydown", onKeyDown);
   }, []);
 
+  useEffect(() => {
+    setSearchOpen(false);
+    setNotificationsOpen(false);
+    setUserOpen(false);
+  }, [location.hash, location.pathname, location.search]);
+
   const chooseSearchResult = (to: string) => {
     setSearchOpen(false);
     setQuery("");
     void navigate(to);
   };
 
-  const pageLabel = useMemo(() => {
-    const allResults = flattenNavigation(navigationSections, instanceId);
-    const match = allResults.find((item) => {
-      const [targetPathWithSearch, rawTargetHash] = item.to.split("#");
-      const [targetPath] = targetPathWithSearch.split("?");
-      const targetHash = rawTargetHash ? `#${rawTargetHash}` : "";
-      return location.pathname === targetPath && location.hash === targetHash;
-    });
-    return match?.label ?? "Control Plane";
+  const currentRoute = useMemo(() => {
+    return findNavigationMatch(navigationSections, location.pathname, location.hash, instanceId);
   }, [instanceId, location.hash, location.pathname, navigationSections]);
 
   return (
@@ -107,8 +106,8 @@ export function AppHeader({ navigationSections, instanceId, session, sessionErro
           <MenuIcon />
         </button>
         <div className="ff-topbar-title">
-          <span>ForgeFrame</span>
-          <strong>{pageLabel}</strong>
+          <span>{currentRoute?.section.label ?? "ForgeFrame"}</span>
+          <strong>{currentRoute?.link.label ?? "Control Plane"}</strong>
         </div>
       </div>
 
