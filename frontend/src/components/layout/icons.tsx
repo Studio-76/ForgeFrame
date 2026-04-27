@@ -82,12 +82,14 @@ export function CloseIcon(props: IconProps) {
 
 export function NavIcon({ name, ...props }: { name: string } & IconProps) {
   switch (name) {
+    case "command":
     case "home":
       return (
         <SvgIcon {...props}>
-          <path d="M3 11.5 12 4l9 7.5" />
-          <path d="M5 10.5V20h14v-9.5" />
-          <path d="M10 20v-5h4v5" />
+          <path d="M4 12h16" />
+          <path d="M12 4v16" />
+          <path d="m7 7 10 10" />
+          <path d="m17 7-10 10" />
         </SvgIcon>
       );
     case "setup":
@@ -103,13 +105,7 @@ export function NavIcon({ name, ...props }: { name: string } & IconProps) {
           <path d="m16.3 7.7 2.8-2.8" />
         </SvgIcon>
       );
-    case "governance":
-      return (
-        <SvgIcon {...props}>
-          <path d="M12 3 4 6v6c0 5 3.4 8 8 9 4.6-1 8-4 8-9V6l-8-3Z" />
-          <path d="m9 12 2 2 4-4" />
-        </SvgIcon>
-      );
+    case "runtime":
     case "operations":
       return (
         <SvgIcon {...props}>
@@ -120,6 +116,13 @@ export function NavIcon({ name, ...props }: { name: string } & IconProps) {
           <path d="M16 17v-3" />
         </SvgIcon>
       );
+    case "governance":
+      return (
+        <SvgIcon {...props}>
+          <path d="M12 3 4 6v6c0 5 3.4 8 8 9 4.6-1 8-4 8-9V6l-8-3Z" />
+          <path d="m9 12 2 2 4-4" />
+        </SvgIcon>
+      );
     case "work":
       return (
         <SvgIcon {...props}>
@@ -128,6 +131,26 @@ export function NavIcon({ name, ...props }: { name: string } & IconProps) {
           <path d="M4 12h16" />
         </SvgIcon>
       );
+    case "knowledge":
+      return (
+        <SvgIcon {...props}>
+          <path d="M5 4h10a3 3 0 0 1 3 3v13H8a3 3 0 0 0-3 3Z" />
+          <path d="M8 20V7a3 3 0 0 1 3-3" />
+          <path d="M12 8h3" />
+          <path d="M12 12h3" />
+        </SvgIcon>
+      );
+    case "extension":
+      return (
+        <SvgIcon {...props}>
+          <path d="M8 5H5v3" />
+          <path d="M16 5h3v3" />
+          <path d="M8 19H5v-3" />
+          <path d="M16 19h3v-3" />
+          <rect x="8" y="8" width="8" height="8" rx="2" />
+        </SvgIcon>
+      );
+    case "system":
     case "settings":
       return (
         <SvgIcon {...props}>

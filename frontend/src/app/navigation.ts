@@ -62,16 +62,59 @@ export type NavigationLinkItem = {
   nonAdminBadge?: string;
 };
 
+export type NavigationSectionId =
+  | "command"
+  | "setup"
+  | "runtime"
+  | "governance"
+  | "work"
+  | "knowledge"
+  | "extension"
+  | "system";
+
+export type NavigationSectionIcon =
+  | "command"
+  | "setup"
+  | "runtime"
+  | "governance"
+  | "work"
+  | "knowledge"
+  | "extension"
+  | "system";
+
 export type NavigationSection = {
+  id: NavigationSectionId;
   label: string;
   description: string;
+  icon: NavigationSectionIcon;
   links: NavigationLinkItem[];
 };
 
+const WORKFLOW_ROUTE_SET = new Set<string>([
+  CONTROL_PLANE_ROUTES.conversations,
+  CONTROL_PLANE_ROUTES.inbox,
+  CONTROL_PLANE_ROUTES.tasks,
+  CONTROL_PLANE_ROUTES.reminders,
+  CONTROL_PLANE_ROUTES.automations,
+  CONTROL_PLANE_ROUTES.notifications,
+  CONTROL_PLANE_ROUTES.agents,
+  CONTROL_PLANE_ROUTES.channels,
+  CONTROL_PLANE_ROUTES.contacts,
+  CONTROL_PLANE_ROUTES.knowledgeSources,
+  CONTROL_PLANE_ROUTES.memory,
+  CONTROL_PLANE_ROUTES.learning,
+  CONTROL_PLANE_ROUTES.skills,
+  CONTROL_PLANE_ROUTES.assistantProfiles,
+  CONTROL_PLANE_ROUTES.workspaces,
+  CONTROL_PLANE_ROUTES.artifacts,
+]);
+
 const NAVIGATION_SECTIONS: NavigationSection[] = [
   {
-    label: "Home",
-    description: "Start in the command center and fan out by operator intent.",
+    id: "command",
+    label: "Command",
+    description: "Return to the primary command surface before branching into deeper operator flows.",
+    icon: "command",
     links: [
       {
         label: "Command Center",
@@ -81,8 +124,10 @@ const NAVIGATION_SECTIONS: NavigationSection[] = [
     ],
   },
   {
+    id: "setup",
     label: "Setup",
     description: "Bring ForgeFrame online and keep provider onboarding grounded in runtime truth.",
+    icon: "setup",
     links: [
       {
         label: "Bootstrap / Readiness",
@@ -125,11 +170,6 @@ const NAVIGATION_SECTIONS: NavigationSection[] = [
         description: "Policy-driven simple/non-simple routing, budget and circuit posture, simulation, and decision explainability.",
       },
       {
-        label: "Plugins",
-        to: CONTROL_PLANE_ROUTES.plugins,
-        description: "Persistent plugin registry with instance-scoped activation, extension slots, config contracts, and security posture.",
-      },
-      {
         label: "Ingress / TLS",
         to: CONTROL_PLANE_ROUTES.ingressTls,
         description: "Public listener, root-path, same-origin, port-80 helper, and certificate automation truth.",
@@ -142,8 +182,68 @@ const NAVIGATION_SECTIONS: NavigationSection[] = [
     ],
   },
   {
+    id: "runtime",
+    label: "Runtime",
+    description: "Monitor execution truth, health, pressure, and failure shape without leaving the control plane.",
+    icon: "runtime",
+    links: [
+      {
+        label: "Execution Review",
+        to: CONTROL_PLANE_ROUTES.execution,
+        description: "Inspect instance-scoped execution runs, approval waits, and replay outcomes on the operator/admin execution surface.",
+      },
+      {
+        label: "Queues",
+        to: CONTROL_PLANE_ROUTES.queues,
+        description: "Lane-backed queue lengths, runnable backlog, paused runs, and quarantine posture.",
+      },
+      {
+        label: "Dispatch",
+        to: CONTROL_PLANE_ROUTES.dispatch,
+        description: "Worker leases, outbox pressure, stalled attempts, and dispatch reconciliation.",
+      },
+      {
+        label: "Provider Health & Runs",
+        to: CONTROL_PLANE_ROUTES.providerHealthRuns,
+        description: "Jump directly to the live provider inventory and run posture.",
+      },
+      {
+        label: "Recovery / Backup / Restore",
+        to: CONTROL_PLANE_ROUTES.recovery,
+        description: "Backup target classes, restore evidence, freshness, and source-identity truth.",
+      },
+      {
+        label: "Health",
+        to: CONTROL_PLANE_ROUTES.health,
+        description: "Runtime readiness, provider health posture, and observability signal-path truth.",
+      },
+      {
+        label: "Logs",
+        to: CONTROL_PLANE_ROUTES.logs,
+        description: "Shared runtime activity, audit pivots, export status, and operational event review.",
+      },
+      {
+        label: "Errors",
+        to: CONTROL_PLANE_ROUTES.errors,
+        description: "Alerts, error shape, blocked routing failures, and incident review.",
+      },
+      {
+        label: "Usage",
+        to: CONTROL_PLANE_ROUTES.usage,
+        description: "Traffic evidence, provider/client drilldowns, and historical usage pressure.",
+      },
+      {
+        label: "Costs",
+        to: CONTROL_PLANE_ROUTES.costs,
+        description: "Budget posture, blocked cost classes, circuit pressure, and routing cost mix.",
+      },
+    ],
+  },
+  {
+    id: "governance",
     label: "Governance",
     description: "Review runtime access, admin posture, and audit evidence without hiding permission boundaries.",
+    icon: "governance",
     links: [
       {
         label: "Accounts",
@@ -181,59 +281,10 @@ const NAVIGATION_SECTIONS: NavigationSection[] = [
     ],
   },
   {
-    label: "Operations",
-    description: "Monitor provider health, execution truth, usage, error shape, and current runtime attention signals.",
-    links: [
-      {
-        label: "Execution Review",
-        to: CONTROL_PLANE_ROUTES.execution,
-        description: "Inspect instance-scoped execution runs, approval waits, and replay outcomes on the operator/admin execution surface.",
-      },
-      {
-        label: "Queues",
-        to: CONTROL_PLANE_ROUTES.queues,
-        description: "Lane-backed queue lengths, runnable backlog, paused runs, and quarantine posture.",
-      },
-      {
-        label: "Dispatch",
-        to: CONTROL_PLANE_ROUTES.dispatch,
-        description: "Worker leases, outbox pressure, stalled attempts, and dispatch reconciliation.",
-      },
-      {
-        label: "Provider Health & Runs",
-        to: CONTROL_PLANE_ROUTES.providerHealthRuns,
-        description: "Jump directly to the live provider inventory and run posture.",
-      },
-      {
-        label: "Recovery / Backup / Restore",
-        to: CONTROL_PLANE_ROUTES.recovery,
-        description: "Backup target classes, restore evidence, freshness, and source-identity truth.",
-      },
-      {
-        label: "Health",
-        to: CONTROL_PLANE_ROUTES.health,
-        description: "Runtime readiness, provider health posture, and observability signal-path truth.",
-      },
-      {
-        label: "Usage",
-        to: CONTROL_PLANE_ROUTES.usage,
-        description: "Traffic evidence, provider/client drilldowns, and historical usage pressure.",
-      },
-      {
-        label: "Costs",
-        to: CONTROL_PLANE_ROUTES.costs,
-        description: "Budget posture, blocked cost classes, circuit pressure, and routing cost mix.",
-      },
-      {
-        label: "Errors",
-        to: CONTROL_PLANE_ROUTES.errors,
-        description: "Alerts, error shape, blocked routing failures, and incident review.",
-      },
-    ],
-  },
-  {
-    label: "Work Interaction",
-    description: "Track inbound work, conversation history, triage posture, issue-linked workspaces, and artifact evidence on first-class work surfaces.",
+    id: "work",
+    label: "Work",
+    description: "Track ongoing work, inbox pressure, and the artifacts created by real operator activity.",
+    icon: "work",
     links: [
       {
         label: "Conversations",
@@ -266,15 +317,23 @@ const NAVIGATION_SECTIONS: NavigationSection[] = [
         description: "Delivery and outbox surface with preview, retry, reject, and fallback truth.",
       },
       {
-        label: "Agents",
-        to: CONTROL_PLANE_ROUTES.agents,
-        description: "Instance-scoped agent registry with the required Operator, participation posture, and assistant-profile linkage.",
+        label: "Workspaces",
+        to: CONTROL_PLANE_ROUTES.workspaces,
+        description: "Issue-linked workspaces with preview, review, handoff, and run/approval context.",
       },
       {
-        label: "Channels",
-        to: CONTROL_PLANE_ROUTES.channels,
-        description: "Delivery channel inventory with fallback posture and recent notification linkage.",
+        label: "Artifacts",
+        to: CONTROL_PLANE_ROUTES.artifacts,
+        description: "Cross-surface artifact inventory attached to workspaces, runs, approvals, instances, and decisions.",
       },
+    ],
+  },
+  {
+    id: "knowledge",
+    label: "Knowledge",
+    description: "Keep people, memory, learning, and reusable knowledge grounded in real source truth.",
+    icon: "knowledge",
+    links: [
       {
         label: "Contacts",
         to: CONTROL_PLANE_ROUTES.contacts,
@@ -300,26 +359,41 @@ const NAVIGATION_SECTIONS: NavigationSection[] = [
         to: CONTROL_PLANE_ROUTES.skills,
         description: "Versioned skill registry with activation state, provenance, scope, and usage telemetry.",
       },
+    ],
+  },
+  {
+    id: "extension",
+    label: "Extension",
+    description: "Manage plugin and agent extension surfaces without burying their operational state.",
+    icon: "extension",
+    links: [
+      {
+        label: "Plugins",
+        to: CONTROL_PLANE_ROUTES.plugins,
+        description: "Persistent plugin registry with instance-scoped activation, extension slots, config contracts, and security posture.",
+      },
+      {
+        label: "Agents",
+        to: CONTROL_PLANE_ROUTES.agents,
+        description: "Instance-scoped agent registry with the required Operator, participation posture, and assistant-profile linkage.",
+      },
+      {
+        label: "Channels",
+        to: CONTROL_PLANE_ROUTES.channels,
+        description: "Delivery channel inventory with fallback posture and recent notification linkage.",
+      },
       {
         label: "Assistant Profiles",
         to: CONTROL_PLANE_ROUTES.assistantProfiles,
         description: "Personal-assistant profiles with quiet hours, delivery rules, and direct-action governance.",
       },
-      {
-        label: "Workspaces",
-        to: CONTROL_PLANE_ROUTES.workspaces,
-        description: "Issue-linked workspaces with preview, review, handoff, and run/approval context.",
-      },
-      {
-        label: "Artifacts",
-        to: CONTROL_PLANE_ROUTES.artifacts,
-        description: "Cross-surface artifact inventory attached to workspaces, runs, approvals, instances, and decisions.",
-      },
     ],
   },
   {
-    label: "Settings",
+    id: "system",
+    label: "System",
     description: "Mutable environment defaults that should stay separate from daily operations.",
+    icon: "system",
     links: [
       {
         label: "System Settings",
@@ -360,24 +434,7 @@ export function getControlPlaneNavigation(session: AdminSessionUser | null): Nav
               : canOpenSecurity
                 ? "Request only"
                 : "Operator or admin"
-          : (
-            link.to === CONTROL_PLANE_ROUTES.conversations
-            || link.to === CONTROL_PLANE_ROUTES.inbox
-            || link.to === CONTROL_PLANE_ROUTES.tasks
-            || link.to === CONTROL_PLANE_ROUTES.reminders
-            || link.to === CONTROL_PLANE_ROUTES.automations
-            || link.to === CONTROL_PLANE_ROUTES.notifications
-            || link.to === CONTROL_PLANE_ROUTES.agents
-            || link.to === CONTROL_PLANE_ROUTES.channels
-            || link.to === CONTROL_PLANE_ROUTES.contacts
-            || link.to === CONTROL_PLANE_ROUTES.knowledgeSources
-            || link.to === CONTROL_PLANE_ROUTES.memory
-            || link.to === CONTROL_PLANE_ROUTES.learning
-            || link.to === CONTROL_PLANE_ROUTES.skills
-            || link.to === CONTROL_PLANE_ROUTES.assistantProfiles
-            || link.to === CONTROL_PLANE_ROUTES.workspaces
-            || link.to === CONTROL_PLANE_ROUTES.artifacts
-          )
+          : WORKFLOW_ROUTE_SET.has(link.to)
             ? !canOpenWorkInteraction
               ? "Operator or admin"
               : !canManageWorkInteraction
@@ -392,24 +449,7 @@ export function getControlPlaneNavigation(session: AdminSessionUser | null): Nav
         || (link.to === CONTROL_PLANE_ROUTES.approvals && !canReviewApprovals)
         || (link.to === CONTROL_PLANE_ROUTES.execution && !canReadExecution)
         || (link.to === CONTROL_PLANE_ROUTES.security && !canOpenSecurity)
-        || ((
-          link.to === CONTROL_PLANE_ROUTES.conversations
-          || link.to === CONTROL_PLANE_ROUTES.inbox
-          || link.to === CONTROL_PLANE_ROUTES.tasks
-          || link.to === CONTROL_PLANE_ROUTES.reminders
-          || link.to === CONTROL_PLANE_ROUTES.automations
-          || link.to === CONTROL_PLANE_ROUTES.notifications
-          || link.to === CONTROL_PLANE_ROUTES.agents
-          || link.to === CONTROL_PLANE_ROUTES.channels
-          || link.to === CONTROL_PLANE_ROUTES.contacts
-          || link.to === CONTROL_PLANE_ROUTES.knowledgeSources
-          || link.to === CONTROL_PLANE_ROUTES.memory
-          || link.to === CONTROL_PLANE_ROUTES.learning
-          || link.to === CONTROL_PLANE_ROUTES.skills
-          || link.to === CONTROL_PLANE_ROUTES.assistantProfiles
-          || link.to === CONTROL_PLANE_ROUTES.workspaces
-          || link.to === CONTROL_PLANE_ROUTES.artifacts
-        ) && !canOpenWorkInteraction)
+        || (WORKFLOW_ROUTE_SET.has(link.to) && !canOpenWorkInteraction)
       ),
     })),
   }));
@@ -431,9 +471,6 @@ export function findNavigationMatch(
 ) {
   for (const section of sections) {
     for (const link of section.links) {
-      if (link.disabled) {
-        continue;
-      }
       const scopedTo = withQueryParams(link.to, { instanceId });
       if (isHrefCurrent(pathname, hash, scopedTo)) {
         return { section, link, to: scopedTo };

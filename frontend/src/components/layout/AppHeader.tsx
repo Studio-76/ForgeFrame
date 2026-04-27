@@ -22,24 +22,32 @@ type SearchResult = {
   description: string;
   to: string;
   section: string;
+  badge?: string;
+  disabled: boolean;
+};
+
+type SearchGroup = {
+  section: string;
+  items: SearchResult[];
 };
 
 function flattenNavigation(sections: NavigationSection[], instanceId: string | null): SearchResult[] {
   return sections.flatMap((section) =>
     section.links
-      .filter((link) => !link.disabled)
       .map((link) => ({
         label: link.label,
         description: link.description,
         to: withQueryParams(link.to, { instanceId }),
         section: section.label,
+        badge: link.badge,
+        disabled: link.disabled === true,
       })),
   );
 }
 
 export function AppHeader({ navigationSections, instanceId, session, sessionError, onLogout }: AppHeaderProps) {
   const { mode, toggleMode } = useTheme();
-  const { toggleSidebar, toggleMobileSidebar } = useSidebar();
+  const { isExpanded, isMobileOpen, toggleSidebar, toggleMobileSidebar } = useSidebar();
   const navigate = useNavigate();
   const location = useLocation();
   const inputRef = useRef<HTMLInputElement | null>(null);
@@ -53,14 +61,24 @@ export function AppHeader({ navigationSections, instanceId, session, sessionErro
     const normalizedQuery = query.trim().toLowerCase();
     const allResults = flattenNavigation(navigationSections, instanceId);
     if (!normalizedQuery) {
-      return allResults.slice(0, 6);
+      return allResults.slice(0, 10);
     }
     return allResults
       .filter((item) =>
         `${item.label} ${item.description} ${item.section}`.toLowerCase().includes(normalizedQuery),
       )
-      .slice(0, 8);
+      .slice(0, 12);
   }, [instanceId, navigationSections, query]);
+
+  const searchGroups = useMemo<SearchGroup[]>(() => {
+    const groupedResults = new Map<string, SearchResult[]>();
+    for (const result of searchResults) {
+      const sectionResults = groupedResults.get(result.section) ?? [];
+      sectionResults.push(result);
+      groupedResults.set(result.section, sectionResults);
+    }
+    return Array.from(groupedResults.entries()).map(([section, items]) => ({ section, items }));
+  }, [searchResults]);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -99,10 +117,24 @@ export function AppHeader({ navigationSections, instanceId, session, sessionErro
   return (
     <header className="ff-topbar">
       <div className="ff-topbar-left">
-        <button className="ff-icon-button ff-mobile-toggle" type="button" onClick={toggleMobileSidebar} aria-label="Open navigation">
+        <button
+          className="ff-icon-button ff-mobile-toggle"
+          type="button"
+          onClick={toggleMobileSidebar}
+          aria-label={isMobileOpen ? "Close navigation" : "Open navigation"}
+          aria-controls="ff-sidebar"
+          aria-expanded={isMobileOpen}
+        >
           <MenuIcon />
         </button>
-        <button className="ff-icon-button ff-desktop-toggle" type="button" onClick={toggleSidebar} aria-label="Toggle sidebar">
+        <button
+          className="ff-icon-button ff-desktop-toggle"
+          type="button"
+          onClick={toggleSidebar}
+          aria-label={isExpanded ? "Collapse navigation" : "Expand navigation"}
+          aria-controls="ff-sidebar"
+          aria-expanded={isExpanded}
+        >
           <MenuIcon />
         </button>
         <div className="ff-topbar-title">
@@ -125,19 +157,43 @@ export function AppHeader({ navigationSections, instanceId, session, sessionErro
           }}
           placeholder="Search command surfaces"
           aria-label="Search command surfaces"
+          role="combobox"
+          aria-expanded={searchOpen}
+          aria-controls="ff-command-menu"
         />
         <kbd>{shortcutLabel}</kbd>
         {searchOpen ? (
-          <div className="ff-command-menu">
-            {searchResults.length > 0 ? (
-              searchResults.map((item) => (
-                <button key={`${item.section}-${item.to}`} type="button" onMouseDown={() => chooseSearchResult(item.to)}>
-                  <span>
-                    <strong>{item.label}</strong>
-                    <small>{item.section}</small>
-                  </span>
-                  <em>{item.description}</em>
-                </button>
+          <div id="ff-command-menu" className="ff-command-menu" role="listbox" aria-label="Command surfaces">
+            {searchGroups.length > 0 ? (
+              searchGroups.map((group) => (
+                <section key={group.section} className="ff-command-group" aria-label={group.section}>
+                  <div className="ff-command-group-label">{group.section}</div>
+                  {group.items.map((item) => (
+                    <button
+                      key={`${item.section}-${item.to}`}
+                      type="button"
+                      role="option"
+                      aria-disabled={item.disabled}
+                      className={item.disabled ? "is-disabled" : undefined}
+                      onMouseDown={(event) => {
+                        if (item.disabled) {
+                          event.preventDefault();
+                          return;
+                        }
+                        chooseSearchResult(item.to);
+                      }}
+                    >
+                      <span>
+                        <strong>{item.label}</strong>
+                        <span className="ff-command-meta">
+                          <small>{item.section}</small>
+                          {item.badge ? <span className="ff-mini-badge">{item.badge}</span> : null}
+                        </span>
+                      </span>
+                      <em>{item.description}</em>
+                    </button>
+                  ))}
+                </section>
               ))
             ) : (
               <div className="ff-menu-empty">No matching ForgeFrame surface</div>
@@ -156,6 +212,7 @@ export function AppHeader({ navigationSections, instanceId, session, sessionErro
               setUserOpen(false);
             }}
             aria-label="Open attention surfaces"
+            aria-expanded={notificationsOpen}
           >
             <BellIcon />
           </button>
@@ -185,6 +242,7 @@ export function AppHeader({ navigationSections, instanceId, session, sessionErro
               setUserOpen((current) => !current);
               setNotificationsOpen(false);
             }}
+            aria-expanded={userOpen}
           >
             <span className="ff-avatar" aria-hidden="true">
               {(session?.display_name ?? session?.username ?? "A").slice(0, 1).toUpperCase()}

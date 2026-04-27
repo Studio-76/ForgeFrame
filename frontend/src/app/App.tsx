@@ -5,7 +5,7 @@ import { clearAdminToken, fetchAdminSession, getAdminToken, logoutAdmin, type Ad
 import { AppShell } from "../components/layout/AppShell";
 import { LoadingState } from "../components/ui/StateBlocks";
 import { getSessionRouteState } from "./authRouting";
-import { CONTROL_PLANE_ROUTES, getControlPlaneNavigation } from "./navigation";
+import { CONTROL_PLANE_ROUTES, getControlPlaneNavigation, type NavigationSection } from "./navigation";
 import { getInstanceIdFromSearchParams } from "./tenantScope";
 
 export function App() {
@@ -73,9 +73,11 @@ export function App() {
     setSession((current) => (current ? { ...current, must_rotate_password: false } : current));
   };
 
-  const passwordRotationNavigation = [{
+  const passwordRotationNavigation: NavigationSection[] = [{
+    id: "system",
     label: "Session",
     description: "Temporary admin sessions can only rotate their password or log out.",
+    icon: "system",
     links: [{
       label: "Rotate password",
       to: CONTROL_PLANE_ROUTES.passwordRotation,

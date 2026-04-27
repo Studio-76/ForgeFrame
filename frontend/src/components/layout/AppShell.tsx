@@ -16,8 +16,8 @@ type AppShellProps = {
 };
 
 function AppShellFrame({ navigationSections, instanceId, session, sessionError, onLogout, children }: AppShellProps) {
-  const { isExpanded, isHovered } = useSidebar();
-  const sidebarOpen = isExpanded || isHovered;
+  const { isExpanded } = useSidebar();
+  const sidebarOpen = isExpanded;
 
   return (
     <div className={`ff-app${sidebarOpen ? " is-sidebar-open" : " is-sidebar-collapsed"}`}>

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { getControlPlaneNavigation, isHrefCurrent } from "../src/app/navigation";
+import { CONTROL_PLANE_ROUTES, getControlPlaneNavigation, isHrefCurrent } from "../src/app/navigation";
 import type { AdminSessionUser } from "../src/api/admin";
 
 const adminSession: AdminSessionUser = {
@@ -36,44 +36,49 @@ const viewerSession: AdminSessionUser = {
   role: "viewer",
 };
 
+function findLink(label: string, session: AdminSessionUser | null) {
+  return getControlPlaneNavigation(session)
+    .flatMap((section) => section.links)
+    .find((link) => link.label === label);
+}
+
 describe("control-plane navigation", () => {
   it("keeps governance security disabled until an operator or admin session exists", () => {
     const navigation = getControlPlaneNavigation(null);
-    const setup = navigation.find((section) => section.label === "Setup");
+    const runtime = navigation.find((section) => section.label === "Runtime");
     const governance = navigation.find((section) => section.label === "Governance");
-    const operations = navigation.find((section) => section.label === "Operations");
-    const workInteraction = navigation.find((section) => section.label === "Work Interaction");
-    const modelsLink = setup?.links.find((link) => link.label === "Models");
-    const targetsLink = setup?.links.find((link) => link.label === "Provider Targets");
-    const routingLink = setup?.links.find((link) => link.label === "Routing");
-    const pluginsLink = setup?.links.find((link) => link.label === "Plugins");
-    const harnessLink = setup?.links.find((link) => link.label === "Harness");
-    const ingressTlsLink = setup?.links.find((link) => link.label === "Ingress / TLS");
-    const releaseValidationLink = setup?.links.find((link) => link.label === "Release / Validation");
-    const approvalsLink = governance?.links.find((link) => link.label === "Approvals");
-    const auditExportLink = governance?.links.find((link) => link.label === "Audit Export");
-    const executionLink = operations?.links.find((link) => link.label === "Execution Review");
-    const queuesLink = operations?.links.find((link) => link.label === "Queues");
-    const dispatchLink = operations?.links.find((link) => link.label === "Dispatch");
-    const recoveryLink = operations?.links.find((link) => link.label === "Recovery / Backup / Restore");
-    const healthLink = operations?.links.find((link) => link.label === "Health");
-    const usageLink = operations?.links.find((link) => link.label === "Usage");
-    const costsLink = operations?.links.find((link) => link.label === "Costs");
-    const errorsLink = operations?.links.find((link) => link.label === "Errors");
-    const securityLink = governance?.links.find((link) => link.label === "Security & Policies");
-    const conversationsLink = workInteraction?.links.find((link) => link.label === "Conversations");
-    const inboxLink = workInteraction?.links.find((link) => link.label === "Inbox");
-    const tasksLink = workInteraction?.links.find((link) => link.label === "Tasks");
-    const remindersLink = workInteraction?.links.find((link) => link.label === "Reminders");
-    const automationsLink = workInteraction?.links.find((link) => link.label === "Automations");
-    const notificationsLink = workInteraction?.links.find((link) => link.label === "Notifications");
-    const channelsLink = workInteraction?.links.find((link) => link.label === "Channels");
-    const contactsLink = workInteraction?.links.find((link) => link.label === "Contacts");
-    const knowledgeSourcesLink = workInteraction?.links.find((link) => link.label === "Knowledge Sources");
-    const memoryLink = workInteraction?.links.find((link) => link.label === "Memory");
-    const assistantProfilesLink = workInteraction?.links.find((link) => link.label === "Assistant Profiles");
-    const workspacesLink = workInteraction?.links.find((link) => link.label === "Workspaces");
-    const artifactsLink = workInteraction?.links.find((link) => link.label === "Artifacts");
+    const modelsLink = findLink("Models", null);
+    const targetsLink = findLink("Provider Targets", null);
+    const routingLink = findLink("Routing", null);
+    const pluginsLink = findLink("Plugins", null);
+    const harnessLink = findLink("Harness", null);
+    const ingressTlsLink = findLink("Ingress / TLS", null);
+    const releaseValidationLink = findLink("Release / Validation", null);
+    const approvalsLink = findLink("Approvals", null);
+    const auditExportLink = findLink("Audit Export", null);
+    const executionLink = findLink("Execution Review", null);
+    const queuesLink = findLink("Queues", null);
+    const dispatchLink = findLink("Dispatch", null);
+    const recoveryLink = findLink("Recovery / Backup / Restore", null);
+    const healthLink = findLink("Health", null);
+    const logsLink = findLink("Logs", null);
+    const usageLink = findLink("Usage", null);
+    const costsLink = findLink("Costs", null);
+    const errorsLink = findLink("Errors", null);
+    const securityLink = findLink("Security & Policies", null);
+    const conversationsLink = findLink("Conversations", null);
+    const inboxLink = findLink("Inbox", null);
+    const tasksLink = findLink("Tasks", null);
+    const remindersLink = findLink("Reminders", null);
+    const automationsLink = findLink("Automations", null);
+    const notificationsLink = findLink("Notifications", null);
+    const channelsLink = findLink("Channels", null);
+    const contactsLink = findLink("Contacts", null);
+    const knowledgeSourcesLink = findLink("Knowledge Sources", null);
+    const memoryLink = findLink("Memory", null);
+    const assistantProfilesLink = findLink("Assistant Profiles", null);
+    const workspacesLink = findLink("Workspaces", null);
+    const artifactsLink = findLink("Artifacts", null);
 
     expect(approvalsLink?.to).toBe("/approvals");
     expect(modelsLink?.to).toBe("/models");
@@ -95,6 +100,7 @@ describe("control-plane navigation", () => {
     expect(recoveryLink?.to).toBe("/recovery");
     expect(recoveryLink?.badge).toBeUndefined();
     expect(healthLink?.to).toBe("/health-status");
+    expect(logsLink?.to).toBe("/logs");
     expect(usageLink?.to).toBe("/usage");
     expect(costsLink?.to).toBe("/costs");
     expect(errorsLink?.to).toBe("/errors");
@@ -141,14 +147,12 @@ describe("control-plane navigation", () => {
     expect(securityLink?.disabled).toBe(true);
     expect(governance?.links.some((link) => link.label === "Audit History")).toBe(true);
     expect(auditExportLink?.to).toBe("/logs#audit-export");
-    expect(operations?.links.some((link) => link.label === "Execution Review")).toBe(true);
+    expect(runtime?.links.some((link) => link.label === "Execution Review")).toBe(true);
   });
 
   it("keeps approvals available for admin sessions", () => {
-    const navigation = getControlPlaneNavigation(adminSession);
-    const governance = navigation.find((section) => section.label === "Governance");
-    const approvalsLink = governance?.links.find((link) => link.label === "Approvals");
-    const securityLink = governance?.links.find((link) => link.label === "Security & Policies");
+    const approvalsLink = findLink("Approvals", adminSession);
+    const securityLink = findLink("Security & Policies", adminSession);
 
     expect(approvalsLink?.disabled).toBe(false);
     expect(approvalsLink?.badge).toBeUndefined();
@@ -157,21 +161,17 @@ describe("control-plane navigation", () => {
   });
 
   it("keeps approvals visible in review-only mode for operators", () => {
-    const navigation = getControlPlaneNavigation(operatorSession);
-    const governance = navigation.find((section) => section.label === "Governance");
-    const operations = navigation.find((section) => section.label === "Operations");
-    const workInteraction = navigation.find((section) => section.label === "Work Interaction");
-    const approvalsLink = governance?.links.find((link) => link.label === "Approvals");
-    const executionLink = operations?.links.find((link) => link.label === "Execution Review");
-    const securityLink = governance?.links.find((link) => link.label === "Security & Policies");
-    const conversationsLink = workInteraction?.links.find((link) => link.label === "Conversations");
-    const tasksLink = workInteraction?.links.find((link) => link.label === "Tasks");
-    const notificationsLink = workInteraction?.links.find((link) => link.label === "Notifications");
-    const contactsLink = workInteraction?.links.find((link) => link.label === "Contacts");
-    const knowledgeSourcesLink = workInteraction?.links.find((link) => link.label === "Knowledge Sources");
-    const memoryLink = workInteraction?.links.find((link) => link.label === "Memory");
-    const assistantProfilesLink = workInteraction?.links.find((link) => link.label === "Assistant Profiles");
-    const workspacesLink = workInteraction?.links.find((link) => link.label === "Workspaces");
+    const approvalsLink = findLink("Approvals", operatorSession);
+    const executionLink = findLink("Execution Review", operatorSession);
+    const securityLink = findLink("Security & Policies", operatorSession);
+    const conversationsLink = findLink("Conversations", operatorSession);
+    const tasksLink = findLink("Tasks", operatorSession);
+    const notificationsLink = findLink("Notifications", operatorSession);
+    const contactsLink = findLink("Contacts", operatorSession);
+    const knowledgeSourcesLink = findLink("Knowledge Sources", operatorSession);
+    const memoryLink = findLink("Memory", operatorSession);
+    const assistantProfilesLink = findLink("Assistant Profiles", operatorSession);
+    const workspacesLink = findLink("Workspaces", operatorSession);
 
     expect(approvalsLink?.disabled).toBe(false);
     expect(approvalsLink?.badge).toBe("Review only");
@@ -198,30 +198,24 @@ describe("control-plane navigation", () => {
   });
 
   it("labels execution review as read-only when the session can inspect but not replay", () => {
-    const navigation = getControlPlaneNavigation(readOnlyOperatorSession);
-    const operations = navigation.find((section) => section.label === "Operations");
-    const executionLink = operations?.links.find((link) => link.label === "Execution Review");
+    const executionLink = findLink("Execution Review", readOnlyOperatorSession);
 
     expect(executionLink?.disabled).toBe(false);
     expect(executionLink?.badge).toBe("Read only");
   });
 
   it("keeps execution review and approvals disabled for viewers", () => {
-    const navigation = getControlPlaneNavigation(viewerSession);
-    const governance = navigation.find((section) => section.label === "Governance");
-    const operations = navigation.find((section) => section.label === "Operations");
-    const workInteraction = navigation.find((section) => section.label === "Work Interaction");
-    const approvalsLink = governance?.links.find((link) => link.label === "Approvals");
-    const executionLink = operations?.links.find((link) => link.label === "Execution Review");
-    const securityLink = governance?.links.find((link) => link.label === "Security & Policies");
-    const conversationsLink = workInteraction?.links.find((link) => link.label === "Conversations");
-    const remindersLink = workInteraction?.links.find((link) => link.label === "Reminders");
-    const automationsLink = workInteraction?.links.find((link) => link.label === "Automations");
-    const contactsLink = workInteraction?.links.find((link) => link.label === "Contacts");
-    const knowledgeSourcesLink = workInteraction?.links.find((link) => link.label === "Knowledge Sources");
-    const memoryLink = workInteraction?.links.find((link) => link.label === "Memory");
-    const assistantProfilesLink = workInteraction?.links.find((link) => link.label === "Assistant Profiles");
-    const workspacesLink = workInteraction?.links.find((link) => link.label === "Workspaces");
+    const approvalsLink = findLink("Approvals", viewerSession);
+    const executionLink = findLink("Execution Review", viewerSession);
+    const securityLink = findLink("Security & Policies", viewerSession);
+    const conversationsLink = findLink("Conversations", viewerSession);
+    const remindersLink = findLink("Reminders", viewerSession);
+    const automationsLink = findLink("Automations", viewerSession);
+    const contactsLink = findLink("Contacts", viewerSession);
+    const knowledgeSourcesLink = findLink("Knowledge Sources", viewerSession);
+    const memoryLink = findLink("Memory", viewerSession);
+    const assistantProfilesLink = findLink("Assistant Profiles", viewerSession);
+    const workspacesLink = findLink("Workspaces", viewerSession);
 
     expect(approvalsLink?.badge).toBe("Operator or admin");
     expect(approvalsLink?.disabled).toBe(true);
@@ -257,5 +251,20 @@ describe("control-plane navigation", () => {
     expect(isHrefCurrent("/logs", "#audit-history", "/logs?tenantId=acct_alpha#audit-history")).toBe(true);
     expect(isHrefCurrent("/logs", "#audit-export", "/logs#audit-export")).toBe(true);
     expect(isHrefCurrent("/logs", "#audit-history", "/logs#audit-export")).toBe(false);
+  });
+
+  it("keeps every control-plane route except auth-only entries reachable from grouped navigation", () => {
+    const navigation = getControlPlaneNavigation(adminSession);
+    const navigationRoutes = new Set(
+      navigation.flatMap((section) => section.links.map((link) => link.to)),
+    );
+
+    for (const [routeKey, routeValue] of Object.entries(CONTROL_PLANE_ROUTES)) {
+      if (routeKey === "login" || routeKey === "passwordRotation") {
+        continue;
+      }
+
+      expect(navigationRoutes.has(routeValue)).toBe(true);
+    }
   });
 });

@@ -1,46 +1,43 @@
 import { Link, useLocation } from "react-router-dom";
 
 import type { NavigationSection } from "../../app/navigation";
-import { isHrefCurrent } from "../../app/navigation";
+import { findNavigationMatch, isHrefCurrent } from "../../app/navigation";
 import { withQueryParams } from "../../app/tenantScope";
 import { useSidebar } from "./SidebarContext";
-import { CloseIcon, NavIcon } from "./icons";
+import { ChevronDownIcon, CloseIcon, NavIcon } from "./icons";
 
 type AppSidebarProps = {
   navigationSections: NavigationSection[];
   instanceId: string | null;
 };
 
-function getSectionIcon(label: string) {
-  switch (label) {
-    case "Home":
-      return "home";
-    case "Setup":
-      return "setup";
-    case "Governance":
-      return "governance";
-    case "Operations":
-      return "operations";
-    case "Work Interaction":
-      return "work";
-    case "Settings":
-      return "settings";
-    default:
-      return "default";
-  }
+function getSectionCountLabel(section: NavigationSection) {
+  const totalLinks = section.links.length;
+  const enabledLinks = section.links.filter((link) => !link.disabled).length;
+
+  return enabledLinks === totalLinks ? String(totalLinks) : `${enabledLinks}/${totalLinks}`;
 }
 
 export function AppSidebar({ navigationSections, instanceId }: AppSidebarProps) {
   const location = useLocation();
-  const { isExpanded, isHovered, isMobileOpen, setIsHovered, closeMobileSidebar } = useSidebar();
-  const isOpen = isExpanded || isHovered || isMobileOpen;
+  const {
+    isExpanded,
+    isMobileOpen,
+    closeMobileSidebar,
+    isSectionOpen,
+    toggleSection,
+    openSection,
+  } = useSidebar();
+  const isDesktopOpen = isExpanded;
+  const isSidebarOpen = isDesktopOpen || isMobileOpen;
+  const activeMatch = findNavigationMatch(navigationSections, location.pathname, location.hash, instanceId);
+  const activeSectionId = activeMatch?.section.id ?? null;
 
   return (
     <>
       <aside
-        className={`ff-sidebar${isOpen ? " is-open" : " is-collapsed"}${isMobileOpen ? " is-mobile-open" : ""}`}
-        onMouseEnter={() => setIsHovered(true)}
-        onMouseLeave={() => setIsHovered(false)}
+        id="ff-sidebar"
+        className={`ff-sidebar${isSidebarOpen ? " is-open" : " is-collapsed"}${isMobileOpen ? " is-mobile-open" : ""}`}
       >
         <div className="ff-sidebar-brand">
           <Link to="/dashboard" className="ff-brand-mark" onClick={closeMobileSidebar}>
@@ -57,44 +54,81 @@ export function AppSidebar({ navigationSections, instanceId }: AppSidebarProps) 
           </button>
         </div>
 
-        <nav className="ff-sidebar-nav" aria-label="ForgeFrame navigation">
-          {navigationSections.map((section) => (
-            <section key={section.label} className="ff-sidebar-section">
-              <div className="ff-sidebar-section-label">
-                <NavIcon name={getSectionIcon(section.label)} />
-                <span>{section.label}</span>
-              </div>
-              <div className="ff-sidebar-links">
-                {section.links.map((link) => {
-                  const scopedTo = withQueryParams(link.to, { instanceId });
-                  const isCurrent = isHrefCurrent(location.pathname, location.hash, scopedTo);
-                  const className = `ff-sidebar-link${isCurrent ? " is-current" : ""}${link.disabled ? " is-disabled" : ""}`;
+        <nav className="ff-sidebar-nav" aria-label="Control-plane navigation">
+          {navigationSections.map((section) => {
+            const linksId = `ff-sidebar-section-${section.id}`;
+            const isCurrentSection = activeSectionId === section.id;
+            const isExpandedSection = isCurrentSection || isSectionOpen(section.id);
+            const isSectionVisible = isSidebarOpen && isExpandedSection;
+            const countLabel = getSectionCountLabel(section);
+            const collapsedTooltip = `${section.label} (${countLabel})`;
 
-                  if (link.disabled) {
+            return (
+              <section key={section.id} className="ff-sidebar-section">
+                <button
+                  className={`ff-sidebar-section-trigger${isSectionVisible ? " is-open" : ""}${isCurrentSection ? " is-current" : ""}`}
+                  type="button"
+                  aria-expanded={isSectionVisible}
+                  aria-controls={linksId}
+                  aria-label={isSidebarOpen ? `${section.label} section` : `Open ${section.label} section`}
+                  data-tooltip={isSidebarOpen ? undefined : collapsedTooltip}
+                  title={isSidebarOpen ? undefined : collapsedTooltip}
+                  onClick={() => {
+                    if (isCurrentSection) {
+                      openSection(section.id);
+                      return;
+                    }
+                    toggleSection(section.id);
+                  }}
+                >
+                  <span className="ff-sidebar-section-leading">
+                    <NavIcon name={section.icon} />
+                    <span>{section.label}</span>
+                  </span>
+                  <span className="ff-sidebar-section-meta">
+                    <span className="ff-mini-badge">{countLabel}</span>
+                    <ChevronDownIcon />
+                  </span>
+                </button>
+
+                <div id={linksId} className="ff-sidebar-links" hidden={!isSectionVisible}>
+                  {section.links.map((link) => {
+                    const scopedTo = withQueryParams(link.to, { instanceId });
+                    const isCurrent = isHrefCurrent(location.pathname, location.hash, scopedTo);
+                    const className = `ff-sidebar-link${isCurrent ? " is-current" : ""}${link.disabled ? " is-disabled" : ""}`;
+
+                    if (link.disabled) {
+                      return (
+                        <div
+                          key={`${section.id}-${link.to}`}
+                          className={className}
+                          role="link"
+                          aria-disabled="true"
+                          aria-current={isCurrent ? "page" : undefined}
+                        >
+                          <span className="ff-sidebar-link-label">{link.label}</span>
+                          {link.badge ? <span className="ff-mini-badge">{link.badge}</span> : null}
+                        </div>
+                      );
+                    }
+
                     return (
-                      <div key={`${section.label}-${link.to}`} className={className} aria-disabled="true">
+                      <Link
+                        key={`${section.id}-${link.to}`}
+                        className={className}
+                        to={scopedTo}
+                        onClick={closeMobileSidebar}
+                        aria-current={isCurrent ? "page" : undefined}
+                      >
                         <span className="ff-sidebar-link-label">{link.label}</span>
                         {link.badge ? <span className="ff-mini-badge">{link.badge}</span> : null}
-                      </div>
+                      </Link>
                     );
-                  }
-
-                  return (
-                    <Link
-                      key={`${section.label}-${link.to}`}
-                      className={className}
-                      to={scopedTo}
-                      onClick={closeMobileSidebar}
-                      aria-current={isCurrent ? "page" : undefined}
-                    >
-                      <span className="ff-sidebar-link-label">{link.label}</span>
-                      {link.badge ? <span className="ff-mini-badge">{link.badge}</span> : null}
-                    </Link>
-                  );
-                })}
-              </div>
-            </section>
-          ))}
+                  })}
+                </div>
+              </section>
+            );
+          })}
         </nav>
       </aside>
       {isMobileOpen ? <button className="ff-backdrop" type="button" aria-label="Close navigation overlay" onClick={closeMobileSidebar} /> : null}
