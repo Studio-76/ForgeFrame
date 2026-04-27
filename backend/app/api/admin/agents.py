@@ -23,12 +23,18 @@ def _error(status_code: int, error_type: str, message: str) -> JSONResponse:
 @router.get("")
 def list_agents(
     status_filter: str | None = Query(default=None, alias="status"),
+    ensure_default_operator: bool = Query(default=False, alias="ensureDefaultOperator"),
     limit: int = 100,
     _admin: AuthenticatedAdmin = Depends(require_admin_role("operator")),
     instance: InstanceRecord = Depends(resolve_admin_instance_scope),
     service: AgentAdminService = Depends(get_agent_admin_service),
 ) -> dict[str, object]:
-    agents = service.list_agents(instance=instance, status=status_filter, limit=limit)
+    agents = service.list_agents(
+        instance=instance,
+        status=status_filter,
+        limit=limit,
+        ensure_default_operator=ensure_default_operator,
+    )
     return {"status": "ok", "instance": instance.model_dump(mode="json"), "agents": [item.model_dump(mode="json") for item in agents]}
 
 

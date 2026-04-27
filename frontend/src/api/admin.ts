@@ -55,6 +55,88 @@ export type HealthConfig = {
   selected_models: string[];
 };
 
+export type InstanceSetupStatus = "ready" | "not-ready" | "bridge-only" | "onboarding-only" | "unsupported";
+
+export type InstanceOperatorAgentSummary = {
+  status: InstanceSetupStatus;
+  reason: string;
+  agent_id: string | null;
+  display_name: string | null;
+  role_kind: AgentRoleKind | null;
+  agent_status: AgentStatus | null;
+  auto_created: boolean;
+  allowed_targets: string[];
+  updated_at: string | null;
+};
+
+export type InstanceProviderTargetSummary = {
+  status: InstanceSetupStatus;
+  reason: string;
+  configured_provider_count: number;
+  total_targets: number;
+  enabled_targets: number;
+  ready_targets: number;
+  primary_targets: Array<{
+    target_key: string | null;
+    label: string | null;
+    provider: string | null;
+    readiness_status: string | null;
+    priority: number | null;
+  }>;
+  last_activity_at: string | null;
+};
+
+export type InstanceRoutingSummary = {
+  status: InstanceSetupStatus;
+  reason: string;
+  policy_count: number;
+  open_circuits: number;
+  hard_budget_blocked: boolean;
+  blocked_cost_classes: string[];
+  simple_preferred_target_keys: string[];
+  non_simple_preferred_target_keys: string[];
+  last_activity_at: string | null;
+};
+
+export type InstanceRuntimeAccessSummary = {
+  status: InstanceSetupStatus;
+  reason: string;
+  total_accounts: number;
+  active_accounts: number;
+  total_keys: number;
+  active_keys: number;
+  last_activity_at: string | null;
+};
+
+export type InstanceWorkInteractionSummary = {
+  status: InstanceSetupStatus;
+  reason: string;
+  mode: string;
+  inbox_enabled: boolean;
+  tasks_enabled: boolean;
+  notifications_enabled: boolean;
+  conversation_count: number;
+  open_conversation_count: number;
+  latest_conversation_id: string | null;
+  latest_conversation_subject: string | null;
+  latest_activity_at: string | null;
+};
+
+export type InstanceReadinessCheck = {
+  id: string;
+  label: string;
+  status: InstanceSetupStatus;
+  detail: string;
+};
+
+export type InstanceReadinessSummary = {
+  status: InstanceSetupStatus;
+  reason: string;
+  ready_check_count: number;
+  check_count: number;
+  checks: InstanceReadinessCheck[];
+};
+
 export type InstanceRecord = {
   instance_id: string;
   slug: string;
@@ -69,6 +151,13 @@ export type InstanceRecord = {
   metadata: Record<string, unknown>;
   created_at: string;
   updated_at: string;
+  operator_agent?: InstanceOperatorAgentSummary | null;
+  provider_targets?: InstanceProviderTargetSummary | null;
+  routing?: InstanceRoutingSummary | null;
+  runtime_access?: InstanceRuntimeAccessSummary | null;
+  work_interaction?: InstanceWorkInteractionSummary | null;
+  readiness?: InstanceReadinessSummary | null;
+  last_activity_at?: string | null;
 };
 
 export type AgentRoleKind = "operator" | "specialist" | "reviewer" | "worker" | "observer";
@@ -2743,7 +2832,7 @@ export function createInstance(payload: {
   exposure_mode?: InstanceRecord["exposure_mode"];
   metadata?: Record<string, unknown>;
 }) {
-  return fetchJson<{ status: string; instance: InstanceRecord }>("/admin/instances/", {
+  return fetchJson<{ status: string; instance: InstanceRecord; operator_agent: AgentDetail; operator_agent_created: boolean }>("/admin/instances/", {
     method: "POST",
     body: JSON.stringify(payload),
   });
@@ -2770,12 +2859,14 @@ export function fetchAgents(
   filters: {
     status?: AgentStatus | "all";
     limit?: number;
+    ensureDefaultOperator?: boolean;
   } = {},
 ) {
   return fetchJson<{ status: string; instance?: InstanceRecord; agents: AgentSummary[] }>(
     appendQueryParams(appendTenantScope("/admin/agents", undefined, instanceId), {
       status: filters.status && filters.status !== "all" ? filters.status : null,
       limit: filters.limit ?? 100,
+      ensureDefaultOperator: filters.ensureDefaultOperator === false ? "false" : null,
     }),
   );
 }

@@ -132,7 +132,7 @@ export function AgentsPage() {
     }
     let cancelled = false;
     setListState("loading");
-    void fetchAgents(instanceId, { status: statusFilter, limit: 100 })
+    void fetchAgents(instanceId, { status: statusFilter, limit: 100, ensureDefaultOperator: false })
       .then((payload) => {
         if (cancelled) return;
         setAgents(payload.agents);

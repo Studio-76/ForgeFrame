@@ -2,6 +2,7 @@
 
 import { act, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
+import { useLocation } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const { fetchInstancesMock, createInstanceMock, updateInstanceMock } = vi.hoisted(() => ({
@@ -50,8 +51,89 @@ function createInstanceRecord(overrides: Partial<InstanceRecord> = {}): Instance
     metadata: {},
     created_at: "2026-04-22T08:00:00Z",
     updated_at: "2026-04-22T08:00:00Z",
+    operator_agent: {
+      status: "ready",
+      reason: "Default Operator agent is active.",
+      agent_id: "agent_operator_alpha",
+      display_name: "Operator",
+      role_kind: "operator",
+      agent_status: "active",
+      auto_created: true,
+      allowed_targets: [],
+      updated_at: "2026-04-22T08:00:00Z",
+    },
+    provider_targets: {
+      status: "ready",
+      reason: "1 ready provider target is available.",
+      configured_provider_count: 1,
+      total_targets: 1,
+      enabled_targets: 1,
+      ready_targets: 1,
+      primary_targets: [
+        {
+          target_key: "target_alpha",
+          label: "Alpha Target",
+          provider: "OpenAI",
+          readiness_status: "ready",
+          priority: 10,
+        },
+      ],
+      last_activity_at: "2026-04-22T08:15:00Z",
+    },
+    routing: {
+      status: "ready",
+      reason: "Routing policies are persisted and have ready targets.",
+      policy_count: 2,
+      open_circuits: 0,
+      hard_budget_blocked: false,
+      blocked_cost_classes: [],
+      simple_preferred_target_keys: ["target_alpha"],
+      non_simple_preferred_target_keys: ["target_alpha"],
+      last_activity_at: "2026-04-22T08:30:00Z",
+    },
+    runtime_access: {
+      status: "onboarding-only",
+      reason: "No runtime key has been issued for this instance yet.",
+      total_accounts: 0,
+      active_accounts: 0,
+      total_keys: 0,
+      active_keys: 0,
+      last_activity_at: null,
+    },
+    work_interaction: {
+      status: "ready",
+      reason: "Mode 'ops_assistant' is configured for this instance.",
+      mode: "ops_assistant",
+      inbox_enabled: true,
+      tasks_enabled: true,
+      notifications_enabled: true,
+      conversation_count: 1,
+      open_conversation_count: 1,
+      latest_conversation_id: "conversation_alpha",
+      latest_conversation_subject: "Alpha conversation",
+      latest_activity_at: "2026-04-22T08:45:00Z",
+    },
+    readiness: {
+      status: "onboarding-only",
+      reason: "No runtime key has been issued for this instance yet.",
+      ready_check_count: 4,
+      check_count: 5,
+      checks: [
+        { id: "operator_agent", label: "Operator agent", status: "ready", detail: "Default Operator agent is active." },
+        { id: "provider_targets", label: "Provider targets", status: "ready", detail: "1 ready provider target is available." },
+        { id: "routing", label: "Routing policy", status: "ready", detail: "Routing policies are persisted and have ready targets." },
+        { id: "runtime_access", label: "Runtime access", status: "onboarding-only", detail: "No runtime key has been issued for this instance yet." },
+        { id: "work_interaction", label: "Work interaction", status: "ready", detail: "Mode 'ops_assistant' is configured for this instance." },
+      ],
+    },
+    last_activity_at: "2026-04-22T08:45:00Z",
     ...overrides,
   };
+}
+
+function LocationSearchEcho() {
+  const location = useLocation();
+  return <output data-testid="location-search">{location.search}</output>;
 }
 
 let container: HTMLDivElement;
@@ -108,6 +190,23 @@ beforeEach(() => {
       company_id: "company_beta",
       is_default: false,
     }),
+    operator_agent: {
+      agent_id: "agent_operator_beta",
+      instance_id: "instance_beta",
+      company_id: "company_beta",
+      display_name: "Operator",
+      default_name: "Operator",
+      role_kind: "operator",
+      status: "active",
+      participation_mode: "direct",
+      allowed_targets: [],
+      assistant_profile_id: null,
+      is_default_operator: true,
+      metadata: { autocreated: true },
+      created_at: "2026-04-22T08:00:00Z",
+      updated_at: "2026-04-22T08:00:00Z",
+    },
+    operator_agent_created: true,
   });
   updateInstanceMock.mockResolvedValue({
     status: "ok",
@@ -143,8 +242,10 @@ describe("Instances page", () => {
     expect(container.textContent).toContain("Instance Inventory");
     expect(container.textContent).toContain("Alpha Instance");
     expect(container.textContent).toContain("Create Instance");
-    expect(container.textContent).toContain("Edit Selected Instance");
+    expect(container.textContent).toContain("Selected Instance");
+    expect(container.textContent).toContain("Edit Instance");
     expect(container.textContent).toContain("Tenant / Organization scope");
+    expect(container.textContent).toContain("Quick Actions");
   });
 
   it("creates a new instance and refreshes the inventory around the new selection", async () => {
@@ -170,10 +271,11 @@ describe("Instances page", () => {
 
     await renderInstancesPage();
 
-    const inputs = Array.from(container.querySelectorAll("input"));
-    const textareas = Array.from(container.querySelectorAll("textarea"));
-    const selects = Array.from(container.querySelectorAll("select"));
     const forms = Array.from(container.querySelectorAll("form"));
+    const createForm = forms[1] as HTMLFormElement;
+    const inputs = Array.from(createForm.querySelectorAll("input"));
+    const textareas = Array.from(createForm.querySelectorAll("textarea"));
+    const selects = Array.from(createForm.querySelectorAll("select"));
 
     await act(async () => {
       setControlValue(inputs[0] as HTMLInputElement, "instance_beta");
@@ -183,7 +285,7 @@ describe("Instances page", () => {
       setControlValue(inputs[3] as HTMLInputElement, "company_beta");
       setControlValue(selects[0] as HTMLSelectElement, "container_optional");
       setControlValue(selects[1] as HTMLSelectElement, "edge_admission");
-      forms[0]?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+      createForm.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
     });
     await flushEffects();
 
@@ -198,23 +300,26 @@ describe("Instances page", () => {
     });
     expect(fetchInstancesMock).toHaveBeenCalledTimes(2);
     expect(container.textContent).toContain("Instance Beta Instance created.");
+    expect(container.textContent).toContain("Operator agent Operator was auto-created.");
+    expect(container.textContent).toContain("Latest Create Result");
   });
 
   it("updates the selected instance through the edit form", async () => {
     await renderInstancesPage();
 
-    const inputs = Array.from(container.querySelectorAll("input"));
-    const textareas = Array.from(container.querySelectorAll("textarea"));
-    const selects = Array.from(container.querySelectorAll("select"));
     const forms = Array.from(container.querySelectorAll("form"));
+    const editForm = forms[0] as HTMLFormElement;
+    const inputs = Array.from(editForm.querySelectorAll("input"));
+    const textareas = Array.from(editForm.querySelectorAll("textarea"));
+    const selects = Array.from(editForm.querySelectorAll("select"));
 
     await act(async () => {
-      setControlValue(inputs[4] as HTMLInputElement, "Alpha Instance Updated");
-      setControlValue(textareas[1] as HTMLTextAreaElement, "Updated alpha instance");
-      setControlValue(selects[2] as HTMLSelectElement, "disabled");
-      setControlValue(selects[3] as HTMLSelectElement, "container_optional");
-      setControlValue(selects[4] as HTMLSelectElement, "edge_admission");
-      forms[1]?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+      setControlValue(inputs[0] as HTMLInputElement, "Alpha Instance Updated");
+      setControlValue(textareas[0] as HTMLTextAreaElement, "Updated alpha instance");
+      setControlValue(selects[0] as HTMLSelectElement, "disabled");
+      setControlValue(selects[1] as HTMLSelectElement, "container_optional");
+      setControlValue(selects[2] as HTMLSelectElement, "edge_admission");
+      editForm.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
     });
     await flushEffects();
 
@@ -228,5 +333,50 @@ describe("Instances page", () => {
       exposure_mode: "edge_admission",
     });
     expect(container.textContent).toContain("Instance Alpha Instance Updated updated.");
+  });
+
+  it("keeps the scoped instanceId in the URL when filters exclude the selected instance", async () => {
+    fetchInstancesMock.mockResolvedValue({
+      status: "ok",
+      instances: [
+        createInstanceRecord(),
+        createInstanceRecord({
+          instance_id: "instance_beta",
+          slug: "instance-beta",
+          display_name: "Beta Instance",
+          tenant_id: "tenant_beta",
+          company_id: "company_beta",
+          is_default: false,
+        }),
+      ],
+    });
+
+    await renderIntoDom(withAppContext({
+      path: "/instances?instanceId=instance_alpha",
+      element: (
+        <>
+          <InstancesPage />
+          <LocationSearchEcho />
+        </>
+      ),
+      session: adminSession,
+    }));
+    await flushEffects();
+
+    const searchInput = container.querySelector('input[placeholder="ID, name, operator, reason"]') as HTMLInputElement | null;
+    expect(searchInput).not.toBeNull();
+
+    await act(async () => {
+      setControlValue(searchInput as HTMLInputElement, "Beta");
+    });
+    await flushEffects();
+
+    expect(container.textContent).toContain("The current scoped instance");
+    expect(container.textContent).toContain("outside the filtered table");
+    expect(container.textContent).toContain("Alpha Instance");
+    expect(container.querySelector('[data-testid="location-search"]')?.textContent).toBe("?instanceId=instance_alpha");
+
+    const openAgentsLink = Array.from(container.querySelectorAll("a")).find((link) => link.textContent === "Open Agents");
+    expect(openAgentsLink?.getAttribute("href")).toBe("/agents?instanceId=instance_alpha");
   });
 });

@@ -100,17 +100,33 @@ class AgentAdminService:
                 existing.role_kind = "specialist"
             existing.updated_at = self._now()
 
-    def ensure_default_operator(self, *, instance: InstanceRecord) -> AgentDetail:
-        with self._session_factory() as session, session.begin():
-            existing = session.execute(
+    def inspect_default_operator(self, *, instance: InstanceRecord) -> AgentDetail | None:
+        with self._session_factory() as session:
+            row = session.execute(
                 select(AgentORM).where(
                     AgentORM.company_id == instance.company_id,
                     AgentORM.instance_id == instance.instance_id,
                     AgentORM.is_default_operator.is_(True),
                 )
             ).scalars().first()
-            if existing is None:
-                existing = AgentORM(
+            if row is None:
+                return None
+            return self._detail(session, row)
+
+    def ensure_default_operator_with_status(self, *, instance: InstanceRecord) -> tuple[AgentDetail, bool]:
+        existing = self.inspect_default_operator(instance=instance)
+        if existing is not None:
+            return existing, False
+        with self._session_factory() as session, session.begin():
+            current = session.execute(
+                select(AgentORM).where(
+                    AgentORM.company_id == instance.company_id,
+                    AgentORM.instance_id == instance.instance_id,
+                    AgentORM.is_default_operator.is_(True),
+                )
+            ).scalars().first()
+            if current is None:
+                current = AgentORM(
                     id=self._new_id("agent"),
                     instance_id=instance.instance_id,
                     company_id=instance.company_id,
@@ -126,19 +142,26 @@ class AgentAdminService:
                     created_at=self._now(),
                     updated_at=self._now(),
                 )
-                session.add(existing)
-        with self._session_factory() as session:
-            row = session.execute(
-                select(AgentORM).where(
-                    AgentORM.company_id == instance.company_id,
-                    AgentORM.instance_id == instance.instance_id,
-                    AgentORM.is_default_operator.is_(True),
-                )
-            ).scalars().one()
-            return self._detail(session, row)
+                session.add(current)
+        operator = self.inspect_default_operator(instance=instance)
+        if operator is None:
+            raise ValueError(f"Default operator for instance '{instance.instance_id}' could not be resolved.")
+        return operator, True
 
-    def list_agents(self, *, instance: InstanceRecord, status: str | None = None, limit: int = 100) -> list[AgentSummary]:
-        self.ensure_default_operator(instance=instance)
+    def ensure_default_operator(self, *, instance: InstanceRecord) -> AgentDetail:
+        operator, _created = self.ensure_default_operator_with_status(instance=instance)
+        return operator
+
+    def list_agents(
+        self,
+        *,
+        instance: InstanceRecord,
+        status: str | None = None,
+        limit: int = 100,
+        ensure_default_operator: bool = False,
+    ) -> list[AgentSummary]:
+        if ensure_default_operator:
+            self.ensure_default_operator(instance=instance)
         with self._session_factory() as session:
             stmt = select(AgentORM).where(
                 AgentORM.company_id == instance.company_id,
@@ -152,7 +175,6 @@ class AgentAdminService:
             return [self._summary(row) for row in rows]
 
     def get_agent(self, *, instance: InstanceRecord, agent_id: str) -> AgentDetail:
-        self.ensure_default_operator(instance=instance)
         with self._session_factory() as session:
             row = self._load_agent(session, instance=instance, agent_id=agent_id)
             return self._detail(session, row)

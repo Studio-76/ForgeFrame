@@ -43,8 +43,7 @@ export function InstanceScopeCard({
         <div>
           <h3>Instance Scope</h3>
           <p className="fg-muted">
-            ForgeFrame routes {surfaceLabel} through the top-level instance registry. Pick the real instance boundary instead of pretending
-            tenant or company IDs are the primary control-plane key.
+            Pick the concrete instance boundary for {surfaceLabel}, then continue through the scoped route links below.
           </p>
         </div>
         <span className="fg-pill" data-tone={scopeTone}>
@@ -76,6 +75,16 @@ export function InstanceScopeCard({
         <Link className="fg-nav-link" to={withInstanceScope(CONTROL_PLANE_ROUTES.instances, instanceId)}>
           Open Instances
         </Link>
+        {instanceId ? (
+          <Link className="fg-nav-link" to={withInstanceScope(CONTROL_PLANE_ROUTES.providerTargets, instanceId)}>
+            Open Targets
+          </Link>
+        ) : null}
+        {instanceId ? (
+          <Link className="fg-nav-link" to={withInstanceScope(CONTROL_PLANE_ROUTES.routing, instanceId)}>
+            Open Routing
+          </Link>
+        ) : null}
       </div>
 
       {selectedInstance ? (
@@ -85,7 +94,7 @@ export function InstanceScopeCard({
         </p>
       ) : (
         <p className="fg-note fg-mt-md">
-          No explicit instance is pinned in the URL. ForgeFrame will fall back to the default instance path until you choose a concrete boundary.
+          No explicit instance is pinned in the URL yet. Choose one here before trusting downstream setup or runtime views.
         </p>
       )}
 

@@ -136,6 +136,10 @@ def _build_control_plane_service(instance_id: str) -> ControlPlaneService:
     return ControlPlaneService(settings, instance, registry, providers, analytics, harness)
 
 
+def build_control_plane_service(instance_id: str) -> ControlPlaneService:
+    return _build_control_plane_service(instance_id)
+
+
 def get_control_plane_service(
     instance: InstanceRecord = Depends(resolve_admin_instance_scope),
 ) -> ControlPlaneService:
@@ -158,5 +162,6 @@ __all__ = [
     "ProviderCreateRequest",
     "ProviderSyncRequest",
     "ProviderUpdateRequest",
+    "build_control_plane_service",
     "get_control_plane_service",
 ]
