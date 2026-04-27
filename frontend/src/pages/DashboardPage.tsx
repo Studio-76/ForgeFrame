@@ -4,28 +4,20 @@ import { Link, useSearchParams } from "react-router-dom";
 import {
   AdminApiError,
   fetchDashboard,
+  type DashboardAttentionItem,
+  type DashboardPrimaryAction,
   type DashboardResponse,
 } from "../api/admin";
-import { buildAuditHistoryPath, resolveNewestAuditHistoryPathForSession } from "../app/auditHistory";
 import { roleAllows, sessionHasAnyInstancePermission } from "../app/adminAccess";
 import { CONTROL_PLANE_ROUTES } from "../app/navigation";
 import { useAppSession } from "../app/session";
 import { getInstanceIdFromSearchParams, withInstanceScope } from "../app/tenantScope";
 import { useInstanceCatalog } from "../app/useInstanceCatalog";
-import { InstanceScopeCard } from "../components/InstanceScopeCard";
 import { PageIntro } from "../components/PageIntro";
 import { ActionBar } from "../components/ui/ActionBar";
 import { AdvancedDiagnostics } from "../components/ui/AdvancedDiagnostics";
-import { DetailPanel } from "../components/ui/DetailPanel";
-import { EntityTable } from "../components/ui/EntityTable";
-import { BlockedState, ErrorState, LoadingState } from "../components/ui/StateBlocks";
-import { SummaryStrip } from "../components/ui/SummaryStrip";
-
-type PrimaryAction = {
-  title: string;
-  description: string;
-  to: string;
-};
+import { StatusBadge } from "../components/ui/StatusBadge";
+import { EmptyState, ErrorState, LoadingState, PermissionState, BlockedState } from "../components/ui/StateBlocks";
 
 function getErrorCode(error: unknown): string | null {
   if (error instanceof AdminApiError) {
@@ -38,64 +30,120 @@ function getErrorCode(error: unknown): string | null {
   return null;
 }
 
-function hasSecurityAttention(security?: Record<string, string | number | boolean>): boolean {
-  if (!security) {
-    return false;
-  }
-  return Boolean(security.default_password_in_use) || Boolean(security.must_rotate_password) || !Boolean(security.admin_auth_enabled);
+function formatStatusLabel(status: string): string {
+  return status.replace(/_/g, " ");
 }
 
-function getPrimaryAction(dashboard: DashboardResponse, isAdmin: boolean): PrimaryAction {
-  if (dashboard.needs_attention.length > 0) {
-    return {
-      title: "Review provider health and readiness",
-      description: `${dashboard.needs_attention.length} provider routes need attention, so the fastest next check is the live provider health surface.`,
-      to: CONTROL_PLANE_ROUTES.providerHealthRuns,
-    };
+function severityTone(severity: DashboardAttentionItem["severity"]): "danger" | "warning" | "info" {
+  if (severity === "critical") {
+    return "danger";
+  }
+  if (severity === "warning") {
+    return "warning";
+  }
+  return "info";
+}
+
+function primaryActionHint(primaryActionKind: DashboardPrimaryAction["kind"]): string {
+  switch (primaryActionKind) {
+    case "go_live_blocker":
+      return "Release remains blocked until this route is resolved.";
+    case "provider_configuration":
+      return "No stable runtime path exists yet for this scope.";
+    case "security_closure":
+      return "Security posture needs closure before the stack is stable.";
+    case "runtime_stability":
+      return "Runtime signals need follow-up before trusting production traffic.";
+    case "routing_queue_pressure":
+      return "Routing and queue pressure is delaying normal flow.";
+    case "cost_pressure":
+      return "Cost guardrails are currently shaping runtime behavior.";
+    case "all_stable":
+    default:
+      return "No active blocker is currently detected.";
+  }
+}
+
+function buildPermissionMessage({
+  sessionReady,
+  isViewer,
+  isReadOnly,
+  canReadExecution,
+  canReadRouting,
+  canOpenSecurity,
+}: {
+  sessionReady: boolean;
+  isViewer: boolean;
+  isReadOnly: boolean;
+  canReadExecution: boolean;
+  canReadRouting: boolean;
+  canOpenSecurity: boolean;
+}): string | null {
+  if (!sessionReady) {
+    return null;
   }
 
-  if (dashboard.alerts.length > 0) {
-    return {
-      title: "Work the active runtime alerts",
-      description: `${dashboard.alerts.length} alert signals are active. Start on the shared errors and activity surface before narrowing further.`,
-      to: CONTROL_PLANE_ROUTES.logs,
-    };
+  const messages: string[] = [];
+  if (isViewer) {
+    messages.push("Viewer sessions can read the command center, but repair routes may stop on permission gates.");
   }
-
-  if (isAdmin && hasSecurityAttention(dashboard.security)) {
-    return {
-      title: "Tighten governance posture",
-      description: "Security bootstrap still has open posture work. Admin review belongs in Security & Policies before the next operating cycle.",
-      to: CONTROL_PLANE_ROUTES.security,
-    };
+  if (isReadOnly) {
+    messages.push("This session is read-only, so corrective flows stay review-only.");
   }
+  if (!canReadExecution) {
+    messages.push("Queue and dispatch repair routes require operator or admin execution access.");
+  }
+  if (!canReadRouting) {
+    messages.push("Routing controls are not available on this session.");
+  }
+  if (!canOpenSecurity) {
+    messages.push("Security closure remains outside the current session scope.");
+  }
+  return messages.length > 0 ? messages.join(" ") : null;
+}
 
-  return {
-    title: "Confirm go-live readiness",
-    description: "No active alert pressure is visible, so the next check is whether onboarding and provider verification are still aligned for runtime traffic.",
-    to: CONTROL_PLANE_ROUTES.onboarding,
-  };
+function buildPermissionActions({
+  canManageSecurity,
+  canOpenSecurity,
+}: {
+  canManageSecurity: boolean;
+  canOpenSecurity: boolean;
+}) {
+  return [
+    {
+      to: CONTROL_PLANE_ROUTES.accounts,
+      label: "Review runtime access",
+    },
+    {
+      to: canManageSecurity || canOpenSecurity ? CONTROL_PLANE_ROUTES.security : CONTROL_PLANE_ROUTES.logs,
+      label: canManageSecurity ? "Close security posture" : canOpenSecurity ? "Review security posture" : "Review live evidence",
+    },
+  ];
 }
 
 export function DashboardPage() {
   const [dashboard, setDashboard] = useState<DashboardResponse | null>(null);
   const [error, setError] = useState<string>("");
   const [errorCode, setErrorCode] = useState<string | null>(null);
-  const [auditHistoryRoute, setAuditHistoryRoute] = useState<string>(() => buildAuditHistoryPath({ window: "all" }));
   const [searchParams, setSearchParams] = useSearchParams();
   const { session, sessionReady } = useAppSession();
   const instanceId = getInstanceIdFromSearchParams(searchParams);
   const { instances, loadState, error: instancesError, selectedInstance } = useInstanceCatalog(instanceId);
   const instanceScopeLabel = selectedInstance?.display_name ?? selectedInstance?.instance_id ?? "Default instance path";
   const canManageSecurity = sessionHasAnyInstancePermission(session, "security.write");
-  const isAdmin = roleAllows(session?.role, "admin");
-  const canReviewApprovals = sessionHasAnyInstancePermission(session, "approvals.read");
-  const governanceRoute = canManageSecurity ? CONTROL_PLANE_ROUTES.security : CONTROL_PLANE_ROUTES.accounts;
-  const governanceLabel = canManageSecurity ? "Policy Review" : "Runtime Access Review";
-  const governanceDescription = canManageSecurity
-    ? "Admin posture, sessions, bootstrap controls, and provider secret policy."
-    : "Operator-safe governance path for accounts, keys, and downstream access posture.";
-  const primaryAction = dashboard ? getPrimaryAction(dashboard, canManageSecurity) : null;
+  const canOpenSecurity = canManageSecurity || sessionHasAnyInstancePermission(session, "security.read") || roleAllows(session?.role, "admin");
+  const canReadExecution = sessionHasAnyInstancePermission(session, "execution.read");
+  const canReadRouting = sessionHasAnyInstancePermission(session, "routing.read");
+  const isViewer = session?.role === "viewer";
+  const permissionActions = buildPermissionActions({ canManageSecurity, canOpenSecurity });
+  const permissionMessage = buildPermissionMessage({
+    sessionReady,
+    isViewer,
+    isReadOnly: session?.read_only === true,
+    canReadExecution,
+    canReadRouting,
+    canOpenSecurity,
+  });
   const instanceFilterRequired = errorCode === "instance_scope_not_found";
 
   const onInstanceChange = (nextInstanceId: string | null) => {
@@ -134,74 +182,13 @@ export function DashboardPage() {
     };
   }, [instanceId]);
 
-  useEffect(() => {
-    let mounted = true;
-
-    void resolveNewestAuditHistoryPathForSession(
-      session,
-      sessionReady,
-      [{ query: { instanceId, window: "all" } }],
-      { instanceId, window: "all" },
-    ).then((route) => {
-      if (mounted) {
-        setAuditHistoryRoute(route);
-      }
-    });
-
-    return () => {
-      mounted = false;
-    };
-  }, [session, sessionReady, instanceId]);
-
   return (
     <section className="fg-page">
       <PageIntro
         eyebrow="Home"
-        title="ForgeFrame Control Plane Dashboard"
-        description="KPIs, alerts, governance posture, and needs-attention signals on the command-center route."
-        question="What needs attention first, and which route should you open next?"
-        links={[
-          {
-            label: "Onboarding",
-            to: CONTROL_PLANE_ROUTES.onboarding,
-            description: "Go-live readiness, bootstrap steps, and provider verification.",
-          },
-          {
-            label: governanceLabel,
-            to: governanceRoute,
-            description: governanceDescription,
-            badge: canManageSecurity ? "Admin only" : "Operator safe",
-          },
-          {
-            label: "Approvals",
-            to: CONTROL_PLANE_ROUTES.approvals,
-            description: "Shared queue for execution-run and elevated-access approval review.",
-            badge: canReviewApprovals ? (canManageSecurity ? undefined : "Review only") : "Operator or admin",
-            disabled: !canReviewApprovals,
-          },
-          {
-            label: "Operations Triage",
-            to: CONTROL_PLANE_ROUTES.logs,
-            description: "Current alerts, error shape, and runtime activity.",
-          },
-          {
-            label: "Audit History",
-            to: auditHistoryRoute,
-            description: "Recent evidence and audit history on the shared logs route.",
-          },
-        ]}
-        badges={[{ label: selectedInstance ? `Instance scope: ${instanceScopeLabel}` : "Default instance path", tone: selectedInstance ? "success" : "neutral" }]}
-        note="The dashboard stays the command center. Deep links fan out by operator intent instead of forcing every alert into the same backend module."
-      />
-
-      <InstanceScopeCard
-        instanceId={instanceId}
-        selectedInstance={selectedInstance}
-        instances={instances}
-        loadState={loadState}
-        error={instancesError}
-        surfaceLabel="dashboard truth"
-        onInstanceChange={onInstanceChange}
+        title="Command Center"
+        description="Critical state, next action, and release posture for the selected scope."
+        question="What blocks go-live right now, and which route should open next?"
       />
 
       {error && instanceFilterRequired ? (
@@ -209,144 +196,217 @@ export function DashboardPage() {
           title="Selected instance is outside the current dashboard scope"
           description={error}
           status="blocked"
+          action={(
+            <div className="fg-actions">
+              <Link className="fg-nav-link" to={CONTROL_PLANE_ROUTES.dashboard}>
+                Reset to default scope
+              </Link>
+              <Link className="fg-nav-link" to={CONTROL_PLANE_ROUTES.instances}>
+                Review instance inventory
+              </Link>
+            </div>
+          )}
         />
       ) : null}
       {error && !instanceFilterRequired ? (
         <ErrorState
           title="Dashboard loading failed"
           description={error}
+          action={(
+            <Link className="fg-nav-link" to={withInstanceScope(CONTROL_PLANE_ROUTES.logs, instanceId)}>
+              Review diagnostics
+            </Link>
+          )}
         />
       ) : null}
       {!dashboard && !error ? (
         <LoadingState
-          title="Loading dashboard truth"
-          description="ForgeFrame is restoring the command-center summary for the selected instance scope."
+          title="Loading command-center truth"
+          description="ForgeFrame is restoring the current next action, blockers, and release posture for the selected scope."
         />
       ) : null}
+
       {dashboard ? (
         <div className="fg-stack">
-          {primaryAction ? (
-            <ActionBar
-              title="Primary Next Action"
-              description={primaryAction.description}
-              actions={(
-                <Link className="fg-nav-link" to={withInstanceScope(primaryAction.to, instanceId)}>
-                  Open route
+          <ActionBar
+            title="Primary next action"
+            description={dashboard.primary_action.description}
+            actions={(
+              <Link className="fg-nav-link" to={withInstanceScope(dashboard.primary_action.to, instanceId)}>
+                {dashboard.primary_action.action_label}
+              </Link>
+            )}
+          >
+            <div className="ff-dashboard-primary">
+              <span className="ff-dashboard-primary-label">Do this now</span>
+              <div className="ff-dashboard-inline-status">
+                <StatusBadge status={dashboard.primary_action.status}>
+                  {formatStatusLabel(dashboard.primary_action.status)}
+                </StatusBadge>
+                <strong>{dashboard.primary_action.title}</strong>
+              </div>
+              <p>{primaryActionHint(dashboard.primary_action.kind)}</p>
+            </div>
+          </ActionBar>
+
+          <section className="ff-dashboard-scope-bar" aria-label="Dashboard scope">
+            <div className="ff-dashboard-scope-copy">
+              <span className="ff-dashboard-scope-label">Instance scope</span>
+              <strong>{instanceScopeLabel}</strong>
+              <p>
+                {selectedInstance
+                  ? `Tenant ${selectedInstance.tenant_id} · execution ${selectedInstance.company_id} · deployment ${selectedInstance.deployment_mode} · exposure ${selectedInstance.exposure_mode}.`
+                  : "Dashboard is following the default instance path until a concrete instance is selected."}
+              </p>
+            </div>
+            <div className="ff-dashboard-scope-controls">
+              <label>
+                <span>Instance</span>
+                <select
+                  value={instanceId ?? ""}
+                  disabled={loadState === "loading" && instances.length === 0}
+                  onChange={(event) => onInstanceChange(event.target.value || null)}
+                >
+                  <option value="">Default instance path</option>
+                  {instances.map((instance) => (
+                    <option key={instance.instance_id} value={instance.instance_id}>
+                      {instance.display_name} ({instance.instance_id})
+                    </option>
+                  ))}
+                </select>
+              </label>
+              {instanceId ? (
+                <button type="button" onClick={() => onInstanceChange(null)}>
+                  Clear scope
+                </button>
+              ) : null}
+              <Link className="fg-nav-link" to={withInstanceScope(CONTROL_PLANE_ROUTES.instances, instanceId)}>
+                Manage instances
+              </Link>
+            </div>
+            {loadState === "loading" && instances.length === 0 ? <p className="fg-muted">Loading instance inventory.</p> : null}
+            {loadState === "success" && instances.length === 0 ? <p className="fg-muted">No instances are registered yet.</p> : null}
+            {instancesError ? <p className="fg-danger">{instancesError}</p> : null}
+            {instanceId && !selectedInstance ? (
+              <p className="fg-danger">
+                The selected instance is not present in the current registry. Open the instance inventory or clear the scope before trusting this view.
+              </p>
+            ) : null}
+          </section>
+
+          {permissionMessage ? (
+            <PermissionState
+              title="Some repair routes are permission-limited"
+              description={permissionMessage}
+              action={(
+                <div className="fg-actions">
+                  {permissionActions.map((action) => (
+                    <Link key={`${action.to}-${action.label}`} className="fg-nav-link" to={withInstanceScope(action.to, instanceId)}>
+                      {action.label}
+                    </Link>
+                  ))}
+                </div>
+              )}
+            />
+          ) : null}
+
+          {dashboard.empty_state ? (
+            <EmptyState
+              title={dashboard.empty_state.title}
+              description={dashboard.empty_state.description}
+              action={(
+                <Link className="fg-nav-link" to={withInstanceScope(dashboard.empty_state.to, instanceId)}>
+                  {dashboard.empty_state.action_label}
                 </Link>
               )}
-            >
-              <p>
-                <strong>{primaryAction.title}</strong>
-              </p>
-            </ActionBar>
-          ) : null}
-          <SummaryStrip
-            items={Object.entries(dashboard.kpis).map(([key, value]) => ({
-              key,
-              label: key.replaceAll("_", " "),
-              value,
-            }))}
-          />
-          <div className="ff-operator-layout">
-            <div className="ff-operator-main">
-              <EntityTable
-                title="Alerts"
-                description="Current runtime alerts and control-plane attention signals."
-                tableLabel="Dashboard alerts"
-                columns={[
-                  {
-                    key: "severity",
-                    header: "Severity",
-                    render: (row) => row.severity,
-                  },
-                  {
-                    key: "type",
-                    header: "Type",
-                    render: (row) => row.type,
-                  },
-                  {
-                    key: "message",
-                    header: "Message",
-                    render: (row) => row.message,
-                  },
-                ]}
-                rows={dashboard.alerts.map((alert, index) => ({
-                  _rowKey: `${String(alert.type)}-${index}`,
-                  severity: String(alert.severity),
-                  type: String(alert.type),
-                  message: String(alert.message),
-                }))}
-                rowKey={(row) => row._rowKey}
-                emptyTitle="No active alerts."
-                emptyDescription="The command center is not seeing active alert pressure for this scope."
-              />
-              <EntityTable
-                title="Needs Attention"
-                description="Provider and runtime paths that should be reviewed before the next operating cycle."
-                tableLabel="Dashboard attention queue"
-                columns={[
-                  {
-                    key: "item",
-                    header: "Attention item",
-                    render: (row) => row.item,
-                  },
-                ]}
-                rows={dashboard.needs_attention.map((item) => ({ item }))}
-                rowKey={(row) => row.item}
-                emptyTitle="No provider flagged."
-                emptyDescription="No provider or runtime path is currently flagged by the dashboard payload."
-              />
-            </div>
-            <div className="ff-operator-sidebar">
-              <DetailPanel
-                title="Governance posture"
-                description="Session-sensitive governance context and bootstrap posture for the current scope."
-                status={canManageSecurity ? "admin posture" : "read only"}
-                statusKey={canManageSecurity ? "ready" : "waiting_approval"}
-                sticky
-              >
-                <dl>
+            />
+          ) : (
+            <div className="ff-dashboard-layout">
+              <article className="ff-dashboard-attention">
+                <div className="ff-dashboard-section-header">
                   <div>
-                    <dt>Instance scope</dt>
-                    <dd>{selectedInstance ? selectedInstance.display_name : "Default instance path"}</dd>
+                    <h3>Priority attention list</h3>
+                    <p>Each item includes severity, cause, affected axis, and one direct repair route.</p>
                   </div>
-                  <div>
-                    <dt>Security route</dt>
-                    <dd>{governanceLabel}</dd>
+                  <StatusBadge status={dashboard.attention.length > 0 ? "degraded" : "ready"}>
+                    {dashboard.attention.length > 0 ? `${dashboard.attention.length} active` : "all stable"}
+                  </StatusBadge>
+                </div>
+
+                {dashboard.attention.length === 0 ? (
+                  <div className="ff-dashboard-attention-empty">
+                    <strong>No blocking attention item is active.</strong>
+                    <p>The command center is not seeing a current go-live, runtime, routing, or cost blocker for this scope.</p>
                   </div>
-                  <div>
-                    <dt>Approvals access</dt>
-                    <dd>{canReviewApprovals ? "Available" : "Operator or admin required"}</dd>
-                  </div>
-                  <div>
-                    <dt>Audit evidence route</dt>
-                    <dd>{auditHistoryRoute}</dd>
-                  </div>
-                </dl>
-                {canManageSecurity && dashboard.security ? (
-                  <>
-                    <h4>Security Bootstrap</h4>
-                    <ul className="fg-list">
-                      {Object.entries(dashboard.security).map(([key, value]) => (
-                        <li key={key}>
-                          {key}: {String(value)}
-                        </li>
-                      ))}
-                    </ul>
-                  </>
                 ) : (
-                  <p className="fg-muted">
-                    Security bootstrap detail stays scoped to sessions that can open mutable governance posture.
-                  </p>
+                  <ol className="ff-dashboard-attention-list">
+                    {dashboard.attention.map((item, index) => (
+                      <li key={item.id} className="ff-dashboard-attention-item">
+                        <div className="ff-dashboard-attention-rank" aria-hidden="true">{index + 1}</div>
+                        <div className="ff-dashboard-attention-content">
+                          <div className="ff-dashboard-attention-meta">
+                            <div className="ff-dashboard-attention-title-row">
+                              <span className="fg-pill" data-tone={severityTone(item.severity)}>
+                                {item.severity}
+                              </span>
+                              <StatusBadge status={item.status}>
+                                {formatStatusLabel(item.status)}
+                              </StatusBadge>
+                            </div>
+                            <span className="ff-dashboard-axis">{item.axis}</span>
+                          </div>
+                          <strong>{item.title}</strong>
+                          <p>
+                            <span className="ff-dashboard-cause-label">Cause:</span> {item.cause}
+                          </p>
+                          <Link className="fg-nav-link" to={withInstanceScope(item.to, instanceId)}>
+                            {item.action_label}
+                          </Link>
+                        </div>
+                      </li>
+                    ))}
+                  </ol>
                 )}
-              </DetailPanel>
+              </article>
+
+              <section className="ff-dashboard-status-board" aria-label="Command center status areas">
+                <div className="ff-dashboard-section-header">
+                  <div>
+                    <h3>Operational posture</h3>
+                    <p>Readiness, Security, Runtime, Routing/Queue, and Cost with next action per area.</p>
+                  </div>
+                  <StatusBadge status={dashboard.attention.length > 0 ? "degraded" : "ready"}>
+                    {dashboard.sections.length} areas
+                  </StatusBadge>
+                </div>
+                <ul className="ff-dashboard-status-list">
+                  {dashboard.sections.map((section) => (
+                    <li key={section.key} className="ff-dashboard-status-item">
+                      <div className="ff-dashboard-status-topline">
+                        <h4>{section.title}</h4>
+                        <StatusBadge status={section.status}>
+                          {formatStatusLabel(section.status)}
+                        </StatusBadge>
+                      </div>
+                      <p>{section.reason}</p>
+                      <p className="ff-dashboard-next-action">
+                        Next action:{" "}
+                        <Link className="fg-nav-link" to={withInstanceScope(section.to, instanceId)}>
+                          {section.action_label}
+                        </Link>
+                      </p>
+                    </li>
+                  ))}
+                </ul>
+              </section>
             </div>
-          </div>
+          )}
+
           <AdvancedDiagnostics
             title="Advanced diagnostics"
-            description="Raw dashboard payload for operator troubleshooting and handoff."
-            status={dashboard.alerts.length > 0 ? "degraded" : "ready"}
-            statusKey={dashboard.alerts.length > 0 ? "degraded" : "ready"}
+            description="Raw command-center payload for operator troubleshooting and handoff."
+            status={dashboard.attention.length > 0 ? "degraded" : "ready"}
+            statusKey={dashboard.attention.length > 0 ? "degraded" : "ready"}
           >
             <pre>{JSON.stringify(dashboard, null, 2)}</pre>
           </AdvancedDiagnostics>

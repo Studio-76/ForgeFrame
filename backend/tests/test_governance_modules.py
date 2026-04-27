@@ -9,6 +9,7 @@ from sqlalchemy import create_engine, text
 from sqlalchemy.exc import IntegrityError
 
 from conftest import admin_headers as shared_admin_headers, login_headers_allowing_password_rotation
+from app.api.admin.dashboard import _primary_action_from_attention
 from app.api.runtime.dependencies import clear_runtime_dependency_caches
 from app.auth.local_auth import hash_password, hash_token, new_secret_salt
 from app.governance.models import (
@@ -299,6 +300,109 @@ def test_dashboard_hides_admin_only_security_posture_from_operator_and_viewer_ro
     assert viewer_dashboard.json()["status"] == "ok"
     assert "security" not in viewer_dashboard.json()
 
+
+def test_dashboard_returns_command_center_contract() -> None:
+    client = TestClient(app)
+    headers = _admin_headers(client)
+
+    response = client.get("/admin/dashboard/", headers=headers)
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["status"] == "ok"
+    assert payload["object"] == "dashboard_command_center"
+    assert isinstance(payload["generated_at"], str)
+    assert payload["primary_action"]["kind"] in {
+        "go_live_blocker",
+        "provider_configuration",
+        "security_closure",
+        "runtime_stability",
+        "routing_queue_pressure",
+        "cost_pressure",
+        "all_stable",
+    }
+    assert isinstance(payload["primary_action"]["to"], str)
+    assert isinstance(payload["primary_action"]["action_label"], str)
+    assert isinstance(payload["attention"], list)
+    assert isinstance(payload["summary"], list)
+    assert {section["key"] for section in payload["sections"]} == {
+        "readiness",
+        "security",
+        "runtime",
+        "routing_queue",
+        "cost",
+    }
+    for item in payload["attention"]:
+        assert item["to"]
+        assert item["action_label"]
+        assert item["severity"] in {"critical", "warning", "info"}
+    for section in payload["sections"]:
+        assert section["to"]
+        assert section["action_label"]
+        assert isinstance(section["details"], list)
+
+
+@pytest.mark.parametrize(
+    ("blocking_item", "expected_kind", "expected_route", "expected_action"),
+    [
+        (
+            {
+                "id": "routing_queue:pressure",
+                "severity": "critical",
+                "title": "Routing or queue pressure needs intervention",
+                "cause": "2 dispatch leases are stalled and need intervention.",
+                "axis": "Routing / Queue",
+                "to": "/dispatch",
+                "action_label": "Recover stalled dispatch",
+                "status": "blocked",
+            },
+            "routing_queue_pressure",
+            "/dispatch",
+            "Recover stalled dispatch",
+        ),
+        (
+            {
+                "id": "cost:guardrails",
+                "severity": "critical",
+                "title": "Cost guardrails are shaping runtime behavior",
+                "cause": "Budget guardrails are hard-blocking routing decisions.",
+                "axis": "Cost",
+                "to": "/costs",
+                "action_label": "Unblock budget guardrails",
+                "status": "blocked",
+            },
+            "cost_pressure",
+            "/costs",
+            "Unblock budget guardrails",
+        ),
+    ],
+)
+def test_dashboard_primary_action_prioritizes_blocked_routing_or_cost_over_degraded_runtime(
+    blocking_item: dict[str, str],
+    expected_kind: str,
+    expected_route: str,
+    expected_action: str,
+) -> None:
+    primary_action = _primary_action_from_attention(
+        [
+            {
+                "id": "alert:provider_hotspot",
+                "severity": "warning",
+                "title": "Runtime failures are climbing",
+                "cause": "Provider openai_api is the current error hotspot.",
+                "axis": "Runtime",
+                "to": "/errors",
+                "action_label": "Investigate runtime failures",
+                "status": "degraded",
+            },
+            blocking_item,
+        ]
+    )
+
+    assert primary_action is not None
+    assert primary_action["kind"] == expected_kind
+    assert primary_action["to"] == expected_route
+    assert primary_action["action_label"] == expected_action
 
 def test_bootstrap_admin_password_reload_applies_before_first_rotation(monkeypatch) -> None:
     client = TestClient(app)
