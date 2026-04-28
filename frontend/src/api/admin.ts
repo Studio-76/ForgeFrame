@@ -402,6 +402,11 @@ export type ProviderControlPlaneResponse = {
 export type AdminModelRegisterRecord = {
   provider: string;
   provider_label: string;
+  provider_enabled: boolean;
+  provider_integration_class: string;
+  provider_last_sync_status: string;
+  provider_last_sync_at?: string | null;
+  provider_last_sync_error?: string | null;
   model_id: string;
   display_name: string;
   owned_by: string;
@@ -411,6 +416,7 @@ export type AdminModelRegisterRecord = {
   execution_traits: Record<string, unknown>;
   policy_flags: Record<string, unknown>;
   economic_profile: Record<string, unknown>;
+  declared_capability_keys: string[];
   source: string;
   discovery_status: string;
   runtime_status: string;
@@ -420,7 +426,62 @@ export type AdminModelRegisterRecord = {
   active: boolean;
   target_count: number;
   active_target_count: number;
+  routing_target_count: number;
   target_keys: string[];
+  linked_targets: Array<{
+    target_key: string;
+    label: string;
+    enabled: boolean;
+    readiness_status: string;
+    availability_status: string;
+    priority: number;
+    provider_enabled: boolean;
+    model_active: boolean;
+    routing_eligible: boolean;
+  }>;
+  routing_policy_classes: string[];
+  routing_status: "routable" | "degraded" | "no_target_coverage" | "stale" | "removed" | "disabled";
+  routing_ready: boolean;
+  routing_reason: string;
+  trust_status: "tested" | "observed" | "declared_only" | "verification_failed";
+  trust_reason: string;
+  evidence: {
+    runtime: {
+      status: string;
+      source: string;
+      recorded_at?: string | null;
+      details: string;
+    };
+    streaming: {
+      status: string;
+      source: string;
+      recorded_at?: string | null;
+      details: string;
+    };
+    tool_calling: {
+      status: string;
+      source: string;
+      recorded_at?: string | null;
+      details: string;
+    };
+    live_probe: {
+      status: string;
+      source: string;
+      recorded_at?: string | null;
+      details: string;
+    };
+  };
+  tested_evidence: Record<string, {
+    status: "missing" | "observed" | "failed" | "not_applicable";
+    source: string;
+    recorded_at?: string | null;
+    details: string;
+  }>;
+  sync: {
+    available: boolean;
+    mode: "provider_sync" | "not_ready";
+    detail: string;
+  };
   last_seen_at?: string | null;
   last_probe_at?: string | null;
   stale_since?: string | null;

@@ -26,7 +26,12 @@ def test_model_and_provider_target_register_endpoints_expose_productive_registry
     assert targets.status_code == 200
     assert models.json()["object"] == "model_register"
     assert targets.json()["object"] == "provider_target_register"
-    assert any(model["routing_key"] == "forgeframe_baseline/forgeframe-baseline-chat-v1" for model in models.json()["models"])
+    baseline_model = next(model for model in models.json()["models"] if model["routing_key"] == "forgeframe_baseline/forgeframe-baseline-chat-v1")
+    assert baseline_model["routing_status"] in {"routable", "no_target_coverage"}
+    assert "trust_status" in baseline_model
+    assert "sync" in baseline_model
+    assert "linked_targets" in baseline_model
+    assert "tested_evidence" in baseline_model
     assert any(target["target_key"] == "forgeframe_baseline::forgeframe-baseline-chat-v1" for target in targets.json()["targets"])
 
 

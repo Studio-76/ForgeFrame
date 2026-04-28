@@ -253,6 +253,12 @@ class ModelRegistry:
                 )
                 if not managed_model.active:
                     continue
+                if managed_model.discovery_status in {"stale", "removed", "removed_from_profile_models"}:
+                    continue
+                if managed_model.runtime_status in {"stale", "unavailable"}:
+                    continue
+                if managed_model.availability_status == "stale":
+                    continue
                 runtime_model = RuntimeModel(
                     id=managed_model.id,
                     provider=provider.provider,

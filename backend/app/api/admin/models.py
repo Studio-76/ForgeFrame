@@ -25,5 +25,8 @@ def list_model_register(
             "active_models": len([model for model in models if bool(model["active"])]),
             "models_with_targets": len([model for model in models if int(model["target_count"]) > 0]),
             "runtime_ready_models": len([model for model in models if str(model["runtime_status"]) == "ready"]),
+            "routable_models": len([model for model in models if bool(model["routing_ready"])]),
+            "tested_models": len([model for model in models if str(model["trust_status"]) == "tested"]),
+            "uncovered_models": len([model for model in models if int(model["routing_target_count"]) == 0]),
         },
     }

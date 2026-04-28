@@ -796,7 +796,7 @@ def test_models_endpoint_omits_stale_generic_harness_models_that_no_longer_dispa
     )
 
     assert stale_dispatch.status_code == 503
-    assert stale_dispatch.json()["error"]["type"] == "provider_not_ready"
+    assert stale_dispatch.json()["error"]["type"] == "dispatch_blocked"
 
 
 def test_models_endpoint_hides_enabled_templated_generic_harness_profiles_from_public_inventory(

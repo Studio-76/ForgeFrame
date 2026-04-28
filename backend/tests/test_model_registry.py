@@ -125,3 +125,43 @@ def test_model_registry_builds_runtime_targets_for_active_models() -> None:
     baseline_target = next(target for target in targets if target.target_key == "forgeframe_baseline::forgeframe-baseline-chat-v1")
     assert baseline_target.model.routing_key == "forgeframe_baseline/forgeframe-baseline-chat-v1"
     assert baseline_target.product_axis == "openai_compatible_clients"
+
+
+def test_model_registry_excludes_stale_models_from_active_runtime_inventory(tmp_path: Path) -> None:
+    state_path = tmp_path / "control_plane_state.json"
+    state_path.write_text(
+        ControlPlaneStateRecord(
+            providers=[
+                {
+                    "provider": "openai_api",
+                    "label": "OpenAI",
+                    "enabled": True,
+                    "managed_models": [
+                        {
+                            "id": "gpt-stale",
+                            "source": "discovered",
+                            "discovery_status": "stale",
+                            "active": True,
+                            "owned_by": "OpenAI",
+                            "display_name": "gpt-stale",
+                            "category": "general",
+                            "routing_key": "openai_api/gpt-stale",
+                            "runtime_status": "stale",
+                            "availability_status": "stale",
+                        }
+                    ],
+                }
+            ]
+        ).model_dump_json(indent=2)
+        + "\n",
+        encoding="utf-8",
+    )
+    settings = Settings(
+        control_plane_storage_backend="file",
+        control_plane_state_path=str(state_path),
+    )
+
+    registry = ModelRegistry(settings)
+
+    assert registry.get_model_by_routing_key("openai_api/gpt-stale") is None
+    assert all(model.id != "gpt-stale" for model in registry.list_active_models())

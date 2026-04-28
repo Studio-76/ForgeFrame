@@ -209,9 +209,82 @@ class OAuthAccountTargetStatus(BaseModel):
     evidence: ProviderCapabilityEvidenceRecord = Field(default_factory=ProviderCapabilityEvidenceRecord)
 
 
+class ModelRegisterEvidenceSnapshot(BaseModel):
+    status: Literal["missing", "observed", "failed", "not_applicable"] = "missing"
+    source: str = "none"
+    recorded_at: str | None = None
+    details: str = ""
+
+
+class ModelRegisterTargetLink(BaseModel):
+    target_key: str
+    label: str
+    enabled: bool
+    readiness_status: str
+    availability_status: str
+    priority: int
+    provider_enabled: bool
+    model_active: bool
+    routing_eligible: bool
+
+
+class ModelRegisterSyncSupport(BaseModel):
+    available: bool = False
+    mode: Literal["provider_sync", "not_ready"] = "not_ready"
+    detail: str = ""
+
+
+class ModelRegisterRecord(BaseModel):
+    provider: str
+    provider_label: str
+    provider_enabled: bool = True
+    provider_integration_class: str = "native"
+    provider_last_sync_status: str = "never"
+    provider_last_sync_at: str | None = None
+    provider_last_sync_error: str | None = None
+    model_id: str
+    display_name: str
+    owned_by: str
+    category: str
+    routing_key: str
+    capabilities: dict[str, object] = Field(default_factory=dict)
+    execution_traits: dict[str, object] = Field(default_factory=dict)
+    policy_flags: dict[str, object] = Field(default_factory=dict)
+    economic_profile: dict[str, object] = Field(default_factory=dict)
+    declared_capability_keys: list[str] = Field(default_factory=list)
+    source: str
+    discovery_status: str
+    runtime_status: str
+    availability_status: str
+    health_status: str
+    status_reason: str | None = None
+    active: bool
+    target_count: int = 0
+    active_target_count: int = 0
+    routing_target_count: int = 0
+    target_keys: list[str] = Field(default_factory=list)
+    linked_targets: list[ModelRegisterTargetLink] = Field(default_factory=list)
+    routing_policy_classes: list[str] = Field(default_factory=list)
+    routing_status: Literal["routable", "degraded", "no_target_coverage", "stale", "removed", "disabled"] = "no_target_coverage"
+    routing_ready: bool = False
+    routing_reason: str = ""
+    trust_status: Literal["tested", "observed", "declared_only", "verification_failed"] = "declared_only"
+    trust_reason: str = ""
+    evidence: ProviderCapabilityEvidenceRecord = Field(default_factory=ProviderCapabilityEvidenceRecord)
+    tested_evidence: dict[str, ModelRegisterEvidenceSnapshot] = Field(default_factory=dict)
+    sync: ModelRegisterSyncSupport = Field(default_factory=ModelRegisterSyncSupport)
+    last_seen_at: str | None = None
+    last_probe_at: str | None = None
+    stale_since: str | None = None
+
+
 __all__ = [
     "ProductAxisTarget",
     "HealthConfigUpdateRequest",
+    "ModelRegisterEvidenceSnapshot",
+    "ModelRegisterRecord",
+    "ModelRegisterSyncSupport",
+    "ModelRegisterTargetLink",
     "OAuthAccountProbeResult",
     "OAuthTargetActionSpec",
     "OAuthAccountTargetStatus",

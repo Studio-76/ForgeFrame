@@ -1,0 +1,33 @@
+# Progress
+
+- Promptdatei: `/opt/ForgeFrame/cleanup/08_models.md`
+- Developer-Zusammenfassung: `Models Register von passiver Kartenliste auf echte Register-Seite mit Filtertabelle, Sticky-Detailpanel, deklarierter/observed/test-verified Capability-Wahrheit und realer Provider-Sync-Aktion umgebaut. Backend-Contract um Routing-/Trust-/Target-/Sync-Semantik erweitert. Runtime-Registry schliesst stale/removed Modelle jetzt auch fachlich aus aktiver Routing-Wahrheit aus.`
+- Geaenderte Dateien:
+  - `backend/app/api/admin/control_plane_models.py`
+  - `backend/app/api/admin/control_plane_targets_domain.py`
+  - `backend/app/api/admin/models.py`
+  - `backend/app/core/model_registry/service.py`
+  - `backend/tests/test_model_registry.py`
+  - `backend/tests/test_provider_target_admin_api.py`
+  - `backend/tests/test_runtime_core.py`
+  - `frontend/src/api/admin.ts`
+  - `frontend/src/pages/ModelsPage.tsx`
+  - `frontend/tests/models-page.test.tsx`
+- Audit-Ergebnis: `APPROVED`
+- Konkrete Audit-Maengel:
+  - `stale`/`removed` Modelle waren auf der UI markierbar, konnten aber fachlich noch als aktive Runtime-Kandidaten durchrutschen, wenn `active=true` gesetzt blieb.
+  - Models-Seite hatte keine echte Filter-/Trust-/Sync-Semantik, sondern nur passive Registeranzeige.
+  - Runtime-Test erwartete nach haerterem Registry-Ausschluss noch den alten Fehlerpfad `provider_not_ready`; die korrekte neue Produktwahrheit ist `dispatch_blocked`.
+- Fix-Runden: `1`
+- Finale Freigabe: `APPROVED`
+- Ausgefuehrte Pruefkommandos:
+  - `cd frontend && npm run build` -> `PASS`
+  - `cd frontend && npm test -- models-page` -> `PASS`
+  - `cd frontend && npm test` -> `PASS (42/42 Testdateien, 160/160 Tests)`
+  - `cd frontend && npm test -- --runInBand` -> `EXPECTED TOOLING FAILURE (Vitest/CAC: Unknown option --runInBand)`
+  - `cd backend && ../.venv/bin/python -m pytest tests/test_provider_target_admin_api.py tests/test_model_registry.py -q` -> `PASS`
+  - `cd backend && ../.venv/bin/python -m pytest tests/test_provider_target_admin_api.py tests/test_model_registry.py tests/test_runtime_core.py -k "stale_generic_harness_models_that_no_longer_dispatch or excludes_stale_models_from_active_runtime_inventory" -q` -> `PASS`
+  - `cd backend && ../.venv/bin/python -m pytest tests/test_scaffold_endpoints.py -q` -> `PASS`
+  - `git diff --check` -> `PASS`
+  - `grep -R "reference/design/dashboard" -n frontend/src frontend/package.json frontend/index.html frontend/vite.config.* docs 2>/dev/null || true` -> `Only docs/ui-redesign-map.md`
+  - `grep -R "reference/" -n frontend/src frontend/package.json frontend/index.html frontend/vite.config.* 2>/dev/null || true` -> `No productive hits`
