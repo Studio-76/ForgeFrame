@@ -7,32 +7,38 @@ from app.harness.redaction import redact_sensitive_payload as _redact_sensitive_
 
 
 class ControlPlaneHarnessDomainMixin:
+    def _resolved_harness_instance_id(self, instance_id: str | None = None) -> str | None:
+        normalized_instance_id = (instance_id or "").strip()
+        if normalized_instance_id:
+            return normalized_instance_id
+        return getattr(getattr(self, "_instance", None), "instance_id", None)
+
     def list_harness_templates(self) -> list[dict[str, object]]:
         return self._harness.list_templates()
 
-    def upsert_harness_profile(self, payload: HarnessProviderProfile):
-        return self._harness.upsert_profile(payload)
+    def upsert_harness_profile(self, payload: HarnessProviderProfile, instance_id: str | None = None):
+        return self._harness.upsert_profile(payload, instance_id=self._resolved_harness_instance_id(instance_id))
 
-    def delete_harness_profile(self, provider_key: str) -> None:
-        self._harness.delete_profile(provider_key)
+    def delete_harness_profile(self, provider_key: str, instance_id: str | None = None) -> None:
+        self._harness.delete_profile(provider_key, self._resolved_harness_instance_id(instance_id))
 
-    def set_harness_profile_active(self, provider_key: str, enabled: bool):
-        return self._harness.set_profile_active(provider_key, enabled)
+    def set_harness_profile_active(self, provider_key: str, enabled: bool, instance_id: str | None = None):
+        return self._harness.set_profile_active(provider_key, enabled, self._resolved_harness_instance_id(instance_id))
 
-    def list_harness_profiles(self):
-        return self._harness.list_profiles()
+    def list_harness_profiles(self, instance_id: str | None = None):
+        return self._harness.list_profiles(instance_id=self._resolved_harness_instance_id(instance_id))
 
-    def harness_preview(self, payload: HarnessPreviewRequest) -> dict[str, object]:
-        preview = self._harness.preview(payload)
+    def harness_preview(self, payload: HarnessPreviewRequest, instance_id: str | None = None) -> dict[str, object]:
+        preview = self._harness.preview(payload, instance_id=self._resolved_harness_instance_id(instance_id))
         return {"status": "ok", "preview": preview}
 
-    def harness_dry_run(self, payload: HarnessPreviewRequest) -> dict[str, object]:
-        result = self._harness.dry_run(payload)
+    def harness_dry_run(self, payload: HarnessPreviewRequest, instance_id: str | None = None) -> dict[str, object]:
+        result = self._harness.dry_run(payload, instance_id=self._resolved_harness_instance_id(instance_id))
         return {"status": "ok", **result}
 
-    def harness_probe(self, payload: HarnessPreviewRequest) -> dict[str, object]:
+    def harness_probe(self, payload: HarnessPreviewRequest, instance_id: str | None = None) -> dict[str, object]:
         try:
-            result = self._harness.probe(payload)
+            result = self._harness.probe(payload, instance_id=self._resolved_harness_instance_id(instance_id))
         except RuntimeError:
             self._analytics.record_integration_error(
                 provider=payload.provider_key,
@@ -60,8 +66,8 @@ class ControlPlaneHarnessDomainMixin:
             )
         return _redact_sensitive_payload({"status": "ok", **result})
 
-    def verify_harness_profile(self, payload: HarnessVerificationRequest) -> dict[str, object]:
-        result = self._harness.verify_profile(payload)
+    def verify_harness_profile(self, payload: HarnessVerificationRequest, instance_id: str | None = None) -> dict[str, object]:
+        result = self._harness.verify_profile(payload, instance_id=self._resolved_harness_instance_id(instance_id))
         for step in result.steps:
             if step["status"] in {"failed", "error"}:
                 self._analytics.record_integration_error(
@@ -77,17 +83,19 @@ class ControlPlaneHarnessDomainMixin:
                 )
         return result.model_dump()
 
-    def harness_snapshot(self) -> dict[str, object]:
-        return {"status": "ok", "snapshot": self._harness.export_snapshot()}
+    def harness_snapshot(self, instance_id: str | None = None) -> dict[str, object]:
+        resolved_instance_id = self._resolved_harness_instance_id(instance_id)
+        return {"status": "ok", "snapshot": self._harness.export_snapshot(instance_id=resolved_instance_id)}
 
-    def export_harness_config(self, *, redact_secrets: bool = True) -> dict[str, object]:
-        return {"status": "ok", "snapshot": self._harness.export_config_snapshot(redact_secrets=redact_secrets)}
+    def export_harness_config(self, *, redact_secrets: bool = True, instance_id: str | None = None) -> dict[str, object]:
+        resolved_instance_id = self._resolved_harness_instance_id(instance_id)
+        return {"status": "ok", "snapshot": self._harness.export_config_snapshot(redact_secrets=redact_secrets, instance_id=resolved_instance_id)}
 
-    def import_harness_config(self, payload: HarnessImportRequest) -> dict[str, object]:
-        return self._harness.import_config_snapshot(payload)
+    def import_harness_config(self, payload: HarnessImportRequest, instance_id: str | None = None) -> dict[str, object]:
+        return self._harness.import_config_snapshot(payload, instance_id=self._resolved_harness_instance_id(instance_id))
 
-    def rollback_harness_profile(self, provider_key: str, revision: int):
-        return self._harness.rollback_profile(provider_key, revision)
+    def rollback_harness_profile(self, provider_key: str, revision: int, instance_id: str | None = None):
+        return self._harness.rollback_profile(provider_key, revision, instance_id=self._resolved_harness_instance_id(instance_id))
 
     def harness_runs(
         self,
@@ -96,15 +104,18 @@ class ControlPlaneHarnessDomainMixin:
         status: str | None = None,
         client_id: str | None = None,
         limit: int = 200,
+        instance_id: str | None = None,
     ) -> dict[str, object]:
+        resolved_instance_id = self._resolved_harness_instance_id(instance_id)
         runs = self._harness.list_runs(
             provider_key,
+            instance_id=resolved_instance_id,
             mode=mode,
             status=status,
             client_id=client_id,
             limit=limit,
         )
-        profiles = self._harness.list_profiles()
+        profiles = self._harness.list_profiles(instance_id=resolved_instance_id)
         last_failed = next((run for run in runs if not run.success), None)
         runs_by_provider: dict[str, int] = {}
         for run in runs:
@@ -112,7 +123,7 @@ class ControlPlaneHarnessDomainMixin:
         return {
             "status": "ok",
             "runs": [_redact_sensitive_payload(item.model_dump()) for item in runs],
-            "summary": self._harness.runs_summary(provider_key),
+            "summary": self._harness.runs_summary(provider_key, instance_id=resolved_instance_id),
             "ops": {
                 "profile_count": len(profiles),
                 "profiles_needing_attention": len([profile for profile in profiles if profile.needs_attention]),

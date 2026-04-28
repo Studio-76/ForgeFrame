@@ -64,6 +64,7 @@ class HarnessCapabilityProfile(BaseModel):
 
 class HarnessProviderProfile(BaseModel):
     provider_key: str
+    instance_id: str | None = None
     label: str
     integration_class: IntegrationClass
     endpoint_base_url: str
@@ -161,6 +162,7 @@ class HarnessVerificationResult(BaseModel):
 class HarnessVerificationRun(BaseModel):
     run_id: str | None = None
     provider_key: str
+    instance_id: str | None = None
     integration_class: IntegrationClass
     model: str | None = None
     mode: Literal["verify", "dry_run", "probe", "preview", "sync", "runtime_non_stream", "runtime_stream"]

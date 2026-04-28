@@ -6,7 +6,7 @@ from app.harness.models import HarnessPreviewRequest, HarnessProviderProfile, Ha
 from app.harness.service import HarnessService
 from app.harness.store import HarnessStore
 from app.providers import ProviderRegistry
-from app.providers.base import ChatDispatchRequest, ProviderUnsupportedFeatureError
+from app.providers.base import ChatDispatchRequest, EmbeddingDispatchRequest, ProviderUnsupportedFeatureError
 from app.providers.generic_harness.adapter import GenericHarnessAdapter
 from app.settings.config import Settings
 from app.storage.harness_repository import FileHarnessRepository, HarnessStoragePaths
@@ -167,6 +167,132 @@ def test_generic_harness_adapter_stream_mapping(tmp_path: Path) -> None:
 
     assert events[0].event == "delta"
     assert events[-1].event == "done"
+
+
+def test_generic_harness_adapter_scopes_duplicate_profile_keys_by_runtime_instance(tmp_path: Path) -> None:
+    service = build_service(tmp_path)
+    provider_key = "shared-profile"
+    model_id = "shared-model"
+    service.upsert_profile(
+        HarnessProviderProfile(
+            provider_key=provider_key,
+            instance_id="instance-alpha",
+            label="Alpha",
+            integration_class="openai_compatible",
+            endpoint_base_url="https://alpha.example.invalid/v1",
+            auth_scheme="none",
+            models=[model_id],
+            stream_mapping={"enabled": True},
+            capabilities={"streaming": True, "embeddings": True, "model_source": "manual"},
+        ),
+        instance_id="instance-alpha",
+    )
+    service.upsert_profile(
+        HarnessProviderProfile(
+            provider_key=provider_key,
+            instance_id="instance-beta",
+            label="Beta",
+            integration_class="openai_compatible",
+            endpoint_base_url="https://beta.example.invalid/v1",
+            auth_scheme="none",
+            models=[model_id],
+            stream_mapping={"enabled": True},
+            capabilities={"streaming": True, "embeddings": True, "model_source": "manual"},
+        ),
+        instance_id="instance-beta",
+    )
+
+    adapter = GenericHarnessAdapter(Settings(), service)
+    seen_non_stream: list[str | None] = []
+    seen_stream: list[str | None] = []
+    seen_embeddings: list[str | None] = []
+
+    def fake_execute_non_stream(
+        provider_key: str,
+        *,
+        instance_id: str | None = None,
+        model: str,
+        messages: list[dict[str, object]],
+        request_metadata: dict[str, str] | None = None,
+    ) -> dict[str, object]:
+        del provider_key, model, messages, request_metadata
+        seen_non_stream.append(instance_id)
+        return {
+            "model": model_id,
+            "content": "ok",
+            "finish_reason": "stop",
+            "prompt_tokens": 1,
+            "completion_tokens": 1,
+            "total_tokens": 2,
+            "tool_calls": [],
+        }
+
+    def fake_execute_stream(
+        provider_key: str,
+        *,
+        instance_id: str | None = None,
+        model: str,
+        messages: list[dict[str, object]],
+        request_metadata: dict[str, str] | None = None,
+    ):
+        del provider_key, model, messages, request_metadata
+        seen_stream.append(instance_id)
+        yield {
+            "event": "done",
+            "finish_reason": "stop",
+            "usage": {"prompt_tokens": 1, "completion_tokens": 1, "total_tokens": 2},
+            "content": "ok",
+            "tool_calls": [],
+        }
+
+    def fake_execute_embeddings(
+        provider_key: str,
+        *,
+        instance_id: str | None = None,
+        model: str,
+        input_items: list[object],
+        request_metadata: dict[str, str] | None = None,
+        encoding_format: str = "float",
+        dimensions: int | None = None,
+    ) -> dict[str, object]:
+        del provider_key, model, input_items, request_metadata, encoding_format, dimensions
+        seen_embeddings.append(instance_id)
+        return {
+            "model": model_id,
+            "data": [{"embedding": [0.1, 0.2]}],
+            "prompt_tokens": 1,
+            "total_tokens": 1,
+        }
+
+    service.execute_non_stream = fake_execute_non_stream  # type: ignore[method-assign]
+    service.execute_stream = fake_execute_stream  # type: ignore[method-assign]
+    service.execute_embeddings = fake_execute_embeddings  # type: ignore[method-assign]
+
+    request_metadata = {"instance_id": "instance-beta"}
+    chat_request = ChatDispatchRequest(
+        model=model_id,
+        messages=[{"role": "user", "content": "scope"}],
+        request_metadata=request_metadata,
+    )
+    stream_request = ChatDispatchRequest(
+        model=model_id,
+        messages=[{"role": "user", "content": "scope"}],
+        stream=True,
+        request_metadata=request_metadata,
+    )
+    embeddings_request = EmbeddingDispatchRequest(
+        model=model_id,
+        input_items=["scope"],
+        request_metadata=request_metadata,
+    )
+
+    adapter.create_chat_completion(chat_request)
+    list(adapter.stream_chat_completion(stream_request))
+    adapter.create_embeddings(embeddings_request)
+
+    assert seen_non_stream == ["instance-beta"]
+    assert seen_stream == ["instance-beta"]
+    assert seen_embeddings == ["instance-beta"]
 
 
 def test_generic_harness_adapter_status_capabilities_require_declared_streaming_support(tmp_path: Path) -> None:

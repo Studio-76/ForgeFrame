@@ -3,14 +3,65 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from typing import cast
 
+from app.api.admin.control_plane_models import (
+    ProviderClassDescriptor,
+    ProviderClassKey,
+    ProviderCreateRequest,
+    ProviderUpdateRequest,
+)
 from app.api.runtime.dependencies import clear_runtime_dependency_caches
-from app.api.admin.control_plane_models import ProviderCreateRequest, ProviderUpdateRequest
 from app.control_plane import ControlPlaneStateRecord, HealthConfig, HealthStatusRecord, ManagedModelRecord, ManagedProviderRecord
 from app.control_plane.target_defaults import ensure_model_registry_metadata
 
 
 class ControlPlaneProviderDomainMixin:
+    _SUPPORTED_PROVIDER_CLASSES: tuple[ProviderClassDescriptor, ...] = (
+        ProviderClassDescriptor(
+            key="openai_compatible",
+            label="OpenAI-compatible",
+            description="Remote or gateway-backed OpenAI-style runtime with explicit endpoint and auth semantics.",
+            integration_class="openai_compatible",
+            template_id="openai_compatible",
+            default_config={
+                "provider_class": "openai_compatible",
+                "endpoint_base_url": "https://example.invalid/v1",
+                "auth_scheme": "bearer",
+            },
+        ),
+        ProviderClassDescriptor(
+            key="local_ollama",
+            label="Local / Ollama",
+            description="Dedicated local runtime path for Ollama-style deployments and local model inventories.",
+            integration_class="local_ollama",
+            template_id="ollama",
+            default_config={
+                "provider_class": "local_ollama",
+                "endpoint_base_url": "http://localhost:11434/v1",
+                "auth_scheme": "none",
+            },
+        ),
+        ProviderClassDescriptor(
+            key="oauth_account",
+            label="OAuth / Account-backed",
+            description="Account-backed runtime that depends on an operator or end-user OAuth/session bridge.",
+            integration_class="oauth_account",
+            default_config={
+                "provider_class": "oauth_account",
+                "auth_scheme": "oauth_account",
+                "oauth_mode": "account_portal",
+            },
+        ),
+        ProviderClassDescriptor(
+            key="custom",
+            label="Custom",
+            description="Explicit custom wiring when the provider does not fit the built-in runtime classes cleanly yet.",
+            integration_class="custom",
+            default_config={"provider_class": "custom"},
+        ),
+    )
+
     @staticmethod
     def _managed_model_runtime_status(model: ManagedModelRecord) -> str:
         if not model.active:
@@ -185,16 +236,106 @@ class ControlPlaneProviderDomainMixin:
             raise ValueError(f"Provider '{provider_name}' is not managed in control plane.")
         return provider
 
+    def supported_provider_classes(self) -> list[dict[str, object]]:
+        return [item.model_dump(mode="json") for item in self._SUPPORTED_PROVIDER_CLASSES]
+
+    def _provider_class_descriptor(self, provider_class: ProviderClassKey) -> ProviderClassDescriptor:
+        for descriptor in self._SUPPORTED_PROVIDER_CLASSES:
+            if descriptor.key == provider_class:
+                return descriptor
+        raise ValueError(f"Unsupported provider class '{provider_class}'.")
+
+    def _infer_provider_class(
+        self,
+        *,
+        provider_name: str,
+        integration_class: str | None,
+        template_id: str | None,
+        config: dict[str, str] | None,
+    ) -> ProviderClassKey:
+        normalized_config = config or {}
+        configured_class = normalized_config.get("provider_class")
+        if configured_class in {"openai_compatible", "local_ollama", "oauth_account", "custom"}:
+            return cast(ProviderClassKey, configured_class)
+
+        normalized_integration = (integration_class or "").strip().lower()
+        normalized_template = (template_id or "").strip().lower()
+        normalized_provider = provider_name.strip().lower()
+        auth_scheme = normalized_config.get("auth_scheme", "").strip().lower()
+
+        if normalized_provider == "ollama" or normalized_template == "ollama" or "ollama" in normalized_integration:
+            return "local_ollama"
+        if normalized_provider in {
+            "openai_codex",
+            "gemini",
+            "antigravity",
+            "github_copilot",
+            "claude_code",
+            "nous_oauth",
+            "qwen_oauth",
+        }:
+            return "oauth_account"
+        if auth_scheme == "oauth_account" or "oauth" in normalized_integration:
+            return "oauth_account"
+        if normalized_provider in {"openai_api", "generic_harness", "forgeframe_baseline", "localai"}:
+            return "openai_compatible"
+        if normalized_integration in {"openai_compatible", "harness_generic"} or normalized_template == "openai_compatible":
+            return "openai_compatible"
+        if auth_scheme in {"bearer", "api_key_header"}:
+            return "openai_compatible"
+        return "custom"
+
+    def _normalize_provider_settings(
+        self,
+        *,
+        provider_name: str,
+        provider_class: ProviderClassKey | None,
+        integration_class: str | None,
+        template_id: str | None,
+        config: dict[str, str] | None,
+    ) -> tuple[ProviderClassKey, str, str | None, dict[str, str]]:
+        resolved_class = provider_class or self._infer_provider_class(
+            provider_name=provider_name,
+            integration_class=integration_class,
+            template_id=template_id,
+            config=config,
+        )
+        descriptor = self._provider_class_descriptor(resolved_class)
+        normalized_config = {
+            key: value
+            for key, value in descriptor.default_config.items()
+            if value is not None and str(value).strip()
+        }
+        if config:
+            normalized_config.update(
+                {
+                    key: value
+                    for key, value in config.items()
+                    if value is not None and value.strip()
+                }
+            )
+        normalized_config["provider_class"] = resolved_class
+        normalized_integration = (integration_class or descriptor.integration_class).strip() or descriptor.integration_class
+        normalized_template = template_id if template_id is not None else descriptor.template_id
+        return resolved_class, normalized_integration, normalized_template, normalized_config
+
     def create_provider(self, payload: ProviderCreateRequest) -> ManagedProviderRecord:
         if payload.provider in self._providers_state:
             raise ValueError(f"Provider '{payload.provider}' already exists.")
+        _, integration_class, template_id, config = self._normalize_provider_settings(
+            provider_name=payload.provider,
+            provider_class=payload.provider_class,
+            integration_class=payload.integration_class,
+            template_id=payload.template_id,
+            config=payload.config,
+        )
         provider = ManagedProviderRecord(
             provider=payload.provider,
             label=payload.label,
             enabled=False,
-            integration_class=payload.integration_class,
-            template_id=payload.template_id,
-            config=payload.config,
+            integration_class=integration_class,
+            template_id=template_id,
+            config=config,
             last_sync_status="created",
         )
         self._providers_state[payload.provider] = provider
@@ -211,12 +352,17 @@ class ControlPlaneProviderDomainMixin:
         provider = self.get_provider(provider_name)
         if payload.label is not None:
             provider.label = payload.label
-        if payload.integration_class is not None:
-            provider.integration_class = payload.integration_class
-        if payload.template_id is not None:
-            provider.template_id = payload.template_id
-        if payload.config is not None:
-            provider.config = payload.config
+        provider_class, integration_class, template_id, config = self._normalize_provider_settings(
+            provider_name=provider.provider,
+            provider_class=payload.provider_class,
+            integration_class=payload.integration_class if payload.integration_class is not None else provider.integration_class,
+            template_id=payload.template_id if payload.template_id is not None else provider.template_id,
+            config=payload.config if payload.config is not None else provider.config,
+        )
+        provider.integration_class = integration_class
+        provider.template_id = template_id
+        provider.config = config
+        provider.config["provider_class"] = provider_class
         self._refresh_provider_targets()
         self._persist_state()
         clear_runtime_dependency_caches()
@@ -260,8 +406,8 @@ class ControlPlaneProviderDomainMixin:
 
             if provider.provider == "generic_harness":
                 profile_failures = 0
-                for profile in self._harness.list_profiles():
-                    sync_state = self._harness.sync_profile_inventory(profile.provider_key)
+                for profile in self._harness.list_profiles(instance_id=self._instance.instance_id):
+                    sync_state = self._harness.sync_profile_inventory(profile.provider_key, instance_id=self._instance.instance_id)
                     if sync_state.last_sync_status != "ok":
                         profile_failures += 1
                         self._analytics.record_integration_error(

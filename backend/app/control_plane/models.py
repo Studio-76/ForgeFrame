@@ -419,6 +419,7 @@ class ControlPlaneBootstrapReadinessReport(BaseModel):
 
 class OAuthOperationRecord(BaseModel):
     tenant_id: str = DEFAULT_BOOTSTRAP_TENANT_ID
+    instance_id: str | None = None
     provider_key: str
     action: Literal["probe", "bridge_sync"]
     status: Literal["ok", "warning", "failed", "skipped"]
@@ -492,6 +493,7 @@ class ProviderUiTruthRecord(BaseModel):
     provider: str
     label: str
     enabled: bool
+    provider_class: str = "custom"
     integration_class: str = "native"
     template_id: str | None = None
     config: dict[str, str] = Field(default_factory=dict)
@@ -523,6 +525,17 @@ class ProviderUiTruthRecord(BaseModel):
     oauth_failure_count: int = 0
     oauth_last_probe: dict[str, object] | None = None
     oauth_last_bridge_sync: dict[str, object] | None = None
+    oauth_connect_required: bool = False
+    target_count: int = 0
+    enabled_target_count: int = 0
+    ready_target_count: int = 0
+    health_status: str = "unknown"
+    healthy_model_count: int = 0
+    attention_model_count: int = 0
+    last_health_check_at: str | None = None
+    last_probe_at: str | None = None
+    next_action: str = "Review provider"
+    next_action_kind: str = "edit_provider"
 
 
 class ProviderTruthAxesRecord(BaseModel):

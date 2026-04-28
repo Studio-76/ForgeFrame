@@ -16,7 +16,7 @@ from sqlalchemy.orm import Mapped, Session, mapped_column, sessionmaker
 from app.control_plane import OAuthOperationRecord
 from app.settings.config import Settings
 from app.storage.harness_repository import Base
-from app.tenancy import effective_tenant_filter
+from app.tenancy import DEFAULT_BOOTSTRAP_TENANT_ID, effective_tenant_filter
 
 
 class OAuthOperationORM(Base):
@@ -88,10 +88,22 @@ class PostgresOAuthOperationsRepository:
         return datetime.fromisoformat(value)
 
     @staticmethod
-    def _tenant_clause(*, tenant_id: str | None, column: str = "tenant_id") -> tuple[str, dict[str, Any]]:
-        if tenant_id is None:
+    def _scope_clause(*, tenant_id: str | None, instance_id: str | None, tenant_column: str = "tenant_id") -> tuple[str, dict[str, Any]]:
+        clauses: list[str] = []
+        params: dict[str, Any] = {}
+        if tenant_id is not None:
+            clauses.append(f"{tenant_column} = :tenant_id")
+            params["tenant_id"] = tenant_id
+        normalized_instance_id = (instance_id or "").strip() or None
+        if normalized_instance_id is not None:
+            clauses.append(
+                "COALESCE(NULLIF(payload->>'instance_id', ''), NULLIF(payload->>'tenant_id', ''), :default_instance_id) = :instance_id"
+            )
+            params["instance_id"] = normalized_instance_id
+            params["default_instance_id"] = DEFAULT_BOOTSTRAP_TENANT_ID
+        if not clauses:
             return "", {}
-        return f" AND {column} = :tenant_id", {"tenant_id": tenant_id}
+        return " AND " + " AND ".join(clauses), params
 
     def _mapped_rows(self, query: str, params: dict[str, Any]) -> list[dict[str, Any]]:
         with self._session() as session:
@@ -113,18 +125,24 @@ class PostgresOAuthOperationsRepository:
             requested_tenant_id,
         )
 
-    def recent_operations(self, *, tenant_id: str | None, limit: int = 50) -> list[OAuthOperationRecord]:
-        tenant_clause, tenant_params = self._tenant_clause(tenant_id=tenant_id)
+    def recent_operations(
+        self,
+        *,
+        tenant_id: str | None,
+        instance_id: str | None = None,
+        limit: int = 50,
+    ) -> list[OAuthOperationRecord]:
+        scope_clause, scope_params = self._scope_clause(tenant_id=tenant_id, instance_id=instance_id)
         rows = self._mapped_rows(
             f"""
             SELECT payload
             FROM oauth_operations
             WHERE 1 = 1
-              {tenant_clause}
+              {scope_clause}
             ORDER BY executed_at DESC
             LIMIT :limit
             """,
-            {**tenant_params, "limit": int(limit)},
+            {**scope_params, "limit": int(limit)},
         )
         operations = [OAuthOperationRecord(**row["payload"]) for row in rows]
         operations.reverse()
@@ -136,19 +154,20 @@ class PostgresOAuthOperationsRepository:
         *,
         action: str,
         tenant_id: str | None = None,
+        instance_id: str | None = None,
     ) -> OAuthOperationRecord | None:
-        tenant_clause, tenant_params = self._tenant_clause(tenant_id=tenant_id)
+        scope_clause, scope_params = self._scope_clause(tenant_id=tenant_id, instance_id=instance_id)
         rows = self._mapped_rows(
             f"""
             SELECT payload
             FROM oauth_operations
             WHERE provider_key = :provider_key
               AND action = :action
-              {tenant_clause}
+              {scope_clause}
             ORDER BY executed_at DESC
             LIMIT 1
             """,
-            {"provider_key": provider_key, "action": action, **tenant_params},
+            {"provider_key": provider_key, "action": action, **scope_params},
         )
         if not rows:
             return None
@@ -158,8 +177,9 @@ class PostgresOAuthOperationsRepository:
         self,
         *,
         tenant_id: str | None,
+        instance_id: str | None = None,
     ) -> dict[str, dict[str, Any]]:
-        tenant_clause, tenant_params = self._tenant_clause(tenant_id=tenant_id)
+        scope_clause, scope_params = self._scope_clause(tenant_id=tenant_id, instance_id=instance_id)
         counts = self._mapped_rows(
             f"""
             SELECT
@@ -181,10 +201,10 @@ class PostgresOAuthOperationsRepository:
               COALESCE(sum(CASE WHEN action = 'bridge_sync' THEN 1 ELSE 0 END), 0)::bigint AS bridge_sync_count
             FROM oauth_operations
             WHERE 1 = 1
-              {tenant_clause}
+              {scope_clause}
             GROUP BY provider_key
             """,
-            tenant_params,
+            scope_params,
         )
         latest_probe = self._mapped_rows(
             f"""
@@ -193,10 +213,10 @@ class PostgresOAuthOperationsRepository:
               payload
             FROM oauth_operations
             WHERE action = 'probe'
-              {tenant_clause}
+              {scope_clause}
             ORDER BY provider_key ASC, executed_at DESC
             """,
-            tenant_params,
+            scope_params,
         )
         latest_bridge = self._mapped_rows(
             f"""
@@ -205,10 +225,10 @@ class PostgresOAuthOperationsRepository:
               payload
             FROM oauth_operations
             WHERE action = 'bridge_sync'
-              {tenant_clause}
+              {scope_clause}
             ORDER BY provider_key ASC, executed_at DESC
             """,
-            tenant_params,
+            scope_params,
         )
         latest_failed = self._mapped_rows(
             f"""
@@ -217,10 +237,10 @@ class PostgresOAuthOperationsRepository:
               payload
             FROM oauth_operations
             WHERE status = 'failed'
-              {tenant_clause}
+              {scope_clause}
             ORDER BY provider_key ASC, executed_at DESC
             """,
-            tenant_params,
+            scope_params,
         )
 
         summary: dict[str, dict[str, Any]] = {}

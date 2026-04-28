@@ -6,6 +6,7 @@ import { getInstanceIdFromSearchParams, withInstanceScope } from "../app/tenantS
 import { useInstanceCatalog } from "../app/useInstanceCatalog";
 import { InstanceScopeCard } from "../components/InstanceScopeCard";
 import { PageIntro } from "../components/PageIntro";
+import { BlockedState } from "../components/ui/StateBlocks";
 import { HarnessControlSection, OperationResultSection } from "../features/providers/ProvidersSections";
 import { getProvidersAccess } from "../features/providers/providersShared";
 import { useProvidersControlPlane } from "../features/providers/useProvidersControlPlane";
@@ -15,8 +16,15 @@ export function HarnessPage() {
   const { session, sessionReady } = useAppSession();
   const instanceId = getInstanceIdFromSearchParams(searchParams);
   const { instances, loadState, error: instancesError, selectedInstance } = useInstanceCatalog(instanceId);
-  const access = getProvidersAccess(session, sessionReady);
-  const { data, actions } = useProvidersControlPlane(access, instanceId);
+  const access = getProvidersAccess(session, sessionReady, instanceId);
+  const { data, actions } = useProvidersControlPlane(access, instanceId, {
+    includeUsageSummary: true,
+    includeHarness: true,
+    includeOauthTargets: false,
+    includeCompatibilityMatrix: false,
+    includeBootstrapReadiness: false,
+    includeClientView: false,
+  });
 
   const onInstanceChange = (nextInstanceId: string | null) => {
     const nextSearchParams = new URLSearchParams(searchParams);
@@ -30,7 +38,9 @@ export function HarnessPage() {
 
   const proofProviders = data.providers.filter((provider) => provider.harness_proof_status !== "none");
   const attentionProfiles = data.profiles.filter((profile) => profile.needs_attention).length;
-  const note = access.canMutate
+  const note = !access.canRead
+    ? access.summaryDetail
+    : access.canMutate
     ? "Harness profile creation, verification, probe, import, export, and proof review are isolated on this route so the Providers module no longer doubles as the main harness workspace."
     : `${access.summaryDetail} Harness proof, runs, and saved profiles stay visible here without exposing mutations the backend would reject.`;
 
@@ -42,9 +52,21 @@ export function HarnessPage() {
         description="Saved harness profiles, verification runs, import/export posture, and proof status live on their own route instead of remaining collapsed under Providers."
         question="Do the current harness profiles and runs prove anything real, or is harness truth still being confused with generic provider setup?"
         links={[
-          { label: "Harness", to: CONTROL_PLANE_ROUTES.harness, description: "Stay on the dedicated harness profile, run, and proof surface." },
-          { label: "Providers", to: CONTROL_PLANE_ROUTES.providers, description: "Return to provider runtime truth when the question shifts away from harness operations." },
-          { label: "Release / Validation", to: CONTROL_PLANE_ROUTES.releaseValidation, description: "Cross-check whether current harness proof is strong enough for release gates." },
+          {
+            label: "Harness",
+            to: withInstanceScope(CONTROL_PLANE_ROUTES.harness, instanceId),
+            description: "Stay on the dedicated harness profile, run, and proof surface.",
+          },
+          {
+            label: "Providers",
+            to: withInstanceScope(CONTROL_PLANE_ROUTES.providers, instanceId),
+            description: "Return to provider runtime truth when the question shifts away from harness operations.",
+          },
+          {
+            label: "Release / Validation",
+            to: withInstanceScope(CONTROL_PLANE_ROUTES.releaseValidation, instanceId),
+            description: "Cross-check whether current harness proof is strong enough for release gates.",
+          },
         ]}
         badges={[
           { label: access.badgeLabel, tone: access.badgeTone },
@@ -65,54 +87,65 @@ export function HarnessPage() {
         onInstanceChange={onInstanceChange}
       />
 
-      <div className="fg-grid fg-grid-compact">
-        <article className="fg-card">
-          <div className="fg-panel-heading">
-            <div>
-              <h3>Harness proof posture</h3>
-              <p className="fg-muted">Recorded harness proof stays visible here instead of disappearing behind the provider route.</p>
-            </div>
-            <span className="fg-pill" data-tone={data.state === "success" ? "success" : data.state === "error" ? "danger" : "neutral"}>
-              {data.state}
-            </span>
-          </div>
-          <ul className="fg-list">
-            <li>Profiles: {data.profiles.length}</li>
-            <li>Profiles needing attention: {attentionProfiles}</li>
-            <li>Recent runs: {data.runs.length}</li>
-            <li>Proof-carrying providers: {proofProviders.length}</li>
-          </ul>
-          <div className="fg-actions">
-            <button type="button" onClick={() => void actions.load()}>
-              Refresh harness
-            </button>
-            <Link className="fg-nav-link" to={withInstanceScope(CONTROL_PLANE_ROUTES.providers, instanceId)}>
-              Open Provider Runtime Truth
-            </Link>
-          </div>
-        </article>
+      {!access.canRead ? (
+        <BlockedState
+          title={access.summaryTitle}
+          description={access.summaryDetail}
+          badgeLabel={access.badgeLabel}
+          status="blocked"
+        />
+      ) : (
+        <>
+          <div className="fg-grid fg-grid-compact">
+            <article className="fg-card">
+              <div className="fg-panel-heading">
+                <div>
+                  <h3>Harness proof posture</h3>
+                  <p className="fg-muted">Recorded harness proof stays visible here instead of disappearing behind the provider route.</p>
+                </div>
+                <span className="fg-pill" data-tone={data.state === "success" ? "success" : data.state === "error" ? "danger" : "neutral"}>
+                  {data.state}
+                </span>
+              </div>
+              <ul className="fg-list">
+                <li>Profiles: {data.profiles.length}</li>
+                <li>Profiles needing attention: {attentionProfiles}</li>
+                <li>Recent runs: {data.runs.length}</li>
+                <li>Proof-carrying providers: {proofProviders.length}</li>
+              </ul>
+              <div className="fg-actions">
+                <button type="button" onClick={() => void actions.load()}>
+                  Refresh harness
+                </button>
+                <Link className="fg-nav-link" to={withInstanceScope(CONTROL_PLANE_ROUTES.providers, instanceId)}>
+                  Open Provider Runtime Truth
+                </Link>
+              </div>
+            </article>
 
-        <article className="fg-card">
-          <div className="fg-panel-heading">
-            <div>
-              <h3>Proof carriers</h3>
-              <p className="fg-muted">Providers with recorded harness proof stay explicit on the dedicated harness route.</p>
-            </div>
+            <article className="fg-card">
+              <div className="fg-panel-heading">
+                <div>
+                  <h3>Proof carriers</h3>
+                  <p className="fg-muted">Providers with recorded harness proof stay explicit on the dedicated harness route.</p>
+                </div>
+              </div>
+              <ul className="fg-list">
+                {proofProviders.length === 0 ? <li>No providers carry harness proof yet.</li> : null}
+                {proofProviders.map((provider) => (
+                  <li key={provider.provider}>
+                    {provider.label} · proof={provider.harness_proof_status} · profiles={provider.harness_profile_count} · runs={provider.harness_run_count}
+                  </li>
+                ))}
+              </ul>
+            </article>
           </div>
-          <ul className="fg-list">
-            {proofProviders.length === 0 ? <li>No providers carry harness proof yet.</li> : null}
-            {proofProviders.map((provider) => (
-              <li key={provider.provider}>
-                {provider.label} · proof={provider.harness_proof_status} · profiles={provider.harness_profile_count} · runs={provider.harness_run_count}
-              </li>
-            ))}
-          </ul>
-        </article>
-      </div>
 
-      {data.error ? <p className="fg-danger">{data.error}</p> : null}
-      <OperationResultSection data={data} actions={actions} />
-      <HarnessControlSection data={data} actions={actions} />
+          {data.error ? <p className="fg-danger">{data.error}</p> : null}
+          <OperationResultSection data={data} actions={actions} />
+          <HarnessControlSection data={data} actions={actions} />
+        </>
+      )}
     </section>
   );
 }

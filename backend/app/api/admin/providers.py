@@ -171,8 +171,14 @@ def list_provider_control_plane(
 ) -> dict[str, object]:
     bootstrap_readiness = service.get_last_bootstrap_readiness()
     try:
-        truth_axes = service.provider_truth_axes(tenant_id=instance.tenant_id)
-        providers = service.provider_control_snapshot(tenant_id=instance.tenant_id)
+        truth_axes = service.provider_truth_axes(
+            tenant_id=instance.tenant_id,
+            instance_id=instance.instance_id,
+        )
+        providers = service.provider_control_snapshot(
+            tenant_id=instance.tenant_id,
+            instance_id=instance.instance_id,
+        )
     except TenantFilterRequiredError as exc:
         return _admin_error(status.HTTP_400_BAD_REQUEST, "tenant_filter_required", str(exc))
     return {
@@ -180,9 +186,13 @@ def list_provider_control_plane(
         "object": "provider_control_plane",
         "instance": instance.model_dump(mode="json"),
         "providers": providers,
+        "supported_provider_classes": service.supported_provider_classes(),
         "provider_catalog": [item.model_dump() for item in service.list_provider_catalog()],
         "provider_catalog_summary": service.provider_catalog_summary().model_dump(),
-        "openai_compatibility_signoff": service.openai_compatibility_signoff(tenant_id=instance.tenant_id),
+        "openai_compatibility_signoff": service.openai_compatibility_signoff(
+            tenant_id=instance.tenant_id,
+            instance_id=instance.instance_id,
+        ),
         "truth_axes": [item.model_dump() for item in truth_axes],
         "health_config": service.get_health_config().model_dump(),
         "bootstrap_readiness": bootstrap_readiness.model_dump() if bootstrap_readiness else None,
@@ -215,7 +225,10 @@ def openai_compatibility_signoff(
     service: ControlPlaneService = Depends(get_control_plane_service),
 ) -> dict[str, object]:
     try:
-        payload = service.openai_compatibility_signoff(tenant_id=instance.tenant_id)
+        payload = service.openai_compatibility_signoff(
+            tenant_id=instance.tenant_id,
+            instance_id=instance.instance_id,
+        )
     except TenantFilterRequiredError as exc:
         return _admin_error(status.HTTP_400_BAD_REQUEST, "tenant_filter_required", str(exc))
     return {
@@ -357,16 +370,20 @@ def probe_oauth_account_provider(
     provider_key: str,
     request: Request,
     _admin: AuthenticatedAdmin = Depends(_require_provider_operate),
+    instance: InstanceRecord = Depends(resolve_admin_instance_scope),
     service: ControlPlaneService = Depends(get_control_plane_service),
 ) -> object:
     return _execute_idempotent_admin_json(
         request=request,
-        scope_key=f"admin.providers.oauth_account.probe:{provider_key}",
-        fingerprint_payload={},
-        execute=lambda: {"status": "ok", "probe": service.probe_oauth_account_provider(provider_key).model_dump()},
+        scope_key=f"admin.providers.oauth_account.probe:{instance.instance_id}:{provider_key}",
+        fingerprint_payload={"instance_id": instance.instance_id},
+        execute=lambda: {
+            "status": "ok",
+            "probe": service.probe_oauth_account_provider(provider_key, instance.instance_id).model_dump(),
+        },
         errors=((ValueError, status.HTTP_404_NOT_FOUND, "oauth_provider_not_found"),),
         resource_type="oauth_account_probe",
-        resource_id=provider_key,
+        resource_id=f"{instance.instance_id}:{provider_key}",
     )
 
 
@@ -380,7 +397,10 @@ def list_oauth_account_targets(
         return {
             "status": "ok",
             "instance": instance.model_dump(mode="json"),
-            "targets": service.list_oauth_account_target_statuses(tenant_id=instance.tenant_id),
+            "targets": service.list_oauth_account_target_statuses(
+                tenant_id=instance.tenant_id,
+                instance_id=instance.instance_id,
+            ),
         }
     except TenantFilterRequiredError as exc:
         return _admin_error(status.HTTP_400_BAD_REQUEST, "tenant_filter_required", str(exc))
@@ -393,7 +413,10 @@ def oauth_account_onboarding(
     service: ControlPlaneService = Depends(get_control_plane_service),
 ) -> object:
     try:
-        response = service.oauth_account_onboarding_summary(tenant_id=instance.tenant_id)
+        response = service.oauth_account_onboarding_summary(
+            tenant_id=instance.tenant_id,
+            instance_id=instance.instance_id,
+        )
         if isinstance(response, dict):
             return {"instance": instance.model_dump(mode="json"), **response}
         return response
@@ -408,7 +431,10 @@ def oauth_account_operations(
     service: ControlPlaneService = Depends(get_control_plane_service),
 ) -> object:
     try:
-        response = service.oauth_account_operations_summary(tenant_id=instance.tenant_id)
+        response = service.oauth_account_operations_summary(
+            tenant_id=instance.tenant_id,
+            instance_id=instance.instance_id,
+        )
         if isinstance(response, dict):
             return {"instance": instance.model_dump(mode="json"), **response}
         return response
@@ -423,7 +449,10 @@ def compatibility_matrix(
     service: ControlPlaneService = Depends(get_control_plane_service),
 ) -> object:
     try:
-        truth_axes = service.provider_truth_axes(tenant_id=instance.tenant_id)
+        truth_axes = service.provider_truth_axes(
+            tenant_id=instance.tenant_id,
+            instance_id=instance.instance_id,
+        )
     except TenantFilterRequiredError as exc:
         return _admin_error(status.HTTP_400_BAD_REQUEST, "tenant_filter_required", str(exc))
     matrix = []
@@ -499,6 +528,7 @@ def compatibility_matrix(
 @router.post("/oauth-account/probe-all")
 def probe_all_oauth_account_targets(
     _admin: AuthenticatedAdmin = Depends(_require_provider_operate),
+    instance: InstanceRecord = Depends(resolve_admin_instance_scope),
     service: ControlPlaneService = Depends(get_control_plane_service),
 ) -> object:
     results = []
@@ -512,7 +542,9 @@ def probe_all_oauth_account_targets(
         "qwen_oauth",
     ]:
         try:
-            results.append(service.probe_oauth_account_provider(provider_key).model_dump())
+            results.append(
+                service.probe_oauth_account_provider(provider_key, instance.instance_id).model_dump()
+            )
         except ValueError as exc:
             results.append({"provider_key": provider_key, "status": "failed", "details": str(exc)})
     return {"status": "ok", "probes": results}
@@ -522,15 +554,16 @@ def probe_all_oauth_account_targets(
 def sync_oauth_account_bridge_profiles(
     request: Request,
     _admin: AuthenticatedAdmin = Depends(_require_provider_write),
+    instance: InstanceRecord = Depends(resolve_admin_instance_scope),
     service: ControlPlaneService = Depends(get_control_plane_service),
 ) -> object:
     return _execute_idempotent_admin_json(
         request=request,
-        scope_key="admin.providers.oauth_account.bridge_profiles.sync",
-        fingerprint_payload={},
-        execute=service.sync_oauth_account_bridge_profiles,
+        scope_key=f"admin.providers.oauth_account.bridge_profiles.sync:{instance.instance_id}",
+        fingerprint_payload={"instance_id": instance.instance_id},
+        execute=lambda: service.sync_oauth_account_bridge_profiles(instance.instance_id),
         resource_type="oauth_bridge_profile_sync",
-        resource_id="control_plane",
+        resource_id=instance.instance_id,
     )
 
 
@@ -553,9 +586,14 @@ def list_harness_templates(
 @router.get("/harness/profiles")
 def list_harness_profiles(
     _admin: AuthenticatedAdmin = Depends(_require_provider_read),
+    instance: InstanceRecord = Depends(resolve_admin_instance_scope),
     service: ControlPlaneService = Depends(get_control_plane_service),
 ) -> dict[str, object]:
-    return {"status": "ok", "profiles": [_redacted_harness_profile_payload(item) for item in service.list_harness_profiles()]}
+    return {
+        "status": "ok",
+        "instance": instance.model_dump(mode="json"),
+        "profiles": [_redacted_harness_profile_payload(item) for item in service.list_harness_profiles(instance.instance_id)],
+    }
 
 
 @router.put("/harness/profiles/{provider_key}")
@@ -564,20 +602,22 @@ def upsert_harness_profile(
     payload: HarnessProviderProfile,
     request: Request,
     _admin: AuthenticatedAdmin = Depends(_require_provider_write),
+    instance: InstanceRecord = Depends(resolve_admin_instance_scope),
     service: ControlPlaneService = Depends(get_control_plane_service),
 ) -> object:
     if payload.provider_key != provider_key:
         return _admin_error(status.HTTP_400_BAD_REQUEST, "provider_key_mismatch", "Path provider_key and payload.provider_key must match.")
+    scoped_payload = payload.model_copy(update={"instance_id": instance.instance_id})
     return _execute_idempotent_admin_json(
         request=request,
-        scope_key=f"admin.providers.harness.profile.upsert:{provider_key}",
-        fingerprint_payload=payload.model_dump(mode="json"),
+        scope_key=f"admin.providers.harness.profile.upsert:{instance.instance_id}:{provider_key}",
+        fingerprint_payload={"instance_id": instance.instance_id, "payload": scoped_payload.model_dump(mode="json")},
         execute=lambda: {
             "status": "ok",
-            "profile": _redacted_harness_profile_payload(service.upsert_harness_profile(payload)),
+            "profile": _redacted_harness_profile_payload(service.upsert_harness_profile(scoped_payload, instance.instance_id)),
         },
         resource_type="harness_profile",
-        resource_id=provider_key,
+        resource_id=f"{instance.instance_id}:{provider_key}",
     )
 
 
@@ -586,16 +626,17 @@ def delete_harness_profile(
     provider_key: str,
     request: Request,
     _admin: AuthenticatedAdmin = Depends(_require_provider_write),
+    instance: InstanceRecord = Depends(resolve_admin_instance_scope),
     service: ControlPlaneService = Depends(get_control_plane_service),
 ) -> object:
     return _execute_idempotent_admin_json(
         request=request,
-        scope_key=f"admin.providers.harness.profile.delete:{provider_key}",
-        fingerprint_payload={},
-        execute=lambda: _delete_harness_profile(service, provider_key),
+        scope_key=f"admin.providers.harness.profile.delete:{instance.instance_id}:{provider_key}",
+        fingerprint_payload={"instance_id": instance.instance_id},
+        execute=lambda: _delete_harness_profile(service, provider_key, instance.instance_id),
         errors=((ValueError, status.HTTP_404_NOT_FOUND, "harness_profile_not_found"),),
         resource_type="harness_profile",
-        resource_id=provider_key,
+        resource_id=f"{instance.instance_id}:{provider_key}",
     )
 
 
@@ -604,19 +645,20 @@ def activate_harness_profile(
     provider_key: str,
     request: Request,
     _admin: AuthenticatedAdmin = Depends(_require_provider_write),
+    instance: InstanceRecord = Depends(resolve_admin_instance_scope),
     service: ControlPlaneService = Depends(get_control_plane_service),
 ) -> object:
     return _execute_idempotent_admin_json(
         request=request,
-        scope_key=f"admin.providers.harness.profile.activate:{provider_key}",
-        fingerprint_payload={},
+        scope_key=f"admin.providers.harness.profile.activate:{instance.instance_id}:{provider_key}",
+        fingerprint_payload={"instance_id": instance.instance_id},
         execute=lambda: {
             "status": "ok",
-            "profile": _redacted_harness_profile_payload(service.set_harness_profile_active(provider_key, True)),
+            "profile": _redacted_harness_profile_payload(service.set_harness_profile_active(provider_key, True, instance.instance_id)),
         },
         errors=((ValueError, status.HTTP_404_NOT_FOUND, "harness_profile_not_found"),),
         resource_type="harness_profile",
-        resource_id=provider_key,
+        resource_id=f"{instance.instance_id}:{provider_key}",
     )
 
 
@@ -625,19 +667,20 @@ def deactivate_harness_profile(
     provider_key: str,
     request: Request,
     _admin: AuthenticatedAdmin = Depends(_require_provider_write),
+    instance: InstanceRecord = Depends(resolve_admin_instance_scope),
     service: ControlPlaneService = Depends(get_control_plane_service),
 ) -> object:
     return _execute_idempotent_admin_json(
         request=request,
-        scope_key=f"admin.providers.harness.profile.deactivate:{provider_key}",
-        fingerprint_payload={},
+        scope_key=f"admin.providers.harness.profile.deactivate:{instance.instance_id}:{provider_key}",
+        fingerprint_payload={"instance_id": instance.instance_id},
         execute=lambda: {
             "status": "ok",
-            "profile": _redacted_harness_profile_payload(service.set_harness_profile_active(provider_key, False)),
+            "profile": _redacted_harness_profile_payload(service.set_harness_profile_active(provider_key, False, instance.instance_id)),
         },
         errors=((ValueError, status.HTTP_404_NOT_FOUND, "harness_profile_not_found"),),
         resource_type="harness_profile",
-        resource_id=provider_key,
+        resource_id=f"{instance.instance_id}:{provider_key}",
     )
 
 
@@ -646,16 +689,17 @@ def harness_preview(
     payload: HarnessPreviewRequest,
     request: Request,
     _admin: AuthenticatedAdmin = Depends(_require_provider_read),
+    instance: InstanceRecord = Depends(resolve_admin_instance_scope),
     service: ControlPlaneService = Depends(get_control_plane_service),
 ) -> object:
     return _execute_idempotent_admin_json(
         request=request,
-        scope_key="admin.providers.harness.preview",
-        fingerprint_payload=payload.model_dump(mode="json"),
-        execute=lambda: _redact_sensitive_payload(service.harness_preview(payload)),
+        scope_key=f"admin.providers.harness.preview:{instance.instance_id}",
+        fingerprint_payload={"instance_id": instance.instance_id, "payload": payload.model_dump(mode="json")},
+        execute=lambda: _redact_sensitive_payload(service.harness_preview(payload, instance.instance_id)),
         errors=((ValueError, status.HTTP_404_NOT_FOUND, "harness_profile_not_found"),),
         resource_type="harness_preview",
-        resource_id=payload.provider_key,
+        resource_id=f"{instance.instance_id}:{payload.provider_key}",
     )
 
 
@@ -664,16 +708,17 @@ def harness_dry_run(
     payload: HarnessPreviewRequest,
     request: Request,
     _admin: AuthenticatedAdmin = Depends(_require_provider_operate),
+    instance: InstanceRecord = Depends(resolve_admin_instance_scope),
     service: ControlPlaneService = Depends(get_control_plane_service),
 ) -> object:
     return _execute_idempotent_admin_json(
         request=request,
-        scope_key="admin.providers.harness.dry_run",
-        fingerprint_payload=payload.model_dump(mode="json"),
-        execute=lambda: _redact_sensitive_payload(service.harness_dry_run(payload)),
+        scope_key=f"admin.providers.harness.dry_run:{instance.instance_id}",
+        fingerprint_payload={"instance_id": instance.instance_id, "payload": payload.model_dump(mode="json")},
+        execute=lambda: _redact_sensitive_payload(service.harness_dry_run(payload, instance.instance_id)),
         errors=((ValueError, status.HTTP_404_NOT_FOUND, "harness_profile_not_found"),),
         resource_type="harness_dry_run",
-        resource_id=payload.provider_key,
+        resource_id=f"{instance.instance_id}:{payload.provider_key}",
     )
 
 
@@ -682,6 +727,7 @@ def harness_probe(
     payload: HarnessPreviewRequest,
     request: Request,
     _admin: AuthenticatedAdmin = Depends(_require_provider_operate),
+    instance: InstanceRecord = Depends(resolve_admin_instance_scope),
     service: ControlPlaneService = Depends(get_control_plane_service),
 ) -> object:
     unsupported = _unsupported_idempotency_response(
@@ -691,7 +737,7 @@ def harness_probe(
     if unsupported is not None:
         return unsupported
     try:
-        return _redact_sensitive_payload(service.harness_probe(payload))
+        return _redact_sensitive_payload(service.harness_probe(payload, instance.instance_id))
     except ValueError as exc:
         return _admin_error(status.HTTP_404_NOT_FOUND, "harness_profile_not_found", str(exc))
     except RuntimeError as exc:
@@ -707,41 +753,44 @@ def verify_harness_profile(
     payload: HarnessVerificationRequest,
     request: Request,
     _admin: AuthenticatedAdmin = Depends(_require_provider_operate),
+    instance: InstanceRecord = Depends(resolve_admin_instance_scope),
     service: ControlPlaneService = Depends(get_control_plane_service),
 ) -> object:
     return _execute_idempotent_admin_json(
         request=request,
-        scope_key="admin.providers.harness.verify",
-        fingerprint_payload=payload.model_dump(mode="json"),
+        scope_key=f"admin.providers.harness.verify:{instance.instance_id}",
+        fingerprint_payload={"instance_id": instance.instance_id, "payload": payload.model_dump(mode="json")},
         execute=lambda: {
             "status": "ok",
-            "verification": _redact_sensitive_payload(service.verify_harness_profile(payload)),
+            "verification": _redact_sensitive_payload(service.verify_harness_profile(payload, instance.instance_id)),
         },
         errors=(
             (ValueError, status.HTTP_404_NOT_FOUND, "harness_profile_not_found"),
             (RuntimeError, status.HTTP_422_UNPROCESSABLE_ENTITY, "harness_verification_failed"),
         ),
         resource_type="harness_verify",
-        resource_id=payload.provider_key,
+        resource_id=f"{instance.instance_id}:{payload.provider_key}",
     )
 
 
 @router.get("/harness/snapshot")
 def harness_snapshot(
     _admin: AuthenticatedAdmin = Depends(_require_provider_read),
+    instance: InstanceRecord = Depends(resolve_admin_instance_scope),
     service: ControlPlaneService = Depends(get_control_plane_service),
 ) -> object:
-    return service.harness_snapshot()
+    return service.harness_snapshot(instance.instance_id)
 
 
 @router.get("/harness/export")
 def export_harness_config(
     redact_secrets: bool = True,
     admin: AuthenticatedAdmin = Depends(_require_provider_read),
+    instance: InstanceRecord = Depends(resolve_admin_instance_scope),
     service: ControlPlaneService = Depends(get_control_plane_service),
 ) -> object:
     _ensure_harness_export_access(admin, redact_secrets=redact_secrets)
-    return service.export_harness_config(redact_secrets=redact_secrets)
+    return service.export_harness_config(redact_secrets=redact_secrets, instance_id=instance.instance_id)
 
 
 @router.post("/harness/import")
@@ -749,16 +798,17 @@ def import_harness_config(
     payload: HarnessImportRequest,
     request: Request,
     _admin: AuthenticatedAdmin = Depends(_require_provider_write),
+    instance: InstanceRecord = Depends(resolve_admin_instance_scope),
     service: ControlPlaneService = Depends(get_control_plane_service),
 ) -> object:
     return _execute_idempotent_admin_json(
         request=request,
-        scope_key="admin.providers.harness.import",
-        fingerprint_payload=payload.model_dump(mode="json"),
-        execute=lambda: service.import_harness_config(payload),
+        scope_key=f"admin.providers.harness.import:{instance.instance_id}",
+        fingerprint_payload={"instance_id": instance.instance_id, "payload": payload.model_dump(mode="json")},
+        execute=lambda: service.import_harness_config(payload, instance.instance_id),
         errors=((ValueError, status.HTTP_400_BAD_REQUEST, "harness_import_invalid"),),
         resource_type="harness_import",
-        resource_id="control_plane",
+        resource_id=instance.instance_id,
     )
 
 
@@ -768,19 +818,20 @@ def rollback_harness_profile(
     revision: int,
     request: Request,
     _admin: AuthenticatedAdmin = Depends(_require_provider_write),
+    instance: InstanceRecord = Depends(resolve_admin_instance_scope),
     service: ControlPlaneService = Depends(get_control_plane_service),
 ) -> object:
     return _execute_idempotent_admin_json(
         request=request,
-        scope_key=f"admin.providers.harness.profile.rollback:{provider_key}",
-        fingerprint_payload={},
+        scope_key=f"admin.providers.harness.profile.rollback:{instance.instance_id}:{provider_key}",
+        fingerprint_payload={"instance_id": instance.instance_id},
         execute=lambda: {
             "status": "ok",
-            "profile": _redacted_harness_profile_payload(service.rollback_harness_profile(provider_key, revision)),
+            "profile": _redacted_harness_profile_payload(service.rollback_harness_profile(provider_key, revision, instance.instance_id)),
         },
         errors=((ValueError, status.HTTP_404_NOT_FOUND, "harness_revision_not_found"),),
         resource_type="harness_profile",
-        resource_id=provider_key,
+        resource_id=f"{instance.instance_id}:{provider_key}",
     )
 
 
@@ -792,11 +843,12 @@ def harness_runs(
     client_id: str | None = None,
     limit: int = 200,
     _admin: AuthenticatedAdmin = Depends(_require_provider_read),
+    instance: InstanceRecord = Depends(resolve_admin_instance_scope),
     service: ControlPlaneService = Depends(get_control_plane_service),
 ) -> object:
-    return _redact_sensitive_payload(service.harness_runs(provider_key, mode, status, client_id, limit))
+    return _redact_sensitive_payload(service.harness_runs(provider_key, mode, status, client_id, limit, instance.instance_id))
 
 
-def _delete_harness_profile(service: ControlPlaneService, provider_key: str) -> dict[str, Any]:
-    service.delete_harness_profile(provider_key)
+def _delete_harness_profile(service: ControlPlaneService, provider_key: str, instance_id: str) -> dict[str, Any]:
+    service.delete_harness_profile(provider_key, instance_id)
     return {"status": "ok", "deleted": provider_key}

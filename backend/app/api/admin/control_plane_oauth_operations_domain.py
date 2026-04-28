@@ -6,13 +6,19 @@ from datetime import UTC, datetime
 from typing import Any, Literal, Protocol, cast
 
 from app.control_plane import OAuthOperationRecord
-from app.tenancy import effective_tenant_filter, normalize_tenant_id
+from app.tenancy import DEFAULT_BOOTSTRAP_TENANT_ID, effective_tenant_filter, normalize_tenant_id
 
 
 class SqlBackedOAuthOperationsRepository(Protocol):
     def effective_tenant_id(self, requested_tenant_id: str | None) -> str | None: ...
 
-    def recent_operations(self, *, tenant_id: str | None, limit: int = 50) -> list[OAuthOperationRecord]: ...
+    def recent_operations(
+        self,
+        *,
+        tenant_id: str | None,
+        instance_id: str | None = None,
+        limit: int = 50,
+    ) -> list[OAuthOperationRecord]: ...
 
     def latest_operation(
         self,
@@ -20,12 +26,33 @@ class SqlBackedOAuthOperationsRepository(Protocol):
         *,
         action: str,
         tenant_id: str | None = None,
+        instance_id: str | None = None,
     ) -> OAuthOperationRecord | None: ...
 
-    def provider_operation_summary(self, *, tenant_id: str | None) -> dict[str, dict[str, Any]]: ...
+    def provider_operation_summary(
+        self,
+        *,
+        tenant_id: str | None,
+        instance_id: str | None = None,
+    ) -> dict[str, dict[str, Any]]: ...
 
 
 class ControlPlaneOAuthOperationsDomainMixin:
+    @staticmethod
+    def _oauth_operation_matches_instance_scope(
+        item: OAuthOperationRecord,
+        requested_instance_id: str | None,
+    ) -> bool:
+        normalized_requested = (requested_instance_id or "").strip() or None
+        if normalized_requested is None:
+            return True
+        normalized_record = (
+            (item.instance_id or "").strip()
+            or (item.tenant_id or "").strip()
+            or DEFAULT_BOOTSTRAP_TENANT_ID
+        )
+        return normalized_record == normalized_requested
+
     def _effective_truth_projection_tenant_id(self, tenant_id: str | None = None) -> str | None:
         requested_tenant_id = (tenant_id or "").strip() or None
         observability_tenant_id = self._analytics.effective_history_tenant_id(tenant_id=requested_tenant_id)
@@ -40,10 +67,19 @@ class ControlPlaneOAuthOperationsDomainMixin:
         provider_key: str,
         *,
         tenant_id: str | None = None,
+        instance_id: str | None = None,
     ):
         if provider_key in {"openai_codex", "gemini"}:
-            return self._native_oauth_target_status(provider_key, tenant_id=tenant_id)
-        return self._oauth_target_status(provider_key, tenant_id=tenant_id)
+            return self._native_oauth_target_status(
+                provider_key,
+                tenant_id=tenant_id,
+                instance_id=instance_id,
+            )
+        return self._oauth_target_status(
+            provider_key,
+            tenant_id=tenant_id,
+            instance_id=instance_id,
+        )
 
     def _sql_oauth_operations_repository(self) -> SqlBackedOAuthOperationsRepository | None:
         required = (
@@ -63,14 +99,25 @@ class ControlPlaneOAuthOperationsDomainMixin:
         operations = self._oauth_operations_repository.load_operations()
         return effective_tenant_filter([item.tenant_id for item in operations], tenant_id)
 
-    def _oauth_operations(self, tenant_id: str | None = None) -> list[OAuthOperationRecord]:
+    def _oauth_operations(
+        self,
+        tenant_id: str | None = None,
+        instance_id: str | None = None,
+    ) -> list[OAuthOperationRecord]:
         repository = self._sql_oauth_operations_repository()
         if repository is not None:
-            return repository.recent_operations(tenant_id=tenant_id, limit=200)
+            return repository.recent_operations(tenant_id=tenant_id, instance_id=instance_id, limit=200)
         operations = self._oauth_operations_repository.load_operations()
-        if tenant_id is None:
-            return operations[-200:]
-        return [item for item in operations if item.tenant_id == tenant_id][-200:]
+        filtered = operations
+        if tenant_id is not None:
+            filtered = [item for item in filtered if item.tenant_id == tenant_id]
+        if instance_id is not None:
+            filtered = [
+                item
+                for item in filtered
+                if self._oauth_operation_matches_instance_scope(item, instance_id)
+            ]
+        return filtered[-200:]
 
     def latest_oauth_operation(
         self,
@@ -78,6 +125,7 @@ class ControlPlaneOAuthOperationsDomainMixin:
         *,
         action: str,
         tenant_id: str | None = None,
+        instance_id: str | None = None,
     ) -> OAuthOperationRecord | None:
         repository = self._sql_oauth_operations_repository()
         if repository is not None:
@@ -85,16 +133,21 @@ class ControlPlaneOAuthOperationsDomainMixin:
                 provider_key,
                 action=action,
                 tenant_id=tenant_id,
+                instance_id=instance_id,
             )
-        operations = self._oauth_operations(tenant_id)
+        operations = self._oauth_operations(tenant_id, instance_id)
         filtered = [item for item in operations if item.provider_key == provider_key and item.action == action]
         return filtered[-1] if filtered else None
 
-    def oauth_operation_provider_summary(self, tenant_id: str | None = None) -> dict[str, dict[str, Any]]:
+    def oauth_operation_provider_summary(
+        self,
+        tenant_id: str | None = None,
+        instance_id: str | None = None,
+    ) -> dict[str, dict[str, Any]]:
         repository = self._sql_oauth_operations_repository()
         if repository is not None:
-            return repository.provider_operation_summary(tenant_id=tenant_id)
-        operations = self._oauth_operations(tenant_id)
+            return repository.provider_operation_summary(tenant_id=tenant_id, instance_id=instance_id)
+        operations = self._oauth_operations(tenant_id, instance_id)
         cutoff_24h = datetime.now(tz=UTC).timestamp() - 24 * 3600
         summary: dict[str, dict[str, Any]] = {}
         for item in operations:
@@ -129,7 +182,11 @@ class ControlPlaneOAuthOperationsDomainMixin:
             provider_summary["failure_rate"] = int(provider_summary["failures"]) / max(1, total)
         return summary
 
-    def oauth_account_operations_summary(self, tenant_id: str | None = None) -> dict[str, object]:
+    def oauth_account_operations_summary(
+        self,
+        tenant_id: str | None = None,
+        instance_id: str | None = None,
+    ) -> dict[str, object]:
         providers = [
             "openai_codex",
             "gemini",
@@ -140,11 +197,16 @@ class ControlPlaneOAuthOperationsDomainMixin:
             "qwen_oauth",
         ]
         effective_tenant_id = self._effective_oauth_tenant_id(tenant_id)
-        operations = self._oauth_operations(effective_tenant_id)
-        summary = self.oauth_operation_provider_summary(effective_tenant_id)
+        scoped_instance_id = (instance_id or "").strip() or None
+        operations = self._oauth_operations(effective_tenant_id, scoped_instance_id)
+        summary = self.oauth_operation_provider_summary(effective_tenant_id, scoped_instance_id)
         per_provider: list[dict[str, object]] = []
         for provider_key in providers:
-            status = self._oauth_operations_target_status(provider_key, tenant_id=effective_tenant_id)
+            status = self._oauth_operations_target_status(
+                provider_key,
+                tenant_id=effective_tenant_id,
+                instance_id=scoped_instance_id,
+            )
             provider_summary = summary.get(
                 provider_key,
                 {
@@ -182,6 +244,7 @@ class ControlPlaneOAuthOperationsDomainMixin:
             "operations": per_provider,
             "recent": [item.model_dump() for item in operations[-50:]],
             "tenant_id": effective_tenant_id,
+            "instance_id": scoped_instance_id,
             "total_operations": len(operations),
         }
 
@@ -193,12 +256,18 @@ class ControlPlaneOAuthOperationsDomainMixin:
         details: str,
         executed_at: str,
         tenant_id: str | None = None,
+        instance_id: str | None = None,
     ) -> None:
+        resolved_instance_id = (instance_id or "").strip() or normalize_tenant_id(
+            tenant_id,
+            fallback_tenant_id=self._instance.instance_id,
+        )
         event = OAuthOperationRecord(
             tenant_id=normalize_tenant_id(
                 tenant_id,
                 fallback_tenant_id=self._default_tenant_id,
             ),
+            instance_id=resolved_instance_id,
             provider_key=provider_key,
             action=action,
             status=status,

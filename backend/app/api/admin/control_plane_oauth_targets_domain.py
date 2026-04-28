@@ -208,24 +208,46 @@ class ControlPlaneOAuthTargetsDomainMixin:
             return "credentials_only"
         return "not_configured"
 
-    def list_oauth_account_target_statuses(self, tenant_id: str | None = None) -> list[dict[str, object]]:
+    def list_oauth_account_target_statuses(
+        self,
+        tenant_id: str | None = None,
+        instance_id: str | None = None,
+    ) -> list[dict[str, object]]:
         effective_tenant_id = self._effective_truth_projection_tenant_id(tenant_id)
+        scoped_instance_id = (instance_id or "").strip() or None
         providers = [*_NATIVE_OAUTH_TARGET_KEYS, *_BRIDGE_OAUTH_TARGET_KEYS]
         statuses: list[dict[str, object]] = []
         for provider_key in providers:
             if provider_key in _BRIDGE_OAUTH_TARGET_KEYS:
-                statuses.append(self._oauth_target_status(provider_key, tenant_id=effective_tenant_id).model_dump())
+                statuses.append(
+                    self._oauth_target_status(
+                        provider_key,
+                        tenant_id=effective_tenant_id,
+                        instance_id=scoped_instance_id,
+                    ).model_dump()
+                )
                 continue
-            status = self._native_oauth_target_status(provider_key, tenant_id=effective_tenant_id)
+            status = self._native_oauth_target_status(
+                provider_key,
+                tenant_id=effective_tenant_id,
+                instance_id=scoped_instance_id,
+            )
             statuses.append(
                 status.model_dump()
             )
         return statuses
 
-    def oauth_account_onboarding_summary(self, tenant_id: str | None = None) -> dict[str, object]:
+    def oauth_account_onboarding_summary(
+        self,
+        tenant_id: str | None = None,
+        instance_id: str | None = None,
+    ) -> dict[str, object]:
         effective_tenant_id = self._effective_truth_projection_tenant_id(tenant_id)
         targets = []
-        for item in self.list_oauth_account_target_statuses(tenant_id=effective_tenant_id):
+        for item in self.list_oauth_account_target_statuses(
+            tenant_id=effective_tenant_id,
+            instance_id=instance_id,
+        ):
             status = OAuthAccountTargetStatus(**item)
             targets.append(
                 {
@@ -234,13 +256,19 @@ class ControlPlaneOAuthTargetsDomainMixin:
                     "operational_depth": self._oauth_target_operational_depth(status.provider_key, status),
                 }
             )
-        return {"status": "ok", "targets": targets, "tenant_id": effective_tenant_id}
+        return {
+            "status": "ok",
+            "targets": targets,
+            "tenant_id": effective_tenant_id,
+            "instance_id": (instance_id or "").strip() or None,
+        }
 
     def _native_oauth_target_status(
         self,
         provider_key: str,
         *,
         tenant_id: str | None = None,
+        instance_id: str | None = None,
     ) -> OAuthAccountTargetStatus:
         if provider_key == "openai_codex":
             auth_state = resolve_codex_auth_state(self._settings)
@@ -261,7 +289,11 @@ class ControlPlaneOAuthTargetsDomainMixin:
         provider_status = self._safe_provider_status(provider_key)
         provider_ready = bool(provider_status.get("ready"))
         provider_reason = str(provider_status.get("readiness_reason") or "")
-        evidence = self._provider_capability_evidence(provider_key, tenant_id=tenant_id)
+        evidence = self._provider_capability_evidence(
+            provider_key,
+            tenant_id=tenant_id,
+            instance_id=instance_id,
+        )
         readiness: Literal["planned", "partial", "ready"] = "planned"
         reason = "OAuth/account credentials missing."
         if configured:
@@ -360,6 +392,7 @@ class ControlPlaneOAuthTargetsDomainMixin:
         provider_key: str,
         *,
         tenant_id: str | None = None,
+        instance_id: str | None = None,
     ) -> OAuthAccountTargetStatus:
         config = self._bridge_oauth_target_config(provider_key)
         token = str(config["token"])
@@ -367,7 +400,11 @@ class ControlPlaneOAuthTargetsDomainMixin:
         bridge_enabled = bool(config["bridge_enabled"])
         runtime_agent_key = str(config["runtime_agent_key"])
         configured = bool(token.strip())
-        evidence = self._provider_capability_evidence(provider_key, tenant_id=tenant_id)
+        evidence = self._provider_capability_evidence(
+            provider_key,
+            tenant_id=tenant_id,
+            instance_id=instance_id,
+        )
         readiness: Literal["planned", "partial", "ready"] = "planned"
         reason = "OAuth/account credentials missing."
         if configured:
@@ -439,7 +476,12 @@ class ControlPlaneOAuthTargetsDomainMixin:
                 "capabilities": {},
             }
 
-    def probe_oauth_account_provider(self, provider_key: str) -> OAuthAccountProbeResult:
+    def probe_oauth_account_provider(
+        self,
+        provider_key: str,
+        instance_id: str | None = None,
+    ) -> OAuthAccountProbeResult:
+        scoped_instance_id = (instance_id or "").strip() or None
         now = datetime.now(tz=UTC).isoformat()
         if provider_key == "openai_codex":
             status = self._providers.get_provider_status("openai_codex")
@@ -452,7 +494,14 @@ class ControlPlaneOAuthTargetsDomainMixin:
                     details=str(status["readiness_reason"]),
                     checked_at=now,
                 )
-                self._record_oauth_operation(provider_key, "probe", result.status, result.details, now)
+                self._record_oauth_operation(
+                    provider_key,
+                    "probe",
+                    result.status,
+                    result.details,
+                    now,
+                    instance_id=scoped_instance_id,
+                )
                 return result
             if not self._settings.openai_codex_bridge_enabled:
                 result = OAuthAccountProbeResult(
@@ -463,7 +512,14 @@ class ControlPlaneOAuthTargetsDomainMixin:
                     details="Codex bridge disabled; readiness only.",
                     checked_at=now,
                 )
-                self._record_oauth_operation(provider_key, "probe", result.status, result.details, now)
+                self._record_oauth_operation(
+                    provider_key,
+                    "probe",
+                    result.status,
+                    result.details,
+                    now,
+                    instance_id=scoped_instance_id,
+                )
                 return result
             payload = {
                 "model": self._settings.openai_codex_probe_model,
@@ -496,7 +552,14 @@ class ControlPlaneOAuthTargetsDomainMixin:
                     details=f"Codex bridge probe request failed: {exc}",
                     checked_at=now,
                 )
-                self._record_oauth_operation(provider_key, "probe", result.status, result.details, now)
+                self._record_oauth_operation(
+                    provider_key,
+                    "probe",
+                    result.status,
+                    result.details,
+                    now,
+                    instance_id=scoped_instance_id,
+                )
                 return result
             result = OAuthAccountProbeResult(
                 provider_key=provider_key,
@@ -511,7 +574,14 @@ class ControlPlaneOAuthTargetsDomainMixin:
                 status_code=response.status_code,
                 checked_at=now,
             )
-            self._record_oauth_operation(provider_key, "probe", result.status, result.details, now)
+            self._record_oauth_operation(
+                provider_key,
+                "probe",
+                result.status,
+                result.details,
+                now,
+                instance_id=scoped_instance_id,
+            )
             return result
 
         if provider_key == "gemini":
@@ -525,7 +595,14 @@ class ControlPlaneOAuthTargetsDomainMixin:
                     details=str(status["readiness_reason"]),
                     checked_at=now,
                 )
-                self._record_oauth_operation(provider_key, "probe", result.status, result.details, now)
+                self._record_oauth_operation(
+                    provider_key,
+                    "probe",
+                    result.status,
+                    result.details,
+                    now,
+                    instance_id=scoped_instance_id,
+                )
                 return result
             if not self._settings.gemini_probe_enabled:
                 result = OAuthAccountProbeResult(
@@ -536,7 +613,14 @@ class ControlPlaneOAuthTargetsDomainMixin:
                     details="Gemini probe flow disabled; set FORGEFRAME_GEMINI_PROBE_ENABLED=true.",
                     checked_at=now,
                 )
-                self._record_oauth_operation(provider_key, "probe", result.status, result.details, now)
+                self._record_oauth_operation(
+                    provider_key,
+                    "probe",
+                    result.status,
+                    result.details,
+                    now,
+                    instance_id=scoped_instance_id,
+                )
                 return result
             payload = {
                 "model": self._settings.gemini_probe_model,
@@ -569,7 +653,14 @@ class ControlPlaneOAuthTargetsDomainMixin:
                     details=f"Gemini probe request failed: {exc}",
                     checked_at=now,
                 )
-                self._record_oauth_operation(provider_key, "probe", result.status, result.details, now)
+                self._record_oauth_operation(
+                    provider_key,
+                    "probe",
+                    result.status,
+                    result.details,
+                    now,
+                    instance_id=scoped_instance_id,
+                )
                 return result
             result = OAuthAccountProbeResult(
                 provider_key=provider_key,
@@ -584,11 +675,22 @@ class ControlPlaneOAuthTargetsDomainMixin:
                 status_code=response.status_code,
                 checked_at=now,
             )
-            self._record_oauth_operation(provider_key, "probe", result.status, result.details, now)
+            self._record_oauth_operation(
+                provider_key,
+                "probe",
+                result.status,
+                result.details,
+                now,
+                instance_id=scoped_instance_id,
+            )
             return result
 
         if provider_key in _BRIDGE_OAUTH_TARGET_KEYS:
-            return self._probe_additional_oauth_target(provider_key, now=now)
+            return self._probe_additional_oauth_target(
+                provider_key,
+                now=now,
+                instance_id=scoped_instance_id,
+            )
 
         raise ValueError(f"Unsupported oauth/account probe provider: {provider_key}")
 
@@ -597,8 +699,9 @@ class ControlPlaneOAuthTargetsDomainMixin:
         provider_key: str,
         *,
         now: str,
+        instance_id: str | None = None,
     ) -> OAuthAccountProbeResult:
-        status = self._oauth_target_status(provider_key)
+        status = self._oauth_target_status(provider_key, instance_id=instance_id)
         config = self._bridge_oauth_target_config(provider_key)
         base_url = str(config["base_url"])
         model = str(config["model"])
@@ -613,7 +716,14 @@ class ControlPlaneOAuthTargetsDomainMixin:
                 details=status.readiness_reason,
                 checked_at=now,
             )
-            self._record_oauth_operation(provider_key, "probe", result.status, result.details, now)
+            self._record_oauth_operation(
+                provider_key,
+                "probe",
+                result.status,
+                result.details,
+                now,
+                instance_id=instance_id,
+            )
             return result
         if not status.probe_enabled:
             result = OAuthAccountProbeResult(
@@ -624,7 +734,14 @@ class ControlPlaneOAuthTargetsDomainMixin:
                 details="Probe disabled; credentials are configured.",
                 checked_at=now,
             )
-            self._record_oauth_operation(provider_key, "probe", result.status, result.details, now)
+            self._record_oauth_operation(
+                provider_key,
+                "probe",
+                result.status,
+                result.details,
+                now,
+                instance_id=instance_id,
+            )
             return result
         if provider_key == "nous_oauth" and not runtime_agent_key.strip():
             result = OAuthAccountProbeResult(
@@ -638,7 +755,14 @@ class ControlPlaneOAuthTargetsDomainMixin:
                 ),
                 checked_at=now,
             )
-            self._record_oauth_operation(provider_key, "probe", result.status, result.details, now)
+            self._record_oauth_operation(
+                provider_key,
+                "probe",
+                result.status,
+                result.details,
+                now,
+                instance_id=instance_id,
+            )
             return result
         payload = {
             "model": model,
@@ -666,7 +790,14 @@ class ControlPlaneOAuthTargetsDomainMixin:
                 details=f"Probe request failed: {exc}",
                 checked_at=now,
             )
-            self._record_oauth_operation(provider_key, "probe", result.status, result.details, now)
+            self._record_oauth_operation(
+                provider_key,
+                "probe",
+                result.status,
+                result.details,
+                now,
+                instance_id=instance_id,
+            )
             return result
         result = OAuthAccountProbeResult(
             provider_key=provider_key,
@@ -681,10 +812,18 @@ class ControlPlaneOAuthTargetsDomainMixin:
             status_code=response.status_code,
             checked_at=now,
         )
-        self._record_oauth_operation(provider_key, "probe", result.status, result.details, now)
+        self._record_oauth_operation(
+            provider_key,
+            "probe",
+            result.status,
+            result.details,
+            now,
+            instance_id=instance_id,
+        )
         return result
 
-    def sync_oauth_account_bridge_profiles(self) -> dict[str, object]:
+    def sync_oauth_account_bridge_profiles(self, instance_id: str | None = None) -> dict[str, object]:
+        scoped_instance_id = (instance_id or "").strip() or self._instance.instance_id
         upserted: list[str] = []
         skipped: list[str] = []
         for provider_key in _BRIDGE_OAUTH_TARGET_KEYS:
@@ -702,6 +841,7 @@ class ControlPlaneOAuthTargetsDomainMixin:
                     "skipped",
                     "Bridge profile sync disabled in settings.",
                     datetime.now(tz=UTC).isoformat(),
+                    instance_id=scoped_instance_id,
                 )
                 continue
             if provider_key == "nous_oauth" and not runtime_agent_key.strip():
@@ -712,10 +852,13 @@ class ControlPlaneOAuthTargetsDomainMixin:
                     "skipped",
                     "Nous bridge profile sync skipped because no minted runtime agent key is configured.",
                     datetime.now(tz=UTC).isoformat(),
+                    instance_id=scoped_instance_id,
                 )
                 continue
+            logical_profile_key = f"{provider_key}_bridge"
             profile = HarnessProviderProfile(
-                provider_key=f"{provider_key}_bridge",
+                provider_key=logical_profile_key,
+                instance_id=scoped_instance_id,
                 label=f"{provider_key} OAuth Bridge",
                 integration_class="openai_compatible",
                 endpoint_base_url=base_url.rstrip("/"),
@@ -751,13 +894,14 @@ class ControlPlaneOAuthTargetsDomainMixin:
                     ),
                 },
             )
-            self._harness.upsert_profile(profile)
-            upserted.append(profile.provider_key)
+            self._harness.upsert_profile(profile, instance_id=scoped_instance_id)
+            upserted.append(logical_profile_key)
             self._record_oauth_operation(
                 provider_key,
                 "bridge_sync",
                 "ok",
-                f"Upserted bridge profile {profile.provider_key}.",
+                f"Upserted bridge profile {logical_profile_key} for instance {scoped_instance_id}.",
                 datetime.now(tz=UTC).isoformat(),
+                instance_id=scoped_instance_id,
             )
         return {"status": "ok", "upserted_profiles": upserted, "skipped": skipped}

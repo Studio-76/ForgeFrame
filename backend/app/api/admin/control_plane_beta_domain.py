@@ -18,7 +18,7 @@ class ControlPlaneBetaDomainMixin:
         gemini_status = self._safe_provider_status("gemini")
         harness_status = self._safe_provider_status("generic_harness")
         ollama_status = self._safe_provider_status("ollama")
-        harness_profiles_configured = bool(self._harness.list_profiles())
+        harness_profiles_configured = bool(self._harness.list_profiles(instance_id=self._instance.instance_id))
         harness_runtime_ready = bool(harness_status["ready"])
         harness_streaming_ready = harness_runtime_ready and bool(harness_status["capabilities"].get("streaming"))
         harness_verify_probe_readiness = "ready" if harness_runtime_ready else ("partial" if harness_profiles_configured else "planned")

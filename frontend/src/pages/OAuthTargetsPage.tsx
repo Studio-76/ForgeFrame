@@ -2,10 +2,11 @@ import { useSearchParams } from "react-router-dom";
 
 import { CONTROL_PLANE_ROUTES } from "../app/navigation";
 import { useAppSession } from "../app/session";
-import { getInstanceIdFromSearchParams } from "../app/tenantScope";
+import { getInstanceIdFromSearchParams, withInstanceScope } from "../app/tenantScope";
 import { useInstanceCatalog } from "../app/useInstanceCatalog";
 import { InstanceScopeCard } from "../components/InstanceScopeCard";
 import { PageIntro } from "../components/PageIntro";
+import { BlockedState } from "../components/ui/StateBlocks";
 import { ExpansionTargetsSection, OperationResultSection } from "../features/providers/ProvidersSections";
 import { getProvidersAccess } from "../features/providers/providersShared";
 import { useProvidersControlPlane } from "../features/providers/useProvidersControlPlane";
@@ -15,9 +16,18 @@ export function OAuthTargetsPage() {
   const { session, sessionReady } = useAppSession();
   const instanceId = getInstanceIdFromSearchParams(searchParams);
   const { instances, loadState, error: instancesError, selectedInstance } = useInstanceCatalog(instanceId);
-  const access = getProvidersAccess(session, sessionReady);
-  const { data, actions } = useProvidersControlPlane(access, instanceId);
-  const note = access.canMutate
+  const access = getProvidersAccess(session, sessionReady, instanceId);
+  const { data, actions } = useProvidersControlPlane(access, instanceId, {
+    includeUsageSummary: true,
+    includeHarness: false,
+    includeOauthTargets: true,
+    includeCompatibilityMatrix: false,
+    includeBootstrapReadiness: true,
+    includeClientView: false,
+  });
+  const note = !access.canRead
+    ? access.summaryDetail
+    : access.canMutate
     ? "Account-backed targets get a dedicated operator surface here so bridge posture, session truth, and probe actions do not disappear inside the broader providers page."
     : `${access.summaryDetail} Contract classification, session truth, and probe evidence stay visible here even when mutation controls remain hidden.`;
 
@@ -41,27 +51,27 @@ export function OAuthTargetsPage() {
         links={[
           {
             label: "OAuth Targets",
-            to: CONTROL_PLANE_ROUTES.oauthTargets,
+            to: withInstanceScope(CONTROL_PLANE_ROUTES.oauthTargets, instanceId),
             description: "Stay on the dedicated surface for account-backed target truth and probe operations.",
           },
           {
             label: "Providers",
-            to: CONTROL_PLANE_ROUTES.providers,
+            to: withInstanceScope(CONTROL_PLANE_ROUTES.providers, instanceId),
             description: "Return to the wider provider control plane when you need runtime inventory context.",
           },
           {
             label: "Harness",
-            to: CONTROL_PLANE_ROUTES.harness,
+            to: withInstanceScope(CONTROL_PLANE_ROUTES.harness, instanceId),
             description: "Open the dedicated harness module when the question shifts to profile proof and probe operations.",
           },
           {
             label: "Onboarding",
-            to: CONTROL_PLANE_ROUTES.onboarding,
+            to: withInstanceScope(CONTROL_PLANE_ROUTES.onboarding, instanceId),
             description: "Check go-live posture, bootstrap readiness, and instance-wide next steps.",
           },
           {
             label: "Usage & Costs",
-            to: CONTROL_PLANE_ROUTES.usage,
+            to: withInstanceScope(CONTROL_PLANE_ROUTES.usage, instanceId),
             description: "Review avoided-cost versus metered-cost posture for account-backed traffic.",
           },
         ]}
@@ -80,10 +90,19 @@ export function OAuthTargetsPage() {
         surfaceLabel="OAuth/account operator truth"
         onInstanceChange={onInstanceChange}
       />
-      <div className="fg-stack">
-        <OperationResultSection data={data} actions={actions} />
-        <ExpansionTargetsSection data={data} actions={actions} />
-      </div>
+      {!access.canRead ? (
+        <BlockedState
+          title={access.summaryTitle}
+          description={access.summaryDetail}
+          badgeLabel={access.badgeLabel}
+          status="blocked"
+        />
+      ) : (
+        <div className="fg-stack">
+          <OperationResultSection data={data} actions={actions} />
+          <ExpansionTargetsSection data={data} actions={actions} />
+        </div>
+      )}
     </section>
   );
 }

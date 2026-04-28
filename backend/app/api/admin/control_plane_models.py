@@ -9,9 +9,22 @@ from pydantic import BaseModel, Field
 from app.control_plane import ProviderCapabilityEvidenceRecord
 
 
+ProviderClassKey = Literal["openai_compatible", "local_ollama", "oauth_account", "custom"]
+
+
+class ProviderClassDescriptor(BaseModel):
+    key: ProviderClassKey
+    label: str
+    description: str
+    integration_class: str
+    template_id: str | None = None
+    default_config: dict[str, str] = Field(default_factory=dict)
+
+
 class ProviderCreateRequest(BaseModel):
     provider: str
     label: str
+    provider_class: ProviderClassKey | None = None
     integration_class: str = "native"
     template_id: str | None = None
     config: dict[str, str] = Field(default_factory=dict)
@@ -19,6 +32,7 @@ class ProviderCreateRequest(BaseModel):
 
 class ProviderUpdateRequest(BaseModel):
     label: str | None = None
+    provider_class: ProviderClassKey | None = None
     integration_class: str | None = None
     template_id: str | None = None
     config: dict[str, str] | None = None
@@ -158,6 +172,8 @@ __all__ = [
     "HealthConfigUpdateRequest",
     "OAuthAccountProbeResult",
     "OAuthAccountTargetStatus",
+    "ProviderClassDescriptor",
+    "ProviderClassKey",
     "ProviderCreateRequest",
     "ProviderSyncRequest",
     "ProviderTargetUpdateRequest",

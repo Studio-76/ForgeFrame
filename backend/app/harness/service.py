@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 from datetime import UTC, datetime
 from functools import lru_cache
+from inspect import Parameter, signature
 from pathlib import Path
 from typing import Any
 
@@ -41,6 +42,16 @@ class HarnessService:
     @staticmethod
     def _now_iso() -> str:
         return datetime.now(tz=UTC).isoformat()
+
+    @staticmethod
+    def _supports_instance_scope_argument(method: object) -> bool:
+        try:
+            parameters = signature(method).parameters.values()
+        except (TypeError, ValueError):
+            return True
+        if any(parameter.kind is Parameter.VAR_KEYWORD for parameter in parameters):
+            return True
+        return "instance_id" in {parameter.name for parameter in parameters}
 
     def list_templates(self) -> list[dict[str, Any]]:
         return [
@@ -110,11 +121,14 @@ class HarnessService:
             "profile": self._config_snapshot_from_profile(profile),
         }
 
-    def upsert_profile(self, profile: HarnessProviderProfile) -> HarnessProfileRecord:
+    def upsert_profile(self, profile: HarnessProviderProfile, instance_id: str | None = None) -> HarnessProfileRecord:
+        resolved_instance_id = (profile.instance_id or "").strip() or ((instance_id or "").strip() or None)
+        if resolved_instance_id != profile.instance_id:
+            profile = profile.model_copy(update={"instance_id": resolved_instance_id})
         resolved_profile = self._resolve_profile_from_template(profile)
         record = HarnessProfileRecord(**resolved_profile.model_dump())
         try:
-            existing = self.get_profile(resolved_profile.provider_key)
+            existing = self.get_profile(resolved_profile.provider_key, resolved_profile.instance_id)
         except ValueError:
             existing = None
         if existing is None:
@@ -146,39 +160,50 @@ class HarnessService:
             ]
         return self._store.upsert_profile(record)
 
-    def delete_profile(self, provider_key: str) -> None:
-        self._store.delete_profile(provider_key)
+    def delete_profile(self, provider_key: str, instance_id: str | None = None) -> None:
+        self._store.delete_profile(provider_key, instance_id)
 
-    def set_profile_active(self, provider_key: str, enabled: bool) -> HarnessProfileRecord:
-        return self._store.set_profile_active(provider_key, enabled)
+    def set_profile_active(self, provider_key: str, enabled: bool, instance_id: str | None = None) -> HarnessProfileRecord:
+        return self._store.set_profile_active(provider_key, enabled, instance_id)
 
-    def list_profiles(self) -> list[HarnessProfileRecord]:
-        return self._store.list_profiles()
+    def list_profiles(self, instance_id: str | None = None) -> list[HarnessProfileRecord]:
+        return self._store.list_profiles(instance_id)
 
-    def get_profile(self, provider_key: str) -> HarnessProfileRecord:
-        return self._store.get_profile(provider_key)
+    def get_profile(self, provider_key: str, instance_id: str | None = None) -> HarnessProfileRecord:
+        return self._store.get_profile(provider_key, instance_id)
 
     def list_runs(
         self,
         provider_key: str | None = None,
         *,
+        instance_id: str | None = None,
         mode: str | None = None,
         status: str | None = None,
         client_id: str | None = None,
         limit: int | None = 200,
     ) -> list[HarnessVerificationRun]:
-        return self._store.list_runs(HarnessRunQuery(provider_key=provider_key, mode=mode, status=status, client_id=client_id, limit=limit))
+        return self._store.list_runs(
+            HarnessRunQuery(
+                provider_key=provider_key,
+                instance_id=instance_id,
+                mode=mode,
+                status=status,
+                client_id=client_id,
+                limit=limit,
+            )
+        )
 
-    def runs_summary(self, provider_key: str | None = None) -> dict[str, int]:
-        return self._store.runs_summary(provider_key)
+    def runs_summary(self, provider_key: str | None = None, instance_id: str | None = None) -> dict[str, int]:
+        return self._store.runs_summary(provider_key, instance_id)
 
     def build_request_preview(
         self,
         payload: HarnessPreviewRequest,
         *,
         request_metadata: dict[str, str] | None = None,
+        instance_id: str | None = None,
     ) -> dict[str, Any]:
-        profile = self.get_profile(payload.provider_key)
+        profile = self.get_profile(payload.provider_key, instance_id)
         resolved_model = self._resolve_model_slug(profile, payload.model)
         rendered_messages = list(payload.messages) if payload.messages else [{"role": "user", "content": payload.message}]
         request_payload = self._render_template(
@@ -217,12 +242,13 @@ class HarnessService:
         headers.update(forgeframe_request_metadata_headers(request_metadata))
         return {"method": profile.request_mapping.method, "url": endpoint, "headers": headers, "json": request_payload}
 
-    def preview(self, payload: HarnessPreviewRequest) -> dict[str, Any]:
-        profile = self.get_profile(payload.provider_key)
-        preview = self.build_request_preview(payload)
+    def preview(self, payload: HarnessPreviewRequest, instance_id: str | None = None) -> dict[str, Any]:
+        profile = self.get_profile(payload.provider_key, instance_id)
+        preview = self.build_request_preview(payload, instance_id=instance_id)
         self._store.record_run(
             HarnessVerificationRun(
                 provider_key=profile.provider_key,
+                instance_id=profile.instance_id,
                 integration_class=profile.integration_class,
                 model=payload.model,
                 mode="preview",
@@ -237,9 +263,9 @@ class HarnessService:
         )
         return preview
 
-    def dry_run(self, payload: HarnessPreviewRequest) -> dict[str, Any]:
-        profile = self.get_profile(payload.provider_key)
-        preview = self.build_request_preview(payload)
+    def dry_run(self, payload: HarnessPreviewRequest, instance_id: str | None = None) -> dict[str, Any]:
+        profile = self.get_profile(payload.provider_key, instance_id)
+        preview = self.build_request_preview(payload, instance_id=instance_id)
         mapped_example = {
             "model": payload.model,
             "content": self._extract({"choices": [{"message": {"content": "sample"}}]}, profile.response_mapping.text_path, default=""),
@@ -247,6 +273,7 @@ class HarnessService:
         }
         run = HarnessVerificationRun(
             provider_key=profile.provider_key,
+            instance_id=profile.instance_id,
             integration_class=profile.integration_class,
             model=payload.model,
             mode="dry_run",
@@ -267,11 +294,11 @@ class HarnessService:
         self._store.record_run(run)
         return {"preview_request": preview, "mapped_example": mapped_example, "run": run.model_dump()}
 
-    def verify_profile(self, request: HarnessVerificationRequest) -> HarnessVerificationResult:
-        profile = self.get_profile(request.provider_key)
+    def verify_profile(self, request: HarnessVerificationRequest, instance_id: str | None = None) -> HarnessVerificationResult:
+        profile = self.get_profile(request.provider_key, instance_id)
         model = request.model or (profile.models[0] if profile.models else "unknown-model")
         preview_payload = HarnessPreviewRequest(provider_key=profile.provider_key, model=model, message=request.test_message, stream=False)
-        preview = self.build_request_preview(preview_payload)
+        preview = self.build_request_preview(preview_payload, instance_id=instance_id)
 
         steps: list[dict[str, Any]] = [{"step": "preview_request", "status": "ok"}]
         if not profile.endpoint_base_url.startswith(("http://", "https://")):
@@ -290,6 +317,7 @@ class HarnessService:
             self._store.record_run(
                 HarnessVerificationRun(
                     provider_key=profile.provider_key,
+                    instance_id=profile.instance_id,
                     integration_class=profile.integration_class,
                     model=model,
                     mode="verify",
@@ -317,7 +345,16 @@ class HarnessService:
 
         if request.live_probe:
             try:
-                probe_result = self.probe(HarnessPreviewRequest(provider_key=profile.provider_key, model=model, message=request.test_message, stream=False))
+                probe_payload = HarnessPreviewRequest(
+                    provider_key=profile.provider_key,
+                    model=model,
+                    message=request.test_message,
+                    stream=False,
+                )
+                if self._supports_instance_scope_argument(self.probe):
+                    probe_result = self.probe(probe_payload, instance_id)
+                else:
+                    probe_result = self.probe(probe_payload)
                 probe_status = "ok" if int(probe_result["status_code"]) < 400 else "failed"
                 steps.append({"step": "live_probe", "status": probe_status, "status_code": int(probe_result["status_code"])})
             except RuntimeError as exc:
@@ -333,6 +370,7 @@ class HarnessService:
         self._store.record_run(
             HarnessVerificationRun(
                 provider_key=profile.provider_key,
+                instance_id=profile.instance_id,
                 integration_class=profile.integration_class,
                 model=model,
                 mode="verify",
@@ -344,15 +382,16 @@ class HarnessService:
         )
         return result
 
-    def probe(self, payload: HarnessPreviewRequest) -> dict[str, Any]:
-        profile = self.get_profile(payload.provider_key)
-        preview = self.build_request_preview(payload)
+    def probe(self, payload: HarnessPreviewRequest, instance_id: str | None = None) -> dict[str, Any]:
+        profile = self.get_profile(payload.provider_key, instance_id)
+        preview = self.build_request_preview(payload, instance_id=instance_id)
         try:
             response = httpx.request(preview["method"], preview["url"], headers=preview["headers"], json=preview["json"], timeout=30)
         except httpx.RequestError as exc:
             redacted_error = str(redact_sensitive_payload(str(exc)))
             run = HarnessVerificationRun(
                 provider_key=profile.provider_key,
+                instance_id=profile.instance_id,
                 integration_class=profile.integration_class,
                 model=payload.model,
                 mode="probe",
@@ -372,6 +411,7 @@ class HarnessService:
         success = response.status_code < 400
         run = HarnessVerificationRun(
             provider_key=profile.provider_key,
+            instance_id=profile.instance_id,
             integration_class=profile.integration_class,
             model=payload.model,
             mode="probe",
@@ -389,8 +429,8 @@ class HarnessService:
             "run": redact_sensitive_payload(run.model_dump()),
         }
 
-    def sync_profile_inventory(self, provider_key: str) -> HarnessProfileRecord:
-        profile = self.get_profile(provider_key)
+    def sync_profile_inventory(self, provider_key: str, instance_id: str | None = None) -> HarnessProfileRecord:
+        profile = self.get_profile(provider_key, instance_id)
         previous = {item.model: item for item in profile.model_inventory}
         now = self._now_iso()
         inventory = [
@@ -407,8 +447,8 @@ class HarnessService:
         ]
         if not inventory:
             inventory = [HarnessModelInventoryItem(model="no_models_configured", source="manual", active=False, status="warning", readiness_reason="profile_has_no_models", discovered_at=now, synced_at=now)]
-            updated = self._store.update_inventory(provider_key, inventory, status="warning", error="profile_has_no_models")
-            self._store.record_run(HarnessVerificationRun(provider_key=profile.provider_key, integration_class=profile.integration_class, mode="sync", status="warning", success=False, steps=[{"step": "discovery", "status": "warning", "reason": "profile_has_no_models"}, {"step": "inventory_diff", "status": "warning", "added": 1, "removed": len(previous), "stale": len(previous)}], error="profile_has_no_models", executed_at=self._now_iso()))
+            updated = self._store.update_inventory(provider_key, inventory, status="warning", error="profile_has_no_models", instance_id=profile.instance_id)
+            self._store.record_run(HarnessVerificationRun(provider_key=profile.provider_key, instance_id=profile.instance_id, integration_class=profile.integration_class, mode="sync", status="warning", success=False, steps=[{"step": "discovery", "status": "warning", "reason": "profile_has_no_models"}, {"step": "inventory_diff", "status": "warning", "added": 1, "removed": len(previous), "stale": len(previous)}], error="profile_has_no_models", executed_at=self._now_iso()))
             return updated
 
         current_ids = {item.model for item in inventory}
@@ -419,12 +459,12 @@ class HarnessService:
             stale = removed
             inventory.extend([HarnessModelInventoryItem(model=model, source=previous[model].source, active=False, status="stale", readiness_reason="removed_from_profile_models", discovered_at=previous[model].discovered_at, synced_at=now) for model in removed])
 
-        updated = self._store.update_inventory(provider_key, inventory, status="ok")
-        self._store.record_run(HarnessVerificationRun(provider_key=profile.provider_key, integration_class=profile.integration_class, mode="sync", status="ok" if not stale else "warning", success=not bool(stale), steps=[{"step": "discovery", "status": "ok", "source": profile.capabilities.model_source}, {"step": "inventory_diff", "status": "ok" if not stale else "warning", "added": len(added), "removed": len(removed), "stale": len(stale)}], executed_at=self._now_iso()))
+        updated = self._store.update_inventory(provider_key, inventory, status="ok", instance_id=profile.instance_id)
+        self._store.record_run(HarnessVerificationRun(provider_key=profile.provider_key, instance_id=profile.instance_id, integration_class=profile.integration_class, mode="sync", status="ok" if not stale else "warning", success=not bool(stale), steps=[{"step": "discovery", "status": "ok", "source": profile.capabilities.model_source}, {"step": "inventory_diff", "status": "ok" if not stale else "warning", "added": len(added), "removed": len(removed), "stale": len(stale)}], executed_at=self._now_iso()))
         return updated
 
-    def export_snapshot(self, *, redact_secrets: bool = True) -> dict[str, Any]:
-        snapshot = self._store.export_snapshot()
+    def export_snapshot(self, *, redact_secrets: bool = True, instance_id: str | None = None) -> dict[str, Any]:
+        snapshot = self._store.export_snapshot(instance_id)
         profiles = snapshot.get("profiles", [])
         runs = snapshot.get("runs", [])
         snapshot["summary"] = {
@@ -438,9 +478,9 @@ class HarnessService:
             return redact_sensitive_payload(snapshot)
         return snapshot
 
-    def export_config_snapshot(self, *, redact_secrets: bool = True, include_runs: bool = True) -> dict[str, Any]:
+    def export_config_snapshot(self, *, redact_secrets: bool = True, include_runs: bool = True, instance_id: str | None = None) -> dict[str, Any]:
         profiles = []
-        for profile in self.list_profiles():
+        for profile in self.list_profiles(instance_id):
             payload = {
                 "provider_key": profile.provider_key,
                 "config_revision": profile.config_revision,
@@ -456,7 +496,7 @@ class HarnessService:
             "profiles": profiles,
         }
         if include_runs:
-            snapshot["recent_runs"] = [item.model_dump() for item in self.list_runs(limit=40)]
+            snapshot["recent_runs"] = [item.model_dump() for item in self.list_runs(instance_id=instance_id, limit=40)]
         snapshot["summary"] = {
             "profile_count": len(profiles),
             "revisions": sum(int(item.get("config_revision", 1)) for item in profiles),
@@ -465,7 +505,7 @@ class HarnessService:
             return redact_sensitive_payload(snapshot)
         return snapshot
 
-    def import_config_snapshot(self, request: HarnessImportRequest) -> dict[str, Any]:
+    def import_config_snapshot(self, request: HarnessImportRequest, instance_id: str | None = None) -> dict[str, Any]:
         payload = request.snapshot
         profiles_raw = payload.get("profiles")
         if not isinstance(profiles_raw, list):
@@ -477,7 +517,10 @@ class HarnessService:
             profile_payload = item.get("profile", item)
             if not isinstance(profile_payload, dict):
                 raise ValueError("snapshot_profile_payload_invalid")
-            parsed_profiles.append(HarnessProviderProfile(**profile_payload))
+            parsed_profile = HarnessProviderProfile(**profile_payload)
+            if (instance_id or "").strip():
+                parsed_profile = parsed_profile.model_copy(update={"instance_id": (instance_id or "").strip()})
+            parsed_profiles.append(parsed_profile)
         if request.dry_run:
             return {
                 "status": "ok",
@@ -487,14 +530,14 @@ class HarnessService:
             }
         imported: list[str] = []
         for profile in parsed_profiles:
-            upserted = self.upsert_profile(profile)
+            upserted = self.upsert_profile(profile, instance_id=instance_id)
             upserted.last_imported_at = self._now_iso()
             self._store.upsert_profile(upserted)
             imported.append(profile.provider_key)
         return {"status": "ok", "dry_run": False, "imported_profiles": imported, "count": len(imported)}
 
-    def rollback_profile(self, provider_key: str, revision: int) -> HarnessProfileRecord:
-        profile = self.get_profile(provider_key)
+    def rollback_profile(self, provider_key: str, revision: int, instance_id: str | None = None) -> HarnessProfileRecord:
+        profile = self.get_profile(provider_key, instance_id)
         if revision == profile.config_revision:
             return profile
         target = next((item for item in profile.config_history if int(item.get("revision", -1)) == revision), None)
@@ -503,12 +546,13 @@ class HarnessService:
         target_payload = target.get("profile")
         if not isinstance(target_payload, dict):
             raise ValueError("revision_payload_invalid")
-        return self.upsert_profile(HarnessProviderProfile(**target_payload))
+        return self.upsert_profile(HarnessProviderProfile(**target_payload), instance_id=profile.instance_id)
 
     def execute_non_stream(
         self,
         provider_key: str,
         *,
+        instance_id: str | None = None,
         model: str,
         messages: list[dict[str, Any]],
         tools: list[dict[str, Any]] | None = None,
@@ -519,7 +563,7 @@ class HarnessService:
         response_format: dict[str, Any] | None = None,
         request_metadata: dict[str, str] | None = None,
     ) -> dict[str, Any]:
-        profile = self.get_profile(provider_key)
+        profile = self.get_profile(provider_key, instance_id)
         preview = self.build_request_preview(
             HarnessPreviewRequest(
                 provider_key=provider_key,
@@ -534,6 +578,7 @@ class HarnessService:
                 response_format=response_format,
             ),
             request_metadata=request_metadata,
+            instance_id=profile.instance_id,
         )
         try:
             response = httpx.request(preview["method"], preview["url"], headers=preview["headers"], json=preview["json"], timeout=30)
@@ -543,14 +588,21 @@ class HarnessService:
             raise RuntimeError(f"Harness provider rejected request ({response.status_code}): {response.text[:300]}")
         payload = response.json()
         parsed = self._parse_non_stream_response(profile, payload, model=model)
-        self._store.record_profile_usage(provider_key=provider_key, model=model, stream=False, total_tokens=int(parsed.get("total_tokens", 0)))
-        self._store.record_run(HarnessVerificationRun(provider_key=provider_key, integration_class=profile.integration_class, model=model, mode="runtime_non_stream", status="ok", success=True, steps=[{"step": "request_render", "status": "ok"}, {"step": "response_mapping", "status": "ok"}], executed_at=self._now_iso(), client_id="runtime", consumer="runtime", integration="generic_harness"))
+        self._store.record_profile_usage(
+            provider_key=provider_key,
+            instance_id=profile.instance_id,
+            model=model,
+            stream=False,
+            total_tokens=int(parsed.get("total_tokens", 0)),
+        )
+        self._store.record_run(HarnessVerificationRun(provider_key=provider_key, instance_id=profile.instance_id, integration_class=profile.integration_class, model=model, mode="runtime_non_stream", status="ok", success=True, steps=[{"step": "request_render", "status": "ok"}, {"step": "response_mapping", "status": "ok"}], executed_at=self._now_iso(), client_id="runtime", consumer="runtime", integration="generic_harness"))
         return parsed
 
     def execute_stream(
         self,
         provider_key: str,
         *,
+        instance_id: str | None = None,
         model: str,
         messages: list[dict[str, Any]],
         tools: list[dict[str, Any]] | None = None,
@@ -566,7 +618,7 @@ class HarnessService:
             merge_openai_tool_call_chunks,
         )
 
-        profile = self.get_profile(provider_key)
+        profile = self.get_profile(provider_key, instance_id)
         if not profile.stream_mapping.enabled:
             raise RuntimeError("Harness profile stream mapping is not enabled.")
         preview = self.build_request_preview(
@@ -583,6 +635,7 @@ class HarnessService:
                 response_format=response_format,
             ),
             request_metadata=request_metadata,
+            instance_id=profile.instance_id,
         )
 
         collected = ""
@@ -626,8 +679,14 @@ class HarnessService:
         if not saw_done and finish_reason == "stop" and not collected:
             raise RuntimeError("Stream closed without done marker or usable payload.")
 
-        self._store.record_profile_usage(provider_key=provider_key, model=model, stream=True, total_tokens=int(usage.get("total_tokens", 0)))
-        self._store.record_run(HarnessVerificationRun(provider_key=provider_key, integration_class=profile.integration_class, model=model, mode="runtime_stream", status="ok", success=True, steps=[{"step": "stream_readiness", "status": "ok"}, {"step": "stream_done", "status": "ok", "saw_done": saw_done}], executed_at=self._now_iso(), client_id="runtime", consumer="runtime", integration="generic_harness"))
+        self._store.record_profile_usage(
+            provider_key=provider_key,
+            instance_id=profile.instance_id,
+            model=model,
+            stream=True,
+            total_tokens=int(usage.get("total_tokens", 0)),
+        )
+        self._store.record_run(HarnessVerificationRun(provider_key=provider_key, instance_id=profile.instance_id, integration_class=profile.integration_class, model=model, mode="runtime_stream", status="ok", success=True, steps=[{"step": "stream_readiness", "status": "ok"}, {"step": "stream_done", "status": "ok", "saw_done": saw_done}], executed_at=self._now_iso(), client_id="runtime", consumer="runtime", integration="generic_harness"))
         yield {
             "event": "done",
             "finish_reason": finish_reason,
@@ -640,13 +699,14 @@ class HarnessService:
         self,
         provider_key: str,
         *,
+        instance_id: str | None = None,
         model: str,
         input_items: list[object],
         encoding_format: str = "float",
         dimensions: int | None = None,
         request_metadata: dict[str, str] | None = None,
     ) -> dict[str, Any]:
-        profile = self.get_profile(provider_key)
+        profile = self.get_profile(provider_key, instance_id)
         if not profile.capabilities.embeddings:
             raise RuntimeError("Harness profile embeddings capability is not enabled.")
 
@@ -679,10 +739,17 @@ class HarnessService:
         usage_payload = dict(parsed.get("usage") or {})
         prompt_tokens = int(usage_payload.get("prompt_tokens", usage_payload.get("input_tokens", 0)) or 0)
         total_tokens = int(usage_payload.get("total_tokens", prompt_tokens) or prompt_tokens)
-        self._store.record_profile_usage(provider_key=provider_key, model=model, stream=False, total_tokens=total_tokens)
+        self._store.record_profile_usage(
+            provider_key=provider_key,
+            instance_id=profile.instance_id,
+            model=model,
+            stream=False,
+            total_tokens=total_tokens,
+        )
         self._store.record_run(
             HarnessVerificationRun(
                 provider_key=provider_key,
+                instance_id=profile.instance_id,
                 integration_class=profile.integration_class,
                 model=model,
                 mode="runtime_non_stream",

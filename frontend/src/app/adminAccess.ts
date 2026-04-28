@@ -96,18 +96,23 @@ export function getAdminInstancePermissions(
   }
 
   const scopedInstanceId = getScopedAdminInstanceId(session, instanceId);
+  const explicitPermissionMap = session.instance_permissions ?? {};
+  const hasExplicitInstancePermissions = Object.keys(explicitPermissionMap).length > 0;
   const explicitPermissions = scopedInstanceId
-    ? session.instance_permissions?.[scopedInstanceId]
+    ? explicitPermissionMap[scopedInstanceId]
     : undefined;
-  if (explicitPermissions && explicitPermissions.length > 0) {
-    return explicitPermissions;
+  if (scopedInstanceId) {
+    if (hasExplicitInstancePermissions) {
+      return [...(explicitPermissions ?? [])];
+    }
+    return [...getLegacyPermissions(session)];
   }
 
   const activeInstancePermissions = session.active_instance_id
-    ? session.instance_permissions?.[session.active_instance_id]
+    ? explicitPermissionMap[session.active_instance_id]
     : undefined;
-  if (!scopedInstanceId && activeInstancePermissions && activeInstancePermissions.length > 0) {
-    return activeInstancePermissions;
+  if (hasExplicitInstancePermissions) {
+    return [...(activeInstancePermissions ?? [])];
   }
 
   return [...getLegacyPermissions(session)];

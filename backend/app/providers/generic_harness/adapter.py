@@ -32,6 +32,7 @@ from app.providers.base import (
     ProviderTimeoutError,
     ProviderUpstreamError,
 )
+from app.request_metadata import extract_scope_attributes
 from app.settings.config import Settings
 from app.usage.models import TokenUsage
 from app.usage.service import UsageAccountingService
@@ -57,25 +58,25 @@ class GenericHarnessAdapter:
         self._harness = harness
         self._usage = UsageAccountingService(settings)
 
-    def is_ready(self) -> bool:
-        runtime_profiles = self._runtime_profiles()
+    def is_ready(self, instance_id: str | None = None) -> bool:
+        runtime_profiles = self._runtime_profiles(instance_id=instance_id)
         return bool(self._settings.generic_harness_enabled and runtime_profiles)
 
-    def readiness_reason(self) -> str | None:
+    def readiness_reason(self, instance_id: str | None = None) -> str | None:
         if not self._settings.generic_harness_enabled:
             return "FORGEFRAME_GENERIC_HARNESS_ENABLED=false"
-        if not self._harness.list_profiles():
+        if not self._harness.list_profiles(instance_id=instance_id):
             return "No harness provider profile configured in control plane."
-        if not self._active_profiles():
+        if not self._active_profiles(instance_id=instance_id):
             return "Harness profiles exist but all are disabled."
-        if not self._runtime_profiles():
+        if not self._runtime_profiles(instance_id=instance_id):
             return "Harness profiles exist, but no enabled profile owns any models."
         return None
 
-    def status_capabilities(self) -> dict[str, object]:
+    def status_capabilities(self, instance_id: str | None = None) -> dict[str, object]:
         capabilities = self.capabilities.model_dump()
-        runtime_profiles = self._capability_truth_profiles()
-        active_profiles = self._active_profiles()
+        runtime_profiles = self._capability_truth_profiles(instance_id=instance_id)
+        active_profiles = self._active_profiles(instance_id=instance_id)
         supports_streaming = any(self._profile_supports_streaming(profile) for profile in runtime_profiles)
         supports_tool_calling = any(self._profile_supports_tool_calling(profile) for profile in runtime_profiles)
         supports_vision = any(self._profile_supports_vision(profile) for profile in runtime_profiles)
@@ -107,15 +108,16 @@ class GenericHarnessAdapter:
         self,
         model: str,
         *,
+        instance_id: str | None = None,
         require_streaming: bool = False,
         require_tool_calling: bool = False,
         require_vision: bool = False,
         require_embeddings: bool = False,
     ) -> tuple[bool, str | None]:
-        if not self.is_ready():
-            return False, self.readiness_reason() or "harness_not_ready"
+        if not self.is_ready(instance_id=instance_id):
+            return False, self.readiness_reason(instance_id=instance_id) or "harness_not_ready"
         try:
-            profile = self._profile_for_model(model)
+            profile = self._profile_for_model(model, instance_id=instance_id)
         except ProviderNotReadyError:
             return False, "model_not_owned_by_enabled_profile"
         if require_streaming and not self._profile_supports_streaming(profile):
@@ -131,7 +133,8 @@ class GenericHarnessAdapter:
     def create_chat_completion(self, request: ChatDispatchRequest) -> ChatDispatchResult:
         if not self.is_ready():
             raise ProviderConfigurationError(self.provider_name, self.readiness_reason() or "Harness not ready")
-        profile = self._profile_for_model(request.model)
+        request_metadata = getattr(request, "request_metadata", {})
+        profile = self._profile_for_model(request.model, request_metadata=request_metadata)
         if getattr(request, "tools", []) and not self._profile_supports_tool_calling(profile):
             raise ProviderUnsupportedFeatureError(self.provider_name, "tool_calling")
         if messages_require_vision(request.messages) and not self._profile_supports_vision(profile):
@@ -144,13 +147,14 @@ class GenericHarnessAdapter:
                 messages=request.messages,
                 **self._harness_execution_kwargs(
                     self._harness.execute_non_stream,
+                    instance_id=profile.instance_id,
                     tools=getattr(request, "tools", []),
                     tool_choice=getattr(request, "tool_choice", None),
                     temperature=response_controls.get("temperature"),
                     max_output_tokens=response_controls.get("max_output_tokens"),
                     metadata=response_controls.get("metadata"),
                     response_format=response_controls.get("response_format"),
-                    request_metadata=getattr(request, "request_metadata", {}),
+                    request_metadata=request_metadata,
                 ),
             )
         except RuntimeError as exc:
@@ -178,7 +182,8 @@ class GenericHarnessAdapter:
     def stream_chat_completion(self, request: ChatDispatchRequest) -> Iterator[ProviderStreamEvent]:
         if not self.is_ready():
             raise ProviderConfigurationError(self.provider_name, self.readiness_reason() or "Harness not ready")
-        profile = self._profile_for_model(request.model)
+        request_metadata = getattr(request, "request_metadata", {})
+        profile = self._profile_for_model(request.model, request_metadata=request_metadata)
         if getattr(request, "tools", []) and not self._profile_supports_tool_calling(profile):
             raise ProviderUnsupportedFeatureError(self.provider_name, "tool_calling")
         if messages_require_vision(request.messages) and not self._profile_supports_vision(profile):
@@ -194,13 +199,14 @@ class GenericHarnessAdapter:
                 messages=request.messages,
                 **self._harness_execution_kwargs(
                     self._harness.execute_stream,
+                    instance_id=profile.instance_id,
                     tools=getattr(request, "tools", []),
                     tool_choice=getattr(request, "tool_choice", None),
                     temperature=response_controls.get("temperature"),
                     max_output_tokens=response_controls.get("max_output_tokens"),
                     metadata=response_controls.get("metadata"),
                     response_format=response_controls.get("response_format"),
-                    request_metadata=getattr(request, "request_metadata", {}),
+                    request_metadata=request_metadata,
                 ),
             )
             for item in stream_iter:
@@ -234,7 +240,8 @@ class GenericHarnessAdapter:
     def create_embeddings(self, request: EmbeddingDispatchRequest) -> EmbeddingDispatchResult:
         if not self.is_ready():
             raise ProviderConfigurationError(self.provider_name, self.readiness_reason() or "Harness not ready")
-        profile = self._profile_for_model(request.model)
+        request_metadata = getattr(request, "request_metadata", {})
+        profile = self._profile_for_model(request.model, request_metadata=request_metadata)
         if not self._profile_supports_embeddings(profile):
             raise ProviderUnsupportedFeatureError(self.provider_name, "embeddings")
         try:
@@ -242,9 +249,13 @@ class GenericHarnessAdapter:
                 profile.provider_key,
                 model=request.model,
                 input_items=list(request.input_items),
-                encoding_format=request.encoding_format,
-                dimensions=request.dimensions,
-                request_metadata=getattr(request, "request_metadata", {}),
+                **self._harness_execution_kwargs(
+                    self._harness.execute_embeddings,
+                    instance_id=profile.instance_id,
+                    encoding_format=request.encoding_format,
+                    dimensions=request.dimensions,
+                    request_metadata=request_metadata,
+                ),
             )
         except RuntimeError as exc:
             raise self._map_harness_error(str(exc)) from exc
@@ -281,21 +292,58 @@ class GenericHarnessAdapter:
         supported = {parameter.name for parameter in parameters}
         return {name: value for name, value in kwargs.items() if name in supported}
 
-    def _active_profiles(self) -> list[Any]:
-        return [profile for profile in self._harness.list_profiles() if profile.enabled]
+    @staticmethod
+    def _scoped_instance_id(
+        request_metadata: dict[str, str] | None,
+        instance_id: str | None = None,
+    ) -> str | None:
+        normalized_instance_id = (instance_id or "").strip() or None
+        if normalized_instance_id is not None:
+            return normalized_instance_id
+        scope = extract_scope_attributes(request_metadata)
+        return (scope.get("instance_id") or "").strip() or None
+
+    def _active_profiles(
+        self,
+        *,
+        request_metadata: dict[str, str] | None = None,
+        instance_id: str | None = None,
+    ) -> list[Any]:
+        scoped_instance_id = self._scoped_instance_id(request_metadata, instance_id)
+        return [
+            profile
+            for profile in self._harness.list_profiles(instance_id=scoped_instance_id)
+            if profile.enabled
+        ]
 
     @staticmethod
     def _profile_has_owned_models(profile: Any) -> bool:
         return any(str(model).strip() for model in getattr(profile, "models", []))
 
-    def _runtime_profiles(self) -> list[Any]:
-        active_profiles = self._active_profiles()
+    def _runtime_profiles(
+        self,
+        *,
+        request_metadata: dict[str, str] | None = None,
+        instance_id: str | None = None,
+    ) -> list[Any]:
+        active_profiles = self._active_profiles(
+            request_metadata=request_metadata,
+            instance_id=instance_id,
+        )
         if self._settings.generic_harness_allow_model_fallback:
             return active_profiles
         return [profile for profile in active_profiles if self._profile_has_owned_models(profile)]
 
-    def _capability_truth_profiles(self) -> list[Any]:
-        return self._runtime_profiles()
+    def _capability_truth_profiles(
+        self,
+        *,
+        request_metadata: dict[str, str] | None = None,
+        instance_id: str | None = None,
+    ) -> list[Any]:
+        return self._runtime_profiles(
+            request_metadata=request_metadata,
+            instance_id=instance_id,
+        )
 
     @staticmethod
     def _profile_supports_streaming(profile: Any) -> bool:
@@ -329,8 +377,17 @@ class GenericHarnessAdapter:
             return auth_mechanisms[0]
         return "mixed"
 
-    def _profile_for_model(self, model: str):
-        enabled = self._active_profiles()
+    def _profile_for_model(
+        self,
+        model: str,
+        *,
+        request_metadata: dict[str, str] | None = None,
+        instance_id: str | None = None,
+    ):
+        enabled = self._active_profiles(
+            request_metadata=request_metadata,
+            instance_id=instance_id,
+        )
         for profile in enabled:
             if model in profile.models:
                 return profile

@@ -269,12 +269,22 @@ class ControlPlaneOpenAICompatibilityDomainMixin:
             summary.overall_status = "unsupported"
         return summary
 
-    def openai_compatibility_signoff(self, tenant_id: str | None = None) -> dict[str, object]:
+    def openai_compatibility_signoff(
+        self,
+        tenant_id: str | None = None,
+        instance_id: str | None = None,
+    ) -> dict[str, object]:
         effective_tenant_id = self._effective_truth_projection_tenant_id(tenant_id)
         company_id = self._runtime_company_id_for_signoff(effective_tenant_id, self._default_tenant_id)
         usage_events = self._openai_compat_usage_events(effective_tenant_id)
         error_events = self._openai_compat_error_events(effective_tenant_id)
-        truth_axes = {item.provider.provider: item for item in self.provider_truth_axes(tenant_id=effective_tenant_id)}
+        truth_axes = {
+            item.provider.provider: item
+            for item in self.provider_truth_axes(
+                tenant_id=effective_tenant_id,
+                instance_id=instance_id,
+            )
+        }
 
         chat_non_stream = self._latest_route_event(
             usage_events,

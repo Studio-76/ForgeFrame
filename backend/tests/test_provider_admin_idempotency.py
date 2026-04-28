@@ -169,7 +169,8 @@ def test_admin_oauth_bridge_sync_replays_original_outcome_without_repeating_oper
     assert second.status_code == 200
     assert second.json() == first.json()
     assert second.headers["X-ForgeFrame-Idempotent-Replay"] == "true"
-    assert after_first == before + 3
+    expected_operations = len(first.json()["upserted_profiles"]) + len(first.json()["skipped"])
+    assert after_first == before + expected_operations
     assert after_second == after_first
 
 

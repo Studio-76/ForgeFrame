@@ -31,6 +31,8 @@ import {
   runHealthChecks,
   syncOauthAccountBridgeProfiles,
   syncProviders,
+  type ProviderClassDescriptor,
+  type ProviderClassKey,
   type HarnessProfile,
   type HealthConfig,
   updateProvider,
@@ -41,11 +43,30 @@ import type {
   HarnessDraft,
   LoadState,
   ProviderDraft,
+  ProviderEditorDraft,
   ProvidersAccessState,
   ProviderRunFilters,
   ProvidersPageActions,
   ProvidersPageData,
 } from "./providersShared";
+
+type ProvidersControlPlaneOptions = {
+  includeUsageSummary?: boolean;
+  includeHarness?: boolean;
+  includeOauthTargets?: boolean;
+  includeCompatibilityMatrix?: boolean;
+  includeBootstrapReadiness?: boolean;
+  includeClientView?: boolean;
+};
+
+const DEFAULT_OPTIONS: Required<ProvidersControlPlaneOptions> = {
+  includeUsageSummary: true,
+  includeHarness: true,
+  includeOauthTargets: true,
+  includeCompatibilityMatrix: true,
+  includeBootstrapReadiness: true,
+  includeClientView: true,
+};
 
 const INITIAL_RUN_FILTERS: ProviderRunFilters = {
   mode: "all",
@@ -57,6 +78,12 @@ const INITIAL_RUN_FILTERS: ProviderRunFilters = {
 const INITIAL_PROVIDER_DRAFT: ProviderDraft = {
   provider: "",
   label: "",
+  providerClass: "openai_compatible",
+  integrationClass: "openai_compatible",
+  templateId: "openai_compatible",
+  endpointBaseUrl: "https://example.invalid/v1",
+  authScheme: "bearer",
+  oauthMode: "account_portal",
 };
 
 const INITIAL_HARNESS_DRAFT: HarnessDraft = {
@@ -72,6 +99,55 @@ const INITIAL_HARNESS_DRAFT: HarnessDraft = {
   stream_enabled: false,
 };
 
+const DEFAULT_PROVIDER_CLASS_OPTIONS: ProviderClassDescriptor[] = [
+  {
+    key: "openai_compatible",
+    label: "OpenAI-compatible",
+    description: "Remote or gateway-backed OpenAI-style runtime with explicit endpoint and auth semantics.",
+    integration_class: "openai_compatible",
+    template_id: "openai_compatible",
+    default_config: {
+      provider_class: "openai_compatible",
+      endpoint_base_url: "https://example.invalid/v1",
+      auth_scheme: "bearer",
+    },
+  },
+  {
+    key: "local_ollama",
+    label: "Local / Ollama",
+    description: "Dedicated local runtime path for Ollama-style deployments and local model inventories.",
+    integration_class: "local_ollama",
+    template_id: "ollama",
+    default_config: {
+      provider_class: "local_ollama",
+      endpoint_base_url: "http://localhost:11434/v1",
+      auth_scheme: "none",
+    },
+  },
+  {
+    key: "oauth_account",
+    label: "OAuth / Account-backed",
+    description: "Account-backed runtime that depends on an operator or end-user OAuth/session bridge.",
+    integration_class: "oauth_account",
+    template_id: null,
+    default_config: {
+      provider_class: "oauth_account",
+      auth_scheme: "oauth_account",
+      oauth_mode: "account_portal",
+    },
+  },
+  {
+    key: "custom",
+    label: "Custom",
+    description: "Explicit custom wiring when the provider does not fit the built-in runtime classes cleanly yet.",
+    integration_class: "custom",
+    template_id: null,
+    default_config: {
+      provider_class: "custom",
+    },
+  },
+];
+
 function getActionError(error: unknown, fallback: string): string {
   return error instanceof Error ? error.message : fallback;
 }
@@ -86,13 +162,101 @@ function getModelSource(integrationClass: HarnessProfile["integration_class"]): 
   return "manual";
 }
 
+function getProviderClassDescriptor(
+  providerClass: ProviderClassKey,
+  supportedClasses: ProviderClassDescriptor[],
+): ProviderClassDescriptor {
+  return supportedClasses.find((item) => item.key === providerClass)
+    ?? DEFAULT_PROVIDER_CLASS_OPTIONS.find((item) => item.key === providerClass)
+    ?? DEFAULT_PROVIDER_CLASS_OPTIONS[0];
+}
+
+function inferProviderClass(
+  provider: {
+    provider: string;
+    provider_class?: string | null;
+    integration_class?: string | null;
+    template_id?: string | null;
+    config?: Record<string, string>;
+    oauth_required?: boolean;
+  },
+): ProviderClassKey {
+  const configuredClass = provider.config?.provider_class ?? provider.provider_class ?? "";
+  if (configuredClass === "openai_compatible" || configuredClass === "local_ollama" || configuredClass === "oauth_account" || configuredClass === "custom") {
+    return configuredClass;
+  }
+  const integrationClass = (provider.integration_class ?? "").toLowerCase();
+  const templateId = (provider.template_id ?? "").toLowerCase();
+  const providerKey = provider.provider.toLowerCase();
+  const authScheme = (provider.config?.auth_scheme ?? "").toLowerCase();
+
+  if (providerKey === "ollama" || templateId === "ollama" || integrationClass.includes("ollama")) {
+    return "local_ollama";
+  }
+  if (provider.oauth_required || authScheme === "oauth_account" || integrationClass.includes("oauth")) {
+    return "oauth_account";
+  }
+  if (
+    integrationClass === "openai_compatible"
+    || integrationClass === "harness_generic"
+    || templateId === "openai_compatible"
+    || authScheme === "bearer"
+    || authScheme === "api_key_header"
+  ) {
+    return "openai_compatible";
+  }
+  return "custom";
+}
+
+function buildProviderEditorDraft(
+  provider: ProvidersPageData["providers"][number],
+  supportedClasses: ProviderClassDescriptor[],
+): ProviderEditorDraft {
+  const providerClass = inferProviderClass(provider);
+  const descriptor = getProviderClassDescriptor(providerClass, supportedClasses);
+  return {
+    label: provider.label,
+    providerClass,
+    integrationClass: provider.integration_class || descriptor.integration_class,
+    templateId: provider.template_id ?? descriptor.template_id ?? "",
+    endpointBaseUrl: provider.config.endpoint_base_url ?? descriptor.default_config.endpoint_base_url ?? "",
+    authScheme: provider.config.auth_scheme ?? descriptor.default_config.auth_scheme ?? "bearer",
+    oauthMode: provider.config.oauth_mode ?? descriptor.default_config.oauth_mode ?? "account_portal",
+  };
+}
+
+function buildProviderConfig(
+  draft: Pick<ProviderDraft, "providerClass" | "endpointBaseUrl" | "authScheme" | "oauthMode">,
+  supportedClasses: ProviderClassDescriptor[],
+): Record<string, string> {
+  const descriptor = getProviderClassDescriptor(draft.providerClass, supportedClasses);
+  const config: Record<string, string> = { ...descriptor.default_config, provider_class: draft.providerClass };
+
+  if (draft.providerClass !== "oauth_account" && draft.endpointBaseUrl.trim()) {
+    config.endpoint_base_url = draft.endpointBaseUrl.trim();
+  } else {
+    delete config.endpoint_base_url;
+  }
+  if (draft.providerClass === "oauth_account") {
+    config.auth_scheme = "oauth_account";
+    config.oauth_mode = draft.oauthMode.trim() || descriptor.default_config.oauth_mode || "account_portal";
+  } else {
+    config.auth_scheme = draft.authScheme.trim() || descriptor.default_config.auth_scheme || "bearer";
+    delete config.oauth_mode;
+  }
+  return config;
+}
+
 export function useProvidersControlPlane(
   access: ProvidersAccessState,
   instanceId?: string | null,
+  options: ProvidersControlPlaneOptions = DEFAULT_OPTIONS,
 ): { data: ProvidersPageData; actions: ProvidersPageActions } {
+  const resolvedOptions = { ...DEFAULT_OPTIONS, ...options };
   const [state, setState] = useState<LoadState>("idle");
   const [error, setError] = useState<string | null>(null);
   const [providers, setProviders] = useState<ProvidersPageData["providers"]>([]);
+  const [supportedProviderClasses, setSupportedProviderClasses] = useState<ProviderClassDescriptor[]>(DEFAULT_PROVIDER_CLASS_OPTIONS);
   const [templates, setTemplates] = useState<ProvidersPageData["templates"]>([]);
   const [profiles, setProfiles] = useState<ProvidersPageData["profiles"]>([]);
   const [runs, setRuns] = useState<ProvidersPageData["runs"]>([]);
@@ -103,6 +267,7 @@ export function useProvidersControlPlane(
   const [syncNote, setSyncNote] = useState<string>("No sync note provided.");
   const [healthConfig, setHealthConfig] = useState<ProvidersPageData["healthConfig"]>(null);
   const [newProvider, setNewProvider] = useState<ProviderDraft>(INITIAL_PROVIDER_DRAFT);
+  const [providerDrafts, setProviderDrafts] = useState<Record<string, ProviderEditorDraft>>({});
   const [providerLabelDrafts, setProviderLabelDrafts] = useState<Record<string, string>>({});
   const [providerErrors, setProviderErrors] = useState<Record<string, number>>({});
   const [modelErrors, setModelErrors] = useState<Record<string, number>>({});
@@ -150,7 +315,44 @@ export function useProvidersControlPlane(
     return false;
   };
 
+  const clearScopedData = () => {
+    setProviders([]);
+    setSupportedProviderClasses(DEFAULT_PROVIDER_CLASS_OPTIONS);
+    setTemplates([]);
+    setProfiles([]);
+    setRuns([]);
+    setRunSummary({});
+    setRunOps({});
+    setClients([]);
+    setProductAxisTargets([]);
+    setOauthTargets([]);
+    setOauthOperations([]);
+    setOauthRecentOps([]);
+    setOauthTotalOps(0);
+    setOauthOnboarding([]);
+    setCompatibilityMatrix([]);
+    setBootstrapReadiness(null);
+    setSyncNote("No sync note provided.");
+    setHealthConfig(null);
+    setProviderErrors({});
+    setModelErrors({});
+    setIntegrationErrors({});
+    setProfileErrors({});
+    setProviderCatalog([]);
+    setProviderCatalogSummary(null);
+    setOpenAICompatibilitySignoff(null);
+    setProviderDrafts({});
+    setProviderLabelDrafts({});
+  };
+
   const load = async () => {
+    if (!access.canRead) {
+      clearScopedData();
+      setState("success");
+      setError(null);
+      return;
+    }
+
     setState("loading");
     setError(null);
     try {
@@ -169,53 +371,96 @@ export function useProvidersControlPlane(
         compatibilityResponse,
       ] = await Promise.all([
         instanceId ? fetchProviderControlPlane(instanceId) : fetchProviderControlPlane(),
-        instanceId ? fetchUsageSummary("24h", instanceId) : fetchUsageSummary(),
-        fetchHarnessTemplates(),
-        fetchHarnessProfiles(),
-        fetchHarnessRuns(
-          runFilters.provider === "all" ? undefined : runFilters.provider,
-          runFilters.mode === "all" ? undefined : runFilters.mode,
-          runFilters.status === "all" ? undefined : runFilters.status,
-          runFilters.client === "all" ? undefined : runFilters.client,
-          40,
-        ),
-        instanceId ? fetchClientOperationalView("24h", instanceId) : fetchClientOperationalView(),
-        instanceId ? fetchProductAxisTargets(instanceId) : fetchProductAxisTargets(),
-        instanceId ? fetchOauthAccountTargets(instanceId) : fetchOauthAccountTargets(),
-        instanceId ? fetchOauthAccountOperations(instanceId) : fetchOauthAccountOperations(),
-        instanceId ? fetchOauthOnboarding(instanceId) : fetchOauthOnboarding(),
-        fetchBootstrapReadiness(),
-        instanceId ? fetchCompatibilityMatrix(instanceId) : fetchCompatibilityMatrix(),
+        resolvedOptions.includeUsageSummary
+          ? (instanceId ? fetchUsageSummary("24h", instanceId) : fetchUsageSummary())
+          : Promise.resolve(null),
+        resolvedOptions.includeHarness ? fetchHarnessTemplates() : Promise.resolve(null),
+        resolvedOptions.includeHarness ? fetchHarnessProfiles(instanceId) : Promise.resolve(null),
+        resolvedOptions.includeHarness
+          ? fetchHarnessRuns(
+            runFilters.provider === "all" ? undefined : runFilters.provider,
+            runFilters.mode === "all" ? undefined : runFilters.mode,
+            runFilters.status === "all" ? undefined : runFilters.status,
+            runFilters.client === "all" ? undefined : runFilters.client,
+            40,
+            instanceId,
+          )
+          : Promise.resolve(null),
+        resolvedOptions.includeClientView
+          ? (instanceId ? fetchClientOperationalView("24h", instanceId) : fetchClientOperationalView())
+          : Promise.resolve(null),
+        resolvedOptions.includeOauthTargets
+          ? (instanceId ? fetchProductAxisTargets(instanceId) : fetchProductAxisTargets())
+          : Promise.resolve(null),
+        resolvedOptions.includeOauthTargets
+          ? (instanceId ? fetchOauthAccountTargets(instanceId) : fetchOauthAccountTargets())
+          : Promise.resolve(null),
+        resolvedOptions.includeOauthTargets
+          ? (instanceId ? fetchOauthAccountOperations(instanceId) : fetchOauthAccountOperations())
+          : Promise.resolve(null),
+        resolvedOptions.includeOauthTargets
+          ? (instanceId ? fetchOauthOnboarding(instanceId) : fetchOauthOnboarding())
+          : Promise.resolve(null),
+        resolvedOptions.includeBootstrapReadiness ? fetchBootstrapReadiness() : Promise.resolve(null),
+        resolvedOptions.includeCompatibilityMatrix
+          ? (instanceId ? fetchCompatibilityMatrix(instanceId) : fetchCompatibilityMatrix())
+          : Promise.resolve(null),
       ]);
 
       setProviders(payload.providers);
-      setTemplates(harnessTemplates.templates);
-      setProfiles(harnessProfiles.profiles);
-      setRuns(harnessRuns.runs.slice(0, 20));
-      setRunSummary(harnessRuns.summary ?? {});
-      setRunOps(harnessRuns.ops ?? {});
-      setClients(clientView.clients ?? []);
-      setProductAxisTargets(productAxisTargetsResponse.targets ?? []);
-      setOauthTargets(oauthTargetsResponse.targets ?? []);
-      setOauthOperations(oauthOpsResponse.operations ?? []);
-      setOauthRecentOps(oauthOpsResponse.recent ?? []);
-      setOauthTotalOps(Number(oauthOpsResponse.total_operations ?? 0));
-      setOauthOnboarding(oauthOnboardingResponse.targets ?? []);
-      setCompatibilityMatrix(compatibilityResponse.matrix ?? []);
-      setBootstrapReadiness({
-        ready: Boolean(bootstrapResponse.ready),
-        checks: bootstrapResponse.checks ?? [],
-        next_steps: bootstrapResponse.next_steps ?? [],
-      });
+      setSupportedProviderClasses(payload.supported_provider_classes ?? DEFAULT_PROVIDER_CLASS_OPTIONS);
+      setTemplates(harnessTemplates?.templates ?? []);
+      setProfiles(harnessProfiles?.profiles ?? []);
+      setRuns(harnessRuns?.runs.slice(0, 20) ?? []);
+      setRunSummary(harnessRuns?.summary ?? {});
+      setRunOps(harnessRuns?.ops ?? {});
+      setClients(clientView?.clients ?? []);
+      setProductAxisTargets(productAxisTargetsResponse?.targets ?? []);
+      setOauthTargets(oauthTargetsResponse?.targets ?? []);
+      setOauthOperations(oauthOpsResponse?.operations ?? []);
+      setOauthRecentOps(oauthOpsResponse?.recent ?? []);
+      setOauthTotalOps(Number(oauthOpsResponse?.total_operations ?? 0));
+      setOauthOnboarding(oauthOnboardingResponse?.targets ?? []);
+      setCompatibilityMatrix(compatibilityResponse?.matrix ?? []);
+      setBootstrapReadiness(
+        bootstrapResponse
+          ? {
+            ready: Boolean(bootstrapResponse.ready),
+            checks: bootstrapResponse.checks ?? [],
+            next_steps: bootstrapResponse.next_steps ?? [],
+          }
+          : null,
+      );
       setSyncNote(typeof payload.notes.sync_action === "string" ? payload.notes.sync_action : "No sync note provided.");
       setHealthConfig(payload.health_config);
-      setProviderErrors(Object.fromEntries(usage.aggregations.errors_by_provider.map((item) => [String(item.provider), Number(item.errors)])));
-      setModelErrors(Object.fromEntries(usage.aggregations.errors_by_model.map((item) => [String(item.model), Number(item.errors)])));
-      setIntegrationErrors(Object.fromEntries(usage.aggregations.errors_by_integration.map((item) => [String(item.integration_key), Number(item.errors)])));
-      setProfileErrors(Object.fromEntries(usage.aggregations.errors_by_profile.map((item) => [String(item.profile_key), Number(item.errors)])));
+      setProviderErrors(
+        usage
+          ? Object.fromEntries(usage.aggregations.errors_by_provider.map((item) => [String(item.provider), Number(item.errors)]))
+          : {},
+      );
+      setModelErrors(
+        usage
+          ? Object.fromEntries(usage.aggregations.errors_by_model.map((item) => [String(item.model), Number(item.errors)]))
+          : {},
+      );
+      setIntegrationErrors(
+        usage
+          ? Object.fromEntries(usage.aggregations.errors_by_integration.map((item) => [String(item.integration_key), Number(item.errors)]))
+          : {},
+      );
+      setProfileErrors(
+        usage
+          ? Object.fromEntries(usage.aggregations.errors_by_profile.map((item) => [String(item.profile_key), Number(item.errors)]))
+          : {},
+      );
       setProviderCatalog(payload.provider_catalog ?? []);
       setProviderCatalogSummary(payload.provider_catalog_summary ?? null);
       setOpenAICompatibilitySignoff(payload.openai_compatibility_signoff ?? null);
+      setProviderDrafts(
+        Object.fromEntries(
+          payload.providers.map((provider) => [provider.provider, buildProviderEditorDraft(provider, payload.supported_provider_classes ?? DEFAULT_PROVIDER_CLASS_OPTIONS)]),
+        ),
+      );
       setProviderLabelDrafts(Object.fromEntries(payload.providers.map((provider) => [provider.provider, provider.label])));
       setState("success");
     } catch (actionError) {
@@ -226,7 +471,20 @@ export function useProvidersControlPlane(
 
   useEffect(() => {
     void load();
-  }, [instanceId, runFilters.client, runFilters.mode, runFilters.provider, runFilters.status]);
+  }, [
+    instanceId,
+    access.canRead,
+    resolvedOptions.includeBootstrapReadiness,
+    resolvedOptions.includeClientView,
+    resolvedOptions.includeCompatibilityMatrix,
+    resolvedOptions.includeHarness,
+    resolvedOptions.includeOauthTargets,
+    resolvedOptions.includeUsageSummary,
+    runFilters.client,
+    runFilters.mode,
+    runFilters.provider,
+    runFilters.status,
+  ]);
 
   const withAction = async (task: () => Promise<void>, fallback: string, requiresMutation = false) => {
     if (requiresMutation && !ensureMutationAllowed()) {
@@ -247,14 +505,52 @@ export function useProvidersControlPlane(
 
   const setProviderLabelDraft = (provider: string, label: string) => {
     setProviderLabelDrafts((current) => ({ ...current, [provider]: label }));
+    setProviderDrafts((current) => ({
+      ...current,
+      [provider]: current[provider]
+        ? {
+          ...current[provider],
+          label,
+        }
+        : {
+          label,
+          providerClass: "custom",
+          integrationClass: "custom",
+          templateId: "",
+          endpointBaseUrl: "",
+          authScheme: "bearer",
+          oauthMode: "account_portal",
+        },
+    }));
+  };
+
+  const setProviderDraftField = (provider: string, field: keyof ProviderEditorDraft, value: string) => {
+    setProviderDrafts((current) => ({
+      ...current,
+      [provider]: {
+        ...(current[provider] ?? {
+          label: providerLabelDrafts[provider] ?? provider,
+          providerClass: "custom",
+          integrationClass: "custom",
+          templateId: "",
+          endpointBaseUrl: "",
+          authScheme: "bearer",
+          oauthMode: "account_portal",
+        }),
+        [field]: value,
+      },
+    }));
+    if (field === "label") {
+      setProviderLabelDrafts((current) => ({ ...current, [provider]: value }));
+    }
   };
 
   const runHarnessAction = async (providerKey: string, model?: string) =>
     withAction(async () => {
       const targetModel = model ?? profiles.find((item) => item.provider_key === providerKey)?.models[0] ?? "model-1";
-      const preview = await previewHarness({ provider_key: providerKey, model: targetModel, message: "preview", stream: false });
-      const dry = await dryRunHarness({ provider_key: providerKey, model: targetModel, message: "dry-run", stream: false });
-      const verify = await verifyHarnessProfile({ provider_key: providerKey, model: targetModel });
+      const preview = await previewHarness({ provider_key: providerKey, model: targetModel, message: "preview", stream: false }, instanceId);
+      const dry = await dryRunHarness({ provider_key: providerKey, model: targetModel, message: "dry-run", stream: false }, instanceId);
+      const verify = await verifyHarnessProfile({ provider_key: providerKey, model: targetModel }, instanceId);
       setOperationResult(JSON.stringify({ preview, dry, verify }, null, 2));
       await load();
     }, "Harness action failed.", true);
@@ -262,7 +558,7 @@ export function useProvidersControlPlane(
   const probeHarnessProfile = async (providerKey: string, model?: string) =>
     withAction(async () => {
       const targetModel = model ?? profiles.find((item) => item.provider_key === providerKey)?.models[0] ?? "model-1";
-      const response = await probeHarness({ provider_key: providerKey, model: targetModel, message: "probe", stream: false });
+      const response = await probeHarness({ provider_key: providerKey, model: targetModel, message: "probe", stream: false }, instanceId);
       setOperationResult(JSON.stringify(response, null, 2));
       await load();
     }, "Harness probe failed.", true);
@@ -270,22 +566,22 @@ export function useProvidersControlPlane(
   const toggleHarnessProfile = async (providerKey: string, enabled: boolean) =>
     withAction(async () => {
       if (enabled) {
-        await deactivateHarnessProfile(providerKey);
+        await deactivateHarnessProfile(providerKey, instanceId);
       } else {
-        await activateHarnessProfile(providerKey);
+        await activateHarnessProfile(providerKey, instanceId);
       }
       await load();
     }, "Harness profile update failed.", true);
 
   const deleteHarnessProfile = async (providerKey: string) =>
     withAction(async () => {
-      await deleteHarnessProfileRequest(providerKey);
+      await deleteHarnessProfileRequest(providerKey, instanceId);
       await load();
     }, "Harness profile deletion failed.", true);
 
   const rollbackHarnessProfile = async (providerKey: string, revision: number) =>
     withAction(async () => {
-      const response = await rollbackHarnessProfileRequest(providerKey, revision);
+      const response = await rollbackHarnessProfileRequest(providerKey, revision, instanceId);
       setOperationResult(JSON.stringify(response.profile, null, 2));
       await load();
     }, "Harness rollback failed.", true);
@@ -301,9 +597,24 @@ export function useProvidersControlPlane(
       setError("Provider key and label are required.");
       return;
     }
+    if (newProvider.providerClass !== "oauth_account" && !newProvider.endpointBaseUrl.trim()) {
+      setError("An endpoint URL is required for OpenAI-compatible, local, and custom providers.");
+      return;
+    }
 
     await withAction(async () => {
-      await createProvider({ provider, label, integration_class: "native", config: {} });
+      const descriptor = getProviderClassDescriptor(newProvider.providerClass, supportedProviderClasses);
+      await createProvider(
+        {
+          provider,
+          label,
+          provider_class: newProvider.providerClass,
+          integration_class: newProvider.integrationClass.trim() || descriptor.integration_class,
+          template_id: newProvider.templateId.trim() || descriptor.template_id || null,
+          config: buildProviderConfig(newProvider, supportedProviderClasses),
+        },
+        instanceId,
+      );
       setNewProvider(INITIAL_PROVIDER_DRAFT);
       await load();
     }, "Provider creation failed.");
@@ -312,21 +623,65 @@ export function useProvidersControlPlane(
   const toggleProvider = async (provider: string, enabled: boolean) =>
     withAction(async () => {
       if (enabled) {
-        await deactivateProvider(provider);
+        await deactivateProvider(provider, instanceId);
       } else {
-        await activateProvider(provider);
+        await activateProvider(provider, instanceId);
       }
       await load();
     }, "Provider state update failed.", true);
 
   const syncProviderModels = async (provider: string) =>
     withAction(async () => {
-      await syncProviders(provider);
+      await syncProviders(provider, instanceId);
       await load();
     }, "Provider sync failed.", true);
 
+  const saveProvider = async (provider: string) => {
+    if (!ensureMutationAllowed()) {
+      return;
+    }
+
+    const draft = providerDrafts[provider];
+    if (!draft) {
+      setError("Provider draft is not available.");
+      return;
+    }
+
+    const label = draft.label.trim();
+    if (!label) {
+      setError("Provider label is required.");
+      return;
+    }
+    if (draft.providerClass !== "oauth_account" && !draft.endpointBaseUrl.trim()) {
+      setError("An endpoint URL is required for OpenAI-compatible, local, and custom providers.");
+      return;
+    }
+
+    await withAction(async () => {
+      const descriptor = getProviderClassDescriptor(draft.providerClass, supportedProviderClasses);
+      await updateProvider(
+        provider,
+        {
+          label,
+          provider_class: draft.providerClass,
+          integration_class: draft.integrationClass.trim() || descriptor.integration_class,
+          template_id: draft.templateId.trim() || descriptor.template_id || null,
+          config: buildProviderConfig(draft, supportedProviderClasses),
+        },
+        instanceId,
+      );
+      await load();
+    }, "Provider update failed.", true);
+  };
+
   const saveProviderLabel = async (provider: string) => {
     if (!ensureMutationAllowed()) {
+      return;
+    }
+
+    const currentDraft = providerDrafts[provider];
+    if (currentDraft) {
+      await saveProvider(provider);
       return;
     }
 
@@ -337,14 +692,14 @@ export function useProvidersControlPlane(
     }
 
     await withAction(async () => {
-      await updateProvider(provider, { label });
+      await updateProvider(provider, { label }, instanceId);
       await load();
     }, "Provider label update failed.", true);
   };
 
   const syncAllProviders = async () =>
     withAction(async () => {
-      await syncProviders();
+      await syncProviders(undefined, instanceId);
       await load();
     }, "Provider sync failed.", true);
 
@@ -397,7 +752,7 @@ export function useProvidersControlPlane(
           discovery_support: false,
           model_source: getModelSource(newHarness.integration_class),
         },
-      });
+      }, instanceId);
       setNewHarness({
         ...INITIAL_HARNESS_DRAFT,
         template_id: newHarness.template_id || INITIAL_HARNESS_DRAFT.template_id,
@@ -409,14 +764,14 @@ export function useProvidersControlPlane(
 
   const updateHealth = async (patch: Partial<HealthConfig>) =>
     withAction(async () => {
-      const response = await patchHealthConfig(patch);
+      const response = await patchHealthConfig(patch, instanceId);
       setHealthConfig(response.config);
       await load();
     }, "Health config update failed.", true);
 
   const runHealthChecksAction = async () =>
     withAction(async () => {
-      await runHealthChecks();
+      await runHealthChecks(instanceId);
       await load();
     }, "Health check run failed.", true);
 
@@ -425,7 +780,7 @@ export function useProvidersControlPlane(
       if (redactSecrets ? !ensureRedactedExportAllowed() : !ensureFullExportAllowed()) {
         return;
       }
-      const response = await fetchHarnessExport(redactSecrets);
+      const response = await fetchHarnessExport(redactSecrets, instanceId);
       const formatted = JSON.stringify(response.snapshot, null, 2);
       setImportPayload(formatted);
       setOperationResult(formatted);
@@ -434,7 +789,7 @@ export function useProvidersControlPlane(
   const importHarness = async (dryRun: boolean) =>
     withAction(async () => {
       const parsed = JSON.parse(importPayload) as Record<string, unknown>;
-      const result = await importHarnessConfig(parsed, dryRun);
+      const result = await importHarnessConfig(parsed, dryRun, instanceId);
       setOperationResult(JSON.stringify(result, null, 2));
       if (!dryRun) {
         await load();
@@ -443,21 +798,21 @@ export function useProvidersControlPlane(
 
   const syncOauthBridgeProfiles = async () =>
     withAction(async () => {
-      const response = await syncOauthAccountBridgeProfiles();
+      const response = await syncOauthAccountBridgeProfiles(instanceId);
       setOperationResult(JSON.stringify(response, null, 2));
       await load();
     }, "OAuth bridge sync failed.", true);
 
   const probeAllOauthTargets = async () =>
     withAction(async () => {
-      const response = await probeAllOauthAccountProviders();
+      const response = await probeAllOauthAccountProviders(instanceId);
       setOperationResult(JSON.stringify(response, null, 2));
       await load();
     }, "OAuth probe failed.", true);
 
   const probeOauthTarget = async (providerKey: string) =>
     withAction(async () => {
-      const response = await probeOauthAccountProvider(providerKey);
+      const response = await probeOauthAccountProvider(providerKey, instanceId);
       setOperationResult(JSON.stringify(response, null, 2));
       await load();
     }, "OAuth probe failed.", true);
@@ -467,6 +822,7 @@ export function useProvidersControlPlane(
     error,
     access,
     providers,
+    supportedProviderClasses,
     templates,
     profiles,
     runs,
@@ -477,6 +833,7 @@ export function useProvidersControlPlane(
     syncNote,
     healthConfig,
     newProvider,
+    providerDrafts,
     providerLabelDrafts,
     providerErrors,
     modelErrors,
@@ -504,6 +861,7 @@ export function useProvidersControlPlane(
     setOperationResult,
     setImportPayload,
     setNewProvider,
+    setProviderDraftField,
     setNewHarness,
     setProviderLabelDraft,
     runHarnessAction,
@@ -512,6 +870,7 @@ export function useProvidersControlPlane(
     deleteHarnessProfile,
     rollbackHarnessProfile,
     createProvider: createProviderAction,
+    saveProvider,
     toggleProvider,
     syncProviderModels,
     saveProviderLabel,

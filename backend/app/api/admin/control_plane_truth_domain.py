@@ -55,11 +55,13 @@ class ControlPlaneTruthDomainMixin:
         *,
         action: str,
         tenant_id: str | None = None,
+        instance_id: str | None = None,
     ) -> object | None:
         return self.latest_oauth_operation(
             provider_name,
             action=action,
             tenant_id=tenant_id,
+            instance_id=instance_id,
         )
 
     def _provider_capability_evidence(
@@ -67,13 +69,19 @@ class ControlPlaneTruthDomainMixin:
         provider_name: str,
         *,
         tenant_id: str | None = None,
+        instance_id: str | None = None,
     ) -> ProviderCapabilityEvidenceRecord:
         runtime_event = self._latest_usage_evidence(provider_name, tenant_id=tenant_id, stream_mode="non_stream")
         streaming_event = self._latest_usage_evidence(provider_name, tenant_id=tenant_id, stream_mode="stream")
         tool_event = self._latest_usage_evidence(provider_name, tenant_id=tenant_id, require_tool_calls=True)
         runtime_error = self._latest_error_evidence(provider_name, tenant_id=tenant_id, stream_mode="non_stream")
         streaming_error = self._latest_error_evidence(provider_name, tenant_id=tenant_id, stream_mode="stream")
-        probe_operation = self._latest_oauth_operation(provider_name, action="probe", tenant_id=tenant_id)
+        probe_operation = self._latest_oauth_operation(
+            provider_name,
+            action="probe",
+            tenant_id=tenant_id,
+            instance_id=instance_id,
+        )
 
         runtime = (
             CapabilityEvidenceRecord(
@@ -312,9 +320,13 @@ class ControlPlaneTruthDomainMixin:
         provider: ManagedProviderRecord,
         *,
         tenant_id: str | None = None,
+        instance_id: str | None = None,
     ) -> RuntimeProviderTruthRecord:
         try:
-            runtime_status = self._providers.get_provider_status(provider.provider)
+            runtime_status = self._providers.get_provider_status(
+                provider.provider,
+                instance_id=instance_id,
+            )
         except ValueError:
             runtime_status = None
         if not runtime_status:
@@ -426,6 +438,88 @@ class ControlPlaneTruthDomainMixin:
             last_failed_run=_redact_sensitive_payload(last_failed.model_dump()) if last_failed else None,
         )
 
+    @staticmethod
+    def _latest_iso_timestamp(*values: object) -> str | None:
+        timestamps = sorted(
+            {
+                str(value)
+                for value in values
+                if isinstance(value, str) and value.strip()
+            }
+        )
+        return timestamps[-1] if timestamps else None
+
+    @staticmethod
+    def _provider_target_summary(targets: list[object]) -> dict[str, object]:
+        last_probe_at = ControlPlaneTruthDomainMixin._latest_iso_timestamp(
+            *[getattr(target, "last_probe_at", None) for target in targets]
+        )
+        return {
+            "target_count": len(targets),
+            "enabled_target_count": len([target for target in targets if bool(getattr(target, "enabled", False))]),
+            "ready_target_count": len(
+                [
+                    target
+                    for target in targets
+                    if str(getattr(target, "readiness_status", "planned")) == "ready"
+                ]
+            ),
+            "last_probe_at": last_probe_at,
+        }
+
+    @staticmethod
+    def _provider_health_summary(records: list[object]) -> dict[str, object]:
+        if not records:
+            return {
+                "health_status": "not-run",
+                "healthy_model_count": 0,
+                "attention_model_count": 0,
+                "last_health_check_at": None,
+            }
+
+        statuses = [str(getattr(record, "status", "unknown")) for record in records]
+        healthy_count = len([status for status in statuses if status in {"healthy", "discovery_only"}])
+        attention_count = len([status for status in statuses if status not in {"healthy", "discovery_only"}])
+        if attention_count == 0:
+            health_status = "healthy"
+        elif any(status in {"auth_failed", "probe_failed", "degraded"} for status in statuses):
+            health_status = "error"
+        else:
+            health_status = "attention"
+        return {
+            "health_status": health_status,
+            "healthy_model_count": healthy_count,
+            "attention_model_count": attention_count,
+            "last_health_check_at": ControlPlaneTruthDomainMixin._latest_iso_timestamp(
+                *[getattr(record, "last_check_at", None) for record in records]
+            ),
+        }
+
+    @staticmethod
+    def _provider_next_action(
+        *,
+        enabled: bool,
+        oauth_connect_required: bool,
+        model_count: int,
+        health_status: str,
+        ready: bool,
+        last_sync_status: str,
+        last_sync_error: str | None,
+    ) -> tuple[str, str]:
+        if oauth_connect_required:
+            return ("connect_oauth", "Connect required")
+        if not enabled:
+            return ("activate_provider", "Activate provider")
+        if model_count == 0:
+            return ("sync_models", "Sync models")
+        if last_sync_error or last_sync_status in {"warning", "failed"}:
+            return ("review_sync", "Review sync")
+        if health_status in {"not-run", "attention", "error"}:
+            return ("run_health", "Run health")
+        if not ready:
+            return ("edit_provider", "Finish setup")
+        return ("edit_provider", "Review config")
+
     def _ui_truth_for_provider(
         self,
         provider_truth: ManagedProviderTruthRecord,
@@ -433,14 +527,50 @@ class ControlPlaneTruthDomainMixin:
         harness_truth: HarnessProviderTruthRecord,
         *,
         health_by_provider: dict[str, dict[str, str]],
+        health_records_by_provider: dict[str, list[object]],
         oauth_failures: dict[str, int],
         oauth_last_probe: dict[str, dict[str, object]],
         oauth_last_bridge: dict[str, dict[str, object]],
+        oauth_target_states: dict[str, dict[str, object]],
+        provider_targets_by_provider: dict[str, list[object]],
     ) -> ProviderUiTruthRecord:
+        provider_name = provider_truth.provider
+        provider_class = self._infer_provider_class(
+            provider_name=provider_name,
+            integration_class=provider_truth.integration_class,
+            template_id=provider_truth.template_id,
+            config=provider_truth.config,
+        )
+        target_summary = self._provider_target_summary(provider_targets_by_provider.get(provider_name, []))
+        health_summary = self._provider_health_summary(health_records_by_provider.get(provider_name, []))
+        oauth_target_state = oauth_target_states.get(provider_name, {})
+        oauth_connect_required = bool(
+            runtime_truth.oauth_required
+            and (
+                not bool(oauth_target_state.get("configured"))
+                or str(oauth_target_state.get("readiness", "planned")) != "ready"
+            )
+        )
+        last_probe_at = self._latest_iso_timestamp(
+            target_summary["last_probe_at"],
+            health_summary["last_health_check_at"],
+            oauth_last_probe.get(provider_name, {}).get("executed_at") if oauth_last_probe.get(provider_name) else None,
+            *[model.last_probe_at for model in provider_truth.managed_models],
+        )
+        next_action_kind, next_action = self._provider_next_action(
+            enabled=provider_truth.enabled,
+            oauth_connect_required=oauth_connect_required,
+            model_count=provider_truth.model_count,
+            health_status=str(health_summary["health_status"]),
+            ready=runtime_truth.ready,
+            last_sync_status=provider_truth.last_sync_status,
+            last_sync_error=provider_truth.last_sync_error,
+        )
         return ProviderUiTruthRecord(
-            provider=provider_truth.provider,
+            provider=provider_name,
             label=provider_truth.label,
             enabled=provider_truth.enabled,
+            provider_class=provider_class,
             integration_class=provider_truth.integration_class,
             template_id=provider_truth.template_id,
             config=dict(provider_truth.config),
@@ -465,7 +595,7 @@ class ControlPlaneTruthDomainMixin:
             models=[
                 ManagedModelUiRecord(
                     **model.model_dump(),
-                    health_status=health_by_provider.get(provider_truth.provider, {}).get(model.id, "unknown"),
+                    health_status=health_by_provider.get(provider_name, {}).get(model.id, "unknown"),
                 )
                 for model in provider_truth.managed_models
             ],
@@ -475,18 +605,38 @@ class ControlPlaneTruthDomainMixin:
             harness_run_count=harness_truth.run_count,
             harness_proof_status=harness_truth.proof_status,
             harness_proven_profile_keys=list(harness_truth.proven_profile_keys),
-            oauth_failure_count=oauth_failures.get(provider_truth.provider, 0),
-            oauth_last_probe=oauth_last_probe.get(provider_truth.provider),
-            oauth_last_bridge_sync=oauth_last_bridge.get(provider_truth.provider),
+            oauth_failure_count=oauth_failures.get(provider_name, 0),
+            oauth_last_probe=oauth_last_probe.get(provider_name),
+            oauth_last_bridge_sync=oauth_last_bridge.get(provider_name),
+            oauth_connect_required=oauth_connect_required,
+            target_count=int(target_summary["target_count"]),
+            enabled_target_count=int(target_summary["enabled_target_count"]),
+            ready_target_count=int(target_summary["ready_target_count"]),
+            health_status=str(health_summary["health_status"]),
+            healthy_model_count=int(health_summary["healthy_model_count"]),
+            attention_model_count=int(health_summary["attention_model_count"]),
+            last_health_check_at=health_summary["last_health_check_at"],
+            last_probe_at=last_probe_at,
+            next_action=next_action,
+            next_action_kind=next_action_kind,
         )
 
-    def provider_truth_axes(self, tenant_id: str | None = None) -> list[ProviderTruthAxesRecord]:
+    def provider_truth_axes(
+        self,
+        tenant_id: str | None = None,
+        instance_id: str | None = None,
+    ) -> list[ProviderTruthAxesRecord]:
         health_by_provider: dict[str, dict[str, str]] = {}
+        health_records_by_provider: dict[str, list[object]] = {}
         oauth_failures: dict[str, int] = {}
         oauth_last_probe: dict[str, dict[str, object]] = {}
         oauth_last_bridge: dict[str, dict[str, object]] = {}
         effective_tenant_id = self._effective_oauth_tenant_id(tenant_id)
-        oauth_summary = self.oauth_operation_provider_summary(effective_tenant_id)
+        scoped_instance_id = (instance_id or "").strip() or None
+        oauth_summary = self.oauth_operation_provider_summary(
+            effective_tenant_id,
+            scoped_instance_id,
+        )
         for provider_key, details in oauth_summary.items():
             oauth_failures[provider_key] = int(details.get("failures", 0) or 0)
             if details.get("last_probe") is not None:
@@ -495,15 +645,28 @@ class ControlPlaneTruthDomainMixin:
                 oauth_last_bridge[provider_key] = details["last_bridge_sync"]
         for record in self._health_records.values():
             health_by_provider.setdefault(record.provider, {})[record.model] = record.status
+            health_records_by_provider.setdefault(record.provider, []).append(record)
+        oauth_target_states = {
+            str(item["provider_key"]): item
+            for item in self.list_oauth_account_target_statuses(
+                tenant_id=effective_tenant_id,
+                instance_id=scoped_instance_id,
+            )
+        }
+        provider_targets_by_provider: dict[str, list[object]] = {}
+        current_provider_targets = getattr(self, "_provider_targets_state", {})
+        for target in current_provider_targets.values():
+            provider_targets_by_provider.setdefault(target.provider, []).append(target)
 
-        harness_profiles = self._harness.list_profiles()
-        harness_runs = self._harness.list_runs(limit=500)
+        harness_profiles = self._harness.list_profiles(instance_id=scoped_instance_id)
+        harness_runs = self._harness.list_runs(instance_id=scoped_instance_id, limit=500)
         truths: list[ProviderTruthAxesRecord] = []
         for provider in self.list_providers():
             provider_truth = self._provider_truth_for_provider(provider)
             runtime_truth = self._runtime_truth_for_provider(
                 provider,
                 tenant_id=effective_tenant_id,
+                instance_id=scoped_instance_id,
             )
             harness_truth = self._harness_truth_for_provider(provider, harness_profiles, harness_runs)
             ui_truth = self._ui_truth_for_provider(
@@ -511,9 +674,12 @@ class ControlPlaneTruthDomainMixin:
                 runtime_truth,
                 harness_truth,
                 health_by_provider=health_by_provider,
+                health_records_by_provider=health_records_by_provider,
                 oauth_failures=oauth_failures,
                 oauth_last_probe=oauth_last_probe,
                 oauth_last_bridge=oauth_last_bridge,
+                oauth_target_states=oauth_target_states,
+                provider_targets_by_provider=provider_targets_by_provider,
             )
             truths.append(
                 ProviderTruthAxesRecord(

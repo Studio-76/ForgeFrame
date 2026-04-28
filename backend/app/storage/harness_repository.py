@@ -73,6 +73,7 @@ class HarnessStoragePaths:
 @dataclass(frozen=True)
 class HarnessRunQuery:
     provider_key: str | None = None
+    instance_id: str | None = None
     mode: str | None = None
     status: str | None = None
     client_id: str | None = None
@@ -80,27 +81,27 @@ class HarnessRunQuery:
 
 
 class HarnessRepository(Protocol):
-    def list_profiles(self) -> list[HarnessProfileRecord]: ...
+    def list_profiles(self, instance_id: str | None = None) -> list[HarnessProfileRecord]: ...
 
-    def get_profile(self, provider_key: str) -> HarnessProfileRecord: ...
+    def get_profile(self, provider_key: str, instance_id: str | None = None) -> HarnessProfileRecord: ...
 
     def upsert_profile(self, profile: HarnessProfileRecord) -> HarnessProfileRecord: ...
 
-    def delete_profile(self, provider_key: str) -> None: ...
+    def delete_profile(self, provider_key: str, instance_id: str | None = None) -> None: ...
 
-    def set_profile_active(self, provider_key: str, enabled: bool) -> HarnessProfileRecord: ...
+    def set_profile_active(self, provider_key: str, enabled: bool, instance_id: str | None = None) -> HarnessProfileRecord: ...
 
-    def update_inventory(self, provider_key: str, inventory: list[HarnessModelInventoryItem], *, status: str, error: str | None = None) -> HarnessProfileRecord: ...
+    def update_inventory(self, provider_key: str, inventory: list[HarnessModelInventoryItem], *, status: str, error: str | None = None, instance_id: str | None = None) -> HarnessProfileRecord: ...
 
-    def record_profile_usage(self, *, provider_key: str, model: str, stream: bool, total_tokens: int, actual_cost: float = 0.0, hypothetical_cost: float = 0.0, avoided_cost: float = 0.0) -> HarnessProfileRecord | None: ...
+    def record_profile_usage(self, *, provider_key: str, instance_id: str | None = None, model: str, stream: bool, total_tokens: int, actual_cost: float = 0.0, hypothetical_cost: float = 0.0, avoided_cost: float = 0.0) -> HarnessProfileRecord | None: ...
 
     def record_run(self, run: HarnessVerificationRun) -> HarnessVerificationRun: ...
 
     def list_runs(self, query: HarnessRunQuery | None = None) -> list[HarnessVerificationRun]: ...
 
-    def runs_summary(self, provider_key: str | None = None) -> dict[str, int]: ...
+    def runs_summary(self, provider_key: str | None = None, instance_id: str | None = None) -> dict[str, int]: ...
 
-    def export_snapshot(self) -> dict[str, Any]: ...
+    def export_snapshot(self, instance_id: str | None = None) -> dict[str, Any]: ...
 
 
 class FileHarnessRepository:
@@ -125,6 +126,41 @@ class FileHarnessRepository:
         if not payload.get("run_id"):
             payload = {**payload, "run_id": f"run_{uuid4().hex[:12]}"}
         return HarnessVerificationRun(**payload)
+
+    @staticmethod
+    def _matches_instance_scope(record_instance_id: str | None, requested_instance_id: str | None) -> bool:
+        normalized_requested = (requested_instance_id or "").strip() or None
+        normalized_record = (record_instance_id or "").strip() or None
+        if normalized_requested is None:
+            return True
+        return normalized_record == normalized_requested
+
+    @staticmethod
+    def _profile_storage_key(provider_key: str, instance_id: str | None) -> str:
+        normalized_instance_id = (instance_id or "").strip() or "__global__"
+        return f"{normalized_instance_id}::{provider_key}"
+
+    def _matching_profile_keys(self, provider_key: str, instance_id: str | None = None) -> list[str]:
+        normalized_instance_id = (instance_id or "").strip() or None
+        matches: list[str] = []
+        for storage_key, profile in self._profiles.items():
+            if profile.provider_key != provider_key:
+                continue
+            profile_instance_id = (profile.instance_id or "").strip() or None
+            if normalized_instance_id is not None:
+                if profile_instance_id == normalized_instance_id:
+                    matches.append(storage_key)
+                continue
+            matches.append(storage_key)
+        return matches
+
+    def _resolve_profile_key(self, provider_key: str, instance_id: str | None = None) -> str:
+        matches = self._matching_profile_keys(provider_key, instance_id)
+        if not matches:
+            raise ValueError(f"Harness profile '{provider_key}' not found.")
+        if len(matches) > 1 and not ((instance_id or "").strip()):
+            raise ValueError(f"Harness profile '{provider_key}' exists in multiple instances; instance scope is required.")
+        return matches[0]
 
     def _read_json(self, path: Path, default: Any) -> Any:
         if not path.exists():
@@ -154,7 +190,11 @@ class FileHarnessRepository:
 
         profiles_raw = profile_payload if isinstance(profile_payload, list) else profile_payload.get("profiles", [])
         runs_raw = run_payload if isinstance(run_payload, list) else run_payload.get("runs", [])
-        self._profiles = {item["provider_key"]: self._hydrate_profile(item) for item in profiles_raw}
+        hydrated_profiles = [self._hydrate_profile(item) for item in profiles_raw]
+        self._profiles = {
+            self._profile_storage_key(profile.provider_key, profile.instance_id): profile
+            for profile in hydrated_profiles
+        }
         self._runs = [self._hydrate_run(item) for item in runs_raw]
         self._flush_profiles()
         self._flush_runs()
@@ -163,7 +203,13 @@ class FileHarnessRepository:
         payload = {
             "schema_version": _SCHEMA_VERSION,
             "updated_at": self._now_iso(),
-            "profiles": [item.model_dump() for item in self.list_profiles()],
+            "profiles": [
+                item.model_dump()
+                for item in sorted(
+                    self._profiles.values(),
+                    key=lambda item: ((item.instance_id or ""), item.provider_key),
+                )
+            ],
         }
         self._atomic_write(self._paths.profiles_path, payload)
 
@@ -176,17 +222,21 @@ class FileHarnessRepository:
         self._runs = [self._hydrate_run(item) for item in payload["runs"]]
         self._atomic_write(self._paths.runs_path, payload)
 
-    def list_profiles(self) -> list[HarnessProfileRecord]:
-        return sorted(self._profiles.values(), key=lambda item: item.provider_key)
+    def list_profiles(self, instance_id: str | None = None) -> list[HarnessProfileRecord]:
+        return sorted(
+            [
+                item
+                for item in self._profiles.values()
+                if self._matches_instance_scope(item.instance_id, instance_id)
+            ],
+            key=lambda item: item.provider_key,
+        )
 
-    def get_profile(self, provider_key: str) -> HarnessProfileRecord:
-        profile = self._profiles.get(provider_key)
-        if not profile:
-            raise ValueError(f"Harness profile '{provider_key}' not found.")
-        return profile
+    def get_profile(self, provider_key: str, instance_id: str | None = None) -> HarnessProfileRecord:
+        return self._profiles[self._resolve_profile_key(provider_key, instance_id)]
 
     def _merge_for_update(self, profile: HarnessProfileRecord) -> HarnessProfileRecord:
-        existing = self._profiles.get(profile.provider_key)
+        existing = self._profiles.get(self._profile_storage_key(profile.provider_key, profile.instance_id))
         if existing:
             profile.created_at = existing.created_at
             profile.updated_at = self._now_iso()
@@ -241,18 +291,16 @@ class FileHarnessRepository:
 
     def upsert_profile(self, profile: HarnessProfileRecord) -> HarnessProfileRecord:
         profile = self._merge_for_update(profile)
-        self._profiles[profile.provider_key] = profile
+        self._profiles[self._profile_storage_key(profile.provider_key, profile.instance_id)] = profile
         self._flush_profiles()
         return profile
 
-    def delete_profile(self, provider_key: str) -> None:
-        if provider_key not in self._profiles:
-            raise ValueError(f"Harness profile '{provider_key}' not found.")
-        del self._profiles[provider_key]
+    def delete_profile(self, provider_key: str, instance_id: str | None = None) -> None:
+        del self._profiles[self._resolve_profile_key(provider_key, instance_id)]
         self._flush_profiles()
 
-    def set_profile_active(self, provider_key: str, enabled: bool) -> HarnessProfileRecord:
-        profile = self.get_profile(provider_key)
+    def set_profile_active(self, provider_key: str, enabled: bool, instance_id: str | None = None) -> HarnessProfileRecord:
+        profile = self.get_profile(provider_key, instance_id)
         profile.enabled = enabled
         profile.updated_at = self._now_iso()
         profile.lifecycle_status = "disabled" if not enabled else "ready"
@@ -260,8 +308,8 @@ class FileHarnessRepository:
         self._flush_profiles()
         return profile
 
-    def update_inventory(self, provider_key: str, inventory: list[HarnessModelInventoryItem], *, status: str, error: str | None = None) -> HarnessProfileRecord:
-        profile = self.get_profile(provider_key)
+    def update_inventory(self, provider_key: str, inventory: list[HarnessModelInventoryItem], *, status: str, error: str | None = None, instance_id: str | None = None) -> HarnessProfileRecord:
+        profile = self.get_profile(provider_key, instance_id)
         profile.model_inventory = inventory
         profile.last_sync_at = self._now_iso()
         profile.last_sync_status = status
@@ -277,9 +325,10 @@ class FileHarnessRepository:
         self._flush_profiles()
         return profile
 
-    def record_profile_usage(self, *, provider_key: str, model: str, stream: bool, total_tokens: int, actual_cost: float = 0.0, hypothetical_cost: float = 0.0, avoided_cost: float = 0.0) -> HarnessProfileRecord | None:
-        profile = self._profiles.get(provider_key)
-        if not profile:
+    def record_profile_usage(self, *, provider_key: str, instance_id: str | None = None, model: str, stream: bool, total_tokens: int, actual_cost: float = 0.0, hypothetical_cost: float = 0.0, avoided_cost: float = 0.0) -> HarnessProfileRecord | None:
+        try:
+            profile = self.get_profile(provider_key, instance_id)
+        except ValueError:
             return None
         profile.last_used_at = self._now_iso()
         profile.last_used_model = model
@@ -296,8 +345,11 @@ class FileHarnessRepository:
     def record_run(self, run: HarnessVerificationRun) -> HarnessVerificationRun:
         normalized = run.model_copy(update={"run_id": run.run_id or f"run_{uuid4().hex[:12]}"})
         self._runs.append(normalized)
-        profile = self._profiles.get(normalized.provider_key)
-        if profile:
+        try:
+            profile = self.get_profile(normalized.provider_key, normalized.instance_id)
+        except ValueError:
+            profile = None
+        if profile is not None:
             profile.updated_at = self._now_iso()
             if normalized.mode == "verify":
                 profile.last_verified_at = normalized.executed_at
@@ -322,6 +374,8 @@ class FileHarnessRepository:
     def list_runs(self, query: HarnessRunQuery | None = None) -> list[HarnessVerificationRun]:
         query = query or HarnessRunQuery()
         runs = self._runs
+        if query.instance_id:
+            runs = [item for item in runs if self._matches_instance_scope(item.instance_id, query.instance_id)]
         if query.provider_key:
             runs = [item for item in runs if item.provider_key == query.provider_key]
         if query.mode:
@@ -335,8 +389,8 @@ class FileHarnessRepository:
             return ordered_runs
         return ordered_runs[: max(1, query.limit)]
 
-    def runs_summary(self, provider_key: str | None = None) -> dict[str, int]:
-        runs = self.list_runs(HarnessRunQuery(provider_key=provider_key, limit=5000))
+    def runs_summary(self, provider_key: str | None = None, instance_id: str | None = None) -> dict[str, int]:
+        runs = self.list_runs(HarnessRunQuery(provider_key=provider_key, instance_id=instance_id, limit=5000))
         return {
             "total": len(runs),
             "failed": len([r for r in runs if not r.success]),
@@ -347,9 +401,9 @@ class FileHarnessRepository:
             "runtime_stream": len([r for r in runs if r.mode == "runtime_stream"]),
         }
 
-    def export_snapshot(self) -> dict[str, Any]:
-        profiles = self.list_profiles()
-        runs = self.list_runs(HarnessRunQuery(limit=120))
+    def export_snapshot(self, instance_id: str | None = None) -> dict[str, Any]:
+        profiles = self.list_profiles(instance_id)
+        runs = self.list_runs(HarnessRunQuery(instance_id=instance_id, limit=120))
         return {
             "schema_version": _SCHEMA_VERSION,
             "storage_backend": "file",
@@ -377,6 +431,53 @@ class PostgresHarnessRepository:
 
     def _session(self) -> Session:
         return self._session_factory()
+
+    @staticmethod
+    def _matches_instance_scope(record_instance_id: str | None, requested_instance_id: str | None) -> bool:
+        normalized_requested = (requested_instance_id or "").strip() or None
+        normalized_record = (record_instance_id or "").strip() or None
+        if normalized_requested is None:
+            return True
+        return normalized_record == normalized_requested
+
+    @staticmethod
+    def _profile_storage_key(provider_key: str, instance_id: str | None) -> str:
+        normalized_instance_id = (instance_id or "").strip() or "__global__"
+        return f"{normalized_instance_id}::{provider_key}"
+
+    def _matching_profile_rows(
+        self,
+        session: Session,
+        provider_key: str,
+        instance_id: str | None = None,
+    ) -> list[HarnessProfileORM]:
+        normalized_instance_id = (instance_id or "").strip() or None
+        rows = session.scalars(select(HarnessProfileORM)).all()
+        matches: list[HarnessProfileORM] = []
+        for row in rows:
+            payload = row.payload
+            if str(payload.get("provider_key", "")) != provider_key:
+                continue
+            payload_instance_id = str(payload.get("instance_id") or "").strip() or None
+            if normalized_instance_id is not None:
+                if payload_instance_id == normalized_instance_id:
+                    matches.append(row)
+                continue
+            matches.append(row)
+        return matches
+
+    def _find_profile_row(
+        self,
+        session: Session,
+        provider_key: str,
+        instance_id: str | None = None,
+    ) -> HarnessProfileORM:
+        matches = self._matching_profile_rows(session, provider_key, instance_id)
+        if not matches:
+            raise ValueError(f"Harness profile '{provider_key}' not found.")
+        if len(matches) > 1 and not ((instance_id or "").strip()):
+            raise ValueError(f"Harness profile '{provider_key}' exists in multiple instances; instance scope is required.")
+        return matches[0]
 
     def _merge_for_update(self, profile: HarnessProfileRecord, existing_payload: dict[str, Any] | None) -> HarnessProfileRecord:
         if existing_payload:
@@ -432,21 +533,31 @@ class PostgresHarnessRepository:
         )
         return profile
 
-    def list_profiles(self) -> list[HarnessProfileRecord]:
+    def list_profiles(self, instance_id: str | None = None) -> list[HarnessProfileRecord]:
         with self._session() as session:
             rows = session.scalars(select(HarnessProfileORM)).all()
-            return sorted((HarnessProfileRecord(**row.payload) for row in rows), key=lambda item: item.provider_key)
+            profiles = [HarnessProfileRecord(**row.payload) for row in rows]
+            return sorted(
+                [
+                    item
+                    for item in profiles
+                    if self._matches_instance_scope(item.instance_id, instance_id)
+                ],
+                key=lambda item: item.provider_key,
+            )
 
-    def get_profile(self, provider_key: str) -> HarnessProfileRecord:
+    def get_profile(self, provider_key: str, instance_id: str | None = None) -> HarnessProfileRecord:
         with self._session() as session:
-            row = session.get(HarnessProfileORM, provider_key)
-            if not row:
-                raise ValueError(f"Harness profile '{provider_key}' not found.")
+            row = self._find_profile_row(session, provider_key, instance_id)
             return HarnessProfileRecord(**row.payload)
 
     def upsert_profile(self, profile: HarnessProfileRecord) -> HarnessProfileRecord:
         with self._session() as session:
-            existing = session.get(HarnessProfileORM, profile.provider_key)
+            existing = None
+            try:
+                existing = self._find_profile_row(session, profile.provider_key, profile.instance_id)
+            except ValueError:
+                existing = None
             profile = self._merge_for_update(profile, existing.payload if existing else None)
             payload = profile.model_dump()
             if existing:
@@ -462,7 +573,7 @@ class PostgresHarnessRepository:
             else:
                 session.add(
                     HarnessProfileORM(
-                        provider_key=profile.provider_key,
+                        provider_key=self._profile_storage_key(profile.provider_key, profile.instance_id),
                         payload=payload,
                         enabled=profile.enabled,
                         needs_attention=profile.needs_attention,
@@ -477,24 +588,22 @@ class PostgresHarnessRepository:
             session.commit()
             return profile
 
-    def delete_profile(self, provider_key: str) -> None:
+    def delete_profile(self, provider_key: str, instance_id: str | None = None) -> None:
         with self._session() as session:
-            row = session.get(HarnessProfileORM, provider_key)
-            if not row:
-                raise ValueError(f"Harness profile '{provider_key}' not found.")
+            row = self._find_profile_row(session, provider_key, instance_id)
             session.delete(row)
             session.commit()
 
-    def set_profile_active(self, provider_key: str, enabled: bool) -> HarnessProfileRecord:
-        profile = self.get_profile(provider_key)
+    def set_profile_active(self, provider_key: str, enabled: bool, instance_id: str | None = None) -> HarnessProfileRecord:
+        profile = self.get_profile(provider_key, instance_id)
         profile.enabled = enabled
         profile.updated_at = self._now_iso()
         profile.lifecycle_status = "disabled" if not enabled else "ready"
         profile.needs_attention = not enabled
         return self.upsert_profile(profile)
 
-    def update_inventory(self, provider_key: str, inventory: list[HarnessModelInventoryItem], *, status: str, error: str | None = None) -> HarnessProfileRecord:
-        profile = self.get_profile(provider_key)
+    def update_inventory(self, provider_key: str, inventory: list[HarnessModelInventoryItem], *, status: str, error: str | None = None, instance_id: str | None = None) -> HarnessProfileRecord:
+        profile = self.get_profile(provider_key, instance_id)
         profile.model_inventory = inventory
         profile.last_sync_at = self._now_iso()
         profile.last_sync_status = status
@@ -509,9 +618,9 @@ class PostgresHarnessRepository:
             profile.needs_attention = False
         return self.upsert_profile(profile)
 
-    def record_profile_usage(self, *, provider_key: str, model: str, stream: bool, total_tokens: int, actual_cost: float = 0.0, hypothetical_cost: float = 0.0, avoided_cost: float = 0.0) -> HarnessProfileRecord | None:
+    def record_profile_usage(self, *, provider_key: str, instance_id: str | None = None, model: str, stream: bool, total_tokens: int, actual_cost: float = 0.0, hypothetical_cost: float = 0.0, avoided_cost: float = 0.0) -> HarnessProfileRecord | None:
         try:
-            profile = self.get_profile(provider_key)
+            profile = self.get_profile(provider_key, instance_id)
         except ValueError:
             return None
         profile.last_used_at = self._now_iso()
@@ -547,7 +656,7 @@ class PostgresHarnessRepository:
             session.commit()
 
         try:
-            profile = self.get_profile(normalized.provider_key)
+            profile = self.get_profile(normalized.provider_key, normalized.instance_id)
         except ValueError:
             profile = None
 
@@ -591,13 +700,16 @@ class PostgresHarnessRepository:
             if query.client_id:
                 stmt = stmt.where(HarnessRunORM.client_id == query.client_id)
             stmt = stmt.order_by(HarnessRunORM.executed_at.desc())
-            if query.limit is not None:
-                stmt = stmt.limit(max(1, query.limit))
             rows = session.scalars(stmt).all()
-            return [HarnessVerificationRun(**row.payload) for row in rows]
+            runs = [HarnessVerificationRun(**row.payload) for row in rows]
+            if query.instance_id:
+                runs = [item for item in runs if self._matches_instance_scope(item.instance_id, query.instance_id)]
+            if query.limit is not None:
+                return runs[: max(1, query.limit)]
+            return runs
 
-    def runs_summary(self, provider_key: str | None = None) -> dict[str, int]:
-        runs = self.list_runs(HarnessRunQuery(provider_key=provider_key, limit=5000))
+    def runs_summary(self, provider_key: str | None = None, instance_id: str | None = None) -> dict[str, int]:
+        runs = self.list_runs(HarnessRunQuery(provider_key=provider_key, instance_id=instance_id, limit=5000))
         return {
             "total": len(runs),
             "failed": len([r for r in runs if not r.success]),
@@ -608,9 +720,9 @@ class PostgresHarnessRepository:
             "runtime_stream": len([r for r in runs if r.mode == "runtime_stream"]),
         }
 
-    def export_snapshot(self) -> dict[str, Any]:
-        profiles = [item.model_dump() for item in self.list_profiles()]
-        runs = [item.model_dump() for item in self.list_runs(HarnessRunQuery(limit=120))]
+    def export_snapshot(self, instance_id: str | None = None) -> dict[str, Any]:
+        profiles = [item.model_dump() for item in self.list_profiles(instance_id)]
+        runs = [item.model_dump() for item in self.list_runs(HarnessRunQuery(instance_id=instance_id, limit=120))]
         payload = {
             "schema_version": _SCHEMA_VERSION,
             "storage_backend": "postgresql",

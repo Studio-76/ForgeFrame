@@ -12,10 +12,22 @@ export type ManagedModel = {
   stale_since?: string | null;
 };
 
+export type ProviderClassKey = "openai_compatible" | "local_ollama" | "oauth_account" | "custom";
+
+export type ProviderClassDescriptor = {
+  key: ProviderClassKey;
+  label: string;
+  description: string;
+  integration_class: string;
+  template_id?: string | null;
+  default_config: Record<string, string>;
+};
+
 export type ProviderControlItem = {
   provider: string;
   label: string;
   enabled: boolean;
+  provider_class: ProviderClassKey | string;
   integration_class: string;
   template_id: string | null;
   config: Record<string, string>;
@@ -45,6 +57,17 @@ export type ProviderControlItem = {
   oauth_failure_count?: number;
   oauth_last_probe?: Record<string, unknown> | null;
   oauth_last_bridge_sync?: Record<string, unknown> | null;
+  oauth_connect_required: boolean;
+  target_count: number;
+  enabled_target_count: number;
+  ready_target_count: number;
+  health_status: string;
+  healthy_model_count: number;
+  attention_model_count: number;
+  last_health_check_at?: string | null;
+  last_probe_at?: string | null;
+  next_action: string;
+  next_action_kind: string;
 };
 
 export type HealthConfig = {
@@ -368,6 +391,7 @@ export type ProviderControlPlaneResponse = {
   object: "provider_control_plane";
   instance?: InstanceRecord;
   providers: ProviderControlItem[];
+  supported_provider_classes?: ProviderClassDescriptor[];
   provider_catalog?: ProviderCatalogEntry[];
   provider_catalog_summary?: ProviderCatalogSummary;
   openai_compatibility_signoff?: OpenAICompatibilitySignoffResponse;
@@ -1114,6 +1138,7 @@ export type HarnessTemplate = {
 
 export type HarnessProfile = {
   provider_key: string;
+  instance_id?: string | null;
   label: string;
   integration_class: "openai_compatible" | "templated_http" | "static_catalog";
   endpoint_base_url: string;
@@ -4981,50 +5006,70 @@ export function fetchCompatibilityMatrix(instanceId?: string | null) {
   );
 }
 
-export function createProvider(payload: { provider: string; label: string; integration_class?: string; template_id?: string | null; config: Record<string, string> }) {
-  return fetchJson<{ status: string; provider: ProviderControlItem }>("/admin/providers/", {
+export function createProvider(
+  payload: {
+    provider: string;
+    label: string;
+    provider_class?: ProviderClassKey;
+    integration_class?: string;
+    template_id?: string | null;
+    config: Record<string, string>;
+  },
+  instanceId?: string | null,
+) {
+  return fetchJson<{ status: string; provider: ProviderControlItem }>(appendTenantScope("/admin/providers/", undefined, instanceId), {
     method: "POST",
     body: JSON.stringify(payload),
   });
 }
 
-export function updateProvider(provider: string, payload: { label?: string; integration_class?: string; template_id?: string | null; config?: Record<string, string> }) {
-  return fetchJson<{ status: string; provider: ProviderControlItem }>(`/admin/providers/${provider}`, {
+export function updateProvider(
+  provider: string,
+  payload: {
+    label?: string;
+    provider_class?: ProviderClassKey;
+    integration_class?: string;
+    template_id?: string | null;
+    config?: Record<string, string>;
+  },
+  instanceId?: string | null,
+) {
+  return fetchJson<{ status: string; provider: ProviderControlItem }>(appendTenantScope(`/admin/providers/${provider}`, undefined, instanceId), {
     method: "PATCH",
     body: JSON.stringify(payload),
   });
 }
 
-export function activateProvider(provider: string) {
-  return fetchJson<{ status: string; provider: ProviderControlItem }>(`/admin/providers/${provider}/activate`, {
+export function activateProvider(provider: string, instanceId?: string | null) {
+  return fetchJson<{ status: string; provider: ProviderControlItem }>(appendTenantScope(`/admin/providers/${provider}/activate`, undefined, instanceId), {
     method: "POST",
     body: JSON.stringify({}),
   });
 }
 
-export function deactivateProvider(provider: string) {
-  return fetchJson<{ status: string; provider: ProviderControlItem }>(`/admin/providers/${provider}/deactivate`, {
+export function deactivateProvider(provider: string, instanceId?: string | null) {
+  return fetchJson<{ status: string; provider: ProviderControlItem }>(appendTenantScope(`/admin/providers/${provider}/deactivate`, undefined, instanceId), {
     method: "POST",
     body: JSON.stringify({}),
   });
 }
 
-export function syncProviders(provider?: string) {
-  return fetchJson<{ status: string; synced_providers: string[]; sync_at: string; note: string }>("/admin/providers/sync", {
+export function syncProviders(provider?: string, instanceId?: string | null) {
+  return fetchJson<{ status: string; synced_providers: string[]; sync_at: string; note: string }>(appendTenantScope("/admin/providers/sync", undefined, instanceId), {
     method: "POST",
     body: JSON.stringify({ provider: provider ?? null }),
   });
 }
 
-export function patchHealthConfig(payload: Partial<HealthConfig>) {
-  return fetchJson<{ status: string; config: HealthConfig }>("/admin/providers/health/config", {
+export function patchHealthConfig(payload: Partial<HealthConfig>, instanceId?: string | null) {
+  return fetchJson<{ status: string; config: HealthConfig }>(appendTenantScope("/admin/providers/health/config", undefined, instanceId), {
     method: "PATCH",
     body: JSON.stringify(payload),
   });
 }
 
-export function runHealthChecks() {
-  return fetchJson<{ status: string; check_type: string; checked_at: string; health_records: Array<Record<string, string>> }>("/admin/providers/health/run", {
+export function runHealthChecks(instanceId?: string | null) {
+  return fetchJson<{ status: string; check_type: string; checked_at: string; health_records: Array<Record<string, string>> }>(appendTenantScope("/admin/providers/health/run", undefined, instanceId), {
     method: "POST",
     body: JSON.stringify({}),
   });
@@ -5038,80 +5083,82 @@ export function fetchHarnessTemplates() {
   return fetchJson<{ status: string; templates: HarnessTemplate[] }>("/admin/providers/harness/templates");
 }
 
-export function fetchHarnessProfiles() {
-  return fetchJson<{ status: string; profiles: HarnessProfile[] }>("/admin/providers/harness/profiles");
+export function fetchHarnessProfiles(instanceId?: string | null) {
+  return fetchJson<{ status: string; profiles: HarnessProfile[] }>(appendTenantScope("/admin/providers/harness/profiles", undefined, instanceId));
 }
 
-export function upsertHarnessProfile(providerKey: string, payload: Record<string, unknown>) {
-  return fetchJson<{ status: string; profile: HarnessProfile }>(`/admin/providers/harness/profiles/${providerKey}`, {
+export function upsertHarnessProfile(providerKey: string, payload: Record<string, unknown>, instanceId?: string | null) {
+  return fetchJson<{ status: string; profile: HarnessProfile }>(appendTenantScope(`/admin/providers/harness/profiles/${providerKey}`, undefined, instanceId), {
     method: "PUT",
     body: JSON.stringify(payload),
   });
 }
 
-export function deleteHarnessProfile(providerKey: string) {
-  return fetchJson<{ status: string; deleted: string }>(`/admin/providers/harness/profiles/${providerKey}`, { method: "DELETE" });
+export function deleteHarnessProfile(providerKey: string, instanceId?: string | null) {
+  return fetchJson<{ status: string; deleted: string }>(appendTenantScope(`/admin/providers/harness/profiles/${providerKey}`, undefined, instanceId), { method: "DELETE" });
 }
 
-export function activateHarnessProfile(providerKey: string) {
-  return fetchJson<{ status: string; profile: HarnessProfile }>(`/admin/providers/harness/profiles/${providerKey}/activate`, { method: "POST", body: "{}" });
+export function activateHarnessProfile(providerKey: string, instanceId?: string | null) {
+  return fetchJson<{ status: string; profile: HarnessProfile }>(appendTenantScope(`/admin/providers/harness/profiles/${providerKey}/activate`, undefined, instanceId), { method: "POST", body: "{}" });
 }
 
-export function deactivateHarnessProfile(providerKey: string) {
-  return fetchJson<{ status: string; profile: HarnessProfile }>(`/admin/providers/harness/profiles/${providerKey}/deactivate`, { method: "POST", body: "{}" });
+export function deactivateHarnessProfile(providerKey: string, instanceId?: string | null) {
+  return fetchJson<{ status: string; profile: HarnessProfile }>(appendTenantScope(`/admin/providers/harness/profiles/${providerKey}/deactivate`, undefined, instanceId), { method: "POST", body: "{}" });
 }
 
-export function verifyHarnessProfile(payload: { provider_key: string; model?: string; test_message?: string; include_preview?: boolean }) {
-  return fetchJson<{ status: string; verification: Record<string, unknown> }>("/admin/providers/harness/verify", {
+export function verifyHarnessProfile(payload: { provider_key: string; model?: string; test_message?: string; include_preview?: boolean }, instanceId?: string | null) {
+  return fetchJson<{ status: string; verification: Record<string, unknown> }>(appendTenantScope("/admin/providers/harness/verify", undefined, instanceId), {
     method: "POST",
     body: JSON.stringify(payload),
   });
 }
 
-export function previewHarness(payload: { provider_key: string; model: string; message: string; stream: boolean }) {
-  return fetchJson<{ status: string; preview: Record<string, unknown> }>("/admin/providers/harness/preview", {
+export function previewHarness(payload: { provider_key: string; model: string; message: string; stream: boolean }, instanceId?: string | null) {
+  return fetchJson<{ status: string; preview: Record<string, unknown> }>(appendTenantScope("/admin/providers/harness/preview", undefined, instanceId), {
     method: "POST",
     body: JSON.stringify(payload),
   });
 }
 
-export function dryRunHarness(payload: { provider_key: string; model: string; message: string; stream: boolean }) {
-  return fetchJson<{ status: string; preview_request: Record<string, unknown>; mapped_example: Record<string, unknown>; run: Record<string, unknown> }>("/admin/providers/harness/dry-run", {
+export function dryRunHarness(payload: { provider_key: string; model: string; message: string; stream: boolean }, instanceId?: string | null) {
+  return fetchJson<{ status: string; preview_request: Record<string, unknown>; mapped_example: Record<string, unknown>; run: Record<string, unknown> }>(appendTenantScope("/admin/providers/harness/dry-run", undefined, instanceId), {
     method: "POST",
     body: JSON.stringify(payload),
   });
 }
 
-export function probeHarness(payload: { provider_key: string; model: string; message: string; stream: boolean }) {
-  return fetchJson<{ status: string; status_code: number; parsed: Record<string, unknown>; raw: Record<string, unknown>; run: Record<string, unknown> }>("/admin/providers/harness/probe", {
+export function probeHarness(payload: { provider_key: string; model: string; message: string; stream: boolean }, instanceId?: string | null) {
+  return fetchJson<{ status: string; status_code: number; parsed: Record<string, unknown>; raw: Record<string, unknown>; run: Record<string, unknown> }>(appendTenantScope("/admin/providers/harness/probe", undefined, instanceId), {
     method: "POST",
     body: JSON.stringify(payload),
   });
 }
 
-export function fetchHarnessSnapshot() {
-  return fetchJson<{ status: string; snapshot: Record<string, unknown> }>("/admin/providers/harness/snapshot");
+export function fetchHarnessSnapshot(instanceId?: string | null) {
+  return fetchJson<{ status: string; snapshot: Record<string, unknown> }>(appendTenantScope("/admin/providers/harness/snapshot", undefined, instanceId));
 }
 
-export function fetchHarnessExport(redactSecrets = true) {
-  return fetchJson<{ status: string; snapshot: Record<string, unknown> }>(`/admin/providers/harness/export?redact_secrets=${String(redactSecrets)}`);
+export function fetchHarnessExport(redactSecrets = true, instanceId?: string | null) {
+  return fetchJson<{ status: string; snapshot: Record<string, unknown> }>(
+    appendTenantScope(`/admin/providers/harness/export?redact_secrets=${String(redactSecrets)}`, undefined, instanceId),
+  );
 }
 
-export function importHarnessConfig(snapshot: Record<string, unknown>, dryRun = true) {
-  return fetchJson<Record<string, unknown>>("/admin/providers/harness/import", {
+export function importHarnessConfig(snapshot: Record<string, unknown>, dryRun = true, instanceId?: string | null) {
+  return fetchJson<Record<string, unknown>>(appendTenantScope("/admin/providers/harness/import", undefined, instanceId), {
     method: "POST",
     body: JSON.stringify({ snapshot, dry_run: dryRun }),
   });
 }
 
-export function rollbackHarnessProfile(providerKey: string, revision: number) {
-  return fetchJson<{ status: string; profile: HarnessProfile }>(`/admin/providers/harness/profiles/${providerKey}/rollback/${revision}`, {
+export function rollbackHarnessProfile(providerKey: string, revision: number, instanceId?: string | null) {
+  return fetchJson<{ status: string; profile: HarnessProfile }>(appendTenantScope(`/admin/providers/harness/profiles/${providerKey}/rollback/${revision}`, undefined, instanceId), {
     method: "POST",
     body: "{}",
   });
 }
 
-export function fetchHarnessRuns(providerKey?: string, mode?: string, status?: string, clientId?: string, limit = 50) {
+export function fetchHarnessRuns(providerKey?: string, mode?: string, status?: string, clientId?: string, limit = 50, instanceId?: string | null) {
   const params = new URLSearchParams();
   if (providerKey) params.set("provider_key", providerKey);
   if (mode) params.set("mode", mode);
@@ -5119,7 +5166,9 @@ export function fetchHarnessRuns(providerKey?: string, mode?: string, status?: s
   if (clientId) params.set("client_id", clientId);
   params.set("limit", String(limit));
   const suffix = params.size ? `?${params.toString()}` : "";
-  return fetchJson<{ status: string; runs: Array<Record<string, unknown>>; summary: Record<string, number>; ops?: Record<string, unknown> }>(`/admin/providers/harness/runs${suffix}`);
+  return fetchJson<{ status: string; runs: Array<Record<string, unknown>>; summary: Record<string, number>; ops?: Record<string, unknown> }>(
+    appendTenantScope(`/admin/providers/harness/runs${suffix}`, undefined, instanceId),
+  );
 }
 
 
@@ -5148,11 +5197,14 @@ export function fetchProductAxisTargets(instanceId?: string | null) {
   );
 }
 
-export function probeOauthAccountProvider(providerKey: string) {
-  return fetchJson<{ status: string; probe: Record<string, unknown> }>(`/admin/providers/oauth-account/probe/${providerKey}`, {
+export function probeOauthAccountProvider(providerKey: string, instanceId?: string | null) {
+  return fetchJson<{ status: string; probe: Record<string, unknown> }>(
+    appendTenantScope(`/admin/providers/oauth-account/probe/${providerKey}`, undefined, instanceId),
+    {
     method: "POST",
     body: "{}",
-  });
+    },
+  );
 }
 
 export function fetchOauthAccountTargets(instanceId?: string | null) {
@@ -5167,18 +5219,24 @@ export function fetchOauthOnboarding(instanceId?: string | null) {
   );
 }
 
-export function syncOauthAccountBridgeProfiles() {
-  return fetchJson<{ status: string; upserted_profiles: string[]; skipped: string[] }>("/admin/providers/oauth-account/bridge-profiles/sync", {
+export function syncOauthAccountBridgeProfiles(instanceId?: string | null) {
+  return fetchJson<{ status: string; upserted_profiles: string[]; skipped: string[] }>(
+    appendTenantScope("/admin/providers/oauth-account/bridge-profiles/sync", undefined, instanceId),
+    {
     method: "POST",
     body: "{}",
-  });
+    },
+  );
 }
 
-export function probeAllOauthAccountProviders() {
-  return fetchJson<{ status: string; probes: Array<Record<string, unknown>> }>("/admin/providers/oauth-account/probe-all", {
+export function probeAllOauthAccountProviders(instanceId?: string | null) {
+  return fetchJson<{ status: string; probes: Array<Record<string, unknown>> }>(
+    appendTenantScope("/admin/providers/oauth-account/probe-all", undefined, instanceId),
+    {
     method: "POST",
     body: "{}",
-  });
+    },
+  );
 }
 
 export function fetchOauthAccountOperations(instanceId?: string | null) {

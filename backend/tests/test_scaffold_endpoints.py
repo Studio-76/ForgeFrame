@@ -1,5 +1,6 @@
 from pathlib import Path
 import os
+from uuid import uuid4
 
 from fastapi.testclient import TestClient
 
@@ -49,6 +50,14 @@ def test_anthropic_only_bootstrap_keeps_runtime_and_provider_control_plane_avail
     monkeypatch.setenv("FORGEGATE_ANTHROPIC_API_KEY", "anthropic-key")
     monkeypatch.setenv("FORGEGATE_DEFAULT_PROVIDER", "anthropic")
     monkeypatch.setenv("FORGEGATE_DEFAULT_MODEL", "claude-3-5-sonnet-latest")
+    monkeypatch.setenv("FORGEFRAME_ANTHROPIC_ENABLED", "true")
+    monkeypatch.setenv("FORGEFRAME_ANTHROPIC_API_KEY", "anthropic-key")
+    monkeypatch.setenv("FORGEFRAME_DEFAULT_PROVIDER", "anthropic")
+    monkeypatch.setenv("FORGEFRAME_DEFAULT_MODEL", "claude-3-5-sonnet-latest")
+    monkeypatch.setenv("FORGEGATE_PUBLIC_FQDN", "")
+    monkeypatch.setenv("FORGEGATE_PUBLIC_TLS_MODE", "disabled")
+    monkeypatch.setenv("FORGEFRAME_PUBLIC_FQDN", "")
+    monkeypatch.setenv("FORGEFRAME_PUBLIC_TLS_MODE", "disabled")
     clear_runtime_dependency_caches()
     get_control_plane_service.cache_clear()
     get_usage_analytics_store.cache_clear()
@@ -157,18 +166,43 @@ def test_admin_providers_create_update_activate_deactivate_and_sync() -> None:
     headers = _admin_headers()
     create_response = client.post(
         "/admin/providers/",
-        json={"provider": "custom_provider", "label": "Custom Provider", "config": {"endpoint": "https://example"}},
+        json={
+            "provider": "custom_provider",
+            "label": "Custom Provider",
+            "provider_class": "openai_compatible",
+            "integration_class": "openai_compatible",
+            "template_id": "openai_compatible",
+            "config": {
+                "endpoint_base_url": "https://example.invalid/v1",
+                "auth_scheme": "bearer",
+            },
+        },
         headers=headers,
     )
     assert create_response.status_code == 201
+    created_provider = create_response.json()["provider"]
+    assert created_provider["integration_class"] == "openai_compatible"
+    assert created_provider["config"]["provider_class"] == "openai_compatible"
+    assert created_provider["config"]["endpoint_base_url"] == "https://example.invalid/v1"
 
     patch_response = client.patch(
         "/admin/providers/custom_provider",
-        json={"label": "Custom Provider 2"},
+        json={
+            "label": "Custom Provider 2",
+            "provider_class": "custom",
+            "integration_class": "custom_http_bridge",
+            "config": {
+                "provider_class": "custom",
+                "endpoint_base_url": "https://custom.invalid/runtime",
+                "auth_scheme": "api_key_header",
+            },
+        },
         headers=headers,
     )
     assert patch_response.status_code == 200
     assert patch_response.json()["provider"]["label"] == "Custom Provider 2"
+    assert patch_response.json()["provider"]["integration_class"] == "custom_http_bridge"
+    assert patch_response.json()["provider"]["config"]["provider_class"] == "custom"
 
     deactivate_response = client.post("/admin/providers/custom_provider/deactivate", json={}, headers=headers)
     assert deactivate_response.status_code == 200
@@ -181,6 +215,23 @@ def test_admin_providers_create_update_activate_deactivate_and_sync() -> None:
     sync_response = client.post("/admin/providers/sync", json={"provider": "custom_provider"}, headers=headers)
     assert sync_response.status_code == 200
     assert "custom_provider" in sync_response.json()["synced_providers"]
+
+
+def test_admin_providers_control_plane_exposes_supported_classes_and_compact_status_fields() -> None:
+    headers = _admin_headers()
+    response = client.get("/admin/providers/", headers=headers)
+    assert response.status_code == 200
+    payload = response.json()
+
+    supported_classes = {item["key"] for item in payload["supported_provider_classes"]}
+    assert {"openai_compatible", "local_ollama", "oauth_account", "custom"} <= supported_classes
+
+    openai_provider = next(item for item in payload["providers"] if item["provider"] == "openai_api")
+    assert "provider_class" in openai_provider
+    assert "target_count" in openai_provider
+    assert "health_status" in openai_provider
+    assert "next_action" in openai_provider
+    assert "next_action_kind" in openai_provider
 
 
 def test_admin_provider_product_axis_targets_endpoint_available() -> None:
@@ -987,6 +1038,415 @@ def test_admin_oauth_bridge_profile_sync_applies_qwen_headers_and_skips_nous_wit
     assert qwen_profile.request_mapping.headers["X-DashScope-AuthType"] == "qwen-oauth"
     assert qwen_profile.request_mapping.headers["X-DashScope-CacheControl"] == "enable"
     assert qwen_profile.auth_value == "qwen-account-token"
+
+
+def test_admin_oauth_bridge_profile_sync_preserves_separate_profiles_per_instance(
+    monkeypatch,
+) -> None:
+    monkeypatch.setenv("FORGEGATE_QWEN_OAUTH_ACCESS_TOKEN", "qwen-account-token")
+    monkeypatch.setenv("FORGEGATE_QWEN_OAUTH_BRIDGE_PROFILE_ENABLED", "true")
+    clear_runtime_dependency_caches()
+    get_control_plane_service.cache_clear()
+
+    headers = _admin_headers()
+    suffix = uuid4().hex[:8]
+    instance_alpha = f"instance_bridge_alpha_{suffix}"
+    instance_beta = f"instance_bridge_beta_{suffix}"
+
+    for instance_id in (instance_alpha, instance_beta):
+        created = client.post(
+            "/admin/instances/",
+            headers=headers,
+            json={
+                "instance_id": instance_id,
+                "display_name": instance_id,
+                "tenant_id": instance_id,
+                "company_id": f"company_{instance_id}",
+                "deployment_mode": "restricted_eval",
+                "exposure_mode": "local_only",
+            },
+        )
+        assert created.status_code == 201
+
+    alpha_sync = client.post(
+        "/admin/providers/oauth-account/bridge-profiles/sync",
+        headers=headers,
+        params={"instanceId": instance_alpha},
+        json={},
+    )
+    beta_sync = client.post(
+        "/admin/providers/oauth-account/bridge-profiles/sync",
+        headers=headers,
+        params={"instanceId": instance_beta},
+        json={},
+    )
+
+    assert alpha_sync.status_code == 200
+    assert beta_sync.status_code == 200
+    assert "qwen_oauth_bridge" in alpha_sync.json()["upserted_profiles"]
+    assert "qwen_oauth_bridge" in beta_sync.json()["upserted_profiles"]
+
+    alpha_profiles_response = client.get(
+        "/admin/providers/harness/profiles",
+        headers=headers,
+        params={"instanceId": instance_alpha},
+    )
+    beta_profiles_response = client.get(
+        "/admin/providers/harness/profiles",
+        headers=headers,
+        params={"instanceId": instance_beta},
+    )
+    alpha_snapshot_response = client.get(
+        "/admin/providers/harness/snapshot",
+        headers=headers,
+        params={"instanceId": instance_alpha},
+    )
+    beta_snapshot_response = client.get(
+        "/admin/providers/harness/snapshot",
+        headers=headers,
+        params={"instanceId": instance_beta},
+    )
+    alpha_export_response = client.get(
+        "/admin/providers/harness/export?redact_secrets=true",
+        headers=headers,
+        params={"instanceId": instance_alpha},
+    )
+    beta_export_response = client.get(
+        "/admin/providers/harness/export?redact_secrets=true",
+        headers=headers,
+        params={"instanceId": instance_beta},
+    )
+
+    assert alpha_profiles_response.status_code == 200
+    assert beta_profiles_response.status_code == 200
+    assert alpha_snapshot_response.status_code == 200
+    assert beta_snapshot_response.status_code == 200
+    assert alpha_export_response.status_code == 200
+    assert beta_export_response.status_code == 200
+
+    alpha_bridge = next(
+        profile
+        for profile in alpha_profiles_response.json()["profiles"]
+        if str(profile["provider_key"]) == "qwen_oauth_bridge"
+    )
+    beta_bridge = next(
+        profile
+        for profile in beta_profiles_response.json()["profiles"]
+        if str(profile["provider_key"]) == "qwen_oauth_bridge"
+    )
+
+    assert alpha_bridge["instance_id"] == instance_alpha
+    assert beta_bridge["instance_id"] == instance_beta
+    assert alpha_bridge["provider_key"] == beta_bridge["provider_key"] == "qwen_oauth_bridge"
+    assert {profile["instance_id"] for profile in alpha_snapshot_response.json()["snapshot"]["profiles"]} == {instance_alpha}
+    assert {profile["instance_id"] for profile in beta_snapshot_response.json()["snapshot"]["profiles"]} == {instance_beta}
+    assert {
+        item["profile"]["instance_id"]
+        for item in alpha_export_response.json()["snapshot"]["profiles"]
+    } == {instance_alpha}
+    assert {
+        item["profile"]["instance_id"]
+        for item in beta_export_response.json()["snapshot"]["profiles"]
+    } == {instance_beta}
+
+
+def test_admin_harness_profiles_remain_isolated_per_instance_for_shared_provider_keys() -> None:
+    headers = _admin_headers()
+    suffix = uuid4().hex[:8]
+    instance_alpha = f"instance_harness_alpha_{suffix}"
+    instance_beta = f"instance_harness_beta_{suffix}"
+    provider_key = f"shared_harness_{suffix}"
+
+    for instance_id in (instance_alpha, instance_beta):
+        created = client.post(
+            "/admin/instances/",
+            headers=headers,
+            json={
+                "instance_id": instance_id,
+                "display_name": instance_id,
+                "tenant_id": instance_id,
+                "company_id": f"company_{instance_id}",
+                "deployment_mode": "restricted_eval",
+                "exposure_mode": "local_only",
+            },
+        )
+        assert created.status_code == 201
+
+    alpha_create = client.put(
+        f"/admin/providers/harness/profiles/{provider_key}",
+        headers=headers,
+        params={"instanceId": instance_alpha},
+        json={
+            "provider_key": provider_key,
+            "label": "Alpha Harness Profile",
+            "integration_class": "openai_compatible",
+            "endpoint_base_url": "https://alpha.example.invalid/v1",
+            "auth_scheme": "bearer",
+            "auth_value": "alpha-secret",
+            "models": ["alpha-model"],
+        },
+    )
+    beta_create = client.put(
+        f"/admin/providers/harness/profiles/{provider_key}",
+        headers=headers,
+        params={"instanceId": instance_beta},
+        json={
+            "provider_key": provider_key,
+            "label": "Beta Harness Profile",
+            "integration_class": "openai_compatible",
+            "endpoint_base_url": "https://beta.example.invalid/v1",
+            "auth_scheme": "bearer",
+            "auth_value": "beta-secret",
+            "models": ["beta-model"],
+        },
+    )
+
+    assert alpha_create.status_code == 200
+    assert beta_create.status_code == 200
+    assert alpha_create.json()["profile"]["instance_id"] == instance_alpha
+    assert beta_create.json()["profile"]["instance_id"] == instance_beta
+
+    alpha_deactivate = client.post(
+        f"/admin/providers/harness/profiles/{provider_key}/deactivate",
+        headers=headers,
+        params={"instanceId": instance_alpha},
+        json={},
+    )
+    assert alpha_deactivate.status_code == 200
+
+    alpha_profiles_response = client.get(
+        "/admin/providers/harness/profiles",
+        headers=headers,
+        params={"instanceId": instance_alpha},
+    )
+    beta_profiles_response = client.get(
+        "/admin/providers/harness/profiles",
+        headers=headers,
+        params={"instanceId": instance_beta},
+    )
+    alpha_snapshot_response = client.get(
+        "/admin/providers/harness/snapshot",
+        headers=headers,
+        params={"instanceId": instance_alpha},
+    )
+    beta_export_response = client.get(
+        "/admin/providers/harness/export?redact_secrets=true",
+        headers=headers,
+        params={"instanceId": instance_beta},
+    )
+
+    assert alpha_profiles_response.status_code == 200
+    assert beta_profiles_response.status_code == 200
+    assert alpha_snapshot_response.status_code == 200
+    assert beta_export_response.status_code == 200
+
+    alpha_profiles = alpha_profiles_response.json()["profiles"]
+    beta_profiles = beta_profiles_response.json()["profiles"]
+    assert len(alpha_profiles) == 1
+    assert len(beta_profiles) == 1
+    assert alpha_profiles[0]["provider_key"] == provider_key
+    assert beta_profiles[0]["provider_key"] == provider_key
+    assert alpha_profiles[0]["instance_id"] == instance_alpha
+    assert beta_profiles[0]["instance_id"] == instance_beta
+    assert alpha_profiles[0]["label"] == "Alpha Harness Profile"
+    assert beta_profiles[0]["label"] == "Beta Harness Profile"
+    assert alpha_profiles[0]["enabled"] is False
+    assert beta_profiles[0]["enabled"] is True
+
+    alpha_snapshot_profiles = alpha_snapshot_response.json()["snapshot"]["profiles"]
+    beta_export_profiles = beta_export_response.json()["snapshot"]["profiles"]
+    assert len(alpha_snapshot_profiles) == 1
+    assert len(beta_export_profiles) == 1
+    assert alpha_snapshot_profiles[0]["instance_id"] == instance_alpha
+    assert alpha_snapshot_profiles[0]["label"] == "Alpha Harness Profile"
+    assert beta_export_profiles[0]["profile"]["instance_id"] == instance_beta
+    assert beta_export_profiles[0]["profile"]["label"] == "Beta Harness Profile"
+
+
+def test_admin_oauth_operation_truth_stays_scoped_to_requested_instance() -> None:
+    headers = _admin_headers()
+    suffix = uuid4().hex[:8]
+    instance_alpha = f"oauth_alpha_{suffix}"
+    instance_beta = f"oauth_beta_{suffix}"
+    provider_key = "openai_codex"
+
+    for instance_id, tenant_id in (
+        (instance_alpha, f"tenant_alpha_{suffix}"),
+        (instance_beta, f"tenant_beta_{suffix}"),
+    ):
+        created = client.post(
+            "/admin/instances/",
+            headers=headers,
+            json={
+                "instance_id": instance_id,
+                "display_name": instance_id,
+                "tenant_id": tenant_id,
+                "company_id": f"company_{instance_id}",
+                "deployment_mode": "restricted_eval",
+                "exposure_mode": "local_only",
+            },
+        )
+        assert created.status_code == 201
+
+    alpha_probe = client.post(
+        f"/admin/providers/oauth-account/probe/{provider_key}",
+        headers=headers,
+        params={"instanceId": instance_alpha},
+        json={},
+    )
+    beta_probe = client.post(
+        f"/admin/providers/oauth-account/probe/{provider_key}",
+        headers=headers,
+        params={"instanceId": instance_beta},
+        json={},
+    )
+    assert alpha_probe.status_code == 200
+    assert beta_probe.status_code == 200
+
+    alpha_operations = client.get(
+        "/admin/providers/oauth-account/operations",
+        headers=headers,
+        params={"instanceId": instance_alpha},
+    )
+    beta_operations = client.get(
+        "/admin/providers/oauth-account/operations",
+        headers=headers,
+        params={"instanceId": instance_beta},
+    )
+    alpha_providers = client.get(
+        "/admin/providers/",
+        headers=headers,
+        params={"instanceId": instance_alpha},
+    )
+    beta_providers = client.get(
+        "/admin/providers/",
+        headers=headers,
+        params={"instanceId": instance_beta},
+    )
+
+    assert alpha_operations.status_code == 200
+    assert beta_operations.status_code == 200
+    assert alpha_providers.status_code == 200
+    assert beta_providers.status_code == 200
+
+    alpha_recent = alpha_operations.json()["recent"]
+    beta_recent = beta_operations.json()["recent"]
+    assert alpha_operations.json()["instance_id"] == instance_alpha
+    assert beta_operations.json()["instance_id"] == instance_beta
+    assert alpha_operations.json()["total_operations"] == 1
+    assert beta_operations.json()["total_operations"] == 1
+    assert {item["instance_id"] for item in alpha_recent} == {instance_alpha}
+    assert {item["instance_id"] for item in beta_recent} == {instance_beta}
+
+    alpha_antigravity = next(
+        item
+        for item in alpha_operations.json()["operations"]
+        if item["provider_key"] == provider_key
+    )
+    beta_antigravity = next(
+        item
+        for item in beta_operations.json()["operations"]
+        if item["provider_key"] == provider_key
+    )
+    assert alpha_antigravity["probe_count"] == 1
+    assert beta_antigravity["probe_count"] == 1
+
+    alpha_provider_row = next(
+        item for item in alpha_providers.json()["providers"] if item["provider"] == provider_key
+    )
+    beta_provider_row = next(
+        item for item in beta_providers.json()["providers"] if item["provider"] == provider_key
+    )
+    assert alpha_provider_row["oauth_failure_count"] == 1
+    assert beta_provider_row["oauth_failure_count"] == 1
+    assert alpha_provider_row["last_probe_at"] == alpha_recent[-1]["executed_at"]
+    assert beta_provider_row["last_probe_at"] == beta_recent[-1]["executed_at"]
+
+
+def test_admin_providers_generic_harness_truth_stays_scoped_to_requested_instance() -> None:
+    headers = _admin_headers()
+    suffix = uuid4().hex[:8]
+    instance_alpha = f"providers_alpha_{suffix}"
+    instance_beta = f"providers_beta_{suffix}"
+
+    for instance_id, tenant_id in (
+        (instance_alpha, f"tenant_alpha_{suffix}"),
+        (instance_beta, f"tenant_beta_{suffix}"),
+    ):
+        created = client.post(
+            "/admin/instances/",
+            headers=headers,
+            json={
+                "instance_id": instance_id,
+                "display_name": instance_id,
+                "tenant_id": tenant_id,
+                "company_id": f"company_{instance_id}",
+                "deployment_mode": "restricted_eval",
+                "exposure_mode": "local_only",
+            },
+        )
+        assert created.status_code == 201
+
+    provider_key = f"harness_alpha_{suffix}"
+    create_profile = client.put(
+        f"/admin/providers/harness/profiles/{provider_key}",
+        headers=headers,
+        params={"instanceId": instance_alpha},
+        json={
+            "provider_key": provider_key,
+            "label": "Alpha Harness Profile",
+            "integration_class": "openai_compatible",
+            "endpoint_base_url": "https://alpha.example.invalid/v1",
+            "auth_scheme": "bearer",
+            "auth_value": "alpha-secret",
+            "enabled": True,
+            "models": ["alpha-model"],
+            "stream_mapping": {"enabled": True},
+            "capabilities": {
+                "streaming": True,
+                "tool_calling": True,
+                "model_source": "manual",
+                "discovery_support": False,
+            },
+        },
+    )
+    assert create_profile.status_code == 200
+
+    alpha_providers = client.get(
+        "/admin/providers/",
+        headers=headers,
+        params={"instanceId": instance_alpha},
+    )
+    beta_providers = client.get(
+        "/admin/providers/",
+        headers=headers,
+        params={"instanceId": instance_beta},
+    )
+    assert alpha_providers.status_code == 200
+    assert beta_providers.status_code == 200
+
+    alpha_truth = next(
+        item["runtime"]
+        for item in alpha_providers.json()["truth_axes"]
+        if item["provider"]["provider"] == "generic_harness"
+    )
+    beta_truth = next(
+        item["runtime"]
+        for item in beta_providers.json()["truth_axes"]
+        if item["provider"]["provider"] == "generic_harness"
+    )
+    alpha_provider_row = next(
+        item for item in alpha_providers.json()["providers"] if item["provider"] == "generic_harness"
+    )
+    beta_provider_row = next(
+        item for item in beta_providers.json()["providers"] if item["provider"] == "generic_harness"
+    )
+
+    assert alpha_truth["capabilities"]["active_profile_count"] == 1
+    assert beta_truth["capabilities"]["active_profile_count"] == 0
+    assert alpha_provider_row["capabilities"]["active_profile_count"] == 1
+    assert beta_provider_row["capabilities"]["active_profile_count"] == 0
+    assert beta_truth["readiness_reason"] == "No harness provider profile configured in control plane."
 
 
 def test_admin_product_axis_targets_include_exact_local_provider_rows() -> None:

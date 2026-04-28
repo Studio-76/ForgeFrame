@@ -2,17 +2,16 @@ import { useSearchParams } from "react-router-dom";
 
 import { CONTROL_PLANE_ROUTES } from "../app/navigation";
 import { useAppSession } from "../app/session";
-import { getInstanceIdFromSearchParams } from "../app/tenantScope";
+import { getInstanceIdFromSearchParams, withInstanceScope } from "../app/tenantScope";
 import { useInstanceCatalog } from "../app/useInstanceCatalog";
 import { InstanceScopeCard } from "../components/InstanceScopeCard";
 import { PageIntro } from "../components/PageIntro";
+import { BlockedState } from "../components/ui/StateBlocks";
 import {
-  ExpansionTargetsSection,
-  OpenAICompatibilitySection,
-  OperationResultSection,
-  ProviderCatalogSection,
-  ProviderInventorySection,
-  ProvidersOverviewSection,
+  ProviderHealthSection,
+  ProvidersAdvancedDiagnosticsSection,
+  ProvidersInventoryTableSection,
+  ProvidersManagementOverviewSection,
 } from "../features/providers/ProvidersSections";
 import { getProvidersAccess } from "../features/providers/providersShared";
 import { useProvidersControlPlane } from "../features/providers/useProvidersControlPlane";
@@ -22,11 +21,20 @@ export function ProvidersPage() {
   const { session, sessionReady } = useAppSession();
   const instanceId = getInstanceIdFromSearchParams(searchParams);
   const { instances, loadState, error: instancesError, selectedInstance } = useInstanceCatalog(instanceId);
-  const access = getProvidersAccess(session, sessionReady);
-  const { data, actions } = useProvidersControlPlane(access, instanceId);
-  const note = access.canMutate
-    ? "Setup keeps the default top-level destination for this route. Operations links can still deep-link directly into live provider health and run review without introducing nested routes yet."
-    : `${access.summaryDetail} Runtime truth stays visible here without surfacing mutations that the backend will block.`;
+  const access = getProvidersAccess(session, sessionReady, instanceId);
+  const { data, actions } = useProvidersControlPlane(access, instanceId, {
+    includeUsageSummary: false,
+    includeHarness: false,
+    includeOauthTargets: false,
+    includeCompatibilityMatrix: false,
+    includeBootstrapReadiness: false,
+    includeClientView: false,
+  });
+  const note = !access.canRead
+    ? access.summaryDetail
+    : access.canMutate
+    ? "Providers stays dedicated to runtime inventory, add/edit, lifecycle changes, compatibility short status, and health. OAuth targets and harness proof stay on their own routes."
+    : `${access.summaryDetail} Provider truth and health stay visible here without surfacing mutations that the backend will block.`;
 
   const onInstanceChange = (nextInstanceId: string | null) => {
     const nextSearchParams = new URLSearchParams(searchParams);
@@ -42,36 +50,31 @@ export function ProvidersPage() {
     <section className="fg-page">
       <PageIntro
         eyebrow="Setup"
-        title="Providers Control Plane"
-        description="Live provider truth, compatibility posture, and expansion targets stay here. Dedicated harness work moved to its own module instead of continuing as a hidden sub-surface of provider setup."
-        question="Which provider task are you handling right now: live runtime posture, compatibility truth, or expansion planning?"
+        title="Providers"
+        description="Manage live providers here: inventory, add/edit, enable/disable, sync, compatibility short status, and health. OAuth targets and harness proof are kept on dedicated routes."
+        question="Which provider are you configuring, syncing, validating, or recovering right now?"
         links={[
           {
             label: "Overview",
-            to: CONTROL_PLANE_ROUTES.providers,
-            description: "Start with the route-level summary and current runtime truth.",
+            to: withInstanceScope(CONTROL_PLANE_ROUTES.providers, instanceId),
+            description: "Start with the live provider inventory and runtime truth for the current instance.",
           },
           {
             label: "Harness",
-            to: CONTROL_PLANE_ROUTES.harness,
+            to: withInstanceScope(CONTROL_PLANE_ROUTES.harness, instanceId),
             description: access.canMutate
               ? "Open the dedicated harness module for profile creation, verification, probe, import, and export work."
-              : "Inspect dedicated harness proof, profile, and run truth without reopening the provider module.",
+              : "Inspect dedicated harness proof, profile, and run truth without reopening the provider inventory.",
           },
           {
-            label: "Provider Health & Runs",
-            to: CONTROL_PLANE_ROUTES.providerHealthRuns,
-            description: "Jump straight to live provider inventory, compatibility, and run posture.",
-          },
-          {
-            label: "Expansion Targets",
-            to: "/providers#expansion-targets",
-            description: "Review planned or partial provider coverage without implying runtime readiness.",
+            label: "Provider Targets",
+            to: withInstanceScope(CONTROL_PLANE_ROUTES.providerTargets, instanceId),
+            description: "Open the target register when you need per-target routing and priority detail.",
           },
           {
             label: "OAuth Targets",
-            to: CONTROL_PLANE_ROUTES.oauthTargets,
-            description: "Open the dedicated operator surface for account-backed target classification, probes, and session truth.",
+            to: withInstanceScope(CONTROL_PLANE_ROUTES.oauthTargets, instanceId),
+            description: "Open the dedicated operator surface for account-backed target classification, connect state, probes, and session truth.",
           },
         ]}
         badges={[
@@ -89,24 +92,25 @@ export function ProvidersPage() {
         surfaceLabel="provider control-plane truth"
         onInstanceChange={onInstanceChange}
       />
-      <div className="fg-stack">
-        <div id="provider-overview">
-          <ProvidersOverviewSection data={data} actions={actions} />
+      {!access.canRead ? (
+        <BlockedState
+          title={access.summaryTitle}
+          description={access.summaryDetail}
+          badgeLabel={access.badgeLabel}
+          status="blocked"
+        />
+      ) : (
+        <div className="fg-stack">
+          <div id="provider-overview">
+            <ProvidersManagementOverviewSection data={data} actions={actions} instanceId={instanceId} />
+          </div>
+          <div id="provider-health-runs">
+            <ProviderHealthSection data={data} actions={actions} />
+          </div>
+          <ProvidersInventoryTableSection data={data} actions={actions} instanceId={instanceId} />
+          <ProvidersAdvancedDiagnosticsSection data={data} />
         </div>
-        <OperationResultSection data={data} actions={actions} />
-        <div id="provider-health-runs">
-          <ProviderInventorySection data={data} actions={actions} />
-        </div>
-        <div id="provider-catalog">
-          <ProviderCatalogSection data={data} />
-        </div>
-        <div id="provider-openai-compatibility">
-          <OpenAICompatibilitySection data={data} />
-        </div>
-        <div id="expansion-targets">
-          <ExpansionTargetsSection data={data} actions={actions} />
-        </div>
-      </div>
+      )}
     </section>
   );
 }

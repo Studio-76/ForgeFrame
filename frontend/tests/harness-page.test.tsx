@@ -17,6 +17,7 @@ function createActions(): ProvidersPageActions {
     setOperationResult: () => undefined,
     setImportPayload: () => undefined,
     setNewProvider: (() => undefined) as ProvidersPageActions["setNewProvider"],
+    setProviderDraftField: () => undefined,
     setNewHarness: (() => undefined) as ProvidersPageActions["setNewHarness"],
     setProviderLabelDraft: () => undefined,
     runHarnessAction: noopAsync,
@@ -25,6 +26,7 @@ function createActions(): ProvidersPageActions {
     deleteHarnessProfile: noopAsync,
     rollbackHarnessProfile: noopAsync,
     createProvider: noopAsync,
+    saveProvider: noopAsync,
     toggleProvider: noopAsync,
     syncProviderModels: noopAsync,
     saveProviderLabel: noopAsync,
@@ -49,6 +51,7 @@ function createData(access: ProvidersAccessState): ProvidersPageData {
       {
         provider: "openai_api",
         label: "OpenAI",
+        provider_class: "openai_compatible",
         enabled: true,
         integration_class: "native",
         template_id: null,
@@ -72,6 +75,32 @@ function createData(access: ProvidersAccessState): ProvidersPageData {
         harness_needs_attention_count: 0,
         harness_proof_status: "proven",
         harness_proven_profile_keys: ["openai-primary"],
+        auth_type: "api_key",
+        target_count: 0,
+        enabled_target_count: 0,
+        ready_target_count: 0,
+        oauth_connect_required: false,
+        health_status: "healthy",
+        healthy_model_count: 1,
+        attention_model_count: 0,
+        last_health_check_at: "2026-04-23T09:00:00Z",
+        last_probe_at: "2026-04-23T09:00:00Z",
+        next_action: "None",
+        next_action_kind: "none",
+      },
+    ],
+    supportedProviderClasses: [
+      {
+        key: "openai_compatible",
+        label: "OpenAI-compatible",
+        description: "OpenAI compatible profile",
+        integration_class: "openai_compatible",
+        template_id: "openai_compatible",
+        default_config: {
+          provider_class: "openai_compatible",
+          endpoint_base_url: "https://api.openai.com/v1",
+          auth_scheme: "bearer",
+        },
       },
     ],
     templates: [
@@ -133,7 +162,14 @@ function createData(access: ProvidersAccessState): ProvidersPageData {
     newProvider: {
       provider: "",
       label: "",
+      providerClass: "openai_compatible",
+      integrationClass: "openai_compatible",
+      templateId: "openai_compatible",
+      endpointBaseUrl: "https://example.invalid/v1",
+      authScheme: "bearer",
+      oauthMode: "account_portal",
     },
+    providerDrafts: {},
     providerLabelDrafts: {},
     providerErrors: {},
     modelErrors: {},
@@ -181,6 +217,27 @@ function createSession(overrides: Partial<AdminSessionUser> = {}): AdminSessionU
   };
 }
 
+function createScopedOperatorSession(): AdminSessionUser {
+  return createSession({
+    role: "operator",
+    active_instance_id: "instance_alpha",
+    instance_permissions: {
+      instance_alpha: ["providers.read", "providers.write"],
+      instance_beta: ["providers.read"],
+    },
+  });
+}
+
+function createScopedNoReadSession(): AdminSessionUser {
+  return createSession({
+    role: "operator",
+    active_instance_id: "instance_alpha",
+    instance_permissions: {
+      instance_alpha: ["providers.read", "providers.write"],
+    },
+  });
+}
+
 vi.mock("../src/features/providers/useProvidersControlPlane", () => ({
   useProvidersControlPlane: (access: ProvidersAccessState, instanceId?: string | null) => mockedUseProvidersControlPlane(access, instanceId),
 }));
@@ -211,18 +268,19 @@ describe("Harness page separation", () => {
     expect(markup).not.toContain("Control-Plane Summary");
   });
 
-  it("hides harness mutations for viewer sessions while keeping proof visible", () => {
+  it("shows an honest blocked state when the session lacks scoped providers.read", () => {
     const markup = renderToStaticMarkup(
       withAppContext({
-        path: "/harness",
+        path: "/harness?instanceId=instance_beta",
         element: <HarnessPage />,
-        session: createSession({ role: "viewer", username: "viewer" }),
+        session: createScopedNoReadSession(),
       }),
     );
 
-    expect(markup).toContain("Viewer access");
-    expect(markup).toContain("Harness proof posture");
-    expect(markup).toContain("Saved Harness Profiles");
+    expect(markup).toContain("Read access required");
+    expect(markup).toContain("the backend will return 403 until providers.read is granted here");
+    expect(markup).not.toContain("Harness proof posture");
+    expect(markup).not.toContain("Saved Harness Profiles");
     expect(markup).not.toContain("Save profile");
     expect(markup).not.toContain("Preview + Verify");
     expect(markup).not.toContain("Export redacted");
@@ -238,5 +296,42 @@ describe("Harness page separation", () => {
     );
 
     expect(mockedUseProvidersControlPlane).toHaveBeenCalledWith(expect.any(Object), "instance_alpha");
+  });
+
+  it("preserves instance scope in the dedicated harness route links", () => {
+    const markup = renderToStaticMarkup(
+      withAppContext({
+        path: "/harness?instanceId=instance_alpha",
+        element: <HarnessPage />,
+        session: createSession(),
+      }),
+    );
+
+    expect(markup).toContain('href="/harness?instanceId=instance_alpha"');
+    expect(markup).toContain('href="/providers?instanceId=instance_alpha"');
+    expect(markup).toContain('href="/release-validation?instanceId=instance_alpha"');
+  });
+
+  it("only shows mutating harness controls on the instance that grants write access", () => {
+    const alphaMarkup = renderToStaticMarkup(
+      withAppContext({
+        path: "/harness?instanceId=instance_alpha",
+        element: <HarnessPage />,
+        session: createScopedOperatorSession(),
+      }),
+    );
+    const betaMarkup = renderToStaticMarkup(
+      withAppContext({
+        path: "/harness?instanceId=instance_beta",
+        element: <HarnessPage />,
+        session: createScopedOperatorSession(),
+      }),
+    );
+
+    expect(alphaMarkup).toContain("Operator mutations enabled");
+    expect(alphaMarkup).toContain("Save profile");
+    expect(betaMarkup).not.toContain("Operator mutations enabled");
+    expect(betaMarkup).not.toContain("Save profile");
+    expect(betaMarkup).toContain("Read only");
   });
 });

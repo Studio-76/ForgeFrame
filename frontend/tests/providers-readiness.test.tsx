@@ -501,7 +501,7 @@ describe("Provider readiness axes", () => {
     expect(markup).not.toContain("readiness=partial");
   });
 
-  it("hides provider mutation controls for viewer sessions while keeping read-only surfaces visible", () => {
+  it("shows the blocked provider state for viewer sessions without scoped read access", () => {
     const data = createData({ role: "viewer" });
     const markup = renderToStaticMarkup(
       <>
@@ -513,7 +513,7 @@ describe("Provider readiness axes", () => {
     );
 
     expect(markup).toContain("Refresh");
-    expect(markup).toContain("Permission-limited provider view");
+    expect(markup).toContain("Read access required");
     expect(markup).toContain("Harness export and import actions stay hidden for viewer sessions.");
     expect(markup).not.toContain("Sync all providers");
     expect(markup).not.toContain("Export redacted");
