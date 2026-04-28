@@ -48,6 +48,35 @@ class OpenAICodexAuthState(BaseModel):
         return "external_token_only"
 
     @property
+    def oauth_connect_support(self) -> str | None:
+        if self.auth_mode != "oauth":
+            return None
+        if self.oauth_mode == "browser_callback":
+            return "browser_callback_not_implemented"
+        if self.oauth_mode == "device_hosted_code":
+            return "device_code_not_implemented"
+        return "manual_redirect_documented_only"
+
+    @property
+    def oauth_connect_summary(self) -> str | None:
+        if self.auth_mode != "oauth":
+            return None
+        if self.oauth_mode == "browser_callback":
+            return (
+                "Browser callback is modeled as the desired Codex OAuth mode, but ForgeFrame does not ship the "
+                "callback exchange or token persistence path yet."
+            )
+        if self.oauth_mode == "device_hosted_code":
+            return (
+                "Device/hosted code is documented for Codex, but ForgeFrame does not start that flow or capture the "
+                "resulting token yet."
+            )
+        return (
+            "Manual redirect completion is the documented Codex path here: obtain the token outside ForgeFrame and "
+            "place it into the runtime env before probing."
+        )
+
+    @property
     def oauth_operator_truth(self) -> str | None:
         if self.auth_mode != "oauth":
             return None
@@ -61,7 +90,7 @@ class OpenAICodexAuthState(BaseModel):
             return f"{provider_label} API-key mode selected but FORGEFRAME_OPENAI_CODEX_API_KEY is missing."
         return (
             f"{provider_label} OAuth mode '{self.oauth_mode}' expects a pre-issued access token in "
-                "FORGEFRAME_OPENAI_CODEX_OAUTH_ACCESS_TOKEN. ForgeFrame does not initiate or complete that OAuth flow itself."
+            "FORGEFRAME_OPENAI_CODEX_OAUTH_ACCESS_TOKEN. ForgeFrame does not initiate or complete that OAuth flow itself."
         )
 
 

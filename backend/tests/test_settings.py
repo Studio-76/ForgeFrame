@@ -1,7 +1,7 @@
 import pytest
 
 from app.core.model_registry import ModelRegistry
-from app.settings.config import Settings, get_settings
+from app.settings.config import Settings, get_settings, oauth_target_env_contract
 
 
 def _clear_default_setting_overrides(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -77,6 +77,17 @@ def test_bridge_only_oauth_targets_do_not_expose_dead_provider_enabled_flags() -
         "claude_code_probe_enabled",
         "claude_code_bridge_profile_enabled",
     } <= fields
+
+
+def test_oauth_target_env_contract_uses_primary_forgeframe_vars() -> None:
+    codex_oauth = oauth_target_env_contract("openai_codex", auth_mode="oauth_account")
+    gemini_api = oauth_target_env_contract("gemini", auth_mode="api_key")
+    copilot = oauth_target_env_contract("github_copilot")
+
+    assert "FORGEFRAME_OPENAI_CODEX_OAUTH_ACCESS_TOKEN" in codex_oauth["required"]
+    assert "FORGEFRAME_OPENAI_CODEX_BRIDGE_ENABLED" in codex_oauth["optional"]
+    assert "FORGEFRAME_GEMINI_API_KEY" in gemini_api["required"]
+    assert "FORGEFRAME_GITHUB_COPILOT_OAUTH_ACCESS_TOKEN" in copilot["required"]
 
 
 def test_pricing_settings_are_operationalized(monkeypatch: pytest.MonkeyPatch) -> None:

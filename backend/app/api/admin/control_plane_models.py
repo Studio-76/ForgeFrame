@@ -144,8 +144,32 @@ class OAuthAccountProbeResult(BaseModel):
     checked_at: str
 
 
+class OAuthTargetOperationSnapshot(BaseModel):
+    action: str
+    status: str
+    details: str
+    executed_at: str | None = None
+
+
+class OAuthTargetSetupGuide(BaseModel):
+    summary: str = ""
+    required_env_vars: list[str] = Field(default_factory=list)
+    optional_env_vars: list[str] = Field(default_factory=list)
+    missing_env_vars: list[str] = Field(default_factory=list)
+    steps: list[str] = Field(default_factory=list)
+
+
+class OAuthTargetActionSpec(BaseModel):
+    action_key: Literal["connect", "manual_token", "device_code", "bridge_sync", "probe", "disconnect"]
+    label: str
+    mode: Literal["api", "manual", "unsupported"]
+    supported: bool
+    detail: str
+
+
 class OAuthAccountTargetStatus(BaseModel):
     provider_key: str
+    provider_label: str = ""
     configured: bool
     runtime_bridge_enabled: bool
     probe_enabled: bool
@@ -164,6 +188,24 @@ class OAuthAccountTargetStatus(BaseModel):
     auth_kind: Literal["oauth_account", "api_key"]
     oauth_mode: str | None = None
     oauth_flow_support: str | None = None
+    connection_status: Literal[
+        "not configured",
+        "token present",
+        "bridge-only",
+        "oauth unsupported",
+        "runtime-ready",
+        "probe failed",
+        "expired",
+        "needs refresh",
+    ] = "not configured"
+    connection_status_reason: str = ""
+    connection_method: str = ""
+    setup: OAuthTargetSetupGuide = Field(default_factory=OAuthTargetSetupGuide)
+    actions: list[OAuthTargetActionSpec] = Field(default_factory=list)
+    last_probe: OAuthTargetOperationSnapshot | None = None
+    last_bridge_sync: OAuthTargetOperationSnapshot | None = None
+    last_failed_operation: OAuthTargetOperationSnapshot | None = None
+    next_step: str = ""
     evidence: ProviderCapabilityEvidenceRecord = Field(default_factory=ProviderCapabilityEvidenceRecord)
 
 
@@ -171,7 +213,10 @@ __all__ = [
     "ProductAxisTarget",
     "HealthConfigUpdateRequest",
     "OAuthAccountProbeResult",
+    "OAuthTargetActionSpec",
     "OAuthAccountTargetStatus",
+    "OAuthTargetOperationSnapshot",
+    "OAuthTargetSetupGuide",
     "ProviderClassDescriptor",
     "ProviderClassKey",
     "ProviderCreateRequest",

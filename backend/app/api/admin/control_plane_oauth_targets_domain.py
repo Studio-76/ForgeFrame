@@ -8,10 +8,16 @@ from typing import Literal
 
 import httpx
 
-from app.api.admin.control_plane_models import OAuthAccountProbeResult, OAuthAccountTargetStatus
+from app.api.admin.control_plane_models import (
+    OAuthAccountProbeResult,
+    OAuthAccountTargetStatus,
+    OAuthTargetActionSpec,
+    OAuthTargetSetupGuide,
+)
 from app.auth.oauth.gemini import resolve_gemini_auth_state
 from app.auth.oauth.openai import resolve_codex_auth_state
 from app.harness import HarnessProviderProfile
+from app.settings.config import OAUTH_TARGET_PROVIDER_LABELS, oauth_target_env_contract
 
 
 _NATIVE_OAUTH_TARGET_KEYS = ("openai_codex", "gemini")
@@ -44,6 +50,30 @@ def _qwen_oauth_headers() -> dict[str, str]:
 
 
 class ControlPlaneOAuthTargetsDomainMixin:
+    @staticmethod
+    def _oauth_target_provider_label(provider_key: str) -> str:
+        return OAUTH_TARGET_PROVIDER_LABELS.get(provider_key, provider_key)
+
+    @staticmethod
+    def _oauth_operation_is_newer(candidate_at: str | None, baseline_at: str | None) -> bool:
+        if not candidate_at:
+            return False
+        if not baseline_at:
+            return True
+        try:
+            return datetime.fromisoformat(candidate_at) >= datetime.fromisoformat(baseline_at)
+        except ValueError:
+            return True
+
+    @staticmethod
+    def _oauth_failure_status(details: str) -> Literal["probe failed", "expired", "needs refresh"]:
+        normalized = details.lower()
+        if "expired" in normalized or "revoked" in normalized:
+            return "expired"
+        if "refresh" in normalized or "401" in normalized or "unauthoriz" in normalized or "invalid token" in normalized:
+            return "needs refresh"
+        return "probe failed"
+
     @staticmethod
     def _oauth_target_contract_classification(
         provider_key: str,
@@ -152,6 +182,283 @@ class ControlPlaneOAuthTargetsDomainMixin:
         if provider_key == "qwen_oauth":
             return _qwen_oauth_headers()
         return {}
+
+    def _latest_provider_oauth_operation(
+        self,
+        provider_key: str,
+        *,
+        tenant_id: str | None = None,
+        instance_id: str | None = None,
+    ):
+        operations = [
+            item
+            for item in self._oauth_operations(tenant_id, instance_id)
+            if item.provider_key == provider_key
+        ]
+        return operations[-1] if operations else None
+
+    def _latest_failed_oauth_operation(
+        self,
+        provider_key: str,
+        *,
+        tenant_id: str | None = None,
+        instance_id: str | None = None,
+    ):
+        operations = [
+            item
+            for item in self._oauth_operations(tenant_id, instance_id)
+            if item.provider_key == provider_key and item.status == "failed"
+        ]
+        return operations[-1] if operations else None
+
+    def _oauth_target_connection_method(
+        self,
+        provider_key: str,
+        status: OAuthAccountTargetStatus,
+    ) -> str:
+        if provider_key == "openai_codex":
+            if status.auth_kind == "api_key":
+                return "API-key mode only; ForgeFrame is not running Codex OAuth on this instance."
+            oauth_mode = status.oauth_mode or "manual_redirect_completion"
+            if oauth_mode == "device_hosted_code":
+                return "Codex OAuth via externally completed device/hosted-code flow and a pre-issued access token."
+            if oauth_mode == "browser_callback":
+                return "Codex OAuth is configured for browser-callback semantics, but ForgeFrame still expects an externally supplied token."
+            return "Codex OAuth via manual redirect completion with an externally supplied access token."
+        if provider_key == "gemini":
+            if status.auth_kind == "api_key":
+                return "API-key mode only; Gemini OAuth/session semantics are not active on this instance."
+            return "Gemini OAuth via externally supplied access token; ForgeFrame does not mint or refresh it."
+        if provider_key == "nous_oauth":
+            return "Bridge-only portal OAuth token plus separate Nous runtime agent key for live runtime proof."
+        if provider_key == "qwen_oauth":
+            return "Bridge-only portal OAuth token with mandatory QwenCode/DashScope request headers."
+        return "Bridge-only portal OAuth token forwarded through probe and harness bridge profile paths."
+
+    def _oauth_target_setup_guide(
+        self,
+        provider_key: str,
+        status: OAuthAccountTargetStatus,
+    ) -> OAuthTargetSetupGuide:
+        env_contract = oauth_target_env_contract(provider_key, auth_mode=status.auth_kind)
+        required_env_vars = list(env_contract["required"])
+        optional_env_vars = list(env_contract["optional"])
+        missing_env_vars: list[str] = []
+        if not status.configured:
+            missing_env_vars.extend(required_env_vars)
+        if provider_key in _NATIVE_OAUTH_TARGET_KEYS and not status.runtime_bridge_enabled:
+            bridge_flag = "FORGEFRAME_OPENAI_CODEX_BRIDGE_ENABLED" if provider_key == "openai_codex" else "FORGEFRAME_GEMINI_PROBE_ENABLED"
+            if bridge_flag not in missing_env_vars:
+                missing_env_vars.append(bridge_flag)
+        if provider_key in _BRIDGE_OAUTH_TARGET_KEYS and not status.probe_enabled:
+            probe_flag = f"FORGEFRAME_{provider_key.upper()}_PROBE_ENABLED"
+            if probe_flag not in missing_env_vars:
+                missing_env_vars.append(probe_flag)
+        if provider_key in _BRIDGE_OAUTH_TARGET_KEYS and not status.harness_profile_enabled:
+            sync_flag = f"FORGEFRAME_{provider_key.upper()}_BRIDGE_PROFILE_ENABLED"
+            if sync_flag not in missing_env_vars:
+                missing_env_vars.append(sync_flag)
+        if provider_key == "nous_oauth" and not self._settings.nous_oauth_runtime_agent_key.strip():
+            required_agent_key = "FORGEFRAME_NOUS_OAUTH_RUNTIME_AGENT_KEY"
+            if required_agent_key not in missing_env_vars:
+                missing_env_vars.append(required_agent_key)
+
+        provider_label = self._oauth_target_provider_label(provider_key)
+        summary = (
+            f"{provider_label} is configured externally through ForgeFrame env settings. "
+            "This page shows the exact contract, but it does not write or rotate upstream OAuth tokens."
+        )
+        steps = [f"Set the required env vars for {provider_label} outside ForgeFrame and reload the runtime."]
+        if provider_key == "openai_codex" and status.auth_kind == "oauth_account":
+            oauth_mode = status.oauth_mode or "manual_redirect_completion"
+            if oauth_mode == "device_hosted_code":
+                steps.append(
+                    "Complete the device/hosted-code flow outside ForgeFrame, then place the resulting token into FORGEFRAME_OPENAI_CODEX_OAUTH_ACCESS_TOKEN."
+                )
+            elif oauth_mode == "browser_callback":
+                steps.append(
+                    "Use an external callback-capable tool to obtain the token; ForgeFrame does not accept the redirect or exchange the code itself."
+                )
+            else:
+                steps.append(
+                    "Complete the manual redirect flow outside ForgeFrame, then place the resulting token into FORGEFRAME_OPENAI_CODEX_OAUTH_ACCESS_TOKEN."
+                )
+        if provider_key in _BRIDGE_OAUTH_TARGET_KEYS:
+            steps.append("Use bridge profile sync only after the base URL, token, and probe model reflect the real upstream runtime lane.")
+        if status.configured:
+            steps.append("Use 'Verbindung testen' after setup changes so the page records a fresh probe result.")
+        return OAuthTargetSetupGuide(
+            summary=summary,
+            required_env_vars=required_env_vars,
+            optional_env_vars=optional_env_vars,
+            missing_env_vars=missing_env_vars,
+            steps=steps,
+        )
+
+    def _oauth_target_actions(
+        self,
+        provider_key: str,
+        status: OAuthAccountTargetStatus,
+    ) -> list[OAuthTargetActionSpec]:
+        actions: list[OAuthTargetActionSpec] = []
+        if provider_key == "openai_codex":
+            if status.auth_kind == "oauth_account":
+                actions.append(
+                    OAuthTargetActionSpec(
+                        action_key="manual_token",
+                        label="Manuell Token hinterlegen",
+                        mode="manual",
+                        supported=True,
+                        detail="ForgeFrame expects a pre-issued Codex OAuth token in the runtime env and does not acquire it itself.",
+                    )
+                )
+                if status.oauth_mode == "device_hosted_code":
+                    actions.append(
+                        OAuthTargetActionSpec(
+                            action_key="device_code",
+                            label="Device-Code starten",
+                            mode="unsupported",
+                            supported=False,
+                            detail="Codex device/hosted-code is documented only. ForgeFrame does not start or complete that flow yet.",
+                        )
+                    )
+                else:
+                    actions.append(
+                        OAuthTargetActionSpec(
+                            action_key="connect",
+                            label="Verbinden",
+                            mode="unsupported",
+                            supported=False,
+                            detail="ForgeFrame does not ship an in-product Codex OAuth connect flow. Use the manual token path instead.",
+                        )
+                    )
+            else:
+                actions.append(
+                    OAuthTargetActionSpec(
+                        action_key="manual_token",
+                        label="Auf OAuth umstellen",
+                        mode="manual",
+                        supported=True,
+                        detail="Switch FORGEFRAME_OPENAI_CODEX_AUTH_MODE=oauth and supply FORGEFRAME_OPENAI_CODEX_OAUTH_ACCESS_TOKEN outside ForgeFrame.",
+                    )
+                )
+        elif provider_key == "gemini":
+            actions.append(
+                OAuthTargetActionSpec(
+                    action_key="manual_token",
+                    label="Manuell Token hinterlegen",
+                    mode="manual",
+                    supported=True,
+                    detail=(
+                        "Gemini OAuth is externally supplied only."
+                        if status.auth_kind == "oauth_account"
+                        else "Switch FORGEFRAME_GEMINI_AUTH_MODE=oauth and provide FORGEFRAME_GEMINI_OAUTH_ACCESS_TOKEN outside ForgeFrame."
+                    ),
+                )
+            )
+        else:
+            actions.append(
+                OAuthTargetActionSpec(
+                    action_key="manual_token",
+                    label="Manuell Token hinterlegen",
+                    mode="manual",
+                    supported=True,
+                    detail="Bridge-only providers still rely on externally supplied portal tokens; ForgeFrame does not mint or refresh them.",
+                )
+            )
+            actions.append(
+                OAuthTargetActionSpec(
+                    action_key="bridge_sync",
+                    label="Bridge-Profil synchronisieren",
+                    mode="api",
+                    supported=True,
+                    detail="Upserts or refreshes the saved harness bridge profile for this provider.",
+                )
+            )
+        actions.append(
+            OAuthTargetActionSpec(
+                action_key="probe",
+                label="Verbindung testen",
+                mode="api",
+                supported=True,
+                detail="Runs the real probe path for this target. This is a test, not a connect or login action.",
+            )
+        )
+        actions.append(
+            OAuthTargetActionSpec(
+                action_key="disconnect",
+                label="Trennen",
+                mode="manual",
+                supported=True,
+                detail="Remove or replace the relevant env token outside ForgeFrame and reload the runtime; no in-product disconnect API exists.",
+            )
+        )
+        return actions
+
+    def _hydrate_oauth_target_surface(
+        self,
+        status: OAuthAccountTargetStatus,
+        *,
+        tenant_id: str | None = None,
+        instance_id: str | None = None,
+    ) -> OAuthAccountTargetStatus:
+        provider_key = status.provider_key
+        latest_probe = self.latest_oauth_operation(
+            provider_key,
+            action="probe",
+            tenant_id=tenant_id,
+            instance_id=instance_id,
+        )
+        latest_bridge_sync = self.latest_oauth_operation(
+            provider_key,
+            action="bridge_sync",
+            tenant_id=tenant_id,
+            instance_id=instance_id,
+        )
+        latest_failed = self._latest_failed_oauth_operation(
+            provider_key,
+            tenant_id=tenant_id,
+            instance_id=instance_id,
+        )
+        latest_operation = self._latest_provider_oauth_operation(
+            provider_key,
+            tenant_id=tenant_id,
+            instance_id=instance_id,
+        )
+
+        status.provider_label = self._oauth_target_provider_label(provider_key)
+        status.connection_method = self._oauth_target_connection_method(provider_key, status)
+        status.setup = self._oauth_target_setup_guide(provider_key, status)
+        status.actions = self._oauth_target_actions(provider_key, status)
+        status.last_probe = self._oauth_operation_snapshot(latest_probe)
+        status.last_bridge_sync = self._oauth_operation_snapshot(latest_bridge_sync)
+        status.last_failed_operation = self._oauth_operation_snapshot(latest_failed)
+
+        if provider_key in _NATIVE_OAUTH_TARGET_KEYS and status.auth_kind == "api_key":
+            status.connection_status = "oauth unsupported"
+            status.connection_status_reason = (
+                f"{status.provider_label} is currently in API-key mode, so this page cannot claim an active OAuth connection."
+            )
+        elif not status.configured:
+            status.connection_status = "not configured"
+            status.connection_status_reason = status.readiness_reason
+        elif latest_operation is not None and latest_operation.status == "failed":
+            status.connection_status = self._oauth_failure_status(latest_operation.details)
+            status.connection_status_reason = latest_operation.details
+        elif status.readiness == "ready" and status.contract_classification == "runtime-ready":
+            status.connection_status = "runtime-ready"
+            status.connection_status_reason = status.readiness_reason
+        elif status.contract_classification == "bridge-only":
+            status.connection_status = "bridge-only"
+            status.connection_status_reason = status.readiness_reason
+        else:
+            status.connection_status = "token present"
+            status.connection_status_reason = status.readiness_reason
+
+        if latest_failed is not None and latest_operation is not None and latest_operation.status == "failed":
+            status.connection_status_reason = latest_failed.details
+        status.next_step = self._oauth_target_next_steps(provider_key, status)[0]
+        return status
 
     def _oauth_target_next_steps(self, provider_key: str, status: OAuthAccountTargetStatus) -> list[str]:
         steps: list[str] = []
@@ -362,6 +669,7 @@ class ControlPlaneOAuthTargetsDomainMixin:
         )
         status = OAuthAccountTargetStatus(
             provider_key=provider_key,
+            provider_label=self._oauth_target_provider_label(provider_key),
             configured=configured,
             runtime_bridge_enabled=runtime_bridge_enabled,
             probe_enabled=probe_enabled,
@@ -385,7 +693,7 @@ class ControlPlaneOAuthTargetsDomainMixin:
         if configured and not self._native_oauth_bridge_path_enabled(status):
             status.readiness = "partial"
             status.readiness_reason = f"{status.readiness_reason}{self._native_oauth_disabled_evidence_suffix(status)}"
-        return status
+        return self._hydrate_oauth_target_surface(status, tenant_id=tenant_id, instance_id=instance_id)
 
     def _oauth_target_status(
         self,
@@ -445,8 +753,9 @@ class ControlPlaneOAuthTargetsDomainMixin:
                     "release truth."
                 )
         contract_classification = "bridge-only" if configured or probe_enabled or bridge_enabled else "onboarding-only"
-        return OAuthAccountTargetStatus(
+        status = OAuthAccountTargetStatus(
             provider_key=provider_key,
+            provider_label=self._oauth_target_provider_label(provider_key),
             configured=configured,
             runtime_bridge_enabled=bridge_enabled,
             probe_enabled=probe_enabled,
@@ -465,6 +774,7 @@ class ControlPlaneOAuthTargetsDomainMixin:
             auth_kind="oauth_account",
             evidence=evidence,
         )
+        return self._hydrate_oauth_target_surface(status, tenant_id=tenant_id, instance_id=instance_id)
 
     def _safe_provider_status(self, provider_key: str) -> dict[str, object]:
         try:

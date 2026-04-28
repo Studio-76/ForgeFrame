@@ -933,6 +933,8 @@ def test_codex_auth_state_resolution() -> None:
     assert state.ready is True
     assert state.credential_type == "oauth_access_token"
     assert state.oauth_flow_support == "external_token_only"
+    assert state.oauth_connect_support == "device_code_not_implemented"
+    assert state.oauth_connect_summary is not None
     assert state.oauth_operator_truth is not None
     assert "does not initiate or complete" in state.oauth_operator_truth
     assert "device/hosted code" in state.oauth_operator_truth

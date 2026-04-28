@@ -1059,14 +1059,14 @@ export function useProvidersControlPlane(
       const response = await probeAllOauthAccountProviders(instanceId);
       setOperationResult(JSON.stringify(response, null, 2));
       await load();
-    }, "OAuth probe failed.", "mutate");
+    }, "OAuth probe failed.", "operate");
 
   const probeOauthTarget = async (providerKey: string) =>
     withAction(async () => {
       const response = await probeOauthAccountProvider(providerKey, instanceId);
       setOperationResult(JSON.stringify(response, null, 2));
       await load();
-    }, "OAuth probe failed.", "mutate");
+    }, "OAuth probe failed.", "operate");
 
   const data: ProvidersPageData = {
     state,

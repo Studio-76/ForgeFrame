@@ -47,6 +47,7 @@ globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
 const operatorAccess: ProvidersAccessState = {
   canRead: true,
+  canOperate: true,
   canExportRedacted: true,
   canExportFull: false,
   canMutate: true,

@@ -15,6 +15,107 @@ PRIMARY_ENV_PREFIX = "FORGEFRAME_"
 LEGACY_ENV_PREFIX = "FORGEGATE_"
 _ENV_FILES = (".env",)
 
+OAUTH_TARGET_PROVIDER_LABELS: dict[str, str] = {
+    "openai_codex": "OpenAI Codex",
+    "gemini": "Gemini",
+    "antigravity": "Antigravity",
+    "github_copilot": "GitHub Copilot",
+    "claude_code": "Claude Code",
+    "nous_oauth": "Nous",
+    "qwen_oauth": "Qwen",
+}
+
+
+def _provider_env_var(suffix: str) -> str:
+    return f"{PRIMARY_ENV_PREFIX}{suffix}"
+
+
+def oauth_target_env_contract(provider_key: str, *, auth_mode: str = "oauth_account") -> dict[str, tuple[str, ...]]:
+    if provider_key == "openai_codex":
+        required = (
+            _provider_env_var("OPENAI_CODEX_API_KEY"),
+            _provider_env_var("OPENAI_CODEX_AUTH_MODE"),
+        ) if auth_mode == "api_key" else (
+            _provider_env_var("OPENAI_CODEX_OAUTH_ACCESS_TOKEN"),
+            _provider_env_var("OPENAI_CODEX_AUTH_MODE"),
+            _provider_env_var("OPENAI_CODEX_OAUTH_MODE"),
+        )
+        return {
+            "required": required,
+            "optional": (
+                _provider_env_var("OPENAI_CODEX_BRIDGE_ENABLED"),
+                _provider_env_var("OPENAI_CODEX_BASE_URL"),
+                _provider_env_var("OPENAI_CODEX_PROBE_MODEL"),
+            ),
+        }
+    if provider_key == "gemini":
+        required = (
+            _provider_env_var("GEMINI_API_KEY"),
+            _provider_env_var("GEMINI_AUTH_MODE"),
+        ) if auth_mode == "api_key" else (
+            _provider_env_var("GEMINI_OAUTH_ACCESS_TOKEN"),
+            _provider_env_var("GEMINI_AUTH_MODE"),
+        )
+        return {
+            "required": required,
+            "optional": (
+                _provider_env_var("GEMINI_PROBE_ENABLED"),
+                _provider_env_var("GEMINI_PROBE_BASE_URL"),
+                _provider_env_var("GEMINI_PROBE_MODEL"),
+            ),
+        }
+    contracts: dict[str, dict[str, tuple[str, ...]]] = {
+        "antigravity": {
+            "required": (_provider_env_var("ANTIGRAVITY_OAUTH_ACCESS_TOKEN"),),
+            "optional": (
+                _provider_env_var("ANTIGRAVITY_PROBE_ENABLED"),
+                _provider_env_var("ANTIGRAVITY_BRIDGE_PROFILE_ENABLED"),
+                _provider_env_var("ANTIGRAVITY_PROBE_BASE_URL"),
+                _provider_env_var("ANTIGRAVITY_PROBE_MODEL"),
+            ),
+        },
+        "github_copilot": {
+            "required": (_provider_env_var("GITHUB_COPILOT_OAUTH_ACCESS_TOKEN"),),
+            "optional": (
+                _provider_env_var("GITHUB_COPILOT_PROBE_ENABLED"),
+                _provider_env_var("GITHUB_COPILOT_BRIDGE_PROFILE_ENABLED"),
+                _provider_env_var("GITHUB_COPILOT_PROBE_BASE_URL"),
+                _provider_env_var("GITHUB_COPILOT_PROBE_MODEL"),
+            ),
+        },
+        "claude_code": {
+            "required": (_provider_env_var("CLAUDE_CODE_OAUTH_ACCESS_TOKEN"),),
+            "optional": (
+                _provider_env_var("CLAUDE_CODE_PROBE_ENABLED"),
+                _provider_env_var("CLAUDE_CODE_BRIDGE_PROFILE_ENABLED"),
+                _provider_env_var("CLAUDE_CODE_PROBE_BASE_URL"),
+                _provider_env_var("CLAUDE_CODE_PROBE_MODEL"),
+            ),
+        },
+        "nous_oauth": {
+            "required": (
+                _provider_env_var("NOUS_OAUTH_ACCESS_TOKEN"),
+                _provider_env_var("NOUS_OAUTH_RUNTIME_AGENT_KEY"),
+            ),
+            "optional": (
+                _provider_env_var("NOUS_OAUTH_PROBE_ENABLED"),
+                _provider_env_var("NOUS_OAUTH_BRIDGE_PROFILE_ENABLED"),
+                _provider_env_var("NOUS_OAUTH_PROBE_BASE_URL"),
+                _provider_env_var("NOUS_OAUTH_PROBE_MODEL"),
+            ),
+        },
+        "qwen_oauth": {
+            "required": (_provider_env_var("QWEN_OAUTH_ACCESS_TOKEN"),),
+            "optional": (
+                _provider_env_var("QWEN_OAUTH_PROBE_ENABLED"),
+                _provider_env_var("QWEN_OAUTH_BRIDGE_PROFILE_ENABLED"),
+                _provider_env_var("QWEN_OAUTH_PROBE_BASE_URL"),
+                _provider_env_var("QWEN_OAUTH_PROBE_MODEL"),
+            ),
+        },
+    }
+    return contracts.get(provider_key, {"required": tuple(), "optional": tuple()})
+
 def _coerce_env_value(value: str) -> str:
     return value.strip().strip('"').strip("'")
 

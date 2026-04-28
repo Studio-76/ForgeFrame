@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import Any, Literal, Protocol, cast
 
+from app.api.admin.control_plane_models import OAuthTargetOperationSnapshot
 from app.control_plane import OAuthOperationRecord
 from app.tenancy import DEFAULT_BOOTSTRAP_TENANT_ID, effective_tenant_filter, normalize_tenant_id
 
@@ -38,6 +39,17 @@ class SqlBackedOAuthOperationsRepository(Protocol):
 
 
 class ControlPlaneOAuthOperationsDomainMixin:
+    @staticmethod
+    def _oauth_operation_snapshot(item: OAuthOperationRecord | None) -> OAuthTargetOperationSnapshot | None:
+        if item is None:
+            return None
+        return OAuthTargetOperationSnapshot(
+            action=item.action,
+            status=item.status,
+            details=item.details,
+            executed_at=item.executed_at,
+        )
+
     @staticmethod
     def _oauth_operation_matches_instance_scope(
         item: OAuthOperationRecord,

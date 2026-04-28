@@ -7,7 +7,7 @@ import { useInstanceCatalog } from "../app/useInstanceCatalog";
 import { InstanceScopeCard } from "../components/InstanceScopeCard";
 import { PageIntro } from "../components/PageIntro";
 import { BlockedState } from "../components/ui/StateBlocks";
-import { ExpansionTargetsSection, OperationResultSection } from "../features/providers/ProvidersSections";
+import { OAuthTargetsSection, OperationResultSection } from "../features/providers/ProvidersSections";
 import { getProvidersAccess } from "../features/providers/providersShared";
 import { useProvidersControlPlane } from "../features/providers/useProvidersControlPlane";
 
@@ -100,7 +100,7 @@ export function OAuthTargetsPage() {
       ) : (
         <div className="fg-stack">
           <OperationResultSection data={data} actions={actions} />
-          <ExpansionTargetsSection data={data} actions={actions} />
+          <OAuthTargetsSection data={data} actions={actions} />
         </div>
       )}
     </section>

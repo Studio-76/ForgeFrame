@@ -368,11 +368,18 @@ def test_admin_oauth_account_targets_are_read_only_and_keep_native_targets_parti
     assert codex["cost_posture"].startswith("avoided-cost")
     assert "pre-issued access token" in codex["operator_truth"]
     assert "pre-issued access token" in codex["readiness_reason"]
+    assert codex["provider_label"] == "OpenAI Codex"
+    assert codex["connection_status"] == "token present"
+    assert "device/hosted-code flow" in codex["connection_method"]
+    assert "FORGEFRAME_OPENAI_CODEX_OAUTH_ACCESS_TOKEN" in codex["setup"]["required_env_vars"]
+    assert any(item["action_key"] == "device_code" for item in codex["actions"])
+    assert any(item["action_key"] == "probe" and item["mode"] == "api" for item in codex["actions"])
     assert codex["evidence"]["live_probe"]["status"] == "missing"
     assert gemini["readiness"] == "partial"
     assert gemini["contract_classification"] == "partial-runtime"
     assert gemini["auth_kind"] == "oauth_account"
     assert gemini["oauth_mode"] is None
+    assert gemini["connection_status"] == "token present"
     assert gemini["evidence"]["live_probe"]["status"] == "missing"
 
 
@@ -398,11 +405,14 @@ def test_admin_oauth_account_targets_preserve_native_api_key_auth_kind(
     assert codex["auth_kind"] == "api_key"
     assert codex["oauth_mode"] is None
     assert codex["oauth_flow_support"] is None
+    assert codex["connection_status"] == "oauth unsupported"
+    assert "API-key mode" in codex["connection_method"]
 
     assert gemini["configured"] is True
     assert gemini["auth_kind"] == "api_key"
     assert gemini["oauth_mode"] is None
     assert gemini["oauth_flow_support"] is None
+    assert gemini["connection_status"] == "oauth unsupported"
 
 
 def test_admin_oauth_account_targets_demote_codex_after_bridge_disable_even_with_historical_probe_evidence(
@@ -775,6 +785,8 @@ def test_admin_oauth_account_targets_keep_bridge_only_targets_partial_even_after
     assert targets_response.status_code == 200
     antigravity = next(item for item in targets_response.json()["targets"] if item["provider_key"] == "antigravity")
     assert antigravity["readiness"] == "partial"
+    assert antigravity["connection_status"] == "bridge-only"
+    assert any(item["action_key"] == "bridge_sync" and item["mode"] == "api" for item in antigravity["actions"])
     assert antigravity["evidence"]["live_probe"]["status"] == "observed"
     assert "bridge-only" in antigravity["readiness_reason"]
 
@@ -783,6 +795,31 @@ def test_admin_oauth_account_targets_keep_bridge_only_targets_partial_even_after
     antigravity_target = next(item for item in axis_targets_response.json()["targets"] if item["provider_key"] == "antigravity")
     assert antigravity_target["readiness"] == "partial"
     assert antigravity_target["verify_probe_readiness"] == "ready"
+
+
+def test_admin_oauth_account_targets_surface_latest_failed_probe_status(
+    monkeypatch,
+) -> None:
+    monkeypatch.setenv("FORGEGATE_OPENAI_CODEX_BRIDGE_ENABLED", "true")
+    monkeypatch.setenv("FORGEGATE_OPENAI_CODEX_OAUTH_ACCESS_TOKEN", "token")
+    clear_runtime_dependency_caches()
+    get_control_plane_service.cache_clear()
+
+    service = get_control_plane_service()
+    service._record_oauth_operation(  # type: ignore[attr-defined]
+        "openai_codex",
+        "probe",
+        "failed",
+        "Codex probe failed: upstream returned 401 unauthorized.",
+        "2026-04-22T00:04:00+00:00",
+    )
+
+    targets_response = client.get("/admin/providers/oauth-account/targets", headers=_admin_headers())
+    assert targets_response.status_code == 200
+    codex = next(item for item in targets_response.json()["targets"] if item["provider_key"] == "openai_codex")
+    assert codex["connection_status"] == "needs refresh"
+    assert codex["last_failed_operation"]["status"] == "failed"
+    assert "401 unauthorized" in codex["last_failed_operation"]["details"]
 
 
 def test_admin_product_axis_targets_keep_bridge_only_probe_truth_planned_without_current_configuration_even_with_historical_probe_evidence(

@@ -1545,6 +1545,7 @@ export type CompatibilityMatrixRow = {
 
 export type OauthTargetStatus = {
   provider_key: string;
+  provider_label: string;
   configured: boolean;
   runtime_bridge_enabled: boolean;
   probe_enabled: boolean;
@@ -1563,6 +1564,42 @@ export type OauthTargetStatus = {
   auth_kind: "oauth_account" | "api_key";
   oauth_mode?: string | null;
   oauth_flow_support?: string | null;
+  connection_status: "not configured" | "token present" | "bridge-only" | "oauth unsupported" | "runtime-ready" | "probe failed" | "expired" | "needs refresh";
+  connection_status_reason: string;
+  connection_method: string;
+  setup: {
+    summary: string;
+    required_env_vars: string[];
+    optional_env_vars: string[];
+    missing_env_vars: string[];
+    steps: string[];
+  };
+  actions: Array<{
+    action_key: "connect" | "manual_token" | "device_code" | "bridge_sync" | "probe" | "disconnect";
+    label: string;
+    mode: "api" | "manual" | "unsupported";
+    supported: boolean;
+    detail: string;
+  }>;
+  last_probe?: {
+    action: string;
+    status: string;
+    details: string;
+    executed_at?: string | null;
+  } | null;
+  last_bridge_sync?: {
+    action: string;
+    status: string;
+    details: string;
+    executed_at?: string | null;
+  } | null;
+  last_failed_operation?: {
+    action: string;
+    status: string;
+    details: string;
+    executed_at?: string | null;
+  } | null;
+  next_step: string;
   evidence: ProviderCapabilityEvidenceRecord;
 };
 

@@ -78,7 +78,83 @@ function createScopedNoReadSession(): AdminSessionUser {
   });
 }
 
-function createData(access: ProvidersAccessState): ProvidersPageData {
+function createOauthTarget(overrides: Partial<ProvidersPageData["oauthTargets"][number]> = {}): ProvidersPageData["oauthTargets"][number] {
+  return {
+    provider_key: "openai_codex",
+    provider_label: "OpenAI Codex",
+    configured: true,
+    runtime_bridge_enabled: false,
+    probe_enabled: false,
+    harness_profile_enabled: false,
+    contract_classification: "onboarding-only",
+    queue_lane: "not_applicable",
+    parallelism_mode: "not_applicable",
+    parallelism_limit: null,
+    session_reuse_strategy: "No managed refresh.",
+    escalation_support: "not_modeled_in_oauth_axis",
+    cost_posture: "avoided-cost",
+    operator_surface: "/oauth-targets",
+    operator_truth: "ForgeFrame consumes a pre-issued access token for Codex OAuth mode.",
+    readiness: "partial",
+    readiness_reason: "Codex OAuth mode is configured, but the native runtime bridge is still disabled.",
+    auth_kind: "oauth_account",
+    oauth_mode: "manual_redirect_completion",
+    oauth_flow_support: "external_token_only",
+    connection_status: "token present",
+    connection_status_reason: "Token is present, but runtime proof is still missing.",
+    connection_method: "Codex OAuth via manual redirect completion with an externally supplied access token.",
+    setup: {
+      summary: "Setup is external-only.",
+      required_env_vars: ["FORGEFRAME_OPENAI_CODEX_OAUTH_ACCESS_TOKEN", "FORGEFRAME_OPENAI_CODEX_AUTH_MODE"],
+      optional_env_vars: ["FORGEFRAME_OPENAI_CODEX_BRIDGE_ENABLED"],
+      missing_env_vars: ["FORGEFRAME_OPENAI_CODEX_BRIDGE_ENABLED"],
+      steps: ["Set the required env vars outside ForgeFrame and reload the runtime."],
+    },
+    actions: [
+      {
+        action_key: "manual_token",
+        label: "Manuell Token hinterlegen",
+        mode: "manual",
+        supported: true,
+        detail: "Use an externally supplied token.",
+      },
+      {
+        action_key: "connect",
+        label: "Verbinden",
+        mode: "unsupported",
+        supported: false,
+        detail: "ForgeFrame does not ship an in-product Codex OAuth connect flow.",
+      },
+      {
+        action_key: "probe",
+        label: "Verbindung testen",
+        mode: "api",
+        supported: true,
+        detail: "Runs the real probe path.",
+      },
+      {
+        action_key: "disconnect",
+        label: "Trennen",
+        mode: "manual",
+        supported: true,
+        detail: "Remove the token outside ForgeFrame.",
+      },
+    ],
+    last_probe: null,
+    last_bridge_sync: null,
+    last_failed_operation: null,
+    next_step: "Enable native runtime bridge for openai_codex.",
+    evidence: {
+      runtime: { status: "missing", source: "none", recorded_at: null, details: "No runtime evidence." },
+      streaming: { status: "missing", source: "none", recorded_at: null, details: "No streaming evidence." },
+      tool_calling: { status: "missing", source: "none", recorded_at: null, details: "No tool evidence." },
+      live_probe: { status: "missing", source: "none", recorded_at: null, details: "No probe evidence." },
+    },
+    ...overrides,
+  };
+}
+
+function createData(access: ProvidersAccessState, overrides: Partial<ProvidersPageData> = {}): ProvidersPageData {
   return {
     state: "success",
     error: null,
@@ -154,6 +230,7 @@ function createData(access: ProvidersAccessState): ProvidersPageData {
       models: "",
       stream_enabled: false,
     },
+    ...overrides,
   };
 }
 
@@ -170,6 +247,13 @@ describe("OAuth targets page", () => {
   });
 
   it("renders the dedicated OAuth operator surface", () => {
+    mockedUseProvidersControlPlane.mockImplementation((access: ProvidersAccessState) => ({
+      data: createData(access, {
+        oauthTargets: [createOauthTarget()],
+      }),
+      actions: createActions(),
+    }));
+
     const markup = renderToStaticMarkup(
       withAppContext({
         path: "/oauth-targets",
@@ -181,7 +265,11 @@ describe("OAuth targets page", () => {
     expect(markup).toContain("OAuth Targets &amp; Operations");
     expect(markup).toContain("Which OAuth/account target are you classifying, probing, or de-risking right now?");
     expect(markup).toContain(">OAuth Targets<");
-    expect(markup).toContain(">Product Axis Contracts</h3>");
+    expect(markup).toContain(">OAuth Provider Connections</h3>");
+    expect(markup).toContain("OpenAI Codex");
+    expect(markup).toContain("Manuell Token hinterlegen");
+    expect(markup).toContain("Verbindung testen");
+    expect(markup).toContain("Advanced Diagnostics");
   });
 
   it("forwards instance scope from the route into the shared providers hook", () => {
@@ -212,7 +300,7 @@ describe("OAuth targets page", () => {
     expect(markup).toContain('href="/usage?instanceId=instance_alpha"');
   });
 
-  it("only shows mutating OAuth target controls on the instance that grants write access", () => {
+  it("keeps probe controls for operate-only access but reserves bridge sync for write-capable sessions", () => {
     const alphaMarkup = renderToStaticMarkup(
       withAppContext({
         path: "/oauth-targets?instanceId=instance_alpha",
@@ -230,8 +318,10 @@ describe("OAuth targets page", () => {
 
     expect(alphaMarkup).toContain("Operator mutations enabled");
     expect(alphaMarkup).toContain("Probe all OAuth targets");
+    expect(alphaMarkup).toContain("Sync OAuth bridge profiles");
     expect(betaMarkup).not.toContain("Operator mutations enabled");
-    expect(betaMarkup).not.toContain("Probe all OAuth targets");
+    expect(betaMarkup).toContain("Probe all OAuth targets");
+    expect(betaMarkup).not.toContain("Sync OAuth bridge profiles");
     expect(betaMarkup).toContain("Operate only");
   });
 
@@ -246,7 +336,7 @@ describe("OAuth targets page", () => {
 
     expect(markup).toContain("Read access required");
     expect(markup).toContain("the backend will return 403 until providers.read is granted here");
-    expect(markup).not.toContain(">Product Axis Contracts</h3>");
+    expect(markup).not.toContain(">OAuth Provider Connections</h3>");
     expect(markup).not.toContain("Probe all OAuth targets");
   });
 });

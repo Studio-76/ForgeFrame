@@ -102,6 +102,86 @@ function createEvidence(
   };
 }
 
+function createOauthTarget(overrides: Partial<ProvidersPageData["oauthTargets"][number]> = {}): ProvidersPageData["oauthTargets"][number] {
+  return {
+    provider_key: "github_copilot",
+    provider_label: "GitHub Copilot",
+    configured: true,
+    runtime_bridge_enabled: true,
+    probe_enabled: true,
+    harness_profile_enabled: true,
+    contract_classification: "bridge-only",
+    queue_lane: "bridge_probe_only",
+    parallelism_mode: "not_enforced",
+    parallelism_limit: null,
+    session_reuse_strategy: "Pre-issued OAuth access token is forwarded through bridge/profile operations only; no managed refresh or session reuse contract exists.",
+    escalation_support: "native_runtime_unavailable",
+    cost_posture: "avoided-cost is tracked while direct provider billing stays outside ForgeFrame.",
+    operator_surface: "/oauth-targets",
+    operator_truth: "ForgeFrame can probe or sync bridge profiles for this target, but no native runtime lane is shipped for it in the current release truth.",
+    readiness: "partial",
+    readiness_reason: "Live probe evidence is recorded, but this target remains onboarding/bridge-only in the current release truth.",
+    auth_kind: "oauth_account",
+    oauth_mode: null,
+    oauth_flow_support: null,
+    connection_status: "bridge-only",
+    connection_status_reason: "Live probe evidence is recorded, but this target remains onboarding/bridge-only in the current release truth.",
+    connection_method: "Bridge-only portal OAuth token forwarded through probe and harness bridge profile paths.",
+    setup: {
+      summary: "Setup is external-only and bridge-scoped.",
+      required_env_vars: ["FORGEFRAME_GITHUB_COPILOT_OAUTH_ACCESS_TOKEN"],
+      optional_env_vars: ["FORGEFRAME_GITHUB_COPILOT_PROBE_ENABLED", "FORGEFRAME_GITHUB_COPILOT_BRIDGE_PROFILE_ENABLED"],
+      missing_env_vars: [],
+      steps: ["Use bridge profile sync only after the base URL, token, and probe model reflect the real upstream runtime lane."],
+    },
+    actions: [
+      {
+        action_key: "manual_token",
+        label: "Manuell Token hinterlegen",
+        mode: "manual",
+        supported: true,
+        detail: "Bridge-only providers still rely on externally supplied portal tokens.",
+      },
+      {
+        action_key: "bridge_sync",
+        label: "Bridge-Profil synchronisieren",
+        mode: "api",
+        supported: true,
+        detail: "Upserts or refreshes the saved harness bridge profile for this provider.",
+      },
+      {
+        action_key: "probe",
+        label: "Verbindung testen",
+        mode: "api",
+        supported: true,
+        detail: "Runs the real probe path for this target.",
+      },
+      {
+        action_key: "disconnect",
+        label: "Trennen",
+        mode: "manual",
+        supported: true,
+        detail: "Remove or replace the relevant env token outside ForgeFrame and reload the runtime.",
+      },
+    ],
+    last_probe: {
+      action: "probe",
+      status: "ok",
+      details: "Probe evidence recorded.",
+      executed_at: "2026-04-21T20:10:00Z",
+    },
+    last_bridge_sync: null,
+    last_failed_operation: null,
+    next_step: "Keep github_copilot positioned as onboarding/bridge-only; probe success does not promote it to native runtime-ready truth.",
+    evidence: createEvidence({
+      runtime: { status: "missing", source: "none", recorded_at: null, details: "No native runtime proof recorded for this target." },
+      streaming: { status: "missing", source: "none", recorded_at: null, details: "No streaming proof recorded for this target." },
+      tool_calling: { status: "missing", source: "none", recorded_at: null, details: "No tool-calling proof recorded for this target." },
+    }),
+    ...overrides,
+  };
+}
+
 function createData(sessionOverrides: Partial<AdminSessionUser> = {}): ProvidersPageData {
   return {
     state: "success",
@@ -476,55 +556,10 @@ describe("Provider readiness axes", () => {
         verify_probe_readiness: "ready",
       },
     ];
-    data.oauthTargets = [
-      {
-        provider_key: "github_copilot",
-        configured: true,
-        runtime_bridge_enabled: true,
-        probe_enabled: true,
-        harness_profile_enabled: true,
-        readiness: "partial",
-        contract_classification: "bridge-only",
-        queue_lane: "bridge_probe_only",
-        parallelism_mode: "not_enforced",
-        parallelism_limit: null,
-        session_reuse_strategy: "Pre-issued OAuth access token is forwarded through bridge/profile operations only; no managed refresh or session reuse contract exists.",
-        escalation_support: "native_runtime_unavailable",
-        cost_posture: "avoided-cost is tracked while direct provider billing stays outside ForgeFrame.",
-        operator_surface: "/oauth-targets",
-        operator_truth: "ForgeFrame can probe or sync bridge profiles for this target, but no native runtime lane is shipped for it in the current release truth.",
-        evidence: createEvidence({
-          runtime: { status: "missing", source: "none", recorded_at: null, details: "No native runtime proof recorded for this target." },
-          streaming: { status: "missing", source: "none", recorded_at: null, details: "No streaming proof recorded for this target." },
-          tool_calling: { status: "missing", source: "none", recorded_at: null, details: "No tool-calling proof recorded for this target." },
-        }),
-      },
-    ];
+    data.oauthTargets = [createOauthTarget()];
     data.oauthOnboarding = [
       {
-        provider_key: "github_copilot",
-        readiness: "partial",
-        contract_classification: "bridge-only",
-        queue_lane: "bridge_probe_only",
-        parallelism_mode: "not_enforced",
-        parallelism_limit: null,
-        session_reuse_strategy: "Pre-issued OAuth access token is forwarded through bridge/profile operations only; no managed refresh or session reuse contract exists.",
-        escalation_support: "native_runtime_unavailable",
-        cost_posture: "avoided-cost is tracked while direct provider billing stays outside ForgeFrame.",
-        operator_surface: "/oauth-targets",
-        operator_truth: "ForgeFrame can probe or sync bridge profiles for this target, but no native runtime lane is shipped for it in the current release truth.",
-        configured: true,
-        runtime_bridge_enabled: true,
-        probe_enabled: true,
-        harness_profile_enabled: true,
-        auth_kind: "oauth_account",
-        oauth_mode: null,
-        oauth_flow_support: null,
-        evidence: createEvidence({
-          runtime: { status: "missing", source: "none", recorded_at: null, details: "No native runtime proof recorded for this target." },
-          streaming: { status: "missing", source: "none", recorded_at: null, details: "No streaming proof recorded for this target." },
-          tool_calling: { status: "missing", source: "none", recorded_at: null, details: "No tool-calling proof recorded for this target." },
-        }),
+        ...createOauthTarget(),
         operational_depth: "bridge_probe_evidenced",
         readiness_reason: "Live probe evidence is recorded, but this target remains onboarding/bridge-only in the current release truth.",
         next_steps: ["Keep github_copilot positioned as onboarding/bridge-only; probe success does not promote it to native runtime-ready truth."],
@@ -533,12 +568,11 @@ describe("Provider readiness axes", () => {
 
     const markup = renderToStaticMarkup(<ExpansionTargetsSection data={data} actions={createActions()} />);
 
-    expect(markup).toContain("onboarding ready");
-    expect(markup).toContain("onboarding status=partial");
-    expect(markup).toContain("Evidence &amp; Proof");
-    expect(markup).toContain("observability axis=partial");
-    expect(markup).toContain("live probe · status=observed");
-    expect(markup).not.toContain("readiness=partial");
+    expect(markup).toContain("GitHub Copilot");
+    expect(markup).toContain("bridge-only");
+    expect(markup).toContain("Next step:");
+    expect(markup).toContain("Advanced Diagnostics");
+    expect(markup).toContain("Probe evidence:");
   });
 
   it("shows the blocked provider state for viewer sessions without scoped read access", () => {
@@ -589,6 +623,7 @@ describe("Provider readiness axes", () => {
 
   it("keeps routine provider mutations visible for admin sessions", () => {
     const data = createData();
+    data.oauthTargets = [createOauthTarget()];
     const markup = renderToStaticMarkup(
       <>
         <ProvidersOverviewSection data={data} actions={createActions()} />
@@ -609,6 +644,6 @@ describe("Provider readiness axes", () => {
     expect(markup).toContain("Create provider");
     expect(markup).toContain("Save label");
     expect(markup).toContain("Sync OAuth bridge profiles");
-    expect(markup).toContain("Probe OAuth target");
+    expect(markup).toContain("Verbindung testen");
   });
 });
