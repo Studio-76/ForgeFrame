@@ -284,6 +284,66 @@ def test_probe_and_run_history_redact_echoed_secrets_for_operator_and_read_only_
     assert "***redacted***" in runs_payload["ops"]["last_failed_run"]["error"]
 
 
+def test_harness_preview_and_verify_include_recorded_run_and_runs_summary_counts() -> None:
+    client = TestClient(app)
+    admin_headers = _admin_headers(client)
+    provider_key = f"preview-verify-summary-{uuid4().hex[:8]}"
+    _seed_harness_profile(client, admin_headers, provider_key=provider_key, auth_value="preview-secret")
+
+    preview = client.post(
+        "/admin/providers/harness/preview",
+        headers=admin_headers,
+        json={
+            "provider_key": provider_key,
+            "model": "model-alpha",
+            "message": "preview me",
+            "stream": False,
+        },
+    )
+    assert preview.status_code == 200
+    preview_payload = preview.json()
+    assert preview_payload["run"]["mode"] == "preview"
+    assert preview_payload["run"]["provider_key"] == provider_key
+
+    dry_run = client.post(
+        "/admin/providers/harness/dry-run",
+        headers=admin_headers,
+        json={
+            "provider_key": provider_key,
+            "model": "model-alpha",
+            "message": "dry run me",
+            "stream": False,
+        },
+    )
+    assert dry_run.status_code == 200
+    assert dry_run.json()["run"]["mode"] == "dry_run"
+
+    verify = client.post(
+        "/admin/providers/harness/verify",
+        headers=admin_headers,
+        json={
+            "provider_key": provider_key,
+            "model": "model-alpha",
+            "include_preview": True,
+            "live_probe": False,
+        },
+    )
+    assert verify.status_code == 200
+    verify_payload = verify.json()
+    assert verify_payload["verification"]["run"]["mode"] == "verify"
+    assert verify_payload["verification"]["run"]["provider_key"] == provider_key
+
+    runs = client.get(
+        f"/admin/providers/harness/runs?provider_key={provider_key}",
+        headers=admin_headers,
+    )
+    assert runs.status_code == 200
+    runs_payload = runs.json()
+    assert runs_payload["summary"]["preview"] == 1
+    assert runs_payload["summary"]["dry_run"] == 1
+    assert runs_payload["ops"]["last_runs_by_provider"][provider_key]["mode"] == "verify"
+
+
 def test_provider_truth_axes_redact_historical_harness_failures_for_operator_and_read_only_sessions() -> None:
     client = TestClient(app)
     admin_headers = _admin_headers(client)

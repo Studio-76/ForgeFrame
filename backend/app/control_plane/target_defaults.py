@@ -127,7 +127,7 @@ def build_default_target_record(
     default_model: str | None = None,
     default_provider: str | None = None,
 ) -> ManagedProviderTargetRecord:
-    technical_capabilities = provider_technical_capabilities(provider.provider)
+    technical_capabilities = dict(model.capabilities or provider_technical_capabilities(provider.provider))
     execution_traits = provider_execution_traits(provider.provider)
     policy_flags = provider_policy_flags(provider.provider)
     economic_profile = provider_economic_profile(provider.provider)

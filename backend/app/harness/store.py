@@ -12,6 +12,19 @@ class HarnessStore:
     def __init__(self, *, repository: HarnessRepository):
         self._repository = repository
 
+    def _record_run_instance_id(self, run: HarnessVerificationRun) -> str | None:
+        normalized_instance_id = (run.instance_id or "").strip() or None
+        if normalized_instance_id is not None:
+            return normalized_instance_id
+        matching_profiles = [
+            profile
+            for profile in self._repository.list_profiles()
+            if profile.provider_key == run.provider_key
+        ]
+        if len(matching_profiles) != 1:
+            return None
+        return (matching_profiles[0].instance_id or "").strip() or None
+
     def list_profiles(self, instance_id: str | None = None) -> list[HarnessProfileRecord]:
         return self._repository.list_profiles(instance_id)
 
@@ -43,7 +56,12 @@ class HarnessStore:
         )
 
     def record_run(self, run: HarnessVerificationRun) -> HarnessVerificationRun:
-        return self._repository.record_run(run)
+        resolved_instance_id = self._record_run_instance_id(run)
+        if resolved_instance_id is None:
+            return self._repository.record_run(run)
+        return self._repository.record_run(
+            run.model_copy(update={"instance_id": resolved_instance_id})
+        )
 
     def list_runs(self, query: HarnessRunQuery | None = None) -> list[HarnessVerificationRun]:
         return self._repository.list_runs(query)

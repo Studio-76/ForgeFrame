@@ -21,6 +21,9 @@ function createActions(): ProvidersPageActions {
     setNewHarness: (() => undefined) as ProvidersPageActions["setNewHarness"],
     setProviderLabelDraft: () => undefined,
     runHarnessAction: noopAsync,
+    previewHarnessProfile: noopAsync,
+    verifyHarnessProfile: noopAsync,
+    dryRunHarnessProfile: noopAsync,
     probeHarnessProfile: noopAsync,
     toggleHarnessProfile: noopAsync,
     deleteHarnessProfile: noopAsync,
@@ -107,6 +110,7 @@ function createData(access: ProvidersAccessState): ProvidersPageData {
       client: "all",
     },
     operationResult: "",
+    lastHarnessAction: null,
     syncNote: "",
     healthConfig: null,
     newProvider: {
@@ -228,7 +232,7 @@ describe("OAuth targets page", () => {
     expect(alphaMarkup).toContain("Probe all OAuth targets");
     expect(betaMarkup).not.toContain("Operator mutations enabled");
     expect(betaMarkup).not.toContain("Probe all OAuth targets");
-    expect(betaMarkup).toContain("Read only");
+    expect(betaMarkup).toContain("Operate only");
   });
 
   it("shows an honest blocked state when the session lacks scoped providers.read", () => {

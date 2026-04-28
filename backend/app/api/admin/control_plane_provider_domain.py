@@ -84,6 +84,18 @@ class ControlPlaneProviderDomainMixin:
             return "degraded"
         return "healthy"
 
+    @staticmethod
+    def _generic_harness_model_capabilities(profile) -> dict[str, object]:
+        return {
+            "streaming": bool(profile.capabilities.streaming and profile.stream_mapping.enabled),
+            "tool_calling": bool(profile.capabilities.tool_calling),
+            "vision": bool(profile.capabilities.vision),
+            "responses": bool(profile.capabilities.responses),
+            "embeddings": bool(profile.capabilities.embeddings),
+            "discovery_support": bool(profile.capabilities.discovery_support),
+            "reasoning_band": "bridge",
+        }
+
     def _bootstrap_provider_state(self) -> dict[str, ManagedProviderRecord]:
         provider_map: dict[str, ManagedProviderRecord] = {}
         for model in self._registry.list_active_models():
@@ -425,12 +437,14 @@ class ControlPlaneProviderDomainMixin:
                     profile_model_ids = {item.model for item in sync_state.model_inventory}
                     for item in sync_state.model_inventory:
                         model_id = item.model
+                        model_capabilities = self._generic_harness_model_capabilities(sync_state)
                         if model_id in existing_map:
                             existing_map[model_id].source = item.source
                             existing_map[model_id].discovery_status = sync_state.last_sync_status
                             existing_map[model_id].active = item.active
                             existing_map[model_id].owned_by = provider.label or provider.provider
                             existing_map[model_id].display_name = model_id
+                            existing_map[model_id].capabilities = dict(model_capabilities)
                             existing_map[model_id].runtime_status = "partial" if item.active else "unavailable"
                             existing_map[model_id].availability_status = "healthy" if item.active else "unavailable"
                             existing_map[model_id].status_reason = sync_state.last_sync_status
@@ -447,6 +461,7 @@ class ControlPlaneProviderDomainMixin:
                                         owned_by=provider.label or provider.provider,
                                         display_name=model_id,
                                         category="general",
+                                        capabilities=dict(model_capabilities),
                                         runtime_status="partial" if item.active else "unavailable",
                                         availability_status="healthy" if item.active else "unavailable",
                                         status_reason=sync_state.last_sync_status,

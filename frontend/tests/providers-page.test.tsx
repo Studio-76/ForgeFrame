@@ -21,6 +21,9 @@ function createActions(): ProvidersPageActions {
     setNewHarness: (() => undefined) as ProvidersPageActions["setNewHarness"],
     setProviderLabelDraft: () => undefined,
     runHarnessAction: noopAsync,
+    previewHarnessProfile: noopAsync,
+    verifyHarnessProfile: noopAsync,
+    dryRunHarnessProfile: noopAsync,
     probeHarnessProfile: noopAsync,
     toggleHarnessProfile: noopAsync,
     deleteHarnessProfile: noopAsync,
@@ -128,6 +131,7 @@ function createData(access: ProvidersAccessState): ProvidersPageData {
       client: "all",
     },
     operationResult: "",
+    lastHarnessAction: null,
     syncNote: "",
     healthConfig: {
       provider_health_enabled: true,
@@ -314,7 +318,7 @@ describe("Providers page hierarchy", () => {
     expect(alphaMarkup).toContain("Sync all providers");
     expect(betaMarkup).not.toContain("Operator mutations enabled");
     expect(betaMarkup).not.toContain("Sync all providers");
-    expect(betaMarkup).toContain("Read only");
+    expect(betaMarkup).toContain("Operate only");
   });
 
   it("shows read-only copy for impersonated sessions before the page surfaces actions", () => {

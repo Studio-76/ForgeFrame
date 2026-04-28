@@ -13,6 +13,24 @@ class ControlPlaneHarnessDomainMixin:
             return normalized_instance_id
         return getattr(getattr(self, "_instance", None), "instance_id", None)
 
+    def _latest_harness_run_payload(
+        self,
+        *,
+        provider_key: str,
+        mode: str,
+        instance_id: str | None = None,
+    ) -> dict[str, object] | None:
+        resolved_instance_id = self._resolved_harness_instance_id(instance_id)
+        runs = self._harness.list_runs(
+            provider_key,
+            instance_id=resolved_instance_id,
+            mode=mode,
+            limit=1,
+        )
+        if not runs:
+            return None
+        return _redact_sensitive_payload(runs[0].model_dump())
+
     def list_harness_templates(self) -> list[dict[str, object]]:
         return self._harness.list_templates()
 
@@ -29,8 +47,13 @@ class ControlPlaneHarnessDomainMixin:
         return self._harness.list_profiles(instance_id=self._resolved_harness_instance_id(instance_id))
 
     def harness_preview(self, payload: HarnessPreviewRequest, instance_id: str | None = None) -> dict[str, object]:
-        preview = self._harness.preview(payload, instance_id=self._resolved_harness_instance_id(instance_id))
-        return {"status": "ok", "preview": preview}
+        resolved_instance_id = self._resolved_harness_instance_id(instance_id)
+        preview = self._harness.preview(payload, instance_id=resolved_instance_id)
+        return {
+            "status": "ok",
+            "preview": preview,
+            "run": self._latest_harness_run_payload(provider_key=payload.provider_key, mode="preview", instance_id=resolved_instance_id),
+        }
 
     def harness_dry_run(self, payload: HarnessPreviewRequest, instance_id: str | None = None) -> dict[str, object]:
         result = self._harness.dry_run(payload, instance_id=self._resolved_harness_instance_id(instance_id))
@@ -67,7 +90,8 @@ class ControlPlaneHarnessDomainMixin:
         return _redact_sensitive_payload({"status": "ok", **result})
 
     def verify_harness_profile(self, payload: HarnessVerificationRequest, instance_id: str | None = None) -> dict[str, object]:
-        result = self._harness.verify_profile(payload, instance_id=self._resolved_harness_instance_id(instance_id))
+        resolved_instance_id = self._resolved_harness_instance_id(instance_id)
+        result = self._harness.verify_profile(payload, instance_id=resolved_instance_id)
         for step in result.steps:
             if step["status"] in {"failed", "error"}:
                 self._analytics.record_integration_error(
@@ -81,7 +105,13 @@ class ControlPlaneHarnessDomainMixin:
                     client_id="control_plane",
                     profile_key=payload.provider_key,
                 )
-        return result.model_dump()
+        payload_dict = result.model_dump()
+        payload_dict["run"] = self._latest_harness_run_payload(
+            provider_key=payload.provider_key,
+            mode="verify",
+            instance_id=resolved_instance_id,
+        )
+        return payload_dict
 
     def harness_snapshot(self, instance_id: str | None = None) -> dict[str, object]:
         resolved_instance_id = self._resolved_harness_instance_id(instance_id)
@@ -118,16 +148,31 @@ class ControlPlaneHarnessDomainMixin:
         profiles = self._harness.list_profiles(instance_id=resolved_instance_id)
         last_failed = next((run for run in runs if not run.success), None)
         runs_by_provider: dict[str, int] = {}
+        last_runs_by_provider: dict[str, dict[str, object]] = {}
         for run in runs:
             runs_by_provider[run.provider_key] = runs_by_provider.get(run.provider_key, 0) + 1
+            if run.provider_key not in last_runs_by_provider:
+                last_runs_by_provider[run.provider_key] = _redact_sensitive_payload(run.model_dump())
+        summary = {
+            "total": len(runs),
+            "failed": len([run for run in runs if not run.success]),
+            "preview": len([run for run in runs if run.mode == "preview"]),
+            "dry_run": len([run for run in runs if run.mode == "dry_run"]),
+            "verify": len([run for run in runs if run.mode == "verify"]),
+            "probe": len([run for run in runs if run.mode == "probe"]),
+            "sync": len([run for run in runs if run.mode == "sync"]),
+            "runtime_non_stream": len([run for run in runs if run.mode == "runtime_non_stream"]),
+            "runtime_stream": len([run for run in runs if run.mode == "runtime_stream"]),
+        }
         return {
             "status": "ok",
             "runs": [_redact_sensitive_payload(item.model_dump()) for item in runs],
-            "summary": self._harness.runs_summary(provider_key, instance_id=resolved_instance_id),
+            "summary": summary,
             "ops": {
                 "profile_count": len(profiles),
                 "profiles_needing_attention": len([profile for profile in profiles if profile.needs_attention]),
                 "runs_by_provider": runs_by_provider,
+                "last_runs_by_provider": last_runs_by_provider,
                 "last_failed_run": _redact_sensitive_payload(last_failed.model_dump()) if last_failed else None,
             },
         }

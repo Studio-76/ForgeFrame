@@ -15,12 +15,18 @@ from app.providers import (
     ProviderStreamEvent,
     ProviderUnsupportedFeatureError,
 )
+from app.request_metadata import extract_scope_attributes
 
 
 class DispatchService:
     def __init__(self, routing: RoutingService, providers: ProviderRegistry):
         self._routing = routing
         self._providers = providers
+
+    @staticmethod
+    def _scoped_instance_id(request_metadata: dict[str, str] | None) -> str | None:
+        scope = extract_scope_attributes(request_metadata)
+        return (scope.get("instance_id") or "").strip() or None
 
     def dispatch_chat(
         self,
@@ -34,6 +40,7 @@ class DispatchService:
         response_controls: dict[str, object] | None = None,
     ) -> tuple[ChatDispatchResult, RouteDecision]:
         validate_tools_and_choice(tools, tool_choice)
+        scoped_instance_id = self._scoped_instance_id(request_metadata)
         require_vision = messages_require_vision(messages)
         try:
             decision = self._routing.resolve_model(
@@ -53,7 +60,10 @@ class DispatchService:
                 raise ProviderUnsupportedFeatureError("runtime", "vision") from exc
             raise
         adapter = self._providers.get(decision.resolved_model.provider)
-        provider_status = self._providers.get_provider_status(adapter.provider_name)
+        provider_status = self._providers.get_provider_status(
+            adapter.provider_name,
+            instance_id=scoped_instance_id,
+        )
         if require_vision and not bool(provider_status.get("capabilities", {}).get("vision", False)):
             raise ProviderUnsupportedFeatureError(adapter.provider_name, "vision")
         request = ChatDispatchRequest(
@@ -66,8 +76,14 @@ class DispatchService:
             response_controls=response_controls or {},
         )
 
-        if not adapter.is_ready():
-            raise ProviderNotReadyError(adapter.provider_name, adapter.readiness_reason())
+        if not self._providers.is_provider_ready(
+            adapter.provider_name,
+            instance_id=scoped_instance_id,
+        ):
+            raise ProviderNotReadyError(
+                adapter.provider_name,
+                str(provider_status.get("readiness_reason") or ""),
+            )
 
         if stream:
             raise ProviderUnsupportedFeatureError(adapter.provider_name, "streaming via dispatch_chat")
@@ -86,6 +102,7 @@ class DispatchService:
         allowed_providers: set[str] | None = None,
         request_metadata: dict[str, str] | None = None,
     ) -> tuple[EmbeddingDispatchResult, RouteDecision]:
+        scoped_instance_id = self._scoped_instance_id(request_metadata)
         decision = self._routing.resolve_model(
             requested_model,
             messages=[],
@@ -100,8 +117,18 @@ class DispatchService:
         adapter = self._providers.get(decision.resolved_model.provider)
         if not bool(getattr(adapter.capabilities, "embeddings", False)):
             raise ProviderUnsupportedFeatureError(adapter.provider_name, "embeddings")
-        if not adapter.is_ready():
-            raise ProviderNotReadyError(adapter.provider_name, adapter.readiness_reason())
+        provider_status = self._providers.get_provider_status(
+            adapter.provider_name,
+            instance_id=scoped_instance_id,
+        )
+        if not self._providers.is_provider_ready(
+            adapter.provider_name,
+            instance_id=scoped_instance_id,
+        ):
+            raise ProviderNotReadyError(
+                adapter.provider_name,
+                str(provider_status.get("readiness_reason") or ""),
+            )
         create_embeddings = getattr(adapter, "create_embeddings", None)
         if not callable(create_embeddings):
             raise ProviderUnsupportedFeatureError(adapter.provider_name, "embeddings")
@@ -126,6 +153,7 @@ class DispatchService:
         response_controls: dict[str, object] | None = None,
     ) -> tuple[str, str, Iterator[ProviderStreamEvent], RouteDecision]:
         validate_tools_and_choice(tools, tool_choice)
+        scoped_instance_id = self._scoped_instance_id(request_metadata)
         require_vision = messages_require_vision(messages)
         try:
             decision = self._routing.resolve_model(
@@ -145,7 +173,10 @@ class DispatchService:
                 raise ProviderUnsupportedFeatureError("runtime", "vision") from exc
             raise
         adapter = self._providers.get(decision.resolved_model.provider)
-        provider_status = self._providers.get_provider_status(adapter.provider_name)
+        provider_status = self._providers.get_provider_status(
+            adapter.provider_name,
+            instance_id=scoped_instance_id,
+        )
         if require_vision and not bool(provider_status.get("capabilities", {}).get("vision", False)):
             raise ProviderUnsupportedFeatureError(adapter.provider_name, "vision")
 
@@ -154,8 +185,14 @@ class DispatchService:
         if tools and not adapter.capabilities.tool_calling:
             raise ProviderUnsupportedFeatureError(adapter.provider_name, "tool_calling")
 
-        if not adapter.is_ready():
-            raise ProviderNotReadyError(adapter.provider_name, adapter.readiness_reason())
+        if not self._providers.is_provider_ready(
+            adapter.provider_name,
+            instance_id=scoped_instance_id,
+        ):
+            raise ProviderNotReadyError(
+                adapter.provider_name,
+                str(provider_status.get("readiness_reason") or ""),
+            )
 
         request = ChatDispatchRequest(
             model=decision.resolved_model.id,

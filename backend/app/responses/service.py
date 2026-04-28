@@ -886,7 +886,7 @@ class ResponsesService:
                         append_object(
                             NativeProductObjectRef(
                                 kind="response_tool_call",
-                                object_id=tool_call_row_id,
+                                object_id=call_id,
                                 relation=f"{phase}_tool_call",
                                 lifecycle_state=str(payload.get("status") or lifecycle_status),
                                 label=str(payload.get("name") or call_id),
@@ -909,7 +909,7 @@ class ResponsesService:
                         append_object(
                             NativeProductObjectRef(
                                 kind="response_tool_output",
-                                object_id=self._native_tool_output_row_id(response_id, call_id, item_index),
+                                object_id=f"{call_id}:{item_index}",
                                 relation="tool_output",
                                 lifecycle_state=str(payload.get("status") or lifecycle_status),
                                 label=call_id,

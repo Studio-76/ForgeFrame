@@ -20,14 +20,19 @@ function createActions(): ProvidersPageActions {
     setOperationResult: () => undefined,
     setImportPayload: () => undefined,
     setNewProvider: (() => undefined) as ProvidersPageActions["setNewProvider"],
+    setProviderDraftField: () => undefined,
     setNewHarness: (() => undefined) as ProvidersPageActions["setNewHarness"],
     setProviderLabelDraft: () => undefined,
     runHarnessAction: noopAsync,
+    previewHarnessProfile: noopAsync,
+    verifyHarnessProfile: noopAsync,
+    dryRunHarnessProfile: noopAsync,
     probeHarnessProfile: noopAsync,
     toggleHarnessProfile: noopAsync,
     deleteHarnessProfile: noopAsync,
     rollbackHarnessProfile: noopAsync,
     createProvider: noopAsync,
+    saveProvider: noopAsync,
     toggleProvider: noopAsync,
     syncProviderModels: noopAsync,
     saveProviderLabel: noopAsync,
@@ -107,6 +112,7 @@ function createData(sessionOverrides: Partial<AdminSessionUser> = {}): Providers
         provider: "openai",
         label: "OpenAI",
         enabled: true,
+        provider_class: "openai_compatible",
         integration_class: "direct",
         template_id: null,
         config: {},
@@ -136,6 +142,31 @@ function createData(sessionOverrides: Partial<AdminSessionUser> = {}): Providers
         oauth_failure_count: 0,
         oauth_last_probe: null,
         oauth_last_bridge_sync: null,
+        oauth_connect_required: false,
+        target_count: 0,
+        enabled_target_count: 0,
+        ready_target_count: 0,
+        health_status: "healthy",
+        healthy_model_count: 1,
+        attention_model_count: 0,
+        last_health_check_at: "2026-04-21T20:00:00Z",
+        last_probe_at: "2026-04-21T20:05:00Z",
+        next_action: "None",
+        next_action_kind: "none",
+      },
+    ],
+    supportedProviderClasses: [
+      {
+        key: "openai_compatible",
+        label: "OpenAI-compatible",
+        description: "OpenAI-compatible profile",
+        integration_class: "openai_compatible",
+        template_id: "openai_compatible",
+        default_config: {
+          provider_class: "openai_compatible",
+          endpoint_base_url: "https://api.openai.com/v1",
+          auth_scheme: "bearer",
+        },
       },
     ],
     templates: [],
@@ -152,10 +183,11 @@ function createData(sessionOverrides: Partial<AdminSessionUser> = {}): Providers
         enabled: true,
         models: ["gpt-4.1"],
         discovery_enabled: true,
-        lifecycle_status: "ok",
+        lifecycle_status: "ready",
         last_verify_status: "ok",
         last_probe_status: "ok",
         last_sync_status: "ok",
+        last_error: null,
         needs_attention: false,
       },
     ],
@@ -169,6 +201,7 @@ function createData(sessionOverrides: Partial<AdminSessionUser> = {}): Providers
       client: "all",
     },
     operationResult: "",
+    lastHarnessAction: null,
     syncNote: "",
     healthConfig: {
       provider_health_enabled: true,
@@ -180,7 +213,14 @@ function createData(sessionOverrides: Partial<AdminSessionUser> = {}): Providers
     newProvider: {
       provider: "",
       label: "",
+      providerClass: "openai_compatible",
+      integrationClass: "openai_compatible",
+      templateId: "openai_compatible",
+      endpointBaseUrl: "https://example.invalid/v1",
+      authScheme: "bearer",
+      oauthMode: "account_portal",
     },
+    providerDrafts: {},
     providerLabelDrafts: {},
     providerErrors: {},
     modelErrors: {},
@@ -514,12 +554,11 @@ describe("Provider readiness axes", () => {
 
     expect(markup).toContain("Refresh");
     expect(markup).toContain("Read access required");
-    expect(markup).toContain("Harness export and import actions stay hidden for viewer sessions.");
     expect(markup).not.toContain("Sync all providers");
     expect(markup).not.toContain("Export redacted");
     expect(markup).not.toContain("Export full snapshot");
     expect(markup).not.toContain("Save profile");
-    expect(markup).not.toContain("Preview + Verify");
+    expect(markup).not.toContain(">Verify<");
     expect(markup).not.toContain("Create provider");
     expect(markup).not.toContain("Save label");
     expect(markup).not.toContain("Run health checks");
@@ -539,8 +578,8 @@ describe("Provider readiness axes", () => {
 
     expect(markup).toContain("Read-only provider view");
     expect(markup).toContain("Export redacted");
-    expect(markup).toContain("Redacted harness export stays available for inspection");
     expect(markup).not.toContain("Export full snapshot");
+    expect(markup).not.toContain(">Verify<");
     expect(markup).not.toContain("Dry-run import");
     expect(markup).not.toContain("Apply import");
     expect(markup).not.toContain("Create provider");
@@ -561,13 +600,14 @@ describe("Provider readiness axes", () => {
 
     expect(markup).toContain("Sync all providers");
     expect(markup).toContain("Save profile");
-    expect(markup).toContain("Preview + Verify");
+    expect(markup).toContain(">Preview<");
+    expect(markup).toContain(">Verify<");
+    expect(markup).toContain(">Dry-run<");
     expect(markup).toContain("Export redacted");
     expect(markup).toContain("Export full snapshot");
     expect(markup).toContain("Dry-run import");
     expect(markup).toContain("Create provider");
     expect(markup).toContain("Save label");
-    expect(markup).toContain("Run health checks");
     expect(markup).toContain("Sync OAuth bridge profiles");
     expect(markup).toContain("Probe OAuth target");
   });

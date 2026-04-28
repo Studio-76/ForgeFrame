@@ -326,12 +326,12 @@ def test_generic_harness_openai_compatible_profile_proves_fidelity(monkeypatch: 
     responses_output = responses_response.json()["output"]
     assert responses_output == [
         {
-            "type": "tool_call",
-            "tool_call": {
-                "id": "call_1",
-                "type": "function",
-                "function": {"name": "lookup", "arguments": "{\"q\":\"forgegate\"}"},
-            },
+            "id": "call_1",
+            "type": "function_call",
+            "status": "completed",
+            "call_id": "call_1",
+            "name": "lookup",
+            "arguments": "{\"q\":\"forgegate\"}",
         }
     ]
 
@@ -385,11 +385,11 @@ def test_generic_harness_openai_compatible_profile_proves_fidelity(monkeypatch: 
             "input": "force-stream-miss",
             "stream": True,
         },
-    ) as response:
-        assert response.status_code == 200
-        raw_error_stream = "".join(response.iter_text())
+        ) as response:
+            assert response.status_code == 200
+            raw_error_stream = "".join(response.iter_text())
     error_payload = _sse_payload(raw_error_stream, "response.error")
-    assert error_payload["error"]["type"] == "provider_model_not_found"
+    assert error_payload["error"]["code"] == "provider_model_not_found"
     assert "provider" not in error_payload["error"]
 
     providers_response = client.get("/admin/providers/", headers=headers)
@@ -721,6 +721,7 @@ def test_generic_harness_runtime_preserves_multiturn_multimodal_chat_sequence(mo
         stream_enabled=True,
         declared_streaming=True,
         tool_calling=True,
+        vision=True,
     )
 
     sync_response = client.post("/admin/providers/sync", headers=headers, json={"provider": "generic_harness"})

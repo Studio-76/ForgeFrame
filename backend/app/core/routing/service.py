@@ -163,7 +163,10 @@ class RoutingService:
         if status_cache is not None and provider in status_cache:
             return status_cache[provider]
         try:
-            status = self._providers.get_provider_status(provider)
+            status = self._providers.get_provider_status(
+                provider,
+                instance_id=self._instance_id,
+            )
         except ValueError:
             status = {
                 "ready": False,
@@ -195,6 +198,7 @@ class RoutingService:
         try:
             result = dispatchability_check(
                 target.model_id,
+                instance_id=self._instance_id,
                 require_streaming=require_streaming,
                 require_tool_calling=require_tool_calling,
                 require_vision=require_vision,

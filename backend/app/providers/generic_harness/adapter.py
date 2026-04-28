@@ -131,9 +131,13 @@ class GenericHarnessAdapter:
         return True, None
 
     def create_chat_completion(self, request: ChatDispatchRequest) -> ChatDispatchResult:
-        if not self.is_ready():
-            raise ProviderConfigurationError(self.provider_name, self.readiness_reason() or "Harness not ready")
         request_metadata = getattr(request, "request_metadata", {})
+        scoped_instance_id = self._scoped_instance_id(request_metadata)
+        if not self.is_ready(instance_id=scoped_instance_id):
+            raise ProviderConfigurationError(
+                self.provider_name,
+                self.readiness_reason(instance_id=scoped_instance_id) or "Harness not ready",
+            )
         profile = self._profile_for_model(request.model, request_metadata=request_metadata)
         if getattr(request, "tools", []) and not self._profile_supports_tool_calling(profile):
             raise ProviderUnsupportedFeatureError(self.provider_name, "tool_calling")
@@ -180,9 +184,13 @@ class GenericHarnessAdapter:
         )
 
     def stream_chat_completion(self, request: ChatDispatchRequest) -> Iterator[ProviderStreamEvent]:
-        if not self.is_ready():
-            raise ProviderConfigurationError(self.provider_name, self.readiness_reason() or "Harness not ready")
         request_metadata = getattr(request, "request_metadata", {})
+        scoped_instance_id = self._scoped_instance_id(request_metadata)
+        if not self.is_ready(instance_id=scoped_instance_id):
+            raise ProviderConfigurationError(
+                self.provider_name,
+                self.readiness_reason(instance_id=scoped_instance_id) or "Harness not ready",
+            )
         profile = self._profile_for_model(request.model, request_metadata=request_metadata)
         if getattr(request, "tools", []) and not self._profile_supports_tool_calling(profile):
             raise ProviderUnsupportedFeatureError(self.provider_name, "tool_calling")
@@ -238,9 +246,13 @@ class GenericHarnessAdapter:
             return
 
     def create_embeddings(self, request: EmbeddingDispatchRequest) -> EmbeddingDispatchResult:
-        if not self.is_ready():
-            raise ProviderConfigurationError(self.provider_name, self.readiness_reason() or "Harness not ready")
         request_metadata = getattr(request, "request_metadata", {})
+        scoped_instance_id = self._scoped_instance_id(request_metadata)
+        if not self.is_ready(instance_id=scoped_instance_id):
+            raise ProviderConfigurationError(
+                self.provider_name,
+                self.readiness_reason(instance_id=scoped_instance_id) or "Harness not ready",
+            )
         profile = self._profile_for_model(request.model, request_metadata=request_metadata)
         if not self._profile_supports_embeddings(profile):
             raise ProviderUnsupportedFeatureError(self.provider_name, "embeddings")

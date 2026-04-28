@@ -7,7 +7,7 @@ import {
   deactivateHarnessProfile,
   deactivateProvider,
   deleteHarnessProfile as deleteHarnessProfileRequest,
-  dryRunHarness,
+  dryRunHarness as dryRunHarnessRequest,
   fetchBootstrapReadiness,
   fetchClientOperationalView,
   fetchCompatibilityMatrix,
@@ -21,11 +21,12 @@ import {
   fetchProductAxisTargets,
   fetchProviderControlPlane,
   fetchUsageSummary,
+  type HarnessRun,
   importHarnessConfig,
   patchHealthConfig,
-  previewHarness,
+  previewHarness as previewHarnessRequest,
   probeAllOauthAccountProviders,
-  probeHarness,
+  probeHarness as probeHarnessRequest,
   probeOauthAccountProvider,
   rollbackHarnessProfile as rollbackHarnessProfileRequest,
   runHealthChecks,
@@ -37,10 +38,12 @@ import {
   type HealthConfig,
   updateProvider,
   upsertHarnessProfile,
-  verifyHarnessProfile,
+  verifyHarnessProfile as verifyHarnessProfileRequest,
 } from "../../api/admin";
 import type {
   HarnessDraft,
+  HarnessActionKind,
+  HarnessActionResult,
   LoadState,
   ProviderDraft,
   ProviderEditorDraft,
@@ -148,8 +151,24 @@ const DEFAULT_PROVIDER_CLASS_OPTIONS: ProviderClassDescriptor[] = [
   },
 ];
 
+type ActionRequirement = "read" | "operate" | "mutate";
+
 function getActionError(error: unknown, fallback: string): string {
   return error instanceof Error ? error.message : fallback;
+}
+
+function formatOperationPayload(payload: unknown): string {
+  if (typeof payload === "string") {
+    return payload;
+  }
+  return JSON.stringify(payload, null, 2) ?? "";
+}
+
+function resolveHarnessActionStatus(run: HarnessRun | null | undefined, fallback: string): string {
+  if (run?.status) {
+    return run.status;
+  }
+  return fallback;
 }
 
 function getModelSource(integrationClass: HarnessProfile["integration_class"]): "manual" | "templated" | "static" {
@@ -264,6 +283,7 @@ export function useProvidersControlPlane(
   const [runOps, setRunOps] = useState<ProvidersPageData["runOps"]>({});
   const [runFilters, setRunFilters] = useState<ProviderRunFilters>(INITIAL_RUN_FILTERS);
   const [operationResult, setOperationResult] = useState<string>("");
+  const [lastHarnessAction, setLastHarnessAction] = useState<HarnessActionResult | null>(null);
   const [syncNote, setSyncNote] = useState<string>("No sync note provided.");
   const [healthConfig, setHealthConfig] = useState<ProvidersPageData["healthConfig"]>(null);
   const [newProvider, setNewProvider] = useState<ProviderDraft>(INITIAL_PROVIDER_DRAFT);
@@ -315,6 +335,57 @@ export function useProvidersControlPlane(
     return false;
   };
 
+  const ensureOperateAllowed = () => {
+    if (access.canOperate) {
+      return true;
+    }
+
+    setError(access.operateBlockedMessage);
+    return false;
+  };
+
+  const ensureActionAllowed = (requirement: ActionRequirement) => {
+    if (requirement === "mutate") {
+      return ensureMutationAllowed();
+    }
+    if (requirement === "operate") {
+      return ensureOperateAllowed();
+    }
+    if (access.canRead) {
+      return true;
+    }
+    setError(access.summaryDetail);
+    return false;
+  };
+
+  const recordHarnessAction = (
+    kind: HarnessActionKind,
+    title: string,
+    payload: unknown,
+    options: {
+      providerKey?: string;
+      model?: string | null;
+      status?: string;
+      summary: string;
+      error?: string | null;
+      run?: HarnessRun | null;
+    },
+  ) => {
+    setOperationResult(formatOperationPayload(payload));
+    setLastHarnessAction({
+      kind,
+      title,
+      providerKey: options.providerKey,
+      model: options.model,
+      status: options.status ?? "ok",
+      summary: options.summary,
+      capturedAt: new Date().toISOString(),
+      error: options.error ?? null,
+      run: options.run ?? null,
+      payload,
+    });
+  };
+
   const clearScopedData = () => {
     setProviders([]);
     setSupportedProviderClasses(DEFAULT_PROVIDER_CLASS_OPTIONS);
@@ -332,6 +403,9 @@ export function useProvidersControlPlane(
     setOauthOnboarding([]);
     setCompatibilityMatrix([]);
     setBootstrapReadiness(null);
+    setImportPayload("");
+    setOperationResult("");
+    setLastHarnessAction(null);
     setSyncNote("No sync note provided.");
     setHealthConfig(null);
     setProviderErrors({});
@@ -486,16 +560,23 @@ export function useProvidersControlPlane(
     runFilters.status,
   ]);
 
-  const withAction = async (task: () => Promise<void>, fallback: string, requiresMutation = false) => {
-    if (requiresMutation && !ensureMutationAllowed()) {
+  const withAction = async <T>(
+    task: () => Promise<T>,
+    fallback: string,
+    requirement: ActionRequirement = "read",
+    onFailure?: (message: string) => void,
+  ): Promise<T | undefined> => {
+    if (!ensureActionAllowed(requirement)) {
       return;
     }
 
     setError(null);
     try {
-      await task();
+      return await task();
     } catch (actionError) {
-      setError(getActionError(actionError, fallback));
+      const message = getActionError(actionError, fallback);
+      setError(message);
+      onFailure?.(message);
     }
   };
 
@@ -545,46 +626,190 @@ export function useProvidersControlPlane(
     }
   };
 
+  const previewHarnessProfile = async (
+    providerKey: string,
+    model: string,
+    message: string,
+    stream = false,
+  ) =>
+    withAction(async () => {
+      const response = await previewHarnessRequest({ provider_key: providerKey, model, message, stream }, instanceId);
+      recordHarnessAction("preview", "Preview request", response, {
+        providerKey,
+        model,
+        run: response.run ?? null,
+        status: resolveHarnessActionStatus(response.run, "ok"),
+        summary: `Preview rendered for ${providerKey} using ${model}.`,
+      });
+      await load();
+    }, "Harness preview failed.", "read", (messageText) => {
+      recordHarnessAction("preview", "Preview request", { error: messageText }, {
+        providerKey,
+        model,
+        status: "failed",
+        summary: `Preview failed for ${providerKey}.`,
+        error: messageText,
+      });
+    });
+
+  const dryRunHarnessProfile = async (
+    providerKey: string,
+    model: string,
+    message: string,
+    stream = false,
+  ) =>
+    withAction(async () => {
+      const response = await dryRunHarnessRequest({ provider_key: providerKey, model, message, stream }, instanceId);
+      recordHarnessAction("dry-run", "Dry-run request", response, {
+        providerKey,
+        model,
+        run: response.run,
+        status: resolveHarnessActionStatus(response.run, "ok"),
+        summary: `Dry-run completed for ${providerKey} using ${model}.`,
+        error: response.run.error ?? null,
+      });
+      await load();
+    }, "Harness dry-run failed.", "operate", (messageText) => {
+      recordHarnessAction("dry-run", "Dry-run request", { error: messageText }, {
+        providerKey,
+        model,
+        status: "failed",
+        summary: `Dry-run failed for ${providerKey}.`,
+        error: messageText,
+      });
+    });
+
+  const verifyHarnessProfileAction = async (providerKey: string, model?: string, testMessage?: string) =>
+    withAction(async () => {
+      const targetModel = model ?? profiles.find((item) => item.provider_key === providerKey)?.models[0] ?? "model-1";
+      const response = await verifyHarnessProfileRequest(
+        {
+          provider_key: providerKey,
+          model: targetModel,
+          test_message: testMessage,
+          include_preview: true,
+        },
+        instanceId,
+      );
+      recordHarnessAction("verify", "Verification run", response, {
+        providerKey,
+        model: targetModel,
+        run: response.verification.run ?? null,
+        status: response.verification.success ? resolveHarnessActionStatus(response.verification.run, "ok") : "failed",
+        summary: response.verification.success
+          ? `Verification passed for ${providerKey}.`
+          : `Verification reported failures for ${providerKey}.`,
+        error: response.verification.success ? null : "verification_failed",
+      });
+      await load();
+    }, "Harness verification failed.", "operate", (messageText) => {
+      recordHarnessAction("verify", "Verification run", { error: messageText }, {
+        providerKey,
+        model: model ?? null,
+        status: "failed",
+        summary: `Verification failed for ${providerKey}.`,
+        error: messageText,
+      });
+    });
+
   const runHarnessAction = async (providerKey: string, model?: string) =>
     withAction(async () => {
       const targetModel = model ?? profiles.find((item) => item.provider_key === providerKey)?.models[0] ?? "model-1";
-      const preview = await previewHarness({ provider_key: providerKey, model: targetModel, message: "preview", stream: false }, instanceId);
-      const dry = await dryRunHarness({ provider_key: providerKey, model: targetModel, message: "dry-run", stream: false }, instanceId);
-      const verify = await verifyHarnessProfile({ provider_key: providerKey, model: targetModel }, instanceId);
-      setOperationResult(JSON.stringify({ preview, dry, verify }, null, 2));
+      const preview = await previewHarnessRequest({ provider_key: providerKey, model: targetModel, message: "preview", stream: false }, instanceId);
+      const dry = await dryRunHarnessRequest({ provider_key: providerKey, model: targetModel, message: "dry-run", stream: false }, instanceId);
+      const verify = await verifyHarnessProfileRequest({ provider_key: providerKey, model: targetModel }, instanceId);
+      recordHarnessAction("preview-verify-bundle", "Legacy preview / dry-run / verify bundle", { preview, dry, verify }, {
+        providerKey,
+        model: targetModel,
+        run: verify.verification.run ?? dry.run ?? preview.run ?? null,
+        status: verify.verification.success ? "ok" : "failed",
+        summary: `Preview, dry-run, and verification completed for ${providerKey}.`,
+        error: verify.verification.success ? null : "verification_failed",
+      });
       await load();
-    }, "Harness action failed.", true);
+    }, "Harness action failed.", "operate", (messageText) => {
+      recordHarnessAction("preview-verify-bundle", "Legacy preview / dry-run / verify bundle", { error: messageText }, {
+        providerKey,
+        model: model ?? null,
+        status: "failed",
+        summary: `Legacy harness bundle failed for ${providerKey}.`,
+        error: messageText,
+      });
+    });
 
   const probeHarnessProfile = async (providerKey: string, model?: string) =>
     withAction(async () => {
       const targetModel = model ?? profiles.find((item) => item.provider_key === providerKey)?.models[0] ?? "model-1";
-      const response = await probeHarness({ provider_key: providerKey, model: targetModel, message: "probe", stream: false }, instanceId);
-      setOperationResult(JSON.stringify(response, null, 2));
+      const response = await probeHarnessRequest({ provider_key: providerKey, model: targetModel, message: "probe", stream: false }, instanceId);
+      recordHarnessAction("probe", "Live probe", response, {
+        providerKey,
+        model: targetModel,
+        run: response.run,
+        status: resolveHarnessActionStatus(response.run, response.status_code < 400 ? "ok" : "failed"),
+        summary: response.status_code < 400
+          ? `Probe succeeded for ${providerKey}.`
+          : `Probe returned HTTP ${response.status_code} for ${providerKey}.`,
+        error: response.run.error ?? null,
+      });
       await load();
-    }, "Harness probe failed.", true);
+    }, "Harness probe failed.", "operate", (messageText) => {
+      recordHarnessAction("probe", "Live probe", { error: messageText }, {
+        providerKey,
+        model: model ?? null,
+        status: "failed",
+        summary: `Probe failed for ${providerKey}.`,
+        error: messageText,
+      });
+    });
 
   const toggleHarnessProfile = async (providerKey: string, enabled: boolean) =>
     withAction(async () => {
-      if (enabled) {
-        await deactivateHarnessProfile(providerKey, instanceId);
-      } else {
-        await activateHarnessProfile(providerKey, instanceId);
-      }
+      const response = enabled
+        ? await deactivateHarnessProfile(providerKey, instanceId)
+        : await activateHarnessProfile(providerKey, instanceId);
+      recordHarnessAction(enabled ? "deactivate" : "activate", enabled ? "Deactivate profile" : "Activate profile", response.profile, {
+        providerKey,
+        status: "ok",
+        summary: enabled ? `${providerKey} was deactivated.` : `${providerKey} was activated.`,
+      });
       await load();
-    }, "Harness profile update failed.", true);
+    }, "Harness profile update failed.", "mutate", (messageText) => {
+      recordHarnessAction(enabled ? "deactivate" : "activate", enabled ? "Deactivate profile" : "Activate profile", { error: messageText }, {
+        providerKey,
+        status: "failed",
+        summary: `Profile state change failed for ${providerKey}.`,
+        error: messageText,
+      });
+    });
 
   const deleteHarnessProfile = async (providerKey: string) =>
     withAction(async () => {
-      await deleteHarnessProfileRequest(providerKey, instanceId);
+      const response = await deleteHarnessProfileRequest(providerKey, instanceId);
+      recordHarnessAction("delete", "Delete profile", response, {
+        providerKey,
+        status: "ok",
+        summary: `${providerKey} was deleted.`,
+      });
       await load();
-    }, "Harness profile deletion failed.", true);
+    }, "Harness profile deletion failed.", "mutate");
 
   const rollbackHarnessProfile = async (providerKey: string, revision: number) =>
     withAction(async () => {
       const response = await rollbackHarnessProfileRequest(providerKey, revision, instanceId);
-      setOperationResult(JSON.stringify(response.profile, null, 2));
+      recordHarnessAction("rollback", "Rollback profile", response.profile, {
+        providerKey,
+        status: "ok",
+        summary: `${providerKey} was rolled back to revision ${revision}.`,
+      });
       await load();
-    }, "Harness rollback failed.", true);
+    }, "Harness rollback failed.", "mutate", (messageText) => {
+      recordHarnessAction("rollback", "Rollback profile", { error: messageText, revision }, {
+        providerKey,
+        status: "failed",
+        summary: `Rollback failed for ${providerKey}.`,
+        error: messageText,
+      });
+    });
 
   const createProviderAction = async () => {
     if (!ensureMutationAllowed()) {
@@ -617,7 +842,7 @@ export function useProvidersControlPlane(
       );
       setNewProvider(INITIAL_PROVIDER_DRAFT);
       await load();
-    }, "Provider creation failed.");
+    }, "Provider creation failed.", "mutate");
   };
 
   const toggleProvider = async (provider: string, enabled: boolean) =>
@@ -628,13 +853,13 @@ export function useProvidersControlPlane(
         await activateProvider(provider, instanceId);
       }
       await load();
-    }, "Provider state update failed.", true);
+    }, "Provider state update failed.", "mutate");
 
   const syncProviderModels = async (provider: string) =>
     withAction(async () => {
       await syncProviders(provider, instanceId);
       await load();
-    }, "Provider sync failed.", true);
+    }, "Provider sync failed.", "mutate");
 
   const saveProvider = async (provider: string) => {
     if (!ensureMutationAllowed()) {
@@ -671,7 +896,7 @@ export function useProvidersControlPlane(
         instanceId,
       );
       await load();
-    }, "Provider update failed.", true);
+    }, "Provider update failed.", "mutate");
   };
 
   const saveProviderLabel = async (provider: string) => {
@@ -694,14 +919,14 @@ export function useProvidersControlPlane(
     await withAction(async () => {
       await updateProvider(provider, { label }, instanceId);
       await load();
-    }, "Provider label update failed.", true);
+    }, "Provider label update failed.", "mutate");
   };
 
   const syncAllProviders = async () =>
     withAction(async () => {
       await syncProviders(undefined, instanceId);
       await load();
-    }, "Provider sync failed.", true);
+    }, "Provider sync failed.", "mutate");
 
   const upsertHarness = async () => {
     if (!ensureMutationAllowed()) {
@@ -734,7 +959,7 @@ export function useProvidersControlPlane(
     }
 
     await withAction(async () => {
-      await upsertHarnessProfile(providerKey, {
+      const response = await upsertHarnessProfile(providerKey, {
         provider_key: providerKey,
         label,
         template_id: newHarness.template_id || null,
@@ -753,13 +978,25 @@ export function useProvidersControlPlane(
           model_source: getModelSource(newHarness.integration_class),
         },
       }, instanceId);
+      recordHarnessAction("save-profile", "Save harness profile", response.profile, {
+        providerKey,
+        status: "ok",
+        summary: `Harness profile ${providerKey} was saved.`,
+      });
       setNewHarness({
         ...INITIAL_HARNESS_DRAFT,
         template_id: newHarness.template_id || INITIAL_HARNESS_DRAFT.template_id,
         integration_class: newHarness.integration_class,
       });
       await load();
-    }, "Harness profile save failed.", true);
+    }, "Harness profile save failed.", "mutate", (messageText) => {
+      recordHarnessAction("save-profile", "Save harness profile", { error: messageText }, {
+        providerKey,
+        status: "failed",
+        summary: `Saving harness profile ${providerKey} failed.`,
+        error: messageText,
+      });
+    });
   };
 
   const updateHealth = async (patch: Partial<HealthConfig>) =>
@@ -767,13 +1004,13 @@ export function useProvidersControlPlane(
       const response = await patchHealthConfig(patch, instanceId);
       setHealthConfig(response.config);
       await load();
-    }, "Health config update failed.", true);
+    }, "Health config update failed.", "mutate");
 
   const runHealthChecksAction = async () =>
     withAction(async () => {
       await runHealthChecks(instanceId);
       await load();
-    }, "Health check run failed.", true);
+    }, "Health check run failed.", "mutate");
 
   const exportHarness = async (redactSecrets: boolean) =>
     withAction(async () => {
@@ -781,41 +1018,55 @@ export function useProvidersControlPlane(
         return;
       }
       const response = await fetchHarnessExport(redactSecrets, instanceId);
-      const formatted = JSON.stringify(response.snapshot, null, 2);
+      const formatted = formatOperationPayload(response.snapshot);
       setImportPayload(formatted);
-      setOperationResult(formatted);
+      recordHarnessAction(redactSecrets ? "export-redacted" : "export-full", redactSecrets ? "Export redacted snapshot" : "Export full snapshot", response.snapshot, {
+        status: "ok",
+        summary: redactSecrets
+          ? "Redacted harness snapshot exported into the diagnostics buffer."
+          : "Full harness snapshot exported into the diagnostics buffer.",
+      });
     }, "Harness export failed.");
 
   const importHarness = async (dryRun: boolean) =>
     withAction(async () => {
       const parsed = JSON.parse(importPayload) as Record<string, unknown>;
       const result = await importHarnessConfig(parsed, dryRun, instanceId);
-      setOperationResult(JSON.stringify(result, null, 2));
+      recordHarnessAction(dryRun ? "import-dry-run" : "import-apply", dryRun ? "Dry-run import" : "Apply import", result, {
+        status: typeof result.status === "string" ? result.status : "ok",
+        summary: dryRun ? "Import payload validated without applying changes." : "Import payload applied to harness profiles.",
+      });
       if (!dryRun) {
         await load();
       }
-    }, "Harness import failed.", true);
+    }, "Harness import failed.", "mutate", (messageText) => {
+      recordHarnessAction(dryRun ? "import-dry-run" : "import-apply", dryRun ? "Dry-run import" : "Apply import", { error: messageText }, {
+        status: "failed",
+        summary: dryRun ? "Dry-run import failed." : "Import apply failed.",
+        error: messageText,
+      });
+    });
 
   const syncOauthBridgeProfiles = async () =>
     withAction(async () => {
       const response = await syncOauthAccountBridgeProfiles(instanceId);
       setOperationResult(JSON.stringify(response, null, 2));
       await load();
-    }, "OAuth bridge sync failed.", true);
+    }, "OAuth bridge sync failed.", "mutate");
 
   const probeAllOauthTargets = async () =>
     withAction(async () => {
       const response = await probeAllOauthAccountProviders(instanceId);
       setOperationResult(JSON.stringify(response, null, 2));
       await load();
-    }, "OAuth probe failed.", true);
+    }, "OAuth probe failed.", "mutate");
 
   const probeOauthTarget = async (providerKey: string) =>
     withAction(async () => {
       const response = await probeOauthAccountProvider(providerKey, instanceId);
       setOperationResult(JSON.stringify(response, null, 2));
       await load();
-    }, "OAuth probe failed.", true);
+    }, "OAuth probe failed.", "mutate");
 
   const data: ProvidersPageData = {
     state,
@@ -830,6 +1081,7 @@ export function useProvidersControlPlane(
     runOps,
     runFilters,
     operationResult,
+    lastHarnessAction,
     syncNote,
     healthConfig,
     newProvider,
@@ -865,6 +1117,9 @@ export function useProvidersControlPlane(
     setNewHarness,
     setProviderLabelDraft,
     runHarnessAction,
+    previewHarnessProfile,
+    verifyHarnessProfile: verifyHarnessProfileAction,
+    dryRunHarnessProfile,
     probeHarnessProfile,
     toggleHarnessProfile,
     deleteHarnessProfile,

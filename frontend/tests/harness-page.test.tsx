@@ -21,6 +21,9 @@ function createActions(): ProvidersPageActions {
     setNewHarness: (() => undefined) as ProvidersPageActions["setNewHarness"],
     setProviderLabelDraft: () => undefined,
     runHarnessAction: noopAsync,
+    previewHarnessProfile: noopAsync,
+    verifyHarnessProfile: noopAsync,
+    dryRunHarnessProfile: noopAsync,
     probeHarnessProfile: noopAsync,
     toggleHarnessProfile: noopAsync,
     deleteHarnessProfile: noopAsync,
@@ -124,13 +127,14 @@ function createData(access: ProvidersAccessState): ProvidersPageData {
         enabled: true,
         models: ["gpt-4.1-mini"],
         discovery_enabled: true,
-        lifecycle_status: "ok",
+        lifecycle_status: "ready",
         last_verified_at: "2026-04-23T09:00:00Z",
         last_verify_status: "ok",
         last_probe_at: "2026-04-23T09:00:00Z",
         last_probe_status: "ok",
         last_sync_at: "2026-04-23T09:00:00Z",
         last_sync_status: "ok",
+        last_error: null,
         needs_attention: false,
       },
     ],
@@ -139,11 +143,26 @@ function createData(access: ProvidersAccessState): ProvidersPageData {
         run_id: "run-harness-1",
         provider_key: "openai-primary",
         mode: "verify",
-        status: "success",
+        status: "ok",
+        success: true,
+        steps: [],
+        executed_at: "2026-04-23T09:00:00Z",
       },
     ],
-    runSummary: { success: 1 },
-    runOps: {},
+    runSummary: { total: 1, failed: 0, preview: 1, dry_run: 0, verify: 1, probe: 0, runtime_non_stream: 0, runtime_stream: 0 },
+    runOps: {
+      last_runs_by_provider: {
+        "openai-primary": {
+          run_id: "run-harness-1",
+          provider_key: "openai-primary",
+          mode: "verify",
+          status: "ok",
+          success: true,
+          steps: [],
+          executed_at: "2026-04-23T09:00:00Z",
+        },
+      },
+    },
     runFilters: {
       mode: "all",
       status: "all",
@@ -151,6 +170,7 @@ function createData(access: ProvidersAccessState): ProvidersPageData {
       client: "all",
     },
     operationResult: "{\"status\":\"ok\"}",
+    lastHarnessAction: null,
     syncNote: "",
     healthConfig: {
       provider_health_enabled: true,
@@ -259,12 +279,15 @@ describe("Harness page separation", () => {
       }),
     );
 
-    expect(markup).toContain("Harness Control Plane");
-    expect(markup).toContain("Harness Onboarding");
-    expect(markup).toContain("Saved Harness Profiles");
-    expect(markup).toContain("Last Control-Plane Action");
+    expect(markup).toContain(">Harness<");
+    expect(markup).toContain("Profiles &amp; Templates");
+    expect(markup).toContain("Selected Profile");
+    expect(markup).toContain("Run History");
+    expect(markup).toContain("Advanced Diagnostics");
     expect(markup).toContain("Save profile");
-    expect(markup).toContain("Preview + Verify");
+    expect(markup).toContain(">Preview<");
+    expect(markup).toContain(">Verify<");
+    expect(markup).toContain(">Dry-run<");
     expect(markup).not.toContain("Control-Plane Summary");
   });
 
@@ -279,10 +302,10 @@ describe("Harness page separation", () => {
 
     expect(markup).toContain("Read access required");
     expect(markup).toContain("the backend will return 403 until providers.read is granted here");
-    expect(markup).not.toContain("Harness proof posture");
-    expect(markup).not.toContain("Saved Harness Profiles");
+    expect(markup).not.toContain("Profiles &amp; Templates");
+    expect(markup).not.toContain("Selected Profile");
     expect(markup).not.toContain("Save profile");
-    expect(markup).not.toContain("Preview + Verify");
+    expect(markup).not.toContain(">Verify<");
     expect(markup).not.toContain("Export redacted");
   });
 
@@ -309,7 +332,7 @@ describe("Harness page separation", () => {
 
     expect(markup).toContain('href="/harness?instanceId=instance_alpha"');
     expect(markup).toContain('href="/providers?instanceId=instance_alpha"');
-    expect(markup).toContain('href="/release-validation?instanceId=instance_alpha"');
+    expect(markup).toContain('href="/logs?instanceId=instance_alpha"');
   });
 
   it("only shows mutating harness controls on the instance that grants write access", () => {
@@ -332,6 +355,6 @@ describe("Harness page separation", () => {
     expect(alphaMarkup).toContain("Save profile");
     expect(betaMarkup).not.toContain("Operator mutations enabled");
     expect(betaMarkup).not.toContain("Save profile");
-    expect(betaMarkup).toContain("Read only");
+    expect(betaMarkup).toContain("Operate only");
   });
 });

@@ -1136,6 +1136,80 @@ export type HarnessTemplate = {
   };
 };
 
+export type HarnessRequestMapping = {
+  method?: "POST" | "GET";
+  path: string;
+  path_join_policy?: "append" | "dedupe_openai_v1";
+  headers?: Record<string, string>;
+  body_template?: Record<string, unknown>;
+};
+
+export type HarnessResponseMapping = {
+  text_path?: string;
+  finish_reason_path?: string;
+  model_path?: string;
+  prompt_tokens_path?: string;
+  completion_tokens_path?: string;
+  total_tokens_path?: string;
+  tool_calls_path?: string;
+};
+
+export type HarnessErrorMapping = {
+  message_path?: string;
+  type_path?: string;
+};
+
+export type HarnessStreamMapping = {
+  enabled: boolean;
+  data_prefix?: string;
+  done_marker?: string;
+  delta_path?: string;
+  tool_calls_path?: string;
+  finish_reason_path?: string;
+  usage_prompt_tokens_path?: string;
+  usage_completion_tokens_path?: string;
+  usage_total_tokens_path?: string;
+};
+
+export type HarnessCapabilityProfile = {
+  streaming?: boolean;
+  tool_calling?: boolean;
+  vision?: boolean;
+  responses?: boolean;
+  embeddings?: boolean;
+  discovery_support?: boolean;
+  model_source?: "static" | "manual" | "discovered" | "templated";
+  unsupported_features?: string[];
+};
+
+export type HarnessRun = {
+  run_id?: string | null;
+  provider_key: string;
+  instance_id?: string | null;
+  integration_class?: string;
+  model?: string | null;
+  mode: string;
+  status: string;
+  success: boolean;
+  steps: Array<Record<string, unknown>>;
+  error?: string | null;
+  executed_at: string;
+  duration_ms?: number | null;
+  client_id?: string | null;
+  consumer?: string | null;
+  integration?: string | null;
+};
+
+export type HarnessVerificationResult = {
+  provider_key: string;
+  integration_class: string;
+  steps: Array<Record<string, unknown>>;
+  preview_request?: Record<string, unknown> | null;
+  preview_response?: Record<string, unknown> | null;
+  success: boolean;
+  run?: HarnessRun | null;
+};
+
 export type HarnessProfile = {
   provider_key: string;
   instance_id?: string | null;
@@ -1146,9 +1220,20 @@ export type HarnessProfile = {
   auth_value: string;
   auth_header: string;
   template_id: string | null;
+  model_slug_policy?: string;
+  model_prefix?: string;
   enabled: boolean;
   models: string[];
   discovery_enabled: boolean;
+  request_mapping?: HarnessRequestMapping;
+  response_mapping?: HarnessResponseMapping;
+  error_mapping?: HarnessErrorMapping;
+  stream_mapping?: HarnessStreamMapping;
+  capabilities?: HarnessCapabilityProfile;
+  created_at?: string;
+  updated_at?: string;
+  last_exported_at?: string | null;
+  last_imported_at?: string | null;
   lifecycle_status?: string;
   last_verified_at?: string | null;
   last_verify_status?: string;
@@ -1157,12 +1242,20 @@ export type HarnessProfile = {
   last_sync_at?: string | null;
   last_sync_status?: string;
   last_sync_error?: string | null;
+  last_error?: string | null;
   model_inventory?: Array<Record<string, string | boolean | null>>;
   last_used_at?: string | null;
   last_used_model?: string | null;
+  verify_success_count?: number;
+  verify_failure_count?: number;
+  probe_success_count?: number;
+  probe_failure_count?: number;
   request_count?: number;
   stream_request_count?: number;
   total_tokens?: number;
+  total_actual_cost?: number;
+  total_hypothetical_cost?: number;
+  total_avoided_cost?: number;
   needs_attention?: boolean;
   config_revision?: number;
   config_revision_parent?: number | null;
@@ -5107,28 +5200,28 @@ export function deactivateHarnessProfile(providerKey: string, instanceId?: strin
 }
 
 export function verifyHarnessProfile(payload: { provider_key: string; model?: string; test_message?: string; include_preview?: boolean }, instanceId?: string | null) {
-  return fetchJson<{ status: string; verification: Record<string, unknown> }>(appendTenantScope("/admin/providers/harness/verify", undefined, instanceId), {
+  return fetchJson<{ status: string; verification: HarnessVerificationResult }>(appendTenantScope("/admin/providers/harness/verify", undefined, instanceId), {
     method: "POST",
     body: JSON.stringify(payload),
   });
 }
 
 export function previewHarness(payload: { provider_key: string; model: string; message: string; stream: boolean }, instanceId?: string | null) {
-  return fetchJson<{ status: string; preview: Record<string, unknown> }>(appendTenantScope("/admin/providers/harness/preview", undefined, instanceId), {
+  return fetchJson<{ status: string; preview: Record<string, unknown>; run?: HarnessRun | null }>(appendTenantScope("/admin/providers/harness/preview", undefined, instanceId), {
     method: "POST",
     body: JSON.stringify(payload),
   });
 }
 
 export function dryRunHarness(payload: { provider_key: string; model: string; message: string; stream: boolean }, instanceId?: string | null) {
-  return fetchJson<{ status: string; preview_request: Record<string, unknown>; mapped_example: Record<string, unknown>; run: Record<string, unknown> }>(appendTenantScope("/admin/providers/harness/dry-run", undefined, instanceId), {
+  return fetchJson<{ status: string; preview_request: Record<string, unknown>; mapped_example: Record<string, unknown>; run: HarnessRun }>(appendTenantScope("/admin/providers/harness/dry-run", undefined, instanceId), {
     method: "POST",
     body: JSON.stringify(payload),
   });
 }
 
 export function probeHarness(payload: { provider_key: string; model: string; message: string; stream: boolean }, instanceId?: string | null) {
-  return fetchJson<{ status: string; status_code: number; parsed: Record<string, unknown>; raw: Record<string, unknown>; run: Record<string, unknown> }>(appendTenantScope("/admin/providers/harness/probe", undefined, instanceId), {
+  return fetchJson<{ status: string; status_code: number; parsed: Record<string, unknown>; raw: Record<string, unknown>; run: HarnessRun }>(appendTenantScope("/admin/providers/harness/probe", undefined, instanceId), {
     method: "POST",
     body: JSON.stringify(payload),
   });
@@ -5166,7 +5259,7 @@ export function fetchHarnessRuns(providerKey?: string, mode?: string, status?: s
   if (clientId) params.set("client_id", clientId);
   params.set("limit", String(limit));
   const suffix = params.size ? `?${params.toString()}` : "";
-  return fetchJson<{ status: string; runs: Array<Record<string, unknown>>; summary: Record<string, number>; ops?: Record<string, unknown> }>(
+  return fetchJson<{ status: string; runs: HarnessRun[]; summary: Record<string, number>; ops?: Record<string, unknown> }>(
     appendTenantScope(`/admin/providers/harness/runs${suffix}`, undefined, instanceId),
   );
 }

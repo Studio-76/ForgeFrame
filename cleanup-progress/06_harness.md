@@ -1,0 +1,40 @@
+# Progress
+
+- Promptdatei: `/opt/ForgeFrame/cleanup/06_harness.md`
+- Developer-Zusammenfassung: `Harness ist jetzt eine eigenstaendige Arbeitsflaeche mit linker Profile-/Template-Liste, mittlerem Selected-Profile- und Config-Contract-Bereich, rechter Actions-/Run-History-Spalte sowie Advanced Diagnostics fuer Roh-Snapshots und Proof-Carriers. Reale Aktionen fuer Preview, Verify, Dry-run, Probe, Activate/Deactivate, Import/Export und Rollback sind an echte Admin-APIs gebunden und schreiben operatorische Resultate samt Run-Metadaten zurueck in die Seite.`
+- Geaenderte Dateien:
+  - `frontend/src/pages/HarnessPage.tsx`
+  - `frontend/src/features/providers/ProvidersSections.tsx`
+  - `frontend/src/features/providers/useProvidersControlPlane.ts`
+  - `frontend/src/features/providers/providersShared.ts`
+  - `frontend/src/api/admin.ts`
+  - `frontend/tests/harness-page.test.tsx`
+  - `frontend/tests/providers-page.test.tsx`
+  - `frontend/tests/providers-readiness.test.tsx`
+  - `frontend/tests/oauth-targets-page.test.tsx`
+  - `backend/app/api/admin/control_plane_harness_domain.py`
+  - `backend/app/api/admin/control_plane_provider_domain.py`
+  - `backend/app/control_plane/target_defaults.py`
+  - `backend/app/core/dispatch.py`
+  - `backend/app/core/routing/service.py`
+  - `backend/app/harness/store.py`
+  - `backend/app/providers/generic_harness/adapter.py`
+  - `backend/app/responses/service.py`
+  - `backend/tests/test_admin_harness_export_api.py`
+  - `backend/tests/test_generic_harness_fidelity.py`
+- Audit-Ergebnis: `APPROVED`
+- Konkrete Audit-Maengel:
+  - `Initialer Prompt-06-Stand hatte keine vollstaendige Runtime-Instanz-Scope-Kette fuer Generic Harness; historische Runs ohne instance_id verschwanden aus scoper Truth, und Routing/Dispatch blockierte Tool-/Stream-Profile trotz realer Harness-Faehigkeiten.`
+  - `Responses-Persistenz erzeugte fuer Tool-Call-Follow-Objects ueberlange object_id-Werte.`
+  - `Ein Harness-Fidelity-Test erwartete veraltete Responses-Ausgabe (`tool_call`) und nutzte im Multimodal-Fall keine vision-Capability, obwohl der Produktvertrag ohne vision explizit blockiert.`
+- Fix-Runden: `4`
+- Finale Freigabe: `APPROVED - Harness ist als eigenstaendige Operator-Flaeche verstaendlich, reale Aktionen sind verdrahtet, Run-Ergebnisse erscheinen mit Zeit/Status/Fehler und Log-Handoff, Advanced Diagnostics kapselt Rohdaten, und die geaenderten Backend-/Frontend-Pfade bauen und testen sauber.`
+- Ausgefuehrte Pruefkommandos:
+  - `cd backend && ../.venv/bin/python -m pytest tests/test_admin_harness_export_api.py::test_provider_truth_axes_redact_historical_harness_failures_for_operator_and_read_only_sessions -q` -> `PASS`
+  - `cd backend && ../.venv/bin/python -m pytest tests/test_generic_harness_fidelity.py -q` -> `PASS`
+  - `cd backend && ../.venv/bin/python -m pytest tests/test_admin_harness_export_api.py tests/test_provider_admin_idempotency.py tests/test_generic_harness_fidelity.py -q` -> `PASS`
+  - `cd frontend && npm test -- harness-page providers-page oauth-targets-page providers-readiness` -> `PASS`
+  - `cd frontend && npm run build` -> `PASS`
+  - `cd frontend && npm test -- --runInBand` -> `FAIL, Vitest/CAC kennt die Option --runInBand in diesem Projekt nicht`
+  - `cd frontend && npm test` -> `PASS (42/42 Dateien, 158/158 Tests)`
+  - `git diff --check` -> `PASS`

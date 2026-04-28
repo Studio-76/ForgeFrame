@@ -1,4 +1,4 @@
-import { Link, useSearchParams } from "react-router-dom";
+import { useSearchParams } from "react-router-dom";
 
 import { CONTROL_PLANE_ROUTES } from "../app/navigation";
 import { useAppSession } from "../app/session";
@@ -7,7 +7,7 @@ import { useInstanceCatalog } from "../app/useInstanceCatalog";
 import { InstanceScopeCard } from "../components/InstanceScopeCard";
 import { PageIntro } from "../components/PageIntro";
 import { BlockedState } from "../components/ui/StateBlocks";
-import { HarnessControlSection, OperationResultSection } from "../features/providers/ProvidersSections";
+import { HarnessControlSection } from "../features/providers/ProvidersSections";
 import { getProvidersAccess } from "../features/providers/providersShared";
 import { useProvidersControlPlane } from "../features/providers/useProvidersControlPlane";
 
@@ -36,42 +36,44 @@ export function HarnessPage() {
     setSearchParams(nextSearchParams);
   };
 
-  const proofProviders = data.providers.filter((provider) => provider.harness_proof_status !== "none");
   const attentionProfiles = data.profiles.filter((profile) => profile.needs_attention).length;
   const note = !access.canRead
     ? access.summaryDetail
     : access.canMutate
-    ? "Harness profile creation, verification, probe, import, export, and proof review are isolated on this route so the Providers module no longer doubles as the main harness workspace."
-    : `${access.summaryDetail} Harness proof, runs, and saved profiles stay visible here without exposing mutations the backend would reject.`;
+    ? "Harness is the standalone operator surface for saved profiles, templates, contract verification, dry-runs, probes, imports, exports, activation, and rollback."
+    : access.canOperate
+    ? "This route stays readable and operational for preview, verify, dry-run, and probe work even when write actions remain hidden."
+    : `${access.summaryDetail} Preview and diagnostics stay visible here, while verify, dry-run, probe, and profile mutations remain hidden when the backend would reject them.`;
 
   return (
     <section className="fg-page">
       <PageIntro
         eyebrow="Setup"
-        title="Harness Control Plane"
-        description="Saved harness profiles, verification runs, import/export posture, and proof status live on their own route instead of remaining collapsed under Providers."
-        question="Do the current harness profiles and runs prove anything real, or is harness truth still being confused with generic provider setup?"
+        title="Harness"
+        description="Operate generic integration profiles from a dedicated harness workspace: saved profiles and templates on the left, the selected config contract in the center, and real actions plus run history on the right."
+        question="Which profile contract are you validating, previewing, probing, importing, exporting, or rolling back right now?"
         links={[
           {
             label: "Harness",
             to: withInstanceScope(CONTROL_PLANE_ROUTES.harness, instanceId),
-            description: "Stay on the dedicated harness profile, run, and proof surface.",
+            description: "Stay on the standalone harness operator surface for profiles, contracts, actions, and run history.",
           },
           {
             label: "Providers",
             to: withInstanceScope(CONTROL_PLANE_ROUTES.providers, instanceId),
-            description: "Return to provider runtime truth when the question shifts away from harness operations.",
+            description: "Return to provider runtime inventory when the question shifts away from harness profile operations.",
           },
           {
-            label: "Release / Validation",
-            to: withInstanceScope(CONTROL_PLANE_ROUTES.releaseValidation, instanceId),
-            description: "Cross-check whether current harness proof is strong enough for release gates.",
+            label: "Logs",
+            to: withInstanceScope(CONTROL_PLANE_ROUTES.logs, instanceId),
+            description: "Open the shared evidence surface when a harness run needs audit or incident follow-up.",
           },
         ]}
         badges={[
           { label: access.badgeLabel, tone: access.badgeTone },
           ...(selectedInstance ? [{ label: `Instance scope: ${selectedInstance.display_name}`, tone: "success" as const }] : []),
           { label: `${data.profiles.length} profile${data.profiles.length === 1 ? "" : "s"}`, tone: data.profiles.length > 0 ? "success" : "warning" },
+          { label: `${attentionProfiles} attention`, tone: attentionProfiles > 0 ? "warning" : "neutral" },
           { label: `${data.runs.length} recent run${data.runs.length === 1 ? "" : "s"}`, tone: data.runs.length > 0 ? "success" : "neutral" },
         ]}
         note={note}
@@ -95,56 +97,10 @@ export function HarnessPage() {
           status="blocked"
         />
       ) : (
-        <>
-          <div className="fg-grid fg-grid-compact">
-            <article className="fg-card">
-              <div className="fg-panel-heading">
-                <div>
-                  <h3>Harness proof posture</h3>
-                  <p className="fg-muted">Recorded harness proof stays visible here instead of disappearing behind the provider route.</p>
-                </div>
-                <span className="fg-pill" data-tone={data.state === "success" ? "success" : data.state === "error" ? "danger" : "neutral"}>
-                  {data.state}
-                </span>
-              </div>
-              <ul className="fg-list">
-                <li>Profiles: {data.profiles.length}</li>
-                <li>Profiles needing attention: {attentionProfiles}</li>
-                <li>Recent runs: {data.runs.length}</li>
-                <li>Proof-carrying providers: {proofProviders.length}</li>
-              </ul>
-              <div className="fg-actions">
-                <button type="button" onClick={() => void actions.load()}>
-                  Refresh harness
-                </button>
-                <Link className="fg-nav-link" to={withInstanceScope(CONTROL_PLANE_ROUTES.providers, instanceId)}>
-                  Open Provider Runtime Truth
-                </Link>
-              </div>
-            </article>
-
-            <article className="fg-card">
-              <div className="fg-panel-heading">
-                <div>
-                  <h3>Proof carriers</h3>
-                  <p className="fg-muted">Providers with recorded harness proof stay explicit on the dedicated harness route.</p>
-                </div>
-              </div>
-              <ul className="fg-list">
-                {proofProviders.length === 0 ? <li>No providers carry harness proof yet.</li> : null}
-                {proofProviders.map((provider) => (
-                  <li key={provider.provider}>
-                    {provider.label} · proof={provider.harness_proof_status} · profiles={provider.harness_profile_count} · runs={provider.harness_run_count}
-                  </li>
-                ))}
-              </ul>
-            </article>
-          </div>
-
+        <div className="fg-stack">
           {data.error ? <p className="fg-danger">{data.error}</p> : null}
-          <OperationResultSection data={data} actions={actions} />
-          <HarnessControlSection data={data} actions={actions} />
-        </>
+          <HarnessControlSection data={data} actions={actions} instanceId={instanceId} />
+        </div>
       )}
     </section>
   );
