@@ -69,3 +69,21 @@
   - `cd frontend && npm test` -> erfolgreich, `42/42` Testdateien, `160/160` Tests
   - `rg -n "links=\\[" frontend/src/features/logs/LogsPage.tsx frontend/src/features/usage/UsagePage.tsx frontend/src/features/onboarding/OnboardingPage.tsx frontend/src/pages/ProvidersPage.tsx frontend/src/pages/OAuthTargetsPage.tsx frontend/src/pages/HarnessPage.tsx frontend/src/pages/ModelsPage.tsx` -> keine Header-Route-Links mehr auf den migrierten Operatorseiten
   - `rg -n 'status:.*warning|data-state=\"blocked\"' frontend/src/pages/ModelsPage.tsx frontend/src/styles/theme.css` -> nur noch Vertragsstatus in `ModelsPage`; blocked-State auf Danger-Styling geprueft
+
+## Zusatzrunde Status-Key Cleanup 2026-04-29
+
+- Audit-Ergebnis: `REJECTED`
+- Konkrete Audit-Maengel:
+  - `ModelsPage` uebergab `routing_status` direkt als `statusKey` an `DetailPanel`, obwohl diese Werte nicht Teil des globalen Shared-Status-Kontrakts sind.
+  - `ProvidersSections` verwendete fuer OAuth-Targets direkte `connection_status`-Werte wie `token present` oder `probe failed` als `statusKey`.
+  - Rein informative Advanced-Diagnostics-Badges nutzten synthetische Keys wie `providers-advanced` und `harness-advanced-diagnostics`.
+- Fix-Runden: `1`
+- Finale Freigabe: `APPROVED`
+- Geaenderte Dateien:
+  - `frontend/src/pages/ModelsPage.tsx`
+  - `frontend/src/features/providers/ProvidersSections.tsx`
+- Ausgefuehrte Pruefkommandos:
+  - `cd frontend && npm run build` -> erfolgreich; nur nicht-blockierende Vite-Warnung zu `index`-Chunk > 500 kB
+  - `cd frontend && npm test -- --runInBand` -> fehlgeschlagen, Vitest/CACError: `Unknown option --runInBand`
+  - `cd frontend && npm test` -> erfolgreich, `42/42` Testdateien, `160/160` Tests
+  - `rg -n 'statusKey=' frontend/src` -> verbleibende Callsites nutzen nur noch Vertragskeys oder abgeleitete Vertragsmappings

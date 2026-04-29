@@ -374,6 +374,29 @@ function formatOauthConnectionStatus(status: ProvidersPageData["oauthTargets"][n
   return status;
 }
 
+function contractStatusFromOauthConnectionStatus(
+  status: ProvidersPageData["oauthTargets"][number]["connection_status"],
+): string {
+  switch (status) {
+    case "runtime-ready":
+      return "runtime-ready";
+    case "bridge-only":
+      return "bridge-only";
+    case "oauth unsupported":
+      return "unsupported";
+    case "token present":
+      return "partial";
+    case "needs refresh":
+    case "expired":
+      return "degraded";
+    case "probe failed":
+      return "blocked";
+    case "not configured":
+    default:
+      return "onboarding-only";
+  }
+}
+
 function formatOauthActionMode(mode: ProvidersPageData["oauthTargets"][number]["actions"][number]["mode"]): string {
   if (mode === "api") {
     return "live action";
@@ -1083,7 +1106,6 @@ export function ProvidersAdvancedDiagnosticsSection({ data }: { data: ProvidersP
       description="Product axis contract language and deeper compatibility proof stay collapsed here."
       status={`${data.providers.length} providers`}
       statusTone="neutral"
-      statusKey="providers-advanced"
     >
       <div className="fg-stack">
         <div className="fg-subcard">
@@ -1848,7 +1870,6 @@ export function HarnessControlSection({ data, actions, instanceId }: HarnessCont
           description="Raw snapshots, import/export payloads, and proof carriers stay collapsed here so the main workspace remains operational."
           status={`${proofProviders.length} proof carrier${proofProviders.length === 1 ? "" : "s"}`}
           statusTone={proofProviders.length > 0 ? "success" : "neutral"}
-          statusKey="harness-advanced-diagnostics"
         >
           <div className="fg-stack">
             <div className="fg-subcard">
@@ -2453,7 +2474,7 @@ export function OAuthTargetsSection({ data, actions }: SectionProps) {
                   description="Session truth, runtime proof, streaming/tool evidence, and raw operator posture stay here instead of crowding the primary connection card."
                   status={formatOauthConnectionStatus(target.connection_status)}
                   statusTone={toneFromOauthConnectionStatus(target.connection_status) === "danger" ? "danger" : toneFromOauthConnectionStatus(target.connection_status) === "success" ? "success" : "warning"}
-                  statusKey={target.connection_status}
+                  statusKey={contractStatusFromOauthConnectionStatus(target.connection_status)}
                 >
                   <div className="fg-detail-grid">
                     <p>Auth kind: {target.auth_kind} · oauth mode={target.oauth_mode ?? "-"} · flow support={target.oauth_flow_support ?? "-"}</p>

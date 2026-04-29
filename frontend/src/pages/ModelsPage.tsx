@@ -86,6 +86,23 @@ function toneFromRoutingStatus(status: AdminModelRegisterRecord["routing_status"
   }
 }
 
+function contractStatusFromRoutingStatus(status: AdminModelRegisterRecord["routing_status"]): string {
+  switch (status) {
+    case "routable":
+      return "ready";
+    case "degraded":
+      return "degraded";
+    case "stale":
+      return "partial";
+    case "removed":
+      return "unsupported";
+    case "disabled":
+    case "no_target_coverage":
+    default:
+      return "blocked";
+  }
+}
+
 function toneFromTrustStatus(status: AdminModelRegisterRecord["trust_status"]): StatusTone {
   switch (status) {
     case "tested":
@@ -530,7 +547,7 @@ export function ModelsPage() {
               description={`${selectedModel.provider_label} · ${selectedModel.routing_key}`}
               status={titleCase(selectedModel.routing_status)}
               statusTone={toneFromRoutingStatus(selectedModel.routing_status)}
-              statusKey={selectedModel.routing_status}
+              statusKey={contractStatusFromRoutingStatus(selectedModel.routing_status)}
               sticky
               actions={(
                 <div className="fg-actions">
