@@ -676,12 +676,106 @@ describe("tasking and delivery pages", () => {
     expect(container.textContent).toContain("Reminder inventory");
     expect(container.textContent).toContain("Price reminder");
     expect(container.textContent).toContain("Task linkage");
+    expect(container.textContent).toContain("Origin");
+    expect(container.textContent).toContain("Reminder actions");
 
     const taskLink = Array.from(container.querySelectorAll("a")).find((link) => link.textContent === "Open task");
     expect(taskLink?.getAttribute("href")).toBe("/tasks?instanceId=instance_alpha&taskId=task_alpha");
+    const automationLink = Array.from(container.querySelectorAll("a")).find((link) => link.textContent === "Open automation");
+    expect(automationLink?.getAttribute("href")).toBe("/automations?instanceId=instance_alpha&automationId=automation_alpha");
   });
 
-  it("creates and updates reminders against the selected instance scope", async () => {
+  it("groups reminders by urgency and runs direct reminder actions from the detail surface", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-04-23T12:00:00Z"));
+
+    fetchRemindersMock.mockResolvedValue({
+      status: "ok",
+      instance: null,
+      reminders: [
+        createReminderSummary({
+          reminder_id: "reminder_overdue",
+          title: "Overdue reminder",
+          due_at: "2026-04-23T10:30:00Z",
+          status: "scheduled",
+        }),
+        createReminderSummary({
+          reminder_id: "reminder_due",
+          title: "Due reminder",
+          due_at: "2026-04-23T12:15:00Z",
+          status: "due",
+        }),
+        createReminderSummary({
+          reminder_id: "reminder_upcoming",
+          title: "Upcoming reminder",
+          due_at: "2026-04-23T14:30:00Z",
+          status: "scheduled",
+        }),
+        createReminderSummary({
+          reminder_id: "reminder_closed",
+          title: "Closed reminder",
+          due_at: "2026-04-23T09:00:00Z",
+          status: "dismissed",
+        }),
+      ],
+    });
+    fetchReminderDetailMock.mockResolvedValue({
+      status: "ok",
+      reminder: createReminderDetail({
+        reminder_id: "reminder_due",
+        title: "Due reminder",
+        due_at: "2026-04-23T12:15:00Z",
+        status: "due",
+      }),
+    });
+
+    try {
+      await renderIntoDom(withAppContext({
+        path: "/reminders?instanceId=instance_alpha&reminderId=reminder_due",
+        element: <RemindersPage />,
+        session: adminSession,
+      }));
+      await flushEffects();
+
+      expect(container.textContent).toContain("Overdue");
+      expect(container.textContent).toContain("Due now");
+      expect(container.textContent).toContain("Upcoming");
+      expect(container.textContent).toContain("Completed / cancelled");
+
+      await act(async () => {
+        getButtonByText(container, "Snooze 1 day")!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      });
+      await flushEffects();
+
+      expect(updateReminderMock).toHaveBeenNthCalledWith(1, "instance_alpha", "reminder_due", expect.objectContaining({
+        status: "scheduled",
+        due_at: "2026-04-24T12:15:00.000Z",
+        triggered_at: null,
+      }));
+
+      await act(async () => {
+        getButtonByText(container, "Complete reminder")!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      });
+      await flushEffects();
+
+      expect(updateReminderMock).toHaveBeenNthCalledWith(2, "instance_alpha", "reminder_due", expect.objectContaining({
+        status: "dismissed",
+      }));
+
+      await act(async () => {
+        getButtonByText(container, "Cancel reminder")!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      });
+      await flushEffects();
+
+      expect(updateReminderMock).toHaveBeenNthCalledWith(3, "instance_alpha", "reminder_due", expect.objectContaining({
+        status: "cancelled",
+      }));
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("creates and updates reminders from the drawer against the selected instance scope", async () => {
     await renderIntoDom(withAppContext({
       path: "/reminders?instanceId=instance_alpha&reminderId=reminder_alpha",
       element: <RemindersPage />,
@@ -689,19 +783,20 @@ describe("tasking and delivery pages", () => {
     }));
     await flushEffects();
 
-    const createForm = getFormByText("Create reminder");
-    const updateForm = getFormByText("Save reminder");
-    const createInputs = Array.from(createForm?.querySelectorAll("input") ?? []);
-    const createTextareas = Array.from(createForm?.querySelectorAll("textarea") ?? []);
-    const createButton = getButtonByText(createForm!, "Create reminder");
+    await act(async () => {
+      getButtonByText(container, "New reminder")!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    await flushEffects();
+
+    const createForm = container.querySelector("#reminder-drawer-form") as HTMLFormElement;
 
     await act(async () => {
-      setControlValue(createInputs[0] as HTMLInputElement, "reminder_beta");
-      setControlValue(createInputs[1] as HTMLInputElement, "task_beta");
-      setControlValue(createInputs[3] as HTMLInputElement, "Escalation reminder");
-      setControlValue(createTextareas[0] as HTMLTextAreaElement, "Escalate the follow-up if no response lands.");
-      setControlValue(createInputs[4] as HTMLInputElement, "2026-04-23T13:30:00Z");
-      createButton!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      setControlValue(getControlByLabel(createForm, "Reminder ID"), "reminder_beta");
+      setControlValue(getControlByLabel(createForm, "Task ID"), "task_beta");
+      setControlValue(getControlByLabel(createForm, "Title"), "Escalation reminder");
+      setControlValue(getControlByLabel(createForm, "Summary"), "Escalate the follow-up if no response lands.");
+      setControlValue(getControlByLabel(createForm, "Due at"), "2026-04-23T13:30:00Z");
+      getButtonByText(container, "Create reminder")!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     });
     await flushEffects();
 
@@ -713,20 +808,22 @@ describe("tasking and delivery pages", () => {
       due_at: "2026-04-23T13:30:00Z",
     }));
 
-    const updateInputs = Array.from(updateForm?.querySelectorAll("input") ?? []);
-    const updateTextareas = Array.from(updateForm?.querySelectorAll("textarea") ?? []);
-    const updateSelects = Array.from(updateForm?.querySelectorAll("select") ?? []);
-    const updateButton = getButtonByText(updateForm!, "Save reminder");
+    await act(async () => {
+      getButtonByText(container, "Edit selected reminder")!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    await flushEffects();
+
+    const updateForm = container.querySelector("#reminder-drawer-form") as HTMLFormElement;
 
     await act(async () => {
-      setControlValue(updateInputs[0] as HTMLInputElement, "task_beta");
-      setControlValue(updateInputs[1] as HTMLInputElement, "notification_beta");
-      setControlValue(updateInputs[2] as HTMLInputElement, "Price reminder updated");
-      setControlValue(updateTextareas[0] as HTMLTextAreaElement, "Reminder updated after operator review.");
-      setControlValue(updateSelects[0] as HTMLSelectElement, "due");
-      setControlValue(updateInputs[3] as HTMLInputElement, "2026-04-23T14:00:00Z");
-      setControlValue(updateInputs[4] as HTMLInputElement, "2026-04-23T13:45:00Z");
-      updateButton!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      setControlValue(getControlByLabel(updateForm, "Task ID"), "task_beta");
+      setControlValue(getControlByLabel(updateForm, "Notification ID"), "notification_beta");
+      setControlValue(getControlByLabel(updateForm, "Title"), "Price reminder updated");
+      setControlValue(getControlByLabel(updateForm, "Summary"), "Reminder updated after operator review.");
+      setControlValue(getControlByLabel(updateForm, "Status"), "due");
+      setControlValue(getControlByLabel(updateForm, "Due at"), "2026-04-23T14:00:00Z");
+      setControlValue(getControlByLabel(updateForm, "Triggered at"), "2026-04-23T13:45:00Z");
+      getButtonByText(container, "Save reminder changes")!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     });
     await flushEffects();
 

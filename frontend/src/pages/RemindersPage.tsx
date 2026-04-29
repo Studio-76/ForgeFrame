@@ -12,12 +12,23 @@ import {
   type ReminderSummary,
 } from "../api/admin";
 import { CONTROL_PLANE_ROUTES } from "../app/navigation";
-import { buildNotificationPath, buildTaskPath } from "../app/workInteractionRoutes";
+import {
+  buildAutomationPath,
+  buildConversationPath,
+  buildNotificationPath,
+  buildReminderPath,
+  buildTaskPath,
+} from "../app/workInteractionRoutes";
 import { useAppSession } from "../app/session";
 import { PageIntro } from "../components/PageIntro";
+import { DetailDrawer } from "../components/ui/DetailDrawer";
 import { getWorkInteractionAccess, normalizeOptional, parseJsonObject, type LoadState } from "./workInteractionPageSupport";
 
+type DrawerMode = "closed" | "create" | "edit";
+type ReminderGroupKey = "overdue" | "due_now" | "upcoming" | "completed_cancelled";
+
 const STATUS_OPTIONS: Array<ReminderStatus | "all"> = ["all", "scheduled", "due", "triggered", "dismissed", "cancelled"];
+const DRAWER_FORM_ID = "reminder-drawer-form";
 
 const DEFAULT_CREATE_FORM = {
   reminderId: "",
@@ -40,6 +51,60 @@ const DEFAULT_EDIT_FORM = {
   metadataJson: "{}",
 };
 
+function reminderStatusTone(status: ReminderStatus): "success" | "danger" | "warning" | "neutral" {
+  if (status === "triggered" || status === "dismissed") {
+    return "success";
+  }
+  if (status === "cancelled") {
+    return "neutral";
+  }
+  if (status === "due") {
+    return "danger";
+  }
+  return "warning";
+}
+
+function reminderGroupKey(reminder: Pick<ReminderSummary, "status" | "due_at">, nowMs: number): ReminderGroupKey {
+  if (reminder.status === "triggered" || reminder.status === "dismissed" || reminder.status === "cancelled") {
+    return "completed_cancelled";
+  }
+
+  const dueMs = Date.parse(reminder.due_at);
+  if (Number.isNaN(dueMs)) {
+    return "upcoming";
+  }
+  if (dueMs < nowMs) {
+    return "overdue";
+  }
+  if (reminder.status === "due" || dueMs <= nowMs + (60 * 60 * 1000)) {
+    return "due_now";
+  }
+  return "upcoming";
+}
+
+function reminderGroupHeading(group: ReminderGroupKey): string {
+  switch (group) {
+    case "overdue":
+      return "Overdue";
+    case "due_now":
+      return "Due now";
+    case "upcoming":
+      return "Upcoming";
+    case "completed_cancelled":
+      return "Completed / cancelled";
+    default:
+      return group;
+  }
+}
+
+function reminderDueBucket(detail: Pick<ReminderSummary, "status" | "due_at">, nowMs: number): string {
+  return reminderGroupHeading(reminderGroupKey(detail, nowMs));
+}
+
+function reminderIsClosed(status: ReminderStatus): boolean {
+  return status === "triggered" || status === "dismissed" || status === "cancelled";
+}
+
 export function RemindersPage() {
   const { session, sessionReady } = useAppSession();
   const { canRead, canMutate } = getWorkInteractionAccess(session, sessionReady);
@@ -57,11 +122,31 @@ export function RemindersPage() {
   const [detail, setDetail] = useState<ReminderDetail | null>(null);
   const [createForm, setCreateForm] = useState(DEFAULT_CREATE_FORM);
   const [editForm, setEditForm] = useState(DEFAULT_EDIT_FORM);
+  const [drawerMode, setDrawerMode] = useState<DrawerMode>("closed");
   const [savingCreate, setSavingCreate] = useState(false);
   const [savingUpdate, setSavingUpdate] = useState(false);
+  const [actionState, setActionState] = useState<Record<"snooze" | "complete" | "cancel", boolean>>({
+    snooze: false,
+    complete: false,
+    cancel: false,
+  });
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
   const [refreshNonce, setRefreshNonce] = useState(0);
+
+  const nowMs = Date.now();
+  const viewerTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
+  const originConversationId = detail?.task?.conversation_id ?? detail?.notification?.conversation_id ?? null;
+  const groupedReminders: Record<ReminderGroupKey, ReminderSummary[]> = {
+    overdue: [],
+    due_now: [],
+    upcoming: [],
+    completed_cancelled: [],
+  };
+
+  reminders.forEach((reminder) => {
+    groupedReminders[reminderGroupKey(reminder, nowMs)].push(reminder);
+  });
 
   const updateRoute = (mutate: (next: URLSearchParams) => void, replace = false) => {
     const next = new URLSearchParams(searchParams);
@@ -206,6 +291,23 @@ export function RemindersPage() {
     });
   }, [detail]);
 
+  const closeDrawer = () => {
+    setDrawerMode("closed");
+    setCreateForm(DEFAULT_CREATE_FORM);
+  };
+
+  const openCreateDrawer = () => {
+    setCreateForm(DEFAULT_CREATE_FORM);
+    setDrawerMode("create");
+  };
+
+  const openEditDrawer = () => {
+    if (!detail) {
+      return;
+    }
+    setDrawerMode("edit");
+  };
+
   const handleCreate = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!canMutate || !instanceId) {
@@ -225,7 +327,7 @@ export function RemindersPage() {
         due_at: createForm.dueAt.trim(),
         metadata: parseJsonObject(createForm.metadataJson, "Reminder metadata"),
       });
-      setCreateForm(DEFAULT_CREATE_FORM);
+      closeDrawer();
       updateRoute((next) => {
         next.set("reminderId", payload.reminder.reminder_id);
       });
@@ -260,12 +362,63 @@ export function RemindersPage() {
       });
       setMessage(`Reminder ${payload.reminder.reminder_id} updated.`);
       setRefreshNonce((current) => current + 1);
+      setDrawerMode("closed");
     } catch (saveError) {
       setError(saveError instanceof Error ? saveError.message : "Reminder update failed.");
     } finally {
       setSavingUpdate(false);
     }
   };
+
+  const handleAction = async (action: "snooze" | "complete" | "cancel") => {
+    if (!canMutate || !instanceId || !detail) {
+      return;
+    }
+
+    setActionState((current) => ({ ...current, [action]: true }));
+    setError("");
+    setMessage("");
+    try {
+      if (action === "snooze") {
+        const nextDue = new Date(detail.due_at);
+        if (Number.isNaN(nextDue.getTime())) {
+          throw new Error("Reminder due_at is invalid and cannot be snoozed.");
+        }
+        nextDue.setUTCDate(nextDue.getUTCDate() + 1);
+        const payload = await updateReminder(instanceId, detail.reminder_id, {
+          status: "scheduled",
+          due_at: nextDue.toISOString(),
+          triggered_at: null,
+        });
+        setMessage(`Reminder ${payload.reminder.reminder_id} snoozed by one day.`);
+      } else if (action === "complete") {
+        const payload = await updateReminder(instanceId, detail.reminder_id, {
+          status: "dismissed",
+        });
+        setMessage(`Reminder ${payload.reminder.reminder_id} marked complete.`);
+      } else {
+        const payload = await updateReminder(instanceId, detail.reminder_id, {
+          status: "cancelled",
+        });
+        setMessage(`Reminder ${payload.reminder.reminder_id} cancelled.`);
+      }
+      setRefreshNonce((current) => current + 1);
+    } catch (saveError) {
+      setError(saveError instanceof Error ? saveError.message : `Reminder action '${action}' failed.`);
+    } finally {
+      setActionState((current) => ({ ...current, [action]: false }));
+    }
+  };
+
+  const drawerModeLabel = drawerMode === "create" ? "Create Reminder" : "Edit Reminder";
+  const drawerStatus = drawerMode === "create"
+    ? (createForm.title.trim() && createForm.dueAt.trim() ? "form ready" : "title and due date required")
+    : (detail ? detail.reminder_id : "select reminder");
+  const drawerStatusTone = drawerMode === "create"
+    ? (createForm.title.trim() && createForm.dueAt.trim() ? "success" : "danger")
+    : detail
+      ? reminderStatusTone(detail.status)
+      : "warning";
 
   if (!sessionReady) {
     return (
@@ -310,8 +463,8 @@ export function RemindersPage() {
       <PageIntro
         eyebrow="Work Interaction"
         title="Reminders"
-        description="Persistent reminder inventory with due-state truth, task linkage, notification linkage, and trigger timestamps."
-        question="Are follow-ups actually scheduled and visible, or is work still relying on memory and operator guesswork?"
+        description="Reminder control plane grouped by due pressure, with direct snooze, complete, cancel, and linkage back to tasking, notification, conversation, and automation truth."
+        question="Are overdue follow-ups visible and steerable, or is operator work still hidden behind generic reminder CRUD?"
         links={[
           { label: "Reminders", to: CONTROL_PLANE_ROUTES.reminders, description: "Stay on the reminder inventory and detail surface." },
           { label: "Tasks", to: CONTROL_PLANE_ROUTES.tasks, description: "Open the task layer linked to these reminders." },
@@ -332,7 +485,7 @@ export function RemindersPage() {
         <div className="fg-panel-heading">
           <div>
             <h3>Scope and filter</h3>
-            <p className="fg-muted">Choose the instance boundary, then constrain the reminder inventory by due-state posture.</p>
+            <p className="fg-muted">Choose the instance boundary, then filter by backend reminder status. ForgeFrame additionally groups the visible results into overdue, due now, upcoming, and completed / cancelled.</p>
           </div>
           <span className="fg-pill" data-tone={instancesState === "success" ? "success" : instancesState === "error" ? "danger" : "neutral"}>{instancesState}</span>
         </div>
@@ -380,9 +533,12 @@ export function RemindersPage() {
           <div className="fg-panel-heading">
             <div>
               <h3>Reminder inventory</h3>
-              <p className="fg-muted">Each row is a persisted due-state object, not a mental note.</p>
+              <p className="fg-muted">Visible reminders are grouped by urgency so overdue follow-ups surface before background upkeep.</p>
             </div>
-            <span className="fg-pill" data-tone={listState === "success" ? "success" : listState === "error" ? "danger" : "neutral"}>{listState}</span>
+            <div className="fg-actions">
+              <span className="fg-pill" data-tone={listState === "success" ? "success" : listState === "error" ? "danger" : "neutral"}>{listState}</span>
+              <button type="button" disabled={!canMutate} onClick={openCreateDrawer}>New reminder</button>
+            </div>
           </div>
 
           {listState === "loading" ? <p className="fg-muted">Loading reminder inventory.</p> : null}
@@ -390,29 +546,43 @@ export function RemindersPage() {
 
           {reminders.length > 0 ? (
             <div className="fg-stack">
-              {reminders.map((reminder) => (
-                <button
-                  key={reminder.reminder_id}
-                  type="button"
-                  className={`fg-data-row${reminder.reminder_id === selectedReminderId ? " is-current" : ""}`}
-                  onClick={() => updateRoute((next) => {
-                    next.set("reminderId", reminder.reminder_id);
-                  })}
-                >
-                  <div className="fg-panel-heading fg-data-row-heading">
-                    <div className="fg-page-header">
-                      <span className="fg-code">{reminder.reminder_id}</span>
-                      <strong>{reminder.title}</strong>
+              {(["overdue", "due_now", "upcoming", "completed_cancelled"] as ReminderGroupKey[]).map((group) => (
+                groupedReminders[group].length > 0 ? (
+                  <article key={group} className="fg-subcard">
+                    <div className="fg-panel-heading">
+                      <div>
+                        <h4>{reminderGroupHeading(group)}</h4>
+                        <p className="fg-muted">{groupedReminders[group].length} reminder{groupedReminders[group].length === 1 ? "" : "s"} in this bucket.</p>
+                      </div>
                     </div>
-                    <div className="fg-actions">
-                      <span className="fg-pill" data-tone={reminder.status === "triggered" ? "success" : reminder.status === "cancelled" ? "danger" : "warning"}>{reminder.status}</span>
+                    <div className="fg-stack">
+                      {groupedReminders[group].map((reminder) => (
+                        <button
+                          key={reminder.reminder_id}
+                          type="button"
+                          className={`fg-data-row${reminder.reminder_id === selectedReminderId ? " is-current" : ""}`}
+                          onClick={() => updateRoute((next) => {
+                            next.set("reminderId", reminder.reminder_id);
+                          })}
+                        >
+                          <div className="fg-panel-heading fg-data-row-heading">
+                            <div className="fg-page-header">
+                              <span className="fg-code">{reminder.reminder_id}</span>
+                              <strong>{reminder.title}</strong>
+                            </div>
+                            <div className="fg-actions">
+                              <span className="fg-pill" data-tone={reminderStatusTone(reminder.status)}>{reminder.status}</span>
+                            </div>
+                          </div>
+                          <div className="fg-detail-grid">
+                            <span className="fg-muted">task {reminder.task_id ?? "none"} · automation {reminder.automation_id ?? "none"} · notification {reminder.notification_id ?? "none"}</span>
+                            <span className="fg-muted">due {reminder.due_at} · timezone UTC</span>
+                          </div>
+                        </button>
+                      ))}
                     </div>
-                  </div>
-                  <div className="fg-detail-grid">
-                    <span className="fg-muted">task {reminder.task_id ?? "none"} · automation {reminder.automation_id ?? "none"}</span>
-                    <span className="fg-muted">due {reminder.due_at}</span>
-                  </div>
-                </button>
+                  </article>
+                ) : null
               ))}
             </div>
           ) : null}
@@ -422,9 +592,12 @@ export function RemindersPage() {
           <div className="fg-panel-heading">
             <div>
               <h3>Reminder detail</h3>
-              <p className="fg-muted">Task linkage, notification linkage, and trigger truth converge here.</p>
+              <p className="fg-muted">Origin, exact due timing, steering actions, and delivery linkage converge here.</p>
             </div>
-            {detail ? <span className="fg-pill">{detail.reminder_id}</span> : null}
+            <div className="fg-actions">
+              {detail ? <span className="fg-pill">{detail.reminder_id}</span> : null}
+              <button type="button" disabled={!canMutate || !detail} onClick={openEditDrawer}>Edit selected reminder</button>
+            </div>
           </div>
 
           {detailState === "idle" ? <p className="fg-muted">Select a reminder to inspect due-state truth.</p> : null}
@@ -432,16 +605,56 @@ export function RemindersPage() {
 
           {detail ? (
             <div className="fg-stack">
+              <div className="fg-actions">
+                <span className="fg-pill" data-tone={reminderStatusTone(detail.status)}>{detail.status}</span>
+                <span className="fg-pill">{reminderDueBucket(detail, nowMs)}</span>
+                <span className="fg-pill">timezone {viewerTimeZone}</span>
+              </div>
+
               <article className="fg-subcard">
-                <h4>Summary</h4>
+                <h4>Timing</h4>
                 <ul className="fg-list">
-                  <li>Status: {detail.status}</li>
-                  <li>Due at: {detail.due_at}</li>
+                  <li>Exact due at: {detail.due_at}</li>
+                  <li>Viewer time zone: {viewerTimeZone}</li>
+                  <li>Due bucket: {reminderDueBucket(detail, nowMs)}</li>
                   <li>Triggered at: {detail.triggered_at ?? "Not triggered"}</li>
+                </ul>
+                <p className="fg-muted">ForgeFrame shows the raw ISO deadline from the backend and labels the effective urgency bucket separately so overdue reminders are immediately visible.</p>
+              </article>
+
+              <article className="fg-subcard">
+                <h4>Origin</h4>
+                <ul className="fg-list">
                   <li>Task: {detail.task_id ?? "Not linked"}</li>
+                  <li>Conversation: {originConversationId ?? "Bridge-only through task or notification"}</li>
                   <li>Automation: {detail.automation_id ?? "Not linked"}</li>
                   <li>Notification: {detail.notification_id ?? "Not linked"}</li>
                 </ul>
+                <div className="fg-actions">
+                  {detail.task ? <Link className="fg-nav-link" to={buildTaskPath({ instanceId, taskId: detail.task.task_id })}>Open task</Link> : null}
+                  {originConversationId ? <Link className="fg-nav-link" to={buildConversationPath({ instanceId, conversationId: originConversationId })}>Open conversation</Link> : null}
+                  {detail.automation_id ? <Link className="fg-nav-link" to={buildAutomationPath({ instanceId, automationId: detail.automation_id })}>Open automation</Link> : null}
+                  {detail.notification ? <Link className="fg-nav-link" to={buildNotificationPath({ instanceId, notificationId: detail.notification.notification_id })}>Open notification</Link> : null}
+                </div>
+              </article>
+
+              <article className="fg-subcard">
+                <h4>Reminder actions</h4>
+                <p className="fg-muted">Snooze, complete, and cancel use the real reminder update API. Closed reminders stay visible but are no longer presented as actively steerable.</p>
+                <div className="fg-actions">
+                  <button type="button" disabled={!canMutate || reminderIsClosed(detail.status) || actionState.snooze} onClick={() => void handleAction("snooze")}>
+                    {actionState.snooze ? "Snoozing" : "Snooze 1 day"}
+                  </button>
+                  <button type="button" disabled={!canMutate || reminderIsClosed(detail.status) || actionState.complete} onClick={() => void handleAction("complete")}>
+                    {actionState.complete ? "Completing" : "Complete reminder"}
+                  </button>
+                  <button type="button" disabled={!canMutate || reminderIsClosed(detail.status) || actionState.cancel} onClick={() => void handleAction("cancel")}>
+                    {actionState.cancel ? "Cancelling" : "Cancel reminder"}
+                  </button>
+                </div>
+                {reminderIsClosed(detail.status) ? (
+                  <p className="fg-muted">This reminder is already completed or cancelled. Use the drawer only for corrective metadata edits, not as a fake active control surface.</p>
+                ) : null}
               </article>
 
               <article className="fg-subcard">
@@ -464,6 +677,7 @@ export function RemindersPage() {
                     </div>
                   ) : <p className="fg-muted">No task is linked to this reminder.</p>}
                 </article>
+
                 <article className="fg-subcard">
                   <h4>Notification linkage</h4>
                   {detail.notification ? (
@@ -484,114 +698,156 @@ export function RemindersPage() {
         </article>
       </div>
 
-      <div className="fg-grid">
-        <article className="fg-card">
-          <div className="fg-panel-heading">
-            <div>
-              <h3>Create reminder</h3>
-              <p className="fg-muted">Create a persisted due-state object instead of relying on operator memory.</p>
-            </div>
-            <span className="fg-pill" data-tone={canMutate ? "success" : "warning"}>{canMutate ? "Writable" : "Admin only"}</span>
-          </div>
-          <form className="fg-stack" onSubmit={handleCreate}>
+      <DetailDrawer
+        open={drawerMode !== "closed"}
+        title={drawerModeLabel}
+        description={drawerMode === "create"
+          ? "Create a persisted follow-up without turning the reminder page back into a permanent form wall."
+          : "Adjust linkage, timing, and metadata inside a focused drawer."}
+        status={drawerStatus}
+        statusTone={drawerStatusTone}
+        properties={[
+          { label: "Scope", value: instanceId || "No instance selected" },
+          { label: "Direct controls", value: "snooze / complete / cancel via reminder PATCH" },
+          { label: "Time display", value: `Raw due_at plus viewer timezone (${viewerTimeZone})` },
+        ]}
+        actions={(
+          <>
+            <button type="button" onClick={closeDrawer}>Cancel</button>
+            <button
+              type="submit"
+              form={DRAWER_FORM_ID}
+              disabled={!canMutate || (drawerMode === "create" ? savingCreate || !createForm.title.trim() || !createForm.dueAt.trim() : savingUpdate || !detail)}
+            >
+              {drawerMode === "create" ? (savingCreate ? "Creating reminder" : "Create reminder") : (savingUpdate ? "Saving reminder" : "Save reminder changes")}
+            </button>
+          </>
+        )}
+        onClose={closeDrawer}
+      >
+        <form id={DRAWER_FORM_ID} className="fg-stack" onSubmit={drawerMode === "create" ? handleCreate : handleUpdate}>
+          <section className="fg-subcard">
+            <h4>Identity</h4>
             <div className="fg-grid fg-grid-compact">
-              <label>
-                Reminder ID
-                <input value={createForm.reminderId} onChange={(event) => setCreateForm((current) => ({ ...current, reminderId: event.target.value }))} placeholder="reminder_customer_pricing" />
-              </label>
+              {drawerMode === "create" ? (
+                <label>
+                  Reminder ID
+                  <input value={createForm.reminderId} onChange={(event) => setCreateForm((current) => ({ ...current, reminderId: event.target.value }))} placeholder="reminder_customer_pricing" />
+                </label>
+              ) : null}
               <label>
                 Task ID
-                <input value={createForm.taskId} onChange={(event) => setCreateForm((current) => ({ ...current, taskId: event.target.value }))} />
+                <input
+                  value={drawerMode === "create" ? createForm.taskId : editForm.taskId}
+                  onChange={(event) => {
+                    const nextValue = event.target.value;
+                    if (drawerMode === "create") {
+                      setCreateForm((current) => ({ ...current, taskId: nextValue }));
+                      return;
+                    }
+                    setEditForm((current) => ({ ...current, taskId: nextValue }));
+                  }}
+                />
               </label>
-              <label>
-                Automation ID
-                <input value={createForm.automationId} onChange={(event) => setCreateForm((current) => ({ ...current, automationId: event.target.value }))} />
-              </label>
-            </div>
-            <label>
-              Title
-              <input value={createForm.title} onChange={(event) => setCreateForm((current) => ({ ...current, title: event.target.value }))} placeholder="Follow up now" />
-            </label>
-            <label>
-              Summary
-              <textarea rows={3} value={createForm.summary} onChange={(event) => setCreateForm((current) => ({ ...current, summary: event.target.value }))} />
-            </label>
-            <label>
-              Due at
-              <input value={createForm.dueAt} onChange={(event) => setCreateForm((current) => ({ ...current, dueAt: event.target.value }))} placeholder="2026-04-23T10:30:00Z" />
-            </label>
-            <label>
-              Metadata JSON
-              <textarea rows={6} value={createForm.metadataJson} onChange={(event) => setCreateForm((current) => ({ ...current, metadataJson: event.target.value }))} />
-            </label>
-            <div className="fg-actions">
-              <button type="submit" disabled={!canMutate || savingCreate || !instanceId || !createForm.title.trim() || !createForm.dueAt.trim()}>
-                {savingCreate ? "Creating reminder" : "Create reminder"}
-              </button>
-            </div>
-          </form>
-        </article>
-
-        <article className="fg-card">
-          <div className="fg-panel-heading">
-            <div>
-              <h3>Edit reminder</h3>
-              <p className="fg-muted">Keep the selected reminder aligned with task, notification, and trigger truth.</p>
-            </div>
-            <span className="fg-pill" data-tone={detail ? "neutral" : "warning"}>{detail ? detail.reminder_id : "Select a reminder"}</span>
-          </div>
-
-          {detail ? (
-            <form className="fg-stack" onSubmit={handleUpdate}>
-              <div className="fg-grid fg-grid-compact">
+              {drawerMode === "create" ? (
                 <label>
-                  Task ID
-                  <input value={editForm.taskId} onChange={(event) => setEditForm((current) => ({ ...current, taskId: event.target.value }))} />
+                  Automation ID
+                  <input value={createForm.automationId} onChange={(event) => setCreateForm((current) => ({ ...current, automationId: event.target.value }))} />
                 </label>
+              ) : (
                 <label>
                   Notification ID
                   <input value={editForm.notificationId} onChange={(event) => setEditForm((current) => ({ ...current, notificationId: event.target.value }))} />
                 </label>
-              </div>
-              <label>
-                Title
-                <input value={editForm.title} onChange={(event) => setEditForm((current) => ({ ...current, title: event.target.value }))} />
-              </label>
-              <label>
-                Summary
-                <textarea rows={3} value={editForm.summary} onChange={(event) => setEditForm((current) => ({ ...current, summary: event.target.value }))} />
-              </label>
-              <div className="fg-grid fg-grid-compact">
+              )}
+            </div>
+          </section>
+
+          <section className="fg-subcard">
+            <h4>Timing and state</h4>
+            <label>
+              Title
+              <input
+                value={drawerMode === "create" ? createForm.title : editForm.title}
+                onChange={(event) => {
+                  const nextValue = event.target.value;
+                  if (drawerMode === "create") {
+                    setCreateForm((current) => ({ ...current, title: nextValue }));
+                    return;
+                  }
+                  setEditForm((current) => ({ ...current, title: nextValue }));
+                }}
+                placeholder="Follow up now"
+              />
+            </label>
+            <label>
+              Summary
+              <textarea
+                rows={4}
+                value={drawerMode === "create" ? createForm.summary : editForm.summary}
+                onChange={(event) => {
+                  const nextValue = event.target.value;
+                  if (drawerMode === "create") {
+                    setCreateForm((current) => ({ ...current, summary: nextValue }));
+                    return;
+                  }
+                  setEditForm((current) => ({ ...current, summary: nextValue }));
+                }}
+              />
+            </label>
+            <div className="fg-grid fg-grid-compact">
+              {drawerMode === "edit" ? (
                 <label>
                   Status
                   <select value={editForm.status} onChange={(event) => setEditForm((current) => ({ ...current, status: event.target.value as ReminderStatus }))}>
                     {STATUS_OPTIONS.filter((option) => option !== "all").map((option) => <option key={option} value={option}>{option}</option>)}
                   </select>
                 </label>
-                <label>
-                  Due at
-                  <input value={editForm.dueAt} onChange={(event) => setEditForm((current) => ({ ...current, dueAt: event.target.value }))} />
-                </label>
+              ) : null}
+              <label>
+                Due at
+                <input
+                  value={drawerMode === "create" ? createForm.dueAt : editForm.dueAt}
+                  onChange={(event) => {
+                    const nextValue = event.target.value;
+                    if (drawerMode === "create") {
+                      setCreateForm((current) => ({ ...current, dueAt: nextValue }));
+                      return;
+                    }
+                    setEditForm((current) => ({ ...current, dueAt: nextValue }));
+                  }}
+                  placeholder="2026-04-23T10:30:00Z"
+                />
+              </label>
+              {drawerMode === "edit" ? (
                 <label>
                   Triggered at
                   <input value={editForm.triggeredAt} onChange={(event) => setEditForm((current) => ({ ...current, triggeredAt: event.target.value }))} />
                 </label>
-              </div>
-              <label>
-                Metadata JSON
-                <textarea rows={6} value={editForm.metadataJson} onChange={(event) => setEditForm((current) => ({ ...current, metadataJson: event.target.value }))} />
-              </label>
-              <div className="fg-actions">
-                <button type="submit" disabled={!canMutate || savingUpdate}>
-                  {savingUpdate ? "Saving reminder" : "Save reminder"}
-                </button>
-              </div>
-            </form>
-          ) : (
-            <p className="fg-muted">Select a reminder before attempting a mutation.</p>
-          )}
-        </article>
-      </div>
+              ) : null}
+            </div>
+          </section>
+
+          <section className="fg-subcard">
+            <h4>Metadata</h4>
+            <label>
+              Metadata JSON
+              <textarea
+                rows={6}
+                value={drawerMode === "create" ? createForm.metadataJson : editForm.metadataJson}
+                onChange={(event) => {
+                  const nextValue = event.target.value;
+                  if (drawerMode === "create") {
+                    setCreateForm((current) => ({ ...current, metadataJson: nextValue }));
+                    return;
+                  }
+                  setEditForm((current) => ({ ...current, metadataJson: nextValue }));
+                }}
+              />
+            </label>
+          </section>
+        </form>
+      </DetailDrawer>
     </section>
   );
 }
