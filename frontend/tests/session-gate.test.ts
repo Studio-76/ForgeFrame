@@ -23,6 +23,7 @@ describe("session route gate", () => {
     expect(
       getSessionRouteState({
         pathname: CONTROL_PLANE_ROUTES.dashboard,
+        requestedPath: CONTROL_PLANE_ROUTES.dashboard,
         hasToken: false,
         session: null,
         sessionReady: true,
@@ -38,13 +39,14 @@ describe("session route gate", () => {
     expect(
       getSessionRouteState({
         pathname: CONTROL_PLANE_ROUTES.providers,
+        requestedPath: CONTROL_PLANE_ROUTES.providers,
         hasToken: true,
         session: createSession({ must_rotate_password: true }),
         sessionReady: true,
       }),
     ).toEqual({
       shellMode: "password_rotation",
-      redirectTo: CONTROL_PLANE_ROUTES.passwordRotation,
+      redirectTo: `${CONTROL_PLANE_ROUTES.passwordRotation}?next=%2Fproviders`,
       loading: false,
     });
   });
@@ -53,6 +55,7 @@ describe("session route gate", () => {
     expect(
       getSessionRouteState({
         pathname: CONTROL_PLANE_ROUTES.passwordRotation,
+        requestedPath: CONTROL_PLANE_ROUTES.passwordRotation,
         hasToken: true,
         session: createSession({ must_rotate_password: true }),
         sessionReady: true,
@@ -68,6 +71,7 @@ describe("session route gate", () => {
     expect(
       getSessionRouteState({
         pathname: CONTROL_PLANE_ROUTES.login,
+        requestedPath: CONTROL_PLANE_ROUTES.login,
         hasToken: true,
         session: createSession(),
         sessionReady: true,
@@ -83,6 +87,7 @@ describe("session route gate", () => {
     expect(
       getSessionRouteState({
         pathname: CONTROL_PLANE_ROUTES.dashboard,
+        requestedPath: CONTROL_PLANE_ROUTES.dashboard,
         hasToken: true,
         session: null,
         sessionReady: false,

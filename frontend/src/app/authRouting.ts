@@ -7,6 +7,7 @@ export type SessionShellMode = "signed_out" | "password_rotation" | "control_pla
 
 type SessionRouteStateArgs = {
   pathname: string;
+  requestedPath: string;
   hasToken: boolean;
   session: AdminSessionUser | null;
   sessionReady: boolean;
@@ -53,14 +54,27 @@ export function normalizeNextPath(rawPath: string | null | undefined): string {
 
 export function getPostLoginDestination(user: AdminSessionUser, requestedNextPath: string | null | undefined): string {
   if (user.must_rotate_password) {
-    return CONTROL_PLANE_ROUTES.passwordRotation;
+    return buildPasswordRotationDestination(requestedNextPath);
   }
 
   return normalizeNextPath(requestedNextPath);
 }
 
+export function buildPasswordRotationDestination(requestedNextPath: string | null | undefined): string {
+  const nextPath = normalizeNextPath(requestedNextPath);
+  if (nextPath === CONTROL_PLANE_ROUTES.dashboard) {
+    return CONTROL_PLANE_ROUTES.passwordRotation;
+  }
+  return `${CONTROL_PLANE_ROUTES.passwordRotation}?next=${encodeURIComponent(nextPath)}`;
+}
+
+export function getPostRotationDestination(requestedNextPath: string | null | undefined): string {
+  return normalizeNextPath(requestedNextPath);
+}
+
 export function getSessionRouteState({
   pathname,
+  requestedPath,
   hasToken,
   session,
   sessionReady,
@@ -87,7 +101,7 @@ export function getSessionRouteState({
   if (session.must_rotate_password) {
     return {
       shellMode: "password_rotation",
-      redirectTo: isPasswordRotationRoute ? null : CONTROL_PLANE_ROUTES.passwordRotation,
+      redirectTo: isPasswordRotationRoute ? null : buildPasswordRotationDestination(requestedPath),
       loading: false,
     };
   }

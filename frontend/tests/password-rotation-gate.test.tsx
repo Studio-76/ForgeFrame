@@ -45,6 +45,16 @@ describe("password rotation gate", () => {
     ).toThrow("New password confirmation does not match.");
   });
 
+  it("rejects reusing the temporary password before the unlock request is sent", () => {
+    expect(() =>
+      buildPasswordRotationRequest({
+        current_password: "Rotation-Reset-456",
+        new_password: "Rotation-Reset-456",
+        confirm_password: "Rotation-Reset-456",
+      }),
+    ).toThrow("New password must differ from the current temporary password.");
+  });
+
   it("renders restricted-session copy that keeps the rest of the control plane locked", () => {
     const markup = renderToStaticMarkup(
       <PasswordRotationGate
@@ -56,6 +66,8 @@ describe("password rotation gate", () => {
     expect(markup).toContain("Password Rotation Required");
     expect(markup).toContain("restricted session");
     expect(markup).toContain("Only self-rotation and logout remain available.");
+    expect(markup).toContain("Password requirements");
+    expect(markup).toContain("Use at least 8 characters.");
     expect(markup).toContain("Current temporary password");
     expect(markup).toContain("Confirm new password");
     expect(markup).toContain("Rotate and unlock control plane");

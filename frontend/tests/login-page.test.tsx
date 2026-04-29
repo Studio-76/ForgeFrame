@@ -123,6 +123,7 @@ describe("Login page", () => {
     const emptyValueMatches = markup.match(/value=""/g) ?? [];
 
     expect(markup).toContain("Sign in with an administrator account");
+    expect(markup).toContain("Temporary passwords trigger a forced password-rotation flow");
     expect(markup).toContain('autoComplete="username"');
     expect(markup).toContain('autoComplete="current-password"');
     expect(markup).toContain(">Sign in</button>");
@@ -160,6 +161,33 @@ describe("Login page", () => {
     expect(setAdminTokenMock).toHaveBeenCalledWith("token-123");
     expect(router.state.location.pathname).toBe("/dashboard");
     expect(container.textContent).toContain("Dashboard route");
+  });
+
+  it("routes first-login sessions into password rotation and preserves the requested next path", async () => {
+    loginAdminMock.mockResolvedValue({
+      status: "ok",
+      access_token: "token-rotate",
+      expires_at: "2026-04-21T22:00:00Z",
+      user: {
+        ...createSessionUser(),
+        must_rotate_password: true,
+      },
+    });
+
+    const router = createMemoryRouter([
+      { path: "/login", element: <LoginPage /> },
+      { path: "/rotate-password", element: <div>Password rotation route</div> },
+    ], {
+      initialEntries: ["/login?next=%2Fproviders"],
+    });
+
+    await renderIntoDom(<RouterProvider router={router} />);
+    await fillLoginForm("ops-admin", "Temp-ForgeFrame-42");
+    await submitLoginForm();
+
+    expect(setAdminTokenMock).toHaveBeenCalledWith("token-rotate");
+    expect(router.state.location.pathname).toBe("/rotate-password");
+    expect(router.state.location.search).toBe("?next=%2Fproviders");
   });
 
   it("keeps the hardened login route on /login and surfaces invalid-credential errors without bootstrap disclosure", async () => {

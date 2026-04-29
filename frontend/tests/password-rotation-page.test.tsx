@@ -21,6 +21,7 @@ function SessionHarness() {
         },
         sessionReady: true,
         markPasswordRotationComplete: () => undefined,
+        replaceSession: () => undefined,
       }}
     />
   );
@@ -29,7 +30,7 @@ function SessionHarness() {
 describe("PasswordRotationPage", () => {
   it("renders a restricted rotation-only control-plane boundary", () => {
     const markup = renderToStaticMarkup(
-      <MemoryRouter initialEntries={[CONTROL_PLANE_ROUTES.passwordRotation]}>
+      <MemoryRouter initialEntries={[`${CONTROL_PLANE_ROUTES.passwordRotation}?next=%2Fproviders`]}>
         <Routes>
           <Route element={<SessionHarness />}>
             <Route path={CONTROL_PLANE_ROUTES.passwordRotation} element={<PasswordRotationPage />} />
@@ -43,6 +44,6 @@ describe("PasswordRotationPage", () => {
     expect(markup).toContain("Rotate password");
     expect(markup).toContain("Current temporary password");
     expect(markup).toContain("New password");
-    expect(markup).toContain("standard control-plane shell hidden");
+    expect(markup).toContain("/providers");
   });
 });

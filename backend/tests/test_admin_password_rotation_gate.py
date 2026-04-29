@@ -165,4 +165,4 @@ def test_self_rotation_rejects_reusing_the_same_password() -> None:
 
     assert rotate_response.status_code == 400
     assert rotate_response.json()["error"]["type"] == "password_rotation_failed"
-    assert rotate_response.json()["error"]["message"] == "new_password_must_differ"
+    assert rotate_response.json()["error"]["message"] == "New password must differ from the current temporary password."

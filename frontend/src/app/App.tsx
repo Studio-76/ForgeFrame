@@ -19,6 +19,7 @@ export function App() {
   const instanceId = getInstanceIdFromSearchParams(scopeSearchParams);
   const routeState = getSessionRouteState({
     pathname: location.pathname,
+    requestedPath: `${location.pathname}${location.search}${location.hash}`,
     hasToken: Boolean(getAdminToken()),
     session,
     sessionReady,

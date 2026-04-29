@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useState, type FormEvent } from "react";
 
-import { rotateOwnPassword, type AdminSessionUser } from "../../api/admin";
+import { fetchAdminSession, rotateOwnPassword, type AdminSessionUser } from "../../api/admin";
 
 export type PasswordRotationDraft = {
   current_password: string;
@@ -23,6 +23,9 @@ export function buildPasswordRotationRequest(draft: PasswordRotationDraft) {
   if (draft.new_password.length < 8) {
     throw new Error("New password must be at least 8 characters.");
   }
+  if (draft.new_password === draft.current_password) {
+    throw new Error("New password must differ from the current temporary password.");
+  }
   if (draft.new_password !== draft.confirm_password) {
     throw new Error("New password confirmation does not match.");
   }
@@ -32,9 +35,24 @@ export function buildPasswordRotationRequest(draft: PasswordRotationDraft) {
   };
 }
 
+function formatRotationError(error: unknown): string {
+  if (error instanceof Error) {
+    if (error.message.includes("Current temporary password was rejected")) {
+      return "Current temporary password was rejected. Re-enter it and try again.";
+    }
+    if (error.message.includes("must differ")) {
+      return "New password must differ from the current temporary password.";
+    }
+    if (error.message.includes("at least 8")) {
+      return "New password must be at least 8 characters.";
+    }
+  }
+  return "Password rotation could not be completed. Verify the temporary password and try again.";
+}
+
 type PasswordRotationGateProps = {
   session: AdminSessionUser;
-  onRotationComplete: () => void;
+  onRotationComplete: (session: AdminSessionUser) => void;
 };
 
 export function PasswordRotationGate({ session, onRotationComplete }: PasswordRotationGateProps) {
@@ -43,18 +61,34 @@ export function PasswordRotationGate({ session, onRotationComplete }: PasswordRo
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
 
-  const onSubmit = async () => {
+  const onSubmit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
     try {
       setBusy(true);
       setError("");
       const payload = buildPasswordRotationRequest(draft);
-      setMessage("Rotating password and restoring the control plane...");
-      await rotateOwnPassword(payload);
+      setMessage("Rotating password and reopening the control plane...");
+      const response = await rotateOwnPassword(payload);
+      const unlockedSession: AdminSessionUser = {
+        ...session,
+        user_id: response.user.user_id,
+        username: response.user.username,
+        display_name: response.user.display_name,
+        role: response.user.role,
+        must_rotate_password: response.user.must_rotate_password,
+      };
+      let nextSession = unlockedSession;
+      try {
+        const refreshedSession = await fetchAdminSession();
+        nextSession = refreshedSession.user;
+      } catch {
+        // The password change already succeeded; keep the unlocked session and continue.
+      }
       setDraft(createEmptyPasswordRotationDraft());
-      onRotationComplete();
+      onRotationComplete(nextSession);
     } catch (err) {
       setMessage("");
-      setError(err instanceof Error ? err.message : "Password rotation failed.");
+      setError(formatRotationError(err));
     } finally {
       setBusy(false);
     }
@@ -80,51 +114,63 @@ export function PasswordRotationGate({ session, onRotationComplete }: PasswordRo
         rotation completes.
       </p>
 
-      <div className="fg-grid fg-grid-compact fg-mt-sm">
-        <label className="fg-stack">
-          <span className="fg-muted">Current temporary password</span>
-          <input
-            autoComplete="current-password"
-            placeholder="current temporary password"
-            type="password"
-            value={draft.current_password}
-            onChange={(event) => setDraft((prev) => ({ ...prev, current_password: event.target.value }))}
-          />
-        </label>
+      <article className="fg-subcard">
+        <h3>Password requirements</h3>
+        <ul className="fg-list">
+          <li>Use at least 8 characters.</li>
+          <li>Choose a password that differs from the current temporary password.</li>
+          <li>Confirm the new password exactly before submitting.</li>
+        </ul>
+      </article>
 
-        <label className="fg-stack">
-          <span className="fg-muted">New password</span>
-          <input
-            autoComplete="new-password"
-            minLength={8}
-            placeholder="new password"
-            type="password"
-            value={draft.new_password}
-            onChange={(event) => setDraft((prev) => ({ ...prev, new_password: event.target.value }))}
-          />
-        </label>
+      <form className="fg-stack fg-mt-sm" onSubmit={(event) => void onSubmit(event)}>
+        <div className="fg-grid fg-grid-compact">
+          <label className="fg-stack">
+            <span className="fg-muted">Current temporary password</span>
+            <input
+              autoComplete="current-password"
+              autoFocus
+              placeholder="current temporary password"
+              type="password"
+              value={draft.current_password}
+              onChange={(event) => setDraft((prev) => ({ ...prev, current_password: event.target.value }))}
+            />
+          </label>
 
-        <label className="fg-stack">
-          <span className="fg-muted">Confirm new password</span>
-          <input
-            autoComplete="new-password"
-            minLength={8}
-            placeholder="confirm new password"
-            type="password"
-            value={draft.confirm_password}
-            onChange={(event) => setDraft((prev) => ({ ...prev, confirm_password: event.target.value }))}
-          />
-        </label>
-      </div>
+          <label className="fg-stack">
+            <span className="fg-muted">New password</span>
+            <input
+              autoComplete="new-password"
+              minLength={8}
+              placeholder="new password"
+              type="password"
+              value={draft.new_password}
+              onChange={(event) => setDraft((prev) => ({ ...prev, new_password: event.target.value }))}
+            />
+          </label>
 
-      {message ? <p className="fg-muted fg-mt-sm">{message}</p> : null}
-      {error ? <p className="fg-danger fg-mt-sm">{error}</p> : null}
+          <label className="fg-stack">
+            <span className="fg-muted">Confirm new password</span>
+            <input
+              autoComplete="new-password"
+              minLength={8}
+              placeholder="confirm new password"
+              type="password"
+              value={draft.confirm_password}
+              onChange={(event) => setDraft((prev) => ({ ...prev, confirm_password: event.target.value }))}
+            />
+          </label>
+        </div>
 
-      <div className="fg-actions fg-mt-sm">
-        <button disabled={busy} type="button" onClick={() => void onSubmit()}>
-          Rotate and unlock control plane
-        </button>
-      </div>
+        {message ? <p className="fg-muted fg-mt-sm" aria-live="polite">{message}</p> : null}
+        {error ? <p className="fg-danger fg-mt-sm" role="alert">{error}</p> : null}
+
+        <div className="fg-actions fg-mt-sm">
+          <button disabled={busy} type="submit">
+            {busy ? "Rotating password..." : "Rotate and unlock control plane"}
+          </button>
+        </div>
+      </form>
     </article>
   );
 }

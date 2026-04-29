@@ -47,6 +47,14 @@ class SignedOutBootstrapHint(BaseModel):
     message: str = "Sign in to inspect bootstrap posture."
 
 
+def _password_rotation_failure_message(error_code: str) -> str:
+    if error_code == "invalid_current_password":
+        return "Current temporary password was rejected. Re-enter it and try again."
+    if error_code == "new_password_must_differ":
+        return "New password must differ from the current temporary password."
+    return "Password rotation could not be completed. Verify the current password and try again."
+
+
 @router.get("/bootstrap")
 def auth_bootstrap_status() -> dict[str, object]:
     return {"status": "ok", "bootstrap": SignedOutBootstrapHint().model_dump()}
@@ -170,6 +178,12 @@ def rotate_own_password(
     except ValueError as exc:
         return JSONResponse(
             status_code=status.HTTP_400_BAD_REQUEST,
-            content={"status": "error", "error": {"type": "password_rotation_failed", "message": str(exc)}},
+            content={
+                "status": "error",
+                "error": {
+                    "type": "password_rotation_failed",
+                    "message": _password_rotation_failure_message(str(exc)),
+                },
+            },
         )
     return {"status": "ok", "user": user.model_dump()}
