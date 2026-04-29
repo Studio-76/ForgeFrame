@@ -2236,6 +2236,26 @@ export type WorkspaceApprovalSummary = {
   decided_at?: string | null;
 };
 
+export type WorkspaceConversationSummary = {
+  conversation_id: string;
+  subject: string;
+  status: string;
+  triage_status: string;
+  priority: string;
+  latest_message_at?: string | null;
+  updated_at: string;
+};
+
+export type WorkspaceTaskSummary = {
+  task_id: string;
+  title: string;
+  status: string;
+  priority: string;
+  owner_id?: string | null;
+  due_at?: string | null;
+  updated_at: string;
+};
+
 export type WorkspaceEventRecord = {
   event_id: string;
   workspace_id: string;
@@ -2270,8 +2290,17 @@ export type WorkspaceSummary = {
   handoff_reference?: string | null;
   metadata: Record<string, unknown>;
   run_count: number;
+  conversation_count?: number;
+  task_count?: number;
   approval_count: number;
   artifact_count: number;
+  latest_conversation_id?: string | null;
+  latest_conversation_subject?: string | null;
+  next_action_key?: "start_preview" | "request_review" | "prepare_handoff" | "review_in_progress" | "handoff_ready" | "handoff_delivered" | "archived";
+  next_action_label?: string;
+  next_action_state?: "available" | "not_ready" | "waiting" | "done";
+  next_action_reason?: string;
+  last_activity_at?: string | null;
   latest_event_at?: string | null;
   created_at: string;
   updated_at: string;
@@ -2279,6 +2308,8 @@ export type WorkspaceSummary = {
 
 export type WorkspaceDetail = WorkspaceSummary & {
   runs: WorkspaceRunSummary[];
+  conversations?: WorkspaceConversationSummary[];
+  tasks?: WorkspaceTaskSummary[];
   approvals: WorkspaceApprovalSummary[];
   artifacts: ArtifactRecord[];
   events: WorkspaceEventRecord[];

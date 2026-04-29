@@ -15,12 +15,33 @@ import {
   type WorkspaceSummary,
 } from "../api/admin";
 import { roleAllows, sessionHasAnyInstancePermission } from "../app/adminAccess";
-import { buildArtifactsPath } from "../app/workInteractionRoutes";
 import { CONTROL_PLANE_ROUTES } from "../app/navigation";
 import { useAppSession } from "../app/session";
+import { buildArtifactsPath, buildConversationPath, buildTaskPath } from "../app/workInteractionRoutes";
 import { PageIntro } from "../components/PageIntro";
+import { DetailDrawer } from "../components/ui/DetailDrawer";
 
 type LoadState = "idle" | "loading" | "success" | "error";
+type DrawerMode = "closed" | "create" | "edit";
+type WorkspaceActionState = "available" | "not_ready" | "waiting" | "done";
+type WorkspaceActionKey =
+  | "start_preview"
+  | "request_review"
+  | "prepare_handoff"
+  | "review_in_progress"
+  | "handoff_ready"
+  | "handoff_delivered"
+  | "archived";
+
+type WorkspaceAction = {
+  key: WorkspaceActionKey;
+  label: string;
+  state: WorkspaceActionState;
+  reason: string;
+  payload?: Parameters<typeof updateWorkspace>[2];
+};
+
+const DRAWER_FORM_ID = "workspace-drawer-form";
 
 const STATUS_OPTIONS: Array<WorkspaceStatus | "all"> = [
   "all",
@@ -31,10 +52,6 @@ const STATUS_OPTIONS: Array<WorkspaceStatus | "all"> = [
   "handed_off",
   "archived",
 ];
-
-const PREVIEW_STATUS_OPTIONS: WorkspacePreviewStatus[] = ["draft", "ready", "approved", "rejected"];
-const REVIEW_STATUS_OPTIONS: WorkspaceReviewStatus[] = ["not_requested", "pending", "approved", "rejected"];
-const HANDOFF_STATUS_OPTIONS: WorkspaceHandoffStatus[] = ["not_ready", "ready", "delivered"];
 
 const DEFAULT_CREATE_FORM = {
   workspaceId: "",
@@ -93,6 +110,137 @@ function parseMetadata(rawValue: string, fieldLabel: string): Record<string, unk
   return parsed as Record<string, unknown>;
 }
 
+function statusTone(status: string): "success" | "warning" | "danger" | "neutral" {
+  if (status === "handed_off" || status === "delivered" || status === "approved" || status === "ready") {
+    return "success";
+  }
+  if (status === "archived" || status === "done") {
+    return "neutral";
+  }
+  if (status === "rejected" || status === "missing") {
+    return "danger";
+  }
+  return "warning";
+}
+
+function actionTone(state: WorkspaceActionState): "success" | "warning" | "danger" | "neutral" {
+  if (state === "available") {
+    return "success";
+  }
+  if (state === "done") {
+    return "neutral";
+  }
+  if (state === "waiting") {
+    return "warning";
+  }
+  return "danger";
+}
+
+function formatTimestamp(value?: string | null): string {
+  if (!value) {
+    return "Not recorded";
+  }
+  return new Date(value).toLocaleString();
+}
+
+function getWorkspaceAction(workspace: WorkspaceSummary | WorkspaceDetail): WorkspaceAction {
+  const key = workspace.next_action_key;
+  const state = workspace.next_action_state;
+  const label = workspace.next_action_label;
+  const reason = workspace.next_action_reason;
+
+  if (key && state && label && reason) {
+    const action: WorkspaceAction = {
+      key,
+      state,
+      label,
+      reason,
+    };
+    if (state === "available") {
+      if (key === "start_preview") {
+        action.payload = {
+          preview_status: "ready",
+          event_note: "Preview recorded from workspace surface after evidence was linked.",
+        };
+      } else if (key === "request_review") {
+        action.payload = {
+          review_status: "pending",
+          event_note: "Review requested from workspace surface.",
+        };
+      } else if (key === "prepare_handoff") {
+        action.payload = {
+          handoff_status: "ready",
+          event_note: "Handoff prepared from workspace surface.",
+        };
+      }
+    }
+    return action;
+  }
+
+  if (workspace.status === "archived") {
+    return { key: "archived", label: "Archived", state: "done", reason: "Workspace is archived." };
+  }
+  if (workspace.handoff_status === "delivered") {
+    return { key: "handoff_delivered", label: "Handoff delivered", state: "done", reason: "Handoff already left ForgeFrame." };
+  }
+  if (workspace.handoff_status === "ready") {
+    return { key: "handoff_ready", label: "Handoff ready", state: "waiting", reason: "Delivery now depends on the downstream target." };
+  }
+  if (workspace.review_status === "pending") {
+    return { key: "review_in_progress", label: "Review in progress", state: "waiting", reason: "Review is already pending." };
+  }
+  if (workspace.review_status === "approved") {
+    if (workspace.handoff_artifact_id || workspace.handoff_reference || workspace.pr_reference) {
+      return {
+        key: "prepare_handoff",
+        label: "Prepare handoff",
+        state: "available",
+        reason: "Handoff evidence is linked. Mark the workspace ready for delivery.",
+        payload: {
+          handoff_status: "ready",
+          event_note: "Handoff prepared from workspace surface.",
+        },
+      };
+    }
+    return {
+      key: "prepare_handoff",
+      label: "Prepare handoff",
+      state: "not_ready",
+      reason: "No dedicated handoff API exists here. Link a handoff artifact, PR reference, or handoff reference first.",
+    };
+  }
+  if (workspace.preview_status === "ready" || workspace.preview_status === "approved") {
+    return {
+      key: "request_review",
+      label: "Request review",
+      state: "available",
+      reason: "Preview evidence is linked. Move the workspace into review.",
+      payload: {
+        review_status: "pending",
+        event_note: "Review requested from workspace surface.",
+      },
+    };
+  }
+  if (workspace.active_run_id || workspace.preview_artifact_id) {
+    return {
+      key: "start_preview",
+      label: "Start preview",
+      state: "available",
+      reason: "Execution or artifact evidence is linked. Record preview readiness from the workspace surface.",
+      payload: {
+        preview_status: "ready",
+        event_note: "Preview recorded from workspace surface after evidence was linked.",
+      },
+    };
+  }
+  return {
+    key: "start_preview",
+    label: "Start preview",
+    state: "not_ready",
+    reason: "No dedicated preview-start API exists here. Link an execution run or preview artifact first.",
+  };
+}
+
 export function WorkspacesPage() {
   const { session, sessionReady } = useAppSession();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -113,12 +261,14 @@ export function WorkspacesPage() {
   const [detailState, setDetailState] = useState<LoadState>("idle");
   const [workspaces, setWorkspaces] = useState<WorkspaceSummary[]>([]);
   const [detail, setDetail] = useState<WorkspaceDetail | null>(null);
+  const [drawerMode, setDrawerMode] = useState<DrawerMode>("closed");
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
   const [createForm, setCreateForm] = useState(DEFAULT_CREATE_FORM);
   const [editForm, setEditForm] = useState(DEFAULT_EDIT_FORM);
   const [savingCreate, setSavingCreate] = useState(false);
   const [savingUpdate, setSavingUpdate] = useState(false);
+  const [runningPrimaryAction, setRunningPrimaryAction] = useState(false);
   const [refreshNonce, setRefreshNonce] = useState(0);
 
   const selectedWorkspace = useMemo(
@@ -274,6 +424,22 @@ export function WorkspacesPage() {
     });
   }, [detail]);
 
+  const openCreateDrawer = () => {
+    setCreateForm(DEFAULT_CREATE_FORM);
+    setDrawerMode("create");
+  };
+
+  const openEditDrawer = () => {
+    if (!detail) {
+      return;
+    }
+    setDrawerMode("edit");
+  };
+
+  const closeDrawer = () => {
+    setDrawerMode("closed");
+  };
+
   const handleCreate = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!canMutate || !instanceId) {
@@ -300,6 +466,7 @@ export function WorkspacesPage() {
         handoff_reference: createForm.handoffReference.trim() || null,
         metadata: parseMetadata(createForm.metadataJson, "Workspace metadata"),
       });
+      closeDrawer();
       setCreateForm(DEFAULT_CREATE_FORM);
       updateRoute((next) => {
         next.set("workspaceId", payload.workspace.workspace_id);
@@ -338,12 +505,37 @@ export function WorkspacesPage() {
         metadata: parseMetadata(editForm.metadataJson, "Workspace metadata"),
         event_note: editForm.eventNote.trim() || null,
       });
+      closeDrawer();
       setMessage(`Workspace ${payload.workspace.workspace_id} updated.`);
       setRefreshNonce((current) => current + 1);
     } catch (saveError) {
       setError(saveError instanceof Error ? saveError.message : "Workspace update failed.");
     } finally {
       setSavingUpdate(false);
+    }
+  };
+
+  const handlePrimaryAction = async () => {
+    if (!canMutate || !instanceId || !detail) {
+      return;
+    }
+
+    const action = getWorkspaceAction(detail);
+    if (action.state !== "available" || !action.payload) {
+      return;
+    }
+
+    setRunningPrimaryAction(true);
+    setError("");
+    setMessage("");
+    try {
+      await updateWorkspace(instanceId, detail.workspace_id, action.payload);
+      setMessage(`Workspace action recorded: ${action.label}.`);
+      setRefreshNonce((current) => current + 1);
+    } catch (actionError) {
+      setError(actionError instanceof Error ? actionError.message : "Workspace action failed.");
+    } finally {
+      setRunningPrimaryAction(false);
     }
   };
 
@@ -354,13 +546,13 @@ export function WorkspacesPage() {
           eyebrow="Work Interaction"
           title="Workspaces"
           description="ForgeFrame is restoring workspace scope before opening preview, review, and handoff truth."
-          question="Which issue-linked workspace should anchor the current run, approval, and handoff review?"
+          question="Which workspace should anchor the current run, issue, approval, and handoff evidence?"
           links={[
             { label: "Command Center", to: CONTROL_PLANE_ROUTES.dashboard, description: "Return to the operator dashboard while access is restored." },
             { label: "Execution Review", to: CONTROL_PLANE_ROUTES.execution, description: "Inspect execution truth after session state resolves." },
           ]}
           badges={[{ label: "Checking access", tone: "neutral" }]}
-          note="Workspace truth stays instance-scoped. ForgeFrame waits for the current session before opening read or mutation paths."
+          note="Workspace truth stays instance-scoped and acts as a handoff and operations object, not as a GitHub replacement."
         />
       </section>
     );
@@ -375,7 +567,7 @@ export function WorkspacesPage() {
           description="This route is reserved for operators and admins who can inspect real workspace and handoff state."
           question="Which adjacent surface should you use when workspace review is outside the current permission envelope?"
           links={[
-            { label: "Execution Review", to: CONTROL_PLANE_ROUTES.execution, description: "Inspect run state when work-interaction review is not available." },
+            { label: "Execution Review", to: CONTROL_PLANE_ROUTES.execution, description: "Inspect run state when workspace review is not available." },
             { label: "Approvals", to: CONTROL_PLANE_ROUTES.approvals, description: "Open the shared approvals queue for decision work." },
             { label: "Command Center", to: CONTROL_PLANE_ROUTES.dashboard, description: "Return to the dashboard and branch into the right surface." },
           ]}
@@ -386,24 +578,33 @@ export function WorkspacesPage() {
     );
   }
 
+  const primaryAction = detail ? getWorkspaceAction(detail) : null;
+  const handoffHistory = (detail?.events ?? []).filter((event) => (
+    event.event_kind === "review_requested"
+    || event.event_kind === "review_approved"
+    || event.event_kind === "review_rejected"
+    || event.event_kind === "handoff_prepared"
+    || event.event_kind === "handoff_delivered"
+  ));
+
   return (
     <section className="fg-page">
       <PageIntro
         eyebrow="Work Interaction"
         title="Workspaces"
-        description="Issue-linked workspaces with preview, review, handoff, and cross-links back to execution, approvals, and artifacts."
-        question="Does the current workspace carry real preview, review, and handoff truth, or is downstream work still floating as loose IDs?"
+        description="Operational handoff objects that connect issue and conversation context to preview evidence, review state, approvals, runs, artifacts, and downstream delivery."
+        question="Does the selected workspace show a real next action with real blockers, or are preview and handoff still implied somewhere else?"
         links={[
-          { label: "Workspaces", to: CONTROL_PLANE_ROUTES.workspaces, description: "Stay on the workspace inventory and detail surface." },
-          { label: "Artifacts", to: buildArtifactsPath({ instanceId, workspaceId: selectedWorkspaceId || undefined }), description: "Open the artifact inventory for this workspace scope." },
-          { label: "Execution Review", to: CONTROL_PLANE_ROUTES.execution, description: "Inspect run truth linked from the selected workspace." },
-          { label: "Approvals", to: CONTROL_PLANE_ROUTES.approvals, description: "Inspect approval truth linked from the selected workspace." },
+          { label: "Artifacts", to: buildArtifactsPath({ instanceId, workspaceId: selectedWorkspaceId || undefined }), description: "Inspect artifacts linked to the current workspace." },
+          { label: "Execution Review", to: CONTROL_PLANE_ROUTES.execution, description: "Inspect the runtime evidence linked from the workspace." },
+          { label: "Approvals", to: CONTROL_PLANE_ROUTES.approvals, description: "Inspect approval gates linked from the workspace." },
+          { label: "Conversations", to: CONTROL_PLANE_ROUTES.conversations, description: "Inspect conversation context connected to workspace work." },
         ]}
         badges={[
           { label: `${workspaces.length} workspace${workspaces.length === 1 ? "" : "s"}`, tone: workspaces.length > 0 ? "success" : "warning" },
           { label: canMutate ? "Admin mutation enabled" : "Read only", tone: canMutate ? "success" : "neutral" },
         ]}
-        note="Workspaces are not cosmetic wrappers. Preview, review, handoff, runs, approvals, and artifacts must reconcile on this surface."
+        note="Workspaces stay an execution and handoff surface. They should never pretend to replace GitHub or any external delivery system."
       />
 
       {error ? <p className="fg-danger">{error}</p> : null}
@@ -443,11 +644,10 @@ export function WorkspacesPage() {
               aria-label="Workspace status filter"
               value={statusFilter}
               onChange={(event) => updateRoute((next) => {
-                const nextStatus = event.target.value;
-                if (nextStatus === "all") {
+                if (event.target.value === "all") {
                   next.delete("status");
                 } else {
-                  next.set("status", nextStatus);
+                  next.set("status", event.target.value);
                 }
                 next.delete("workspaceId");
               })}
@@ -459,6 +659,10 @@ export function WorkspacesPage() {
               ))}
             </select>
           </label>
+          <div className="fg-actions">
+            <button type="button" onClick={openCreateDrawer} disabled={!canMutate || !instanceId}>New workspace</button>
+            <button type="button" onClick={openEditDrawer} disabled={!canMutate || !detail}>Edit selected workspace</button>
+          </div>
         </div>
       </article>
 
@@ -466,8 +670,8 @@ export function WorkspacesPage() {
         <article className="fg-card">
           <div className="fg-panel-heading">
             <div>
-              <h3>Workspace Inventory</h3>
-              <p className="fg-muted">Every row is a durable workspace object, not a loose run or issue string.</p>
+              <h3>Workspace inventory</h3>
+              <p className="fg-muted">Workspace owner, linked issue or conversation, preview/review/handoff posture, next action, and latest activity all stay visible.</p>
             </div>
             <span className="fg-pill" data-tone={listState === "success" ? "success" : listState === "error" ? "danger" : "neutral"}>
               {listState}
@@ -475,42 +679,64 @@ export function WorkspacesPage() {
           </div>
 
           {listState === "loading" ? <p className="fg-muted">Loading workspace inventory.</p> : null}
-          {listState === "success" && workspaces.length === 0 ? (
-            <p className="fg-muted">No workspaces matched the selected instance and status filter.</p>
-          ) : null}
+          {listState === "success" && workspaces.length === 0 ? <p className="fg-muted">No workspaces matched the selected instance and status filter.</p> : null}
 
           {workspaces.length > 0 ? (
-            <div className="fg-stack">
-              {workspaces.map((workspace) => (
-                <button
-                  key={workspace.workspace_id}
-                  type="button"
-                  className={`fg-data-row${workspace.workspace_id === selectedWorkspaceId ? " is-current" : ""}`}
-                  onClick={() => updateRoute((next) => {
-                    next.set("workspaceId", workspace.workspace_id);
+            <div className="fg-table-wrap">
+              <table className="fg-table" aria-label="Workspace inventory">
+                <thead>
+                  <tr>
+                    <th>Workspace</th>
+                    <th>Owner</th>
+                    <th>Issue / conversation</th>
+                    <th>Preview / review / handoff</th>
+                    <th>Next action</th>
+                    <th>Last activity</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {workspaces.map((workspace) => {
+                    const action = getWorkspaceAction(workspace);
+                    return (
+                      <tr key={workspace.workspace_id}>
+                        <td>
+                          <button className="fg-table-trigger" type="button" onClick={() => updateRoute((next) => next.set("workspaceId", workspace.workspace_id))}>
+                            {workspace.title}
+                          </button>
+                          <div className="fg-code">{workspace.workspace_id}</div>
+                          <div className="fg-muted">{workspace.summary || "No summary"}</div>
+                        </td>
+                        <td>
+                          <span className="fg-pill" data-tone={statusTone(workspace.status)}>{workspace.status}</span>
+                          <div>{workspace.owner_id ?? "No owner"}</div>
+                        </td>
+                        <td>
+                          <div>Issue: {workspace.issue_id ?? "Not linked"}</div>
+                          <div>
+                            Conversation:{" "}
+                            {workspace.latest_conversation_id ? (
+                              <Link to={buildConversationPath({ instanceId, conversationId: workspace.latest_conversation_id })}>
+                                {workspace.latest_conversation_subject ?? workspace.latest_conversation_id}
+                              </Link>
+                            ) : "Not linked"}
+                          </div>
+                        </td>
+                        <td>
+                          <div>Preview: {workspace.preview_status}</div>
+                          <div>Review: {workspace.review_status}</div>
+                          <div>Handoff: {workspace.handoff_status}</div>
+                        </td>
+                        <td>
+                          <span className="fg-pill" data-tone={actionTone(action.state)}>{action.state}</span>
+                          <div>{action.label}</div>
+                          <div className="fg-muted">{action.reason}</div>
+                        </td>
+                        <td>{formatTimestamp(workspace.last_activity_at ?? workspace.latest_event_at ?? workspace.updated_at)}</td>
+                      </tr>
+                    );
                   })}
-                >
-                  <div className="fg-panel-heading fg-data-row-heading">
-                    <div className="fg-page-header">
-                      <span className="fg-code">{workspace.workspace_id}</span>
-                      <strong>{workspace.title}</strong>
-                    </div>
-                    <div className="fg-actions">
-                      <span className="fg-pill" data-tone={workspace.status === "handed_off" ? "success" : workspace.status === "archived" ? "neutral" : "warning"}>
-                        {workspace.status}
-                      </span>
-                    </div>
-                  </div>
-                  <div className="fg-detail-grid">
-                    <span className="fg-muted">
-                      preview {workspace.preview_status} · review {workspace.review_status} · handoff {workspace.handoff_status}
-                    </span>
-                    <span className="fg-muted">
-                      runs {workspace.run_count} · approvals {workspace.approval_count} · artifacts {workspace.artifact_count}
-                    </span>
-                  </div>
-                </button>
-              ))}
+                </tbody>
+              </table>
             </div>
           ) : null}
         </article>
@@ -518,30 +744,55 @@ export function WorkspacesPage() {
         <article className="fg-card">
           <div className="fg-panel-heading">
             <div>
-              <h3>Workspace Detail</h3>
-              <p className="fg-muted">Preview, review, handoff, event history, and linked runtime objects converge here.</p>
+              <h3>Workspace detail</h3>
+              <p className="fg-muted">Context, conversations, tasks, runs, approvals, artifacts, and handoff history converge here.</p>
             </div>
             {selectedWorkspace ? <span className="fg-pill">{selectedWorkspace.workspace_id}</span> : null}
           </div>
 
-          {detailState === "idle" ? <p className="fg-muted">Select a workspace to inspect preview, review, handoff, runs, approvals, artifacts, and events.</p> : null}
+          {detailState === "idle" ? <p className="fg-muted">Select a workspace to inspect work state and handoff posture.</p> : null}
           {detailState === "loading" ? <p className="fg-muted">Loading workspace detail.</p> : null}
 
           {detail ? (
             <div className="fg-stack">
+              {primaryAction ? (
+                <article className="fg-subcard">
+                  <div className="fg-panel-heading">
+                    <div>
+                      <h4>Next action</h4>
+                      <p className="fg-muted">The workspace surface stays honest about what can run here and what remains blocked by missing preview or handoff APIs.</p>
+                    </div>
+                    <span className="fg-pill" data-tone={actionTone(primaryAction.state)}>{primaryAction.state}</span>
+                  </div>
+                  <p><strong>{primaryAction.label}</strong></p>
+                  <p className={primaryAction.state === "not_ready" ? "fg-danger" : "fg-muted"}>{primaryAction.reason}</p>
+                  <div className="fg-actions">
+                    {primaryAction.state === "available" ? (
+                      <button type="button" onClick={handlePrimaryAction} disabled={!canMutate || runningPrimaryAction}>
+                        {runningPrimaryAction ? `${primaryAction.label}...` : primaryAction.label}
+                      </button>
+                    ) : null}
+                    <Link className="fg-nav-link" to={buildArtifactsPath({ instanceId, workspaceId: detail.workspace_id })}>Workspace artifacts</Link>
+                    {detail.active_run_id ? <Link className="fg-nav-link" to={buildExecutionRoute(instanceId, detail.active_run_id)}>Execution evidence</Link> : null}
+                    {detail.latest_approval_id ? <Link className="fg-nav-link" to={buildApprovalRoute(instanceId, detail.latest_approval_id)}>Approval gate</Link> : null}
+                  </div>
+                </article>
+              ) : null}
+
               <div className="fg-card-grid">
                 <article className="fg-subcard">
-                  <h4>Summary</h4>
+                  <h4>Context</h4>
                   <ul className="fg-list">
                     <li>Workspace ID: <span className="fg-code">{detail.workspace_id}</span></li>
-                    <li>Instance scope: <span className="fg-code">{detail.instance_id}</span></li>
-                    <li>Execution scope: <span className="fg-code">{detail.company_id}</span></li>
                     <li>Issue link: {detail.issue_id ?? "Not linked"}</li>
                     <li>Owner: {detail.owner_id ?? "Not recorded"}</li>
-                    <li>Created at: {detail.created_at}</li>
-                    <li>Updated at: {detail.updated_at}</li>
+                    <li>Conversation count: {detail.conversation_count ?? detail.conversations?.length ?? 0}</li>
+                    <li>Task count: {detail.task_count ?? detail.tasks?.length ?? 0}</li>
+                    <li>Last activity: {formatTimestamp(detail.last_activity_at ?? detail.latest_event_at ?? detail.updated_at)}</li>
                   </ul>
+                  <p>{detail.summary || "No workspace summary was recorded."}</p>
                 </article>
+
                 <article className="fg-subcard">
                   <h4>Lifecycle</h4>
                   <ul className="fg-list">
@@ -551,39 +802,50 @@ export function WorkspacesPage() {
                     <li>Handoff: {detail.handoff_status}</li>
                     <li>Preview artifact: {detail.preview_artifact_id ?? "None"}</li>
                     <li>Handoff artifact: {detail.handoff_artifact_id ?? "None"}</li>
-                    <li>Latest event: {detail.latest_event_at ?? "Not recorded"}</li>
                   </ul>
                 </article>
+
                 <article className="fg-subcard">
-                  <h4>References</h4>
+                  <h4>Handoff target</h4>
                   <ul className="fg-list">
+                    <li>PR reference: {detail.pr_reference ?? "Not linked"}</li>
+                    <li>Handoff reference: {detail.handoff_reference ?? "Not linked"}</li>
                     <li>Active run: {detail.active_run_id ?? "None"}</li>
                     <li>Latest approval: {detail.latest_approval_id ?? "None"}</li>
-                    <li>PR reference: {detail.pr_reference ?? "None"}</li>
-                    <li>Handoff reference: {detail.handoff_reference ?? "None"}</li>
                   </ul>
-                  <div className="fg-actions">
-                    <Link className="fg-nav-link" to={buildArtifactsPath({ instanceId, workspaceId: detail.workspace_id })}>
-                      Open Workspace Artifacts
-                    </Link>
-                    {detail.active_run_id ? (
-                      <Link className="fg-nav-link" to={buildExecutionRoute(instanceId, detail.active_run_id)}>
-                        Open Execution Review
-                      </Link>
-                    ) : null}
-                    {detail.latest_approval_id ? (
-                      <Link className="fg-nav-link" to={buildApprovalRoute(instanceId, detail.latest_approval_id)}>
-                        Open Approval Review
-                      </Link>
-                    ) : null}
-                  </div>
+                  <p className="fg-muted">The workspace records handoff readiness and operating evidence. Delivery itself still happens in the external target system.</p>
                 </article>
               </div>
 
-              <article className="fg-subcard">
-                <h4>Description</h4>
-                <p>{detail.summary || "No workspace summary was recorded."}</p>
-              </article>
+              <div className="fg-card-grid">
+                <article className="fg-subcard">
+                  <h4>Conversations</h4>
+                  {(detail.conversations ?? []).length === 0 ? <p className="fg-muted">No conversations are linked to this workspace.</p> : (
+                    <ul className="fg-list">
+                      {(detail.conversations ?? []).map((conversation) => (
+                        <li key={conversation.conversation_id}>
+                          <Link to={buildConversationPath({ instanceId, conversationId: conversation.conversation_id })}>{conversation.subject}</Link>
+                          {" | "}{conversation.status}{" | "}{conversation.triage_status}{" | "}{conversation.priority}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </article>
+
+                <article className="fg-subcard">
+                  <h4>Tasks</h4>
+                  {(detail.tasks ?? []).length === 0 ? <p className="fg-muted">No tasks are linked to this workspace.</p> : (
+                    <ul className="fg-list">
+                      {(detail.tasks ?? []).map((task) => (
+                        <li key={task.task_id}>
+                          <Link to={buildTaskPath({ instanceId, taskId: task.task_id })}>{task.title}</Link>
+                          {" | "}{task.status}{" | "}{task.priority}{" | due "}{formatTimestamp(task.due_at)}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </article>
+              </div>
 
               <div className="fg-card-grid">
                 <article className="fg-subcard">
@@ -593,12 +855,13 @@ export function WorkspacesPage() {
                       {detail.runs.map((run) => (
                         <li key={run.run_id}>
                           <Link to={buildExecutionRoute(instanceId, run.run_id, run.state)}>{run.run_id}</Link>
-                          {" · "}{run.run_kind}{" · "}{run.state}{" · "}{run.execution_lane}
+                          {" | "}{run.run_kind}{" | "}{run.state}{" | "}{run.execution_lane}
                         </li>
                       ))}
                     </ul>
                   )}
                 </article>
+
                 <article className="fg-subcard">
                   <h4>Approvals</h4>
                   {detail.approvals.length === 0 ? <p className="fg-muted">No approvals are linked to this workspace.</p> : (
@@ -606,12 +869,13 @@ export function WorkspacesPage() {
                       {detail.approvals.map((approval) => (
                         <li key={approval.shared_approval_id}>
                           <Link to={buildApprovalRoute(instanceId, approval.shared_approval_id)}>{approval.shared_approval_id}</Link>
-                          {" · "}{approval.gate_status}{" · "}{approval.gate_key}
+                          {" | "}{approval.gate_status}{" | "}{approval.gate_key}
                         </li>
                       ))}
                     </ul>
                   )}
                 </article>
+
                 <article className="fg-subcard">
                   <h4>Artifacts</h4>
                   {detail.artifacts.length === 0 ? <p className="fg-muted">No artifacts are linked to this workspace.</p> : (
@@ -619,7 +883,7 @@ export function WorkspacesPage() {
                       {detail.artifacts.map((artifact) => (
                         <li key={artifact.artifact_id}>
                           <Link to={buildArtifactsPath({ instanceId, artifactId: artifact.artifact_id })}>{artifact.label}</Link>
-                          {" · "}{artifact.artifact_type}{" · "}{artifact.status}
+                          {" | "}{artifact.artifact_type}{" | "}{artifact.status}
                         </li>
                       ))}
                     </ul>
@@ -628,12 +892,25 @@ export function WorkspacesPage() {
               </div>
 
               <article className="fg-subcard">
-                <h4>Event history</h4>
+                <h4>Handoff history</h4>
+                {handoffHistory.length === 0 ? <p className="fg-muted">No review or handoff transitions were recorded yet.</p> : (
+                  <ul className="fg-list">
+                    {handoffHistory.map((event) => (
+                      <li key={event.event_id}>
+                        {event.event_kind} | {formatTimestamp(event.created_at)} | {event.note ?? "No note"}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </article>
+
+              <article className="fg-subcard">
+                <h4>Workspace events</h4>
                 {detail.events.length === 0 ? <p className="fg-muted">No workspace events were recorded.</p> : (
                   <ul className="fg-list">
                     {detail.events.map((event) => (
                       <li key={event.event_id}>
-                        {event.event_kind} · {event.created_at} · {event.note ?? "No note"}
+                        {event.event_kind} | {formatTimestamp(event.created_at)} | {event.note ?? "No note"}
                       </li>
                     ))}
                   </ul>
@@ -644,179 +921,197 @@ export function WorkspacesPage() {
         </article>
       </div>
 
-      <div className="fg-grid">
-        <article className="fg-card">
-          <div className="fg-panel-heading">
-            <div>
-              <h3>Create Workspace</h3>
-              <p className="fg-muted">Create a real workspace object instead of leaving preview and handoff state implicit.</p>
-            </div>
-            <span className="fg-pill" data-tone={canMutate ? "success" : "warning"}>{canMutate ? "Writable" : "Admin only"}</span>
-          </div>
-          <form className="fg-stack" onSubmit={handleCreate}>
+      <DetailDrawer
+        open={drawerMode !== "closed"}
+        title={drawerMode === "create" ? "Create Workspace" : "Edit Workspace"}
+        description={drawerMode === "create"
+          ? "Create a workspace as an operational handoff object with real preview, review, and downstream delivery posture."
+          : "Adjust the selected workspace, links, and lifecycle posture in a focused drawer instead of treating it like a GitHub replacement."}
+        status={drawerMode === "create" ? "Create" : detail?.workspace_id ?? "Edit"}
+        statusTone={drawerMode === "create" ? "success" : "neutral"}
+        properties={detail && drawerMode === "edit" ? [
+          { label: "Current status", value: detail.status },
+          { label: "Next action", value: detail.next_action_label ?? getWorkspaceAction(detail).label },
+          { label: "Last activity", value: formatTimestamp(detail.last_activity_at ?? detail.latest_event_at ?? detail.updated_at) },
+        ] : []}
+        actions={(
+          <>
+            <button type="button" onClick={closeDrawer}>Cancel</button>
+            <button
+              type="submit"
+              form={DRAWER_FORM_ID}
+              disabled={
+                !canMutate
+                || (drawerMode === "create" ? savingCreate || !createForm.title.trim() : savingUpdate || !detail || !editForm.title.trim())
+              }
+            >
+              {drawerMode === "create" ? (savingCreate ? "Creating workspace..." : "Create workspace") : (savingUpdate ? "Saving workspace..." : "Save workspace")}
+            </button>
+          </>
+        )}
+        onClose={closeDrawer}
+      >
+        <form id={DRAWER_FORM_ID} className="fg-stack" onSubmit={drawerMode === "create" ? handleCreate : handleUpdate}>
+          {drawerMode === "create" ? (
             <label>
               Workspace ID
               <input value={createForm.workspaceId} onChange={(event) => setCreateForm((current) => ({ ...current, workspaceId: event.target.value }))} placeholder="ws_customer_pricing" />
             </label>
+          ) : null}
+          <label>
+            Title
+            <input
+              value={drawerMode === "create" ? createForm.title : editForm.title}
+              onChange={(event) => {
+                if (drawerMode === "create") {
+                  setCreateForm((current) => ({ ...current, title: event.target.value }));
+                } else {
+                  setEditForm((current) => ({ ...current, title: event.target.value }));
+                }
+              }}
+              placeholder="Customer pricing handoff"
+            />
+          </label>
+          <label>
+            Summary
+            <textarea
+              rows={4}
+              value={drawerMode === "create" ? createForm.summary : editForm.summary}
+              onChange={(event) => {
+                if (drawerMode === "create") {
+                  setCreateForm((current) => ({ ...current, summary: event.target.value }));
+                } else {
+                  setEditForm((current) => ({ ...current, summary: event.target.value }));
+                }
+              }}
+            />
+          </label>
+          <div className="fg-grid fg-grid-compact">
             <label>
-              Title
-              <input value={createForm.title} onChange={(event) => setCreateForm((current) => ({ ...current, title: event.target.value }))} placeholder="Customer pricing handoff" />
+              Issue ID
+              <input
+                value={drawerMode === "create" ? createForm.issueId : editForm.issueId}
+                onChange={(event) => {
+                  if (drawerMode === "create") {
+                    setCreateForm((current) => ({ ...current, issueId: event.target.value }));
+                  } else {
+                    setEditForm((current) => ({ ...current, issueId: event.target.value }));
+                  }
+                }}
+                placeholder="FOR-178"
+              />
             </label>
             <label>
-              Summary
-              <textarea rows={4} value={createForm.summary} onChange={(event) => setCreateForm((current) => ({ ...current, summary: event.target.value }))} />
+              Owner ID
+              <input
+                value={drawerMode === "create" ? createForm.ownerId : editForm.ownerId}
+                onChange={(event) => {
+                  if (drawerMode === "create") {
+                    setCreateForm((current) => ({ ...current, ownerId: event.target.value }));
+                  } else {
+                    setEditForm((current) => ({ ...current, ownerId: event.target.value }));
+                  }
+                }}
+                placeholder="user-admin"
+              />
             </label>
-            <div className="fg-grid fg-grid-compact">
-              <label>
-                Issue ID
-                <input value={createForm.issueId} onChange={(event) => setCreateForm((current) => ({ ...current, issueId: event.target.value }))} placeholder="FOR-178" />
-              </label>
-              <label>
-                Owner ID
-                <input value={createForm.ownerId} onChange={(event) => setCreateForm((current) => ({ ...current, ownerId: event.target.value }))} placeholder="user-admin" />
-              </label>
-            </div>
-            <div className="fg-grid fg-grid-compact">
-              <label>
-                Preview
-                <select value={createForm.previewStatus} onChange={(event) => setCreateForm((current) => ({ ...current, previewStatus: event.target.value as WorkspacePreviewStatus }))}>
-                  {PREVIEW_STATUS_OPTIONS.map((option) => <option key={option} value={option}>{option}</option>)}
-                </select>
-              </label>
-              <label>
-                Review
-                <select value={createForm.reviewStatus} onChange={(event) => setCreateForm((current) => ({ ...current, reviewStatus: event.target.value as WorkspaceReviewStatus }))}>
-                  {REVIEW_STATUS_OPTIONS.map((option) => <option key={option} value={option}>{option}</option>)}
-                </select>
-              </label>
-              <label>
-                Handoff
-                <select value={createForm.handoffStatus} onChange={(event) => setCreateForm((current) => ({ ...current, handoffStatus: event.target.value as WorkspaceHandoffStatus }))}>
-                  {HANDOFF_STATUS_OPTIONS.map((option) => <option key={option} value={option}>{option}</option>)}
-                </select>
-              </label>
-            </div>
-            <div className="fg-grid fg-grid-compact">
-              <label>
-                Active run ID
-                <input value={createForm.activeRunId} onChange={(event) => setCreateForm((current) => ({ ...current, activeRunId: event.target.value }))} placeholder="run_alpha" />
-              </label>
-              <label>
-                Latest approval ID
-                <input value={createForm.latestApprovalId} onChange={(event) => setCreateForm((current) => ({ ...current, latestApprovalId: event.target.value }))} placeholder="run:instance_alpha:company_alpha:approval-1" />
-              </label>
-            </div>
-            <div className="fg-grid fg-grid-compact">
-              <label>
-                PR reference
-                <input value={createForm.prReference} onChange={(event) => setCreateForm((current) => ({ ...current, prReference: event.target.value }))} placeholder="https://github.com/org/repo/pull/123" />
-              </label>
-              <label>
-                Handoff reference
-                <input value={createForm.handoffReference} onChange={(event) => setCreateForm((current) => ({ ...current, handoffReference: event.target.value }))} placeholder="handoff://package/123" />
-              </label>
-            </div>
-            <label>
-              Metadata JSON
-              <textarea rows={6} value={createForm.metadataJson} onChange={(event) => setCreateForm((current) => ({ ...current, metadataJson: event.target.value }))} />
-            </label>
-            <div className="fg-actions">
-              <button type="submit" disabled={!canMutate || savingCreate || !instanceId || !createForm.title.trim()}>
-                {savingCreate ? "Creating workspace" : "Create workspace"}
-              </button>
-            </div>
-          </form>
-        </article>
-
-        <article className="fg-card">
-          <div className="fg-panel-heading">
-            <div>
-              <h3>Edit Workspace</h3>
-              <p className="fg-muted">Mutations must keep preview, review, and handoff truth coherent with linked runs, approvals, and artifacts.</p>
-            </div>
-            <span className="fg-pill" data-tone={detail ? "neutral" : "warning"}>
-              {detail ? detail.workspace_id : "Select a workspace"}
-            </span>
           </div>
-          {detail ? (
-            <form className="fg-stack" onSubmit={handleUpdate}>
-              <label>
-                Title
-                <input value={editForm.title} onChange={(event) => setEditForm((current) => ({ ...current, title: event.target.value }))} />
-              </label>
-              <label>
-                Summary
-                <textarea rows={4} value={editForm.summary} onChange={(event) => setEditForm((current) => ({ ...current, summary: event.target.value }))} />
-              </label>
-              <div className="fg-grid fg-grid-compact">
-                <label>
-                  Issue ID
-                  <input value={editForm.issueId} onChange={(event) => setEditForm((current) => ({ ...current, issueId: event.target.value }))} />
-                </label>
-                <label>
-                  Owner ID
-                  <input value={editForm.ownerId} onChange={(event) => setEditForm((current) => ({ ...current, ownerId: event.target.value }))} />
-                </label>
-              </div>
-              <div className="fg-grid fg-grid-compact">
-                <label>
-                  Preview
-                  <select value={editForm.previewStatus} onChange={(event) => setEditForm((current) => ({ ...current, previewStatus: event.target.value as WorkspacePreviewStatus }))}>
-                    {PREVIEW_STATUS_OPTIONS.map((option) => <option key={option} value={option}>{option}</option>)}
-                  </select>
-                </label>
-                <label>
-                  Review
-                  <select value={editForm.reviewStatus} onChange={(event) => setEditForm((current) => ({ ...current, reviewStatus: event.target.value as WorkspaceReviewStatus }))}>
-                    {REVIEW_STATUS_OPTIONS.map((option) => <option key={option} value={option}>{option}</option>)}
-                  </select>
-                </label>
-                <label>
-                  Handoff
-                  <select value={editForm.handoffStatus} onChange={(event) => setEditForm((current) => ({ ...current, handoffStatus: event.target.value as WorkspaceHandoffStatus }))}>
-                    {HANDOFF_STATUS_OPTIONS.map((option) => <option key={option} value={option}>{option}</option>)}
-                  </select>
-                </label>
-              </div>
-              <div className="fg-grid fg-grid-compact">
-                <label>
-                  Active run ID
-                  <input value={editForm.activeRunId} onChange={(event) => setEditForm((current) => ({ ...current, activeRunId: event.target.value }))} />
-                </label>
-                <label>
-                  Latest approval ID
-                  <input value={editForm.latestApprovalId} onChange={(event) => setEditForm((current) => ({ ...current, latestApprovalId: event.target.value }))} />
-                </label>
-              </div>
-              <div className="fg-grid fg-grid-compact">
-                <label>
-                  PR reference
-                  <input value={editForm.prReference} onChange={(event) => setEditForm((current) => ({ ...current, prReference: event.target.value }))} />
-                </label>
-                <label>
-                  Handoff reference
-                  <input value={editForm.handoffReference} onChange={(event) => setEditForm((current) => ({ ...current, handoffReference: event.target.value }))} />
-                </label>
-              </div>
-              <label>
-                Metadata JSON
-                <textarea rows={6} value={editForm.metadataJson} onChange={(event) => setEditForm((current) => ({ ...current, metadataJson: event.target.value }))} />
-              </label>
-              <label>
-                Event note
-                <textarea rows={3} value={editForm.eventNote} onChange={(event) => setEditForm((current) => ({ ...current, eventNote: event.target.value }))} placeholder="Why did this workspace state change?" />
-              </label>
-              <div className="fg-actions">
-                <button type="submit" disabled={!canMutate || savingUpdate}>
-                  {savingUpdate ? "Saving workspace" : "Save workspace"}
-                </button>
-              </div>
-            </form>
-          ) : (
-            <p className="fg-muted">Select a workspace before attempting a mutation.</p>
-          )}
-        </article>
-      </div>
+          <div className="fg-card-grid">
+            <article className="fg-subcard">
+              <h4>Lifecycle controls</h4>
+              {drawerMode === "create" ? (
+                <p className="fg-muted">New workspaces start in preview draft, review not requested, and handoff not ready. Move lifecycle state from the detail panel only after evidence exists.</p>
+              ) : (
+                <ul className="fg-list">
+                  <li>Preview: {editForm.previewStatus}</li>
+                  <li>Review: {editForm.reviewStatus}</li>
+                  <li>Handoff: {editForm.handoffStatus}</li>
+                </ul>
+              )}
+            </article>
+          </div>
+          <div className="fg-grid fg-grid-compact">
+            <label>
+              Active run ID
+              <input
+                value={drawerMode === "create" ? createForm.activeRunId : editForm.activeRunId}
+                onChange={(event) => {
+                  if (drawerMode === "create") {
+                    setCreateForm((current) => ({ ...current, activeRunId: event.target.value }));
+                  } else {
+                    setEditForm((current) => ({ ...current, activeRunId: event.target.value }));
+                  }
+                }}
+                placeholder="run_alpha"
+              />
+            </label>
+            <label>
+              Latest approval ID
+              <input
+                value={drawerMode === "create" ? createForm.latestApprovalId : editForm.latestApprovalId}
+                onChange={(event) => {
+                  if (drawerMode === "create") {
+                    setCreateForm((current) => ({ ...current, latestApprovalId: event.target.value }));
+                  } else {
+                    setEditForm((current) => ({ ...current, latestApprovalId: event.target.value }));
+                  }
+                }}
+                placeholder="run:instance_alpha:company_alpha:approval-1"
+              />
+            </label>
+          </div>
+          <div className="fg-grid fg-grid-compact">
+            <label>
+              PR reference
+              <input
+                value={drawerMode === "create" ? createForm.prReference : editForm.prReference}
+                onChange={(event) => {
+                  if (drawerMode === "create") {
+                    setCreateForm((current) => ({ ...current, prReference: event.target.value }));
+                  } else {
+                    setEditForm((current) => ({ ...current, prReference: event.target.value }));
+                  }
+                }}
+                placeholder="https://github.com/org/repo/pull/123"
+              />
+            </label>
+            <label>
+              Handoff reference
+              <input
+                value={drawerMode === "create" ? createForm.handoffReference : editForm.handoffReference}
+                onChange={(event) => {
+                  if (drawerMode === "create") {
+                    setCreateForm((current) => ({ ...current, handoffReference: event.target.value }));
+                  } else {
+                    setEditForm((current) => ({ ...current, handoffReference: event.target.value }));
+                  }
+                }}
+                placeholder="handoff://package/123"
+              />
+            </label>
+          </div>
+          <label>
+            Metadata JSON
+            <textarea
+              rows={6}
+              value={drawerMode === "create" ? createForm.metadataJson : editForm.metadataJson}
+              onChange={(event) => {
+                if (drawerMode === "create") {
+                  setCreateForm((current) => ({ ...current, metadataJson: event.target.value }));
+                } else {
+                  setEditForm((current) => ({ ...current, metadataJson: event.target.value }));
+                }
+              }}
+            />
+          </label>
+          {drawerMode === "edit" ? (
+            <label>
+              Event note
+              <textarea rows={3} value={editForm.eventNote} onChange={(event) => setEditForm((current) => ({ ...current, eventNote: event.target.value }))} />
+            </label>
+          ) : null}
+        </form>
+      </DetailDrawer>
     </section>
   );
 }

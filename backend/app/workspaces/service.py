@@ -12,18 +12,22 @@ from sqlalchemy.orm import Session
 from app.approvals.models import build_execution_approval_id, parse_shared_approval_id
 from app.artifacts.models import ArtifactAttachmentRecord, ArtifactRecord, CreateArtifact, UpdateArtifact
 from app.instances.models import InstanceRecord
+from app.storage.conversation_repository import ConversationORM
 from app.storage.artifact_repository import ArtifactAttachmentORM, ArtifactORM
 from app.storage.execution_repository import RunApprovalLinkORM, RunORM
+from app.storage.tasking_repository import TaskORM
 from app.storage.workspace_repository import WorkspaceEventORM, WorkspaceORM
 from app.workspaces.models import (
     CreateWorkspace,
     UpdateWorkspace,
     WorkspaceApprovalSummary,
+    WorkspaceConversationSummary,
     WorkspaceDetail,
     WorkspaceEventRecord,
     WorkspaceEventKind,
     WorkspaceRunSummary,
     WorkspaceSummary,
+    WorkspaceTaskSummary,
 )
 
 SessionFactory = Callable[[], Session]
@@ -70,6 +74,88 @@ class WorkInteractionAdminService:
         if payload.preview_status == "ready":
             return "preview_ready"
         return "updated"
+
+    @staticmethod
+    def _latest_activity(*timestamps: datetime | None) -> datetime | None:
+        values = [item for item in timestamps if item is not None]
+        if not values:
+            return None
+        return max(values)
+
+    @staticmethod
+    def _next_action(row: WorkspaceORM) -> tuple[str, str, str, str]:
+        if row.status == "archived":
+            return ("archived", "Archived", "done", "Workspace is archived and no further handoff action is expected.")
+        if row.handoff_status == "delivered":
+            return ("handoff_delivered", "Handoff delivered", "done", "The handoff already left ForgeFrame and now lives in the downstream system.")
+        if row.handoff_status == "ready":
+            return ("handoff_ready", "Handoff ready", "waiting", "Handoff evidence is prepared, but delivery still happens outside this page.")
+        if row.review_status == "pending":
+            return ("review_in_progress", "Review in progress", "waiting", "Review is already pending. Use approvals and artifacts to close the gate.")
+        if row.review_status == "approved":
+            if row.handoff_artifact_id or row.handoff_reference or row.pr_reference:
+                return ("prepare_handoff", "Prepare handoff", "available", "Handoff evidence is linked. Mark the workspace ready for delivery.")
+            return (
+                "prepare_handoff",
+                "Prepare handoff",
+                "not_ready",
+                "No dedicated handoff API exists here. Link a handoff artifact, PR reference, or handoff reference first.",
+            )
+        if row.preview_status in {"ready", "approved"}:
+            return ("request_review", "Request review", "available", "Preview evidence is linked. Move the workspace into review.")
+        if row.active_run_id or row.preview_artifact_id:
+            return (
+                "start_preview",
+                "Start preview",
+                "available",
+                "No dedicated preview-start API exists here. This action records preview readiness after execution or artifact evidence is linked.",
+            )
+        return (
+            "start_preview",
+            "Start preview",
+            "not_ready",
+            "No dedicated preview-start API exists here. Link an execution run or preview artifact first.",
+        )
+
+    @staticmethod
+    def _validate_lifecycle_state(
+        *,
+        preview_status: str,
+        review_status: str,
+        handoff_status: str,
+        active_run_id: str | None,
+        preview_artifact_id: str | None,
+        latest_approval_id: str | None,
+        handoff_artifact_id: str | None,
+        pr_reference: str | None,
+        handoff_reference: str | None,
+        previous_handoff_status: str | None = None,
+    ) -> None:
+        has_preview_evidence = bool(active_run_id or preview_artifact_id)
+        has_handoff_evidence = bool(handoff_artifact_id or pr_reference or handoff_reference)
+
+        if preview_status in {"ready", "approved", "rejected"} and not has_preview_evidence:
+            raise ValueError("Preview status requires a linked execution run or preview artifact.")
+
+        if review_status in {"pending", "approved", "rejected"}:
+            if preview_status not in {"ready", "approved"}:
+                raise ValueError("Review status requires preview evidence before review can start.")
+        if review_status in {"approved", "rejected"} and not latest_approval_id:
+            raise ValueError("Approved or rejected review state requires a linked approval.")
+
+        if handoff_status == "ready":
+            if review_status != "approved":
+                raise ValueError("Handoff readiness requires an approved review.")
+            if not has_handoff_evidence:
+                raise ValueError("Handoff readiness requires a handoff artifact, PR reference, or handoff reference.")
+
+        if handoff_status == "delivered":
+            if review_status != "approved":
+                raise ValueError("Handoff delivery requires an approved review.")
+            if previous_handoff_status != "ready":
+                raise ValueError("Handoff delivery confirmation is not available until the workspace is already handoff-ready.")
+            if not handoff_reference:
+                raise ValueError("Handoff delivery requires an external handoff reference.")
 
     def _artifact_attachments(self, session: Session, *, company_id: str, artifact_ids: list[str]) -> dict[str, list[ArtifactAttachmentRecord]]:
         if not artifact_ids:
@@ -245,10 +331,49 @@ class WorkInteractionAdminService:
                 ArtifactORM.workspace_id == row.id,
             )
         ).scalar_one()
+        latest_artifact_at = session.execute(
+            select(func.max(ArtifactORM.updated_at)).where(
+                ArtifactORM.company_id == row.company_id,
+                ArtifactORM.workspace_id == row.id,
+            )
+        ).scalar_one()
         run_count = session.execute(
             select(func.count(RunORM.id)).where(
                 RunORM.company_id == row.company_id,
                 RunORM.workspace_id == row.id,
+            )
+        ).scalar_one()
+        latest_run_at = session.execute(
+            select(func.max(RunORM.updated_at)).where(
+                RunORM.company_id == row.company_id,
+                RunORM.workspace_id == row.id,
+            )
+        ).scalar_one()
+        conversation_count = session.execute(
+            select(func.count(ConversationORM.id)).where(
+                ConversationORM.company_id == row.company_id,
+                ConversationORM.workspace_id == row.id,
+            )
+        ).scalar_one()
+        latest_conversation = session.execute(
+            select(ConversationORM)
+            .where(
+                ConversationORM.company_id == row.company_id,
+                ConversationORM.workspace_id == row.id,
+            )
+            .order_by(ConversationORM.updated_at.desc())
+            .limit(1)
+        ).scalar_one_or_none()
+        task_count = session.execute(
+            select(func.count(TaskORM.id)).where(
+                TaskORM.company_id == row.company_id,
+                TaskORM.workspace_id == row.id,
+            )
+        ).scalar_one()
+        latest_task_at = session.execute(
+            select(func.max(TaskORM.updated_at)).where(
+                TaskORM.company_id == row.company_id,
+                TaskORM.workspace_id == row.id,
             )
         ).scalar_one()
         approval_count = session.execute(
@@ -271,6 +396,7 @@ class WorkInteractionAdminService:
                 WorkspaceEventORM.workspace_id == row.id,
             )
         ).scalar_one()
+        next_action_key, next_action_label, next_action_state, next_action_reason = self._next_action(row)
         return WorkspaceSummary(
             workspace_id=row.id,
             instance_id=row.instance_id,
@@ -293,7 +419,23 @@ class WorkInteractionAdminService:
             metadata=dict(row.metadata_json or {}),
             artifact_count=int(artifact_count or 0),
             run_count=int(run_count or 0),
+            conversation_count=int(conversation_count or 0),
+            task_count=int(task_count or 0),
             approval_count=int(approval_count or 0),
+            latest_conversation_id=latest_conversation.id if latest_conversation is not None else None,
+            latest_conversation_subject=latest_conversation.subject if latest_conversation is not None else None,
+            next_action_key=next_action_key,  # type: ignore[arg-type]
+            next_action_label=next_action_label,
+            next_action_state=next_action_state,  # type: ignore[arg-type]
+            next_action_reason=next_action_reason,
+            last_activity_at=self._latest_activity(
+                row.updated_at,
+                latest_event_at,
+                latest_artifact_at,
+                latest_run_at,
+                latest_task_at,
+                latest_conversation.updated_at if latest_conversation is not None else None,
+            ),
             latest_event_at=latest_event_at,
             created_at=row.created_at,
             updated_at=row.updated_at,
@@ -331,6 +473,16 @@ class WorkInteractionAdminService:
                 .where(RunORM.company_id == instance.company_id, RunORM.workspace_id == workspace_id)
                 .order_by(RunORM.updated_at.desc())
             ).scalars().all()
+            conversation_rows = session.execute(
+                select(ConversationORM)
+                .where(ConversationORM.company_id == instance.company_id, ConversationORM.workspace_id == workspace_id)
+                .order_by(ConversationORM.updated_at.desc())
+            ).scalars().all()
+            task_rows = session.execute(
+                select(TaskORM)
+                .where(TaskORM.company_id == instance.company_id, TaskORM.workspace_id == workspace_id)
+                .order_by(TaskORM.updated_at.desc())
+            ).scalars().all()
             approval_rows = session.execute(
                 select(RunApprovalLinkORM, RunORM)
                 .join(
@@ -366,6 +518,30 @@ class WorkInteractionAdminService:
                         updated_at=run.updated_at,
                     )
                     for run in run_rows
+                ],
+                conversations=[
+                    WorkspaceConversationSummary(
+                        conversation_id=conversation.id,
+                        subject=conversation.subject,
+                        status=conversation.status,
+                        triage_status=conversation.triage_status,
+                        priority=conversation.priority,
+                        latest_message_at=conversation.latest_message_at,
+                        updated_at=conversation.updated_at,
+                    )
+                    for conversation in conversation_rows
+                ],
+                tasks=[
+                    WorkspaceTaskSummary(
+                        task_id=task.id,
+                        title=task.title,
+                        status=task.status,
+                        priority=task.priority,
+                        owner_id=task.owner_id,
+                        due_at=task.due_at,
+                        updated_at=task.updated_at,
+                    )
+                    for task in task_rows
                 ],
                 approvals=[
                     WorkspaceApprovalSummary(
@@ -451,6 +627,18 @@ class WorkInteractionAdminService:
                     company_id=instance.company_id,
                     approval_id=payload.latest_approval_id,
                 )
+            self._validate_lifecycle_state(
+                preview_status=payload.preview_status,
+                review_status=payload.review_status,
+                handoff_status=payload.handoff_status,
+                active_run_id=payload.active_run_id,
+                preview_artifact_id=None,
+                latest_approval_id=payload.latest_approval_id,
+                handoff_artifact_id=None,
+                pr_reference=payload.pr_reference,
+                handoff_reference=payload.handoff_reference,
+                previous_handoff_status=None,
+            )
             created_at = self._now()
             status = self._workspace_status(
                 payload.preview_status,
@@ -505,37 +693,63 @@ class WorkInteractionAdminService:
             row = session.get(WorkspaceORM, workspace_id)
             if row is None or row.company_id != instance.company_id:
                 raise ValueError(f"Workspace '{workspace_id}' was not found.")
-            if payload.active_run_id is not None:
-                self._ensure_run_exists(session, company_id=instance.company_id, run_id=payload.active_run_id)
-            if payload.latest_approval_id is not None:
+            fields_set = payload.model_fields_set
+            next_issue_id = payload.issue_id if "issue_id" in fields_set else row.issue_id
+            next_owner_id = payload.owner_id if "owner_id" in fields_set else row.owner_id
+            next_active_run_id = payload.active_run_id if "active_run_id" in fields_set else row.active_run_id
+            next_latest_approval_id = payload.latest_approval_id if "latest_approval_id" in fields_set else row.latest_approval_id
+            next_preview_artifact_id = payload.preview_artifact_id if "preview_artifact_id" in fields_set else row.preview_artifact_id
+            next_handoff_artifact_id = payload.handoff_artifact_id if "handoff_artifact_id" in fields_set else row.handoff_artifact_id
+            next_pr_reference = payload.pr_reference if "pr_reference" in fields_set else row.pr_reference
+            next_handoff_reference = payload.handoff_reference if "handoff_reference" in fields_set else row.handoff_reference
+            next_preview_status = payload.preview_status or row.preview_status
+            next_review_status = payload.review_status or row.review_status
+            next_handoff_status = payload.handoff_status or row.handoff_status
+
+            if next_active_run_id is not None:
+                self._ensure_run_exists(session, company_id=instance.company_id, run_id=next_active_run_id)
+            if next_latest_approval_id is not None:
                 self._ensure_execution_approval_exists(
                     session,
                     company_id=instance.company_id,
-                    approval_id=payload.latest_approval_id,
+                    approval_id=next_latest_approval_id,
                 )
-            if payload.preview_artifact_id is not None:
-                preview_artifact = session.get(ArtifactORM, payload.preview_artifact_id)
+            if next_preview_artifact_id is not None:
+                preview_artifact = session.get(ArtifactORM, next_preview_artifact_id)
                 if preview_artifact is None or preview_artifact.company_id != instance.company_id:
-                    raise ValueError(f"Preview artifact '{payload.preview_artifact_id}' was not found.")
-            if payload.handoff_artifact_id is not None:
-                handoff_artifact = session.get(ArtifactORM, payload.handoff_artifact_id)
+                    raise ValueError(f"Preview artifact '{next_preview_artifact_id}' was not found.")
+            if next_handoff_artifact_id is not None:
+                handoff_artifact = session.get(ArtifactORM, next_handoff_artifact_id)
                 if handoff_artifact is None or handoff_artifact.company_id != instance.company_id:
-                    raise ValueError(f"Handoff artifact '{payload.handoff_artifact_id}' was not found.")
+                    raise ValueError(f"Handoff artifact '{next_handoff_artifact_id}' was not found.")
+
+            self._validate_lifecycle_state(
+                preview_status=next_preview_status,
+                review_status=next_review_status,
+                handoff_status=next_handoff_status,
+                active_run_id=next_active_run_id,
+                preview_artifact_id=next_preview_artifact_id,
+                latest_approval_id=next_latest_approval_id,
+                handoff_artifact_id=next_handoff_artifact_id,
+                pr_reference=next_pr_reference,
+                handoff_reference=next_handoff_reference,
+                previous_handoff_status=row.handoff_status,
+            )
 
             row.title = payload.title.strip() if payload.title is not None else row.title
             row.summary = payload.summary.strip() if payload.summary is not None else row.summary
-            row.issue_id = payload.issue_id if payload.issue_id is not None else row.issue_id
-            row.preview_status = payload.preview_status or row.preview_status
-            row.review_status = payload.review_status or row.review_status
-            row.handoff_status = payload.handoff_status or row.handoff_status
+            row.issue_id = next_issue_id
+            row.preview_status = next_preview_status
+            row.review_status = next_review_status
+            row.handoff_status = next_handoff_status
             row.owner_type = payload.owner_type or row.owner_type
-            row.owner_id = payload.owner_id if payload.owner_id is not None else row.owner_id
-            row.active_run_id = payload.active_run_id if payload.active_run_id is not None else row.active_run_id
-            row.latest_approval_id = payload.latest_approval_id if payload.latest_approval_id is not None else row.latest_approval_id
-            row.preview_artifact_id = payload.preview_artifact_id if payload.preview_artifact_id is not None else row.preview_artifact_id
-            row.handoff_artifact_id = payload.handoff_artifact_id if payload.handoff_artifact_id is not None else row.handoff_artifact_id
-            row.pr_reference = payload.pr_reference if payload.pr_reference is not None else row.pr_reference
-            row.handoff_reference = payload.handoff_reference if payload.handoff_reference is not None else row.handoff_reference
+            row.owner_id = next_owner_id
+            row.active_run_id = next_active_run_id
+            row.latest_approval_id = next_latest_approval_id
+            row.preview_artifact_id = next_preview_artifact_id
+            row.handoff_artifact_id = next_handoff_artifact_id
+            row.pr_reference = next_pr_reference
+            row.handoff_reference = next_handoff_reference
             row.metadata_json = dict(payload.metadata) if payload.metadata is not None else dict(row.metadata_json or {})
             row.status = self._workspace_status(
                 row.preview_status,

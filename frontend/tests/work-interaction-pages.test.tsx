@@ -80,8 +80,17 @@ function createWorkspaceSummary(overrides: Partial<WorkspaceSummary> = {}): Work
     handoff_reference: null,
     metadata: {},
     run_count: 1,
+    conversation_count: 1,
+    task_count: 1,
     approval_count: 1,
     artifact_count: 1,
+    latest_conversation_id: "conv_alpha",
+    latest_conversation_subject: "Alpha handoff thread",
+    next_action_key: "request_review",
+    next_action_label: "Request review",
+    next_action_state: "available",
+    next_action_reason: "Preview evidence is linked. Move the workspace into review.",
+    last_activity_at: "2026-04-23T10:05:00Z",
     latest_event_at: "2026-04-23T10:00:00Z",
     created_at: "2026-04-23T09:00:00Z",
     updated_at: "2026-04-23T10:00:00Z",
@@ -100,6 +109,28 @@ function createWorkspaceDetail(overrides: Partial<WorkspaceDetail> = {}): Worksp
         execution_lane: "background_agentic",
         issue_id: "FOR-178",
         updated_at: "2026-04-23T10:00:00Z",
+      },
+    ],
+    conversations: [
+      {
+        conversation_id: "conv_alpha",
+        subject: "Alpha handoff thread",
+        status: "open",
+        triage_status: "relevant",
+        priority: "high",
+        latest_message_at: "2026-04-23T09:58:00Z",
+        updated_at: "2026-04-23T10:04:00Z",
+      },
+    ],
+    tasks: [
+      {
+        task_id: "task_alpha",
+        title: "Prepare workspace review",
+        status: "open",
+        priority: "high",
+        owner_id: "user-admin",
+        due_at: "2026-04-24T10:00:00Z",
+        updated_at: "2026-04-23T10:03:00Z",
       },
     ],
     approvals: [
@@ -145,6 +176,18 @@ function createWorkspaceDetail(overrides: Partial<WorkspaceDetail> = {}): Worksp
         actor_type: "user",
         actor_id: "user-admin",
         created_at: "2026-04-23T09:00:00Z",
+      },
+      {
+        event_id: "evt_workspace_review_requested",
+        workspace_id: "ws_alpha",
+        event_kind: "review_requested",
+        note: "Preview evidence linked and review requested.",
+        artifact_id: "artifact_preview",
+        approval_id: "run:instance_alpha:company_alpha:approval-1",
+        run_id: "run_alpha",
+        actor_type: "user",
+        actor_id: "user-admin",
+        created_at: "2026-04-23T10:00:00Z",
       },
     ],
     ...overrides,
@@ -210,6 +253,22 @@ function setControlValue(control: HTMLInputElement | HTMLTextAreaElement | HTMLS
   const setter = Object.getOwnPropertyDescriptor(prototype, "value")?.set;
   setter?.call(control, value);
   control.dispatchEvent(new Event(control.tagName === "SELECT" ? "change" : "input", { bubbles: true }));
+}
+
+function getButtonByText(scope: ParentNode, text: string) {
+  return Array.from(scope.querySelectorAll("button")).find((button) => button.textContent?.includes(text));
+}
+
+function getLabeledControl(scope: ParentNode, labelText: string) {
+  const label = Array.from(scope.querySelectorAll("label")).find((candidate) => candidate.textContent?.includes(labelText));
+  if (!label) {
+    throw new Error(`Label not found: ${labelText}`);
+  }
+  const control = label.querySelector("input, textarea, select");
+  if (!control) {
+    throw new Error(`Control not found for label: ${labelText}`);
+  }
+  return control as HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement;
 }
 
 beforeEach(() => {
@@ -294,11 +353,14 @@ describe("work interaction pages", () => {
 
     expect(fetchWorkspacesMock).toHaveBeenCalledWith("instance_alpha", "all", 100);
     expect(fetchWorkspaceDetailMock).toHaveBeenCalledWith("ws_alpha", "instance_alpha");
-    expect(container.textContent).toContain("Workspace Inventory");
+    expect(container.textContent).toContain("Workspace inventory");
     expect(container.textContent).toContain("Alpha workspace");
-    expect(container.textContent).toContain("Event history");
+    expect(container.textContent).toContain("Next action");
+    expect(container.textContent).toContain("Alpha handoff thread");
+    expect(container.textContent).toContain("Prepare workspace review");
+    expect(container.textContent).toContain("Handoff history");
 
-    const artifactsLink = Array.from(container.querySelectorAll("a")).find((link) => link.textContent === "Open Workspace Artifacts");
+    const artifactsLink = Array.from(container.querySelectorAll("a")).find((link) => link.textContent === "Workspace artifacts");
     expect(artifactsLink?.getAttribute("href")).toBe("/artifacts?instanceId=instance_alpha&workspaceId=ws_alpha");
   });
 
@@ -310,23 +372,18 @@ describe("work interaction pages", () => {
     }));
     await flushEffects();
 
-    const forms = Array.from(container.querySelectorAll("form"));
-    const createForm = forms.find((form) => form.textContent?.includes("Create workspace"));
-    const editForm = forms.find((form) => form.textContent?.includes("Save workspace"));
-    const createInputs = Array.from(createForm?.querySelectorAll("input") ?? []);
-    const createTextareas = Array.from(createForm?.querySelectorAll("textarea") ?? []);
-    const createSelects = Array.from(createForm?.querySelectorAll("select") ?? []);
-    const createButton = Array.from(createForm?.querySelectorAll("button") ?? []).find((button) => button.textContent?.includes("Create workspace"));
-    const editInputs = Array.from(editForm?.querySelectorAll("input") ?? []);
-    const editTextareas = Array.from(editForm?.querySelectorAll("textarea") ?? []);
-    const saveButton = Array.from(editForm?.querySelectorAll("button") ?? []).find((button) => button.textContent?.includes("Save workspace"));
+    await act(async () => {
+      getButtonByText(container, "New workspace")!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    await flushEffects();
+
+    const createForm = container.querySelector("form");
 
     await act(async () => {
-      setControlValue(createInputs[0] as HTMLInputElement, "ws_beta");
-      setControlValue(createInputs[1] as HTMLInputElement, "Beta workspace");
-      setControlValue(createTextareas[0] as HTMLTextAreaElement, "New workspace summary");
-      setControlValue(createSelects[0] as HTMLSelectElement, "ready");
-      createButton!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      setControlValue(getLabeledControl(createForm!, "Workspace ID"), "ws_beta");
+      setControlValue(getLabeledControl(createForm!, "Title"), "Beta workspace");
+      setControlValue(getLabeledControl(createForm!, "Summary"), "New workspace summary");
+      getButtonByText(container, "Create workspace")!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     });
     await flushEffects();
 
@@ -334,19 +391,99 @@ describe("work interaction pages", () => {
       workspace_id: "ws_beta",
       title: "Beta workspace",
       summary: "New workspace summary",
-      preview_status: "ready",
+      preview_status: "draft",
     }));
 
     await act(async () => {
-      setControlValue(editInputs[0] as HTMLInputElement, "Alpha workspace updated");
-      setControlValue(editTextareas[0] as HTMLTextAreaElement, "Updated workspace summary");
-      saveButton!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      getButtonByText(container, "Edit selected workspace")!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    await flushEffects();
+
+    const editForm = container.querySelector("form");
+
+    await act(async () => {
+      setControlValue(getLabeledControl(editForm!, "Title"), "Alpha workspace updated");
+      setControlValue(getLabeledControl(editForm!, "Summary"), "Updated workspace summary");
+      setControlValue(getLabeledControl(editForm!, "Handoff reference"), "handoff://pkg/alpha");
+      setControlValue(getLabeledControl(editForm!, "Event note"), "Prepared for review handoff.");
+      getButtonByText(container, "Save workspace")!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     });
     await flushEffects();
 
     expect(updateWorkspaceMock).toHaveBeenCalledWith("instance_alpha", "ws_alpha", expect.objectContaining({
       title: "Alpha workspace updated",
       summary: "Updated workspace summary",
+      handoff_reference: "handoff://pkg/alpha",
+      event_note: "Prepared for review handoff.",
+    }));
+  });
+
+  it("shows preview and handoff blockers honestly instead of exposing fake lifecycle edits", async () => {
+    fetchWorkspacesMock.mockResolvedValueOnce({
+      status: "ok",
+      instance: null,
+      workspaces: [createWorkspaceSummary({
+        preview_status: "draft",
+        review_status: "not_requested",
+        handoff_status: "not_ready",
+        active_run_id: null,
+        preview_artifact_id: null,
+        next_action_key: "start_preview",
+        next_action_label: "Start preview",
+        next_action_state: "not_ready",
+        next_action_reason: "No dedicated preview-start API exists here. Link an execution run or preview artifact first.",
+      })],
+    });
+    fetchWorkspaceDetailMock.mockResolvedValueOnce({
+      status: "ok",
+      workspace: createWorkspaceDetail({
+        preview_status: "draft",
+        review_status: "not_requested",
+        handoff_status: "not_ready",
+        active_run_id: null,
+        preview_artifact_id: null,
+        next_action_key: "start_preview",
+        next_action_label: "Start preview",
+        next_action_state: "not_ready",
+        next_action_reason: "No dedicated preview-start API exists here. Link an execution run or preview artifact first.",
+      }),
+    });
+
+    await renderIntoDom(withAppContext({
+      path: "/workspaces?instanceId=instance_alpha&workspaceId=ws_alpha",
+      element: <WorkspacesPage />,
+      session: adminSession,
+    }));
+    await flushEffects();
+
+    expect(container.textContent).toContain("No dedicated preview-start API exists here. Link an execution run or preview artifact first.");
+    expect(getButtonByText(container, "Start preview")).toBeUndefined();
+
+    await act(async () => {
+      getButtonByText(container, "Edit selected workspace")!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    await flushEffects();
+
+    const editForm = container.querySelector("form");
+    expect(editForm?.querySelectorAll("select").length).toBe(0);
+  });
+
+  it("runs the workspace next action when the current status exposes a real transition", async () => {
+    await renderIntoDom(withAppContext({
+      path: "/workspaces?instanceId=instance_alpha&workspaceId=ws_alpha",
+      element: <WorkspacesPage />,
+      session: adminSession,
+    }));
+    await flushEffects();
+
+    await act(async () => {
+      getButtonByText(container, "Request review")!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    await flushEffects();
+
+    expect(updateWorkspaceMock).toHaveBeenCalledWith("instance_alpha", "ws_alpha", expect.objectContaining({
+      review_status: "pending",
+      event_note: "Review requested from workspace surface.",
     }));
   });
 

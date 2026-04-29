@@ -43,6 +43,28 @@ WorkspaceEventKind = Literal[
     "handoff_delivered",
 ]
 
+WORKSPACE_NEXT_ACTION_KEYS = (
+    "start_preview",
+    "request_review",
+    "prepare_handoff",
+    "review_in_progress",
+    "handoff_ready",
+    "handoff_delivered",
+    "archived",
+)
+WorkspaceNextActionKey = Literal[
+    "start_preview",
+    "request_review",
+    "prepare_handoff",
+    "review_in_progress",
+    "handoff_ready",
+    "handoff_delivered",
+    "archived",
+]
+
+WORKSPACE_ACTION_STATES = ("available", "not_ready", "waiting", "done")
+WorkspaceActionState = Literal["available", "not_ready", "waiting", "done"]
+
 
 class WorkspaceRunSummary(BaseModel):
     run_id: str
@@ -60,6 +82,26 @@ class WorkspaceApprovalSummary(BaseModel):
     gate_key: str
     opened_at: datetime
     decided_at: datetime | None = None
+
+
+class WorkspaceConversationSummary(BaseModel):
+    conversation_id: str
+    subject: str
+    status: str
+    triage_status: str
+    priority: str
+    latest_message_at: datetime | None = None
+    updated_at: datetime
+
+
+class WorkspaceTaskSummary(BaseModel):
+    task_id: str
+    title: str
+    status: str
+    priority: str
+    owner_id: str | None = None
+    due_at: datetime | None = None
+    updated_at: datetime
 
 
 class WorkspaceEventRecord(BaseModel):
@@ -96,8 +138,17 @@ class WorkspaceSummary(BaseModel):
     handoff_reference: str | None = None
     metadata: dict[str, Any] = Field(default_factory=dict)
     run_count: int = 0
+    conversation_count: int = 0
+    task_count: int = 0
     approval_count: int = 0
     artifact_count: int = 0
+    latest_conversation_id: str | None = None
+    latest_conversation_subject: str | None = None
+    next_action_key: WorkspaceNextActionKey = "start_preview"
+    next_action_label: str = "Start preview"
+    next_action_state: WorkspaceActionState = "not_ready"
+    next_action_reason: str = "No preview-start API is available here yet."
+    last_activity_at: datetime | None = None
     latest_event_at: datetime | None = None
     created_at: datetime
     updated_at: datetime
@@ -105,6 +156,8 @@ class WorkspaceSummary(BaseModel):
 
 class WorkspaceDetail(WorkspaceSummary):
     runs: list[WorkspaceRunSummary] = Field(default_factory=list)
+    conversations: list[WorkspaceConversationSummary] = Field(default_factory=list)
+    tasks: list[WorkspaceTaskSummary] = Field(default_factory=list)
     approvals: list[WorkspaceApprovalSummary] = Field(default_factory=list)
     artifacts: list[ArtifactRecord] = Field(default_factory=list)
     events: list[WorkspaceEventRecord] = Field(default_factory=list)
