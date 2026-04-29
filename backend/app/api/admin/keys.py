@@ -51,12 +51,16 @@ class RuntimeKeyFirstSuccessProbeRequest(BaseModel):
     message: str = "ForgeFrame first success probe"
 
 
+def _runtime_key_response(key) -> dict[str, object]:
+    return key.model_dump(exclude={"secret_hash"})
+
+
 @router.get("/")
 def list_runtime_keys(
     instance: InstanceRecord = Depends(resolve_admin_instance_scope),
     service: GovernanceService = Depends(get_governance_service),
 ) -> dict[str, object]:
-    return {"status": "ok", "keys": [item.model_dump() for item in service.list_runtime_keys(instance_id=instance.instance_id)]}
+    return {"status": "ok", "keys": [_runtime_key_response(item) for item in service.list_runtime_keys(instance_id=instance.instance_id)]}
 
 
 @router.post("/", status_code=status.HTTP_201_CREATED)
@@ -119,7 +123,7 @@ def disable_runtime_key(
         key = service.set_runtime_key_status(key_id, "disabled", admin, instance_id=instance.instance_id)
     except ValueError as exc:
         return JSONResponse(status_code=404, content={"error": {"type": "runtime_key_not_found", "message": str(exc)}})
-    return {"status": "ok", "key": key.model_dump()}
+    return {"status": "ok", "key": _runtime_key_response(key)}
 
 
 @router.post("/{key_id}/activate")
@@ -137,7 +141,7 @@ def activate_runtime_key(
         key = service.set_runtime_key_status(key_id, "active", admin, instance_id=instance.instance_id)
     except ValueError as exc:
         return JSONResponse(status_code=404, content={"error": {"type": "runtime_key_not_found", "message": str(exc)}})
-    return {"status": "ok", "key": key.model_dump()}
+    return {"status": "ok", "key": _runtime_key_response(key)}
 
 
 @router.post("/{key_id}/revoke")
@@ -155,7 +159,7 @@ def revoke_runtime_key(
         key = service.set_runtime_key_status(key_id, "revoked", admin, instance_id=instance.instance_id)
     except ValueError as exc:
         return JSONResponse(status_code=404, content={"error": {"type": "runtime_key_not_found", "message": str(exc)}})
-    return {"status": "ok", "key": key.model_dump()}
+    return {"status": "ok", "key": _runtime_key_response(key)}
 
 
 @router.get("/{key_id}/request-path-policy")
@@ -212,7 +216,7 @@ def update_runtime_key_request_path_policy(
         error_type = "runtime_key_not_found" if "not found" in str(exc).lower() else "invalid_request"
         status_code = 404 if error_type == "runtime_key_not_found" else 422
         return JSONResponse(status_code=status_code, content={"error": {"type": error_type, "message": str(exc)}})
-    return {"status": "ok", "key": key.model_dump()}
+    return {"status": "ok", "key": _runtime_key_response(key)}
 
 
 @router.post("/first-success/probe")

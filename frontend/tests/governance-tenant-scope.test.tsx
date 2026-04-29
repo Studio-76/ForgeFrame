@@ -4,11 +4,12 @@ import { act, type ReactElement, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const { fetchAccountsMock, fetchAuditHistoryMock, fetchRuntimeKeysMock, fetchInstancesMock } = vi.hoisted(() => ({
+const { fetchAccountsMock, fetchAuditHistoryMock, fetchRuntimeKeysMock, fetchInstancesMock, fetchRuntimeKeyRequestPathPolicyMock } = vi.hoisted(() => ({
   fetchAccountsMock: vi.fn(),
   fetchAuditHistoryMock: vi.fn(),
   fetchRuntimeKeysMock: vi.fn(),
   fetchInstancesMock: vi.fn(),
+  fetchRuntimeKeyRequestPathPolicyMock: vi.fn(),
 }));
 
 vi.mock("../src/api/admin", async () => {
@@ -20,6 +21,7 @@ vi.mock("../src/api/admin", async () => {
     fetchAuditHistory: fetchAuditHistoryMock,
     fetchRuntimeKeys: fetchRuntimeKeysMock,
     fetchInstances: fetchInstancesMock,
+    fetchRuntimeKeyRequestPathPolicy: fetchRuntimeKeyRequestPathPolicyMock,
   };
 });
 
@@ -168,6 +170,16 @@ beforeEach(() => {
   fetchRuntimeKeysMock.mockResolvedValue({
     status: "ok",
     keys: [createRuntimeKey()],
+  });
+  fetchRuntimeKeyRequestPathPolicyMock.mockResolvedValue({
+    status: "ok",
+    policy: {
+      allowed_request_paths: ["smart_routing"],
+      default_request_path: "smart_routing",
+      pinned_target_key: null,
+      local_only_policy: "require_local_target",
+      review_required_conditions: [],
+    },
   });
   fetchAuditHistoryMock.mockResolvedValue(createAuditHistoryResponse("audit_evt_account_scope", "gateway_account"));
   container = document.createElement("div");
