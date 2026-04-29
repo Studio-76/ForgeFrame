@@ -11,6 +11,12 @@ from pydantic import BaseModel, Field
 CONTACT_STATUSES = ("active", "snoozed", "archived")
 ContactStatus = Literal["active", "snoozed", "archived"]
 
+CONTACT_CHANNEL_KINDS = ("email", "phone", "slack", "other")
+ContactChannelKind = Literal["email", "phone", "slack", "other"]
+
+CONTACT_ROUTE_STATUSES = ("reachable", "warning", "blocked")
+ContactRouteStatus = Literal["reachable", "warning", "blocked"]
+
 KNOWLEDGE_SOURCE_KINDS = ("mail", "calendar", "contacts", "drive", "knowledge_base")
 KnowledgeSourceKind = Literal["mail", "calendar", "contacts", "drive", "knowledge_base"]
 
@@ -42,12 +48,38 @@ class RecordLink(BaseModel):
     status: str | None = None
 
 
+class ContactChannel(BaseModel):
+    kind: ContactChannelKind
+    label: str
+    address: str
+    is_primary: bool = False
+    source: str | None = None
+    route_status: ContactRouteStatus = "reachable"
+    warning: str | None = None
+
+
+class ContactProvenance(BaseModel):
+    provider: str | None = None
+    import_reference: str | None = None
+    imported_at: datetime | None = None
+    last_verified_at: datetime | None = None
+    note: str | None = None
+
+
+class ContactConsent(BaseModel):
+    status: str = "unknown"
+    captured_at: datetime | None = None
+    note: str | None = None
+
+
 class ContactSummary(BaseModel):
     contact_id: str
     instance_id: str
     company_id: str
     contact_ref: str
     source_id: str | None = None
+    source_label: str | None = None
+    source_kind: KnowledgeSourceKind | None = None
     display_name: str
     primary_email: str | None = None
     primary_phone: str | None = None
@@ -56,8 +88,12 @@ class ContactSummary(BaseModel):
     status: ContactStatus
     visibility_scope: VisibilityScope
     metadata: dict[str, Any] = Field(default_factory=dict)
+    channels: list[ContactChannel] = Field(default_factory=list)
+    reachable_channel_count: int = 0
+    route_warnings: list[str] = Field(default_factory=list)
     conversation_count: int = 0
     memory_count: int = 0
+    last_contact_at: datetime | None = None
     created_at: datetime
     updated_at: datetime
 
@@ -112,7 +148,12 @@ class MemorySummary(BaseModel):
 
 class ContactDetail(ContactSummary):
     source: KnowledgeSourceSummary | None = None
+    provenance: ContactProvenance = Field(default_factory=ContactProvenance)
+    consent: ContactConsent = Field(default_factory=ContactConsent)
+    visibility_note: str | None = None
     recent_conversations: list[RecordLink] = Field(default_factory=list)
+    recent_tasks: list[RecordLink] = Field(default_factory=list)
+    recent_notifications: list[RecordLink] = Field(default_factory=list)
     recent_memory: list[MemorySummary] = Field(default_factory=list)
 
 

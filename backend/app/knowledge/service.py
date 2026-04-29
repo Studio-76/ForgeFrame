@@ -6,13 +6,16 @@ from collections.abc import Callable
 from datetime import UTC, datetime
 from uuid import uuid4
 
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from app.governance.models import AuthenticatedAdmin
 from app.instances.models import InstanceRecord
 from app.knowledge.models import (
+    ContactChannel,
+    ContactConsent,
     ContactDetail,
+    ContactProvenance,
     ContactSummary,
     CorrectMemory,
     CreateContact,
@@ -56,8 +59,17 @@ class KnowledgeContextAdminService:
 
     @staticmethod
     def _load_source(session: Session, *, instance: InstanceRecord, source_id: str) -> KnowledgeSourceORM:
+        return KnowledgeContextAdminService._load_source_by_scope(
+            session,
+            company_id=instance.company_id,
+            instance_id=instance.instance_id,
+            source_id=source_id,
+        )
+
+    @staticmethod
+    def _load_source_by_scope(session: Session, *, company_id: str, instance_id: str, source_id: str) -> KnowledgeSourceORM:
         row = session.get(KnowledgeSourceORM, source_id)
-        if row is None or row.company_id != instance.company_id or row.instance_id != instance.instance_id:
+        if row is None or row.company_id != company_id or row.instance_id != instance_id:
             raise ValueError(f"Knowledge source '{source_id}' was not found.")
         return row
 
@@ -103,7 +115,206 @@ class KnowledgeContextAdminService:
             raise ValueError(f"Workspace '{workspace_id}' was not found.")
         return row
 
+    @staticmethod
+    def _metadata_record(value: object) -> dict[str, object]:
+        return dict(value) if isinstance(value, dict) else {}
+
+    @staticmethod
+    def _string_value(value: object) -> str | None:
+        if not isinstance(value, str):
+            return None
+        normalized = value.strip()
+        return normalized or None
+
+    @classmethod
+    def _parse_datetime_value(cls, value: object) -> datetime | None:
+        normalized = cls._string_value(value)
+        if normalized is None:
+            return None
+        candidate = normalized[:-1] + "+00:00" if normalized.endswith("Z") else normalized
+        try:
+            return datetime.fromisoformat(candidate)
+        except ValueError:
+            return None
+
+    @classmethod
+    def _contact_channels(cls, row: ContactORM) -> tuple[list[ContactChannel], list[str]]:
+        metadata = cls._metadata_record(row.metadata_json)
+        channels: list[ContactChannel] = []
+        warnings: list[str] = []
+        seen_routes: set[tuple[str, str]] = set()
+        primary_routes: dict[str, str] = {}
+
+        def append_channel(
+            *,
+            kind: str,
+            label: str,
+            address: str | None,
+            is_primary: bool,
+            source: str | None = None,
+            route_status: str | None = None,
+            warning: str | None = None,
+        ) -> None:
+            normalized_kind = kind if kind in {"email", "phone", "slack", "other"} else "other"
+            normalized_address = (address or "").strip()
+            normalized_status = route_status if route_status in {"reachable", "warning", "blocked"} else None
+            channel_warning = warning
+            if not normalized_address:
+                normalized_address = "[missing address]"
+                normalized_status = normalized_status or "warning"
+                channel_warning = channel_warning or f"{label} is missing an address."
+            route_key = (normalized_kind, normalized_address.casefold())
+            if normalized_address != "[missing address]" and route_key in seen_routes:
+                warnings.append(f"Duplicate {normalized_kind} route '{normalized_address}' is recorded multiple times.")
+                return
+            seen_routes.add(route_key)
+            if is_primary and normalized_address != "[missing address]":
+                previous_primary = primary_routes.get(normalized_kind)
+                if previous_primary and previous_primary.casefold() != normalized_address.casefold():
+                    warnings.append(
+                        f"Conflicting primary {normalized_kind} routes are recorded: '{previous_primary}' and '{normalized_address}'.",
+                    )
+                else:
+                    primary_routes[normalized_kind] = normalized_address
+            channels.append(
+                ContactChannel(
+                    kind=normalized_kind,  # type: ignore[arg-type]
+                    label=label,
+                    address=normalized_address,
+                    is_primary=is_primary,
+                    source=source,
+                    route_status=(normalized_status or "reachable"),  # type: ignore[arg-type]
+                    warning=channel_warning,
+                ),
+            )
+            if channel_warning:
+                warnings.append(channel_warning)
+
+        if row.primary_email:
+            append_channel(kind="email", label="Primary email", address=row.primary_email, is_primary=True, source="contact profile")
+        if row.primary_phone:
+            append_channel(kind="phone", label="Primary phone", address=row.primary_phone, is_primary=True, source="contact profile")
+
+        metadata_channels = metadata.get("channels")
+        if isinstance(metadata_channels, list):
+            for index, item in enumerate(metadata_channels):
+                if isinstance(item, str):
+                    append_channel(
+                        kind="other",
+                        label=f"Route {index + 1}",
+                        address=item,
+                        is_primary=False,
+                        source="metadata",
+                    )
+                    continue
+                if not isinstance(item, dict):
+                    warnings.append(f"Channel entry #{index + 1} is not a structured route object.")
+                    continue
+                kind = cls._string_value(item.get("kind")) or cls._string_value(item.get("type")) or "other"
+                label = cls._string_value(item.get("label")) or f"{kind.title()} route"
+                address = (
+                    cls._string_value(item.get("address"))
+                    or cls._string_value(item.get("value"))
+                    or cls._string_value(item.get("target"))
+                    or cls._string_value(item.get("handle"))
+                )
+                source = cls._string_value(item.get("source")) or cls._string_value(item.get("provenance"))
+                warning = cls._string_value(item.get("warning"))
+                route_status = cls._string_value(item.get("route_status")) or cls._string_value(item.get("status"))
+                is_primary = bool(item.get("is_primary"))
+                append_channel(
+                    kind=kind,
+                    label=label,
+                    address=address,
+                    is_primary=is_primary,
+                    source=source or "metadata",
+                    route_status=route_status,
+                    warning=warning,
+                )
+
+        legacy_secondary_email = cls._string_value(metadata.get("secondary_email")) or cls._string_value(metadata.get("alternate_email"))
+        if legacy_secondary_email:
+            append_channel(kind="email", label="Secondary email", address=legacy_secondary_email, is_primary=False, source="metadata")
+        legacy_secondary_phone = cls._string_value(metadata.get("secondary_phone")) or cls._string_value(metadata.get("alternate_phone"))
+        if legacy_secondary_phone:
+            append_channel(kind="phone", label="Secondary phone", address=legacy_secondary_phone, is_primary=False, source="metadata")
+        legacy_slack = cls._string_value(metadata.get("slack_handle")) or cls._string_value(metadata.get("slack_channel"))
+        if legacy_slack:
+            append_channel(kind="slack", label="Slack", address=legacy_slack, is_primary=False, source="metadata")
+
+        reachable_routes = [channel for channel in channels if channel.route_status == "reachable"]
+        if not reachable_routes:
+            warnings.append("No reachable channel is recorded for this contact.")
+        return channels, list(dict.fromkeys(warnings))
+
+    @classmethod
+    def _contact_provenance(cls, row: ContactORM) -> ContactProvenance:
+        metadata = cls._metadata_record(row.metadata_json)
+        provenance = cls._metadata_record(metadata.get("provenance"))
+        return ContactProvenance(
+            provider=(
+                cls._string_value(provenance.get("provider"))
+                or cls._string_value(provenance.get("system"))
+                or cls._string_value(metadata.get("source_provider"))
+            ),
+            import_reference=(
+                cls._string_value(provenance.get("import_reference"))
+                or cls._string_value(provenance.get("external_id"))
+                or cls._string_value(provenance.get("record_id"))
+            ),
+            imported_at=(
+                cls._parse_datetime_value(provenance.get("imported_at"))
+                or cls._parse_datetime_value(metadata.get("imported_at"))
+            ),
+            last_verified_at=(
+                cls._parse_datetime_value(provenance.get("last_verified_at"))
+                or cls._parse_datetime_value(metadata.get("last_verified_at"))
+            ),
+            note=(
+                cls._string_value(provenance.get("note"))
+                or cls._string_value(provenance.get("summary"))
+                or cls._string_value(metadata.get("source_note"))
+            ),
+        )
+
+    @classmethod
+    def _contact_consent(cls, row: ContactORM) -> ContactConsent:
+        metadata = cls._metadata_record(row.metadata_json)
+        consent = cls._metadata_record(metadata.get("consent"))
+        return ContactConsent(
+            status=(
+                cls._string_value(consent.get("status"))
+                or cls._string_value(consent.get("state"))
+                or cls._string_value(metadata.get("consent_status"))
+                or "unknown"
+            ),
+            captured_at=(
+                cls._parse_datetime_value(consent.get("captured_at"))
+                or cls._parse_datetime_value(consent.get("updated_at"))
+                or cls._parse_datetime_value(metadata.get("consent_captured_at"))
+            ),
+            note=(
+                cls._string_value(consent.get("note"))
+                or cls._string_value(consent.get("policy_basis"))
+                or cls._string_value(metadata.get("consent_note"))
+            ),
+        )
+
+    @classmethod
+    def _contact_visibility_note(cls, row: ContactORM) -> str | None:
+        metadata = cls._metadata_record(row.metadata_json)
+        visibility = cls._metadata_record(metadata.get("visibility"))
+        return (
+            cls._string_value(visibility.get("note"))
+            or cls._string_value(visibility.get("summary"))
+            or cls._string_value(metadata.get("visibility_note"))
+        )
+
     def _contact_summary(self, session: Session, row: ContactORM) -> ContactSummary:
+        source_row = session.get(KnowledgeSourceORM, row.source_id) if row.source_id else None
+        if source_row is not None and (source_row.company_id != row.company_id or source_row.instance_id != row.instance_id):
+            source_row = None
+        channels, route_warnings = self._contact_channels(row)
         conversation_count = int(
             session.scalar(
                 select(func.count()).select_from(ConversationORM).where(
@@ -113,6 +324,13 @@ class KnowledgeContextAdminService:
                 ),
             )
             or 0,
+        )
+        last_contact_at = session.scalar(
+            select(func.max(ConversationORM.updated_at)).where(
+                ConversationORM.company_id == row.company_id,
+                ConversationORM.instance_id == row.instance_id,
+                ConversationORM.contact_ref == row.contact_ref,
+            ),
         )
         memory_count = int(
             session.scalar(
@@ -129,6 +347,8 @@ class KnowledgeContextAdminService:
             company_id=row.company_id,
             contact_ref=row.contact_ref,
             source_id=row.source_id,
+            source_label=source_row.label if source_row is not None else None,
+            source_kind=source_row.source_kind if source_row is not None else None,  # type: ignore[arg-type]
             display_name=row.display_name,
             primary_email=row.primary_email,
             primary_phone=row.primary_phone,
@@ -137,8 +357,12 @@ class KnowledgeContextAdminService:
             status=row.status,  # type: ignore[arg-type]
             visibility_scope=row.visibility_scope,  # type: ignore[arg-type]
             metadata=dict(row.metadata_json or {}),
+            channels=channels,
+            reachable_channel_count=sum(1 for channel in channels if channel.route_status == "reachable"),
+            route_warnings=route_warnings,
             conversation_count=conversation_count,
             memory_count=memory_count,
+            last_contact_at=last_contact_at,
             created_at=row.created_at,
             updated_at=row.updated_at,
         )
@@ -219,9 +443,16 @@ class KnowledgeContextAdminService:
     def _sanitize_contact(self, summary: ContactSummary, *, actor: AuthenticatedAdmin) -> ContactSummary:
         if self._can_view_sensitive(actor) or summary.visibility_scope not in {"personal", "restricted"}:
             return summary
+        redacted_channels = [
+            channel.model_copy(update={
+                "address": "[redacted]" if channel.address and channel.address != "[missing address]" else channel.address,
+            })
+            for channel in summary.channels
+        ]
         return summary.model_copy(update={
             "primary_email": None,
             "primary_phone": None,
+            "channels": redacted_channels,
             "metadata": {"redacted": True},
         })
 
@@ -294,27 +525,80 @@ class KnowledgeContextAdminService:
         with self._session_factory() as session:
             row = self._load_contact(session, instance=instance, contact_id=contact_id)
             summary = self._sanitize_contact(self._contact_summary(session, row), actor=actor)
-            source = self._sanitize_source(self._source_summary(session, self._load_source(session, instance=instance, source_id=row.source_id)), actor=actor) if row.source_id else None
+            source_row = session.get(KnowledgeSourceORM, row.source_id) if row.source_id else None
+            if source_row is not None and (source_row.company_id != instance.company_id or source_row.instance_id != instance.instance_id):
+                source_row = None
+            source = self._sanitize_source(self._source_summary(session, source_row), actor=actor) if source_row is not None else None
+            provenance = self._contact_provenance(row)
+            consent = self._contact_consent(row)
+            visibility_note = self._contact_visibility_note(row)
+            conversation_rows = session.execute(
+                select(ConversationORM).where(
+                    ConversationORM.company_id == instance.company_id,
+                    ConversationORM.instance_id == instance.instance_id,
+                    ConversationORM.contact_ref == row.contact_ref,
+                ).order_by(ConversationORM.updated_at.desc()).limit(10),
+            ).scalars().all()
             recent_conversations = [
                 self._record_link(record_id=item.id, label=item.subject, status=item.status)
-                for item in session.execute(
-                    select(ConversationORM).where(
-                        ConversationORM.company_id == instance.company_id,
-                        ConversationORM.instance_id == instance.instance_id,
-                        ConversationORM.contact_ref == row.contact_ref,
-                    ).order_by(ConversationORM.updated_at.desc()).limit(10),
-                ).scalars().all()
+                for item in conversation_rows
             ]
+            recent_memory_rows = session.execute(
+                select(MemoryEntryORM).where(
+                    MemoryEntryORM.company_id == instance.company_id,
+                    MemoryEntryORM.contact_id == contact_id,
+                ).order_by(MemoryEntryORM.updated_at.desc()).limit(10),
+            ).scalars().all()
             recent_memory = [
                 self._sanitize_memory(self._memory_summary(item), actor=actor)
-                for item in session.execute(
-                    select(MemoryEntryORM).where(
-                        MemoryEntryORM.company_id == instance.company_id,
-                        MemoryEntryORM.contact_id == contact_id,
-                    ).order_by(MemoryEntryORM.updated_at.desc()).limit(10),
-                ).scalars().all()
+                for item in recent_memory_rows
             ]
-            return ContactDetail(**summary.model_dump(), source=source, recent_conversations=recent_conversations, recent_memory=recent_memory)
+            task_ids = [item.task_id for item in recent_memory_rows if item.task_id]
+            task_rows = []
+            if task_ids:
+                task_rows = session.execute(
+                    select(TaskORM).where(
+                        TaskORM.company_id == instance.company_id,
+                        TaskORM.id.in_(task_ids),
+                    ).order_by(TaskORM.updated_at.desc()).limit(10),
+                ).scalars().all()
+            recent_tasks = [
+                self._record_link(record_id=item.id, label=item.title, status=item.status)
+                for item in task_rows
+            ]
+            conversation_ids = [item.id for item in conversation_rows]
+            notification_rows = []
+            if conversation_ids or task_ids:
+                notification_stmt = select(NotificationORM).where(NotificationORM.company_id == instance.company_id)
+                clauses = []
+                if conversation_ids:
+                    clauses.append(NotificationORM.conversation_id.in_(conversation_ids))
+                if task_ids:
+                    clauses.append(NotificationORM.task_id.in_(task_ids))
+                if clauses:
+                    notification_stmt = notification_stmt.where(or_(*clauses))
+                notification_rows = session.execute(
+                    notification_stmt.order_by(NotificationORM.updated_at.desc()).limit(10),
+                ).scalars().all()
+            recent_notifications = [
+                self._record_link(record_id=item.id, label=item.title, status=item.delivery_status)
+                for item in notification_rows
+            ]
+            if not self._can_view_sensitive(actor) and summary.visibility_scope in {"personal", "restricted"}:
+                provenance = provenance.model_copy(update={"import_reference": None, "note": None})
+                consent = consent.model_copy(update={"note": None})
+                visibility_note = None
+            return ContactDetail(
+                **summary.model_dump(),
+                source=source,
+                provenance=provenance,
+                consent=consent,
+                visibility_note=visibility_note,
+                recent_conversations=recent_conversations,
+                recent_tasks=recent_tasks,
+                recent_notifications=recent_notifications,
+                recent_memory=recent_memory,
+            )
 
     def create_contact(self, *, instance: InstanceRecord, payload: CreateContact) -> ContactDetail:
         with self._session_factory() as session, session.begin():
@@ -359,10 +643,13 @@ class KnowledgeContextAdminService:
     def update_contact(self, *, instance: InstanceRecord, contact_id: str, payload: UpdateContact) -> ContactDetail:
         with self._session_factory() as session, session.begin():
             row = self._load_contact(session, instance=instance, contact_id=contact_id)
-            if payload.source_id:
+            fields_set = payload.model_fields_set
+            if "source_id" in fields_set and payload.source_id:
                 self._load_source(session, instance=instance, source_id=payload.source_id)
-            if payload.contact_ref is not None:
-                candidate = payload.contact_ref.strip()
+            if "contact_ref" in fields_set:
+                candidate = (payload.contact_ref or "").strip()
+                if not candidate:
+                    raise ValueError("Contact ref cannot be empty.")
                 existing_ref = session.execute(
                     select(ContactORM).where(
                         ContactORM.company_id == instance.company_id,
@@ -373,15 +660,27 @@ class KnowledgeContextAdminService:
                 if existing_ref is not None:
                     raise ValueError(f"Contact ref '{candidate}' already exists.")
                 row.contact_ref = candidate
-            row.source_id = payload.source_id if payload.source_id is not None else row.source_id
-            row.display_name = payload.display_name.strip() if payload.display_name is not None else row.display_name
-            row.primary_email = payload.primary_email if payload.primary_email is not None else row.primary_email
-            row.primary_phone = payload.primary_phone if payload.primary_phone is not None else row.primary_phone
-            row.organization = payload.organization if payload.organization is not None else row.organization
-            row.title = payload.title if payload.title is not None else row.title
-            row.status = payload.status or row.status
-            row.visibility_scope = payload.visibility_scope or row.visibility_scope
-            row.metadata_json = dict(payload.metadata) if payload.metadata is not None else dict(row.metadata_json or {})
+            if "source_id" in fields_set:
+                row.source_id = payload.source_id
+            if "display_name" in fields_set:
+                candidate_name = (payload.display_name or "").strip()
+                if not candidate_name:
+                    raise ValueError("Display name cannot be empty.")
+                row.display_name = candidate_name
+            if "primary_email" in fields_set:
+                row.primary_email = payload.primary_email
+            if "primary_phone" in fields_set:
+                row.primary_phone = payload.primary_phone
+            if "organization" in fields_set:
+                row.organization = payload.organization
+            if "title" in fields_set:
+                row.title = payload.title
+            if "status" in fields_set and payload.status is not None:
+                row.status = payload.status
+            if "visibility_scope" in fields_set and payload.visibility_scope is not None:
+                row.visibility_scope = payload.visibility_scope
+            if "metadata" in fields_set:
+                row.metadata_json = dict(payload.metadata or {})
             row.updated_at = self._now()
         return self.get_contact(instance=instance, actor=AuthenticatedAdmin(
             session_id="system",

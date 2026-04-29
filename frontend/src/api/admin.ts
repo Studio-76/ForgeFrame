@@ -2590,6 +2590,10 @@ export type AutomationDetail = AutomationSummary & {
 
 export type ContactStatus = "active" | "snoozed" | "archived";
 
+export type ContactChannelKind = "email" | "phone" | "slack" | "other";
+
+export type ContactRouteStatus = "reachable" | "warning" | "blocked";
+
 export type KnowledgeSourceKind = "mail" | "calendar" | "contacts" | "drive" | "knowledge_base";
 
 export type KnowledgeSourceStatus = "active" | "paused" | "error";
@@ -2611,12 +2615,38 @@ export type RecordLink = {
   status?: string | null;
 };
 
+export type ContactChannel = {
+  kind: ContactChannelKind;
+  label: string;
+  address: string;
+  is_primary: boolean;
+  source?: string | null;
+  route_status: ContactRouteStatus;
+  warning?: string | null;
+};
+
+export type ContactProvenance = {
+  provider?: string | null;
+  import_reference?: string | null;
+  imported_at?: string | null;
+  last_verified_at?: string | null;
+  note?: string | null;
+};
+
+export type ContactConsent = {
+  status: string;
+  captured_at?: string | null;
+  note?: string | null;
+};
+
 export type ContactSummary = {
   contact_id: string;
   instance_id: string;
   company_id: string;
   contact_ref: string;
   source_id?: string | null;
+  source_label?: string | null;
+  source_kind?: KnowledgeSourceKind | null;
   display_name: string;
   primary_email?: string | null;
   primary_phone?: string | null;
@@ -2625,8 +2655,12 @@ export type ContactSummary = {
   status: ContactStatus;
   visibility_scope: VisibilityScope;
   metadata: Record<string, unknown>;
+  channels: ContactChannel[];
+  reachable_channel_count: number;
+  route_warnings: string[];
   conversation_count: number;
   memory_count: number;
+  last_contact_at?: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -2681,7 +2715,12 @@ export type MemorySummary = {
 
 export type ContactDetail = ContactSummary & {
   source?: KnowledgeSourceSummary | null;
+  provenance: ContactProvenance;
+  consent: ContactConsent;
+  visibility_note?: string | null;
   recent_conversations: RecordLink[];
+  recent_tasks: RecordLink[];
+  recent_notifications: RecordLink[];
   recent_memory: MemorySummary[];
 };
 

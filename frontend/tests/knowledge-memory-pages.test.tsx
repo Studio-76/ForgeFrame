@@ -117,6 +117,8 @@ function createContactSummary(overrides: Partial<ContactSummary> = {}): ContactS
     company_id: "company_alpha",
     contact_ref: "contact://acme/pat",
     source_id: "source_mail_primary",
+    source_label: "Primary mail connector",
+    source_kind: "mail",
     display_name: "Pat Morgan",
     primary_email: "pat@example.com",
     primary_phone: "+49-30-555-100",
@@ -125,8 +127,49 @@ function createContactSummary(overrides: Partial<ContactSummary> = {}): ContactS
     status: "active",
     visibility_scope: "team",
     metadata: {},
+    channels: [
+      {
+        kind: "email",
+        label: "Primary email",
+        address: "pat@example.com",
+        is_primary: true,
+        source: "contact profile",
+        route_status: "reachable",
+        warning: null,
+      },
+      {
+        kind: "phone",
+        label: "Primary phone",
+        address: "+49-30-555-100",
+        is_primary: true,
+        source: "contact profile",
+        route_status: "reachable",
+        warning: null,
+      },
+      {
+        kind: "slack",
+        label: "Escalation slack",
+        address: "@pat-morgan",
+        is_primary: false,
+        source: "crm-sync",
+        route_status: "reachable",
+        warning: null,
+      },
+      {
+        kind: "email",
+        label: "Escalation mailbox",
+        address: "[missing address]",
+        is_primary: false,
+        source: "metadata",
+        route_status: "warning",
+        warning: "Escalation mailbox is missing an address.",
+      },
+    ],
+    reachable_channel_count: 3,
+    route_warnings: ["Escalation mailbox is missing an address."],
     conversation_count: 1,
     memory_count: 1,
+    last_contact_at: "2026-04-23T10:20:00Z",
     created_at: "2026-04-23T09:05:00Z",
     updated_at: "2026-04-23T10:05:00Z",
     ...overrides,
@@ -167,13 +210,62 @@ function createMemorySummary(overrides: Partial<MemorySummary> = {}): MemorySumm
 
 function createContactDetail(overrides: Partial<ContactDetail> = {}): ContactDetail {
   return {
-    ...createContactSummary(),
+    ...createContactSummary({
+      metadata: {
+        channels: [
+          { kind: "slack", label: "Escalation slack", address: "@pat-morgan", source: "crm-sync" },
+          { kind: "email", label: "Escalation mailbox" },
+        ],
+        provenance: {
+          provider: "crm",
+          import_reference: "crm-4471",
+          imported_at: "2026-04-23T09:30:00Z",
+          last_verified_at: "2026-04-23T10:15:00Z",
+          note: "Imported from the CRM owner directory.",
+        },
+        consent: {
+          status: "explicit_opt_in",
+          captured_at: "2026-04-23T09:40:00Z",
+          note: "Approved for pricing follow-up.",
+        },
+        visibility: {
+          note: "Shared with the sales response team.",
+        },
+      },
+    }),
     source: createSourceSummary(),
+    provenance: {
+      provider: "crm",
+      import_reference: "crm-4471",
+      imported_at: "2026-04-23T09:30:00Z",
+      last_verified_at: "2026-04-23T10:15:00Z",
+      note: "Imported from the CRM owner directory.",
+    },
+    consent: {
+      status: "explicit_opt_in",
+      captured_at: "2026-04-23T09:40:00Z",
+      note: "Approved for pricing follow-up.",
+    },
+    visibility_note: "Shared with the sales response team.",
     recent_conversations: [
       {
         record_id: "conversation_alpha",
         label: "Pricing review thread",
         status: "open",
+      },
+    ],
+    recent_tasks: [
+      {
+        record_id: "task_alpha",
+        label: "Review outbound pricing",
+        status: "open",
+      },
+    ],
+    recent_notifications: [
+      {
+        record_id: "notification_alpha",
+        label: "Pricing preview",
+        status: "preview",
       },
     ],
     recent_memory: [createMemorySummary()],
@@ -423,28 +515,43 @@ describe("knowledge and memory pages", () => {
     expect(fetchContactsMock).toHaveBeenCalledWith("instance_alpha", { status: "all", limit: 100 });
     expect(fetchContactDetailMock).toHaveBeenCalledWith("contact_alpha", "instance_alpha");
     expect(container.textContent).toContain("Pat Morgan");
-    expect(container.textContent).toContain("Recent conversations");
+    expect(container.textContent).toContain("Linked conversations");
+    expect(container.textContent).toContain("Escalation mailbox is missing an address.");
+    expect(container.textContent).toContain("Pricing preview");
+    expect(container.textContent).toContain("Review outbound pricing");
 
     const sourceLink = Array.from(container.querySelectorAll("a")).find((link) => link.textContent === "Open source");
     expect(sourceLink?.getAttribute("href")).toBe("/knowledge-sources?instanceId=instance_alpha&sourceId=source_mail_primary");
+    const notificationLink = Array.from(container.querySelectorAll("a")).find((link) => link.textContent === "Pricing preview");
+    expect(notificationLink?.getAttribute("href")).toBe("/notifications?instanceId=instance_alpha&notificationId=notification_alpha");
 
     const createForm = getFormByText("Create contact");
     const editForm = getFormByText("Save contact");
-    const createInputs = Array.from(createForm?.querySelectorAll("input") ?? []);
-    const createSelects = Array.from(createForm?.querySelectorAll("select") ?? []);
     const createButton = getButtonByText(createForm!, "Create contact");
 
     await act(async () => {
-      setControlValue(createInputs[0] as HTMLInputElement, "contact_beta");
-      setControlValue(createInputs[1] as HTMLInputElement, "contact://acme/jordan");
-      setControlValue(createInputs[2] as HTMLInputElement, "source_mail_primary");
-      setControlValue(createInputs[3] as HTMLInputElement, "Jordan Vega");
-      setControlValue(createInputs[4] as HTMLInputElement, "jordan@example.com");
-      setControlValue(createInputs[5] as HTMLInputElement, "+49-30-555-200");
-      setControlValue(createInputs[6] as HTMLInputElement, "Beta GmbH");
-      setControlValue(createInputs[7] as HTMLInputElement, "Director");
-      setControlValue(createSelects[0] as HTMLSelectElement, "active");
-      setControlValue(createSelects[1] as HTMLSelectElement, "team");
+      setControlValue(getControlByLabel(createForm!, "Contact ID"), "contact_beta");
+      setControlValue(getControlByLabel(createForm!, "Contact ref"), "contact://acme/jordan");
+      setControlValue(getControlByLabel(createForm!, "Source ID"), "source_mail_primary");
+      setControlValue(getControlByLabel(createForm!, "Display name"), "Jordan Vega");
+      setControlValue(getControlByLabel(createForm!, "Organization"), "Beta GmbH");
+      setControlValue(getControlByLabel(createForm!, "Title"), "Director");
+      setControlValue(getControlByLabel(createForm!, "Primary email"), "jordan@example.com");
+      setControlValue(getControlByLabel(createForm!, "Secondary email"), "sales@example.com");
+      setControlValue(getControlByLabel(createForm!, "Slack handle"), "@jordan-vega");
+      setControlValue(getControlByLabel(createForm!, "Primary phone"), "+49-30-555-200");
+      setControlValue(getControlByLabel(createForm!, "Secondary phone"), "+49-30-555-201");
+      setControlValue(getControlByLabel(createForm!, "Status"), "active");
+      setControlValue(getControlByLabel(createForm!, "Visibility scope"), "team");
+      setControlValue(getControlByLabel(createForm!, "Consent status"), "explicit_opt_in");
+      setControlValue(getControlByLabel(createForm!, "Consent captured at"), "2026-04-24T11:00:00Z");
+      setControlValue(getControlByLabel(createForm!, "Consent note"), "Approved for sales outreach");
+      setControlValue(getControlByLabel(createForm!, "Visibility note"), "Shared with revenue operations");
+      setControlValue(getControlByLabel(createForm!, "Source provider"), "crm");
+      setControlValue(getControlByLabel(createForm!, "Import reference"), "crm-778");
+      setControlValue(getControlByLabel(createForm!, "Imported at"), "2026-04-24T10:30:00Z");
+      setControlValue(getControlByLabel(createForm!, "Last verified at"), "2026-04-24T10:45:00Z");
+      setControlValue(getControlByLabel(createForm!, "Provenance note"), "Imported from CRM sync");
       createButton!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     });
     await flushEffects();
@@ -460,28 +567,61 @@ describe("knowledge and memory pages", () => {
       title: "Director",
       status: "active",
       visibility_scope: "team",
+      metadata: {
+        channels: [
+          { kind: "email", label: "Secondary email", address: "sales@example.com", source: "operator" },
+          { kind: "phone", label: "Secondary phone", address: "+49-30-555-201", source: "operator" },
+          { kind: "slack", label: "Slack", address: "@jordan-vega", source: "operator" },
+        ],
+        consent: {
+          status: "explicit_opt_in",
+          captured_at: "2026-04-24T11:00:00Z",
+          note: "Approved for sales outreach",
+        },
+        provenance: {
+          provider: "crm",
+          import_reference: "crm-778",
+          imported_at: "2026-04-24T10:30:00Z",
+          last_verified_at: "2026-04-24T10:45:00Z",
+          note: "Imported from CRM sync",
+        },
+        visibility: {
+          note: "Shared with revenue operations",
+        },
+      },
     }));
 
-    const editInputs = Array.from(editForm?.querySelectorAll("input") ?? []);
-    const editSelects = Array.from(editForm?.querySelectorAll("select") ?? []);
     const editButton = getButtonByText(editForm!, "Save contact");
 
     await act(async () => {
-      setControlValue(editInputs[0] as HTMLInputElement, "contact://acme/pat-updated");
-      setControlValue(editInputs[1] as HTMLInputElement, "source_mail_primary");
-      setControlValue(editInputs[2] as HTMLInputElement, "Pat Morgan Updated");
-      setControlValue(editInputs[3] as HTMLInputElement, "pat-updated@example.com");
-      setControlValue(editInputs[4] as HTMLInputElement, "+49-30-555-999");
-      setControlValue(editInputs[5] as HTMLInputElement, "Acme Holding");
-      setControlValue(editInputs[6] as HTMLInputElement, "VP Operations");
-      setControlValue(editSelects[0] as HTMLSelectElement, "snoozed");
-      setControlValue(editSelects[1] as HTMLSelectElement, "restricted");
+      setControlValue(getControlByLabel(editForm!, "Contact ref"), "contact://acme/pat-updated");
+      setControlValue(getControlByLabel(editForm!, "Source ID"), "source_mail_primary");
+      setControlValue(getControlByLabel(editForm!, "Display name"), "Pat Morgan Updated");
+      setControlValue(getControlByLabel(editForm!, "Organization"), "Acme Holding");
+      setControlValue(getControlByLabel(editForm!, "Title"), "VP Operations");
+      setControlValue(getControlByLabel(editForm!, "Primary email"), "pat-updated@example.com");
+      setControlValue(getControlByLabel(editForm!, "Secondary email"), "ops-updated@example.com");
+      setControlValue(getControlByLabel(editForm!, "Slack handle"), "@pat-updated");
+      setControlValue(getControlByLabel(editForm!, "Primary phone"), "+49-30-555-999");
+      setControlValue(getControlByLabel(editForm!, "Secondary phone"), "+49-30-555-998");
+      setControlValue(getControlByLabel(editForm!, "Status"), "snoozed");
+      setControlValue(getControlByLabel(editForm!, "Visibility scope"), "restricted");
+      setControlValue(getControlByLabel(editForm!, "Consent status"), "opted_out");
+      setControlValue(getControlByLabel(editForm!, "Consent captured at"), "2026-04-25T09:00:00Z");
+      setControlValue(getControlByLabel(editForm!, "Consent note"), "Opted out of outbound mail");
+      setControlValue(getControlByLabel(editForm!, "Source provider"), "crm");
+      setControlValue(getControlByLabel(editForm!, "Import reference"), "crm-4471-updated");
+      setControlValue(getControlByLabel(editForm!, "Imported at"), "2026-04-25T08:45:00Z");
+      setControlValue(getControlByLabel(editForm!, "Last verified at"), "2026-04-25T08:55:00Z");
+      setControlValue(getControlByLabel(editForm!, "Provenance note"), "Updated after CRM review");
+      setControlValue(getControlByLabel(editForm!, "Visibility note"), "Restricted to senior operators");
       editButton!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     });
     await flushEffects();
 
     expect(updateContactMock).toHaveBeenCalledWith("instance_alpha", "contact_alpha", expect.objectContaining({
       contact_ref: "contact://acme/pat-updated",
+      source_id: "source_mail_primary",
       display_name: "Pat Morgan Updated",
       primary_email: "pat-updated@example.com",
       primary_phone: "+49-30-555-999",
@@ -489,6 +629,43 @@ describe("knowledge and memory pages", () => {
       title: "VP Operations",
       status: "snoozed",
       visibility_scope: "restricted",
+      metadata: {
+        channels: [
+          { kind: "email", label: "Escalation mailbox" },
+          { kind: "email", label: "Secondary email", address: "ops-updated@example.com", source: "operator" },
+          { kind: "phone", label: "Secondary phone", address: "+49-30-555-998", source: "operator" },
+          { kind: "slack", label: "Slack", address: "@pat-updated", source: "operator" },
+        ],
+        consent: {
+          status: "opted_out",
+          captured_at: "2026-04-25T09:00:00Z",
+          note: "Opted out of outbound mail",
+        },
+        provenance: {
+          provider: "crm",
+          import_reference: "crm-4471-updated",
+          imported_at: "2026-04-25T08:45:00Z",
+          last_verified_at: "2026-04-25T08:55:00Z",
+          note: "Updated after CRM review",
+        },
+        visibility: {
+          note: "Restricted to senior operators",
+        },
+      },
+    }));
+
+    await act(async () => {
+      setControlValue(getControlByLabel(editForm!, "Source ID"), "");
+      setControlValue(getControlByLabel(editForm!, "Primary email"), "");
+      setControlValue(getControlByLabel(editForm!, "Primary phone"), "");
+      editButton!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    await flushEffects();
+
+    expect(updateContactMock).toHaveBeenNthCalledWith(2, "instance_alpha", "contact_alpha", expect.objectContaining({
+      source_id: null,
+      primary_email: null,
+      primary_phone: null,
     }));
   });
 

@@ -1,4 +1,5 @@
 from fastapi.testclient import TestClient
+from uuid import uuid4
 
 from app.main import app
 from conftest import admin_headers as shared_admin_headers
@@ -10,6 +11,10 @@ def _admin_headers(client: TestClient) -> dict[str, str]:
 
 def _instance_scope(instance_id: str) -> dict[str, str]:
     return {"instanceId": instance_id}
+
+
+def _unique_contact_ref(prefix: str) -> str:
+    return f"{prefix}-{uuid4().hex[:8]}"
 
 
 def _create_instance(
@@ -31,7 +36,8 @@ def _create_instance(
             "exposure_mode": "local_only",
         },
     )
-    assert response.status_code == 201
+    if response.status_code != 201:
+        raise AssertionError(response.json())
     return response.json()["instance"]["instance_id"]
 
 
@@ -54,7 +60,7 @@ def _create_workspace(
             "handoff_status": "not_ready",
         },
     )
-    assert response.status_code == 201
+    assert response.status_code == 201, response.json()
     return response.json()["workspace"]["workspace_id"]
 
 
@@ -91,6 +97,8 @@ def _create_contact(
     source_id: str,
     display_name: str,
     contact_ref: str,
+    primary_phone: str | None = None,
+    metadata: dict[str, object] | None = None,
 ) -> str:
     response = client.post(
         "/admin/contacts",
@@ -101,11 +109,14 @@ def _create_contact(
             "display_name": display_name,
             "contact_ref": contact_ref,
             "primary_email": "customer@example.com",
+            "primary_phone": primary_phone,
             "organization": "Acme",
             "visibility_scope": "team",
+            "metadata": metadata or {},
         },
     )
-    assert response.status_code == 201
+    if response.status_code != 201:
+        raise AssertionError(response.json())
     return response.json()["contact"]["contact_id"]
 
 
@@ -185,6 +196,7 @@ def _create_notification(
     instance_id: str,
     task_id: str,
     channel_id: str,
+    conversation_id: str | None = None,
 ) -> str:
     response = client.post(
         "/admin/notifications",
@@ -192,6 +204,7 @@ def _create_notification(
         params=_instance_scope(instance_id),
         json={
             "task_id": task_id,
+            "conversation_id": conversation_id,
             "channel_id": channel_id,
             "title": "Knowledge notification",
             "body": "Notification linked to memory truth.",
@@ -206,6 +219,7 @@ def test_contacts_sources_and_memory_linkage_persist_context_truth() -> None:
     client = TestClient(app)
     headers = _admin_headers(client)
     instance_id = _create_instance(client, headers, instance_id="instance_context_alpha", company_id="company_context_alpha")
+    contact_ref = _unique_contact_ref("contact://customers/alex")
     source_id = _create_source(
         client,
         headers,
@@ -220,13 +234,46 @@ def test_contacts_sources_and_memory_linkage_persist_context_truth() -> None:
         instance_id=instance_id,
         source_id=source_id,
         display_name="Alex Customer",
-        contact_ref="contact://customers/alex",
+        contact_ref=contact_ref,
+        primary_phone="+49-30-555-200",
+        metadata={
+            "channels": [
+                {"kind": "slack", "label": "Escalation slack", "address": "@alex-customer", "source": "crm-sync"},
+                {"kind": "email", "label": "Escalation mailbox"},
+            ],
+            "provenance": {
+                "provider": "crm",
+                "import_reference": "crm-4471",
+                "imported_at": "2026-04-23T09:25:00Z",
+                "last_verified_at": "2026-04-23T10:15:00Z",
+                "note": "Imported from the CRM owner directory.",
+            },
+            "consent": {
+                "status": "explicit_opt_in",
+                "captured_at": "2026-04-23T09:30:00Z",
+                "note": "Approved for commercial follow-up.",
+            },
+            "visibility": {
+                "note": "Shared with the sales response team.",
+            },
+        },
     )
     conversation_id = _create_conversation(
         client,
         headers,
         instance_id=instance_id,
-        contact_ref="contact://customers/alex",
+        contact_ref=contact_ref,
+    )
+    workspace_id = _create_workspace(client, headers, instance_id=instance_id, title="Context workspace")
+    task_id = _create_task(client, headers, instance_id=instance_id, workspace_id=workspace_id)
+    channel_id = _create_channel(client, headers, instance_id=instance_id)
+    notification_id = _create_notification(
+        client,
+        headers,
+        instance_id=instance_id,
+        task_id=task_id,
+        channel_id=channel_id,
+        conversation_id=conversation_id,
     )
 
     created_memory = client.post(
@@ -237,6 +284,8 @@ def test_contacts_sources_and_memory_linkage_persist_context_truth() -> None:
             "source_id": source_id,
             "contact_id": contact_id,
             "conversation_id": conversation_id,
+            "task_id": task_id,
+            "notification_id": notification_id,
             "memory_kind": "fact",
             "title": "Preferred contract cadence",
             "body": "Customer expects weekly contract updates.",
@@ -255,8 +304,32 @@ def test_contacts_sources_and_memory_linkage_persist_context_truth() -> None:
     assert contact_detail.status_code == 200
     contact_payload = contact_detail.json()["contact"]
     assert contact_payload["source"]["source_id"] == source_id
+    assert contact_payload["source_label"] == "Customer mailbox"
+    assert contact_payload["source_kind"] == "mail"
+    assert contact_payload["last_contact_at"] is not None
+    assert contact_payload["channels"][0]["address"] == "customer@example.com"
+    assert contact_payload["channels"][1]["address"] == "+49-30-555-200"
+    assert contact_payload["channels"][2]["address"] == "@alex-customer"
+    assert any("missing an address" in warning for warning in contact_payload["route_warnings"])
+    assert contact_payload["provenance"]["provider"] == "crm"
+    assert contact_payload["provenance"]["import_reference"] == "crm-4471"
+    assert contact_payload["consent"]["status"] == "explicit_opt_in"
+    assert contact_payload["visibility_note"] == "Shared with the sales response team."
     assert contact_payload["recent_conversations"][0]["record_id"] == conversation_id
+    assert contact_payload["recent_tasks"][0]["record_id"] == task_id
+    assert contact_payload["recent_notifications"][0]["record_id"] == notification_id
     assert contact_payload["recent_memory"][0]["memory_id"] == memory_id
+
+    contact_list = client.get(
+        "/admin/contacts",
+        headers=headers,
+        params=_instance_scope(instance_id),
+    )
+    assert contact_list.status_code == 200
+    list_payload = contact_list.json()["contacts"][0]
+    assert list_payload["source_label"] == "Customer mailbox"
+    assert list_payload["reachable_channel_count"] == 3
+    assert list_payload["last_contact_at"] is not None
 
     source_detail = client.get(
         f"/admin/knowledge-sources/{source_id}",
@@ -271,10 +344,95 @@ def test_contacts_sources_and_memory_linkage_persist_context_truth() -> None:
     assert source_payload["memory_entries"][0]["memory_id"] == memory_id
 
 
+def test_contact_route_warnings_surface_incomplete_routes() -> None:
+    client = TestClient(app)
+    headers = _admin_headers(client)
+    instance_id = _create_instance(client, headers, instance_id="instance_contact_warning", company_id="company_contact_warning")
+    contact_ref = _unique_contact_ref("contact://warning/contact")
+    source_id = _create_source(
+        client,
+        headers,
+        instance_id=instance_id,
+        source_kind="contacts",
+        label="Warning contacts",
+        connection_target="contacts://warning",
+    )
+    contact_id = _create_contact(
+        client,
+        headers,
+        instance_id=instance_id,
+        source_id=source_id,
+        display_name="Route Warning",
+        contact_ref=contact_ref,
+        metadata={
+            "channels": [
+                {"kind": "slack", "label": "Slack route"},
+            ],
+        },
+    )
+
+    contact_detail = client.get(
+        f"/admin/contacts/{contact_id}",
+        headers=headers,
+        params=_instance_scope(instance_id),
+    )
+    assert contact_detail.status_code == 200
+    payload = contact_detail.json()["contact"]
+    assert payload["reachable_channel_count"] == 1
+    assert any("missing an address" in warning for warning in payload["route_warnings"])
+
+
+def test_contact_updates_can_clear_optional_route_and_source_fields() -> None:
+    client = TestClient(app)
+    headers = _admin_headers(client)
+    instance_id = _create_instance(client, headers, instance_id="instance_contact_clear", company_id="company_contact_clear")
+    contact_ref = _unique_contact_ref("contact://clear/contact")
+    source_id = _create_source(
+        client,
+        headers,
+        instance_id=instance_id,
+        source_kind="contacts",
+        label="Clearable contacts",
+        connection_target="contacts://clear",
+    )
+    contact_id = _create_contact(
+        client,
+        headers,
+        instance_id=instance_id,
+        source_id=source_id,
+        display_name="Clearable Contact",
+        contact_ref=contact_ref,
+        primary_phone="+49-30-555-880",
+    )
+
+    cleared = client.patch(
+        f"/admin/contacts/{contact_id}",
+        headers=headers,
+        params=_instance_scope(instance_id),
+        json={
+            "source_id": None,
+            "primary_email": None,
+            "primary_phone": None,
+            "organization": None,
+            "title": None,
+        },
+    )
+    assert cleared.status_code == 200
+    payload = cleared.json()["contact"]
+    assert payload["source_id"] is None
+    assert payload["source"] is None
+    assert payload["primary_email"] is None
+    assert payload["primary_phone"] is None
+    assert payload["organization"] is None
+    assert payload["title"] is None
+    assert any("No reachable channel is recorded" in warning for warning in payload["route_warnings"])
+
+
 def test_memory_correction_and_delete_preserve_linkage_and_status_truth() -> None:
     client = TestClient(app)
     headers = _admin_headers(client)
     instance_id = _create_instance(client, headers, instance_id="instance_memory_alpha", company_id="company_memory_alpha")
+    contact_ref = _unique_contact_ref("contact://reviewers/nina")
     workspace_id = _create_workspace(client, headers, instance_id=instance_id, title="Context workspace")
     source_id = _create_source(
         client,
@@ -290,7 +448,7 @@ def test_memory_correction_and_delete_preserve_linkage_and_status_truth() -> Non
         instance_id=instance_id,
         source_id=source_id,
         display_name="Nina Reviewer",
-        contact_ref="contact://reviewers/nina",
+        contact_ref=contact_ref,
     )
     task_id = _create_task(client, headers, instance_id=instance_id, workspace_id=workspace_id)
     channel_id = _create_channel(client, headers, instance_id=instance_id)
@@ -376,6 +534,7 @@ def test_memory_revoke_marks_truth_state_and_human_override() -> None:
     client = TestClient(app)
     headers = _admin_headers(client)
     instance_id = _create_instance(client, headers, instance_id="instance_memory_revoke", company_id="company_memory_revoke")
+    contact_ref = _unique_contact_ref("contact://revocation/contact")
     source_id = _create_source(
         client,
         headers,
@@ -390,7 +549,7 @@ def test_memory_revoke_marks_truth_state_and_human_override() -> None:
         instance_id=instance_id,
         source_id=source_id,
         display_name="Revocation Contact",
-        contact_ref="contact://revocation/contact",
+        contact_ref=contact_ref,
     )
 
     created_memory = client.post(
@@ -438,6 +597,7 @@ def test_contacts_sources_and_memory_are_hard_scoped_to_the_selected_instance() 
     headers = _admin_headers(client)
     instance_alpha = _create_instance(client, headers, instance_id="instance_scope_alpha", company_id="company_scope_alpha")
     instance_beta = _create_instance(client, headers, instance_id="instance_scope_beta", company_id="company_scope_beta")
+    contact_ref = _unique_contact_ref("contact://scoped/contact")
     source_id = _create_source(
         client,
         headers,
@@ -452,7 +612,7 @@ def test_contacts_sources_and_memory_are_hard_scoped_to_the_selected_instance() 
         instance_id=instance_alpha,
         source_id=source_id,
         display_name="Scoped Contact",
-        contact_ref="contact://scoped/contact",
+        contact_ref=contact_ref,
     )
     created_memory = client.post(
         "/admin/memory",
