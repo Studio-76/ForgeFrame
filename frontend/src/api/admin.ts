@@ -2608,6 +2608,8 @@ export type MemorySensitivity = "normal" | "sensitive" | "restricted";
 
 export type MemoryTruthState = "active" | "corrected" | "revoked" | "superseded" | "expired" | "deleted";
 export type MemorySourceTrustClass = "human_verified" | "operator_verified" | "runtime_inferred" | "external_unverified";
+export type MemoryLayer = "durable" | "boot" | "working";
+export type MemoryReviewState = "not_required" | "scheduled" | "overdue" | "required";
 
 export type RecordLink = {
   record_id: string;
@@ -2660,6 +2662,30 @@ export type KnowledgeSourceIndexCounts = {
   durable_memory: number;
   linked_conversations: number;
   linked_skills: number;
+};
+
+export type MemoryReviewPosture = {
+  review_at?: string | null;
+  state: MemoryReviewState;
+  note?: string | null;
+  rationale?: string | null;
+};
+
+export type MemoryUsageSummary = {
+  runs: number;
+  conversations: number;
+  skills: number;
+};
+
+export type MemoryRevisionRecord = {
+  memory_id: string;
+  title: string;
+  status: MemoryStatus;
+  truth_state: MemoryTruthState;
+  source_trust_class: MemorySourceTrustClass;
+  correction_note?: string | null;
+  created_at: string;
+  updated_at: string;
 };
 
 export type ContactSummary = {
@@ -2715,6 +2741,8 @@ export type MemorySummary = {
   instance_id: string;
   company_id: string;
   source_id?: string | null;
+  source_label?: string | null;
+  source_kind?: KnowledgeSourceKind | null;
   contact_id?: string | null;
   conversation_id?: string | null;
   task_id?: string | null;
@@ -2723,11 +2751,16 @@ export type MemorySummary = {
   memory_kind: MemoryKind;
   title: string;
   body: string;
+  memory_layer: MemoryLayer;
+  memory_layer_label: string;
   status: MemoryStatus;
   truth_state: MemoryTruthState;
   source_trust_class: MemorySourceTrustClass;
   visibility_scope: VisibilityScope;
   sensitivity: MemorySensitivity;
+  review: MemoryReviewPosture;
+  last_used_at?: string | null;
+  usage: MemoryUsageSummary;
   correction_note?: string | null;
   supersedes_memory_id?: string | null;
   learned_from_event_id?: string | null;
@@ -2766,6 +2799,10 @@ export type MemoryDetail = MemorySummary & {
   task?: RecordLink | null;
   notification?: RecordLink | null;
   workspace?: RecordLink | null;
+  revision_history: MemoryRevisionRecord[];
+  usage_runs: RecordLink[];
+  usage_conversations: RecordLink[];
+  usage_skills: RecordLink[];
 };
 
 export type AssistantProfileStatus = "active" | "paused";
@@ -5198,9 +5235,12 @@ export function createMemoryEntry(
     memory_kind: MemoryKind;
     title: string;
     body: string;
+    source_trust_class?: MemorySourceTrustClass;
     visibility_scope?: VisibilityScope;
     sensitivity?: MemorySensitivity;
     correction_note?: string | null;
+    learned_from_event_id?: string | null;
+    human_override?: boolean;
     expires_at?: string | null;
     metadata?: Record<string, unknown>;
   },
@@ -5227,9 +5267,12 @@ export function updateMemoryEntry(
     memory_kind?: MemoryKind;
     title?: string;
     body?: string;
+    source_trust_class?: MemorySourceTrustClass;
     visibility_scope?: VisibilityScope;
     sensitivity?: MemorySensitivity;
     correction_note?: string | null;
+    learned_from_event_id?: string | null;
+    human_override?: boolean;
     expires_at?: string | null;
     metadata?: Record<string, unknown>;
   },
@@ -5251,6 +5294,7 @@ export function correctMemoryEntry(
     body: string;
     correction_note: string;
     memory_kind?: MemoryKind;
+    source_trust_class?: MemorySourceTrustClass;
     visibility_scope?: VisibilityScope;
     sensitivity?: MemorySensitivity;
     expires_at?: string | null;

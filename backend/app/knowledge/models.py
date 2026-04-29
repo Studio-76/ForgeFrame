@@ -41,6 +41,12 @@ MemoryTruthState = Literal["active", "corrected", "revoked", "superseded", "expi
 MEMORY_SOURCE_TRUST_CLASSES = ("human_verified", "operator_verified", "runtime_inferred", "external_unverified")
 MemorySourceTrustClass = Literal["human_verified", "operator_verified", "runtime_inferred", "external_unverified"]
 
+MEMORY_LAYERS = ("durable", "boot", "working")
+MemoryLayer = Literal["durable", "boot", "working"]
+
+MEMORY_REVIEW_STATES = ("not_required", "scheduled", "overdue", "required")
+MemoryReviewState = Literal["not_required", "scheduled", "overdue", "required"]
+
 
 class RecordLink(BaseModel):
     record_id: str
@@ -93,6 +99,30 @@ class KnowledgeSourceIndexCounts(BaseModel):
     durable_memory: int = 0
     linked_conversations: int = 0
     linked_skills: int = 0
+
+
+class MemoryReviewPosture(BaseModel):
+    review_at: datetime | None = None
+    state: MemoryReviewState = "not_required"
+    note: str | None = None
+    rationale: str | None = None
+
+
+class MemoryUsageSummary(BaseModel):
+    runs: int = 0
+    conversations: int = 0
+    skills: int = 0
+
+
+class MemoryRevisionRecord(BaseModel):
+    memory_id: str
+    title: str
+    status: MemoryStatus
+    truth_state: MemoryTruthState
+    source_trust_class: MemorySourceTrustClass
+    correction_note: str | None = None
+    created_at: datetime
+    updated_at: datetime
 
 
 class ContactSummary(BaseModel):
@@ -148,6 +178,8 @@ class MemorySummary(BaseModel):
     instance_id: str
     company_id: str
     source_id: str | None = None
+    source_label: str | None = None
+    source_kind: KnowledgeSourceKind | None = None
     contact_id: str | None = None
     conversation_id: str | None = None
     task_id: str | None = None
@@ -156,11 +188,16 @@ class MemorySummary(BaseModel):
     memory_kind: MemoryKind
     title: str
     body: str
+    memory_layer: MemoryLayer = "durable"
+    memory_layer_label: str = "Durable Memory"
     status: MemoryStatus
     truth_state: MemoryTruthState = "active"
     source_trust_class: MemorySourceTrustClass = "operator_verified"
     visibility_scope: VisibilityScope
     sensitivity: MemorySensitivity
+    review: MemoryReviewPosture = Field(default_factory=MemoryReviewPosture)
+    last_used_at: datetime | None = None
+    usage: MemoryUsageSummary = Field(default_factory=MemoryUsageSummary)
     correction_note: str | None = None
     supersedes_memory_id: str | None = None
     learned_from_event_id: str | None = None
@@ -199,6 +236,10 @@ class MemoryDetail(MemorySummary):
     task: RecordLink | None = None
     notification: RecordLink | None = None
     workspace: RecordLink | None = None
+    revision_history: list[MemoryRevisionRecord] = Field(default_factory=list)
+    usage_runs: list[RecordLink] = Field(default_factory=list)
+    usage_conversations: list[RecordLink] = Field(default_factory=list)
+    usage_skills: list[RecordLink] = Field(default_factory=list)
 
 
 class CreateContact(BaseModel):

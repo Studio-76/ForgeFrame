@@ -29,7 +29,11 @@ from app.knowledge.models import (
     KnowledgeSourceSummary,
     MemoryActionResult,
     MemoryDetail,
+    MemoryLayer,
+    MemoryReviewPosture,
+    MemoryRevisionRecord,
     MemorySummary,
+    MemoryUsageSummary,
     RevokeMemory,
     RecordLink,
     UpdateContact,
@@ -37,8 +41,9 @@ from app.knowledge.models import (
     UpdateMemory,
 )
 from app.storage.conversation_repository import ConversationORM
+from app.storage.execution_repository import RunORM
 from app.storage.knowledge_repository import ContactORM, KnowledgeSourceORM, MemoryEntryORM
-from app.storage.skill_repository import SkillORM
+from app.storage.skill_repository import SkillORM, SkillUsageEventORM
 from app.storage.tasking_repository import NotificationORM, TaskORM
 from app.storage.workspace_repository import WorkspaceORM
 
@@ -563,7 +568,366 @@ class KnowledgeContextAdminService:
             updated_at=row.updated_at,
         )
 
-    def _memory_summary(self, row: MemoryEntryORM) -> MemorySummary:
+    @staticmethod
+    def _memory_layer_label(layer: MemoryLayer) -> str:
+        if layer == "boot":
+            return "Boot Memory Candidate"
+        if layer == "working":
+            return "Working Context Reference"
+        return "Durable Memory"
+
+    @classmethod
+    def _memory_layer_from_fields(
+        cls,
+        *,
+        metadata: dict[str, object],
+        conversation_id: str | None,
+        task_id: str | None,
+        notification_id: str | None,
+        workspace_id: str | None,
+        learned_from_event_id: str | None,
+        source_trust_class: str,
+    ) -> MemoryLayer:
+        memory_block = cls._metadata_record(metadata.get("memory"))
+        tier = (
+            cls._string_value(metadata.get("memory_tier"))
+            or cls._string_value(memory_block.get("tier"))
+            or cls._string_value(metadata.get("memory_layer"))
+        )
+        if tier:
+            normalized = tier.lower().replace("-", "_").strip()
+            if "boot" in normalized:
+                return "boot"
+            if "working" in normalized or "context" in normalized:
+                return "working"
+            return "durable"
+        if learned_from_event_id and source_trust_class == "runtime_inferred":
+            return "boot"
+        if conversation_id or task_id or notification_id or workspace_id:
+            return "working"
+        return "durable"
+
+    @classmethod
+    def _memory_layer(cls, row: MemoryEntryORM) -> MemoryLayer:
+        return cls._memory_layer_from_fields(
+            metadata=cls._metadata_record(row.metadata_json),
+            conversation_id=row.conversation_id,
+            task_id=row.task_id,
+            notification_id=row.notification_id,
+            workspace_id=row.workspace_id,
+            learned_from_event_id=row.learned_from_event_id,
+            source_trust_class=row.source_trust_class,
+        )
+
+    @classmethod
+    def _memory_review(cls, row: MemoryEntryORM) -> MemoryReviewPosture:
+        metadata = cls._metadata_record(row.metadata_json)
+        review = cls._metadata_record(metadata.get("review"))
+        review_at = (
+            cls._parse_datetime_value(review.get("review_at"))
+            or cls._parse_datetime_value(review.get("at"))
+            or cls._parse_datetime_value(metadata.get("review_at"))
+        )
+        note = cls._string_value(review.get("note")) or cls._string_value(metadata.get("review_note"))
+        requires_review = row.source_trust_class in {"runtime_inferred", "external_unverified"}
+        now = cls._now()
+        if review_at is not None and review_at <= now:
+            return MemoryReviewPosture(
+                review_at=review_at,
+                state="overdue",
+                note=note,
+                rationale="The scheduled review date has passed and this memory needs operator attention.",
+            )
+        if review_at is not None:
+            return MemoryReviewPosture(
+                review_at=review_at,
+                state="scheduled",
+                note=note,
+                rationale="A future review checkpoint is scheduled for this memory entry.",
+            )
+        if requires_review:
+            return MemoryReviewPosture(
+                review_at=None,
+                state="required",
+                note=note,
+                rationale="Runtime-inferred or externally unverified memory requires an explicit review before it should be trusted as durable truth.",
+            )
+        return MemoryReviewPosture(
+            review_at=None,
+            state="not_required",
+            note=note,
+            rationale="No additional review checkpoint is currently required.",
+        )
+
+    @staticmethod
+    def _skill_matches_memory(skill: SkillORM, memory_id: str) -> bool:
+        provenance = dict(skill.provenance_json or {})
+        if not provenance:
+            return False
+        direct_memory_id = provenance.get("memory_id")
+        if isinstance(direct_memory_id, str) and direct_memory_id.strip() == memory_id:
+            return True
+        memory_block = provenance.get("memory")
+        if isinstance(memory_block, dict):
+            nested_memory_id = memory_block.get("memory_id")
+            if isinstance(nested_memory_id, str) and nested_memory_id.strip() == memory_id:
+                return True
+        return False
+
+    @staticmethod
+    def _usage_event_matches_memory(row: MemoryEntryORM, event: SkillUsageEventORM) -> bool:
+        details = dict(event.details_json or {})
+        direct_memory_id = details.get("memory_id")
+        if isinstance(direct_memory_id, str) and direct_memory_id.strip() == row.id:
+            return True
+        if row.conversation_id and event.conversation_id == row.conversation_id:
+            return True
+        return False
+
+    def _memory_usage_events(self, session: Session, row: MemoryEntryORM) -> list[SkillUsageEventORM]:
+        usage_rows = session.execute(
+            select(SkillUsageEventORM).where(
+                SkillUsageEventORM.company_id == row.company_id,
+                SkillUsageEventORM.instance_id == row.instance_id,
+            ).order_by(SkillUsageEventORM.created_at.desc())
+        ).scalars().all()
+        return [item for item in usage_rows if self._usage_event_matches_memory(row, item)]
+
+    @staticmethod
+    def _source_row_for_memory(session: Session, row: MemoryEntryORM) -> KnowledgeSourceORM | None:
+        source_row = session.get(KnowledgeSourceORM, row.source_id) if row.source_id else None
+        if source_row is not None and (source_row.company_id != row.company_id or source_row.instance_id != row.instance_id):
+            source_row = None
+        return source_row
+
+    def _memory_skill_links(self, session: Session, row: MemoryEntryORM, usage_rows: list[SkillUsageEventORM]) -> list[RecordLink]:
+        skill_rows = [
+            skill
+            for skill in session.execute(
+                select(SkillORM).where(
+                    SkillORM.company_id == row.company_id,
+                    SkillORM.instance_id == row.instance_id,
+                ).order_by(SkillORM.updated_at.desc())
+            ).scalars().all()
+            if self._skill_matches_memory(skill, row.id) or any(item.skill_id == skill.id for item in usage_rows)
+        ]
+        return [
+            self._record_link(record_id=item.id, label=item.display_name, status=item.status)
+            for item in skill_rows[:10]
+        ]
+
+    def _memory_conversation_links(
+        self,
+        session: Session,
+        *,
+        row: MemoryEntryORM,
+        usage_rows: list[SkillUsageEventORM],
+    ) -> list[RecordLink]:
+        conversation_ids = {
+            item_id
+            for item_id in [row.conversation_id, *(item.conversation_id for item in usage_rows)]
+            if item_id
+        }
+        if not conversation_ids:
+            return []
+        rows = session.execute(
+            select(ConversationORM).where(
+                ConversationORM.company_id == row.company_id,
+                ConversationORM.instance_id == row.instance_id,
+                ConversationORM.id.in_(conversation_ids),
+            ).order_by(ConversationORM.updated_at.desc())
+        ).scalars().all()
+        rows_by_id = {item.id: item for item in rows}
+        links = [
+            self._record_link(record_id=item.id, label=item.subject, status=item.status)
+            for item in rows
+        ]
+        missing_ids = [conversation_id for conversation_id in conversation_ids if conversation_id not in rows_by_id]
+        links.extend(
+            self._record_link(record_id=conversation_id, label=f"Conversation {conversation_id}", status="not-resolved")
+            for conversation_id in sorted(missing_ids)
+        )
+        return links[:10]
+
+    def _memory_run_links(self, session: Session, row: MemoryEntryORM, usage_rows: list[SkillUsageEventORM]) -> list[RecordLink]:
+        conversation_run_ids = []
+        if row.conversation_id:
+            conversation_row = session.get(ConversationORM, row.conversation_id)
+            if conversation_row is not None and conversation_row.company_id == row.company_id and conversation_row.instance_id == row.instance_id and conversation_row.run_id:
+                conversation_run_ids.append(conversation_row.run_id)
+        run_ids = {
+            item_id
+            for item_id in [*conversation_run_ids, *(item.run_id for item in usage_rows)]
+            if item_id
+        }
+        if not run_ids:
+            return []
+        rows = session.execute(
+            select(RunORM).where(
+                RunORM.company_id == row.company_id,
+                RunORM.id.in_(run_ids),
+            ).order_by(RunORM.updated_at.desc())
+        ).scalars().all()
+        rows_by_id = {item.id: item for item in rows}
+        links = [
+            self._record_link(record_id=item.id, label=f"Run {item.id}", status=item.state)
+            for item in rows
+        ]
+        missing_ids = [run_id for run_id in run_ids if run_id not in rows_by_id]
+        links.extend(
+            self._record_link(record_id=run_id, label=f"Run {run_id}", status="not-resolved")
+            for run_id in sorted(missing_ids)
+        )
+        return links[:10]
+
+    def _memory_usage_summary(
+        self,
+        session: Session,
+        *,
+        row: MemoryEntryORM,
+        usage_rows: list[SkillUsageEventORM],
+        skill_links: list[RecordLink] | None = None,
+        conversation_links: list[RecordLink] | None = None,
+        run_links: list[RecordLink] | None = None,
+    ) -> MemoryUsageSummary:
+        resolved_skill_links = skill_links if skill_links is not None else self._memory_skill_links(session, row, usage_rows)
+        resolved_conversation_links = (
+            conversation_links if conversation_links is not None else self._memory_conversation_links(session, row=row, usage_rows=usage_rows)
+        )
+        resolved_run_links = run_links if run_links is not None else self._memory_run_links(session, row, usage_rows)
+        return MemoryUsageSummary(
+            runs=len({item.record_id for item in resolved_run_links}),
+            conversations=len({item.record_id for item in resolved_conversation_links}),
+            skills=len({item.record_id for item in resolved_skill_links}),
+        )
+
+    def _memory_last_used_at(
+        self,
+        session: Session,
+        *,
+        row: MemoryEntryORM,
+        usage_rows: list[SkillUsageEventORM],
+        skill_links: list[RecordLink] | None = None,
+    ) -> datetime | None:
+        candidates: list[datetime] = []
+        if row.conversation_id:
+            conversation_row = session.get(ConversationORM, row.conversation_id)
+            if conversation_row is not None and conversation_row.company_id == row.company_id and conversation_row.instance_id == row.instance_id:
+                candidates.append(conversation_row.updated_at)
+        if row.task_id:
+            task_row = session.get(TaskORM, row.task_id)
+            if task_row is not None and task_row.company_id == row.company_id and task_row.instance_id == row.instance_id:
+                candidates.append(task_row.updated_at)
+        if row.notification_id:
+            notification_row = session.get(NotificationORM, row.notification_id)
+            if notification_row is not None and notification_row.company_id == row.company_id and notification_row.instance_id == row.instance_id:
+                candidates.append(notification_row.updated_at)
+        if row.workspace_id:
+            workspace_row = session.get(WorkspaceORM, row.workspace_id)
+            if workspace_row is not None and workspace_row.company_id == row.company_id and workspace_row.instance_id == row.instance_id:
+                candidates.append(workspace_row.updated_at)
+        candidates.extend(item.created_at for item in usage_rows)
+        if skill_links is None:
+            skill_links = self._memory_skill_links(session, row, usage_rows)
+        for link in skill_links:
+            skill_row = session.get(SkillORM, link.record_id)
+            if skill_row is not None and skill_row.company_id == row.company_id and skill_row.instance_id == row.instance_id and skill_row.last_used_at is not None:
+                candidates.append(skill_row.last_used_at)
+        return max(candidates) if candidates else None
+
+    def _memory_revision_history(self, session: Session, row: MemoryEntryORM) -> list[MemoryRevisionRecord]:
+        related: dict[str, MemoryEntryORM] = {row.id: row}
+        cursor = row
+        while cursor.supersedes_memory_id:
+            parent = session.get(MemoryEntryORM, cursor.supersedes_memory_id)
+            if parent is None or parent.company_id != row.company_id or parent.instance_id != row.instance_id or parent.id in related:
+                break
+            related[parent.id] = parent
+            cursor = parent
+        frontier = [item_id for item_id in related]
+        while frontier:
+            descendants = session.execute(
+                select(MemoryEntryORM).where(
+                    MemoryEntryORM.company_id == row.company_id,
+                    MemoryEntryORM.instance_id == row.instance_id,
+                    MemoryEntryORM.supersedes_memory_id.in_(frontier),
+                )
+            ).scalars().all()
+            frontier = []
+            for item in descendants:
+                if item.id in related:
+                    continue
+                related[item.id] = item
+                frontier.append(item.id)
+        return [
+            MemoryRevisionRecord(
+                memory_id=item.id,
+                title=item.title,
+                status=item.status,  # type: ignore[arg-type]
+                truth_state=item.truth_state,  # type: ignore[arg-type]
+                source_trust_class=item.source_trust_class,  # type: ignore[arg-type]
+                correction_note=item.correction_note,
+                created_at=item.created_at,
+                updated_at=item.updated_at,
+            )
+            for item in sorted(related.values(), key=lambda candidate: (candidate.created_at, candidate.updated_at, candidate.id))
+        ]
+
+    @classmethod
+    def _memory_review_at_from_metadata(cls, metadata: dict[str, object]) -> datetime | None:
+        review = cls._metadata_record(metadata.get("review"))
+        return (
+            cls._parse_datetime_value(review.get("review_at"))
+            or cls._parse_datetime_value(review.get("at"))
+            or cls._parse_datetime_value(metadata.get("review_at"))
+        )
+
+    @classmethod
+    def _validate_memory_governance(
+        cls,
+        *,
+        source_trust_class: str,
+        visibility_scope: str,
+        sensitivity: str,
+        metadata: dict[str, object],
+        conversation_id: str | None,
+        task_id: str | None,
+        notification_id: str | None,
+        workspace_id: str | None,
+        learned_from_event_id: str | None,
+    ) -> None:
+        memory_layer = cls._memory_layer_from_fields(
+            metadata=metadata,
+            conversation_id=conversation_id,
+            task_id=task_id,
+            notification_id=notification_id,
+            workspace_id=workspace_id,
+            learned_from_event_id=learned_from_event_id,
+            source_trust_class=source_trust_class,
+        )
+        if visibility_scope == "restricted" and sensitivity == "normal":
+            raise ValueError("Restricted memory must use sensitive or restricted sensitivity.")
+        if memory_layer == "working" and not any([conversation_id, task_id, notification_id, workspace_id]):
+            raise ValueError("Working-context memory must stay linked to a conversation, task, notification, or workspace.")
+        if memory_layer == "boot" and not learned_from_event_id:
+            raise ValueError("Boot memory candidates must stay linked to a learning event.")
+        if memory_layer == "durable" and source_trust_class in {"runtime_inferred", "external_unverified"}:
+            review_at = cls._memory_review_at_from_metadata(metadata)
+            if review_at is None:
+                raise ValueError("Durable memory with runtime-inferred or external-unverified trust must include a scheduled review date.")
+
+    def _memory_summary(self, session: Session, row: MemoryEntryORM) -> MemorySummary:
+        source_row = self._source_row_for_memory(session, row)
+        memory_layer = self._memory_layer(row)
+        usage_rows = self._memory_usage_events(session, row)
+        skill_links = self._memory_skill_links(session, row, usage_rows)
+        usage = self._memory_usage_summary(
+            session,
+            row=row,
+            usage_rows=usage_rows,
+            skill_links=skill_links,
+        )
+        last_used_at = self._memory_last_used_at(session, row=row, usage_rows=usage_rows, skill_links=skill_links)
         truth_state = row.truth_state
         if row.status == "deleted":
             truth_state = "deleted"
@@ -574,6 +938,8 @@ class KnowledgeContextAdminService:
             instance_id=row.instance_id,
             company_id=row.company_id,
             source_id=row.source_id,
+            source_label=source_row.label if source_row is not None else None,
+            source_kind=source_row.source_kind if source_row is not None else None,  # type: ignore[arg-type]
             contact_id=row.contact_id,
             conversation_id=row.conversation_id,
             task_id=row.task_id,
@@ -582,11 +948,16 @@ class KnowledgeContextAdminService:
             memory_kind=row.memory_kind,  # type: ignore[arg-type]
             title=row.title,
             body=row.body,
+            memory_layer=memory_layer,
+            memory_layer_label=self._memory_layer_label(memory_layer),
             status=row.status,  # type: ignore[arg-type]
             truth_state=truth_state,  # type: ignore[arg-type]
             source_trust_class=row.source_trust_class,  # type: ignore[arg-type]
             visibility_scope=row.visibility_scope,  # type: ignore[arg-type]
             sensitivity=row.sensitivity,  # type: ignore[arg-type]
+            review=self._memory_review(row),
+            last_used_at=last_used_at,
+            usage=usage,
             correction_note=row.correction_note,
             supersedes_memory_id=row.supersedes_memory_id,
             learned_from_event_id=row.learned_from_event_id,
@@ -708,7 +1079,7 @@ class KnowledgeContextAdminService:
                 ).order_by(MemoryEntryORM.updated_at.desc()).limit(10),
             ).scalars().all()
             recent_memory = [
-                self._sanitize_memory(self._memory_summary(item), actor=actor)
+                self._sanitize_memory(self._memory_summary(session, item), actor=actor)
                 for item in recent_memory_rows
             ]
             task_ids = [item.task_id for item in recent_memory_rows if item.task_id]
@@ -883,7 +1254,7 @@ class KnowledgeContextAdminService:
                 ).scalars().all()
             ]
             memory_entries = [
-                self._sanitize_memory(self._memory_summary(item), actor=actor)
+                self._sanitize_memory(self._memory_summary(session, item), actor=actor)
                 for item in session.execute(
                     select(MemoryEntryORM).where(
                         MemoryEntryORM.company_id == instance.company_id,
@@ -1028,13 +1399,14 @@ class KnowledgeContextAdminService:
             if visibility_scope is not None:
                 stmt = stmt.where(MemoryEntryORM.visibility_scope == visibility_scope)
             rows = session.execute(stmt.order_by(MemoryEntryORM.updated_at.desc()).limit(max(1, min(limit, 200)))).scalars().all()
-            return [self._sanitize_memory(self._memory_summary(row), actor=actor) for row in rows]
+            return [self._sanitize_memory(self._memory_summary(session, row), actor=actor) for row in rows]
 
     def get_memory(self, *, instance: InstanceRecord, actor: AuthenticatedAdmin, memory_id: str) -> MemoryDetail:
         with self._session_factory() as session:
             row = self._load_memory(session, instance=instance, memory_id=memory_id)
-            summary = self._sanitize_memory(self._memory_summary(row), actor=actor)
-            source = self._sanitize_source(self._source_summary(session, self._load_source(session, instance=instance, source_id=row.source_id)), actor=actor) if row.source_id else None
+            summary = self._sanitize_memory(self._memory_summary(session, row), actor=actor)
+            source_row = self._source_row_for_memory(session, row)
+            source = self._sanitize_source(self._source_summary(session, source_row), actor=actor) if source_row is not None else None
             contact = self._sanitize_contact(self._contact_summary(session, self._load_contact(session, instance=instance, contact_id=row.contact_id)), actor=actor) if row.contact_id else None
             conversation = None
             if row.conversation_id:
@@ -1052,12 +1424,36 @@ class KnowledgeContextAdminService:
             if row.workspace_id:
                 workspace_row = self._load_workspace(session, instance=instance, workspace_id=row.workspace_id)
                 workspace = self._record_link(workspace_row.id, workspace_row.title, workspace_row.status)
-            return MemoryDetail(**summary.model_dump(), source=source, contact=contact, conversation=conversation, task=task, notification=notification, workspace=workspace)
+            usage_rows = self._memory_usage_events(session, row)
+            usage_skills = self._memory_skill_links(session, row, usage_rows)
+            usage_conversations = self._memory_conversation_links(session, row=row, usage_rows=usage_rows)
+            usage_runs = self._memory_run_links(session, row, usage_rows)
+            revision_history = self._memory_revision_history(session, row)
+            return MemoryDetail(
+                **summary.model_dump(),
+                source=source,
+                contact=contact,
+                conversation=conversation,
+                task=task,
+                notification=notification,
+                workspace=workspace,
+                revision_history=revision_history,
+                usage_runs=usage_runs,
+                usage_conversations=usage_conversations,
+                usage_skills=usage_skills,
+            )
 
     def create_memory(self, *, instance: InstanceRecord, payload: CreateMemory) -> MemoryDetail:
         if payload.expires_at is not None and payload.expires_at <= self._now():
             raise ValueError("Memory expiry must lie in the future.")
         with self._session_factory() as session, session.begin():
+            title = payload.title.strip()
+            body = payload.body.strip()
+            if not title:
+                raise ValueError("Memory title cannot be empty.")
+            if not body:
+                raise ValueError("Memory body cannot be empty.")
+            metadata = dict(payload.metadata)
             self._validate_memory_links(
                 session,
                 instance=instance,
@@ -1067,6 +1463,17 @@ class KnowledgeContextAdminService:
                 task_id=payload.task_id,
                 notification_id=payload.notification_id,
                 workspace_id=payload.workspace_id,
+            )
+            self._validate_memory_governance(
+                source_trust_class=payload.source_trust_class,
+                visibility_scope=payload.visibility_scope,
+                sensitivity=payload.sensitivity,
+                metadata=metadata,
+                conversation_id=payload.conversation_id,
+                task_id=payload.task_id,
+                notification_id=payload.notification_id,
+                workspace_id=payload.workspace_id,
+                learned_from_event_id=payload.learned_from_event_id,
             )
             memory_id = payload.memory_id or self._new_id("memory")
             if session.get(MemoryEntryORM, memory_id) is not None:
@@ -1083,8 +1490,8 @@ class KnowledgeContextAdminService:
                     notification_id=payload.notification_id,
                     workspace_id=payload.workspace_id,
                     memory_kind=payload.memory_kind,
-                    title=payload.title.strip(),
-                    body=payload.body.strip(),
+                    title=title,
+                    body=body,
                     status="active",
                     truth_state="active",
                     source_trust_class=payload.source_trust_class,
@@ -1094,7 +1501,7 @@ class KnowledgeContextAdminService:
                     learned_from_event_id=payload.learned_from_event_id,
                     human_override=payload.human_override,
                     expires_at=payload.expires_at,
-                    metadata_json=dict(payload.metadata),
+                    metadata_json=metadata,
                     created_at=self._now(),
                     updated_at=self._now(),
                 ),
@@ -1114,12 +1521,31 @@ class KnowledgeContextAdminService:
             row = self._load_memory(session, instance=instance, memory_id=memory_id)
             if row.status != "active":
                 raise ValueError("Only active memory entries can be updated.")
-            source_id = payload.source_id if payload.source_id is not None else row.source_id
-            contact_id = payload.contact_id if payload.contact_id is not None else row.contact_id
-            conversation_id = payload.conversation_id if payload.conversation_id is not None else row.conversation_id
-            task_id = payload.task_id if payload.task_id is not None else row.task_id
-            notification_id = payload.notification_id if payload.notification_id is not None else row.notification_id
-            workspace_id = payload.workspace_id if payload.workspace_id is not None else row.workspace_id
+            fields_set = payload.model_fields_set
+            source_id = payload.source_id if "source_id" in fields_set else row.source_id
+            contact_id = payload.contact_id if "contact_id" in fields_set else row.contact_id
+            conversation_id = payload.conversation_id if "conversation_id" in fields_set else row.conversation_id
+            task_id = payload.task_id if "task_id" in fields_set else row.task_id
+            notification_id = payload.notification_id if "notification_id" in fields_set else row.notification_id
+            workspace_id = payload.workspace_id if "workspace_id" in fields_set else row.workspace_id
+            source_trust_class = payload.source_trust_class if "source_trust_class" in fields_set and payload.source_trust_class is not None else row.source_trust_class
+            visibility_scope = payload.visibility_scope if "visibility_scope" in fields_set and payload.visibility_scope is not None else row.visibility_scope
+            sensitivity = payload.sensitivity if "sensitivity" in fields_set and payload.sensitivity is not None else row.sensitivity
+            learned_from_event_id = payload.learned_from_event_id if "learned_from_event_id" in fields_set else row.learned_from_event_id
+            human_override = payload.human_override if "human_override" in fields_set and payload.human_override is not None else row.human_override
+            metadata = dict(payload.metadata or {}) if "metadata" in fields_set else dict(row.metadata_json or {})
+            if "title" in fields_set:
+                title = (payload.title or "").strip()
+                if not title:
+                    raise ValueError("Memory title cannot be empty.")
+            else:
+                title = row.title
+            if "body" in fields_set:
+                body = (payload.body or "").strip()
+                if not body:
+                    raise ValueError("Memory body cannot be empty.")
+            else:
+                body = row.body
             self._validate_memory_links(
                 session,
                 instance=instance,
@@ -1130,23 +1556,39 @@ class KnowledgeContextAdminService:
                 notification_id=notification_id,
                 workspace_id=workspace_id,
             )
+            self._validate_memory_governance(
+                source_trust_class=source_trust_class,
+                visibility_scope=visibility_scope,
+                sensitivity=sensitivity,
+                metadata=metadata,
+                conversation_id=conversation_id,
+                task_id=task_id,
+                notification_id=notification_id,
+                workspace_id=workspace_id,
+                learned_from_event_id=learned_from_event_id,
+            )
             row.source_id = source_id
             row.contact_id = contact_id
             row.conversation_id = conversation_id
             row.task_id = task_id
             row.notification_id = notification_id
             row.workspace_id = workspace_id
-            row.memory_kind = payload.memory_kind or row.memory_kind
-            row.title = payload.title.strip() if payload.title is not None else row.title
-            row.body = payload.body.strip() if payload.body is not None else row.body
-            row.visibility_scope = payload.visibility_scope or row.visibility_scope
-            row.sensitivity = payload.sensitivity or row.sensitivity
-            row.source_trust_class = payload.source_trust_class or row.source_trust_class
-            row.correction_note = payload.correction_note if payload.correction_note is not None else row.correction_note
-            row.learned_from_event_id = payload.learned_from_event_id if payload.learned_from_event_id is not None else row.learned_from_event_id
-            row.human_override = payload.human_override if payload.human_override is not None else row.human_override
-            row.expires_at = payload.expires_at if payload.expires_at is not None else row.expires_at
-            row.metadata_json = dict(payload.metadata) if payload.metadata is not None else dict(row.metadata_json or {})
+            if "memory_kind" in fields_set and payload.memory_kind is not None:
+                row.memory_kind = payload.memory_kind
+            row.title = title
+            row.body = body
+            row.visibility_scope = visibility_scope
+            row.sensitivity = sensitivity
+            row.source_trust_class = source_trust_class
+            if "correction_note" in fields_set:
+                row.correction_note = payload.correction_note
+            if "learned_from_event_id" in fields_set:
+                row.learned_from_event_id = learned_from_event_id
+            row.human_override = human_override
+            if "expires_at" in fields_set:
+                row.expires_at = payload.expires_at
+            if "metadata" in fields_set:
+                row.metadata_json = metadata
             row.updated_at = self._now()
         return self.get_memory(instance=instance, actor=AuthenticatedAdmin(
             session_id="system",
@@ -1163,6 +1605,28 @@ class KnowledgeContextAdminService:
             row = self._load_memory(session, instance=instance, memory_id=memory_id)
             if row.status != "active":
                 raise ValueError("Only active memory entries can be corrected.")
+            title = payload.title.strip()
+            body = payload.body.strip()
+            if not title:
+                raise ValueError("Corrected memory title cannot be empty.")
+            if not body:
+                raise ValueError("Corrected memory body cannot be empty.")
+            source_trust_class = payload.source_trust_class or "human_verified"
+            visibility_scope = payload.visibility_scope or row.visibility_scope
+            sensitivity = payload.sensitivity or row.sensitivity
+            metadata = dict(payload.metadata) if payload.metadata is not None else dict(row.metadata_json or {})
+            expires_at = payload.expires_at if payload.expires_at is not None else row.expires_at
+            self._validate_memory_governance(
+                source_trust_class=source_trust_class,
+                visibility_scope=visibility_scope,
+                sensitivity=sensitivity,
+                metadata=metadata,
+                conversation_id=row.conversation_id,
+                task_id=row.task_id,
+                notification_id=row.notification_id,
+                workspace_id=row.workspace_id,
+                learned_from_event_id=row.learned_from_event_id,
+            )
             now = self._now()
             corrected_memory_id = self._new_id("memory")
             row.status = "corrected"
@@ -1182,19 +1646,19 @@ class KnowledgeContextAdminService:
                     notification_id=row.notification_id,
                     workspace_id=row.workspace_id,
                     memory_kind=payload.memory_kind or row.memory_kind,
-                    title=payload.title.strip(),
-                    body=payload.body.strip(),
+                    title=title,
+                    body=body,
                     status="active",
                     truth_state="active",
-                    source_trust_class=payload.source_trust_class or "human_verified",
-                    visibility_scope=payload.visibility_scope or row.visibility_scope,
-                    sensitivity=payload.sensitivity or row.sensitivity,
+                    source_trust_class=source_trust_class,
+                    visibility_scope=visibility_scope,
+                    sensitivity=sensitivity,
                     correction_note=payload.correction_note,
                     supersedes_memory_id=row.id,
                     learned_from_event_id=row.learned_from_event_id,
                     human_override=True,
-                    expires_at=payload.expires_at if payload.expires_at is not None else row.expires_at,
-                    metadata_json=dict(payload.metadata) if payload.metadata is not None else dict(row.metadata_json or {}),
+                    expires_at=expires_at,
+                    metadata_json=metadata,
                     created_at=now,
                     updated_at=now,
                 ),

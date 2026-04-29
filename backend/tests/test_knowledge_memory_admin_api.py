@@ -1,7 +1,10 @@
 from fastapi.testclient import TestClient
+from datetime import UTC, datetime
 from uuid import uuid4
 
+from app.execution.dependencies import get_execution_session_factory
 from app.main import app
+from app.storage.execution_repository import RunORM
 from conftest import admin_headers as shared_admin_headers
 
 
@@ -246,6 +249,69 @@ def _create_skill(
     )
     assert response.status_code == 201, response.json()
     return response.json()["skill"]["skill_id"]
+
+
+def _record_skill_usage(
+    client: TestClient,
+    headers: dict[str, str],
+    *,
+    instance_id: str,
+    skill_id: str,
+    memory_id: str,
+    run_id: str | None = None,
+    conversation_id: str | None = None,
+) -> None:
+    response = client.post(
+        f"/admin/skills/{skill_id}/usage-events",
+        headers=headers,
+        params=_instance_scope(instance_id),
+        json={
+            "run_id": run_id,
+            "conversation_id": conversation_id,
+            "outcome": "success",
+            "details": {
+                "memory_id": memory_id,
+            },
+        },
+    )
+    assert response.status_code == 200, response.json()
+
+
+def _create_run(
+    *,
+    company_id: str,
+    run_id: str,
+) -> str:
+    session_factory = get_execution_session_factory()
+    now = datetime.now(tz=UTC)
+    with session_factory() as session, session.begin():
+        session.add(
+            RunORM(
+                id=run_id,
+                company_id=company_id,
+                workspace_id=None,
+                issue_id=None,
+                run_kind="memory_usage",
+                state="succeeded",
+                execution_lane="background_agentic",
+                operator_state="completed",
+                status_reason=None,
+                active_attempt_no=1,
+                current_attempt_id=None,
+                current_approval_link_id=None,
+                latest_command_id=None,
+                current_step_key=None,
+                result_summary={"status": "succeeded"},
+                failure_class=None,
+                next_wakeup_at=None,
+                cancel_requested_at=None,
+                terminal_at=now,
+                version=0,
+                created_at=now,
+                updated_at=now,
+            ),
+        )
+    return run_id
 
 
 def test_contacts_sources_and_memory_linkage_persist_context_truth() -> None:
@@ -550,6 +616,7 @@ def test_memory_correction_and_delete_preserve_linkage_and_status_truth() -> Non
     client = TestClient(app)
     headers = _admin_headers(client)
     instance_id = _create_instance(client, headers, instance_id="instance_memory_alpha", company_id="company_memory_alpha")
+    run_id = _create_run(company_id="company_memory_alpha", run_id=f"run_memory_alpha_{uuid4().hex[:8]}")
     contact_ref = _unique_contact_ref("contact://reviewers/nina")
     workspace_id = _create_workspace(client, headers, instance_id=instance_id, title="Context workspace")
     source_id = _create_source(
@@ -568,6 +635,12 @@ def test_memory_correction_and_delete_preserve_linkage_and_status_truth() -> Non
         display_name="Nina Reviewer",
         contact_ref=contact_ref,
     )
+    conversation_id = _create_conversation(
+        client,
+        headers,
+        instance_id=instance_id,
+        contact_ref=contact_ref,
+    )
     task_id = _create_task(client, headers, instance_id=instance_id, workspace_id=workspace_id)
     channel_id = _create_channel(client, headers, instance_id=instance_id)
     notification_id = _create_notification(
@@ -576,6 +649,7 @@ def test_memory_correction_and_delete_preserve_linkage_and_status_truth() -> Non
         instance_id=instance_id,
         task_id=task_id,
         channel_id=channel_id,
+        conversation_id=conversation_id,
     )
 
     created_memory = client.post(
@@ -585,18 +659,56 @@ def test_memory_correction_and_delete_preserve_linkage_and_status_truth() -> Non
         json={
             "source_id": source_id,
             "contact_id": contact_id,
+            "conversation_id": conversation_id,
             "task_id": task_id,
             "notification_id": notification_id,
             "workspace_id": workspace_id,
             "memory_kind": "preference",
             "title": "Quiet review window",
             "body": "Do not send review pings after 18:00 CET.",
+            "source_trust_class": "runtime_inferred",
             "visibility_scope": "personal",
             "sensitivity": "sensitive",
+            "metadata": {
+                "memory_tier": "working",
+                "review": {
+                    "review_at": "2026-05-29T09:00:00Z",
+                    "note": "Reconfirm this working context after the review loop.",
+                },
+            },
         },
     )
     assert created_memory.status_code == 201
-    original_memory_id = created_memory.json()["memory"]["memory_id"]
+    created_payload = created_memory.json()["memory"]
+    original_memory_id = created_payload["memory_id"]
+    assert created_payload["memory_layer"] == "working"
+    assert created_payload["memory_layer_label"] == "Working Context Reference"
+    assert created_payload["source_label"] == "Pricing playbook"
+    assert created_payload["source_kind"] == "knowledge_base"
+    assert created_payload["review"]["state"] == "scheduled"
+
+    skill_id = _create_skill(
+        client,
+        headers,
+        instance_id=instance_id,
+        display_name="Review quiet-hours skill",
+        provenance={
+            "memory_id": original_memory_id,
+            "memory": {
+                "memory_id": original_memory_id,
+                "title": "Quiet review window",
+            },
+        },
+    )
+    _record_skill_usage(
+        client,
+        headers,
+        instance_id=instance_id,
+        skill_id=skill_id,
+        memory_id=original_memory_id,
+        run_id=run_id,
+        conversation_id=conversation_id,
+    )
 
     corrected = client.post(
         f"/admin/memory/{original_memory_id}/correct",
@@ -606,8 +718,16 @@ def test_memory_correction_and_delete_preserve_linkage_and_status_truth() -> Non
             "title": "Quiet review window corrected",
             "body": "Do not send review pings after 17:30 CET.",
             "correction_note": "Quiet-hours correction after reviewer feedback.",
+            "source_trust_class": "human_verified",
             "visibility_scope": "personal",
             "sensitivity": "sensitive",
+            "metadata": {
+                "memory_tier": "working",
+                "review": {
+                    "review_at": "2026-05-30T09:00:00Z",
+                    "note": "Human-verified correction scheduled for one final review.",
+                },
+            },
         },
     )
     assert corrected.status_code == 200
@@ -615,6 +735,11 @@ def test_memory_correction_and_delete_preserve_linkage_and_status_truth() -> Non
     corrected_memory_id = corrected_payload["memory_id"]
     assert corrected.json()["action"] == "correct"
     assert corrected_payload["supersedes_memory_id"] == original_memory_id
+    assert corrected_payload["revision_history"][0]["memory_id"] == original_memory_id
+    assert corrected_payload["revision_history"][-1]["memory_id"] == corrected_memory_id
+    assert corrected_payload["usage_runs"][0]["record_id"] == run_id
+    assert corrected_payload["usage_conversations"][0]["record_id"] == conversation_id
+    assert corrected_payload["usage_skills"][0]["record_id"] == skill_id
     assert corrected_payload["task"]["record_id"] == task_id
     assert corrected_payload["notification"]["record_id"] == notification_id
     assert corrected_payload["workspace"]["record_id"] == workspace_id
@@ -625,7 +750,10 @@ def test_memory_correction_and_delete_preserve_linkage_and_status_truth() -> Non
         params=_instance_scope(instance_id),
     )
     assert original_detail.status_code == 200
-    assert original_detail.json()["memory"]["status"] == "corrected"
+    original_detail_payload = original_detail.json()["memory"]
+    assert original_detail_payload["status"] == "corrected"
+    assert original_detail_payload["truth_state"] == "superseded"
+    assert original_detail_payload["usage_runs"][0]["record_id"] == run_id
 
     deleted = client.post(
         f"/admin/memory/{corrected_memory_id}/delete",
@@ -683,6 +811,13 @@ def test_memory_revoke_marks_truth_state_and_human_override() -> None:
             "visibility_scope": "team",
             "sensitivity": "normal",
             "source_trust_class": "runtime_inferred",
+            "metadata": {
+                "memory_tier": "durable",
+                "review": {
+                    "review_at": "2026-05-30T08:00:00Z",
+                    "note": "Runtime-derived durable truth must be reviewed before use.",
+                },
+            },
         },
     )
     assert created_memory.status_code == 201
@@ -708,6 +843,90 @@ def test_memory_revoke_marks_truth_state_and_human_override() -> None:
     )
     assert detail.status_code == 200
     assert detail.json()["memory"]["truth_state"] == "revoked"
+
+
+def test_memory_governance_validation_rejects_invalid_layer_and_review_states() -> None:
+    client = TestClient(app)
+    headers = _admin_headers(client)
+    instance_id = _create_instance(client, headers, instance_id="instance_memory_validation", company_id="company_memory_validation")
+    contact_ref = _unique_contact_ref("contact://validation/contact")
+    source_id = _create_source(
+        client,
+        headers,
+        instance_id=instance_id,
+        source_kind="mail",
+        label="Validation mailbox",
+        connection_target="mailbox://validation",
+    )
+    contact_id = _create_contact(
+        client,
+        headers,
+        instance_id=instance_id,
+        source_id=source_id,
+        display_name="Validation Contact",
+        contact_ref=contact_ref,
+    )
+
+    durable_without_review = client.post(
+        "/admin/memory",
+        headers=headers,
+        params=_instance_scope(instance_id),
+        json={
+            "source_id": source_id,
+            "contact_id": contact_id,
+            "memory_kind": "fact",
+            "title": "Durable runtime fact",
+            "body": "Runtime-inferred durable fact without review.",
+            "visibility_scope": "team",
+            "sensitivity": "normal",
+            "source_trust_class": "runtime_inferred",
+            "metadata": {
+                "memory_tier": "durable",
+            },
+        },
+    )
+    assert durable_without_review.status_code == 404
+    assert "scheduled review date" in durable_without_review.json()["error"]["message"]
+
+    working_without_links = client.post(
+        "/admin/memory",
+        headers=headers,
+        params=_instance_scope(instance_id),
+        json={
+            "source_id": source_id,
+            "contact_id": contact_id,
+            "memory_kind": "summary",
+            "title": "Working context without linkage",
+            "body": "Missing conversation and task linkage.",
+            "visibility_scope": "team",
+            "sensitivity": "sensitive",
+            "metadata": {
+                "memory_tier": "working",
+            },
+        },
+    )
+    assert working_without_links.status_code == 404
+    assert "Working-context memory" in working_without_links.json()["error"]["message"]
+
+    boot_without_learning = client.post(
+        "/admin/memory",
+        headers=headers,
+        params=_instance_scope(instance_id),
+        json={
+            "source_id": source_id,
+            "contact_id": contact_id,
+            "memory_kind": "summary",
+            "title": "Boot candidate without learning event",
+            "body": "Missing learning-event linkage.",
+            "visibility_scope": "team",
+            "sensitivity": "sensitive",
+            "metadata": {
+                "memory_tier": "boot",
+            },
+        },
+    )
+    assert boot_without_learning.status_code == 404
+    assert "Boot memory candidates" in boot_without_learning.json()["error"]["message"]
 
 
 def test_contacts_sources_and_memory_are_hard_scoped_to_the_selected_instance() -> None:

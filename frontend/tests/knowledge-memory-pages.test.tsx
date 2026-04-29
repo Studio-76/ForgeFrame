@@ -209,6 +209,8 @@ function createMemorySummary(overrides: Partial<MemorySummary> = {}): MemorySumm
     instance_id: "instance_alpha",
     company_id: "company_alpha",
     source_id: "source_mail_primary",
+    source_label: "Primary mail connector",
+    source_kind: "mail",
     contact_id: "contact_alpha",
     conversation_id: "conversation_alpha",
     task_id: "task_alpha",
@@ -217,11 +219,25 @@ function createMemorySummary(overrides: Partial<MemorySummary> = {}): MemorySumm
     memory_kind: "preference",
     title: "Pricing preference",
     body: "Customer prefers a reviewed pricing response before send.",
+    memory_layer: "working",
+    memory_layer_label: "Working Context Reference",
     status: "active",
     truth_state: "active",
-    source_trust_class: "operator_verified",
+    source_trust_class: "runtime_inferred",
     visibility_scope: "team",
     sensitivity: "sensitive",
+    review: {
+      review_at: "2026-04-25T10:00:00Z",
+      state: "scheduled",
+      note: "Review inferred pricing truth after operator confirmation.",
+      rationale: "A future review checkpoint is scheduled for this memory entry.",
+    },
+    last_used_at: "2026-04-23T10:40:00Z",
+    usage: {
+      runs: 1,
+      conversations: 1,
+      skills: 1,
+    },
     correction_note: null,
     supersedes_memory_id: null,
     learned_from_event_id: "learning_alpha",
@@ -393,6 +409,49 @@ function createMemoryDetail(overrides: Partial<MemoryDetail> = {}): MemoryDetail
       label: "Pricing workspace",
       status: "previewing",
     },
+    revision_history: [
+      {
+        memory_id: "memory_seed",
+        title: "Pricing preference seed",
+        status: "corrected",
+        truth_state: "superseded",
+        source_trust_class: "operator_verified",
+        correction_note: "Superseded by reviewed memory.",
+        created_at: "2026-04-23T08:50:00Z",
+        updated_at: "2026-04-23T09:20:00Z",
+      },
+      {
+        memory_id: "memory_alpha",
+        title: "Pricing preference",
+        status: "active",
+        truth_state: "active",
+        source_trust_class: "runtime_inferred",
+        correction_note: null,
+        created_at: "2026-04-23T09:10:00Z",
+        updated_at: "2026-04-23T10:10:00Z",
+      },
+    ],
+    usage_runs: [
+      {
+        record_id: "run_alpha",
+        label: "Run run_alpha",
+        status: "succeeded",
+      },
+    ],
+    usage_conversations: [
+      {
+        record_id: "conversation_alpha",
+        label: "Pricing review thread",
+        status: "open",
+      },
+    ],
+    usage_skills: [
+      {
+        record_id: "skill_alpha",
+        label: "Pricing response guardrail",
+        status: "active",
+      },
+    ],
     ...overrides,
   };
 }
@@ -526,7 +585,84 @@ beforeEach(() => {
   fetchMemoryEntriesMock.mockResolvedValue({
     status: "ok",
     instance: null,
-    memory: [createMemorySummary()],
+    memory: [
+      createMemorySummary(),
+      createMemorySummary({
+        memory_id: "memory_durable",
+        title: "Durable pricing truth",
+        body: "Approved and durable pricing rule.",
+        conversation_id: null,
+        task_id: null,
+        notification_id: null,
+        workspace_id: null,
+        learned_from_event_id: null,
+        memory_layer: "durable",
+        memory_layer_label: "Durable Memory",
+        source_trust_class: "operator_verified",
+        review: {
+          review_at: null,
+          state: "not_required",
+          note: null,
+          rationale: "No additional review checkpoint is currently required.",
+        },
+        usage: {
+          runs: 0,
+          conversations: 0,
+          skills: 1,
+        },
+        last_used_at: "2026-04-23T10:15:00Z",
+      }),
+      createMemorySummary({
+        memory_id: "memory_boot",
+        title: "Boot candidate follow-up",
+        body: "Boot memory candidate waiting for durable review.",
+        conversation_id: null,
+        task_id: null,
+        notification_id: null,
+        workspace_id: null,
+        learned_from_event_id: "learning_boot",
+        memory_layer: "boot",
+        memory_layer_label: "Boot Memory Candidate",
+        review: {
+          review_at: "2026-04-25T09:00:00Z",
+          state: "scheduled",
+          note: "Promoted from learning and awaiting durable review.",
+          rationale: "A future review checkpoint is scheduled for this memory entry.",
+        },
+        usage: {
+          runs: 0,
+          conversations: 0,
+          skills: 0,
+        },
+        last_used_at: null,
+      }),
+      createMemorySummary({
+        memory_id: "memory_revoked",
+        title: "Revoked stale fact",
+        body: "Stale runtime-derived fact.",
+        conversation_id: null,
+        task_id: null,
+        notification_id: null,
+        workspace_id: null,
+        memory_layer: "durable",
+        memory_layer_label: "Durable Memory",
+        status: "active",
+        truth_state: "revoked",
+        source_trust_class: "external_unverified",
+        review: {
+          review_at: null,
+          state: "required",
+          note: "Revoked after invalid runtime evidence.",
+          rationale: "Runtime-inferred or externally unverified memory requires an explicit review before it should be trusted as durable truth.",
+        },
+        usage: {
+          runs: 0,
+          conversations: 0,
+          skills: 0,
+        },
+        last_used_at: null,
+      }),
+    ],
   });
   fetchMemoryDetailMock.mockResolvedValue({
     status: "ok",
@@ -898,12 +1034,21 @@ describe("knowledge and memory pages", () => {
     expect(fetchMemoryDetailMock).toHaveBeenCalledWith("memory_alpha", "instance_alpha");
     expect(container.textContent).toContain("Pricing preference");
     expect(container.textContent).toContain("Delete memory");
-    expect(container.textContent).toContain("Truth maintenance");
+    expect(container.textContent).toContain("Durable Memory");
+    expect(container.textContent).toContain("Boot Memory Candidates");
+    expect(container.textContent).toContain("Working Context References");
+    expect(container.textContent).toContain("Revoked/Superseded");
+    expect(container.textContent).toContain("Usage in runs");
+    expect(container.textContent).toContain("Revision history");
 
     const taskLink = Array.from(container.querySelectorAll("a")).find((link) => link.textContent === "Open task");
     expect(taskLink?.getAttribute("href")).toBe("/tasks?instanceId=instance_alpha&taskId=task_alpha");
     const learningLink = Array.from(container.querySelectorAll("a")).find((link) => link.textContent === "Open learning event");
     expect(learningLink?.getAttribute("href")).toBe("/learning?instanceId=instance_alpha&eventId=learning_alpha");
+    const runLink = Array.from(container.querySelectorAll("a")).find((link) => link.textContent === "Run run_alpha");
+    expect(runLink?.getAttribute("href")).toBe("/execution?instanceId=instance_alpha&runId=run_alpha");
+    const skillLink = Array.from(container.querySelectorAll("a")).find((link) => link.textContent === "Pricing response guardrail");
+    expect(skillLink?.getAttribute("href")).toBe("/skills?instanceId=instance_alpha&skillId=skill_alpha");
 
     const createForm = getFormByText("Create memory entry");
     const saveForm = getFormByText("Save memory");
@@ -921,9 +1066,13 @@ describe("knowledge and memory pages", () => {
       setControlValue(getControlByLabel(createForm, "Task ID"), "task_alpha");
       setControlValue(getControlByLabel(createForm, "Notification ID"), "notification_alpha");
       setControlValue(getControlByLabel(createForm, "Workspace ID"), "ws_alpha");
+      setControlValue(getControlByLabel(createForm, "Memory layer"), "working");
+      setControlValue(getControlByLabel(createForm, "Source trust"), "operator_verified");
       setControlValue(getControlByLabel(createForm, "Memory kind"), "constraint");
       setControlValue(getControlByLabel(createForm, "Visibility"), "restricted");
       setControlValue(getControlByLabel(createForm, "Sensitivity"), "restricted");
+      setControlValue(getControlByLabel(createForm, "Review at"), "2026-04-25T10:30:00Z");
+      setControlValue(getControlByLabel(createForm, "Review note"), "Working context should be rechecked tomorrow.");
       setControlValue(getControlByLabel(createForm, "Expires at"), "2026-04-25T10:00:00Z");
       setControlValue(getControlByLabel(createForm, "Title"), "Escalation preference");
       setControlValue(getControlByLabel(createForm, "Correction note"), "Initial note");
@@ -943,10 +1092,18 @@ describe("knowledge and memory pages", () => {
       memory_kind: "constraint",
       title: "Escalation preference",
       body: "Escalate if no approval arrives by noon.",
+      source_trust_class: "operator_verified",
       visibility_scope: "restricted",
       sensitivity: "restricted",
       correction_note: "Initial note",
       expires_at: "2026-04-25T10:00:00Z",
+      metadata: {
+        memory_tier: "working",
+        review: {
+          review_at: "2026-04-25T10:30:00Z",
+          note: "Working context should be rechecked tomorrow.",
+        },
+      },
     }));
 
     const saveButton = getButtonByText(saveForm!, "Save memory");
@@ -958,9 +1115,14 @@ describe("knowledge and memory pages", () => {
       setControlValue(getControlByLabel(saveForm, "Task ID"), "task_alpha");
       setControlValue(getControlByLabel(saveForm, "Notification ID"), "notification_alpha");
       setControlValue(getControlByLabel(saveForm, "Workspace ID"), "ws_alpha");
+      setControlValue(getControlByLabel(saveForm, "Memory layer"), "durable");
+      setControlValue(getControlByLabel(saveForm, "Source trust"), "runtime_inferred");
       setControlValue(getControlByLabel(saveForm, "Memory kind"), "summary");
       setControlValue(getControlByLabel(saveForm, "Visibility"), "team");
       setControlValue(getControlByLabel(saveForm, "Sensitivity"), "sensitive");
+      setControlValue(getControlByLabel(saveForm, "Learning event ID"), "learning_alpha");
+      setControlValue(getControlByLabel(saveForm, "Review at"), "2026-04-26T11:00:00Z");
+      setControlValue(getControlByLabel(saveForm, "Review note"), "Durable review required after operator sign-off.");
       setControlValue(getControlByLabel(saveForm, "Expires at"), "2026-04-26T09:00:00Z");
       setControlValue(getControlByLabel(saveForm, "Correction note"), "Manual refinement");
       setControlValue(getControlByLabel(saveForm, "Title"), "Pricing preference updated");
@@ -973,10 +1135,19 @@ describe("knowledge and memory pages", () => {
       memory_kind: "summary",
       title: "Pricing preference updated",
       body: "Updated memory after operator review.",
+      source_trust_class: "runtime_inferred",
       visibility_scope: "team",
       sensitivity: "sensitive",
       correction_note: "Manual refinement",
+      learned_from_event_id: "learning_alpha",
       expires_at: "2026-04-26T09:00:00Z",
+      metadata: {
+        memory_tier: "durable",
+        review: {
+          review_at: "2026-04-26T11:00:00Z",
+          note: "Durable review required after operator sign-off.",
+        },
+      },
     }));
 
     const correctButton = getButtonByText(correctForm!, "Correct memory");
@@ -985,9 +1156,13 @@ describe("knowledge and memory pages", () => {
       setControlValue(getControlByLabel(correctForm, "Title"), "Pricing preference corrected");
       setControlValue(getControlByLabel(correctForm, "Body"), "Corrected context body.");
       setControlValue(getControlByLabel(correctForm, "Correction note"), "Corrected after operator review");
+      setControlValue(getControlByLabel(correctForm, "Memory layer"), "durable");
+      setControlValue(getControlByLabel(correctForm, "Source trust"), "human_verified");
       setControlValue(getControlByLabel(correctForm, "Memory kind"), "preference");
       setControlValue(getControlByLabel(correctForm, "Visibility"), "restricted");
       setControlValue(getControlByLabel(correctForm, "Sensitivity"), "restricted");
+      setControlValue(getControlByLabel(correctForm, "Review at"), "2026-04-27T11:15:00Z");
+      setControlValue(getControlByLabel(correctForm, "Review note"), "Human-verified durable correction.");
       setControlValue(getControlByLabel(correctForm, "Expires at"), "2026-04-27T09:00:00Z");
       correctButton!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     });
@@ -998,9 +1173,17 @@ describe("knowledge and memory pages", () => {
       body: "Corrected context body.",
       correction_note: "Corrected after operator review",
       memory_kind: "preference",
+      source_trust_class: "human_verified",
       visibility_scope: "restricted",
       sensitivity: "restricted",
       expires_at: "2026-04-27T09:00:00Z",
+      metadata: {
+        memory_tier: "durable",
+        review: {
+          review_at: "2026-04-27T11:15:00Z",
+          note: "Human-verified durable correction.",
+        },
+      },
     }));
 
     const deleteButton = getButtonByText(deleteForm!, "Delete memory");
