@@ -304,15 +304,27 @@ class ControlPlaneRoutingDomainMixin:
         response_controls: dict[str, object] = {}
         if payload.max_output_tokens is not None:
             response_controls["max_output_tokens"] = payload.max_output_tokens
+        allowed_providers = {
+            str(value).strip()
+            for value in (payload.allowed_providers or [])
+            if str(value).strip()
+        } or None
+        route_context = {
+            str(key).strip(): str(value).strip()
+            for key, value in (payload.route_context or {}).items()
+            if str(key).strip() and str(value).strip()
+        } or None
 
         try:
-            decision = routing.resolve_model(
+            routing.resolve_model(
                 payload.requested_model,
                 messages=messages,
                 stream=payload.stream,
                 tools=payload.tools,
                 require_vision=payload.require_vision,
                 response_controls=response_controls,
+                allowed_providers=allowed_providers,
+                route_context=route_context,
                 decision_source="admin_simulation",
             )
         except (RoutingBudgetExceededError, RoutingCircuitOpenError, RoutingNoCandidateError) as exc:
@@ -331,7 +343,8 @@ class ControlPlaneRoutingDomainMixin:
         self._routing_decisions_state = self._load_routing_decisions(
             refreshed.routing_decisions if refreshed else []
         )
+        latest = self._latest_admin_simulation_decision()
         return {
             "status": "ok",
-            "decision": decision.model_dump(mode="json"),
+            "decision": latest.model_dump(mode="json") if latest is not None else None,
         }

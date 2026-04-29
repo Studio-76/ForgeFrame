@@ -263,24 +263,76 @@ beforeEach(() => {
   updateRoutingPolicyMock.mockResolvedValue({ status: "ok", policy: {} });
   updateRoutingBudgetMock.mockResolvedValue({ status: "ok", budget: {} });
   updateRoutingCircuitMock.mockResolvedValue({ status: "ok", circuit: {} });
-  simulateRoutingMock.mockResolvedValue({
-    status: "ok",
-    decision: {
-      decision_id: "route_123",
-      source: "admin_simulation",
-      instance_id: "instance_alpha",
-      selected_target_key: "openai_api::gpt-4.1-mini",
-      classification: "non_simple",
-      classification_summary: "Deterministic routing rules classified this request as non-simple.",
-      classification_rules: ["tool_calling_requires_non_simple"],
-      policy_stage: "preferred",
-      execution_lane: "queued_background",
-      summary: "non-simple routing selected 'openai_api::gpt-4.1-mini' on the preferred stage.",
-      structured_details: { selected_target: "openai_api::gpt-4.1-mini", candidate_count: 2 },
-      raw_details: { policy: { allow_premium: true }, selection_basis: { tools: true } },
-      candidates: [],
-      created_at: "2026-04-23T08:15:00Z",
-    },
+  simulateRoutingMock.mockImplementation(async (payload: Record<string, unknown>) => {
+    const isNonSimple = Array.isArray(payload.tools) && payload.tools.length > 0;
+    return {
+      status: "ok",
+      decision: {
+        decision_id: isNonSimple ? "route_non_simple" : "route_simple",
+        source: "admin_simulation",
+        instance_id: "instance_alpha",
+        selected_target_key: isNonSimple ? "openai_api::gpt-4.1-mini" : "ollama::llama3.2",
+        classification: isNonSimple ? "non_simple" : "simple",
+        classification_summary: isNonSimple
+          ? "Deterministic routing rules classified this request as non-simple."
+          : "No non-simple routing rule matched, so the request stays on the simple path.",
+        classification_rules: isNonSimple ? ["tool_calling_requires_non_simple"] : ["default_simple_path"],
+        policy_stage: "preferred",
+        execution_lane: isNonSimple ? "queued_background" : "sync_interactive",
+        summary: isNonSimple
+          ? "non-simple routing selected 'openai_api::gpt-4.1-mini' on the preferred stage."
+          : "simple routing selected 'ollama::llama3.2' on the preferred stage.",
+        structured_details: { selected_target: isNonSimple ? "openai_api::gpt-4.1-mini" : "ollama::llama3.2", candidate_count: 2 },
+        raw_details: {
+          policy: { allow_premium: isNonSimple },
+          selection_basis: {
+            allowed_providers: payload.allowed_providers ?? null,
+            route_context: payload.route_context ?? {},
+            request_path_policy: (payload.route_context as Record<string, string> | undefined)?.request_path_policy ?? "smart_routing",
+            blocked_cost_classes: [],
+            budget_matching_scopes: [],
+            open_circuits: [],
+          },
+        },
+        candidates: [
+          {
+            target_key: "ollama::llama3.2",
+            provider: "ollama",
+            model_id: "llama3.2",
+            label: "Ollama · llama3.2",
+            stage_eligible: true,
+            selected: !isNonSimple,
+            priority: 120,
+            cost_class: "low",
+            latency_class: "low",
+            availability_status: "healthy",
+            health_status: "healthy",
+            queue_eligible: true,
+            capability_match: true,
+            exclusion_reasons: isNonSimple ? ["tool_calling_missing"] : [],
+            selection_reasons: !isNonSimple ? ["policy_prefers_local", "simple_cost_floor_match"] : [],
+          },
+          {
+            target_key: "openai_api::gpt-4.1-mini",
+            provider: "openai_api",
+            model_id: "gpt-4.1-mini",
+            label: "OpenAI · gpt-4.1-mini",
+            stage_eligible: true,
+            selected: isNonSimple,
+            priority: 85,
+            cost_class: "high",
+            latency_class: "medium",
+            availability_status: "healthy",
+            health_status: "healthy",
+            queue_eligible: true,
+            capability_match: true,
+            exclusion_reasons: [],
+            selection_reasons: isNonSimple ? ["tool_calling_requires_non_simple", "non_simple_queue_match"] : [],
+          },
+        ],
+        created_at: "2026-04-23T08:15:00Z",
+      },
+    };
   });
   container = document.createElement("div");
   document.body.innerHTML = "";
@@ -298,7 +350,7 @@ afterEach(() => {
 });
 
 describe("Routing page", () => {
-  it("loads routing truth and can simulate a policy decision", async () => {
+  it("loads routing truth and compares simple and non-simple simulations with real routing context", async () => {
     await renderIntoDom(withAppContext({
       path: "/routing?instanceId=instance_alpha",
       element: <RoutingPage />,
@@ -309,11 +361,45 @@ describe("Routing page", () => {
     expect(fetchInstancesMock).toHaveBeenCalledTimes(1);
     expect(fetchRoutingControlPlaneMock).toHaveBeenCalledWith("instance_alpha");
     expect(container.textContent).toContain("Smart Execution Routing");
-    expect(container.textContent).toContain("Policy Register");
-    expect(container.textContent).toContain("Budget & Circuits");
+    expect(container.textContent).toContain("Policy editor");
+    expect(container.textContent).toContain("Budget and circuit guardrails");
     expect(container.textContent).toContain("Ollama · llama3.2");
 
-    const simulateButton = Array.from(container.querySelectorAll("button")).find((button) => button.textContent === "Run simulation");
+    const providerSelect = container.querySelector<HTMLSelectElement>('select[aria-label="Simulation provider"]');
+    const pathSelect = container.querySelector<HTMLSelectElement>('select[aria-label="Request path policy"]');
+    const scopeTypeSelect = container.querySelector<HTMLSelectElement>('select[aria-label="Budget scope type"]');
+    const requestClassSelect = container.querySelector<HTMLSelectElement>('select[aria-label="Simulation request class"]');
+    let scopeKeyInput = container.querySelector<HTMLInputElement>('input[aria-label="Budget scope key"]');
+
+    expect(providerSelect).not.toBeNull();
+    expect(pathSelect).not.toBeNull();
+    expect(scopeTypeSelect).not.toBeNull();
+    expect(requestClassSelect).not.toBeNull();
+    expect(scopeKeyInput).not.toBeNull();
+
+    await act(async () => {
+      requestClassSelect!.value = "non_simple";
+      requestClassSelect!.dispatchEvent(new Event("change", { bubbles: true }));
+      providerSelect!.value = "openai_api";
+      providerSelect!.dispatchEvent(new Event("change", { bubbles: true }));
+      pathSelect!.value = "queue_background";
+      pathSelect!.dispatchEvent(new Event("change", { bubbles: true }));
+      scopeTypeSelect!.value = "agent";
+      scopeTypeSelect!.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+    await flushEffects();
+
+    scopeKeyInput = container.querySelector<HTMLInputElement>('input[aria-label="Budget scope key"]');
+    expect(scopeKeyInput).not.toBeNull();
+
+    await act(async () => {
+      scopeKeyInput!.value = "assistant-alpha";
+      scopeKeyInput!.dispatchEvent(new Event("input", { bubbles: true }));
+      scopeKeyInput!.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+    await flushEffects();
+
+    const simulateButton = Array.from(container.querySelectorAll("button")).find((button) => button.textContent === "Run configured simulation");
     await act(async () => {
       simulateButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     });
@@ -322,15 +408,25 @@ describe("Routing page", () => {
     expect(simulateRoutingMock).toHaveBeenCalledWith(
       expect.objectContaining({
         requested_model: null,
-        prompt: "Route this quick provider health summary and keep it local if possible.",
-        stream: false,
-        require_vision: false,
+        allowed_providers: ["openai_api"],
+        route_context: expect.objectContaining({
+          instance_id: "instance_alpha",
+          request_path_policy: "queue_background",
+        }),
       }),
       "instance_alpha",
     );
-    expect(container.textContent).toContain("Simulation Result");
+    expect(container.textContent).toContain("Short decision");
     expect(container.textContent).toContain("openai_api::gpt-4.1-mini");
-    expect(container.textContent).toContain("Structured Explainability");
-    expect(container.textContent).toContain("Raw Explainability");
+    expect(container.textContent).toContain("Expected lane matched: queued_background");
+
+    const simpleButton = Array.from(container.querySelectorAll("button")).find((button) => button.textContent === "Run simple simulation");
+    await act(async () => {
+      simpleButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    await flushEffects();
+
+    expect(container.textContent).toContain("ollama::llama3.2");
+    expect(container.textContent).toContain("Simple and non-simple simulations currently resolve to different targets");
   });
 });

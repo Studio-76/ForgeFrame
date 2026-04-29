@@ -94,6 +94,8 @@ class RoutingSimulationRequest(BaseModel):
     tools: list[dict] | None = None
     require_vision: bool = False
     max_output_tokens: int | None = Field(default=None, gt=0)
+    allowed_providers: list[str] | None = None
+    route_context: dict[str, str] | None = None
 
 
 class ProviderSyncRequest(BaseModel):

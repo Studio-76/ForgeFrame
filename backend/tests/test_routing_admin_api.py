@@ -138,9 +138,39 @@ def test_routing_simulation_returns_non_simple_explainability_for_tool_requests(
     assert decision["classification"] == "non_simple"
     assert decision["policy_stage"] == "preferred"
     assert decision["execution_lane"] == "queued_background"
-    assert decision["resolved_target"]["provider"] == "openai_api"
+    assert decision["selected_target_key"].startswith("openai_api::gpt-4.1")
     assert "tool_calling_requires_non_simple" in decision["classification_rules"]
-    assert any(candidate["selected"] for candidate in decision["considered_candidates"])
+    assert any(candidate["selected"] for candidate in decision["candidates"])
+
+
+def test_routing_simulation_honors_provider_scope_and_route_context(monkeypatch) -> None:
+    _configure_fast_routing_test_env(monkeypatch)
+    client = _client()
+    headers = _admin_headers(client)
+
+    response = client.post(
+        "/admin/routing/simulate",
+        headers=headers,
+        json={
+            "prompt": "Plan a scoped background run.",
+            "tools": [{"type": "function", "function": {"name": "plan_release"}}],
+            "allowed_providers": ["openai_api"],
+            "route_context": {
+                "agent_id": "assistant-alpha",
+                "request_path_policy": "queue_background",
+            },
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["status"] == "ok"
+    decision = payload["decision"]
+    assert decision["selected_target_key"].startswith("openai_api::gpt-4.1")
+    selection_basis = decision["raw_details"]["selection_basis"]
+    assert selection_basis["allowed_providers"] == ["openai_api"]
+    assert selection_basis["request_path_policy"] == "queue_background"
+    assert selection_basis["route_context"]["agent_id"] == "assistant-alpha"
 
 
 def test_routing_simulation_surfaces_budget_block_with_admin_decision_ledger(monkeypatch) -> None:

@@ -5179,6 +5179,8 @@ export function simulateRouting(
     tools?: Array<Record<string, unknown>>;
     require_vision?: boolean;
     max_output_tokens?: number | null;
+    allowed_providers?: string[];
+    route_context?: Record<string, string>;
   },
   instanceId?: string | null,
 ) {
