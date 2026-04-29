@@ -34,7 +34,7 @@ vi.mock("../src/api/admin", async () => {
   };
 });
 
-import type { AdminSessionUser, AssistantProfileDetail, AssistantProfileSummary } from "../src/api/admin";
+import type { AdminSessionUser, AssistantActionEvaluation, AssistantProfileDetail, AssistantProfileSummary } from "../src/api/admin";
 import { AssistantProfilesPage } from "../src/pages/AssistantProfilesPage";
 import { withAppContext } from "./testContext";
 
@@ -47,6 +47,26 @@ const adminSession: AdminSessionUser = {
   display_name: "Admin",
   role: "admin",
 };
+
+function createEvaluation(overrides: Partial<AssistantActionEvaluation> = {}): AssistantActionEvaluation {
+  return {
+    assistant_profile_id: "assistant_profile_primary",
+    decision: "requires_preview",
+    action_mode: "direct",
+    action_kind: "send_notification",
+    priority: "critical",
+    evaluated_at: "2026-04-23T11:00:00Z",
+    effective_channel_id: "channel_primary",
+    fallback_channel_id: "channel_backup",
+    quiet_hours_active: true,
+    preview_required: true,
+    approval_required: false,
+    delegate_contact_id: "contact_delegate",
+    reasons: ["quiet_hours_priority_override"],
+    metadata: {},
+    ...overrides,
+  };
+}
 
 function createProfileSummary(overrides: Partial<AssistantProfileSummary> = {}): AssistantProfileSummary {
   return {
@@ -66,7 +86,28 @@ function createProfileSummary(overrides: Partial<AssistantProfileSummary> = {}):
     fallback_channel_id: "channel_backup",
     mail_source_id: "source_mail_primary",
     calendar_source_id: "source_calendar_primary",
-    metadata: {},
+    profile_scope: "team",
+    profile_scope_label: "Team profile",
+    memory_scope: "team",
+    memory_scope_label: "Team memory",
+    operating_mode: "direct_autonomous",
+    operating_mode_label: "Direct automation",
+    quiet_hours_summary: "UTC 22:00-07:00 (mon,tue,wed,thu,fri)",
+    direct_action_policy: "allow",
+    direct_action_policy_label: "Direct allowed",
+    last_evaluation: createEvaluation(),
+    risk_warning: {
+      level: "high",
+      title: "Direct external action rights",
+      reasons: ["Direct actions can execute without preview or approval."],
+    },
+    metadata: {
+      custom_flag: "on",
+      governance: {
+        profile_scope: "team",
+        memory_scope: "team",
+      },
+    },
     created_at: "2026-04-23T09:00:00Z",
     updated_at: "2026-04-23T10:00:00Z",
     ...overrides,
@@ -116,7 +157,7 @@ function createProfileDetail(overrides: Partial<AssistantProfileDetail> = {}): A
       tone: "warm",
       locale: "de-DE",
       signature: "Jordan",
-      style_notes: null,
+      style_notes: "Brief and proactive",
     },
     quiet_hours: {
       enabled: true,
@@ -137,11 +178,11 @@ function createProfileDetail(overrides: Partial<AssistantProfileDetail> = {}): A
     action_policies: {
       suggestions_enabled: true,
       questions_enabled: true,
-      direct_action_policy: "preview_required",
+      direct_action_policy: "allow",
       allow_mail_actions: true,
-      allow_calendar_actions: false,
+      allow_calendar_actions: true,
       allow_task_actions: true,
-      require_approval_reference: true,
+      require_approval_reference: false,
       direct_channel_ids: ["channel_primary"],
     },
     delegation_rules: {
@@ -150,6 +191,13 @@ function createProfileDetail(overrides: Partial<AssistantProfileDetail> = {}): A
       allow_external_delegation: true,
       allow_auto_followups: true,
     },
+    allowed_action_kinds: ["draft_message", "send_notification", "create_follow_up", "schedule_calendar", "delegate_follow_up"],
+    blocked_action_kinds: [],
+    allowed_channels: [
+      { record_id: "channel_primary", label: "Personal email", status: "active" },
+      { record_id: "channel_backup", label: "Backup email", status: "active" },
+    ],
+    direct_channels: [{ record_id: "channel_primary", label: "Personal email", status: "active" }],
     ...overrides,
   };
 }
@@ -248,26 +296,15 @@ beforeEach(() => {
     profile: createProfileDetail({
       display_name: "Primary assistant profile updated",
       status: "paused",
+      profile_scope: "personal",
+      profile_scope_label: "Personal profile",
+      memory_scope: "disabled",
+      memory_scope_label: "No memory persistence",
     }),
   });
   evaluateAssistantActionMock.mockResolvedValue({
     status: "ok",
-    evaluation: {
-      assistant_profile_id: "assistant_profile_primary",
-      decision: "requires_preview",
-      action_mode: "direct",
-      action_kind: "send_notification",
-      priority: "critical",
-      evaluated_at: "2026-04-23T11:00:00Z",
-      effective_channel_id: "channel_primary",
-      fallback_channel_id: "channel_backup",
-      quiet_hours_active: true,
-      preview_required: true,
-      approval_required: false,
-      delegate_contact_id: "contact_delegate",
-      reasons: ["quiet_hours_priority_override"],
-      metadata: {},
-    },
+    evaluation: createEvaluation(),
   });
 
   container = document.createElement("div");
@@ -286,7 +323,7 @@ afterEach(() => {
 });
 
 describe("assistant profiles page", () => {
-  it("renders assistant-profile detail with linked records", async () => {
+  it("renders governance inventory and detail with linked records", async () => {
     await renderIntoDom(withAppContext({
       path: "/assistant-profiles?instanceId=instance_alpha&assistantProfileId=assistant_profile_primary",
       element: <AssistantProfilesPage />,
@@ -296,8 +333,12 @@ describe("assistant profiles page", () => {
 
     expect(fetchAssistantProfilesMock).toHaveBeenCalledWith("instance_alpha", { status: "all", limit: 100 });
     expect(fetchAssistantProfileDetailMock).toHaveBeenCalledWith("assistant_profile_primary", "instance_alpha");
-    expect(container.textContent).toContain("Primary assistant profile");
-    expect(container.textContent).toContain("Direct-action policy");
+    expect(container.textContent).toContain("Assistant-profile inventory");
+    expect(container.textContent).toContain("Team profile");
+    expect(container.textContent).toContain("Direct automation");
+    expect(container.textContent).toContain("Direct external action rights");
+    expect(container.textContent).toContain("High-risk outward execution is enabled on this profile.");
+    expect(container.textContent).toContain("Allowed actions");
 
     const primaryChannelLink = Array.from(container.querySelectorAll("a")).find((link) => link.textContent === "Personal email");
     expect(primaryChannelLink?.getAttribute("href")).toBe("/channels?instanceId=instance_alpha&channelId=channel_primary");
@@ -315,39 +356,43 @@ describe("assistant profiles page", () => {
     const editForm = getFormByText("Save assistant profile");
     const evaluateForm = getFormByText("Evaluate assistant action");
 
-    const createButton = getButtonByText(createForm!, "Create assistant profile");
-
     await act(async () => {
       setControlValue(getLabeledControl(createForm!, "Assistant profile ID"), "assistant_profile_beta");
       setControlValue(getLabeledControl(createForm!, "Display name"), "Backup assistant profile");
-      setControlValue(getLabeledControl(createForm!, "Status"), "active");
-      setControlValue(getLabeledControl(createForm!, "Summary"), "Backup personal assistant profile.");
-      setControlValue(getLabeledControl(createForm!, "Assistant mode enabled"), "yes");
-      setControlValue(getLabeledControl(createForm!, "Default profile"), "yes");
+      setControlValue(getLabeledControl(createForm!, "Profile scope"), "team");
+      setControlValue(getLabeledControl(createForm!, "Memory scope"), "team");
+      setControlValue(getLabeledControl(createForm!, "Summary"), "Backup team assistant profile.");
       setControlValue(getLabeledControl(createForm!, "Tone"), "direct");
       setControlValue(getLabeledControl(createForm!, "Timezone"), "Europe/Berlin");
       setControlValue(getLabeledControl(createForm!, "Locale"), "de-DE");
+      setControlValue(getLabeledControl(createForm!, "Signature"), "Jordan");
       setControlValue(getLabeledControl(createForm!, "Preferred contact ID"), "contact_alpha");
+      setControlValue(getLabeledControl(createForm!, "Delegate contact ID"), "contact_delegate");
+      setControlValue(getLabeledControl(createForm!, "Escalation contact ID"), "contact_escalation");
       setControlValue(getLabeledControl(createForm!, "Mail source ID"), "source_mail_primary");
       setControlValue(getLabeledControl(createForm!, "Calendar source ID"), "source_calendar_primary");
+      setControlValue(getLabeledControl(createForm!, "Primary channel ID"), "channel_primary");
+      setControlValue(getLabeledControl(createForm!, "Fallback channel ID"), "channel_backup");
+      setControlValue(getLabeledControl(createForm!, "Allowed channel IDs"), "channel_primary, channel_backup");
+      setControlValue(getLabeledControl(createForm!, "Direct channel IDs"), "channel_primary");
+      setControlValue(getLabeledControl(createForm!, "Quiet hours enabled"), "yes");
+      setControlValue(getLabeledControl(createForm!, "Quiet start"), "00:00");
+      setControlValue(getLabeledControl(createForm!, "Quiet end"), "06:00");
+      setControlValue(getLabeledControl(createForm!, "Direct-action policy"), "preview_required");
+      setControlValue(getLabeledControl(createForm!, "Allow external delegation"), "yes");
       setControlValue(getLabeledControl(createForm!, "Preferences JSON"), "{\"language\":\"de\"}");
-      setControlValue(getLabeledControl(createForm!, "Communication rules JSON"), "{\"tone\":\"direct\",\"locale\":\"de-DE\"}");
-      setControlValue(getLabeledControl(createForm!, "Quiet hours JSON"), "{\"enabled\":true,\"timezone\":\"UTC\",\"start_minute\":0,\"end_minute\":0,\"days\":[\"mon\"]}");
-      setControlValue(getLabeledControl(createForm!, "Delivery preferences JSON"), "{\"primary_channel_id\":\"channel_primary\",\"allowed_channel_ids\":[\"channel_primary\"]}");
-      setControlValue(getLabeledControl(createForm!, "Action policies JSON"), "{\"direct_action_policy\":\"preview_required\",\"direct_channel_ids\":[\"channel_primary\"]}");
-      setControlValue(getLabeledControl(createForm!, "Delegation rules JSON"), "{\"delegate_contact_id\":\"contact_delegate\",\"allow_external_delegation\":true}");
-      setControlValue(getLabeledControl(createForm!, "Metadata JSON"), "{\"mode\":\"personal\"}");
-      createButton!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      setControlValue(getLabeledControl(createForm!, "Metadata JSON"), "{\"mode\":\"team\"}");
+      setControlValue(getLabeledControl(createForm!, "Policy overrides JSON"), "{\"action_policies\":{\"allow_calendar_actions\":true}}");
+      getButtonByText(createForm!, "Create assistant profile")!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     });
     await flushEffects();
 
     expect(createAssistantProfileMock).toHaveBeenCalledWith("instance_alpha", expect.objectContaining({
       assistant_profile_id: "assistant_profile_beta",
       display_name: "Backup assistant profile",
-      summary: "Backup personal assistant profile.",
-      status: "active",
-      assistant_mode_enabled: true,
-      is_default: true,
+      summary: "Backup team assistant profile.",
+      profile_scope: "team",
+      memory_scope: "team",
       tone: "direct",
       timezone: "Europe/Berlin",
       locale: "de-DE",
@@ -355,30 +400,52 @@ describe("assistant profiles page", () => {
       mail_source_id: "source_mail_primary",
       calendar_source_id: "source_calendar_primary",
       preferences: { language: "de" },
-      communication_rules: { tone: "direct", locale: "de-DE" },
-      quiet_hours: { enabled: true, timezone: "UTC", start_minute: 0, end_minute: 0, days: ["mon"] },
-      delivery_preferences: { primary_channel_id: "channel_primary", allowed_channel_ids: ["channel_primary"] },
-      action_policies: { direct_action_policy: "preview_required", direct_channel_ids: ["channel_primary"] },
-      delegation_rules: { delegate_contact_id: "contact_delegate", allow_external_delegation: true },
-      metadata: { mode: "personal" },
+      communication_rules: {
+        tone: "direct",
+        locale: "de-DE",
+        signature: "Jordan",
+        style_notes: null,
+      },
+      quiet_hours: expect.objectContaining({
+        enabled: true,
+        timezone: "UTC",
+        start_minute: 0,
+        end_minute: 360,
+      }),
+      delivery_preferences: {
+        primary_channel_id: "channel_primary",
+        fallback_channel_id: "channel_backup",
+        allowed_channel_ids: ["channel_primary", "channel_backup"],
+        preview_by_default: true,
+        mute_during_quiet_hours: true,
+      },
+      action_policies: expect.objectContaining({
+        direct_action_policy: "preview_required",
+        allow_calendar_actions: true,
+        direct_channel_ids: ["channel_primary"],
+      }),
+      delegation_rules: {
+        delegate_contact_id: "contact_delegate",
+        escalation_contact_id: "contact_escalation",
+        allow_external_delegation: true,
+        allow_auto_followups: true,
+      },
+      metadata: { mode: "team" },
     }));
-
-    const editButton = getButtonByText(editForm!, "Save assistant profile");
 
     await act(async () => {
       setControlValue(getLabeledControl(editForm!, "Display name"), "Primary assistant profile updated");
       setControlValue(getLabeledControl(editForm!, "Status"), "paused");
+      setControlValue(getLabeledControl(editForm!, "Profile scope"), "personal");
+      setControlValue(getLabeledControl(editForm!, "Memory scope"), "disabled");
       setControlValue(getLabeledControl(editForm!, "Tone"), "formal");
       setControlValue(getLabeledControl(editForm!, "Summary"), "Updated summary after audit.");
-      setControlValue(getLabeledControl(editForm!, "Assistant mode enabled"), "yes");
-      setControlValue(getLabeledControl(editForm!, "Default profile"), "no");
-      setControlValue(getLabeledControl(editForm!, "Preferred contact ID"), "contact_alpha");
-      setControlValue(getLabeledControl(editForm!, "Timezone"), "Europe/Berlin");
-      setControlValue(getLabeledControl(editForm!, "Locale"), "de-DE");
-      setControlValue(getLabeledControl(editForm!, "Mail source ID"), "source_mail_primary");
-      setControlValue(getLabeledControl(editForm!, "Calendar source ID"), "source_calendar_primary");
-      setControlValue(getLabeledControl(editForm!, "Action policies JSON"), "{\"direct_action_policy\":\"approval_required\"}");
-      editButton!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      setControlValue(getLabeledControl(editForm!, "Mail source ID"), "");
+      setControlValue(getLabeledControl(editForm!, "Calendar source ID"), "");
+      setControlValue(getLabeledControl(editForm!, "Direct-action policy"), "approval_required");
+      setControlValue(getLabeledControl(editForm!, "Allow external delegation"), "no");
+      setControlValue(getLabeledControl(editForm!, "Policy overrides JSON"), "");
+      getButtonByText(editForm!, "Save assistant profile")!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     });
     await flushEffects();
 
@@ -386,18 +453,18 @@ describe("assistant profiles page", () => {
       display_name: "Primary assistant profile updated",
       summary: "Updated summary after audit.",
       status: "paused",
-      assistant_mode_enabled: true,
-      is_default: false,
+      profile_scope: "personal",
+      memory_scope: "disabled",
       tone: "formal",
-      timezone: "Europe/Berlin",
-      locale: "de-DE",
-      preferred_contact_id: "contact_alpha",
-      mail_source_id: "source_mail_primary",
-      calendar_source_id: "source_calendar_primary",
-      action_policies: { direct_action_policy: "approval_required" },
+      mail_source_id: null,
+      calendar_source_id: null,
+      action_policies: expect.objectContaining({
+        direct_action_policy: "approval_required",
+      }),
+      delegation_rules: expect.objectContaining({
+        allow_external_delegation: false,
+      }),
     }));
-
-    const evaluateButton = getButtonByText(evaluateForm!, "Evaluate assistant action");
 
     await act(async () => {
       setControlValue(getLabeledControl(evaluateForm!, "Action mode"), "direct");
@@ -408,8 +475,8 @@ describe("assistant profiles page", () => {
       setControlValue(getLabeledControl(evaluateForm!, "Occurred at"), "2026-04-23T02:00:00Z");
       setControlValue(getLabeledControl(evaluateForm!, "Requires external delivery"), "yes");
       setControlValue(getLabeledControl(evaluateForm!, "Approval reference"), "approval-123");
-      setControlValue(getLabeledControl(evaluateForm!, "Metadata JSON"), "{\"reason\":\"night send\"}");
-      evaluateButton!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      setControlValue(getLabeledControl(evaluateForm!, "Evaluation metadata JSON"), "{\"reason\":\"night send\"}");
+      getButtonByText(evaluateForm!, "Evaluate assistant action")!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     });
     await flushEffects();
 

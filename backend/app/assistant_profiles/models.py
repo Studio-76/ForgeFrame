@@ -17,6 +17,12 @@ AssistantProfileStatus = Literal["active", "paused"]
 ASSISTANT_TONES = ("neutral", "warm", "direct", "formal")
 AssistantTone = Literal["neutral", "warm", "direct", "formal"]
 
+ASSISTANT_PROFILE_SCOPES = ("personal", "team")
+AssistantProfileScope = Literal["personal", "team"]
+
+ASSISTANT_MEMORY_SCOPES = ("disabled", "personal", "team")
+AssistantMemoryScope = Literal["disabled", "personal", "team"]
+
 QUIET_HOURS_DAYS = ("mon", "tue", "wed", "thu", "fri", "sat", "sun")
 QuietHoursDay = Literal["mon", "tue", "wed", "thu", "fri", "sat", "sun"]
 
@@ -31,6 +37,28 @@ AssistantActionKind = Literal["draft_message", "send_notification", "create_foll
 
 ASSISTANT_ACTION_DECISIONS = ("allow", "requires_preview", "requires_approval", "blocked")
 AssistantActionDecision = Literal["allow", "requires_preview", "requires_approval", "blocked"]
+
+ASSISTANT_OPERATING_MODES = (
+    "disabled",
+    "suggest_only",
+    "ask_first",
+    "advisory_only",
+    "preview_gated",
+    "approval_gated",
+    "direct_autonomous",
+)
+AssistantOperatingMode = Literal[
+    "disabled",
+    "suggest_only",
+    "ask_first",
+    "advisory_only",
+    "preview_gated",
+    "approval_gated",
+    "direct_autonomous",
+]
+
+ASSISTANT_RISK_LEVELS = ("guarded", "high")
+AssistantRiskLevel = Literal["guarded", "high"]
 
 
 class QuietHoursSettings(BaseModel):
@@ -76,6 +104,12 @@ class DelegationRules(BaseModel):
     allow_auto_followups: bool = True
 
 
+class AssistantProfileRiskWarning(BaseModel):
+    level: AssistantRiskLevel
+    title: str
+    reasons: list[str] = Field(default_factory=list)
+
+
 class AssistantProfileSummary(BaseModel):
     assistant_profile_id: str
     instance_id: str
@@ -93,6 +127,17 @@ class AssistantProfileSummary(BaseModel):
     fallback_channel_id: str | None = None
     mail_source_id: str | None = None
     calendar_source_id: str | None = None
+    profile_scope: AssistantProfileScope = "personal"
+    profile_scope_label: str = "Personal profile"
+    memory_scope: AssistantMemoryScope = "personal"
+    memory_scope_label: str = "Profile memory"
+    operating_mode: AssistantOperatingMode = "disabled"
+    operating_mode_label: str = "Disabled"
+    quiet_hours_summary: str = "Quiet hours disabled"
+    direct_action_policy: DirectActionPolicy = "preview_required"
+    direct_action_policy_label: str = "Preview required"
+    last_evaluation: AssistantActionEvaluation | None = None
+    risk_warning: AssistantProfileRiskWarning | None = None
     metadata: dict[str, Any] = Field(default_factory=dict)
     created_at: datetime
     updated_at: datetime
@@ -112,6 +157,10 @@ class AssistantProfileDetail(AssistantProfileSummary):
     delivery_preferences: DeliveryPreferences = Field(default_factory=DeliveryPreferences)
     action_policies: ActionPolicies = Field(default_factory=ActionPolicies)
     delegation_rules: DelegationRules = Field(default_factory=DelegationRules)
+    allowed_action_kinds: list[AssistantActionKind] = Field(default_factory=list)
+    blocked_action_kinds: list[AssistantActionKind] = Field(default_factory=list)
+    allowed_channels: list[RecordLink] = Field(default_factory=list)
+    direct_channels: list[RecordLink] = Field(default_factory=list)
 
 
 class CreateAssistantProfile(BaseModel):
@@ -124,6 +173,8 @@ class CreateAssistantProfile(BaseModel):
     timezone: str = Field(default="UTC", min_length=1, max_length=64)
     locale: str = Field(default="en-US", min_length=2, max_length=16)
     tone: AssistantTone = "neutral"
+    profile_scope: AssistantProfileScope = "personal"
+    memory_scope: AssistantMemoryScope = "personal"
     preferred_contact_id: str | None = Field(default=None, max_length=64)
     mail_source_id: str | None = Field(default=None, max_length=64)
     calendar_source_id: str | None = Field(default=None, max_length=64)
@@ -145,6 +196,8 @@ class UpdateAssistantProfile(BaseModel):
     timezone: str | None = Field(default=None, min_length=1, max_length=64)
     locale: str | None = Field(default=None, min_length=2, max_length=16)
     tone: AssistantTone | None = None
+    profile_scope: AssistantProfileScope | None = None
+    memory_scope: AssistantMemoryScope | None = None
     preferred_contact_id: str | None = Field(default=None, max_length=64)
     mail_source_id: str | None = Field(default=None, max_length=64)
     calendar_source_id: str | None = Field(default=None, max_length=64)
@@ -184,4 +237,3 @@ class AssistantActionEvaluation(BaseModel):
     delegate_contact_id: str | None = None
     reasons: list[str] = Field(default_factory=list)
     metadata: dict[str, Any] = Field(default_factory=dict)
-

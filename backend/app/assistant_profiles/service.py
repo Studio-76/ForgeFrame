@@ -14,6 +14,7 @@ from app.assistant_profiles.models import (
     ActionPolicies,
     AssistantActionEvaluation,
     AssistantProfileDetail,
+    AssistantProfileRiskWarning,
     AssistantProfileSummary,
     CommunicationRules,
     CreateAssistantProfile,
@@ -75,6 +76,153 @@ class AssistantProfileAdminService:
     @staticmethod
     def _delegation_rules(payload: dict[str, object] | None) -> DelegationRules:
         return DelegationRules.model_validate(payload or {})
+
+    @staticmethod
+    def _metadata_dict(payload: dict[str, object] | None) -> dict[str, object]:
+        return dict(payload or {})
+
+    @staticmethod
+    def _profile_scope(metadata: dict[str, object] | None) -> str:
+        governance = metadata.get("governance") if isinstance(metadata, dict) else None
+        if isinstance(governance, dict):
+            value = governance.get("profile_scope")
+            if value in {"personal", "team"}:
+                return value
+        return "personal"
+
+    @staticmethod
+    def _memory_scope(metadata: dict[str, object] | None) -> str:
+        governance = metadata.get("governance") if isinstance(metadata, dict) else None
+        if isinstance(governance, dict):
+            value = governance.get("memory_scope")
+            if value in {"disabled", "personal", "team"}:
+                return value
+        return "personal"
+
+    @staticmethod
+    def _last_evaluation(metadata: dict[str, object] | None) -> AssistantActionEvaluation | None:
+        if not isinstance(metadata, dict):
+            return None
+        raw = metadata.get("last_evaluation")
+        if not isinstance(raw, dict):
+            return None
+        return AssistantActionEvaluation.model_validate(raw)
+
+    @staticmethod
+    def _profile_scope_label(scope: str) -> str:
+        if scope == "team":
+            return "Team profile"
+        return "Personal profile"
+
+    @staticmethod
+    def _memory_scope_label(scope: str) -> str:
+        if scope == "disabled":
+            return "No memory persistence"
+        if scope == "team":
+            return "Team memory"
+        return "Profile memory"
+
+    @staticmethod
+    def _operating_mode(action_policies: ActionPolicies, *, status: str, assistant_mode_enabled: bool) -> tuple[str, str]:
+        if status != "active" or not assistant_mode_enabled:
+            return ("disabled", "Disabled")
+        if action_policies.direct_action_policy == "allow":
+            return ("direct_autonomous", "Direct automation")
+        if action_policies.direct_action_policy == "approval_required":
+            return ("approval_gated", "Approval gated")
+        if action_policies.direct_action_policy == "preview_required":
+            return ("preview_gated", "Preview gated")
+        if action_policies.suggestions_enabled and action_policies.questions_enabled:
+            return ("advisory_only", "Advisory only")
+        if action_policies.questions_enabled:
+            return ("ask_first", "Ask first")
+        if action_policies.suggestions_enabled:
+            return ("suggest_only", "Suggest only")
+        return ("disabled", "Disabled")
+
+    @staticmethod
+    def _quiet_hours_summary(settings: QuietHoursSettings) -> str:
+        if not settings.enabled:
+            return "Quiet hours disabled"
+        day_summary = ",".join(settings.days) if settings.days else "no-days"
+        start_hour, start_minute = divmod(settings.start_minute, 60)
+        end_hour, end_minute = divmod(settings.end_minute, 60)
+        return (
+            f"{settings.timezone} "
+            f"{start_hour:02d}:{start_minute:02d}-{end_hour:02d}:{end_minute:02d} "
+            f"({day_summary})"
+        )
+
+    @staticmethod
+    def _direct_action_policy_label(policy: str) -> str:
+        if policy == "allow":
+            return "Direct allowed"
+        if policy == "approval_required":
+            return "Approval required"
+        if policy == "never":
+            return "Direct blocked"
+        return "Preview required"
+
+    @staticmethod
+    def _risk_warning(
+        action_policies: ActionPolicies,
+        delegation_rules: DelegationRules,
+    ) -> AssistantProfileRiskWarning | None:
+        reasons: list[str] = []
+        level = "guarded"
+        if action_policies.direct_action_policy == "allow":
+            level = "high"
+            reasons.append("Direct actions can execute without preview or approval.")
+        elif action_policies.direct_action_policy == "approval_required":
+            reasons.append("Direct actions remain available when an approval reference is present.")
+        elif action_policies.direct_action_policy == "preview_required":
+            reasons.append("Direct actions remain available after a preview gate.")
+
+        if delegation_rules.allow_external_delegation:
+            reasons.append("External delegation to contacts is enabled.")
+        if action_policies.allow_calendar_actions and action_policies.direct_action_policy != "never":
+            reasons.append("Calendar actions can create or change external commitments.")
+        if action_policies.allow_mail_actions and action_policies.direct_action_policy != "never":
+            reasons.append("Mail and notification actions can leave the system boundary.")
+
+        if not reasons:
+            return None
+        return AssistantProfileRiskWarning(
+            level=level,  # type: ignore[arg-type]
+            title="Direct external action rights",
+            reasons=reasons,
+        )
+
+    @staticmethod
+    def _action_coverage(action_policies: ActionPolicies, delegation_rules: DelegationRules) -> tuple[list[str], list[str]]:
+        coverage = {
+            "draft_message": action_policies.allow_mail_actions,
+            "send_notification": action_policies.allow_mail_actions,
+            "create_follow_up": action_policies.allow_task_actions,
+            "schedule_calendar": action_policies.allow_calendar_actions,
+            "delegate_follow_up": delegation_rules.allow_external_delegation,
+        }
+        allowed = [action_kind for action_kind, is_allowed in coverage.items() if is_allowed]
+        blocked = [action_kind for action_kind, is_allowed in coverage.items() if not is_allowed]
+        return allowed, blocked
+
+    def _channel_links(
+        self,
+        session: Session,
+        *,
+        company_id: str,
+        instance_id: str,
+        channel_ids: list[str],
+    ) -> list[RecordLink]:
+        links: list[RecordLink] = []
+        seen: set[str] = set()
+        for channel_id in channel_ids:
+            if channel_id in seen:
+                continue
+            seen.add(channel_id)
+            channel = self._load_channel_by_scope(session, company_id=company_id, instance_id=instance_id, channel_id=channel_id)
+            links.append(self._record_link(channel.id, channel.label, channel.status))
+        return links
 
     @staticmethod
     def _priority_at_least(priority: str, minimum: str) -> bool:
@@ -205,7 +353,18 @@ class AssistantProfileAdminService:
 
     def _summary(self, row: AssistantProfileORM) -> AssistantProfileSummary:
         communication_rules = self._communication_rules(row.communication_rules_json)
+        quiet_hours = self._quiet_hours(row.quiet_hours_json)
         delivery_preferences = self._delivery_preferences(row.delivery_preferences_json)
+        action_policies = self._action_policies(row.action_policies_json)
+        delegation_rules = self._delegation_rules(row.delegation_rules_json)
+        metadata = self._metadata_dict(row.metadata_json)
+        profile_scope = self._profile_scope(metadata)
+        memory_scope = self._memory_scope(metadata)
+        operating_mode, operating_mode_label = self._operating_mode(
+            action_policies,
+            status=row.status,
+            assistant_mode_enabled=row.assistant_mode_enabled,
+        )
         return AssistantProfileSummary(
             assistant_profile_id=row.id,
             instance_id=row.instance_id,
@@ -223,7 +382,18 @@ class AssistantProfileAdminService:
             fallback_channel_id=delivery_preferences.fallback_channel_id,
             mail_source_id=row.mail_source_id,
             calendar_source_id=row.calendar_source_id,
-            metadata=dict(row.metadata_json or {}),
+            profile_scope=profile_scope,  # type: ignore[arg-type]
+            profile_scope_label=self._profile_scope_label(profile_scope),
+            memory_scope=memory_scope,  # type: ignore[arg-type]
+            memory_scope_label=self._memory_scope_label(memory_scope),
+            operating_mode=operating_mode,  # type: ignore[arg-type]
+            operating_mode_label=operating_mode_label,
+            quiet_hours_summary=self._quiet_hours_summary(quiet_hours),
+            direct_action_policy=action_policies.direct_action_policy,
+            direct_action_policy_label=self._direct_action_policy_label(action_policies.direct_action_policy),
+            last_evaluation=self._last_evaluation(metadata),
+            risk_warning=self._risk_warning(action_policies, delegation_rules),
+            metadata=metadata,
             created_at=row.created_at,
             updated_at=row.updated_at,
         )
@@ -235,6 +405,7 @@ class AssistantProfileAdminService:
         delivery_preferences = self._delivery_preferences(row.delivery_preferences_json)
         action_policies = self._action_policies(row.action_policies_json)
         delegation_rules = self._delegation_rules(row.delegation_rules_json)
+        allowed_action_kinds, blocked_action_kinds = self._action_coverage(action_policies, delegation_rules)
 
         preferred_contact = None
         if row.preferred_contact_id:
@@ -271,6 +442,19 @@ class AssistantProfileAdminService:
             source = self._load_source_by_scope(session, company_id=row.company_id, instance_id=row.instance_id, source_id=row.calendar_source_id)
             calendar_source = self._record_link(source.id, source.label, source.status)
 
+        allowed_channels = self._channel_links(
+            session,
+            company_id=row.company_id,
+            instance_id=row.instance_id,
+            channel_ids=delivery_preferences.allowed_channel_ids,
+        )
+        direct_channels = self._channel_links(
+            session,
+            company_id=row.company_id,
+            instance_id=row.instance_id,
+            channel_ids=action_policies.direct_channel_ids,
+        )
+
         return AssistantProfileDetail(
             **summary.model_dump(),
             preferred_contact=preferred_contact,
@@ -286,6 +470,10 @@ class AssistantProfileAdminService:
             delivery_preferences=delivery_preferences,
             action_policies=action_policies,
             delegation_rules=delegation_rules,
+            allowed_action_kinds=allowed_action_kinds,  # type: ignore[arg-type]
+            blocked_action_kinds=blocked_action_kinds,  # type: ignore[arg-type]
+            allowed_channels=allowed_channels,
+            direct_channels=direct_channels,
         )
 
     def list_profiles(self, *, instance: InstanceRecord, status: str | None = None, limit: int = 100) -> list[AssistantProfileSummary]:
@@ -349,7 +537,13 @@ class AssistantProfileAdminService:
                 delivery_preferences_json=payload.delivery_preferences.model_dump(mode="json"),
                 action_policies_json=payload.action_policies.model_dump(mode="json"),
                 delegation_rules_json=payload.delegation_rules.model_dump(mode="json"),
-                metadata_json=dict(payload.metadata),
+                metadata_json={
+                    **dict(payload.metadata),
+                    "governance": {
+                        "profile_scope": payload.profile_scope,
+                        "memory_scope": payload.memory_scope,
+                    },
+                },
                 created_at=now,
                 updated_at=now,
             )
@@ -362,9 +556,9 @@ class AssistantProfileAdminService:
             delivery_preferences = payload.delivery_preferences or self._delivery_preferences(row.delivery_preferences_json)
             action_policies = payload.action_policies or self._action_policies(row.action_policies_json)
             delegation_rules = payload.delegation_rules or self._delegation_rules(row.delegation_rules_json)
-            preferred_contact_id = payload.preferred_contact_id if payload.preferred_contact_id is not None else row.preferred_contact_id
-            mail_source_id = payload.mail_source_id if payload.mail_source_id is not None else row.mail_source_id
-            calendar_source_id = payload.calendar_source_id if payload.calendar_source_id is not None else row.calendar_source_id
+            preferred_contact_id = payload.preferred_contact_id if "preferred_contact_id" in payload.model_fields_set else row.preferred_contact_id
+            mail_source_id = payload.mail_source_id if "mail_source_id" in payload.model_fields_set else row.mail_source_id
+            calendar_source_id = payload.calendar_source_id if "calendar_source_id" in payload.model_fields_set else row.calendar_source_id
             self._validate_profile_links(
                 session,
                 instance=instance,
@@ -394,7 +588,14 @@ class AssistantProfileAdminService:
             row.delivery_preferences_json = delivery_preferences.model_dump(mode="json")
             row.action_policies_json = action_policies.model_dump(mode="json")
             row.delegation_rules_json = delegation_rules.model_dump(mode="json")
-            row.metadata_json = dict(payload.metadata) if payload.metadata is not None else dict(row.metadata_json or {})
+            next_metadata = dict(payload.metadata) if payload.metadata is not None else dict(row.metadata_json or {})
+            next_metadata["governance"] = {
+                "profile_scope": payload.profile_scope if payload.profile_scope is not None else self._profile_scope(next_metadata),
+                "memory_scope": payload.memory_scope if payload.memory_scope is not None else self._memory_scope(next_metadata),
+            }
+            if "last_evaluation" in (row.metadata_json or {}) and "last_evaluation" not in next_metadata:
+                next_metadata["last_evaluation"] = dict((row.metadata_json or {}).get("last_evaluation") or {})
+            row.metadata_json = next_metadata
             row.updated_at = self._now()
         return self.get_profile(instance=instance, assistant_profile_id=assistant_profile_id)
 
@@ -428,7 +629,7 @@ class AssistantProfileAdminService:
         assistant_profile_id: str,
         payload: EvaluateAssistantAction,
     ) -> AssistantActionEvaluation:
-        with self._session_factory() as session:
+        with self._session_factory() as session, session.begin():
             row = self._load_profile(session, instance=instance, assistant_profile_id=assistant_profile_id)
             delivery_preferences = self._delivery_preferences(row.delivery_preferences_json)
             action_policies = self._action_policies(row.action_policies_json)
@@ -517,7 +718,7 @@ class AssistantProfileAdminService:
                 preview_required = False
                 approval_required = False
 
-            return AssistantActionEvaluation(
+            evaluation = AssistantActionEvaluation(
                 assistant_profile_id=row.id,
                 decision=decision,  # type: ignore[arg-type]
                 action_mode=payload.action_mode,
@@ -533,3 +734,8 @@ class AssistantProfileAdminService:
                 reasons=reasons,
                 metadata=dict(payload.metadata),
             )
+            next_metadata = dict(row.metadata_json or {})
+            next_metadata["last_evaluation"] = evaluation.model_dump(mode="json")
+            row.metadata_json = next_metadata
+            row.updated_at = self._now()
+            return evaluation

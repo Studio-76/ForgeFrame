@@ -2879,6 +2879,10 @@ export type AssistantProfileStatus = "active" | "paused";
 
 export type AssistantTone = "neutral" | "warm" | "direct" | "formal";
 
+export type AssistantProfileScope = "personal" | "team";
+
+export type AssistantMemoryScope = "disabled" | "personal" | "team";
+
 export type QuietHoursDay = "mon" | "tue" | "wed" | "thu" | "fri" | "sat" | "sun";
 
 export type DirectActionPolicy = "never" | "preview_required" | "approval_required" | "allow";
@@ -2888,6 +2892,17 @@ export type AssistantActionMode = "suggest" | "ask" | "direct";
 export type AssistantActionKind = "draft_message" | "send_notification" | "create_follow_up" | "schedule_calendar" | "delegate_follow_up";
 
 export type AssistantActionDecision = "allow" | "requires_preview" | "requires_approval" | "blocked";
+
+export type AssistantOperatingMode =
+  | "disabled"
+  | "suggest_only"
+  | "ask_first"
+  | "advisory_only"
+  | "preview_gated"
+  | "approval_gated"
+  | "direct_autonomous";
+
+export type AssistantRiskLevel = "guarded" | "high";
 
 export type QuietHoursSettings = {
   enabled: boolean;
@@ -2932,6 +2947,12 @@ export type DelegationRules = {
   allow_auto_followups: boolean;
 };
 
+export type AssistantProfileRiskWarning = {
+  level: AssistantRiskLevel;
+  title: string;
+  reasons: string[];
+};
+
 export type AssistantProfileSummary = {
   assistant_profile_id: string;
   instance_id: string;
@@ -2949,6 +2970,17 @@ export type AssistantProfileSummary = {
   fallback_channel_id?: string | null;
   mail_source_id?: string | null;
   calendar_source_id?: string | null;
+  profile_scope: AssistantProfileScope;
+  profile_scope_label: string;
+  memory_scope: AssistantMemoryScope;
+  memory_scope_label: string;
+  operating_mode: AssistantOperatingMode;
+  operating_mode_label: string;
+  quiet_hours_summary: string;
+  direct_action_policy: DirectActionPolicy;
+  direct_action_policy_label: string;
+  last_evaluation?: AssistantActionEvaluation | null;
+  risk_warning?: AssistantProfileRiskWarning | null;
   metadata: Record<string, unknown>;
   created_at: string;
   updated_at: string;
@@ -2968,6 +3000,10 @@ export type AssistantProfileDetail = AssistantProfileSummary & {
   delivery_preferences: DeliveryPreferences;
   action_policies: ActionPolicies;
   delegation_rules: DelegationRules;
+  allowed_action_kinds: AssistantActionKind[];
+  blocked_action_kinds: AssistantActionKind[];
+  allowed_channels: RecordLink[];
+  direct_channels: RecordLink[];
 };
 
 export type AssistantActionEvaluation = {
@@ -5443,6 +5479,8 @@ export function createAssistantProfile(
     timezone?: string;
     locale?: string;
     tone?: AssistantTone;
+    profile_scope?: AssistantProfileScope;
+    memory_scope?: AssistantMemoryScope;
     preferred_contact_id?: string | null;
     mail_source_id?: string | null;
     calendar_source_id?: string | null;
@@ -5476,6 +5514,8 @@ export function updateAssistantProfile(
     timezone?: string;
     locale?: string;
     tone?: AssistantTone;
+    profile_scope?: AssistantProfileScope;
+    memory_scope?: AssistantMemoryScope;
     preferred_contact_id?: string | null;
     mail_source_id?: string | null;
     calendar_source_id?: string | null;

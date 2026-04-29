@@ -85,11 +85,10 @@ def update_assistant_profile(
 def evaluate_assistant_action(
     assistant_profile_id: str,
     payload: EvaluateAssistantAction,
-    admin: AuthenticatedAdmin = Depends(require_admin_role("operator")),
+    _admin: AuthenticatedAdmin = Depends(require_admin_mutation_role("admin")),
     instance: InstanceRecord = Depends(resolve_admin_instance_scope),
     service: AssistantProfileAdminService = Depends(get_assistant_profile_admin_service),
 ) -> object:
-    _ = admin
     try:
         evaluation = service.evaluate_action(instance=instance, assistant_profile_id=assistant_profile_id, payload=payload)
     except ValueError as exc:
@@ -97,4 +96,3 @@ def evaluate_assistant_action(
         code = status.HTTP_404_NOT_FOUND if error_type == "assistant_profile_not_found" else status.HTTP_400_BAD_REQUEST
         return _error(code, error_type, str(exc))
     return {"status": "ok", "evaluation": evaluation.model_dump(mode="json")}
-
