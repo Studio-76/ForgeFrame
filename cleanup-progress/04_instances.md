@@ -26,3 +26,13 @@
   - `cd frontend && npm test -- instances-page` -> `passed`
   - `cd frontend && npm test` -> `passed (41 test files, 151 tests)`
   - `./.venv/bin/pytest backend/tests/test_instances_admin_api.py backend/tests/test_agents_admin_api.py` -> `passed (5 tests)`
+
+## Revalidation 2026-04-29
+
+- Audit-Ergebnis: `APPROVED`
+- Konkrete Audit-Maengel: `keine`
+- Finale Freigabe: `APPROVED`
+- Begruendung:
+  - Die Instances-Seite bleibt auf aktuellem HEAD eine echte Instanzverwaltung mit Filtertabelle, defektem Operator-Zustand, scoped Deep-Links und ehrlicher Auto-Create-Rueckmeldung fuer den Default-Operator.
+  - Der nachgezogene Global-Contract-Fix aus `00` hat den Instances-Flow nicht regressiv veraendert.
+  - Die auf aktuellem HEAD erfolgreich gelaufenen Pruefkommandos `cd frontend && npm run build`, `cd frontend && npm test -- --runInBand` (Vitest-Option objektiv unsupported) und `cd frontend && npm test` decken den Instances-Stand mit ab.
