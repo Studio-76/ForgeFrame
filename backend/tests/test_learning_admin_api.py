@@ -97,6 +97,13 @@ def test_learning_event_can_promote_durable_memory_with_provenance() -> None:
         },
     )
     assert created.status_code == 201
+    created_payload = created.json()["event"]
+    assert created_payload["review_bucket"] == "suggested"
+    assert created_payload["suggested_lane"] == "auto_promote"
+    assert created_payload["source"]["label"] == "Conversation: Learning conversation"
+    assert created_payload["proposal"]["target_kind"] == "durable_memory"
+    assert created_payload["proposal"]["scope_label"] == "Team visibility"
+    assert created_payload["risk"]["level"] == "high"
     event_id = created.json()["event"]["learning_event_id"]
 
     decided = client.post(
@@ -109,6 +116,7 @@ def test_learning_event_can_promote_durable_memory_with_provenance() -> None:
             "human_override": True,
             "memory_payload": {
                 "visibility_scope": "restricted",
+                "sensitivity": "restricted",
                 "source_trust_class": "human_verified",
             },
         },
@@ -116,6 +124,8 @@ def test_learning_event_can_promote_durable_memory_with_provenance() -> None:
     assert decided.status_code == 200
     decided_payload = decided.json()["event"]
     assert decided_payload["status"] == "applied"
+    assert decided_payload["outcome"]["target_kind"] == "durable_memory"
+    assert decided_payload["outcome"]["scope_label"] == "Restricted visibility"
     assert decided_payload["promoted_memory"]["status"] == "active"
     promoted_memory_id = decided_payload["promoted_memory_id"]
 
@@ -130,6 +140,7 @@ def test_learning_event_can_promote_durable_memory_with_provenance() -> None:
     assert memory_payload["human_override"] is True
     assert memory_payload["source_trust_class"] == "human_verified"
     assert memory_payload["visibility_scope"] == "restricted"
+    assert memory_payload["sensitivity"] == "restricted"
 
 
 def test_learning_pattern_scan_detects_repeat_corrections_and_can_create_skill_draft() -> None:
@@ -163,6 +174,10 @@ def test_learning_pattern_scan_detects_repeat_corrections_and_can_create_skill_d
     event = scanned.json()["events"][0]
     assert event["trigger_kind"] == "pattern_detected"
     assert event["summary"] == "Repeated correction pattern: Repeated pricing correction"
+    assert event["review_bucket"] == "suggested"
+    assert event["source"]["label"] == "Pattern scan: Repeated pricing correction"
+    assert event["proposal"]["surface"] == "review"
+    assert event["risk"]["level"] == "medium"
     event_id = event["learning_event_id"]
 
     decided = client.post(
@@ -182,6 +197,7 @@ def test_learning_pattern_scan_detects_repeat_corrections_and_can_create_skill_d
     assert decided.status_code == 200
     decided_payload = decided.json()["event"]
     assert decided_payload["status"] == "applied"
+    assert decided_payload["outcome"]["target_kind"] == "skill_draft"
     assert decided_payload["promoted_skill"]["label"] == "Repeated pricing correction skill"
 
     skill_detail = client.get(
@@ -191,3 +207,91 @@ def test_learning_pattern_scan_detects_repeat_corrections_and_can_create_skill_d
     )
     assert skill_detail.status_code == 200
     assert skill_detail.json()["skill"]["status"] == "draft"
+
+
+def test_learning_event_rejects_mixed_memory_and_skill_proposals() -> None:
+    client = TestClient(app)
+    headers = _admin_headers(client)
+    instance_id = _create_instance(client, headers, instance_id="instance_learning_invalid", company_id="company_learning_invalid")
+
+    created = client.post(
+        "/admin/learning",
+        headers=headers,
+        params=_instance_scope(instance_id),
+        json={
+            "trigger_kind": "operator_action",
+            "suggested_decision": "review_required",
+            "summary": "Mixed proposal should fail",
+            "explanation": "This learning item incorrectly tries to propose memory and skill at the same time.",
+            "proposed_memory": {
+                "memory_kind": "summary",
+                "title": "Mixed memory",
+                "body": "Should not be combined with a skill.",
+            },
+            "proposed_skill": {
+                "display_name": "Mixed skill",
+                "instruction_core": "Should not be combined with memory.",
+            },
+        },
+    )
+    assert created.status_code == 409
+    assert "either memory or skill promotion" in created.json()["error"]["message"]
+
+
+def test_learning_promotion_failure_does_not_leak_partial_decision_audit_state() -> None:
+    client = TestClient(app)
+    headers = _admin_headers(client)
+    instance_id = _create_instance(client, headers, instance_id="instance_learning_rollback", company_id="company_learning_rollback")
+
+    created = client.post(
+        "/admin/learning",
+        headers=headers,
+        params=_instance_scope(instance_id),
+        json={
+            "trigger_kind": "operator_action",
+            "suggested_decision": "durable_memory",
+            "summary": "Rollback durable promotion",
+            "explanation": "This event should remain undecided if durable promotion fails governance validation.",
+            "proposed_memory": {
+                "memory_kind": "summary",
+                "title": "Rollback durable memory candidate",
+                "body": "Missing review schedule should keep the event pending.",
+            },
+        },
+    )
+    assert created.status_code == 201
+    event_id = created.json()["event"]["learning_event_id"]
+
+    failed = client.post(
+        f"/admin/learning/{event_id}/decide",
+        headers=headers,
+        params=_instance_scope(instance_id),
+        json={
+            "decision": "durable_memory",
+            "decision_note": "This should not persist when memory validation fails.",
+            "human_override": True,
+            "memory_payload": {
+                "source_trust_class": "runtime_inferred",
+                "visibility_scope": "team",
+                "sensitivity": "normal",
+            },
+        },
+    )
+    assert failed.status_code == 409
+
+    detail = client.get(
+        f"/admin/learning/{event_id}",
+        headers=headers,
+        params=_instance_scope(instance_id),
+    )
+    assert detail.status_code == 200
+    payload = detail.json()["event"]
+    assert payload["status"] == "pending"
+    assert payload["review_bucket"] == "suggested"
+    assert payload["outcome"]["surface"] == "pending"
+    assert payload["outcome"]["target_kind"] is None
+    assert payload["decided_at"] is None
+    assert payload["promoted_memory_id"] is None
+    assert payload["promoted_skill_id"] is None
+    assert payload["human_override"] is False
+    assert payload["decision_note"] is None

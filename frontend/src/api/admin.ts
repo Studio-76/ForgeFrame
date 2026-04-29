@@ -296,6 +296,38 @@ export type SkillDetail = SkillSummary & {
 export type LearningTriggerKind = "run_completion" | "session_rotation" | "pattern_detected" | "operator_action";
 export type LearningDecision = "discard" | "history_only" | "boot_memory" | "durable_memory" | "skill_draft" | "review_required";
 export type LearningStatus = "pending" | "applied" | "discarded" | "review_required";
+export type LearningReviewBucket = "suggested" | "review_required" | "approved_promoted" | "rejected";
+export type LearningDecisionLane = "auto_reject" | "auto_draft" | "auto_suggest" | "review_required" | "auto_promote";
+export type LearningRiskLevel = "low" | "medium" | "high";
+export type LearningProposalSurface = "memory" | "skill" | "history" | "rejection" | "review";
+export type LearningOutcomeSurface = "pending" | "memory" | "skill" | "history" | "rejection" | "review";
+
+export type LearningSourceSummary = {
+  kind: string;
+  label: string;
+  detail?: string | null;
+};
+
+export type LearningProposalSummary = {
+  target_kind: LearningDecision;
+  target_label: string;
+  surface: LearningProposalSurface;
+  scope_label: string;
+  content_summary: string;
+  trust_label?: string | null;
+};
+
+export type LearningOutcomeSummary = {
+  target_kind?: LearningDecision | null;
+  target_label: string;
+  surface: LearningOutcomeSurface;
+  scope_label?: string | null;
+};
+
+export type LearningRiskSummary = {
+  level: LearningRiskLevel;
+  reasons: string[];
+};
 
 export type LearningEventSummary = {
   learning_event_id: string;
@@ -316,6 +348,14 @@ export type LearningEventSummary = {
   promoted_skill_id?: string | null;
   human_override: boolean;
   decision_note?: string | null;
+  review_bucket: LearningReviewBucket;
+  review_bucket_label: string;
+  suggested_lane: LearningDecisionLane;
+  suggested_lane_label: string;
+  source: LearningSourceSummary;
+  proposal: LearningProposalSummary;
+  outcome: LearningOutcomeSummary;
+  risk: LearningRiskSummary;
   created_at: string;
   decided_at?: string | null;
 };

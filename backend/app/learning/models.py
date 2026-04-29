@@ -19,6 +19,45 @@ LearningDecision = Literal["discard", "history_only", "boot_memory", "durable_me
 LEARNING_STATUSES = ("pending", "applied", "discarded", "review_required")
 LearningStatus = Literal["pending", "applied", "discarded", "review_required"]
 
+LEARNING_REVIEW_BUCKETS = ("suggested", "review_required", "approved_promoted", "rejected")
+LearningReviewBucket = Literal["suggested", "review_required", "approved_promoted", "rejected"]
+
+LEARNING_DECISION_LANES = ("auto_reject", "auto_draft", "auto_suggest", "review_required", "auto_promote")
+LearningDecisionLane = Literal["auto_reject", "auto_draft", "auto_suggest", "review_required", "auto_promote"]
+
+LEARNING_RISK_LEVELS = ("low", "medium", "high")
+LearningRiskLevel = Literal["low", "medium", "high"]
+
+LearningProposalSurface = Literal["memory", "skill", "history", "rejection", "review"]
+LearningOutcomeSurface = Literal["pending", "memory", "skill", "history", "rejection", "review"]
+
+
+class LearningSourceSummary(BaseModel):
+    kind: str
+    label: str
+    detail: str | None = None
+
+
+class LearningProposalSummary(BaseModel):
+    target_kind: LearningDecision
+    target_label: str
+    surface: LearningProposalSurface
+    scope_label: str
+    content_summary: str
+    trust_label: str | None = None
+
+
+class LearningOutcomeSummary(BaseModel):
+    target_kind: LearningDecision | None = None
+    target_label: str
+    surface: LearningOutcomeSurface
+    scope_label: str | None = None
+
+
+class LearningRiskSummary(BaseModel):
+    level: LearningRiskLevel
+    reasons: list[str] = Field(default_factory=list)
+
 
 class LearningEventSummary(BaseModel):
     learning_event_id: str
@@ -39,6 +78,14 @@ class LearningEventSummary(BaseModel):
     promoted_skill_id: str | None = None
     human_override: bool = False
     decision_note: str | None = None
+    review_bucket: LearningReviewBucket
+    review_bucket_label: str
+    suggested_lane: LearningDecisionLane
+    suggested_lane_label: str
+    source: LearningSourceSummary
+    proposal: LearningProposalSummary
+    outcome: LearningOutcomeSummary
+    risk: LearningRiskSummary
     created_at: datetime
     decided_at: datetime | None = None
 
