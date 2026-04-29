@@ -1873,6 +1873,11 @@ export type AuditHistoryTargetSummary = {
   secondary?: string | null;
 };
 
+export type AuditHistoryCorrelationSummary = {
+  label: string;
+  value: string;
+};
+
 export type AuditHistoryRow = {
   eventId: string;
   createdAt: string;
@@ -1885,6 +1890,7 @@ export type AuditHistoryRow = {
   actor: AuditHistoryActorSummary;
   target: AuditHistoryTargetSummary;
   summary: string;
+  correlation?: AuditHistoryCorrelationSummary | null;
   detailAvailable: boolean;
 };
 
@@ -1946,6 +1952,7 @@ export type AuditHistoryDetailResponse = {
   target: AuditHistoryTargetSummary;
   summary: string;
   outcome: string;
+  correlation?: AuditHistoryCorrelationSummary | null;
   changeContext: Array<{ label: string; value: string }>;
   changeContextUnavailable: boolean;
   rawMetadata: Record<string, unknown>;

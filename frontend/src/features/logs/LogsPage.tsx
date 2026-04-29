@@ -1,5 +1,5 @@
-import { type FormEvent, useEffect, useMemo, useState } from "react";
-import { Link, useSearchParams } from "react-router-dom";
+import { type FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import { Link, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 
 import {
   fetchAuditHistory,
@@ -35,6 +35,8 @@ const EXPORT_DEFAULT_LIMIT = 250;
 const HISTORY_WINDOWS: AuditHistoryWindow[] = ["24h", "7d", "30d", "all"];
 const EXPORT_FORMATS: AuditExportFormat[] = ["json", "csv"];
 const STATUS_OPTIONS: AuditHistoryStatus[] = ["ok", "warning", "failed"];
+const AUDIT_HISTORY_HASH = "#audit-history";
+const AUDIT_EXPORT_HASH = "#audit-export";
 
 function stringifyValue(value: unknown): string {
   if (value === null || value === undefined || value === "") {
@@ -102,6 +104,7 @@ function buildAuditHashPath(
     companyId,
     window,
     action,
+    actor,
     status,
     eventId,
     targetType,
@@ -111,6 +114,7 @@ function buildAuditHashPath(
     companyId: string | null;
     window: AuditHistoryWindow;
     action?: string | null;
+    actor?: string | null;
     status?: AuditHistoryStatus | null;
     eventId?: string | null;
     targetType?: string | null;
@@ -122,6 +126,7 @@ function buildAuditHashPath(
     companyId,
     auditWindow: window,
     auditAction: action,
+    auditActor: actor,
     auditStatus: status,
     auditEvent: eventId,
     auditTargetType: targetType,
@@ -145,7 +150,9 @@ function scopeLabel(instanceName: string | null, window: AuditHistoryWindow, act
 }
 
 export function LogsPage() {
-  const [searchParams, setSearchParams] = useSearchParams();
+  const location = useLocation();
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { session, sessionReady } = useAppSession();
   const instanceId = getInstanceIdFromSearchParams(searchParams);
   const companyId = normalizedParam(searchParams, "companyId");
@@ -172,8 +179,19 @@ export function LogsPage() {
   const [exportState, setExportState] = useState<LoadState>("idle");
   const [exportError, setExportError] = useState<string | null>(null);
   const [exportResult, setExportResult] = useState<AuditExportResult | null>(null);
+  const auditHistoryRef = useRef<HTMLElement | null>(null);
+  const auditExportRef = useRef<HTMLElement | null>(null);
   const canReadAudit = sessionReady && sessionHasAnyInstancePermission(session, "audit.read");
   const canGenerateExport = canReadAudit && session?.read_only !== true;
+
+  const updateRouteSearch = (nextSearchParams: URLSearchParams) => {
+    const search = nextSearchParams.toString();
+    navigate({
+      pathname: location.pathname,
+      search: search ? `?${search}` : "",
+      hash: location.hash,
+    });
+  };
 
   const onInstanceChange = (nextInstanceId: string | null) => {
     const nextSearchParams = new URLSearchParams(searchParams);
@@ -182,7 +200,7 @@ export function LogsPage() {
     } else {
       nextSearchParams.delete("instanceId");
     }
-    setSearchParams(nextSearchParams);
+    updateRouteSearch(nextSearchParams);
   };
 
   const updateAuditParam = (key: string, value: string | null) => {
@@ -195,8 +213,23 @@ export function LogsPage() {
     if (key !== "auditEvent") {
       nextSearchParams.delete("auditEvent");
     }
-    setSearchParams(nextSearchParams);
+    updateRouteSearch(nextSearchParams);
   };
+
+  useEffect(() => {
+    const target = location.hash === AUDIT_HISTORY_HASH
+      ? auditHistoryRef.current
+      : location.hash === AUDIT_EXPORT_HASH
+        ? auditExportRef.current
+        : null;
+    if (!target) {
+      return;
+    }
+    if (typeof target.scrollIntoView === "function") {
+      target.scrollIntoView({ block: "start" });
+    }
+    target.focus();
+  }, [location.hash]);
 
   useEffect(() => {
     let mounted = true;
@@ -321,14 +354,20 @@ export function LogsPage() {
     companyId,
     window: auditWindow,
     action: auditAction,
+    actor: auditActor,
     status: auditStatus,
+    targetType: auditTargetType,
+    targetId: auditTargetId,
   });
   const historyPath = buildAuditHashPath("audit-history", {
     instanceId,
     companyId,
     window: auditWindow,
     action: auditAction,
+    actor: auditActor,
     status: auditStatus,
+    targetType: auditTargetType,
+    targetId: auditTargetId,
   });
 
   const handleExport = async (event: FormEvent<HTMLFormElement>) => {
@@ -380,6 +419,7 @@ export function LogsPage() {
         companyId,
         window: "all",
         action: "audit_export_generated",
+        actor: auditActor,
         targetType: "audit_export",
         targetId: exportResult.exportId,
       })
@@ -544,7 +584,12 @@ export function LogsPage() {
         </>
       ) : null}
 
-      <article id="audit-export" className="fg-card">
+      <article
+        id="audit-export"
+        ref={auditExportRef}
+        tabIndex={-1}
+        className={`fg-card${location.hash === AUDIT_EXPORT_HASH ? " is-anchor-target" : ""}`}
+      >
         <div className="fg-panel-heading">
           <div>
             <h3>Audit export</h3>
@@ -607,11 +652,16 @@ export function LogsPage() {
         ) : null}
       </article>
 
-      <article id="audit-history" className="fg-card">
+      <article
+        id="audit-history"
+        ref={auditHistoryRef}
+        tabIndex={-1}
+        className={`fg-card${location.hash === AUDIT_HISTORY_HASH ? " is-anchor-target" : ""}`}
+      >
         <div className="fg-panel-heading">
           <div>
             <h3>Audit history</h3>
-            <p className="fg-muted">Audit history and detail require a standard operator or admin session. Viewer sessions stay on the logs overview only.</p>
+            <p className="fg-muted">Use this as a focused evidence search surface. Filters stay URL-backed, detail stays separate, and raw payloads remain collapsible.</p>
           </div>
           <Link className="fg-nav-link" to={exportPath}>Open Audit Export</Link>
         </div>
@@ -645,15 +695,23 @@ export function LogsPage() {
                 </select>
               </label>
               <label>
-                Status
+                Outcome
                 <select value={auditStatus ?? ""} onChange={(event) => updateAuditParam("auditStatus", event.target.value || null)}>
-                  <option value="">Any status</option>
+                  <option value="">Any outcome</option>
                   {STATUS_OPTIONS.map((status) => <option key={status} value={status}>{optionLabel(status, history?.filters.available.statuses ?? [])}</option>)}
                 </select>
               </label>
               <label>
                 Actor
                 <input value={auditActor ?? ""} placeholder="Search actor" onChange={(event) => updateAuditParam("auditActor", event.target.value || null)} />
+              </label>
+              <label>
+                Target
+                <input
+                  value={auditTargetId ?? ""}
+                  placeholder="Search target or correlation"
+                  onChange={(event) => updateAuditParam("auditTargetId", event.target.value || null)}
+                />
               </label>
             </div>
 
@@ -662,6 +720,11 @@ export function LogsPage() {
 
             {history ? (
               <>
+                <p className="fg-muted fg-mt-sm">
+                  Showing {history.items.length} event{history.items.length === 1 ? "" : "s"} from {history.summary.totalMatchingFilters} matching result
+                  {history.summary.totalMatchingFilters === 1 ? "" : "s"} in {history.summary.totalInScope} in-scope event
+                  {history.summary.totalInScope === 1 ? "" : "s"}.
+                </p>
                 {history.items.length === 0 && history.summary.totalInScope === 0 ? (
                   <article className="fg-subcard fg-mt-md">
                     <h4>No audit evidence yet</h4>
@@ -679,24 +742,42 @@ export function LogsPage() {
                     <table className="fg-table">
                       <thead>
                         <tr>
-                          <th>Created</th>
-                          <th>Action</th>
-                          <th>Status</th>
                           <th>Actor</th>
+                          <th>Action</th>
                           <th>Target</th>
-                          <th>Summary</th>
-                          <th>Details</th>
+                          <th>Outcome</th>
+                          <th>Correlation</th>
+                          <th>Timestamp</th>
+                          <th>Detail</th>
                         </tr>
                       </thead>
                       <tbody>
                         {history.items.map((item) => (
                           <tr key={item.eventId}>
-                            <td>{item.createdAt}</td>
-                            <td>{item.actionLabel}</td>
+                            <td>
+                              {item.actor.label}
+                              {item.actor.secondary ? <div className="fg-muted">{item.actor.secondary}</div> : null}
+                            </td>
+                            <td>
+                              {item.actionLabel}
+                              <div className="fg-muted">{item.actionKey}</div>
+                            </td>
+                            <td>
+                              {item.target.label}
+                              <div className="fg-muted">{item.target.typeLabel}{item.target.secondary ? ` · ${item.target.secondary}` : ""}</div>
+                            </td>
                             <td><span className="fg-pill" data-tone={item.status === "ok" ? "success" : item.status === "warning" ? "warning" : "danger"}>{item.statusLabel}</span></td>
-                            <td>{item.actor.label}</td>
-                            <td>{item.target.label}</td>
-                            <td>{item.summary}</td>
+                            <td>
+                              {item.correlation ? (
+                                <>
+                                  {item.correlation.value}
+                                  <div className="fg-muted">{item.correlation.label}</div>
+                                </>
+                              ) : (
+                                <span className="fg-muted">n/a</span>
+                              )}
+                            </td>
+                            <td>{item.createdAt}</td>
                             <td>
                               <button className="fg-table-trigger" type="button" onClick={() => openDetail(item.eventId)} disabled={!item.detailAvailable}>
                                 Open detail
@@ -733,7 +814,32 @@ export function LogsPage() {
             description={detail.summary}
             status={detail.outcome}
             statusKey={detail.event.status === "ok" ? "ready" : detail.event.status === "warning" ? "degraded" : "blocked"}
+            sticky
           >
+            <h4>Short interpretation</h4>
+            <p>{detail.summary}</p>
+            <dl>
+              <div>
+                <dt>Actor</dt>
+                <dd>{detail.actor.label}{detail.actor.secondary ? ` · ${detail.actor.secondary}` : ""}</dd>
+              </div>
+              <div>
+                <dt>Target</dt>
+                <dd>{detail.target.label}{detail.target.secondary ? ` · ${detail.target.secondary}` : ""}</dd>
+              </div>
+              <div>
+                <dt>Outcome</dt>
+                <dd>{detail.outcome}</dd>
+              </div>
+              <div>
+                <dt>Correlation</dt>
+                <dd>{detail.correlation ? `${detail.correlation.label}: ${detail.correlation.value}` : "n/a"}</dd>
+              </div>
+              <div>
+                <dt>Timestamp</dt>
+                <dd>{detail.event.createdAt}</dd>
+              </div>
+            </dl>
             <h4>Change context</h4>
             <ul className="fg-list">
               {detail.changeContext.length === 0 ? <li>{detail.changeContextUnavailable ? "Change context unavailable." : "No change context recorded."}</li> : null}

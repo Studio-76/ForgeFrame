@@ -146,12 +146,13 @@ function createAuditHistoryResponse({
           actionLabel: "Execution replay admitted",
           status: "warning",
           statusLabel: "Needs attention",
-          actor: { type: "admin_user", id: "admin_1", label: "Ops Admin", secondary: "ops-admin" },
-          target: { type: "execution_run", typeLabel: "Execution run", id: "run_123", label: "run_123", secondary: "run_123" },
-          summary: "Replay admitted for run 'run_123'.",
-          detailAvailable: true,
-        },
-      ];
+        actor: { type: "admin_user", id: "admin_1", label: "Ops Admin", secondary: "ops-admin" },
+        target: { type: "execution_run", typeLabel: "Execution run", id: "run_123", label: "run_123", secondary: "run_123" },
+        summary: "Replay admitted for run 'run_123'.",
+        correlation: { label: "Request", value: "req-42" },
+        detailAvailable: true,
+      },
+    ];
 
   return {
     status: "ok",
@@ -226,6 +227,10 @@ function createAuditHistoryDetail(): AuditHistoryDetailResponse {
     },
     summary: "Replay admitted for run 'run_123'.",
     outcome: "Needs attention",
+    correlation: {
+      label: "Request",
+      value: "req-42",
+    },
     changeContext: [
       { label: "Reason", value: "Replay after provider credentials were rotated and verified." },
       { label: "Command", value: "cmd_123" },
@@ -271,6 +276,12 @@ async function flushEffects() {
   await act(async () => {
     await Promise.resolve();
   });
+}
+
+function setInputValue(element: HTMLInputElement, value: string) {
+  const descriptor = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value");
+  descriptor?.set?.call(element, value);
+  element.dispatchEvent(new Event("input", { bubbles: true }));
 }
 
 async function renderLogsPage(path = "/logs#audit-history") {
@@ -346,10 +357,12 @@ describe("Logs page audit history workflow", () => {
     expect(container.textContent).not.toContain("Subject: ops runtime_key key_alpha");
     expect(container.querySelector<HTMLSelectElement>("#audit-history select")?.value).toBe("30d");
     expect(container.querySelector<HTMLInputElement>('input[placeholder="Search actor"]')?.value).toBe("ops");
+    expect(container.querySelector<HTMLInputElement>('input[placeholder="Search target or correlation"]')?.value).toBe("key_alpha");
     expect(container.querySelector<HTMLButtonElement>("#audit-export button")?.disabled).toBe(false);
+    expect(container.querySelector<HTMLElement>("#audit-history")?.className).toContain("is-anchor-target");
 
     const exportLink = Array.from(container.querySelectorAll("a")).find((link) => link.textContent?.includes("Open Audit Export"));
-    expect(exportLink?.getAttribute("href")).toBe("/logs?instanceId=instance_alpha&auditWindow=30d&auditAction=runtime_key_issue&auditStatus=warning#audit-export");
+    expect(exportLink?.getAttribute("href")).toBe("/logs?instanceId=instance_alpha&auditWindow=30d&auditAction=runtime_key_issue&auditActor=ops&auditStatus=warning&auditTargetType=runtime_key&auditTargetId=key_alpha#audit-export");
   });
 
   it("keeps company-scoped execution audit links on the company filter path", async () => {
@@ -370,7 +383,7 @@ describe("Logs page audit history workflow", () => {
     expect(fetchAuditHistoryDetailMock).toHaveBeenCalledWith("audit_evt_execution_replay", "instance_alpha", undefined, "company_alpha");
 
     const exportLink = Array.from(container.querySelectorAll("a")).find((link) => link.textContent?.includes("Open Audit Export"));
-    expect(exportLink?.getAttribute("href")).toBe("/logs?instanceId=instance_alpha&companyId=company_alpha&auditWindow=all&auditAction=execution_run_replay&auditStatus=ok#audit-export");
+    expect(exportLink?.getAttribute("href")).toBe("/logs?instanceId=instance_alpha&companyId=company_alpha&auditWindow=all&auditAction=execution_run_replay&auditStatus=ok&auditTargetType=execution_run&auditTargetId=run_alpha#audit-export");
   });
 
   it("preserves instance scope on the in-page audit export CTA", async () => {
@@ -564,6 +577,29 @@ describe("Logs page audit history workflow", () => {
     expect(container.textContent).toContain("No results for the current filters.");
   });
 
+  it("re-queries audit history when the target filter changes", async () => {
+    await renderLogsPage("/logs?instanceId=instance_alpha#audit-history");
+
+    const targetInput = container.querySelector<HTMLInputElement>('input[placeholder="Search target or correlation"]');
+    expect(targetInput).not.toBeNull();
+
+    await act(async () => {
+      setInputValue(targetInput!, "req-42");
+    });
+    await flushEffects();
+
+    expect(fetchAuditHistoryMock).toHaveBeenLastCalledWith({
+      instanceId: "instance_alpha",
+      window: "7d",
+      action: null,
+      actor: null,
+      targetType: null,
+      targetId: "req-42",
+      status: null,
+      limit: 25,
+    });
+  });
+
   it("opens the detail panel without losing the table state", async () => {
     await renderLogsPage("/logs?instanceId=instance_alpha#audit-history");
 
@@ -576,6 +612,8 @@ describe("Logs page audit history workflow", () => {
     await flushEffects();
 
     expect(fetchAuditHistoryDetailMock).toHaveBeenCalledWith("audit_evt_1", "instance_alpha", undefined, null);
+    expect(container.textContent).toContain("Short interpretation");
+    expect(container.textContent).toContain("req-42");
     expect(container.textContent).toContain("Replay after provider credentials were rotated and verified.");
     expect(container.textContent).toContain("Raw metadata");
     expect(container.textContent).toContain("Open Provider Health & Runs");

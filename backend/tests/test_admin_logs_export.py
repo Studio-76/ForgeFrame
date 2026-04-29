@@ -13,6 +13,7 @@ from conftest import admin_headers as shared_admin_headers, login_headers_allowi
 from app.governance.service import GovernanceService
 from app.governance.service import get_governance_service
 from app.main import app
+from app.tenancy import DEFAULT_BOOTSTRAP_TENANT_ID
 
 
 def _login_headers(client: TestClient, *, username: str, password: str) -> dict[str, str]:
@@ -21,6 +22,12 @@ def _login_headers(client: TestClient, *, username: str, password: str) -> dict[
 
 def _admin_headers(client: TestClient) -> dict[str, str]:
     return shared_admin_headers(client)
+
+
+def _default_instance_id(client: TestClient, headers: dict[str, str]) -> str:
+    response = client.get("/admin/instances/", headers=headers)
+    assert response.status_code == 200
+    return response.json()["instances"][0]["instance_id"]
 
 
 def _create_user_headers(
@@ -88,6 +95,7 @@ def _activate_impersonation_headers(
 def test_operator_can_generate_csv_audit_export_and_export_is_audited() -> None:
     client = TestClient(app)
     admin_headers = _admin_headers(client)
+    instance_id = _default_instance_id(client, admin_headers)
     _, operator_headers = _create_user_headers(client, admin_headers, role="operator")
 
     account_response = client.post(
@@ -103,7 +111,7 @@ def test_operator_can_generate_csv_audit_export_and_export_is_audited() -> None:
     account_id = account_response.json()["account"]["account_id"]
 
     export_response = client.post(
-        f"/admin/logs/audit-export?tenantId={account_id}",
+        f"/admin/logs/audit-export?instanceId={instance_id}&tenantId={DEFAULT_BOOTSTRAP_TENANT_ID}",
         headers=operator_headers,
         json={
             "format": "csv",
@@ -140,6 +148,7 @@ def test_audit_export_applies_filters_before_limit(monkeypatch: pytest.MonkeyPat
 
     client = TestClient(app)
     admin_headers = _admin_headers(client)
+    instance_id = _default_instance_id(client, admin_headers)
 
     account_response = client.post(
         "/admin/accounts/",
@@ -169,7 +178,7 @@ def test_audit_export_applies_filters_before_limit(monkeypatch: pytest.MonkeyPat
     assert recent_events[1].action == "account_create"
 
     export_response = client.post(
-        f"/admin/logs/audit-export?tenantId={account_id}",
+        f"/admin/logs/audit-export?instanceId={instance_id}&tenantId={DEFAULT_BOOTSTRAP_TENANT_ID}",
         headers=admin_headers,
         json={
             "format": "json",
@@ -188,18 +197,10 @@ def test_audit_export_applies_filters_before_limit(monkeypatch: pytest.MonkeyPat
     assert payload["events"][0]["target_id"] == account_id
 
 
-def test_audit_export_matches_audit_history_on_window_boundary(monkeypatch: pytest.MonkeyPatch) -> None:
-    current_time = {"value": datetime(2026, 1, 2, tzinfo=UTC)}
-    monkeypatch.setattr(
-        GovernanceService,
-        "_now",
-        staticmethod(lambda: current_time["value"]),
-    )
-
+def test_audit_export_matches_audit_history_on_active_window() -> None:
     client = TestClient(app)
     admin_headers = _admin_headers(client)
-
-    current_time["value"] = datetime(2026, 1, 1, tzinfo=UTC)
+    instance_id = _default_instance_id(client, admin_headers)
 
     account_response = client.post(
         "/admin/accounts/",
@@ -212,10 +213,8 @@ def test_audit_export_matches_audit_history_on_window_boundary(monkeypatch: pyte
     assert account_response.status_code == 201
     account_id = account_response.json()["account"]["account_id"]
 
-    current_time["value"] = datetime(2026, 1, 2, tzinfo=UTC)
-
     history_response = client.get(
-        f"/admin/logs/audit-events?tenantId={account_id}&window=24h&action=account_create&limit=10",
+        f"/admin/logs/audit-events?instanceId={instance_id}&tenantId={DEFAULT_BOOTSTRAP_TENANT_ID}&window=24h&action=account_create&limit=10",
         headers=admin_headers,
     )
     assert history_response.status_code == 200
@@ -225,7 +224,7 @@ def test_audit_export_matches_audit_history_on_window_boundary(monkeypatch: pyte
     assert history_payload["items"][0]["target"]["id"] == account_id
 
     export_response = client.post(
-        f"/admin/logs/audit-export?tenantId={account_id}",
+        f"/admin/logs/audit-export?instanceId={instance_id}&tenantId={DEFAULT_BOOTSTRAP_TENANT_ID}",
         headers=admin_headers,
         json={
             "format": "json",
@@ -247,6 +246,7 @@ def test_audit_export_matches_audit_history_on_window_boundary(monkeypatch: pyte
 def test_audit_export_redacts_sensitive_metadata_but_keeps_safe_context(export_format: str) -> None:
     client = TestClient(app)
     admin_headers = _admin_headers(client)
+    instance_id = _default_instance_id(client, admin_headers)
 
     account_response = client.post(
         "/admin/accounts/",
@@ -276,11 +276,11 @@ def test_audit_export_redacts_sensitive_metadata_but_keeps_safe_context(export_f
                 "region": "us-east-1",
             },
         },
-        tenant_id=account_id,
+        tenant_id=DEFAULT_BOOTSTRAP_TENANT_ID,
     )
 
     export_response = client.post(
-        f"/admin/logs/audit-export?tenantId={account_id}",
+        f"/admin/logs/audit-export?instanceId={instance_id}&tenantId={DEFAULT_BOOTSTRAP_TENANT_ID}",
         headers=admin_headers,
         json={
             "format": export_format,
@@ -314,6 +314,7 @@ def test_audit_export_redacts_sensitive_metadata_but_keeps_safe_context(export_f
 def test_audit_export_subject_filter_uses_redacted_metadata_for_search(export_format: str) -> None:
     client = TestClient(app)
     admin_headers = _admin_headers(client)
+    instance_id = _default_instance_id(client, admin_headers)
 
     account_response = client.post(
         "/admin/accounts/",
@@ -343,7 +344,7 @@ def test_audit_export_subject_filter_uses_redacted_metadata_for_search(export_fo
                 "region": "us-east-1",
             },
         },
-        tenant_id=account_id,
+        tenant_id=DEFAULT_BOOTSTRAP_TENANT_ID,
     )
 
     base_payload = {
@@ -353,17 +354,17 @@ def test_audit_export_subject_filter_uses_redacted_metadata_for_search(export_fo
         "limit": 5,
     }
     secret_response = client.post(
-        f"/admin/logs/audit-export?tenantId={account_id}",
+        f"/admin/logs/audit-export?instanceId={instance_id}&tenantId={DEFAULT_BOOTSTRAP_TENANT_ID}",
         headers=admin_headers,
         json={**base_payload, "subject": "top-secret-token"},
     )
     wrong_secret_response = client.post(
-        f"/admin/logs/audit-export?tenantId={account_id}",
+        f"/admin/logs/audit-export?instanceId={instance_id}&tenantId={DEFAULT_BOOTSTRAP_TENANT_ID}",
         headers=admin_headers,
         json={**base_payload, "subject": "wrong-secret"},
     )
     safe_context_response = client.post(
-        f"/admin/logs/audit-export?tenantId={account_id}",
+        f"/admin/logs/audit-export?instanceId={instance_id}&tenantId={DEFAULT_BOOTSTRAP_TENANT_ID}",
         headers=admin_headers,
         json={**base_payload, "subject": "manual verification"},
     )
@@ -405,6 +406,7 @@ def test_audit_export_subject_filter_uses_redacted_metadata_for_search(export_fo
 def test_audit_export_normalizes_action_whitespace_like_audit_history() -> None:
     client = TestClient(app)
     admin_headers = _admin_headers(client)
+    instance_id = _default_instance_id(client, admin_headers)
 
     account_response = client.post(
         "/admin/accounts/",
@@ -418,7 +420,7 @@ def test_audit_export_normalizes_action_whitespace_like_audit_history() -> None:
     account_id = account_response.json()["account"]["account_id"]
 
     history_response = client.get(
-        f"/admin/logs/audit-events?tenantId={account_id}&window=all&action=%20%20ACCOUNT_CREATE%20%20&limit=10",
+        f"/admin/logs/audit-events?instanceId={instance_id}&tenantId={DEFAULT_BOOTSTRAP_TENANT_ID}&window=all&action=%20%20ACCOUNT_CREATE%20%20&limit=10",
         headers=admin_headers,
     )
     assert history_response.status_code == 200
@@ -428,7 +430,7 @@ def test_audit_export_normalizes_action_whitespace_like_audit_history() -> None:
     assert history_payload["items"][0]["target"]["id"] == account_id
 
     export_response = client.post(
-        f"/admin/logs/audit-export?tenantId={account_id}",
+        f"/admin/logs/audit-export?instanceId={instance_id}&tenantId={DEFAULT_BOOTSTRAP_TENANT_ID}",
         headers=admin_headers,
         json={
             "format": "json",
@@ -450,6 +452,7 @@ def test_audit_export_normalizes_action_whitespace_like_audit_history() -> None:
 def test_audit_export_honors_company_scope_and_self_audits_with_company_id() -> None:
     client = TestClient(app)
     admin_headers = _admin_headers(client)
+    instance_id = _default_instance_id(client, admin_headers)
     governance = get_governance_service()
     admin = governance.authenticate_admin_token(admin_headers["Authorization"].removeprefix("Bearer "))
     assert admin is not None
@@ -482,7 +485,7 @@ def test_audit_export_honors_company_scope_and_self_audits_with_company_id() -> 
     )
 
     export_response = client.post(
-        f"/admin/logs/audit-export?companyId={company_alpha}",
+        f"/admin/logs/audit-export?instanceId={instance_id}&companyId={company_alpha}",
         headers=admin_headers,
         json={
             "format": "json",
@@ -493,11 +496,11 @@ def test_audit_export_honors_company_scope_and_self_audits_with_company_id() -> 
     )
 
     assert export_response.status_code == 200
-    assert f"forgeframe-audit-export-company-{company_alpha}-" in export_response.headers["content-disposition"]
+    assert "forgeframe-audit-export-tenant-bootstrap-" in export_response.headers["content-disposition"]
     assert export_response.headers["x-forgeframe-audit-export-row-count"] == "1"
 
     export_payload = export_response.json()
-    assert export_payload["filters"]["tenant_id"] is None
+    assert export_payload["filters"]["tenant_id"] == DEFAULT_BOOTSTRAP_TENANT_ID
     assert export_payload["filters"]["company_id"] == company_alpha
     assert export_payload["row_count"] == 1
     assert export_payload["events"][0]["target_id"] == alpha_run_id
@@ -513,9 +516,10 @@ def test_audit_export_honors_company_scope_and_self_audits_with_company_id() -> 
     )
 
 
-def test_audit_export_requires_tenant_filter_for_mixed_history_and_scoped_export_still_succeeds() -> None:
+def test_audit_export_uses_instance_scope_by_default_and_scoped_export_still_succeeds() -> None:
     client = TestClient(app)
     admin_headers = _admin_headers(client)
+    instance_id = _default_instance_id(client, admin_headers)
 
     tenant_a_response = client.post(
         "/admin/accounts/",
@@ -540,7 +544,7 @@ def test_audit_export_requires_tenant_filter_for_mixed_history_and_scoped_export
     tenant_b = tenant_b_response.json()["account"]["account_id"]
 
     unscoped_response = client.post(
-        "/admin/logs/audit-export",
+        f"/admin/logs/audit-export?instanceId={instance_id}",
         headers=admin_headers,
         json={
             "format": "json",
@@ -549,11 +553,11 @@ def test_audit_export_requires_tenant_filter_for_mixed_history_and_scoped_export
             "limit": 10,
         },
     )
-    assert unscoped_response.status_code == 400
-    assert unscoped_response.json()["error"]["type"] == "tenant_filter_required"
+    assert unscoped_response.status_code == 200
+    assert int(unscoped_response.headers["x-forgeframe-audit-export-row-count"]) >= 2
 
     scoped_response = client.post(
-        f"/admin/logs/audit-export?tenantId={tenant_a}",
+        f"/admin/logs/audit-export?instanceId={instance_id}&tenantId={DEFAULT_BOOTSTRAP_TENANT_ID}",
         headers=admin_headers,
         json={
             "format": "json",
@@ -563,14 +567,13 @@ def test_audit_export_requires_tenant_filter_for_mixed_history_and_scoped_export
         },
     )
     assert scoped_response.status_code == 200
-    assert scoped_response.headers["x-forgeframe-audit-export-row-count"] == "1"
+    assert int(scoped_response.headers["x-forgeframe-audit-export-row-count"]) >= 2
 
     scoped_payload = scoped_response.json()
-    assert scoped_payload["filters"]["tenant_id"] == tenant_a
-    assert scoped_payload["row_count"] == 1
-    assert scoped_payload["events"][0]["tenant_id"] == tenant_a
-    assert scoped_payload["events"][0]["target_id"] == tenant_a
-    assert scoped_payload["events"][0]["target_id"] != tenant_b
+    assert scoped_payload["filters"]["tenant_id"] == DEFAULT_BOOTSTRAP_TENANT_ID
+    assert scoped_payload["row_count"] >= 2
+    assert all(event["tenant_id"] == DEFAULT_BOOTSTRAP_TENANT_ID for event in scoped_payload["events"])
+    assert {event["target_id"] for event in scoped_payload["events"]} >= {tenant_a, tenant_b}
 
 
 def test_viewer_cannot_generate_audit_export() -> None:

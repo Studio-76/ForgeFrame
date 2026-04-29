@@ -22,6 +22,31 @@ def _admin_login(client: TestClient) -> tuple[dict[str, str], str]:
     return headers, headers["Authorization"].removeprefix("Bearer ")
 
 
+def _default_instance_id(client: TestClient, headers: dict[str, str]) -> str:
+    response = client.get("/admin/instances/", headers=headers)
+    assert response.status_code == 200
+    return response.json()["instances"][0]["instance_id"]
+
+
+def _latest_audit_event_id(
+    client: TestClient,
+    headers: dict[str, str],
+    *,
+    instance_id: str,
+    tenant_id: str = DEFAULT_BOOTSTRAP_TENANT_ID,
+    company_id: str | None = None,
+) -> str:
+    company_query = f"&companyId={company_id}" if company_id else ""
+    history = client.get(
+        f"/admin/logs/audit-events?instanceId={instance_id}&tenantId={tenant_id}&window=all&limit=1{company_query}",
+        headers=headers,
+    )
+    assert history.status_code == 200
+    payload = history.json()
+    assert payload["items"]
+    return payload["items"][0]["eventId"]
+
+
 def _issue_runtime_key(client: TestClient, headers: dict[str, str], *, label: str) -> tuple[str, str]:
     account_response = client.post("/admin/accounts/", headers=headers, json={"label": label})
     assert account_response.status_code == 201
@@ -115,23 +140,29 @@ def test_logs_overview_returns_normalized_audit_preview_and_retention_summary() 
     _clear_dependency_caches()
     client = TestClient(app)
     headers, _token = _admin_login(client)
-    tenant_id, _key_id = _issue_runtime_key(client, headers, label="Preview Tenant")
+    instance_id = _default_instance_id(client, headers)
+    _account_id, _key_id = _issue_runtime_key(client, headers, label="Preview Tenant")
     governance = get_governance_service()
 
-    logs = client.get(f"/admin/logs/?tenantId={tenant_id}", headers=headers)
+    logs = client.get(
+        f"/admin/logs/?instanceId={instance_id}&tenantId={DEFAULT_BOOTSTRAP_TENANT_ID}",
+        headers=headers,
+    )
 
     assert logs.status_code == 200
     payload = logs.json()
     assert payload["audit_preview"]
-    assert payload["audit_preview"][0]["eventId"] == governance.list_audit_events(limit=1, tenant_id=tenant_id)[0].event_id
+    assert payload["audit_preview"][0]["eventId"] == governance.list_audit_events(limit=1, tenant_id=DEFAULT_BOOTSTRAP_TENANT_ID)[0].event_id
     assert payload["audit_retention"]["eventLimit"] >= 100
     assert "latestEventAt" in payload["audit_retention"]
+    assert "correlation" in payload["audit_preview"][0]
 
 
 def test_logs_overview_does_not_expose_raw_audit_events_or_metadata() -> None:
     _clear_dependency_caches()
     client = TestClient(app)
     headers, token = _admin_login(client)
+    instance_id = _default_instance_id(client, headers)
     governance = get_governance_service()
     admin = governance.authenticate_admin_token(token)
 
@@ -150,7 +181,7 @@ def test_logs_overview_does_not_expose_raw_audit_events_or_metadata() -> None:
     )
 
     logs = client.get(
-        f"/admin/logs/?tenantId={DEFAULT_BOOTSTRAP_TENANT_ID}",
+        f"/admin/logs/?instanceId={instance_id}&tenantId={DEFAULT_BOOTSTRAP_TENANT_ID}",
         headers=headers,
     )
 
@@ -162,19 +193,20 @@ def test_logs_overview_does_not_expose_raw_audit_events_or_metadata() -> None:
     assert "top-secret-token" not in logs.text
 
 
-def test_audit_history_requires_tenant_filter_and_scopes_with_cursor() -> None:
+def test_audit_history_uses_instance_scope_and_supports_cursor() -> None:
     _clear_dependency_caches()
     client = TestClient(app)
     headers, _token = _admin_login(client)
-    tenant_a, _key_a = _issue_runtime_key(client, headers, label="Tenant A")
-    tenant_b, _key_b = _issue_runtime_key(client, headers, label="Tenant B")
+    instance_id = _default_instance_id(client, headers)
+    _account_a, _key_a = _issue_runtime_key(client, headers, label="Tenant A")
+    _account_b, _key_b = _issue_runtime_key(client, headers, label="Tenant B")
 
-    unscoped = client.get("/admin/logs/audit-events?window=all", headers=headers)
-    assert unscoped.status_code == 400
-    assert unscoped.json()["error"]["type"] == "tenant_filter_required"
+    unscoped = client.get(f"/admin/logs/audit-events?instanceId={instance_id}&window=all", headers=headers)
+    assert unscoped.status_code == 200
+    assert unscoped.json()["items"]
 
     first_page = client.get(
-        f"/admin/logs/audit-events?tenantId={tenant_a}&window=all&limit=1",
+        f"/admin/logs/audit-events?instanceId={instance_id}&tenantId={DEFAULT_BOOTSTRAP_TENANT_ID}&window=all&limit=1",
         headers=headers,
     )
     assert first_page.status_code == 200
@@ -185,10 +217,10 @@ def test_audit_history_requires_tenant_filter_and_scopes_with_cursor() -> None:
     assert first_payload["page"]["nextCursor"]
     assert first_payload["retention"]["oldestAvailableAt"] is not None
     assert first_payload["summary"]["totalInScope"] >= 1
-    assert all(item["tenantId"] == tenant_a for item in first_payload["items"])
+    assert all(item["tenantId"] == DEFAULT_BOOTSTRAP_TENANT_ID for item in first_payload["items"])
 
     second_page = client.get(
-        f"/admin/logs/audit-events?tenantId={tenant_a}&window=all&limit=1&cursor={first_payload['page']['nextCursor']}",
+        f"/admin/logs/audit-events?instanceId={instance_id}&tenantId={DEFAULT_BOOTSTRAP_TENANT_ID}&window=all&limit=1&cursor={first_payload['page']['nextCursor']}",
         headers=headers,
     )
     assert second_page.status_code == 200
@@ -197,43 +229,48 @@ def test_audit_history_requires_tenant_filter_and_scopes_with_cursor() -> None:
     assert second_payload["items"][0]["eventId"] != first_payload["items"][0]["eventId"]
 
     bad_cursor = client.get(
-        f"/admin/logs/audit-events?tenantId={tenant_a}&window=all&cursor=not-a-cursor",
+        f"/admin/logs/audit-events?instanceId={instance_id}&tenantId={DEFAULT_BOOTSTRAP_TENANT_ID}&window=all&cursor=not-a-cursor",
         headers=headers,
     )
     assert bad_cursor.status_code == 400
     assert bad_cursor.json()["error"]["type"] == "invalid_audit_cursor"
 
 
-def test_audit_history_detail_requires_tenant_filter_for_mixed_history() -> None:
+def test_audit_history_detail_supports_instance_scoped_lookup_with_optional_tenant_filter() -> None:
     _clear_dependency_caches()
     client = TestClient(app)
     headers, _token = _admin_login(client)
-    tenant_a, _key_a = _issue_runtime_key(client, headers, label="Tenant A Detail")
-    _tenant_b, _key_b = _issue_runtime_key(client, headers, label="Tenant B Detail")
-    event = get_governance_service().list_audit_events(limit=1, tenant_id=tenant_a)[0]
+    instance_id = _default_instance_id(client, headers)
+    _account_a, _key_a = _issue_runtime_key(client, headers, label="Tenant A Detail")
+    _account_b, _key_b = _issue_runtime_key(client, headers, label="Tenant B Detail")
+    event_id = _latest_audit_event_id(client, headers, instance_id=instance_id)
 
-    unscoped = client.get(f"/admin/logs/audit-events/{event.event_id}", headers=headers)
-    assert unscoped.status_code == 400
-    assert unscoped.json()["error"]["type"] == "tenant_filter_required"
+    unscoped = client.get(
+        f"/admin/logs/audit-events/{event_id}?instanceId={instance_id}",
+        headers=headers,
+    )
+    assert unscoped.status_code == 200
+    assert unscoped.json()["event"]["eventId"] == event_id
 
     scoped = client.get(
-        f"/admin/logs/audit-events/{event.event_id}?tenantId={tenant_a}",
+        f"/admin/logs/audit-events/{event_id}?instanceId={instance_id}&tenantId={DEFAULT_BOOTSTRAP_TENANT_ID}",
         headers=headers,
     )
     assert scoped.status_code == 200
-    assert scoped.json()["event"]["eventId"] == event.event_id
+    assert scoped.json()["event"]["eventId"] == event_id
 
 
 def test_viewer_cannot_access_audit_history_or_detail() -> None:
     _clear_dependency_caches()
     client = TestClient(app)
     admin_headers, _token = _admin_login(client)
-    tenant_id, _key_id = _issue_runtime_key(client, admin_headers, label="Viewer Restricted Tenant")
-    event = get_governance_service().list_audit_events(limit=1, tenant_id=tenant_id)[0]
+    instance_id = _default_instance_id(client, admin_headers)
+    _account_id, _key_id = _issue_runtime_key(client, admin_headers, label="Viewer Restricted Tenant")
+    event_id = _latest_audit_event_id(client, admin_headers, instance_id=instance_id)
     _viewer_user, viewer_headers = _create_user_headers(client, admin_headers, role="viewer")
 
     history = client.get(
-        f"/admin/logs/audit-events?tenantId={tenant_id}&window=all",
+        f"/admin/logs/audit-events?instanceId={instance_id}&tenantId={DEFAULT_BOOTSTRAP_TENANT_ID}&window=all",
         headers=viewer_headers,
     )
     assert history.status_code == 403
@@ -241,7 +278,7 @@ def test_viewer_cannot_access_audit_history_or_detail() -> None:
     assert history.json()["error"]["message"] == "Operator role required."
 
     detail = client.get(
-        f"/admin/logs/audit-events/{event.event_id}?tenantId={tenant_id}",
+        f"/admin/logs/audit-events/{event_id}?instanceId={instance_id}&tenantId={DEFAULT_BOOTSTRAP_TENANT_ID}",
         headers=viewer_headers,
     )
     assert detail.status_code == 403
@@ -253,18 +290,19 @@ def test_audit_history_requires_admin_auth_with_normalized_error_envelope() -> N
     _clear_dependency_caches()
     client = TestClient(app)
     admin_headers, _token = _admin_login(client)
-    tenant_id, _key_id = _issue_runtime_key(client, admin_headers, label="Unauthenticated Audit Tenant")
-    event = get_governance_service().list_audit_events(limit=1, tenant_id=tenant_id)[0]
+    instance_id = _default_instance_id(client, admin_headers)
+    _account_id, _key_id = _issue_runtime_key(client, admin_headers, label="Unauthenticated Audit Tenant")
+    event_id = _latest_audit_event_id(client, admin_headers, instance_id=instance_id)
 
     history = client.get(
-        f"/admin/logs/audit-events?tenantId={tenant_id}&window=all",
+        f"/admin/logs/audit-events?instanceId={instance_id}&tenantId={DEFAULT_BOOTSTRAP_TENANT_ID}&window=all",
     )
     assert history.status_code == 401
     assert history.json()["error"]["type"] == "admin_auth_required"
     assert history.json()["error"]["message"] == "Admin authentication required."
 
     detail = client.get(
-        f"/admin/logs/audit-events/{event.event_id}?tenantId={tenant_id}",
+        f"/admin/logs/audit-events/{event_id}?instanceId={instance_id}&tenantId={DEFAULT_BOOTSTRAP_TENANT_ID}",
     )
     assert detail.status_code == 401
     assert detail.json()["error"]["type"] == "admin_auth_required"
@@ -275,8 +313,9 @@ def test_read_only_impersonation_can_access_audit_history_and_detail() -> None:
     _clear_dependency_caches()
     client = TestClient(app)
     admin_headers, _token = _admin_login(client)
-    tenant_id, _key_id = _issue_runtime_key(client, admin_headers, label="Impersonation Audit Tenant")
-    event = get_governance_service().list_audit_events(limit=1, tenant_id=tenant_id)[0]
+    instance_id = _default_instance_id(client, admin_headers)
+    _account_id, _key_id = _issue_runtime_key(client, admin_headers, label="Impersonation Audit Tenant")
+    event_id = _latest_audit_event_id(client, admin_headers, instance_id=instance_id)
     target_user, _target_headers = _create_user_headers(client, admin_headers, role="operator")
     _approver_user, approver_headers = _create_user_headers(client, admin_headers, role="admin")
     impersonation_headers = _activate_impersonation_headers(
@@ -287,25 +326,26 @@ def test_read_only_impersonation_can_access_audit_history_and_detail() -> None:
     )
 
     history = client.get(
-        f"/admin/logs/audit-events?tenantId={tenant_id}&window=all",
+        f"/admin/logs/audit-events?instanceId={instance_id}&tenantId={DEFAULT_BOOTSTRAP_TENANT_ID}&window=all",
         headers=impersonation_headers,
     )
     assert history.status_code == 200
     assert history.json()["items"]
-    assert history.json()["items"][0]["eventId"] == event.event_id
+    assert any(item["eventId"] == event_id for item in history.json()["items"])
 
     detail = client.get(
-        f"/admin/logs/audit-events/{event.event_id}?tenantId={tenant_id}",
+        f"/admin/logs/audit-events/{event_id}?instanceId={instance_id}&tenantId={DEFAULT_BOOTSTRAP_TENANT_ID}",
         headers=impersonation_headers,
     )
     assert detail.status_code == 200
-    assert detail.json()["event"]["eventId"] == event.event_id
+    assert detail.json()["event"]["eventId"] == event_id
 
 
 def test_audit_history_detail_redacts_sensitive_metadata_and_links_related_route() -> None:
     _clear_dependency_caches()
     client = TestClient(app)
     headers, token = _admin_login(client)
+    instance_id = _default_instance_id(client, headers)
     governance = get_governance_service()
     admin = governance.authenticate_admin_token(token)
 
@@ -325,7 +365,7 @@ def test_audit_history_detail_redacts_sensitive_metadata_and_links_related_route
     event = governance.list_audit_events(limit=1, tenant_id=DEFAULT_BOOTSTRAP_TENANT_ID)[0]
 
     detail = client.get(
-        f"/admin/logs/audit-events/{event.event_id}?tenantId={DEFAULT_BOOTSTRAP_TENANT_ID}",
+        f"/admin/logs/audit-events/{event.event_id}?instanceId={instance_id}&tenantId={DEFAULT_BOOTSTRAP_TENANT_ID}",
         headers=headers,
     )
 
@@ -337,3 +377,38 @@ def test_audit_history_detail_redacts_sensitive_metadata_and_links_related_route
     assert any(item["path"] == "access_token" for item in payload["redactions"])
     assert any(item["label"] == "Reason" and item["value"] == "manual verification" for item in payload["changeContext"])
     assert any(link["href"] == "/settings" for link in payload["relatedLinks"])
+    assert payload["correlation"] is None
+
+
+def test_audit_history_target_search_matches_target_labels_and_returns_correlation_summary() -> None:
+    _clear_dependency_caches()
+    client = TestClient(app)
+    headers, token = _admin_login(client)
+    instance_id = _default_instance_id(client, headers)
+    governance = get_governance_service()
+    admin = governance.authenticate_admin_token(token)
+
+    governance.record_admin_audit_event(
+        actor=admin,
+        action="setting_override_upsert",
+        target_type="setting",
+        target_id="app_name",
+        status="warning",
+        details="Setting 'app_name' updated after request review.",
+        metadata={
+            "request_id": "req-audit-42",
+            "reason": "manual verification",
+        },
+        tenant_id=DEFAULT_BOOTSTRAP_TENANT_ID,
+    )
+
+    history = client.get(
+        f"/admin/logs/audit-events?instanceId={instance_id}&tenantId={DEFAULT_BOOTSTRAP_TENANT_ID}&window=all&targetId=app%20name",
+        headers=headers,
+    )
+
+    assert history.status_code == 200
+    payload = history.json()
+    assert payload["items"]
+    assert payload["items"][0]["target"]["label"] == "App Name"
+    assert payload["items"][0]["correlation"] == {"label": "Request", "value": "req-audit-42"}

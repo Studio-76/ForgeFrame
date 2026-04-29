@@ -682,6 +682,11 @@ a {
   padding: var(--fg-space-4);
 }
 
+.fg-card.is-anchor-target {
+  border-color: var(--fg-color-border-strong);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--fg-color-accent) 18%, transparent), var(--fg-shadow-panel);
+}
+
 .fg-muted {
   color: var(--fg-color-text-secondary);
 }

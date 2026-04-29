@@ -150,9 +150,11 @@ _CHANGE_CONTEXT_FIELD_LABELS = {
     "rotated_to": "Rotated to",
     "row_count": "Export rows",
     "scopes": "Scopes",
+    "session_id": "Session",
     "status": "Status",
     "target_role": "Target role",
     "target_user_id": "Target user",
+    "trace_id": "Trace",
 }
 
 _SENSITIVE_METADATA_FRAGMENTS = (
@@ -195,6 +197,15 @@ _DETAIL_METADATA_KEY_ORDER = (
     "filename",
     "format",
     "row_count",
+)
+
+_CORRELATION_METADATA_KEY_ORDER = (
+    "request_id",
+    "command_id",
+    "session_id",
+    "trace_id",
+    "approval_reference",
+    "attempt_id",
 )
 
 
@@ -412,8 +423,8 @@ def _resolve_scope_from_instance(
     company_id: str | None,
 ) -> tuple[str, str | None]:
     resolved_tenant_id = (tenant_id or "").strip() or instance.tenant_id
-    resolved_company_id = (company_id or "").strip() or instance.company_id
-    return resolved_tenant_id, (resolved_company_id or None)
+    resolved_company_id = (company_id or "").strip() or None
+    return resolved_tenant_id, resolved_company_id
 
 
 def _actor_summary(
@@ -501,6 +512,9 @@ def _target_summary(
         if setting is not None:
             label = _humanize_key(setting.key)
             secondary = setting.key
+        else:
+            label = _humanize_key(event.target_id)
+            secondary = event.target_id
     elif event.target_type in {"execution_run", "execution_approval", "elevated_access_request", "admin_session", "audit_export"} and event.target_id:
         secondary = event.target_id
 
@@ -518,6 +532,7 @@ def _normalize_audit_row(
     *,
     indexes: dict[str, dict[str, Any]],
 ) -> dict[str, Any]:
+    correlation = _correlation_summary(event)
     return {
         "eventId": event.event_id,
         "createdAt": event.created_at,
@@ -530,6 +545,7 @@ def _normalize_audit_row(
         "actor": _actor_summary(event, indexes=indexes),
         "target": _target_summary(event, indexes=indexes),
         "summary": event.details,
+        "correlation": correlation,
         "detailAvailable": True,
     }
 
@@ -549,10 +565,26 @@ def _matches_actor(event: AuditEventRecord, *, indexes: dict[str, dict[str, Any]
     return actor_filter in haystack
 
 
-def _matches_target_id(event: AuditEventRecord, *, target_id_filter: str | None) -> bool:
-    if target_id_filter is None:
+def _matches_target(
+    event: AuditEventRecord,
+    *,
+    indexes: dict[str, dict[str, Any]],
+    target_filter: str | None,
+) -> bool:
+    if target_filter is None:
         return True
-    return target_id_filter in _safe_str(event.target_id).lower()
+    target = _target_summary(event, indexes=indexes)
+    correlation = _correlation_summary(event)
+    haystack = " ".join(
+        [
+            _safe_str(target.get("label")),
+            _safe_str(target.get("secondary")),
+            _safe_str(target.get("id")),
+            event.target_type,
+            correlation["value"] if correlation is not None else "",
+        ]
+    ).lower()
+    return target_filter in haystack
 
 
 def _filter_audit_history_events(
@@ -576,7 +608,7 @@ def _filter_audit_history_events(
     if target_type is not None:
         filtered = [event for event in filtered if event.target_type.lower() == target_type]
     filtered = [event for event in filtered if _matches_actor(event, indexes=indexes, actor_filter=actor)]
-    filtered = [event for event in filtered if _matches_target_id(event, target_id_filter=target_id)]
+    filtered = [event for event in filtered if _matches_target(event, indexes=indexes, target_filter=target_id)]
     return window_scoped, filtered
 
 
@@ -644,6 +676,19 @@ def _build_change_context(
     return entries, len(entries) == 0
 
 
+def _correlation_summary(event: AuditEventRecord) -> dict[str, str] | None:
+    metadata = dict(event.metadata)
+    for key in _CORRELATION_METADATA_KEY_ORDER:
+        value = metadata.get(key)
+        if value in (None, "", [], {}):
+            continue
+        return {
+            "label": _CHANGE_CONTEXT_FIELD_LABELS.get(key, _humanize_key(key)),
+            "value": _safe_str(value),
+        }
+    return None
+
+
 def _audit_detail_payload(
     event: AuditEventRecord,
     *,
@@ -668,6 +713,7 @@ def _audit_detail_payload(
         "target": normalized_row["target"],
         "summary": event.details,
         "outcome": normalized_row["statusLabel"],
+        "correlation": normalized_row["correlation"],
         "changeContext": change_context,
         "changeContextUnavailable": change_context_unavailable,
         "rawMetadata": redacted_metadata,
@@ -822,44 +868,33 @@ def list_audit_history(
             company_id=resolved_company_id,
             require_explicit_scope=True,
         )
-        window_scoped_events = governance.query_audit_events(
+        retained_events = governance.query_audit_events(
             limit=_retained_audit_limit(settings),
             tenant_id=resolved_tenant_id,
             company_id=resolved_company_id,
             require_explicit_scope=True,
-            window_seconds=int(_AUDIT_EXPORT_WINDOWS[window].total_seconds()) if _AUDIT_EXPORT_WINDOWS[window] is not None else None,
-        )
-        filtered_events = governance.query_audit_events(
-            limit=_retained_audit_limit(settings),
-            tenant_id=resolved_tenant_id,
-            company_id=resolved_company_id,
-            require_explicit_scope=True,
-            window_seconds=int(_AUDIT_EXPORT_WINDOWS[window].total_seconds()) if _AUDIT_EXPORT_WINDOWS[window] is not None else None,
-            action=normalized_action,
-            actor=normalized_actor,
-            target_type=normalized_target_type,
-            target_id=normalized_target_id,
-            status=normalized_status,
-        )
-        cursor_scoped_events = governance.query_audit_events(
-            limit=limit + 1,
-            tenant_id=resolved_tenant_id,
-            company_id=resolved_company_id,
-            require_explicit_scope=True,
-            window_seconds=int(_AUDIT_EXPORT_WINDOWS[window].total_seconds()) if _AUDIT_EXPORT_WINDOWS[window] is not None else None,
-            action=normalized_action,
-            actor=normalized_actor,
-            target_type=normalized_target_type,
-            target_id=normalized_target_id,
-            status=normalized_status,
-            cursor_created_at=cursor_created_at,
-            cursor_event_id=cursor_event_id,
+            window_seconds=None,
         )
     except TenantFilterRequiredError as exc:
         return JSONResponse(
             status_code=400,
             content={"error": {"type": "tenant_filter_required", "message": str(exc)}},
         )
+
+    window_scoped_events, filtered_events = _filter_audit_history_events(
+        retained_events,
+        indexes=indexes,
+        window=window,
+        action=normalized_action,
+        actor=normalized_actor,
+        target_type=normalized_target_type,
+        target_id=normalized_target_id,
+        status_filter=normalized_status,
+    )
+    cursor_scoped_events = _apply_cursor(
+        _sort_audit_events(filtered_events),
+        cursor=cursor,
+    )
 
     page_items = cursor_scoped_events[:limit]
     has_more = len(cursor_scoped_events) > limit
