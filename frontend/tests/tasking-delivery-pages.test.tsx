@@ -326,6 +326,22 @@ function getButtonByText(scope: ParentNode, text: string) {
   return Array.from(scope.querySelectorAll("button")).find((button) => button.textContent?.includes(text));
 }
 
+function getControlByLabel(scope: ParentNode, labelText: string): HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement {
+  const normalizedTarget = labelText.replace(/\s+/g, " ").trim().toLowerCase();
+  const label = Array.from(scope.querySelectorAll("label"))
+    .map((item) => ({
+      element: item,
+      text: item.textContent?.replace(/\s+/g, " ").trim().toLowerCase() ?? "",
+    }))
+    .filter((item) => item.text.startsWith(normalizedTarget))
+    .sort((left, right) => left.text.length - right.text.length)[0]?.element;
+  const control = label?.querySelector("input, textarea, select");
+  if (!control) {
+    throw new Error(`Control with label '${labelText}' not found.`);
+  }
+  return control as HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement;
+}
+
 beforeEach(() => {
   vi.resetAllMocks();
 
@@ -533,12 +549,23 @@ describe("tasking and delivery pages", () => {
     expect(container.textContent).toContain("Task inventory");
     expect(container.textContent).toContain("Customer pricing follow-up");
     expect(container.textContent).toContain("Reminders");
+    expect(container.textContent).toContain("Status actions");
+    expect(container.textContent).toContain("Reminder path");
+    expect(container.textContent).toContain("bridge-only");
 
     const reminderLink = Array.from(container.querySelectorAll("a")).find((link) => link.textContent === "Price reminder");
     expect(reminderLink?.getAttribute("href")).toBe("/reminders?instanceId=instance_alpha&reminderId=reminder_alpha");
   });
 
-  it("creates and updates tasks against the selected instance scope", async () => {
+  it("runs direct task status and reminder actions from the task detail surface", async () => {
+    fetchTaskDetailMock.mockResolvedValue({
+      status: "ok",
+      task: createTaskDetail({
+        reminders: [],
+        notifications: [],
+      }),
+    });
+
     await renderIntoDom(withAppContext({
       path: "/tasks?instanceId=instance_alpha&taskId=task_alpha",
       element: <TasksPage />,
@@ -546,23 +573,53 @@ describe("tasking and delivery pages", () => {
     }));
     await flushEffects();
 
-    const createForm = getFormByText("Create task");
-    const updateForm = getFormByText("Save task");
-    const createInputs = Array.from(createForm?.querySelectorAll("input") ?? []);
-    const createTextareas = Array.from(createForm?.querySelectorAll("textarea") ?? []);
-    const createSelects = Array.from(createForm?.querySelectorAll("select") ?? []);
-    const createButton = getButtonByText(createForm!, "Create task");
+    await act(async () => {
+      getButtonByText(container, "Start work")!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    await flushEffects();
+
+    expect(updateTaskMock).toHaveBeenNthCalledWith(1, "instance_alpha", "task_alpha", expect.objectContaining({
+      status: "in_progress",
+      completed_at: null,
+    }));
 
     await act(async () => {
-      setControlValue(createInputs[0] as HTMLInputElement, "task_beta");
-      setControlValue(createSelects[0] as HTMLSelectElement, "follow_up");
-      setControlValue(createSelects[1] as HTMLSelectElement, "critical");
-      setControlValue(createInputs[1] as HTMLInputElement, "Escalate customer pricing");
-      setControlValue(createTextareas[0] as HTMLTextAreaElement, "Escalate the pricing review today.");
-      setControlValue(createSelects[2] as HTMLSelectElement, "blocked");
-      setControlValue(createInputs[2] as HTMLInputElement, "user-lead");
-      setControlValue(createInputs[4] as HTMLInputElement, "conversation_beta");
-      createButton!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      getButtonByText(container, "Create reminder from task")!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    await flushEffects();
+
+    expect(createReminderMock).toHaveBeenCalledWith("instance_alpha", expect.objectContaining({
+      task_id: "task_alpha",
+      title: "Customer pricing follow-up reminder",
+      due_at: "2026-04-23T12:00:00Z",
+    }));
+  });
+
+  it("creates and updates tasks from the drawer against the selected instance scope", async () => {
+    await renderIntoDom(withAppContext({
+      path: "/tasks?instanceId=instance_alpha&taskId=task_alpha",
+      element: <TasksPage />,
+      session: adminSession,
+    }));
+    await flushEffects();
+
+    await act(async () => {
+      getButtonByText(container, "New task")!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    await flushEffects();
+
+    const createForm = container.querySelector("#task-drawer-form") as HTMLFormElement;
+
+    await act(async () => {
+      setControlValue(getControlByLabel(createForm, "Task ID"), "task_beta");
+      setControlValue(getControlByLabel(createForm, "Task kind"), "follow_up");
+      setControlValue(getControlByLabel(createForm, "Title"), "Escalate customer pricing");
+      setControlValue(getControlByLabel(createForm, "Summary"), "Escalate the pricing review today.");
+      setControlValue(getControlByLabel(createForm, "Status"), "blocked");
+      setControlValue(getControlByLabel(createForm, "Priority"), "critical");
+      setControlValue(getControlByLabel(createForm, "Owner ID"), "user-lead");
+      setControlValue(getControlByLabel(createForm, "Conversation ID"), "conversation_beta");
+      getButtonByText(container, "Create task")!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     });
     await flushEffects();
 
@@ -577,18 +634,20 @@ describe("tasking and delivery pages", () => {
       conversation_id: "conversation_beta",
     }));
 
-    const updateInputs = Array.from(updateForm?.querySelectorAll("input") ?? []);
-    const updateTextareas = Array.from(updateForm?.querySelectorAll("textarea") ?? []);
-    const updateSelects = Array.from(updateForm?.querySelectorAll("select") ?? []);
-    const updateButton = getButtonByText(updateForm!, "Save task");
+    await act(async () => {
+      getButtonByText(container, "Edit selected task")!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    await flushEffects();
+
+    const updateForm = container.querySelector("#task-drawer-form") as HTMLFormElement;
 
     await act(async () => {
-      setControlValue(updateInputs[0] as HTMLInputElement, "Customer pricing follow-up updated");
-      setControlValue(updateTextareas[0] as HTMLTextAreaElement, "Review package was updated and reassigned.");
-      setControlValue(updateSelects[0] as HTMLSelectElement, "in_progress");
-      setControlValue(updateSelects[1] as HTMLSelectElement, "normal");
-      setControlValue(updateInputs[4] as HTMLInputElement, "conversation_beta");
-      updateButton!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      setControlValue(getControlByLabel(updateForm, "Title"), "Customer pricing follow-up updated");
+      setControlValue(getControlByLabel(updateForm, "Summary"), "Review package was updated and reassigned.");
+      setControlValue(getControlByLabel(updateForm, "Status"), "in_progress");
+      setControlValue(getControlByLabel(updateForm, "Priority"), "normal");
+      setControlValue(getControlByLabel(updateForm, "Conversation ID"), "conversation_beta");
+      getButtonByText(container, "Save task changes")!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     });
     await flushEffects();
 
