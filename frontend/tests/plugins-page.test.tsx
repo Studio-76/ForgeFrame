@@ -66,6 +66,7 @@ function createPluginEntry(overrides: Partial<PluginCatalogEntry> = {}): PluginC
         mode: { type: "string" },
         max_items: { type: "integer" },
       },
+      required: ["mode"],
     },
     default_config: {
       mode: "preview",
@@ -95,6 +96,10 @@ function createPluginEntry(overrides: Partial<PluginCatalogEntry> = {}): PluginC
       created_at: "2026-04-23T09:30:00Z",
       updated_at: "2026-04-23T10:30:00Z",
     },
+    binding_count: 1,
+    enabled_binding_count: 1,
+    bound_instance_ids: ["instance_alpha"],
+    enabled_instance_ids: ["instance_alpha"],
     effective_status: "enabled",
     status_summary: "Enabled for this instance with persisted binding and config.",
     effective_config: {
@@ -213,6 +218,10 @@ beforeEach(() => {
       api_mounts: ["/plugins/contract-guard/checks"],
       runtime_surfaces: ["dispatch_review"],
       binding: null,
+      binding_count: 0,
+      enabled_binding_count: 0,
+      bound_instance_ids: [],
+      enabled_instance_ids: [],
       effective_status: "available",
       status_summary: "Registered but not yet activated for this instance.",
       effective_config: { mode: "preview" },
@@ -277,10 +286,12 @@ describe("plugins page", () => {
 
     expect(fetchPluginsMock).toHaveBeenCalledWith("instance_alpha");
     expect(fetchPluginDetailMock).toHaveBeenCalledWith("plugin_review_bridge", "instance_alpha");
-    expect(container.textContent).toContain("Plugin registry");
+    expect(container.textContent).toContain("Extension catalog");
     expect(container.textContent).toContain("Review Bridge");
     expect(container.textContent).toContain("Enabled for this instance with persisted binding and config.");
     expect(container.textContent).toContain("forgeframe/review-bridge/token");
+    expect(container.textContent).toContain("Plugin: extends product surfaces or system functions.");
+    expect(container.textContent).toContain("Skill: extends procedural behavior for an agent or workflow.");
   });
 
   it("creates plugins and updates manifest plus instance binding", async () => {
@@ -291,9 +302,14 @@ describe("plugins page", () => {
     }));
     await flushEffects();
 
+    const manifestPanelButton = getButtonByText(container, "Manifest bearbeiten");
+    await act(async () => {
+      manifestPanelButton!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    await flushEffects();
+
     const createForm = getFormByButtonText("Create plugin");
     const manifestForm = getFormByButtonText("Save plugin manifest");
-    const bindingForm = getFormByButtonText("Save instance binding");
 
     const createButton = getButtonByText(createForm!, "Create plugin");
     await act(async () => {
@@ -352,6 +368,13 @@ describe("plugins page", () => {
       default_config: { mode: "preview", max_items: 12 },
     }));
 
+    const bindingPanelButton = getButtonByText(container, "Instanz-Aktivierung");
+    await act(async () => {
+      bindingPanelButton!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    await flushEffects();
+
+    const bindingForm = getFormByButtonText("Save instance binding");
     const saveBindingButton = getButtonByText(bindingForm!, "Save instance binding");
     await act(async () => {
       setControlValue(getLabeledControl(bindingForm!, "Binding enabled"), "no");
@@ -373,5 +396,29 @@ describe("plugins page", () => {
       notes: "Disabled during audit.",
     }));
     expect(container.textContent).toContain("saved");
+  });
+
+  it("keeps manifest editing stable when advanced security posture JSON is invalid", async () => {
+    await renderIntoDom(withAppContext({
+      path: "/plugins?instanceId=instance_alpha&pluginId=plugin_review_bridge",
+      element: <PluginsPage />,
+      session: adminSession,
+    }));
+    await flushEffects();
+
+    const manifestPanelButton = getButtonByText(container, "Manifest bearbeiten");
+    await act(async () => {
+      manifestPanelButton!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    await flushEffects();
+
+    const createForm = getFormByButtonText("Create plugin");
+    await act(async () => {
+      setControlValue(getLabeledControl(createForm!, "Security posture JSON"), "[]");
+    });
+    await flushEffects();
+
+    expect(container.textContent).toContain("Plugin security posture must be a JSON object.");
+    expect(container.textContent).toContain("Create plugin");
   });
 });

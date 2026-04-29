@@ -60,25 +60,62 @@ class PluginCatalogService:
         return [binding for binding in self._state.bindings if binding.plugin_id == plugin_id]
 
     @staticmethod
-    def _validate_config_against_schema(manifest: PluginManifestRecord, config: dict[str, object]) -> None:
+    def _validate_config_against_schema(
+        manifest: PluginManifestRecord,
+        config: dict[str, object],
+        *,
+        config_label: str,
+    ) -> None:
         properties = manifest.config_schema.get("properties")
+        if properties is None:
+            properties = {}
         if not isinstance(properties, dict):
-            return
+            raise ValueError("Plugin config schema properties must be a JSON object.")
+
+        required_values = manifest.config_schema.get("required")
+        if required_values is None:
+            required_keys: list[str] = []
+        elif isinstance(required_values, (list, tuple)):
+            required_keys = [str(item).strip() for item in required_values if str(item).strip()]
+        else:
+            raise ValueError("Plugin config schema required must be an array of strings.")
+
+        unknown_required_keys = sorted(key for key in required_keys if key not in properties)
+        if unknown_required_keys:
+            raise ValueError(
+                "Plugin config schema marks undeclared required keys: "
+                + ", ".join(unknown_required_keys)
+            )
+
         unknown_keys = sorted(key for key in config if key not in properties)
         if unknown_keys:
             raise ValueError(
-                "Plugin binding config contains keys not declared by the manifest schema: "
+                f"{config_label} contains keys not declared by the manifest schema: "
                 + ", ".join(unknown_keys)
+            )
+        missing_required_keys = sorted(key for key in required_keys if key not in config)
+        if missing_required_keys:
+            raise ValueError(
+                f"{config_label} is missing required manifest keys: "
+                + ", ".join(missing_required_keys)
             )
 
     def _validate_manifest_contract(self, manifest: PluginManifestRecord) -> None:
-        self._validate_config_against_schema(manifest, manifest.default_config)
+        self._validate_config_against_schema(
+            manifest,
+            manifest.default_config,
+            config_label="Plugin default config",
+        )
 
     def _validate_existing_bindings_against_manifest(self, manifest: PluginManifestRecord) -> None:
         invalid_instances: list[str] = []
         for binding in self._bindings_for_plugin(manifest.plugin_id):
             try:
-                self._validate_config_against_schema(manifest, binding.config)
+                self._validate_config_against_schema(
+                    manifest,
+                    binding.config,
+                    config_label="Plugin binding config",
+                )
                 self._validate_binding_lists(
                     manifest,
                     enabled_capabilities=binding.enabled_capabilities,
@@ -147,6 +184,16 @@ class PluginCatalogService:
         binding: InstancePluginBindingRecord | None,
     ) -> PluginCatalogEntry:
         effective_status, status_summary = self._status_summary(manifest, binding)
+        all_bindings = [
+            item
+            for item in self._state.bindings
+            if item.plugin_id == manifest.plugin_id
+        ]
+        enabled_bindings = [
+            item
+            for item in all_bindings
+            if item.enabled
+        ]
         return PluginCatalogEntry(
             plugin_id=manifest.plugin_id,
             display_name=manifest.display_name,
@@ -163,6 +210,10 @@ class PluginCatalogService:
             security_posture=manifest.security_posture,
             metadata=dict(manifest.metadata),
             binding=binding,
+            binding_count=len(all_bindings),
+            enabled_binding_count=len(enabled_bindings),
+            bound_instance_ids=sorted({item.instance_id for item in all_bindings}),
+            enabled_instance_ids=sorted({item.instance_id for item in enabled_bindings}),
             effective_status=effective_status,  # type: ignore[arg-type]
             status_summary=status_summary,
             effective_config=self._effective_config(manifest, binding),
@@ -292,7 +343,11 @@ class PluginCatalogService:
         enabled_ui_slots = list(payload.enabled_ui_slots) if payload.enabled_ui_slots is not None else list(manifest.ui_slots)
         enabled_api_mounts = list(payload.enabled_api_mounts) if payload.enabled_api_mounts is not None else list(manifest.api_mounts)
 
-        self._validate_config_against_schema(manifest, payload.config)
+        self._validate_config_against_schema(
+            manifest,
+            payload.config,
+            config_label="Plugin binding config",
+        )
         self._validate_binding_lists(
             manifest,
             enabled_capabilities=enabled_capabilities,

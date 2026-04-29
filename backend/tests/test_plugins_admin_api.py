@@ -8,7 +8,7 @@ def _admin_headers(client: TestClient) -> dict[str, str]:
     return shared_admin_headers(client)
 
 
-def _operator_headers(client: TestClient) -> dict[str, str]:
+def _operator_session(client: TestClient) -> tuple[dict[str, object], dict[str, str], str]:
     admin_headers = _admin_headers(client)
     password = "Plugin-Operator-123"
     created = client.post(
@@ -22,7 +22,9 @@ def _operator_headers(client: TestClient) -> dict[str, str]:
         },
     )
     assert created.status_code == 201
-    return login_headers_allowing_password_rotation(client, username="plugin-operator", password=password)
+    user = created.json()["user"]
+    headers = login_headers_allowing_password_rotation(client, username="plugin-operator", password=password)
+    return user, headers, password
 
 
 def _instance_scope(instance_id: str) -> dict[str, str]:
@@ -71,6 +73,7 @@ def test_plugins_admin_api_persists_manifest_registry_and_instance_scoped_bindin
                     "mode": {"type": "string"},
                     "max_items": {"type": "integer"},
                 },
+                "required": ["mode"],
             },
             "default_config": {"mode": "preview", "max_items": 25},
             "security_posture": {
@@ -95,6 +98,8 @@ def test_plugins_admin_api_persists_manifest_registry_and_instance_scoped_bindin
     assert plugin_alpha["plugin_id"] == "plugin_review_bridge"
     assert plugin_alpha["effective_status"] == "available"
     assert plugin_alpha["binding"] is None
+    assert plugin_alpha["binding_count"] == 0
+    assert plugin_alpha["enabled_binding_count"] == 0
     assert plugin_alpha["capabilities"] == ["review.panel", "artifact.render"]
     assert plugin_alpha["status_summary"] == "Registered but not yet activated for this instance."
 
@@ -117,6 +122,9 @@ def test_plugins_admin_api_persists_manifest_registry_and_instance_scoped_bindin
     assert bound_payload["binding"]["instance_id"] == instance_alpha
     assert bound_payload["binding"]["company_id"] == "company_plugin_alpha"
     assert bound_payload["binding"]["enabled_capabilities"] == ["review.panel"]
+    assert bound_payload["binding_count"] == 1
+    assert bound_payload["enabled_binding_count"] == 1
+    assert bound_payload["enabled_instance_ids"] == [instance_alpha]
     assert bound_payload["effective_config"] == {"mode": "enforce", "max_items": 10}
 
     detail_alpha = client.get(
@@ -135,6 +143,9 @@ def test_plugins_admin_api_persists_manifest_registry_and_instance_scoped_bindin
     plugin_beta = listing_beta.json()["plugins"][0]
     assert plugin_beta["effective_status"] == "available"
     assert plugin_beta["binding"] is None
+    assert plugin_beta["binding_count"] == 1
+    assert plugin_beta["enabled_binding_count"] == 1
+    assert plugin_beta["bound_instance_ids"] == [instance_alpha]
     assert listing_beta.json()["summary"]["bound_plugins"] == 0
 
 
@@ -157,7 +168,9 @@ def test_plugins_admin_api_validates_binding_contract_against_manifest_schema_an
                 "properties": {
                     "mode": {"type": "string"},
                 },
+                "required": ["mode"],
             },
+            "default_config": {"mode": "preview"},
         },
     )
     assert created.status_code == 201
@@ -168,11 +181,23 @@ def test_plugins_admin_api_validates_binding_contract_against_manifest_schema_an
         params=_instance_scope(instance_id),
         json={
             "enabled": True,
-            "config": {"unknown_key": "boom"},
+            "config": {},
         },
     )
     assert invalid_config.status_code == 400
     assert invalid_config.json()["error"]["type"] == "plugin_binding_invalid"
+
+    invalid_unknown_key = client.put(
+        "/admin/plugins/plugin_contract_guard/binding",
+        headers=headers,
+        params=_instance_scope(instance_id),
+        json={
+            "enabled": True,
+            "config": {"mode": "strict", "unknown_key": "boom"},
+        },
+    )
+    assert invalid_unknown_key.status_code == 400
+    assert invalid_unknown_key.json()["error"]["type"] == "plugin_binding_invalid"
 
     invalid_capability = client.put(
         "/admin/plugins/plugin_contract_guard/binding",
@@ -212,10 +237,10 @@ def test_plugins_admin_api_validates_binding_contract_against_manifest_schema_an
     assert invalid_manifest_update.json()["error"]["type"] == "plugin_invalid"
 
 
-def test_plugins_admin_api_keeps_read_truth_open_to_operators_but_blocks_mutations() -> None:
+def test_plugins_admin_api_requires_operator_instance_membership_for_reads_and_blocks_mutations() -> None:
     client = TestClient(app)
     admin_headers = _admin_headers(client)
-    operator_headers = _operator_headers(client)
+    operator_user, operator_headers, operator_password = _operator_session(client)
     instance_id = _create_instance(client, admin_headers, instance_id="instance_plugin_operator", company_id="company_plugin_operator")
 
     created = client.post(
@@ -228,6 +253,23 @@ def test_plugins_admin_api_keeps_read_truth_open_to_operators_but_blocks_mutatio
         },
     )
     assert created.status_code == 201
+
+    listing = client.get("/admin/plugins", headers=operator_headers, params=_instance_scope(instance_id))
+    assert listing.status_code == 403
+    assert listing.json()["detail"] == "instance_membership_required"
+
+    granted = client.put(
+        f"/admin/security/users/{operator_user['user_id']}/memberships/{instance_id}",
+        headers=admin_headers,
+        json={"role": "operator", "status": "active"},
+    )
+    assert granted.status_code == 200
+
+    operator_headers = login_headers_allowing_password_rotation(
+        client,
+        username="plugin-operator",
+        password=operator_password,
+    )
 
     listing = client.get("/admin/plugins", headers=operator_headers, params=_instance_scope(instance_id))
     assert listing.status_code == 200

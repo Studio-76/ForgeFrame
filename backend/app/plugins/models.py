@@ -163,6 +163,10 @@ class PluginCatalogEntry(BaseModel):
     security_posture: PluginSecurityPosture = Field(default_factory=PluginSecurityPosture)
     metadata: dict[str, Any] = Field(default_factory=dict)
     binding: InstancePluginBindingRecord | None = None
+    binding_count: int = 0
+    enabled_binding_count: int = 0
+    bound_instance_ids: list[str] = Field(default_factory=list)
+    enabled_instance_ids: list[str] = Field(default_factory=list)
     effective_status: PluginEffectiveStatus
     status_summary: str
     effective_config: dict[str, Any] = Field(default_factory=dict)

@@ -361,6 +361,10 @@ export type PluginCatalogEntry = {
   security_posture: PluginSecurityPosture;
   metadata: Record<string, unknown>;
   binding?: PluginInstanceBinding | null;
+  binding_count: number;
+  enabled_binding_count: number;
+  bound_instance_ids: string[];
+  enabled_instance_ids: string[];
   effective_status: "available" | "enabled" | "disabled";
   status_summary: string;
   effective_config: Record<string, unknown>;
