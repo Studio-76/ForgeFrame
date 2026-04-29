@@ -8,7 +8,7 @@ from app.api.runtime.dependencies import clear_runtime_dependency_caches
 from app.governance.service import get_governance_service
 from app.main import app
 from app.tenancy import DEFAULT_BOOTSTRAP_TENANT_ID
-from app.usage.analytics import get_usage_analytics_store
+from app.usage.analytics import ClientIdentity, get_usage_analytics_store
 
 
 def _clear_dependency_caches() -> None:
@@ -191,6 +191,131 @@ def test_logs_overview_does_not_expose_raw_audit_events_or_metadata() -> None:
     assert payload["audit_preview"]
     assert "access_token" not in logs.text
     assert "top-secret-token" not in logs.text
+
+
+def test_logs_overview_groups_security_and_tls_incidents_for_errors_surface() -> None:
+    _clear_dependency_caches()
+    client = TestClient(app)
+    headers, _token = _admin_login(client)
+    instance_id = _default_instance_id(client, headers)
+    analytics = get_usage_analytics_store()
+
+    analytics.record_runtime_error(
+        provider=None,
+        model=None,
+        client=ClientIdentity(client_id="incident-suite", consumer="tests", integration="pytest"),
+        route="/v1/responses",
+        stream_mode="non_stream",
+        error_type="permission_denied",
+        status_code=403,
+    )
+    analytics.record_runtime_error(
+        provider=None,
+        model=None,
+        client=ClientIdentity(client_id="incident-suite", consumer="tests", integration="pytest"),
+        route="/ingress/callback",
+        stream_mode="non_stream",
+        error_type="tls_certificate_expired",
+        status_code=503,
+    )
+
+    logs = client.get(
+        f"/admin/logs/?instanceId={instance_id}&tenantId={DEFAULT_BOOTSTRAP_TENANT_ID}",
+        headers=headers,
+    )
+
+    assert logs.status_code == 200
+    axes = {item["axis"]: item for item in logs.json()["incident_review"]["axes"]}
+    assert axes["security"]["severity"] == "critical"
+    assert axes["security"]["count"] == 1
+    assert axes["security"]["next_step"] == "Open Security & Policies to inspect permissions, approvals, or request-path gates."
+    assert axes["tls"]["severity"] == "critical"
+    assert axes["tls"]["count"] == 1
+    assert axes["tls"]["summary"] == "Most common TLS error: tls_certificate_expired."
+
+
+def test_logs_overview_exposes_blocked_routing_failures_with_reason_categories() -> None:
+    _clear_dependency_caches()
+    client = TestClient(app)
+    headers, _token = _admin_login(client)
+    instance_id = _default_instance_id(client, headers)
+
+    try:
+        budget_update = client.patch(
+            "/admin/routing/budget",
+            headers=headers,
+            json={"hard_blocked": True, "reason": "incident budget freeze"},
+        )
+        assert budget_update.status_code == 200
+
+        simulation = client.post(
+            "/admin/routing/simulate",
+            headers=headers,
+            json={"prompt": "This request should be blocked for incident review coverage."},
+        )
+        assert simulation.status_code == 200
+        assert simulation.json()["error"]["type"] == "routing_budget_exceeded"
+
+        logs = client.get(
+            f"/admin/logs/?instanceId={instance_id}&tenantId={DEFAULT_BOOTSTRAP_TENANT_ID}",
+            headers=headers,
+        )
+
+        assert logs.status_code == 200
+        payload = logs.json()["incident_review"]
+        assert payload["blocked_routing_failures"]
+        assert payload["blocked_routing_failures"][0]["error_type"] == "routing_budget_exceeded"
+        assert payload["blocked_routing_failures"][0]["reason_category"] == "budget"
+        assert payload["blocked_routing_failures"][0]["links"] == [
+            {"label": "Open Routing", "href": "/routing"},
+            {"label": "Open Costs", "href": "/costs"},
+        ]
+        axes = {item["axis"]: item for item in payload["axes"]}
+        assert axes["routing"]["severity"] == "critical"
+        assert axes["routing"]["count"] >= 1
+    finally:
+        reset = client.patch(
+            "/admin/routing/budget",
+            headers=headers,
+            json={"hard_blocked": False, "reason": "reset after incident review test"},
+        )
+        assert reset.status_code == 200
+
+
+def test_logs_overview_treats_budget_blocked_without_failure_row_as_active_routing_incident() -> None:
+    _clear_dependency_caches()
+    client = TestClient(app)
+    headers, _token = _admin_login(client)
+    instance_id = _default_instance_id(client, headers)
+
+    try:
+        budget_update = client.patch(
+            "/admin/routing/budget",
+            headers=headers,
+            json={"hard_blocked": True, "reason": "preemptive budget freeze"},
+        )
+        assert budget_update.status_code == 200
+
+        logs = client.get(
+            f"/admin/logs/?instanceId={instance_id}&tenantId={DEFAULT_BOOTSTRAP_TENANT_ID}",
+            headers=headers,
+        )
+
+        assert logs.status_code == 200
+        axes = {item["axis"]: item for item in logs.json()["incident_review"]["axes"]}
+        routing_axis = axes["routing"]
+        assert routing_axis["severity"] == "critical"
+        assert routing_axis["count"] == 0
+        assert routing_axis["current_effect"] == "Routing decisions are being blocked by policy, budget, circuit, or capability posture."
+        assert routing_axis["next_step"] == "Open Routing to inspect policy stage, budget gates, and blocked candidates."
+        assert routing_axis["summary"] == "Blocked decisions: 0 · open circuits: 0 · budget blocked: yes."
+    finally:
+        reset = client.patch(
+            "/admin/routing/budget",
+            headers=headers,
+            json={"hard_blocked": False, "reason": "reset after incident review test"},
+        )
+        assert reset.status_code == 200
 
 
 def test_audit_history_uses_instance_scope_and_supports_cursor() -> None:

@@ -1887,6 +1887,41 @@ export type LogsResponse = {
   };
   alerts: Array<Record<string, string | number>>;
   error_summary: Record<string, unknown>;
+  incident_review?: {
+    axes: Array<{
+      incident_id: string;
+      axis: "runtime" | "provider" | "oauth" | "routing" | "queue_dispatch" | "security" | "tls" | "work_interaction";
+      axis_label: string;
+      title: string;
+      severity: "critical" | "warning" | "info" | "clear" | "unsupported";
+      count: number;
+      first_seen_at?: string | null;
+      last_seen_at?: string | null;
+      current_effect: string;
+      next_step: string;
+      summary: string;
+      links: Array<{
+        label: string;
+        href: string;
+      }>;
+      raw_evidence: Record<string, unknown>;
+    }>;
+    blocked_routing_failures: Array<{
+      decision_id: string;
+      error_type: string;
+      summary: string;
+      policy_stage?: string | null;
+      created_at: string;
+      reason_category: string;
+      current_effect: string;
+      next_step: string;
+      links: Array<{
+        label: string;
+        href: string;
+      }>;
+      raw_evidence: Record<string, unknown>;
+    }>;
+  };
   operability: {
     ready: boolean;
     checks: Array<Record<string, unknown>>;

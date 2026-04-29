@@ -7,6 +7,7 @@ import binascii
 import csv
 import io
 import json
+from collections import Counter, defaultdict
 from datetime import UTC, datetime, timedelta
 from typing import Any, Literal
 from uuid import uuid4
@@ -207,6 +208,572 @@ _CORRELATION_METADATA_KEY_ORDER = (
     "approval_reference",
     "attempt_id",
 )
+
+_INCIDENT_AXIS_LABELS = {
+    "runtime": "Runtime",
+    "provider": "Provider",
+    "oauth": "OAuth",
+    "routing": "Routing",
+    "queue_dispatch": "Queue / Dispatch",
+    "security": "Security",
+    "tls": "TLS",
+    "work_interaction": "Work Interaction",
+}
+
+_INCIDENT_AXIS_LINKS = {
+    "runtime": [{"label": "Open Logs", "href": "/logs"}, {"label": "Open Execution Review", "href": "/execution"}],
+    "provider": [{"label": "Open Health", "href": "/health-status"}, {"label": "Open Provider Targets", "href": "/provider-targets"}],
+    "oauth": [{"label": "Open OAuth Targets", "href": "/oauth-targets"}, {"label": "Open Health", "href": "/health-status"}],
+    "routing": [{"label": "Open Routing", "href": "/routing"}, {"label": "Open Provider Targets", "href": "/provider-targets"}],
+    "queue_dispatch": [{"label": "Open Queues", "href": "/queues"}, {"label": "Open Dispatch", "href": "/dispatch"}, {"label": "Open Execution Review", "href": "/execution"}],
+    "security": [{"label": "Open Security & Policies", "href": "/security"}],
+    "tls": [{"label": "Open Ingress / TLS", "href": "/ingress-tls"}, {"label": "Open Health", "href": "/health-status"}],
+    "work_interaction": [{"label": "Open Execution Review", "href": "/execution"}, {"label": "Open Logs", "href": "/logs"}],
+}
+
+_WORK_INTERACTION_ROUTE_FRAGMENTS = (
+    "/conversations",
+    "/inbox",
+    "/tasks",
+    "/reminders",
+    "/automations",
+    "/notifications",
+    "/agents",
+    "/channels",
+    "/contacts",
+    "/knowledge",
+    "/memory",
+    "/learning",
+    "/skills",
+    "/assistant-profiles",
+    "/workspaces",
+    "/artifacts",
+)
+
+
+def _incident_links(axis: str) -> list[dict[str, str]]:
+    return list(_INCIDENT_AXIS_LINKS.get(axis, [{"label": "Open Logs", "href": "/logs"}]))
+
+
+def _timestamp_bounds(values: list[str]) -> tuple[str | None, str | None]:
+    timestamps = sorted(value for value in values if value)
+    if not timestamps:
+        return None, None
+    return timestamps[0], timestamps[-1]
+
+
+def _top_counts(values: list[str], *, limit: int = 5) -> list[dict[str, object]]:
+    counts = Counter(value for value in values if value)
+    return [
+        {"value": value, "count": count}
+        for value, count in counts.most_common(limit)
+    ]
+
+
+def _severity_label(*, critical: bool, warning: bool, unsupported: bool = False) -> str:
+    if unsupported:
+        return "unsupported"
+    if critical:
+        return "critical"
+    if warning:
+        return "warning"
+    return "clear"
+
+
+def _axis_for_error(event: Any) -> str:
+    error_type = str(getattr(event, "error_type", "") or "").lower()
+    route = str(getattr(event, "route", "") or "").lower()
+    integration = str(getattr(event, "integration", "") or "").lower()
+    integration_class = str(getattr(event, "integration_class", "") or "").lower()
+    provider = str(getattr(event, "provider", "") or "").lower()
+    status_code = int(getattr(event, "status_code", 0) or 0)
+
+    if "oauth" in error_type or "oauth" in route or "oauth" in integration or "oauth" in integration_class:
+        return "oauth"
+    if error_type.startswith("routing_") or "routing" in route:
+        return "routing"
+    if any(fragment in error_type for fragment in ("queue", "dispatch", "lease", "outbox")):
+        return "queue_dispatch"
+    if any(fragment in error_type for fragment in ("tls", "certificate", "acme")) or "ingress" in route:
+        return "tls"
+    if any(fragment in error_type for fragment in ("security", "permission", "forbidden", "unauthorized")) or status_code in {401, 403}:
+        return "security"
+    if any(fragment in route for fragment in _WORK_INTERACTION_ROUTE_FRAGMENTS) or integration in {
+        "conversations",
+        "inbox",
+        "tasks",
+        "reminders",
+        "automations",
+        "notifications",
+        "agents",
+        "channels",
+        "contacts",
+        "knowledge",
+        "memory",
+        "learning",
+        "skills",
+        "assistant_profiles",
+        "workspaces",
+        "artifacts",
+    }:
+        return "work_interaction"
+    if provider and (error_type.startswith("provider_") or status_code >= 502):
+        return "provider"
+    return "runtime"
+
+
+def _incident_entry(
+    *,
+    axis: str,
+    title: str,
+    severity: str,
+    count: int,
+    first_seen_at: str | None,
+    last_seen_at: str | None,
+    current_effect: str,
+    next_step: str,
+    summary: str,
+    raw_evidence: dict[str, object],
+) -> dict[str, object]:
+    return {
+        "incident_id": f"{axis}:{severity}:{count}:{last_seen_at or 'none'}",
+        "axis": axis,
+        "axis_label": _INCIDENT_AXIS_LABELS[axis],
+        "title": title,
+        "severity": severity,
+        "count": count,
+        "first_seen_at": first_seen_at,
+        "last_seen_at": last_seen_at,
+        "current_effect": current_effect,
+        "next_step": next_step,
+        "summary": summary,
+        "links": _incident_links(axis),
+        "raw_evidence": raw_evidence,
+    }
+
+
+def _grouped_error_incidents(error_events: list[Any]) -> dict[str, list[Any]]:
+    grouped: dict[str, list[Any]] = defaultdict(list)
+    for event in error_events:
+        grouped[_axis_for_error(event)].append(event)
+    return grouped
+
+
+def _axis_incidents_snapshot(
+    *,
+    metrics_snapshot: dict[str, object],
+    logging_snapshot: dict[str, object],
+    tracing_snapshot: dict[str, object],
+    error_events: list[Any],
+    health_events: list[Any],
+) -> list[dict[str, object]]:
+    grouped_errors = _grouped_error_incidents(error_events)
+    dependency_metrics = list(metrics_snapshot.get("dependency_metrics", []))
+    routing_metrics = dict(metrics_snapshot.get("routing_metrics", {}))
+    queue_metrics = dict(metrics_snapshot.get("queue_metrics", {}))
+    degraded_health_events = [
+        event
+        for event in health_events
+        if str(getattr(event, "status", "") or "").lower() not in {"healthy", "ok", "success", "discovery_only"}
+        or bool(getattr(event, "last_error", None))
+    ]
+
+    runtime_events = grouped_errors.get("runtime", [])
+    runtime_first, runtime_last = _timestamp_bounds([str(event.created_at) for event in runtime_events])
+    provider_events = grouped_errors.get("provider", [])
+    provider_first, provider_last = _timestamp_bounds(
+        [str(event.created_at) for event in provider_events]
+        + [str(event.created_at) for event in degraded_health_events]
+    )
+    oauth_events = grouped_errors.get("oauth", [])
+    oauth_first, oauth_last = _timestamp_bounds([str(event.created_at) for event in oauth_events])
+    routing_events = grouped_errors.get("routing", [])
+    queue_events = grouped_errors.get("queue_dispatch", [])
+    security_events = grouped_errors.get("security", [])
+    tls_events = grouped_errors.get("tls", [])
+    work_events = grouped_errors.get("work_interaction", [])
+    work_first, work_last = _timestamp_bounds([str(event.created_at) for event in work_events])
+    routing_failures = list(routing_metrics.get("recent_failures", []))
+    routing_first, routing_last = _timestamp_bounds(
+        [str(item.get("created_at") or "") for item in routing_failures]
+        + [str(event.created_at) for event in routing_events]
+    )
+    queue_first, queue_last = _timestamp_bounds([str(event.created_at) for event in queue_events])
+    security_first, security_last = _timestamp_bounds([str(event.created_at) for event in security_events])
+    tls_first, tls_last = _timestamp_bounds([str(event.created_at) for event in tls_events])
+
+    queue_dead_letters = int(queue_metrics.get("dead_letters", 0) or 0)
+    queue_expired_leases = int(queue_metrics.get("expired_leases", 0) or 0)
+    queue_pending_dispatch = int(queue_metrics.get("pending_dispatch", 0) or 0)
+    queue_pending_outbox = int(queue_metrics.get("pending_outbox", 0) or 0)
+    queue_pressure = queue_dead_letters + queue_expired_leases + queue_pending_dispatch + queue_pending_outbox
+    routing_budget = dict(routing_metrics.get("budget", {}))
+    routing_budget_blocked = bool(routing_budget.get("hard_blocked")) or bool(routing_metrics.get("budget_blocked"))
+    routing_open_circuits = bool(routing_metrics.get("open_circuits"))
+    routing_count = max(
+        len(routing_failures),
+        len(routing_events),
+        int(routing_metrics.get("blocked_decisions", 0) or 0),
+    )
+    routing_incident_active = routing_budget_blocked or routing_open_circuits or routing_count > 0
+    queue_count = max(queue_pressure, len(queue_events))
+    security_denials = sum(
+        1
+        for event in security_events
+        if int(getattr(event, "status_code", 0) or 0) in {401, 403}
+    )
+    tls_fatal = sum(
+        1
+        for event in tls_events
+        if int(getattr(event, "status_code", 0) or 0) >= 500
+    )
+
+    incidents = [
+        _incident_entry(
+            axis="runtime",
+            title="Runtime execution failures",
+            severity=_severity_label(critical=len(runtime_events) >= 3, warning=len(runtime_events) > 0),
+            count=len(runtime_events),
+            first_seen_at=runtime_first,
+            last_seen_at=runtime_last,
+            current_effect="Runtime requests are failing on the active instance scope." if runtime_events else "No current runtime execution failure is visible in the logs endpoint.",
+            next_step="Open logs or execution review to inspect the active runtime failure path." if runtime_events else "Monitor only.",
+            summary=(
+                f"Most common runtime error: {_top_counts([str(event.error_type) for event in runtime_events], limit=1)[0]['value']}."
+                if runtime_events
+                else "No runtime-specific error shape is currently recorded."
+            ),
+            raw_evidence={
+                "top_error_types": _top_counts([str(event.error_type) for event in runtime_events]),
+                "top_routes": _top_counts([str(event.route or 'unknown') for event in runtime_events]),
+                "sample_errors": [
+                    {
+                        "created_at": str(event.created_at),
+                        "error_type": str(event.error_type),
+                        "status_code": int(event.status_code),
+                        "route": str(event.route or ""),
+                        "client_id": str(event.client_id),
+                    }
+                    for event in runtime_events[:5]
+                ],
+            },
+        ),
+        _incident_entry(
+            axis="provider",
+            title="Provider health and dependency failures",
+            severity=_severity_label(
+                critical=len(provider_events) >= 3 or len(degraded_health_events) >= 2,
+                warning=len(provider_events) > 0 or len(degraded_health_events) > 0,
+            ),
+            count=len(provider_events) + len(degraded_health_events),
+            first_seen_at=provider_first,
+            last_seen_at=provider_last,
+            current_effect="Provider failures or degraded health are affecting routing candidates and runtime stability." if provider_events or degraded_health_events else "No active provider-side failure signal is visible.",
+            next_step="Open Health or Provider Targets to repair provider readiness and target posture." if provider_events or degraded_health_events else "Monitor only.",
+            summary=(
+                f"Affected providers: {', '.join(sorted({str(getattr(event, 'provider', '') or 'unknown') for event in [*provider_events, *degraded_health_events]}))}."
+                if provider_events or degraded_health_events
+                else "No provider incident is currently recorded."
+            ),
+            raw_evidence={
+                "dependency_metrics": dependency_metrics,
+                "top_error_types": _top_counts([str(event.error_type) for event in provider_events]),
+                "sample_errors": [
+                    {
+                        "created_at": str(event.created_at),
+                        "provider": str(event.provider or "unknown"),
+                        "error_type": str(event.error_type),
+                        "status_code": int(event.status_code),
+                    }
+                    for event in provider_events[:5]
+                ],
+                "degraded_health": [
+                    {
+                        "created_at": str(event.created_at),
+                        "provider": str(event.provider),
+                        "status": str(event.status),
+                        "reason": str(event.readiness_reason or ""),
+                        "last_error": str(event.last_error or ""),
+                    }
+                    for event in degraded_health_events[:5]
+                ],
+            },
+        ),
+        _incident_entry(
+            axis="oauth",
+            title="OAuth-specific failures",
+            severity=_severity_label(critical=len(oauth_events) >= 2, warning=len(oauth_events) > 0),
+            count=len(oauth_events),
+            first_seen_at=oauth_first,
+            last_seen_at=oauth_last,
+            current_effect="OAuth-backed provider flows are failing and can block account-based runtime paths." if oauth_events else "No OAuth-specific error is visible in the current logs scope.",
+            next_step="Open OAuth Targets to reconnect or revalidate account-backed providers." if oauth_events else "Monitor only.",
+            summary=(
+                f"Most common OAuth error: {_top_counts([str(event.error_type) for event in oauth_events], limit=1)[0]['value']}."
+                if oauth_events
+                else "No OAuth incident is currently recorded."
+            ),
+            raw_evidence={
+                "top_error_types": _top_counts([str(event.error_type) for event in oauth_events]),
+                "sample_errors": [
+                    {
+                        "created_at": str(event.created_at),
+                        "provider": str(event.provider or "unknown"),
+                        "error_type": str(event.error_type),
+                        "status_code": int(event.status_code),
+                    }
+                    for event in oauth_events[:5]
+                ],
+            },
+        ),
+        _incident_entry(
+            axis="routing",
+            title="Routing and policy failures",
+            severity=_severity_label(
+                critical=routing_budget_blocked or routing_count > 0,
+                warning=routing_open_circuits or bool(routing_metrics.get("blocked_decisions")),
+            ),
+            count=routing_count,
+            first_seen_at=routing_first,
+            last_seen_at=routing_last,
+            current_effect="Routing decisions are being blocked by policy, budget, circuit, or capability posture." if routing_incident_active else "No blocked routing decision is currently recorded.",
+            next_step="Open Routing to inspect policy stage, budget gates, and blocked candidates." if routing_incident_active else "Monitor only.",
+            summary=(
+                f"Blocked decisions: {int(routing_metrics.get('blocked_decisions', 0) or 0)} · open circuits: {int(routing_metrics.get('open_circuits', 0) or 0)} · budget blocked: {'yes' if routing_budget_blocked else 'no'}."
+                if routing_incident_active
+                else "No routing incident is currently recorded."
+            ),
+            raw_evidence={
+                "routing_metrics": routing_metrics,
+                "recent_failures": routing_failures,
+                "top_error_types": _top_counts([str(event.error_type) for event in routing_events]),
+                "sample_errors": [
+                    {
+                        "created_at": str(event.created_at),
+                        "route": str(event.route or ""),
+                        "error_type": str(event.error_type),
+                        "status_code": int(event.status_code),
+                    }
+                    for event in routing_events[:5]
+                ],
+            },
+        ),
+        _incident_entry(
+            axis="queue_dispatch",
+            title="Queue and dispatch pressure",
+            severity=_severity_label(
+                critical=queue_dead_letters > 0 or queue_expired_leases > 0,
+                warning=queue_count > 0,
+            ),
+            count=queue_count,
+            first_seen_at=queue_first,
+            last_seen_at=queue_last,
+            current_effect="Queue or dispatch pressure is delaying, dead-lettering, or stalling work." if queue_count > 0 else "No queue or dispatch pressure is visible in the current metrics snapshot.",
+            next_step="Open Queues, Dispatch, or Execution Review to recover leased attempts, outbox pressure, or dead letters." if queue_count > 0 else "Monitor only.",
+            summary=(
+                f"dead_letters={queue_dead_letters}, expired_leases={queue_expired_leases}, pending_dispatch={queue_pending_dispatch}, pending_outbox={queue_pending_outbox}"
+            ),
+            raw_evidence={
+                "queue_metrics": queue_metrics,
+                "top_error_types": _top_counts([str(event.error_type) for event in queue_events]),
+                "sample_errors": [
+                    {
+                        "created_at": str(event.created_at),
+                        "route": str(event.route or ""),
+                        "error_type": str(event.error_type),
+                        "status_code": int(event.status_code),
+                    }
+                    for event in queue_events[:5]
+                ],
+            },
+        ),
+        _incident_entry(
+            axis="security",
+            title="Security-linked failures",
+            severity=_severity_label(
+                critical=security_denials > 0 or len(security_events) >= 3,
+                warning=len(security_events) > 0,
+            ),
+            count=len(security_events),
+            first_seen_at=security_first,
+            last_seen_at=security_last,
+            current_effect="Authorization or permission failures are actively blocking runtime or admin flows." if security_events else "No security-linked failure is visible in the current logs scope.",
+            next_step="Open Security & Policies to inspect permissions, approvals, or request-path gates." if security_events else "Monitor only.",
+            summary=(
+                f"Most common security error: {_top_counts([str(event.error_type) for event in security_events], limit=1)[0]['value']}."
+                if security_events
+                else "No security-linked incident is currently recorded."
+            ),
+            raw_evidence={
+                "top_error_types": _top_counts([str(event.error_type) for event in security_events]),
+                "top_routes": _top_counts([str(event.route or 'unknown') for event in security_events]),
+                "sample_errors": [
+                    {
+                        "created_at": str(event.created_at),
+                        "route": str(event.route or ""),
+                        "error_type": str(event.error_type),
+                        "status_code": int(event.status_code),
+                    }
+                    for event in security_events[:5]
+                ],
+            },
+        ),
+        _incident_entry(
+            axis="tls",
+            title="TLS and ingress failures",
+            severity=_severity_label(
+                critical=tls_fatal > 0 or len(tls_events) >= 2,
+                warning=len(tls_events) > 0,
+            ),
+            count=len(tls_events),
+            first_seen_at=tls_first,
+            last_seen_at=tls_last,
+            current_effect="Ingress or certificate failures are preventing the expected public request path from completing." if tls_events else "No TLS or ingress failure is visible in the current logs scope.",
+            next_step="Open Ingress / TLS or Health to inspect listener exposure, certificates, and public readiness." if tls_events else "Monitor only.",
+            summary=(
+                f"Most common TLS error: {_top_counts([str(event.error_type) for event in tls_events], limit=1)[0]['value']}."
+                if tls_events
+                else "No TLS or ingress incident is currently recorded."
+            ),
+            raw_evidence={
+                "top_error_types": _top_counts([str(event.error_type) for event in tls_events]),
+                "top_routes": _top_counts([str(event.route or 'unknown') for event in tls_events]),
+                "sample_errors": [
+                    {
+                        "created_at": str(event.created_at),
+                        "route": str(event.route or ""),
+                        "error_type": str(event.error_type),
+                        "status_code": int(event.status_code),
+                    }
+                    for event in tls_events[:5]
+                ],
+            },
+        ),
+        _incident_entry(
+            axis="work_interaction",
+            title="Work interaction failures",
+            severity=_severity_label(critical=len(work_events) >= 3, warning=len(work_events) > 0),
+            count=len(work_events),
+            first_seen_at=work_first,
+            last_seen_at=work_last,
+            current_effect="Conversation, tasking, or other work-interaction routes are failing on the active scope." if work_events else "No work-interaction error is visible in the current logs scope.",
+            next_step="Open Execution Review or Logs to inspect the failing work-interaction path." if work_events else "Monitor only.",
+            summary=(
+                f"Top work route: {_top_counts([str(event.route or 'unknown') for event in work_events], limit=1)[0]['value']}."
+                if work_events
+                else "No work-interaction incident is currently recorded."
+            ),
+            raw_evidence={
+                "top_routes": _top_counts([str(event.route or 'unknown') for event in work_events]),
+                "top_error_types": _top_counts([str(event.error_type) for event in work_events]),
+                "sample_errors": [
+                    {
+                        "created_at": str(event.created_at),
+                        "route": str(event.route or ""),
+                        "error_type": str(event.error_type),
+                        "status_code": int(event.status_code),
+                    }
+                    for event in work_events[:5]
+                ],
+            },
+        ),
+    ]
+
+    return sorted(
+        incidents,
+        key=lambda item: (
+            {"critical": 0, "warning": 1, "info": 2, "clear": 3, "unsupported": 4}.get(str(item["severity"]), 5),
+            -int(item["count"]),
+            str(item["axis"]),
+        ),
+    )
+
+
+def _blocked_routing_failures_snapshot(metrics_snapshot: dict[str, object]) -> list[dict[str, object]]:
+    routing_metrics = dict(metrics_snapshot.get("routing_metrics", {}))
+    failures = list(routing_metrics.get("recent_failures", []))
+    rows: list[dict[str, object]] = []
+    for failure in failures:
+        error_type = str(failure.get("error_type") or "routing_failure")
+        lowered = error_type.lower()
+        if "budget" in lowered:
+            reason_category = "budget"
+            current_effect = "Budget posture is blocking eligible routing candidates."
+            next_step = "Open Routing or Costs to remove the blocking budget condition."
+            links = [
+                {"label": "Open Routing", "href": "/routing"},
+                {"label": "Open Costs", "href": "/costs"},
+            ]
+        elif "capability" in lowered:
+            reason_category = "capability"
+            current_effect = "No candidate satisfied the requested runtime capability or modality constraints."
+            next_step = "Open Provider Targets to add or enable a compatible target."
+            links = [
+                {"label": "Open Provider Targets", "href": "/provider-targets"},
+                {"label": "Open Health", "href": "/health-status"},
+            ]
+        elif "circuit" in lowered:
+            reason_category = "circuit"
+            current_effect = "Open target circuits are excluding otherwise eligible candidates."
+            next_step = "Open Routing to close or review the affected circuit breakers."
+            links = [
+                {"label": "Open Routing", "href": "/routing"},
+                {"label": "Open Provider Targets", "href": "/provider-targets"},
+            ]
+        else:
+            reason_category = "policy"
+            current_effect = "Policy stage evaluation is blocking route admission for the current request shape."
+            next_step = "Open Routing to inspect stage eligibility, fallback, and escalation policy."
+            links = [{"label": "Open Routing", "href": "/routing"}]
+
+        rows.append(
+            {
+                "decision_id": str(failure.get("decision_id") or ""),
+                "error_type": error_type,
+                "summary": str(failure.get("summary") or ""),
+                "policy_stage": failure.get("policy_stage"),
+                "created_at": str(failure.get("created_at") or ""),
+                "reason_category": reason_category,
+                "current_effect": current_effect,
+                "next_step": next_step,
+                "links": links,
+                "raw_evidence": dict(failure),
+            }
+        )
+
+    return sorted(rows, key=lambda item: str(item["created_at"]), reverse=True)
+
+
+def _incident_review_snapshot(
+    analytics: UsageAnalyticsStore,
+    *,
+    tenant_id: str | None,
+    metrics_snapshot: dict[str, object],
+    logging_snapshot: dict[str, object],
+    tracing_snapshot: dict[str, object],
+) -> dict[str, object]:
+    cutoff = datetime.now(tz=UTC) - timedelta(hours=24)
+    error_events = [
+        event
+        for event in analytics.list_error_events(tenant_id=tenant_id)
+        if datetime.fromisoformat(event.created_at) >= cutoff
+    ]
+    health_events = [
+        event
+        for event in analytics.list_health_events(tenant_id=tenant_id)
+        if datetime.fromisoformat(event.created_at) >= cutoff
+    ]
+
+    return {
+        "axes": _axis_incidents_snapshot(
+            metrics_snapshot=metrics_snapshot,
+            logging_snapshot=logging_snapshot,
+            tracing_snapshot=tracing_snapshot,
+            error_events=error_events,
+            health_events=health_events,
+        ),
+        "blocked_routing_failures": _blocked_routing_failures_snapshot(metrics_snapshot),
+    }
 
 
 class AuditExportRequest(BaseModel):
@@ -1120,6 +1687,13 @@ def logs_view(
             "errors_by_provider": aggregates["errors_by_provider"][:10],
             "errors_by_type": aggregates["errors_by_type"][:10],
         },
+        "incident_review": _incident_review_snapshot(
+            analytics,
+            tenant_id=resolved_tenant_id,
+            metrics_snapshot=metrics_snapshot,
+            logging_snapshot=logging_snapshot,
+            tracing_snapshot=tracing_snapshot,
+        ),
         "operability": {
             "ready": all(bool(item["ok"]) for item in operability_checks),
             "checks": operability_checks,

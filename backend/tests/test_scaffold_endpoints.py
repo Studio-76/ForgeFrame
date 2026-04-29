@@ -1521,3 +1521,4 @@ def test_admin_dashboard_and_security_modules_available() -> None:
     logs = client.get("/admin/logs/", headers=headers)
     assert logs.status_code == 200
     assert "audit_preview" in logs.json()
+    assert "incident_review" in logs.json()

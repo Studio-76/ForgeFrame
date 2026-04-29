@@ -327,6 +327,63 @@ beforeEach(() => {
     audit_retention: { eventLimit: 1000, oldestAvailableAt: null, retentionLimited: false, latestEventAt: null },
     alerts: [{ severity: "warning", type: "provider_hotspot", message: "Provider openai_api is degraded." }],
     error_summary: { errors_24h: 2, errors_by_provider: [{ provider: "openai_api", errors: 2 }] },
+    incident_review: {
+      axes: [
+        {
+          incident_id: "runtime:critical",
+          axis: "runtime",
+          axis_label: "Runtime",
+          title: "Runtime execution failures",
+          severity: "critical",
+          count: 2,
+          first_seen_at: "2026-04-23T08:05:00Z",
+          last_seen_at: "2026-04-23T08:20:00Z",
+          current_effect: "Runtime requests are failing on the active instance scope.",
+          next_step: "Open logs or execution review to inspect the active runtime failure path.",
+          summary: "Most common runtime error: provider_timeout.",
+          links: [
+            { label: "Open Logs", href: "/logs" },
+            { label: "Open Execution Review", href: "/execution" },
+          ],
+          raw_evidence: { top_error_types: [{ value: "provider_timeout", count: 2 }] },
+        },
+        {
+          incident_id: "routing:warning",
+          axis: "routing",
+          axis_label: "Routing",
+          title: "Routing and policy failures",
+          severity: "warning",
+          count: 1,
+          first_seen_at: "2026-04-23T08:20:00Z",
+          last_seen_at: "2026-04-23T08:20:00Z",
+          current_effect: "Routing decisions are being blocked by policy, budget, circuit, or capability posture.",
+          next_step: "Open Routing to inspect policy stage, budget gates, and blocked candidates.",
+          summary: "Blocked decisions: 1 · open circuits: 0.",
+          links: [
+            { label: "Open Routing", href: "/routing" },
+            { label: "Open Provider Targets", href: "/provider-targets" },
+          ],
+          raw_evidence: { recent_failures: [{ error_type: "routing_budget_exceeded" }] },
+        },
+      ],
+      blocked_routing_failures: [
+        {
+          decision_id: "route_blocked",
+          error_type: "routing_budget_exceeded",
+          summary: "budget blocked",
+          policy_stage: "blocked",
+          created_at: "2026-04-23T08:20:00Z",
+          reason_category: "budget",
+          current_effect: "Budget posture is blocking eligible routing candidates.",
+          next_step: "Open Routing or Costs to remove the blocking budget condition.",
+          links: [
+            { label: "Open Routing", href: "/routing" },
+            { label: "Open Costs", href: "/costs" },
+          ],
+          raw_evidence: { decision_id: "route_blocked" },
+        },
+      ],
+    },
     operability: {
       ready: true,
       checks: [
@@ -473,7 +530,8 @@ describe("observability pages", () => {
     await flushEffects();
 
     expect(container.textContent).toContain("Errors & Incident Review");
-    expect(container.textContent).toContain("Blocked Routing Failures");
+    expect(container.textContent).toContain("Incident triage by axis");
+    expect(container.textContent).toContain("Blocked routing failures");
     expect(container.textContent).toContain("routing_budget_exceeded");
   });
 
