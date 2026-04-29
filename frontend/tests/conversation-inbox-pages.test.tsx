@@ -11,6 +11,7 @@ const {
   fetchConversationDetailMock,
   fetchTasksMock,
   createConversationMock,
+  createTaskMock,
   updateConversationMock,
   appendConversationMessageMock,
   fetchInboxItemsMock,
@@ -24,6 +25,7 @@ const {
   fetchConversationDetailMock: vi.fn(),
   fetchTasksMock: vi.fn(),
   createConversationMock: vi.fn(),
+  createTaskMock: vi.fn(),
   updateConversationMock: vi.fn(),
   appendConversationMessageMock: vi.fn(),
   fetchInboxItemsMock: vi.fn(),
@@ -43,6 +45,7 @@ vi.mock("../src/api/admin", async () => {
     fetchConversationDetail: fetchConversationDetailMock,
     fetchTasks: fetchTasksMock,
     createConversation: createConversationMock,
+    createTask: createTaskMock,
     updateConversation: updateConversationMock,
     appendConversationMessage: appendConversationMessageMock,
     fetchInboxItems: fetchInboxItemsMock,
@@ -462,6 +465,13 @@ beforeEach(() => {
       participant_agent_ids: ["agent_operator"],
     }),
   });
+  createTaskMock.mockResolvedValue({
+    status: "ok",
+    task: createTaskSummary({
+      task_id: "task_gamma",
+      title: "Inbox follow-up",
+    }),
+  });
   updateConversationMock.mockResolvedValue({
     status: "ok",
     conversation: createConversationDetail({
@@ -732,13 +742,134 @@ describe("conversation and inbox pages", () => {
       priority: "all",
       limit: 100,
     });
+    expect(fetchAgentsMock).toHaveBeenCalledWith("instance_alpha", {
+      status: "all",
+      limit: 100,
+    });
+    expect(fetchTasksMock).toHaveBeenCalledWith("instance_alpha", {
+      status: "all",
+      limit: 100,
+    });
+    expect(fetchConversationsMock).toHaveBeenCalledWith("instance_alpha", {
+      status: "all",
+      triageStatus: "all",
+      agentId: null,
+      limit: 100,
+    });
     expect(fetchInboxItemDetailMock).toHaveBeenCalledWith("inbox_alpha", "instance_alpha");
     expect(container.textContent).toContain("Inbox inventory");
     expect(container.textContent).toContain("Triage pricing request");
     expect(container.textContent).toContain("Conversation summary");
+    expect(container.textContent).toContain("Triage actions");
+    expect(container.textContent).toContain("Related tasks");
+    expect(container.textContent).toContain("Queue posture new");
 
     const conversationLink = Array.from(container.querySelectorAll("a")).find((link) => link.textContent === "Open conversation");
     expect(conversationLink?.getAttribute("href")).toBe("/conversations?instanceId=instance_alpha&conversationId=conversation_alpha");
+    const taskLink = Array.from(container.querySelectorAll("a")).find((link) => link.textContent === "Open task");
+    expect(taskLink?.getAttribute("href")).toBe("/tasks?instanceId=instance_alpha&taskId=task_alpha");
+  });
+
+  it("filters inbox inventory and executes direct triage and follow-up actions for orphan items", async () => {
+    const orphanItem = createInboxSummary({
+      inbox_id: "inbox_orphan",
+      conversation_id: null,
+      thread_id: null,
+      title: "Manual SLA breach intake",
+      summary: "Needs owner assignment and follow-up.",
+      priority: "critical",
+      workspace_id: "ws_orphan",
+      run_id: null,
+      artifact_id: null,
+      approval_id: null,
+      latest_message_at: null,
+    });
+    fetchInboxItemsMock.mockResolvedValue({
+      status: "ok",
+      instance: null,
+      items: [createInboxSummary(), orphanItem],
+    });
+    fetchInboxItemDetailMock.mockResolvedValue({
+      status: "ok",
+      item: createInboxDetail({
+        ...orphanItem,
+        conversation: null,
+      }),
+    });
+    fetchTasksMock.mockResolvedValue({
+      status: "ok",
+      tasks: [
+        createTaskSummary({
+          task_id: "task_else",
+          inbox_id: "inbox_else",
+          conversation_id: "conversation_beta",
+          owner_id: "agent_worker",
+        }),
+      ],
+    });
+
+    await renderIntoDom(withAppContext({
+      path: "/inbox?instanceId=instance_alpha&inboxId=inbox_orphan",
+      element: <InboxPage />,
+      session: adminSession,
+    }));
+    await flushEffects();
+
+    expect(container.textContent).toContain("Manual SLA breach intake");
+    expect(container.textContent).toContain("Create conversation from item");
+    expect(container.textContent).toContain("Create follow-up task");
+
+    await act(async () => {
+      setControlValue(getControlByLabel(container, "Source"), "manual");
+    });
+    await flushEffects();
+
+    expect(container.textContent).not.toContain("Triage pricing request");
+
+    await act(async () => {
+      setControlValue(getControlByLabel(container, "Agent / owner"), "agent_operator");
+    });
+    await flushEffects();
+
+    expect(container.textContent).toContain("No inbox items matched the selected filters and lenses.");
+
+    await act(async () => {
+      setControlValue(getControlByLabel(container, "Agent / owner"), "");
+      getButtonByText(container, "Wait").dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    await flushEffects();
+
+    expect(updateInboxItemMock).toHaveBeenNthCalledWith(1, "instance_alpha", "inbox_orphan", expect.objectContaining({
+      triage_status: "new",
+      status: "snoozed",
+    }));
+
+    await act(async () => {
+      getButtonByText(container, "Create conversation from item").dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    await flushEffects();
+
+    expect(createConversationMock).toHaveBeenCalledWith("instance_alpha", expect.objectContaining({
+      subject: "Manual SLA breach intake",
+      summary: "Needs owner assignment and follow-up.",
+      create_inbox_entry: false,
+    }));
+    expect(updateInboxItemMock).toHaveBeenNthCalledWith(2, "instance_alpha", "inbox_orphan", expect.objectContaining({
+      conversation_id: "conversation_beta",
+      thread_id: "thread_alpha",
+    }));
+
+    await act(async () => {
+      getButtonByText(container, "Create follow-up task").dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    await flushEffects();
+
+    expect(createTaskMock).toHaveBeenCalledWith("instance_alpha", expect.objectContaining({
+      title: "Manual SLA breach intake",
+      priority: "critical",
+      inbox_id: "inbox_orphan",
+      workspace_id: "ws_orphan",
+    }));
   });
 
   it("creates and updates inbox items against the selected instance scope", async () => {

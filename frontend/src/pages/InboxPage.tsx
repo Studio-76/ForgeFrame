@@ -1,21 +1,29 @@
-import { startTransition, useEffect, useState, type FormEvent } from "react";
+import { startTransition, useEffect, useMemo, useState, type FormEvent } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 
 import {
+  createConversation,
   createInboxItem,
+  createTask,
+  fetchAgents,
+  fetchConversations,
   fetchInboxItemDetail,
   fetchInboxItems,
   fetchInstances,
+  fetchTasks,
+  type AgentSummary,
+  type ConversationSummary,
   updateInboxItem,
   type InboxDetail,
   type InboxStatus,
   type InboxSummary,
+  type TaskSummary,
   type TriageStatus,
   type WorkItemPriority,
 } from "../api/admin";
 import { roleAllows, sessionHasAnyInstancePermission } from "../app/adminAccess";
 import { CONTROL_PLANE_ROUTES } from "../app/navigation";
-import { buildArtifactsPath, buildConversationPath, buildInboxPath, buildWorkspacePath } from "../app/workInteractionRoutes";
+import { buildArtifactsPath, buildConversationPath, buildInboxPath, buildTaskPath, buildWorkspacePath } from "../app/workInteractionRoutes";
 import { useAppSession } from "../app/session";
 import { PageIntro } from "../components/PageIntro";
 
@@ -24,6 +32,9 @@ type LoadState = "idle" | "loading" | "success" | "error";
 const TRIAGE_OPTIONS: Array<TriageStatus | "all"> = ["all", "new", "relevant", "delegated", "blocked", "done"];
 const STATUS_OPTIONS: Array<InboxStatus | "all"> = ["all", "open", "snoozed", "closed", "archived"];
 const PRIORITY_OPTIONS: Array<WorkItemPriority | "all"> = ["all", "low", "normal", "high", "critical"];
+const SOURCE_OPTIONS = ["all", "manual", "conversation", "workspace", "run", "approval", "artifact"] as const;
+
+type InboxSourceFilter = typeof SOURCE_OPTIONS[number];
 
 const DEFAULT_CREATE_FORM = {
   inboxId: "",
@@ -80,6 +91,47 @@ function buildApprovalRoute(instanceId: string, approvalId: string): string {
   return `${CONTROL_PLANE_ROUTES.approvals}?${new URLSearchParams({ instanceId, approvalId, status: "all" }).toString()}`;
 }
 
+function inboxSourceLabel(item: InboxSummary): Exclude<InboxSourceFilter, "all"> {
+  if (item.conversation_id) {
+    return "conversation";
+  }
+  if (item.workspace_id) {
+    return "workspace";
+  }
+  if (item.run_id) {
+    return "run";
+  }
+  if (item.approval_id) {
+    return "approval";
+  }
+  if (item.artifact_id) {
+    return "artifact";
+  }
+  return "manual";
+}
+
+function inboxQueuePosture(item: Pick<InboxSummary, "triage_status" | "status">): { label: string; tone: "success" | "danger" | "warning" | "neutral" } {
+  if (item.status === "archived") {
+    return { label: "archived", tone: "neutral" };
+  }
+  if (item.triage_status === "done" || item.status === "closed") {
+    return { label: "done", tone: "success" };
+  }
+  if (item.triage_status === "blocked") {
+    return { label: "blocked", tone: "danger" };
+  }
+  if (item.status === "snoozed") {
+    return { label: "waiting", tone: "warning" };
+  }
+  if (item.triage_status === "delegated") {
+    return { label: "delegated", tone: "warning" };
+  }
+  if (item.triage_status === "relevant") {
+    return { label: "relevant", tone: "success" };
+  }
+  return { label: "new", tone: "neutral" };
+}
+
 export function InboxPage() {
   const { session, sessionReady } = useAppSession();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -98,6 +150,12 @@ export function InboxPage() {
 
   const [instancesState, setInstancesState] = useState<LoadState>("idle");
   const [instances, setInstances] = useState<Array<{ instance_id: string; display_name: string }>>([]);
+  const [agentsState, setAgentsState] = useState<LoadState>("idle");
+  const [agents, setAgents] = useState<AgentSummary[]>([]);
+  const [tasksState, setTasksState] = useState<LoadState>("idle");
+  const [tasks, setTasks] = useState<TaskSummary[]>([]);
+  const [conversationsState, setConversationsState] = useState<LoadState>("idle");
+  const [conversations, setConversations] = useState<ConversationSummary[]>([]);
   const [listState, setListState] = useState<LoadState>("idle");
   const [detailState, setDetailState] = useState<LoadState>("idle");
   const [items, setItems] = useState<InboxSummary[]>([]);
@@ -109,6 +167,9 @@ export function InboxPage() {
   const [savingCreate, setSavingCreate] = useState(false);
   const [savingUpdate, setSavingUpdate] = useState(false);
   const [refreshNonce, setRefreshNonce] = useState(0);
+  const [sourceFilter, setSourceFilter] = useState<InboxSourceFilter>("all");
+  const [ownerFilter, setOwnerFilter] = useState("");
+  const [quickActionState, setQuickActionState] = useState<Record<string, boolean>>({});
 
   const updateRoute = (mutate: (next: URLSearchParams) => void, replace = false) => {
     const next = new URLSearchParams(searchParams);
@@ -153,6 +214,78 @@ export function InboxPage() {
       cancelled = true;
     };
   }, [canRead, instanceId]);
+
+  useEffect(() => {
+    if (!canRead || !instanceId) {
+      setAgents([]);
+      setAgentsState("idle");
+      setTasks([]);
+      setTasksState("idle");
+      setConversations([]);
+      setConversationsState("idle");
+      return;
+    }
+
+    let cancelled = false;
+    setAgentsState("loading");
+    setTasksState("loading");
+    setConversationsState("loading");
+
+    void fetchAgents(instanceId, { status: "all", limit: 100 })
+      .then((payload) => {
+        if (cancelled) {
+          return;
+        }
+        setAgents(payload.agents);
+        setAgentsState("success");
+      })
+      .catch((loadError: unknown) => {
+        if (cancelled) {
+          return;
+        }
+        setAgents([]);
+        setAgentsState("error");
+        setError(loadError instanceof Error ? loadError.message : "Inbox agent registry could not be loaded.");
+      });
+
+    void fetchTasks(instanceId, { status: "all", limit: 100 })
+      .then((payload) => {
+        if (cancelled) {
+          return;
+        }
+        setTasks(payload.tasks);
+        setTasksState("success");
+      })
+      .catch((loadError: unknown) => {
+        if (cancelled) {
+          return;
+        }
+        setTasks([]);
+        setTasksState("error");
+        setError(loadError instanceof Error ? loadError.message : "Inbox task links could not be loaded.");
+      });
+
+    void fetchConversations(instanceId, { status: "all", triageStatus: "all", agentId: null, limit: 100 })
+      .then((payload) => {
+        if (cancelled) {
+          return;
+        }
+        setConversations(payload.conversations);
+        setConversationsState("success");
+      })
+      .catch((loadError: unknown) => {
+        if (cancelled) {
+          return;
+        }
+        setConversations([]);
+        setConversationsState("error");
+        setError(loadError instanceof Error ? loadError.message : "Inbox conversation links could not be loaded.");
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [canRead, instanceId, refreshNonce]);
 
   useEffect(() => {
     if (!canRead || !instanceId) {
@@ -339,6 +472,138 @@ export function InboxPage() {
     }
   };
 
+  const relatedTasks = useMemo(
+    () => detail
+      ? tasks.filter((task) => task.inbox_id === detail.inbox_id || (detail.conversation_id && task.conversation_id === detail.conversation_id))
+      : [],
+    [detail, tasks],
+  );
+  const conversationById = useMemo(
+    () => new Map(conversations.map((conversation) => [conversation.conversation_id, conversation])),
+    [conversations],
+  );
+  const agentNameById = useMemo(
+    () => new Map(agents.map((agent) => [agent.agent_id, agent.display_name])),
+    [agents],
+  );
+  const visibleItems = useMemo(() => items.filter((item) => {
+    if (sourceFilter !== "all" && inboxSourceLabel(item) !== sourceFilter) {
+      return false;
+    }
+    if (!ownerFilter) {
+      return true;
+    }
+    const relatedTask = tasks.find((task) => task.inbox_id === item.inbox_id);
+    if (relatedTask?.owner_id === ownerFilter) {
+      return true;
+    }
+    const linkedConversation = item.conversation_id ? conversationById.get(item.conversation_id) : null;
+    return Boolean(linkedConversation?.participant_agent_ids.includes(ownerFilter));
+  }), [conversationById, items, ownerFilter, sourceFilter, tasks]);
+  const availableOwnerAgents = useMemo(() => {
+    const ownerIds = new Set<string>();
+    tasks.forEach((task) => {
+      if (task.owner_id) {
+        ownerIds.add(task.owner_id);
+      }
+    });
+    conversations.forEach((conversation) => {
+      conversation.participant_agent_ids.forEach((agentId) => ownerIds.add(agentId));
+    });
+    return agents.filter((agent) => ownerIds.has(agent.agent_id));
+  }, [agents, conversations, tasks]);
+
+  const runQuickAction = async (
+    actionKey: string,
+    payload: Partial<Pick<InboxDetail, "triage_status" | "status">>,
+  ) => {
+    if (!detail || !instanceId || !canMutate) {
+      return;
+    }
+
+    setQuickActionState((current) => ({ ...current, [actionKey]: true }));
+    setError("");
+    setMessage("");
+    try {
+      const response = await updateInboxItem(instanceId, detail.inbox_id, {
+        triage_status: payload.triage_status ?? detail.triage_status,
+        status: payload.status ?? detail.status,
+      });
+      setMessage(`Inbox item ${response.item.inbox_id} updated via ${actionKey}.`);
+      setRefreshNonce((current) => current + 1);
+    } catch (saveError) {
+      setError(saveError instanceof Error ? saveError.message : `Inbox quick action '${actionKey}' failed.`);
+    } finally {
+      setQuickActionState((current) => ({ ...current, [actionKey]: false }));
+    }
+  };
+
+  const handleCreateConversationFromInbox = async () => {
+    if (!detail || !instanceId || !canMutate) {
+      return;
+    }
+
+    setQuickActionState((current) => ({ ...current, create_conversation: true }));
+    setError("");
+    setMessage("");
+    try {
+      const conversation = await createConversation(instanceId, {
+        workspace_id: detail.workspace_id ?? null,
+        subject: detail.title,
+        summary: detail.summary,
+        triage_status: detail.triage_status,
+        priority: detail.priority,
+        contact_ref: detail.contact_ref ?? null,
+        run_id: detail.run_id ?? null,
+        artifact_id: detail.artifact_id ?? null,
+        approval_id: detail.approval_id ?? null,
+        decision_id: detail.decision_id ?? null,
+        initial_thread_title: detail.thread_id ?? "Inbox intake",
+        initial_session_kind: "operator",
+        initial_message_role: "operator",
+        initial_message_body: detail.summary || detail.title,
+        create_inbox_entry: false,
+      });
+      await updateInboxItem(instanceId, detail.inbox_id, {
+        conversation_id: conversation.conversation.conversation_id,
+        thread_id: conversation.conversation.active_thread_id ?? null,
+      });
+      setMessage(`Conversation ${conversation.conversation.conversation_id} created from inbox item ${detail.inbox_id}.`);
+      setRefreshNonce((current) => current + 1);
+    } catch (saveError) {
+      setError(saveError instanceof Error ? saveError.message : "Inbox-to-conversation handoff failed.");
+    } finally {
+      setQuickActionState((current) => ({ ...current, create_conversation: false }));
+    }
+  };
+
+  const handleCreateTaskFromInbox = async () => {
+    if (!detail || !instanceId || !canMutate) {
+      return;
+    }
+
+    setQuickActionState((current) => ({ ...current, create_task: true }));
+    setError("");
+    setMessage("");
+    try {
+      const task = await createTask(instanceId, {
+        title: detail.title,
+        summary: detail.summary,
+        priority: detail.priority,
+        status: "open",
+        conversation_id: detail.conversation_id ?? null,
+        inbox_id: detail.inbox_id,
+        workspace_id: detail.workspace_id ?? null,
+      });
+      setMessage(`Task ${task.task.task_id} created from inbox item ${detail.inbox_id}.`);
+      setRefreshNonce((current) => current + 1);
+    } catch (saveError) {
+      setError(saveError instanceof Error ? saveError.message : "Inbox-to-task handoff failed.");
+    } finally {
+      setQuickActionState((current) => ({ ...current, create_task: false }));
+    }
+  };
+
   if (!sessionReady) {
     return (
       <section className="fg-page">
@@ -405,10 +670,19 @@ export function InboxPage() {
         <div className="fg-panel-heading">
           <div>
             <h3>Scope and filter</h3>
-            <p className="fg-muted">Choose the instance boundary, then narrow the triage queue by status, priority, and current triage posture.</p>
+            <p className="fg-muted">Choose the instance boundary, then narrow the triage queue by status, priority, source, and responsible agent/owner.</p>
           </div>
-          <span className="fg-pill" data-tone={instancesState === "success" ? "success" : instancesState === "error" ? "danger" : "neutral"}>
-            {instancesState}
+          <span
+            className="fg-pill"
+            data-tone={
+              instancesState === "error" || agentsState === "error" || tasksState === "error" || conversationsState === "error"
+                ? "danger"
+                : instancesState === "success" && agentsState !== "loading" && tasksState !== "loading" && conversationsState !== "loading"
+                  ? "success"
+                  : "neutral"
+            }
+          >
+            instances {instancesState} · agents {agentsState} · tasks {tasksState} · conversations {conversationsState}
           </span>
         </div>
         <div className="fg-inline-form">
@@ -483,6 +757,31 @@ export function InboxPage() {
               {PRIORITY_OPTIONS.map((option) => <option key={option} value={option}>{option}</option>)}
             </select>
           </label>
+          <label>
+            Source
+            <select
+              aria-label="Inbox source filter"
+              value={sourceFilter}
+              onChange={(event) => setSourceFilter(event.target.value as InboxSourceFilter)}
+            >
+              {SOURCE_OPTIONS.map((option) => <option key={option} value={option}>{option}</option>)}
+            </select>
+          </label>
+          <label>
+            Agent / owner
+            <select
+              aria-label="Inbox owner filter"
+              value={ownerFilter}
+              onChange={(event) => setOwnerFilter(event.target.value)}
+            >
+              <option value="">all agents</option>
+              {availableOwnerAgents.map((agent) => (
+                <option key={agent.agent_id} value={agent.agent_id}>
+                  {agent.display_name}
+                </option>
+              ))}
+            </select>
+          </label>
         </div>
       </article>
 
@@ -491,7 +790,7 @@ export function InboxPage() {
           <div className="fg-panel-heading">
             <div>
               <h3>Inbox inventory</h3>
-              <p className="fg-muted">Each row is a triageable work item with explicit conversation and runtime linkage.</p>
+              <p className="fg-muted">Each row is a triageable work item with explicit source, priority, and next-path linkage into conversation, task, runtime, or approval follow-up.</p>
             </div>
             <span className="fg-pill" data-tone={listState === "success" ? "success" : listState === "error" ? "danger" : "neutral"}>
               {listState}
@@ -499,11 +798,20 @@ export function InboxPage() {
           </div>
 
           {listState === "loading" ? <p className="fg-muted">Loading inbox inventory.</p> : null}
-          {listState === "success" && items.length === 0 ? <p className="fg-muted">No inbox items matched the selected filters.</p> : null}
+          {listState === "success" && visibleItems.length === 0 ? <p className="fg-muted">No inbox items matched the selected filters and lenses.</p> : null}
 
-          {items.length > 0 ? (
+          {visibleItems.length > 0 ? (
             <div className="fg-stack">
-              {items.map((item) => (
+              {visibleItems.map((item) => {
+                const linkedTask = tasks.find((task) => task.inbox_id === item.inbox_id);
+                const linkedConversation = item.conversation_id ? conversationById.get(item.conversation_id) : null;
+                const posture = inboxQueuePosture(item);
+                const ownerLabel = linkedTask?.owner_id
+                  ? (agentNameById.get(linkedTask.owner_id) ?? linkedTask.owner_id)
+                  : linkedConversation?.participant_agent_ids[0]
+                    ? (agentNameById.get(linkedConversation.participant_agent_ids[0]) ?? linkedConversation.participant_agent_ids[0])
+                    : "unassigned";
+                return (
                 <button
                   key={item.inbox_id}
                   type="button"
@@ -518,17 +826,19 @@ export function InboxPage() {
                       <strong>{item.title}</strong>
                     </div>
                     <div className="fg-actions">
-                      <span className="fg-pill" data-tone={item.triage_status === "done" ? "success" : item.triage_status === "blocked" ? "danger" : "warning"}>
-                        {item.triage_status}
+                      <span className="fg-pill" data-tone={posture.tone}>
+                        {posture.label}
                       </span>
                     </div>
                   </div>
                   <div className="fg-detail-grid">
-                    <span className="fg-muted">{item.status} · {item.priority} priority</span>
-                    <span className="fg-muted">conversation {item.conversation_id ?? "none"} · workspace {item.workspace_id ?? "none"}</span>
+                    <span className="fg-muted">{item.status} · {item.priority} priority · source {inboxSourceLabel(item)}</span>
+                    <span className="fg-muted">triage {item.triage_status} · owner {ownerLabel}</span>
+                    <span className="fg-muted">conversation {item.conversation_id ?? "none"} · task {linkedTask?.task_id ?? "none"}</span>
                   </div>
                 </button>
-              ))}
+                );
+              })}
             </div>
           ) : null}
         </article>
@@ -537,7 +847,7 @@ export function InboxPage() {
           <div className="fg-panel-heading">
             <div>
               <h3>Inbox detail</h3>
-              <p className="fg-muted">Triage posture, links, and the attached conversation summary converge here.</p>
+              <p className="fg-muted">Triage posture, waiting/blocking state, linked conversation/task/runtime references, and the next action path converge here.</p>
             </div>
             {detail ? <span className="fg-pill">{detail.inbox_id}</span> : null}
           </div>
@@ -547,6 +857,11 @@ export function InboxPage() {
 
           {detail ? (
             <div className="fg-stack">
+              <div className="fg-actions">
+                <span className="fg-pill" data-tone={inboxQueuePosture(detail).tone}>Queue posture {inboxQueuePosture(detail).label}</span>
+                <span className="fg-pill">{detail.priority} priority</span>
+                <span className="fg-pill">source {inboxSourceLabel(detail)}</span>
+              </div>
               <div className="fg-card-grid">
                 <article className="fg-subcard">
                   <h4>Summary</h4>
@@ -556,12 +871,14 @@ export function InboxPage() {
                     <li>Execution scope: <span className="fg-code">{detail.company_id}</span></li>
                     <li>Triage: {detail.triage_status}</li>
                     <li>Status: {detail.status}</li>
+                    <li>Queue posture: {inboxQueuePosture(detail).label}</li>
                     <li>Priority: {detail.priority}</li>
+                    <li>Source: {inboxSourceLabel(detail)}</li>
                     <li>Latest message: {detail.latest_message_at ?? "Not recorded"}</li>
                   </ul>
                 </article>
                 <article className="fg-subcard">
-                  <h4>Links</h4>
+                  <h4>Next path</h4>
                   <ul className="fg-list">
                     <li>Conversation: {detail.conversation_id ?? "Not linked"}</li>
                     <li>Thread: {detail.thread_id ?? "Not linked"}</li>
@@ -571,9 +888,21 @@ export function InboxPage() {
                     <li>Artifact: {detail.artifact_id ?? "Not linked"}</li>
                     <li>Decision: {detail.decision_id ?? "Not linked"}</li>
                     <li>Contact: {detail.contact_ref ?? "Not recorded"}</li>
+                    <li>Tasks: {relatedTasks.length > 0 ? `${relatedTasks.length} linked` : "No linked task"}</li>
                   </ul>
                   <div className="fg-actions">
                     {detail.conversation_id ? <Link className="fg-nav-link" to={buildConversationPath({ instanceId, conversationId: detail.conversation_id })}>Open conversation</Link> : null}
+                    {!detail.conversation_id ? (
+                      <button type="button" disabled={!canMutate || quickActionState.create_conversation} onClick={() => void handleCreateConversationFromInbox()}>
+                        {quickActionState.create_conversation ? "Creating conversation" : "Create conversation from item"}
+                      </button>
+                    ) : null}
+                    {relatedTasks[0] ? <Link className="fg-nav-link" to={buildTaskPath({ instanceId, taskId: relatedTasks[0].task_id })}>Open task</Link> : null}
+                    {!relatedTasks[0] ? (
+                      <button type="button" disabled={!canMutate || quickActionState.create_task} onClick={() => void handleCreateTaskFromInbox()}>
+                        {quickActionState.create_task ? "Creating task" : "Create follow-up task"}
+                      </button>
+                    ) : null}
                     {detail.workspace_id ? <Link className="fg-nav-link" to={buildWorkspacePath({ instanceId, workspaceId: detail.workspace_id })}>Open workspace</Link> : null}
                     {detail.artifact_id ? <Link className="fg-nav-link" to={buildArtifactsPath({ instanceId, artifactId: detail.artifact_id })}>Open artifact</Link> : null}
                     {detail.run_id ? <Link className="fg-nav-link" to={buildExecutionRoute(instanceId, detail.run_id)}>Open execution review</Link> : null}
@@ -581,6 +910,31 @@ export function InboxPage() {
                   </div>
                 </article>
               </div>
+
+              <article className="fg-subcard">
+                <h4>Triage actions</h4>
+                <p className="fg-muted">Drive the queue directly from here instead of opening the generic edit form for every state transition.</p>
+                <div className="fg-actions">
+                  <button type="button" disabled={!canMutate || quickActionState.relevant} onClick={() => void runQuickAction("relevant", { triage_status: "relevant", status: "open" })}>
+                    {quickActionState.relevant ? "Setting relevant" : "Mark relevant"}
+                  </button>
+                  <button type="button" disabled={!canMutate || quickActionState.delegated} onClick={() => void runQuickAction("delegated", { triage_status: "delegated", status: "open" })}>
+                    {quickActionState.delegated ? "Delegating" : "Delegate"}
+                  </button>
+                  <button type="button" disabled={!canMutate || quickActionState.blocked} onClick={() => void runQuickAction("blocked", { triage_status: "blocked", status: "open" })}>
+                    {quickActionState.blocked ? "Blocking" : "Block"}
+                  </button>
+                  <button type="button" disabled={!canMutate || quickActionState.waiting} onClick={() => void runQuickAction("waiting", { status: "snoozed" })}>
+                    {quickActionState.waiting ? "Waiting" : "Wait"}
+                  </button>
+                  <button type="button" disabled={!canMutate || quickActionState.done} onClick={() => void runQuickAction("done", { triage_status: "done", status: "closed" })}>
+                    {quickActionState.done ? "Completing" : "Done"}
+                  </button>
+                  <button type="button" disabled={!canMutate || quickActionState.archive} onClick={() => void runQuickAction("archive", { status: "archived" })}>
+                    {quickActionState.archive ? "Archiving" : "Archive"}
+                  </button>
+                </div>
+              </article>
 
               <article className="fg-subcard">
                 <h4>Summary text</h4>
@@ -604,6 +958,23 @@ export function InboxPage() {
                   <p className="fg-muted">No conversation summary is linked to this inbox item.</p>
                 )}
               </article>
+
+              <article className="fg-subcard">
+                <h4>Related tasks</h4>
+                {tasksState === "loading" ? <p className="fg-muted">Loading linked tasks.</p> : null}
+                {relatedTasks.length === 0 ? <p className="fg-muted">No task is currently linked to this inbox item. Use the direct create action above if follow-up should move into task tracking.</p> : null}
+                {relatedTasks.length > 0 ? (
+                  <ul className="fg-list">
+                    {relatedTasks.map((task) => (
+                      <li key={task.task_id}>
+                        <Link className="fg-nav-link" to={buildTaskPath({ instanceId, taskId: task.task_id })}>{task.title}</Link>
+                        {" · "}{task.status}
+                        {" · owner "}{task.owner_id ? (agentNameById.get(task.owner_id) ?? task.owner_id) : "unassigned"}
+                      </li>
+                    ))}
+                  </ul>
+                ) : null}
+              </article>
             </div>
           ) : null}
         </article>
@@ -613,8 +984,8 @@ export function InboxPage() {
         <article className="fg-card">
           <div className="fg-panel-heading">
             <div>
-              <h3>Create inbox item</h3>
-              <p className="fg-muted">Create a durable triage item instead of leaving inbound work as loose notes or disconnected conversation state.</p>
+              <h3>Manual intake</h3>
+              <p className="fg-muted">Create inbox items manually only when inbound work did not already arrive through conversation, runtime, approval, or workspace truth.</p>
             </div>
             <span className="fg-pill" data-tone={canMutate ? "success" : "warning"}>{canMutate ? "Writable" : "Admin only"}</span>
           </div>
@@ -704,8 +1075,8 @@ export function InboxPage() {
         <article className="fg-card">
           <div className="fg-panel-heading">
             <div>
-              <h3>Edit inbox item</h3>
-              <p className="fg-muted">Keep triage posture and conversation/runtime links coherent with the selected work item.</p>
+              <h3>Inbox settings</h3>
+              <p className="fg-muted">Use the form below for deeper edits. Fast triage should happen through the direct actions in the detail panel.</p>
             </div>
             <span className="fg-pill" data-tone={detail ? "neutral" : "warning"}>
               {detail ? detail.inbox_id : "Select an inbox item"}
