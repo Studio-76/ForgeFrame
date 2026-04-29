@@ -443,6 +443,157 @@ export function ConversationsPage() {
     setMessageAgentLensId("");
   }, [detail]);
 
+  const selectableAgents = agents.filter((agent) => agent.status !== "archived");
+  const activeSelectableAgents = useMemo(
+    () => selectableAgents.filter((agent) => agent.status === "active"),
+    [selectableAgents],
+  );
+  const participantSelectableAgents = useMemo(
+    () => activeSelectableAgents.filter((agent) => agent.participation_mode === "direct" || agent.participation_mode === "roundtable"),
+    [activeSelectableAgents],
+  );
+  const mentionSelectableAgents = useMemo(
+    () => activeSelectableAgents.filter((agent) => agent.participation_mode !== "handoff_only"),
+    [activeSelectableAgents],
+  );
+  const roundtableSelectableAgents = useMemo(
+    () => activeSelectableAgents.filter((agent) => agent.participation_mode === "direct" || agent.participation_mode === "roundtable"),
+    [activeSelectableAgents],
+  );
+  const handoffSelectableAgents = useMemo(
+    () => activeSelectableAgents.filter((agent) => agent.participation_mode === "direct" || agent.participation_mode === "handoff_only"),
+    [activeSelectableAgents],
+  );
+  const resolveAgentLabel = (agentId: string | null | undefined) => {
+    if (!agentId) {
+      return "Unassigned";
+    }
+    return agents.find((agent) => agent.agent_id === agentId)?.display_name ?? agentId;
+  };
+  const conversationIdsWithTasks = useMemo(
+    () => new Set(tasks.filter((task) => task.conversation_id).map((task) => task.conversation_id as string)),
+    [tasks],
+  );
+  const visibleConversations = useMemo(
+    () => conversations.filter((conversation) => conversationMatchesLinkLens(conversation, linkLens, conversationIdsWithTasks)),
+    [conversations, conversationIdsWithTasks, linkLens],
+  );
+  const visibleTasks = useMemo(
+    () => detail ? tasks.filter((task) => task.conversation_id === detail.conversation_id) : [],
+    [detail, tasks],
+  );
+  const mentionsByMessageId = useMemo(() => {
+    const grouped = new Map<string, ConversationDetail["mentions"]>();
+    if (!detail) {
+      return grouped;
+    }
+    detail.mentions.forEach((mention) => {
+      const current = grouped.get(mention.message_id) ?? [];
+      current.push(mention);
+      grouped.set(mention.message_id, current);
+    });
+    return grouped;
+  }, [detail]);
+  const eventsByMessageId = useMemo(() => {
+    const grouped = new Map<string, ConversationEventRecord[]>();
+    if (!detail) {
+      return grouped;
+    }
+    detail.events.forEach((eventItem) => {
+      if (!eventItem.source_message_id) {
+        return;
+      }
+      const current = grouped.get(eventItem.source_message_id) ?? [];
+      current.push(eventItem);
+      grouped.set(eventItem.source_message_id, current);
+    });
+    return grouped;
+  }, [detail]);
+  const threadTitleById = useMemo(
+    () => new Map((detail?.threads ?? []).map((thread) => [thread.thread_id, thread.title])),
+    [detail],
+  );
+  const sessionById = useMemo(
+    () => new Map((detail?.sessions ?? []).map((sessionItem) => [sessionItem.session_id, sessionItem])),
+    [detail],
+  );
+  const timelineItems = useMemo<TimelineItem[]>(() => {
+    if (!detail) {
+      return [];
+    }
+    const items: TimelineItem[] = [
+      ...detail.messages.map((messageItem) => ({
+        kind: "message" as const,
+        sortAt: messageItem.created_at,
+        threadId: messageItem.thread_id,
+        message: messageItem,
+        mentions: mentionsByMessageId.get(messageItem.message_id) ?? [],
+        events: eventsByMessageId.get(messageItem.message_id) ?? [],
+      })),
+      ...detail.events.map((eventItem) => ({
+        kind: "event" as const,
+        sortAt: eventItem.created_at,
+        threadId: eventItem.thread_id,
+        event: eventItem,
+      })),
+    ];
+    return items.sort((left, right) => left.sortAt.localeCompare(right.sortAt));
+  }, [detail, eventsByMessageId, mentionsByMessageId]);
+  const filteredTimelineItems = useMemo(() => timelineItems.filter((item) => {
+    if (threadLensId !== "all" && item.threadId !== threadLensId) {
+      return false;
+    }
+
+    if (item.kind === "event") {
+      if (messageAgentLensId && item.event.target_agent_id !== messageAgentLensId && item.event.source_agent_id !== messageAgentLensId) {
+        return false;
+      }
+      if (messageDirectionLens === "to_agent" && !item.event.target_agent_id) {
+        return false;
+      }
+      if (messageDirectionLens === "from_agent") {
+        return false;
+      }
+      if (messageDirectionLens === "human") {
+        return false;
+      }
+      return true;
+    }
+
+    const isAgentAuthored = item.message.author_type === "agent" || item.message.message_role === "assistant";
+    const isHumanAuthored = item.message.message_role === "user" || item.message.message_role === "operator";
+    const isSystemAuthored = item.message.message_role === "system" || item.message.message_role === "tool";
+    const agentIds = [
+      ...item.mentions.map((mention) => mention.agent_id),
+      ...item.events.flatMap((eventItem) => [eventItem.source_agent_id, eventItem.target_agent_id].filter(Boolean) as string[]),
+      item.message.author_id ?? "",
+    ].filter(Boolean);
+
+    if (messageAgentLensId && !agentIds.includes(messageAgentLensId)) {
+      return false;
+    }
+    if (messageDirectionLens === "to_agent" && item.mentions.length === 0 && item.events.every((eventItem) => !eventItem.target_agent_id)) {
+      return false;
+    }
+    if (messageDirectionLens === "from_agent" && !isAgentAuthored) {
+      return false;
+    }
+    if (messageDirectionLens === "human" && !isHumanAuthored) {
+      return false;
+    }
+    if (messageDirectionLens === "system" && !isSystemAuthored) {
+      return false;
+    }
+    return true;
+  }), [messageAgentLensId, messageDirectionLens, threadLensId, timelineItems]);
+  const composerStructuredSelections = [
+    ...appendForm.mentionAgentIds.map((agentId) => `Mention ${resolveAgentLabel(agentId)}`),
+    appendForm.handoffToAgentId ? `Handoff to ${resolveAgentLabel(appendForm.handoffToAgentId)}` : null,
+    appendForm.reviewRequestAgentId ? `Review from ${resolveAgentLabel(appendForm.reviewRequestAgentId)}` : null,
+    appendForm.blockerAgentId ? `Blocker owner ${resolveAgentLabel(appendForm.blockerAgentId)}` : null,
+    ...appendForm.roundtableAgentIds.map((agentId) => `Roundtable ${resolveAgentLabel(agentId)}`),
+  ].filter((item): item is string => Boolean(item));
+
   const handleCreate = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!canMutate || !instanceId) {
@@ -610,137 +761,6 @@ export function ConversationsPage() {
       </section>
     );
   }
-
-  const selectableAgents = agents.filter((agent) => agent.status !== "archived");
-  const resolveAgentLabel = (agentId: string | null | undefined) => {
-    if (!agentId) {
-      return "Unassigned";
-    }
-    return agents.find((agent) => agent.agent_id === agentId)?.display_name ?? agentId;
-  };
-  const conversationIdsWithTasks = useMemo(
-    () => new Set(tasks.filter((task) => task.conversation_id).map((task) => task.conversation_id as string)),
-    [tasks],
-  );
-  const visibleConversations = useMemo(
-    () => conversations.filter((conversation) => conversationMatchesLinkLens(conversation, linkLens, conversationIdsWithTasks)),
-    [conversations, conversationIdsWithTasks, linkLens],
-  );
-  const visibleTasks = useMemo(
-    () => detail ? tasks.filter((task) => task.conversation_id === detail.conversation_id) : [],
-    [detail, tasks],
-  );
-  const mentionsByMessageId = useMemo(() => {
-    const grouped = new Map<string, ConversationDetail["mentions"]>();
-    if (!detail) {
-      return grouped;
-    }
-    detail.mentions.forEach((mention) => {
-      const current = grouped.get(mention.message_id) ?? [];
-      current.push(mention);
-      grouped.set(mention.message_id, current);
-    });
-    return grouped;
-  }, [detail]);
-  const eventsByMessageId = useMemo(() => {
-    const grouped = new Map<string, ConversationEventRecord[]>();
-    if (!detail) {
-      return grouped;
-    }
-    detail.events.forEach((eventItem) => {
-      if (!eventItem.source_message_id) {
-        return;
-      }
-      const current = grouped.get(eventItem.source_message_id) ?? [];
-      current.push(eventItem);
-      grouped.set(eventItem.source_message_id, current);
-    });
-    return grouped;
-  }, [detail]);
-  const threadTitleById = useMemo(
-    () => new Map((detail?.threads ?? []).map((thread) => [thread.thread_id, thread.title])),
-    [detail],
-  );
-  const sessionById = useMemo(
-    () => new Map((detail?.sessions ?? []).map((sessionItem) => [sessionItem.session_id, sessionItem])),
-    [detail],
-  );
-  const timelineItems = useMemo<TimelineItem[]>(() => {
-    if (!detail) {
-      return [];
-    }
-    const items: TimelineItem[] = [
-      ...detail.messages.map((messageItem) => ({
-        kind: "message" as const,
-        sortAt: messageItem.created_at,
-        threadId: messageItem.thread_id,
-        message: messageItem,
-        mentions: mentionsByMessageId.get(messageItem.message_id) ?? [],
-        events: eventsByMessageId.get(messageItem.message_id) ?? [],
-      })),
-      ...detail.events.map((eventItem) => ({
-        kind: "event" as const,
-        sortAt: eventItem.created_at,
-        threadId: eventItem.thread_id,
-        event: eventItem,
-      })),
-    ];
-    return items.sort((left, right) => left.sortAt.localeCompare(right.sortAt));
-  }, [detail, eventsByMessageId, mentionsByMessageId]);
-  const filteredTimelineItems = useMemo(() => timelineItems.filter((item) => {
-    if (threadLensId !== "all" && item.threadId !== threadLensId) {
-      return false;
-    }
-
-    if (item.kind === "event") {
-      if (messageAgentLensId && item.event.target_agent_id !== messageAgentLensId && item.event.source_agent_id !== messageAgentLensId) {
-        return false;
-      }
-      if (messageDirectionLens === "to_agent" && !item.event.target_agent_id) {
-        return false;
-      }
-      if (messageDirectionLens === "from_agent") {
-        return false;
-      }
-      if (messageDirectionLens === "human") {
-        return false;
-      }
-      return true;
-    }
-
-    const isAgentAuthored = item.message.author_type === "agent" || item.message.message_role === "assistant";
-    const isHumanAuthored = item.message.message_role === "user" || item.message.message_role === "operator";
-    const isSystemAuthored = item.message.message_role === "system" || item.message.message_role === "tool";
-    const agentIds = [
-      ...item.mentions.map((mention) => mention.agent_id),
-      ...item.events.flatMap((eventItem) => [eventItem.source_agent_id, eventItem.target_agent_id].filter(Boolean) as string[]),
-      item.message.author_id ?? "",
-    ].filter(Boolean);
-
-    if (messageAgentLensId && !agentIds.includes(messageAgentLensId)) {
-      return false;
-    }
-    if (messageDirectionLens === "to_agent" && item.mentions.length === 0 && item.events.every((eventItem) => !eventItem.target_agent_id)) {
-      return false;
-    }
-    if (messageDirectionLens === "from_agent" && !isAgentAuthored) {
-      return false;
-    }
-    if (messageDirectionLens === "human" && !isHumanAuthored) {
-      return false;
-    }
-    if (messageDirectionLens === "system" && !isSystemAuthored) {
-      return false;
-    }
-    return true;
-  }), [messageAgentLensId, messageDirectionLens, threadLensId, timelineItems]);
-  const composerStructuredSelections = [
-    ...appendForm.mentionAgentIds.map((agentId) => `Mention ${resolveAgentLabel(agentId)}`),
-    appendForm.handoffToAgentId ? `Handoff to ${resolveAgentLabel(appendForm.handoffToAgentId)}` : null,
-    appendForm.reviewRequestAgentId ? `Review from ${resolveAgentLabel(appendForm.reviewRequestAgentId)}` : null,
-    appendForm.blockerAgentId ? `Blocker owner ${resolveAgentLabel(appendForm.blockerAgentId)}` : null,
-    ...appendForm.roundtableAgentIds.map((agentId) => `Roundtable ${resolveAgentLabel(agentId)}`),
-  ].filter((item): item is string => Boolean(item));
 
   return (
     <section className="fg-page">
@@ -1128,14 +1148,14 @@ export function ConversationsPage() {
                     Mention agents
                     <select
                       multiple
-                      size={Math.min(Math.max(selectableAgents.length, 3), 6)}
+                      size={Math.min(Math.max(mentionSelectableAgents.length, 3), 6)}
                       value={appendForm.mentionAgentIds}
                       onChange={(event) => setAppendForm((current) => ({
                         ...current,
                         mentionAgentIds: Array.from(event.target.selectedOptions, (option) => option.value),
                       }))}
                     >
-                      {selectableAgents.map((agent) => (
+                      {mentionSelectableAgents.map((agent) => (
                         <option key={agent.agent_id} value={agent.agent_id}>
                           @{agent.display_name}
                         </option>
@@ -1146,14 +1166,14 @@ export function ConversationsPage() {
                     Roundtable agents
                     <select
                       multiple
-                      size={Math.min(Math.max(selectableAgents.length, 3), 6)}
+                      size={Math.min(Math.max(roundtableSelectableAgents.length, 3), 6)}
                       value={appendForm.roundtableAgentIds}
                       onChange={(event) => setAppendForm((current) => ({
                         ...current,
                         roundtableAgentIds: Array.from(event.target.selectedOptions, (option) => option.value),
                       }))}
                     >
-                      {selectableAgents.map((agent) => (
+                      {roundtableSelectableAgents.map((agent) => (
                         <option key={agent.agent_id} value={agent.agent_id}>
                           {agent.display_name}
                         </option>
@@ -1169,7 +1189,7 @@ export function ConversationsPage() {
                       onChange={(event) => setAppendForm((current) => ({ ...current, handoffToAgentId: event.target.value }))}
                     >
                       <option value="">none</option>
-                      {selectableAgents.map((agent) => (
+                      {handoffSelectableAgents.map((agent) => (
                         <option key={agent.agent_id} value={agent.agent_id}>
                           {agent.display_name}
                         </option>
@@ -1183,7 +1203,7 @@ export function ConversationsPage() {
                       onChange={(event) => setAppendForm((current) => ({ ...current, reviewRequestAgentId: event.target.value }))}
                     >
                       <option value="">none</option>
-                      {selectableAgents.map((agent) => (
+                      {handoffSelectableAgents.map((agent) => (
                         <option key={agent.agent_id} value={agent.agent_id}>
                           {agent.display_name}
                         </option>
@@ -1197,7 +1217,7 @@ export function ConversationsPage() {
                       onChange={(event) => setAppendForm((current) => ({ ...current, blockerAgentId: event.target.value }))}
                     >
                       <option value="">none</option>
-                      {selectableAgents.map((agent) => (
+                      {handoffSelectableAgents.map((agent) => (
                         <option key={agent.agent_id} value={agent.agent_id}>
                           {agent.display_name}
                         </option>
@@ -1205,6 +1225,7 @@ export function ConversationsPage() {
                     </select>
                   </label>
                 </div>
+                <p className="fg-muted">Composer routing follows the live registry. Mention targets come from mention-capable modes; handoff, review, and blocker ownership only expose owner-capable modes.</p>
                 <label>
                   Structured payload JSON
                   <textarea rows={4} value={appendForm.structuredPayloadJson} onChange={(event) => setAppendForm((current) => ({ ...current, structuredPayloadJson: event.target.value }))} />
@@ -1474,14 +1495,14 @@ export function ConversationsPage() {
                 Participants
                 <select
                   multiple
-                  size={Math.min(Math.max(selectableAgents.length, 3), 6)}
+                  size={Math.min(Math.max(participantSelectableAgents.length, 3), 6)}
                   value={createForm.participantAgentIds}
                   onChange={(event) => setCreateForm((current) => ({
                     ...current,
                     participantAgentIds: Array.from(event.target.selectedOptions, (option) => option.value),
                   }))}
                 >
-                  {selectableAgents.map((agent) => (
+                  {participantSelectableAgents.map((agent) => (
                     <option key={agent.agent_id} value={agent.agent_id}>
                       {agent.display_name} ({agent.role_kind})
                     </option>
@@ -1492,14 +1513,14 @@ export function ConversationsPage() {
                 Initial mentions
                 <select
                   multiple
-                  size={Math.min(Math.max(selectableAgents.length, 3), 6)}
+                  size={Math.min(Math.max(mentionSelectableAgents.length, 3), 6)}
                   value={createForm.initialMentionAgentIds}
                   onChange={(event) => setCreateForm((current) => ({
                     ...current,
                     initialMentionAgentIds: Array.from(event.target.selectedOptions, (option) => option.value),
                   }))}
                 >
-                  {selectableAgents.map((agent) => (
+                  {mentionSelectableAgents.map((agent) => (
                     <option key={agent.agent_id} value={agent.agent_id}>
                       @{agent.display_name}
                     </option>
@@ -1507,6 +1528,7 @@ export function ConversationsPage() {
                 </select>
               </label>
             </div>
+            <p className="fg-muted">Conversation creation respects agent participation modes: owner-capable agents populate participant lists, while mention pickers exclude `handoff_only` agents.</p>
             <label>
               Initial message
               <textarea rows={4} value={createForm.initialMessageBody} onChange={(event) => setCreateForm((current) => ({ ...current, initialMessageBody: event.target.value }))} />

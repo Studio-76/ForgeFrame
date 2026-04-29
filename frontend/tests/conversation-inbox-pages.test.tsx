@@ -124,6 +124,11 @@ function createAgentSummary(overrides: Partial<AgentSummary> = {}): AgentSummary
     allowed_targets: ["conversation", "task"],
     assistant_profile_id: null,
     is_default_operator: true,
+    conversation_count: 1,
+    mention_count: 0,
+    last_activity_at: "2026-04-23T10:15:00Z",
+    addressable_in_conversations: true,
+    addressability_reason: "Addressable for assignment, mentions, and active conversation participation.",
     metadata: {},
     created_at: "2026-04-23T09:00:00Z",
     updated_at: "2026-04-23T10:00:00Z",
@@ -429,11 +434,40 @@ beforeEach(() => {
         is_default_operator: false,
       }),
       createAgentSummary({
+        agent_id: "agent_mention",
+        display_name: "Mention Specialist",
+        default_name: "Mention Specialist",
+        role_kind: "observer",
+        participation_mode: "mentioned_only",
+        is_default_operator: false,
+        conversation_count: 0,
+        mention_count: 2,
+        last_activity_at: "2026-04-23T10:12:00Z",
+        addressability_reason: "Addressable as a mention target only; ownership and handoff controls stay disabled.",
+      }),
+      createAgentSummary({
         agent_id: "agent_worker",
         display_name: "Worker",
         default_name: "Worker",
         role_kind: "worker",
+        participation_mode: "handoff_only",
         is_default_operator: false,
+        conversation_count: 0,
+        mention_count: 0,
+        last_activity_at: "2026-04-23T10:18:00Z",
+        addressability_reason: "Addressable only for handoff or blocker ownership, not for mention-based routing.",
+      }),
+      createAgentSummary({
+        agent_id: "agent_roundtable",
+        display_name: "Roundtable Facilitator",
+        default_name: "Roundtable Facilitator",
+        role_kind: "specialist",
+        participation_mode: "roundtable",
+        is_default_operator: false,
+        conversation_count: 1,
+        mention_count: 1,
+        last_activity_at: "2026-04-23T10:19:00Z",
+        addressability_reason: "Addressable for mentions and broadcast/roundtable participation, but not as a dedicated owner.",
       }),
     ],
   });
@@ -646,18 +680,62 @@ describe("conversation and inbox pages", () => {
 
     expect(container.textContent).toContain("No timeline items matched the selected thread and agent lenses.");
 
+    const createForm = getFormByText("Create conversation");
     const appendForm = getFormByText("Append message");
+    const participants = getControlByLabel(createForm, "Participants") as HTMLSelectElement;
+    const initialMentions = getControlByLabel(createForm, "Initial mentions") as HTMLSelectElement;
+    const mentionAgents = getControlByLabel(appendForm, "Mention agents") as HTMLSelectElement;
+    const roundtableAgents = getControlByLabel(appendForm, "Roundtable agents") as HTMLSelectElement;
+    const handoffTo = getControlByLabel(appendForm, "Handoff to") as HTMLSelectElement;
+    const reviewRequest = getControlByLabel(appendForm, "Review request") as HTMLSelectElement;
+
+    expect(Array.from(participants.options, (option) => option.value)).toEqual([
+      "agent_operator",
+      "agent_reviewer",
+      "agent_roundtable",
+    ]);
+    expect(Array.from(initialMentions.options, (option) => option.value)).toEqual([
+      "agent_operator",
+      "agent_reviewer",
+      "agent_mention",
+      "agent_roundtable",
+    ]);
+    expect(Array.from(mentionAgents.options, (option) => option.value)).toEqual([
+      "agent_operator",
+      "agent_reviewer",
+      "agent_mention",
+      "agent_roundtable",
+    ]);
+    expect(Array.from(roundtableAgents.options, (option) => option.value)).toEqual([
+      "agent_operator",
+      "agent_reviewer",
+      "agent_roundtable",
+    ]);
+    expect(Array.from(handoffTo.options, (option) => option.value)).toEqual([
+      "",
+      "agent_operator",
+      "agent_reviewer",
+      "agent_worker",
+    ]);
+    expect(Array.from(reviewRequest.options, (option) => option.value)).toEqual([
+      "",
+      "agent_operator",
+      "agent_reviewer",
+      "agent_worker",
+    ]);
 
     await act(async () => {
-      setMultiSelectValues(getControlByLabel(appendForm, "Mention agents") as HTMLSelectElement, ["agent_operator"]);
+      setMultiSelectValues(mentionAgents, ["agent_mention"]);
       setControlValue(getControlByLabel(appendForm, "Handoff to"), "agent_worker");
       setControlValue(getControlByLabel(appendForm, "Review request"), "agent_reviewer");
+      setMultiSelectValues(roundtableAgents, ["agent_roundtable"]);
     });
     await flushEffects();
 
-    expect(container.textContent).toContain("Mention Operator");
+    expect(container.textContent).toContain("Mention Mention Specialist");
     expect(container.textContent).toContain("Handoff to Worker");
     expect(container.textContent).toContain("Review from Reviewer");
+    expect(container.textContent).toContain("Roundtable Roundtable Facilitator");
   });
 
   it("creates, updates, and appends conversation history against the selected instance scope", async () => {
@@ -677,8 +755,8 @@ describe("conversation and inbox pages", () => {
       setControlValue(getControlByLabel(createForm, "Subject"), "Operator follow-up");
       setControlValue(getControlByLabel(createForm, "Initial message"), "Initial operator note.");
       setControlValue(getControlByLabel(createForm, "Triage"), "relevant");
-      setMultiSelectValues(getControlByLabel(createForm, "Participants") as HTMLSelectElement, ["agent_operator", "agent_reviewer"]);
-      setMultiSelectValues(getControlByLabel(createForm, "Initial mentions") as HTMLSelectElement, ["agent_operator"]);
+      setMultiSelectValues(getControlByLabel(createForm, "Participants") as HTMLSelectElement, ["agent_operator", "agent_roundtable"]);
+      setMultiSelectValues(getControlByLabel(createForm, "Initial mentions") as HTMLSelectElement, ["agent_mention"]);
       createButton.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     });
     await flushEffects();
@@ -687,8 +765,8 @@ describe("conversation and inbox pages", () => {
       subject: "Operator follow-up",
       initial_message_body: "Initial operator note.",
       triage_status: "relevant",
-      participant_agent_ids: ["agent_operator", "agent_reviewer"],
-      initial_mention_agent_ids: ["agent_operator"],
+      participant_agent_ids: ["agent_operator", "agent_roundtable"],
+      initial_mention_agent_ids: ["agent_mention"],
     }));
 
     const updateButton = getButtonByText(updateForm, "Save conversation");
@@ -709,10 +787,10 @@ describe("conversation and inbox pages", () => {
       setControlValue(getControlByLabel(appendForm, "Continuity key"), "assistant-review-1");
       setControlValue(getControlByLabel(appendForm, "Message role"), "assistant");
       setControlValue(getControlByLabel(appendForm, "Message body"), "Assistant reviewed the thread and suggested the next handoff step.");
-      setMultiSelectValues(getControlByLabel(appendForm, "Mention agents") as HTMLSelectElement, ["agent_worker"]);
+      setMultiSelectValues(getControlByLabel(appendForm, "Mention agents") as HTMLSelectElement, ["agent_mention"]);
       setControlValue(getControlByLabel(appendForm, "Handoff to"), "agent_worker");
       setControlValue(getControlByLabel(appendForm, "Review request"), "agent_reviewer");
-      setMultiSelectValues(getControlByLabel(appendForm, "Roundtable agents") as HTMLSelectElement, ["agent_operator", "agent_worker"]);
+      setMultiSelectValues(getControlByLabel(appendForm, "Roundtable agents") as HTMLSelectElement, ["agent_operator", "agent_roundtable"]);
       appendButton.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     });
     await flushEffects();
@@ -721,10 +799,10 @@ describe("conversation and inbox pages", () => {
       continuity_key: "assistant-review-1",
       body: "Assistant reviewed the thread and suggested the next handoff step.",
       message_role: "assistant",
-      mention_agent_ids: ["agent_worker"],
+      mention_agent_ids: ["agent_mention"],
       handoff_to_agent_id: "agent_worker",
       review_request_agent_id: "agent_reviewer",
-      roundtable_agent_ids: ["agent_operator", "agent_worker"],
+      roundtable_agent_ids: ["agent_operator", "agent_roundtable"],
     }));
   });
 

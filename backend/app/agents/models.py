@@ -32,6 +32,11 @@ class AgentSummary(BaseModel):
     allowed_targets: list[str] = Field(default_factory=list)
     assistant_profile_id: str | None = None
     is_default_operator: bool = False
+    conversation_count: int = 0
+    mention_count: int = 0
+    last_activity_at: datetime | None = None
+    addressable_in_conversations: bool = False
+    addressability_reason: str = ""
     metadata: dict[str, Any] = Field(default_factory=dict)
     created_at: datetime
     updated_at: datetime
@@ -69,4 +74,3 @@ class UpdateAgent(BaseModel):
 class ArchiveAgent(BaseModel):
     replacement_agent_id: str | None = Field(default=None, max_length=64)
     reason: str | None = Field(default=None, max_length=4000)
-

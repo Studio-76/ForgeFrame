@@ -6,7 +6,7 @@ from collections.abc import Callable
 from datetime import UTC, datetime
 from uuid import uuid4
 
-from sqlalchemy import select
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from app.agents.models import AgentDetail, AgentSummary, CreateAgent, UpdateAgent
@@ -14,6 +14,7 @@ from app.instances.models import InstanceRecord
 from app.knowledge.models import RecordLink
 from app.storage.agent_repository import AgentORM
 from app.storage.assistant_profile_repository import AssistantProfileORM
+from app.storage.conversation_repository import ConversationEventORM, ConversationMentionORM, ConversationParticipantORM
 
 SessionFactory = Callable[[], Session]
 
@@ -58,7 +59,59 @@ class AgentAdminService:
             raise ValueError(f"Agent '{agent_id}' was not found.")
         return row
 
-    def _summary(self, row: AgentORM) -> AgentSummary:
+    @staticmethod
+    def _addressability(row: AgentORM) -> tuple[bool, str]:
+        if row.status != "active":
+            return False, "Paused or archived agents stay visible in history but are not offered for active conversation routing."
+        if row.participation_mode == "direct":
+            return True, "Addressable for assignment, mentions, and active conversation participation."
+        if row.participation_mode == "mentioned_only":
+            return True, "Addressable as a mention target only; ownership and handoff controls stay disabled."
+        if row.participation_mode == "roundtable":
+            return True, "Addressable for mentions and broadcast/roundtable participation, but not as a dedicated owner."
+        if row.participation_mode == "handoff_only":
+            return True, "Addressable only for handoff or blocker ownership, not for mention-based routing."
+        return False, "Conversation addressability is not available for this backend participation mode."
+
+    def _summary(self, session: Session, row: AgentORM) -> AgentSummary:
+        conversation_count = session.scalar(
+            select(func.count(func.distinct(ConversationParticipantORM.conversation_id))).where(
+                ConversationParticipantORM.company_id == row.company_id,
+                ConversationParticipantORM.agent_id == row.id,
+            )
+        ) or 0
+        mention_count = session.scalar(
+            select(func.count()).select_from(ConversationMentionORM).where(
+                ConversationMentionORM.company_id == row.company_id,
+                ConversationMentionORM.agent_id == row.id,
+            )
+        ) or 0
+        participant_last_activity = session.scalar(
+            select(func.max(ConversationParticipantORM.updated_at)).where(
+                ConversationParticipantORM.company_id == row.company_id,
+                ConversationParticipantORM.agent_id == row.id,
+            )
+        )
+        mention_last_activity = session.scalar(
+            select(func.max(ConversationMentionORM.created_at)).where(
+                ConversationMentionORM.company_id == row.company_id,
+                ConversationMentionORM.agent_id == row.id,
+            )
+        )
+        event_last_activity = session.scalar(
+            select(func.max(ConversationEventORM.created_at)).where(
+                ConversationEventORM.company_id == row.company_id,
+                or_(ConversationEventORM.source_agent_id == row.id, ConversationEventORM.target_agent_id == row.id),
+            )
+        )
+        addressable_in_conversations, addressability_reason = self._addressability(row)
+        last_activity_candidates = [
+            row.updated_at,
+            participant_last_activity,
+            mention_last_activity,
+            event_last_activity,
+        ]
+        last_activity_at = max((item for item in last_activity_candidates if item is not None), default=row.updated_at)
         return AgentSummary(
             agent_id=row.id,
             instance_id=row.instance_id,
@@ -71,13 +124,18 @@ class AgentAdminService:
             allowed_targets=list(row.allowed_targets_json or []),
             assistant_profile_id=row.assistant_profile_id,
             is_default_operator=row.is_default_operator,
+            conversation_count=int(conversation_count),
+            mention_count=int(mention_count),
+            last_activity_at=last_activity_at,
+            addressable_in_conversations=addressable_in_conversations,
+            addressability_reason=addressability_reason,
             metadata=dict(row.metadata_json or {}),
             created_at=row.created_at,
             updated_at=row.updated_at,
         )
 
     def _detail(self, session: Session, row: AgentORM) -> AgentDetail:
-        summary = self._summary(row)
+        summary = self._summary(session, row)
         assistant_profile = None
         if row.assistant_profile_id:
             profile = session.get(AssistantProfileORM, row.assistant_profile_id)
@@ -172,7 +230,7 @@ class AgentAdminService:
             rows = session.execute(
                 stmt.order_by(AgentORM.is_default_operator.desc(), AgentORM.updated_at.desc()).limit(max(1, min(limit, 200)))
             ).scalars().all()
-            return [self._summary(row) for row in rows]
+            return [self._summary(session, row) for row in rows]
 
     def get_agent(self, *, instance: InstanceRecord, agent_id: str) -> AgentDetail:
         with self._session_factory() as session:

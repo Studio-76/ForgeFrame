@@ -199,6 +199,11 @@ export type AgentSummary = {
   allowed_targets: string[];
   assistant_profile_id?: string | null;
   is_default_operator: boolean;
+  conversation_count: number;
+  mention_count: number;
+  last_activity_at?: string | null;
+  addressable_in_conversations: boolean;
+  addressability_reason: string;
   metadata: Record<string, unknown>;
   created_at: string;
   updated_at: string;
@@ -3402,7 +3407,12 @@ export function fetchAgents(
     appendQueryParams(appendTenantScope("/admin/agents", undefined, instanceId), {
       status: filters.status && filters.status !== "all" ? filters.status : null,
       limit: filters.limit ?? 100,
-      ensureDefaultOperator: filters.ensureDefaultOperator === false ? "false" : null,
+      ensureDefaultOperator:
+        filters.ensureDefaultOperator === true
+          ? "true"
+          : filters.ensureDefaultOperator === false
+            ? "false"
+            : null,
     }),
   );
 }
