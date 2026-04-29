@@ -31,3 +31,17 @@
   - `git diff --check` -> `PASS`
   - `grep -R "reference/design/dashboard" -n frontend/src frontend/package.json frontend/index.html frontend/vite.config.* docs 2>/dev/null || true` -> `Only docs/ui-redesign-map.md`
   - `grep -R "reference/" -n frontend/src frontend/package.json frontend/index.html frontend/vite.config.* 2>/dev/null || true` -> `No productive hits`
+
+## Revalidation 2026-04-29
+
+- Audit-Ergebnis: `APPROVED`
+- Konkrete Audit-Maengel: `keine`
+- Finale Freigabe: `APPROVED`
+- Begruendung:
+  - Die Models-Seite bleibt auf aktuellem HEAD eine echte Registerflaeche mit Filtertabelle, Sticky-Detailpanel, Sync-Aktion und ehrlicher Routing-/Trust-Wahrheit.
+  - Der Global-Contract-Fix aus `00` hat die Cross-Surface-Handoffs in eine kontextuelle ActionBar verschoben und `statusKey` im Detailpanel auf den globalen Vertragswortschatz gemappt, ohne die Registerlogik zu regressieren.
+  - Ausgefuehrte Pruefkommandos auf aktuellem HEAD:
+    - `cd frontend && npm run build` -> `passed`
+    - `cd frontend && npm test -- --runInBand` -> `failed as tooling incompatibility (Vitest: Unknown option --runInBand)`
+    - `cd frontend && npm test` -> `passed (42 test files, 160 tests)`
+    - `cd frontend && npm test -- models-page` -> `passed (1 test file, 3 tests)`
