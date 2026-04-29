@@ -137,6 +137,7 @@ beforeEach(() => {
       present: false,
       certificate_path: "/etc/forgeframe/tls/live/fullchain.pem",
       key_path: "/etc/forgeframe/tls/live/privkey.pem",
+      trust_state: "missing",
       issuer: null,
       subject: null,
       valid_from: null,
@@ -145,6 +146,9 @@ beforeEach(() => {
       last_error: "certificate material missing",
     },
     mode_classification: "limited_exception",
+    renewal_supported: true,
+    renewal_allowed: false,
+    renewal_blocked_reason: "tls_mode_not_integrated_acme",
     blockers: ["tls_mode_disabled", "certificate_material_missing"],
     checked_at: "2026-04-23T08:40:00Z",
   });
@@ -281,7 +285,7 @@ describe("setup module pages", () => {
     expect(fetchIngressTlsStatusMock).toHaveBeenCalled();
     expect(container.textContent).toContain("Ingress / TLS / Certificates");
     expect(container.textContent).toContain("forgeframe.example.com");
-    expect(container.textContent).toContain("Certificate posture");
+    expect(container.textContent).toContain("Ingress checklist");
     expect(container.textContent).toContain("tls_mode_disabled");
     expect(container.textContent).toContain("Current blockers");
     expect(container.textContent).toContain("Bind the UI to 0.0.0.0:443 under /.");

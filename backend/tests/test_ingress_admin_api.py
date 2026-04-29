@@ -6,7 +6,7 @@ from threading import Thread
 from fastapi.testclient import TestClient
 
 from conftest import admin_headers as shared_admin_headers
-from app.ingress.service import IngressTlsStatus, TlsCertificateStatus, build_ingress_tls_status
+from app.ingress.service import IngressTlsStatus, TlsCertificateStatus, build_ingress_tls_status, run_tls_renewal
 from app.main import app
 from app.settings.config import Settings
 
@@ -46,6 +46,7 @@ def _certificate_status(*, present: bool = True) -> TlsCertificateStatus:
         present=present,
         certificate_path="/etc/forgeframe/tls/live/fullchain.pem",
         key_path="/etc/forgeframe/tls/live/privkey.pem",
+        trust_state="public_ca" if present else "missing",
         issuer="CN=Let's Encrypt",
         subject="CN=forgeframe.example.com",
         valid_from="Apr 23 00:00:00 2026 GMT",
@@ -77,6 +78,8 @@ def test_build_ingress_tls_status_requires_integrated_acme_for_normative_mode(mo
 
     assert status.mode_classification == "limited_exception"
     assert "tls_mode_not_integrated_acme" in status.blockers
+    assert status.renewal_allowed is False
+    assert status.renewal_blocked_reason == "tls_mode_not_integrated_acme"
 
 
 def test_build_ingress_tls_status_reports_normative_public_https_only_when_all_contracts_hold(monkeypatch) -> None:
@@ -90,6 +93,8 @@ def test_build_ingress_tls_status_reports_normative_public_https_only_when_all_c
     assert status.mode_classification == "normative_public_https"
     assert status.blockers == []
     assert status.public_origin == "https://forgeframe.example.com"
+    assert status.renewal_allowed is True
+    assert status.certificate.trust_state == "public_ca"
 
 
 def test_build_ingress_tls_status_treats_placeholder_public_contract_values_as_missing(monkeypatch) -> None:
@@ -107,6 +112,8 @@ def test_build_ingress_tls_status_treats_placeholder_public_contract_values_as_m
     assert status.fqdn is None
     assert status.public_origin is None
     assert "public_fqdn_missing" in status.blockers
+    assert status.renewal_allowed is False
+    assert status.renewal_blocked_reason == "tls_mode_not_integrated_acme"
 
 
 def test_ingress_admin_api_requires_auth_and_returns_operator_truth(monkeypatch) -> None:
@@ -129,6 +136,9 @@ def test_ingress_admin_api_requires_auth_and_returns_operator_truth(monkeypatch)
         resolved_addresses=["203.0.113.10"],
         certificate=_certificate_status(),
         mode_classification="normative_public_https",
+        renewal_supported=True,
+        renewal_allowed=True,
+        renewal_blocked_reason=None,
         blockers=[],
         checked_at="2026-04-23T00:00:00+00:00",
     )
@@ -162,13 +172,27 @@ def test_ingress_admin_api_exposes_certificate_renewal_result(monkeypatch) -> No
     assert response.status_code == 200
     assert response.json()["renewal"]["status"] == "failed"
     assert response.json()["renewal"]["stderr"] == "certbot failed"
+    assert response.json()["ingress"]["mode_classification"] in {"normative_public_https", "limited_exception"}
+
+
+def test_run_tls_renewal_blocks_until_integrated_acme_contract_is_ready(monkeypatch) -> None:
+    settings = _base_settings(public_tls_mode="manual")
+    monkeypatch.setattr("app.ingress.service._resolve_dns", lambda fqdn, port: (True, ["203.0.113.10"]))
+    monkeypatch.setattr("app.ingress.service._load_certificate_status", lambda current: _certificate_status())
+    monkeypatch.setattr("app.ingress.service.has_integrated_tls_automation", lambda repo_root: True)
+
+    result = run_tls_renewal(settings)
+
+    assert result["status"] == "blocked"
+    assert result["blocked_reason"] == "tls_mode_not_integrated_acme"
 
 
 def test_acme_http_helper_only_serves_challenges_and_redirects_other_paths(tmp_path) -> None:
     module = _load_acme_helper_module()
     module.WEBROOT = tmp_path
     module.FQDN = "forgeframe.example.com"
-    challenge = tmp_path / "token-123"
+    challenge = tmp_path / ".well-known" / "acme-challenge" / "token-123"
+    challenge.parent.mkdir(parents=True, exist_ok=True)
     challenge.write_text("challenge-proof", encoding="utf-8")
     server = module.ThreadingHTTPServer(("127.0.0.1", 0), module.AcmeHelperHandler)
     thread = Thread(target=server.serve_forever, daemon=True)

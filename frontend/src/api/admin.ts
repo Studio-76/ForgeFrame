@@ -773,6 +773,7 @@ export type IngressTlsCertificateStatus = {
   present: boolean;
   certificate_path: string;
   key_path: string;
+  trust_state: "missing" | "self_signed" | "public_ca" | "unknown";
   issuer?: string | null;
   subject?: string | null;
   valid_from?: string | null;
@@ -803,8 +804,21 @@ export type IngressTlsStatusResponse = {
   resolved_addresses: string[];
   certificate: IngressTlsCertificateStatus;
   mode_classification: "normative_public_https" | "limited_exception";
+  renewal_supported: boolean;
+  renewal_allowed: boolean;
+  renewal_blocked_reason?: string | null;
   blockers: string[];
   checked_at: string;
+};
+
+export type IngressTlsRenewalResult = {
+  status: string;
+  command?: string[];
+  blocked_reason?: string | null;
+  details?: string | null;
+  stdout?: string | null;
+  stderr?: string | null;
+  exit_code?: number | null;
 };
 
 export type RecoveryBackupTargetClass =
@@ -5464,7 +5478,7 @@ export function fetchIngressTlsStatus(): Promise<IngressTlsStatusResponse> {
 }
 
 export function renewIngressTls() {
-  return fetchJson<{ status: string; renewal: Record<string, unknown> }>("/admin/ingress/tls/renew", {
+  return fetchJson<{ status: string; renewal: IngressTlsRenewalResult; ingress: IngressTlsStatusResponse }>("/admin/ingress/tls/renew", {
     method: "POST",
     body: "{}",
   });

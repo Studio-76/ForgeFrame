@@ -18,5 +18,7 @@ def get_ingress_tls_status() -> dict[str, object]:
 
 @router.post("/tls/renew")
 def renew_ingress_tls() -> dict[str, object]:
-    result = run_tls_renewal(get_settings())
-    return {"status": "ok", "renewal": result}
+    settings = get_settings()
+    result = run_tls_renewal(settings)
+    status = build_ingress_tls_status(settings)
+    return {"status": "ok", "renewal": result, "ingress": status.model_dump()}

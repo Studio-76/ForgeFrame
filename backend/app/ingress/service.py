@@ -31,6 +31,7 @@ class TlsCertificateStatus(BaseModel):
     present: bool
     certificate_path: str
     key_path: str
+    trust_state: Literal["missing", "self_signed", "public_ca", "unknown"] = "unknown"
     issuer: str | None = None
     subject: str | None = None
     valid_from: str | None = None
@@ -60,6 +61,9 @@ class IngressTlsStatus(BaseModel):
     resolved_addresses: list[str] = Field(default_factory=list)
     certificate: TlsCertificateStatus
     mode_classification: Literal["normative_public_https", "limited_exception"]
+    renewal_supported: bool
+    renewal_allowed: bool
+    renewal_blocked_reason: str | None = None
     blockers: list[str] = Field(default_factory=list)
     checked_at: str
 
@@ -74,6 +78,7 @@ def _load_certificate_status(settings: Settings) -> TlsCertificateStatus:
             present=False,
             certificate_path=str(cert_path),
             key_path=str(key_path),
+            trust_state="missing",
             last_error=last_error,
         )
 
@@ -84,6 +89,7 @@ def _load_certificate_status(settings: Settings) -> TlsCertificateStatus:
             present=False,
             certificate_path=str(cert_path),
             key_path=str(key_path),
+            trust_state="unknown",
             last_error=f"{type(exc).__name__}: {exc}",
         )
 
@@ -111,6 +117,11 @@ def _load_certificate_status(settings: Settings) -> TlsCertificateStatus:
         present=True,
         certificate_path=str(cert_path),
         key_path=str(key_path),
+        trust_state=(
+            "self_signed"
+            if decoded.get("issuer") and decoded.get("subject") and decoded.get("issuer") == decoded.get("subject")
+            else "public_ca"
+        ),
         issuer=_join_name(decoded.get("issuer")),
         subject=_join_name(decoded.get("subject")),
         valid_from=valid_from,
@@ -168,6 +179,22 @@ def build_ingress_tls_status(settings: Settings) -> IngressTlsStatus:
     if not certificate.present:
         blockers.append("certificate_material_missing")
 
+    renewal_supported = integrated_tls
+    renewal_blocked_reason: str | None = None
+    if settings.public_tls_mode != "integrated_acme":
+        renewal_blocked_reason = "tls_mode_not_integrated_acme"
+    elif not configured_fqdn:
+        renewal_blocked_reason = "public_fqdn_missing"
+    elif not has_configured_public_acme_email(settings.public_tls_acme_email):
+        renewal_blocked_reason = "public_tls_acme_email_missing"
+    elif not dns_resolves:
+        renewal_blocked_reason = "public_fqdn_dns_unresolved"
+    elif settings.public_http_helper_port != NORMATIVE_HTTP_HELPER_PORT:
+        renewal_blocked_reason = "port80_helper_not_normative"
+    elif not integrated_tls:
+        renewal_blocked_reason = "integrated_tls_automation_missing"
+    renewal_allowed = renewal_blocked_reason is None
+
     public_origin = None
     if configured_fqdn:
         public_origin = f"https://{configured_fqdn}"
@@ -190,14 +217,28 @@ def build_ingress_tls_status(settings: Settings) -> IngressTlsStatus:
         resolved_addresses=resolved_addresses,
         certificate=certificate,
         mode_classification="normative_public_https" if not blockers else "limited_exception",
+        renewal_supported=renewal_supported,
+        renewal_allowed=renewal_allowed,
+        renewal_blocked_reason=renewal_blocked_reason,
         blockers=blockers,
         checked_at=datetime.now(tz=timezone.utc).isoformat(),
     )
 
 
 def run_tls_renewal(settings: Settings) -> dict[str, object]:
+    status = build_ingress_tls_status(settings)
     script = Path(__file__).resolve().parents[3] / "scripts" / "renew-certificates.sh"
     command = ["bash", str(script)]
+    if not status.renewal_allowed:
+        return {
+            "status": "blocked",
+            "command": command,
+            "blocked_reason": status.renewal_blocked_reason,
+            "details": (
+                "Certificate renewal is unavailable until the integrated ACME contract is satisfied: "
+                f"{status.renewal_blocked_reason}."
+            ),
+        }
     try:
         completed = subprocess.run(
             command,
