@@ -603,22 +603,15 @@ class GovernanceService:
         )
         return memberships[0] if memberships else None
 
-    def _sync_user_role_from_memberships(self, user: AdminUserRecord) -> None:
-        memberships = self._instance_memberships_for_user(user.user_id)
-        if not memberships:
-            return
-        highest_role = max(memberships, key=lambda item: self._role_rank(item.role)).role
-        if user.role != highest_role:
-            user.role = highest_role
-
     def _sync_memberships_from_user_defaults(self, user: AdminUserRecord) -> bool:
         changed = False
-        role_rank = self._role_rank(user.role)
-        for index, membership in enumerate(self._all_instance_memberships_for_user(user.user_id)):
+        for index, membership in enumerate(self._state.instance_memberships):
+            if membership.user_id != user.user_id:
+                continue
             updates: dict[str, object] = {}
-            if membership.status != user.status:
-                updates["status"] = user.status
-            if self._role_rank(membership.role) > role_rank:
+            # Global admin role is an explicit ceiling, not a value that should overwrite
+            # every scoped membership on each authenticated request.
+            if self._role_rank(membership.role) > self._role_rank(user.role):
                 updates["role"] = user.role
             if not updates:
                 continue
@@ -643,7 +636,6 @@ class GovernanceService:
                     changed = True
             if self._sync_memberships_from_user_defaults(user):
                 changed = True
-            self._sync_user_role_from_memberships(user)
         return changed
 
     def _effective_session_membership_role(
@@ -2176,6 +2168,26 @@ class GovernanceService:
         payload["history_source"] = history_source
         return payload
 
+    @staticmethod
+    def _secret_control_state(*, configured: bool, needs_rotation_evidence: bool) -> dict[str, str]:
+        if not configured:
+            return {
+                "state": "missing",
+                "state_label": "Missing",
+                "state_reason": "No credential is configured for this control path.",
+            }
+        if needs_rotation_evidence:
+            return {
+                "state": "blocked",
+                "state_label": "Blocked",
+                "state_reason": "Credential exists, but ForgeFrame has no recorded rotation evidence for it.",
+            }
+        return {
+            "state": "rotatable",
+            "state_label": "Rotatable",
+            "state_reason": "Credential is configured and ForgeFrame has recorded rotation evidence for it.",
+        }
+
     def _runtime_provider_secret_posture(self) -> list[dict[str, object]]:
         openai_codex_oauth = self._settings.openai_codex_auth_mode == "oauth"
         gemini_oauth = self._settings.gemini_auth_mode == "oauth"
@@ -2310,6 +2322,10 @@ class GovernanceService:
                     "config_revision": profile.config_revision,
                     "history_source": "harness_config_history",
                     "needs_rotation_evidence": configured and int(summary["history_count"]) == 0,
+                    **self._secret_control_state(
+                        configured=configured,
+                        needs_rotation_evidence=configured and int(summary["history_count"]) == 0,
+                    ),
                     **summary,
                 }
             )
@@ -2408,6 +2424,10 @@ class GovernanceService:
                     **provider,
                     "history_source": "governance_recorded_event",
                     "needs_rotation_evidence": bool(provider["configured"]) and int(summary["history_count"]) == 0,
+                    **self._secret_control_state(
+                        configured=bool(provider["configured"]),
+                        needs_rotation_evidence=bool(provider["configured"]) and int(summary["history_count"]) == 0,
+                    ),
                     **summary,
                 }
             )
@@ -2438,6 +2458,11 @@ class GovernanceService:
                     "profile_count": len(harness_profiles),
                     "history_source": "harness_config_history",
                     "needs_rotation_evidence": any(bool(item["configured"]) for item in harness_profiles) and int(harness_summary["history_count"]) == 0,
+                    **self._secret_control_state(
+                        configured=any(bool(item["configured"]) for item in harness_profiles),
+                        needs_rotation_evidence=any(bool(item["configured"]) for item in harness_profiles)
+                        and int(harness_summary["history_count"]) == 0,
+                    ),
                     **harness_summary,
                     "last_rotation_reference": (
                         f"{latest_harness_event['target_id']}:{latest_harness_event.get('reference')}"
@@ -2480,6 +2505,116 @@ class GovernanceService:
                 "storage": "repository_backed_configuration",
                 "plaintext_persisted": True,
                 "notes": "Generic harness auth material is stored with the profile record and requires database/filesystem controls plus redacted rotation evidence.",
+            },
+        ]
+
+    def security_blockers(self, *, actor: AuthenticatedAdmin | None = None) -> list[dict[str, object]]:
+        bootstrap = self.bootstrap_status()
+        approver_posture = self.elevated_access_approver_posture(actor=actor)
+        secret_posture = self.provider_secret_posture()
+        active_sessions = [session for session in self._state.admin_sessions if self._session_is_active(session)]
+        active_break_glass_sessions = [session for session in active_sessions if session.session_type == "break_glass"]
+        secrets_missing = [item for item in secret_posture if not bool(item["configured"])]
+        missing_rotation = [item for item in secret_posture if bool(item["needs_rotation_evidence"])]
+
+        return [
+            {
+                "blocker_id": "default_password",
+                "label": "Default password",
+                "active": bool(bootstrap["default_password_in_use"]),
+                "tone": "danger" if bool(bootstrap["default_password_in_use"]) else "success",
+                "count": 1 if bool(bootstrap["default_password_in_use"]) else 0,
+                "summary": (
+                    "Bootstrap password still active."
+                    if bool(bootstrap["default_password_in_use"])
+                    else "Bootstrap password has been rotated."
+                ),
+                "detail": (
+                    "The bootstrap admin account still uses a known insecure password and must be rotated immediately."
+                    if bool(bootstrap["default_password_in_use"])
+                    else "No insecure bootstrap password is currently active."
+                ),
+            },
+            {
+                "blocker_id": "missing_rotation",
+                "label": "Missing rotation evidence",
+                "active": bool(missing_rotation),
+                "tone": "danger" if missing_rotation else "success",
+                "count": len(missing_rotation),
+                "summary": (
+                    f"{len(missing_rotation)} secret controls lack rotation evidence."
+                    if missing_rotation
+                    else "All tracked secret controls have rotation evidence."
+                ),
+                "detail": (
+                    "Configured provider or harness credentials exist without recorded rotation evidence."
+                    if missing_rotation
+                    else "Every configured provider or harness control has at least one recorded rotation event."
+                ),
+            },
+            {
+                "blocker_id": "open_sessions",
+                "label": "Open sessions",
+                "active": bool(active_sessions),
+                "tone": "warning" if active_sessions else "success",
+                "count": len(active_sessions),
+                "summary": (
+                    f"{len(active_sessions)} admin sessions are active."
+                    if active_sessions
+                    else "No admin sessions are active."
+                ),
+                "detail": (
+                    "Review active sessions and revoke anything that no longer needs control-plane access."
+                    if active_sessions
+                    else "There are no active standard or elevated admin sessions to review."
+                ),
+            },
+            {
+                "blocker_id": "secrets_missing",
+                "label": "Secrets missing",
+                "active": bool(secrets_missing),
+                "tone": "danger" if secrets_missing else "success",
+                "count": len(secrets_missing),
+                "summary": (
+                    f"{len(secrets_missing)} provider controls are not configured."
+                    if secrets_missing
+                    else "All tracked provider controls are configured."
+                ),
+                "detail": (
+                    "One or more provider integrations cannot authenticate because no credential is configured."
+                    if secrets_missing
+                    else "Every tracked provider control reports a configured credential path."
+                ),
+            },
+            {
+                "blocker_id": "break_glass_active",
+                "label": "Break-glass active",
+                "active": bool(active_break_glass_sessions),
+                "tone": "danger" if active_break_glass_sessions else "success",
+                "count": len(active_break_glass_sessions),
+                "summary": (
+                    f"{len(active_break_glass_sessions)} break-glass sessions are active."
+                    if active_break_glass_sessions
+                    else "No break-glass sessions are active."
+                ),
+                "detail": (
+                    "A write-capable emergency session is currently active and should be time-bounded and monitored."
+                    if active_break_glass_sessions
+                    else "No emergency break-glass exceptions are currently running."
+                ),
+            },
+            {
+                "blocker_id": "approver_recovery",
+                "label": "Elevated access recovery",
+                "active": approver_posture["state"] == "recovery_required",
+                "tone": "danger" if approver_posture["state"] == "recovery_required" else "success",
+                "count": 1 if approver_posture["state"] == "recovery_required" else 0,
+                "summary": (
+                    "Elevated access is blocked until a second admin approver exists."
+                    if approver_posture["state"] == "recovery_required"
+                    else "A distinct admin approver is available."
+                ),
+                "detail": str(approver_posture["secondary_message"]),
             },
         ]
 

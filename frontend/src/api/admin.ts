@@ -1493,15 +1493,98 @@ export type SecurityCredentialPolicy = {
   observability?: Record<string, unknown>;
 };
 
+export type SecurityBlocker = {
+  blocker_id: string;
+  label: string;
+  active: boolean;
+  tone: "success" | "warning" | "danger" | "neutral";
+  count?: number;
+  summary: string;
+  detail: string;
+};
+
+export type SecurityBootstrapStatus = {
+  admin_auth_enabled: boolean;
+  bootstrap_username: string;
+  must_rotate_password: boolean;
+  default_password_in_use: boolean;
+  admin_user_count: number;
+  active_session_count: number;
+  governance_storage_backend: string;
+};
+
+export type SecuritySecretPosture = {
+  provider: string;
+  configured: boolean;
+  auth_mode: string;
+  rotation_support: string;
+  secret_storage: string;
+  credential_reference: string;
+  history_source: string;
+  needs_rotation_evidence: boolean;
+  state: "missing" | "rotatable" | "blocked";
+  state_label: string;
+  state_reason: string;
+  history_count: number;
+  last_rotation_at?: string | null;
+  last_rotation_reference?: string | null;
+  last_rotation_kind?: string | null;
+  profile_count?: number;
+  oauth_mode?: string | null;
+  oauth_flow_support?: string | null;
+  oauth_operator_truth?: string | null;
+};
+
+export type HarnessSecretPosture = {
+  provider_key: string;
+  label: string;
+  configured: boolean;
+  auth_mode: string;
+  rotation_support: string;
+  secret_storage: string;
+  credential_reference: string;
+  config_revision: number;
+  history_source: string;
+  needs_rotation_evidence: boolean;
+  state: "missing" | "rotatable" | "blocked";
+  state_label: string;
+  state_reason: string;
+  history_count: number;
+  last_rotation_at?: string | null;
+  last_rotation_reference?: string | null;
+  last_rotation_kind?: string | null;
+};
+
+export type SecurityRotationEvent = {
+  event_id: string;
+  target_type: string;
+  target_id: string;
+  kind: string;
+  recorded_at: string;
+  recorded_by_user_id?: string | null;
+  reference?: string | null;
+  notes?: string | null;
+  metadata?: Record<string, unknown>;
+  history_source?: string | null;
+};
+
+export type SecretStorageControl = {
+  credential_class: string;
+  storage: string;
+  plaintext_persisted: boolean;
+  notes: string;
+};
+
 export type SecurityBootstrapResponse = {
   status: "ok";
   credential_policy: SecurityCredentialPolicy;
   elevated_access_approver_posture: ElevatedAccessApproverPosture;
-  bootstrap?: Record<string, string | number | boolean>;
-  secret_posture?: Array<Record<string, string | number | boolean>>;
-  harness_profiles?: Array<Record<string, string | number | boolean>>;
-  recent_rotations?: Array<Record<string, unknown>>;
-  secret_storage_controls?: Array<Record<string, unknown>>;
+  security_blockers: SecurityBlocker[];
+  bootstrap?: SecurityBootstrapStatus;
+  secret_posture?: SecuritySecretPosture[];
+  harness_profiles?: HarnessSecretPosture[];
+  recent_rotations?: SecurityRotationEvent[];
+  secret_storage_controls?: SecretStorageControl[];
 };
 
 export type AdminSessionUser = {
@@ -5098,6 +5181,26 @@ export function cancelElevatedAccessRequest(requestId: string) {
   );
 }
 
+export function approveElevatedAccessRequest(requestId: string, decisionNote: string) {
+  return fetchJson<{ status: string; request: ElevatedAccessRequest }>(
+    `/admin/security/elevated-access-requests/${encodeURIComponent(requestId)}/approve`,
+    {
+      method: "POST",
+      body: JSON.stringify({ decision_note: decisionNote }),
+    },
+  );
+}
+
+export function rejectElevatedAccessRequest(requestId: string, decisionNote: string) {
+  return fetchJson<{ status: string; request: ElevatedAccessRequest }>(
+    `/admin/security/elevated-access-requests/${encodeURIComponent(requestId)}/reject`,
+    {
+      method: "POST",
+      body: JSON.stringify({ decision_note: decisionNote }),
+    },
+  );
+}
+
 export function issueElevatedAccessRequest(requestId: string) {
   return fetchJson<{
     status: string;
@@ -5114,6 +5217,10 @@ export function issueElevatedAccessRequest(requestId: string) {
 
 export function fetchAdminUsers() {
   return fetchJson<{ status: string; users: AdminUser[] }>("/admin/security/users");
+}
+
+export function fetchAdminUserMemberships(userId: string) {
+  return fetchJson<{ status: string; memberships: AdminInstanceMembership[] }>(`/admin/security/users/${encodeURIComponent(userId)}/memberships`);
 }
 
 export function createAdminUser(payload: { username: string; display_name: string; role: string; password: string }) {
@@ -5137,6 +5244,30 @@ export function rotateAdminPassword(userId: string, payload: AdminPasswordRotati
   });
 }
 
+export function upsertAdminUserMembership(
+  userId: string,
+  instanceId: string,
+  payload: { role: AdminRole; status: "active" | "disabled" },
+) {
+  return fetchJson<{ status: string; membership: AdminInstanceMembership }>(
+    `/admin/security/users/${encodeURIComponent(userId)}/memberships/${encodeURIComponent(instanceId)}`,
+    {
+      method: "PUT",
+      body: JSON.stringify(payload),
+    },
+  );
+}
+
+export function deleteAdminUserMembership(userId: string, instanceId: string) {
+  return fetchJson<{ status: string; deleted: { user_id: string; instance_id: string } }>(
+    `/admin/security/users/${encodeURIComponent(userId)}/memberships/${encodeURIComponent(instanceId)}`,
+    {
+      method: "DELETE",
+      body: "{}",
+    },
+  );
+}
+
 export function fetchAdminSessions() {
   return fetchJson<{ status: string; sessions: AdminSecuritySession[] }>("/admin/security/sessions");
 }
@@ -5149,7 +5280,26 @@ export function revokeAdminSession(sessionId: string) {
 }
 
 export function fetchProviderSecretPosture() {
-  return fetchJson<{ status: string; providers: Array<Record<string, string | number | boolean>> }>("/admin/security/secret-posture");
+  return fetchJson<{
+    status: string;
+    providers: SecuritySecretPosture[];
+    harness_profiles: HarnessSecretPosture[];
+    recent_rotations: SecurityRotationEvent[];
+    controls: SecretStorageControl[];
+  }>("/admin/security/secret-posture");
+}
+
+export function recordSecretRotation(payload: {
+  target_type: "provider" | "harness_profile";
+  target_id: string;
+  kind: string;
+  reference?: string;
+  notes?: string;
+}) {
+  return fetchJson<{ status: string; rotation: SecurityRotationEvent }>("/admin/security/secret-rotations", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
 }
 
 export function fetchProviderControlPlane(instanceId?: string | null): Promise<ProviderControlPlaneResponse> {

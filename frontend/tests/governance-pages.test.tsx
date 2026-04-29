@@ -46,12 +46,12 @@ describe("governance page role cues", () => {
       }),
     );
 
-    expect(markup).toContain("Elevated-access requester");
-    expect(markup).toContain("Request elevated access");
-    expect(markup).toContain("Request history");
+    expect(markup).toContain("Operator exception view");
+    expect(markup).toContain("Critical security blockers");
+    expect(markup).toContain("Admin Users (Restricted)");
     expect(markup).toContain("Audit History");
     expect(markup).not.toContain("Audit &amp; Export");
-    expect(markup).not.toContain(">Create Admin User</h3>");
+    expect(markup).not.toContain(">Create admin user</h3>");
   });
 
   it("surfaces admin mutation status on security for admins", () => {
@@ -63,9 +63,9 @@ describe("governance page role cues", () => {
       }),
     );
 
-    expect(markup).toContain("Admin posture + requests");
+    expect(markup).toContain("Admin security control");
     expect(markup).toContain("Audit History");
     expect(markup).not.toContain("Audit &amp; Export");
-    expect(markup).toContain(">Create Admin User</h3>");
+    expect(markup).toContain("Provider Secrets");
   });
 });

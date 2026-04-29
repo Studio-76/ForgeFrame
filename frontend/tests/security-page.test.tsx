@@ -5,41 +5,68 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const {
+  approveElevatedAccessRequestMock,
   cancelElevatedAccessRequestMock,
-  fetchSecurityBootstrapMock,
-  fetchElevatedAccessRequestsMock,
-  fetchAdminUsersMock,
-  fetchAdminSessionsMock,
   createBreakGlassRequestMock,
+  deleteAdminUserMembershipMock,
+  fetchAdminUserMembershipsMock,
+  fetchAdminSessionsMock,
+  fetchAdminUsersMock,
+  fetchElevatedAccessRequestsMock,
+  fetchInstancesMock,
+  fetchSecurityBootstrapMock,
   issueElevatedAccessRequestMock,
+  recordSecretRotationMock,
+  setAdminTokenMock,
+  upsertAdminUserMembershipMock,
+  updateAdminUserMock,
 } = vi.hoisted(() => ({
+  approveElevatedAccessRequestMock: vi.fn(),
   cancelElevatedAccessRequestMock: vi.fn(),
-  fetchSecurityBootstrapMock: vi.fn(),
-  fetchElevatedAccessRequestsMock: vi.fn(),
-  fetchAdminUsersMock: vi.fn(),
-  fetchAdminSessionsMock: vi.fn(),
   createBreakGlassRequestMock: vi.fn(),
+  deleteAdminUserMembershipMock: vi.fn(),
+  fetchAdminUserMembershipsMock: vi.fn(),
+  fetchAdminSessionsMock: vi.fn(),
+  fetchAdminUsersMock: vi.fn(),
+  fetchElevatedAccessRequestsMock: vi.fn(),
+  fetchInstancesMock: vi.fn(),
+  fetchSecurityBootstrapMock: vi.fn(),
   issueElevatedAccessRequestMock: vi.fn(),
+  recordSecretRotationMock: vi.fn(),
+  setAdminTokenMock: vi.fn(),
+  upsertAdminUserMembershipMock: vi.fn(),
+  updateAdminUserMock: vi.fn(),
 }));
 
 vi.mock("../src/api/admin", async () => {
   const actual = await vi.importActual<typeof import("../src/api/admin")>("../src/api/admin");
-
   return {
     ...actual,
+    approveElevatedAccessRequest: approveElevatedAccessRequestMock,
     cancelElevatedAccessRequest: cancelElevatedAccessRequestMock,
-    fetchSecurityBootstrap: fetchSecurityBootstrapMock,
-    fetchElevatedAccessRequests: fetchElevatedAccessRequestsMock,
-    fetchAdminUsers: fetchAdminUsersMock,
-    fetchAdminSessions: fetchAdminSessionsMock,
     createBreakGlassRequest: createBreakGlassRequestMock,
+    deleteAdminUserMembership: deleteAdminUserMembershipMock,
+    fetchAdminUserMemberships: fetchAdminUserMembershipsMock,
+    fetchAdminSessions: fetchAdminSessionsMock,
+    fetchAdminUsers: fetchAdminUsersMock,
+    fetchElevatedAccessRequests: fetchElevatedAccessRequestsMock,
+    fetchInstances: fetchInstancesMock,
+    fetchSecurityBootstrap: fetchSecurityBootstrapMock,
     issueElevatedAccessRequest: issueElevatedAccessRequestMock,
+    recordSecretRotation: recordSecretRotationMock,
+    setAdminToken: setAdminTokenMock,
+    upsertAdminUserMembership: upsertAdminUserMembershipMock,
+    updateAdminUser: updateAdminUserMock,
   };
 });
 
 import type {
+  AdminInstanceMembership,
+  AdminSecuritySession,
   AdminSessionUser,
+  AdminUser,
   ElevatedAccessRequest,
+  InstanceRecord,
   SecurityBootstrapResponse,
 } from "../src/api/admin";
 import { SecurityPage } from "../src/pages/SecurityPage";
@@ -55,51 +82,82 @@ const operatorSession: AdminSessionUser = {
   role: "operator",
 };
 
-function createBootstrap(): SecurityBootstrapResponse {
+const adminSession: AdminSessionUser = {
+  session_id: "session-admin",
+  user_id: "user-admin",
+  username: "admin",
+  display_name: "Admin",
+  role: "admin",
+};
+
+function createUser(overrides: Partial<AdminUser> = {}): AdminUser {
   return {
-    status: "ok",
-    credential_policy: {
-      elevated_access_requests: {
-        approval_ttl_minutes: 30,
-        gate_statuses: ["open", "approved", "rejected", "timed_out", "cancelled"],
-        issuance_states: ["pending", "issued"],
-        requester_claim_required: true,
-        self_approval_allowed: false,
-        approver_availability: {
-          state: "approval_available",
-          label: "Approval available",
-          approval_requires_distinct_admin: true,
-          eligible_admin_approver_count: 2,
-          blocked_reason: null,
-          primary_message: "A different admin can review elevated-access requests in this environment.",
-          secondary_message: "ForgeFrame keeps elevated-access requests pending until a different admin approves them.",
-        },
-      },
-      impersonation_sessions: {
-        max_ttl_minutes: 30,
-        approval_reference_required: true,
-        notification_targets_required: true,
-        approval_required_before_issue: true,
-        read_only: true,
-        write_capable_admin_routes: false,
-      },
-      break_glass_sessions: {
-        max_ttl_minutes: 60,
-        approval_reference_required: true,
-        notification_targets_required: true,
-        approval_required_before_issue: true,
-        eligible_roles: ["admin", "operator"],
-      },
-    },
-    elevated_access_approver_posture: {
-      state: "approval_available",
-      label: "Approval available",
-      approval_requires_distinct_admin: true,
-      eligible_admin_approver_count: 2,
-      blocked_reason: null,
-      primary_message: "A different admin can review elevated-access requests in this environment.",
-      secondary_message: "ForgeFrame keeps elevated-access requests pending until a different admin approves them.",
-    },
+    user_id: "user-alpha",
+    username: "alpha",
+    display_name: "Alpha Admin",
+    role: "admin",
+    status: "active",
+    must_rotate_password: false,
+    created_at: "2026-04-21T22:00:00Z",
+    updated_at: "2026-04-21T22:00:00Z",
+    last_login_at: "2026-04-21T22:10:00Z",
+    created_by: "user-admin",
+    ...overrides,
+  };
+}
+
+function createAdminSecuritySession(overrides: Partial<AdminSecuritySession> = {}): AdminSecuritySession {
+  return {
+    session_id: "session-alpha",
+    user_id: "user-alpha",
+    role: "admin",
+    session_type: "standard",
+    created_at: "2026-04-21T22:00:00Z",
+    expires_at: "2026-04-21T23:00:00Z",
+    last_used_at: "2026-04-21T22:30:00Z",
+    username: "alpha",
+    display_name: "Alpha Admin",
+    user_status: "active",
+    active: true,
+    expired: false,
+    elevated: false,
+    read_only: false,
+    ...overrides,
+  };
+}
+
+function createInstance(overrides: Partial<InstanceRecord> = {}): InstanceRecord {
+  return {
+    instance_id: "tenant_bootstrap",
+    slug: "bootstrap",
+    display_name: "Bootstrap Instance",
+    description: "Default tenant",
+    status: "active",
+    tenant_id: "tenant_bootstrap",
+    company_id: "tenant_bootstrap",
+    deployment_mode: "linux_host_native",
+    exposure_mode: "same_origin",
+    is_default: true,
+    metadata: {},
+    created_at: "2026-04-21T20:00:00Z",
+    updated_at: "2026-04-21T20:00:00Z",
+    ...overrides,
+  };
+}
+
+function createMembership(overrides: Partial<AdminInstanceMembership> = {}): AdminInstanceMembership {
+  return {
+    membership_id: "membership-alpha",
+    user_id: "user-alpha",
+    instance_id: "tenant_bootstrap",
+    tenant_id: "tenant_bootstrap",
+    company_id: "tenant_bootstrap",
+    role: "admin",
+    status: "active",
+    created_at: "2026-04-21T20:00:00Z",
+    updated_at: "2026-04-21T20:00:00Z",
+    created_by: "user-admin",
+    ...overrides,
   };
 }
 
@@ -139,6 +197,200 @@ function createRequest(overrides: Partial<ElevatedAccessRequest> = {}): Elevated
   };
 }
 
+function createBootstrap(overrides: Partial<SecurityBootstrapResponse> = {}): SecurityBootstrapResponse {
+  return {
+    status: "ok",
+    security_blockers: [
+      {
+        blocker_id: "default_password",
+        label: "Default password",
+        active: false,
+        tone: "success",
+        count: 0,
+        summary: "Bootstrap password has been rotated.",
+        detail: "No insecure bootstrap password is currently active.",
+      },
+      {
+        blocker_id: "missing_rotation",
+        label: "Missing rotation evidence",
+        active: true,
+        tone: "danger",
+        count: 1,
+        summary: "1 secret controls lack rotation evidence.",
+        detail: "Configured provider or harness credentials exist without recorded rotation evidence.",
+      },
+      {
+        blocker_id: "open_sessions",
+        label: "Open sessions",
+        active: true,
+        tone: "warning",
+        count: 2,
+        summary: "2 admin sessions are active.",
+        detail: "Review active sessions and revoke anything that no longer needs control-plane access.",
+      },
+      {
+        blocker_id: "secrets_missing",
+        label: "Secrets missing",
+        active: true,
+        tone: "danger",
+        count: 1,
+        summary: "1 provider controls are not configured.",
+        detail: "One or more provider integrations cannot authenticate because no credential is configured.",
+      },
+      {
+        blocker_id: "break_glass_active",
+        label: "Break-glass active",
+        active: false,
+        tone: "success",
+        count: 0,
+        summary: "No break-glass sessions are active.",
+        detail: "No emergency break-glass exceptions are currently running.",
+      },
+    ],
+    credential_policy: {
+      human_sessions: {
+        ttl_hours: 8,
+        rotation_trigger: "password_rotation_or_admin_revocation",
+        session_types: ["standard", "impersonation", "break_glass"],
+      },
+      elevated_access_requests: {
+        approval_ttl_minutes: 30,
+        gate_statuses: ["open", "approved", "rejected", "timed_out", "cancelled"],
+        issuance_states: ["pending", "issued"],
+        requester_claim_required: true,
+        self_approval_allowed: false,
+        approver_availability: {
+          state: "approval_available",
+          label: "Approval available",
+          approval_requires_distinct_admin: true,
+          eligible_admin_approver_count: 2,
+          blocked_reason: null,
+          primary_message: "A different admin can review elevated-access requests in this environment.",
+          secondary_message: "ForgeFrame keeps elevated-access requests pending until a different admin approves them.",
+        },
+      },
+      impersonation_sessions: {
+        max_ttl_minutes: 30,
+        approval_reference_required: true,
+        notification_targets_required: true,
+        approval_required_before_issue: true,
+        read_only: true,
+        write_capable_admin_routes: false,
+      },
+      break_glass_sessions: {
+        max_ttl_minutes: 60,
+        approval_reference_required: true,
+        notification_targets_required: true,
+        approval_required_before_issue: true,
+        eligible_roles: ["admin", "operator"],
+      },
+      service_account_keys: {
+        ttl_days: 30,
+        rotation_warning_days: 7,
+        revocation_modes: ["disable", "revoke", "rotate"],
+        hashing: "sha256",
+      },
+    },
+    elevated_access_approver_posture: {
+      state: "approval_available",
+      label: "Approval available",
+      approval_requires_distinct_admin: true,
+      eligible_admin_approver_count: 2,
+      blocked_reason: null,
+      primary_message: "A different admin can review elevated-access requests in this environment.",
+      secondary_message: "ForgeFrame keeps elevated-access requests pending until a different admin approves them.",
+    },
+    bootstrap: {
+      admin_auth_enabled: true,
+      bootstrap_username: "admin",
+      must_rotate_password: false,
+      default_password_in_use: false,
+      admin_user_count: 2,
+      active_session_count: 2,
+      governance_storage_backend: "sqlite",
+    },
+    secret_posture: [
+      {
+        provider: "openai_api",
+        configured: true,
+        auth_mode: "api_key",
+        rotation_support: "manual_env_rotation",
+        secret_storage: "environment_variable",
+        credential_reference: "FORGEFRAME_OPENAI_API_KEY",
+        history_source: "governance_recorded_event",
+        needs_rotation_evidence: false,
+        state: "rotatable",
+        state_label: "Rotatable",
+        state_reason: "Credential is configured and ForgeFrame has recorded rotation evidence for it.",
+        history_count: 1,
+        last_rotation_at: "2026-04-20T10:00:00Z",
+        last_rotation_reference: "SEC-10",
+        last_rotation_kind: "manual_env_rotation",
+      },
+      {
+        provider: "gemini",
+        configured: false,
+        auth_mode: "api_key",
+        rotation_support: "manual_env_rotation",
+        secret_storage: "environment_variable",
+        credential_reference: "FORGEFRAME_GEMINI_API_KEY",
+        history_source: "governance_recorded_event",
+        needs_rotation_evidence: false,
+        state: "missing",
+        state_label: "Missing",
+        state_reason: "No credential is configured for this control path.",
+        history_count: 0,
+        last_rotation_at: null,
+        last_rotation_reference: null,
+        last_rotation_kind: null,
+      },
+    ],
+    harness_profiles: [
+      {
+        provider_key: "rotation_profile",
+        label: "Rotation Profile",
+        configured: true,
+        auth_mode: "bearer",
+        rotation_support: "harness_profile_rotation",
+        secret_storage: "repository_backed_configuration",
+        credential_reference: "harness_profile:rotation_profile",
+        config_revision: 3,
+        history_source: "harness_config_history",
+        needs_rotation_evidence: true,
+        state: "blocked",
+        state_label: "Blocked",
+        state_reason: "Credential exists, but ForgeFrame has no recorded rotation evidence for it.",
+        history_count: 0,
+        last_rotation_at: null,
+        last_rotation_reference: null,
+        last_rotation_kind: null,
+      },
+    ],
+    recent_rotations: [
+      {
+        event_id: "rotate_1",
+        target_type: "provider",
+        target_id: "openai_api",
+        kind: "manual_env_rotation",
+        recorded_at: "2026-04-20T10:00:00Z",
+        reference: "SEC-10",
+        notes: "Rotated in vault",
+        metadata: {},
+        history_source: "governance_recorded_event",
+      },
+    ],
+    secret_storage_controls: [
+      {
+        credential_class: "provider_secret",
+        storage: "environment_variable",
+        plaintext_persisted: true,
+        notes: "Provider credentials remain operator-managed env/OAuth material.",
+      },
+    ],
+    ...overrides,
+  };
+}
+
 let container: HTMLDivElement;
 let root: Root | null = null;
 
@@ -161,11 +413,19 @@ async function flushEffects() {
   });
 }
 
-function setControlValue(control: HTMLTextAreaElement | HTMLInputElement, value: string) {
-  const prototype = Object.getPrototypeOf(control) as HTMLTextAreaElement | HTMLInputElement;
+function setControlValue(control: HTMLTextAreaElement | HTMLInputElement | HTMLSelectElement, value: string) {
+  const prototype = Object.getPrototypeOf(control) as HTMLTextAreaElement | HTMLInputElement | HTMLSelectElement;
   const setter = Object.getOwnPropertyDescriptor(prototype, "value")?.set;
   setter?.call(control, value);
-  control.dispatchEvent(new Event("input", { bubbles: true }));
+  control.dispatchEvent(new Event(control instanceof HTMLSelectElement ? "change" : "input", { bubbles: true }));
+}
+
+function clickButton(label: string) {
+  const button = Array.from(container.querySelectorAll("button")).find((item) => item.textContent?.trim() === label);
+  expect(button).toBeDefined();
+  return act(async () => {
+    button?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+  });
 }
 
 async function renderSecurityPage(session: AdminSessionUser) {
@@ -186,11 +446,43 @@ beforeEach(() => {
   });
   fetchAdminUsersMock.mockResolvedValue({
     status: "ok",
-    users: [],
+    users: [
+      createUser(),
+      createUser({
+        user_id: "user-operator",
+        username: "operator",
+        display_name: "Operator",
+        role: "operator",
+      }),
+    ],
+  });
+  fetchAdminUserMembershipsMock.mockResolvedValue({
+    status: "ok",
+    memberships: [createMembership()],
   });
   fetchAdminSessionsMock.mockResolvedValue({
     status: "ok",
-    sessions: [],
+    sessions: [
+      createAdminSecuritySession({
+        session_id: adminSession.session_id,
+        user_id: adminSession.user_id,
+        username: adminSession.username,
+        display_name: adminSession.display_name,
+      }),
+      createAdminSecuritySession({
+        session_id: "session-break-glass",
+        user_id: "user-operator",
+        role: "admin",
+        username: "operator",
+        display_name: "Operator",
+        session_type: "break_glass",
+        approval_reference: "INC-42",
+      }),
+    ],
+  });
+  fetchInstancesMock.mockResolvedValue({
+    status: "ok",
+    instances: [createInstance()],
   });
   createBreakGlassRequestMock.mockResolvedValue({
     status: "ok",
@@ -204,17 +496,36 @@ beforeEach(() => {
       decided_by_username: null,
     }),
   });
-  cancelElevatedAccessRequestMock.mockResolvedValue({
+  approveElevatedAccessRequestMock.mockResolvedValue({
     status: "ok",
     request: createRequest({
-      gate_status: "cancelled",
-      ready_to_issue: false,
-      session_status: "not_issued",
-      decided_at: "2026-04-21T23:04:00Z",
-      decided_by_user_id: operatorSession.user_id,
-      decided_by_username: operatorSession.username,
-      updated_at: "2026-04-21T23:04:00Z",
+      gate_status: "approved",
+      ready_to_issue: true,
     }),
+  });
+  updateAdminUserMock.mockResolvedValue({
+    status: "ok",
+    user: createUser({
+      display_name: "Alpha Platform Admin",
+    }),
+  });
+  upsertAdminUserMembershipMock.mockResolvedValue({
+    status: "ok",
+    membership: createMembership({
+      role: "viewer",
+      status: "disabled",
+    }),
+  });
+  deleteAdminUserMembershipMock.mockResolvedValue({
+    status: "ok",
+    deleted: {
+      user_id: "user-alpha",
+      instance_id: "tenant_bootstrap",
+    },
+  });
+  recordSecretRotationMock.mockResolvedValue({
+    status: "ok",
+    rotation: createBootstrap().recent_rotations![0],
   });
   issueElevatedAccessRequestMock.mockResolvedValue({
     status: "ok",
@@ -237,6 +548,7 @@ beforeEach(() => {
       session_type: "break_glass",
     },
   });
+
   container = document.createElement("div");
   document.body.innerHTML = "";
   document.body.appendChild(container);
@@ -246,54 +558,41 @@ afterEach(() => {
   if (!root) {
     return;
   }
-
   act(() => {
     root?.unmount();
   });
   root = null;
 });
 
-describe("Security page elevated-access workflow", () => {
-  it("keeps operator access on the elevated-access request surface without loading admin-only posture APIs", async () => {
+describe("Security page security center", () => {
+  it("keeps operator access on elevated-access and blocker visibility without loading admin-only posture APIs", async () => {
     await renderSecurityPage(operatorSession);
 
     expect(fetchSecurityBootstrapMock).toHaveBeenCalledTimes(1);
     expect(fetchElevatedAccessRequestsMock).toHaveBeenCalledTimes(1);
     expect(fetchAdminUsersMock).not.toHaveBeenCalled();
     expect(fetchAdminSessionsMock).not.toHaveBeenCalled();
+    expect(container.textContent).toContain("Critical security blockers");
+    expect(container.textContent).toContain("Admin Users (Restricted)");
+
+    await clickButton("Elevated Access");
+    await flushEffects();
+
     expect(container.textContent).toContain("Request elevated access");
-    expect(container.textContent).toContain("Request break-glass access");
-    expect(container.textContent).toContain("Ready to start");
-    expect(container.textContent).not.toContain("Create Admin User");
   });
 
-  it("keeps the shared approvals path visible from Security for operators", async () => {
+  it("submits a break-glass request from the elevated-access tab", async () => {
     await renderSecurityPage(operatorSession);
-
-    const approvalsIntroLink = Array.from(container.querySelectorAll("a")).find(
-      (link) => link.textContent?.includes("Approvals"),
-    );
-
-    expect(approvalsIntroLink?.getAttribute("href")).toBe("/approvals");
-    expect(container.textContent).not.toContain("Not available yet");
-  });
-
-  it("adds approval-detail and audit handoff links after request submission", async () => {
-    await renderSecurityPage(operatorSession);
+    await clickButton("Elevated Access");
+    await flushEffects();
 
     const approvalReferenceField = container.querySelector<HTMLInputElement>('input[placeholder="INC-1245"]');
     const notificationTargetsField = container.querySelector<HTMLInputElement>('input[placeholder="incident-channel, oncall@example.com"]');
-    const justificationField = container.querySelector<HTMLTextAreaElement>(
-      'textarea[placeholder="Describe why elevated access is required and what outcome you need."]',
-    );
-    const requestButton = Array.from(container.querySelectorAll("button")).find(
-      (button) => button.textContent === "Request break-glass access",
-    );
+    const justificationField = container.querySelector<HTMLTextAreaElement>('textarea[placeholder="Describe why elevated access is required and what outcome you need."]');
 
     expect(approvalReferenceField).not.toBeNull();
     expect(notificationTargetsField).not.toBeNull();
     expect(justificationField).not.toBeNull();
-    expect(requestButton).not.toBeNull();
 
     await act(async () => {
       setControlValue(approvalReferenceField!, "INC-99");
@@ -301,9 +600,7 @@ describe("Security page elevated-access workflow", () => {
       setControlValue(justificationField!, "Need elevated access to inspect runtime drift.");
     });
 
-    await act(async () => {
-      requestButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-    });
+    await clickButton("Request break-glass access");
     await flushEffects();
 
     expect(createBreakGlassRequestMock).toHaveBeenCalledWith({
@@ -312,22 +609,26 @@ describe("Security page elevated-access workflow", () => {
       notification_targets: ["incident-room"],
       duration_minutes: 15,
     });
-    expect(container.textContent).toContain("Pending approval confirmation");
-
-    const approvalDetailLink = Array.from(container.querySelectorAll("a")).find(
-      (link) => link.textContent === "Open approval detail",
-    );
-    const auditHistoryLink = Array.from(container.querySelectorAll("a")).find(
-      (link) => link.textContent === "Open audit history",
-    );
-
-    expect(approvalDetailLink?.getAttribute("href")).toBe("/approvals?status=all&approvalId=elevated%3Aelev_req_alpha");
-    expect(auditHistoryLink?.getAttribute("href")).toBe(
-      "/logs?auditWindow=all&auditTargetType=elevated_access_request&auditTargetId=elev_req_alpha#audit-history",
-    );
   });
 
-  it("lets the requester cancel a pending elevated-access request from Security", async () => {
+  it("marks the current admin session and keeps provider secret controls metadata-only", async () => {
+    await renderSecurityPage(adminSession);
+
+    expect(fetchAdminUsersMock).toHaveBeenCalledTimes(1);
+    expect(fetchAdminSessionsMock).toHaveBeenCalledTimes(1);
+
+    await clickButton("Sessions");
+    await flushEffects();
+    expect(container.textContent).toContain("This browser");
+
+    await clickButton("Provider Secrets");
+    await flushEffects();
+    expect(container.textContent).toContain("Provider secret values never render here.");
+    expect(container.textContent).toContain("FORGEFRAME_OPENAI_API_KEY");
+    expect(container.textContent).not.toContain("super-secret-value");
+  });
+
+  it("lets an admin approve an elevated-access request from the dedicated approval queue", async () => {
     fetchElevatedAccessRequestsMock.mockResolvedValueOnce({
       status: "ok",
       requests: [createRequest({
@@ -338,40 +639,110 @@ describe("Security page elevated-access workflow", () => {
         decided_at: null,
         decided_by_user_id: null,
         decided_by_username: null,
+        requested_by_user_id: "user-operator",
+        requested_by_username: "operator",
+        requested_by_display_name: "Operator",
       })],
     });
 
-    await renderSecurityPage(operatorSession);
-
-    const cancelButton = Array.from(container.querySelectorAll("button")).find(
-      (button) => button.textContent === "Cancel request",
-    );
-    expect(cancelButton).not.toBeUndefined();
-
-    await act(async () => {
-      cancelButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-    });
+    await renderSecurityPage(adminSession);
+    await clickButton("Elevated Access");
     await flushEffects();
 
-    expect(cancelElevatedAccessRequestMock).toHaveBeenCalledWith("elev_req_alpha");
-    expect(container.textContent).toContain("Break-glass request cancelled.");
-    expect(container.textContent).toContain("Request cancelled");
-  });
-
-  it("lets the requester start an approved elevated-access session from Security", async () => {
-    await renderSecurityPage(operatorSession);
-
-    const startButton = Array.from(container.querySelectorAll("button")).find(
-      (button) => button.textContent === "Start break-glass session",
-    );
-    expect(startButton).not.toBeUndefined();
+    const decisionField = container.querySelector<HTMLTextAreaElement>('textarea[placeholder="Explain why this exception is approved or rejected."]');
+    expect(decisionField).not.toBeNull();
 
     await act(async () => {
-      startButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      setControlValue(decisionField!, "Approved because incident response needs temporary control-plane access.");
     });
+
+    await clickButton("Approve");
+    await flushEffects();
+
+    expect(approveElevatedAccessRequestMock).toHaveBeenCalledWith(
+      "elev_req_alpha",
+      "Approved because incident response needs temporary control-plane access.",
+    );
+  });
+
+  it("lets an admin edit the selected privileged user profile", async () => {
+    await renderSecurityPage(adminSession);
+    await clickButton("Admin Users");
+    await flushEffects();
+
+    const displayNameField = Array.from(container.querySelectorAll("input")).find((input) => input.value === "Alpha Admin");
+    expect(displayNameField).toBeDefined();
+
+    await act(async () => {
+      setControlValue(displayNameField as HTMLInputElement, "Alpha Platform Admin");
+    });
+
+    await clickButton("Save profile changes");
+    await flushEffects();
+
+    expect(updateAdminUserMock).toHaveBeenCalledWith("user-alpha", {
+      display_name: "Alpha Platform Admin",
+    });
+  });
+
+  it("lets an admin upsert a scoped membership for the selected user", async () => {
+    await renderSecurityPage(adminSession);
+    await clickButton("Admin Users");
+    await flushEffects();
+
+    const selects = Array.from(container.querySelectorAll("select"));
+    const scopedRoleSelect = selects.find((select) => select.value === "admin" && select.parentElement?.textContent?.includes("Scoped role"));
+    const scopedStatusSelect = selects.find((select) => select.value === "active" && select.parentElement?.textContent?.includes("Scoped status"));
+    expect(scopedRoleSelect).toBeDefined();
+    expect(scopedStatusSelect).toBeDefined();
+
+    await act(async () => {
+      setControlValue(scopedRoleSelect as HTMLSelectElement, "viewer");
+      setControlValue(scopedStatusSelect as HTMLSelectElement, "disabled");
+    });
+
+    await clickButton("Save scope mapping");
+    await flushEffects();
+
+    expect(upsertAdminUserMembershipMock).toHaveBeenCalledWith("user-alpha", "tenant_bootstrap", {
+      role: "viewer",
+      status: "disabled",
+    });
+  });
+
+  it("records secret rotation evidence without collecting a secret value", async () => {
+    await renderSecurityPage(adminSession);
+    await clickButton("Provider Secrets");
+    await flushEffects();
+
+    const referenceField = container.querySelector<HTMLInputElement>('input[placeholder="INC-202 / vault-change-ticket"]');
+    expect(referenceField).not.toBeNull();
+
+    await act(async () => {
+      setControlValue(referenceField!, "SEC-221");
+    });
+
+    await clickButton("Record rotation evidence");
+    await flushEffects();
+
+    expect(recordSecretRotationMock).toHaveBeenCalledWith({
+      target_type: "provider",
+      target_id: "openai_api",
+      kind: "manual_env_rotation",
+      reference: "SEC-221",
+      notes: undefined,
+    });
+  });
+
+  it("lets the original requester start an approved elevated session from the security surface", async () => {
+    await renderSecurityPage(operatorSession);
+    await clickButton("Elevated Access");
+    await flushEffects();
+
+    await clickButton("Start break-glass session");
     await flushEffects();
 
     expect(issueElevatedAccessRequestMock).toHaveBeenCalledWith("elev_req_alpha");
-    expect(container.textContent).toContain("Break-glass session started.");
+    expect(setAdminTokenMock).toHaveBeenCalledWith("fg_admin_break_glass_token");
   });
 });

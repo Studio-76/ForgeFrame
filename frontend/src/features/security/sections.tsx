@@ -1,17 +1,23 @@
 import { Link } from "react-router-dom";
 
 import type {
+  AdminInstanceMembership,
   AdminSecuritySession,
   AdminUser,
   ElevatedAccessApproverPosture,
   ElevatedAccessRequest,
+  HarnessSecretPosture,
+  InstanceRecord,
+  SecretStorageControl,
+  SecurityBlocker,
+  SecurityBootstrapStatus,
   SecurityCredentialPolicy,
+  SecurityRotationEvent,
+  SecuritySecretPosture,
 } from "../../api/admin";
-import { revokeAdminSession } from "../../api/admin";
 import {
   formatApprovalStatus,
   formatApprovalType,
-  formatSessionStatus,
   formatTimestamp,
 } from "../approvals/presentation";
 import {
@@ -21,124 +27,919 @@ import {
 import type { ElevatedAccessRequestDraft } from "./elevatedAccess";
 import { OwnPasswordRotationForm, type OwnPasswordRotationDraft } from "./OwnPasswordRotationForm";
 import {
+  adminSessionStatus,
   approvalTone,
   buildApprovalDetailPath,
   buildRequestAuditHistoryPath,
   describeRequestBanner,
   formatRequestActor,
   formatRequestTarget,
-  type Tone,
+  requestStage,
+  secretStateTone,
 } from "./helpers";
 
-type SecurityOverviewSectionProps = {
-  openRequestCount: number;
-  readyToStartCount: number;
-  activeRequestCount: number;
-  approverPosture: ElevatedAccessApproverPosture | null;
-  policyTone: Tone;
-  policyBadge: string;
-  credentialPolicy: SecurityCredentialPolicy | null;
-  breakGlassMaxMinutes: number;
-  impersonationMaxMinutes: number;
-  canRequestBreakGlass: boolean;
-  accessDraft: ElevatedAccessRequestDraft;
-  canRequestImpersonation: boolean;
-  impersonationTargets: AdminUser[];
-  recoveryRequired: boolean;
-  accessPending: boolean;
-  submittedRequest: ElevatedAccessRequest | null;
-  onElevatedRequestTypeChange: (value: ElevatedAccessRequestDraft["request_type"]) => void;
-  onElevatedAccessDraftChange: (field: keyof ElevatedAccessRequestDraft, value: string) => void;
-  onSubmitElevatedAccessRequest: () => void;
+export type SecurityTabId =
+  | "posture"
+  | "admin_users"
+  | "sessions"
+  | "elevated_access"
+  | "provider_secrets"
+  | "credential_policy";
+
+export type RotationTargetOption = {
+  target_type: "provider" | "harness_profile";
+  target_id: string;
+  label: string;
+  recommended_kind: string;
 };
 
-export function SecurityOverviewSection({
-  openRequestCount,
-  readyToStartCount,
-  activeRequestCount,
-  approverPosture,
-  policyTone,
-  policyBadge,
-  credentialPolicy,
-  breakGlassMaxMinutes,
-  impersonationMaxMinutes,
-  canRequestBreakGlass,
-  accessDraft,
-  canRequestImpersonation,
-  impersonationTargets,
-  recoveryRequired,
-  accessPending,
-  submittedRequest,
-  onElevatedRequestTypeChange,
-  onElevatedAccessDraftChange,
-  onSubmitElevatedAccessRequest,
-}: SecurityOverviewSectionProps) {
+export type RotationDraft = {
+  target_type: "provider" | "harness_profile";
+  target_id: string;
+  kind: string;
+  reference: string;
+  notes: string;
+};
+
+export type AdminUserEditDraft = {
+  display_name: string;
+  role: AdminUser["role"];
+  status: AdminUser["status"];
+};
+
+export type AdminUserScopeDraft = {
+  instance_id: string;
+  role: AdminUser["role"];
+  status: "active" | "disabled";
+};
+
+export const SECURITY_TABS: Array<{
+  id: SecurityTabId;
+  label: string;
+  adminOnly?: boolean;
+}> = [
+  { id: "posture", label: "Posture" },
+  { id: "admin_users", label: "Admin Users", adminOnly: true },
+  { id: "sessions", label: "Sessions", adminOnly: true },
+  { id: "elevated_access", label: "Elevated Access" },
+  { id: "provider_secrets", label: "Provider Secrets", adminOnly: true },
+  { id: "credential_policy", label: "Credential Policy" },
+];
+
+function AccessBlockedCard({
+  title,
+  description,
+}: {
+  title: string;
+  description: string;
+}) {
   return (
-    <>
-      <div className="fg-card-grid">
-        <article className="fg-kpi">
-          <span className="fg-muted">Pending approvals</span>
-          <strong className="fg-kpi-value">{openRequestCount}</strong>
-        </article>
-        <article className="fg-kpi">
-          <span className="fg-muted">Ready to start</span>
-          <strong className="fg-kpi-value">{readyToStartCount}</strong>
-        </article>
-        <article className="fg-kpi">
-          <span className="fg-muted">Active elevated sessions</span>
-          <strong className="fg-kpi-value">{activeRequestCount}</strong>
-        </article>
-        <article className="fg-kpi">
-          <span className="fg-muted">Eligible approvers</span>
-          <strong className="fg-kpi-value">{approverPosture?.eligible_admin_approver_count ?? 0}</strong>
-        </article>
+    <article className="fg-card">
+      <div className="fg-panel-heading">
+        <div>
+          <h3>{title}</h3>
+          <p className="fg-muted">{description}</p>
+        </div>
+        <span className="fg-pill" data-tone="warning">Admin session required</span>
       </div>
+    </article>
+  );
+}
+
+function KeyValueList({ items }: { items: Array<{ label: string; value: string }> }) {
+  return (
+    <div className="fg-card-grid">
+      {items.map((item) => (
+        <article key={item.label} className="fg-subcard">
+          <span className="fg-section-label">{item.label}</span>
+          <p>{item.value}</p>
+        </article>
+      ))}
+    </div>
+  );
+}
+
+export function SecurityBlockerStrip({
+  blockers,
+}: {
+  blockers: SecurityBlocker[];
+}) {
+  return (
+    <article className="fg-card">
+      <div className="fg-panel-heading">
+        <div>
+          <h3>Critical security blockers</h3>
+          <p className="fg-muted">
+            Default password, rotation evidence, open sessions, missing credentials, and live break-glass exceptions stay visible at the top.
+          </p>
+        </div>
+        <span className="fg-pill" data-tone={blockers.some((item) => item.active) ? "danger" : "success"}>
+          {blockers.filter((item) => item.active).length} active
+        </span>
+      </div>
+      <div className="fg-card-grid">
+        {blockers.map((blocker) => (
+          <article key={blocker.blocker_id} className="fg-subcard">
+            <div className="fg-panel-heading">
+              <div>
+                <h4>{blocker.label}</h4>
+                <p className="fg-muted">{blocker.summary}</p>
+              </div>
+              <div className="fg-actions">
+                <span className="fg-pill" data-tone={blocker.tone}>{blocker.active ? "Active" : "Clear"}</span>
+                {typeof blocker.count === "number" ? <span className="fg-pill">{blocker.count}</span> : null}
+              </div>
+            </div>
+            <p>{blocker.detail}</p>
+          </article>
+        ))}
+      </div>
+    </article>
+  );
+}
+
+export function SecurityTabBar({
+  activeTab,
+  canViewAdminTabs,
+  onSelectTab,
+}: {
+  activeTab: SecurityTabId;
+  canViewAdminTabs: boolean;
+  onSelectTab: (tab: SecurityTabId) => void;
+}) {
+  return (
+    <article className="fg-card">
+      <div className="fg-panel-heading">
+        <div>
+          <h3>Security control planes</h3>
+          <p className="fg-muted">
+            Split privileged identity, session, exception, secret, and policy work into separate operator surfaces.
+          </p>
+        </div>
+        <span className="fg-pill" data-tone={canViewAdminTabs ? "success" : "warning"}>
+          {canViewAdminTabs ? "Admin detail available" : "Operator view"}
+        </span>
+      </div>
+      <div className="fg-actions" aria-label="Security tabs" role="tablist">
+        {SECURITY_TABS.map((tab) => (
+          <button
+            key={tab.id}
+            aria-selected={activeTab === tab.id}
+            role="tab"
+            type="button"
+            onClick={() => onSelectTab(tab.id)}
+          >
+            {tab.label}
+            {tab.adminOnly && !canViewAdminTabs ? " (Restricted)" : ""}
+          </button>
+        ))}
+      </div>
+    </article>
+  );
+}
+
+export function SecurityPostureSection({
+  bootstrap,
+  approverPosture,
+  credentialPolicy,
+  requests,
+  sessions,
+  users,
+  canViewAdminTabs,
+}: {
+  bootstrap: SecurityBootstrapStatus | null;
+  approverPosture: ElevatedAccessApproverPosture | null;
+  credentialPolicy: SecurityCredentialPolicy | null;
+  requests: ElevatedAccessRequest[];
+  sessions: AdminSecuritySession[];
+  users: AdminUser[];
+  canViewAdminTabs: boolean;
+}) {
+  const openRequests = requests.filter((item) => item.gate_status === "open").length;
+  const readyRequests = requests.filter((item) => item.ready_to_issue).length;
+  const activeElevated = requests.filter((item) => item.session_status === "active").length;
+  const forcedRotationUsers = users.filter((item) => item.must_rotate_password).length;
+
+  return (
+    <div className="fg-stack">
+      <article className="fg-card">
+        <div className="fg-panel-heading">
+          <div>
+            <h3>30-second security readout</h3>
+            <p className="fg-muted">
+              Start with exception pressure, approver availability, and whether the bootstrap account or provider credentials still need remediation.
+            </p>
+          </div>
+          {approverPosture ? (
+            <span className="fg-pill" data-tone={approverPosture.state === "recovery_required" ? "danger" : "success"}>
+              {approverPosture.label}
+            </span>
+          ) : null}
+        </div>
+        <div className="fg-card-grid">
+          <article className="fg-kpi">
+            <span className="fg-muted">Open approvals</span>
+            <strong className="fg-kpi-value">{openRequests}</strong>
+          </article>
+          <article className="fg-kpi">
+            <span className="fg-muted">Ready to start</span>
+            <strong className="fg-kpi-value">{readyRequests}</strong>
+          </article>
+          <article className="fg-kpi">
+            <span className="fg-muted">Active elevated sessions</span>
+            <strong className="fg-kpi-value">{activeElevated}</strong>
+          </article>
+          <article className="fg-kpi">
+            <span className="fg-muted">Forced password rotations</span>
+            <strong className="fg-kpi-value">{canViewAdminTabs ? forcedRotationUsers : "Restricted"}</strong>
+          </article>
+        </div>
+      </article>
 
       <article className="fg-card">
         <div className="fg-panel-heading">
           <div>
-            <h3>Elevated Access Policy</h3>
+            <h3>Elevated-access posture</h3>
             <p className="fg-muted">
-              Request approval first, then let the original requester start the resulting session from this Security surface.
+              Break-glass and impersonation are time-bounded exceptions. Approval and session start remain separate actions.
             </p>
           </div>
-          <div className="fg-actions">
-            <span className="fg-pill" data-tone={policyTone}>
-              {policyBadge}
-            </span>
-            <span className="fg-pill">Distinct admin approval required</span>
-          </div>
+          <span className="fg-pill" data-tone={approverPosture?.state === "recovery_required" ? "danger" : "success"}>
+            {approverPosture?.eligible_admin_approver_count ?? 0} approvers
+          </span>
         </div>
-
         {approverPosture ? (
-          <div className="fg-approval-banner" data-tone={policyTone}>
-            <strong>{approverPosture.label}</strong>
-            <p>{approverPosture.primary_message}</p>
+          <div className="fg-approval-banner" data-tone={approverPosture.state === "recovery_required" ? "danger" : "success"}>
+            <strong>{approverPosture.primary_message}</strong>
             <p>{approverPosture.secondary_message}</p>
           </div>
         ) : (
-          <p className="fg-muted">Loading the current approval posture and policy limits…</p>
+          <p className="fg-muted">Approval posture is loading.</p>
         )}
+        <KeyValueList
+          items={[
+            {
+              label: "Approval TTL",
+              value: credentialPolicy?.elevated_access_requests
+                ? `${credentialPolicy.elevated_access_requests.approval_ttl_minutes} minutes`
+                : "Not recorded",
+            },
+            {
+              label: "Break-glass max TTL",
+              value: credentialPolicy?.break_glass_sessions
+                ? `${credentialPolicy.break_glass_sessions.max_ttl_minutes} minutes`
+                : "Not recorded",
+            },
+            {
+              label: "Impersonation max TTL",
+              value: credentialPolicy?.impersonation_sessions
+                ? `${credentialPolicy.impersonation_sessions.max_ttl_minutes} minutes`
+                : "Not recorded",
+            },
+            {
+              label: "Impersonation write posture",
+              value: credentialPolicy?.impersonation_sessions
+                ? credentialPolicy.impersonation_sessions.read_only
+                  ? "Read-only"
+                  : "Writable"
+                : "Not recorded",
+            },
+          ]}
+        />
+      </article>
 
-        <div className="fg-card-grid">
-          <article className="fg-subcard">
-            <span className="fg-section-label">Approval request TTL</span>
-            <p>{credentialPolicy?.elevated_access_requests?.approval_ttl_minutes ?? "Not recorded"} minutes</p>
-          </article>
-          <article className="fg-subcard">
-            <span className="fg-section-label">Break-glass limit</span>
-            <p>{breakGlassMaxMinutes} minutes</p>
-          </article>
-          <article className="fg-subcard">
-            <span className="fg-section-label">Impersonation limit</span>
-            <p>{impersonationMaxMinutes} minutes</p>
-          </article>
-          <article className="fg-subcard">
-            <span className="fg-section-label">Session consequences</span>
-            <p>
-              Break-glass stays write-capable. Impersonation is{" "}
-              {credentialPolicy?.impersonation_sessions?.read_only ? "read-only" : "not recorded"}.
+      {bootstrap ? (
+        <article className="fg-card">
+          <div className="fg-panel-heading">
+            <div>
+              <h3>Bootstrap security baseline</h3>
+              <p className="fg-muted">
+                Bootstrap posture confirms whether the original admin secret and active control-plane sessions have been cleaned up.
+              </p>
+            </div>
+            <span className="fg-pill" data-tone={bootstrap.default_password_in_use ? "danger" : "success"}>
+              {bootstrap.default_password_in_use ? "Default password active" : "Bootstrap rotated"}
+            </span>
+          </div>
+          <KeyValueList
+            items={[
+              { label: "Bootstrap account", value: bootstrap.bootstrap_username },
+              { label: "Default password", value: bootstrap.default_password_in_use ? "Still in use" : "Rotated" },
+              { label: "Must rotate", value: bootstrap.must_rotate_password ? "Yes" : "No" },
+              { label: "Admin users", value: String(bootstrap.admin_user_count) },
+              { label: "Active sessions", value: String(bootstrap.active_session_count) },
+              { label: "Governance storage", value: bootstrap.governance_storage_backend },
+            ]}
+          />
+        </article>
+      ) : (
+        <AccessBlockedCard
+          title="Bootstrap security baseline"
+          description="Bootstrap account, admin population, and global session posture stay reserved for admin sessions."
+        />
+      )}
+
+      {canViewAdminTabs ? (
+        <article className="fg-card">
+          <div className="fg-panel-heading">
+            <div>
+              <h3>Privileged identity pressure</h3>
+              <p className="fg-muted">
+                Admin user count, active sessions, and forced rotations show whether privileged access is bounded or drifting.
+              </p>
+            </div>
+          </div>
+          <KeyValueList
+            items={[
+              { label: "Admin users", value: String(users.length) },
+              { label: "Active sessions", value: String(sessions.filter((item) => item.active).length) },
+              { label: "Break-glass sessions", value: String(sessions.filter((item) => item.active && item.session_type === "break_glass").length) },
+              { label: "Password reset pressure", value: `${forcedRotationUsers} users must rotate` },
+            ]}
+          />
+        </article>
+      ) : null}
+    </div>
+  );
+}
+
+export function SecurityAdminUsersSection({
+  canViewAdminTabs,
+  canMutateAdminPosture,
+  users,
+  instances,
+  memberships,
+  currentUserId,
+  selectedUser,
+  selectedUserId,
+  createForm,
+  editDraft,
+  scopeDraft,
+  selfPassword,
+  selfPasswordPending,
+  activeResetUserId,
+  resetDraft,
+  resetPending,
+  createPending,
+  updatePending,
+  membershipsLoading,
+  scopePending,
+  removingMembershipInstanceId,
+  onSelectUser,
+  onCreateFormChange,
+  onCreate,
+  onEditDraftChange,
+  onSaveUser,
+  onFlagUserRotation,
+  onScopeDraftChange,
+  onSaveScope,
+  onRemoveScope,
+  onSelfPasswordChange,
+  onRotateOwnPassword,
+  onOpenResetForm,
+  onCloseResetForm,
+  onResetDraftChange,
+  onResetPassword,
+}: {
+  canViewAdminTabs: boolean;
+  canMutateAdminPosture: boolean;
+  users: AdminUser[];
+  instances: InstanceRecord[];
+  memberships: AdminInstanceMembership[];
+  currentUserId: string | null | undefined;
+  selectedUser: AdminUser | null;
+  selectedUserId: string | null;
+  createForm: { username: string; display_name: string; role: AdminUser["role"]; password: string };
+  editDraft: AdminUserEditDraft;
+  scopeDraft: AdminUserScopeDraft;
+  selfPassword: OwnPasswordRotationDraft;
+  selfPasswordPending: boolean;
+  activeResetUserId: string | null;
+  resetDraft: AdminPasswordResetDraft;
+  resetPending: boolean;
+  createPending: boolean;
+  updatePending: boolean;
+  membershipsLoading: boolean;
+  scopePending: boolean;
+  removingMembershipInstanceId: string | null;
+  onSelectUser: (userId: string) => void;
+  onCreateFormChange: (field: "username" | "display_name" | "role" | "password", value: string) => void;
+  onCreate: () => void;
+  onEditDraftChange: (field: keyof AdminUserEditDraft, value: string) => void;
+  onSaveUser: () => void;
+  onFlagUserRotation: () => void;
+  onScopeDraftChange: (field: keyof AdminUserScopeDraft, value: string) => void;
+  onSaveScope: () => void;
+  onRemoveScope: (instanceId: string) => void;
+  onSelfPasswordChange: (field: keyof OwnPasswordRotationDraft, value: string) => void;
+  onRotateOwnPassword: () => void;
+  onOpenResetForm: (userId: string) => void;
+  onCloseResetForm: () => void;
+  onResetDraftChange: (field: keyof AdminPasswordResetDraft, value: string) => void;
+  onResetPassword: (user: AdminUser) => void;
+}) {
+  if (!canViewAdminTabs) {
+    return (
+      <AccessBlockedCard
+        title="Admin users"
+        description="Only admin-role sessions can inspect or mutate the privileged user directory."
+      />
+    );
+  }
+
+  return (
+    <div className="fg-stack">
+      <article className="fg-card">
+        <div className="fg-panel-heading">
+          <div>
+            <h3>Privileged user directory</h3>
+            <p className="fg-muted">
+              Create, edit, and rotate admin identities as separate actions so role changes never get mixed with password handoffs.
             </p>
+          </div>
+          <span className="fg-pill" data-tone={canMutateAdminPosture ? "success" : "warning"}>
+            {canMutateAdminPosture ? "Writable" : "Read only"}
+          </span>
+        </div>
+        {users.length === 0 ? (
+          <p className="fg-muted">No admin users recorded.</p>
+        ) : (
+          <div className="fg-table-wrap">
+            <table className="fg-table" aria-label="Admin users">
+              <thead>
+                <tr>
+                  <th>User</th>
+                  <th>Role</th>
+                  <th>Status</th>
+                  <th>Password</th>
+                  <th>Last login</th>
+                </tr>
+              </thead>
+              <tbody>
+                {users.map((user) => (
+                  <tr key={user.user_id} className={selectedUserId === user.user_id ? "is-selected" : undefined}>
+                    <td>
+                      <button className="fg-table-trigger" type="button" onClick={() => onSelectUser(user.user_id)}>
+                        {user.display_name}
+                      </button>
+                      <div className="fg-muted">{user.username}</div>
+                    </td>
+                    <td>{user.role}</td>
+                    <td>
+                      <span className="fg-pill" data-tone={user.status === "active" ? "success" : "warning"}>{user.status}</span>
+                      {user.user_id === currentUserId ? <span className="fg-pill">You</span> : null}
+                    </td>
+                    <td>
+                      <span className="fg-pill" data-tone={user.must_rotate_password ? "warning" : "success"}>
+                        {user.must_rotate_password ? "Rotation required" : "Rotated"}
+                      </span>
+                    </td>
+                    <td>{user.last_login_at ? formatTimestamp(user.last_login_at) : "Never"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </article>
+
+      {canMutateAdminPosture ? (
+        <article className="fg-card">
+          <div className="fg-panel-heading">
+            <div>
+              <h3>Create admin user</h3>
+              <p className="fg-muted">Initial password handoff is separate from later edits and later rotation evidence.</p>
+            </div>
+          </div>
+          <div className="fg-grid fg-grid-compact">
+            <label className="fg-stack">
+              <span className="fg-muted">Username</span>
+              <input value={createForm.username} onChange={(event) => onCreateFormChange("username", event.target.value)} />
+            </label>
+            <label className="fg-stack">
+              <span className="fg-muted">Display name</span>
+              <input value={createForm.display_name} onChange={(event) => onCreateFormChange("display_name", event.target.value)} />
+            </label>
+            <label className="fg-stack">
+              <span className="fg-muted">Role</span>
+              <select value={createForm.role} onChange={(event) => onCreateFormChange("role", event.target.value)}>
+                <option value="owner">owner</option>
+                <option value="admin">admin</option>
+                <option value="operator">operator</option>
+                <option value="viewer">viewer</option>
+              </select>
+            </label>
+            <label className="fg-stack">
+              <span className="fg-muted">Initial password</span>
+              <input
+                autoComplete="new-password"
+                type="password"
+                value={createForm.password}
+                onChange={(event) => onCreateFormChange("password", event.target.value)}
+              />
+            </label>
+          </div>
+          <div className="fg-actions fg-mt-sm">
+            <button disabled={createPending} type="button" onClick={onCreate}>Create user</button>
+          </div>
+        </article>
+      ) : null}
+
+      {selectedUser ? (
+        <article className="fg-card">
+          <div className="fg-panel-heading">
+            <div>
+              <h3>Edit selected user</h3>
+              <p className="fg-muted">
+                Role, display name, and account status mutate the selected identity only. Password changes stay on the separate rotation action.
+              </p>
+            </div>
+            <div className="fg-actions">
+              <span className="fg-pill">{selectedUser.username}</span>
+              <span className="fg-pill" data-tone={selectedUser.must_rotate_password ? "warning" : "success"}>
+                {selectedUser.must_rotate_password ? "Rotation required" : "Rotation clear"}
+              </span>
+            </div>
+          </div>
+          {canMutateAdminPosture ? (
+            <>
+              <div className="fg-grid fg-grid-compact">
+                <label className="fg-stack">
+                  <span className="fg-muted">Display name</span>
+                  <input
+                    value={editDraft.display_name}
+                    onChange={(event) => onEditDraftChange("display_name", event.target.value)}
+                  />
+                </label>
+                <label className="fg-stack">
+                  <span className="fg-muted">Role</span>
+                  <select value={editDraft.role} onChange={(event) => onEditDraftChange("role", event.target.value)}>
+                    <option value="owner">owner</option>
+                    <option value="admin">admin</option>
+                    <option value="operator">operator</option>
+                    <option value="viewer">viewer</option>
+                  </select>
+                </label>
+                <label className="fg-stack">
+                  <span className="fg-muted">Status</span>
+                  <select value={editDraft.status} onChange={(event) => onEditDraftChange("status", event.target.value)}>
+                    <option value="active">active</option>
+                    <option value="disabled">disabled</option>
+                  </select>
+                </label>
+              </div>
+              <div className="fg-actions fg-mt-sm">
+                <button disabled={updatePending} type="button" onClick={onSaveUser}>Save profile changes</button>
+                {!selectedUser.must_rotate_password ? (
+                  <button disabled={updatePending} type="button" onClick={onFlagUserRotation}>
+                    Require password rotation
+                  </button>
+                ) : null}
+                <button disabled={resetPending} type="button" onClick={() => onOpenResetForm(selectedUser.user_id)}>
+                  Prepare password reset
+                </button>
+              </div>
+              {activeResetUserId === selectedUser.user_id ? (
+                <AdminPasswordResetForm
+                  busy={resetPending}
+                  draft={resetDraft}
+                  user={selectedUser}
+                  onCancel={onCloseResetForm}
+                  onChange={onResetDraftChange}
+                  onSubmit={() => onResetPassword(selectedUser)}
+                />
+              ) : null}
+            </>
+          ) : (
+            <p className="fg-muted">This session can inspect the selected user, but only a write-capable admin session can change it.</p>
+          )}
+        </article>
+      ) : null}
+
+      {selectedUser ? (
+        <article className="fg-card">
+          <div className="fg-panel-heading">
+            <div>
+              <h3>Roles & scopes</h3>
+              <p className="fg-muted">
+                Global role and per-instance memberships stay explicit. Scoped memberships drive where this user can actually operate.
+              </p>
+            </div>
+            <div className="fg-actions">
+              <span className="fg-pill">{selectedUser.role}</span>
+              <span className="fg-pill">{memberships.length} scopes</span>
+            </div>
+          </div>
+
+          {membershipsLoading ? (
+            <p className="fg-muted">Loading scoped memberships.</p>
+          ) : memberships.length === 0 ? (
+            <p className="fg-muted">No instance-scoped memberships are recorded for this user.</p>
+          ) : (
+            <div className="fg-table-wrap">
+              <table className="fg-table" aria-label="Admin user scoped memberships">
+                <thead>
+                  <tr>
+                    <th>Instance</th>
+                    <th>Tenant</th>
+                    <th>Role</th>
+                    <th>Status</th>
+                    <th>Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {memberships.map((membership) => {
+                    const instance = instances.find((item) => item.instance_id === membership.instance_id) ?? null;
+                    return (
+                      <tr key={membership.membership_id}>
+                        <td>
+                          {instance?.display_name ?? membership.instance_id}
+                          <div className="fg-muted">{membership.instance_id}</div>
+                        </td>
+                        <td>{membership.tenant_id}</td>
+                        <td>{membership.role}</td>
+                        <td>
+                          <span className="fg-pill" data-tone={membership.status === "active" ? "success" : "warning"}>
+                            {membership.status}
+                          </span>
+                        </td>
+                        <td>
+                          {canMutateAdminPosture ? (
+                            <button
+                              disabled={removingMembershipInstanceId === membership.instance_id}
+                              type="button"
+                              onClick={() => onRemoveScope(membership.instance_id)}
+                            >
+                              Remove scope
+                            </button>
+                          ) : (
+                            <span className="fg-muted">No action</span>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          {canMutateAdminPosture ? (
+            <>
+              <div className="fg-grid fg-grid-compact fg-mt-sm">
+                <label className="fg-stack">
+                  <span className="fg-muted">Instance scope</span>
+                  <select value={scopeDraft.instance_id} onChange={(event) => onScopeDraftChange("instance_id", event.target.value)}>
+                    {instances.map((instance) => (
+                      <option key={instance.instance_id} value={instance.instance_id}>
+                        {instance.display_name} ({instance.instance_id})
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="fg-stack">
+                  <span className="fg-muted">Scoped role</span>
+                  <select value={scopeDraft.role} onChange={(event) => onScopeDraftChange("role", event.target.value)}>
+                    <option value="owner">owner</option>
+                    <option value="admin">admin</option>
+                    <option value="operator">operator</option>
+                    <option value="viewer">viewer</option>
+                  </select>
+                </label>
+                <label className="fg-stack">
+                  <span className="fg-muted">Scoped status</span>
+                  <select value={scopeDraft.status} onChange={(event) => onScopeDraftChange("status", event.target.value)}>
+                    <option value="active">active</option>
+                    <option value="disabled">disabled</option>
+                  </select>
+                </label>
+              </div>
+              <div className="fg-actions fg-mt-sm">
+                <button disabled={scopePending || instances.length === 0} type="button" onClick={onSaveScope}>
+                  Save scope mapping
+                </button>
+              </div>
+            </>
+          ) : (
+            <p className="fg-muted fg-mt-sm">A write-capable admin session is required to upsert or remove scoped memberships.</p>
+          )}
+        </article>
+      ) : null}
+
+      {canMutateAdminPosture ? (
+        <OwnPasswordRotationForm
+          busy={selfPasswordPending}
+          description="Rotate the current admin password without leaving the active browser session."
+          draft={selfPassword}
+          note="Own-password rotation clears the forced-rotation flag and preserves accountability for the acting session."
+          submitLabel="Rotate own password"
+          title="Rotate own password"
+          onChange={onSelfPasswordChange}
+          onSubmit={onRotateOwnPassword}
+        />
+      ) : null}
+    </div>
+  );
+}
+
+export function SecuritySessionsSection({
+  canViewAdminTabs,
+  canMutateAdminPosture,
+  sessions,
+  currentSessionId,
+  revokePendingSessionId,
+  onRevokeSession,
+}: {
+  canViewAdminTabs: boolean;
+  canMutateAdminPosture: boolean;
+  sessions: AdminSecuritySession[];
+  currentSessionId: string | null | undefined;
+  revokePendingSessionId: string | null;
+  onRevokeSession: (sessionId: string) => void;
+}) {
+  if (!canViewAdminTabs) {
+    return (
+      <AccessBlockedCard
+        title="Sessions"
+        description="Only admin-role sessions can review global admin session inventory and revoke other sessions."
+      />
+    );
+  }
+
+  return (
+    <article className="fg-card">
+      <div className="fg-panel-heading">
+        <div>
+          <h3>Admin sessions</h3>
+          <p className="fg-muted">
+            Distinguish active, expired, revoked, and elevated sessions. Mark the current browser session so revocation is deliberate.
+          </p>
+        </div>
+        <span className="fg-pill" data-tone={sessions.some((item) => item.active) ? "warning" : "success"}>
+          {sessions.filter((item) => item.active).length} active
+        </span>
+      </div>
+      {sessions.length === 0 ? (
+        <p className="fg-muted">No admin sessions recorded.</p>
+      ) : (
+        <div className="fg-table-wrap">
+          <table className="fg-table" aria-label="Admin sessions">
+            <thead>
+              <tr>
+                <th>Session</th>
+                <th>User</th>
+                <th>Type</th>
+                <th>Status</th>
+                <th>Last used</th>
+                <th>Expires</th>
+                <th>Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              {sessions.map((adminSession) => {
+                const status = adminSessionStatus(adminSession);
+                const isCurrent = adminSession.session_id === currentSessionId;
+                return (
+                  <tr key={adminSession.session_id}>
+                    <td>
+                      <code>{adminSession.session_id}</code>
+                      <div className="fg-muted">
+                        {adminSession.approval_reference ? `approval ${adminSession.approval_reference}` : "standard login"}
+                      </div>
+                    </td>
+                    <td>
+                      {adminSession.display_name} ({adminSession.username})
+                      <div className="fg-muted">{adminSession.role}</div>
+                    </td>
+                    <td>
+                      <span className="fg-pill" data-tone={adminSession.session_type === "break_glass" ? "danger" : adminSession.session_type === "impersonation" ? "warning" : "neutral"}>
+                        {adminSession.session_type}
+                      </span>
+                      {isCurrent ? <span className="fg-pill">This browser</span> : null}
+                    </td>
+                    <td><span className="fg-pill" data-tone={status.tone}>{status.label}</span></td>
+                    <td>{formatTimestamp(adminSession.last_used_at)}</td>
+                    <td>{formatTimestamp(adminSession.expires_at)}</td>
+                    <td>
+                      {canMutateAdminPosture && adminSession.active ? (
+                        <button
+                          disabled={revokePendingSessionId === adminSession.session_id}
+                          type="button"
+                          onClick={() => onRevokeSession(adminSession.session_id)}
+                        >
+                          Revoke
+                        </button>
+                      ) : (
+                        <span className="fg-muted">No action</span>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </article>
+  );
+}
+
+export function SecurityElevatedAccessSection({
+  requests,
+  sessions,
+  sessionUserId,
+  canRequestBreakGlass,
+  canRequestImpersonation,
+  canDecideElevatedAccess,
+  canStartElevated,
+  credentialPolicy,
+  approverPosture,
+  accessDraft,
+  accessPending,
+  impersonationTargets,
+  cancellingRequestId,
+  issuingRequestId,
+  decisionPendingRequestId,
+  decisionDrafts,
+  onElevatedRequestTypeChange,
+  onElevatedAccessDraftChange,
+  onSubmitElevatedAccessRequest,
+  onDecisionDraftChange,
+  onApproveRequest,
+  onRejectRequest,
+  onCancelElevatedAccessRequest,
+  onIssueElevatedAccess,
+}: {
+  requests: ElevatedAccessRequest[];
+  sessions: AdminSecuritySession[];
+  sessionUserId: string | null | undefined;
+  canRequestBreakGlass: boolean;
+  canRequestImpersonation: boolean;
+  canDecideElevatedAccess: boolean;
+  canStartElevated: boolean;
+  credentialPolicy: SecurityCredentialPolicy | null;
+  approverPosture: ElevatedAccessApproverPosture | null;
+  accessDraft: ElevatedAccessRequestDraft;
+  accessPending: boolean;
+  impersonationTargets: AdminUser[];
+  cancellingRequestId: string | null;
+  issuingRequestId: string | null;
+  decisionPendingRequestId: string | null;
+  decisionDrafts: Record<string, string>;
+  onElevatedRequestTypeChange: (value: ElevatedAccessRequestDraft["request_type"]) => void;
+  onElevatedAccessDraftChange: (field: keyof ElevatedAccessRequestDraft, value: string) => void;
+  onSubmitElevatedAccessRequest: () => void;
+  onDecisionDraftChange: (requestId: string, value: string) => void;
+  onApproveRequest: (request: ElevatedAccessRequest) => void;
+  onRejectRequest: (request: ElevatedAccessRequest) => void;
+  onCancelElevatedAccessRequest: (request: ElevatedAccessRequest) => void;
+  onIssueElevatedAccess: (request: ElevatedAccessRequest) => void;
+}) {
+  const openRequests = requests.filter((item) => item.gate_status === "open");
+  const readyRequests = requests.filter((item) => item.ready_to_issue);
+  const activeRequests = requests.filter((item) => item.session_status === "active");
+  const closedRequests = requests.filter((item) =>
+    item.gate_status === "rejected"
+    || item.gate_status === "cancelled"
+    || item.gate_status === "timed_out"
+    || item.session_status === "expired"
+    || item.session_status === "revoked",
+  );
+  const breakGlassMaxMinutes = credentialPolicy?.break_glass_sessions?.max_ttl_minutes ?? 60;
+  const impersonationMaxMinutes = credentialPolicy?.impersonation_sessions?.max_ttl_minutes ?? 30;
+
+  return (
+    <div className="fg-stack">
+      <article className="fg-card">
+        <div className="fg-panel-heading">
+          <div>
+            <h3>Exception lifecycle</h3>
+            <p className="fg-muted">
+              Request, approval, session start, and expiry/cancellation stay separate, visible states.
+            </p>
+          </div>
+          {approverPosture ? (
+            <span className="fg-pill" data-tone={approverPosture.state === "recovery_required" ? "danger" : "success"}>
+              {approverPosture.label}
+            </span>
+          ) : null}
+        </div>
+        <div className="fg-card-grid">
+          <article className="fg-kpi">
+            <span className="fg-muted">Requested</span>
+            <strong className="fg-kpi-value">{openRequests.length}</strong>
+          </article>
+          <article className="fg-kpi">
+            <span className="fg-muted">Approved</span>
+            <strong className="fg-kpi-value">{readyRequests.length}</strong>
+          </article>
+          <article className="fg-kpi">
+            <span className="fg-muted">Active</span>
+            <strong className="fg-kpi-value">{activeRequests.length}</strong>
+          </article>
+          <article className="fg-kpi">
+            <span className="fg-muted">Ended</span>
+            <strong className="fg-kpi-value">{closedRequests.length}</strong>
           </article>
         </div>
       </article>
@@ -149,14 +950,13 @@ export function SecurityOverviewSection({
             <div>
               <h3>Request elevated access</h3>
               <p className="fg-muted">
-                Request first. Approval and a live elevated session are separate states, and only the original requester can start the session later.
+                Start with a request. The requester must later claim the approved session from the same Security surface.
               </p>
             </div>
-            <span className="fg-pill" data-tone={recoveryRequired ? "warning" : "success"}>
+            <span className="fg-pill" data-tone={accessDraft.request_type === "impersonation" ? "warning" : "danger"}>
               {accessDraft.request_type === "impersonation" ? "Impersonation" : "Break-glass"}
             </span>
           </div>
-
           <div className="fg-grid fg-grid-compact">
             <label className="fg-stack">
               <span className="fg-muted">Request type</span>
@@ -168,7 +968,6 @@ export function SecurityOverviewSection({
                 {canRequestImpersonation ? <option value="impersonation">Impersonation</option> : null}
               </select>
             </label>
-
             {accessDraft.request_type === "impersonation" ? (
               <label className="fg-stack">
                 <span className="fg-muted">Target user</span>
@@ -185,7 +984,6 @@ export function SecurityOverviewSection({
                 </select>
               </label>
             ) : null}
-
             <label className="fg-stack">
               <span className="fg-muted">Approval reference</span>
               <input
@@ -194,19 +992,16 @@ export function SecurityOverviewSection({
                 onChange={(event) => onElevatedAccessDraftChange("approval_reference", event.target.value)}
               />
             </label>
-
             <label className="fg-stack">
               <span className="fg-muted">Duration (minutes)</span>
               <input
                 max={accessDraft.request_type === "impersonation" ? impersonationMaxMinutes : breakGlassMaxMinutes}
                 min={1}
-                placeholder="15"
                 type="number"
                 value={accessDraft.duration_minutes}
                 onChange={(event) => onElevatedAccessDraftChange("duration_minutes", event.target.value)}
               />
             </label>
-
             <label className="fg-stack">
               <span className="fg-muted">Notification targets</span>
               <input
@@ -216,7 +1011,6 @@ export function SecurityOverviewSection({
               />
             </label>
           </div>
-
           <label className="fg-stack fg-mt-sm">
             <span className="fg-muted">Justification</span>
             <textarea
@@ -226,34 +1020,20 @@ export function SecurityOverviewSection({
               onChange={(event) => onElevatedAccessDraftChange("justification", event.target.value)}
             />
           </label>
-
-          {accessDraft.request_type === "impersonation" && impersonationTargets.length === 0 ? (
+          {approverPosture?.state === "recovery_required" ? (
             <p className="fg-danger fg-mt-sm">
-              No eligible impersonation targets are available. Add or restore another user before submitting this request.
+              ForgeFrame will not open elevated access until a second admin approver is restored.
             </p>
           ) : null}
-
-          {!canRequestImpersonation ? (
-            <p className="fg-muted fg-mt-sm">
-              This session can request break-glass only. Impersonation requests require a standard admin session.
-            </p>
-          ) : null}
-
-          {recoveryRequired ? (
-            <p className="fg-muted fg-mt-sm">
-              ForgeFrame will not create a pending approval item or issue elevated access while no eligible second admin approver exists.
-            </p>
-          ) : (
-            <p className="fg-muted fg-mt-sm">
-              Approval request submitted. No elevated session is active until this request is approved.
-            </p>
-          )}
-
           <div className="fg-actions fg-mt-sm">
             <button
-              disabled={accessPending || recoveryRequired || (accessDraft.request_type === "impersonation" && impersonationTargets.length === 0)}
+              disabled={
+                accessPending
+                || approverPosture?.state === "recovery_required"
+                || (accessDraft.request_type === "impersonation" && impersonationTargets.length === 0)
+              }
               type="button"
-              onClick={() => void onSubmitElevatedAccessRequest()}
+              onClick={onSubmitElevatedAccessRequest}
             >
               {accessDraft.request_type === "impersonation" ? "Request impersonation" : "Request break-glass access"}
             </button>
@@ -261,413 +1041,550 @@ export function SecurityOverviewSection({
         </article>
       ) : (
         <article className="fg-card">
-          <h3>Read-only elevated-access review</h3>
+          <h3>Read-only exception review</h3>
           <p className="fg-muted">
-            This session can inspect policy posture and request history, but a standard admin or operator session is required to submit or start elevated access.
+            This session can inspect the exception lifecycle, but a write-capable operator or admin session is required to request or start elevated access.
           </p>
         </article>
       )}
 
-      {submittedRequest ? (
+      {canDecideElevatedAccess ? (
         <article className="fg-card">
           <div className="fg-panel-heading">
             <div>
-              <h3>Pending approval confirmation</h3>
+              <h3>Approval queue</h3>
               <p className="fg-muted">
-                Security keeps approval review and live session start separate. Use the request-scoped links below instead of searching the queue or audit history manually.
+                Distinct admins decide open elevated-access requests here instead of forcing reviewers back into a generic mixed queue.
               </p>
             </div>
-            <span className="fg-pill" data-tone="warning">
-              {formatApprovalStatus(submittedRequest.gate_status)}
+            <span className="fg-pill" data-tone={openRequests.length > 0 ? "warning" : "success"}>
+              {openRequests.length} open
             </span>
           </div>
-          <div className="fg-approval-banner" data-tone="warning">
-            <strong>Approval request submitted</strong>
-            <p>Approval request submitted. No elevated session is active until this request is approved.</p>
-            <p>
-              Request ID <code>{submittedRequest.request_id}</code> routes to approval <code>{submittedRequest.approval_id}</code>.
-            </p>
-          </div>
-          <div className="fg-actions fg-mt-sm">
-            <Link className="fg-nav-link" to={buildApprovalDetailPath(submittedRequest.approval_id)}>
-              Open approval detail
-            </Link>
-            <Link className="fg-nav-link" to={buildRequestAuditHistoryPath(submittedRequest.request_id)}>
-              Open audit history
-            </Link>
-          </div>
+          {openRequests.length === 0 ? (
+            <p className="fg-muted">No open elevated-access approvals are waiting for decision.</p>
+          ) : (
+            <div className="fg-stack">
+              {openRequests.map((request) => {
+                const note = decisionDrafts[request.request_id] ?? "";
+                const canSelfApprove = request.requested_by_user_id !== sessionUserId;
+                return (
+                  <article key={`review-${request.request_id}`} className="fg-subcard">
+                    <div className="fg-panel-heading">
+                      <div>
+                        <h4>{formatApprovalType(request.request_type)} approval</h4>
+                        <p className="fg-muted">
+                          {formatRequestActor(request.requested_by_display_name, request.requested_by_username, request.requested_by_user_id)}
+                          {" -> "}
+                          {formatRequestTarget(request)}
+                        </p>
+                      </div>
+                      <div className="fg-actions">
+                        <span className="fg-pill" data-tone={approvalTone(request.gate_status)}>
+                          {formatApprovalStatus(request.gate_status)}
+                        </span>
+                        <span className="fg-pill">{formatTimestamp(request.approval_expires_at)}</span>
+                      </div>
+                    </div>
+                    <p>{request.justification}</p>
+                    <label className="fg-stack fg-mt-sm">
+                      <span className="fg-muted">Decision note</span>
+                      <textarea
+                        placeholder="Explain why this exception is approved or rejected."
+                        rows={3}
+                        value={note}
+                        onChange={(event) => onDecisionDraftChange(request.request_id, event.target.value)}
+                      />
+                    </label>
+                    <div className="fg-actions fg-mt-sm">
+                      <button
+                        disabled={!canSelfApprove || note.trim().length < 8 || decisionPendingRequestId === request.request_id}
+                        type="button"
+                        onClick={() => onApproveRequest(request)}
+                      >
+                        Approve
+                      </button>
+                      <button
+                        disabled={!canSelfApprove || note.trim().length < 8 || decisionPendingRequestId === request.request_id}
+                        type="button"
+                        onClick={() => onRejectRequest(request)}
+                      >
+                        Reject
+                      </button>
+                      {!canSelfApprove ? <span className="fg-muted">Requesters cannot approve their own exception.</span> : null}
+                    </div>
+                  </article>
+                );
+              })}
+            </div>
+          )}
         </article>
       ) : null}
-    </>
-  );
-}
 
-type SecurityRequestHistoryCardProps = {
-  requests: ElevatedAccessRequest[];
-  sessions: AdminSecuritySession[];
-  sessionByRequestId: Map<string, AdminSecuritySession>;
-  sessionUserId: string | null | undefined;
-  canManageAdminPosture: boolean;
-  canStartElevated: boolean;
-  cancellingRequestId: string | null;
-  issuingRequestId: string | null;
-  onCancelElevatedAccessRequest: (request: ElevatedAccessRequest) => void;
-  onIssueElevatedAccess: (request: ElevatedAccessRequest) => void;
-};
-
-export function SecurityRequestHistoryCard({
-  requests,
-  sessions,
-  sessionByRequestId,
-  sessionUserId,
-  canManageAdminPosture,
-  canStartElevated,
-  cancellingRequestId,
-  issuingRequestId,
-  onCancelElevatedAccessRequest,
-  onIssueElevatedAccess,
-}: SecurityRequestHistoryCardProps) {
-  return (
-    <article className="fg-card">
-      <div className="fg-panel-heading">
-        <div>
-          <h3>Request history</h3>
-          <p className="fg-muted">
-            {canManageAdminPosture
-              ? "Admins see all elevated-access requests so approval state and live session posture stay visible in one place."
-              : "Operators see only their own elevated-access requests so start and follow-up work stays grounded in the active requester context."}
-          </p>
+      <article className="fg-card">
+        <div className="fg-panel-heading">
+          <div>
+            <h3>Lifecycle status</h3>
+            <p className="fg-muted">
+              Each request keeps its own request, approval, start, and expiry trail with direct links to approvals and audit history.
+            </p>
+          </div>
         </div>
-      </div>
-
-      {requests.length === 0 ? (
-        <p className="fg-muted">
-          No elevated-access requests yet. Submit a request from Security to create the first pending approval.
-        </p>
-      ) : (
-        <div className="fg-stack">
-          {requests.map((request) => {
-            const linkedSession = request.issued_session_id
-              ? sessions.find((item) => item.session_id === request.issued_session_id) ?? sessionByRequestId.get(request.request_id) ?? null
-              : sessionByRequestId.get(request.request_id) ?? null;
-            const banner = describeRequestBanner(request, linkedSession);
-            const sessionLabel = formatSessionStatus(request.session_status, request.ready_to_issue);
-            const isRequester = request.requested_by_user_id === sessionUserId;
-            const canCancelRequest = request.gate_status === "open" && isRequester && canStartElevated;
-            const canIssueRequest = request.ready_to_issue && isRequester && canStartElevated;
-            const approvalDetailPath = buildApprovalDetailPath(request.approval_id);
-            const auditHistoryPath = buildRequestAuditHistoryPath(request.request_id);
-
-            return (
-              <article key={request.request_id} className="fg-subcard">
-                <div className="fg-panel-heading">
-                  <div>
-                    <h4>{formatApprovalType(request.request_type)} request</h4>
-                    <p className="fg-muted">
-                      Request ID <code>{request.request_id}</code>
-                    </p>
-                  </div>
-                  <div className="fg-actions">
-                    <span className="fg-pill" data-tone={approvalTone(request.gate_status)}>
-                      {formatApprovalStatus(request.gate_status)}
-                    </span>
-                    {sessionLabel ? <span className="fg-pill">{sessionLabel}</span> : null}
-                  </div>
-                </div>
-
-                <div className="fg-approval-banner" data-tone={banner.tone}>
-                  <strong>{banner.title}</strong>
-                  <p>{banner.body}</p>
-                </div>
-
-                <div className="fg-card-grid">
-                  <article className="fg-subcard">
-                    <span className="fg-section-label">Requester</span>
-                    <p>{formatRequestActor(request.requested_by_display_name, request.requested_by_username, request.requested_by_user_id)}</p>
-                  </article>
-                  <article className="fg-subcard">
-                    <span className="fg-section-label">Target</span>
-                    <p>{formatRequestTarget(request)}</p>
-                  </article>
-                  <article className="fg-subcard">
-                    <span className="fg-section-label">Approval reference</span>
-                    <p>{request.approval_reference}</p>
-                  </article>
-                  <article className="fg-subcard">
-                    <span className="fg-section-label">Opened</span>
-                    <p>{formatTimestamp(request.created_at)}</p>
-                  </article>
-                  <article className="fg-subcard">
-                    <span className="fg-section-label">Approval window</span>
-                    <p>{formatTimestamp(request.approval_expires_at)}</p>
-                  </article>
-                  <article className="fg-subcard">
-                    <span className="fg-section-label">Duration</span>
-                    <p>{request.duration_minutes} minutes</p>
-                  </article>
-                  <article className="fg-subcard">
-                    <span className="fg-section-label">Decision</span>
-                    <p>
-                      {request.decided_at
-                        ? `${request.decided_by_username ?? request.decided_by_user_id ?? "Unknown"} · ${formatTimestamp(request.decided_at)}`
-                        : "Pending approval"}
-                    </p>
-                  </article>
-                  <article className="fg-subcard">
-                    <span className="fg-section-label">Notifications</span>
-                    <p>{request.notification_targets.length > 0 ? request.notification_targets.join(", ") : "None recorded"}</p>
-                  </article>
-                  {linkedSession ? (
-                    <article className="fg-subcard">
-                      <span className="fg-section-label">Linked session</span>
-                      <p>
-                        {linkedSession.session_type}
-                        {linkedSession.expires_at ? ` · expires ${formatTimestamp(linkedSession.expires_at)}` : ""}
+        {requests.length === 0 ? (
+          <p className="fg-muted">No elevated-access requests recorded.</p>
+        ) : (
+          <div className="fg-stack">
+            {requests.map((request) => {
+              const linkedSession = request.issued_session_id
+                ? sessions.find((item) => item.session_id === request.issued_session_id) ?? null
+                : null;
+              const banner = describeRequestBanner(request, linkedSession);
+              const stage = requestStage(request);
+              const isRequester = request.requested_by_user_id === sessionUserId;
+              const canCancelRequest = request.gate_status === "open" && isRequester && canStartElevated;
+              const canIssueRequest = request.ready_to_issue && isRequester && canStartElevated;
+              return (
+                <article key={request.request_id} className="fg-subcard">
+                  <div className="fg-panel-heading">
+                    <div>
+                      <h4>{formatApprovalType(request.request_type)} request</h4>
+                      <p className="fg-muted">
+                        {formatRequestActor(request.requested_by_display_name, request.requested_by_username, request.requested_by_user_id)}
                       </p>
-                    </article>
-                  ) : null}
-                </div>
-
-                <p className="fg-mt-sm">{request.justification}</p>
-                {request.decision_note ? <p className="fg-muted">Decision note: {request.decision_note}</p> : null}
-
-                <div className="fg-actions fg-mt-sm">
-                  <Link className="fg-nav-link" to={approvalDetailPath}>
-                    Open approval detail
-                  </Link>
-                  <Link className="fg-nav-link" to={auditHistoryPath}>
-                    Open audit history
-                  </Link>
-                  {canCancelRequest ? (
-                    <button
-                      disabled={cancellingRequestId === request.request_id}
-                      type="button"
-                      onClick={() => void onCancelElevatedAccessRequest(request)}
-                    >
-                      Cancel request
-                    </button>
-                  ) : null}
-                  {canIssueRequest ? (
-                    <button
-                      disabled={issuingRequestId === request.request_id}
-                      type="button"
-                      onClick={() => void onIssueElevatedAccess(request)}
-                    >
-                      {request.request_type === "impersonation" ? "Start impersonation session" : "Start break-glass session"}
-                    </button>
-                  ) : null}
-                  {request.ready_to_issue && !isRequester ? (
-                    <p className="fg-muted">Only the original requester can start this session.</p>
-                  ) : null}
-                  {request.ready_to_issue && isRequester && !canStartElevated ? (
-                    <p className="fg-muted">Open a standard admin or operator session to start this access.</p>
-                  ) : null}
-                </div>
-              </article>
-            );
-          })}
-        </div>
-      )}
-    </article>
+                    </div>
+                    <div className="fg-actions">
+                      <span className="fg-pill" data-tone={stage.tone}>{stage.label}</span>
+                      <span className="fg-pill" data-tone={approvalTone(request.gate_status)}>
+                        {formatApprovalStatus(request.gate_status)}
+                      </span>
+                    </div>
+                  </div>
+                  <div className="fg-approval-banner" data-tone={banner.tone}>
+                    <strong>{banner.title}</strong>
+                    <p>{banner.body}</p>
+                  </div>
+                  <KeyValueList
+                    items={[
+                      { label: "Target", value: formatRequestTarget(request) },
+                      { label: "Approval reference", value: request.approval_reference },
+                      { label: "Requested", value: formatTimestamp(request.created_at) },
+                      { label: "Approval expires", value: formatTimestamp(request.approval_expires_at) },
+                      { label: "Duration", value: `${request.duration_minutes} minutes` },
+                      {
+                        label: "Decision",
+                        value: request.decided_at
+                          ? `${request.decided_by_username ?? request.decided_by_user_id ?? "Unknown"} · ${formatTimestamp(request.decided_at)}`
+                          : "Pending approval",
+                      },
+                    ]}
+                  />
+                  <p className="fg-mt-sm">{request.justification}</p>
+                  {request.decision_note ? <p className="fg-muted">Decision note: {request.decision_note}</p> : null}
+                  <div className="fg-actions fg-mt-sm">
+                    <Link className="fg-nav-link" to={buildApprovalDetailPath(request.approval_id)}>
+                      Open approval detail
+                    </Link>
+                    <Link className="fg-nav-link" to={buildRequestAuditHistoryPath(request.request_id)}>
+                      Open audit history
+                    </Link>
+                    {canCancelRequest ? (
+                      <button
+                        disabled={cancellingRequestId === request.request_id}
+                        type="button"
+                        onClick={() => onCancelElevatedAccessRequest(request)}
+                      >
+                        Cancel request
+                      </button>
+                    ) : null}
+                    {canIssueRequest ? (
+                      <button
+                        disabled={issuingRequestId === request.request_id}
+                        type="button"
+                        onClick={() => onIssueElevatedAccess(request)}
+                      >
+                        {request.request_type === "impersonation" ? "Start impersonation session" : "Start break-glass session"}
+                      </button>
+                    ) : null}
+                    {request.ready_to_issue && !isRequester ? <span className="fg-muted">Only the original requester can start this session.</span> : null}
+                  </div>
+                </article>
+              );
+            })}
+          </div>
+        )}
+      </article>
+    </div>
   );
 }
 
-type SecurityAdminPostureSectionProps = {
-  canManageAdminPosture: boolean;
-  bootstrap: Record<string, string | number | boolean> | null;
-  canMutateAdminPosture: boolean;
-  createForm: { username: string; display_name: string; role: string; password: string };
-  selfPasswordPending: boolean;
-  selfPassword: OwnPasswordRotationDraft;
-  users: AdminUser[];
-  activeResetUserId: string | null;
-  resetPending: boolean;
-  resetDraft: AdminPasswordResetDraft;
-  sessions: AdminSecuritySession[];
-  secretPosture: Array<Record<string, string | number | boolean>>;
-  onCreateFormChange: (field: "username" | "display_name" | "role" | "password", value: string) => void;
-  onCreate: () => void;
-  onSelfPasswordChange: (field: keyof OwnPasswordRotationDraft, value: string) => void;
-  onRotateOwnPassword: () => void;
-  onOpenResetForm: (userId: string) => void;
-  onCloseResetForm: () => void;
-  onResetDraftChange: (field: keyof AdminPasswordResetDraft, value: string) => void;
-  onResetPassword: (user: AdminUser) => void;
-  onRevokeSession: (sessionId: string) => void;
-};
-
-export function SecurityAdminPostureSection({
-  canManageAdminPosture,
-  bootstrap,
+export function SecurityProviderSecretsSection({
+  canViewAdminTabs,
   canMutateAdminPosture,
-  createForm,
-  selfPasswordPending,
-  selfPassword,
-  users,
-  activeResetUserId,
-  resetPending,
-  resetDraft,
-  sessions,
   secretPosture,
-  onCreateFormChange,
-  onCreate,
-  onSelfPasswordChange,
-  onRotateOwnPassword,
-  onOpenResetForm,
-  onCloseResetForm,
-  onResetDraftChange,
-  onResetPassword,
-  onRevokeSession,
-}: SecurityAdminPostureSectionProps) {
-  if (!canManageAdminPosture) {
-    return null;
+  harnessProfiles,
+  recentRotations,
+  secretStorageControls,
+  rotationTargets,
+  rotationDraft,
+  rotationPending,
+  onRotationDraftChange,
+  onRecordRotation,
+}: {
+  canViewAdminTabs: boolean;
+  canMutateAdminPosture: boolean;
+  secretPosture: SecuritySecretPosture[];
+  harnessProfiles: HarnessSecretPosture[];
+  recentRotations: SecurityRotationEvent[];
+  secretStorageControls: SecretStorageControl[];
+  rotationTargets: RotationTargetOption[];
+  rotationDraft: RotationDraft;
+  rotationPending: boolean;
+  onRotationDraftChange: (field: keyof RotationDraft, value: string) => void;
+  onRecordRotation: () => void;
+}) {
+  if (!canViewAdminTabs) {
+    return (
+      <AccessBlockedCard
+        title="Provider secrets"
+        description="Credential references, rotation evidence, and storage controls stay reserved for admin-role sessions."
+      />
+    );
+  }
+
+  const providerMissing = secretPosture.filter((item) => item.state === "missing").length;
+  const providerBlocked = secretPosture.filter((item) => item.state === "blocked").length;
+  const providerRotatable = secretPosture.filter((item) => item.state === "rotatable").length;
+
+  return (
+    <div className="fg-stack">
+      <article className="fg-card">
+        <div className="fg-panel-heading">
+          <div>
+            <h3>Provider secret controls</h3>
+            <p className="fg-muted">
+              ForgeFrame shows control state, rotation evidence, and credential references only. Secret values never appear here.
+            </p>
+          </div>
+          <span className="fg-pill" data-tone={providerMissing > 0 || providerBlocked > 0 ? "danger" : "success"}>
+            {providerMissing + providerBlocked} require action
+          </span>
+        </div>
+        <div className="fg-card-grid">
+          <article className="fg-kpi">
+            <span className="fg-muted">Missing</span>
+            <strong className="fg-kpi-value">{providerMissing}</strong>
+          </article>
+          <article className="fg-kpi">
+            <span className="fg-muted">Blocked</span>
+            <strong className="fg-kpi-value">{providerBlocked}</strong>
+          </article>
+          <article className="fg-kpi">
+            <span className="fg-muted">Rotatable</span>
+            <strong className="fg-kpi-value">{providerRotatable}</strong>
+          </article>
+          <article className="fg-kpi">
+            <span className="fg-muted">Harness profiles</span>
+            <strong className="fg-kpi-value">{harnessProfiles.length}</strong>
+          </article>
+        </div>
+      </article>
+
+      <article className="fg-card">
+        <h3>Provider posture</h3>
+        {secretPosture.length === 0 ? (
+          <p className="fg-muted">No provider secret posture recorded.</p>
+        ) : (
+          <div className="fg-table-wrap">
+            <table className="fg-table" aria-label="Provider secret posture">
+              <thead>
+                <tr>
+                  <th>Control</th>
+                  <th>State</th>
+                  <th>Auth mode</th>
+                  <th>Rotation support</th>
+                  <th>Last rotation</th>
+                  <th>Reference</th>
+                </tr>
+              </thead>
+              <tbody>
+                {secretPosture.map((provider) => (
+                  <tr key={provider.provider}>
+                    <td>
+                      {provider.provider}
+                      <div className="fg-muted">{provider.state_reason}</div>
+                    </td>
+                    <td><span className="fg-pill" data-tone={secretStateTone(provider.state)}>{provider.state_label}</span></td>
+                    <td>{provider.auth_mode}</td>
+                    <td>{provider.rotation_support}</td>
+                    <td>{provider.last_rotation_at ? formatTimestamp(provider.last_rotation_at) : "Never"}</td>
+                    <td><code>{provider.credential_reference}</code></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </article>
+
+      <article className="fg-card">
+        <h3>Harness secret posture</h3>
+        {harnessProfiles.length === 0 ? (
+          <p className="fg-muted">No harness-backed secret profiles recorded.</p>
+        ) : (
+          <div className="fg-table-wrap">
+            <table className="fg-table" aria-label="Harness secret posture">
+              <thead>
+                <tr>
+                  <th>Profile</th>
+                  <th>State</th>
+                  <th>Auth mode</th>
+                  <th>Config revision</th>
+                  <th>Last rotation</th>
+                  <th>Reference</th>
+                </tr>
+              </thead>
+              <tbody>
+                {harnessProfiles.map((profile) => (
+                  <tr key={profile.provider_key}>
+                    <td>
+                      {profile.label}
+                      <div className="fg-muted">{profile.provider_key}</div>
+                    </td>
+                    <td><span className="fg-pill" data-tone={secretStateTone(profile.state)}>{profile.state_label}</span></td>
+                    <td>{profile.auth_mode}</td>
+                    <td>{profile.config_revision}</td>
+                    <td>{profile.last_rotation_at ? formatTimestamp(profile.last_rotation_at) : "Never"}</td>
+                    <td><code>{profile.credential_reference}</code></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </article>
+
+      {canMutateAdminPosture ? (
+        <article className="fg-card">
+          <div className="fg-panel-heading">
+            <div>
+              <h3>Record rotation evidence</h3>
+              <p className="fg-muted">
+                Recording rotation evidence updates blocker posture without ever collecting or echoing the rotated secret value.
+              </p>
+            </div>
+          </div>
+          {rotationTargets.length === 0 ? (
+            <p className="fg-muted">No provider or harness control is available for rotation evidence recording.</p>
+          ) : (
+            <>
+              <div className="fg-grid fg-grid-compact">
+                <label className="fg-stack">
+                  <span className="fg-muted">Control</span>
+                  <select
+                    value={`${rotationDraft.target_type}:${rotationDraft.target_id}`}
+                    onChange={(event) => {
+                      const [targetType, targetId] = event.target.value.split(":");
+                      onRotationDraftChange("target_type", targetType);
+                      onRotationDraftChange("target_id", targetId);
+                    }}
+                  >
+                    {rotationTargets.map((target) => (
+                      <option key={`${target.target_type}:${target.target_id}`} value={`${target.target_type}:${target.target_id}`}>
+                        {target.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="fg-stack">
+                  <span className="fg-muted">Rotation kind</span>
+                  <input value={rotationDraft.kind} onChange={(event) => onRotationDraftChange("kind", event.target.value)} />
+                </label>
+                <label className="fg-stack">
+                  <span className="fg-muted">Reference</span>
+                  <input
+                    placeholder="INC-202 / vault-change-ticket"
+                    value={rotationDraft.reference}
+                    onChange={(event) => onRotationDraftChange("reference", event.target.value)}
+                  />
+                </label>
+              </div>
+              <label className="fg-stack fg-mt-sm">
+                <span className="fg-muted">Notes</span>
+                <textarea rows={3} value={rotationDraft.notes} onChange={(event) => onRotationDraftChange("notes", event.target.value)} />
+              </label>
+              <div className="fg-actions fg-mt-sm">
+                <button disabled={rotationPending} type="button" onClick={onRecordRotation}>Record rotation evidence</button>
+              </div>
+            </>
+          )}
+        </article>
+      ) : null}
+
+      <article className="fg-card">
+        <h3>Recent rotation events</h3>
+        {recentRotations.length === 0 ? (
+          <p className="fg-muted">No rotation events recorded.</p>
+        ) : (
+          <div className="fg-table-wrap">
+            <table className="fg-table" aria-label="Recent secret rotation events">
+              <thead>
+                <tr>
+                  <th>When</th>
+                  <th>Target</th>
+                  <th>Kind</th>
+                  <th>Reference</th>
+                  <th>Source</th>
+                </tr>
+              </thead>
+              <tbody>
+                {recentRotations.map((event) => (
+                  <tr key={event.event_id}>
+                    <td>{formatTimestamp(event.recorded_at)}</td>
+                    <td>{event.target_type}:{event.target_id}</td>
+                    <td>{event.kind}</td>
+                    <td>{event.reference ?? "Not recorded"}</td>
+                    <td>{event.history_source ?? "Not recorded"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </article>
+
+      <article className="fg-card">
+        <h3>Storage controls</h3>
+        <div className="fg-card-grid">
+          {secretStorageControls.map((control) => (
+            <article key={control.credential_class} className="fg-subcard">
+              <div className="fg-panel-heading">
+                <div>
+                  <h4>{control.credential_class}</h4>
+                  <p className="fg-muted">{control.storage}</p>
+                </div>
+                <span className="fg-pill" data-tone={control.plaintext_persisted ? "warning" : "success"}>
+                  {control.plaintext_persisted ? "Plaintext persists" : "Plaintext blocked"}
+                </span>
+              </div>
+              <p>{control.notes}</p>
+            </article>
+          ))}
+        </div>
+      </article>
+    </div>
+  );
+}
+
+export function SecurityCredentialPolicySection({
+  credentialPolicy,
+}: {
+  credentialPolicy: SecurityCredentialPolicy | null;
+}) {
+  if (!credentialPolicy) {
+    return (
+      <article className="fg-card">
+        <h3>Credential policy</h3>
+        <p className="fg-muted">Credential lifecycle policy is loading.</p>
+      </article>
+    );
   }
 
   return (
-    <>
-      {bootstrap ? (
-        <article className="fg-card">
-          <h3>Bootstrap Security Status</h3>
-          <ul className="fg-list">
-            {Object.entries(bootstrap).map(([key, value]) => (
-              <li key={key}>
-                {key}: {String(value)}
-              </li>
-            ))}
-          </ul>
-        </article>
-      ) : null}
-
-      {canMutateAdminPosture ? (
-        <>
-          <article className="fg-card">
-            <h3>Create Admin User</h3>
-            <div className="fg-grid fg-grid-compact">
-              <input
-                placeholder="username"
-                value={createForm.username}
-                onChange={(event) => onCreateFormChange("username", event.target.value)}
-              />
-              <input
-                placeholder="display name"
-                value={createForm.display_name}
-                onChange={(event) => onCreateFormChange("display_name", event.target.value)}
-              />
-              <select
-                value={createForm.role}
-                onChange={(event) => onCreateFormChange("role", event.target.value)}
-              >
-                <option value="owner">owner</option>
-                <option value="admin">admin</option>
-                <option value="operator">operator</option>
-                <option value="viewer">viewer</option>
-              </select>
-              <input
-                type="password"
-                placeholder="initial password"
-                value={createForm.password}
-                onChange={(event) => onCreateFormChange("password", event.target.value)}
-              />
-              <button type="button" onClick={() => void onCreate()}>
-                Create User
-              </button>
-            </div>
-          </article>
-
-          <OwnPasswordRotationForm
-            busy={selfPasswordPending}
-            description="Replace the current admin password without leaving the active session."
-            draft={selfPassword}
-            note="Self-rotation clears the forced-rotation flag and keeps the current session usable."
-            submitLabel="Rotate Password"
-            title="Rotate own password"
-            onChange={onSelfPasswordChange}
-            onSubmit={() => void onRotateOwnPassword()}
-          />
-        </>
-      ) : (
-        <article className="fg-card">
-          <h3>Read-only admin posture</h3>
-          <p className="fg-muted">
-            Admin posture remains visible, but user, password, and session mutations stay hidden for read-only sessions.
-          </p>
-        </article>
-      )}
-
-      <div className="fg-grid">
-        <article className="fg-card">
-          <div className="fg-panel-heading">
-            <div>
-              <h3>Admin Users</h3>
-              <p className="fg-muted">
-                Password resets require a temporary secret that the acting admin enters and confirms before handoff.
-              </p>
-            </div>
+    <div className="fg-stack">
+      <article className="fg-card">
+        <div className="fg-panel-heading">
+          <div>
+            <h3>Human sessions</h3>
+            <p className="fg-muted">Session TTL and rotation triggers define how long privileged browsers can stay active.</p>
           </div>
-          <div className="fg-stack">
-            {users.map((user) => (
-              <article key={user.user_id} className="fg-subcard">
-                <div className="fg-panel-heading">
-                  <div>
-                    <h4>{user.display_name}</h4>
-                    <p className="fg-muted">
-                      {user.username} · role={user.role} · status={user.status} · rotate={String(user.must_rotate_password)}
-                    </p>
-                  </div>
-                  {canMutateAdminPosture ? (
-                    <div className="fg-actions">
-                      <button disabled={resetPending} type="button" onClick={() => onOpenResetForm(user.user_id)}>
-                        {activeResetUserId === user.user_id ? "Reset form open" : "Prepare reset"}
-                      </button>
-                    </div>
-                  ) : null}
-                </div>
-                {activeResetUserId === user.user_id ? (
-                  <AdminPasswordResetForm
-                    busy={resetPending}
-                    draft={resetDraft}
-                    user={user}
-                    onCancel={onCloseResetForm}
-                    onChange={onResetDraftChange}
-                    onSubmit={() => void onResetPassword(user)}
-                  />
-                ) : null}
-              </article>
-            ))}
-          </div>
-        </article>
-
-        <article className="fg-card">
-          <h3>Active Sessions</h3>
-          <ul className="fg-list">
-            {sessions.map((adminSession) => (
-              <li key={adminSession.session_id}>
-                {adminSession.username} · role={adminSession.role} · type={adminSession.session_type} · active={String(adminSession.active)} · last_used={adminSession.last_used_at}
-                {canMutateAdminPosture && adminSession.active ? (
-                  <button
-                    type="button"
-                    style={{ marginLeft: "0.5rem" }}
-                    onClick={() => void onRevokeSession(adminSession.session_id)}
-                  >
-                    Revoke
-                  </button>
-                ) : null}
-              </li>
-            ))}
-          </ul>
-        </article>
-      </div>
+        </div>
+        <KeyValueList
+          items={[
+            { label: "TTL", value: `${credentialPolicy.human_sessions?.ttl_hours ?? "Not recorded"} hours` },
+            { label: "Rotation trigger", value: String(credentialPolicy.human_sessions?.rotation_trigger ?? "Not recorded") },
+            {
+              label: "Session types",
+              value: Array.isArray(credentialPolicy.human_sessions?.session_types)
+                ? credentialPolicy.human_sessions?.session_types.join(", ")
+                : "Not recorded",
+            },
+          ]}
+        />
+      </article>
 
       <article className="fg-card">
-        <h3>Provider Secret Posture</h3>
-        <ul className="fg-list">
-          {secretPosture.map((provider) => (
-            <li key={String(provider.provider)}>
-              {String(provider.provider)} · configured={String(provider.configured)} · auth={String(provider.auth_mode)} · rotation={String(provider.rotation_support)} · history={String(provider.history_count ?? 0)} · last={String(provider.last_rotation_at ?? "never")}
-            </li>
-          ))}
-        </ul>
+        <h3>Elevated access approvals</h3>
+        <KeyValueList
+          items={[
+            {
+              label: "Approval TTL",
+              value: credentialPolicy.elevated_access_requests
+                ? `${credentialPolicy.elevated_access_requests.approval_ttl_minutes} minutes`
+                : "Not recorded",
+            },
+            {
+              label: "Requester must claim session",
+              value: credentialPolicy.elevated_access_requests?.requester_claim_required ? "Yes" : "No",
+            },
+            {
+              label: "Self-approval allowed",
+              value: credentialPolicy.elevated_access_requests?.self_approval_allowed ? "Yes" : "No",
+            },
+            {
+              label: "Approver posture",
+              value: credentialPolicy.elevated_access_requests?.approver_availability?.label ?? "Not recorded",
+            },
+          ]}
+        />
       </article>
-    </>
+
+      <article className="fg-card">
+        <h3>Exception session policies</h3>
+        <KeyValueList
+          items={[
+            {
+              label: "Impersonation max TTL",
+              value: credentialPolicy.impersonation_sessions
+                ? `${credentialPolicy.impersonation_sessions.max_ttl_minutes} minutes`
+                : "Not recorded",
+            },
+            {
+              label: "Impersonation read-only",
+              value: credentialPolicy.impersonation_sessions?.read_only ? "Yes" : "No",
+            },
+            {
+              label: "Break-glass max TTL",
+              value: credentialPolicy.break_glass_sessions
+                ? `${credentialPolicy.break_glass_sessions.max_ttl_minutes} minutes`
+                : "Not recorded",
+            },
+            {
+              label: "Break-glass eligible roles",
+              value: credentialPolicy.break_glass_sessions?.eligible_roles.join(", ") ?? "Not recorded",
+            },
+          ]}
+        />
+      </article>
+
+      <article className="fg-card">
+        <h3>Service account key policy</h3>
+        <KeyValueList
+          items={[
+            { label: "TTL", value: `${credentialPolicy.service_account_keys?.ttl_days ?? "Not recorded"} days` },
+            {
+              label: "Rotation warning",
+              value: `${credentialPolicy.service_account_keys?.rotation_warning_days ?? "Not recorded"} days`,
+            },
+            {
+              label: "Revocation modes",
+              value: Array.isArray(credentialPolicy.service_account_keys?.revocation_modes)
+                ? credentialPolicy.service_account_keys?.revocation_modes.join(", ")
+                : "Not recorded",
+            },
+            { label: "Hashing", value: String(credentialPolicy.service_account_keys?.hashing ?? "Not recorded") },
+          ]}
+        />
+      </article>
+    </div>
   );
 }

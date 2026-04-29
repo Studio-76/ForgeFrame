@@ -96,6 +96,7 @@ def security_bootstrap(
         "status": "ok",
         "credential_policy": service.credential_lifecycle_policy(actor=admin),
         "elevated_access_approver_posture": service.elevated_access_approver_posture(actor=admin),
+        "security_blockers": service.security_blockers(actor=admin),
     }
     # Operators need pre-submit elevated-access posture, but secret/bootstrap governance
     # details remain limited to full admin sessions.

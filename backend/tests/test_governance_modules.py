@@ -8,7 +8,7 @@ import pytest
 from sqlalchemy import create_engine, text
 from sqlalchemy.exc import IntegrityError
 
-from conftest import admin_headers as shared_admin_headers, login_headers_allowing_password_rotation
+from conftest import admin_headers as shared_admin_headers, login_headers_allowing_password_rotation, rotated_test_password
 from app.api.admin.dashboard import _primary_action_from_attention
 from app.api.runtime.dependencies import clear_runtime_dependency_caches
 from app.auth.local_auth import hash_password, hash_token, new_secret_salt
@@ -23,7 +23,7 @@ from app.governance.models import (
 )
 from app.governance.service import GovernanceService, get_governance_service
 from app.main import app
-from app.settings.config import Settings
+from app.settings.config import Settings, get_settings
 from app.storage.governance_repository import PostgresGovernanceRepository
 from app.storage.migrator import apply_storage_migrations, list_storage_migrations
 
@@ -411,6 +411,7 @@ def test_bootstrap_admin_password_reload_applies_before_first_rotation(monkeypat
     assert first_login.status_code == 201
 
     monkeypatch.setenv("FORGEGATE_BOOTSTRAP_ADMIN_PASSWORD", "ForgeFrame-Test-Admin-Secret-456")
+    get_settings.cache_clear()
     clear_runtime_dependency_caches()
     get_governance_service.cache_clear()
 
@@ -458,6 +459,7 @@ def test_runtime_key_can_authenticate_models_endpoint_when_runtime_auth_required
     ).json()["issued"]
 
     monkeypatch.setenv("FORGEGATE_RUNTIME_AUTH_REQUIRED", "true")
+    get_settings.cache_clear()
     clear_runtime_dependency_caches()
     get_governance_service.cache_clear()
     secured_client = TestClient(app)
@@ -471,6 +473,7 @@ def test_runtime_key_can_authenticate_models_endpoint_when_runtime_auth_required
 
 def test_runtime_key_rejects_disabled_and_suspended_accounts(monkeypatch) -> None:
     monkeypatch.setenv("FORGEGATE_RUNTIME_AUTH_REQUIRED", "true")
+    get_settings.cache_clear()
     clear_runtime_dependency_caches()
     get_governance_service.cache_clear()
 
@@ -556,6 +559,7 @@ def test_runtime_provider_bindings_filter_models_and_block_disallowed_chat(monke
 
 def test_runtime_provider_bindings_hide_unready_provider_models(monkeypatch) -> None:
     monkeypatch.setenv("FORGEGATE_RUNTIME_AUTH_REQUIRED", "true")
+    get_settings.cache_clear()
     clear_runtime_dependency_caches()
     get_governance_service.cache_clear()
 
@@ -726,6 +730,15 @@ def test_security_admin_endpoints_manage_users_sessions_and_secret_posture() -> 
     bootstrap = client.get("/admin/security/bootstrap", headers=headers)
     assert bootstrap.status_code == 200
     assert bootstrap.json()["bootstrap"]["admin_user_count"] >= 1
+    blocker_ids = {item["blocker_id"] for item in bootstrap.json()["security_blockers"]}
+    assert {
+        "default_password",
+        "missing_rotation",
+        "open_sessions",
+        "secrets_missing",
+        "break_glass_active",
+        "approver_recovery",
+    }.issubset(blocker_ids)
 
     created = client.post(
         "/admin/security/users",
@@ -773,7 +786,7 @@ def test_security_admin_endpoints_manage_users_sessions_and_secret_posture() -> 
     rotated_self = client.post(
         "/admin/auth/rotate-password",
         headers=viewer_headers,
-        json={"current_password": "operator-pass-456", "new_password": "operator-pass-456"},
+        json={"current_password": "operator-pass-456", "new_password": "operator-pass-789"},
     )
     assert rotated_self.status_code == 200
     assert rotated_self.json()["user"]["must_rotate_password"] is False
@@ -789,10 +802,33 @@ def test_security_admin_endpoints_manage_users_sessions_and_secret_posture() -> 
     assert promoted.status_code == 200
     assert promoted.json()["user"]["role"] == "operator"
 
+    instances = client.get("/admin/instances/", headers=headers)
+    assert instances.status_code == 200
+    scoped_instance_id = instances.json()["instances"][0]["instance_id"]
+
+    memberships_before = client.get(f"/admin/security/users/{user_id}/memberships", headers=headers)
+    assert memberships_before.status_code == 200
+    assert any(item["instance_id"] == scoped_instance_id for item in memberships_before.json()["memberships"])
+
+    scoped_membership = client.put(
+        f"/admin/security/users/{user_id}/memberships/{scoped_instance_id}",
+        headers=headers,
+        json={"role": "viewer", "status": "active"},
+    )
+    assert scoped_membership.status_code == 200
+    assert scoped_membership.json()["membership"]["role"] == "viewer"
+
+    memberships_after = client.get(f"/admin/security/users/{user_id}/memberships", headers=headers)
+    assert memberships_after.status_code == 200
+    assert any(
+        item["instance_id"] == scoped_instance_id and item["role"] == "viewer"
+        for item in memberships_after.json()["memberships"]
+    )
+
     stale_viewer_session = client.get("/admin/auth/me", headers=viewer_headers)
     assert stale_viewer_session.status_code == 401
 
-    operator_login = client.post("/admin/auth/login", json={"username": "ops", "password": "operator-pass-456"})
+    operator_login = client.post("/admin/auth/login", json={"username": "ops", "password": "operator-pass-789"})
     assert operator_login.status_code == 201
     operator_token = operator_login.json()["access_token"]
     operator_headers = {"Authorization": f"Bearer {operator_token}"}
@@ -973,10 +1009,15 @@ def test_security_admin_endpoints_manage_users_sessions_and_secret_posture() -> 
     assert "generic_harness" in providers
     assert providers_payload["openai_api"]["history_count"] == 1
     assert providers_payload["openai_api"]["last_rotation_reference"] == "ops-ticket-42"
+    assert providers_payload["openai_api"]["state"] == (
+        "rotatable" if providers_payload["openai_api"]["configured"] else "missing"
+    )
+    assert providers_payload["generic_harness"]["state"] == "rotatable"
     assert secret_posture.json()["controls"]
     harness_profiles = {item["provider_key"]: item for item in secret_posture.json()["harness_profiles"]}
     assert harness_profiles["rotation_history_profile"]["history_count"] == 1
     assert harness_profiles["rotation_history_profile"]["last_rotation_reference"] == "config_revision_2"
+    assert harness_profiles["rotation_history_profile"]["state"] == "rotatable"
 
     rotations = client.get("/admin/security/secret-rotations", headers=headers)
     assert rotations.status_code == 200
@@ -1172,10 +1213,13 @@ def test_impersonation_sessions_are_read_only_for_control_plane_writes() -> None
         "/admin/auth/login",
         json={
             "username": f"impersonated-admin-{suffix}",
-            "password": "Impersonated-Admin-123",
+            "password": rotated_test_password("Impersonated-Admin-123"),
         },
     )
     assert post_rotation_login.status_code == 201
+    post_rotation_headers = {"Authorization": f"Bearer {post_rotation_login.json()['access_token']}"}
+    post_rotation_logout = client.post("/admin/auth/logout", headers=post_rotation_headers)
+    assert post_rotation_logout.status_code == 200
 
     policy = client.get("/admin/security/credential-policy", headers=headers)
     assert policy.status_code == 200
@@ -1184,7 +1228,7 @@ def test_impersonation_sessions_are_read_only_for_control_plane_writes() -> None
 
     sessions_after = client.get("/admin/security/sessions", headers=headers)
     assert sessions_after.status_code == 200
-    assert len(sessions_after.json()["sessions"]) == session_count_before + 3
+    assert len(sessions_after.json()["sessions"]) == session_count_before + 4
     assert not any(
         item["session_type"] == "break_glass" and item["issued_by_user_id"] == impersonated_user_id
         for item in sessions_after.json()["sessions"]
@@ -1346,6 +1390,8 @@ def test_security_posture_routes_are_operator_readable_for_elevated_access_reque
     bootstrap = client.get("/admin/security/bootstrap", headers=operator_headers)
     assert bootstrap.status_code == 200
     bootstrap_payload = bootstrap.json()
+    blocker_ids = {item["blocker_id"] for item in bootstrap_payload["security_blockers"]}
+    assert {"default_password", "missing_rotation", "open_sessions", "secrets_missing", "break_glass_active"}.issubset(blocker_ids)
     assert "bootstrap" not in bootstrap_payload
     assert "secret_posture" not in bootstrap_payload
 

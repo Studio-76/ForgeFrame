@@ -2,6 +2,8 @@ import type {
   AdminSecuritySession,
   ElevatedAccessApproverPosture,
   ElevatedAccessRequest,
+  HarnessSecretPosture,
+  SecuritySecretPosture,
 } from "../../api/admin";
 import { AdminApiError } from "../../api/admin";
 import { buildAuditHistoryPath } from "../../app/auditHistory";
@@ -146,6 +148,60 @@ export function describeRequestBanner(
         body: "Review the linked approval and session state for the latest status.",
       };
   }
+}
+
+export function requestStage(request: ElevatedAccessRequest): { label: string; tone: Tone } {
+  if (request.session_status === "active") {
+    return { label: "Active", tone: "danger" };
+  }
+  if (request.ready_to_issue) {
+    return { label: "Approved", tone: "success" };
+  }
+  if (request.gate_status === "open") {
+    return { label: "Requested", tone: "warning" };
+  }
+  if (request.session_status === "expired") {
+    return { label: "Expired", tone: "warning" };
+  }
+  if (request.session_status === "revoked") {
+    return { label: "Revoked", tone: "neutral" };
+  }
+  if (request.gate_status === "cancelled") {
+    return { label: "Cancelled", tone: "neutral" };
+  }
+  if (request.gate_status === "rejected") {
+    return { label: "Rejected", tone: "danger" };
+  }
+  if (request.gate_status === "timed_out") {
+    return { label: "Expired before approval", tone: "warning" };
+  }
+  return { label: "Recorded", tone: "neutral" };
+}
+
+export function secretStateTone(state: SecuritySecretPosture["state"] | HarnessSecretPosture["state"]): Tone {
+  switch (state) {
+    case "missing":
+      return "danger";
+    case "blocked":
+      return "warning";
+    case "rotatable":
+      return "success";
+    default:
+      return "neutral";
+  }
+}
+
+export function adminSessionStatus(session: AdminSecuritySession): { label: string; tone: Tone } {
+  if (session.revoked_at) {
+    return { label: "Revoked", tone: "neutral" };
+  }
+  if (session.expired) {
+    return { label: "Expired", tone: "warning" };
+  }
+  if (session.active) {
+    return { label: "Active", tone: session.session_type === "break_glass" ? "danger" : "success" };
+  }
+  return { label: "Ended", tone: "neutral" };
 }
 
 export function extractApproverPosture(error: unknown): ElevatedAccessApproverPosture | null {
