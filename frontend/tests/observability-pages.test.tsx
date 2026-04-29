@@ -5,6 +5,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const {
+  fetchDashboardMock,
   fetchInstancesMock,
   fetchLogsMock,
   fetchProviderControlPlaneMock,
@@ -12,6 +13,7 @@ const {
   fetchRuntimeHealthMock,
   fetchUsageSummaryMock,
 } = vi.hoisted(() => ({
+  fetchDashboardMock: vi.fn(),
   fetchInstancesMock: vi.fn(),
   fetchLogsMock: vi.fn(),
   fetchProviderControlPlaneMock: vi.fn(),
@@ -24,6 +26,7 @@ vi.mock("../src/api/admin", async () => {
   const actual = await vi.importActual<typeof import("../src/api/admin")>("../src/api/admin");
   return {
     ...actual,
+    fetchDashboard: fetchDashboardMock,
     fetchInstances: fetchInstancesMock,
     fetchLogs: fetchLogsMock,
     fetchProviderControlPlane: fetchProviderControlPlaneMock,
@@ -220,6 +223,51 @@ beforeEach(() => {
     ],
     summary: {},
   });
+  fetchDashboardMock.mockResolvedValue({
+    status: "ok",
+    object: "dashboard_command_center",
+    generated_at: "2026-04-23T08:35:00Z",
+    kpis: {},
+    alerts: [],
+    needs_attention: ["routing_queue"],
+    primary_action: {
+      kind: "runtime_stability",
+      title: "Recover stalled dispatch",
+      description: "Queue and worker posture need intervention.",
+      status: "blocked",
+      to: "/dispatch",
+      action_label: "Open Dispatch",
+    },
+    attention: [
+      {
+        id: "routing_queue:pressure",
+        severity: "critical",
+        title: "Routing or queue pressure needs intervention",
+        cause: "1 dispatch lease is stalled and needs intervention.",
+        axis: "runtime",
+        to: "/dispatch",
+        action_label: "Recover stalled dispatch",
+        status: "blocked",
+      },
+    ],
+    sections: [
+      {
+        key: "routing_queue",
+        title: "Routing / Queue",
+        status: "blocked",
+        reason: "1 dispatch lease is stalled and needs intervention.",
+        to: "/dispatch",
+        action_label: "Recover stalled dispatch",
+        details: [
+          "1 runs are currently runnable across queue lanes.",
+          "1 dispatch leases are active right now.",
+        ],
+      },
+    ],
+    summary: [],
+    instance: createInstanceRecord(),
+    security: {},
+  });
   fetchLogsMock.mockResolvedValue({
     status: "ok",
     audit_preview: [],
@@ -264,11 +312,24 @@ beforeEach(() => {
     status: "ok",
     object: "provider_control_plane",
     instance: createInstanceRecord(),
+    bootstrap_readiness: {
+      ready: false,
+      checked_at: "2026-04-23T08:31:00Z",
+      checks: [
+        { id: "postgres_url", ok: true, details: "FORGEFRAME_HARNESS_POSTGRES_URL" },
+        { id: "migration_runner", ok: true, details: "scripts/apply-storage-migrations.py" },
+        { id: "public_https_listener", ok: false, details: "0.0.0.0:443;mode=local_only" },
+        { id: "public_fqdn_tls_evidence", ok: false, details: "fqdn=missing;dns=missing;cert=missing;mode=local_only" },
+        { id: "frontend_dist", ok: true, details: "frontend/dist/index.html" },
+      ],
+      next_steps: ["Configure the public origin before go-live."],
+    },
     providers: [
       {
         provider: "openai_api",
         label: "OpenAI",
         enabled: true,
+        provider_class: "openai_compatible",
         integration_class: "native",
         template_id: null,
         config: {},
@@ -279,6 +340,7 @@ beforeEach(() => {
         runtime_readiness: "partial",
         streaming_readiness: "partial",
         oauth_required: false,
+        oauth_mode: "account_portal",
         discovery_supported: true,
         model_count: 1,
         models: [
@@ -289,10 +351,22 @@ beforeEach(() => {
             active: true,
             health_status: "degraded",
             availability_status: "degraded",
+            status_reason: "provider probe timeout",
           },
         ],
         last_sync_at: null,
         last_sync_status: "ok",
+        oauth_connect_required: false,
+        target_count: 0,
+        enabled_target_count: 0,
+        ready_target_count: 0,
+        health_status: "attention",
+        healthy_model_count: 0,
+        attention_model_count: 1,
+        last_health_check_at: "2026-04-23T08:31:00Z",
+        last_probe_at: "2026-04-23T08:31:00Z",
+        next_action: "Reconnect OAuth account",
+        next_action_kind: "connect_oauth",
         harness_proof_status: "partial",
         harness_proven_profile_keys: [],
       },
@@ -358,8 +432,15 @@ describe("observability pages", () => {
     await flushEffects();
 
     expect(container.textContent).toContain("Health & Readiness");
-    expect(container.textContent).toContain("Runtime Readiness");
-    expect(container.textContent).toContain("Provider Health Posture");
-    expect(container.textContent).toContain("public_https_listener");
+    expect(container.textContent).toContain("Technical Health");
+    expect(container.textContent).toContain("Readiness");
+    expect(container.textContent).toContain("TLS / FQDN");
+    expect(container.textContent).toContain("Signal Path");
+    expect(container.textContent).toContain("Current Risks");
+    expect(container.textContent).toContain("public_fqdn_tls_evidence");
+    expect(container.textContent).toContain("Readiness stays non-green");
+    const oauthLinks = Array.from(container.querySelectorAll("a")).filter((link) => link.getAttribute("href") === "/oauth-targets?instanceId=instance_alpha");
+    expect(oauthLinks.length).toBeGreaterThan(0);
+    expect(oauthLinks.some((link) => link.textContent === "Open OAuth Targets")).toBe(true);
   });
 });

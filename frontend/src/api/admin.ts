@@ -399,6 +399,16 @@ export type ProviderControlPlaneResponse = {
   provider_catalog?: ProviderCatalogEntry[];
   provider_catalog_summary?: ProviderCatalogSummary;
   openai_compatibility_signoff?: OpenAICompatibilitySignoffResponse;
+  bootstrap_readiness?: {
+    ready: boolean;
+    checked_at?: string | null;
+    checks: Array<{
+      id: string;
+      ok: boolean;
+      details: string;
+    }>;
+    next_steps: string[];
+  } | null;
   health_config: HealthConfig;
   notes: Record<string, unknown>;
 };
