@@ -77,6 +77,11 @@ def _record_operator_audit(
 @router.get("/runs")
 def list_execution_runs(
     state: str | None = None,
+    execution_lane: str | None = None,
+    target: str | None = None,
+    approval_wait: bool | None = None,
+    has_error: bool | None = None,
+    window: str | None = None,
     limit: int = 100,
     _admin: AuthenticatedAdmin = Depends(
         require_admin_instance_permission("execution.read", explicit_scope=True)
@@ -84,7 +89,16 @@ def list_execution_runs(
     instance: InstanceRecord = Depends(require_admin_instance_scope),
     service: ExecutionAdminService = Depends(get_execution_admin_service),
 ) -> dict[str, object]:
-    runs = service.list_runs(instance=instance, state=state, limit=limit)
+    runs = service.list_runs(
+        instance=instance,
+        state=state,
+        execution_lane=execution_lane,
+        target=target,
+        approval_wait=approval_wait,
+        has_error=has_error,
+        window=window,
+        limit=limit,
+    )
     return {"status": "ok", "runs": [item.model_dump(mode="json") for item in runs]}
 
 

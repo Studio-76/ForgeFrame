@@ -2882,6 +2882,21 @@ export type ExecutionRunOutboxView = {
   payload: Record<string, unknown>;
 };
 
+export type ExecutionRunApprovalLinkView = {
+  id: string;
+  approval_id: string;
+  gate_key: string;
+  gate_status: string;
+  resume_disposition: string;
+  opened_at: string;
+  decided_at?: string | null;
+  resume_enqueued_at?: string | null;
+  decision_actor_type?: string | null;
+  decision_actor_id?: string | null;
+  attempt_id: string;
+  version: number;
+};
+
 export type ExecutionRunSummary = {
   run_id: string;
   instance_id?: string | null;
@@ -2899,6 +2914,7 @@ export type ExecutionRunSummary = {
   terminal_at?: string | null;
   result_summary?: Record<string, unknown> | null;
   replayable: boolean;
+  current_approval_id?: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -2907,6 +2923,7 @@ export type ExecutionRunDetail = ExecutionRunSummary & {
   attempts: ExecutionRunAttemptView[];
   commands: ExecutionRunCommandView[];
   outbox: ExecutionRunOutboxView[];
+  approval_links: ExecutionRunApprovalLinkView[];
   workspace?: WorkspaceSummary | null;
   artifacts: ArtifactRecord[];
   native_mapping?: RuntimeNativeMapping | null;
@@ -3935,7 +3952,17 @@ export function rejectApproval(approvalId: string, decisionNote?: string | null,
   });
 }
 
-export function fetchExecutionRuns(options: { instanceId?: string | null; companyId?: string | null; state?: string; limit?: number }) {
+export function fetchExecutionRuns(options: {
+  instanceId?: string | null;
+  companyId?: string | null;
+  state?: string;
+  executionLane?: string | null;
+  target?: string | null;
+  approvalWait?: boolean;
+  hasError?: boolean;
+  window?: string | null;
+  limit?: number;
+}) {
   const params = new URLSearchParams();
   if (options.instanceId?.trim()) {
     params.set("instanceId", options.instanceId.trim());
@@ -3945,6 +3972,21 @@ export function fetchExecutionRuns(options: { instanceId?: string | null; compan
   }
   if (options.state && options.state !== "all") {
     params.set("state", options.state);
+  }
+  if (options.executionLane?.trim()) {
+    params.set("execution_lane", options.executionLane.trim());
+  }
+  if (options.target?.trim()) {
+    params.set("target", options.target.trim());
+  }
+  if (options.approvalWait) {
+    params.set("approval_wait", "true");
+  }
+  if (options.hasError) {
+    params.set("has_error", "true");
+  }
+  if (options.window?.trim() && options.window.trim() !== "all") {
+    params.set("window", options.window.trim());
   }
   if (options.limit) {
     params.set("limit", String(options.limit));

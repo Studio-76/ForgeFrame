@@ -1,4 +1,5 @@
 import os
+from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
 from fastapi.testclient import TestClient
@@ -7,6 +8,7 @@ from conftest import admin_headers as shared_admin_headers, login_headers_allowi
 from app.execution.dependencies import get_execution_transition_service
 from app.governance.service import get_governance_service
 from app.main import app
+from app.storage.execution_repository import RunAttemptORM, RunORM
 
 
 def _login_headers(client: TestClient, *, username: str, password: str) -> dict[str, str]:
@@ -17,7 +19,7 @@ def _admin_headers(client: TestClient) -> dict[str, str]:
     return shared_admin_headers(client)
 
 
-def _operator_headers(client: TestClient) -> dict[str, str]:
+def _create_operator_user(client: TestClient) -> tuple[str, str, str]:
     admin_headers = _admin_headers(client)
     suffix = uuid4().hex[:8]
     username = f"operator-{suffix}"
@@ -34,7 +36,16 @@ def _operator_headers(client: TestClient) -> dict[str, str]:
     )
     assert created_user.status_code == 201
 
-    return _login_headers(client, username=username, password=password)
+    return created_user.json()["user"]["user_id"], username, password
+
+
+def _operator_session(client: TestClient) -> tuple[dict[str, str], str]:
+    user_id, username, password = _create_operator_user(client)
+    return _login_headers(client, username=username, password=password), user_id
+
+
+def _operator_headers(client: TestClient) -> dict[str, str]:
+    return _operator_session(client)[0]
 
 
 def _create_instance(
@@ -65,7 +76,7 @@ def _execution_scope(instance_id: str, **params: str) -> dict[str, str]:
     return {"instanceId": instance_id, **params}
 
 
-def _impersonation_headers(client: TestClient, *, role: str = "operator") -> dict[str, str]:
+def _create_impersonation_target_user(client: TestClient, *, role: str = "operator") -> str:
     admin_headers = _admin_headers(client)
     suffix = uuid4().hex[:8]
     created_user = client.post(
@@ -82,6 +93,12 @@ def _impersonation_headers(client: TestClient, *, role: str = "operator") -> dic
     target_headers = _login_headers(client, username=f"impersonated-{role}-{suffix}", password="Impersonated-User-123")
     target_logout = client.post("/admin/auth/logout", headers=target_headers)
     assert target_logout.status_code == 200
+    return created_user.json()["user"]["user_id"]
+
+
+def _issue_impersonation_session(client: TestClient, *, target_user_id: str) -> dict[str, str]:
+    admin_headers = _admin_headers(client)
+    suffix = uuid4().hex[:8]
 
     approver = client.post(
         "/admin/security/users",
@@ -104,7 +121,7 @@ def _impersonation_headers(client: TestClient, *, role: str = "operator") -> dic
         "/admin/security/impersonations",
         headers=admin_headers,
         json={
-            "target_user_id": created_user.json()["user"]["user_id"],
+            "target_user_id": target_user_id,
             "approval_reference": "INC-EXEC-REPLAY",
             "justification": "Verify impersonation replay write protections.",
             "notification_targets": ["slack://security-audit"],
@@ -129,31 +146,68 @@ def _impersonation_headers(client: TestClient, *, role: str = "operator") -> dic
     return {"Authorization": f"Bearer {issued.json()['access_token']}"}
 
 
+def _impersonation_session(client: TestClient, *, role: str = "operator") -> tuple[dict[str, str], str]:
+    user_id = _create_impersonation_target_user(client, role=role)
+    return _issue_impersonation_session(client, target_user_id=user_id), user_id
+
+
+def _impersonation_headers(client: TestClient, *, role: str = "operator") -> dict[str, str]:
+    return _impersonation_session(client, role=role)[0]
+
+
+def _grant_instance_membership(
+    client: TestClient,
+    headers: dict[str, str],
+    *,
+    user_id: str,
+    instance_id: str,
+    role: str,
+) -> None:
+    membership = client.put(
+        f"/admin/security/users/{user_id}/memberships/{instance_id}",
+        headers=headers,
+        json={"role": role, "status": "active"},
+    )
+    assert membership.status_code == 200
+
+
 def _seed_dead_letter_run(*, company_id: str = "forgegate") -> str:
     service = get_execution_transition_service()
+    suffix = uuid4().hex
     created = service.admit_create(
         company_id=company_id,
         actor_type="agent",
         actor_id="agent_backend",
-        idempotency_key="idem_seed_dead_letter",
-        request_fingerprint_hash="fp_seed_dead_letter",
+        idempotency_key=f"idem_seed_dead_letter_{suffix}",
+        request_fingerprint_hash=f"fp_seed_dead_letter_{suffix}",
         run_kind="provider_dispatch",
         issue_id="FOR-27",
     )
-    claim = service.claim_next_attempt(company_id=company_id, worker_key="worker_alpha")
-    assert claim is not None
-    service.mark_attempt_executing(
-        company_id=company_id,
-        run_id=claim.run_id,
-        attempt_id=claim.attempt_id,
-        lease_token=claim.lease_token,
-        step_key="provider_call",
-    )
+    lease_token = f"lease_dead_letter_{suffix}"
+    current_time = datetime.now(tz=UTC)
+    with service._session_factory() as session, session.begin():  # noqa: SLF001 - test-only state shaping
+        run = session.get(RunORM, created.run_id)
+        attempt = session.get(RunAttemptORM, created.attempt_id)
+        assert run is not None
+        assert attempt is not None
+        run.state = "executing"
+        run.operator_state = "waiting_external"
+        run.current_step_key = "provider_call"
+        run.updated_at = current_time
+        attempt.attempt_state = "executing"
+        attempt.operator_state = "waiting_external"
+        attempt.worker_key = "worker_alpha"
+        attempt.lease_status = "leased"
+        attempt.lease_token = lease_token
+        attempt.lease_acquired_at = current_time
+        attempt.lease_expires_at = current_time + timedelta(seconds=60)
+        attempt.started_at = current_time
+        attempt.updated_at = current_time
     service.record_attempt_failure(
         company_id=company_id,
-        run_id=claim.run_id,
-        attempt_id=claim.attempt_id,
-        lease_token=claim.lease_token,
+        run_id=created.run_id,
+        attempt_id=created.attempt_id,
+        lease_token=lease_token,
         failure_class="provider_terminal",
         error_code="provider_authentication_error",
         error_detail="credentials rejected by upstream",
@@ -164,26 +218,100 @@ def _seed_dead_letter_run(*, company_id: str = "forgegate") -> str:
 
 def _dead_letter_next_attempt(*, company_id: str, run_id: str, worker_key: str = "worker_alpha") -> None:
     service = get_execution_transition_service()
-    claim = service.claim_next_attempt(company_id=company_id, worker_key=worker_key)
-    assert claim is not None
-    assert claim.run_id == run_id
-    service.mark_attempt_executing(
-        company_id=company_id,
-        run_id=claim.run_id,
-        attempt_id=claim.attempt_id,
-        lease_token=claim.lease_token,
-        step_key="provider_call",
-    )
+    suffix = uuid4().hex
+    lease_token = f"lease_dead_letter_next_{suffix}"
+    current_time = datetime.now(tz=UTC)
+    with service._session_factory() as session, session.begin():  # noqa: SLF001 - test-only state shaping
+        run = session.get(RunORM, run_id)
+        assert run is not None
+        attempt = session.get(RunAttemptORM, run.current_attempt_id)
+        assert attempt is not None
+        attempt.worker_key = worker_key
+        attempt.lease_status = "leased"
+        attempt.lease_token = lease_token
+        attempt.lease_acquired_at = current_time
+        attempt.lease_expires_at = current_time + timedelta(seconds=60)
+        attempt.started_at = current_time
+        attempt.attempt_state = "executing"
+        attempt.operator_state = "waiting_external"
+        attempt.updated_at = current_time
+        run.state = "executing"
+        run.operator_state = "waiting_external"
+        run.current_step_key = "provider_call"
+        run.updated_at = current_time
     service.record_attempt_failure(
         company_id=company_id,
-        run_id=claim.run_id,
-        attempt_id=claim.attempt_id,
-        lease_token=claim.lease_token,
+        run_id=run_id,
+        attempt_id=attempt.id,
+        lease_token=lease_token,
         failure_class="provider_terminal",
         error_code="provider_authentication_error",
         error_detail="credentials rejected by upstream",
         retryable=False,
     )
+
+
+def _seed_waiting_on_approval_run(*, company_id: str = "forgegate") -> tuple[str, str]:
+    service = get_execution_transition_service()
+    suffix = uuid4().hex
+    created = service.admit_create(
+        company_id=company_id,
+        actor_type="agent",
+        actor_id="agent_backend",
+        idempotency_key=f"idem_seed_waiting_approval_{suffix}",
+        request_fingerprint_hash=f"fp_seed_waiting_approval_{suffix}",
+        run_kind="responses_background",
+        issue_id="FOR-APPROVAL",
+    )
+    current_time = datetime.now(tz=UTC)
+    with service._session_factory() as session, session.begin():  # noqa: SLF001 - test-only state shaping
+        run = session.get(RunORM, created.run_id)
+        attempt = session.get(RunAttemptORM, created.attempt_id)
+        assert run is not None
+        assert attempt is not None
+        run.state = "executing"
+        run.operator_state = "waiting_external"
+        run.current_step_key = "approval_gate"
+        run.updated_at = current_time
+        attempt.attempt_state = "executing"
+        attempt.operator_state = "waiting_external"
+        attempt.worker_key = "worker_approval"
+        attempt.lease_status = "leased"
+        attempt.lease_token = f"lease_waiting_approval_{suffix}"
+        attempt.lease_acquired_at = current_time
+        attempt.lease_expires_at = current_time + timedelta(seconds=60)
+        attempt.started_at = current_time
+        attempt.updated_at = current_time
+    approval_id = f"approval-waiting-{suffix[:8]}"
+    service.open_approval(
+        company_id=company_id,
+        run_id=created.run_id,
+        attempt_id=created.attempt_id,
+        approval_id=approval_id,
+        gate_key="operator_approval",
+    )
+    return created.run_id, approval_id
+
+
+def _backdate_run(*, company_id: str, run_id: str, days: int) -> None:
+    service = get_execution_transition_service()
+    shifted = datetime.now(tz=UTC) - timedelta(days=days)
+    with service._session_factory() as session, session.begin():  # noqa: SLF001 - test-only state shaping
+        run = session.get(RunORM, run_id)
+        assert run is not None
+        assert run.company_id == company_id
+        run.created_at = shifted
+        run.updated_at = shifted
+        run.terminal_at = shifted
+        attempts = session.query(RunAttemptORM).filter(
+            RunAttemptORM.company_id == company_id,
+            RunAttemptORM.run_id == run_id,
+        ).all()
+        for attempt in attempts:
+            attempt.scheduled_at = shifted
+            attempt.started_at = shifted
+            attempt.finished_at = shifted
+            attempt.updated_at = shifted
 
 
 def test_admin_execution_runs_expose_dead_letter_detail() -> None:
@@ -204,6 +332,7 @@ def test_admin_execution_runs_expose_dead_letter_detail() -> None:
     assert run["state"] == "dead_lettered"
     assert run["status_reason"] == "terminal_failure"
     assert run["replayable"] is True
+    assert run["current_approval_id"] is None
     assert run["current_attempt"]["attempt_state"] == "dead_lettered"
 
     detail = client.get(
@@ -216,12 +345,103 @@ def test_admin_execution_runs_expose_dead_letter_detail() -> None:
     payload = detail.json()["run"]
     assert payload["run_id"] == run_id
     assert payload["attempts"][0]["attempt_state"] == "dead_lettered"
+    assert payload["approval_links"] == []
     assert payload["result_summary"]["error_code"] == "provider_authentication_error"
     assert any(item["event_type"] == "dead_letter" for item in payload["outbox"])
     assert payload["native_mapping"]["contract_surface"] == "forgeframe_execution"
     assert payload["native_mapping"]["primary_native_object_kind"] == "run"
     assert any(item["kind"] == "run" for item in payload["native_mapping"]["objects"])
     assert any(item["event_kind"] == "blocker_event" for item in payload["native_mapping"]["events"])
+
+
+def test_admin_execution_filters_and_approval_links_are_explicit() -> None:
+    client = TestClient(app)
+    headers = _admin_headers(client)
+    instance_id = _create_instance(client, headers, instance_id="instance_alpha", company_id="company_alpha")
+    dead_letter_run_id = _seed_dead_letter_run(company_id="company_alpha")
+    waiting_run_id, approval_id = _seed_waiting_on_approval_run(company_id="company_alpha")
+
+    service = get_execution_transition_service()
+    with service._session_factory() as session, session.begin():  # noqa: SLF001 - test-only payload shaping
+        run = session.get(RunORM, dead_letter_run_id)
+        assert run is not None
+        run.result_summary = {
+            **(run.result_summary or {}),
+            "routing": {
+                "selected_target_key": "openai_api::gpt-4.1-mini",
+            },
+        }
+    service.escalate_run(
+        company_id="company_alpha",
+        run_id=dead_letter_run_id,
+        actor_type="user",
+        actor_id="operator_alpha",
+        idempotency_key=f"idem_escalate_execution_filter_{uuid4().hex}",
+        request_fingerprint_hash=f"fp_escalate_execution_filter_{uuid4().hex}",
+        target_execution_lane="interactive_heavy",
+        reason="Escalate for filter coverage.",
+    )
+
+    target_filtered = client.get(
+        "/admin/execution/runs",
+        params=_execution_scope(instance_id, state="dead_lettered", target="openai_api::gpt-4.1-mini"),
+        headers=headers,
+    )
+    assert target_filtered.status_code == 200
+    target_runs = [item["run_id"] for item in target_filtered.json()["runs"]]
+    assert dead_letter_run_id in target_runs
+    assert waiting_run_id not in target_runs
+
+    lane_filtered = client.get(
+        "/admin/execution/runs",
+        params=_execution_scope(instance_id, execution_lane="interactive_heavy"),
+        headers=headers,
+    )
+    assert lane_filtered.status_code == 200
+    assert dead_letter_run_id in [item["run_id"] for item in lane_filtered.json()["runs"]]
+
+    approval_wait_filtered = client.get(
+        "/admin/execution/runs",
+        params=_execution_scope(instance_id, approval_wait="true"),
+        headers=headers,
+    )
+    assert approval_wait_filtered.status_code == 200
+    approval_runs = approval_wait_filtered.json()["runs"]
+    approval_run_ids = [item["run_id"] for item in approval_runs]
+    assert waiting_run_id in approval_run_ids
+    assert all(item["current_approval_id"] for item in approval_runs)
+    waiting_row = next(item for item in approval_runs if item["run_id"] == waiting_run_id)
+    assert waiting_row["current_approval_id"] == approval_id
+
+    error_filtered = client.get(
+        "/admin/execution/runs",
+        params=_execution_scope(instance_id, has_error="true"),
+        headers=headers,
+    )
+    assert error_filtered.status_code == 200
+    error_runs = [item["run_id"] for item in error_filtered.json()["runs"]]
+    assert dead_letter_run_id in error_runs
+    assert waiting_run_id not in error_runs
+
+    waiting_detail = client.get(
+        f"/admin/execution/runs/{waiting_run_id}",
+        params=_execution_scope(instance_id),
+        headers=headers,
+    )
+    assert waiting_detail.status_code == 200
+    waiting_payload = waiting_detail.json()["run"]
+    assert waiting_payload["current_approval_id"] == approval_id
+    assert waiting_payload["approval_links"][0]["approval_id"] == approval_id
+    assert waiting_payload["approval_links"][0]["gate_status"] == "open"
+
+    _backdate_run(company_id="company_alpha", run_id=dead_letter_run_id, days=45)
+    window_filtered = client.get(
+        "/admin/execution/runs",
+        params=_execution_scope(instance_id, state="dead_lettered", window="30d"),
+        headers=headers,
+    )
+    assert window_filtered.status_code == 200
+    assert dead_letter_run_id not in [item["run_id"] for item in window_filtered.json()["runs"]]
 
 
 def test_admin_execution_replay_persists_reason_and_audit_event() -> None:
@@ -267,9 +487,11 @@ def test_admin_execution_replay_persists_reason_and_audit_event() -> None:
 
 def test_operator_execution_replay_allows_non_impersonated_sessions() -> None:
     client = TestClient(app)
-    operator_headers = _operator_headers(client)
     admin_headers = _admin_headers(client)
+    operator_user_id, operator_username, operator_password = _create_operator_user(client)
     instance_id = _create_instance(client, admin_headers, instance_id="instance_alpha", company_id="company_alpha")
+    _grant_instance_membership(client, admin_headers, user_id=operator_user_id, instance_id=instance_id, role="operator")
+    operator_headers = _login_headers(client, username=operator_username, password=operator_password)
     run_id = _seed_dead_letter_run(company_id="company_alpha")
     reason = "Replay after provider credentials were rotated and verified."
 
@@ -485,7 +707,9 @@ def test_admin_execution_replay_rejects_read_only_impersonation_sessions() -> No
     admin_headers = _admin_headers(client)
     instance_id = _create_instance(client, admin_headers, instance_id="instance_alpha", company_id="company_alpha")
     run_id = _seed_dead_letter_run(company_id="company_alpha")
-    impersonation_headers = _impersonation_headers(client)
+    impersonated_user_id = _create_impersonation_target_user(client)
+    _grant_instance_membership(client, admin_headers, user_id=impersonated_user_id, instance_id=instance_id, role="operator")
+    impersonation_headers = _issue_impersonation_session(client, target_user_id=impersonated_user_id)
 
     replay = client.post(
         f"/admin/execution/runs/{run_id}/replay",
@@ -516,7 +740,9 @@ def test_admin_execution_reads_allow_read_only_impersonation_sessions() -> None:
     admin_headers = _admin_headers(client)
     instance_id = _create_instance(client, admin_headers, instance_id="instance_alpha", company_id="company_alpha")
     run_id = _seed_dead_letter_run(company_id="company_alpha")
-    impersonation_headers = _impersonation_headers(client)
+    impersonated_user_id = _create_impersonation_target_user(client)
+    _grant_instance_membership(client, admin_headers, user_id=impersonated_user_id, instance_id=instance_id, role="operator")
+    impersonation_headers = _issue_impersonation_session(client, target_user_id=impersonated_user_id)
 
     listing = client.get(
         "/admin/execution/runs",

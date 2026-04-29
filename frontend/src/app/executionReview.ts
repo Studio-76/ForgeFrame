@@ -20,7 +20,11 @@ const EXECUTION_STATE_VALUES = new Set([
   "paused",
   "cancel_requested",
   "queued",
+  "dispatching",
   "executing",
+  "compensating",
+  "timed_out",
+  "succeeded",
 ]);
 
 function normalizeExecutionParam(value: string | null | undefined): string | null {

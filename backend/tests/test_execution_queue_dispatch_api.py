@@ -1,4 +1,5 @@
 import os
+from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
 from fastapi.testclient import TestClient
@@ -6,6 +7,7 @@ from fastapi.testclient import TestClient
 from conftest import admin_headers as shared_admin_headers, login_headers_allowing_password_rotation
 from app.execution.dependencies import get_execution_transition_service, get_execution_worker_service
 from app.main import app
+from app.storage.execution_repository import RunAttemptORM, RunORM
 
 
 def _login_headers(client: TestClient, *, username: str, password: str) -> dict[str, str]:
@@ -40,12 +42,13 @@ def _execution_scope(instance_id: str) -> dict[str, str]:
 def _seed_leased_run(*, company_id: str) -> tuple[str, str]:
     service = get_execution_transition_service()
     worker = get_execution_worker_service()
+    suffix = uuid4().hex
     created = service.admit_create(
         company_id=company_id,
         actor_type="agent",
         actor_id="agent_backend",
-        idempotency_key=f"idem_leased_{uuid4().hex}",
-        request_fingerprint_hash=f"fp_leased_{uuid4().hex}",
+        idempotency_key=f"idem_leased_{suffix}",
+        request_fingerprint_hash=f"fp_leased_{suffix}",
         run_kind="provider_dispatch",
     )
     worker.start_worker(
@@ -54,15 +57,26 @@ def _seed_leased_run(*, company_id: str) -> tuple[str, str]:
         execution_lane="background_agentic",
         instance_id="instance_alpha",
     )
-    claim = service.claim_next_attempt(company_id=company_id, worker_key="worker_alpha")
-    assert claim is not None
-    service.mark_attempt_executing(
-        company_id=company_id,
-        run_id=claim.run_id,
-        attempt_id=claim.attempt_id,
-        lease_token=claim.lease_token,
-        step_key="provider_call",
-    )
+    lease_token = f"lease_queue_dispatch_{suffix}"
+    current_time = datetime.now(tz=UTC)
+    with service._session_factory() as session, session.begin():  # noqa: SLF001 - test-only state shaping
+        run = session.get(RunORM, created.run_id)
+        attempt = session.get(RunAttemptORM, created.attempt_id)
+        assert run is not None
+        assert attempt is not None
+        run.state = "executing"
+        run.operator_state = "waiting_external"
+        run.current_step_key = "provider_call"
+        run.updated_at = current_time
+        attempt.attempt_state = "executing"
+        attempt.operator_state = "waiting_external"
+        attempt.lease_status = "leased"
+        attempt.worker_key = "worker_alpha"
+        attempt.lease_token = lease_token
+        attempt.lease_acquired_at = current_time
+        attempt.lease_expires_at = current_time + timedelta(seconds=60)
+        attempt.started_at = current_time
+        attempt.updated_at = current_time
     worker.heartbeat_worker(
         company_id=company_id,
         worker_key="worker_alpha",
@@ -70,12 +84,12 @@ def _seed_leased_run(*, company_id: str) -> tuple[str, str]:
         execution_lane="background_agentic",
         worker_state="busy",
         active_attempts=1,
-        current_run_id=claim.run_id,
-        current_attempt_id=claim.attempt_id,
-        lease_token=claim.lease_token,
+        current_run_id=created.run_id,
+        current_attempt_id=created.attempt_id,
+        lease_token=lease_token,
         clear_error=True,
     )
-    return created.run_id, claim.attempt_id
+    return created.run_id, created.attempt_id
 
 
 def test_execution_queue_dispatch_and_operator_action_endpoints() -> None:
@@ -91,9 +105,10 @@ def test_execution_queue_dispatch_and_operator_action_endpoints() -> None:
 
     dispatch = client.get("/admin/execution/dispatch", headers=headers, params=_execution_scope(instance_id))
     assert dispatch.status_code == 200
-    assert dispatch.json()["dispatch"]["leased_attempts"][0]["attempt_id"] == attempt_id
-    assert dispatch.json()["dispatch"]["workers"][0]["worker_state"] == "busy"
-    assert dispatch.json()["dispatch"]["workers"][0]["current_attempt_id"] == attempt_id
+    dispatch_payload = dispatch.json()["dispatch"]
+    assert any(item["attempt_id"] == attempt_id for item in dispatch_payload["leased_attempts"])
+    assert any(item["worker_state"] == "busy" for item in dispatch_payload["workers"])
+    assert any(item["current_attempt_id"] == attempt_id for item in dispatch_payload["workers"])
 
     interrupt = client.post(
         f"/admin/execution/runs/{run_id}/interrupt",

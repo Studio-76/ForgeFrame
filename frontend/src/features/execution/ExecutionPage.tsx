@@ -23,12 +23,20 @@ import { CONTROL_PLANE_ROUTES } from "../../app/navigation";
 import { useAppSession } from "../../app/session";
 import { PageIntro } from "../../components/PageIntro";
 import {
+  DEFAULT_APPROVAL_WAIT_FILTER,
+  DEFAULT_ERROR_FILTER,
+  DEFAULT_LANE_FILTER,
   buildExecutionScopeOptions,
   DEFAULT_STATE_FILTER,
+  DEFAULT_TARGET_FILTER,
+  DEFAULT_WINDOW_FILTER,
   describeReplayError,
   getExecutionAccess,
   type OperatorActionState,
+  type ExecutionApprovalWaitFilter,
+  type ExecutionErrorFilter,
   type ExecutionScopeOption,
+  type ExecutionWindowFilter,
   type LoadState,
   type ReplayState,
 } from "./helpers";
@@ -43,15 +51,31 @@ export function ExecutionPage() {
   const { session, sessionReady } = useAppSession();
   const [searchParams, setSearchParams] = useSearchParams();
 
+  const approvalWaitParam = searchParams.get("approvalWait")?.trim() === "waiting_only" ? "waiting_only" : DEFAULT_APPROVAL_WAIT_FILTER;
+  const errorParam = searchParams.get("error")?.trim() === "with_error" ? "with_error" : DEFAULT_ERROR_FILTER;
+  const windowParam = (() => {
+    const value = searchParams.get("window")?.trim() ?? DEFAULT_WINDOW_FILTER;
+    return ["all", "24h", "72h", "7d", "30d"].includes(value) ? (value as ExecutionWindowFilter) : DEFAULT_WINDOW_FILTER;
+  })();
   const instanceId = normalizeExecutionInstanceId(searchParams.get("instanceId")) ?? "";
   const companyId = normalizeExecutionCompanyId(searchParams.get("companyId")) ?? "";
   const stateFilter = normalizeExecutionState(searchParams.get("state")) ?? DEFAULT_STATE_FILTER;
+  const laneFilter = searchParams.get("lane")?.trim() ?? DEFAULT_LANE_FILTER;
+  const targetFilter = searchParams.get("target")?.trim() ?? DEFAULT_TARGET_FILTER;
+  const approvalWaitFilter = approvalWaitParam as ExecutionApprovalWaitFilter;
+  const errorFilter = errorParam as ExecutionErrorFilter;
+  const windowFilter = windowParam;
   const selectedRunId = searchParams.get("runId")?.trim() ?? "";
   const canReviewExecution = sessionReady && sessionHasScopedOrAnyInstancePermission(session, instanceId, "execution.read");
   const access = getExecutionAccess(session, sessionReady, instanceId);
 
   const [instanceDraft, setInstanceDraft] = useState(instanceId);
   const [stateDraft, setStateDraft] = useState(stateFilter);
+  const [laneDraft, setLaneDraft] = useState(laneFilter);
+  const [targetDraft, setTargetDraft] = useState(targetFilter);
+  const [approvalWaitDraft, setApprovalWaitDraft] = useState<ExecutionApprovalWaitFilter>(approvalWaitFilter);
+  const [errorDraft, setErrorDraft] = useState<ExecutionErrorFilter>(errorFilter);
+  const [windowDraft, setWindowDraft] = useState<ExecutionWindowFilter>(windowFilter);
   const [scopeOptionsState, setScopeOptionsState] = useState<LoadState>("idle");
   const [scopeOptions, setScopeOptions] = useState<ExecutionScopeOption[]>([]);
   const [scopeOptionsError, setScopeOptionsError] = useState("");
@@ -80,6 +104,26 @@ export function ExecutionPage() {
   useEffect(() => {
     setStateDraft(stateFilter);
   }, [stateFilter]);
+
+  useEffect(() => {
+    setLaneDraft(laneFilter);
+  }, [laneFilter]);
+
+  useEffect(() => {
+    setTargetDraft(targetFilter);
+  }, [targetFilter]);
+
+  useEffect(() => {
+    setApprovalWaitDraft(approvalWaitFilter);
+  }, [approvalWaitFilter]);
+
+  useEffect(() => {
+    setErrorDraft(errorFilter);
+  }, [errorFilter]);
+
+  useEffect(() => {
+    setWindowDraft(windowFilter);
+  }, [windowFilter]);
 
   useEffect(() => {
     if (!canReviewExecution || instanceId) {
@@ -124,12 +168,19 @@ export function ExecutionPage() {
     setRunsState("loading");
     setRunsError("");
 
-    void fetchExecutionRuns({
+    const runQuery = {
       instanceId,
       companyId,
-      state: stateFilter === "all" ? undefined : stateFilter,
       limit: 50,
-    })
+      ...(stateFilter === "all" ? {} : { state: stateFilter }),
+      ...(laneFilter ? { executionLane: laneFilter } : {}),
+      ...(targetFilter ? { target: targetFilter } : {}),
+      ...(approvalWaitFilter === "waiting_only" ? { approvalWait: true } : {}),
+      ...(errorFilter === "with_error" ? { hasError: true } : {}),
+      ...(windowFilter === "all" ? {} : { window: windowFilter }),
+    };
+
+    void fetchExecutionRuns(runQuery)
       .then((payload) => {
         if (cancelled) {
           return;
@@ -149,7 +200,7 @@ export function ExecutionPage() {
     return () => {
       cancelled = true;
     };
-  }, [canReviewExecution, instanceId, companyId, stateFilter, refreshNonce]);
+  }, [canReviewExecution, instanceId, companyId, stateFilter, laneFilter, targetFilter, approvalWaitFilter, errorFilter, windowFilter, refreshNonce]);
 
   useEffect(() => {
     if (!canReviewExecution || !instanceId || runsState !== "success") {
@@ -228,6 +279,8 @@ export function ExecutionPage() {
     event.preventDefault();
     const normalizedInstance = instanceDraft.trim();
     const normalizedState = stateDraft || DEFAULT_STATE_FILTER;
+    const normalizedLane = laneDraft.trim();
+    const normalizedTarget = targetDraft.trim();
 
     updateSearchParams((next) => {
       if (normalizedInstance) {
@@ -240,6 +293,31 @@ export function ExecutionPage() {
       } else {
         next.set("state", normalizedState);
       }
+      if (normalizedLane) {
+        next.set("lane", normalizedLane);
+      } else {
+        next.delete("lane");
+      }
+      if (normalizedTarget) {
+        next.set("target", normalizedTarget);
+      } else {
+        next.delete("target");
+      }
+      if (approvalWaitDraft === "waiting_only") {
+        next.set("approvalWait", approvalWaitDraft);
+      } else {
+        next.delete("approvalWait");
+      }
+      if (errorDraft === "with_error") {
+        next.set("error", errorDraft);
+      } else {
+        next.delete("error");
+      }
+      if (windowDraft === "all") {
+        next.delete("window");
+      } else {
+        next.set("window", windowDraft);
+      }
       next.delete("runId");
     });
   };
@@ -247,10 +325,20 @@ export function ExecutionPage() {
   const handleScopeClear = () => {
     setInstanceDraft("");
     setStateDraft(DEFAULT_STATE_FILTER);
+    setLaneDraft(DEFAULT_LANE_FILTER);
+    setTargetDraft(DEFAULT_TARGET_FILTER);
+    setApprovalWaitDraft(DEFAULT_APPROVAL_WAIT_FILTER);
+    setErrorDraft(DEFAULT_ERROR_FILTER);
+    setWindowDraft(DEFAULT_WINDOW_FILTER);
     updateSearchParams((next) => {
       next.delete("instanceId");
       next.delete("companyId");
       next.delete("state");
+      next.delete("lane");
+      next.delete("target");
+      next.delete("approvalWait");
+      next.delete("error");
+      next.delete("window");
       next.delete("runId");
     });
   };
@@ -268,6 +356,11 @@ export function ExecutionPage() {
       next.set("instanceId", nextInstanceId);
       next.delete("companyId");
       next.delete("state");
+      next.delete("lane");
+      next.delete("target");
+      next.delete("approvalWait");
+      next.delete("error");
+      next.delete("window");
       next.delete("runId");
     });
   };
@@ -346,6 +439,11 @@ export function ExecutionPage() {
                     });
       setOperatorActionResult(response.action);
       setOperatorActionState("success");
+      if (response.action.run_id && response.action.run_id !== detail.run_id) {
+        updateSearchParams((next) => {
+          next.set("runId", response.action.run_id);
+        });
+      }
       setRefreshNonce((current) => current + 1);
     } catch (error) {
       setOperatorActionState("error");
@@ -488,8 +586,18 @@ export function ExecutionPage() {
         scopeOptionsError={scopeOptionsError}
         instanceDraft={instanceDraft}
         stateDraft={stateDraft}
+        laneDraft={laneDraft}
+        targetDraft={targetDraft}
+        approvalWaitDraft={approvalWaitDraft}
+        errorDraft={errorDraft}
+        windowDraft={windowDraft}
         onInstanceDraftChange={setInstanceDraft}
         onStateDraftChange={setStateDraft}
+        onLaneDraftChange={setLaneDraft}
+        onTargetDraftChange={setTargetDraft}
+        onApprovalWaitDraftChange={setApprovalWaitDraft}
+        onErrorDraftChange={setErrorDraft}
+        onWindowDraftChange={setWindowDraft}
         onScopeSubmit={handleScopeSubmit}
         onScopeClear={handleScopeClear}
         onScopeChoice={handleScopeChoice}
@@ -502,6 +610,11 @@ export function ExecutionPage() {
           instanceId={instanceId}
           companyId={companyId}
           stateFilter={stateFilter}
+          laneFilter={laneFilter}
+          targetFilter={targetFilter}
+          approvalWaitFilter={approvalWaitFilter}
+          errorFilter={errorFilter}
+          windowFilter={windowFilter}
           runsState={runsState}
           runs={runs}
           runsError={runsError}

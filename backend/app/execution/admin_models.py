@@ -76,6 +76,21 @@ class ExecutionRunOutboxView(BaseModel):
     payload: dict[str, object]
 
 
+class ExecutionRunApprovalLinkView(BaseModel):
+    id: str
+    approval_id: str
+    gate_key: str
+    gate_status: str
+    resume_disposition: str
+    opened_at: datetime
+    decided_at: datetime | None = None
+    resume_enqueued_at: datetime | None = None
+    decision_actor_type: str | None = None
+    decision_actor_id: str | None = None
+    attempt_id: str
+    version: int
+
+
 class ExecutionRunSummary(BaseModel):
     instance_id: str
     run_id: str
@@ -93,6 +108,7 @@ class ExecutionRunSummary(BaseModel):
     terminal_at: datetime | None = None
     result_summary: dict[str, object] | None = None
     replayable: bool
+    current_approval_id: str | None = None
     created_at: datetime
     updated_at: datetime
 
@@ -101,6 +117,7 @@ class ExecutionRunDetail(ExecutionRunSummary):
     attempts: list[ExecutionRunAttemptView] = Field(default_factory=list)
     commands: list[ExecutionRunCommandView] = Field(default_factory=list)
     outbox: list[ExecutionRunOutboxView] = Field(default_factory=list)
+    approval_links: list[ExecutionRunApprovalLinkView] = Field(default_factory=list)
     workspace: WorkspaceSummary | None = None
     artifacts: list[ArtifactRecord] = Field(default_factory=list)
     native_mapping: RuntimeNativeMapping | None = None

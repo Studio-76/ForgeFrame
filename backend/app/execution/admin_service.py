@@ -5,7 +5,7 @@ from __future__ import annotations
 import hashlib
 from collections import Counter, defaultdict
 from collections.abc import Callable
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -19,6 +19,7 @@ from app.execution.admin_models import (
     ExecutionOperatorActionResult,
     ExecutionQueueLaneSummary,
     ExecutionQueueRunView,
+    ExecutionRunApprovalLinkView,
     ExecutionReplayResult,
     ExecutionRunAttemptView,
     ExecutionRunCommandView,
@@ -52,6 +53,12 @@ _LANE_LABELS = {
     "interactive_heavy": "Interactive Heavy",
     "background_agentic": "Background Agentic",
     "oauth_serialized": "OAuth Serialized",
+}
+_WINDOW_HOURS = {
+    "24h": 24,
+    "72h": 72,
+    "7d": 24 * 7,
+    "30d": 24 * 30,
 }
 
 
@@ -115,6 +122,23 @@ class ExecutionAdminService:
             dead_lettered_at=entry.dead_lettered_at,
             last_publish_error=entry.last_publish_error,
             payload=entry.payload,
+        )
+
+    @staticmethod
+    def _map_approval_link(link: RunApprovalLinkORM) -> ExecutionRunApprovalLinkView:
+        return ExecutionRunApprovalLinkView(
+            id=link.id,
+            approval_id=link.approval_id,
+            gate_key=link.gate_key,
+            gate_status=link.gate_status,
+            resume_disposition=link.resume_disposition,
+            opened_at=link.opened_at,
+            decided_at=link.decided_at,
+            resume_enqueued_at=link.resume_enqueued_at,
+            decision_actor_type=link.decision_actor_type,
+            decision_actor_id=link.decision_actor_id,
+            attempt_id=link.attempt_id,
+            version=link.version,
         )
 
     @staticmethod
@@ -360,6 +384,80 @@ class ExecutionAdminService:
             return run.active_attempt_no - 1
         return run.active_attempt_no
 
+    @staticmethod
+    def _current_approval_id(session: Session, run: RunORM) -> str | None:
+        if not run.current_approval_link_id:
+            return None
+        approval_link = session.get(RunApprovalLinkORM, run.current_approval_link_id)
+        if approval_link is None or approval_link.company_id != run.company_id:
+            return None
+        return approval_link.approval_id
+
+    @staticmethod
+    def _current_target_key(run: RunORM) -> str | None:
+        result_summary = run.result_summary if isinstance(run.result_summary, dict) else {}
+        routing = result_summary.get("routing")
+        if not isinstance(routing, dict):
+            return None
+        direct_target = routing.get("selected_target_key")
+        if isinstance(direct_target, str) and direct_target.strip():
+            return direct_target.strip()
+        for key in ("structured_details", "structured_explainability", "raw_details", "raw_explainability"):
+            candidate = routing.get(key)
+            if not isinstance(candidate, dict):
+                continue
+            nested_target = candidate.get("selected_target") or candidate.get("selected_target_key")
+            if isinstance(nested_target, str) and nested_target.strip():
+                return nested_target.strip()
+        return None
+
+    @staticmethod
+    def _current_cost_class(run: RunORM) -> str | None:
+        result_summary = run.result_summary if isinstance(run.result_summary, dict) else {}
+        routing = result_summary.get("routing")
+        if not isinstance(routing, dict):
+            return None
+        for key in ("selected_cost_class", "cost_class"):
+            value = routing.get(key)
+            if isinstance(value, str) and value.strip():
+                return value.strip()
+        raw_explainability = routing.get("raw_explainability")
+        if isinstance(raw_explainability, dict):
+            selection_basis = raw_explainability.get("selection_basis")
+            if isinstance(selection_basis, dict):
+                selected_candidate = selection_basis.get("selected_candidate")
+                if isinstance(selected_candidate, dict):
+                    cost_class = selected_candidate.get("cost_class")
+                    if isinstance(cost_class, str) and cost_class.strip():
+                        return cost_class.strip()
+        return None
+
+    @classmethod
+    def _has_run_error(cls, run: RunORM, attempt: RunAttemptORM | None) -> bool:
+        if run.failure_class is not None:
+            return True
+        if run.state in {"failed", "timed_out", "dead_lettered"}:
+            return True
+        if attempt is not None and (attempt.last_error_code or attempt.last_error_detail):
+            return True
+        result_summary = run.result_summary if isinstance(run.result_summary, dict) else {}
+        if isinstance(result_summary.get("error_code"), str) and result_summary["error_code"].strip():
+            return True
+        last_failure = result_summary.get("last_failure")
+        if isinstance(last_failure, dict):
+            return any(
+                isinstance(last_failure.get(field), str) and str(last_failure[field]).strip()
+                for field in ("error_code", "error_detail")
+            )
+        return False
+
+    @staticmethod
+    def _window_cutoff(window: str | None) -> datetime | None:
+        hours = _WINDOW_HOURS.get((window or "").strip().lower())
+        if hours is None:
+            return None
+        return datetime.now(tz=UTC).replace(microsecond=0) - timedelta(hours=hours)
+
     def _map_run_summary(self, session: Session, run: RunORM, *, instance: InstanceRecord) -> ExecutionRunSummary:
         current_attempt = session.get(RunAttemptORM, run.current_attempt_id) if run.current_attempt_id else None
         return ExecutionRunSummary(
@@ -379,17 +477,61 @@ class ExecutionAdminService:
             terminal_at=run.terminal_at,
             result_summary=run.result_summary,
             replayable=run.state in _REPLAYABLE_STATES,
+            current_approval_id=self._current_approval_id(session, run),
             created_at=run.created_at,
             updated_at=run.updated_at,
         )
 
-    def list_runs(self, *, instance: InstanceRecord, state: str | None = None, limit: int = 100) -> list[ExecutionRunSummary]:
+    def list_runs(
+        self,
+        *,
+        instance: InstanceRecord,
+        state: str | None = None,
+        execution_lane: str | None = None,
+        target: str | None = None,
+        approval_wait: bool | None = None,
+        has_error: bool | None = None,
+        window: str | None = None,
+        limit: int = 100,
+    ) -> list[ExecutionRunSummary]:
         with self._session_factory() as session:
             stmt = select(RunORM).where(RunORM.company_id == instance.company_id)
             if state is not None:
                 stmt = stmt.where(RunORM.state == state)
-            rows = session.execute(stmt.order_by(RunORM.updated_at.desc()).limit(max(1, min(limit, 200)))).scalars().all()
-            return [self._map_run_summary(session, row, instance=instance) for row in rows]
+            if execution_lane:
+                stmt = stmt.where(RunORM.execution_lane == execution_lane)
+            if approval_wait is True:
+                stmt = stmt.where(
+                    (RunORM.state == "waiting_on_approval")
+                    | (RunORM.operator_state == "waiting_on_approval")
+                    | (RunORM.current_approval_link_id.is_not(None))
+                )
+            cutoff = self._window_cutoff(window)
+            if cutoff is not None:
+                stmt = stmt.where(RunORM.updated_at >= cutoff)
+
+            rows = session.execute(stmt.order_by(RunORM.updated_at.desc()).limit(200)).scalars().all()
+            filtered: list[RunORM] = []
+            normalized_target = (target or "").strip().lower()
+            for row in rows:
+                current_attempt = session.get(RunAttemptORM, row.current_attempt_id) if row.current_attempt_id else None
+                if has_error is True and not self._has_run_error(row, current_attempt):
+                    continue
+                if normalized_target:
+                    target_values = [
+                        self._current_target_key(row),
+                        row.workspace_id,
+                        row.issue_id,
+                    ]
+                    joined = " ".join(value for value in target_values if value).lower()
+                    if normalized_target not in joined:
+                        continue
+                filtered.append(row)
+
+            return [
+                self._map_run_summary(session, row, instance=instance)
+                for row in filtered[: max(1, min(limit, 200))]
+            ]
 
     def get_run_detail(self, *, instance: InstanceRecord, run_id: str) -> ExecutionRunDetail:
         with self._session_factory() as session:
@@ -429,6 +571,7 @@ class ExecutionAdminService:
                 attempts=[self._map_attempt(item) for item in attempts],
                 commands=[self._map_command(item) for item in commands],
                 outbox=[self._map_outbox(item) for item in outbox],
+                approval_links=[self._map_approval_link(item) for item in approval_links],
                 workspace=(
                     self._work.get_workspace_summary(company_id=instance.company_id, workspace_id=run.workspace_id)
                     if run.workspace_id

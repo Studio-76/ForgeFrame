@@ -147,6 +147,7 @@ function createRunSummary(overrides: Partial<ExecutionRunSummary> = {}): Executi
       },
     },
     replayable: true,
+    current_approval_id: null,
     created_at: "2026-04-21T21:00:00Z",
     updated_at: "2026-04-21T21:02:00Z",
     ...overrides,
@@ -245,9 +246,10 @@ function createRunDetail(overrides: Partial<ExecutionRunDetail> = {}): Execution
         metadata: {},
         attachments: [],
         created_at: "2026-04-21T21:02:10Z",
-        updated_at: "2026-04-21T21:02:10Z",
+      updated_at: "2026-04-21T21:02:10Z",
       },
     ],
+    approval_links: [],
     native_mapping: {
       object: "forgeframe.native_mapping",
       mapping_version: "2026-04-v1",
@@ -323,6 +325,197 @@ function createRunDetail(overrides: Partial<ExecutionRunDetail> = {}): Execution
   };
 }
 
+function createApprovalWaitRunSummary(overrides: Partial<ExecutionRunSummary> = {}): ExecutionRunSummary {
+  return createRunSummary({
+    run_id: "run_waiting",
+    workspace_id: "ws_waiting",
+    run_kind: "responses_background",
+    state: "waiting_on_approval",
+    operator_state: "waiting_on_approval",
+    status_reason: "approval_required",
+    failure_class: null,
+    current_attempt: {
+      id: "attempt_waiting",
+      attempt_no: 2,
+      attempt_state: "waiting_on_approval",
+      operator_state: "waiting_on_approval",
+      lease_status: "released",
+      worker_key: null,
+      retry_count: 1,
+      scheduled_at: "2026-04-22T09:00:00Z",
+      started_at: "2026-04-22T09:01:00Z",
+      finished_at: null,
+      version: 2,
+    },
+    next_wakeup_at: null,
+    terminal_at: null,
+    result_summary: {
+      routing: {
+        summary: "Execution is paused on an operator approval boundary.",
+        classification: "non_simple",
+        policy_stage: "runtime_dispatch",
+        selected_target_key: "openai_api::gpt-4.1",
+        structured_explainability: {
+          selected_target: "openai_api::gpt-4.1",
+          execution_lane: "background_agentic",
+          candidate_count: 3,
+        },
+        raw_explainability: {
+          selection_basis: {
+            blocked_cost_classes: [],
+            selected_candidate: {
+              cost_class: "premium",
+            },
+          },
+        },
+      },
+    },
+    replayable: false,
+    current_approval_id: "approval-waiting-1",
+    created_at: "2026-04-22T09:00:00Z",
+    updated_at: "2026-04-22T09:05:00Z",
+    ...overrides,
+  });
+}
+
+function createApprovalWaitRunDetail(overrides: Partial<ExecutionRunDetail> = {}): ExecutionRunDetail {
+  return createRunDetail({
+    ...createApprovalWaitRunSummary(),
+    attempts: [
+      {
+        id: "attempt_waiting",
+        attempt_no: 2,
+        attempt_state: "waiting_on_approval",
+        operator_state: "waiting_on_approval",
+        lease_status: "released",
+        worker_key: null,
+        retry_count: 1,
+        scheduled_at: "2026-04-22T09:00:00Z",
+        started_at: "2026-04-22T09:01:00Z",
+        finished_at: null,
+        last_error_code: null,
+        last_error_detail: null,
+        version: 2,
+      },
+    ],
+    commands: [
+      {
+        id: "command_waiting",
+        command_type: "create",
+        command_status: "completed",
+        actor_type: "agent",
+        actor_id: "agent_backend",
+        idempotency_key: "idem_waiting",
+        accepted_transition: "waiting_on_approval",
+        response_snapshot: { approval_id: "approval-waiting-1" },
+        issued_at: "2026-04-22T09:00:00Z",
+        completed_at: "2026-04-22T09:00:01Z",
+      },
+    ],
+    outbox: [
+      {
+        id: "outbox_waiting",
+        event_type: "approval_notify",
+        publish_state: "pending",
+        available_at: "2026-04-22T09:02:00Z",
+        publish_attempts: 1,
+        published_at: null,
+        dead_lettered_at: null,
+        last_publish_error: null,
+        payload: {
+          approval_id: "approval-waiting-1",
+        },
+      },
+    ],
+    workspace: {
+      workspace_id: "ws_waiting",
+      instance_id: "instance_alpha",
+      company_id: "company_alpha",
+      issue_id: "FOR-999",
+      title: "Waiting workspace",
+      summary: "Needs approval before execution continues.",
+      status: "in_review",
+      preview_status: "ready",
+      review_status: "pending",
+      handoff_status: "not_ready",
+      owner_type: "user",
+      owner_id: "user-admin",
+      active_run_id: "run_waiting",
+      latest_approval_id: "approval-waiting-1",
+      preview_artifact_id: null,
+      handoff_artifact_id: null,
+      pr_reference: null,
+      handoff_reference: null,
+      metadata: {},
+      run_count: 1,
+      approval_count: 1,
+      artifact_count: 0,
+      latest_event_at: "2026-04-22T09:05:00Z",
+      created_at: "2026-04-22T08:55:00Z",
+      updated_at: "2026-04-22T09:05:00Z",
+    },
+    artifacts: [],
+    approval_links: [
+      {
+        id: "approval_link_waiting",
+        approval_id: "approval-waiting-1",
+        gate_key: "operator_approval",
+        gate_status: "open",
+        resume_disposition: "resume",
+        opened_at: "2026-04-22T09:02:00Z",
+        decided_at: null,
+        resume_enqueued_at: null,
+        decision_actor_type: null,
+        decision_actor_id: null,
+        attempt_id: "attempt_waiting",
+        version: 1,
+      },
+    ],
+    native_mapping: {
+      object: "forgeframe.native_mapping",
+      mapping_version: "2026-04-v1",
+      contract_surface: "forgeframe_execution",
+      request_path: "/admin/execution/runs/run_waiting",
+      response_id: "resp_waiting",
+      processing_mode: "background",
+      stream: false,
+      background: true,
+      primary_native_object_kind: "run",
+      objects: [
+        {
+          kind: "run",
+          object_id: "run_waiting",
+          relation: "primary_object",
+          lifecycle_state: "waiting_on_approval",
+          details: {
+            operator_state: "waiting_on_approval",
+            execution_lane: "background_agentic",
+          },
+        },
+      ],
+      events: [
+        {
+          event_kind: "review_request_event",
+          related_object_kind: "approval",
+          related_object_id: "approval-waiting-1",
+          status: "pending",
+          details: {
+            outbox_id: "outbox_waiting",
+          },
+        },
+      ],
+      commands: [],
+      views: [],
+      route_context: {
+        run_id: "run_waiting",
+        execution_lane: "background_agentic",
+      },
+      notes: ["Approval wait run for execution review tests."],
+    },
+    ...overrides,
+  });
+}
+
 let container: HTMLDivElement;
 let root: Root | null = null;
 
@@ -387,10 +580,10 @@ beforeEach(() => {
     status: "ok",
     runs: [createRunSummary()],
   });
-  fetchExecutionRunDetailMock.mockResolvedValue({
+  fetchExecutionRunDetailMock.mockImplementation(async (runId: string) => ({
     status: "ok",
-    run: createRunDetail(),
-  });
+    run: runId === "run_waiting" ? createApprovalWaitRunDetail() : createRunDetail(),
+  }));
   replayExecutionRunMock.mockResolvedValue({
     status: "ok",
     replay: {
@@ -546,6 +739,57 @@ describe("Execution page operator workflow", () => {
     expect(container.textContent).toContain("Instance: instance_alpha");
   });
 
+  it("submits the full filter set for execution review", async () => {
+    await renderExecutionPage("/execution?instanceId=instance_alpha", operatorSession);
+
+    const targetInput = container.querySelector<HTMLInputElement>('input[aria-label="Execution target filter"]');
+    const laneSelect = container.querySelector<HTMLSelectElement>('select[aria-label="Execution lane filter"]');
+    const stateSelect = container.querySelector<HTMLSelectElement>('select[aria-label="Execution run state filter"]');
+    const approvalWaitSelect = container.querySelector<HTMLSelectElement>('select[aria-label="Execution approval wait filter"]');
+    const errorSelect = container.querySelector<HTMLSelectElement>('select[aria-label="Execution error filter"]');
+    const windowSelect = container.querySelector<HTMLSelectElement>('select[aria-label="Execution window filter"]');
+    const filterForm = targetInput?.closest("form");
+
+    expect(targetInput).not.toBeNull();
+    expect(laneSelect).not.toBeNull();
+    expect(stateSelect).not.toBeNull();
+    expect(approvalWaitSelect).not.toBeNull();
+    expect(errorSelect).not.toBeNull();
+    expect(windowSelect).not.toBeNull();
+    expect(filterForm).not.toBeNull();
+
+    await act(async () => {
+      stateSelect!.value = "waiting_on_approval";
+      stateSelect!.dispatchEvent(new Event("change", { bubbles: true }));
+      laneSelect!.value = "background_agentic";
+      laneSelect!.dispatchEvent(new Event("change", { bubbles: true }));
+      setInputValue(targetInput!, "openai_api::gpt-4.1");
+      approvalWaitSelect!.value = "waiting_only";
+      approvalWaitSelect!.dispatchEvent(new Event("change", { bubbles: true }));
+      errorSelect!.value = "with_error";
+      errorSelect!.dispatchEvent(new Event("change", { bubbles: true }));
+      windowSelect!.value = "7d";
+      windowSelect!.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+
+    await act(async () => {
+      filterForm!.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+    });
+    await flushEffects();
+
+    expect(fetchExecutionRunsMock).toHaveBeenLastCalledWith({
+      instanceId: "instance_alpha",
+      companyId: "",
+      state: "waiting_on_approval",
+      executionLane: "background_agentic",
+      target: "openai_api::gpt-4.1",
+      approvalWait: true,
+      hasError: true,
+      window: "7d",
+      limit: 50,
+    });
+  });
+
   it("loads instance-scoped list and detail state for operator sessions", async () => {
     await renderExecutionPage("/execution?instanceId=instance_alpha", operatorSession);
 
@@ -559,21 +803,39 @@ describe("Execution page operator workflow", () => {
     expect(container.textContent).toContain("run_alpha");
     expect(container.textContent).toContain("Replay ready");
     expect(container.textContent).toContain("provider_authentication_error");
-    expect(container.textContent).toContain("Workspace and artifacts");
+    expect(container.textContent).toContain("Run table");
+    expect(container.textContent).toContain("Timeline");
+    expect(container.textContent).toContain("Dispatch jobs");
+    expect(container.textContent).toContain("Routing and lifecycle decisions");
+    expect(container.textContent).toContain("Artifacts and workspace evidence");
     expect(container.textContent).toContain("Preview package");
-    expect(container.textContent).toContain("Run Explainability");
-    expect(container.textContent).toContain("Routing decision");
     expect(container.textContent).toContain("Blocked after premium provider authentication failure.");
-    expect(container.textContent).toContain("Wake gate");
-    expect(container.textContent).toContain("Native runtime mapping");
-    expect(container.textContent).toContain("forgeframe_execution");
-    expect(container.textContent).toContain("dispatch_job");
-    expect(container.textContent).toContain("blocker_event");
-    expect(container.textContent).toContain("action_preview");
-    expect(container.textContent).toContain("Raw result summary payload");
+    expect(container.textContent).toContain("Run is quarantined or terminal");
+    expect(container.textContent).toContain("Raw details");
 
     const workspaceLink = Array.from(container.querySelectorAll("a")).find((link) => link.textContent === "ws_alpha");
     expect(workspaceLink?.getAttribute("href")).toBe("/workspaces?instanceId=instance_alpha&workspaceId=ws_alpha");
+  });
+
+  it("shows approval waits as explicit approval links back to the approvals route", async () => {
+    fetchExecutionRunsMock.mockResolvedValueOnce({
+      status: "ok",
+      runs: [createApprovalWaitRunSummary()],
+    });
+
+    await renderExecutionPage("/execution?instanceId=instance_alpha&state=waiting_on_approval&runId=run_waiting", operatorSession);
+
+    expect(fetchExecutionRunsMock).toHaveBeenCalledWith({
+      instanceId: "instance_alpha",
+      companyId: "",
+      state: "waiting_on_approval",
+      limit: 50,
+    });
+    expect(fetchExecutionRunDetailMock).toHaveBeenCalledWith("run_waiting", { instanceId: "instance_alpha", companyId: "" });
+    expect(container.textContent).toContain("Approval gate holding execution");
+    expect(container.textContent).toContain("Approval links");
+    const approvalLink = Array.from(container.querySelectorAll("a")).find((link) => link.textContent === "Open approval");
+    expect(approvalLink?.getAttribute("href")).toBe("/approvals?instanceId=instance_alpha&approvalId=approval-waiting-1&status=all");
   });
 
   it("keeps read-only sessions on inspection while blocking replay controls", async () => {
@@ -603,7 +865,7 @@ describe("Execution page operator workflow", () => {
     await renderExecutionPage("/execution?instanceId=instance_alpha", operatorSession);
 
     const reason = container.querySelector<HTMLTextAreaElement>('textarea[aria-label="Execution replay reason"]');
-    const form = container.querySelector<HTMLFormElement>("form.fg-stack");
+    const form = reason?.closest("form");
 
     expect(reason).not.toBeNull();
     expect(form).not.toBeNull();
@@ -630,7 +892,7 @@ describe("Execution page operator workflow", () => {
     await renderExecutionPage("/execution?instanceId=instance_alpha", operatorSession);
 
     const reason = container.querySelector<HTMLTextAreaElement>('textarea[aria-label="Execution replay reason"]');
-    const form = container.querySelector<HTMLFormElement>("form.fg-stack");
+    const form = reason?.closest("form");
 
     expect(reason).not.toBeNull();
     expect(form).not.toBeNull();
@@ -651,49 +913,37 @@ describe("Execution page operator workflow", () => {
     );
   });
 
-  it("submits operator controls for pause and lane escalation", async () => {
+  it("blocks invalid operator controls while allowing escalation on a valid lane change", async () => {
     await renderExecutionPage("/execution?instanceId=instance_alpha", operatorSession);
 
     const reason = container.querySelector<HTMLTextAreaElement>('textarea[aria-label="Execution operator reason"]');
     const lane = container.querySelector<HTMLSelectElement>('select[aria-label="Execution operator lane"]');
     const pauseButton = Array.from(container.querySelectorAll("button")).find((button) => button.textContent === "Pause");
+    const interruptButton = Array.from(container.querySelectorAll("button")).find((button) => button.textContent === "Interrupt");
+    const restartButton = Array.from(container.querySelectorAll("button")).find((button) => button.textContent === "Restart");
     const escalateButton = Array.from(container.querySelectorAll("button")).find((button) => button.textContent === "Escalate");
 
     expect(reason).not.toBeNull();
     expect(lane).not.toBeNull();
     expect(pauseButton).not.toBeNull();
+    expect(interruptButton).not.toBeNull();
+    expect(restartButton).not.toBeNull();
     expect(escalateButton).not.toBeNull();
+    expect(pauseButton!.hasAttribute("disabled")).toBe(true);
+    expect(interruptButton!.hasAttribute("disabled")).toBe(true);
+    expect(restartButton!.hasAttribute("disabled")).toBe(false);
+    expect(escalateButton!.hasAttribute("disabled")).toBe(true);
 
     await act(async () => {
-      setInputValue(reason!, "Pause while waiting for operator review.");
-    });
-
-    await act(async () => {
-      pauseButton!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      setInputValue(reason!, "Escalate to interactive heavy for deeper inspection.");
+      lane!.value = "interactive_heavy";
+      lane!.dispatchEvent(new Event("change", { bubbles: true }));
     });
     await flushEffects();
 
-    expect(pauseExecutionRunMock).toHaveBeenCalledWith("run_alpha", {
-      instanceId: "instance_alpha",
-      companyId: "",
-      reason: "Pause while waiting for operator review.",
-      executionLane: "",
-    });
-    expect(container.textContent).toContain("Operator state: paused");
-
-    const refreshedReason = container.querySelector<HTMLTextAreaElement>('textarea[aria-label="Execution operator reason"]');
-    const refreshedLane = container.querySelector<HTMLSelectElement>('select[aria-label="Execution operator lane"]');
     const refreshedEscalateButton = Array.from(container.querySelectorAll("button")).find((button) => button.textContent === "Escalate");
-
-    expect(refreshedReason).not.toBeNull();
-    expect(refreshedLane).not.toBeNull();
     expect(refreshedEscalateButton).not.toBeNull();
-
-    await act(async () => {
-      setInputValue(refreshedReason!, "Escalate to interactive heavy for deeper inspection.");
-      refreshedLane!.value = "interactive_heavy";
-      refreshedLane!.dispatchEvent(new Event("change", { bubbles: true }));
-    });
+    expect(refreshedEscalateButton!.hasAttribute("disabled")).toBe(false);
 
     await act(async () => {
       refreshedEscalateButton!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
