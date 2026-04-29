@@ -121,9 +121,44 @@ function createData(access: ProvidersAccessState): ProvidersPageData {
     ],
     templates: [],
     profiles: [],
-    runs: [],
-    runSummary: {},
-    runOps: {},
+    runs: [
+      {
+        run_id: "run_health_alpha",
+        provider_key: "local_runtime",
+        instance_id: "instance_alpha",
+        integration_class: "openai_compatible",
+        model: "llama3.1",
+        mode: "probe",
+        status: "failed",
+        success: false,
+        steps: [],
+        error: "provider probe timed out",
+        executed_at: "2026-04-23T09:00:00Z",
+        duration_ms: 5000,
+        client_id: "control_plane",
+        consumer: "provider_health",
+        integration: "openai_compatible",
+      },
+    ],
+    runSummary: { total: 1, failed: 1, probe: 1 },
+    runOps: {
+      last_failed_run: {
+        provider_key: "local_runtime",
+        status: "failed",
+        executed_at: "2026-04-23T09:00:00Z",
+      },
+      last_runs_by_provider: {
+        local_runtime: {
+          run_id: "run_health_alpha",
+          provider_key: "local_runtime",
+          model: "llama3.1",
+          mode: "probe",
+          status: "failed",
+          error: "provider probe timed out",
+          executed_at: "2026-04-23T09:00:00Z",
+        },
+      },
+    },
     runFilters: {
       mode: "all",
       status: "all",
@@ -247,7 +282,9 @@ describe("Providers page hierarchy", () => {
     expect(markup).toContain("href=\"/harness\"");
     expect(markup).toContain(">Provider Targets<");
     expect(markup).toContain(">Provider Runtime Inventory</h3>");
-    expect(markup).toContain(">Provider Health</h3>");
+    expect(markup).toContain(">Provider Health &amp; Runs</h3>");
+    expect(markup).toContain("id=\"provider-health-runs\"");
+    expect(markup).toContain("Show probe");
     expect(markup).toContain(">Provider Inventory</h3>");
     expect(markup).toContain(">Provider hinzufügen</h3>");
     expect(markup).toContain(">Advanced Diagnostics</strong>");
@@ -289,7 +326,7 @@ describe("Providers page hierarchy", () => {
       "instance_alpha",
       expect.objectContaining({
         includeUsageSummary: false,
-        includeHarness: false,
+        includeHarness: true,
         includeOauthTargets: false,
         includeCompatibilityMatrix: false,
         includeBootstrapReadiness: false,

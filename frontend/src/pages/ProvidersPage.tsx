@@ -25,7 +25,7 @@ export function ProvidersPage() {
   const access = getProvidersAccess(session, sessionReady, instanceId);
   const { data, actions } = useProvidersControlPlane(access, instanceId, {
     includeUsageSummary: false,
-    includeHarness: false,
+    includeHarness: true,
     includeOauthTargets: false,
     includeCompatibilityMatrix: false,
     includeBootstrapReadiness: false,
@@ -92,10 +92,10 @@ export function ProvidersPage() {
           <div id="provider-overview">
             <ProvidersManagementOverviewSection data={data} actions={actions} instanceId={instanceId} />
           </div>
-          <div id="provider-health-runs">
-            <ProviderHealthSection data={data} actions={actions} />
+          <ProviderHealthSection data={data} actions={actions} instanceId={instanceId} />
+          <div id="provider-inventory">
+            <ProvidersInventoryTableSection data={data} actions={actions} instanceId={instanceId} />
           </div>
-          <ProvidersInventoryTableSection data={data} actions={actions} instanceId={instanceId} />
           <ProvidersAdvancedDiagnosticsSection data={data} />
         </div>
       )}

@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState, type ReactNode } from "react";
-import { Link } from "react-router-dom";
+import { useEffect, useMemo, useRef, useState, type ReactNode, type Ref } from "react";
+import { Link, useLocation } from "react-router-dom";
 
 import type {
   CapabilityEvidenceRecord,
@@ -35,13 +35,17 @@ type SectionCardProps = {
   description?: string;
   actions?: ReactNode;
   children: ReactNode;
+  id?: string;
+  className?: string;
+  tabIndex?: number;
+  cardRef?: Ref<HTMLDivElement>;
 };
 
 type Tone = "success" | "warning" | "danger" | "neutral";
 
-function SectionCard({ title, description, actions, children }: SectionCardProps) {
+function SectionCard({ title, description, actions, children, id, className, tabIndex, cardRef }: SectionCardProps) {
   return (
-    <div className="fg-card">
+    <div id={id} ref={cardRef} tabIndex={tabIndex} className={`fg-card${className ? ` ${className}` : ""}`}>
       <div className="fg-panel-heading">
         <div>
           <h3>{title}</h3>
@@ -738,29 +742,149 @@ export function ProvidersManagementOverviewSection({ data, actions, instanceId }
   );
 }
 
-export function ProviderHealthSection({ data, actions }: SectionProps) {
+type ProviderHealthSectionProps = SectionProps & {
+  instanceId?: string | null;
+};
+
+function representativeProviderModel(
+  provider: ProvidersPageData["providers"][number],
+  latestRun: ProvidersPageData["runs"][number] | null,
+) {
+  if (latestRun?.model) {
+    return latestRun.model;
+  }
+  const attentionModel = provider.models.find((model) => model.health_status !== "healthy");
+  if (attentionModel?.id) {
+    return attentionModel.id;
+  }
+  return provider.models[0]?.id ?? "No model recorded";
+}
+
+function latestProviderError(
+  provider: ProvidersPageData["providers"][number],
+  latestRun: ProvidersPageData["runs"][number] | null,
+) {
+  if (latestRun?.error) {
+    return latestRun.error;
+  }
+  const modelError = provider.models.find((model) => model.status_reason)?.status_reason;
+  if (modelError) {
+    return modelError;
+  }
+  if (provider.last_sync_error) {
+    return provider.last_sync_error;
+  }
+  if (provider.oauth_connect_required) {
+    return "OAuth connection required before provider health can succeed.";
+  }
+  return provider.readiness_reason ?? "No error recorded";
+}
+
+function providerSetupLink(provider: ProvidersPageData["providers"][number], instanceId?: string | null) {
+  if (provider.oauth_connect_required || provider.next_action_kind === "connect_oauth") {
+    return {
+      label: "Open OAuth Targets",
+      to: withInstanceScope(CONTROL_PLANE_ROUTES.oauthTargets, instanceId),
+    };
+  }
+  if (provider.target_count === 0 || provider.ready_target_count === 0 || provider.next_action_kind === "review_sync") {
+    return {
+      label: "Open Provider Targets",
+      to: withInstanceScope(CONTROL_PLANE_ROUTES.providerTargets, instanceId),
+    };
+  }
+  return {
+    label: "Open Provider Inventory",
+    to: withInstanceScope(`${CONTROL_PLANE_ROUTES.providers}#provider-inventory`, instanceId),
+  };
+}
+
+function formatHealthRunTimestamp(
+  provider: ProvidersPageData["providers"][number],
+  latestRun: ProvidersPageData["runs"][number] | null,
+) {
+  if (latestRun) {
+    return `${formatHarnessMode(latestRun.mode)} · ${formatTimestamp(latestRun.executed_at)}`;
+  }
+  if (provider.last_health_check_at) {
+    return `provider check · ${formatTimestamp(provider.last_health_check_at)}`;
+  }
+  if (provider.last_probe_at) {
+    return `probe only · ${formatTimestamp(provider.last_probe_at)}`;
+  }
+  return "No run recorded";
+}
+
+export function ProviderHealthSection({ data, actions, instanceId }: ProviderHealthSectionProps) {
+  const location = useLocation();
+  const anchorRef = useRef<HTMLDivElement | null>(null);
   const healthyProviders = data.providers.filter((provider) => provider.health_status === "healthy").length;
   const notRunProviders = data.providers.filter((provider) => provider.health_status === "not-run").length;
   const attentionProviders = data.providers.filter((provider) => provider.health_status === "attention" || provider.health_status === "error");
   const providerHealthEnabled = data.healthConfig?.provider_health_enabled ?? false;
   const modelHealthEnabled = data.healthConfig?.model_health_enabled ?? false;
+  const latestFailedRun = asRecord(data.runOps.last_failed_run);
+  const [selectedProviderKey, setSelectedProviderKey] = useState<string>(attentionProviders[0]?.provider ?? data.providers[0]?.provider ?? "");
+
+  useEffect(() => {
+    const nextSelectedKey = attentionProviders[0]?.provider ?? data.providers[0]?.provider ?? "";
+    if (!data.providers.some((provider) => provider.provider === selectedProviderKey)) {
+      setSelectedProviderKey(nextSelectedKey);
+    }
+  }, [attentionProviders, data.providers, selectedProviderKey]);
+
+  useEffect(() => {
+    if (location.hash !== "#provider-health-runs") {
+      return;
+    }
+    const target = anchorRef.current;
+    if (!target) {
+      return;
+    }
+    if (typeof target.scrollIntoView === "function") {
+      target.scrollIntoView({ block: "start" });
+    }
+    target.focus();
+  }, [location.hash]);
+
+  const selectedProvider = data.providers.find((provider) => provider.provider === selectedProviderKey) ?? data.providers[0] ?? null;
+  const selectedProviderRun = selectedProvider ? latestRunForProfile(selectedProvider.provider, data.runs, data.runOps) : null;
+  const selectedProviderSetup = selectedProvider ? providerSetupLink(selectedProvider, instanceId) : null;
+  const selectedProviderError = selectedProvider ? latestProviderError(selectedProvider, selectedProviderRun) : "No provider selected.";
 
   return (
     <SectionCard
-      title="Provider Health"
-      description="Health runs stay direct and compact here instead of disappearing inside a wall of diagnostics cards."
+      id="provider-health-runs"
+      cardRef={anchorRef}
+      tabIndex={-1}
+      className={location.hash === "#provider-health-runs" ? "is-anchor-target" : ""}
+      title="Provider Health & Runs"
+      description="Keep provider probes and latest runs as a focused operations surface with direct error handoffs to inventory, OAuth, and targets."
       actions={
-        data.access.canMutate ? (
-          <button type="button" onClick={() => void actions.runHealthChecks()}>
-            Run health now
-          </button>
-        ) : undefined
+        <>
+          {data.access.canMutate ? (
+            <button type="button" onClick={() => void actions.runHealthChecks()}>
+              Run health now
+            </button>
+          ) : null}
+          <Link className="fg-nav-link" to={withInstanceScope(CONTROL_PLANE_ROUTES.oauthTargets, instanceId)}>
+            Open OAuth Targets
+          </Link>
+          <Link className="fg-nav-link" to={withInstanceScope(CONTROL_PLANE_ROUTES.providerTargets, instanceId)}>
+            Open Provider Targets
+          </Link>
+        </>
       }
     >
       <div className="fg-grid fg-grid-compact fg-mb-md">
         <MetricTile label="Healthy" value={formatMetric(healthyProviders)} note={`${formatMetric(attentionProviders.length)} need attention`} />
         <MetricTile label="Not run" value={formatMetric(notRunProviders)} note={data.healthConfig ? `${data.healthConfig.interval_seconds}s interval` : "no health config"} />
         <MetricTile label="Model checks" value={modelHealthEnabled ? "enabled" : "disabled"} note={providerHealthEnabled ? "provider checks enabled" : "provider checks disabled"} />
+        <MetricTile
+          label="Last failed run"
+          value={toStringValue(latestFailedRun?.status, "none")}
+          note={latestFailedRun ? `${formatTimestamp(toStringValue(latestFailedRun.executed_at, ""))} · ${toStringValue(latestFailedRun.provider_key, "unknown provider")}` : "no failed run recorded"}
+        />
       </div>
 
       {data.access.canMutate && data.healthConfig ? (
@@ -811,34 +935,123 @@ export function ProviderHealthSection({ data, actions }: SectionProps) {
       ) : null}
 
       <div className="fg-table-wrap">
-        <table className="fg-table">
+        <table className="fg-table" aria-label="Provider health and runs">
           <thead>
             <tr>
               <th>Provider</th>
-              <th>Health</th>
-              <th>Models</th>
-              <th>Last check</th>
+              <th>Target / model</th>
+              <th>Last run</th>
+              <th>Status</th>
+              <th>Error</th>
+              <th>Next action</th>
             </tr>
           </thead>
           <tbody>
-            {data.providers.map((provider) => (
-              <tr key={provider.provider}>
+            {data.providers.map((provider) => {
+              const latestRun = latestRunForProfile(provider.provider, data.runs, data.runOps);
+              const setupLink = providerSetupLink(provider, instanceId);
+              const isSelected = provider.provider === selectedProvider?.provider;
+              return (
+              <tr key={provider.provider} className={isSelected ? "is-selected" : ""}>
                 <td>
-                  <strong>{provider.label}</strong>
+                  <button className="fg-table-trigger" type="button" onClick={() => setSelectedProviderKey(provider.provider)}>
+                    <strong>{provider.label}</strong>
+                  </button>
                   <div className="fg-muted">{provider.provider}</div>
+                  <div className="fg-muted">{authTypeLabel(provider)}</div>
+                </td>
+                <td>
+                  <strong>{representativeProviderModel(provider, latestRun)}</strong>
+                  <div className="fg-muted">
+                    {formatMetric(provider.ready_target_count)} ready / {formatMetric(provider.enabled_target_count)} enabled / {formatMetric(provider.target_count)} targets
+                  </div>
+                </td>
+                <td>
+                  {formatHealthRunTimestamp(provider, latestRun)}
+                  <div className="fg-muted">probe {formatTimestamp(provider.last_probe_at)}</div>
                 </td>
                 <td>
                   <TonePill label={formatHealthLabel(provider.health_status)} tone={toneFromHealthStatus(provider.health_status)} />
+                  <div className="fg-muted">
+                    {latestRun ? `${formatHarnessMode(latestRun.mode)} · ${latestRun.status}` : provider.runtime_readiness}
+                  </div>
                 </td>
                 <td>
-                  {formatMetric(provider.healthy_model_count)} healthy / {formatMetric(provider.attention_model_count)} attention
+                  {latestProviderError(provider, latestRun)}
+                  <div className="fg-muted">{provider.ready ? "runtime ready" : provider.readiness_reason ?? "runtime not ready"}</div>
                 </td>
-                <td>{formatTimestamp(provider.last_health_check_at)}</td>
+                <td>
+                  <div className="fg-actions">
+                    {provider.next_action_kind === "run_health" && data.access.canMutate ? (
+                      <button type="button" onClick={() => void actions.runHealthChecks()}>
+                        {provider.next_action}
+                      </button>
+                    ) : null}
+                    <button type="button" onClick={() => setSelectedProviderKey(provider.provider)}>
+                      Show probe
+                    </button>
+                    <Link className="fg-nav-link" to={setupLink.to}>
+                      {setupLink.label}
+                    </Link>
+                  </div>
+                </td>
               </tr>
-            ))}
+            );
+            })}
           </tbody>
         </table>
       </div>
+
+      {selectedProvider ? (
+        <div className="fg-subcard fg-mt-md">
+          <div className="fg-panel-heading">
+            <div>
+              <h4>{selectedProvider.label}</h4>
+              <p className="fg-muted">
+                {selectedProviderRun
+                  ? `Latest run ${formatHarnessMode(selectedProviderRun.mode)} at ${formatTimestamp(selectedProviderRun.executed_at)}`
+                  : `No harness run recorded. Last provider signal ${formatTimestamp(selectedProvider.last_health_check_at ?? selectedProvider.last_probe_at)}`}
+              </p>
+            </div>
+            <div className="fg-actions">
+              <TonePill label={formatHealthLabel(selectedProvider.health_status)} tone={toneFromHealthStatus(selectedProvider.health_status)} />
+              {selectedProviderSetup ? (
+                <Link className="fg-nav-link" to={selectedProviderSetup.to}>
+                  {selectedProviderSetup.label}
+                </Link>
+              ) : null}
+            </div>
+          </div>
+          <div className="fg-detail-grid">
+            <p>
+              Target/model: {representativeProviderModel(selectedProvider, selectedProviderRun)} · last probe {formatTimestamp(selectedProvider.last_probe_at)}
+            </p>
+            <p>
+              Latest run status: {selectedProviderRun ? `${selectedProviderRun.status} · ${toStringValue(selectedProviderRun.error, "no run error")}` : "not-ready"}
+            </p>
+            <p>
+              Next action: {selectedProvider.next_action} · ready targets {formatMetric(selectedProvider.ready_target_count)}
+            </p>
+            <p>Error handoff: {selectedProviderError}</p>
+          </div>
+          <div className="fg-actions">
+            {data.access.canMutate ? (
+              <button type="button" onClick={() => void actions.runHealthChecks()}>
+                Run health now
+              </button>
+            ) : null}
+            <Link className="fg-nav-link" to={withInstanceScope(CONTROL_PLANE_ROUTES.oauthTargets, instanceId)}>
+              Open OAuth Targets
+            </Link>
+            <Link className="fg-nav-link" to={withInstanceScope(CONTROL_PLANE_ROUTES.providerTargets, instanceId)}>
+              Open Provider Targets
+            </Link>
+            <Link className="fg-nav-link" to={withInstanceScope(`${CONTROL_PLANE_ROUTES.providers}#provider-inventory`, instanceId)}>
+              Open Provider Inventory
+            </Link>
+          </div>
+        </div>
+      ) : null}
     </SectionCard>
   );
 }
