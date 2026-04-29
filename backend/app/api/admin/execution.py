@@ -104,6 +104,10 @@ def list_execution_runs(
 
 @router.get("/queues")
 def list_execution_queues(
+    execution_lane: str | None = None,
+    state: str | None = None,
+    target: str | None = None,
+    age: str | None = None,
     limit: int = 100,
     _admin: AuthenticatedAdmin = Depends(
         require_admin_instance_permission("execution.read", explicit_scope=True)
@@ -111,7 +115,14 @@ def list_execution_queues(
     instance: InstanceRecord = Depends(require_admin_instance_scope),
     service: ExecutionAdminService = Depends(get_execution_admin_service),
 ) -> dict[str, object]:
-    lanes, runs = service.list_queue_view(instance=instance, limit=limit)
+    lanes, runs = service.list_queue_view(
+        instance=instance,
+        execution_lane=execution_lane,
+        state=state,
+        target=target,
+        age=age,
+        limit=limit,
+    )
     return {
         "status": "ok",
         "lanes": [item.model_dump(mode="json") for item in lanes],

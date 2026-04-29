@@ -55,6 +55,8 @@ _LANE_LABELS = {
     "oauth_serialized": "OAuth Serialized",
 }
 _WINDOW_HOURS = {
+    "1h": 1,
+    "6h": 6,
     "24h": 24,
     "72h": 72,
     "7d": 24 * 7,
@@ -589,18 +591,78 @@ class ExecutionAdminService:
                 ),
             )
 
+    @staticmethod
+    def _queue_wait_age_seconds(attempt: RunAttemptORM | None, run: RunORM, now: datetime) -> int | None:
+        scheduled_at = ExecutionAdminService._as_utc(attempt.scheduled_at) if attempt is not None else None
+        updated_at = ExecutionAdminService._as_utc(run.updated_at)
+        anchor = scheduled_at or updated_at
+        if anchor is None:
+            return None
+        return max(0, int((now - anchor).total_seconds()))
+
+    @staticmethod
+    def _queue_wait_reason(run: RunORM, attempt: RunAttemptORM | None) -> str:
+        if run.operator_state == "waiting_on_approval":
+            return "Waiting on approval before the current attempt may continue."
+        if run.operator_state == "paused":
+            return "Paused by an operator command."
+        if run.operator_state == "quarantined":
+            return "Quarantined after a terminal or operator-forced failure."
+        if run.operator_state == "retry_scheduled":
+            return "Retry is scheduled but not yet runnable."
+        if run.operator_state in {"leased", "waiting_external"} or run.state in {"dispatching", "executing"}:
+            return "Currently running on a worker lease or waiting on upstream runtime work."
+        if run.state == "cancel_requested" or run.operator_state == "interrupted":
+            return "Cancellation is in flight for the current attempt."
+        if attempt is not None and attempt.lease_status == "not_leased":
+            return "Runnable and waiting for worker capacity on the selected lane."
+        return run.status_reason or f"Waiting in {run.operator_state} state."
+
+    @staticmethod
+    def _queue_next_allowed_action(run: RunORM) -> str:
+        if run.operator_state == "waiting_on_approval":
+            return "Open approval or Execution Review"
+        if run.operator_state == "paused":
+            return "Resume on Execution Review"
+        if run.operator_state == "quarantined" or run.state in {"dead_lettered", "failed", "timed_out"}:
+            return "Replay or restart on Execution Review"
+        if run.state == "cancel_requested" or run.operator_state == "interrupted":
+            return "Monitor cancellation on Execution Review"
+        if run.operator_state == "retry_scheduled":
+            return "Inspect retry schedule on Execution Review"
+        if run.operator_state in {"leased", "waiting_external"} or run.state in {"dispatching", "executing"}:
+            return "Monitor running attempt on Execution Review"
+        return "Open Execution Review"
+
+    @staticmethod
+    def _queue_state_matches(run: RunORM, attempt: RunAttemptORM | None, state_filter: str | None) -> bool:
+        if not state_filter:
+            return True
+        normalized = state_filter.strip().lower()
+        if not normalized or normalized == "all":
+            return True
+        return normalized in {
+            run.state,
+            run.operator_state,
+            attempt.attempt_state if attempt is not None else "",
+        }
+
     def list_queue_view(
         self,
         *,
         instance: InstanceRecord,
+        execution_lane: str | None = None,
+        state: str | None = None,
+        target: str | None = None,
+        age: str | None = None,
         limit: int = 100,
     ) -> tuple[list[ExecutionQueueLaneSummary], list[ExecutionQueueRunView]]:
         with self._session_factory() as session:
+            stmt = select(RunORM).where(RunORM.company_id == instance.company_id)
+            if execution_lane:
+                stmt = stmt.where(RunORM.execution_lane == execution_lane)
             runs = session.execute(
-                select(RunORM)
-                .where(RunORM.company_id == instance.company_id)
-                .order_by(RunORM.updated_at.desc())
-                .limit(max(1, min(limit, 200)))
+                stmt.order_by(RunORM.updated_at.desc()).limit(200)
             ).scalars().all()
             attempts_by_id = {
                 attempt.id: attempt
@@ -614,9 +676,26 @@ class ExecutionAdminService:
             lane_oldest_schedule: dict[str, datetime | None] = {key: None for key in _LANE_LABELS}
             lane_longest_wait_seconds: dict[str, int | None] = {key: None for key in _LANE_LABELS}
             now = datetime.now(tz=UTC)
+            minimum_age_seconds = None
+            if age:
+                hours = _WINDOW_HOURS.get(age.strip().lower())
+                if hours is not None:
+                    minimum_age_seconds = hours * 3600
 
             for run in runs:
                 attempt = attempts_by_id.get(run.current_attempt_id or "")
+                wait_age_seconds = self._queue_wait_age_seconds(attempt, run, now)
+                if not self._queue_state_matches(run, attempt, state):
+                    continue
+                if minimum_age_seconds is not None and (wait_age_seconds is None or wait_age_seconds < minimum_age_seconds):
+                    continue
+                normalized_target = (target or "").strip().lower()
+                if normalized_target:
+                    target_values = [self._current_target_key(run), run.workspace_id, run.issue_id]
+                    if normalized_target not in " ".join(value for value in target_values if value).lower():
+                        continue
+
+                current_approval_id = self._current_approval_id(session, run)
                 queue_rows.append(
                     ExecutionQueueRunView(
                         run_id=run.id,
@@ -629,6 +708,11 @@ class ExecutionAdminService:
                         attempt_id=attempt.id if attempt is not None else None,
                         attempt_state=attempt.attempt_state if attempt is not None else None,
                         lease_status=attempt.lease_status if attempt is not None else None,
+                        selected_target_key=self._current_target_key(run),
+                        current_approval_id=current_approval_id,
+                        wait_reason=self._queue_wait_reason(run, attempt),
+                        next_allowed_action=self._queue_next_allowed_action(run),
+                        wait_age_seconds=wait_age_seconds,
                         scheduled_at=attempt.scheduled_at if attempt is not None else None,
                         next_wakeup_at=run.next_wakeup_at,
                         status_reason=run.status_reason,
@@ -639,6 +723,8 @@ class ExecutionAdminService:
                 counters["total_runs"] += 1
                 if run.operator_state in {"admitted", "leased"}:
                     counters["runnable_runs"] += 1
+                if run.operator_state in {"leased", "waiting_external"} or run.state in {"dispatching", "executing"}:
+                    counters["running_runs"] += 1
                 if run.operator_state == "paused":
                     counters["paused_runs"] += 1
                 if run.operator_state == "waiting_on_approval":
@@ -647,17 +733,16 @@ class ExecutionAdminService:
                     counters["retry_scheduled_runs"] += 1
                 if run.operator_state == "quarantined":
                     counters["quarantined_runs"] += 1
+                if wait_age_seconds is not None:
+                    current_longest = lane_longest_wait_seconds[run.execution_lane]
+                    if current_longest is None or wait_age_seconds > current_longest:
+                        lane_longest_wait_seconds[run.execution_lane] = wait_age_seconds
                 if attempt is not None and attempt.scheduled_at is not None:
                     scheduled_at = self._as_utc(attempt.scheduled_at)
                     oldest = lane_oldest_schedule[run.execution_lane]
                     lane_oldest_schedule[run.execution_lane] = (
                         scheduled_at if scheduled_at is not None and (oldest is None or scheduled_at < oldest) else oldest
                     )
-                    if attempt.operator_state in {"admitted", "retry_scheduled"} and scheduled_at is not None:
-                        waited = max(0, int((now - scheduled_at).total_seconds()))
-                        current_longest = lane_longest_wait_seconds[run.execution_lane]
-                        if current_longest is None or waited > current_longest:
-                            lane_longest_wait_seconds[run.execution_lane] = waited
 
             lane_summaries = [
                 ExecutionQueueLaneSummary(
@@ -665,6 +750,7 @@ class ExecutionAdminService:
                     display_name=_LANE_LABELS[lane_key],
                     total_runs=lane_counters[lane_key]["total_runs"],
                     runnable_runs=lane_counters[lane_key]["runnable_runs"],
+                    running_runs=lane_counters[lane_key]["running_runs"],
                     paused_runs=lane_counters[lane_key]["paused_runs"],
                     waiting_on_approval_runs=lane_counters[lane_key]["waiting_on_approval_runs"],
                     retry_scheduled_runs=lane_counters[lane_key]["retry_scheduled_runs"],
@@ -674,7 +760,7 @@ class ExecutionAdminService:
                 )
                 for lane_key in _LANE_LABELS
             ]
-            return lane_summaries, queue_rows
+            return lane_summaries, queue_rows[: max(1, min(limit, 200))]
 
     def get_dispatch_snapshot(self, *, instance: InstanceRecord) -> ExecutionDispatchSnapshot:
         with self._session_factory() as session:

@@ -92,6 +92,45 @@ def _seed_leased_run(*, company_id: str) -> tuple[str, str]:
     return created.run_id, created.attempt_id
 
 
+def _seed_quarantined_backlog_run(*, company_id: str, age_hours: int = 48) -> str:
+    service = get_execution_transition_service()
+    suffix = uuid4().hex
+    created = service.admit_create(
+        company_id=company_id,
+        actor_type="agent",
+        actor_id="agent_backend",
+        idempotency_key=f"idem_quarantined_queue_{suffix}",
+        request_fingerprint_hash=f"fp_quarantined_queue_{suffix}",
+        run_kind="provider_dispatch",
+        issue_id="FOR-QUEUE",
+    )
+    anchor = datetime.now(tz=UTC) - timedelta(hours=age_hours)
+    with service._session_factory() as session, session.begin():  # noqa: SLF001 - test-only state shaping
+        run = session.get(RunORM, created.run_id)
+        attempt = session.get(RunAttemptORM, created.attempt_id)
+        assert run is not None
+        assert attempt is not None
+        run.state = "dead_lettered"
+        run.operator_state = "quarantined"
+        run.status_reason = "terminal_failure"
+        run.updated_at = anchor
+        run.result_summary = {
+            "routing": {
+                "selected_target_key": "openai_api::gpt-4.1-mini",
+            },
+        }
+        attempt.attempt_state = "dead_lettered"
+        attempt.operator_state = "quarantined"
+        attempt.lease_status = "released"
+        attempt.scheduled_at = anchor
+        attempt.started_at = anchor
+        attempt.finished_at = anchor
+        attempt.last_error_code = "provider_authentication_error"
+        attempt.last_error_detail = "credentials rejected by upstream"
+        attempt.updated_at = anchor
+    return created.run_id
+
+
 def test_execution_queue_dispatch_and_operator_action_endpoints() -> None:
     client = TestClient(app)
     headers = _admin_headers(client)
@@ -118,3 +157,33 @@ def test_execution_queue_dispatch_and_operator_action_endpoints() -> None:
     )
     assert interrupt.status_code == 200
     assert interrupt.json()["action"]["operator_state"] == "interrupted"
+
+
+def test_execution_queue_filters_explain_waiting_rows() -> None:
+    client = TestClient(app)
+    headers = _admin_headers(client)
+    instance_id = _create_instance(client, headers, instance_id="instance_alpha", company_id="company_alpha")
+    run_id = _seed_quarantined_backlog_run(company_id="company_alpha")
+
+    queue_listing = client.get(
+        "/admin/execution/queues",
+        headers=headers,
+        params={
+            **_execution_scope(instance_id),
+            "execution_lane": "background_agentic",
+            "state": "quarantined",
+            "target": "openai_api::gpt-4.1-mini",
+            "age": "24h",
+        },
+    )
+
+    assert queue_listing.status_code == 200
+    lane = next(item for item in queue_listing.json()["lanes"] if item["execution_lane"] == "background_agentic")
+    assert lane["quarantined_runs"] >= 1
+    assert lane["running_runs"] >= 0
+    assert lane["longest_wait_seconds"] >= 24 * 3600
+    row = next(item for item in queue_listing.json()["runs"] if item["run_id"] == run_id)
+    assert row["selected_target_key"] == "openai_api::gpt-4.1-mini"
+    assert "Quarantined" in row["wait_reason"]
+    assert row["next_allowed_action"] == "Replay or restart on Execution Review"
+    assert row["wait_age_seconds"] >= 24 * 3600

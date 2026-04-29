@@ -2970,6 +2970,7 @@ export type ExecutionQueueLaneSummary = {
   display_name: string;
   total_runs: number;
   runnable_runs: number;
+  running_runs: number;
   paused_runs: number;
   waiting_on_approval_runs: number;
   retry_scheduled_runs: number;
@@ -2989,6 +2990,11 @@ export type ExecutionQueueRunView = {
   attempt_id?: string | null;
   attempt_state?: string | null;
   lease_status?: string | null;
+  selected_target_key?: string | null;
+  current_approval_id?: string | null;
+  wait_reason: string;
+  next_allowed_action: string;
+  wait_age_seconds?: number | null;
   scheduled_at?: string | null;
   next_wakeup_at?: string | null;
   status_reason?: string | null;
@@ -3994,13 +4000,33 @@ export function fetchExecutionRuns(options: {
   return fetchJson<{ status: string; runs: ExecutionRunSummary[] }>(`/admin/execution/runs?${params.toString()}`);
 }
 
-export function fetchExecutionQueues(options: { instanceId?: string | null; companyId?: string | null; limit?: number }) {
+export function fetchExecutionQueues(options: {
+  instanceId?: string | null;
+  companyId?: string | null;
+  executionLane?: string | null;
+  state?: string | null;
+  target?: string | null;
+  age?: string | null;
+  limit?: number;
+}) {
   const params = new URLSearchParams();
   if (options.instanceId?.trim()) {
     params.set("instanceId", options.instanceId.trim());
   }
   if (options.companyId?.trim()) {
     params.set("companyId", options.companyId.trim());
+  }
+  if (options.executionLane?.trim()) {
+    params.set("execution_lane", options.executionLane.trim());
+  }
+  if (options.state?.trim() && options.state.trim() !== "all") {
+    params.set("state", options.state.trim());
+  }
+  if (options.target?.trim()) {
+    params.set("target", options.target.trim());
+  }
+  if (options.age?.trim() && options.age.trim() !== "all") {
+    params.set("age", options.age.trim());
   }
   if (options.limit) {
     params.set("limit", String(options.limit));

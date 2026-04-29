@@ -164,6 +164,7 @@ class ExecutionQueueLaneSummary(BaseModel):
     display_name: str
     total_runs: int
     runnable_runs: int
+    running_runs: int
     paused_runs: int
     waiting_on_approval_runs: int
     retry_scheduled_runs: int
@@ -183,6 +184,11 @@ class ExecutionQueueRunView(BaseModel):
     attempt_id: str | None = None
     attempt_state: RunAttemptState | None = None
     lease_status: RunLeaseStatus | None = None
+    selected_target_key: str | None = None
+    current_approval_id: str | None = None
+    wait_reason: str
+    next_allowed_action: str
+    wait_age_seconds: int | None = None
     scheduled_at: datetime | None = None
     next_wakeup_at: datetime | None = None
     status_reason: str | None = None
