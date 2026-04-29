@@ -8,3 +8,17 @@
 - Fix-Runden: `3`
 - Finale Freigabe: `APPROVED`
 - Ausgefuehrte Pruefkommandos: `cd frontend && npm run build -> PASS; cd frontend && npm test -- providers-page harness-page oauth-targets-page -> PASS (4 Dateien / 16 Tests); cd frontend && npm test -> PASS (42 Dateien / 158 Tests); cd backend && ../.venv/bin/python -m pytest tests/test_harness_phase8.py::test_generic_harness_adapter_scopes_duplicate_profile_keys_by_runtime_instance tests/test_scaffold_endpoints.py::test_admin_oauth_bridge_profile_sync_preserves_separate_profiles_per_instance tests/test_scaffold_endpoints.py::test_admin_harness_profiles_remain_isolated_per_instance_for_shared_provider_keys tests/test_scaffold_endpoints.py::test_admin_oauth_operation_truth_stays_scoped_to_requested_instance tests/test_provider_admin_idempotency.py::test_admin_oauth_probe_replays_original_outcome_without_repeating_operation_log tests/test_provider_admin_idempotency.py::test_admin_oauth_bridge_sync_replays_original_outcome_without_repeating_operation_log -q -> PASS; cd backend && ../.venv/bin/python -m pytest tests/test_scaffold_endpoints.py::test_admin_providers_generic_harness_truth_stays_scoped_to_requested_instance tests/test_harness_phase8.py::test_generic_harness_adapter_scopes_duplicate_profile_keys_by_runtime_instance -q -> PASS; cd backend && ../.venv/bin/python -m pytest tests/test_harness_phase8.py tests/test_scaffold_endpoints.py tests/test_provider_admin_idempotency.py -q -> PASS (nur Deprecation-Warnungen aus anyio/HTTP_422); separater Audit-Agent -> APPROVED`
+
+## Revalidation 2026-04-29
+
+- Audit-Ergebnis: `APPROVED`
+- Konkrete Audit-Maengel: `keine`
+- Finale Freigabe: `APPROVED`
+- Begruendung:
+  - Die Providers-Achse bleibt auf aktuellem HEAD getrennt und ehrlich: Runtime-Inventar auf der Hauptseite, OAuth und Harness als eigene Operatorflaechen, scoped Permission-Messaging und reale Actions bleiben intakt.
+  - Der Global-Contract-Fix aus `00` hat die Cross-Surface-Handoffs in kontextuelle ActionBars verschoben und die verbleibenden Shared-StatusKeys auf Vertragswerte gemappt, ohne die Provider-/Harness-/OAuth-Funktionalitaet zu verfaelschen.
+  - Ausgefuehrte Pruefkommandos auf aktuellem HEAD:
+    - `cd frontend && npm run build` -> `passed`
+    - `cd frontend && npm test -- --runInBand` -> `failed as tooling incompatibility (Vitest: Unknown option --runInBand)`
+    - `cd frontend && npm test` -> `passed (42 test files, 160 tests)`
+    - `cd frontend && npm test -- providers-page providers-readiness harness-page oauth-targets-page oauth-targets-page-actions` -> `passed (5 test files, 23 tests)`
