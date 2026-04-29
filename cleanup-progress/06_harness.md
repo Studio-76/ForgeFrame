@@ -38,3 +38,17 @@
   - `cd frontend && npm test -- --runInBand` -> `FAIL, Vitest/CAC kennt die Option --runInBand in diesem Projekt nicht`
   - `cd frontend && npm test` -> `PASS (42/42 Dateien, 158/158 Tests)`
   - `git diff --check` -> `PASS`
+
+## Revalidation 2026-04-29
+
+- Audit-Ergebnis: `APPROVED`
+- Konkrete Audit-Maengel: `keine`
+- Finale Freigabe: `APPROVED`
+- Begruendung:
+  - Harness bleibt auf aktuellem HEAD eine eigenstaendige Operatorflaeche mit echter Profile-/Action-/Run-History-Logik und ehrlich gekapselten Diagnostics.
+  - Der Global-Contract-Fix aus `00` hat nur die Header-Handoffs in eine kontextuelle ActionBar verschoben und den Shared-Status-Key-Raum bereinigt; die realen Harness-Flows blieben unveraendert.
+  - Ausgefuehrte Pruefkommandos auf aktuellem HEAD:
+    - `cd frontend && npm run build` -> `passed`
+    - `cd frontend && npm test -- --runInBand` -> `failed as tooling incompatibility (Vitest: Unknown option --runInBand)`
+    - `cd frontend && npm test` -> `passed (42 test files, 160 tests)`
+    - `cd frontend && npm test -- providers-page providers-readiness harness-page oauth-targets-page oauth-targets-page-actions` -> `passed (5 test files, 23 tests)`
