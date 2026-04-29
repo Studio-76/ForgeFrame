@@ -72,6 +72,29 @@ class ContactConsent(BaseModel):
     note: str | None = None
 
 
+class KnowledgeSourceSyncPosture(BaseModel):
+    state: str = "never_synced"
+    next_step: str = ""
+    action_available: bool = False
+    action_state: str = "missing-runtime-state"
+    action_reason: str = "Backend does not expose a dedicated knowledge-source sync endpoint."
+
+
+class KnowledgeSourceConfigField(BaseModel):
+    key: str
+    label: str
+    value: str
+    note: str | None = None
+    redacted: bool = False
+
+
+class KnowledgeSourceIndexCounts(BaseModel):
+    contacts: int = 0
+    durable_memory: int = 0
+    linked_conversations: int = 0
+    linked_skills: int = 0
+
+
 class ContactSummary(BaseModel):
     contact_id: str
     instance_id: str
@@ -108,11 +131,14 @@ class KnowledgeSourceSummary(BaseModel):
     connection_target: str
     status: KnowledgeSourceStatus
     visibility_scope: VisibilityScope
+    scope_label: str = "instance knowledge"
     last_synced_at: datetime | None = None
     last_error: str | None = None
+    sync: KnowledgeSourceSyncPosture = Field(default_factory=KnowledgeSourceSyncPosture)
     metadata: dict[str, Any] = Field(default_factory=dict)
     contact_count: int = 0
     memory_count: int = 0
+    indexed_objects: KnowledgeSourceIndexCounts = Field(default_factory=KnowledgeSourceIndexCounts)
     created_at: datetime
     updated_at: datetime
 
@@ -160,6 +186,10 @@ class ContactDetail(ContactSummary):
 class KnowledgeSourceDetail(KnowledgeSourceSummary):
     contacts: list[ContactSummary] = Field(default_factory=list)
     memory_entries: list[MemorySummary] = Field(default_factory=list)
+    connector_fields: list[KnowledgeSourceConfigField] = Field(default_factory=list)
+    linked_conversations: list[RecordLink] = Field(default_factory=list)
+    linked_skills: list[RecordLink] = Field(default_factory=list)
+    recall_vs_memory_note: str = ""
 
 
 class MemoryDetail(MemorySummary):

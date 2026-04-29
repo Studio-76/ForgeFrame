@@ -99,11 +99,38 @@ function createSourceSummary(overrides: Partial<KnowledgeSourceSummary> = {}): K
     connection_target: "imap://mail.example.com/inbox",
     status: "active",
     visibility_scope: "team",
+    scope_label: "tenant knowledge",
     last_synced_at: "2026-04-23T10:00:00Z",
     last_error: null,
-    metadata: {},
+    sync: {
+      state: "synced",
+      next_step: "Use this source for recall, then promote verified durable facts into Memory when they must survive connector drift.",
+      action_available: false,
+      action_state: "missing-runtime-state",
+      action_reason: "Backend does not expose a dedicated knowledge-source sync endpoint.",
+    },
+    metadata: {
+      connector: {
+        account: "ops@example.com",
+        collection: "INBOX/Customers",
+        index_mode: "subject+body",
+      },
+      knowledge_boundary: {
+        recall_class: "customer recall",
+        scope_note: "Tenant-shared sales knowledge",
+      },
+      error_guidance: {
+        next_step: "Refresh connector credentials and re-run bridge sync",
+      },
+    },
     contact_count: 1,
     memory_count: 1,
+    indexed_objects: {
+      contacts: 1,
+      durable_memory: 1,
+      linked_conversations: 1,
+      linked_skills: 1,
+    },
     created_at: "2026-04-23T09:00:00Z",
     updated_at: "2026-04-23T10:00:00Z",
     ...overrides,
@@ -278,6 +305,65 @@ function createSourceDetail(overrides: Partial<KnowledgeSourceDetail> = {}): Kno
     ...createSourceSummary(),
     contacts: [createContactSummary()],
     memory_entries: [createMemorySummary()],
+    connector_fields: [
+      {
+        key: "connection_target",
+        label: "Mailbox target",
+        value: "imap://mail.example.com/inbox",
+        note: null,
+        redacted: false,
+      },
+      {
+        key: "connector_account",
+        label: "Connector account",
+        value: "ops@example.com",
+        note: null,
+        redacted: false,
+      },
+      {
+        key: "connector_collection",
+        label: "Collection / folder",
+        value: "INBOX/Customers",
+        note: null,
+        redacted: false,
+      },
+      {
+        key: "index_mode",
+        label: "Index mode",
+        value: "subject+body",
+        note: null,
+        redacted: false,
+      },
+      {
+        key: "recall_class",
+        label: "Recall class",
+        value: "customer recall",
+        note: null,
+        redacted: false,
+      },
+      {
+        key: "scope_note",
+        label: "Scope note",
+        value: "Tenant-shared sales knowledge",
+        note: null,
+        redacted: false,
+      },
+    ],
+    linked_conversations: [
+      {
+        record_id: "conversation_alpha",
+        label: "Pricing review thread",
+        status: "open",
+      },
+    ],
+    linked_skills: [
+      {
+        record_id: "skill_alpha",
+        label: "Pricing response guardrail",
+        status: "active",
+      },
+    ],
+    recall_vs_memory_note: "Source recall stays connector-backed and can drift after the next sync. Durable Memory is the governed, operator-correctable layer for facts that must outlive connector state.",
     ...overrides,
   };
 }
@@ -685,27 +771,39 @@ describe("knowledge and memory pages", () => {
     expect(fetchKnowledgeSourceDetailMock).toHaveBeenCalledWith("source_mail_primary", "instance_alpha");
     expect(container.textContent).toContain("Primary mail connector");
     expect(container.textContent).toContain("Linked contacts");
+    expect(container.textContent).toContain("tenant knowledge");
+    expect(container.textContent).toContain("missing-runtime-state");
+    expect(container.textContent).toContain("Pricing response guardrail");
+    expect(container.textContent).toContain("Source recall stays connector-backed");
 
     const contactLink = Array.from(container.querySelectorAll("a")).find((link) => link.textContent === "Pat Morgan");
     expect(contactLink?.getAttribute("href")).toBe("/contacts?instanceId=instance_alpha&contactId=contact_alpha");
+    const skillLink = Array.from(container.querySelectorAll("a")).find((link) => link.textContent === "Pricing response guardrail");
+    expect(skillLink?.getAttribute("href")).toBe("/skills?instanceId=instance_alpha&skillId=skill_alpha");
+    const memoryLink = Array.from(container.querySelectorAll("a")).find((link) => link.textContent === "Open durable memory");
+    expect(memoryLink?.getAttribute("href")).toBe("/memory?instanceId=instance_alpha");
 
     const createForm = getFormByText("Create knowledge source");
     const editForm = getFormByText("Save knowledge source");
-    const createInputs = Array.from(createForm?.querySelectorAll("input") ?? []);
-    const createTextareas = Array.from(createForm?.querySelectorAll("textarea") ?? []);
-    const createSelects = Array.from(createForm?.querySelectorAll("select") ?? []);
     const createButton = getButtonByText(createForm!, "Create knowledge source");
 
     await act(async () => {
-      setControlValue(createInputs[0] as HTMLInputElement, "source_drive_shared");
-      setControlValue(createSelects[0] as HTMLSelectElement, "drive");
-      setControlValue(createSelects[1] as HTMLSelectElement, "active");
-      setControlValue(createInputs[1] as HTMLInputElement, "Shared drive");
-      setControlValue(createInputs[2] as HTMLInputElement, "https://drive.example.com/shared");
-      setControlValue(createSelects[2] as HTMLSelectElement, "team");
-      setControlValue(createTextareas[0] as HTMLTextAreaElement, "Shared working files");
-      setControlValue(createInputs[3] as HTMLInputElement, "2026-04-23T11:00:00Z");
-      setControlValue(createInputs[4] as HTMLInputElement, "Optional issue");
+      setControlValue(getControlByLabel(createForm!, "Source ID"), "source_drive_shared");
+      setControlValue(getControlByLabel(createForm!, "Source kind"), "drive");
+      setControlValue(getControlByLabel(createForm!, "Status"), "active");
+      setControlValue(getControlByLabel(createForm!, "Label"), "Shared drive");
+      setControlValue(getControlByLabel(createForm!, "Visibility scope"), "team");
+      setControlValue(getControlByLabel(createForm!, "Library target"), "https://drive.example.com/shared");
+      setControlValue(getControlByLabel(createForm!, "Drive account"), "drive-sync@example.com");
+      setControlValue(getControlByLabel(createForm!, "Root folder"), "/pricing");
+      setControlValue(getControlByLabel(createForm!, "Index mode"), "metadata-only");
+      setControlValue(getControlByLabel(createForm!, "Recall class"), "reference recall");
+      setControlValue(getControlByLabel(createForm!, "Scope note"), "Tenant-shared pricing documents");
+      setControlValue(getControlByLabel(createForm!, "Error next step"), "Refresh drive token and re-run bridge sync");
+      setControlValue(getControlByLabel(createForm!, "Description"), "Shared working files");
+      setControlValue(getControlByLabel(createForm!, "Last synced at"), "2026-04-23T11:00:00Z");
+      setControlValue(getControlByLabel(createForm!, "Last error"), "Optional issue");
+      setControlValue(getControlByLabel(createForm!, "Advanced metadata JSON"), "{\n  \"retention\": \"30d\"\n}");
       createButton!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     });
     await flushEffects();
@@ -720,21 +818,40 @@ describe("knowledge and memory pages", () => {
       visibility_scope: "team",
       last_synced_at: "2026-04-23T11:00:00Z",
       last_error: "Optional issue",
+      metadata: {
+        retention: "30d",
+        connector: {
+          account: "drive-sync@example.com",
+          collection: "/pricing",
+          index_mode: "metadata-only",
+        },
+        knowledge_boundary: {
+          recall_class: "reference recall",
+          scope_note: "Tenant-shared pricing documents",
+        },
+        error_guidance: {
+          next_step: "Refresh drive token and re-run bridge sync",
+        },
+      },
     }));
 
-    const editInputs = Array.from(editForm?.querySelectorAll("input") ?? []);
-    const editTextareas = Array.from(editForm?.querySelectorAll("textarea") ?? []);
-    const editSelects = Array.from(editForm?.querySelectorAll("select") ?? []);
     const editButton = getButtonByText(editForm!, "Save knowledge source");
 
     await act(async () => {
-      setControlValue(editInputs[0] as HTMLInputElement, "Primary mail connector updated");
-      setControlValue(editInputs[1] as HTMLInputElement, "imap://mail.example.com/archive");
-      setControlValue(editSelects[0] as HTMLSelectElement, "paused");
-      setControlValue(editTextareas[0] as HTMLTextAreaElement, "Inbound email context updated");
-      setControlValue(editSelects[1] as HTMLSelectElement, "restricted");
-      setControlValue(editInputs[2] as HTMLInputElement, "2026-04-23T12:00:00Z");
-      setControlValue(editInputs[3] as HTMLInputElement, "Probe degraded");
+      setControlValue(getControlByLabel(editForm!, "Label"), "Primary mail connector updated");
+      setControlValue(getControlByLabel(editForm!, "Status"), "paused");
+      setControlValue(getControlByLabel(editForm!, "Visibility scope"), "restricted");
+      setControlValue(getControlByLabel(editForm!, "Mailbox target"), "imap://mail.example.com/archive");
+      setControlValue(getControlByLabel(editForm!, "Mailbox account"), "mail-ops@example.com");
+      setControlValue(getControlByLabel(editForm!, "Folder / label"), "Archive/Customers");
+      setControlValue(getControlByLabel(editForm!, "Index mode"), "headers-only");
+      setControlValue(getControlByLabel(editForm!, "Recall class"), "operator recall");
+      setControlValue(getControlByLabel(editForm!, "Scope note"), "Restricted executive mailbox");
+      setControlValue(getControlByLabel(editForm!, "Error next step"), "Repair mailbox bridge health before resuming sync");
+      setControlValue(getControlByLabel(editForm!, "Description"), "Inbound email context updated");
+      setControlValue(getControlByLabel(editForm!, "Last synced at"), "2026-04-23T12:00:00Z");
+      setControlValue(getControlByLabel(editForm!, "Last error"), "Probe degraded");
+      setControlValue(getControlByLabel(editForm!, "Advanced metadata JSON"), "{\n  \"retention\": \"7d\"\n}");
       editButton!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     });
     await flushEffects();
@@ -747,6 +864,21 @@ describe("knowledge and memory pages", () => {
       visibility_scope: "restricted",
       last_synced_at: "2026-04-23T12:00:00Z",
       last_error: "Probe degraded",
+      metadata: {
+        retention: "7d",
+        connector: {
+          account: "mail-ops@example.com",
+          collection: "Archive/Customers",
+          index_mode: "headers-only",
+        },
+        knowledge_boundary: {
+          recall_class: "operator recall",
+          scope_note: "Restricted executive mailbox",
+        },
+        error_guidance: {
+          next_step: "Repair mailbox bridge health before resuming sync",
+        },
+      },
     }));
   });
 

@@ -72,6 +72,11 @@ def _create_source(
     source_kind: str,
     label: str,
     connection_target: str,
+    visibility_scope: str = "team",
+    description: str | None = None,
+    last_synced_at: str | None = None,
+    last_error: str | None = None,
+    metadata: dict[str, object] | None = None,
 ) -> str:
     response = client.post(
         "/admin/knowledge-sources",
@@ -80,9 +85,12 @@ def _create_source(
         json={
             "source_kind": source_kind,
             "label": label,
-            "description": f"{label} source",
+            "description": description if description is not None else f"{label} source",
             "connection_target": connection_target,
-            "visibility_scope": "team",
+            "visibility_scope": visibility_scope,
+            "last_synced_at": last_synced_at,
+            "last_error": last_error,
+            "metadata": metadata or {},
         },
     )
     assert response.status_code == 201
@@ -215,6 +223,31 @@ def _create_notification(
     return response.json()["notification"]["notification_id"]
 
 
+def _create_skill(
+    client: TestClient,
+    headers: dict[str, str],
+    *,
+    instance_id: str,
+    display_name: str,
+    provenance: dict[str, object],
+) -> str:
+    response = client.post(
+        "/admin/skills",
+        headers=headers,
+        params=_instance_scope(instance_id),
+        json={
+            "display_name": display_name,
+            "summary": f"{display_name} skill",
+            "scope": "instance",
+            "status": "active",
+            "instruction_core": "Use the linked source to provide grounded operator guidance.",
+            "provenance": provenance,
+        },
+    )
+    assert response.status_code == 201, response.json()
+    return response.json()["skill"]["skill_id"]
+
+
 def test_contacts_sources_and_memory_linkage_persist_context_truth() -> None:
     client = TestClient(app)
     headers = _admin_headers(client)
@@ -227,6 +260,22 @@ def test_contacts_sources_and_memory_linkage_persist_context_truth() -> None:
         source_kind="mail",
         label="Customer mailbox",
         connection_target="mailbox://customer-support",
+        last_synced_at="2026-04-23T10:00:00Z",
+        metadata={
+            "scope": "tenant",
+            "connector": {
+                "account": "customer-success@example.com",
+                "collection": "INBOX/Customers",
+                "index_mode": "subject+body",
+            },
+            "knowledge_boundary": {
+                "recall_class": "customer recall",
+                "scope_note": "Tenant-shared customer-support knowledge.",
+            },
+            "error_guidance": {
+                "next_step": "Refresh connector credentials and re-run bridge sync.",
+            },
+        },
     )
     contact_id = _create_contact(
         client,
@@ -274,6 +323,19 @@ def test_contacts_sources_and_memory_linkage_persist_context_truth() -> None:
         task_id=task_id,
         channel_id=channel_id,
         conversation_id=conversation_id,
+    )
+    skill_id = _create_skill(
+        client,
+        headers,
+        instance_id=instance_id,
+        display_name="Customer mailbox response policy",
+        provenance={
+            "source_id": source_id,
+            "source": {
+                "source_id": source_id,
+                "label": "Customer mailbox",
+            },
+        },
     )
 
     created_memory = client.post(
@@ -340,8 +402,18 @@ def test_contacts_sources_and_memory_linkage_persist_context_truth() -> None:
     source_payload = source_detail.json()["source"]
     assert source_payload["contact_count"] == 1
     assert source_payload["memory_count"] == 1
+    assert source_payload["scope_label"] == "tenant knowledge"
+    assert source_payload["sync"]["state"] == "synced"
+    assert source_payload["sync"]["action_state"] == "missing-runtime-state"
     assert source_payload["contacts"][0]["contact_id"] == contact_id
     assert source_payload["memory_entries"][0]["memory_id"] == memory_id
+    assert source_payload["connector_fields"][0]["value"] == "mailbox://customer-support"
+    assert source_payload["connector_fields"][1]["value"] == "customer-success@example.com"
+    assert source_payload["indexed_objects"]["linked_conversations"] == 1
+    assert source_payload["indexed_objects"]["linked_skills"] == 1
+    assert source_payload["linked_conversations"][0]["record_id"] == conversation_id
+    assert source_payload["linked_skills"][0]["record_id"] == skill_id
+    assert "Durable Memory" in source_payload["recall_vs_memory_note"]
 
 
 def test_contact_route_warnings_surface_incomplete_routes() -> None:
@@ -426,6 +498,52 @@ def test_contact_updates_can_clear_optional_route_and_source_fields() -> None:
     assert payload["organization"] is None
     assert payload["title"] is None
     assert any("No reachable channel is recorded" in warning for warning in payload["route_warnings"])
+
+
+def test_source_updates_can_clear_sync_and_error_fields() -> None:
+    client = TestClient(app)
+    headers = _admin_headers(client)
+    instance_id = _create_instance(client, headers, instance_id="instance_source_clear", company_id="company_source_clear")
+    source_id = _create_source(
+        client,
+        headers,
+        instance_id=instance_id,
+        source_kind="drive",
+        label="Shared drive",
+        connection_target="drive://shared/pricing",
+        last_synced_at="2026-04-23T11:00:00Z",
+        last_error="Bridge degraded",
+        metadata={
+            "connector": {
+                "account": "drive-sync@example.com",
+                "collection": "/pricing",
+                "index_mode": "metadata-only",
+            },
+            "error_guidance": {
+                "next_step": "Refresh drive credentials and re-run bridge sync.",
+            },
+        },
+    )
+
+    cleared = client.patch(
+        f"/admin/knowledge-sources/{source_id}",
+        headers=headers,
+        params=_instance_scope(instance_id),
+        json={
+            "description": "",
+            "last_synced_at": None,
+            "last_error": None,
+            "metadata": {},
+        },
+    )
+    assert cleared.status_code == 200
+    payload = cleared.json()["source"]
+    assert payload["description"] == ""
+    assert payload["last_synced_at"] is None
+    assert payload["last_error"] is None
+    assert payload["metadata"] == {}
+    assert payload["sync"]["state"] == "never_synced"
+    assert payload["sync"]["action_state"] == "missing-runtime-state"
 
 
 def test_memory_correction_and_delete_preserve_linkage_and_status_truth() -> None:

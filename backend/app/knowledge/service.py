@@ -22,7 +22,10 @@ from app.knowledge.models import (
     CreateKnowledgeSource,
     CreateMemory,
     DeleteMemory,
+    KnowledgeSourceConfigField,
     KnowledgeSourceDetail,
+    KnowledgeSourceIndexCounts,
+    KnowledgeSourceSyncPosture,
     KnowledgeSourceSummary,
     MemoryActionResult,
     MemoryDetail,
@@ -35,6 +38,7 @@ from app.knowledge.models import (
 )
 from app.storage.conversation_repository import ConversationORM
 from app.storage.knowledge_repository import ContactORM, KnowledgeSourceORM, MemoryEntryORM
+from app.storage.skill_repository import SkillORM
 from app.storage.tasking_repository import NotificationORM, TaskORM
 from app.storage.workspace_repository import WorkspaceORM
 
@@ -310,6 +314,115 @@ class KnowledgeContextAdminService:
             or cls._string_value(metadata.get("visibility_note"))
         )
 
+    @classmethod
+    def _source_scope_label(cls, row: KnowledgeSourceORM) -> str:
+        metadata = cls._metadata_record(row.metadata_json)
+        scope_hint = cls._string_value(metadata.get("scope")) or cls._string_value(metadata.get("knowledge_scope"))
+        if scope_hint:
+            normalized = scope_hint.lower().replace("_", " ").strip()
+            if "tenant" in normalized:
+                return "tenant knowledge"
+            if "personal" in normalized:
+                return "personal recall"
+            if "instance" in normalized:
+                return "instance knowledge"
+            if "restricted" in normalized:
+                return "restricted knowledge"
+        if row.visibility_scope == "personal":
+            return "personal recall"
+        if row.visibility_scope == "instance":
+            return "instance knowledge"
+        if row.visibility_scope == "restricted":
+            return "restricted knowledge"
+        return "tenant knowledge"
+
+    @classmethod
+    def _source_sync_posture(cls, row: KnowledgeSourceORM) -> KnowledgeSourceSyncPosture:
+        metadata = cls._metadata_record(row.metadata_json)
+        configured_next_step = (
+            cls._string_value(cls._metadata_record(metadata.get("error_guidance")).get("next_step"))
+            or cls._string_value(metadata.get("sync_next_step"))
+        )
+        if row.last_error:
+            next_step = configured_next_step or "Inspect connector configuration, repair the upstream credential or target, then resync through the bridge runtime."
+            return KnowledgeSourceSyncPosture(
+                state="attention_required",
+                next_step=next_step,
+            )
+        if row.status == "paused":
+            return KnowledgeSourceSyncPosture(
+                state="paused",
+                next_step=configured_next_step or "Resume or reconfigure the connector before expecting fresh recall results.",
+            )
+        if row.last_synced_at is None:
+            return KnowledgeSourceSyncPosture(
+                state="never_synced",
+                next_step=configured_next_step or "Run the source sync from the connector runtime or bridge; this control plane does not expose a direct sync trigger here.",
+            )
+        return KnowledgeSourceSyncPosture(
+            state="synced",
+            next_step=configured_next_step or "Use this source for recall, then promote verified durable facts into Memory when they must survive connector drift.",
+        )
+
+    @classmethod
+    def _source_connector_fields(cls, row: KnowledgeSourceORM, *, redacted: bool = False) -> list[KnowledgeSourceConfigField]:
+        metadata = cls._metadata_record(row.metadata_json)
+        connector = cls._metadata_record(metadata.get("connector"))
+        boundary = cls._metadata_record(metadata.get("knowledge_boundary"))
+        label_by_kind = {
+            "mail": "Mailbox target",
+            "calendar": "Calendar target",
+            "contacts": "Directory target",
+            "drive": "Library target",
+            "knowledge_base": "Knowledge target",
+        }
+        fields = [
+            KnowledgeSourceConfigField(
+                key="connection_target",
+                label=label_by_kind.get(row.source_kind, "Connector target"),
+                value="[redacted]" if redacted else row.connection_target,
+                redacted=redacted,
+            ),
+        ]
+        structured_fields = [
+            ("connector_account", "Connector account", cls._string_value(connector.get("account")) or cls._string_value(metadata.get("connector_account"))),
+            ("connector_collection", "Collection / folder", cls._string_value(connector.get("collection")) or cls._string_value(metadata.get("collection"))),
+            ("index_mode", "Index mode", cls._string_value(connector.get("index_mode")) or cls._string_value(metadata.get("index_mode"))),
+            ("recall_class", "Recall class", cls._string_value(boundary.get("recall_class")) or cls._string_value(metadata.get("recall_class"))),
+            ("scope_note", "Scope note", cls._string_value(boundary.get("scope_note")) or cls._string_value(metadata.get("scope_note"))),
+        ]
+        for key, label, value in structured_fields:
+            if value:
+                fields.append(KnowledgeSourceConfigField(key=key, label=label, value=value))
+        return fields
+
+    @staticmethod
+    def _source_conversation_ids_for_contact_refs(session: Session, *, instance: InstanceRecord, contact_refs: list[str]) -> list[str]:
+        if not contact_refs:
+            return []
+        return list(dict.fromkeys(session.execute(
+            select(ConversationORM.id).where(
+                ConversationORM.company_id == instance.company_id,
+                ConversationORM.instance_id == instance.instance_id,
+                ConversationORM.contact_ref.in_(contact_refs),
+            ),
+        ).scalars().all()))
+
+    @staticmethod
+    def _skill_matches_source(skill: SkillORM, source_id: str) -> bool:
+        provenance = dict(skill.provenance_json or {})
+        if not provenance:
+            return False
+        direct_source_id = provenance.get("source_id") or provenance.get("knowledge_source_id")
+        if isinstance(direct_source_id, str) and direct_source_id.strip() == source_id:
+            return True
+        source_block = provenance.get("source")
+        if isinstance(source_block, dict):
+            nested_source_id = source_block.get("source_id") or source_block.get("knowledge_source_id")
+            if isinstance(nested_source_id, str) and nested_source_id.strip() == source_id:
+                return True
+        return False
+
     def _contact_summary(self, session: Session, row: ContactORM) -> ContactSummary:
         source_row = session.get(KnowledgeSourceORM, row.source_id) if row.source_id else None
         if source_row is not None and (source_row.company_id != row.company_id or source_row.instance_id != row.instance_id):
@@ -367,7 +480,7 @@ class KnowledgeContextAdminService:
             updated_at=row.updated_at,
         )
 
-    def _source_summary(self, session: Session, row: KnowledgeSourceORM) -> KnowledgeSourceSummary:
+    def _source_index_counts(self, session: Session, row: KnowledgeSourceORM) -> KnowledgeSourceIndexCounts:
         contact_count = int(
             session.scalar(
                 select(func.count()).select_from(ContactORM).where(
@@ -386,6 +499,48 @@ class KnowledgeContextAdminService:
             )
             or 0,
         )
+        contact_refs = session.execute(
+            select(ContactORM.contact_ref).where(
+                ContactORM.company_id == row.company_id,
+                ContactORM.source_id == row.id,
+            ),
+        ).scalars().all()
+        conversation_ids = set(session.execute(
+            select(MemoryEntryORM.conversation_id).where(
+                MemoryEntryORM.company_id == row.company_id,
+                MemoryEntryORM.source_id == row.id,
+                MemoryEntryORM.conversation_id.is_not(None),
+            ),
+        ).scalars().all())
+        if contact_refs:
+            conversation_ids.update(
+                session.execute(
+                    select(ConversationORM.id).where(
+                        ConversationORM.company_id == row.company_id,
+                        ConversationORM.instance_id == row.instance_id,
+                        ConversationORM.contact_ref.in_(contact_refs),
+                    ),
+                ).scalars().all(),
+            )
+        skills = [
+            skill
+            for skill in session.execute(
+                select(SkillORM).where(
+                    SkillORM.company_id == row.company_id,
+                    SkillORM.instance_id == row.instance_id,
+                ),
+            ).scalars().all()
+            if self._skill_matches_source(skill, row.id)
+        ]
+        return KnowledgeSourceIndexCounts(
+            contacts=contact_count,
+            durable_memory=memory_count,
+            linked_conversations=len({conversation_id for conversation_id in conversation_ids if conversation_id}),
+            linked_skills=len(skills),
+        )
+
+    def _source_summary(self, session: Session, row: KnowledgeSourceORM) -> KnowledgeSourceSummary:
+        indexed_objects = self._source_index_counts(session, row)
         return KnowledgeSourceSummary(
             source_id=row.id,
             instance_id=row.instance_id,
@@ -396,11 +551,14 @@ class KnowledgeContextAdminService:
             connection_target=row.connection_target,
             status=row.status,  # type: ignore[arg-type]
             visibility_scope=row.visibility_scope,  # type: ignore[arg-type]
+            scope_label=self._source_scope_label(row),
             last_synced_at=row.last_synced_at,
             last_error=row.last_error,
+            sync=self._source_sync_posture(row),
             metadata=dict(row.metadata_json or {}),
-            contact_count=contact_count,
-            memory_count=memory_count,
+            contact_count=indexed_objects.contacts,
+            memory_count=indexed_objects.durable_memory,
+            indexed_objects=indexed_objects,
             created_at=row.created_at,
             updated_at=row.updated_at,
         )
@@ -733,7 +891,57 @@ class KnowledgeContextAdminService:
                     ).order_by(MemoryEntryORM.updated_at.desc()).limit(10),
                 ).scalars().all()
             ]
-            return KnowledgeSourceDetail(**summary.model_dump(), contacts=contacts, memory_entries=memory_entries)
+            contact_refs = [item.contact_ref for item in session.execute(
+                select(ContactORM).where(
+                    ContactORM.company_id == instance.company_id,
+                    ContactORM.source_id == source_id,
+                ),
+            ).scalars().all()]
+            conversation_ids = set(self._source_conversation_ids_for_contact_refs(session, instance=instance, contact_refs=contact_refs))
+            conversation_ids.update(item.conversation_id for item in memory_entries if item.conversation_id)
+            conversation_rows = []
+            if conversation_ids:
+                conversation_rows = session.execute(
+                    select(ConversationORM).where(
+                        ConversationORM.company_id == instance.company_id,
+                        ConversationORM.instance_id == instance.instance_id,
+                        ConversationORM.id.in_(conversation_ids),
+                    ).order_by(ConversationORM.updated_at.desc()).limit(10),
+                ).scalars().all()
+            linked_conversations = [
+                self._record_link(record_id=item.id, label=item.subject, status=item.status)
+                for item in conversation_rows
+            ]
+            skill_rows = [
+                skill
+                for skill in session.execute(
+                    select(SkillORM).where(
+                        SkillORM.company_id == instance.company_id,
+                        SkillORM.instance_id == instance.instance_id,
+                    ).order_by(SkillORM.updated_at.desc()),
+                ).scalars().all()
+                if self._skill_matches_source(skill, source_id)
+            ][:10]
+            linked_skills = [
+                self._record_link(record_id=item.id, label=item.display_name, status=item.status)
+                for item in skill_rows
+            ]
+            connector_fields = self._source_connector_fields(
+                row,
+                redacted=not self._can_view_sensitive(actor) and summary.visibility_scope in {"personal", "restricted"},
+            )
+            recall_vs_memory_note = (
+                "Source recall stays connector-backed and can drift after the next sync. Durable Memory is the governed, operator-correctable layer for facts that must outlive connector state."
+            )
+            return KnowledgeSourceDetail(
+                **summary.model_dump(),
+                contacts=contacts,
+                memory_entries=memory_entries,
+                connector_fields=connector_fields,
+                linked_conversations=linked_conversations,
+                linked_skills=linked_skills,
+                recall_vs_memory_note=recall_vs_memory_note,
+            )
 
     def create_source(self, *, instance: InstanceRecord, payload: CreateKnowledgeSource) -> KnowledgeSourceDetail:
         with self._session_factory() as session, session.begin():
@@ -769,14 +977,29 @@ class KnowledgeContextAdminService:
     def update_source(self, *, instance: InstanceRecord, source_id: str, payload: UpdateKnowledgeSource) -> KnowledgeSourceDetail:
         with self._session_factory() as session, session.begin():
             row = self._load_source(session, instance=instance, source_id=source_id)
-            row.label = payload.label.strip() if payload.label is not None else row.label
-            row.description = payload.description.strip() if payload.description is not None else row.description
-            row.connection_target = payload.connection_target.strip() if payload.connection_target is not None else row.connection_target
-            row.status = payload.status or row.status
-            row.visibility_scope = payload.visibility_scope or row.visibility_scope
-            row.last_synced_at = payload.last_synced_at if payload.last_synced_at is not None else row.last_synced_at
-            row.last_error = payload.last_error if payload.last_error is not None else row.last_error
-            row.metadata_json = dict(payload.metadata) if payload.metadata is not None else dict(row.metadata_json or {})
+            fields_set = payload.model_fields_set
+            if "label" in fields_set:
+                candidate_label = (payload.label or "").strip()
+                if not candidate_label:
+                    raise ValueError("Knowledge source label cannot be empty.")
+                row.label = candidate_label
+            if "description" in fields_set:
+                row.description = (payload.description or "").strip()
+            if "connection_target" in fields_set:
+                candidate_target = (payload.connection_target or "").strip()
+                if not candidate_target:
+                    raise ValueError("Connection target cannot be empty.")
+                row.connection_target = candidate_target
+            if "status" in fields_set and payload.status is not None:
+                row.status = payload.status
+            if "visibility_scope" in fields_set and payload.visibility_scope is not None:
+                row.visibility_scope = payload.visibility_scope
+            if "last_synced_at" in fields_set:
+                row.last_synced_at = payload.last_synced_at
+            if "last_error" in fields_set:
+                row.last_error = payload.last_error
+            if "metadata" in fields_set:
+                row.metadata_json = dict(payload.metadata or {})
             row.updated_at = self._now()
         return self.get_source(instance=instance, actor=AuthenticatedAdmin(
             session_id="system",

@@ -2639,6 +2639,29 @@ export type ContactConsent = {
   note?: string | null;
 };
 
+export type KnowledgeSourceSyncPosture = {
+  state: string;
+  next_step: string;
+  action_available: boolean;
+  action_state: string;
+  action_reason: string;
+};
+
+export type KnowledgeSourceConfigField = {
+  key: string;
+  label: string;
+  value: string;
+  note?: string | null;
+  redacted: boolean;
+};
+
+export type KnowledgeSourceIndexCounts = {
+  contacts: number;
+  durable_memory: number;
+  linked_conversations: number;
+  linked_skills: number;
+};
+
 export type ContactSummary = {
   contact_id: string;
   instance_id: string;
@@ -2675,11 +2698,14 @@ export type KnowledgeSourceSummary = {
   connection_target: string;
   status: KnowledgeSourceStatus;
   visibility_scope: VisibilityScope;
+  scope_label: string;
   last_synced_at?: string | null;
   last_error?: string | null;
+  sync: KnowledgeSourceSyncPosture;
   metadata: Record<string, unknown>;
   contact_count: number;
   memory_count: number;
+  indexed_objects: KnowledgeSourceIndexCounts;
   created_at: string;
   updated_at: string;
 };
@@ -2727,6 +2753,10 @@ export type ContactDetail = ContactSummary & {
 export type KnowledgeSourceDetail = KnowledgeSourceSummary & {
   contacts: ContactSummary[];
   memory_entries: MemorySummary[];
+  connector_fields: KnowledgeSourceConfigField[];
+  linked_conversations: RecordLink[];
+  linked_skills: RecordLink[];
+  recall_vs_memory_note: string;
 };
 
 export type MemoryDetail = MemorySummary & {
