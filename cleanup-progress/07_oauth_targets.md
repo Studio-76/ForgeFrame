@@ -8,3 +8,17 @@
 - Fix-Runden: `3`
 - Finale Freigabe: `APPROVED`
 - Ausgefuehrte Pruefkommandos: `cd frontend && npm run build -> PASS; cd frontend && npm test -- oauth-targets-page oauth-targets-page-actions -> PASS; cd frontend && npm test -> PASS (42/42 Dateien, 158/158 Tests); cd frontend && npm test -- --runInBand -> FAIL, Vitest/CAC: Unknown option --runInBand; deshalb gemaess Prompt auf npm test ausgewichen und exakt dokumentiert; cd backend && ../.venv/bin/python -m pytest tests/test_scaffold_endpoints.py -k "oauth_account_targets or bridge_only_targets_partial_even_after_probe_evidence" -q -> PASS; cd backend && ../.venv/bin/python -m pytest tests/test_provider_contract.py::test_codex_auth_state_resolution tests/test_settings.py::test_oauth_target_env_contract_uses_primary_forgeframe_vars -q -> PASS; cd backend && ../.venv/bin/python -m pytest tests/test_scaffold_endpoints.py tests/test_provider_contract.py tests/test_settings.py -q -> PASS; git diff --check -> PASS`
+
+## Revalidation 2026-04-29
+
+- Audit-Ergebnis: `APPROVED`
+- Konkrete Audit-Maengel: `keine`
+- Finale Freigabe: `APPROVED`
+- Begruendung:
+  - Die OAuth-Targets-Seite bleibt auf aktuellem HEAD eine echte Operatorflaeche mit ehrlichen Connection-States, Probe-/Sync-Aktionen, Bridge-only-/Unsupported-Abgrenzung und scope-erhaltenden Handoffs.
+  - Der Global-Contract-Fix aus `00` hat die Header-Handoffs in eine kontextuelle ActionBar verschoben und die verbleibenden `statusKey`-Werte auf Vertragsstatus gemappt, ohne die OAuth-Aktionspfade zu verwischen.
+  - Ausgefuehrte Pruefkommandos auf aktuellem HEAD:
+    - `cd frontend && npm run build` -> `passed`
+    - `cd frontend && npm test -- --runInBand` -> `failed as tooling incompatibility (Vitest: Unknown option --runInBand)`
+    - `cd frontend && npm test` -> `passed (42 test files, 160 tests)`
+    - `cd frontend && npm test -- providers-page providers-readiness harness-page oauth-targets-page oauth-targets-page-actions` -> `passed (5 test files, 23 tests)`
