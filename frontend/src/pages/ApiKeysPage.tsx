@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 
 import { buildAuditHistoryPath, resolveNewestAuditHistoryPathForSession } from "../app/auditHistory";
@@ -66,6 +66,11 @@ function normalizePolicyDraft(draft: RuntimeKeyPolicyDraft): RuntimeKeyRequestPa
   };
 }
 
+function normalizeQueryValue(value: string | null): string | null {
+  const normalized = (value ?? "").trim();
+  return normalized.length > 0 ? normalized : null;
+}
+
 export function ApiKeysPage() {
   const [keys, setKeys] = useState<RuntimeKey[]>([]);
   const [accounts, setAccounts] = useState<GatewayAccount[]>([]);
@@ -88,6 +93,7 @@ export function ApiKeysPage() {
   const { session, sessionReady } = useAppSession();
   const [searchParams, setSearchParams] = useSearchParams();
   const instanceId = getInstanceIdFromSearchParams(searchParams);
+  const focusedAccountId = normalizeQueryValue(searchParams.get("accountId"));
   const { instances, loadState, error: instancesError, selectedInstance } = useInstanceCatalog(instanceId);
   const instanceScopeLabel = selectedInstance?.display_name ?? selectedInstance?.instance_id ?? "Default instance path";
   const canMutate = sessionReady && roleAllows(session?.role, "admin") && session?.read_only !== true;
@@ -104,6 +110,7 @@ export function ApiKeysPage() {
     } else {
       nextSearchParams.delete("instanceId");
     }
+    nextSearchParams.delete("accountId");
     setSearchParams(nextSearchParams);
   };
 
@@ -124,6 +131,13 @@ export function ApiKeysPage() {
   useEffect(() => {
     void load();
   }, [instanceId]);
+
+  useEffect(() => {
+    if (!focusedAccountId || !accounts.some((account) => account.account_id === focusedAccountId)) {
+      return;
+    }
+    setForm((prev) => (prev.accountId === focusedAccountId ? prev : { ...prev, accountId: focusedAccountId }));
+  }, [accounts, focusedAccountId]);
 
   const refreshAuditHistoryRoute = async (targetId?: string | null) => {
     const route = await resolveNewestAuditHistoryPathForSession(
@@ -192,6 +206,15 @@ export function ApiKeysPage() {
     await Promise.all([load(), refreshAuditHistoryRoute(keyId)]);
   };
 
+  const focusedAccount = useMemo(
+    () => accounts.find((account) => account.account_id === focusedAccountId) ?? null,
+    [accounts, focusedAccountId],
+  );
+  const visibleKeys = useMemo(
+    () => (focusedAccountId ? keys.filter((key) => key.account_id === focusedAccountId) : keys),
+    [focusedAccountId, keys],
+  );
+
   return (
     <section className="fg-page">
       <PageIntro
@@ -248,6 +271,26 @@ export function ApiKeysPage() {
         surfaceLabel="runtime key governance"
         onInstanceChange={onInstanceChange}
       />
+
+      {focusedAccountId ? (
+        <div className="fg-card">
+          <h3>Focused Account Handoff</h3>
+          {focusedAccount ? (
+            <>
+              <p>Focused account: {focusedAccount.label} ({focusedAccount.account_id}).</p>
+              <p className="fg-muted">
+                Filtering the runtime-key inventory to the affected account so the handoff from Accounts lands on the correct keys.
+              </p>
+              <p className="fg-muted">Bound providers: {focusedAccount.provider_bindings.join(", ") || "none"}.</p>
+              <p className="fg-muted">{visibleKeys.length > 0 ? `${visibleKeys.length} linked key(s) currently match this account focus.` : "No keys are currently linked to this account."}</p>
+            </>
+          ) : (
+            <p className="fg-danger">
+              Focused account {focusedAccountId} is not present in the current instance scope. Clear the handoff or repair account inventory before trusting key linkage.
+            </p>
+          )}
+        </div>
+      ) : null}
 
       {error ? <p className="fg-danger">{error}</p> : null}
       {canMutate ? (
@@ -314,7 +357,7 @@ export function ApiKeysPage() {
         </div>
       )}
       <div className="fg-grid">
-        {keys.map((key) => (
+        {visibleKeys.map((key) => (
           <article key={key.key_id} className="fg-card">
             <h3>{key.label}</h3>
             <p className="fg-muted">

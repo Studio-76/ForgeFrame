@@ -204,13 +204,14 @@ describe("governance instance scope", () => {
     const hrefs = collectLinkHrefs();
     expect(hrefs).toContain("/accounts?instanceId=instance_alpha");
     expect(hrefs).toContain("/api-keys?instanceId=instance_alpha");
+    expect(hrefs).toContain("/api-keys?instanceId=instance_alpha&accountId=acct_alpha");
     expect(hrefs).toContain("/logs?instanceId=instance_alpha&auditWindow=all&auditTargetType=gateway_account&auditEvent=audit_evt_account_scope#audit-history");
   });
 
   it("loads runtime keys and account inventory within the active instance scope", async () => {
     fetchAuditHistoryMock.mockResolvedValueOnce(createAuditHistoryResponse("audit_evt_key_scope", "runtime_key"));
 
-    await renderPage("/api-keys?instanceId=instance_alpha", <ApiKeysPage />);
+    await renderPage("/api-keys?instanceId=instance_alpha&accountId=acct_alpha", <ApiKeysPage />);
 
     expect(fetchRuntimeKeysMock).toHaveBeenCalledWith("instance_alpha");
     expect(fetchAccountsMock).toHaveBeenCalledWith("instance_alpha");
@@ -222,6 +223,7 @@ describe("governance instance scope", () => {
       limit: 1,
     });
     expect(container.textContent).toContain("Instance scope: Alpha Instance");
+    expect(container.textContent).toContain("Focused account: Tenant Alpha");
 
     const hrefs = collectLinkHrefs();
     expect(hrefs).toContain("/api-keys?instanceId=instance_alpha");

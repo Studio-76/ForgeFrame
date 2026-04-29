@@ -32,9 +32,9 @@ describe("governance page role cues", () => {
       }),
     );
 
-    expect(markup).toContain("Read-Only Runtime Access Review");
-    expect(markup).toContain("Request break-glass access or review your elevated-access history");
-    expect(markup).not.toContain(">Create Account<");
+    expect(markup).toContain("Read-only account review");
+    expect(markup).toContain("it cannot mutate account profile or lifecycle");
+    expect(markup).not.toContain(">Create account<");
   });
 
   it("opens security as the elevated-access request surface for operators", () => {
