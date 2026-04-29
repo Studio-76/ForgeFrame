@@ -48,3 +48,19 @@
   - `cd frontend && npm test -- --runInBand` -> fehlgeschlagen, Vitest/CACError: `Unknown option --runInBand`
   - `cd frontend && npm test` -> erfolgreich, `40/40` Testdateien, `149/149` Tests
   - `cd frontend && npm test -- header-command-palette sidebar-navigation navigation` -> erfolgreich, `3/3` Testdateien, `11/11` Tests
+
+## Re-Audit 2026-04-29
+
+- Promptdatei: `/opt/ForgeFrame/cleanup/01_navigation_shell_collapsible_menu.md`
+- Developer-Zusammenfassung: `Re-Audit auf aktuellem HEAD bestaetigt kollabierte Desktop-Sidebar, Gruppenpersistenz, aktive Routenerkennung und gruppierte Command-Palette ohne weiteren Fix-Bedarf.`
+- Geaenderte Dateien: `keine zusaetzlichen Quelltextaenderungen; Progressdatei fuer Re-Audit aktualisiert`
+- Audit-Ergebnis: `APPROVED`
+- Konkrete Audit-Maengel: `keine`
+- Fix-Runden: `0`
+- Finale Freigabe: `APPROVED`
+- Ausgefuehrte Pruefkommandos:
+  - `cd frontend && npm run build` -> erfolgreich; nur nicht-blockierende Vite-Warnung zu `index`-Chunk > 500 kB
+  - `cd frontend && npm test -- --runInBand` -> fehlgeschlagen, Vitest/CACError: `Unknown option --runInBand`
+  - `cd frontend && npm test` -> erfolgreich, `42/42` Testdateien, `160/160` Tests
+  - `cd frontend && npm test -- header-command-palette sidebar-navigation navigation` -> erfolgreich, `3/3` Testdateien, `11/11` Tests
+  - Gepruefter Quelltext: `frontend/src/app/navigation.ts`, `frontend/src/components/layout/AppSidebar.tsx`, `frontend/src/components/layout/SidebarContext.tsx`, `frontend/src/components/layout/AppHeader.tsx`
