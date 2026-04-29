@@ -4,10 +4,11 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
+from urllib.parse import urlsplit
 from uuid import uuid4
 
 from pydantic import ValidationError
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from app.conversations.models import ConversationSummary, InboxSummary
@@ -24,6 +25,7 @@ from app.storage.workspace_repository import WorkspaceORM
 from app.tasks.models import (
     AutomationDetail,
     AutomationSummary,
+    ChannelCredentialPosture,
     ChannelDetail,
     CreateAutomation,
     CreateDeliveryChannel,
@@ -51,6 +53,19 @@ SessionFactory = Callable[[], Session]
 _NOTIFICATION_INTERNAL_METADATA_KEY = "_forgeframe_delivery"
 _NOTIFICATION_ATTEMPTS_KEY = "attempts"
 _NOTIFICATION_CONFIGURED_CHANNEL_ID_KEY = "configured_channel_id"
+_CHANNEL_SECRET_KEY_TOKENS = (
+    "secret",
+    "token",
+    "password",
+    "api_key",
+    "apikey",
+    "authorization",
+    "auth",
+    "webhook_url",
+    "signing_key",
+    "signing_secret",
+)
+_CHANNEL_REFERENCE_KEY_TOKENS = ("credential_ref", "secret_ref", "vault_ref", "oauth_ref", "key_ref")
 
 
 class TaskAutomationAdminService:
@@ -64,6 +79,251 @@ class TaskAutomationAdminService:
     @staticmethod
     def _new_id(prefix: str) -> str:
         return f"{prefix}_{uuid4().hex[:20]}"
+
+    @staticmethod
+    def _channel_key_is_reference(key: str) -> bool:
+        normalized = key.strip().lower()
+        return normalized.endswith("_ref") or normalized in _CHANNEL_REFERENCE_KEY_TOKENS
+
+    @classmethod
+    def _channel_key_is_secret(cls, key: str) -> bool:
+        normalized = key.strip().lower()
+        if cls._channel_key_is_reference(normalized):
+            return False
+        return any(token in normalized for token in _CHANNEL_SECRET_KEY_TOKENS)
+
+    @classmethod
+    def _channel_sanitize_metadata_value(
+        cls,
+        value: object,
+        *,
+        path: str,
+        redacted_fields: list[str],
+        reference_fields: list[str],
+    ) -> object:
+        if isinstance(value, dict):
+            sanitized: dict[str, object] = {}
+            for raw_key, raw_item in value.items():
+                if not isinstance(raw_key, str):
+                    continue
+                next_path = f"{path}.{raw_key}" if path else raw_key
+                if cls._channel_key_is_secret(raw_key):
+                    redacted_fields.append(next_path)
+                    sanitized[raw_key] = "[redacted]"
+                    continue
+                if cls._channel_key_is_reference(raw_key):
+                    reference_fields.append(next_path)
+                sanitized[raw_key] = cls._channel_sanitize_metadata_value(
+                    raw_item,
+                    path=next_path,
+                    redacted_fields=redacted_fields,
+                    reference_fields=reference_fields,
+                )
+            return sanitized
+        if isinstance(value, list):
+            return [
+                cls._channel_sanitize_metadata_value(
+                    item,
+                    path=f"{path}[]",
+                    redacted_fields=redacted_fields,
+                    reference_fields=reference_fields,
+                )
+                for item in value
+            ]
+        return value
+
+    @classmethod
+    def _channel_public_metadata(cls, row: DeliveryChannelORM) -> tuple[dict[str, object], list[str], list[str]]:
+        redacted_fields: list[str] = []
+        reference_fields: list[str] = []
+        sanitized = cls._channel_sanitize_metadata_value(
+            dict(row.metadata_json or {}),
+            path="",
+            redacted_fields=redacted_fields,
+            reference_fields=reference_fields,
+        )
+        return dict(sanitized) if isinstance(sanitized, dict) else {}, redacted_fields, reference_fields
+
+    @staticmethod
+    def _channel_scope_reference(metadata: dict[str, object]) -> str | None:
+        for key in ("contact_ref", "contact_id", "scope_ref"):
+            value = metadata.get(key)
+            if isinstance(value, str) and value.strip():
+                return value.strip()
+        return None
+
+    @classmethod
+    def _channel_scope_label(cls, metadata: dict[str, object]) -> str:
+        if cls._channel_scope_reference(metadata):
+            return "contact-bound"
+        scope = metadata.get("scope")
+        if isinstance(scope, str):
+            normalized = scope.strip().lower().replace("_", "-")
+            if normalized in {"contact", "contact-bound", "contact-specific"}:
+                return "contact-bound"
+            if normalized in {"instance", "instance-default", "instance default"}:
+                return "instance default"
+            if normalized:
+                return normalized
+        return "instance default"
+
+    @staticmethod
+    def _channel_target_display(row: DeliveryChannelORM) -> str:
+        if row.channel_kind != "webhook":
+            return row.target
+        parsed = urlsplit(row.target)
+        if parsed.scheme and parsed.netloc:
+            return f"{parsed.scheme}://{parsed.netloc}/[redacted]"
+        return "[masked webhook target]"
+
+    @classmethod
+    def _channel_credential_posture(cls, row: DeliveryChannelORM) -> ChannelCredentialPosture:
+        metadata, redacted_fields, reference_fields = cls._channel_public_metadata(row)
+        del metadata  # posture uses only the classified key sets
+        target_masked = row.channel_kind == "webhook"
+        if row.channel_kind == "in_app" and not redacted_fields and not reference_fields:
+            storage_state = "not_applicable"
+            summary = "In-app channels stay inside ForgeFrame and do not require outward delivery credentials."
+        elif redacted_fields:
+            storage_state = "inline_secret_redacted"
+            summary = "Secret-bearing metadata was detected and redacted. Move credentials behind references or a delivery bridge."
+        elif reference_fields:
+            storage_state = "external_reference"
+            summary = "Credential posture is expressed through external references. Secret values stay outside the admin UI."
+        elif target_masked:
+            storage_state = "masked_target_only"
+            summary = "Webhook destinations are masked after save. Enter a new endpoint only when rotating the integration."
+        else:
+            storage_state = "no_secret_material"
+            summary = "No secret-bearing fields are currently persisted for this channel."
+        return ChannelCredentialPosture(
+            storage_state=storage_state,  # type: ignore[arg-type]
+            target_masked=target_masked,
+            redacted_fields=redacted_fields,
+            external_reference_fields=reference_fields,
+            summary=summary,
+        )
+
+    @staticmethod
+    def _channel_rank_map(rows: list[DeliveryChannelORM]) -> dict[str, int]:
+        parents_by_child: dict[str, list[str]] = {}
+        for row in rows:
+            if row.fallback_channel_id:
+                parents_by_child.setdefault(row.fallback_channel_id, []).append(row.id)
+
+        cache: dict[str, int] = {}
+        visiting: set[str] = set()
+
+        def rank_for(channel_id: str) -> int:
+            if channel_id in cache:
+                return cache[channel_id]
+            if channel_id in visiting:
+                return 0
+            visiting.add(channel_id)
+            parents = parents_by_child.get(channel_id, [])
+            result = 0 if not parents else min(rank_for(parent_id) for parent_id in parents) + 1
+            visiting.remove(channel_id)
+            cache[channel_id] = result
+            return result
+
+        for row in rows:
+            rank_for(row.id)
+        return cache
+
+    def _channel_notification_stats(self, session: Session, *, instance: InstanceRecord, channel_id: str) -> dict[str, object]:
+        notification_count = int(
+            session.scalar(
+                select(func.count()).select_from(NotificationORM).where(
+                    NotificationORM.company_id == instance.company_id,
+                    NotificationORM.channel_id == channel_id,
+                )
+            )
+            or 0
+        )
+        last_success_at = session.scalar(
+            select(func.max(NotificationORM.delivered_at)).where(
+                NotificationORM.company_id == instance.company_id,
+                NotificationORM.channel_id == channel_id,
+            )
+        )
+        last_failure_at = session.scalar(
+            select(func.max(NotificationORM.updated_at)).where(
+                NotificationORM.company_id == instance.company_id,
+                NotificationORM.channel_id == channel_id,
+                or_(
+                    NotificationORM.last_error.is_not(None),
+                    NotificationORM.delivery_status.in_(("failed", "cancelled", "rejected")),
+                ),
+            )
+        )
+        last_error_row = session.execute(
+            select(NotificationORM).where(
+                NotificationORM.company_id == instance.company_id,
+                NotificationORM.channel_id == channel_id,
+                NotificationORM.last_error.is_not(None),
+            ).order_by(NotificationORM.updated_at.desc()).limit(1)
+        ).scalars().first()
+        return {
+            "notification_count": notification_count,
+            "last_success_at": last_success_at,
+            "last_failure_at": last_failure_at,
+            "last_error": last_error_row.last_error if last_error_row is not None else None,
+        }
+
+    @classmethod
+    def _channel_summary(
+        cls,
+        row: DeliveryChannelORM,
+        *,
+        notification_count: int,
+        fallback_rank: int,
+        last_success_at: datetime | None,
+        last_failure_at: datetime | None,
+        last_error: str | None,
+    ) -> DeliveryChannelSummary:
+        public_metadata, _redacted_fields, _reference_fields = cls._channel_public_metadata(row)
+        return DeliveryChannelSummary(
+            channel_id=row.id,
+            instance_id=row.instance_id,
+            company_id=row.company_id,
+            channel_kind=row.channel_kind,  # type: ignore[arg-type]
+            label=row.label,
+            target=cls._channel_target_display(row),
+            status=row.status,  # type: ignore[arg-type]
+            fallback_channel_id=row.fallback_channel_id,
+            metadata=public_metadata,
+            scope_label=cls._channel_scope_label(dict(row.metadata_json or {})),
+            fallback_rank=fallback_rank,
+            notification_count=notification_count,
+            last_success_at=last_success_at,
+            last_failure_at=last_failure_at,
+            last_error=last_error,
+            created_at=row.created_at,
+            updated_at=row.updated_at,
+        )
+
+    def _channel_summary_for_row(
+        self,
+        session: Session,
+        *,
+        instance: InstanceRecord,
+        row: DeliveryChannelORM,
+        rank_map: dict[str, int] | None = None,
+    ) -> DeliveryChannelSummary:
+        effective_rank_map = rank_map
+        if effective_rank_map is None:
+            all_rows = session.execute(
+                select(DeliveryChannelORM).where(
+                    DeliveryChannelORM.company_id == instance.company_id,
+                    DeliveryChannelORM.instance_id == instance.instance_id,
+                )
+            ).scalars().all()
+            effective_rank_map = self._channel_rank_map(all_rows)
+        return self._channel_summary(
+            row,
+            fallback_rank=effective_rank_map.get(row.id, 0),
+            **self._channel_notification_stats(session, instance=instance, channel_id=row.id),
+        )
 
     @staticmethod
     def _load_conversation(session: Session, *, instance: InstanceRecord, conversation_id: str) -> ConversationORM:
@@ -215,23 +475,6 @@ class TaskAutomationAdminService:
             due_at=row.due_at,
             triggered_at=row.triggered_at,
             metadata=dict(row.metadata_json or {}),
-            created_at=row.created_at,
-            updated_at=row.updated_at,
-        )
-
-    @staticmethod
-    def _channel_summary(row: DeliveryChannelORM, *, notification_count: int) -> DeliveryChannelSummary:
-        return DeliveryChannelSummary(
-            channel_id=row.id,
-            instance_id=row.instance_id,
-            company_id=row.company_id,
-            channel_kind=row.channel_kind,  # type: ignore[arg-type]
-            label=row.label,
-            target=row.target,
-            status=row.status,  # type: ignore[arg-type]
-            fallback_channel_id=row.fallback_channel_id,
-            metadata=dict(row.metadata_json or {}),
-            notification_count=notification_count,
             created_at=row.created_at,
             updated_at=row.updated_at,
         )
@@ -573,31 +816,75 @@ class TaskAutomationAdminService:
             row.updated_at = self._now()
         return self.get_reminder(instance=instance, reminder_id=reminder_id)
 
-    def list_channels(self, *, instance: InstanceRecord, status: str | None = None, limit: int = 100) -> list[DeliveryChannelSummary]:
+    def list_channels(
+        self,
+        *,
+        instance: InstanceRecord,
+        status: str | None = None,
+        kind: str | None = None,
+        limit: int = 100,
+    ) -> list[DeliveryChannelSummary]:
         with self._session_factory() as session:
             stmt = select(DeliveryChannelORM).where(DeliveryChannelORM.company_id == instance.company_id, DeliveryChannelORM.instance_id == instance.instance_id)
             if status is not None:
                 stmt = stmt.where(DeliveryChannelORM.status == status)
+            if kind is not None:
+                stmt = stmt.where(DeliveryChannelORM.channel_kind == kind)
             rows = session.execute(stmt.order_by(DeliveryChannelORM.updated_at.desc()).limit(max(1, min(limit, 200)))).scalars().all()
-            return [
-                self._channel_summary(
-                    row,
-                    notification_count=int(session.scalar(select(func.count()).select_from(NotificationORM).where(NotificationORM.company_id == instance.company_id, NotificationORM.channel_id == row.id)) or 0),
+            all_rows = session.execute(
+                select(DeliveryChannelORM).where(
+                    DeliveryChannelORM.company_id == instance.company_id,
+                    DeliveryChannelORM.instance_id == instance.instance_id,
                 )
+            ).scalars().all()
+            rank_map = self._channel_rank_map(all_rows)
+            return [
+                self._channel_summary_for_row(session, instance=instance, row=row, rank_map=rank_map)
                 for row in rows
             ]
 
     def get_channel(self, *, instance: InstanceRecord, channel_id: str) -> ChannelDetail:
         with self._session_factory() as session:
             row = self._load_channel(session, instance=instance, channel_id=channel_id)
-            summary = self._channel_summary(
-                row,
-                notification_count=int(session.scalar(select(func.count()).select_from(NotificationORM).where(NotificationORM.company_id == instance.company_id, NotificationORM.channel_id == row.id)) or 0),
-            )
+            all_rows = session.execute(
+                select(DeliveryChannelORM).where(
+                    DeliveryChannelORM.company_id == instance.company_id,
+                    DeliveryChannelORM.instance_id == instance.instance_id,
+                )
+            ).scalars().all()
+            rank_map = self._channel_rank_map(all_rows)
+            row_by_id = {item.id: item for item in all_rows}
+            summary = self._channel_summary_for_row(session, instance=instance, row=row, rank_map=rank_map)
             recent = session.execute(
                 select(NotificationORM).where(NotificationORM.company_id == instance.company_id, NotificationORM.channel_id == channel_id).order_by(NotificationORM.updated_at.desc()).limit(20)
             ).scalars().all()
-            return ChannelDetail(**summary.model_dump(), recent_notifications=[self._notification_summary(item) for item in recent])
+            fallback_chain: list[DeliveryChannelSummary] = []
+            visited: set[str] = set()
+            current: DeliveryChannelORM | None = row
+            while current is not None and current.id not in visited:
+                visited.add(current.id)
+                fallback_chain.append(self._channel_summary_for_row(session, instance=instance, row=current, rank_map=rank_map))
+                if not current.fallback_channel_id:
+                    break
+                current = row_by_id.get(current.fallback_channel_id)
+            fallback_sources = [
+                self._channel_summary_for_row(session, instance=instance, row=item, rank_map=rank_map)
+                for item in all_rows
+                if item.fallback_channel_id == row.id
+            ]
+            public_metadata, _redacted_fields, _reference_fields = self._channel_public_metadata(row)
+            return ChannelDetail(
+                **summary.model_dump(),
+                recent_notifications=[self._notification_summary(item) for item in recent],
+                credential_posture=self._channel_credential_posture(row),
+                advanced_metadata=public_metadata,
+                scope_reference=self._channel_scope_reference(dict(row.metadata_json or {})),
+                fallback_chain=fallback_chain,
+                fallback_sources=fallback_sources,
+                test_delivery_supported=False,
+                test_delivery_state="not_ready",
+                test_delivery_reason="Backend does not expose a dedicated channel test-send endpoint.",
+            )
 
     def create_channel(self, *, instance: InstanceRecord, payload: CreateDeliveryChannel) -> ChannelDetail:
         with self._session_factory() as session, session.begin():
@@ -663,17 +950,20 @@ class TaskAutomationAdminService:
             configured_channel_id = self._notification_configured_channel_id(row)
             task = self._task_summary(session, self._load_task(session, instance=instance, task_id=row.task_id)) if row.task_id else None
             reminder = self._reminder_summary(self._load_reminder(session, instance=instance, reminder_id=row.reminder_id)) if row.reminder_id else None
-            channel = self._channel_summary(
-                self._load_channel(session, instance=instance, channel_id=row.channel_id),
-                notification_count=int(session.scalar(select(func.count()).select_from(NotificationORM).where(NotificationORM.company_id == instance.company_id, NotificationORM.channel_id == row.channel_id)) or 0),
+            channel = self._channel_summary_for_row(
+                session,
+                instance=instance,
+                row=self._load_channel(session, instance=instance, channel_id=row.channel_id),
             ) if row.channel_id else None
-            configured_channel = self._channel_summary(
-                self._load_channel(session, instance=instance, channel_id=configured_channel_id),
-                notification_count=int(session.scalar(select(func.count()).select_from(NotificationORM).where(NotificationORM.company_id == instance.company_id, NotificationORM.channel_id == configured_channel_id)) or 0),
+            configured_channel = self._channel_summary_for_row(
+                session,
+                instance=instance,
+                row=self._load_channel(session, instance=instance, channel_id=configured_channel_id),
             ) if configured_channel_id else None
-            fallback_channel = self._channel_summary(
-                self._load_channel(session, instance=instance, channel_id=row.fallback_channel_id),
-                notification_count=int(session.scalar(select(func.count()).select_from(NotificationORM).where(NotificationORM.company_id == instance.company_id, NotificationORM.channel_id == row.fallback_channel_id)) or 0),
+            fallback_channel = self._channel_summary_for_row(
+                session,
+                instance=instance,
+                row=self._load_channel(session, instance=instance, channel_id=row.fallback_channel_id),
             ) if row.fallback_channel_id else None
             return NotificationDetail(
                 **summary.model_dump(),
@@ -792,7 +1082,7 @@ class TaskAutomationAdminService:
                     detail=f"Operator changed delivery state from {previous_status} to {row.delivery_status}.",
                     next_step=self._notification_evidence(
                         row,
-                        channel=self._channel_summary(self._load_channel(session, instance=instance, channel_id=row.channel_id), notification_count=0) if row.channel_id else None,
+                        channel=self._channel_summary_for_row(session, instance=instance, row=self._load_channel(session, instance=instance, channel_id=row.channel_id)) if row.channel_id else None,
                     ).next_step,
                     channel=self._load_channel(session, instance=instance, channel_id=row.channel_id) if row.channel_id else None,
                 )
@@ -884,9 +1174,10 @@ class TaskAutomationAdminService:
             row = self._load_automation(session, instance=instance, automation_id=automation_id)
             summary = self._automation_summary(row)
             task = self._task_summary(session, self._load_task(session, instance=instance, task_id=row.target_task_id)) if row.target_task_id else None
-            channel = self._channel_summary(
-                self._load_channel(session, instance=instance, channel_id=row.channel_id),
-                notification_count=int(session.scalar(select(func.count()).select_from(NotificationORM).where(NotificationORM.company_id == instance.company_id, NotificationORM.channel_id == row.channel_id)) or 0),
+            channel = self._channel_summary_for_row(
+                session,
+                instance=instance,
+                row=self._load_channel(session, instance=instance, channel_id=row.channel_id),
             ) if row.channel_id else None
             return AutomationDetail(**summary.model_dump(), task=task, channel=channel)
 

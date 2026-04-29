@@ -2436,9 +2436,22 @@ export type DeliveryChannelSummary = {
   status: DeliveryChannelStatus;
   fallback_channel_id?: string | null;
   metadata: Record<string, unknown>;
+  scope_label: string;
+  fallback_rank: number;
   notification_count: number;
+  last_success_at?: string | null;
+  last_failure_at?: string | null;
+  last_error?: string | null;
   created_at: string;
   updated_at: string;
+};
+
+export type ChannelCredentialPosture = {
+  storage_state: "not_applicable" | "no_secret_material" | "external_reference" | "inline_secret_redacted" | "masked_target_only";
+  target_masked: boolean;
+  redacted_fields: string[];
+  external_reference_fields: string[];
+  summary: string;
 };
 
 export type NotificationSummary = {
@@ -2560,6 +2573,14 @@ export type NotificationDetail = NotificationSummary & {
 
 export type ChannelDetail = DeliveryChannelSummary & {
   recent_notifications: NotificationSummary[];
+  credential_posture: ChannelCredentialPosture;
+  advanced_metadata: Record<string, unknown>;
+  scope_reference?: string | null;
+  fallback_chain: DeliveryChannelSummary[];
+  fallback_sources: DeliveryChannelSummary[];
+  test_delivery_supported: boolean;
+  test_delivery_state: string;
+  test_delivery_reason: string;
 };
 
 export type AutomationDetail = AutomationSummary & {
@@ -4670,12 +4691,14 @@ export function fetchChannels(
   instanceId?: string | null,
   filters: {
     status?: DeliveryChannelStatus | "all";
+    kind?: DeliveryChannelKind | "all";
     limit?: number;
   } = {},
 ) {
   return fetchJson<{ status: string; instance?: InstanceRecord; channels: DeliveryChannelSummary[] }>(
     appendQueryParams(appendTenantScope("/admin/channels", undefined, instanceId), {
       status: filters.status && filters.status !== "all" ? filters.status : null,
+      kind: filters.kind && filters.kind !== "all" ? filters.kind : null,
       limit: filters.limit ?? 100,
     }),
   );

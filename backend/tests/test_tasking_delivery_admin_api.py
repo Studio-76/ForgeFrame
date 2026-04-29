@@ -1,3 +1,4 @@
+import json
 from datetime import UTC, datetime, timedelta
 
 from fastapi.testclient import TestClient
@@ -107,6 +108,8 @@ def _create_channel(
     label: str,
     target: str,
     fallback_channel_id: str | None = None,
+    status: str = "active",
+    metadata: dict[str, object] | None = None,
 ) -> str:
     response = client.post(
         "/admin/channels",
@@ -116,7 +119,9 @@ def _create_channel(
             "channel_kind": channel_kind,
             "label": label,
             "target": target,
+            "status": status,
             "fallback_channel_id": fallback_channel_id,
+            "metadata": metadata or {},
         },
     )
     assert response.status_code == 201
@@ -412,3 +417,132 @@ def test_automation_trigger_materializes_follow_up_and_notification_records() ->
     assert notification_payload["task_id"] == root_task_id
     assert notification_payload["channel_id"] == channel_id
     assert notification_payload["delivery_status"] == "preview"
+
+
+def test_channels_filter_redact_credentials_and_expose_fallback_posture() -> None:
+    client = TestClient(app)
+    headers = _admin_headers(client)
+    instance_id = _create_instance(client, headers, instance_id="instance_channels_alpha", company_id="company_channels_alpha")
+    fallback_channel_id = _create_channel(
+        client,
+        headers,
+        instance_id=instance_id,
+        channel_kind="slack",
+        label="Fallback Slack",
+        target="#ops-room",
+    )
+    webhook_channel_id = _create_channel(
+        client,
+        headers,
+        instance_id=instance_id,
+        channel_kind="webhook",
+        label="Ops webhook",
+        target="https://hooks.example.com/services/T/secret-123?token=secret-123",
+        fallback_channel_id=fallback_channel_id,
+        status="degraded",
+        metadata={
+            "contact_ref": "contact://customer/acme",
+            "credential_ref": "vault://channels/ops-webhook",
+            "api_key": "secret-123",
+        },
+    )
+    primary_channel_id = _create_channel(
+        client,
+        headers,
+        instance_id=instance_id,
+        channel_kind="email",
+        label="Primary email",
+        target="ops@example.com",
+        fallback_channel_id=webhook_channel_id,
+    )
+
+    delivered_notification = client.post(
+        "/admin/notifications",
+        headers=headers,
+        params=_instance_scope(instance_id),
+        json={
+            "title": "Delivered email notification",
+            "body": "This message reached the primary email channel.",
+            "channel_id": primary_channel_id,
+            "preview_required": False,
+        },
+    )
+    assert delivered_notification.status_code == 201
+    delivered_notification_id = delivered_notification.json()["notification"]["notification_id"]
+    delivered_update = client.patch(
+        f"/admin/notifications/{delivered_notification_id}",
+        headers=headers,
+        params=_instance_scope(instance_id),
+        json={"delivery_status": "delivered"},
+    )
+    assert delivered_update.status_code == 200
+
+    failed_notification = client.post(
+        "/admin/notifications",
+        headers=headers,
+        params=_instance_scope(instance_id),
+        json={
+            "title": "Failed webhook notification",
+            "body": "The webhook endpoint should fail and surface credential posture.",
+            "channel_id": webhook_channel_id,
+            "fallback_channel_id": fallback_channel_id,
+            "preview_required": False,
+        },
+    )
+    assert failed_notification.status_code == 201
+    failed_notification_id = failed_notification.json()["notification"]["notification_id"]
+    failed_update = client.patch(
+        f"/admin/notifications/{failed_notification_id}",
+        headers=headers,
+        params=_instance_scope(instance_id),
+        json={
+            "delivery_status": "failed",
+            "last_error": "HTTP 410 Gone",
+        },
+    )
+    assert failed_update.status_code == 200
+
+    filtered = client.get(
+        "/admin/channels",
+        headers=headers,
+        params={**_instance_scope(instance_id), "kind": "webhook", "status": "degraded"},
+    )
+    assert filtered.status_code == 200
+    filtered_payload = filtered.json()["channels"]
+    assert any(item["channel_id"] == webhook_channel_id for item in filtered_payload)
+    assert all(item["channel_kind"] == "webhook" for item in filtered_payload)
+    assert all(item["status"] == "degraded" for item in filtered_payload)
+    webhook_summary = next(item for item in filtered_payload if item["channel_id"] == webhook_channel_id)
+    assert webhook_summary["scope_label"] == "contact-bound"
+    assert webhook_summary["fallback_rank"] == 1
+    assert webhook_summary["last_failure_at"] is not None
+    assert webhook_summary["last_error"] == "HTTP 410 Gone"
+    assert "[redacted]" in webhook_summary["target"]
+    assert "secret-123" not in webhook_summary["target"]
+
+    primary_list = client.get("/admin/channels", headers=headers, params={**_instance_scope(instance_id), "kind": "email"})
+    assert primary_list.status_code == 200
+    primary_summary = primary_list.json()["channels"][0]
+    assert primary_summary["channel_id"] == primary_channel_id
+    assert primary_summary["fallback_rank"] == 0
+    assert primary_summary["last_success_at"] is not None
+
+    detail = client.get(
+        f"/admin/channels/{webhook_channel_id}",
+        headers=headers,
+        params=_instance_scope(instance_id),
+    )
+    assert detail.status_code == 200
+    detail_payload = detail.json()["channel"]
+    detail_json = json.dumps(detail_payload)
+    assert detail_payload["credential_posture"]["storage_state"] == "inline_secret_redacted"
+    assert "api_key" in detail_payload["credential_posture"]["redacted_fields"]
+    assert "credential_ref" in detail_payload["credential_posture"]["external_reference_fields"]
+    assert detail_payload["advanced_metadata"]["api_key"] == "[redacted]"
+    assert detail_payload["scope_reference"] == "contact://customer/acme"
+    assert [item["channel_id"] for item in detail_payload["fallback_chain"]] == [webhook_channel_id, fallback_channel_id]
+    assert [item["channel_id"] for item in detail_payload["fallback_sources"]] == [primary_channel_id]
+    assert detail_payload["test_delivery_supported"] is False
+    assert detail_payload["test_delivery_state"] == "not_ready"
+    assert detail_payload["recent_notifications"][0]["notification_id"] == failed_notification_id
+    assert "secret-123" not in detail_json

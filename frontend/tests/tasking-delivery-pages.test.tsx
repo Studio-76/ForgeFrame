@@ -177,7 +177,12 @@ function createChannelSummary(overrides: Partial<DeliveryChannelSummary> = {}): 
     status: "active",
     fallback_channel_id: "channel_fallback",
     metadata: {},
+    scope_label: "instance default",
+    fallback_rank: 0,
     notification_count: 1,
+    last_success_at: "2026-04-23T09:45:00Z",
+    last_failure_at: "2026-04-23T10:05:00Z",
+    last_error: "Primary channel timeout",
     created_at: "2026-04-23T09:00:00Z",
     updated_at: "2026-04-23T10:00:00Z",
     ...overrides,
@@ -282,6 +287,31 @@ function createChannelDetail(overrides: Partial<ChannelDetail> = {}): ChannelDet
   return {
     ...createChannelSummary(),
     recent_notifications: [createNotificationSummary()],
+    credential_posture: {
+      storage_state: "no_secret_material",
+      target_masked: false,
+      redacted_fields: [],
+      external_reference_fields: [],
+      summary: "No secret-bearing fields are currently persisted for this channel.",
+    },
+    advanced_metadata: {},
+    scope_reference: null,
+    fallback_chain: [
+      createChannelSummary(),
+      createChannelSummary({
+        channel_id: "channel_fallback",
+        channel_kind: "slack",
+        label: "Fallback Slack",
+        target: "#ops-room",
+        fallback_channel_id: null,
+        fallback_rank: 1,
+        last_error: null,
+      }),
+    ],
+    fallback_sources: [],
+    test_delivery_supported: false,
+    test_delivery_state: "not_ready",
+    test_delivery_reason: "Backend does not expose a dedicated channel test-send endpoint.",
     ...overrides,
   };
 }
@@ -971,15 +1001,21 @@ describe("tasking and delivery pages", () => {
 
     expect(fetchChannelsMock).toHaveBeenCalledWith("instance_alpha", {
       status: "all",
+      kind: "all",
       limit: 100,
     });
     expect(fetchChannelDetailMock).toHaveBeenCalledWith("channel_primary", "instance_alpha");
     expect(container.textContent).toContain("Channel inventory");
     expect(container.textContent).toContain("Ops email");
+    expect(container.textContent).toContain("Credential / secret posture");
+    expect(container.textContent).toContain("Fallback chain");
     expect(container.textContent).toContain("Recent notifications");
+    expect(container.textContent).toContain("Test send");
+    expect(container.textContent).toContain("not_ready");
 
     const fallbackLink = Array.from(container.querySelectorAll("a")).find((link) => link.textContent === "Open fallback channel");
-    expect(fallbackLink?.getAttribute("href")).toBe("/channels?instanceId=instance_alpha&channelId=channel_fallback");
+    expect(fallbackLink).toBeUndefined();
+    expect(Array.from(container.querySelectorAll("a")).some((link) => link.getAttribute("href") === "/channels?instanceId=instance_alpha&channelId=channel_fallback")).toBe(true);
   });
 
   it("creates and updates channels against the selected instance scope", async () => {
@@ -992,19 +1028,16 @@ describe("tasking and delivery pages", () => {
 
     const createForm = getFormByText("Create channel");
     const updateForm = getFormByText("Save channel");
-    const createInputs = Array.from(createForm?.querySelectorAll("input") ?? []);
-    const createTextareas = Array.from(createForm?.querySelectorAll("textarea") ?? []);
-    const createSelects = Array.from(createForm?.querySelectorAll("select") ?? []);
     const createButton = getButtonByText(createForm!, "Create channel");
 
     await act(async () => {
-      setControlValue(createInputs[0] as HTMLInputElement, "channel_slack");
-      setControlValue(createSelects[0] as HTMLSelectElement, "slack");
-      setControlValue(createSelects[1] as HTMLSelectElement, "degraded");
-      setControlValue(createInputs[1] as HTMLInputElement, "Ops Slack");
-      setControlValue(createInputs[2] as HTMLInputElement, "#ops-alerts");
-      setControlValue(createInputs[3] as HTMLInputElement, "channel_fallback");
-      setControlValue(createTextareas[0] as HTMLTextAreaElement, "{\"tier\":\"secondary\"}");
+      setControlValue(getControlByLabel(createForm!, "Channel ID"), "channel_slack");
+      setControlValue(getControlByLabel(createForm!, "Channel kind"), "slack");
+      setControlValue(getControlByLabel(createForm!, "Status"), "degraded");
+      setControlValue(getControlByLabel(createForm!, "Label"), "Ops Slack");
+      setControlValue(getControlByLabel(createForm!, "Target"), "#ops-alerts");
+      setControlValue(getControlByLabel(createForm!, "Fallback channel ID"), "channel_fallback");
+      setControlValue(getControlByLabel(createForm!, "Metadata JSON"), "{\"tier\":\"secondary\"}");
       createButton!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     });
     await flushEffects();
@@ -1019,17 +1052,14 @@ describe("tasking and delivery pages", () => {
       metadata: { tier: "secondary" },
     }));
 
-    const updateInputs = Array.from(updateForm?.querySelectorAll("input") ?? []);
-    const updateTextareas = Array.from(updateForm?.querySelectorAll("textarea") ?? []);
-    const updateSelects = Array.from(updateForm?.querySelectorAll("select") ?? []);
     const updateButton = getButtonByText(updateForm!, "Save channel");
 
     await act(async () => {
-      setControlValue(updateInputs[0] as HTMLInputElement, "Ops email updated");
-      setControlValue(updateInputs[1] as HTMLInputElement, "ops-updated@example.com");
-      setControlValue(updateSelects[0] as HTMLSelectElement, "degraded");
-      setControlValue(updateInputs[2] as HTMLInputElement, "channel_fallback");
-      setControlValue(updateTextareas[0] as HTMLTextAreaElement, "{\"tier\":\"primary\"}");
+      setControlValue(getControlByLabel(updateForm!, "Label"), "Ops email updated");
+      setControlValue(getControlByLabel(updateForm!, "Status"), "degraded");
+      setControlValue(getControlByLabel(updateForm!, "Fallback channel ID"), "channel_fallback");
+      setControlValue(getControlByLabel(updateForm!, "Target"), "ops-updated@example.com");
+      setControlValue(getControlByLabel(updateForm!, "Metadata JSON"), "{\"tier\":\"primary\"}");
       updateButton!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     });
     await flushEffects();
@@ -1041,6 +1071,124 @@ describe("tasking and delivery pages", () => {
       fallback_channel_id: "channel_fallback",
       metadata: { tier: "primary" },
     }));
+  });
+
+  it("filters channels by type/status and keeps webhook credential posture redacted without fake test-send actions", async () => {
+    fetchChannelsMock.mockImplementation(async (_instanceId: string, filters?: { status?: string; kind?: string }) => ({
+      status: "ok",
+      instance: null,
+      channels: filters?.kind === "webhook"
+        ? [
+          createChannelSummary({
+            channel_id: "channel_webhook",
+            channel_kind: "webhook",
+            label: "Ops webhook",
+            target: "https://hooks.example.com/[redacted]",
+            status: "degraded",
+            fallback_channel_id: null,
+            scope_label: "contact-bound",
+            last_error: "HTTP 410 Gone",
+            last_success_at: null,
+          }),
+        ]
+        : [createChannelSummary()],
+    }));
+    fetchChannelDetailMock.mockResolvedValue({
+      status: "ok",
+      channel: createChannelDetail({
+        channel_id: "channel_webhook",
+        channel_kind: "webhook",
+        label: "Ops webhook",
+        target: "https://hooks.example.com/[redacted]",
+        status: "degraded",
+        fallback_channel_id: null,
+        metadata: {
+          contact_ref: "contact://customer/acme",
+          credential_ref: "vault://channels/ops-webhook",
+          api_key: "[redacted]",
+        },
+        scope_label: "contact-bound",
+        fallback_rank: 0,
+        notification_count: 2,
+        last_success_at: null,
+        last_failure_at: "2026-04-23T10:20:00Z",
+        last_error: "HTTP 410 Gone",
+        credential_posture: {
+          storage_state: "inline_secret_redacted",
+          target_masked: true,
+          redacted_fields: ["api_key"],
+          external_reference_fields: ["credential_ref"],
+          summary: "Secret-bearing metadata was detected and redacted. Move credentials behind references or a delivery bridge.",
+        },
+        advanced_metadata: {
+          contact_ref: "contact://customer/acme",
+          credential_ref: "vault://channels/ops-webhook",
+          api_key: "[redacted]",
+        },
+        scope_reference: "contact://customer/acme",
+        fallback_chain: [
+          createChannelSummary({
+            channel_id: "channel_webhook",
+            channel_kind: "webhook",
+            label: "Ops webhook",
+            target: "https://hooks.example.com/[redacted]",
+            status: "degraded",
+            fallback_channel_id: null,
+            scope_label: "contact-bound",
+            last_success_at: null,
+            last_error: "HTTP 410 Gone",
+          }),
+        ],
+        fallback_sources: [
+          createChannelSummary({
+            channel_id: "channel_primary",
+            channel_kind: "email",
+            label: "Ops email",
+            target: "ops@example.com",
+          }),
+        ],
+        recent_notifications: [
+          createNotificationSummary({
+            notification_id: "notification_webhook",
+            channel_id: "channel_webhook",
+            configured_channel_id: "channel_webhook",
+            fallback_channel_id: null,
+            delivery_status: "failed",
+            last_error: "HTTP 410 Gone",
+          }),
+        ],
+      }),
+    });
+
+    await renderIntoDom(withAppContext({
+      path: "/channels?instanceId=instance_alpha&channelId=channel_webhook",
+      element: <ChannelsPage />,
+      session: adminSession,
+    }));
+    await flushEffects();
+
+    await act(async () => {
+      setControlValue(container.querySelector('select[aria-label="Channel kind filter"]') as HTMLSelectElement, "webhook");
+    });
+    await flushEffects();
+
+    await act(async () => {
+      setControlValue(container.querySelector('select[aria-label="Channel status filter"]') as HTMLSelectElement, "degraded");
+    });
+    await flushEffects();
+
+    expect(fetchChannelsMock).toHaveBeenLastCalledWith("instance_alpha", {
+      status: "degraded",
+      kind: "webhook",
+      limit: 100,
+    });
+    expect(container.textContent).toContain("inline_secret_redacted");
+    expect(container.textContent).toContain("api_key");
+    expect(container.textContent).toContain("vault://channels/ops-webhook");
+    expect(container.textContent).toContain("contact://customer/acme");
+    expect(container.textContent).toContain("not_ready");
+    expect(container.textContent).not.toContain("secret-123");
+    expect(Array.from(container.querySelectorAll("button")).some((button) => button.textContent?.includes("Send test"))).toBe(false);
   });
 
   it("renders the notifications page with grouped outbox, fallback chain, and delivery evidence", async () => {

@@ -23,12 +23,13 @@ def _error(status_code: int, error_type: str, message: str) -> JSONResponse:
 @router.get("")
 def list_channels(
     status_filter: str | None = Query(default=None, alias="status"),
+    kind_filter: str | None = Query(default=None, alias="kind"),
     limit: int = 100,
     _admin: AuthenticatedAdmin = Depends(require_admin_role("operator")),
     instance: InstanceRecord = Depends(resolve_admin_instance_scope),
     service: TaskAutomationAdminService = Depends(get_task_automation_admin_service),
 ) -> dict[str, object]:
-    channels = service.list_channels(instance=instance, status=status_filter, limit=limit)
+    channels = service.list_channels(instance=instance, status=status_filter, kind=kind_filter, limit=limit)
     return {"status": "ok", "instance": instance.model_dump(mode="json"), "channels": [item.model_dump(mode="json") for item in channels]}
 
 

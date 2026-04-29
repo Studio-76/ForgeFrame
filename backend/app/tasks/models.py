@@ -32,6 +32,14 @@ DeliveryChannelKind = Literal["in_app", "email", "webhook", "slack"]
 DELIVERY_CHANNEL_STATUSES = ("active", "disabled", "degraded")
 DeliveryChannelStatus = Literal["active", "disabled", "degraded"]
 
+ChannelCredentialStorageState = Literal[
+    "not_applicable",
+    "no_secret_material",
+    "external_reference",
+    "inline_secret_redacted",
+    "masked_target_only",
+]
+
 NOTIFICATION_DELIVERY_STATUSES = (
     "draft",
     "preview",
@@ -77,7 +85,12 @@ class DeliveryChannelSummary(BaseModel):
     status: DeliveryChannelStatus
     fallback_channel_id: str | None = None
     metadata: dict[str, Any] = Field(default_factory=dict)
+    scope_label: str = "instance default"
+    fallback_rank: int = 0
     notification_count: int = 0
+    last_success_at: datetime | None = None
+    last_failure_at: datetime | None = None
+    last_error: str | None = None
     created_at: datetime
     updated_at: datetime
 
@@ -221,8 +234,24 @@ class NotificationDetail(NotificationSummary):
     delivery_evidence: NotificationDeliveryEvidence | None = None
 
 
+class ChannelCredentialPosture(BaseModel):
+    storage_state: ChannelCredentialStorageState
+    target_masked: bool = False
+    redacted_fields: list[str] = Field(default_factory=list)
+    external_reference_fields: list[str] = Field(default_factory=list)
+    summary: str
+
+
 class ChannelDetail(DeliveryChannelSummary):
     recent_notifications: list[NotificationSummary] = Field(default_factory=list)
+    credential_posture: ChannelCredentialPosture
+    advanced_metadata: dict[str, Any] = Field(default_factory=dict)
+    scope_reference: str | None = None
+    fallback_chain: list[DeliveryChannelSummary] = Field(default_factory=list)
+    fallback_sources: list[DeliveryChannelSummary] = Field(default_factory=list)
+    test_delivery_supported: bool = False
+    test_delivery_state: str = "not_ready"
+    test_delivery_reason: str = "Backend does not expose a dedicated channel test-send endpoint."
 
 
 class CreateTask(BaseModel):
