@@ -2185,12 +2185,20 @@ export type ArtifactRecord = {
   instance_id: string;
   company_id: string;
   workspace_id?: string | null;
+  scope?: "workspace" | "instance";
+  scope_label?: string;
+  workspace_role?: ArtifactWorkspaceRole | null;
   artifact_type: ArtifactType;
   label: string;
   uri: string;
   media_type?: string | null;
   preview_url?: string | null;
   size_bytes?: number | null;
+  version?: string | null;
+  checksum_sha256?: string | null;
+  retention_policy?: string | null;
+  retained_until?: string | null;
+  archive_reason?: string | null;
   status: ArtifactStatus;
   created_by_type: string;
   created_by_id?: string | null;
@@ -4550,6 +4558,11 @@ export function createArtifact(
     media_type?: string | null;
     preview_url?: string | null;
     size_bytes?: number | null;
+    version?: string | null;
+    checksum_sha256?: string | null;
+    retention_policy?: string | null;
+    retained_until?: string | null;
+    archive_reason?: string | null;
     status?: ArtifactStatus;
     attachments?: Array<{
       target_kind: ArtifactAttachmentTargetKind;
@@ -4577,6 +4590,11 @@ export function updateArtifact(
     media_type?: string | null;
     preview_url?: string | null;
     size_bytes?: number | null;
+    version?: string | null;
+    checksum_sha256?: string | null;
+    retention_policy?: string | null;
+    retained_until?: string | null;
+    archive_reason?: string | null;
     status?: ArtifactStatus;
     metadata?: Record<string, unknown>;
   },

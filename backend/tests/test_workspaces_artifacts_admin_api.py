@@ -384,6 +384,84 @@ def test_artifact_creation_rejects_unknown_runtime_targets() -> None:
     assert invalid_approval_attachment.json()["error"]["type"] == "artifact_invalid"
 
 
+def test_artifact_detail_surfaces_structured_metadata_and_clears_optional_access_fields() -> None:
+    client = TestClient(app)
+    headers = _admin_headers(client)
+    suffix = uuid4().hex[:8]
+    company_id = f"company_workspace_artifact_meta_{suffix}"
+    instance_id = _create_instance(client, headers, instance_id=f"instance_workspace_artifact_meta_{suffix}", company_id=company_id)
+    workspace = _create_workspace(
+        client,
+        headers,
+        instance_id=instance_id,
+        title="Artifact metadata workspace",
+        issue_id="FOR-801",
+    )
+
+    created = client.post(
+        "/admin/artifacts",
+        headers=headers,
+        params=_instance_scope(instance_id),
+        json={
+            "workspace_id": workspace["workspace_id"],
+            "artifact_type": "pdf",
+            "label": "Workspace handoff bundle",
+            "uri": "https://forgeframe.local/handoff/ws-801.pdf",
+            "preview_url": "https://forgeframe.local/handoff/ws-801-preview",
+            "media_type": "application/pdf",
+            "size_bytes": 4096,
+            "version": "2026.04.29-1",
+            "checksum_sha256": "abcdef1234567890",
+            "retention_policy": "handoff_90d",
+            "retained_until": "2026-07-29T12:00:00Z",
+            "archive_reason": "Awaiting downstream delivery confirmation.",
+            "metadata": {
+                "category": "handoff",
+                "retention": {"region": "eu"},
+            },
+        },
+    )
+    assert created.status_code == 201
+    artifact = created.json()["artifact"]
+    assert artifact["scope"] == "workspace"
+    assert artifact["scope_label"] == "Workspace · artifact"
+    assert artifact["workspace_role"] == "artifact"
+    assert artifact["version"] == "2026.04.29-1"
+    assert artifact["checksum_sha256"] == "abcdef1234567890"
+    assert artifact["retention_policy"] == "handoff_90d"
+    assert artifact["retained_until"].startswith("2026-07-29T12:00:00")
+    assert artifact["archive_reason"] == "Awaiting downstream delivery confirmation."
+    assert artifact["metadata"]["category"] == "handoff"
+    assert artifact["metadata"]["retention"]["region"] == "eu"
+    assert artifact["metadata"]["retention"]["policy"] == "handoff_90d"
+
+    updated = client.patch(
+        f"/admin/artifacts/{artifact['artifact_id']}",
+        headers=headers,
+        params=_instance_scope(instance_id),
+        json={
+            "preview_url": None,
+            "media_type": None,
+            "size_bytes": None,
+            "checksum_sha256": None,
+            "retention_policy": None,
+            "retained_until": None,
+            "archive_reason": None,
+            "metadata": {"category": "handoff-archived"},
+        },
+    )
+    assert updated.status_code == 200
+    updated_artifact = updated.json()["artifact"]
+    assert updated_artifact["preview_url"] is None
+    assert updated_artifact["media_type"] is None
+    assert updated_artifact["size_bytes"] is None
+    assert updated_artifact["checksum_sha256"] is None
+    assert updated_artifact["retention_policy"] is None
+    assert updated_artifact["retained_until"] is None
+    assert updated_artifact["archive_reason"] is None
+    assert updated_artifact["metadata"] == {"category": "handoff-archived"}
+
+
 def test_workspace_lifecycle_transitions_reject_impossible_manual_jumps() -> None:
     client = TestClient(app)
     headers = _admin_headers(client)

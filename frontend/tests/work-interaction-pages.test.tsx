@@ -200,12 +200,20 @@ function createArtifactRecord(overrides: Partial<ArtifactRecord> = {}): Artifact
     instance_id: "instance_alpha",
     company_id: "company_alpha",
     workspace_id: "ws_alpha",
+    scope: "workspace",
+    scope_label: "Workspace · preview",
+    workspace_role: "preview",
     artifact_type: "preview_link",
     label: "Preview package",
     uri: "https://forgeframe.local/previews/ws_alpha",
     media_type: "text/html",
     preview_url: "https://forgeframe.local/previews/ws_alpha",
     size_bytes: 2048,
+    version: "2026.04.23-1",
+    checksum_sha256: "abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890",
+    retention_policy: "workspace_review_30d",
+    retained_until: "2026-05-23T09:45:00Z",
+    archive_reason: null,
     status: "active",
     created_by_type: "user",
     created_by_id: "user-admin",
@@ -217,6 +225,30 @@ function createArtifactRecord(overrides: Partial<ArtifactRecord> = {}): Artifact
         target_kind: "run",
         target_id: "run_alpha",
         role: "related",
+        created_at: "2026-04-23T09:45:00Z",
+      },
+      {
+        attachment_id: "attach_approval_alpha",
+        artifact_id: "artifact_preview",
+        target_kind: "approval",
+        target_id: "run:instance_alpha:company_alpha:approval-1",
+        role: "approval_evidence",
+        created_at: "2026-04-23T09:45:00Z",
+      },
+      {
+        attachment_id: "attach_instance_alpha",
+        artifact_id: "artifact_preview",
+        target_kind: "instance",
+        target_id: "instance_alpha",
+        role: "instance_scope",
+        created_at: "2026-04-23T09:45:00Z",
+      },
+      {
+        attachment_id: "attach_decision_alpha",
+        artifact_id: "artifact_preview",
+        target_kind: "decision",
+        target_id: "decision_alpha",
+        role: "decision_context",
         created_at: "2026-04-23T09:45:00Z",
       },
     ],
@@ -505,9 +537,75 @@ describe("work interaction pages", () => {
     expect(fetchArtifactDetailMock).toHaveBeenCalledWith("artifact_preview", "instance_alpha");
     expect(container.textContent).toContain("Artifact inventory");
     expect(container.textContent).toContain("Preview package");
+    expect(container.textContent).toContain("Workspace · preview");
+    expect(container.textContent).toContain("2026.04.23-1");
+    expect(container.textContent).toContain("workspace_review_30d");
 
-    const runLink = Array.from(container.querySelectorAll("a")).find((link) => link.textContent === "Open execution review");
+    const inventoryRow = container.querySelector('table[aria-label="Artifact inventory"] tbody tr');
+    const inventoryLinks = Array.from(inventoryRow?.querySelectorAll("a") ?? []);
+    expect(inventoryLinks.some((link) => link.getAttribute("href") === "/workspaces?instanceId=instance_alpha&workspaceId=ws_alpha")).toBe(true);
+    expect(inventoryLinks.some((link) => link.getAttribute("href") === "/execution?instanceId=instance_alpha&runId=run_alpha")).toBe(true);
+    expect(inventoryLinks.some((link) => link.getAttribute("href") === "/approvals?instanceId=instance_alpha&approvalId=run%3Ainstance_alpha%3Acompany_alpha%3Aapproval-1&status=all")).toBe(true);
+
+    const runLink = Array.from(container.querySelectorAll("a")).find((link) => link.getAttribute("href") === "/execution?instanceId=instance_alpha&runId=run_alpha");
     expect(runLink?.getAttribute("href")).toBe("/execution?instanceId=instance_alpha&runId=run_alpha");
+    const downloadLink = Array.from(container.querySelectorAll("a")).find((link) => link.textContent === "Download artifact");
+    expect(downloadLink?.getAttribute("href")).toBe("https://forgeframe.local/previews/ws_alpha");
+  });
+
+  it("shows metadata-only artifact truth when blob delivery is not exposed on this surface", async () => {
+    fetchArtifactsMock.mockResolvedValueOnce({
+      status: "ok",
+      instance: null,
+      artifacts: [createArtifactRecord({
+        artifact_id: "artifact_note",
+        scope_label: "Instance",
+        workspace_id: null,
+        workspace_role: null,
+        artifact_type: "handoff_note",
+        label: "Handoff operator note",
+        uri: "file:///var/lib/forgeframe/handoff-note.md",
+        preview_url: null,
+        media_type: "text/markdown",
+        version: null,
+        checksum_sha256: null,
+        retention_policy: null,
+        retained_until: null,
+        attachments: [],
+      })],
+    });
+    fetchArtifactDetailMock.mockResolvedValueOnce({
+      status: "ok",
+      artifact: createArtifactRecord({
+        artifact_id: "artifact_note",
+        scope: "instance",
+        scope_label: "Instance",
+        workspace_id: null,
+        workspace_role: null,
+        artifact_type: "handoff_note",
+        label: "Handoff operator note",
+        uri: "file:///var/lib/forgeframe/handoff-note.md",
+        preview_url: null,
+        media_type: "text/markdown",
+        version: null,
+        checksum_sha256: null,
+        retention_policy: null,
+        retained_until: null,
+        attachments: [],
+      }),
+    });
+
+    await renderIntoDom(withAppContext({
+      path: "/artifacts?instanceId=instance_alpha&artifactId=artifact_note",
+      element: <ArtifactsPage />,
+      session: adminSession,
+    }));
+    await flushEffects();
+
+    expect(container.textContent).toContain("metadata-only");
+    expect(container.textContent).toContain("does not expose blob delivery");
+    const downloadLink = Array.from(container.querySelectorAll("a")).find((link) => link.textContent === "Download artifact");
+    expect(downloadLink).toBeUndefined();
   });
 
   it("creates and updates artifacts against the selected instance scope", async () => {
@@ -521,36 +619,55 @@ describe("work interaction pages", () => {
     const forms = Array.from(container.querySelectorAll("form"));
     const createForm = forms.find((form) => form.textContent?.includes("Create artifact"));
     const editForm = forms.find((form) => form.textContent?.includes("Save artifact"));
-    const createInputs = Array.from(createForm?.querySelectorAll("input") ?? []);
-    const createSelects = Array.from(createForm?.querySelectorAll("select") ?? []);
     const createButton = Array.from(createForm?.querySelectorAll("button") ?? []).find((button) => button.textContent?.includes("Create artifact"));
-    const editInputs = Array.from(editForm?.querySelectorAll("input") ?? []);
     const saveButton = Array.from(editForm?.querySelectorAll("button") ?? []).find((button) => button.textContent?.includes("Save artifact"));
 
     await act(async () => {
-      setControlValue(createInputs[0] as HTMLInputElement, "ws_alpha");
-      setControlValue(createInputs[1] as HTMLInputElement, "Handoff note");
-      setControlValue(createInputs[2] as HTMLInputElement, "file:///var/lib/forgeframe/handoff.md");
-      setControlValue(createSelects[1] as HTMLSelectElement, "handoff_note");
+      setControlValue(getLabeledControl(createForm!, "Workspace ID"), "ws_alpha");
+      setControlValue(getLabeledControl(createForm!, "Workspace role"), "handoff");
+      setControlValue(getLabeledControl(createForm!, "Type"), "handoff_note");
+      setControlValue(getLabeledControl(createForm!, "Linked run ID"), "run_alpha");
+      setControlValue(getLabeledControl(createForm!, "Linked approval ID"), "run:instance_alpha:company_alpha:approval-1");
+      setControlValue(getLabeledControl(createForm!, "Label"), "Handoff note");
+      setControlValue(getLabeledControl(createForm!, "URI"), "https://forgeframe.local/handoff/ws_alpha.md");
+      setControlValue(getLabeledControl(createForm!, "Version"), "2026.04.24-2");
+      setControlValue(getLabeledControl(createForm!, "Checksum (SHA-256)"), "feedface1234");
+      setControlValue(getLabeledControl(createForm!, "Retention policy"), "handoff_90d");
+      setControlValue(getLabeledControl(createForm!, "Retained until"), "2026-07-24T10:00:00Z");
       createButton!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     });
     await flushEffects();
 
     expect(createArtifactMock).toHaveBeenCalledWith("instance_alpha", expect.objectContaining({
       workspace_id: "ws_alpha",
+      workspace_role: "handoff",
       label: "Handoff note",
-      uri: "file:///var/lib/forgeframe/handoff.md",
+      uri: "https://forgeframe.local/handoff/ws_alpha.md",
       artifact_type: "handoff_note",
+      version: "2026.04.24-2",
+      checksum_sha256: "feedface1234",
+      retention_policy: "handoff_90d",
+      retained_until: "2026-07-24T10:00:00Z",
+      attachments: [
+        { target_kind: "run", target_id: "run_alpha", role: "run_output" },
+        { target_kind: "approval", target_id: "run:instance_alpha:company_alpha:approval-1", role: "approval_evidence" },
+      ],
     }));
 
     await act(async () => {
-      setControlValue(editInputs[0] as HTMLInputElement, "Preview package updated");
+      setControlValue(getLabeledControl(editForm!, "Label"), "Preview package updated");
+      setControlValue(getLabeledControl(editForm!, "Preview URL"), "");
+      setControlValue(getLabeledControl(editForm!, "Checksum (SHA-256)"), "");
+      setControlValue(getLabeledControl(editForm!, "Archive reason"), "Archived after approval closeout");
       saveButton!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     });
     await flushEffects();
 
     expect(updateArtifactMock).toHaveBeenCalledWith("instance_alpha", "artifact_preview", expect.objectContaining({
       label: "Preview package updated",
+      preview_url: null,
+      checksum_sha256: null,
+      archive_reason: "Archived after approval closeout",
     }));
   });
 });

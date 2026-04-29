@@ -41,6 +41,7 @@ ArtifactAttachmentTargetKind = Literal["workspace", "run", "approval", "instance
 
 ARTIFACT_WORKSPACE_ROLES = ("artifact", "preview", "handoff")
 ArtifactWorkspaceRole = Literal["artifact", "preview", "handoff"]
+ArtifactScope = Literal["workspace", "instance"]
 
 
 class ArtifactAttachmentRecord(BaseModel):
@@ -57,12 +58,20 @@ class ArtifactRecord(BaseModel):
     instance_id: str
     company_id: str
     workspace_id: str | None = None
+    scope: ArtifactScope = "instance"
+    scope_label: str = "Instance"
+    workspace_role: ArtifactWorkspaceRole | None = None
     artifact_type: ArtifactType
     label: str
     uri: str
     media_type: str | None = None
     preview_url: str | None = None
     size_bytes: int | None = None
+    version: str | None = None
+    checksum_sha256: str | None = None
+    retention_policy: str | None = None
+    retained_until: datetime | None = None
+    archive_reason: str | None = None
     status: ArtifactStatus = "active"
     created_by_type: str = "system"
     created_by_id: str | None = None
@@ -87,6 +96,11 @@ class CreateArtifact(BaseModel):
     media_type: str | None = Field(default=None, max_length=191)
     preview_url: str | None = Field(default=None, max_length=2000)
     size_bytes: int | None = Field(default=None, ge=0)
+    version: str | None = Field(default=None, max_length=191)
+    checksum_sha256: str | None = Field(default=None, max_length=191)
+    retention_policy: str | None = Field(default=None, max_length=191)
+    retained_until: datetime | None = None
+    archive_reason: str | None = Field(default=None, max_length=500)
     status: ArtifactStatus = "active"
     attachments: list[CreateArtifactAttachment] = Field(default_factory=list)
     metadata: dict[str, Any] = Field(default_factory=dict)
@@ -98,5 +112,10 @@ class UpdateArtifact(BaseModel):
     media_type: str | None = Field(default=None, max_length=191)
     preview_url: str | None = Field(default=None, max_length=2000)
     size_bytes: int | None = Field(default=None, ge=0)
+    version: str | None = Field(default=None, max_length=191)
+    checksum_sha256: str | None = Field(default=None, max_length=191)
+    retention_policy: str | None = Field(default=None, max_length=191)
+    retained_until: datetime | None = None
+    archive_reason: str | None = Field(default=None, max_length=500)
     status: ArtifactStatus | None = None
     metadata: dict[str, Any] | None = None

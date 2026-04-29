@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from datetime import UTC, datetime
+from typing import Any
 from uuid import uuid4
 
 from sqlalchemy import and_, func, select
@@ -163,8 +164,19 @@ class WorkInteractionAdminService:
         rows = session.execute(
             select(ArtifactAttachmentORM)
             .where(ArtifactAttachmentORM.company_id == company_id, ArtifactAttachmentORM.artifact_id.in_(artifact_ids))
-            .order_by(ArtifactAttachmentORM.created_at.asc())
+            .order_by(ArtifactAttachmentORM.created_at.asc(), ArtifactAttachmentORM.target_kind.asc(), ArtifactAttachmentORM.target_id.asc(), ArtifactAttachmentORM.role.asc())
         ).scalars().all()
+        priority = {"workspace": 0, "run": 1, "approval": 2, "instance": 3, "decision": 4}
+        rows = sorted(
+            rows,
+            key=lambda row: (
+                row.artifact_id,
+                priority.get(row.target_kind, 99),
+                row.created_at,
+                row.target_id,
+                row.role,
+            ),
+        )
         grouped: dict[str, list[ArtifactAttachmentRecord]] = {}
         for row in rows:
             grouped.setdefault(row.artifact_id, []).append(
@@ -179,23 +191,141 @@ class WorkInteractionAdminService:
             )
         return grouped
 
+    @staticmethod
+    def _clean_optional_string(value: str | None) -> str | None:
+        if value is None:
+            return None
+        normalized = value.strip()
+        return normalized or None
+
+    @staticmethod
+    def _artifact_metadata_string(metadata: dict[str, Any], *keys: str) -> str | None:
+        for key in keys:
+            value = metadata.get(key)
+            if isinstance(value, str):
+                normalized = value.strip()
+                if normalized:
+                    return normalized
+        return None
+
+    @staticmethod
+    def _artifact_metadata_datetime(metadata: dict[str, Any], *paths: tuple[str, ...]) -> datetime | None:
+        for path in paths:
+            current: Any = metadata
+            for segment in path:
+                if not isinstance(current, dict):
+                    current = None
+                    break
+                current = current.get(segment)
+            if isinstance(current, datetime):
+                return current
+            if isinstance(current, str):
+                try:
+                    return datetime.fromisoformat(current.replace("Z", "+00:00"))
+                except ValueError:
+                    continue
+        return None
+
+    @staticmethod
+    def _artifact_workspace_role(*, row: ArtifactORM, artifact_attachments: list[ArtifactAttachmentRecord]) -> str | None:
+        if row.workspace_id is None:
+            return None
+        for attachment in artifact_attachments:
+            if attachment.target_kind == "workspace" and attachment.target_id == row.workspace_id:
+                return attachment.role
+        return "artifact"
+
+    def _apply_structured_artifact_metadata(
+        self,
+        metadata: dict[str, Any],
+        *,
+        fields_set: set[str] | None,
+        version: str | None,
+        checksum_sha256: str | None,
+        retention_policy: str | None,
+        retained_until: datetime | None,
+        archive_reason: str | None,
+    ) -> dict[str, Any]:
+        next_metadata = dict(metadata)
+
+        def should_apply(field_name: str) -> bool:
+            return fields_set is None or field_name in fields_set
+
+        if should_apply("version"):
+            if version:
+                next_metadata["version"] = version
+            else:
+                next_metadata.pop("version", None)
+                next_metadata.pop("artifact_version", None)
+                next_metadata.pop("version_label", None)
+
+        if should_apply("checksum_sha256"):
+            if checksum_sha256:
+                next_metadata["checksum_sha256"] = checksum_sha256
+            else:
+                next_metadata.pop("checksum_sha256", None)
+                next_metadata.pop("sha256", None)
+                next_metadata.pop("checksum", None)
+
+        if should_apply("retention_policy") or should_apply("retained_until"):
+            current_retention = next_metadata.get("retention")
+            retention = dict(current_retention) if isinstance(current_retention, dict) else {}
+            if should_apply("retention_policy"):
+                if retention_policy:
+                    retention["policy"] = retention_policy
+                else:
+                    retention.pop("policy", None)
+                    retention.pop("classification", None)
+            if should_apply("retained_until"):
+                if retained_until is not None:
+                    retention["retained_until"] = retained_until.isoformat()
+                else:
+                    retention.pop("retained_until", None)
+            if retention:
+                next_metadata["retention"] = retention
+            else:
+                next_metadata.pop("retention", None)
+                next_metadata.pop("retention_policy", None)
+                next_metadata.pop("retained_until", None)
+
+        if should_apply("archive_reason"):
+            if archive_reason:
+                next_metadata["archive_reason"] = archive_reason
+            else:
+                next_metadata.pop("archive_reason", None)
+
+        return next_metadata
+
     def _artifact_record(self, row: ArtifactORM, *, attachments: dict[str, list[ArtifactAttachmentRecord]]) -> ArtifactRecord:
+        artifact_attachments = list(attachments.get(row.id, []))
+        metadata = dict(row.metadata_json or {})
+        workspace_role = self._artifact_workspace_role(row=row, artifact_attachments=artifact_attachments)
+        scope = "workspace" if row.workspace_id else "instance"
         return ArtifactRecord(
             artifact_id=row.id,
             instance_id=row.instance_id,
             company_id=row.company_id,
             workspace_id=row.workspace_id,
+            scope=scope,
+            scope_label=f"Workspace · {workspace_role or 'artifact'}" if row.workspace_id else "Instance",
+            workspace_role=workspace_role,  # type: ignore[arg-type]
             artifact_type=row.artifact_type,  # type: ignore[arg-type]
             label=row.label,
             uri=row.uri,
             media_type=row.media_type,
             preview_url=row.preview_url,
             size_bytes=row.size_bytes,
+            version=self._artifact_metadata_string(metadata, "version", "artifact_version", "version_label"),
+            checksum_sha256=self._artifact_metadata_string(metadata, "checksum_sha256", "sha256", "checksum"),
+            retention_policy=self._artifact_metadata_string(metadata, "retention_policy")
+            or self._artifact_metadata_string(metadata.get("retention", {}) if isinstance(metadata.get("retention"), dict) else {}, "policy", "classification"),
+            retained_until=self._artifact_metadata_datetime(metadata, ("retention", "retained_until"), ("retained_until",)),
+            archive_reason=self._artifact_metadata_string(metadata, "archive_reason"),
             status=row.status,  # type: ignore[arg-type]
             created_by_type=row.created_by_type,
             created_by_id=row.created_by_id,
-            metadata=dict(row.metadata_json or {}),
-            attachments=list(attachments.get(row.id, [])),
+            metadata=metadata,
+            attachments=artifact_attachments,
             created_at=row.created_at,
             updated_at=row.updated_at,
         )
@@ -789,6 +919,15 @@ class WorkInteractionAdminService:
 
             now = self._now()
             artifact_id = self._new_id("artifact")
+            metadata_json = self._apply_structured_artifact_metadata(
+                dict(payload.metadata),
+                fields_set=None,
+                version=self._clean_optional_string(payload.version),
+                checksum_sha256=self._clean_optional_string(payload.checksum_sha256),
+                retention_policy=self._clean_optional_string(payload.retention_policy),
+                retained_until=payload.retained_until,
+                archive_reason=self._clean_optional_string(payload.archive_reason),
+            )
             row = ArtifactORM(
                 id=artifact_id,
                 instance_id=instance.instance_id,
@@ -803,7 +942,7 @@ class WorkInteractionAdminService:
                 status=payload.status,
                 created_by_type=actor_type,
                 created_by_id=actor_id,
-                metadata_json=dict(payload.metadata),
+                metadata_json=metadata_json,
                 created_at=now,
                 updated_at=now,
             )
@@ -888,12 +1027,32 @@ class WorkInteractionAdminService:
             row = session.get(ArtifactORM, artifact_id)
             if row is None or row.company_id != instance.company_id:
                 raise ValueError(f"Artifact '{artifact_id}' was not found.")
+            fields_set = payload.model_fields_set
             row.label = payload.label.strip() if payload.label is not None else row.label
             row.uri = payload.uri.strip() if payload.uri is not None else row.uri
-            row.media_type = payload.media_type.strip() if payload.media_type else row.media_type
-            row.preview_url = payload.preview_url.strip() if payload.preview_url else row.preview_url
-            row.size_bytes = payload.size_bytes if payload.size_bytes is not None else row.size_bytes
-            row.status = payload.status or row.status
-            row.metadata_json = dict(payload.metadata) if payload.metadata is not None else dict(row.metadata_json or {})
+            if "media_type" in fields_set:
+                row.media_type = payload.media_type.strip() if payload.media_type else None
+            if "preview_url" in fields_set:
+                row.preview_url = payload.preview_url.strip() if payload.preview_url else None
+            if "size_bytes" in fields_set:
+                row.size_bytes = payload.size_bytes
+            if "status" in fields_set and payload.status is not None:
+                row.status = payload.status
+            base_metadata = (
+                {}
+                if "metadata" in fields_set and payload.metadata is None
+                else dict(payload.metadata)
+                if payload.metadata is not None
+                else dict(row.metadata_json or {})
+            )
+            row.metadata_json = self._apply_structured_artifact_metadata(
+                base_metadata,
+                fields_set=fields_set,
+                version=self._clean_optional_string(payload.version),
+                checksum_sha256=self._clean_optional_string(payload.checksum_sha256),
+                retention_policy=self._clean_optional_string(payload.retention_policy),
+                retained_until=payload.retained_until,
+                archive_reason=self._clean_optional_string(payload.archive_reason),
+            )
             row.updated_at = self._now()
         return self.get_artifact(instance=instance, artifact_id=artifact_id)
