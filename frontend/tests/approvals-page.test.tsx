@@ -51,6 +51,7 @@ function createApprovalSummary(overrides: Partial<ApprovalSummary> = {}): Approv
     source_kind: "execution_run",
     native_approval_id: "approval-1",
     approval_type: "execution_run",
+    approval_class: "execution_control",
     status: "open",
     title: "Execution approval for provider_sync",
     opened_at: "2026-04-21T22:00:00Z",
@@ -64,18 +65,60 @@ function createApprovalSummary(overrides: Partial<ApprovalSummary> = {}): Approv
       user_id: "requester-1",
       username: "ops-admin",
       display_name: "Ops Admin",
+      role: "admin",
     },
     target: {
-      user_id: "target-1",
-      username: "runtime-service",
-      display_name: "Runtime Service",
-      role: "operator",
+      display_name: "Issue FOR-178 in workspace ws_alpha",
+      role: "execution_scope",
     },
     decision_actor: null,
     ready_to_issue: false,
     session_status: null,
+    risk_level: "medium",
+    risk_label: "Queued runtime work resumes after approval",
+    due_state: "no_deadline",
+    next_step: "Review evidence and record approve or reject. Run pause/resume/retry stays on Execution Review.",
+    consequence_summary: "Approving re-opens the paused execution path. Rejecting sends the run into its configured deny flow.",
+    irreversible: false,
     ...overrides,
   };
+}
+
+function createElevatedApprovalSummary(overrides: Partial<ApprovalSummary> = {}): ApprovalSummary {
+  return createApprovalSummary({
+    approval_id: "elevated:req_alpha",
+    source_kind: "elevated_access",
+    native_approval_id: "req_alpha",
+    approval_type: "break_glass",
+    approval_class: "elevated_access",
+    title: "Break-glass approval for Shared Target",
+    expires_at: "2026-04-22T12:10:00Z",
+    instance_id: null,
+    company_id: null,
+    issue_id: null,
+    workspace_id: null,
+    requester: {
+      user_id: "requester-2",
+      username: "sec-ops",
+      display_name: "Security Ops",
+      role: "operator",
+    },
+    target: {
+      user_id: "target-2",
+      username: "shared-target",
+      display_name: "Shared Target",
+      role: "operator",
+    },
+    ready_to_issue: false,
+    session_status: "not_issued",
+    risk_level: "critical",
+    risk_label: "Break-glass admin access",
+    due_state: "due_now",
+    next_step: "Review access evidence and record approve or reject. Session issuance stays on Security & Policies.",
+    consequence_summary: "Approving records access eligibility only. The requester must still issue the session from Security & Policies.",
+    irreversible: true,
+    ...overrides,
+  });
 }
 
 function createApprovalDetail(overrides: Partial<ApprovalDetail> = {}): ApprovalDetail {
@@ -150,6 +193,50 @@ function createApprovalDetail(overrides: Partial<ApprovalDetail> = {}): Approval
       approve_blocked_reason: null,
       reject_blocked_reason: null,
     },
+    action_preview: {
+      decision_surface: "Approve or reject only",
+      decision_boundary: "This page records the approval outcome. Pause, resume, retry, and replay controls remain on Execution Review.",
+      approve_effect: "Approving lets the waiting execution path continue according to the stored resume disposition.",
+      reject_effect: "Rejecting sends the run into its configured deny path such as failed, cancel, or compensating.",
+      risk_level: "medium",
+      risk_label: "Queued runtime work resumes after approval",
+      irreversible: false,
+    },
+    affected_identity: {
+      requester: { display_name: "Ops Admin", username: "ops-admin" },
+      target: { display_name: "Issue FOR-178 in workspace ws_alpha" },
+    },
+    affected_scope: {
+      instance_id: "instance_alpha",
+      company_id: "company_alpha",
+      workspace_id: "ws_alpha",
+      issue_id: "FOR-178",
+      run_id: "run-1",
+    },
+    consequence: {
+      approve: "Paused execution becomes eligible to continue or re-queue.",
+      reject: "The configured deny flow runs next and may fail, cancel, or compensate the run.",
+      irreversible: false,
+      follow_up_surface: "Execution Review",
+    },
+    audit_history: {
+      target_type: "execution_approval",
+      target_id: "run:instance_alpha:company_alpha:approval-1",
+      native_approval_id: "approval-1",
+      status: "open",
+      instance_id: "instance_alpha",
+      entries: [
+        {
+          event_id: "audit_evt_execution_approval",
+          created_at: "2026-04-21T22:10:00Z",
+          action: "execution_approval_opened",
+          status: "ok",
+          actor: "Ops Admin",
+          details: "Execution approval opened.",
+          decision_note: null,
+        },
+      ],
+    },
     ...overrides,
   };
 }
@@ -176,11 +263,17 @@ async function flushEffects() {
   });
 }
 
-function setControlValue(control: HTMLTextAreaElement | HTMLInputElement, value: string) {
-  const prototype = Object.getPrototypeOf(control) as HTMLTextAreaElement | HTMLInputElement;
+function setControlValue(control: HTMLTextAreaElement | HTMLInputElement | HTMLSelectElement, value: string) {
+  const prototype = Object.getPrototypeOf(control) as HTMLTextAreaElement | HTMLInputElement | HTMLSelectElement;
   const setter = Object.getOwnPropertyDescriptor(prototype, "value")?.set;
   setter?.call(control, value);
   control.dispatchEvent(new Event("input", { bubbles: true }));
+  control.dispatchEvent(new Event("change", { bubbles: true }));
+}
+
+function findLabeledControl<T extends HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>(labelText: string): T | null {
+  const label = Array.from(container.querySelectorAll("label")).find((item) => item.textContent?.includes(labelText));
+  return label?.querySelector<T>("input, select, textarea") ?? null;
 }
 
 async function renderApprovalsPage(path = "/approvals?instanceId=instance_alpha") {
@@ -208,6 +301,7 @@ beforeEach(() => {
     status: "ok",
     approval: createApprovalDetail({
       status: "approved",
+      due_state: "resolved",
       actions: {
         can_approve: false,
         can_reject: false,
@@ -221,6 +315,7 @@ beforeEach(() => {
     status: "ok",
     approval: createApprovalDetail({
       status: "rejected",
+      due_state: "resolved",
       actions: {
         can_approve: false,
         can_reject: false,
@@ -259,23 +354,28 @@ beforeEach(() => {
 });
 
 afterEach(() => {
-  if (!root) {
-    vi.useRealTimers();
-    return;
+  if (root) {
+    act(() => {
+      root?.unmount();
+    });
   }
-
-  act(() => {
-    root?.unmount();
-  });
   root = null;
   vi.useRealTimers();
 });
 
 describe("approvals page workflow", () => {
-  it("loads the shared approvals queue inside the selected instance slice", async () => {
+  it("loads the decision queue and detail view with action preview and audit links", async () => {
     await renderApprovalsPage();
 
-    expect(fetchApprovalsMock).toHaveBeenCalledWith("open", "instance_alpha");
+    expect(fetchApprovalsMock).toHaveBeenCalledWith({
+      status: "open",
+      approvalType: "all",
+      risk: "all",
+      due: "all",
+      approvalClass: "all",
+      instanceId: "instance_alpha",
+      limit: 200,
+    });
     expect(fetchApprovalDetailMock).toHaveBeenCalledWith("run:instance_alpha:company_alpha:approval-1", "instance_alpha");
     expect(fetchAuditHistoryMock).toHaveBeenCalledWith({
       instanceId: "instance_alpha",
@@ -283,7 +383,11 @@ describe("approvals page workflow", () => {
       targetType: "execution_approval",
       limit: 1,
     });
-    expect(container.textContent).toContain("Instance instance_alpha");
+
+    expect(container.textContent).toContain("Execution control");
+    expect(container.textContent).toContain("Queued runtime work resumes after approval");
+    expect(container.textContent).toContain("Pause, resume, retry, and replay controls remain on Execution Review.");
+    expect(container.textContent).toContain("Execution approval opened.");
 
     const executionLink = Array.from(container.querySelectorAll("a")).find((link) => link.textContent?.includes("Open Execution Review"));
     expect(executionLink?.getAttribute("href")).toBe("/execution?instanceId=instance_alpha&companyId=company_alpha&state=waiting_on_approval&runId=run-1");
@@ -298,18 +402,97 @@ describe("approvals page workflow", () => {
     expect(auditLink?.getAttribute("href")).toBe("/logs?instanceId=instance_alpha&auditWindow=all&auditTargetType=execution_approval&auditTargetId=run%3Ainstance_alpha%3Acompany_alpha%3Aapproval-1&auditEvent=audit_evt_execution_approval#audit-history");
   });
 
-  it("submits approval decisions with the active instance scope preserved", async () => {
-    await renderApprovalsPage();
+  it("filters the queue by risk and approval class", async () => {
+    fetchApprovalsMock.mockResolvedValue({
+      status: "ok",
+      approvals: [
+        createApprovalSummary(),
+        createElevatedApprovalSummary(),
+      ],
+    });
+    fetchApprovalDetailMock.mockResolvedValue({
+      status: "ok",
+      approval: createApprovalDetail({
+        ...createElevatedApprovalSummary(),
+        action_preview: {
+          decision_surface: "Approve or reject only",
+          decision_boundary: "This page records the approval outcome. Session issuance, expiry review, and revocation stay on Security & Policies.",
+          approve_effect: "Marks the request approved and makes the session eligible to start; it does not issue the elevated session.",
+          reject_effect: "Closes the request as rejected and prevents any session issuance from this approval item.",
+          risk_level: "critical",
+          risk_label: "Break-glass admin access",
+          irreversible: true,
+        },
+        affected_identity: {
+          requester: { display_name: "Security Ops", username: "sec-ops" },
+          target: { display_name: "Shared Target", username: "shared-target" },
+        },
+        affected_scope: {
+          request_id: "req_alpha",
+          request_type: "break_glass",
+          session_role: "admin",
+        },
+        consequence: {
+          approve: "Requester can start the approved elevated session from Security & Policies.",
+          reject: "Request is denied and no elevated session can be issued from this approval item.",
+          irreversible: true,
+          follow_up_surface: "Security & Policies",
+        },
+        audit_history: {
+          target_type: "elevated_access_request",
+          target_id: "req_alpha",
+          approval_id: "elevated:req_alpha",
+          status: "open",
+          entries: [
+            {
+              event_id: "audit_evt_elevated_open",
+              created_at: "2026-04-22T11:55:00Z",
+              action: "break_glass_requested",
+              status: "ok",
+              actor: "Security Ops",
+              details: "Break-glass request created.",
+              decision_note: null,
+            },
+          ],
+        },
+      }),
+    });
 
-    const noteField = container.querySelector<HTMLTextAreaElement>("textarea");
-    const reviewApproveButton = Array.from(container.querySelectorAll("button")).find((button) => button.textContent?.includes("Review approval"));
+    await renderApprovalsPage("/approvals");
 
-    expect(noteField).not.toBeNull();
-    expect(reviewApproveButton).not.toBeNull();
+    const riskSelect = findLabeledControl<HTMLSelectElement>("Risk");
+    const classSelect = findLabeledControl<HTMLSelectElement>("Approval class");
+
+    expect(riskSelect).not.toBeNull();
+    expect(classSelect).not.toBeNull();
 
     await act(async () => {
-      setControlValue(noteField!, "Approve the waiting provider sync after reviewing the recorded evidence.");
+      setControlValue(riskSelect!, "critical");
+      setControlValue(classSelect!, "elevated_access");
     });
+    await flushEffects();
+
+    expect(fetchApprovalsMock).toHaveBeenLastCalledWith({
+      status: "open",
+      approvalType: "all",
+      risk: "critical",
+      due: "all",
+      approvalClass: "elevated_access",
+      instanceId: null,
+      limit: 200,
+    });
+
+    const tableBodyText = container.querySelector("tbody")?.textContent ?? "";
+    expect(tableBodyText).toContain("Break-glass");
+    expect(tableBodyText).toContain("Shared Target");
+    expect(tableBodyText).not.toContain("provider_sync");
+  });
+
+  it("records approval decisions without requiring a comment", async () => {
+    await renderApprovalsPage();
+
+    const reviewApproveButton = Array.from(container.querySelectorAll("button")).find((button) => button.textContent?.includes("Review approval"));
+    expect(reviewApproveButton).not.toBeNull();
 
     await act(async () => {
       reviewApproveButton!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
@@ -326,8 +509,10 @@ describe("approvals page workflow", () => {
 
     expect(approveApprovalMock).toHaveBeenCalledWith(
       "run:instance_alpha:company_alpha:approval-1",
-      "Approve the waiting provider sync after reviewing the recorded evidence.",
+      "",
       "instance_alpha",
     );
+    expect(container.textContent).toContain("Approval recorded");
+    expect(container.textContent).toContain("No comment supplied.");
   });
 });

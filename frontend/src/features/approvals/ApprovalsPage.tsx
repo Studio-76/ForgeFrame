@@ -6,11 +6,9 @@ import {
   fetchApprovalDetail,
   fetchApprovals,
   rejectApproval,
-  type AuditHistoryQuery,
   type ApprovalDetail,
   type ApprovalStatus,
   type ApprovalSummary,
-  type ApprovalType,
 } from "../../api/admin";
 import { buildAuditHistoryPath, resolveNewestAuditHistoryPath } from "../../app/auditHistory";
 import {
@@ -25,31 +23,33 @@ import { buildArtifactsPath, buildWorkspacePath } from "../../app/workInteractio
 import { PageIntro } from "../../components/PageIntro";
 import {
   approvalAuditCandidates,
-  approvalRequesterFilterValue,
   buildApprovalAuditHistoryFallback,
-  buildRequesterOptions,
-  formatOpenedAtFilter,
+  buildInstanceOptions,
+  formatClassFilterLabel,
+  formatDueFilterLabel,
+  formatInstanceFilterLabel,
+  formatRiskFilterLabel,
   formatStatusFilterLabel,
-  groupApprovalsForQueue,
   matchesApprovalSearch,
-  matchesOpenedAtFilter,
-  matchesRequesterFilter,
+  matchesClassFilter,
+  matchesDueFilter,
+  matchesInstanceFilter,
+  matchesRiskFilter,
   parseStatusFilter,
-  type ApprovalRequesterFilter,
+  sortApprovalsForDecisionSurface,
+  type ApprovalClassFilter,
+  type ApprovalDueFilter,
+  type ApprovalInstanceFilter,
+  type ApprovalRiskFilter,
   type ApprovalTypeFilter,
-  type OpenedAtFilter,
 } from "./helpers";
 import {
   describeApprovalBanner,
   describeApprovalDecisionConfirmation,
   describeApprovalMutationMessage,
   describeDecisionBlockedReason,
-  formatApprovalActor,
-  formatApprovalSourceKind,
   formatApprovalType,
   type ApprovalDecisionIntent,
-  formatSessionStatus,
-  formatTimestamp,
 } from "./presentation";
 import {
   ApprovalDetailSection,
@@ -57,27 +57,38 @@ import {
   ApprovalQueueCard,
 } from "./sections";
 
+type DecisionOutcomeNotice = {
+  approvalId: string;
+  tone: "success" | "danger";
+  title: string;
+  body: string;
+  comment: string;
+};
+
 export function ApprovalsPage() {
   const location = useLocation();
   const { session, sessionReady } = useAppSession();
   const searchParams = new URLSearchParams(location.search);
-  const instanceId = getInstanceIdFromSearchParams(searchParams);
+  const routeInstanceId = getInstanceIdFromSearchParams(searchParams);
   const requestedApprovalId = searchParams.get("approvalId")?.trim() || null;
   const requestedStatusFilter = parseStatusFilter(searchParams.get("status")) ?? (requestedApprovalId ? "all" : "open");
 
   const [statusFilter, setStatusFilter] = useState<ApprovalStatus | "all">(requestedStatusFilter);
   const [typeFilter, setTypeFilter] = useState<ApprovalTypeFilter>("all");
-  const [requesterFilter, setRequesterFilter] = useState<ApprovalRequesterFilter>("all");
-  const [openedAtFilter, setOpenedAtFilter] = useState<OpenedAtFilter>("all");
+  const [riskFilter, setRiskFilter] = useState<ApprovalRiskFilter>("all");
+  const [instanceFilter, setInstanceFilter] = useState<ApprovalInstanceFilter>(routeInstanceId?.trim() || "all");
+  const [dueFilter, setDueFilter] = useState<ApprovalDueFilter>("all");
+  const [approvalClassFilter, setApprovalClassFilter] = useState<ApprovalClassFilter>("all");
   const [search, setSearch] = useState("");
   const [approvals, setApprovals] = useState<ApprovalSummary[]>([]);
   const [selectedApprovalId, setSelectedApprovalId] = useState<string | null>(requestedApprovalId);
   const [detail, setDetail] = useState<ApprovalDetail | null>(null);
   const [listLoading, setListLoading] = useState(false);
   const [detailLoading, setDetailLoading] = useState(false);
-  const [decisionNote, setDecisionNote] = useState("");
+  const [decisionComment, setDecisionComment] = useState("");
   const [decisionConfirmation, setDecisionConfirmation] = useState<ApprovalDecisionIntent | null>(null);
   const [decisionPending, setDecisionPending] = useState(false);
+  const [decisionOutcome, setDecisionOutcome] = useState<DecisionOutcomeNotice | null>(null);
   const [reloadSequence, setReloadSequence] = useState(0);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
@@ -97,6 +108,11 @@ export function ApprovalsPage() {
   }, [requestedStatusFilter]);
 
   useEffect(() => {
+    const nextInstanceFilter = routeInstanceId?.trim() || "all";
+    setInstanceFilter((current) => (current === nextInstanceFilter ? current : nextInstanceFilter));
+  }, [routeInstanceId]);
+
+  useEffect(() => {
     if (!requestedApprovalId) {
       return;
     }
@@ -114,7 +130,15 @@ export function ApprovalsPage() {
     let cancelled = false;
     setListLoading(true);
 
-    void fetchApprovals(statusFilter, instanceId)
+    void fetchApprovals({
+      status: statusFilter,
+      approvalType: typeFilter,
+      risk: riskFilter,
+      due: dueFilter,
+      approvalClass: approvalClassFilter,
+      instanceId: instanceFilter === "all" ? null : instanceFilter,
+      limit: 200,
+    })
       .then((payload) => {
         if (cancelled) {
           return;
@@ -140,7 +164,7 @@ export function ApprovalsPage() {
     return () => {
       cancelled = true;
     };
-  }, [canReview, instanceId, reloadSequence, statusFilter]);
+  }, [approvalClassFilter, canReview, dueFilter, instanceFilter, reloadSequence, riskFilter, statusFilter, typeFilter]);
 
   useEffect(() => {
     let cancelled = false;
@@ -153,8 +177,8 @@ export function ApprovalsPage() {
     }
 
     void resolveNewestAuditHistoryPath(
-      approvalAuditCandidates(null, instanceId),
-      buildApprovalAuditHistoryFallback(null, instanceId),
+      approvalAuditCandidates(null, routeInstanceId),
+      buildApprovalAuditHistoryFallback(null, routeInstanceId),
     ).then((route) => {
       if (!cancelled) {
         setAuditHistoryRoute(route);
@@ -164,44 +188,40 @@ export function ApprovalsPage() {
     return () => {
       cancelled = true;
     };
-  }, [canReview, instanceId, reloadSequence]);
+  }, [canReview, reloadSequence, routeInstanceId]);
 
-  const requesterOptions = buildRequesterOptions(approvals);
-
-  useEffect(() => {
-    if (requesterFilter === "all") {
-      return;
-    }
-    if (requesterOptions.some((option) => option.value === requesterFilter)) {
-      return;
-    }
-    setRequesterFilter("all");
-  }, [requesterFilter, requesterOptions]);
+  const instanceOptions = buildInstanceOptions(approvals);
+  const visibleInstanceOptions = instanceFilter !== "all" && !instanceOptions.some((option) => option.value === instanceFilter)
+    ? [{ value: instanceFilter, label: instanceFilter }, ...instanceOptions]
+    : instanceOptions;
 
   const visibleApprovals = approvals.filter(
     (item) => (
       (typeFilter === "all" || item.approval_type === typeFilter)
-      && matchesRequesterFilter(item, requesterFilter)
-      && matchesOpenedAtFilter(item, openedAtFilter)
+      && matchesRiskFilter(item, riskFilter)
+      && matchesInstanceFilter(item, instanceFilter)
+      && matchesDueFilter(item, dueFilter)
+      && matchesClassFilter(item, approvalClassFilter)
       && matchesApprovalSearch(item, search)
     ),
   );
-  const queueSections = groupApprovalsForQueue(visibleApprovals, Date.now());
-  const orderedVisibleApprovals = queueSections.flatMap((section) => section.items);
+  const orderedVisibleApprovals = sortApprovalsForDecisionSurface(visibleApprovals);
+  const selectedApprovalSummary = approvals.find((item) => item.approval_id === selectedApprovalId) ?? null;
 
-  const requesterFilterLabel = requesterFilter === "all"
-    ? "All requesters"
-    : requesterOptions.find((option) => option.value === requesterFilter)?.label ?? "Selected requester";
   const activeQueueFilters = [
     `Status: ${formatStatusFilterLabel(statusFilter)}`,
-    typeFilter !== "all" ? `Approval type: ${formatApprovalType(typeFilter)}` : null,
-    requesterFilter !== "all" ? `Requester: ${requesterFilterLabel}` : null,
-    openedAtFilter !== "all" ? `Opened at: ${formatOpenedAtFilter(openedAtFilter)}` : null,
+    typeFilter !== "all" ? `Type: ${formatApprovalType(typeFilter)}` : null,
+    riskFilter !== "all" ? `Risk: ${formatRiskFilterLabel(riskFilter)}` : null,
+    instanceFilter !== "all" ? `Instance: ${formatInstanceFilterLabel(instanceFilter, visibleInstanceOptions)}` : null,
+    dueFilter !== "all" ? `Due: ${formatDueFilterLabel(dueFilter)}` : null,
+    approvalClassFilter !== "all" ? `Class: ${formatClassFilterLabel(approvalClassFilter)}` : null,
     search.trim() ? `Search: ${search.trim()}` : null,
   ].filter((item): item is string => Boolean(item));
   const hasClientSideQueueFilters = typeFilter !== "all"
-    || requesterFilter !== "all"
-    || openedAtFilter !== "all"
+    || riskFilter !== "all"
+    || instanceFilter !== "all"
+    || dueFilter !== "all"
+    || approvalClassFilter !== "all"
     || search.trim().length > 0;
 
   useEffect(() => {
@@ -234,7 +254,7 @@ export function ApprovalsPage() {
     let cancelled = false;
     setDetailLoading(true);
 
-    void fetchApprovalDetail(selectedApprovalId, instanceId)
+    void fetchApprovalDetail(selectedApprovalId, selectedApprovalSummary?.instance_id ?? routeInstanceId)
       .then((payload) => {
         if (cancelled) {
           return;
@@ -258,10 +278,11 @@ export function ApprovalsPage() {
     return () => {
       cancelled = true;
     };
-  }, [canReview, instanceId, selectedApprovalId]);
+  }, [canReview, routeInstanceId, selectedApprovalId, selectedApprovalSummary?.instance_id]);
 
   useEffect(() => {
     setDecisionConfirmation(null);
+    setDecisionOutcome((current) => (current && current.approvalId !== selectedApprovalId ? null : current));
   }, [detail?.approval_id, detail?.status, selectedApprovalId]);
 
   useEffect(() => {
@@ -275,8 +296,8 @@ export function ApprovalsPage() {
     }
 
     void resolveNewestAuditHistoryPath(
-      approvalAuditCandidates(detail, instanceId),
-      buildApprovalAuditHistoryFallback(detail, instanceId),
+      approvalAuditCandidates(detail, detail.instance_id ?? routeInstanceId),
+      buildApprovalAuditHistoryFallback(detail, detail.instance_id ?? routeInstanceId),
     ).then((route) => {
       if (!cancelled) {
         setDetailAuditHistoryRoute(route);
@@ -286,13 +307,12 @@ export function ApprovalsPage() {
     return () => {
       cancelled = true;
     };
-  }, [auditHistoryRoute, detail, instanceId]);
+  }, [auditHistoryRoute, detail, routeInstanceId]);
 
-  const decisionReady = decisionNote.trim().length >= 8;
   const openCount = approvals.filter((item) => item.status === "open").length;
+  const highRiskCount = approvals.filter((item) => item.risk_level === "critical" || item.risk_level === "high" || item.irreversible).length;
   const executionCount = approvals.filter((item) => item.source_kind === "execution_run").length;
   const elevatedCount = approvals.filter((item) => item.source_kind === "elevated_access").length;
-  const readyToStartCount = approvals.filter((item) => item.ready_to_issue).length;
 
   const banner = detail ? describeApprovalBanner(detail) : null;
   const canApprove = canDecide && detail?.actions.can_approve === true;
@@ -313,59 +333,20 @@ export function ApprovalsPage() {
       ? approveDecisionFlow
       : rejectDecisionFlow
     : null;
-
-  const primaryEvidenceEntries: Array<[string, unknown]> = detail
-    ? [
-        ["request_time", detail.opened_at],
-        ["requester", formatApprovalActor(detail.requester)],
-        ["target", formatApprovalActor(detail.target)],
-        ["impact", banner?.body ?? detail.title],
-      ]
-    : [];
-
-  const evidenceEntries: Array<[string, unknown]> = detail ? Object.entries(detail.evidence) : [];
-  const decisionEntries: Array<[string, unknown]> = detail
-    ? [
-        ["decided_at", formatTimestamp(detail.decided_at)],
-        ["expires_at", formatTimestamp(detail.expires_at)],
-        ["session_status", formatSessionStatus(detail.session_status, detail.ready_to_issue) ?? "Not applicable"],
-        ["decision_actor", formatApprovalActor(detail.decision_actor)],
-      ]
-    : [];
-  const referenceEntries: Array<[string, unknown]> = detail
-    ? [
-        ["approval_id", detail.approval_id],
-        ["native_approval_id", detail.native_approval_id],
-        ["approval_type", formatApprovalType(detail.approval_type)],
-        ["source_kind", formatApprovalSourceKind(detail.source_kind)],
-        ["company_id", detail.company_id ?? "Not recorded"],
-        ["issue_id", detail.issue_id ?? "Not recorded"],
-      ]
-    : [];
-  const sourceEntries: Array<[string, unknown]> = detail ? Object.entries(detail.source) : [];
   const workspaceSummary = detail?.workspace && typeof detail.workspace.workspace_id === "string"
     ? detail.workspace
     : null;
   const workspaceRoute = workspaceSummary?.workspace_id
-    ? buildWorkspacePath({ instanceId: workspaceSummary.instance_id ?? detail?.instance_id ?? instanceId, workspaceId: workspaceSummary.workspace_id })
+    ? buildWorkspacePath({ instanceId: workspaceSummary.instance_id ?? detail?.instance_id ?? routeInstanceId, workspaceId: workspaceSummary.workspace_id })
     : null;
   const artifactRoute = detail
     ? buildArtifactsPath({
-        instanceId: detail.instance_id ?? instanceId,
+        instanceId: detail.instance_id ?? routeInstanceId,
         workspaceId: workspaceSummary?.workspace_id ?? detail.workspace_id ?? undefined,
         targetKind: "approval",
         targetId: detail.approval_id,
       })
     : null;
-  const workspaceEntries: Array<[string, unknown]> = workspaceSummary
-    ? [
-        ["workspace_id", workspaceSummary.workspace_id],
-        ["status", workspaceSummary.status ?? "Not recorded"],
-        ["preview_status", workspaceSummary.preview_status ?? "Not recorded"],
-        ["review_status", workspaceSummary.review_status ?? "Not recorded"],
-        ["handoff_status", workspaceSummary.handoff_status ?? "Not recorded"],
-      ]
-    : [];
   const executionReviewRoute = detail?.source_kind === "execution_run"
     ? buildExecutionReviewPath({
         instanceId: detail.instance_id ?? (typeof detail.source.instance_id === "string" ? detail.source.instance_id : null),
@@ -374,22 +355,6 @@ export function ApprovalsPage() {
         state: typeof detail.evidence.run_state === "string" ? detail.evidence.run_state : null,
       })
     : null;
-  const auditScopeLabel = detail
-    ? detail.source_kind === "elevated_access"
-      ? "Elevated-access request history"
-      : "Execution approval history"
-    : "";
-  const auditNextActorLabel = detail
-    ? detail.status === "open"
-      ? hasDecisionAction
-        ? "After reviewing the retained audit trail, record the decision note and confirm the approval outcome."
-        : "After reviewing the retained audit trail, hand the item to an eligible admin instead of relying on raw metadata alone."
-      : detail.source_kind === "elevated_access" && detail.ready_to_issue
-        ? "The requester is next. They must open Security & Policies to start the approved elevated session."
-        : detail.source_kind === "execution_run"
-          ? "Use the audit trail, then return to Execution Review to confirm the downstream run state."
-          : "Use the audit trail, then return to Security & Policies to confirm the downstream session posture."
-    : "";
 
   const startDecisionConfirmation = (intent: ApprovalDecisionIntent) => {
     if (!detail || !canDecide) {
@@ -411,22 +376,32 @@ export function ApprovalsPage() {
     }
 
     try {
+      const trimmedComment = decisionComment.trim();
       setDecisionPending(true);
       setError("");
       setMessage("");
+      setDecisionOutcome(null);
       const response = intent === "approve"
-        ? await approveApproval(detail.approval_id, decisionNote.trim(), instanceId)
-        : await rejectApproval(detail.approval_id, decisionNote.trim(), instanceId);
+        ? await approveApproval(detail.approval_id, trimmedComment, detail.instance_id ?? routeInstanceId)
+        : await rejectApproval(detail.approval_id, trimmedComment, detail.instance_id ?? routeInstanceId);
       setApprovals((current) =>
         current.map((item) => (item.approval_id === response.approval.approval_id ? { ...item, ...response.approval } : item)),
       );
       setDetail(response.approval);
-      setDecisionNote("");
+      setDecisionComment("");
       setDecisionConfirmation(null);
-      setMessage(describeApprovalMutationMessage(response.approval));
+      const mutationMessage = describeApprovalMutationMessage(response.approval);
+      setMessage(mutationMessage);
+      setDecisionOutcome({
+        approvalId: response.approval.approval_id,
+        tone: intent === "approve" ? "success" : "danger",
+        title: intent === "approve" ? "Approval recorded" : "Rejection recorded",
+        body: mutationMessage,
+        comment: trimmedComment,
+      });
       const auditRoute = await resolveNewestAuditHistoryPath(
-        approvalAuditCandidates(response.approval, instanceId),
-        buildApprovalAuditHistoryFallback(response.approval, instanceId),
+        approvalAuditCandidates(response.approval, response.approval.instance_id ?? routeInstanceId),
+        buildApprovalAuditHistoryFallback(response.approval, response.approval.instance_id ?? routeInstanceId),
       );
       setAuditHistoryRoute(auditRoute);
       setDetailAuditHistoryRoute(auditRoute);
@@ -587,24 +562,28 @@ export function ApprovalsPage() {
           <strong className="fg-kpi-value">{elevatedCount}</strong>
         </article>
         <article className="fg-kpi">
-          <span className="fg-muted">Ready to start</span>
-          <strong className="fg-kpi-value">{readyToStartCount}</strong>
+          <span className="fg-muted">High-risk or irreversible</span>
+          <strong className="fg-kpi-value">{highRiskCount}</strong>
         </article>
       </div>
 
       <ApprovalFiltersCard
         statusFilter={statusFilter}
         typeFilter={typeFilter}
-        requesterFilter={requesterFilter}
-        requesterOptions={requesterOptions}
-        openedAtFilter={openedAtFilter}
+        riskFilter={riskFilter}
+        instanceFilter={instanceFilter}
+        instanceOptions={visibleInstanceOptions}
+        dueFilter={dueFilter}
+        approvalClassFilter={approvalClassFilter}
         search={search}
         orderedVisibleCount={orderedVisibleApprovals.length}
         activeQueueFilters={activeQueueFilters}
         onStatusFilterChange={setStatusFilter}
         onTypeFilterChange={setTypeFilter}
-        onRequesterFilterChange={setRequesterFilter}
-        onOpenedAtFilterChange={setOpenedAtFilter}
+        onRiskFilterChange={setRiskFilter}
+        onInstanceFilterChange={setInstanceFilter}
+        onDueFilterChange={setDueFilter}
+        onApprovalClassFilterChange={setApprovalClassFilter}
         onSearchChange={setSearch}
       />
 
@@ -612,7 +591,6 @@ export function ApprovalsPage() {
         <ApprovalQueueCard
           listLoading={listLoading}
           orderedVisibleApprovals={orderedVisibleApprovals}
-          queueSections={queueSections}
           selectedApprovalId={selectedApprovalId}
           statusFilter={statusFilter}
           approvalsLoaded={approvals.length}
@@ -626,22 +604,13 @@ export function ApprovalsPage() {
           banner={banner}
           executionReviewRoute={executionReviewRoute}
           canOpenSecurity={canOpenSecurity}
-          primaryEvidenceEntries={primaryEvidenceEntries}
-          evidenceEntries={evidenceEntries}
-          auditScopeLabel={auditScopeLabel}
-          auditNextActorLabel={auditNextActorLabel}
           detailAuditHistoryRoute={detailAuditHistoryRoute}
-          decisionEntries={decisionEntries}
-          referenceEntries={referenceEntries}
-          sourceEntries={sourceEntries}
-          workspaceEntries={workspaceEntries}
           workspaceRoute={workspaceRoute}
           artifactRoute={artifactRoute}
-          artifacts={detail?.artifacts ?? []}
+          decisionOutcome={decisionOutcome}
           hasDecisionAction={hasDecisionAction}
           decisionBlockedReason={decisionBlockedReason}
-          decisionNote={decisionNote}
-          decisionReady={decisionReady}
+          decisionComment={decisionComment}
           decisionPending={decisionPending}
           canApprove={canApprove}
           canReject={canReject}
@@ -649,10 +618,9 @@ export function ApprovalsPage() {
           rejectDecisionFlow={rejectDecisionFlow}
           pendingDecisionFlow={pendingDecisionFlow}
           pendingDecisionIntent={decisionConfirmation}
-          hasPendingDecisionFlow={decisionConfirmation !== null}
           approveBlockedReason={approveBlockedReason}
           rejectBlockedReason={rejectBlockedReason}
-          onDecisionNoteChange={setDecisionNote}
+          onDecisionCommentChange={setDecisionComment}
           onStartDecisionConfirmation={startDecisionConfirmation}
           onCancelDecisionConfirmation={() => setDecisionConfirmation(null)}
           onDecision={(intent) => void onDecision(intent)}

@@ -182,14 +182,21 @@ def test_shared_approvals_queue_and_detail_include_execution_and_elevated_access
 
     assert items[execution_approval_id]["source_kind"] == "execution_run"
     assert items[execution_approval_id]["approval_type"] == "execution_run"
+    assert items[execution_approval_id]["approval_class"] == "execution_control"
     assert items[execution_approval_id]["status"] == "open"
     assert items[execution_approval_id]["instance_id"] == instance_id
     assert items[execution_approval_id]["company_id"] == "company_alpha"
+    assert items[execution_approval_id]["requester"]["display_name"] == "agent_backend_api_lead"
+    assert items[execution_approval_id]["risk_level"] == "medium"
+    assert "Execution Review" in items[execution_approval_id]["next_step"]
 
     assert items[elevated_approval_id]["source_kind"] == "elevated_access"
     assert items[elevated_approval_id]["approval_type"] == "impersonation"
+    assert items[elevated_approval_id]["approval_class"] == "elevated_access"
     assert items[elevated_approval_id]["status"] == "open"
     assert items[elevated_approval_id]["session_status"] == "not_issued"
+    assert items[elevated_approval_id]["risk_level"] == "high"
+    assert items[elevated_approval_id]["due_state"] in {"due_now", "due_soon", "later"}
 
     execution_detail = client.get(
         f"/admin/approvals/{execution_approval_id}",
@@ -197,9 +204,15 @@ def test_shared_approvals_queue_and_detail_include_execution_and_elevated_access
         params={"instanceId": instance_id},
     )
     assert execution_detail.status_code == 200
-    assert execution_detail.json()["approval"]["source"]["run_id"] == run_id
-    assert execution_detail.json()["approval"]["source"]["instance_id"] == instance_id
-    assert execution_detail.json()["approval"]["evidence"]["gate_key"] == "manual_approval_gate"
+    execution_payload = execution_detail.json()["approval"]
+    assert execution_payload["source"]["run_id"] == run_id
+    assert execution_payload["source"]["instance_id"] == instance_id
+    assert execution_payload["evidence"]["gate_key"] == "manual_approval_gate"
+    assert execution_payload["action_preview"]["decision_boundary"].startswith("This page records the approval outcome.")
+    assert execution_payload["affected_scope"]["run_id"] == run_id
+    assert execution_payload["audit_history"]["target_type"] == "execution_approval"
+    assert execution_payload["audit_history"]["entry_count"] == 1
+    assert execution_payload["audit_history"]["entries"][0]["action"] == "execution_approval_opened"
 
     elevated_detail = client.get(f"/admin/approvals/{elevated_approval_id}", headers=headers)
     assert elevated_detail.status_code == 200
@@ -208,6 +221,11 @@ def test_shared_approvals_queue_and_detail_include_execution_and_elevated_access
     assert elevated_payload["evidence"]["issuance_status"] == "pending"
     assert elevated_payload["actions"]["can_approve"] is False
     assert elevated_payload["actions"]["decision_blocked_reason"] == "elevated_access_self_approval_forbidden"
+    assert elevated_payload["action_preview"]["decision_boundary"].startswith("This page records the approval outcome.")
+    assert elevated_payload["affected_scope"]["request_type"] == "impersonation"
+    assert elevated_payload["audit_history"]["target_type"] == "elevated_access_request"
+    assert elevated_payload["audit_history"]["entry_count"] == 1
+    assert elevated_payload["audit_history"]["entries"][0]["action"] == "admin_impersonation_requested"
 
 
 def test_shared_approvals_support_instance_scope_but_reject_legacy_tenant_and_company_filters() -> None:
@@ -264,6 +282,7 @@ def test_shared_approvals_support_instance_scope_but_reject_legacy_tenant_and_co
         approval_id=alpha_native_id,
     ) in approval_ids
     assert not any(item.endswith("company_beta:" + _beta_native_id) for item in approval_ids)
+    assert not any(item.startswith("elevated:") for item in approval_ids)
 
     detail = client.get(
         f"/admin/approvals/{build_execution_approval_id(instance_id=alpha_instance_id, company_id='company_alpha', approval_id=alpha_native_id)}",
@@ -308,7 +327,7 @@ def test_shared_execution_approval_decisions_record_instance_scoped_audit_truth(
         f"/admin/approvals/{approval_id}/approve",
         headers=headers,
         params={"instanceId": instance_id},
-        json={"decision_note": "Approve the execution run after verifying the instance-scoped failure evidence."},
+        json={},
     )
 
     assert approved.status_code == 200
@@ -325,6 +344,72 @@ def test_shared_execution_approval_decisions_record_instance_scoped_audit_truth(
     )
     assert audit_event.instance_id == instance_id
     assert audit_event.metadata["instance_id"] == instance_id
+    assert audit_event.metadata["decision_note"] == ""
+
+
+def test_shared_approvals_server_side_filters_survive_large_shared_queue_snapshots() -> None:
+    client = TestClient(app)
+    headers = _admin_headers(client)
+    suffix = uuid4().hex[:8]
+    requester_user_id, _requester_headers = _create_admin_user_and_headers(
+        client,
+        headers,
+        username=f"filter-requester-{suffix}",
+        display_name="Filter Requester",
+    )
+
+    created_user = client.post(
+        "/admin/security/users",
+        headers=headers,
+        json={
+            "username": f"filter-target-{suffix}",
+            "display_name": "Filter Target",
+            "role": "operator",
+            "password": "Filter-Target-123",
+        },
+    )
+    assert created_user.status_code == 201
+    target_user_id = created_user.json()["user"]["user_id"]
+    governance = get_governance_service()
+    target_user = governance._find_user_by_id(target_user_id)
+    assert target_user is not None
+
+    for index in range(205):
+        governance._create_elevated_access_request(
+            request_type="impersonation",
+            requested_by_user_id=requester_user_id,
+            target_user=target_user,
+            session_role=target_user.role,
+            approval_reference=f"INC-FILTER-{index:03d}",
+            justification="Create shared elevated-access pressure before verifying server-side approval filters.",
+            notification_targets=["slack://approvals-pressure"],
+            duration_minutes=15,
+        )
+
+    instance_id = _create_instance(client, headers, instance_id=f"instance_filter_{suffix}", company_id=f"company_filter_{suffix}")
+    _run_id, execution_native_id = _open_execution_approval(company_id=f"company_filter_{suffix}")
+    execution_approval_id = build_execution_approval_id(
+        instance_id=instance_id,
+        company_id=f"company_filter_{suffix}",
+        approval_id=execution_native_id,
+    )
+
+    instance_filtered = client.get(
+        "/admin/approvals",
+        headers=headers,
+        params={
+            "status": "open",
+            "instanceId": instance_id,
+            "approvalClass": "execution_control",
+            "approvalType": "execution_run",
+            "risk": "medium",
+            "due": "no_deadline",
+            "limit": 200,
+        },
+    )
+    assert instance_filtered.status_code == 200
+    payload = instance_filtered.json()["approvals"]
+    assert [item["approval_id"] for item in payload] == [execution_approval_id]
 
 
 def test_shared_execution_approvals_require_instance_membership_and_separate_read_from_decide() -> None:
@@ -470,7 +555,7 @@ def test_shared_approvals_expose_elevated_access_requests_to_operator_observers_
         json={"decision_note": "Operators can inspect this approval, but they cannot decide it."},
     )
     assert approve.status_code == 403
-    assert approve.json()["detail"] == "admin_role_required"
+    assert approve.json()["error"]["message"] == "admin_role_required"
 
 
 def test_shared_approvals_approve_endpoint_updates_elevated_access_lifecycle() -> None:

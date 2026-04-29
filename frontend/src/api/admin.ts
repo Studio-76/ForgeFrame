@@ -2645,11 +2645,16 @@ export type ApprovalActorSummary = {
   role?: string | null;
 };
 
+export type ApprovalClass = "execution_control" | "elevated_access";
+export type ApprovalRiskLevel = "low" | "medium" | "high" | "critical";
+export type ApprovalDueState = "due_now" | "due_soon" | "later" | "no_deadline" | "resolved";
+
 export type ApprovalSummary = {
   approval_id: string;
   source_kind: ApprovalSourceKind;
   native_approval_id: string;
   approval_type: ApprovalType;
+  approval_class: ApprovalClass;
   status: ApprovalStatus;
   title: string;
   opened_at: string;
@@ -2664,6 +2669,12 @@ export type ApprovalSummary = {
   decision_actor?: ApprovalActorSummary | null;
   ready_to_issue: boolean;
   session_status?: ApprovalSessionStatus | null;
+  risk_level: ApprovalRiskLevel;
+  risk_label: string;
+  due_state: ApprovalDueState;
+  next_step: string;
+  consequence_summary: string;
+  irreversible: boolean;
 };
 
 export type ApprovalDetail = ApprovalSummary & {
@@ -2678,6 +2689,11 @@ export type ApprovalDetail = ApprovalSummary & {
     approve_blocked_reason?: ApprovalDecisionBlockedReason | null;
     reject_blocked_reason?: ApprovalDecisionBlockedReason | null;
   };
+  action_preview: Record<string, unknown>;
+  affected_identity: Record<string, unknown>;
+  affected_scope: Record<string, unknown>;
+  consequence: Record<string, unknown>;
+  audit_history: Record<string, unknown>;
 };
 
 export type ExecutionRunAttemptView = {
@@ -3757,13 +3773,34 @@ export async function generateAuditExport(
   };
 }
 
-export function fetchApprovals(status: ApprovalStatus | "all" = "open", instanceId?: string | null) {
+export function fetchApprovals(options: {
+  status?: ApprovalStatus | "all";
+  approvalType?: ApprovalType | "all";
+  risk?: ApprovalRiskLevel | "all";
+  due?: ApprovalDueState | "all";
+  approvalClass?: ApprovalClass | "all";
+  instanceId?: string | null;
+  limit?: number;
+}) {
   const params = new URLSearchParams();
-  if (status !== "all") {
-    params.set("status", status);
+  params.set("limit", String(options.limit ?? 200));
+  if (options.status && options.status !== "all") {
+    params.set("status", options.status);
   }
-  if (instanceId?.trim()) {
-    params.set("instanceId", instanceId.trim());
+  if (options.approvalType && options.approvalType !== "all") {
+    params.set("approvalType", options.approvalType);
+  }
+  if (options.risk && options.risk !== "all") {
+    params.set("risk", options.risk);
+  }
+  if (options.due && options.due !== "all") {
+    params.set("due", options.due);
+  }
+  if (options.approvalClass && options.approvalClass !== "all") {
+    params.set("approvalClass", options.approvalClass);
+  }
+  if (options.instanceId?.trim()) {
+    params.set("instanceId", options.instanceId.trim());
   }
   const suffix = params.size ? `?${params.toString()}` : "";
   return fetchJson<{ status: string; approvals: ApprovalSummary[] }>(`/admin/approvals${suffix}`);
@@ -3778,7 +3815,7 @@ export function fetchApprovalDetail(approvalId: string, instanceId?: string | nu
   return fetchJson<{ status: string; approval: ApprovalDetail }>(`/admin/approvals/${encodeURIComponent(approvalId)}${suffix}`);
 }
 
-export function approveApproval(approvalId: string, decisionNote: string, instanceId?: string | null) {
+export function approveApproval(approvalId: string, decisionNote?: string | null, instanceId?: string | null) {
   const params = new URLSearchParams();
   if (instanceId?.trim()) {
     params.set("instanceId", instanceId.trim());
@@ -3786,11 +3823,11 @@ export function approveApproval(approvalId: string, decisionNote: string, instan
   const suffix = params.size ? `?${params.toString()}` : "";
   return fetchJson<{ status: string; approval: ApprovalDetail }>(`/admin/approvals/${encodeURIComponent(approvalId)}/approve${suffix}`, {
     method: "POST",
-    body: JSON.stringify({ decision_note: decisionNote }),
+    body: JSON.stringify({ decision_note: decisionNote?.trim() || null }),
   });
 }
 
-export function rejectApproval(approvalId: string, decisionNote: string, instanceId?: string | null) {
+export function rejectApproval(approvalId: string, decisionNote?: string | null, instanceId?: string | null) {
   const params = new URLSearchParams();
   if (instanceId?.trim()) {
     params.set("instanceId", instanceId.trim());
@@ -3798,7 +3835,7 @@ export function rejectApproval(approvalId: string, decisionNote: string, instanc
   const suffix = params.size ? `?${params.toString()}` : "";
   return fetchJson<{ status: string; approval: ApprovalDetail }>(`/admin/approvals/${encodeURIComponent(approvalId)}/reject${suffix}`, {
     method: "POST",
-    body: JSON.stringify({ decision_note: decisionNote }),
+    body: JSON.stringify({ decision_note: decisionNote?.trim() || null }),
   });
 }
 

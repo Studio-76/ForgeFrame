@@ -19,6 +19,15 @@ ApprovalSourceKind = Literal["execution_run", "elevated_access"]
 APPROVAL_TYPES = ("execution_run", "break_glass", "impersonation")
 ApprovalType = Literal["execution_run", "break_glass", "impersonation"]
 
+APPROVAL_CLASSES = ("execution_control", "elevated_access")
+ApprovalClass = Literal["execution_control", "elevated_access"]
+
+APPROVAL_RISK_LEVELS = ("low", "medium", "high", "critical")
+ApprovalRiskLevel = Literal["low", "medium", "high", "critical"]
+
+APPROVAL_DUE_STATES = ("due_now", "due_soon", "later", "no_deadline", "resolved")
+ApprovalDueState = Literal["due_now", "due_soon", "later", "no_deadline", "resolved"]
+
 APPROVAL_SESSION_STATUSES = ("not_issued", "active", "expired", "revoked")
 ApprovalSessionStatus = Literal["not_issued", "active", "expired", "revoked"]
 
@@ -70,6 +79,7 @@ class ApprovalSummary(BaseModel):
     source_kind: ApprovalSourceKind
     native_approval_id: str
     approval_type: ApprovalType
+    approval_class: ApprovalClass
     status: ApprovalStatus
     title: str
     opened_at: datetime
@@ -84,6 +94,12 @@ class ApprovalSummary(BaseModel):
     decision_actor: ApprovalActorSummary | None = None
     ready_to_issue: bool = False
     session_status: ApprovalSessionStatus | None = None
+    risk_level: ApprovalRiskLevel = "medium"
+    risk_label: str = ""
+    due_state: ApprovalDueState = "no_deadline"
+    next_step: str = ""
+    consequence_summary: str = ""
+    irreversible: bool = False
 
 
 class ApprovalDetail(ApprovalSummary):
@@ -92,3 +108,8 @@ class ApprovalDetail(ApprovalSummary):
     artifacts: list[ArtifactRecord] = Field(default_factory=list)
     workspace: dict[str, Any] = Field(default_factory=dict)
     actions: dict[str, Any] = Field(default_factory=dict)
+    action_preview: dict[str, Any] = Field(default_factory=dict)
+    affected_identity: dict[str, Any] = Field(default_factory=dict)
+    affected_scope: dict[str, Any] = Field(default_factory=dict)
+    consequence: dict[str, Any] = Field(default_factory=dict)
+    audit_history: dict[str, Any] = Field(default_factory=dict)

@@ -1,10 +1,14 @@
 import type {
   AdminSessionUser,
   ApprovalActorSummary,
+  ApprovalClass,
   ApprovalDetail,
+  ApprovalDueState,
+  ApprovalRiskLevel,
   ApprovalSessionStatus,
   ApprovalSourceKind,
   ApprovalStatus,
+  ApprovalSummary,
   ApprovalType,
 } from "../../api/admin";
 
@@ -59,6 +63,10 @@ export function formatApprovalType(value: ApprovalType): string {
   }
 }
 
+export function formatApprovalClass(value: ApprovalClass): string {
+  return value === "elevated_access" ? "Elevated access" : "Execution control";
+}
+
 export function formatApprovalSourceKind(value: ApprovalSourceKind): string {
   return value === "elevated_access" ? "Elevated access" : "Execution";
 }
@@ -77,6 +85,22 @@ export function formatApprovalStatus(value: ApprovalStatus): string {
       return "Cancelled";
     default:
       return value;
+  }
+}
+
+export function approvalStatusTone(value: ApprovalStatus): BannerTone {
+  switch (value) {
+    case "approved":
+      return "success";
+    case "open":
+    case "timed_out":
+      return "warning";
+    case "rejected":
+      return "danger";
+    case "cancelled":
+      return "neutral";
+    default:
+      return "neutral";
   }
 }
 
@@ -113,6 +137,93 @@ export function formatApprovalActor(actor?: ApprovalActorSummary | null): string
   }
 
   return actor.display_name ?? actor.username ?? actor.user_id ?? "Not recorded";
+}
+
+export function formatApprovalTarget(approval: Pick<ApprovalSummary, "source_kind" | "target" | "issue_id" | "workspace_id" | "title">): string {
+  if (approval.target) {
+    return formatApprovalActor(approval.target);
+  }
+  if (approval.source_kind === "execution_run") {
+    if (approval.issue_id && approval.workspace_id) {
+      return `Issue ${approval.issue_id} · Workspace ${approval.workspace_id}`;
+    }
+    if (approval.issue_id) {
+      return `Issue ${approval.issue_id}`;
+    }
+    if (approval.workspace_id) {
+      return `Workspace ${approval.workspace_id}`;
+    }
+  }
+  return approval.title;
+}
+
+export function formatApprovalRiskLevel(value: ApprovalRiskLevel): string {
+  switch (value) {
+    case "critical":
+      return "Critical";
+    case "high":
+      return "High";
+    case "medium":
+      return "Medium";
+    case "low":
+      return "Low";
+    default:
+      return value;
+  }
+}
+
+export function approvalRiskTone(value: ApprovalRiskLevel): BannerTone {
+  switch (value) {
+    case "critical":
+    case "high":
+      return "danger";
+    case "medium":
+      return "warning";
+    default:
+      return "neutral";
+  }
+}
+
+export function formatApprovalDueState(value: ApprovalDueState): string {
+  switch (value) {
+    case "due_now":
+      return "Due now";
+    case "due_soon":
+      return "Due within 24h";
+    case "later":
+      return "Due later";
+    case "no_deadline":
+      return "No deadline";
+    case "resolved":
+      return "Resolved";
+    default:
+      return value;
+  }
+}
+
+export function formatApprovalAge(value?: string | null): string {
+  if (!value) {
+    return "Unknown";
+  }
+  const openedAt = Date.parse(value);
+  if (Number.isNaN(openedAt)) {
+    return value;
+  }
+  const elapsedMs = Math.max(0, Date.now() - openedAt);
+  const minutes = Math.floor(elapsedMs / (60 * 1000));
+  if (minutes < 60) {
+    return `${Math.max(1, minutes)}m`;
+  }
+  const hours = Math.floor(minutes / 60);
+  if (hours < 48) {
+    return `${hours}h`;
+  }
+  const days = Math.floor(hours / 24);
+  if (days < 14) {
+    return `${days}d`;
+  }
+  const weeks = Math.floor(days / 7);
+  return `${weeks}w`;
 }
 
 function formatConflictingSessionType(value: unknown): string {
@@ -216,11 +327,16 @@ function describeExecutionDecision(detail: ApprovalDetail): ApprovalBanner & { m
 
 export function describeApprovalBanner(detail: ApprovalDetail): ApprovalBanner {
   if (detail.source_kind === "elevated_access") {
+    const riskPrefix = detail.risk_level === "critical"
+      ? "Critical risk. "
+      : detail.risk_level === "high"
+        ? "High risk. "
+        : "";
     if (detail.session_status === "active") {
       return {
         tone: "success",
         title: "Elevated session active",
-        body: "The approval already resulted in a live elevated session. Review the current session in Security & Policies for expiry and revocation state.",
+        body: `${riskPrefix}The approval already resulted in a live elevated session. Review the current session in Security & Policies for expiry and revocation state.`,
       };
     }
 
@@ -233,7 +349,7 @@ export function describeApprovalBanner(detail: ApprovalDetail): ApprovalBanner {
       return {
         tone: "danger",
         title: "Active elevated session already exists",
-        body: `A ${conflictType} session is already active for this requester${conflictExpiry}. Approve stays blocked until that session ends or is revoked. You can still reject this request from the shared queue or review the live session in Security & Policies.`,
+        body: `${riskPrefix}A ${conflictType} session is already active for this requester${conflictExpiry}. Approve stays blocked until that session ends or is revoked. You can still reject this request from the shared queue or review the live session in Security & Policies.`,
       };
     }
 
@@ -241,7 +357,7 @@ export function describeApprovalBanner(detail: ApprovalDetail): ApprovalBanner {
       return {
         tone: "success",
         title: "Access approved and ready to start",
-        body: "The decision is complete, but no session is active yet. Only the original requester can start the elevated session from Security & Policies.",
+        body: `${riskPrefix}The decision is complete, but no session is active yet. Only the original requester can start the elevated session from Security & Policies.`,
       };
     }
 
@@ -250,31 +366,31 @@ export function describeApprovalBanner(detail: ApprovalDetail): ApprovalBanner {
         return {
           tone: "warning",
           title: "Approval request submitted",
-          body: "No elevated session is active until this request is approved. Review the evidence first, then decide whether access should move forward.",
+          body: `${riskPrefix}No elevated session is active until this request is approved. Review the evidence first, then decide whether access should move forward.`,
         };
       case "approved":
         return {
           tone: "success",
           title: "Access approved",
-          body: "The approval decision is recorded. Use Security & Policies to confirm whether the requester still needs to issue or review the resulting session.",
+          body: `${riskPrefix}The approval decision is recorded. Use Security & Policies to confirm whether the requester still needs to issue or review the resulting session.`,
         };
       case "rejected":
         return {
           tone: "danger",
           title: "Request rejected",
-          body: "No elevated session was issued. The audit trail should now carry the rejection rationale and decision actor.",
+          body: `${riskPrefix}No elevated session was issued. The audit trail should now carry the rejection rationale and decision actor.`,
         };
       case "timed_out":
         return {
           tone: "warning",
           title: "Request expired before approval",
-          body: "This elevated-access request timed out without a decision. Submit a new request if access is still required.",
+          body: `${riskPrefix}This elevated-access request timed out without a decision. Submit a new request if access is still required.`,
         };
       case "cancelled":
         return {
           tone: "neutral",
           title: "Request cancelled",
-          body: "The request was cancelled before issuance. No elevated session will be issued from this approval item.",
+          body: `${riskPrefix}The request was cancelled before issuance. No elevated session will be issued from this approval item.`,
         };
     }
   }

@@ -38,7 +38,7 @@ _SHARED_APPROVAL_TENANT_SCOPE_MESSAGE = (
 
 
 class ApprovalDecisionRequest(BaseModel):
-    decision_note: str = Field(min_length=8, max_length=500)
+    decision_note: str | None = Field(default=None, max_length=500)
 
 
 def _approval_error(status_code: int, error_type: str, message: str) -> JSONResponse:
@@ -93,6 +93,10 @@ def _resolve_shared_approval_instance_scope(
 @router.get("")
 def list_approvals(
     status_filter: str | None = Query(default=None, alias="status"),
+    approval_type_filter: str | None = Query(default=None, alias="approvalType"),
+    risk_filter: str | None = Query(default=None, alias="risk"),
+    due_filter: str | None = Query(default=None, alias="due"),
+    approval_class_filter: str | None = Query(default=None, alias="approvalClass"),
     instance_id: str | None = Query(default=None, alias="instanceId"),
     tenant_id: str | None = Query(default=None, alias="tenantId"),
     company_id: str | None = Query(default=None, alias="companyId"),
@@ -113,6 +117,10 @@ def list_approvals(
         approvals = service.list_approvals(
             actor=admin,
             status=status_filter,
+            approval_type=approval_type_filter,
+            risk_level=risk_filter,
+            due_state=due_filter,
+            approval_class=approval_class_filter,
             limit=limit,
             instance=instance,
         )
@@ -190,7 +198,7 @@ def _decide_approval(
             actor=admin,
             approval_id=approval_id,
             approved=approved,
-            decision_note=payload.decision_note,
+            decision_note=(payload.decision_note or "").strip(),
             idempotency_key=_decision_idempotency_key(request=request, approval_id=approval_id, approved=approved),
             request_fingerprint_hash=build_request_fingerprint(
                 request,

@@ -596,6 +596,7 @@ class ExecutionTransitionService:
                     updated_at=current_time,
                 )
                 session.add(run)
+                session.flush()
 
                 attempt = RunAttemptORM(
                     id=attempt_id,
@@ -611,6 +612,7 @@ class ExecutionTransitionService:
                     updated_at=current_time,
                 )
                 session.add(attempt)
+                session.flush()
 
                 outbox = RunOutboxORM(
                     id=outbox_id,
