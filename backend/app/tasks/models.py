@@ -56,6 +56,15 @@ NotificationDeliveryStatus = Literal[
     "rejected",
     "cancelled",
 ]
+NotificationAttemptKind = Literal[
+    "preview",
+    "approval",
+    "retry",
+    "fallback",
+    "manual_override",
+    "terminal",
+]
+NotificationDeliveryEffect = Literal["preview_only", "queued", "sent", "failed", "rejected", "cancelled"]
 
 
 class DeliveryChannelSummary(BaseModel):
@@ -83,6 +92,7 @@ class NotificationSummary(BaseModel):
     inbox_id: str | None = None
     workspace_id: str | None = None
     channel_id: str | None = None
+    configured_channel_id: str | None = None
     fallback_channel_id: str | None = None
     title: str
     body: str
@@ -99,6 +109,26 @@ class NotificationSummary(BaseModel):
     metadata: dict[str, Any] = Field(default_factory=dict)
     created_at: datetime
     updated_at: datetime
+
+
+class NotificationDeliveryAttempt(BaseModel):
+    attempt_id: str
+    attempt_kind: NotificationAttemptKind
+    delivery_status: NotificationDeliveryStatus
+    happened_at: datetime
+    channel_id: str | None = None
+    channel_label: str | None = None
+    channel_target: str | None = None
+    detail: str
+    next_step: str | None = None
+
+
+class NotificationDeliveryEvidence(BaseModel):
+    effect_state: NotificationDeliveryEffect
+    live_delivery: bool
+    current_target: str | None = None
+    next_step: str
+    evidence_note: str
 
 
 class ReminderSummary(BaseModel):
@@ -185,6 +215,10 @@ class NotificationDetail(NotificationSummary):
     task: TaskSummary | None = None
     reminder: ReminderSummary | None = None
     channel: DeliveryChannelSummary | None = None
+    configured_channel: DeliveryChannelSummary | None = None
+    fallback_channel: DeliveryChannelSummary | None = None
+    delivery_attempts: list[NotificationDeliveryAttempt] = Field(default_factory=list)
+    delivery_evidence: NotificationDeliveryEvidence | None = None
 
 
 class ChannelDetail(DeliveryChannelSummary):

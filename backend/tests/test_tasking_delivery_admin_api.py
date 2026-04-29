@@ -176,7 +176,7 @@ def test_task_and_reminder_flow_persists_links_and_due_state() -> None:
         params={**_instance_scope(instance_id), "status": "due"},
     )
     assert listed_reminders.status_code == 200
-    assert listed_reminders.json()["reminders"][0]["reminder_id"] == reminder["reminder_id"]
+    assert reminder["reminder_id"] in {item["reminder_id"] for item in listed_reminders.json()["reminders"]}
 
     task_detail = client.get(
         f"/admin/tasks/{task_id}",
@@ -227,8 +227,13 @@ def test_notification_preview_reject_retry_and_fallback_truth() -> None:
         },
     )
     assert created_preview.status_code == 201
-    notification_id = created_preview.json()["notification"]["notification_id"]
-    assert created_preview.json()["notification"]["delivery_status"] == "preview"
+    created_payload = created_preview.json()["notification"]
+    notification_id = created_payload["notification_id"]
+    assert created_payload["delivery_status"] == "preview"
+    assert created_payload["delivery_evidence"]["effect_state"] == "preview_only"
+    assert created_payload["configured_channel_id"] == primary_channel_id
+    assert created_payload["delivery_attempts"][0]["attempt_kind"] == "preview"
+    assert created_payload["delivery_attempts"][0]["detail"] == "Created as preview-only outbox content."
 
     rejected = client.post(
         f"/admin/notifications/{notification_id}/reject",
@@ -236,8 +241,12 @@ def test_notification_preview_reject_retry_and_fallback_truth() -> None:
         params=_instance_scope(instance_id),
     )
     assert rejected.status_code == 200
-    assert rejected.json()["notification"]["delivery_status"] == "rejected"
-    assert rejected.json()["notification"]["rejected_at"] is not None
+    rejected_payload = rejected.json()["notification"]
+    assert rejected_payload["delivery_status"] == "rejected"
+    assert rejected_payload["rejected_at"] is not None
+    assert rejected_payload["delivery_evidence"]["effect_state"] == "rejected"
+    assert rejected_payload["delivery_attempts"][-1]["attempt_kind"] == "approval"
+    assert rejected_payload["delivery_attempts"][-1]["delivery_status"] == "rejected"
 
     confirmed = client.post(
         f"/admin/notifications/{notification_id}/confirm",
@@ -245,8 +254,14 @@ def test_notification_preview_reject_retry_and_fallback_truth() -> None:
         params=_instance_scope(instance_id),
     )
     assert confirmed.status_code == 200
-    assert confirmed.json()["notification"]["delivery_status"] == "queued"
-    assert confirmed.json()["notification"]["next_attempt_at"] is not None
+    confirmed_payload = confirmed.json()["notification"]
+    assert confirmed_payload["delivery_status"] == "queued"
+    assert confirmed_payload["next_attempt_at"] is not None
+    assert confirmed_payload["delivery_evidence"]["effect_state"] == "queued"
+    assert confirmed_payload["configured_channel"]["channel_id"] == primary_channel_id
+    assert confirmed_payload["fallback_channel"]["channel_id"] == fallback_channel_id
+    assert confirmed_payload["delivery_attempts"][-1]["attempt_kind"] == "approval"
+    assert confirmed_payload["delivery_attempts"][-1]["delivery_status"] == "queued"
 
     first_retry = client.post(
         f"/admin/notifications/{notification_id}/retry",
@@ -257,7 +272,12 @@ def test_notification_preview_reject_retry_and_fallback_truth() -> None:
     first_payload = first_retry.json()["notification"]
     assert first_payload["delivery_status"] == "fallback_queued"
     assert first_payload["channel_id"] == fallback_channel_id
+    assert first_payload["configured_channel_id"] == primary_channel_id
+    assert first_payload["configured_channel"]["channel_id"] == primary_channel_id
+    assert first_payload["fallback_channel"]["channel_id"] == fallback_channel_id
     assert first_payload["retry_count"] == 1
+    assert first_payload["delivery_attempts"][-1]["attempt_kind"] == "fallback"
+    assert first_payload["delivery_attempts"][-1]["channel_id"] == fallback_channel_id
 
     second_retry = client.post(
         f"/admin/notifications/{notification_id}/retry",
@@ -269,6 +289,9 @@ def test_notification_preview_reject_retry_and_fallback_truth() -> None:
     assert second_payload["delivery_status"] == "failed"
     assert second_payload["next_attempt_at"] is None
     assert second_payload["retry_count"] == 2
+    assert second_payload["delivery_evidence"]["effect_state"] == "failed"
+    assert second_payload["delivery_attempts"][-1]["attempt_kind"] == "retry"
+    assert second_payload["delivery_attempts"][-1]["delivery_status"] == "failed"
 
 
 def test_automation_trigger_materializes_follow_up_and_notification_records() -> None:

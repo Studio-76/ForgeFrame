@@ -195,6 +195,7 @@ function createNotificationSummary(overrides: Partial<NotificationSummary> = {})
     inbox_id: "inbox_alpha",
     workspace_id: "ws_alpha",
     channel_id: "channel_primary",
+    configured_channel_id: "channel_primary",
     fallback_channel_id: "channel_fallback",
     title: "Preview customer reply",
     body: "Please confirm the outbound customer pricing response.",
@@ -211,6 +212,21 @@ function createNotificationSummary(overrides: Partial<NotificationSummary> = {})
     metadata: {},
     created_at: "2026-04-23T09:50:00Z",
     updated_at: "2026-04-23T10:10:00Z",
+    ...overrides,
+  };
+}
+
+function createNotificationAttempt(overrides: Partial<NotificationDetail["delivery_attempts"][number]> = {}): NotificationDetail["delivery_attempts"][number] {
+  return {
+    attempt_id: "attempt_alpha",
+    attempt_kind: "preview",
+    delivery_status: "preview",
+    happened_at: "2026-04-23T09:50:00Z",
+    channel_id: "channel_primary",
+    channel_label: "Ops email",
+    channel_target: "ops@example.com",
+    detail: "Created as preview-only outbox content.",
+    next_step: "Confirm the preview before outward delivery.",
     ...overrides,
   };
 }
@@ -276,6 +292,22 @@ function createNotificationDetail(overrides: Partial<NotificationDetail> = {}): 
     task: createTaskSummary(),
     reminder: createReminderSummary(),
     channel: createChannelSummary(),
+    configured_channel: createChannelSummary(),
+    fallback_channel: createChannelSummary({
+      channel_id: "channel_fallback",
+      channel_kind: "slack",
+      label: "Fallback Slack",
+      target: "#ops-room",
+      fallback_channel_id: null,
+    }),
+    delivery_attempts: [createNotificationAttempt()],
+    delivery_evidence: {
+      effect_state: "preview_only",
+      live_delivery: false,
+      current_target: "ops@example.com",
+      next_step: "Confirm the preview to enter the live delivery queue, or reject it before any outward send.",
+      evidence_note: "No outward delivery has happened. The record is still a preview-only outbox item.",
+    },
     ...overrides,
   };
 }
@@ -456,6 +488,12 @@ beforeEach(() => {
       notification_id: "notification_beta",
       title: "Escalate customer reply",
       delivery_status: "draft",
+      delivery_attempts: [
+        createNotificationAttempt({
+          attempt_id: "attempt_beta",
+          detail: "Created as preview-only outbox content.",
+        }),
+      ],
     }),
   });
   updateNotificationMock.mockResolvedValue({
@@ -463,18 +501,72 @@ beforeEach(() => {
     notification: createNotificationDetail({
       title: "Preview customer reply updated",
       delivery_status: "queued",
+      delivery_attempts: [
+        createNotificationAttempt(),
+        createNotificationAttempt({
+          attempt_id: "attempt_override",
+          attempt_kind: "manual_override",
+          delivery_status: "queued",
+          happened_at: "2026-04-23T10:20:00Z",
+          detail: "Operator changed delivery state from preview to queued.",
+        }),
+      ],
+      delivery_evidence: {
+        effect_state: "queued",
+        live_delivery: true,
+        current_target: "ops@example.com",
+        next_step: "Monitor the queue and retry only if the provider or channel fails.",
+        evidence_note: "The notification is positioned for live delivery. Any further outcome depends on the delivery channel.",
+      },
     }),
   });
   confirmNotificationMock.mockResolvedValue({
     status: "ok",
     notification: createNotificationDetail({
-      delivery_status: "confirmed",
+      delivery_status: "queued",
+      delivery_attempts: [
+        createNotificationAttempt(),
+        createNotificationAttempt({
+          attempt_id: "attempt_confirm",
+          attempt_kind: "approval",
+          delivery_status: "queued",
+          happened_at: "2026-04-23T10:15:00Z",
+          detail: "Preview approved and moved into the live delivery queue.",
+          next_step: "Wait for the live send or retry if the provider path fails.",
+        }),
+      ],
+      delivery_evidence: {
+        effect_state: "queued",
+        live_delivery: true,
+        current_target: "ops@example.com",
+        next_step: "Monitor the queue and retry only if the provider or channel fails.",
+        evidence_note: "The notification is positioned for live delivery. Any further outcome depends on the delivery channel.",
+      },
     }),
   });
   rejectNotificationMock.mockResolvedValue({
     status: "ok",
     notification: createNotificationDetail({
       delivery_status: "rejected",
+      rejected_at: "2026-04-23T10:16:00Z",
+      delivery_attempts: [
+        createNotificationAttempt(),
+        createNotificationAttempt({
+          attempt_id: "attempt_reject",
+          attempt_kind: "approval",
+          delivery_status: "rejected",
+          happened_at: "2026-04-23T10:16:00Z",
+          detail: "Preview rejected before live delivery continued.",
+          next_step: "Edit the notification content or routing, then confirm it again when it is ready.",
+        }),
+      ],
+      delivery_evidence: {
+        effect_state: "rejected",
+        live_delivery: false,
+        current_target: "ops@example.com",
+        next_step: "Edit the message or routing, then confirm it again when the preview is acceptable.",
+        evidence_note: "The notification was blocked before live delivery resumed.",
+      },
     }),
   });
   retryNotificationMock.mockResolvedValue({
@@ -482,6 +574,37 @@ beforeEach(() => {
     notification: createNotificationDetail({
       delivery_status: "fallback_queued",
       retry_count: 2,
+      channel_id: "channel_fallback",
+      channel: createChannelSummary({
+        channel_id: "channel_fallback",
+        channel_kind: "slack",
+        label: "Fallback Slack",
+        target: "#ops-room",
+        fallback_channel_id: null,
+      }),
+      configured_channel_id: "channel_primary",
+      configured_channel: createChannelSummary(),
+      delivery_attempts: [
+        createNotificationAttempt(),
+        createNotificationAttempt({
+          attempt_id: "attempt_retry",
+          attempt_kind: "fallback",
+          delivery_status: "fallback_queued",
+          happened_at: "2026-04-23T10:18:00Z",
+          channel_id: "channel_fallback",
+          channel_label: "Fallback Slack",
+          channel_target: "#ops-room",
+          detail: "Primary delivery exhausted its retry budget and moved to the fallback channel.",
+          next_step: "Monitor the fallback channel and inspect its health before forcing another retry.",
+        }),
+      ],
+      delivery_evidence: {
+        effect_state: "queued",
+        live_delivery: true,
+        current_target: "#ops-room",
+        next_step: "Monitor the queue and retry only if the provider or channel fails.",
+        evidence_note: "The notification is positioned for live delivery. Any further outcome depends on the delivery channel.",
+      },
     }),
   });
 
@@ -920,7 +1043,7 @@ describe("tasking and delivery pages", () => {
     }));
   });
 
-  it("renders the notifications page with channel, reminder, and retry truth", async () => {
+  it("renders the notifications page with grouped outbox, fallback chain, and delivery evidence", async () => {
     await renderIntoDom(withAppContext({
       path: "/notifications?instanceId=instance_alpha&notificationId=notification_alpha",
       element: <NotificationsPage />,
@@ -934,11 +1057,14 @@ describe("tasking and delivery pages", () => {
       limit: 100,
     });
     expect(fetchNotificationDetailMock).toHaveBeenCalledWith("notification_alpha", "instance_alpha");
-    expect(container.textContent).toContain("Notification inventory");
+    expect(container.textContent).toContain("Outbox table");
+    expect(container.textContent).toContain("Pending approval / preview");
     expect(container.textContent).toContain("Preview customer reply");
-    expect(container.textContent).toContain("Retry count");
+    expect(container.textContent).toContain("Target and fallback chain");
+    expect(container.textContent).toContain("Delivery attempts");
+    expect(container.textContent).toContain("Fallback Slack");
 
-    const channelLink = Array.from(container.querySelectorAll("a")).find((link) => link.textContent === "Open channel");
+    const channelLink = Array.from(container.querySelectorAll("a")).find((link) => link.textContent === "Open configured channel");
     expect(channelLink?.getAttribute("href")).toBe("/channels?instanceId=instance_alpha&channelId=channel_primary");
   });
 
@@ -950,26 +1076,29 @@ describe("tasking and delivery pages", () => {
     }));
     await flushEffects();
 
-    const createForm = getFormByText("Create notification");
-    const updateForm = getFormByText("Save notification");
-    const createInputs = Array.from(createForm?.querySelectorAll("input") ?? []);
-    const createTextareas = Array.from(createForm?.querySelectorAll("textarea") ?? []);
-    const createSelects = Array.from(createForm?.querySelectorAll("select") ?? []);
-    const createButton = getButtonByText(createForm!, "Create notification");
+    await act(async () => {
+      getButtonByText(container, "New notification")!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    await flushEffects();
+
+    const createForm = container.querySelector("#notifications-drawer-form") as HTMLFormElement;
 
     await act(async () => {
-      setControlValue(createInputs[0] as HTMLInputElement, "notification_beta");
-      setControlValue(createInputs[1] as HTMLInputElement, "task_beta");
-      setControlValue(createInputs[2] as HTMLInputElement, "reminder_beta");
-      setControlValue(createInputs[6] as HTMLInputElement, "channel_primary");
-      setControlValue(createInputs[7] as HTMLInputElement, "channel_fallback");
-      setControlValue(createInputs[8] as HTMLInputElement, "Escalate customer reply");
-      setControlValue(createTextareas[0] as HTMLTextAreaElement, "Escalate the outbound customer response.");
-      setControlValue(createSelects[0] as HTMLSelectElement, "critical");
-      setControlValue(createSelects[1] as HTMLSelectElement, "no");
-      setControlValue(createInputs[9] as HTMLInputElement, "3");
-      setControlValue(createTextareas[1] as HTMLTextAreaElement, "{\"channel\":\"primary\"}");
-      createButton!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      setControlValue(getControlByLabel(createForm, "Notification ID"), "notification_beta");
+      setControlValue(getControlByLabel(createForm, "Task ID"), "task_beta");
+      setControlValue(getControlByLabel(createForm, "Reminder ID"), "reminder_beta");
+      setControlValue(getControlByLabel(createForm, "Conversation ID"), "conversation_beta");
+      setControlValue(getControlByLabel(createForm, "Inbox ID"), "inbox_beta");
+      setControlValue(getControlByLabel(createForm, "Workspace ID"), "ws_beta");
+      setControlValue(getControlByLabel(createForm, "Channel ID"), "channel_primary");
+      setControlValue(getControlByLabel(createForm, "Fallback channel ID"), "channel_fallback");
+      setControlValue(getControlByLabel(createForm, "Preview required"), "no");
+      setControlValue(getControlByLabel(createForm, "Priority"), "critical");
+      setControlValue(getControlByLabel(createForm, "Max retries"), "3");
+      setControlValue(getControlByLabel(createForm, "Title"), "Escalate customer reply");
+      setControlValue(getControlByLabel(createForm, "Body"), "Escalate the outbound customer response.");
+      setControlValue(getControlByLabel(createForm, "Metadata JSON"), "{\"channel\":\"primary\"}");
+      getButtonByText(container, "Create notification")!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     });
     await flushEffects();
 
@@ -977,6 +1106,9 @@ describe("tasking and delivery pages", () => {
       notification_id: "notification_beta",
       task_id: "task_beta",
       reminder_id: "reminder_beta",
+      conversation_id: "conversation_beta",
+      inbox_id: "inbox_beta",
+      workspace_id: "ws_beta",
       channel_id: "channel_primary",
       fallback_channel_id: "channel_fallback",
       title: "Escalate customer reply",
@@ -987,23 +1119,25 @@ describe("tasking and delivery pages", () => {
       metadata: { channel: "primary" },
     }));
 
-    const updateInputs = Array.from(updateForm?.querySelectorAll("input") ?? []);
-    const updateTextareas = Array.from(updateForm?.querySelectorAll("textarea") ?? []);
-    const updateSelects = Array.from(updateForm?.querySelectorAll("select") ?? []);
-    const updateButton = getButtonByText(updateForm!, "Save notification");
+    await act(async () => {
+      getButtonByText(container, "Edit selected notification")!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    await flushEffects();
+
+    const updateForm = container.querySelector("#notifications-drawer-form") as HTMLFormElement;
 
     await act(async () => {
-      setControlValue(updateInputs[0] as HTMLInputElement, "channel_primary");
-      setControlValue(updateInputs[1] as HTMLInputElement, "channel_fallback");
-      setControlValue(updateInputs[2] as HTMLInputElement, "Preview customer reply updated");
-      setControlValue(updateTextareas[0] as HTMLTextAreaElement, "Updated outbound customer response preview.");
-      setControlValue(updateSelects[0] as HTMLSelectElement, "queued");
-      setControlValue(updateSelects[1] as HTMLSelectElement, "normal");
-      setControlValue(updateSelects[2] as HTMLSelectElement, "no");
-      setControlValue(updateInputs[3] as HTMLInputElement, "4");
-      setControlValue(updateInputs[4] as HTMLInputElement, "Transient provider error");
-      setControlValue(updateTextareas[1] as HTMLTextAreaElement, "{\"channel\":\"fallback\"}");
-      updateButton!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      setControlValue(getControlByLabel(updateForm, "Channel ID"), "channel_primary");
+      setControlValue(getControlByLabel(updateForm, "Fallback channel ID"), "channel_fallback");
+      setControlValue(getControlByLabel(updateForm, "Preview required"), "no");
+      setControlValue(getControlByLabel(updateForm, "Priority"), "normal");
+      setControlValue(getControlByLabel(updateForm, "Max retries"), "4");
+      setControlValue(getControlByLabel(updateForm, "Delivery status"), "queued");
+      setControlValue(getControlByLabel(updateForm, "Title"), "Preview customer reply updated");
+      setControlValue(getControlByLabel(updateForm, "Body"), "Updated outbound customer response preview.");
+      setControlValue(getControlByLabel(updateForm, "Last error"), "Transient provider error");
+      setControlValue(getControlByLabel(updateForm, "Metadata JSON"), "{\"channel\":\"fallback\"}");
+      getButtonByText(container, "Save notification")!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     });
     await flushEffects();
 
@@ -1020,9 +1154,9 @@ describe("tasking and delivery pages", () => {
       metadata: { channel: "fallback" },
     }));
 
-    const confirmButton = getButtonByText(container, "Confirm notification");
-    const rejectButton = getButtonByText(container, "Reject notification");
-    const retryButton = getButtonByText(container, "Retry notification");
+    const confirmButton = getButtonByText(container, "Approve preview");
+    const rejectButton = getButtonByText(container, "Reject preview");
+    const retryButton = getButtonByText(container, "Retry delivery");
 
     await act(async () => {
       confirmButton!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
@@ -1040,6 +1174,15 @@ describe("tasking and delivery pages", () => {
     expect(confirmNotificationMock).toHaveBeenCalledWith("instance_alpha", "notification_alpha");
     expect(rejectNotificationMock).toHaveBeenCalledWith("instance_alpha", "notification_alpha");
     expect(retryNotificationMock).toHaveBeenCalledWith("instance_alpha", "notification_alpha");
+    expect(container.textContent).toContain("Latest queue mutation");
+    expect(container.textContent).toContain("fallback_queued");
+    expect(container.textContent).toContain("Configured primary channel: Ops email (channel_primary)");
+    expect(container.textContent).toContain("Active delivery channel: Fallback Slack (channel_fallback)");
+
+    const activeChannelLink = Array.from(container.querySelectorAll("a")).find((link) => link.textContent === "Open active delivery channel");
+    const fallbackChannelLink = Array.from(container.querySelectorAll("a")).find((link) => link.textContent === "Open fallback channel");
+    expect(activeChannelLink?.getAttribute("href")).toBe("/channels?instanceId=instance_alpha&channelId=channel_fallback");
+    expect(fallbackChannelLink?.getAttribute("href")).toBe("/channels?instanceId=instance_alpha&channelId=channel_fallback");
   });
 
   it("renders the automations page with target and last-trigger truth", async () => {

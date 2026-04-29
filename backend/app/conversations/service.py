@@ -874,6 +874,8 @@ class ConversationInboxAdminService:
                     updated_at=now,
                 )
             )
+            # Persist conversation and thread before child records with strict FK chains.
+            session.flush()
             session.add(
                 ConversationSessionORM(
                     id=session_id,
@@ -888,6 +890,8 @@ class ConversationInboxAdminService:
                     started_at=now,
                 )
             )
+            # Persist the session before the first message references it.
+            session.flush()
             session.add(
                 ConversationMessageORM(
                     id=message_id,

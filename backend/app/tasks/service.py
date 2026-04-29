@@ -6,6 +6,7 @@ from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
+from pydantic import ValidationError
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
@@ -31,6 +32,8 @@ from app.tasks.models import (
     CreateTask,
     DeliveryChannelSummary,
     NotificationActionResult,
+    NotificationDeliveryAttempt,
+    NotificationDeliveryEvidence,
     NotificationDetail,
     NotificationSummary,
     ReminderDetail,
@@ -45,6 +48,9 @@ from app.tasks.models import (
 )
 
 SessionFactory = Callable[[], Session]
+_NOTIFICATION_INTERNAL_METADATA_KEY = "_forgeframe_delivery"
+_NOTIFICATION_ATTEMPTS_KEY = "attempts"
+_NOTIFICATION_CONFIGURED_CHANNEL_ID_KEY = "configured_channel_id"
 
 
 class TaskAutomationAdminService:
@@ -231,6 +237,135 @@ class TaskAutomationAdminService:
         )
 
     @staticmethod
+    def _notification_public_metadata(row: NotificationORM) -> dict[str, object]:
+        metadata = dict(row.metadata_json or {})
+        metadata.pop(_NOTIFICATION_INTERNAL_METADATA_KEY, None)
+        return metadata
+
+    @staticmethod
+    def _notification_internal_metadata(row: NotificationORM) -> dict[str, object]:
+        metadata = dict(row.metadata_json or {})
+        internal = metadata.get(_NOTIFICATION_INTERNAL_METADATA_KEY)
+        return dict(internal) if isinstance(internal, dict) else {}
+
+    @classmethod
+    def _notification_attempts(cls, row: NotificationORM) -> list[NotificationDeliveryAttempt]:
+        internal = cls._notification_internal_metadata(row)
+        raw_attempts = internal.get(_NOTIFICATION_ATTEMPTS_KEY)
+        if not isinstance(raw_attempts, list):
+            return []
+        attempts: list[NotificationDeliveryAttempt] = []
+        for item in raw_attempts:
+            if not isinstance(item, dict):
+                continue
+            try:
+                attempts.append(NotificationDeliveryAttempt.model_validate(item))
+            except ValidationError:
+                continue
+        return attempts
+
+    @classmethod
+    def _notification_configured_channel_id(cls, row: NotificationORM) -> str | None:
+        internal = cls._notification_internal_metadata(row)
+        configured_channel_id = internal.get(_NOTIFICATION_CONFIGURED_CHANNEL_ID_KEY)
+        if isinstance(configured_channel_id, str) and configured_channel_id:
+            return configured_channel_id
+        return row.channel_id
+
+    @classmethod
+    def _notification_set_attempts(
+        cls,
+        row: NotificationORM,
+        *,
+        user_metadata: dict[str, object] | None = None,
+        attempts: list[NotificationDeliveryAttempt] | None = None,
+        configured_channel_id: str | None = None,
+    ) -> None:
+        public_metadata = dict(user_metadata) if user_metadata is not None else cls._notification_public_metadata(row)
+        effective_configured_channel_id = configured_channel_id if configured_channel_id is not None else cls._notification_configured_channel_id(row)
+        raw_attempts = [attempt.model_dump(mode="json") for attempt in (attempts if attempts is not None else cls._notification_attempts(row))]
+        internal_metadata: dict[str, object] = {}
+        if raw_attempts:
+            internal_metadata[_NOTIFICATION_ATTEMPTS_KEY] = raw_attempts
+        if effective_configured_channel_id:
+            internal_metadata[_NOTIFICATION_CONFIGURED_CHANNEL_ID_KEY] = effective_configured_channel_id
+        if internal_metadata:
+            public_metadata[_NOTIFICATION_INTERNAL_METADATA_KEY] = internal_metadata
+        row.metadata_json = public_metadata
+
+    @staticmethod
+    def _notification_evidence(
+        row: NotificationORM,
+        *,
+        channel: DeliveryChannelSummary | None,
+    ) -> NotificationDeliveryEvidence:
+        if row.delivery_status in {"draft", "preview"}:
+            effect_state = "preview_only"
+            live_delivery = False
+            next_step = "Confirm the preview to enter the live delivery queue, or reject it before any outward send."
+            evidence_note = "No outward delivery has happened. The record is still a preview-only outbox item."
+        elif row.delivery_status in {"confirmed", "queued", "delivering", "fallback_queued"}:
+            effect_state = "queued"
+            live_delivery = True
+            next_step = "Monitor the queue and retry only if the provider or channel fails."
+            evidence_note = "The notification is positioned for live delivery. Any further outcome depends on the delivery channel."
+        elif row.delivery_status == "delivered":
+            effect_state = "sent"
+            live_delivery = True
+            next_step = "Delivery completed. Review linked task or reminder context if follow-up is still needed."
+            evidence_note = "A delivered timestamp is present, so the record is treated as externally sent."
+        elif row.delivery_status == "rejected":
+            effect_state = "rejected"
+            live_delivery = False
+            next_step = "Edit the message or routing, then confirm it again when the preview is acceptable."
+            evidence_note = "The notification was blocked before live delivery resumed."
+        elif row.delivery_status == "cancelled":
+            effect_state = "cancelled"
+            live_delivery = False
+            next_step = "Create a replacement notification or move the linked task forward through another route."
+            evidence_note = "Delivery is intentionally cancelled; no additional send is scheduled."
+        else:
+            effect_state = "failed"
+            live_delivery = False
+            next_step = "Inspect the last error, adjust channel or fallback routing, then retry deliberately."
+            evidence_note = "The retry budget or latest delivery path failed and no healthy send is currently confirmed."
+        return NotificationDeliveryEvidence(
+            effect_state=effect_state,
+            live_delivery=live_delivery,
+            current_target=channel.target if channel is not None else None,
+            next_step=next_step,
+            evidence_note=evidence_note,
+        )
+
+    @classmethod
+    def _append_notification_attempt(
+        cls,
+        row: NotificationORM,
+        *,
+        attempt_kind: str,
+        delivery_status: str,
+        happened_at: datetime,
+        detail: str,
+        next_step: str | None,
+        channel: DeliveryChannelORM | None,
+    ) -> None:
+        attempts = cls._notification_attempts(row)
+        attempts.append(
+            NotificationDeliveryAttempt(
+                attempt_id=f"attempt_{uuid4().hex[:12]}",
+                attempt_kind=attempt_kind,
+                delivery_status=delivery_status,
+                happened_at=happened_at,
+                channel_id=channel.id if channel is not None else row.channel_id,
+                channel_label=channel.label if channel is not None else None,
+                channel_target=channel.target if channel is not None else None,
+                detail=detail,
+                next_step=next_step,
+            )
+        )
+        cls._notification_set_attempts(row, attempts=attempts[-20:])
+
+    @staticmethod
     def _notification_summary(row: NotificationORM) -> NotificationSummary:
         return NotificationSummary(
             notification_id=row.id,
@@ -242,6 +377,7 @@ class TaskAutomationAdminService:
             inbox_id=row.inbox_id,
             workspace_id=row.workspace_id,
             channel_id=row.channel_id,
+            configured_channel_id=TaskAutomationAdminService._notification_configured_channel_id(row),
             fallback_channel_id=row.fallback_channel_id,
             title=row.title,
             body=row.body,
@@ -255,7 +391,7 @@ class TaskAutomationAdminService:
             delivered_at=row.delivered_at,
             rejected_at=row.rejected_at,
             last_error=row.last_error,
-            metadata=dict(row.metadata_json or {}),
+            metadata=TaskAutomationAdminService._notification_public_metadata(row),
             created_at=row.created_at,
             updated_at=row.updated_at,
         )
@@ -524,13 +660,31 @@ class TaskAutomationAdminService:
         with self._session_factory() as session:
             row = self._load_notification(session, instance=instance, notification_id=notification_id)
             summary = self._notification_summary(row)
+            configured_channel_id = self._notification_configured_channel_id(row)
             task = self._task_summary(session, self._load_task(session, instance=instance, task_id=row.task_id)) if row.task_id else None
             reminder = self._reminder_summary(self._load_reminder(session, instance=instance, reminder_id=row.reminder_id)) if row.reminder_id else None
             channel = self._channel_summary(
                 self._load_channel(session, instance=instance, channel_id=row.channel_id),
                 notification_count=int(session.scalar(select(func.count()).select_from(NotificationORM).where(NotificationORM.company_id == instance.company_id, NotificationORM.channel_id == row.channel_id)) or 0),
             ) if row.channel_id else None
-            return NotificationDetail(**summary.model_dump(), task=task, reminder=reminder, channel=channel)
+            configured_channel = self._channel_summary(
+                self._load_channel(session, instance=instance, channel_id=configured_channel_id),
+                notification_count=int(session.scalar(select(func.count()).select_from(NotificationORM).where(NotificationORM.company_id == instance.company_id, NotificationORM.channel_id == configured_channel_id)) or 0),
+            ) if configured_channel_id else None
+            fallback_channel = self._channel_summary(
+                self._load_channel(session, instance=instance, channel_id=row.fallback_channel_id),
+                notification_count=int(session.scalar(select(func.count()).select_from(NotificationORM).where(NotificationORM.company_id == instance.company_id, NotificationORM.channel_id == row.fallback_channel_id)) or 0),
+            ) if row.fallback_channel_id else None
+            return NotificationDetail(
+                **summary.model_dump(),
+                task=task,
+                reminder=reminder,
+                channel=channel,
+                configured_channel=configured_channel,
+                fallback_channel=fallback_channel,
+                delivery_attempts=self._notification_attempts(row),
+                delivery_evidence=self._notification_evidence(row, channel=channel),
+            )
 
     def create_notification(self, *, instance: InstanceRecord, payload: CreateNotification) -> NotificationDetail:
         with self._session_factory() as session, session.begin():
@@ -558,35 +712,45 @@ class TaskAutomationAdminService:
             now = self._now()
             delivery_status = "preview" if payload.preview_required else "queued"
             next_attempt_at = None if payload.preview_required else now
-            session.add(
-                NotificationORM(
-                    id=notification_id,
-                    instance_id=instance.instance_id,
-                    company_id=instance.company_id,
-                    task_id=payload.task_id,
-                    reminder_id=payload.reminder_id,
-                    conversation_id=payload.conversation_id,
-                    inbox_id=payload.inbox_id,
-                    workspace_id=payload.workspace_id,
-                    channel_id=payload.channel_id,
-                    fallback_channel_id=payload.fallback_channel_id,
-                    title=payload.title.strip(),
-                    body=payload.body.strip(),
-                    delivery_status=delivery_status,
-                    priority=payload.priority,
-                    preview_required=payload.preview_required,
-                    max_retries=payload.max_retries,
-                    next_attempt_at=next_attempt_at,
-                    metadata_json=dict(payload.metadata),
-                    created_at=now,
-                    updated_at=now,
-                )
+            row = NotificationORM(
+                id=notification_id,
+                instance_id=instance.instance_id,
+                company_id=instance.company_id,
+                task_id=payload.task_id,
+                reminder_id=payload.reminder_id,
+                conversation_id=payload.conversation_id,
+                inbox_id=payload.inbox_id,
+                workspace_id=payload.workspace_id,
+                channel_id=payload.channel_id,
+                fallback_channel_id=payload.fallback_channel_id,
+                title=payload.title.strip(),
+                body=payload.body.strip(),
+                delivery_status=delivery_status,
+                priority=payload.priority,
+                preview_required=payload.preview_required,
+                max_retries=payload.max_retries,
+                next_attempt_at=next_attempt_at,
+                metadata_json=dict(payload.metadata),
+                created_at=now,
+                updated_at=now,
+            )
+            session.add(row)
+            self._notification_set_attempts(row, configured_channel_id=row.channel_id)
+            self._append_notification_attempt(
+                row,
+                attempt_kind="preview" if payload.preview_required else "manual_override",
+                delivery_status=delivery_status,
+                happened_at=now,
+                detail="Created as preview-only outbox content." if payload.preview_required else "Created directly in the live delivery queue.",
+                next_step="Confirm the preview before outward delivery." if payload.preview_required else "Monitor the queued send or retry if the provider fails.",
+                channel=self._load_channel(session, instance=instance, channel_id=row.channel_id) if row.channel_id else None,
             )
         return self.get_notification(instance=instance, notification_id=notification_id)
 
     def update_notification(self, *, instance: InstanceRecord, notification_id: str, payload: UpdateNotification) -> NotificationDetail:
         with self._session_factory() as session, session.begin():
             row = self._load_notification(session, instance=instance, notification_id=notification_id)
+            previous_status = row.delivery_status
             channel_id = payload.channel_id if payload.channel_id is not None else row.channel_id
             fallback_channel_id = payload.fallback_channel_id if payload.fallback_channel_id is not None else row.fallback_channel_id
             self._validate_channel_links(session, instance=instance, channel_id=channel_id, fallback_channel_id=fallback_channel_id)
@@ -599,18 +763,59 @@ class TaskAutomationAdminService:
             row.preview_required = payload.preview_required if payload.preview_required is not None else row.preview_required
             row.max_retries = payload.max_retries if payload.max_retries is not None else row.max_retries
             row.last_error = payload.last_error if payload.last_error is not None else row.last_error
-            row.metadata_json = dict(payload.metadata) if payload.metadata is not None else dict(row.metadata_json or {})
+            if payload.delivery_status == "delivered":
+                row.delivered_at = self._now()
+                row.next_attempt_at = None
+            elif payload.delivery_status == "rejected":
+                row.rejected_at = self._now()
+                row.next_attempt_at = None
+            elif payload.delivery_status in {"queued", "confirmed", "delivering", "fallback_queued"}:
+                row.rejected_at = None
+                row.next_attempt_at = row.next_attempt_at or self._now()
+            elif payload.delivery_status in {"failed", "cancelled"}:
+                row.next_attempt_at = None
+            if payload.metadata is not None:
+                self._notification_set_attempts(
+                    row,
+                    user_metadata=dict(payload.metadata),
+                    configured_channel_id=payload.channel_id if payload.channel_id is not None else None,
+                )
+            elif payload.channel_id is not None:
+                self._notification_set_attempts(row, configured_channel_id=payload.channel_id)
             row.updated_at = self._now()
+            if payload.delivery_status is not None and payload.delivery_status != previous_status:
+                self._append_notification_attempt(
+                    row,
+                    attempt_kind="manual_override",
+                    delivery_status=row.delivery_status,
+                    happened_at=row.updated_at,
+                    detail=f"Operator changed delivery state from {previous_status} to {row.delivery_status}.",
+                    next_step=self._notification_evidence(
+                        row,
+                        channel=self._channel_summary(self._load_channel(session, instance=instance, channel_id=row.channel_id), notification_count=0) if row.channel_id else None,
+                    ).next_step,
+                    channel=self._load_channel(session, instance=instance, channel_id=row.channel_id) if row.channel_id else None,
+                )
         return self.get_notification(instance=instance, notification_id=notification_id)
 
     def confirm_notification(self, *, instance: InstanceRecord, notification_id: str) -> NotificationActionResult:
         with self._session_factory() as session, session.begin():
             row = self._load_notification(session, instance=instance, notification_id=notification_id)
+            now = self._now()
             row.rejected_at = None
             row.last_error = None
             row.delivery_status = "queued"
-            row.next_attempt_at = self._now()
-            row.updated_at = self._now()
+            row.next_attempt_at = now
+            row.updated_at = now
+            self._append_notification_attempt(
+                row,
+                attempt_kind="approval",
+                delivery_status="queued",
+                happened_at=now,
+                detail="Preview approved and moved into the live delivery queue.",
+                next_step="Wait for the live send or retry if the provider path fails.",
+                channel=self._load_channel(session, instance=instance, channel_id=row.channel_id) if row.channel_id else None,
+            )
         return NotificationActionResult(notification=self.get_notification(instance=instance, notification_id=notification_id), action="confirm")
 
     def reject_notification(self, *, instance: InstanceRecord, notification_id: str) -> NotificationActionResult:
@@ -620,6 +825,16 @@ class TaskAutomationAdminService:
             row.delivery_status = "rejected"
             row.rejected_at = now
             row.updated_at = now
+            row.next_attempt_at = None
+            self._append_notification_attempt(
+                row,
+                attempt_kind="approval",
+                delivery_status="rejected",
+                happened_at=now,
+                detail="Preview rejected before live delivery continued.",
+                next_step="Edit the notification content or routing, then confirm it again when it is ready.",
+                channel=self._load_channel(session, instance=instance, channel_id=row.channel_id) if row.channel_id else None,
+            )
         return NotificationActionResult(notification=self.get_notification(instance=instance, notification_id=notification_id), action="reject")
 
     def retry_notification(self, *, instance: InstanceRecord, notification_id: str) -> NotificationActionResult:
@@ -629,16 +844,31 @@ class TaskAutomationAdminService:
             row.retry_count += 1
             row.last_attempt_at = now
             row.updated_at = now
+            detail = "Retry requested on the current delivery channel."
+            next_step = "Wait for the queued retry to execute."
             if row.retry_count >= row.max_retries and row.fallback_channel_id and row.channel_id != row.fallback_channel_id:
                 row.channel_id = row.fallback_channel_id
                 row.delivery_status = "fallback_queued"
                 row.next_attempt_at = now
+                detail = "Primary delivery exhausted its retry budget and moved to the fallback channel."
+                next_step = "Monitor the fallback channel and inspect its health before forcing another retry."
             elif row.retry_count > row.max_retries:
                 row.delivery_status = "failed"
                 row.next_attempt_at = None
+                detail = "Retry budget is exhausted and no additional automatic send is queued."
+                next_step = "Fix the routing or clear the failure condition before retrying again."
             else:
                 row.delivery_status = "queued"
                 row.next_attempt_at = now
+            self._append_notification_attempt(
+                row,
+                attempt_kind="fallback" if row.delivery_status == "fallback_queued" else "retry",
+                delivery_status=row.delivery_status,
+                happened_at=now,
+                detail=detail,
+                next_step=next_step,
+                channel=self._load_channel(session, instance=instance, channel_id=row.channel_id) if row.channel_id else None,
+            )
         return NotificationActionResult(notification=self.get_notification(instance=instance, notification_id=notification_id), action="retry")
 
     def list_automations(self, *, instance: InstanceRecord, status: str | None = None, limit: int = 100) -> list[AutomationSummary]:

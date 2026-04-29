@@ -2397,6 +2397,8 @@ export type NotificationDeliveryStatus =
   | "fallback_queued"
   | "rejected"
   | "cancelled";
+export type NotificationAttemptKind = "preview" | "approval" | "retry" | "fallback" | "manual_override" | "terminal";
+export type NotificationDeliveryEffect = "preview_only" | "queued" | "sent" | "failed" | "rejected" | "cancelled";
 
 export type AutomationStatus = "active" | "paused" | "archived";
 
@@ -2444,6 +2446,7 @@ export type NotificationSummary = {
   inbox_id?: string | null;
   workspace_id?: string | null;
   channel_id?: string | null;
+  configured_channel_id?: string | null;
   fallback_channel_id?: string | null;
   title: string;
   body: string;
@@ -2460,6 +2463,26 @@ export type NotificationSummary = {
   metadata: Record<string, unknown>;
   created_at: string;
   updated_at: string;
+};
+
+export type NotificationDeliveryAttempt = {
+  attempt_id: string;
+  attempt_kind: NotificationAttemptKind;
+  delivery_status: NotificationDeliveryStatus;
+  happened_at: string;
+  channel_id?: string | null;
+  channel_label?: string | null;
+  channel_target?: string | null;
+  detail: string;
+  next_step?: string | null;
+};
+
+export type NotificationDeliveryEvidence = {
+  effect_state: NotificationDeliveryEffect;
+  live_delivery: boolean;
+  current_target?: string | null;
+  next_step: string;
+  evidence_note: string;
 };
 
 export type AutomationSummary = {
@@ -2524,6 +2547,10 @@ export type NotificationDetail = NotificationSummary & {
   task?: TaskSummary | null;
   reminder?: ReminderSummary | null;
   channel?: DeliveryChannelSummary | null;
+  configured_channel?: DeliveryChannelSummary | null;
+  fallback_channel?: DeliveryChannelSummary | null;
+  delivery_attempts: NotificationDeliveryAttempt[];
+  delivery_evidence?: NotificationDeliveryEvidence | null;
 };
 
 export type ChannelDetail = DeliveryChannelSummary & {
