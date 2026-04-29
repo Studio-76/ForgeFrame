@@ -21,6 +21,7 @@ import { getInstanceIdFromSearchParams, withInstanceScope, withQueryParams } fro
 import { useInstanceCatalog } from "../../app/useInstanceCatalog";
 import { InstanceScopeCard } from "../../components/InstanceScopeCard";
 import { PageIntro } from "../../components/PageIntro";
+import { ActionBar } from "../../components/ui/ActionBar";
 import { AdvancedDiagnostics } from "../../components/ui/AdvancedDiagnostics";
 import { DetailPanel } from "../../components/ui/DetailPanel";
 import { EntityTable } from "../../components/ui/EntityTable";
@@ -391,28 +392,6 @@ export function LogsPage() {
         title="Errors, Activity, and Audit History"
         description="Operational signal, audit preview, retention posture, and observability checks for the active instance scope."
         question="What evidence is available for this scope, and is the logging path healthy?"
-        links={[
-          {
-            label: "Errors",
-            to: withInstanceScope(CONTROL_PLANE_ROUTES.errors, instanceId),
-            description: "Open incident review when the logs point to current runtime failures.",
-          },
-          {
-            label: "Health",
-            to: withInstanceScope(CONTROL_PLANE_ROUTES.health, instanceId),
-            description: "Check runtime readiness and provider posture for degraded signal paths.",
-          },
-          {
-            label: "Audit History",
-            to: historyPath,
-            description: "Review full governance event history from the same scope.",
-          },
-          {
-            label: "Audit export",
-            to: exportPath,
-            description: "Export stays on this route with a separate audit export workflow.",
-          },
-        ]}
         badges={[
           { label: selectedInstance ? `Instance scope: ${selectedInstance.display_name}` : "Default instance path", tone: selectedInstance ? "success" : "neutral" },
           { label: logs?.operability.ready ? "Logging ready" : "Logging not ready", tone: logs?.operability.ready ? "success" : "warning" },
@@ -430,6 +409,17 @@ export function LogsPage() {
         surfaceLabel="logs and audit evidence"
         onInstanceChange={onInstanceChange}
       />
+      <ActionBar
+        title="Evidence handoffs"
+        description="Export stays on this route with a separate audit export workflow."
+      >
+        <div className="fg-actions">
+          <Link className="fg-nav-link" to={withInstanceScope(CONTROL_PLANE_ROUTES.errors, instanceId)}>Errors</Link>
+          <Link className="fg-nav-link" to={withInstanceScope(CONTROL_PLANE_ROUTES.health, instanceId)}>Health</Link>
+          <Link className="fg-nav-link" to={historyPath}>Audit History</Link>
+          <Link className="fg-nav-link" to={exportPath}>Audit export</Link>
+        </div>
+      </ActionBar>
 
       {logsState === "loading" ? (
         <LoadingState

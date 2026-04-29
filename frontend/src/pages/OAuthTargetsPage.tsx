@@ -1,4 +1,4 @@
-import { useSearchParams } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 
 import { CONTROL_PLANE_ROUTES } from "../app/navigation";
 import { useAppSession } from "../app/session";
@@ -6,6 +6,7 @@ import { getInstanceIdFromSearchParams, withInstanceScope } from "../app/tenantS
 import { useInstanceCatalog } from "../app/useInstanceCatalog";
 import { InstanceScopeCard } from "../components/InstanceScopeCard";
 import { PageIntro } from "../components/PageIntro";
+import { ActionBar } from "../components/ui/ActionBar";
 import { BlockedState } from "../components/ui/StateBlocks";
 import { OAuthTargetsSection, OperationResultSection } from "../features/providers/ProvidersSections";
 import { getProvidersAccess } from "../features/providers/providersShared";
@@ -48,33 +49,6 @@ export function OAuthTargetsPage() {
         title="OAuth Targets & Operations"
         description="Account-backed provider axes, bridge-only slices, session truth, and probe posture get their own operator surface instead of hiding inside generic provider onboarding."
         question="Which OAuth/account target are you classifying, probing, or de-risking right now?"
-        links={[
-          {
-            label: "OAuth Targets",
-            to: withInstanceScope(CONTROL_PLANE_ROUTES.oauthTargets, instanceId),
-            description: "Stay on the dedicated surface for account-backed target truth and probe operations.",
-          },
-          {
-            label: "Providers",
-            to: withInstanceScope(CONTROL_PLANE_ROUTES.providers, instanceId),
-            description: "Return to the wider provider control plane when you need runtime inventory context.",
-          },
-          {
-            label: "Harness",
-            to: withInstanceScope(CONTROL_PLANE_ROUTES.harness, instanceId),
-            description: "Open the dedicated harness module when the question shifts to profile proof and probe operations.",
-          },
-          {
-            label: "Onboarding",
-            to: withInstanceScope(CONTROL_PLANE_ROUTES.onboarding, instanceId),
-            description: "Check go-live posture, bootstrap readiness, and instance-wide next steps.",
-          },
-          {
-            label: "Usage & Costs",
-            to: withInstanceScope(CONTROL_PLANE_ROUTES.usage, instanceId),
-            description: "Review avoided-cost versus metered-cost posture for account-backed traffic.",
-          },
-        ]}
         badges={[
           { label: access.badgeLabel, tone: access.badgeTone },
           ...(selectedInstance ? [{ label: `Instance scope: ${selectedInstance.display_name}`, tone: "success" as const }] : []),
@@ -90,6 +64,18 @@ export function OAuthTargetsPage() {
         surfaceLabel="OAuth/account operator truth"
         onInstanceChange={onInstanceChange}
       />
+      <ActionBar
+        title="Adjacent OAuth surfaces"
+        description="Use these handoffs only when the question moves out of target classification and probe posture."
+      >
+        <div className="fg-actions">
+          <Link className="fg-nav-link" to={withInstanceScope(CONTROL_PLANE_ROUTES.oauthTargets, instanceId)}>OAuth Targets</Link>
+          <Link className="fg-nav-link" to={withInstanceScope(CONTROL_PLANE_ROUTES.providers, instanceId)}>Providers</Link>
+          <Link className="fg-nav-link" to={withInstanceScope(CONTROL_PLANE_ROUTES.harness, instanceId)}>Harness</Link>
+          <Link className="fg-nav-link" to={withInstanceScope(CONTROL_PLANE_ROUTES.onboarding, instanceId)}>Onboarding</Link>
+          <Link className="fg-nav-link" to={withInstanceScope(CONTROL_PLANE_ROUTES.usage, instanceId)}>Usage &amp; Costs</Link>
+        </div>
+      </ActionBar>
       {!access.canRead ? (
         <BlockedState
           title={access.summaryTitle}

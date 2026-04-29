@@ -1,4 +1,4 @@
-import { useSearchParams } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 
 import { CONTROL_PLANE_ROUTES } from "../app/navigation";
 import { useAppSession } from "../app/session";
@@ -6,6 +6,7 @@ import { getInstanceIdFromSearchParams, withInstanceScope } from "../app/tenantS
 import { useInstanceCatalog } from "../app/useInstanceCatalog";
 import { InstanceScopeCard } from "../components/InstanceScopeCard";
 import { PageIntro } from "../components/PageIntro";
+import { ActionBar } from "../components/ui/ActionBar";
 import { BlockedState } from "../components/ui/StateBlocks";
 import {
   ProviderHealthSection,
@@ -53,30 +54,6 @@ export function ProvidersPage() {
         title="Providers"
         description="Manage live providers here: inventory, add/edit, enable/disable, sync, compatibility short status, and health. OAuth targets and harness proof are kept on dedicated routes."
         question="Which provider are you configuring, syncing, validating, or recovering right now?"
-        links={[
-          {
-            label: "Overview",
-            to: withInstanceScope(CONTROL_PLANE_ROUTES.providers, instanceId),
-            description: "Start with the live provider inventory and runtime truth for the current instance.",
-          },
-          {
-            label: "Harness",
-            to: withInstanceScope(CONTROL_PLANE_ROUTES.harness, instanceId),
-            description: access.canMutate
-              ? "Open the dedicated harness module for profile creation, verification, probe, import, and export work."
-              : "Inspect dedicated harness proof, profile, and run truth without reopening the provider inventory.",
-          },
-          {
-            label: "Provider Targets",
-            to: withInstanceScope(CONTROL_PLANE_ROUTES.providerTargets, instanceId),
-            description: "Open the target register when you need per-target routing and priority detail.",
-          },
-          {
-            label: "OAuth Targets",
-            to: withInstanceScope(CONTROL_PLANE_ROUTES.oauthTargets, instanceId),
-            description: "Open the dedicated operator surface for account-backed target classification, connect state, probes, and session truth.",
-          },
-        ]}
         badges={[
           { label: access.badgeLabel, tone: access.badgeTone },
           ...(selectedInstance ? [{ label: `Instance scope: ${selectedInstance.display_name}`, tone: "success" as const }] : []),
@@ -92,6 +69,17 @@ export function ProvidersPage() {
         surfaceLabel="provider control-plane truth"
         onInstanceChange={onInstanceChange}
       />
+      <ActionBar
+        title="Adjacent provider surfaces"
+        description="Open another route only when the current task leaves runtime inventory management."
+      >
+        <div className="fg-actions">
+          <Link className="fg-nav-link" to={withInstanceScope(CONTROL_PLANE_ROUTES.providers, instanceId)}>Providers</Link>
+          <Link className="fg-nav-link" to={withInstanceScope(CONTROL_PLANE_ROUTES.harness, instanceId)}>Harness</Link>
+          <Link className="fg-nav-link" to={withInstanceScope(CONTROL_PLANE_ROUTES.providerTargets, instanceId)}>Provider Targets</Link>
+          <Link className="fg-nav-link" to={withInstanceScope(CONTROL_PLANE_ROUTES.oauthTargets, instanceId)}>OAuth Targets</Link>
+        </div>
+      </ActionBar>
       {!access.canRead ? (
         <BlockedState
           title={access.summaryTitle}

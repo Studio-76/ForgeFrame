@@ -1805,8 +1805,8 @@ details summary {
 }
 
 .ff-state-block[data-state="blocked"] {
-  border-color: var(--fg-color-status-info-border);
-  background: linear-gradient(180deg, var(--fg-color-status-info-soft), var(--fg-color-surface-default));
+  border-color: var(--fg-color-status-danger-border);
+  background: linear-gradient(180deg, var(--fg-color-status-danger-soft), var(--fg-color-surface-default));
 }
 
 .ff-state-actions {

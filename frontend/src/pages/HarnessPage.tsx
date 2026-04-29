@@ -1,4 +1,4 @@
-import { useSearchParams } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 
 import { CONTROL_PLANE_ROUTES } from "../app/navigation";
 import { useAppSession } from "../app/session";
@@ -6,6 +6,7 @@ import { getInstanceIdFromSearchParams, withInstanceScope } from "../app/tenantS
 import { useInstanceCatalog } from "../app/useInstanceCatalog";
 import { InstanceScopeCard } from "../components/InstanceScopeCard";
 import { PageIntro } from "../components/PageIntro";
+import { ActionBar } from "../components/ui/ActionBar";
 import { BlockedState } from "../components/ui/StateBlocks";
 import { HarnessControlSection } from "../features/providers/ProvidersSections";
 import { getProvidersAccess } from "../features/providers/providersShared";
@@ -52,23 +53,6 @@ export function HarnessPage() {
         title="Harness"
         description="Operate generic integration profiles from a dedicated harness workspace: saved profiles and templates on the left, the selected config contract in the center, and real actions plus run history on the right."
         question="Which profile contract are you validating, previewing, probing, importing, exporting, or rolling back right now?"
-        links={[
-          {
-            label: "Harness",
-            to: withInstanceScope(CONTROL_PLANE_ROUTES.harness, instanceId),
-            description: "Stay on the standalone harness operator surface for profiles, contracts, actions, and run history.",
-          },
-          {
-            label: "Providers",
-            to: withInstanceScope(CONTROL_PLANE_ROUTES.providers, instanceId),
-            description: "Return to provider runtime inventory when the question shifts away from harness profile operations.",
-          },
-          {
-            label: "Logs",
-            to: withInstanceScope(CONTROL_PLANE_ROUTES.logs, instanceId),
-            description: "Open the shared evidence surface when a harness run needs audit or incident follow-up.",
-          },
-        ]}
         badges={[
           { label: access.badgeLabel, tone: access.badgeTone },
           ...(selectedInstance ? [{ label: `Instance scope: ${selectedInstance.display_name}`, tone: "success" as const }] : []),
@@ -88,6 +72,16 @@ export function HarnessPage() {
         surfaceLabel="harness proof and profile truth"
         onInstanceChange={onInstanceChange}
       />
+      <ActionBar
+        title="Adjacent harness surfaces"
+        description="Leave the harness only when the issue becomes runtime inventory or shared evidence."
+      >
+        <div className="fg-actions">
+          <Link className="fg-nav-link" to={withInstanceScope(CONTROL_PLANE_ROUTES.harness, instanceId)}>Harness</Link>
+          <Link className="fg-nav-link" to={withInstanceScope(CONTROL_PLANE_ROUTES.providers, instanceId)}>Providers</Link>
+          <Link className="fg-nav-link" to={withInstanceScope(CONTROL_PLANE_ROUTES.logs, instanceId)}>Logs</Link>
+        </div>
+      </ActionBar>
 
       {!access.canRead ? (
         <BlockedState

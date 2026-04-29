@@ -184,6 +184,17 @@ export function UsageContent({
               </select>
             </label>
           </div>
+          <div className="fg-actions">
+            <Link className="fg-nav-link" to={withInstanceScope(CONTROL_PLANE_ROUTES.usage, instanceId)}>
+              Usage Overview
+            </Link>
+            <Link className="fg-nav-link" to={withInstanceScope(CONTROL_PLANE_ROUTES.providerHealthRuns, instanceId)}>
+              Provider Health &amp; Runs
+            </Link>
+            <Link className="fg-nav-link" to={withInstanceScope(`${CONTROL_PLANE_ROUTES.usage}#client-investigation`, instanceId)}>
+              Client Investigation
+            </Link>
+          </div>
           {recommendation ? (
             <div className="fg-stack">
               <strong>{recommendation.title}</strong>

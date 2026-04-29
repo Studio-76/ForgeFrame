@@ -1,5 +1,5 @@
 import { type FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 
 import {
   createInstance,
@@ -27,6 +27,7 @@ import { getInstanceIdFromSearchParams } from "../../app/tenantScope";
 import { useInstanceCatalog } from "../../app/useInstanceCatalog";
 import { InstanceScopeCard } from "../../components/InstanceScopeCard";
 import { PageIntro } from "../../components/PageIntro";
+import { ActionBar } from "../../components/ui/ActionBar";
 import {
   createOnboardingInterviewState,
   evaluateOnboardingInterview,
@@ -779,24 +780,6 @@ export function OnboardingPage() {
         title="Guided Onboarding Wizard"
         description="Wizard-driven first go-live flow: operating model, first instance, operator agent, provider target, routing defaults, runtime key issuance, TLS evidence, and first success."
         question="What blocks first live runtime traffic right now?"
-        links={[
-          {
-            label: "Onboarding",
-            to: CONTROL_PLANE_ROUTES.onboarding,
-            description: "Drive the wizard to a real go-live state.",
-          },
-          {
-            label: "Providers",
-            to: CONTROL_PLANE_ROUTES.providers,
-            description: "Verify provider readiness and target classifications.",
-          },
-          {
-            label: "Dashboard",
-            to: CONTROL_PLANE_ROUTES.dashboard,
-            description: "Use once go-live blockers are closed.",
-            badge: goLiveReady ? "Go live" : undefined,
-          },
-        ]}
         badges={[
           { label: access.badgeLabel, tone: access.badgeTone },
           { label: `${completedSteps}/${steps.length} wizard steps done`, tone: overallTone },
@@ -814,6 +797,18 @@ export function OnboardingPage() {
         surfaceLabel="onboarding wizard"
         onInstanceChange={onInstanceChange}
       />
+      <ActionBar
+        title="Go-live handoffs"
+        description="Use adjacent surfaces only when the wizard needs external evidence or a final release check."
+      >
+        <div className="fg-actions">
+          <Link className="fg-nav-link" to={CONTROL_PLANE_ROUTES.onboarding}>Onboarding</Link>
+          <Link className="fg-nav-link" to={CONTROL_PLANE_ROUTES.providers}>Providers</Link>
+          <Link className="fg-nav-link" to={CONTROL_PLANE_ROUTES.dashboard}>
+            {goLiveReady ? "Dashboard (Go live)" : "Dashboard"}
+          </Link>
+        </div>
+      </ActionBar>
 
       <OnboardingContent
         error={error}

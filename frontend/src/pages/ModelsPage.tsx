@@ -9,6 +9,7 @@ import { getInstanceIdFromSearchParams, withQueryParams } from "../app/tenantSco
 import { useInstanceCatalog } from "../app/useInstanceCatalog";
 import { InstanceScopeCard } from "../components/InstanceScopeCard";
 import { PageIntro } from "../components/PageIntro";
+import { ActionBar } from "../components/ui/ActionBar";
 import { DetailPanel } from "../components/ui/DetailPanel";
 import { EntityTable, type EntityTableColumn } from "../components/ui/EntityTable";
 import { EmptyState, ErrorState, LoadingState } from "../components/ui/StateBlocks";
@@ -357,23 +358,6 @@ export function ModelsPage() {
         title="Models Register"
         description="Models are the routing and target truth for the selected instance. This register separates declared catalog metadata from observed runtime evidence and from test-verified provider checks."
         question="Which model entries are genuinely routable right now, which are stale or removed, and what capability trust backs each one?"
-        links={[
-          {
-            label: "Providers",
-            to: CONTROL_PLANE_ROUTES.providers,
-            description: "Return to provider onboarding, sync posture, health, harness, and capability truth.",
-          },
-          {
-            label: "Provider Targets",
-            to: CONTROL_PLANE_ROUTES.providerTargets,
-            description: "Inspect the instance-bound targets layered on top of these model records.",
-          },
-          {
-            label: "Routing",
-            to: CONTROL_PLANE_ROUTES.routing,
-            description: "Review the routing policy and budget state that can reference these targets.",
-          },
-        ]}
         badges={[
           { label: `${summary.routable_models ?? 0} routable`, tone: (summary.routable_models ?? 0) > 0 ? "success" : "warning" },
           { label: `${summary.tested_models ?? 0} tested`, tone: (summary.tested_models ?? 0) > 0 ? "success" : "warning" },
@@ -393,6 +377,16 @@ export function ModelsPage() {
         surfaceLabel="model register truth"
         onInstanceChange={onInstanceChange}
       />
+      <ActionBar
+        title="Adjacent model surfaces"
+        description="Open another setup route only when the next question leaves the model register itself."
+      >
+        <div className="fg-actions">
+          <Link className="fg-nav-link" to={providerRoute}>Providers</Link>
+          <Link className="fg-nav-link" to={providerTargetsRoute}>Provider Targets</Link>
+          <Link className="fg-nav-link" to={routingRoute}>Routing</Link>
+        </div>
+      </ActionBar>
 
       <SummaryStrip
         items={[
@@ -420,7 +414,7 @@ export function ModelsPage() {
             key: "uncovered",
             label: "No routing coverage",
             value: summary.uncovered_models ?? models.filter((item) => item.routing_target_count === 0).length,
-            status: (summary.uncovered_models ?? 0) === 0 ? "ready" : "warning",
+            status: (summary.uncovered_models ?? 0) === 0 ? "ready" : "degraded",
             meta: "Models that exist in the register but currently have no routing-capable target.",
           },
         ]}
