@@ -32,15 +32,21 @@ class SettingsPatchRequest(BaseModel):
     updates: dict[str, object] = Field(default_factory=dict)
 
 
-@router.get("/")
-def list_settings(service: GovernanceService = Depends(get_governance_service)) -> dict[str, object]:
+def _settings_payload(service: GovernanceService, *, operation: dict[str, object] | None = None) -> dict[str, object]:
     raw = Settings()
     effective = get_effective_settings()
-    overrides = service.list_setting_overrides()
-    return {
+    payload: dict[str, object] = {
         "status": "ok",
-        "settings": serialize_mutable_settings(raw, effective, overrides),
+        "settings": serialize_mutable_settings(raw, effective, service.list_setting_overrides()),
     }
+    if operation is not None:
+        payload["operation"] = operation
+    return payload
+
+
+@router.get("/")
+def list_settings(service: GovernanceService = Depends(get_governance_service)) -> dict[str, object]:
+    return _settings_payload(service)
 
 
 @router.patch("/")
@@ -57,21 +63,38 @@ def patch_settings(
     for key, raw_value in payload.updates.items():
         definition = MUTABLE_SETTINGS.get(key)
         if definition is None:
-            continue
-        value = coerce_mutable_setting_value(key, raw_value)
-        service.upsert_setting_override(key=key, value=value, category=definition.category, actor=admin)
+            return JSONResponse(status_code=404, content={"error": {"type": "setting_not_found", "message": f"Unknown mutable setting '{key}'."}})
+        try:
+            value = coerce_mutable_setting_value(key, raw_value)
+        except ValueError as exc:
+            return JSONResponse(status_code=409, content={"error": {"type": "setting_invalid", "message": str(exc)}})
+        service.upsert_setting_override(key=key, value=value, category=definition.group, actor=admin)
         updated.append(key)
     clear_runtime_dependency_caches()
     get_governance_service.cache_clear()
     get_control_plane_service.cache_clear()
     get_usage_analytics_store.cache_clear()
     service = get_governance_service()
-    raw = Settings()
-    effective = get_effective_settings()
+    highest_risk = next(
+        (
+            risk
+            for risk in ("high", "medium", "low")
+            if any(MUTABLE_SETTINGS[key].risk_level == risk for key in updated)
+        ),
+        "low",
+    )
     return {
-        "status": "ok",
+        **_settings_payload(
+            service,
+            operation={
+                "kind": "patch",
+                "keys": updated,
+                "summary": f"Updated {len(updated)} setting{'s' if len(updated) != 1 else ''}.",
+                "highest_risk": highest_risk,
+                "requires_confirmation": any(MUTABLE_SETTINGS[key].confirmation_required for key in updated),
+            },
+        ),
         "updated": updated,
-        "settings": serialize_mutable_settings(raw, effective, service.list_setting_overrides()),
     }
 
 
@@ -85,6 +108,9 @@ def reset_setting(
     unsupported = unsupported_idempotency_response(request, message=_SETTINGS_IDEMPOTENCY_MESSAGE)
     if unsupported is not None:
         return unsupported
+    definition = MUTABLE_SETTINGS.get(key)
+    if definition is None:
+        return JSONResponse(status_code=404, content={"error": {"type": "setting_not_found", "message": f"Unknown mutable setting '{key}'."}})
     try:
         service.remove_setting_override(key=key, actor=admin)
     except ValueError as exc:
@@ -93,4 +119,17 @@ def reset_setting(
     get_governance_service.cache_clear()
     get_control_plane_service.cache_clear()
     get_usage_analytics_store.cache_clear()
-    return {"status": "ok", "reset": key}
+    service = get_governance_service()
+    return {
+        **_settings_payload(
+            service,
+            operation={
+                "kind": "reset",
+                "keys": [key],
+                "summary": f"Reset {definition.label} to its environment default.",
+                "highest_risk": definition.risk_level,
+                "requires_confirmation": definition.confirmation_required,
+            },
+        ),
+        "reset": key,
+    }

@@ -8,11 +8,15 @@ const {
   fetchMutableSettingsMock,
   patchMutableSettingsMock,
   resetMutableSettingMock,
+  confirmMock,
 } = vi.hoisted(() => ({
   fetchMutableSettingsMock: vi.fn(),
   patchMutableSettingsMock: vi.fn(),
   resetMutableSettingMock: vi.fn(),
+  confirmMock: vi.fn(() => true),
 }));
+
+vi.stubGlobal("confirm", confirmMock);
 
 vi.mock("../src/api/admin", async () => {
   const actual = await vi.importActual<typeof import("../src/api/admin")>("../src/api/admin");
@@ -57,19 +61,75 @@ const readOnlyAdminSession: AdminSessionUser = {
   session_type: "impersonation",
 };
 
-function createSetting(): MutableSettingEntry {
-  return {
-    key: "routing_require_healthy",
-    label: "Require healthy providers",
-    category: "routing",
-    value_type: "bool",
-    description: "Only route to healthy providers when the runtime selects a default target.",
-    default_value: false,
-    effective_value: true,
-    overridden: true,
-    updated_at: "2026-04-21T21:00:00Z",
-    updated_by: "ops-admin",
-  };
+function createSettings(): MutableSettingEntry[] {
+  return [
+    {
+      key: "routing_require_healthy",
+      label: "Require Healthy Route",
+      group: "routing",
+      group_label: "Routing",
+      category: "routing",
+      value_type: "bool",
+      description: "Require healthy models for implicit routing when possible.",
+      default_value: false,
+      effective_value: true,
+      source: "override",
+      source_label: "Persisted override",
+      mutable: true,
+      risk_level: "medium",
+      risk_label: "Moderate risk",
+      risk_note: "Can block degraded providers from being selected by default routes.",
+      confirmation_required: false,
+      allowed_values: [],
+      overridden: true,
+      updated_at: "2026-04-21T21:00:00Z",
+      updated_by: "ops-admin",
+    },
+    {
+      key: "public_tls_mode",
+      label: "TLS Mode",
+      group: "tls",
+      group_label: "TLS",
+      category: "tls",
+      value_type: "str",
+      description: "Controls whether public TLS is disabled, manual, or managed by integrated ACME.",
+      default_value: "disabled",
+      effective_value: "disabled",
+      source: "default",
+      source_label: "Environment default",
+      mutable: true,
+      risk_level: "high",
+      risk_label: "High risk",
+      risk_note: "Can immediately change public TLS posture and ingress expectations.",
+      confirmation_required: true,
+      allowed_values: ["disabled", "manual", "integrated_acme"],
+      overridden: false,
+      updated_at: null,
+      updated_by: null,
+    },
+    {
+      key: "app_name",
+      label: "App Name",
+      group: "ui",
+      group_label: "UI",
+      category: "ui",
+      value_type: "str",
+      description: "Visible product name in the admin shell.",
+      default_value: "ForgeFrame",
+      effective_value: "ForgeFrame",
+      source: "default",
+      source_label: "Environment default",
+      mutable: true,
+      risk_level: "low",
+      risk_label: "Low risk",
+      risk_note: "Changes operator-facing product labeling but does not alter runtime execution.",
+      confirmation_required: false,
+      allowed_values: [],
+      overridden: false,
+      updated_at: null,
+      updated_by: null,
+    },
+  ];
 }
 
 let container: HTMLDivElement;
@@ -91,6 +151,26 @@ async function flushEffects() {
   });
 }
 
+function setControlValue(control: HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement, value: string) {
+  const prototype = Object.getPrototypeOf(control) as HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement;
+  const setter = Object.getOwnPropertyDescriptor(prototype, "value")?.set;
+  setter?.call(control, value);
+  control.dispatchEvent(new Event(control.tagName === "SELECT" ? "change" : "input", { bubbles: true }));
+}
+
+function getButtonByText(scope: ParentNode, text: string) {
+  return Array.from(scope.querySelectorAll("button")).find((button) => button.textContent?.includes(text));
+}
+
+function getLabeledControl(scope: ParentNode, labelText: string) {
+  const label = Array.from(scope.querySelectorAll("label")).find((candidate) => candidate.textContent?.includes(labelText));
+  const control = label?.querySelector("input, textarea, select");
+  if (!control) {
+    throw new Error(`Missing labeled control: ${labelText}`);
+  }
+  return control as HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement;
+}
+
 async function renderSettingsPage(session: AdminSessionUser) {
   await renderIntoDom(withAppContext({
     path: "/settings",
@@ -102,18 +182,44 @@ async function renderSettingsPage(session: AdminSessionUser) {
 
 beforeEach(() => {
   vi.resetAllMocks();
+  confirmMock.mockReturnValue(true);
   fetchMutableSettingsMock.mockResolvedValue({
     status: "ok",
-    settings: [createSetting()],
+    settings: createSettings(),
   });
   patchMutableSettingsMock.mockResolvedValue({
     status: "ok",
-    updated: ["routing_require_healthy"],
-    settings: [createSetting()],
+    updated: ["public_tls_mode"],
+    operation: {
+      kind: "patch",
+      keys: ["public_tls_mode"],
+      summary: "Updated 1 setting.",
+      highest_risk: "high",
+      requires_confirmation: true,
+    },
+    settings: createSettings().map((item) => item.key === "public_tls_mode"
+      ? {
+          ...item,
+          effective_value: "manual",
+          source: "override",
+          source_label: "Persisted override",
+          overridden: true,
+          updated_at: "2026-04-29T20:15:00Z",
+          updated_by: "user-admin",
+        }
+      : item),
   });
   resetMutableSettingMock.mockResolvedValue({
     status: "ok",
-    reset: "routing_require_healthy",
+    reset: "public_tls_mode",
+    operation: {
+      kind: "reset",
+      keys: ["public_tls_mode"],
+      summary: "Reset TLS Mode to its environment default.",
+      highest_risk: "high",
+      requires_confirmation: true,
+    },
+    settings: createSettings(),
   });
   container = document.createElement("div");
   document.body.innerHTML = "";
@@ -132,46 +238,72 @@ afterEach(() => {
 });
 
 describe("Settings page role-aware controls", () => {
-  it("keeps settings in read-only mode for operators", async () => {
+  it("keeps grouped settings in review mode for operators without rendering a disabled editor", async () => {
     await renderSettingsPage(operatorSession);
 
     expect(fetchMutableSettingsMock).toHaveBeenCalledTimes(1);
-    expect(container.textContent).toContain("Read-Only Settings Review");
-    expect(container.textContent).toContain("Authenticated non-admin sessions can inspect effective settings here");
-    expect(container.textContent).toContain("Read only");
-    expect(container.querySelectorAll("button")).toHaveLength(0);
-
-    const select = container.querySelector<HTMLSelectElement>('select[aria-label="Require healthy providers effective value"]');
-    expect(select).not.toBeNull();
-    expect(select?.disabled).toBe(true);
+    expect(container.textContent).toContain("Read-Only Review");
+    expect(container.textContent).toContain("Authenticated non-admin sessions can review grouped system defaults here");
+    expect(container.textContent).toContain("Routing");
+    expect(container.textContent).toContain("TLS");
+    expect(getButtonByText(container, "Save override")).toBeUndefined();
+    expect(getButtonByText(container, "Reset to default")).toBeUndefined();
+    expect(container.querySelector('select[aria-label="TLS Mode effective value"]')).toBeNull();
   });
 
-  it("keeps mutation controls available for admin sessions", async () => {
+  it("groups, searches, confirms risky changes, and resets settings for admins", async () => {
     await renderSettingsPage(adminSession);
 
     expect(fetchMutableSettingsMock).toHaveBeenCalledTimes(1);
     expect(container.textContent).toContain("Admin mutations enabled");
+    expect(container.textContent).toContain("Routing");
+    expect(container.textContent).toContain("TLS");
+    expect(container.textContent).toContain("UI");
 
-    const buttonLabels = Array.from(container.querySelectorAll("button")).map((button) => button.textContent);
-    expect(buttonLabels).toContain("Save");
-    expect(buttonLabels).toContain("Reset");
+    await act(async () => {
+      setControlValue(getLabeledControl(container, "Search settings"), "tls mode");
+    });
+    await flushEffects();
 
-    const select = container.querySelector<HTMLSelectElement>('select[aria-label="Require healthy providers effective value"]');
-    expect(select).not.toBeNull();
-    expect(select?.disabled).toBe(false);
+    expect(container.textContent).toContain("1 matching");
+
+    await act(async () => {
+      getButtonByText(container, "public_tls_mode")!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    await flushEffects();
+
+    const valueControl = getLabeledControl(container, "New effective value");
+    await act(async () => {
+      setControlValue(valueControl, "manual");
+      getButtonByText(container, "Save override")!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    await flushEffects();
+
+    expect(confirmMock).toHaveBeenCalledTimes(1);
+    expect(patchMutableSettingsMock).toHaveBeenCalledWith({ public_tls_mode: "manual" });
+    expect(container.textContent).toContain("Updated 1 setting.");
+    expect(container.textContent).toContain("Persisted override");
+    expect(getButtonByText(container, "Reset to default")?.hasAttribute("disabled")).toBe(false);
+
+    await act(async () => {
+      getButtonByText(container, "Reset to default")!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    await flushEffects();
+
+    expect(confirmMock).toHaveBeenCalledTimes(2);
+    expect(resetMutableSettingMock).toHaveBeenCalledWith("public_tls_mode");
+    expect(container.textContent).toContain("Reset TLS Mode to its environment default.");
   });
 
-  it("keeps impersonation admin sessions read-only", async () => {
+  it("keeps impersonation admin sessions in read-only review mode", async () => {
     await renderSettingsPage(readOnlyAdminSession);
 
     expect(fetchMutableSettingsMock).toHaveBeenCalledTimes(1);
-    expect(container.textContent).toContain("Read-Only Settings Review");
+    expect(container.textContent).toContain("Read-Only Review");
     expect(container.textContent).toContain("This admin session is read-only");
-    expect(container.textContent).toContain("Read only");
-    expect(container.querySelectorAll("button")).toHaveLength(0);
-
-    const select = container.querySelector<HTMLSelectElement>('select[aria-label="Require healthy providers effective value"]');
-    expect(select).not.toBeNull();
-    expect(select?.disabled).toBe(true);
+    expect(container.textContent).toContain("Read-only review");
+    expect(getButtonByText(container, "Save override")).toBeUndefined();
+    expect(getButtonByText(container, "Reset to default")).toBeUndefined();
+    expect(container.querySelector('select[aria-label="TLS Mode effective value"]')).toBeNull();
   });
 });

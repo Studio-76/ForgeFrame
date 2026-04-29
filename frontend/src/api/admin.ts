@@ -1792,14 +1792,32 @@ export type RuntimeKeyFirstSuccessProbeResponse = {
 export type MutableSettingEntry = {
   key: string;
   label: string;
+  group: "runtime" | "security" | "providers" | "routing" | "tls" | "observability" | "ui";
+  group_label: string;
   category: string;
-  value_type: "str" | "bool" | "float";
+  value_type: "str" | "bool" | "float" | "int";
   description: string;
   default_value: string | number | boolean;
   effective_value: string | number | boolean;
+  source: "default" | "override";
+  source_label: string;
+  mutable: boolean;
+  risk_level: "low" | "medium" | "high";
+  risk_label: string;
+  risk_note: string;
+  confirmation_required: boolean;
+  allowed_values: string[];
   overridden: boolean;
   updated_at?: string | null;
   updated_by?: string | null;
+};
+
+export type MutableSettingOperation = {
+  kind: "patch" | "reset";
+  keys: string[];
+  summary: string;
+  highest_risk: "low" | "medium" | "high";
+  requires_confirmation: boolean;
 };
 
 export type DashboardPrimaryAction = {
@@ -4149,14 +4167,14 @@ export function fetchMutableSettings() {
 }
 
 export function patchMutableSettings(updates: Record<string, unknown>) {
-  return fetchJson<{ status: string; updated: string[]; settings: MutableSettingEntry[] }>("/admin/settings/", {
+  return fetchJson<{ status: string; updated: string[]; settings: MutableSettingEntry[]; operation: MutableSettingOperation }>("/admin/settings/", {
     method: "PATCH",
     body: JSON.stringify({ updates }),
   });
 }
 
 export function resetMutableSetting(key: string) {
-  return fetchJson<{ status: string; reset: string }>(`/admin/settings/${key}`, {
+  return fetchJson<{ status: string; reset: string; settings: MutableSettingEntry[]; operation: MutableSettingOperation }>(`/admin/settings/${key}`, {
     method: "DELETE",
   });
 }
