@@ -110,6 +110,13 @@ export function AppHeader({ navigationSections, instanceId, session, sessionErro
     void navigate(to);
   };
 
+  const onSearchResultActivate = (item: SearchResult) => {
+    if (item.disabled) {
+      return;
+    }
+    chooseSearchResult(item.to);
+  };
+
   const currentRoute = useMemo(() => {
     return findNavigationMatch(navigationSections, location.pathname, location.hash, instanceId);
   }, [instanceId, location.hash, location.pathname, navigationSections]);
@@ -173,14 +180,15 @@ export function AppHeader({ navigationSections, instanceId, session, sessionErro
                       key={`${item.section}-${item.to}`}
                       type="button"
                       role="option"
+                      disabled={item.disabled}
                       aria-disabled={item.disabled}
                       className={item.disabled ? "is-disabled" : undefined}
-                      onMouseDown={(event) => {
-                        if (item.disabled) {
+                      onClick={() => onSearchResultActivate(item)}
+                      onKeyDown={(event) => {
+                        if ((event.key === "Enter" || event.key === " ") && !item.disabled) {
                           event.preventDefault();
-                          return;
+                          onSearchResultActivate(item);
                         }
-                        chooseSearchResult(item.to);
                       }}
                     >
                       <span>

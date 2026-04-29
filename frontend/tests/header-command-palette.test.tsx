@@ -2,7 +2,7 @@
 
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { MemoryRouter } from "react-router-dom";
+import { MemoryRouter, useLocation } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { AdminSessionUser } from "../src/api/admin";
@@ -24,6 +24,23 @@ const viewerSession: AdminSessionUser = {
 let container: HTMLDivElement;
 let root: Root | null = null;
 
+function HeaderHarness({ session }: { session: AdminSessionUser }) {
+  const location = useLocation();
+
+  return (
+    <>
+      <AppHeader
+        navigationSections={getControlPlaneNavigation(session)}
+        instanceId={null}
+        session={session}
+        sessionError=""
+        onLogout={vi.fn()}
+      />
+      <div data-route-probe>{`${location.pathname}${location.search}${location.hash}`}</div>
+    </>
+  );
+}
+
 async function renderHeader(path: string, session: AdminSessionUser = viewerSession) {
   root = createRoot(container);
   await act(async () => {
@@ -31,17 +48,17 @@ async function renderHeader(path: string, session: AdminSessionUser = viewerSess
       <MemoryRouter initialEntries={[path]}>
         <ThemeProvider>
           <SidebarProvider>
-            <AppHeader
-              navigationSections={getControlPlaneNavigation(session)}
-              instanceId={null}
-              session={session}
-              sessionError=""
-              onLogout={vi.fn()}
-            />
+            <HeaderHarness session={session} />
           </SidebarProvider>
         </ThemeProvider>
       </MemoryRouter>,
     );
+  });
+}
+
+async function flushEffects() {
+  await act(async () => {
+    await Promise.resolve();
   });
 }
 
@@ -96,5 +113,59 @@ describe("header command palette", () => {
     expect(approvalsOption).not.toBeNull();
     expect(approvalsOption?.getAttribute("aria-disabled")).toBe("true");
     expect(approvalsOption?.textContent).toContain("Operator or admin");
+  });
+
+  it("opens enabled command-palette results from the keyboard", async () => {
+    await renderHeader("/dashboard");
+
+    const searchInput = container.querySelector<HTMLInputElement>('input[aria-label="Search command surfaces"]');
+    expect(searchInput).not.toBeNull();
+
+    await act(async () => {
+      searchInput?.focus();
+      setInputValue(searchInput!, "settings");
+    });
+
+    const settingsOption = Array.from(container.querySelectorAll<HTMLButtonElement>('#ff-command-menu button')).find(
+      (button) => button.textContent?.includes("System Settings"),
+    );
+
+    expect(settingsOption).not.toBeNull();
+
+    await act(async () => {
+      settingsOption?.focus();
+      settingsOption?.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+    });
+    await flushEffects();
+
+    const routeProbe = container.querySelector<HTMLElement>("[data-route-probe]");
+    expect(routeProbe?.textContent).toBe("/settings");
+  });
+
+  it("does not activate disabled command-palette results", async () => {
+    await renderHeader("/dashboard");
+
+    const searchInput = container.querySelector<HTMLInputElement>('input[aria-label="Search command surfaces"]');
+    expect(searchInput).not.toBeNull();
+
+    await act(async () => {
+      searchInput?.focus();
+      setInputValue(searchInput!, "approvals");
+    });
+
+    const approvalsOption = Array.from(container.querySelectorAll<HTMLButtonElement>('#ff-command-menu button')).find(
+      (button) => button.textContent?.includes("Approvals"),
+    );
+
+    expect(approvalsOption).not.toBeNull();
+    expect(approvalsOption?.disabled).toBe(true);
+
+    await act(async () => {
+      approvalsOption?.click();
+    });
+    await flushEffects();
+
+    const routeProbe = container.querySelector<HTMLElement>("[data-route-probe]");
+    expect(routeProbe?.textContent).toBe("/dashboard");
   });
 });
