@@ -41,3 +41,19 @@
 - `LogsPage` nutzt fuer den letzten Export jetzt einen echten Download-Pfad ueber einen vom API-Pfad gelieferten `Blob`; keine tote Export-Aktion mehr.
 - Der Shared-Operator-Vertrag ist real auf mindestens drei Seiten im Einsatz: `Dashboard`, `Logs`, `Usage`.
 - `PageIntro` erzeugt keinen Wayfinding-Gridblock mehr, und `OnboardingPage` reduziert die In-Page-CTAs auf kontextuelle Minimalnavigation.
+
+## Re-Audit 2026-04-29
+
+- Promptdatei: `/opt/ForgeFrame/cleanup/00_global_frontend_cleanup_contract.md`
+- Developer-Zusammenfassung: `Re-Audit auf aktuellem HEAD bestaetigt den globalen UI-Vertrag ohne weiteren Fix-Bedarf.`
+- Geaenderte Dateien: `keine zusaetzlichen Quelltextaenderungen; Progressdatei fuer Re-Audit aktualisiert`
+- Audit-Ergebnis: `APPROVED`
+- Konkrete Audit-Maengel: `keine`
+- Fix-Runden: `0`
+- Finale Freigabe: `APPROVED`
+- Ausgefuehrte Pruefkommandos:
+  - `cd frontend && npm run build` -> erfolgreich; nur nicht-blockierende Vite-Warnung zu `index`-Chunk > 500 kB
+  - `cd frontend && npm test -- --runInBand` -> fehlgeschlagen, Vitest/CACError: `Unknown option --runInBand`
+  - `cd frontend && npm test` -> erfolgreich, `42/42` Testdateien, `160/160` Tests
+  - `rg -n "<ActionBar|<SummaryStrip|<EntityTable|<DetailPanel|<AdvancedDiagnostics|<PermissionState|<BlockedState|<EmptyState" frontend/src/pages frontend/src/features` -> Shared-Bausteine real auf `Dashboard`, `Logs`, `Usage`, `Models` und weiteren Seiten im Einsatz
+  - `rg -n "href=\"#\"|preventDefault\\(\\)" frontend/src/features/logs frontend/src/features/usage frontend/src/features/onboarding frontend/src/pages/DashboardPage.tsx` -> keine placebohaften `href="#"`-Links auf den direkt geprueften Vertragsseiten
