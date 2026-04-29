@@ -27,6 +27,8 @@ import { useAppSession } from "../app/session";
 import { PageIntro } from "../components/PageIntro";
 import { getWorkInteractionAccess, normalizeOptional, parseInteger, parseJsonObject, type LoadState } from "./workInteractionPageSupport";
 
+type ScheduleUnit = "minutes" | "hours" | "days";
+
 const STATUS_OPTIONS: Array<AutomationStatus | "all"> = ["all", "active", "paused", "archived"];
 const ACTION_KIND_OPTIONS: AutomationActionKind[] = ["create_follow_up", "create_reminder", "create_notification"];
 
@@ -71,6 +73,67 @@ const DEFAULT_EDIT_FORM = {
   metadataJson: "{}",
 };
 
+function cadenceToStructured(cadenceMinutes: string | number): { every: string; unit: ScheduleUnit } {
+  const minutes = typeof cadenceMinutes === "number"
+    ? cadenceMinutes
+    : parseInteger(String(cadenceMinutes), 60);
+  if (minutes % 1440 === 0) {
+    return { every: String(Math.max(1, minutes / 1440)), unit: "days" };
+  }
+  if (minutes % 60 === 0) {
+    return { every: String(Math.max(1, minutes / 60)), unit: "hours" };
+  }
+  return { every: String(Math.max(1, minutes)), unit: "minutes" };
+}
+
+function structuredToCadence(every: string, unit: ScheduleUnit): string {
+  const normalized = Math.max(1, parseInteger(every, 1));
+  if (unit === "days") {
+    return String(normalized * 1440);
+  }
+  if (unit === "hours") {
+    return String(normalized * 60);
+  }
+  return String(normalized);
+}
+
+function automationStatusTone(status: AutomationStatus): "success" | "warning" | "danger" {
+  if (status === "active") {
+    return "success";
+  }
+  if (status === "paused") {
+    return "warning";
+  }
+  return "danger";
+}
+
+function automationTargetLabel(automation: Pick<AutomationSummary, "target_task_id" | "target_conversation_id" | "target_inbox_id" | "target_workspace_id">): string {
+  const parts = [
+    automation.target_task_id ? `task ${automation.target_task_id}` : null,
+    automation.target_conversation_id ? `conversation ${automation.target_conversation_id}` : null,
+    automation.target_inbox_id ? `inbox ${automation.target_inbox_id}` : null,
+    automation.target_workspace_id ? `workspace ${automation.target_workspace_id}` : null,
+  ].filter(Boolean);
+  return parts.join(" · ") || "no target";
+}
+
+function automationOutcomeLabel(automation: Pick<AutomationSummary, "last_notification_id" | "last_reminder_id" | "last_task_id">): string {
+  if (automation.last_notification_id) {
+    return `notification ${automation.last_notification_id}`;
+  }
+  if (automation.last_reminder_id) {
+    return `reminder ${automation.last_reminder_id}`;
+  }
+  if (automation.last_task_id) {
+    return `task ${automation.last_task_id}`;
+  }
+  return "none yet";
+}
+
+function automationHasExternalEffect(automation: Pick<AutomationSummary, "action_kind" | "channel_id" | "fallback_channel_id" | "preview_required">): boolean {
+  return automation.action_kind === "create_notification" || Boolean(automation.channel_id || automation.fallback_channel_id || automation.preview_required === false);
+}
+
 export function AutomationsPage() {
   const { session, sessionReady } = useAppSession();
   const { canRead, canMutate } = getWorkInteractionAccess(session, sessionReady);
@@ -91,9 +154,15 @@ export function AutomationsPage() {
   const [savingCreate, setSavingCreate] = useState(false);
   const [savingUpdate, setSavingUpdate] = useState(false);
   const [triggering, setTriggering] = useState(false);
+  const [showCreateAdvancedSchedule, setShowCreateAdvancedSchedule] = useState(false);
+  const [showEditAdvancedSchedule, setShowEditAdvancedSchedule] = useState(false);
+  const [lastTriggerResult, setLastTriggerResult] = useState<{ triggeredAt: string; automation: AutomationDetail } | null>(null);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
   const [refreshNonce, setRefreshNonce] = useState(0);
+
+  const createSchedule = cadenceToStructured(createForm.cadenceMinutes);
+  const editSchedule = cadenceToStructured(editForm.cadenceMinutes);
 
   const updateRoute = (mutate: (next: URLSearchParams) => void, replace = false) => {
     const next = new URLSearchParams(searchParams);
@@ -223,6 +292,7 @@ export function AutomationsPage() {
   useEffect(() => {
     if (!detail) {
       setEditForm(DEFAULT_EDIT_FORM);
+      setShowEditAdvancedSchedule(false);
       return;
     }
 
@@ -245,7 +315,12 @@ export function AutomationsPage() {
       notificationBody: "",
       metadataJson: JSON.stringify(detail.metadata, null, 2),
     });
+    setShowEditAdvancedSchedule(false);
   }, [detail]);
+
+  useEffect(() => {
+    setLastTriggerResult(null);
+  }, [selectedAutomationId]);
 
   const buildAutomationPayload = (form: typeof DEFAULT_CREATE_FORM | typeof DEFAULT_EDIT_FORM) => ({
     title: form.title.trim(),
@@ -282,6 +357,7 @@ export function AutomationsPage() {
         ...buildAutomationPayload(createForm),
       });
       setCreateForm(DEFAULT_CREATE_FORM);
+      setShowCreateAdvancedSchedule(false);
       updateRoute((next) => {
         next.set("automationId", payload.automation.automation_id);
       });
@@ -327,7 +403,11 @@ export function AutomationsPage() {
     setMessage("");
     try {
       const payload = await triggerAutomation(instanceId, detail.automation_id);
-      setMessage(`Automation ${payload.automation.automation_id} triggered.`);
+      setLastTriggerResult({
+        triggeredAt: new Date().toISOString(),
+        automation: payload.automation,
+      });
+      setMessage(`Automation ${payload.automation.automation_id} tested now.`);
       setRefreshNonce((current) => current + 1);
     } catch (triggerError) {
       setError(triggerError instanceof Error ? triggerError.message : "Automation trigger failed.");
@@ -449,7 +529,7 @@ export function AutomationsPage() {
           <div className="fg-panel-heading">
             <div>
               <h3>Automation inventory</h3>
-              <p className="fg-muted">Each row is a persisted recurring rule with real trigger posture.</p>
+              <p className="fg-muted">Each row is a persisted recurring rule with real schedule, target, and materialized outcome posture.</p>
             </div>
             <span className="fg-pill" data-tone={listState === "success" ? "success" : listState === "error" ? "danger" : "neutral"}>{listState}</span>
           </div>
@@ -458,31 +538,44 @@ export function AutomationsPage() {
           {listState === "success" && automations.length === 0 ? <p className="fg-muted">No automations matched the selected filters.</p> : null}
 
           {automations.length > 0 ? (
-            <div className="fg-stack">
-              {automations.map((automation) => (
-                <button
-                  key={automation.automation_id}
-                  type="button"
-                  className={`fg-data-row${automation.automation_id === selectedAutomationId ? " is-current" : ""}`}
-                  onClick={() => updateRoute((next) => {
-                    next.set("automationId", automation.automation_id);
-                  })}
-                >
-                  <div className="fg-panel-heading fg-data-row-heading">
-                    <div className="fg-page-header">
-                      <span className="fg-code">{automation.automation_id}</span>
-                      <strong>{automation.title}</strong>
-                    </div>
-                    <div className="fg-actions">
-                      <span className="fg-pill" data-tone={automation.status === "active" ? "success" : automation.status === "paused" ? "warning" : "danger"}>{automation.status}</span>
-                    </div>
-                  </div>
-                  <div className="fg-detail-grid">
-                    <span className="fg-muted">{automation.action_kind} · cadence {automation.cadence_minutes}m</span>
-                    <span className="fg-muted">next run {automation.next_run_at}</span>
-                  </div>
-                </button>
-              ))}
+            <div className="fg-table-wrap">
+              <table className="fg-table" aria-label="Automation inventory">
+                <thead>
+                  <tr>
+                    <th>Automation</th>
+                    <th>Status</th>
+                    <th>Schedule</th>
+                    <th>Next run</th>
+                    <th>Last run</th>
+                    <th>Target</th>
+                    <th>Outcome</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {automations.map((automation) => (
+                    <tr key={automation.automation_id} className={automation.automation_id === selectedAutomationId ? "is-selected" : undefined}>
+                      <td>
+                        <button
+                          className="fg-table-trigger"
+                          type="button"
+                          onClick={() => updateRoute((next) => {
+                            next.set("automationId", automation.automation_id);
+                          })}
+                        >
+                          {automation.title}
+                        </button>
+                        <div className="fg-muted">{automation.automation_id} · {automation.action_kind}</div>
+                      </td>
+                      <td><span className="fg-pill" data-tone={automationStatusTone(automation.status)}>{automation.status}</span></td>
+                      <td>every {cadenceToStructured(automation.cadence_minutes).every} {cadenceToStructured(automation.cadence_minutes).unit}</td>
+                      <td>{automation.next_run_at}</td>
+                      <td>{automation.last_run_at ?? "Never"}</td>
+                      <td>{automationTargetLabel(automation)}</td>
+                      <td>{automationOutcomeLabel(automation)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
           ) : null}
         </article>
@@ -491,7 +584,7 @@ export function AutomationsPage() {
           <div className="fg-panel-heading">
             <div>
               <h3>Automation detail</h3>
-              <p className="fg-muted">Target linkage, last trigger output, and channel posture converge here.</p>
+              <p className="fg-muted">Target linkage, trigger history, governance posture, and latest test result converge here.</p>
             </div>
             {detail ? <span className="fg-pill">{detail.automation_id}</span> : null}
           </div>
@@ -506,17 +599,54 @@ export function AutomationsPage() {
                 <ul className="fg-list">
                   <li>Status: {detail.status}</li>
                   <li>Action kind: {detail.action_kind}</li>
-                  <li>Cadence: {detail.cadence_minutes} minutes</li>
+                  <li>Schedule: every {cadenceToStructured(detail.cadence_minutes).every} {cadenceToStructured(detail.cadence_minutes).unit}</li>
+                  <li>Raw cadence minutes: {detail.cadence_minutes}</li>
                   <li>Next run: {detail.next_run_at}</li>
                   <li>Last run: {detail.last_run_at ?? "Never triggered"}</li>
                   <li>Preview required: {detail.preview_required ? "yes" : "no"}</li>
                 </ul>
                 <div className="fg-actions">
                   <button type="button" disabled={!canMutate || triggering} onClick={() => void handleTrigger()}>
-                    {triggering ? "Triggering automation" : "Trigger automation"}
+                    {triggering ? "Testing automation" : "Test now"}
                   </button>
                 </div>
               </article>
+
+              <article className="fg-subcard">
+                <h4>Trigger history</h4>
+                <ul className="fg-list">
+                  <li>Last run at: {detail.last_run_at ?? "Never triggered"}</li>
+                  <li>Next run at: {detail.next_run_at}</li>
+                  <li>Last task output: {detail.last_task_id ?? "None"}</li>
+                  <li>Last reminder output: {detail.last_reminder_id ?? "None"}</li>
+                  <li>Last notification output: {detail.last_notification_id ?? "None"}</li>
+                  <li>Historical run ledger: bridge-only in the current backend model</li>
+                </ul>
+                <div className="fg-actions">
+                  {detail.last_task_id ? <Link className="fg-nav-link" to={buildTaskPath({ instanceId, taskId: detail.last_task_id })}>Open last task</Link> : null}
+                  {detail.last_reminder_id ? <Link className="fg-nav-link" to={buildReminderPath({ instanceId, reminderId: detail.last_reminder_id })}>Open last reminder</Link> : null}
+                  {detail.last_notification_id ? <Link className="fg-nav-link" to={buildNotificationPath({ instanceId, notificationId: detail.last_notification_id })}>Open last notification</Link> : null}
+                </div>
+                <p className="fg-muted">ForgeFrame currently receives the latest materialized outputs and `last_run_at`, but no full per-run ledger or run object linkage. That limit is shown explicitly instead of being faked as history.</p>
+              </article>
+
+              {lastTriggerResult ? (
+                <article className="fg-subcard">
+                  <h4>Latest test trigger</h4>
+                  <ul className="fg-list">
+                    <li>Triggered at: {lastTriggerResult.triggeredAt}</li>
+                    <li>Last run after test: {lastTriggerResult.automation.last_run_at ?? "No last run returned"}</li>
+                    <li>Resulting task: {lastTriggerResult.automation.last_task_id ?? "None"}</li>
+                    <li>Resulting reminder: {lastTriggerResult.automation.last_reminder_id ?? "None"}</li>
+                    <li>Resulting notification: {lastTriggerResult.automation.last_notification_id ?? "None"}</li>
+                  </ul>
+                  <div className="fg-actions">
+                    {lastTriggerResult.automation.last_task_id ? <Link className="fg-nav-link" to={buildTaskPath({ instanceId, taskId: lastTriggerResult.automation.last_task_id })}>Open tested task</Link> : null}
+                    {lastTriggerResult.automation.last_reminder_id ? <Link className="fg-nav-link" to={buildReminderPath({ instanceId, reminderId: lastTriggerResult.automation.last_reminder_id })}>Open tested reminder</Link> : null}
+                    {lastTriggerResult.automation.last_notification_id ? <Link className="fg-nav-link" to={buildNotificationPath({ instanceId, notificationId: lastTriggerResult.automation.last_notification_id })}>Open tested notification</Link> : null}
+                  </div>
+                </article>
+              ) : null}
 
               <article className="fg-subcard">
                 <h4>Target linkage</h4>
@@ -538,17 +668,19 @@ export function AutomationsPage() {
               </article>
 
               <article className="fg-subcard">
-                <h4>Last trigger output</h4>
+                <h4>Governance</h4>
                 <ul className="fg-list">
-                  <li>Last task: {detail.last_task_id ?? "None"}</li>
-                  <li>Last reminder: {detail.last_reminder_id ?? "None"}</li>
-                  <li>Last notification: {detail.last_notification_id ?? "None"}</li>
+                  <li>Preview required: {detail.preview_required ? "yes" : "no"}</li>
+                  <li>External effect: {automationHasExternalEffect(detail) ? "possible" : "internal only"}</li>
+                  <li>Approval-specific governance: bridge-only in the current automation model</li>
                 </ul>
-                <div className="fg-actions">
-                  {detail.last_task_id ? <Link className="fg-nav-link" to={buildTaskPath({ instanceId, taskId: detail.last_task_id })}>Open last task</Link> : null}
-                  {detail.last_reminder_id ? <Link className="fg-nav-link" to={buildReminderPath({ instanceId, reminderId: detail.last_reminder_id })}>Open last reminder</Link> : null}
-                  {detail.last_notification_id ? <Link className="fg-nav-link" to={buildNotificationPath({ instanceId, notificationId: detail.last_notification_id })}>Open last notification</Link> : null}
-                </div>
+                <p className="fg-muted">
+                  {automationHasExternalEffect(detail)
+                    ? (detail.preview_required
+                      ? "This automation can create outward-facing delivery objects, but preview gating is still required before final delivery."
+                      : "This automation can create outward-facing delivery objects without preview gating. Treat it as high-impact automation, not as harmless housekeeping.")
+                    : "This automation currently materializes internal follow-up objects only and does not present as an external delivery rule."}
+                </p>
               </article>
             </div>
           ) : null}
@@ -560,7 +692,7 @@ export function AutomationsPage() {
           <div className="fg-panel-heading">
             <div>
               <h3>Create automation</h3>
-              <p className="fg-muted">Create a persisted recurring rule instead of relying on invisible scheduler folklore.</p>
+              <p className="fg-muted">Create a recurring rule with a structured schedule editor. Advanced raw cadence stays available, but it is not the default authoring path.</p>
             </div>
             <span className="fg-pill" data-tone={canMutate ? "success" : "warning"}>{canMutate ? "Writable" : "Admin only"}</span>
           </div>
@@ -576,10 +708,6 @@ export function AutomationsPage() {
                   {ACTION_KIND_OPTIONS.map((option) => <option key={option} value={option}>{option}</option>)}
                 </select>
               </label>
-              <label>
-                Cadence minutes
-                <input value={createForm.cadenceMinutes} onChange={(event) => setCreateForm((current) => ({ ...current, cadenceMinutes: event.target.value }))} />
-              </label>
             </div>
             <label>
               Title
@@ -589,10 +717,56 @@ export function AutomationsPage() {
               Summary
               <textarea rows={3} value={createForm.summary} onChange={(event) => setCreateForm((current) => ({ ...current, summary: event.target.value }))} />
             </label>
-            <label>
-              Next run at
-              <input value={createForm.nextRunAt} onChange={(event) => setCreateForm((current) => ({ ...current, nextRunAt: event.target.value }))} placeholder="2026-04-23T10:30:00Z" />
-            </label>
+            <section className="fg-subcard">
+              <h4>Schedule editor</h4>
+              <div className="fg-grid fg-grid-compact">
+                <label>
+                  Every
+                  <input
+                    value={createSchedule.every}
+                    onChange={(event) => setCreateForm((current) => ({
+                      ...current,
+                      cadenceMinutes: structuredToCadence(event.target.value, cadenceToStructured(current.cadenceMinutes).unit),
+                    }))}
+                  />
+                </label>
+                <label>
+                  Unit
+                  <select
+                    value={createSchedule.unit}
+                    onChange={(event) => setCreateForm((current) => ({
+                      ...current,
+                      cadenceMinutes: structuredToCadence(cadenceToStructured(current.cadenceMinutes).every, event.target.value as ScheduleUnit),
+                    }))}
+                  >
+                    <option value="minutes">minutes</option>
+                    <option value="hours">hours</option>
+                    <option value="days">days</option>
+                  </select>
+                </label>
+                <label>
+                  Next run at
+                  <input value={createForm.nextRunAt} onChange={(event) => setCreateForm((current) => ({ ...current, nextRunAt: event.target.value }))} placeholder="2026-04-23T10:30:00Z" />
+                </label>
+              </div>
+              <div className="fg-actions">
+                <button type="button" onClick={() => setShowCreateAdvancedSchedule((current) => !current)}>
+                  {showCreateAdvancedSchedule ? "Hide advanced fields" : "Show advanced fields"}
+                </button>
+              </div>
+              {showCreateAdvancedSchedule ? (
+                <>
+                  <label>
+                    Advanced raw cadence minutes
+                    <input value={createForm.cadenceMinutes} onChange={(event) => setCreateForm((current) => ({ ...current, cadenceMinutes: event.target.value }))} />
+                  </label>
+                  <label>
+                    Metadata JSON
+                    <textarea rows={6} value={createForm.metadataJson} onChange={(event) => setCreateForm((current) => ({ ...current, metadataJson: event.target.value }))} />
+                  </label>
+                </>
+              ) : null}
+            </section>
             <div className="fg-grid fg-grid-compact">
               <label>
                 Target task ID
@@ -646,10 +820,6 @@ export function AutomationsPage() {
               Notification body
               <textarea rows={3} value={createForm.notificationBody} onChange={(event) => setCreateForm((current) => ({ ...current, notificationBody: event.target.value }))} />
             </label>
-            <label>
-              Metadata JSON
-              <textarea rows={6} value={createForm.metadataJson} onChange={(event) => setCreateForm((current) => ({ ...current, metadataJson: event.target.value }))} />
-            </label>
             <div className="fg-actions">
               <button type="submit" disabled={!canMutate || savingCreate || !instanceId || !createForm.title.trim() || !createForm.nextRunAt.trim()}>
                 {savingCreate ? "Creating automation" : "Create automation"}
@@ -662,7 +832,7 @@ export function AutomationsPage() {
           <div className="fg-panel-heading">
             <div>
               <h3>Edit automation</h3>
-              <p className="fg-muted">Keep cadence, targets, and preview posture coherent for the selected recurring rule.</p>
+              <p className="fg-muted">Keep cadence, targets, and preview posture coherent for the selected recurring rule. Structured schedule inputs stay primary; raw cadence is explicitly advanced.</p>
             </div>
             <span className="fg-pill" data-tone={detail ? "neutral" : "warning"}>{detail ? detail.automation_id : "Select an automation"}</span>
           </div>
@@ -684,15 +854,57 @@ export function AutomationsPage() {
                     {STATUS_OPTIONS.filter((option) => option !== "all").map((option) => <option key={option} value={option}>{option}</option>)}
                   </select>
                 </label>
-                <label>
-                  Cadence minutes
-                  <input value={editForm.cadenceMinutes} onChange={(event) => setEditForm((current) => ({ ...current, cadenceMinutes: event.target.value }))} />
-                </label>
-                <label>
-                  Next run at
-                  <input value={editForm.nextRunAt} onChange={(event) => setEditForm((current) => ({ ...current, nextRunAt: event.target.value }))} />
-                </label>
               </div>
+              <section className="fg-subcard">
+                <h4>Schedule editor</h4>
+                <div className="fg-grid fg-grid-compact">
+                  <label>
+                    Every
+                    <input
+                      value={editSchedule.every}
+                      onChange={(event) => setEditForm((current) => ({
+                        ...current,
+                        cadenceMinutes: structuredToCadence(event.target.value, cadenceToStructured(current.cadenceMinutes).unit),
+                      }))}
+                    />
+                  </label>
+                  <label>
+                    Unit
+                    <select
+                      value={editSchedule.unit}
+                      onChange={(event) => setEditForm((current) => ({
+                        ...current,
+                        cadenceMinutes: structuredToCadence(cadenceToStructured(current.cadenceMinutes).every, event.target.value as ScheduleUnit),
+                      }))}
+                    >
+                      <option value="minutes">minutes</option>
+                      <option value="hours">hours</option>
+                      <option value="days">days</option>
+                    </select>
+                  </label>
+                  <label>
+                    Next run at
+                    <input value={editForm.nextRunAt} onChange={(event) => setEditForm((current) => ({ ...current, nextRunAt: event.target.value }))} />
+                  </label>
+                </div>
+                <div className="fg-actions">
+                  <button type="button" onClick={() => setShowEditAdvancedSchedule((current) => !current)}>
+                    {showEditAdvancedSchedule ? "Hide advanced fields" : "Show advanced fields"}
+                  </button>
+                </div>
+                {showEditAdvancedSchedule ? (
+                  <>
+                    <label>
+                      Advanced raw cadence minutes
+                      <input value={editForm.cadenceMinutes} onChange={(event) => setEditForm((current) => ({ ...current, cadenceMinutes: event.target.value }))} />
+                    </label>
+                    <label>
+                      Metadata JSON
+                      <textarea rows={6} value={editForm.metadataJson} onChange={(event) => setEditForm((current) => ({ ...current, metadataJson: event.target.value }))} />
+                    </label>
+                  </>
+                ) : null}
+              </section>
               <div className="fg-grid fg-grid-compact">
                 <label>
                   Target task ID
@@ -745,10 +957,6 @@ export function AutomationsPage() {
               <label>
                 Notification body
                 <textarea rows={3} value={editForm.notificationBody} onChange={(event) => setEditForm((current) => ({ ...current, notificationBody: event.target.value }))} />
-              </label>
-              <label>
-                Metadata JSON
-                <textarea rows={6} value={editForm.metadataJson} onChange={(event) => setEditForm((current) => ({ ...current, metadataJson: event.target.value }))} />
               </label>
               <div className="fg-actions">
                 <button type="submit" disabled={!canMutate || savingUpdate}>

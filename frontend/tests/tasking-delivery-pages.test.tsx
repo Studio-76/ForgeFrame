@@ -1057,7 +1057,11 @@ describe("tasking and delivery pages", () => {
     expect(fetchAutomationDetailMock).toHaveBeenCalledWith("automation_alpha", "instance_alpha");
     expect(container.textContent).toContain("Automation inventory");
     expect(container.textContent).toContain("Follow up cadence");
-    expect(container.textContent).toContain("Last trigger output");
+    expect(container.textContent).toContain("Trigger history");
+    expect(container.textContent).toContain("Governance");
+    expect(container.textContent).toContain("preview gating");
+    expect(container.textContent).not.toContain("Advanced raw cadence minutes");
+    expect(container.textContent).not.toContain("Metadata JSON");
 
     const lastNotificationLink = Array.from(container.querySelectorAll("a")).find((link) => link.textContent === "Open last notification");
     expect(lastNotificationLink?.getAttribute("href")).toBe("/notifications?instanceId=instance_alpha&notificationId=notification_alpha");
@@ -1073,27 +1077,30 @@ describe("tasking and delivery pages", () => {
 
     const createForm = getFormByText("Create automation");
     const updateForm = getFormByText("Save automation");
-    const createInputs = Array.from(createForm?.querySelectorAll("input") ?? []);
-    const createTextareas = Array.from(createForm?.querySelectorAll("textarea") ?? []);
-    const createSelects = Array.from(createForm?.querySelectorAll("select") ?? []);
     const createButton = getButtonByText(createForm!, "Create automation");
 
     await act(async () => {
-      setControlValue(createInputs[0] as HTMLInputElement, "automation_beta");
-      setControlValue(createSelects[0] as HTMLSelectElement, "create_notification");
-      setControlValue(createInputs[1] as HTMLInputElement, "90");
-      setControlValue(createInputs[2] as HTMLInputElement, "Escalation automation");
-      setControlValue(createTextareas[0] as HTMLTextAreaElement, "Generate escalation notifications on a cadence.");
-      setControlValue(createInputs[3] as HTMLInputElement, "2026-04-23T15:00:00Z");
-      setControlValue(createInputs[4] as HTMLInputElement, "task_beta");
-      setControlValue(createInputs[8] as HTMLInputElement, "channel_primary");
-      setControlValue(createInputs[9] as HTMLInputElement, "channel_fallback");
-      setControlValue(createSelects[1] as HTMLSelectElement, "no");
-      setControlValue(createInputs[10] as HTMLInputElement, "Escalation task");
-      setControlValue(createInputs[11] as HTMLInputElement, "Escalation notification");
-      setControlValue(createTextareas[1] as HTMLTextAreaElement, "Create the escalation task with the latest context.");
-      setControlValue(createTextareas[2] as HTMLTextAreaElement, "Escalate this work item immediately.");
-      setControlValue(createTextareas[3] as HTMLTextAreaElement, "{\"cadence\":\"tight\"}");
+      setControlValue(getControlByLabel(createForm!, "Automation ID"), "automation_beta");
+      setControlValue(getControlByLabel(createForm!, "Action kind"), "create_notification");
+      setControlValue(getControlByLabel(createForm!, "Title"), "Escalation automation");
+      setControlValue(getControlByLabel(createForm!, "Summary"), "Generate escalation notifications on a cadence.");
+      setControlValue(getControlByLabel(createForm!, "Every"), "90");
+      setControlValue(getControlByLabel(createForm!, "Unit"), "minutes");
+      setControlValue(getControlByLabel(createForm!, "Next run at"), "2026-04-23T15:00:00Z");
+      setControlValue(getControlByLabel(createForm!, "Target task ID"), "task_beta");
+      setControlValue(getControlByLabel(createForm!, "Channel ID"), "channel_primary");
+      setControlValue(getControlByLabel(createForm!, "Fallback channel ID"), "channel_fallback");
+      setControlValue(getControlByLabel(createForm!, "Preview required"), "no");
+      setControlValue(getControlByLabel(createForm!, "Task template title"), "Escalation task");
+      setControlValue(getControlByLabel(createForm!, "Notification title"), "Escalation notification");
+      setControlValue(getControlByLabel(createForm!, "Task template summary"), "Create the escalation task with the latest context.");
+      setControlValue(getControlByLabel(createForm!, "Notification body"), "Escalate this work item immediately.");
+      getButtonByText(createForm!, "Show advanced fields")!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    await flushEffects();
+
+    await act(async () => {
+      setControlValue(getControlByLabel(createForm!, "Metadata JSON"), "{\"cadence\":\"tight\"}");
       createButton!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     });
     await flushEffects();
@@ -1116,21 +1123,24 @@ describe("tasking and delivery pages", () => {
       metadata: { cadence: "tight" },
     }));
 
-    const updateInputs = Array.from(updateForm?.querySelectorAll("input") ?? []);
-    const updateTextareas = Array.from(updateForm?.querySelectorAll("textarea") ?? []);
-    const updateSelects = Array.from(updateForm?.querySelectorAll("select") ?? []);
     const updateButton = getButtonByText(updateForm!, "Save automation");
 
     await act(async () => {
-      setControlValue(updateInputs[0] as HTMLInputElement, "Follow up cadence updated");
-      setControlValue(updateTextareas[0] as HTMLTextAreaElement, "Recurring rule updated after audit.");
-      setControlValue(updateSelects[0] as HTMLSelectElement, "paused");
-      setControlValue(updateInputs[1] as HTMLInputElement, "120");
-      setControlValue(updateInputs[2] as HTMLInputElement, "2026-04-23T16:00:00Z");
-      setControlValue(updateInputs[6] as HTMLInputElement, "ws_beta");
-      setControlValue(updateInputs[7] as HTMLInputElement, "channel_fallback");
-      setControlValue(updateSelects[1] as HTMLSelectElement, "no");
-      setControlValue(updateTextareas[3] as HTMLTextAreaElement, "{\"cadence\":\"paused\"}");
+      setControlValue(getControlByLabel(updateForm!, "Title"), "Follow up cadence updated");
+      setControlValue(getControlByLabel(updateForm!, "Summary"), "Recurring rule updated after audit.");
+      setControlValue(getControlByLabel(updateForm!, "Status"), "paused");
+      setControlValue(getControlByLabel(updateForm!, "Every"), "2");
+      setControlValue(getControlByLabel(updateForm!, "Unit"), "hours");
+      setControlValue(getControlByLabel(updateForm!, "Next run at"), "2026-04-23T16:00:00Z");
+      setControlValue(getControlByLabel(updateForm!, "Target workspace ID"), "ws_beta");
+      setControlValue(getControlByLabel(updateForm!, "Channel ID"), "channel_fallback");
+      setControlValue(getControlByLabel(updateForm!, "Preview required"), "no");
+      getButtonByText(updateForm!, "Show advanced fields")!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    await flushEffects();
+
+    await act(async () => {
+      setControlValue(getControlByLabel(updateForm!, "Metadata JSON"), "{\"cadence\":\"paused\"}");
       updateButton!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     });
     await flushEffects();
@@ -1147,12 +1157,14 @@ describe("tasking and delivery pages", () => {
       metadata: { cadence: "paused" },
     }));
 
-    const triggerButton = getButtonByText(container, "Trigger automation");
+    const triggerButton = getButtonByText(container, "Test now");
     await act(async () => {
       triggerButton!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     });
     await flushEffects();
 
     expect(triggerAutomationMock).toHaveBeenCalledWith("instance_alpha", "automation_alpha");
+    expect(container.textContent).toContain("Latest test trigger");
+    expect(container.textContent).toContain("2026-04-23T12:30:00Z");
   });
 });
