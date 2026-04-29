@@ -15,6 +15,7 @@ from app.recovery.models import (
     ImportRecoveryUpgradeReport,
     UpdateRecoveryBackupPolicy,
 )
+from app.recovery.service import RecoveryPolicyNotFoundError, RecoveryReportValidationError
 
 router = APIRouter(prefix="/recovery", tags=["admin-recovery"])
 
@@ -71,8 +72,10 @@ def import_backup_report(
     _ = admin
     try:
         report, summary = service.import_backup_report(payload)
-    except ValueError as exc:
+    except RecoveryPolicyNotFoundError as exc:
         return _error(status.HTTP_404_NOT_FOUND, "recovery_policy_not_found", str(exc))
+    except RecoveryReportValidationError as exc:
+        return _error(status.HTTP_400_BAD_REQUEST, "recovery_backup_report_invalid", str(exc))
     return {
         "status": "ok",
         "report": report.model_dump(mode="json"),
@@ -89,8 +92,10 @@ def import_restore_report(
     _ = admin
     try:
         report, summary = service.import_restore_report(payload)
-    except ValueError as exc:
+    except RecoveryPolicyNotFoundError as exc:
         return _error(status.HTTP_404_NOT_FOUND, "recovery_policy_not_found", str(exc))
+    except RecoveryReportValidationError as exc:
+        return _error(status.HTTP_400_BAD_REQUEST, "recovery_restore_report_invalid", str(exc))
     return {
         "status": "ok",
         "report": report.model_dump(mode="json"),
@@ -107,7 +112,7 @@ def import_upgrade_report(
     _ = admin
     try:
         report, posture = service.import_upgrade_report(payload)
-    except ValueError as exc:
+    except RecoveryReportValidationError as exc:
         return _error(status.HTTP_400_BAD_REQUEST, "recovery_upgrade_report_invalid", str(exc))
     return {
         "status": "ok",

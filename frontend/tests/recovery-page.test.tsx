@@ -259,6 +259,34 @@ function setControlValue(control: HTMLInputElement | HTMLTextAreaElement | HTMLS
   control.dispatchEvent(new Event(control.tagName === "SELECT" ? "change" : "input", { bubbles: true }));
 }
 
+function getButtonByText(scope: ParentNode, text: string) {
+  const button = Array.from(scope.querySelectorAll("button")).find((candidate) => candidate.textContent?.includes(text));
+  if (!button) {
+    throw new Error(`Button not found: ${text}`);
+  }
+  return button as HTMLButtonElement;
+}
+
+function getLabeledControl(scope: ParentNode, labelText: string) {
+  const label = Array.from(scope.querySelectorAll("label")).find((candidate) => candidate.textContent?.includes(labelText));
+  if (!label) {
+    throw new Error(`Label not found: ${labelText}`);
+  }
+  const control = label.querySelector("input, textarea, select");
+  if (!control) {
+    throw new Error(`Control not found for label: ${labelText}`);
+  }
+  return control as HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement;
+}
+
+function getDrawerByTitle(title: string) {
+  const drawer = container.querySelector(`aside[aria-label="${title}"]`);
+  if (!drawer) {
+    throw new Error(`Drawer not found: ${title}`);
+  }
+  return drawer;
+}
+
 async function renderRecoveryPage() {
   await renderIntoDom(withAppContext({
     path: "/recovery",
@@ -303,8 +331,16 @@ beforeEach(() => {
   });
   importRecoveryUpgradeReportMock.mockResolvedValue({
     status: "ok",
-    report: overview.recent_upgrades[0],
-    upgrade_posture: overview.upgrade_posture,
+    report: {
+      ...overview.recent_upgrades[0],
+      release_id: "release-2026-04-24",
+      target_version: "0.6.1",
+    },
+    upgrade_posture: {
+      ...overview.upgrade_posture,
+      latest_release_id: "release-2026-04-24",
+      latest_target_version: "0.6.1",
+    },
   });
   container = document.createElement("div");
   document.body.innerHTML = "";
@@ -322,16 +358,42 @@ afterEach(() => {
 });
 
 describe("Recovery page", () => {
-  it("loads overview posture and renders coverage plus policy truth", async () => {
+  it("loads overview posture and separates coverage, policy, backup, restore, and upgrade workflows", async () => {
     await renderRecoveryPage();
 
     expect(fetchRecoveryOverviewMock).toHaveBeenCalledTimes(1);
     expect(container.textContent).toContain("Recovery / Backup / Restore");
     expect(container.textContent).toContain("Coverage summary");
-    expect(container.textContent).toContain("Upgrade / Rollback posture");
+    expect(container.textContent).toContain("Current recovery risks");
+    expect(container.textContent).toContain("blob_contents");
+    expect(container.textContent).toContain("unprotected");
+    expect(container.textContent).toContain("Protected");
     expect(container.textContent).toContain("Local secondary backup");
-    expect(container.textContent).toContain("Latest backup evidence");
-    expect(container.textContent).toContain("Latest restore evidence");
+
+    await act(async () => {
+      getButtonByText(container, "Policies").dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    await flushEffects();
+    expect(container.textContent).toContain("Create policy");
+    expect(container.textContent).toContain("Edit selected policy");
+
+    await act(async () => {
+      getButtonByText(container, "Backup Evidence").dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    await flushEffects();
+    expect(container.textContent).toContain("Import backup manifest");
+
+    await act(async () => {
+      getButtonByText(container, "Restore Evidence").dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    await flushEffects();
+    expect(container.textContent).toContain("Import restore report");
+
+    await act(async () => {
+      getButtonByText(container, "Upgrade / Rollback").dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    await flushEffects();
+    expect(container.textContent).toContain("Import upgrade proof");
   });
 
   it("creates and updates recovery policies from the operator surface", async () => {
@@ -356,18 +418,24 @@ describe("Recovery page", () => {
 
     await renderRecoveryPage();
 
-    const textInputs = Array.from(container.querySelectorAll("input[type='text'], input:not([type])"));
-    const textareas = Array.from(container.querySelectorAll("textarea"));
-    const selects = Array.from(container.querySelectorAll("select"));
-    const buttons = Array.from(container.querySelectorAll("button"));
+    await act(async () => {
+      getButtonByText(container, "Policies").dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    await flushEffects();
 
     await act(async () => {
-      setControlValue(textInputs[0] as HTMLInputElement, "backup_policy_object");
-      setControlValue(textInputs[1] as HTMLInputElement, "Object storage backup");
-      setControlValue(selects[0] as HTMLSelectElement, "object_storage");
-      setControlValue(textInputs[2] as HTMLInputElement, "s3://forgeframe-prod");
-      setControlValue(textareas[0] as HTMLTextAreaElement, "{\n  \"provider\": \"s3\",\n  \"bucket\": \"forgeframe-prod\",\n  \"prefix\": \"nightly\"\n}");
-      buttons.find((button) => button.textContent?.includes("Create recovery policy"))?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      getButtonByText(container, "Create policy").dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    await flushEffects();
+
+    const createDrawer = getDrawerByTitle("Create Recovery Policy");
+    await act(async () => {
+      setControlValue(getLabeledControl(createDrawer, "Policy ID"), "backup_policy_object");
+      setControlValue(getLabeledControl(createDrawer, "Label"), "Object storage backup");
+      setControlValue(getLabeledControl(createDrawer, "Target class"), "object_storage");
+      setControlValue(getLabeledControl(createDrawer, "Target label"), "s3://forgeframe-prod");
+      setControlValue(getLabeledControl(createDrawer, "Target config JSON"), "{\n  \"provider\": \"s3\",\n  \"bucket\": \"forgeframe-prod\",\n  \"prefix\": \"nightly\"\n}");
+      getButtonByText(createDrawer, "Create recovery policy").dispatchEvent(new MouseEvent("click", { bubbles: true }));
     });
     await flushEffects();
 
@@ -380,16 +448,102 @@ describe("Recovery page", () => {
     }));
 
     await act(async () => {
-      const editLabelInput = Array.from(container.querySelectorAll("input"))
-        .find((input) => (input as HTMLInputElement).value === "Object storage backup") as HTMLInputElement;
-      setControlValue(editLabelInput, "Local secondary backup updated");
-      buttons.find((button) => button.textContent?.includes("Save selected policy"))?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      getButtonByText(container, "Edit selected policy").dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    await flushEffects();
+
+    const editDrawer = getDrawerByTitle("Edit Recovery Policy");
+    await act(async () => {
+      setControlValue(getLabeledControl(editDrawer, "Label"), "Local secondary backup updated");
+      getButtonByText(editDrawer, "Save selected policy").dispatchEvent(new MouseEvent("click", { bubbles: true }));
     });
     await flushEffects();
 
     expect(updateRecoveryBackupPolicyMock).toHaveBeenCalledWith("backup_policy_object", expect.objectContaining({
       label: "Local secondary backup updated",
     }));
+  });
+
+  it("keeps backup-only coverage blocked until restore evidence exists", async () => {
+    fetchRecoveryOverviewMock.mockResolvedValueOnce(createOverview([
+      createPolicySummary({
+        latest_restore: null,
+        restore_fresh: false,
+        source_identity_verified: false,
+        mismatches: ["restore_report_missing"],
+        overall_status: "blocked",
+      }),
+    ]));
+
+    await renderRecoveryPage();
+
+    expect(container.textContent).toContain("restore never tested");
+    expect(container.textContent).toContain("blocked");
+
+    await act(async () => {
+      getButtonByText(container, "Restore Evidence").dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    await flushEffects();
+
+    expect(container.textContent).toContain("never tested");
+    expect(container.textContent).toContain("Restore has never been tested for this policy.");
+  });
+
+  it("treats paused policies as not effective protection", async () => {
+    const pausedOverview = createOverview([
+      createPolicySummary({
+        policy: {
+          ...createPolicySummary().policy,
+          status: "paused",
+        },
+        backup_fresh: true,
+        restore_fresh: true,
+        source_identity_verified: true,
+        mismatches: ["policy_paused_non_effective"],
+        overall_status: "warning",
+      }),
+    ]);
+    pausedOverview.summary = {
+      ...pausedOverview.summary,
+      active_policies: 0,
+      healthy_policies: 0,
+      warning_policies: 0,
+      blocked_policies: 0,
+      fresh_backup_policies: 0,
+      fresh_restore_policies: 0,
+      source_identity_verified_policies: 0,
+      target_classes_present: [],
+      protected_data_classes_present: [],
+      missing_protected_data_classes: ["database", "artifact_metadata", "blob_contents", "configuration_state", "secret_metadata"],
+      runtime_status: "blocked",
+    };
+    fetchRecoveryOverviewMock.mockResolvedValueOnce(pausedOverview);
+
+    await renderRecoveryPage();
+
+    expect(container.textContent).toContain("0/5");
+    expect(container.textContent).not.toContain("covered and restore-tested");
+
+    await act(async () => {
+      getButtonByText(container, "Policies").dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    await flushEffects();
+
+    expect(container.textContent).toContain("paused / not effective");
+
+    await act(async () => {
+      getButtonByText(container, "Backup Evidence").dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    await flushEffects();
+    expect(container.textContent).toContain("paused / not effective");
+    expect(container.textContent).toContain("does not count as effective backup protection");
+
+    await act(async () => {
+      getButtonByText(container, "Restore Evidence").dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    await flushEffects();
+    expect(container.textContent).toContain("paused / not effective");
+    expect(container.textContent).toContain("does not count as effective restore protection");
   });
 
   it("imports backup, restore, and upgrade evidence through the product surface", async () => {
@@ -399,12 +553,20 @@ describe("Recovery page", () => {
 
     await renderRecoveryPage();
 
-    const textareas = Array.from(container.querySelectorAll("textarea"));
-    const buttons = Array.from(container.querySelectorAll("button"));
+    await act(async () => {
+      getButtonByText(container, "Backup Evidence").dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    await flushEffects();
 
     await act(async () => {
-      setControlValue(textareas[4] as HTMLTextAreaElement, "{\n  \"backup_path\": \"/var/backups/forgeframe/latest.dump\",\n  \"manifest_path\": \"/var/backups/forgeframe/latest.dump.json\",\n  \"database\": \"forgeframe\",\n  \"cluster_system_identifier\": \"cluster-123\"\n}");
-      buttons.find((button) => button.textContent?.includes("Import backup manifest"))?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      setControlValue(getLabeledControl(container, "Backup manifest JSON"), "{}");
+    });
+    await flushEffects();
+    expect(container.textContent).toContain("Backup manifest must contain backup_path.");
+
+    await act(async () => {
+      setControlValue(getLabeledControl(container, "Backup manifest JSON"), "{\n  \"backup_path\": \"/var/backups/forgeframe/latest.dump\",\n  \"manifest_path\": \"/var/backups/forgeframe/latest.dump.json\",\n  \"database\": \"forgeframe\",\n  \"cluster_system_identifier\": \"cluster-123\"\n}");
+      getButtonByText(container, "Import backup manifest").dispatchEvent(new MouseEvent("click", { bubbles: true }));
     });
     await flushEffects();
 
@@ -412,10 +574,28 @@ describe("Recovery page", () => {
       policy_id: "backup_policy_local",
       manifest: expect.objectContaining({ database: "forgeframe" }),
     }));
+    expect(container.textContent).toContain("Backup import: Local secondary backup");
 
     await act(async () => {
-      setControlValue(textareas[6] as HTMLTextAreaElement, "{\n  \"restored_database\": \"forgeframe_restore_smoke\",\n  \"source_database\": \"forgeframe\",\n  \"source_cluster_system_identifier\": \"cluster-123\",\n  \"validated_source_databases\": [{\"database\": \"forgeframe\", \"cluster_system_identifier\": \"cluster-123\"}],\n  \"tables_compared\": 42\n}");
-      buttons.find((button) => button.textContent?.includes("Import restore report"))?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      getButtonByText(container, "Restore Evidence").dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    await flushEffects();
+
+    await act(async () => {
+      setControlValue(getLabeledControl(container, "Restore report JSON"), "{}");
+    });
+    await flushEffects();
+    expect(container.textContent).toContain("Restore report must contain restored_database or target_database.");
+
+    await act(async () => {
+      setControlValue(getLabeledControl(container, "Restore report JSON"), "{\n  \"restored_database\": \"forgeframe_restore_smoke\",\n  \"source_database\": \"forgeframe\",\n  \"source_cluster_system_identifier\": \"cluster-123\",\n  \"tables_compared\": 1.5\n}");
+    });
+    await flushEffects();
+    expect(container.textContent).toContain("Restore report must contain integer tables_compared >= 1.");
+
+    await act(async () => {
+      setControlValue(getLabeledControl(container, "Restore report JSON"), "{\n  \"restored_database\": \"forgeframe_restore_smoke\",\n  \"source_database\": \"forgeframe\",\n  \"source_cluster_system_identifier\": \"cluster-123\",\n  \"validated_source_databases\": [{\"database\": \"forgeframe\", \"cluster_system_identifier\": \"cluster-123\"}],\n  \"tables_compared\": 42\n}");
+      getButtonByText(container, "Import restore report").dispatchEvent(new MouseEvent("click", { bubbles: true }));
     });
     await flushEffects();
 
@@ -423,15 +603,40 @@ describe("Recovery page", () => {
       policy_id: "backup_policy_local",
       report: expect.objectContaining({ restored_database: "forgeframe_restore_smoke" }),
     }));
+    expect(container.textContent).toContain("Restore import: Local secondary backup");
 
     await act(async () => {
-      setControlValue(textareas[8] as HTMLTextAreaElement, "{\n  \"release_id\": \"release-2026-04-24\",\n  \"target_version\": \"0.6.1\",\n  \"upgrade_result\": \"succeeded\",\n  \"rollback_classification\": \"not_needed\",\n  \"failure_classification\": \"none\",\n  \"bootstrap_recovery_state\": \"recovered\",\n  \"before\": {\n    \"source_identity\": {\"source_database\": \"forgeframe\", \"cluster_system_identifier\": \"cluster-123\", \"deployment_slug\": \"forgeframe-prod\", \"public_fqdn\": \"forgeframe.example.com\"},\n    \"migration\": {\"latest_version\": 28},\n    \"critical_object_counts\": {\"runs\": 12, \"run_approval_links\": 3, \"memory_entries\": 8, \"skills\": 2},\n    \"queue_state_counts\": {\"queued\": 0, \"executing\": 0}\n  },\n  \"after\": {\n    \"source_identity\": {\"source_database\": \"forgeframe\", \"cluster_system_identifier\": \"cluster-123\", \"deployment_slug\": \"forgeframe-prod\", \"public_fqdn\": \"forgeframe.example.com\"},\n    \"migration\": {\"latest_version\": 29},\n    \"critical_object_counts\": {\"runs\": 12, \"run_approval_links\": 3, \"memory_entries\": 8, \"skills\": 2},\n    \"queue_state_counts\": {\"queued\": 0, \"executing\": 0}\n  }\n}");
-      buttons.find((button) => button.textContent?.includes("Import upgrade proof"))?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      getButtonByText(container, "Upgrade / Rollback").dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    await flushEffects();
+
+    await act(async () => {
+      setControlValue(getLabeledControl(container, "Upgrade proof JSON"), "{}");
+    });
+    await flushEffects();
+    expect(container.textContent).toContain("Upgrade report must contain release_id or release.");
+
+    await act(async () => {
+      setControlValue(getLabeledControl(container, "Upgrade proof JSON"), "{\n  \"release_id\": \"release-2026-04-24\",\n  \"target_version\": \"0.6.1\",\n  \"upgrade_result\": \"succeeded\",\n  \"rollback_classification\": \"not_needed\",\n  \"failure_classification\": \"none\",\n  \"before\": {},\n  \"after\": {}\n}");
+    });
+    await flushEffects();
+    expect(container.textContent).toContain("Upgrade report must contain before or before_snapshot.");
+
+    await act(async () => {
+      setControlValue(getLabeledControl(container, "Upgrade proof JSON"), "{\n  \"release_id\": \"release-2026-04-24\",\n  \"target_version\": \"0.6.1\",\n  \"upgrade_result\": \"succeeded\",\n  \"rollback_classification\": \"manual_failover\",\n  \"failure_classification\": \"fatal\",\n  \"bootstrap_recovery_state\": \"recovered\",\n  \"before\": {\n    \"source_identity\": {\"source_database\": \"forgeframe\", \"cluster_system_identifier\": \"cluster-123\", \"deployment_slug\": \"forgeframe-prod\", \"public_fqdn\": \"forgeframe.example.com\"},\n    \"migration\": {\"latest_version\": 28},\n    \"critical_object_counts\": {\"runs\": 12, \"run_approval_links\": 3, \"memory_entries\": 8, \"skills\": 2},\n    \"queue_state_counts\": {\"queued\": 0, \"executing\": 0}\n  },\n  \"after\": {\n    \"source_identity\": {\"source_database\": \"forgeframe\", \"cluster_system_identifier\": \"cluster-123\", \"deployment_slug\": \"forgeframe-prod\", \"public_fqdn\": \"forgeframe.example.com\"},\n    \"migration\": {\"latest_version\": 29},\n    \"critical_object_counts\": {\"runs\": 12, \"run_approval_links\": 3, \"memory_entries\": 8, \"skills\": 2},\n    \"queue_state_counts\": {\"queued\": 0, \"executing\": 0}\n  }\n}");
+    });
+    await flushEffects();
+    expect(container.textContent).toContain("Successful upgrade reports must use rollback_classification=not_needed or leave it empty.");
+
+    await act(async () => {
+      setControlValue(getLabeledControl(container, "Upgrade proof JSON"), "{\n  \"release_id\": \"release-2026-04-24\",\n  \"target_version\": \"0.6.1\",\n  \"upgrade_result\": \"succeeded\",\n  \"rollback_classification\": \"not_needed\",\n  \"failure_classification\": \"none\",\n  \"bootstrap_recovery_state\": \"recovered\",\n  \"before\": {\n    \"source_identity\": {\"source_database\": \"forgeframe\", \"cluster_system_identifier\": \"cluster-123\", \"deployment_slug\": \"forgeframe-prod\", \"public_fqdn\": \"forgeframe.example.com\"},\n    \"migration\": {\"latest_version\": 28},\n    \"critical_object_counts\": {\"runs\": 12, \"run_approval_links\": 3, \"memory_entries\": 8, \"skills\": 2},\n    \"queue_state_counts\": {\"queued\": 0, \"executing\": 0}\n  },\n  \"after\": {\n    \"source_identity\": {\"source_database\": \"forgeframe\", \"cluster_system_identifier\": \"cluster-123\", \"deployment_slug\": \"forgeframe-prod\", \"public_fqdn\": \"forgeframe.example.com\"},\n    \"migration\": {\"latest_version\": 29},\n    \"critical_object_counts\": {\"runs\": 12, \"run_approval_links\": 3, \"memory_entries\": 8, \"skills\": 2},\n    \"queue_state_counts\": {\"queued\": 0, \"executing\": 0}\n  }\n}");
+      getButtonByText(container, "Import upgrade proof").dispatchEvent(new MouseEvent("click", { bubbles: true }));
     });
     await flushEffects();
 
     expect(importRecoveryUpgradeReportMock).toHaveBeenCalledWith(expect.objectContaining({
       report: expect.objectContaining({ release_id: "release-2026-04-24", target_version: "0.6.1" }),
     }));
+    expect(container.textContent).toContain("Upgrade import: release-2026-04-24");
   });
 });

@@ -870,6 +870,22 @@ export type RecoveryBackupReportRecord = {
   notes: string;
 };
 
+export type RecoveryBackupManifestPayload = {
+  backup_path: string;
+  manifest_path: string;
+  database?: string;
+  source_database?: string;
+  cluster_system_identifier?: string;
+  source_cluster_system_identifier?: string;
+  deployment_slug?: string;
+  public_fqdn?: string;
+  created_at?: string;
+  byte_size?: number | null;
+  checksum_sha256?: string | null;
+  protected_data_classes?: RecoveryProtectedDataClass[];
+  [key: string]: unknown;
+};
+
 export type RecoveryRestoreReportRecord = {
   report_id: string;
   policy_id: string;
@@ -886,6 +902,23 @@ export type RecoveryRestoreReportRecord = {
   created_at: string;
   imported_at: string;
   notes: string;
+};
+
+export type RecoveryRestoreImportPayload = {
+  restored_database?: string;
+  target_database?: string;
+  source_database?: string;
+  database?: string;
+  source_cluster_system_identifier?: string;
+  cluster_system_identifier?: string;
+  deployment_slug?: string;
+  public_fqdn?: string;
+  validated_source_databases?: Array<Record<string, unknown>>;
+  tables_compared?: number;
+  checked_at?: string;
+  restored_at?: string;
+  protected_data_classes?: RecoveryProtectedDataClass[];
+  [key: string]: unknown;
 };
 
 export type RecoveryBackupPolicyRecord = {
@@ -934,6 +967,23 @@ export type RecoveryUpgradeReportRecord = {
   created_at: string;
   imported_at: string;
   notes: string;
+};
+
+export type RecoveryUpgradeImportPayload = {
+  release_id?: string;
+  release?: string;
+  target_version?: string;
+  upgrade_result?: "succeeded" | "failed" | "rolled_back" | "partial_failure" | string;
+  rollback_classification?: string;
+  failure_classification?: string;
+  bootstrap_recovery_state?: string;
+  queue_drain_ok?: boolean;
+  no_loss_ok?: boolean;
+  before?: Record<string, unknown>;
+  before_snapshot?: Record<string, unknown>;
+  after?: Record<string, unknown>;
+  after_snapshot?: Record<string, unknown>;
+  [key: string]: unknown;
 };
 
 export type RecoveryUpgradePosture = {
@@ -5529,7 +5579,7 @@ export function updateRecoveryBackupPolicy(policyId: string, payload: {
 export function importRecoveryBackupReport(payload: {
   policy_id: string;
   status?: "ok" | "warning" | "failed";
-  manifest: Record<string, unknown>;
+  manifest: RecoveryBackupManifestPayload;
   protected_data_classes?: RecoveryProtectedDataClass[];
   notes?: string;
   reported_at?: string | null;
@@ -5543,7 +5593,7 @@ export function importRecoveryBackupReport(payload: {
 export function importRecoveryRestoreReport(payload: {
   policy_id: string;
   status?: "ok" | "warning" | "failed";
-  report: Record<string, unknown>;
+  report: RecoveryRestoreImportPayload;
   protected_data_classes?: RecoveryProtectedDataClass[];
   notes?: string;
   reported_at?: string | null;
@@ -5556,7 +5606,7 @@ export function importRecoveryRestoreReport(payload: {
 
 export function importRecoveryUpgradeReport(payload: {
   status?: "ok" | "warning" | "failed" | null;
-  report: Record<string, unknown>;
+  report: RecoveryUpgradeImportPayload;
   notes?: string;
   reported_at?: string | null;
 }) {
