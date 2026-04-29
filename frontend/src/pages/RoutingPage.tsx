@@ -320,7 +320,7 @@ export function RoutingPage() {
       {error ? <p className="fg-danger">{error}</p> : null}
 
       {canReadRouting ? (
-      <article className="fg-card">
+      <article id="routing-dry-run" className="fg-card">
         <div className="fg-panel-heading">
           <div>
             <h3>Policy Register</h3>

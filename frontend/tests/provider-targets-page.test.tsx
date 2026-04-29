@@ -21,7 +21,7 @@ vi.mock("../src/api/admin", async () => {
   };
 });
 
-import type { AdminSessionUser, InstanceRecord } from "../src/api/admin";
+import type { AdminSessionUser, InstanceRecord, ProviderTargetRecord } from "../src/api/admin";
 import { ProviderTargetsPage } from "../src/pages/ProviderTargetsPage";
 import { withAppContext } from "./testContext";
 
@@ -62,6 +62,49 @@ function createInstanceRecord(overrides: Partial<InstanceRecord> = {}): Instance
   };
 }
 
+function createTarget(overrides: Partial<ProviderTargetRecord> = {}): ProviderTargetRecord {
+  return {
+    target_key: "openai_api::gpt-4.1-mini",
+    provider: "openai_api",
+    model_id: "gpt-4.1-mini",
+    model_routing_key: "openai_api/gpt-4.1-mini",
+    label: "OpenAI · gpt-4.1-mini",
+    instance_id: "instance_alpha",
+    product_axis: "openai_compatible_providers",
+    auth_type: "api_key",
+    credential_type: "api_key_secret",
+    capability_profile: { streaming: true, tool_calling: true, queue_eligible: true },
+    technical_capabilities: { streaming: true, tool_calling: true, vision: true },
+    execution_traits: { queue_eligible: true, task_complexity_floor: "general", execution_lane: "queued_background" },
+    policy_flags: { fallback_allowed: true, premium_policy_gate: false },
+    economic_profile: { cost_class: "high", latency_class: "medium", quality_tier: "premium" },
+    cost_class: "high",
+    latency_class: "medium",
+    enabled: true,
+    priority: 125,
+    queue_eligible: true,
+    stream_capable: true,
+    tool_capable: true,
+    vision_capable: true,
+    fallback_allowed: true,
+    fallback_target_keys: [],
+    escalation_allowed: true,
+    escalation_target_keys: [],
+    health_status: "healthy",
+    availability_status: "healthy",
+    readiness_status: "ready",
+    status_reason: null,
+    provider_label: "OpenAI",
+    model_display_name: "gpt-4.1-mini",
+    model_owned_by: "OpenAI",
+    runtime_ready: true,
+    runtime_readiness_reason: "Live runtime evidence is recorded for this provider.",
+    provider_enabled: true,
+    model_active: true,
+    ...overrides,
+  };
+}
+
 let container: HTMLDivElement;
 let root: Root | null = null;
 
@@ -88,6 +131,13 @@ function setInputValue(control: HTMLInputElement, value: string) {
   control.dispatchEvent(new Event("input", { bubbles: true }));
 }
 
+function setSelectValue(control: HTMLSelectElement, value: string) {
+  const prototype = Object.getPrototypeOf(control) as HTMLSelectElement;
+  const setter = Object.getOwnPropertyDescriptor(prototype, "value")?.set;
+  setter?.call(control, value);
+  control.dispatchEvent(new Event("change", { bubbles: true }));
+}
+
 beforeEach(() => {
   vi.resetAllMocks();
   fetchInstancesMock.mockResolvedValue({
@@ -98,48 +148,46 @@ beforeEach(() => {
     status: "ok",
     object: "provider_target_register",
     targets: [
-      {
-        target_key: "openai_api::gpt-4.1-mini",
-        provider: "openai_api",
-        model_id: "gpt-4.1-mini",
-        model_routing_key: "openai_api/gpt-4.1-mini",
-        label: "OpenAI · gpt-4.1-mini",
-        instance_id: "instance_alpha",
-        product_axis: "openai_compatible_providers",
-        auth_type: "api_key",
-        credential_type: "api_key_secret",
-        capability_profile: { streaming: true, tool_calling: true, queue_eligible: true },
-        technical_capabilities: { streaming: true, tool_calling: true, vision: true },
-        execution_traits: { queue_eligible: true, task_complexity_floor: "general" },
-        policy_flags: { fallback_allowed: true, premium_policy_gate: false },
-        economic_profile: { cost_class: "high", latency_class: "medium", quality_tier: "premium" },
-        cost_class: "high",
+      createTarget(),
+      createTarget({
+        target_key: "anthropic_oauth::claude-3.5-sonnet",
+        provider: "anthropic_oauth",
+        model_id: "claude-3.5-sonnet",
+        model_routing_key: "anthropic_oauth/claude-3.5-sonnet",
+        label: "Anthropic OAuth · Claude 3.5 Sonnet",
+        product_axis: "oauth_account_providers",
+        auth_type: "oauth_account",
+        credential_type: "oauth_token",
+        capability_profile: { streaming: true, tool_calling: true, queue_eligible: false },
+        technical_capabilities: { streaming: true, tool_calling: true, vision: false },
+        execution_traits: { queue_eligible: false, task_complexity_floor: "premium", execution_lane: "sync_interactive" },
+        policy_flags: { fallback_allowed: false, premium_policy_gate: true },
+        economic_profile: { cost_class: "premium", latency_class: "medium", quality_tier: "premium" },
+        cost_class: "premium",
         latency_class: "medium",
-        enabled: true,
-        priority: 125,
-        queue_eligible: true,
+        enabled: false,
+        priority: 10,
+        queue_eligible: false,
         stream_capable: true,
         tool_capable: true,
-        vision_capable: true,
-        fallback_allowed: true,
+        vision_capable: false,
+        fallback_allowed: false,
         fallback_target_keys: [],
-        escalation_allowed: true,
+        escalation_allowed: false,
         escalation_target_keys: [],
-        health_status: "healthy",
-        availability_status: "healthy",
-        readiness_status: "ready",
-        status_reason: null,
-        provider_label: "OpenAI",
-        model_display_name: "gpt-4.1-mini",
-        model_owned_by: "OpenAI",
-        runtime_ready: true,
-        runtime_readiness_reason: "Live runtime evidence is recorded for this provider.",
-        provider_enabled: true,
-        model_active: true,
-      },
+        health_status: "degraded",
+        availability_status: "degraded",
+        readiness_status: "partial",
+        status_reason: "OAuth bridge is present but native runtime evidence is incomplete.",
+        provider_label: "Anthropic OAuth",
+        model_display_name: "Claude 3.5 Sonnet",
+        model_owned_by: "Anthropic",
+        runtime_ready: false,
+        runtime_readiness_reason: "Probe evidence exists, but premium OAuth target is not runtime-ready yet.",
+      }),
     ],
     summary: {
-      total_targets: 1,
+      total_targets: 2,
       enabled_targets: 1,
       queue_eligible_targets: 1,
       ready_targets: 1,
@@ -147,11 +195,10 @@ beforeEach(() => {
   });
   updateProviderTargetMock.mockResolvedValue({
     status: "ok",
-    target: {
-      target_key: "openai_api::gpt-4.1-mini",
+    target: createTarget({
       enabled: false,
       priority: 200,
-    },
+    }),
   });
   container = document.createElement("div");
   document.body.innerHTML = "";
@@ -169,7 +216,7 @@ afterEach(() => {
 });
 
 describe("Provider targets page", () => {
-  it("loads instance-bound targets and allows operator priority updates", async () => {
+  it("loads instance-bound targets, keeps capabilities and policy flags separate, and saves priority updates", async () => {
     await renderIntoDom(withAppContext({
       path: "/provider-targets?instanceId=instance_alpha",
       element: <ProviderTargetsPage />,
@@ -180,21 +227,78 @@ describe("Provider targets page", () => {
     expect(fetchInstancesMock).toHaveBeenCalledTimes(1);
     expect(fetchProviderTargetsMock).toHaveBeenCalledWith("instance_alpha");
     expect(container.textContent).toContain("Provider Targets");
-    expect(container.textContent).toContain("Instance-Bound Target Register");
-    expect(container.textContent).toContain("openai_api::gpt-4.1-mini");
-    expect(container.textContent).toContain("priority=125");
+    expect(container.textContent).toContain("Instance-bound target table");
+    expect(container.textContent).toContain("OpenAI · gpt-4.1-mini");
+    expect(container.textContent).toContain("Capabilities");
+    expect(container.textContent).toContain("Policy flags");
+    expect(container.textContent).toContain("Cost / quality profile");
+    expect(container.textContent).toContain("Routing Dry Run");
+    expect(container.textContent).toContain("Provider Health");
 
-    const priorityInput = container.querySelector("input");
-    const saveButton = Array.from(container.querySelectorAll("button")).find((button) => button.textContent?.includes("Save priority"));
+    const providerFilter = container.querySelector<HTMLSelectElement>('select[aria-label="Provider filter"]');
+    expect(providerFilter?.value).toBe("all");
 
     await act(async () => {
-      setInputValue(priorityInput as HTMLInputElement, "200");
+      setSelectValue(providerFilter!, "OpenAI");
+    });
+
+    expect(container.textContent).toContain("Showing 1 of 2 instance-bound provider targets.");
+
+    const priorityInput = container.querySelector<HTMLInputElement>('input[aria-label="Priority"]');
+    const saveButton = Array.from(container.querySelectorAll("button")).find((button) => button.textContent?.includes("Save target changes"));
+
+    await act(async () => {
+      setInputValue(priorityInput!, "200");
       saveButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     });
     await flushEffects();
 
     expect(updateProviderTargetMock).toHaveBeenCalledWith("openai_api::gpt-4.1-mini", {
       priority: 200,
+    }, "instance_alpha");
+  });
+
+  it("requires explicit acknowledgement before promoting a premium OAuth target to the default active path", async () => {
+    await renderIntoDom(withAppContext({
+      path: "/provider-targets?instanceId=instance_alpha",
+      element: <ProviderTargetsPage />,
+      session: operatorSession,
+    }));
+    await flushEffects();
+
+    const oauthRowButton = Array.from(container.querySelectorAll("button")).find(
+      (button) => button.textContent?.includes("Anthropic OAuth · Claude 3.5 Sonnet"),
+    );
+
+    await act(async () => {
+      oauthRowButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+
+    expect(container.textContent).toContain("Anthropic OAuth · Claude 3.5 Sonnet");
+    expect(container.textContent).toContain("Partial");
+
+    const enableCheckbox = container.querySelector<HTMLInputElement>('input[aria-label="Enable target"]');
+    const saveButton = Array.from(container.querySelectorAll("button")).find((button) => button.textContent?.includes("Save target changes"));
+
+    await act(async () => {
+      enableCheckbox?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      saveButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    await flushEffects();
+
+    expect(updateProviderTargetMock).toHaveBeenCalledTimes(0);
+    expect(container.textContent).toContain("Premium or OAuth target becomes the default active path");
+
+    const confirmCheckbox = container.querySelector<HTMLInputElement>('input[aria-label="Confirm premium or OAuth default warning"]');
+
+    await act(async () => {
+      confirmCheckbox?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      saveButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    await flushEffects();
+
+    expect(updateProviderTargetMock).toHaveBeenCalledWith("anthropic_oauth::claude-3.5-sonnet", {
+      enabled: true,
     }, "instance_alpha");
   });
 });
