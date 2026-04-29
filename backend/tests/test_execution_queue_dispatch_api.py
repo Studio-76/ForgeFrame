@@ -68,6 +68,11 @@ def _seed_leased_run(*, company_id: str) -> tuple[str, str]:
         run.operator_state = "waiting_external"
         run.current_step_key = "provider_call"
         run.updated_at = current_time
+        run.result_summary = {
+            "routing": {
+                "selected_target_key": "openai_api::gpt-4.1-mini",
+            },
+        }
         attempt.attempt_state = "executing"
         attempt.operator_state = "waiting_external"
         attempt.lease_status = "leased"
@@ -90,6 +95,20 @@ def _seed_leased_run(*, company_id: str) -> tuple[str, str]:
         clear_error=True,
     )
     return created.run_id, created.attempt_id
+
+
+def _expire_leased_attempt(*, run_id: str, attempt_id: str) -> None:
+    service = get_execution_transition_service()
+    expired_at = datetime.now(tz=UTC) - timedelta(minutes=2)
+    with service._session_factory() as session, session.begin():  # noqa: SLF001 - test-only state shaping
+        run = session.get(RunORM, run_id)
+        attempt = session.get(RunAttemptORM, attempt_id)
+        assert run is not None
+        assert attempt is not None
+        run.updated_at = expired_at
+        attempt.lease_expires_at = expired_at
+        attempt.last_heartbeat_at = expired_at
+        attempt.updated_at = expired_at
 
 
 def _seed_quarantined_backlog_run(*, company_id: str, age_hours: int = 48) -> str:
@@ -146,6 +165,8 @@ def test_execution_queue_dispatch_and_operator_action_endpoints() -> None:
     assert dispatch.status_code == 200
     dispatch_payload = dispatch.json()["dispatch"]
     assert any(item["attempt_id"] == attempt_id for item in dispatch_payload["leased_attempts"])
+    leased_attempt = next(item for item in dispatch_payload["leased_attempts"] if item["attempt_id"] == attempt_id)
+    assert leased_attempt["selected_target_key"] == "openai_api::gpt-4.1-mini"
     assert any(item["worker_state"] == "busy" for item in dispatch_payload["workers"])
     assert any(item["current_attempt_id"] == attempt_id for item in dispatch_payload["workers"])
 
@@ -157,6 +178,22 @@ def test_execution_queue_dispatch_and_operator_action_endpoints() -> None:
     )
     assert interrupt.status_code == 200
     assert interrupt.json()["action"]["operator_state"] == "interrupted"
+
+
+def test_execution_dispatch_surfaces_expired_leases_for_reconciliation() -> None:
+    client = TestClient(app)
+    headers = _admin_headers(client)
+    instance_id = _create_instance(client, headers, instance_id="instance_alpha", company_id="company_alpha")
+    run_id, attempt_id = _seed_leased_run(company_id="company_alpha")
+    _expire_leased_attempt(run_id=run_id, attempt_id=attempt_id)
+
+    dispatch = client.get("/admin/execution/dispatch", headers=headers, params=_execution_scope(instance_id))
+
+    assert dispatch.status_code == 200
+    dispatch_payload = dispatch.json()["dispatch"]
+    stalled_attempt = next(item for item in dispatch_payload["stalled_attempts"] if item["attempt_id"] == attempt_id)
+    assert stalled_attempt["run_id"] == run_id
+    assert stalled_attempt["selected_target_key"] == "openai_api::gpt-4.1-mini"
 
 
 def test_execution_queue_filters_explain_waiting_rows() -> None:

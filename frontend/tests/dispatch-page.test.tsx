@@ -38,6 +38,11 @@ const operatorSession: AdminSessionUser = {
   role: "operator",
 };
 
+const readOnlyOperatorSession: AdminSessionUser = {
+  ...operatorSession,
+  read_only: true,
+};
+
 let container: HTMLDivElement;
 let root: Root | null = null;
 
@@ -57,17 +62,21 @@ async function flushEffects() {
   });
 }
 
-async function renderDispatchPage(path: string) {
+async function renderDispatchPage(path: string, session: AdminSessionUser = operatorSession) {
   await renderIntoDom(withAppContext({
     path,
     element: <DispatchPage />,
-    session: operatorSession,
+    session,
   }));
   await flushEffects();
 }
 
 beforeEach(() => {
   vi.resetAllMocks();
+  const now = Date.now();
+  const expiredLeaseAt = new Date(now - 2 * 60_000).toISOString();
+  const staleHeartbeatAt = new Date(now - 3 * 60_000).toISOString();
+  const futureWakeupAt = new Date(now + 10 * 60_000).toISOString();
   fetchInstancesMock.mockResolvedValue({
     status: "ok",
     instances: [],
@@ -76,7 +85,7 @@ beforeEach(() => {
     status: "ok",
     dispatch: {
       outbox_counts: { pending: 2, dead: 1 },
-      event_counts: { run_dispatch: 1, dead_letter: 1 },
+      event_counts: { run_dispatch: 1, run_resume: 1, dead_letter: 1 },
       leased_attempts: [
         {
           run_id: "run_alpha",
@@ -85,33 +94,55 @@ beforeEach(() => {
           state: "executing",
           operator_state: "waiting_external",
           execution_lane: "background_agentic",
+          workspace_id: "workspace_alpha",
+          issue_id: "FORGE-23",
+          selected_target_key: "openai_api::gpt-4.1-mini",
           worker_key: "worker_alpha",
           lease_status: "leased",
-          lease_expires_at: "2026-04-23T08:10:00Z",
-          last_heartbeat_at: "2026-04-23T08:09:30Z",
-          next_wakeup_at: null,
+          lease_expires_at: expiredLeaseAt,
+          last_heartbeat_at: staleHeartbeatAt,
+          next_wakeup_at: futureWakeupAt,
           status_reason: "provider_call",
-          updated_at: "2026-04-23T08:09:30Z",
+          updated_at: staleHeartbeatAt,
         },
       ],
-      stalled_attempts: [],
+      stalled_attempts: [
+        {
+          run_id: "run_alpha",
+          attempt_id: "attempt_alpha",
+          run_kind: "provider_dispatch",
+          state: "executing",
+          operator_state: "waiting_external",
+          execution_lane: "background_agentic",
+          workspace_id: "workspace_alpha",
+          issue_id: "FORGE-23",
+          selected_target_key: "openai_api::gpt-4.1-mini",
+          worker_key: "worker_alpha",
+          lease_status: "leased",
+          lease_expires_at: expiredLeaseAt,
+          last_heartbeat_at: staleHeartbeatAt,
+          next_wakeup_at: futureWakeupAt,
+          status_reason: "provider_call",
+          updated_at: staleHeartbeatAt,
+        },
+      ],
       workers: [
         {
           worker_key: "worker_alpha",
-          worker_state: "busy",
+          worker_state: "stale",
           instance_id: "instance_alpha",
           execution_lane: "background_agentic",
           active_attempts: 1,
           leased_runs: ["run_alpha"],
           current_run_id: "run_alpha",
           current_attempt_id: "attempt_alpha",
-          oldest_lease_expires_at: "2026-04-23T08:10:00Z",
-          heartbeat_expires_at: "2026-04-23T08:10:30Z",
-          last_heartbeat_at: "2026-04-23T08:09:30Z",
-          last_claimed_at: "2026-04-23T08:09:00Z",
+          oldest_lease_expires_at: expiredLeaseAt,
+          heartbeat_expires_at: expiredLeaseAt,
+          last_heartbeat_at: staleHeartbeatAt,
+          last_claimed_at: staleHeartbeatAt,
           last_completed_at: null,
-          last_error_code: null,
-          last_error_detail: null,
+          last_error_code: "lease_expired",
+          last_error_detail: "worker stopped renewing lease",
         },
       ],
       quarantined_runs: 1,
@@ -121,7 +152,14 @@ beforeEach(() => {
   });
   reconcileExecutionLeasesMock.mockResolvedValue({
     status: "ok",
-    reconciled: [{ run_id: "run_alpha", attempt_id: "attempt_alpha", reconciled_to_state: "quarantined", dead_letter_reason: "lease_expired" }],
+    reconciled: [
+      {
+        run_id: "run_alpha",
+        attempt_id: "attempt_alpha",
+        reconciled_to_state: "quarantined",
+        dead_letter_reason: "lease_expired",
+      },
+    ],
   });
   container = document.createElement("div");
   document.body.innerHTML = "";
@@ -139,12 +177,19 @@ afterEach(() => {
 });
 
 describe("Dispatch page", () => {
-  it("loads dispatch truth and reconciles expired leases", async () => {
+  it("loads dispatch truth, shows stale lease evidence, and reconciles expired leases", async () => {
     await renderDispatchPage("/dispatch?instanceId=instance_alpha");
 
     expect(fetchExecutionDispatchMock).toHaveBeenCalledWith({ instanceId: "instance_alpha", companyId: "" });
-    expect(container.textContent).toContain("worker_alpha");
-    expect(container.textContent).toContain("waiting_external");
+    expect(container.textContent).toContain("Worker Leases");
+    expect(container.textContent).toContain("Leased Attempts");
+    expect(container.textContent).toContain("Outbox Pressure");
+    expect(container.textContent).toContain("Reconciliation");
+    expect(container.textContent).toContain("openai_api::gpt-4.1-mini");
+    expect(container.textContent).toContain("Expired lease");
+    expect(container.textContent).toContain("Outbox events have dead-lettered");
+    const notificationsLink = Array.from(container.querySelectorAll("a")).find((link) => link.textContent === "Open notifications");
+    expect(notificationsLink?.getAttribute("href")).toBe("/notifications?instanceId=instance_alpha");
 
     const reconcileButton = Array.from(container.querySelectorAll("button")).find((button) => button.textContent === "Reconcile expired leases");
     expect(reconcileButton).not.toBeNull();
@@ -155,6 +200,19 @@ describe("Dispatch page", () => {
     await flushEffects();
 
     expect(reconcileExecutionLeasesMock).toHaveBeenCalledWith({ instanceId: "instance_alpha", companyId: "" });
-    expect(container.textContent).toContain("Reconciled 1 expired lease(s).");
+    expect(container.textContent).toContain("Corrected leases");
+    expect(container.textContent).toContain("Corrected attempts");
+    expect(container.textContent).toContain("lease_expired");
+    expect(container.textContent).toContain("quarantined");
+  });
+
+  it("shows a real permission blocker when dispatch mutations are read-only", async () => {
+    await renderDispatchPage("/dispatch?instanceId=instance_alpha", readOnlyOperatorSession);
+
+    const reconcileButton = Array.from(container.querySelectorAll("button")).find((button) => button.textContent === "Reconcile expired leases");
+    expect(reconcileButton).not.toBeNull();
+    expect(reconcileButton?.hasAttribute("disabled")).toBe(true);
+    expect(container.textContent).toContain("Permission blocker");
+    expect(container.textContent).toContain("lacks `execution.operate`");
   });
 });

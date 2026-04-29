@@ -3026,6 +3026,9 @@ export type ExecutionDispatchAttemptView = {
   state: string;
   operator_state: string;
   execution_lane: string;
+  workspace_id?: string | null;
+  issue_id?: string | null;
+  selected_target_key?: string | null;
   worker_key?: string | null;
   lease_status: string;
   lease_expires_at?: string | null;

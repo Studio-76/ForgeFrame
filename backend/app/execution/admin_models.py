@@ -220,6 +220,9 @@ class ExecutionDispatchAttemptView(BaseModel):
     state: RunState
     operator_state: RunOperatorState
     execution_lane: RunExecutionLane
+    workspace_id: str | None = None
+    issue_id: str | None = None
+    selected_target_key: str | None = None
     worker_key: str | None = None
     lease_status: RunLeaseStatus
     lease_expires_at: datetime | None = None
