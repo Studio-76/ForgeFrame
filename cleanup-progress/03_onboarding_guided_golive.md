@@ -26,3 +26,13 @@
   - `cd frontend && npm test -- onboarding-page` -> `passed`
   - `cd frontend && npm test` -> `passed (40 test files, 149 tests)`
   - `cd /opt/ForgeFrame && .venv/bin/pytest backend/tests/test_admin_keys_first_success_probe.py` -> `passed (3 tests)`
+
+## Revalidation 2026-04-29
+
+- Audit-Ergebnis: `APPROVED`
+- Konkrete Audit-Maengel: `keine`
+- Finale Freigabe: `APPROVED`
+- Begruendung:
+  - Der Wizard bleibt auf aktuellem HEAD real zustandsgetrieben: Betriebsart, erste Instanz, Routingdefault, Runtime-Key und persistierte First-Success-Probe werden weiterhin aus echter Persistenz-/API-Wahrheit abgeleitet.
+  - Der Global-Contract-Fix aus `00` hat nur die Header-Handoffs aus `PageIntro` in eine kontextuelle `ActionBar` verlagert; Wizard-Logik und Schrittstatus blieben unveraendert.
+  - Die auf aktuellem HEAD erfolgreich gelaufenen Pruefkommandos `cd frontend && npm run build`, `cd frontend && npm test -- --runInBand` (Vitest-Option objektiv unsupported) und `cd frontend && npm test` decken den Onboarding-Stand mit ab.
