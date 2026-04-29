@@ -17,6 +17,7 @@ import {
   updateRoutingCircuit,
   updateRoutingPolicy,
   type RoutingBudgetRecord,
+  type RoutingBudgetScopeUpdateRecord,
   type RoutingCircuitRecord,
   type RoutingControlPlaneResponse,
   type RoutingDecisionCandidateRecord,
@@ -114,7 +115,7 @@ function formatJson(value: unknown): string {
   return JSON.stringify(value, null, 2);
 }
 
-function parseBudgetScopesJson(value: string): RoutingBudgetRecord["scopes"] {
+function parseBudgetScopesJson(value: string): RoutingBudgetScopeUpdateRecord[] {
   const normalized = value.trim();
   if (!normalized) {
     return [];
@@ -123,7 +124,22 @@ function parseBudgetScopesJson(value: string): RoutingBudgetRecord["scopes"] {
   if (!Array.isArray(parsed)) {
     throw new Error("Budget scopes must be a JSON array.");
   }
-  return parsed as RoutingBudgetRecord["scopes"];
+  return parsed as RoutingBudgetScopeUpdateRecord[];
+}
+
+function writableBudgetScopes(scopes: Array<RoutingBudgetScopeUpdateRecord | RoutingBudgetRecord["scopes"][number]>): RoutingBudgetScopeUpdateRecord[] {
+  return scopes.map((scope) => ({
+    scope_type: scope.scope_type,
+    scope_key: scope.scope_key,
+    window: scope.window,
+    enabled: scope.enabled,
+    soft_cost_limit: scope.soft_cost_limit ?? null,
+    hard_cost_limit: scope.hard_cost_limit ?? null,
+    soft_token_limit: scope.soft_token_limit ?? null,
+    hard_token_limit: scope.hard_token_limit ?? null,
+    soft_blocked_cost_classes: [...scope.soft_blocked_cost_classes],
+    note: scope.note ?? null,
+  }));
 }
 
 function toPolicyDraft(policy: RoutingPolicyRecord): PolicyDraft {
@@ -364,7 +380,7 @@ export function RoutingPage() {
         hard_blocked: payload.budget.hard_blocked,
         blocked_cost_classes: payload.budget.blocked_cost_classes.join(", "),
         reason: payload.budget.reason ?? "",
-        scopes_json: formatJson(payload.budget.scopes ?? []),
+        scopes_json: formatJson(writableBudgetScopes(payload.budget.scopes ?? [])),
       });
       setCircuitDrafts(
         Object.fromEntries(payload.circuits.map((circuit) => [circuit.target_key, circuit.reason ?? ""])),
@@ -493,7 +509,7 @@ export function RoutingPage() {
     }
     setActionError("");
     try {
-      const scopes = parseBudgetScopesJson(budgetDraft.scopes_json);
+      const scopes = writableBudgetScopes(parseBudgetScopesJson(budgetDraft.scopes_json));
       await updateRoutingBudget(
         {
           hard_blocked: budgetDraft.hard_blocked,
@@ -904,7 +920,7 @@ export function RoutingPage() {
 
                   <article className="fg-subcard">
                     <h4>Budget gate editor</h4>
-                    <p className="fg-muted">Hard block stops all routing. Blocked cost classes only remove matching candidates. Scoped budget rules remain persisted JSON today because the backend API stores full scope records.</p>
+                    <p className="fg-muted">Hard block stops all routing. Blocked cost classes only remove matching candidates. Only writable scope fields belong in this editor; observed usage, anomaly flags, and evaluation timestamps are server-calculated and remain read-only below.</p>
                     <div className="fg-inline-form">
                       <label className="fg-checkbox">
                         <input
@@ -931,9 +947,9 @@ export function RoutingPage() {
                         />
                       </label>
                       <label>
-                        Scoped budget rules (JSON)
+                        Scoped budget rules (writable JSON)
                         <textarea
-                          aria-label="Scoped budget rules JSON"
+                          aria-label="Scoped budget rules writable JSON"
                           value={budgetDraft.scopes_json}
                           rows={10}
                           onChange={(event) => setBudgetDraft((current) => ({ ...current, scopes_json: event.target.value }))}

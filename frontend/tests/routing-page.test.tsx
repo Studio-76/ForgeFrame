@@ -47,6 +47,15 @@ const operatorSession: AdminSessionUser = {
   role: "operator",
 };
 
+const adminSession: AdminSessionUser = {
+  ...operatorSession,
+  session_id: "session-admin",
+  user_id: "user-admin",
+  username: "admin",
+  display_name: "Admin",
+  role: "admin",
+};
+
 function createInstanceRecord(overrides: Partial<InstanceRecord> = {}): InstanceRecord {
   return {
     instance_id: "instance_alpha",
@@ -428,5 +437,37 @@ describe("Routing page", () => {
 
     expect(container.textContent).toContain("ollama::llama3.2");
     expect(container.textContent).toContain("Simple and non-simple simulations currently resolve to different targets");
+  });
+
+  it("sanitizes writable budget scopes and shows inline simulation errors", async () => {
+    await renderIntoDom(withAppContext({
+      path: "/routing?instanceId=instance_alpha",
+      element: <RoutingPage />,
+      session: operatorSession,
+    }));
+    await flushEffects();
+
+    const budgetTextarea = container.querySelector<HTMLTextAreaElement>('textarea[aria-label="Scoped budget rules writable JSON"]');
+    expect(budgetTextarea).not.toBeNull();
+
+    const parsedBudgetScopes = JSON.parse(budgetTextarea!.value) as Array<Record<string, unknown>>;
+    expect(parsedBudgetScopes[0]).not.toHaveProperty("observed_cost");
+    expect(parsedBudgetScopes[0]).not.toHaveProperty("soft_limit_exceeded");
+    expect(parsedBudgetScopes[0]).not.toHaveProperty("last_evaluated_at");
+
+    simulateRoutingMock.mockRejectedValueOnce(new Error("Unknown or inactive model: does-not-exist"));
+
+    const modelInput = container.querySelector<HTMLInputElement>('input[aria-label="Simulation model"]');
+    const runButton = Array.from(container.querySelectorAll("button")).find((button) => button.textContent === "Run configured simulation");
+
+    await act(async () => {
+      modelInput!.value = "does-not-exist";
+      modelInput!.dispatchEvent(new Event("input", { bubbles: true }));
+      modelInput!.dispatchEvent(new Event("change", { bubbles: true }));
+      runButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    await flushEffects();
+
+    expect(container.textContent).toContain("Unknown or inactive model: does-not-exist");
   });
 });

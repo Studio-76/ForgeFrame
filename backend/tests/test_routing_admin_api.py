@@ -173,6 +173,23 @@ def test_routing_simulation_honors_provider_scope_and_route_context(monkeypatch)
     assert selection_basis["route_context"]["agent_id"] == "assistant-alpha"
 
 
+def test_routing_simulation_returns_typed_error_for_unknown_requested_model(monkeypatch) -> None:
+    _configure_fast_routing_test_env(monkeypatch)
+    client = _client()
+    headers = _admin_headers(client)
+
+    response = client.post(
+        "/admin/routing/simulate",
+        headers=headers,
+        json={"requested_model": "does-not-exist"},
+    )
+
+    assert response.status_code == 400
+    payload = response.json()
+    assert payload["error"]["type"] == "routing_simulation_invalid"
+    assert "Unknown or inactive model" in payload["error"]["message"]
+
+
 def test_routing_simulation_surfaces_budget_block_with_admin_decision_ledger(monkeypatch) -> None:
     _configure_fast_routing_test_env(monkeypatch)
     client = _client()

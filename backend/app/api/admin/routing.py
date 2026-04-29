@@ -83,4 +83,10 @@ def simulate_routing(
     _admin: AuthenticatedAdmin = Depends(require_admin_instance_permission("routing.read")),
     service: ControlPlaneService = Depends(get_control_plane_service),
 ) -> dict[str, object]:
-    return service.simulate_routing(payload)
+    try:
+        return service.simulate_routing(payload)
+    except ValueError as exc:
+        return JSONResponse(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            content={"error": {"type": "routing_simulation_invalid", "message": str(exc)}},
+        )

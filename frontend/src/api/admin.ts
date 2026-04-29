@@ -640,10 +640,23 @@ export type RoutingBudgetAnomalyRecord = {
   detected_at: string;
 };
 
+export type RoutingBudgetScopeUpdateRecord = {
+  scope_type: "instance" | "agent" | "task";
+  scope_key: string;
+  window: "1h" | "24h" | "7d" | "30d";
+  enabled: boolean;
+  soft_cost_limit?: number | null;
+  hard_cost_limit?: number | null;
+  soft_token_limit?: number | null;
+  hard_token_limit?: number | null;
+  soft_blocked_cost_classes: string[];
+  note?: string | null;
+};
+
 export type RoutingBudgetUpdatePayload = Partial<
   Pick<RoutingBudgetRecord, "hard_blocked" | "blocked_cost_classes" | "reason">
 > & {
-  scopes?: RoutingBudgetScopeRecord[];
+  scopes?: RoutingBudgetScopeUpdateRecord[];
 };
 
 export type RoutingCircuitRecord = {
