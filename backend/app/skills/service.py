@@ -15,9 +15,12 @@ from app.skills.models import (
     ActivateSkillVersion,
     CreateSkill,
     RecordSkillUsage,
+    SkillApprovalSummary,
     SkillActivationRecord,
     SkillDetail,
+    SkillProvenanceSummary,
     SkillSummary,
+    SkillTelemetrySummary,
     SkillUsageEventRecord,
     SkillVersionRecord,
     UpdateSkill,
@@ -65,6 +68,111 @@ class SkillAdminService:
             raise ValueError(f"Skill '{skill_id}' was not found.")
         return row
 
+    @staticmethod
+    def _scope_label(scope: str, scope_agent_label: str | None = None) -> str:
+        if scope == "agent":
+            return f"Agent scope · {scope_agent_label or 'agent required'}"
+        return "Instance scope"
+
+    @staticmethod
+    def _approval_summary(status: str) -> SkillApprovalSummary:
+        if status == "draft":
+            return SkillApprovalSummary(
+                posture="draft",
+                label="Draft registry entry",
+                note="Draft skills are registered but not yet approved for activation.",
+            )
+        if status == "review":
+            return SkillApprovalSummary(
+                posture="review_required",
+                label="Review required",
+                note="This skill is waiting for approval or operator review before active use.",
+            )
+        if status == "archived":
+            return SkillApprovalSummary(
+                posture="archived",
+                label="Archived",
+                note="Archiving keeps versions and telemetry but removes the skill from active use.",
+            )
+        return SkillApprovalSummary(
+            posture="approved",
+            label="Approved / active",
+            note="This skill has cleared review and currently participates in activation state.",
+        )
+
+    @staticmethod
+    def _provenance_summary(provenance: dict[str, object]) -> SkillProvenanceSummary:
+        if learning_event_id := provenance.get("learning_event_id"):
+            return SkillProvenanceSummary(
+                kind="learning",
+                label="Promoted from learning",
+                detail=f"learning event {learning_event_id}",
+            )
+        if memory_id := provenance.get("memory_id"):
+            return SkillProvenanceSummary(
+                kind="memory",
+                label="Derived from memory",
+                detail=f"memory {memory_id}",
+            )
+        if source_id := provenance.get("source_id"):
+            return SkillProvenanceSummary(
+                kind="knowledge_source",
+                label="Backed by knowledge source",
+                detail=f"source {source_id}",
+            )
+        if plugin_id := provenance.get("plugin_id") or provenance.get("plugin_name"):
+            return SkillProvenanceSummary(
+                kind="plugin",
+                label="Plugin-managed",
+                detail=str(plugin_id),
+            )
+        if source := provenance.get("source"):
+            if str(source) == "operator":
+                return SkillProvenanceSummary(
+                    kind="operator",
+                    label="Operator-authored",
+                    detail="Manual registry entry",
+                )
+            return SkillProvenanceSummary(
+                kind="unknown",
+                label="External provenance",
+                detail=str(source),
+            )
+        return SkillProvenanceSummary(
+            kind="unknown",
+            label="Registry entry",
+            detail="No explicit plugin, harness, target, or learning provenance was recorded.",
+        )
+
+    @staticmethod
+    def _telemetry_summary(telemetry: dict[str, object]) -> SkillTelemetrySummary:
+        last_outcome = telemetry.get("last_outcome")
+        return SkillTelemetrySummary(
+            usage_count=int(telemetry.get("usage_count", 0) or 0),
+            last_outcome=last_outcome if last_outcome in {"success", "blocked", "error"} else None,
+            success_count=int(telemetry.get("success_count", 0) or 0),
+            blocked_count=int(telemetry.get("blocked_count", 0) or 0),
+            error_count=int(telemetry.get("error_count", 0) or 0),
+        )
+
+    def _active_scope_labels(self, session: Session, row: SkillORM) -> list[str]:
+        labels: list[str] = []
+        active_rows = session.execute(
+            select(SkillActivationORM).where(
+                SkillActivationORM.company_id == row.company_id,
+                SkillActivationORM.skill_id == row.id,
+                SkillActivationORM.status == "active",
+            ).order_by(SkillActivationORM.activated_at.desc())
+        ).scalars().all()
+        for activation in active_rows:
+            agent_label = None
+            if activation.scope_agent_id:
+                agent = session.get(AgentORM, activation.scope_agent_id)
+                if agent is not None and agent.company_id == row.company_id and agent.instance_id == row.instance_id:
+                    agent_label = agent.display_name
+            labels.append(self._scope_label(activation.scope, agent_label))
+        return list(dict.fromkeys(labels))
+
     def _load_version(self, session: Session, *, instance: InstanceRecord, version_id: str) -> SkillVersionORM:
         row = session.get(SkillVersionORM, version_id)
         if row is None or row.company_id != instance.company_id or row.instance_id != instance.instance_id:
@@ -82,6 +190,13 @@ class SkillAdminService:
             )
             or 0,
         )
+        scope_agent_label = None
+        if row.scope_agent_id:
+            scope_agent = session.get(AgentORM, row.scope_agent_id)
+            if scope_agent is not None and scope_agent.company_id == row.company_id and scope_agent.instance_id == row.instance_id:
+                scope_agent_label = scope_agent.display_name
+        telemetry = dict(row.telemetry_json or {})
+        provenance = dict(row.provenance_json or {})
         return SkillSummary(
             skill_id=row.id,
             instance_id=row.instance_id,
@@ -89,16 +204,22 @@ class SkillAdminService:
             display_name=row.display_name,
             summary=row.summary,
             scope=row.scope,  # type: ignore[arg-type]
+            scope_label=self._scope_label(row.scope, scope_agent_label),
             scope_agent_id=row.scope_agent_id,
             current_version_number=row.current_version_number,
             status=row.status,  # type: ignore[arg-type]
-            provenance=dict(row.provenance_json or {}),
+            approval=self._approval_summary(row.status),
+            provenance=provenance,
+            provenance_summary=self._provenance_summary(provenance),
             activation_conditions=dict(row.activation_conditions_json or {}),
             instruction_core=row.instruction_core,
-            telemetry=dict(row.telemetry_json or {}),
+            telemetry=telemetry,
+            telemetry_summary=self._telemetry_summary(telemetry),
             metadata=dict(row.metadata_json or {}),
             last_used_at=row.last_used_at,
             active_activation_count=active_activation_count,
+            active_scope_labels=self._active_scope_labels(session, row),
+            last_outcome=telemetry.get("last_outcome") if telemetry.get("last_outcome") in {"success", "blocked", "error"} else None,  # type: ignore[arg-type]
             created_at=row.created_at,
             updated_at=row.updated_at,
         )
@@ -121,7 +242,7 @@ class SkillAdminService:
         )
 
     @staticmethod
-    def _activation_record(row: SkillActivationORM) -> SkillActivationRecord:
+    def _activation_record(row: SkillActivationORM, scope_label: str) -> SkillActivationRecord:
         return SkillActivationRecord(
             activation_id=row.id,
             skill_id=row.skill_id,
@@ -129,6 +250,7 @@ class SkillAdminService:
             instance_id=row.instance_id,
             company_id=row.company_id,
             scope=row.scope,  # type: ignore[arg-type]
+            scope_label=scope_label,
             scope_agent_id=row.scope_agent_id,
             status=row.status,  # type: ignore[arg-type]
             activation_conditions=dict(row.activation_conditions_json or {}),
@@ -140,11 +262,12 @@ class SkillAdminService:
         )
 
     @staticmethod
-    def _usage_record(row: SkillUsageEventORM) -> SkillUsageEventRecord:
+    def _usage_record(row: SkillUsageEventORM, version_number: int | None) -> SkillUsageEventRecord:
         return SkillUsageEventRecord(
             usage_event_id=row.id,
             skill_id=row.skill_id,
             version_id=row.version_id,
+            version_number=version_number,
             activation_id=row.activation_id,
             instance_id=row.instance_id,
             company_id=row.company_id,
@@ -176,17 +299,26 @@ class SkillAdminService:
                 SkillUsageEventORM.skill_id == row.id,
             ).order_by(SkillUsageEventORM.created_at.desc()).limit(25)
         ).scalars().all()
+        versions_by_id = {item.id: item for item in versions}
         scope_agent = None
         if row.scope_agent_id:
             agent = session.get(AgentORM, row.scope_agent_id)
             if agent is not None and agent.company_id == row.company_id and agent.instance_id == row.instance_id:
                 scope_agent = self._record_link(agent.id, agent.display_name, agent.status)
+        activation_records: list[SkillActivationRecord] = []
+        for item in activations:
+            agent_label = None
+            if item.scope_agent_id:
+                agent = session.get(AgentORM, item.scope_agent_id)
+                if agent is not None and agent.company_id == row.company_id and agent.instance_id == row.instance_id:
+                    agent_label = agent.display_name
+            activation_records.append(self._activation_record(item, self._scope_label(item.scope, agent_label)))
         return SkillDetail(
             **summary.model_dump(),
             scope_agent=scope_agent,
             versions=[self._version_record(item) for item in versions],
-            activations=[self._activation_record(item) for item in activations],
-            recent_usage=[self._usage_record(item) for item in usage_rows],
+            activations=activation_records,
+            recent_usage=[self._usage_record(item, versions_by_id.get(item.version_id).version_number if versions_by_id.get(item.version_id) is not None else None) for item in usage_rows],
         )
 
     def list_skills(self, *, instance: InstanceRecord, status: str | None = None, scope: str | None = None, limit: int = 100) -> list[SkillSummary]:
@@ -260,7 +392,8 @@ class SkillAdminService:
         with self._session_factory() as session, session.begin():
             row = self._load_skill(session, instance=instance, skill_id=skill_id)
             next_scope = payload.scope or row.scope
-            next_scope_agent_id = payload.scope_agent_id if payload.scope_agent_id is not None else row.scope_agent_id
+            scope_agent_set = "scope_agent_id" in payload.model_fields_set
+            next_scope_agent_id = payload.scope_agent_id if scope_agent_set else row.scope_agent_id
             self._validate_scope(session, instance=instance, scope=next_scope, scope_agent_id=next_scope_agent_id)
             versioned_change = (
                 payload.summary is not None
@@ -394,6 +527,8 @@ class SkillAdminService:
             telemetry = dict(row.telemetry_json or {})
             telemetry["usage_count"] = int(telemetry.get("usage_count", 0)) + 1
             telemetry["last_outcome"] = payload.outcome
+            outcome_key = f"{payload.outcome}_count"
+            telemetry[outcome_key] = int(telemetry.get(outcome_key, 0)) + 1
             row.telemetry_json = telemetry
             row.last_used_at = self._now()
             row.updated_at = self._now()

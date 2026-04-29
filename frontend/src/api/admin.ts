@@ -217,6 +217,28 @@ export type SkillScope = "instance" | "agent";
 export type SkillStatus = "draft" | "review" | "active" | "archived";
 export type SkillActivationStatus = "active" | "inactive" | "archived";
 export type SkillUsageOutcome = "success" | "blocked" | "error";
+export type SkillApprovalPosture = "draft" | "review_required" | "approved" | "archived";
+export type SkillProvenanceKind = "operator" | "learning" | "memory" | "knowledge_source" | "plugin" | "unknown";
+
+export type SkillApprovalSummary = {
+  posture: SkillApprovalPosture;
+  label: string;
+  note: string;
+};
+
+export type SkillProvenanceSummary = {
+  kind: SkillProvenanceKind;
+  label: string;
+  detail?: string | null;
+};
+
+export type SkillTelemetrySummary = {
+  usage_count: number;
+  last_outcome?: SkillUsageOutcome | null;
+  success_count: number;
+  blocked_count: number;
+  error_count: number;
+};
 
 export type SkillVersionRecord = {
   version_id: string;
@@ -240,6 +262,7 @@ export type SkillActivationRecord = {
   instance_id: string;
   company_id: string;
   scope: SkillScope;
+  scope_label: string;
   scope_agent_id?: string | null;
   status: SkillActivationStatus;
   activation_conditions: Record<string, unknown>;
@@ -254,6 +277,7 @@ export type SkillUsageEventRecord = {
   usage_event_id: string;
   skill_id: string;
   version_id: string;
+  version_number?: number | null;
   activation_id?: string | null;
   instance_id: string;
   company_id: string;
@@ -272,16 +296,22 @@ export type SkillSummary = {
   display_name: string;
   summary: string;
   scope: SkillScope;
+  scope_label: string;
   scope_agent_id?: string | null;
   current_version_number: number;
   status: SkillStatus;
+  approval: SkillApprovalSummary;
   provenance: Record<string, unknown>;
+  provenance_summary: SkillProvenanceSummary;
   activation_conditions: Record<string, unknown>;
   instruction_core: string;
   telemetry: Record<string, unknown>;
+  telemetry_summary: SkillTelemetrySummary;
   metadata: Record<string, unknown>;
   last_used_at?: string | null;
   active_activation_count: number;
+  active_scope_labels: string[];
+  last_outcome?: SkillUsageOutcome | null;
   created_at: string;
   updated_at: string;
 };

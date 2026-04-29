@@ -22,6 +22,32 @@ SkillActivationStatus = Literal["active", "inactive", "archived"]
 SKILL_USAGE_OUTCOMES = ("success", "blocked", "error")
 SkillUsageOutcome = Literal["success", "blocked", "error"]
 
+SKILL_APPROVAL_POSTURES = ("draft", "review_required", "approved", "archived")
+SkillApprovalPosture = Literal["draft", "review_required", "approved", "archived"]
+
+SKILL_PROVENANCE_KINDS = ("operator", "learning", "memory", "knowledge_source", "plugin", "unknown")
+SkillProvenanceKind = Literal["operator", "learning", "memory", "knowledge_source", "plugin", "unknown"]
+
+
+class SkillApprovalSummary(BaseModel):
+    posture: SkillApprovalPosture
+    label: str
+    note: str
+
+
+class SkillProvenanceSummary(BaseModel):
+    kind: SkillProvenanceKind
+    label: str
+    detail: str | None = None
+
+
+class SkillTelemetrySummary(BaseModel):
+    usage_count: int = 0
+    last_outcome: SkillUsageOutcome | None = None
+    success_count: int = 0
+    blocked_count: int = 0
+    error_count: int = 0
+
 
 class SkillVersionRecord(BaseModel):
     version_id: str
@@ -45,6 +71,7 @@ class SkillActivationRecord(BaseModel):
     instance_id: str
     company_id: str
     scope: SkillScope
+    scope_label: str
     scope_agent_id: str | None = None
     status: SkillActivationStatus
     activation_conditions: dict[str, Any] = Field(default_factory=dict)
@@ -59,6 +86,7 @@ class SkillUsageEventRecord(BaseModel):
     usage_event_id: str
     skill_id: str
     version_id: str
+    version_number: int | None = None
     activation_id: str | None = None
     instance_id: str
     company_id: str
@@ -77,16 +105,22 @@ class SkillSummary(BaseModel):
     display_name: str
     summary: str
     scope: SkillScope
+    scope_label: str
     scope_agent_id: str | None = None
     current_version_number: int
     status: SkillStatus
+    approval: SkillApprovalSummary
     provenance: dict[str, Any] = Field(default_factory=dict)
+    provenance_summary: SkillProvenanceSummary
     activation_conditions: dict[str, Any] = Field(default_factory=dict)
     instruction_core: str
     telemetry: dict[str, Any] = Field(default_factory=dict)
+    telemetry_summary: SkillTelemetrySummary
     metadata: dict[str, Any] = Field(default_factory=dict)
     last_used_at: datetime | None = None
     active_activation_count: int = 0
+    active_scope_labels: list[str] = Field(default_factory=list)
+    last_outcome: SkillUsageOutcome | None = None
     created_at: datetime
     updated_at: datetime
 
