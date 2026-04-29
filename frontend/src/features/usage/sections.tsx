@@ -2,9 +2,8 @@ import { Link } from "react-router-dom";
 
 import type { UsageSummaryResponse } from "../../api/admin";
 import { CONTROL_PLANE_ROUTES } from "../../app/navigation";
-import { withInstanceScope } from "../../app/tenantScope";
+import { withInstanceScope, withQueryParams } from "../../app/tenantScope";
 import { ActionBar } from "../../components/ui/ActionBar";
-import { AdvancedDiagnostics } from "../../components/ui/AdvancedDiagnostics";
 import { DetailPanel } from "../../components/ui/DetailPanel";
 import { EntityTable } from "../../components/ui/EntityTable";
 import { BlockedState, EmptyState, ErrorState, LoadingState, PermissionState } from "../../components/ui/StateBlocks";
@@ -25,136 +24,216 @@ type FreshnessState = {
   detail: string;
 };
 
-type Recommendation = {
-  title: string;
-  description: string;
-  linkLabel: string;
-  to: string;
-} | null;
+type ProviderRow = {
+  provider: string;
+  requests: number;
+  tokens: number;
+  errors: number;
+  actualCost: number;
+};
+
+type ClientRow = {
+  clientId: string;
+  requests: number;
+  tokens: number;
+  errors: number;
+  actualCost: number;
+};
+
+type ModelRow = {
+  model: string;
+  requests: number;
+  tokens: number;
+  errors: number;
+};
+
+type AuthRow = {
+  authKey: string;
+  requests: number;
+  tokens: number;
+};
 
 type UsageContentProps = {
   access: UsageAccessState;
-  window: UsageWindow;
-  windowLabels: Record<UsageWindow, string>;
-  windowOptions: UsageWindow[];
   state: LoadState;
   error: string | null;
   partialMessages: string[];
   summary: UsageSummaryResponse | null;
-  recommendation: Recommendation;
-  freshness: FreshnessState;
-  latestEvidenceAt: number | null;
-  attentionClients: Array<Record<string, string | number | boolean>>;
   emptyUsage: boolean;
-  selectedProvider: string;
+  latestEvidenceAt: number | null;
+  freshness: FreshnessState;
+  instanceId: string | null;
+  window: UsageWindow;
+  windowLabels: Record<UsageWindow, string>;
+  windowOptions: UsageWindow[];
+  providerFilter: string;
+  providerOptions: string[];
+  clientFilter: string;
+  clientOptions: string[];
+  modelFilter: string;
+  modelOptions: string[];
+  providerDrilldown: Record<string, unknown> | null;
   providerDrilldownState: LoadState;
   providerDrilldownError: string | null;
-  providerDrilldown: Record<string, unknown> | null;
-  providerModels: Array<Record<string, unknown>>;
-  providerClients: Array<Record<string, unknown>>;
-  providerHealth: Array<Record<string, unknown>>;
-  selectedClient: string;
+  clientDrilldown: Record<string, unknown> | null;
   clientDrilldownState: LoadState;
   clientDrilldownError: string | null;
-  clientDrilldown: Record<string, unknown> | null;
-  clientOps: Array<Record<string, string | number | boolean>>;
-  clientProviders: Array<Record<string, unknown>>;
-  clientErrors: Array<Record<string, unknown>>;
-  clientUsage: Array<Record<string, unknown>>;
-  instanceId: string | null;
   onWindowChange: (value: UsageWindow) => void;
-  onSelectedProviderChange: (value: string) => void;
-  onSelectedClientChange: (value: string) => void;
+  onProviderFilterChange: (value: string) => void;
+  onClientFilterChange: (value: string) => void;
+  onModelFilterChange: (value: string) => void;
+  onResetFilters: () => void;
   formatMetric: (value: unknown, fractionDigits?: number) => string;
   formatPercent: (value: unknown) => string;
   formatTimestamp: (value: unknown, fallback?: string) => string;
-  toStringValue: (value: unknown, fallback?: string) => string;
 };
 
-function diagnosticsStatus(state: LoadState, partialMessages: string[], summary: UsageSummaryResponse | null, freshnessTone: BadgeTone) {
-  if (state === "error") {
-    return "blocked";
+function toNumber(value: unknown): number {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value;
   }
-  if (!summary) {
-    return partialMessages.length > 0 ? "partial" : "onboarding-only";
+  if (typeof value === "string") {
+    const parsed = Number(value);
+    if (Number.isFinite(parsed)) {
+      return parsed;
+    }
   }
-  if (partialMessages.length > 0) {
-    return "partial";
+  return 0;
+}
+
+function rate(errors: number, requests: number): number {
+  return errors / Math.max(1, requests + errors);
+}
+
+function buildErrorLookup(items: Array<Record<string, string | number>>, keyField: string): Map<string, number> {
+  return new Map(
+    items.map((item) => [String(item[keyField] ?? ""), toNumber(item.errors)]),
+  );
+}
+
+function buildProviderRows(summary: UsageSummaryResponse): ProviderRow[] {
+  const errorLookup = buildErrorLookup(summary.aggregations.errors_by_provider, "provider");
+  return summary.aggregations.by_provider.map((item) => {
+    const provider = String(item.provider ?? "");
+    return {
+      provider,
+      requests: toNumber(item.requests),
+      tokens: toNumber(item.tokens),
+      errors: errorLookup.get(provider) ?? 0,
+      actualCost: toNumber(item.actual_cost),
+    };
+  });
+}
+
+function buildClientRows(summary: UsageSummaryResponse): ClientRow[] {
+  const errorLookup = buildErrorLookup(summary.aggregations.errors_by_client, "client_id");
+  return summary.aggregations.by_client.map((item) => {
+    const clientId = String(item.client_id ?? "");
+    return {
+      clientId,
+      requests: toNumber(item.requests),
+      tokens: toNumber(item.tokens),
+      errors: errorLookup.get(clientId) ?? 0,
+      actualCost: toNumber(item.actual_cost),
+    };
+  });
+}
+
+function buildModelRows(summary: UsageSummaryResponse): ModelRow[] {
+  const errorLookup = buildErrorLookup(summary.aggregations.errors_by_model, "model");
+  return summary.aggregations.by_model.map((item) => {
+    const model = String(item.model ?? "");
+    return {
+      model,
+      requests: toNumber(item.requests),
+      tokens: toNumber(item.tokens),
+      errors: errorLookup.get(model) ?? 0,
+    };
+  });
+}
+
+function buildAuthRows(summary: UsageSummaryResponse): AuthRow[] {
+  return summary.aggregations.by_auth.map((item) => ({
+    authKey: String(item.auth_key ?? ""),
+    requests: toNumber(item.requests),
+    tokens: toNumber(item.tokens),
+  }));
+}
+
+function asRecordArray(value: unknown): Array<Record<string, unknown>> {
+  if (!Array.isArray(value)) {
+    return [];
   }
-  if (freshnessTone === "warning") {
-    return "degraded";
-  }
-  return "ready";
+  return value
+    .filter((item): item is Record<string, unknown> => typeof item === "object" && item !== null);
 }
 
 export function UsageContent({
   access,
-  window,
-  windowLabels,
-  windowOptions,
   state,
   error,
   partialMessages,
   summary,
-  recommendation,
-  freshness,
-  latestEvidenceAt,
-  attentionClients,
   emptyUsage,
-  selectedProvider,
+  latestEvidenceAt,
+  freshness,
+  instanceId,
+  window,
+  windowLabels,
+  windowOptions,
+  providerFilter,
+  providerOptions,
+  clientFilter,
+  clientOptions,
+  modelFilter,
+  modelOptions,
+  providerDrilldown,
   providerDrilldownState,
   providerDrilldownError,
-  providerDrilldown,
-  providerModels,
-  providerClients,
-  providerHealth,
-  selectedClient,
+  clientDrilldown,
   clientDrilldownState,
   clientDrilldownError,
-  clientDrilldown,
-  clientOps,
-  clientProviders,
-  clientErrors,
-  clientUsage,
-  instanceId,
   onWindowChange,
-  onSelectedProviderChange,
-  onSelectedClientChange,
+  onProviderFilterChange,
+  onClientFilterChange,
+  onModelFilterChange,
+  onResetFilters,
   formatMetric,
   formatPercent,
   formatTimestamp,
-  toStringValue,
 }: UsageContentProps) {
-  const latestEvidenceLabel = latestEvidenceAt ? new Date(latestEvidenceAt).toISOString() : "No recent evidence";
-  const currentAlertRows = summary
-    ? summary.alerts.map((item, index) => ({
-        rowKey: `${toStringValue(item.type)}-${index}`,
-        severity: toStringValue(item.severity),
-        type: toStringValue(item.type),
-        message: toStringValue(item.message),
-        value: toStringValue(item.value),
-      }))
-    : [];
-  const providerTrafficRows = summary
-    ? summary.aggregations.by_provider.slice(0, 5).map((item) => ({
-        rowKey: toStringValue(item.provider),
-        provider: toStringValue(item.provider),
-        requests: formatMetric(item.requests),
-        tokens: formatMetric(item.tokens),
-        actualCost: formatMetric(item.actual_cost, 2),
-      }))
-    : [];
-  const clientHotspotRows = clientOps.slice(0, 5).map((item) => ({
-    rowKey: toStringValue(item.client_id),
-    clientId: toStringValue(item.client_id),
-    requests: formatMetric(item.requests),
-    errors: formatMetric(item.errors),
-    errorRate: formatPercent(item.error_rate),
-    needsAttention: toStringValue(item.needs_attention),
-  }));
-  const providerName = providerDrilldown ? toStringValue(providerDrilldown.provider, selectedProvider) : selectedProvider || "No provider selected";
-  const clientName = clientDrilldown ? toStringValue(clientDrilldown.client_id, selectedClient) : selectedClient || "No client selected";
-  const advancedStatus = diagnosticsStatus(state, partialMessages, summary, freshness.tone);
+  const providerRows = summary ? buildProviderRows(summary) : [];
+  const clientRows = summary ? buildClientRows(summary) : [];
+  const modelRows = summary ? buildModelRows(summary) : [];
+  const authRows = summary ? buildAuthRows(summary) : [];
+  const topProvider = providerRows[0]?.provider ?? "No provider traffic";
+  const topClient = clientRows[0]?.clientId ?? "No client traffic";
+  const runtimeRequests = toNumber(summary?.traffic_split.runtime.requests);
+  const totalTokens = toNumber(summary?.traffic_split.runtime.tokens) + toNumber(summary?.traffic_split.health_check.tokens);
+  const recordedErrors = toNumber(summary?.metrics.recorded_error_count);
+  const streamRequests = toNumber(summary?.stream_mode_counts?.stream);
+  const runtimeRequestCount = toNumber(summary?.stream_mode_counts?.runtime_request_count);
+  const filtersActive = Boolean(providerFilter || clientFilter || modelFilter);
+  const providerModels = asRecordArray(providerDrilldown?.models);
+  const providerClients = asRecordArray(providerDrilldown?.clients);
+  const providerHealth = asRecordArray(providerDrilldown?.latest_health);
+  const clientProviders = asRecordArray(clientDrilldown?.providers);
+  const clientRecentErrors = asRecordArray(clientDrilldown?.recent_errors);
+  const clientRecentUsage = asRecordArray(clientDrilldown?.recent_usage);
+  const providerDetailLink = (provider: string) => withQueryParams(`${CONTROL_PLANE_ROUTES.usage}#provider-detail`, {
+    instanceId,
+    usageWindow: window,
+    provider,
+    client: null,
+    model: modelFilter || null,
+  });
+  const clientDetailLink = (clientId: string) => withQueryParams(`${CONTROL_PLANE_ROUTES.usage}#client-detail`, {
+    instanceId,
+    usageWindow: window,
+    provider: null,
+    client: clientId,
+    model: modelFilter || null,
+  });
 
   return (
     <>
@@ -162,51 +241,90 @@ export function UsageContent({
         <PermissionState title={access.noticeTitle} description={access.noticeDetail} />
       ) : null}
 
-      <div id="usage-overview">
-        <ActionBar
-          title="Monitoring overview"
-          description="Window changes should preserve focus and make it clear whether the evidence is fresh, partial, or empty."
-          actions={recommendation ? (
-            <Link className="fg-nav-link" to={withInstanceScope(recommendation.to, instanceId)}>
-              {recommendation.linkLabel}
-            </Link>
-          ) : null}
-        >
-          <div className="fg-inline-form">
-            <label>
-              Usage window
-              <select aria-label="Usage window" value={window} onChange={(event) => onWindowChange(event.target.value as UsageWindow)}>
-                {windowOptions.map((option) => (
-                  <option key={option} value={option}>
-                    {windowLabels[option]}
-                  </option>
-                ))}
-              </select>
-            </label>
-          </div>
+      <ActionBar
+        title="Usage filters"
+        description="Filter the analysis by selected window, provider, client, and model. Costs and Errors stay separate operational routes."
+        actions={(
           <div className="fg-actions">
-            <Link className="fg-nav-link" to={withInstanceScope(CONTROL_PLANE_ROUTES.usage, instanceId)}>
-              Usage Overview
+            <Link className="fg-nav-link" to={withInstanceScope(CONTROL_PLANE_ROUTES.costs, instanceId)}>
+              Open Costs
+            </Link>
+            <Link className="fg-nav-link" to={withInstanceScope(CONTROL_PLANE_ROUTES.errors, instanceId)}>
+              Open Errors
             </Link>
             <Link className="fg-nav-link" to={withInstanceScope(CONTROL_PLANE_ROUTES.providerHealthRuns, instanceId)}>
               Provider Health &amp; Runs
             </Link>
-            <Link className="fg-nav-link" to={withInstanceScope(`${CONTROL_PLANE_ROUTES.usage}#client-investigation`, instanceId)}>
-              Client Investigation
-            </Link>
           </div>
-          {recommendation ? (
-            <div className="fg-stack">
-              <strong>{recommendation.title}</strong>
-              <p className="fg-muted">{recommendation.description}</p>
-            </div>
+        )}
+      >
+        <div className="fg-inline-form">
+          <label>
+            Time window
+            <select aria-label="Usage window" value={window} onChange={(event) => onWindowChange(event.target.value as UsageWindow)}>
+              {windowOptions.map((option) => (
+                <option key={option} value={option}>
+                  {windowLabels[option]}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            Provider
+            <select aria-label="Usage provider filter" value={providerFilter} onChange={(event) => onProviderFilterChange(event.target.value)}>
+              <option value="">All providers</option>
+              {providerOptions.map((option) => (
+                <option key={option} value={option}>
+                  {option}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            Client
+            <select aria-label="Usage client filter" value={clientFilter} onChange={(event) => onClientFilterChange(event.target.value)}>
+              <option value="">All clients</option>
+              {clientOptions.map((option) => (
+                <option key={option} value={option}>
+                  {option}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            Model
+            <select aria-label="Usage model filter" value={modelFilter} onChange={(event) => onModelFilterChange(event.target.value)}>
+              <option value="">All models</option>
+              {modelOptions.map((option) => (
+                <option key={option} value={option}>
+                  {option}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            API key
+            <select aria-label="Usage API key filter" disabled value="">
+              <option value="">Unsupported</option>
+            </select>
+          </label>
+          {filtersActive ? (
+            <button type="button" className="fg-button" onClick={onResetFilters}>
+              Reset filters
+            </button>
           ) : null}
-        </ActionBar>
-      </div>
+        </div>
+        <p className="fg-muted">
+          API-key filtering is currently blocked. Runtime error events do not yet persist auth attribution, so ForgeFrame keeps that axis honest and routes spend review to Costs instead of faking a partial filter.
+        </p>
+        <p className="fg-muted">
+          Latest evidence: {formatTimestamp(latestEvidenceAt ? new Date(latestEvidenceAt).toISOString() : null, "No recent evidence")} · {freshness.detail}
+        </p>
+      </ActionBar>
 
       {error ? (
         <ErrorState
-          title="Usage drilldown loading failed"
+          title="Usage analysis loading failed"
           description={error}
         />
       ) : null}
@@ -222,8 +340,8 @@ export function UsageContent({
 
       {state === "loading" ? (
         <LoadingState
-          title="Loading usage drilldown"
-          description="ForgeFrame is refreshing summary monitoring, client hotspot ranking, and the currently selected drilldowns."
+          title="Loading usage analysis"
+          description="ForgeFrame is refreshing traffic, hotspot, and model concentration evidence for the selected window."
         />
       ) : null}
 
@@ -231,39 +349,42 @@ export function UsageContent({
         <SummaryStrip
           items={[
             {
-              key: "active-models",
-              label: "Active models",
-              value: formatMetric(summary.metrics.active_model_count),
-            },
-            {
-              key: "recorded-requests",
-              label: "Recorded requests",
+              key: "requests",
+              label: "Requests",
               value: formatMetric(summary.metrics.recorded_request_count),
             },
             {
-              key: "recorded-errors",
-              label: "Recorded errors",
-              value: formatMetric(summary.metrics.recorded_error_count),
-              status: summary.metrics.recorded_error_count ? "degraded" : "ready",
+              key: "tokens",
+              label: "Tokens",
+              value: formatMetric(totalTokens),
             },
             {
-              key: "health-events",
-              label: "Health events",
-              value: formatMetric(summary.metrics.recorded_health_event_count),
+              key: "streaming-share",
+              label: "Streaming share",
+              value: runtimeRequestCount > 0 ? formatPercent(streamRequests / runtimeRequestCount) : "0.0%",
+              meta: `${formatMetric(streamRequests)} of ${formatMetric(runtimeRequestCount)} runtime requests streamed.`,
             },
             {
-              key: "freshness",
-              label: "Freshness",
-              value: freshness.label,
-              meta: freshness.detail,
-              tone: freshness.tone,
+              key: "error-rate",
+              label: "Error rate",
+              value: formatPercent(rate(recordedErrors, runtimeRequests)),
+              status: recordedErrors > 0 ? "degraded" : "ready",
             },
             {
-              key: "client-hotspots",
-              label: "Client hotspots",
-              value: attentionClients.length > 0 ? "Needs attention" : "No client flagged",
-              meta: `${attentionClients.length} hotspot${attentionClients.length === 1 ? "" : "s"} in the current ranking.`,
-              status: attentionClients.length > 0 ? "degraded" : "ready",
+              key: "latency-p95",
+              label: "Latency p95",
+              value: summary.runtime_duration_ms?.p95 !== null && summary.runtime_duration_ms?.p95 !== undefined ? `${formatMetric(summary.runtime_duration_ms.p95)} ms` : "n/a",
+              meta: summary.runtime_duration_ms?.sample_count ? `${formatMetric(summary.runtime_duration_ms.sample_count)} runtime samples` : "No runtime latency samples",
+            },
+            {
+              key: "top-provider",
+              label: "Top provider",
+              value: topProvider,
+            },
+            {
+              key: "top-client",
+              label: "Top client",
+              value: topClient,
             },
           ]}
         />
@@ -271,107 +392,145 @@ export function UsageContent({
 
       {emptyUsage ? (
         <EmptyState
-          title="No recent runtime or health traffic was recorded in this window"
-          description="This is the expected empty state for a pre-launch or low-traffic installation. Keep the route honest by treating it as monitoring with no evidence rather than implying missing configuration controls."
+          title="No traffic in selected window"
+          description="ForgeFrame found no runtime or health traffic for the selected instance and time window. This is an honest empty state, not an operational failure."
         />
       ) : null}
 
-      <div className="ff-operator-layout">
-        <div className="ff-operator-main">
-          {summary ? (
-            <EntityTable
-              title="Current alert pressure"
-              description="Last-hour alert indicators stay separate from the historical window below so the route does not overstate what the selector controls."
-              tableLabel="Current alert pressure"
-              columns={[
-                { key: "severity", header: "Severity", render: (row) => row.severity },
-                { key: "type", header: "Type", render: (row) => row.type },
-                { key: "message", header: "Message", render: (row) => row.message },
-                { key: "value", header: "Value", render: (row) => row.value },
-              ]}
-              rows={currentAlertRows}
-              rowKey={(row) => row.rowKey}
-              emptyTitle="No active last-hour alert indicators."
-              emptyDescription="Alert posture is clear right now. Historical evidence still stays visible on the monitoring surface."
-            />
-          ) : (
-            <BlockedState
-              title="Summary monitoring unavailable"
-              description="Summary monitoring is unavailable for this scope, so provider-facing traffic evidence is reduced to the remaining client hotspot and drilldown signals."
-              status="partial"
-              badgeLabel="Summary unavailable"
-            />
-          )}
+      {summary ? (
+        <div className="fg-stack">
+          <EntityTable
+            title="Provider drilldown"
+            description="Use provider rows to identify traffic concentration, then branch to Provider Health, Errors, or Costs instead of mixing those controls into this page."
+            tableLabel="Provider drilldown"
+            columns={[
+              { key: "provider", header: "Provider", render: (row: ProviderRow) => row.provider },
+              { key: "requests", header: "Requests", render: (row: ProviderRow) => formatMetric(row.requests) },
+              { key: "tokens", header: "Tokens", render: (row: ProviderRow) => formatMetric(row.tokens) },
+              { key: "errors", header: "Errors", render: (row: ProviderRow) => formatMetric(row.errors) },
+              { key: "errorRate", header: "Error rate", render: (row: ProviderRow) => formatPercent(rate(row.errors, row.requests)) },
+              {
+                key: "nextRoute",
+                header: "Next route",
+                render: (row: ProviderRow) => (
+                  <div className="fg-actions">
+                    <Link className="fg-nav-link" to={providerDetailLink(row.provider)}>Usage detail</Link>
+                    <Link className="fg-nav-link" to={withInstanceScope(CONTROL_PLANE_ROUTES.providerHealthRuns, instanceId)}>Provider Health</Link>
+                    {row.errors > 0 ? <Link className="fg-nav-link" to={withInstanceScope(CONTROL_PLANE_ROUTES.errors, instanceId)}>Errors</Link> : null}
+                    {row.actualCost > 0 ? <Link className="fg-nav-link" to={withInstanceScope(CONTROL_PLANE_ROUTES.costs, instanceId)}>Costs</Link> : null}
+                  </div>
+                ),
+              },
+            ]}
+            rows={providerRows}
+            rowKey={(row) => row.provider}
+            emptyTitle="No provider traffic in selected window"
+            emptyDescription="No provider-level usage evidence matches the selected filters."
+          />
 
-          <div id="client-investigation">
-            <EntityTable
-              title="Client investigation"
-              description="Use this when the question is client blast radius, error concentration, or cost concentration rather than provider readiness."
-              actions={(
-                <Link className="fg-nav-link" to={withInstanceScope(CONTROL_PLANE_ROUTES.logs, instanceId)}>
-                  Open Errors & Activity
-                </Link>
-              )}
-              tableLabel="Client investigation"
-              columns={[
-                { key: "clientId", header: "Client", render: (row) => row.clientId },
-                { key: "requests", header: "Requests", render: (row) => row.requests },
-                { key: "errors", header: "Errors", render: (row) => row.errors },
-                { key: "errorRate", header: "Error rate", render: (row) => row.errorRate },
-                { key: "needsAttention", header: "Needs attention", render: (row) => row.needsAttention },
-              ]}
-              rows={clientHotspotRows}
-              rowKey={(row) => row.rowKey}
-              emptyTitle="No client activity recorded in this window."
-              emptyDescription="No client activity was recorded for the selected monitoring window."
-            />
-          </div>
-        </div>
+          <EntityTable
+            title="Client drilldown"
+            description="Client rows expose blast radius, error concentration, and the next honest route for investigation."
+            tableLabel="Client drilldown"
+            columns={[
+              { key: "client", header: "Client", render: (row: ClientRow) => row.clientId },
+              { key: "requests", header: "Requests", render: (row: ClientRow) => formatMetric(row.requests) },
+              { key: "tokens", header: "Tokens", render: (row: ClientRow) => formatMetric(row.tokens) },
+              { key: "errors", header: "Errors", render: (row: ClientRow) => formatMetric(row.errors) },
+              { key: "errorRate", header: "Error rate", render: (row: ClientRow) => formatPercent(rate(row.errors, row.requests)) },
+              {
+                key: "nextRoute",
+                header: "Next route",
+                render: (row: ClientRow) => (
+                  <div className="fg-actions">
+                    <Link className="fg-nav-link" to={clientDetailLink(row.clientId)}>Usage detail</Link>
+                    <Link className="fg-nav-link" to={withInstanceScope(CONTROL_PLANE_ROUTES.errors, instanceId)}>Errors</Link>
+                    {row.actualCost > 0 ? <Link className="fg-nav-link" to={withInstanceScope(CONTROL_PLANE_ROUTES.costs, instanceId)}>Costs</Link> : null}
+                  </div>
+                ),
+              },
+            ]}
+            rows={clientRows}
+            rowKey={(row) => row.clientId}
+            emptyTitle="No client traffic in selected window"
+            emptyDescription="No client-level usage evidence matches the selected filters."
+          />
 
-        <div className="ff-operator-sidebar">
-          <DetailPanel
-            title="Provider investigation"
-            description="Use this after the summary points to a provider hotspot. Live readiness and control actions stay on Provider Health & Runs."
-            status={providerName}
-            statusKey={selectedProvider ? "runtime-ready" : "onboarding-only"}
-            actions={(
-              <Link className="fg-nav-link" to={withInstanceScope(CONTROL_PLANE_ROUTES.providerHealthRuns, instanceId)}>
-                Open Provider Health & Runs
-              </Link>
-            )}
-            sticky
-          >
-            {summary?.aggregations.by_provider.length ? (
-              <>
-                <div className="fg-inline-form">
-                  <label>
-                    Provider drilldown
-                    <select value={selectedProvider} onChange={(event) => onSelectedProviderChange(event.target.value)}>
-                      {summary.aggregations.by_provider.map((item) => {
-                        const provider = toStringValue(item.provider, "");
-                        return (
-                          <option key={provider} value={provider}>
-                            {provider}
-                          </option>
-                        );
-                      })}
-                    </select>
-                  </label>
-                </div>
+          <EntityTable
+            title="Model concentration"
+            description="Models stay visible as a runtime pressure axis, but follow-up still happens on Errors or Provider Health instead of here."
+            tableLabel="Model concentration"
+            columns={[
+              { key: "model", header: "Model", render: (row: ModelRow) => row.model },
+              { key: "requests", header: "Requests", render: (row: ModelRow) => formatMetric(row.requests) },
+              { key: "tokens", header: "Tokens", render: (row: ModelRow) => formatMetric(row.tokens) },
+              { key: "errors", header: "Errors", render: (row: ModelRow) => formatMetric(row.errors) },
+              {
+                key: "nextRoute",
+                header: "Next route",
+                render: (row: ModelRow) => (
+                  <div className="fg-actions">
+                    {row.errors > 0 ? <Link className="fg-nav-link" to={withInstanceScope(CONTROL_PLANE_ROUTES.errors, instanceId)}>Errors</Link> : null}
+                    <Link className="fg-nav-link" to={withInstanceScope(CONTROL_PLANE_ROUTES.providerHealthRuns, instanceId)}>Provider Health</Link>
+                  </div>
+                ),
+              },
+            ]}
+            rows={modelRows}
+            rowKey={(row) => row.model}
+            emptyTitle="No model traffic in selected window"
+            emptyDescription="No model-level usage evidence matches the selected filters."
+          />
 
-                {providerDrilldownError ? (
-                  <ErrorState title="Provider drilldown unavailable" description={providerDrilldownError} />
-                ) : null}
+          <EntityTable
+            title="API key / auth hotspots"
+            description="Auth usage is visible here, but filter-level auth attribution is still blocked until runtime errors persist the same axis."
+            tableLabel="API key auth hotspots"
+            columns={[
+              { key: "authKey", header: "Auth source", render: (row: AuthRow) => row.authKey },
+              { key: "requests", header: "Requests", render: (row: AuthRow) => formatMetric(row.requests) },
+              { key: "tokens", header: "Tokens", render: (row: AuthRow) => formatMetric(row.tokens) },
+              {
+                key: "nextRoute",
+                header: "Next route",
+                render: () => (
+                  <Link className="fg-nav-link" to={withInstanceScope(CONTROL_PLANE_ROUTES.costs, instanceId)}>
+                    Costs
+                  </Link>
+                ),
+              },
+            ]}
+            rows={authRows}
+            rowKey={(row) => row.authKey}
+            emptyTitle="No auth-attributed traffic in selected window"
+            emptyDescription="No auth-attributed usage evidence matches the selected filters."
+          />
+
+          {providerFilter ? (
+            <div id="provider-detail">
+              <DetailPanel
+                title="Provider detail"
+                description="This drilldown is row-specific and backed by the provider usage endpoint instead of generic routing links."
+                status={providerFilter}
+                statusKey="ready"
+                actions={(
+                  <div className="fg-actions">
+                    <Link className="fg-nav-link" to={withInstanceScope(CONTROL_PLANE_ROUTES.providerHealthRuns, instanceId)}>Provider Health</Link>
+                    <Link className="fg-nav-link" to={withInstanceScope(CONTROL_PLANE_ROUTES.errors, instanceId)}>Errors</Link>
+                    <Link className="fg-nav-link" to={withInstanceScope(CONTROL_PLANE_ROUTES.costs, instanceId)}>Costs</Link>
+                  </div>
+                )}
+              >
+                {providerDrilldownError ? <ErrorState title="Provider drilldown unavailable" description={providerDrilldownError} /> : null}
                 {providerDrilldownState === "loading" ? (
-                  <LoadingState title="Loading provider drilldown." description="ForgeFrame is restoring the selected provider detail view." />
+                  <LoadingState title="Loading provider detail" description="ForgeFrame is restoring the selected provider usage drilldown." />
                 ) : null}
-
                 {providerDrilldown ? (
                   <>
                     <dl>
                       <div>
                         <dt>Provider</dt>
-                        <dd>{providerName}</dd>
+                        <dd>{providerFilter}</dd>
                       </div>
                       <div>
                         <dt>Requests</dt>
@@ -381,93 +540,64 @@ export function UsageContent({
                         <dt>Errors</dt>
                         <dd>{formatMetric(providerDrilldown.errors)}</dd>
                       </div>
-                      <div>
-                        <dt>Models with evidence</dt>
-                        <dd>{formatMetric(providerModels.length)}</dd>
-                      </div>
-                      <div>
-                        <dt>Clients with evidence</dt>
-                        <dd>{formatMetric(providerClients.length)}</dd>
-                      </div>
                     </dl>
-                    <h4>Model concentration</h4>
+                    <h4>Models</h4>
                     <ul className="fg-list">
-                      {providerModels.length === 0 ? <li>No model evidence recorded for this provider.</li> : null}
+                      {providerModels.length === 0 ? <li>No model detail recorded for this provider.</li> : null}
                       {providerModels.slice(0, 5).map((item) => (
-                        <li key={toStringValue(item.model)}>
-                          {toStringValue(item.model)} · requests={formatMetric(item.requests)} · tokens={formatMetric(item.tokens)} · actual=
-                          {formatMetric(item.actual_cost, 2)} · errors={formatMetric(item.errors)}
+                        <li key={String(item.model ?? "unknown")}>
+                          {String(item.model ?? "unknown")} · requests={formatMetric(item.requests)} · tokens={formatMetric(item.tokens)} · errors={formatMetric(item.errors)}
                         </li>
                       ))}
                     </ul>
-                    <h4>Client concentration</h4>
+                    <h4>Clients</h4>
                     <ul className="fg-list">
-                      {providerClients.length === 0 ? <li>No client evidence recorded for this provider.</li> : null}
+                      {providerClients.length === 0 ? <li>No client detail recorded for this provider.</li> : null}
                       {providerClients.slice(0, 5).map((item) => (
-                        <li key={toStringValue(item.client_id)}>
-                          {toStringValue(item.client_id)} · requests={formatMetric(item.requests)} · tokens={formatMetric(item.tokens)} · actual=
-                          {formatMetric(item.actual_cost, 2)} · errors={formatMetric(item.errors)}
+                        <li key={String(item.client_id ?? "unknown")}>
+                          {String(item.client_id ?? "unknown")} · requests={formatMetric(item.requests)} · tokens={formatMetric(item.tokens)} · errors={formatMetric(item.errors)}
                         </li>
                       ))}
                     </ul>
-                    <h4>Recent provider health evidence</h4>
+                    <h4>Recent health</h4>
                     <ul className="fg-list">
-                      {providerHealth.length === 0 ? <li>No recent health checks recorded for this provider.</li> : null}
+                      {providerHealth.length === 0 ? <li>No provider health evidence recorded.</li> : null}
                       {providerHealth.slice(0, 5).map((item) => (
-                        <li key={`${toStringValue(item.provider)}:${toStringValue(item.model)}:${toStringValue(item.checked_at)}`}>
-                          {toStringValue(item.model)} · status={toStringValue(item.status)} · check={toStringValue(item.check_type)} · at=
-                          {formatTimestamp(item.checked_at)}
+                        <li key={`${String(item.provider ?? "unknown")}:${String(item.model ?? "unknown")}:${String(item.checked_at ?? "unknown")}`}>
+                          {String(item.model ?? "unknown")} · status={String(item.status ?? "unknown")} · check={String(item.check_type ?? "unknown")} · at={formatTimestamp(item.checked_at)}
                         </li>
                       ))}
                     </ul>
                   </>
                 ) : null}
-              </>
-            ) : (
-              <EmptyState
-                title="No provider activity recorded in this window."
-                description="Provider investigation opens once the selected monitoring window has provider-level traffic evidence."
-              />
-            )}
-          </DetailPanel>
+              </DetailPanel>
+            </div>
+          ) : null}
 
-          <DetailPanel
-            title="Client detail"
-            description="Selected client summary and recent error or usage evidence for the active monitoring window."
-            status={clientName}
-            statusKey={selectedClient ? "ready" : "onboarding-only"}
-          >
-            {clientOps.length > 0 ? (
-              <>
-                <div className="fg-inline-form">
-                  <label>
-                    Client drilldown
-                    <select value={selectedClient} onChange={(event) => onSelectedClientChange(event.target.value)}>
-                      {clientOps.map((item) => {
-                        const clientId = toStringValue(item.client_id, "");
-                        return (
-                          <option key={clientId} value={clientId}>
-                            {clientId}
-                          </option>
-                        );
-                      })}
-                    </select>
-                  </label>
-                </div>
-
-                {clientDrilldownError ? (
-                  <ErrorState title="Client drilldown unavailable" description={clientDrilldownError} />
-                ) : null}
+          {clientFilter ? (
+            <div id="client-detail">
+              <DetailPanel
+                title="Client detail"
+                description="This drilldown is row-specific and backed by the client usage endpoint instead of a generic incident link."
+                status={clientFilter}
+                statusKey="ready"
+                actions={(
+                  <div className="fg-actions">
+                    <Link className="fg-nav-link" to={withInstanceScope(CONTROL_PLANE_ROUTES.errors, instanceId)}>Errors</Link>
+                    <Link className="fg-nav-link" to={withInstanceScope(CONTROL_PLANE_ROUTES.costs, instanceId)}>Costs</Link>
+                  </div>
+                )}
+              >
+                {clientDrilldownError ? <ErrorState title="Client drilldown unavailable" description={clientDrilldownError} /> : null}
                 {clientDrilldownState === "loading" ? (
-                  <LoadingState title="Loading client drilldown." description="ForgeFrame is restoring the selected client detail view." />
+                  <LoadingState title="Loading client detail" description="ForgeFrame is restoring the selected client usage drilldown." />
                 ) : null}
-
                 {clientDrilldown ? (
                   <>
                     <dl>
                       <div>
                         <dt>Client</dt>
-                        <dd>{clientName}</dd>
+                        <dd>{clientFilter}</dd>
                       </div>
                       <div>
                         <dt>Requests</dt>
@@ -477,153 +607,40 @@ export function UsageContent({
                         <dt>Errors</dt>
                         <dd>{formatMetric(clientDrilldown.errors)}</dd>
                       </div>
-                      <div>
-                        <dt>Providers touched</dt>
-                        <dd>{formatMetric(clientProviders.length)}</dd>
-                      </div>
                     </dl>
-                    <h4>Provider spread</h4>
+                    <h4>Providers</h4>
                     <ul className="fg-list">
-                      {clientProviders.length === 0 ? <li>No provider evidence recorded for this client.</li> : null}
+                      {clientProviders.length === 0 ? <li>No provider detail recorded for this client.</li> : null}
                       {clientProviders.slice(0, 5).map((item) => (
-                        <li key={toStringValue(item.provider)}>
-                          {toStringValue(item.provider)} · requests={formatMetric(item.requests)} · tokens={formatMetric(item.tokens)} · actual=
-                          {formatMetric(item.actual_cost, 2)} · errors={formatMetric(item.errors)}
+                        <li key={String(item.provider ?? "unknown")}>
+                          {String(item.provider ?? "unknown")} · requests={formatMetric(item.requests)} · tokens={formatMetric(item.tokens)} · errors={formatMetric(item.errors)}
                         </li>
                       ))}
                     </ul>
-                    <h4>Recent client errors</h4>
+                    <h4>Recent errors</h4>
                     <ul className="fg-list">
-                      {clientErrors.length === 0 ? <li>No recent errors recorded for this client.</li> : null}
-                      {clientErrors.slice(0, 5).map((item, index) => (
-                        <li key={`${toStringValue(item.provider)}-${index}`}>
-                          {formatTimestamp(item.created_at ?? item.checked_at)} · provider={toStringValue(item.provider)} · model=
-                          {toStringValue(item.model)} · type={toStringValue(item.error_type ?? item.status)}
+                      {clientRecentErrors.length === 0 ? <li>No recent errors recorded for this client.</li> : null}
+                      {clientRecentErrors.slice(0, 5).map((item, index) => (
+                        <li key={`${String(item.provider ?? "unknown")}-${index}`}>
+                          {formatTimestamp(item.created_at)} · provider={String(item.provider ?? "unknown")} · model={String(item.model ?? "unknown")} · type={String(item.error_type ?? "unknown")}
                         </li>
                       ))}
                     </ul>
-                    <h4>Recent client usage</h4>
+                    <h4>Recent usage</h4>
                     <ul className="fg-list">
-                      {clientUsage.length === 0 ? <li>No recent usage events recorded for this client.</li> : null}
-                      {clientUsage.slice(0, 5).map((item, index) => (
-                        <li key={`${toStringValue(item.provider)}-${index}`}>
-                          {formatTimestamp(item.created_at)} · provider={toStringValue(item.provider)} · model={toStringValue(item.model)} ·
-                          tokens={formatMetric(item.total_tokens)} · actual={formatMetric(item.actual_cost, 2)}
+                      {clientRecentUsage.length === 0 ? <li>No recent usage recorded for this client.</li> : null}
+                      {clientRecentUsage.slice(0, 5).map((item, index) => (
+                        <li key={`${String(item.provider ?? "unknown")}-${index}`}>
+                          {formatTimestamp(item.created_at)} · provider={String(item.provider ?? "unknown")} · model={String(item.model ?? "unknown")} · tokens={formatMetric(item.total_tokens)}
                         </li>
                       ))}
                     </ul>
                   </>
                 ) : null}
-              </>
-            ) : (
-              <EmptyState
-                title="No client activity recorded in this window."
-                description="Client detail opens once the selected monitoring window has client-level evidence."
-              />
-            )}
-          </DetailPanel>
+              </DetailPanel>
+            </div>
+          ) : null}
         </div>
-      </div>
-
-      {summary ? (
-        <AdvancedDiagnostics
-          title="Advanced diagnostics"
-          description="Historical traffic, cost posture, and raw timeline evidence for deeper operator review."
-          status={advancedStatus.replace(/_/g, " ")}
-          statusKey={advancedStatus}
-        >
-          <div className="fg-card-grid">
-            <article className="fg-subcard">
-              <h4>Traffic split</h4>
-              <ul className="fg-list">
-                <li>
-                  Runtime · requests={formatMetric(summary.traffic_split.runtime.requests)} · tokens=
-                  {formatMetric(summary.traffic_split.runtime.tokens)} · actual={formatMetric(summary.traffic_split.runtime.actual_cost, 2)}
-                </li>
-                <li>
-                  Health checks · requests={formatMetric(summary.traffic_split.health_check.requests)} · tokens=
-                  {formatMetric(summary.traffic_split.health_check.tokens)} · actual={formatMetric(summary.traffic_split.health_check.actual_cost, 2)}
-                </li>
-              </ul>
-            </article>
-
-            <article className="fg-subcard">
-              <h4>Top providers</h4>
-              <ul className="fg-list">
-                {providerTrafficRows.length === 0 ? <li>No provider traffic recorded.</li> : null}
-                {providerTrafficRows.map((row) => (
-                  <li key={row.rowKey}>
-                    {row.provider} · requests={row.requests} · tokens={row.tokens} · actual={row.actualCost}
-                  </li>
-                ))}
-              </ul>
-            </article>
-
-            <article className="fg-subcard">
-              <h4>Error shape</h4>
-              <ul className="fg-list">
-                {summary.aggregations.errors_by_provider.slice(0, 3).map((item) => (
-                  <li key={`provider-${toStringValue(item.provider)}`}>
-                    Provider {toStringValue(item.provider)}: {formatMetric(item.errors)} errors
-                  </li>
-                ))}
-                {summary.aggregations.errors_by_client.slice(0, 3).map((item) => (
-                  <li key={`client-${toStringValue(item.client_id)}`}>
-                    Client {toStringValue(item.client_id)}: {formatMetric(item.errors)} errors
-                  </li>
-                ))}
-                {summary.aggregations.errors_by_type.slice(0, 3).map((item) => (
-                  <li key={`type-${toStringValue(item.error_key)}`}>
-                    {toStringValue(item.error_key)}: {formatMetric(item.errors)} errors
-                  </li>
-                ))}
-                {summary.aggregations.errors_by_provider.length === 0 &&
-                summary.aggregations.errors_by_client.length === 0 &&
-                summary.aggregations.errors_by_type.length === 0 ? <li>No recorded error hotspots.</li> : null}
-              </ul>
-            </article>
-
-            <article className="fg-subcard">
-              <h4>Timeline</h4>
-              <ul className="fg-list">
-                {summary.timeline_24h.slice(-8).map((item) => (
-                  <li key={toStringValue(item.bucket_start)}>
-                    {toStringValue(item.bucket_start)} · req={formatMetric(item.requests)} · err={formatMetric(item.errors)} · rate=
-                    {formatPercent(item.error_rate)} · actual={formatMetric(item.actual_cost, 2)}
-                  </li>
-                ))}
-              </ul>
-            </article>
-
-            <article className="fg-subcard">
-              <h4>Latest health evidence</h4>
-              <ul className="fg-list">
-                {summary.latest_health.length === 0 ? <li>No recent health evidence recorded.</li> : null}
-                {summary.latest_health.slice(0, 5).map((item) => (
-                  <li key={`${toStringValue(item.provider)}:${toStringValue(item.model)}:${toStringValue(item.checked_at)}`}>
-                    {toStringValue(item.provider)} / {toStringValue(item.model)} · status={toStringValue(item.status)} · check=
-                    {toStringValue(item.check_type)} · at={formatTimestamp(item.checked_at)}
-                  </li>
-                ))}
-              </ul>
-            </article>
-
-            <article className="fg-subcard">
-              <h4>Cost posture</h4>
-              <ul className="fg-list">
-                <li>Actual: {toStringValue(summary.cost_axes.actual)}</li>
-                <li>Hypothetical: {toStringValue(summary.cost_axes.hypothetical)}</li>
-                <li>Avoided: {toStringValue(summary.cost_axes.avoided)}</li>
-                <li>Latest evidence: {latestEvidenceLabel}</li>
-                {Object.entries(summary.pricing_snapshot).map(([key, value]) => (
-                  <li key={key}>
-                    {key}: {formatMetric(value, 2)}
-                  </li>
-                ))}
-              </ul>
-            </article>
-          </div>
-        </AdvancedDiagnostics>
       ) : null}
     </>
   );

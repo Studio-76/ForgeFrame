@@ -6,16 +6,14 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const {
   fetchInstancesMock,
-  fetchUsageSummaryMock,
-  fetchClientOperationalViewMock,
-  fetchProviderDrilldownMock,
   fetchClientDrilldownMock,
+  fetchProviderDrilldownMock,
+  fetchUsageSummaryMock,
 } = vi.hoisted(() => ({
   fetchInstancesMock: vi.fn(),
-  fetchUsageSummaryMock: vi.fn(),
-  fetchClientOperationalViewMock: vi.fn(),
-  fetchProviderDrilldownMock: vi.fn(),
   fetchClientDrilldownMock: vi.fn(),
+  fetchProviderDrilldownMock: vi.fn(),
+  fetchUsageSummaryMock: vi.fn(),
 }));
 
 vi.mock("../src/api/admin", async () => {
@@ -23,11 +21,10 @@ vi.mock("../src/api/admin", async () => {
 
   return {
     ...actual,
-    fetchInstances: fetchInstancesMock,
-    fetchUsageSummary: fetchUsageSummaryMock,
-    fetchClientOperationalView: fetchClientOperationalViewMock,
-    fetchProviderDrilldown: fetchProviderDrilldownMock,
     fetchClientDrilldown: fetchClientDrilldownMock,
+    fetchInstances: fetchInstancesMock,
+    fetchProviderDrilldown: fetchProviderDrilldownMock,
+    fetchUsageSummary: fetchUsageSummaryMock,
   };
 });
 
@@ -76,20 +73,26 @@ function createUsageSummary({
   recordedRequests = 12,
   recordedErrors = 2,
   recordedHealthEvents = 4,
-  alerts = [{ severity: "warning", type: "provider_hotspot", message: "Provider openai_api is the current error hotspot.", value: 4 }],
   byProvider = [{ provider: "openai_api", requests: 12, tokens: 4500, actual_cost: 3.4, hypothetical_cost: 4.2, avoided_cost: 0.8 }],
   byClient = [{ client_id: "web-ui", requests: 8, tokens: 2000, actual_cost: 1.5 }],
+  byModel = [{ model: "gpt-4o-mini", requests: 12, tokens: 4500 }],
+  byAuth = [{ auth_key: "api_key:runtime", requests: 12, tokens: 4500 }],
   latestHealth = [{ provider: "openai_api", model: "gpt-4o-mini", status: "healthy", check_type: "probe", checked_at: "2026-04-21T21:30:00Z" }],
   timeline24h = [{ bucket_start: "2026-04-21T21:00:00Z", requests: 4, errors: 1, error_rate: 0.2, actual_cost: 1.1 }],
+  streamModeCounts = { stream: 3, non_stream: 9, runtime_request_count: 12 },
+  runtimeDuration = { sample_count: 6, avg: 180, p50: 150, p95: 320, max: 400 },
 }: {
   recordedRequests?: number;
   recordedErrors?: number;
   recordedHealthEvents?: number;
-  alerts?: Array<Record<string, string | number>>;
   byProvider?: Array<Record<string, string | number>>;
   byClient?: Array<Record<string, string | number>>;
+  byModel?: Array<Record<string, string | number>>;
+  byAuth?: Array<Record<string, string | number>>;
   latestHealth?: Array<Record<string, string | number | null>>;
   timeline24h?: Array<Record<string, string | number>>;
+  streamModeCounts?: { stream: number; non_stream: number; runtime_request_count: number };
+  runtimeDuration?: { sample_count: number; avg: number | null; p50: number | null; p95: number | null; max: number | null };
 } = {}): UsageSummaryResponse {
   return {
     status: "ok",
@@ -103,24 +106,24 @@ function createUsageSummary({
     },
     aggregations: {
       by_provider: byProvider,
-      by_model: [{ model: "gpt-4o-mini", requests: 12, tokens: 4500, actual_cost: 3.4 }],
-      by_auth: [{ auth_key: "admin-token", requests: 12, tokens: 4500 }],
+      by_model: byModel,
+      by_auth: byAuth,
       by_client: byClient,
       by_traffic_type: [
-        { traffic_type: "runtime", requests: 12, tokens: 4500, actual_cost: 3.4, hypothetical_cost: 4.2, avoided_cost: 0.8 },
-        { traffic_type: "health_check", requests: 4, tokens: 120, actual_cost: 0.3, hypothetical_cost: 0.3, avoided_cost: 0 },
+        { traffic_type: "runtime", requests: recordedRequests, tokens: 4500, actual_cost: 3.4, hypothetical_cost: 4.2, avoided_cost: 0.8 },
+        { traffic_type: "health_check", requests: recordedHealthEvents, tokens: 120, actual_cost: 0.3, hypothetical_cost: 0.3, avoided_cost: 0 },
       ],
       errors_by_provider: recordedErrors > 0 ? [{ provider: "openai_api", errors: recordedErrors }] : [],
       errors_by_model: recordedErrors > 0 ? [{ model: "gpt-4o-mini", errors: recordedErrors }] : [],
       errors_by_client: recordedErrors > 0 ? [{ client_id: "web-ui", errors: recordedErrors }] : [],
       errors_by_traffic_type: recordedErrors > 0 ? [{ traffic_type: "runtime", errors: recordedErrors }] : [],
-      errors_by_type: recordedErrors > 0 ? [{ error_key: "provider_error", errors: recordedErrors }] : [],
-      errors_by_integration: recordedErrors > 0 ? [{ integration_key: "pytest", errors: recordedErrors }] : [],
+      errors_by_type: recordedErrors > 0 ? [{ error_key: "provider_error:502", errors: recordedErrors }] : [],
+      errors_by_integration: recordedErrors > 0 ? [{ integration_key: "runtime:none:none", errors: recordedErrors }] : [],
       errors_by_profile: recordedErrors > 0 ? [{ profile_key: "default", errors: recordedErrors }] : [],
     },
     traffic_split: {
-      runtime: { traffic_type: "runtime", requests: 12, tokens: 4500, actual_cost: 3.4, hypothetical_cost: 4.2, avoided_cost: 0.8 },
-      health_check: { traffic_type: "health_check", requests: 4, tokens: 120, actual_cost: 0.3, hypothetical_cost: 0.3, avoided_cost: 0 },
+      runtime: { traffic_type: "runtime", requests: recordedRequests, tokens: 4500, actual_cost: 3.4, hypothetical_cost: 4.2, avoided_cost: 0.8 },
+      health_check: { traffic_type: "health_check", requests: recordedHealthEvents, tokens: 120, actual_cost: 0.3, hypothetical_cost: 0.3, avoided_cost: 0 },
     },
     cost_axes: {
       actual: "tracked for metered API providers",
@@ -130,26 +133,20 @@ function createUsageSummary({
     window: "24h",
     latest_health: latestHealth,
     timeline_24h: timeline24h,
-    alerts,
+    alerts: [],
+    runtime_duration_ms: runtimeDuration,
+    stream_mode_counts: streamModeCounts,
+    selected_filters: {
+      provider: null,
+      client_id: null,
+      model: null,
+    },
     pricing_snapshot: {
       openai_input_per_1m: 10,
       openai_output_per_1m: 30,
       codex_hyp_input_per_1m: 15,
       codex_hyp_output_per_1m: 45,
     },
-  };
-}
-
-function createClientOps(clients?: Array<Record<string, string | number | boolean>>) {
-  return {
-    status: "ok",
-    window: "24h",
-    clients: clients
-      ? clients
-      : [
-          { client_id: "billing-sync", requests: 6, errors: 2, error_rate: 0.25, needs_attention: true },
-          { client_id: "web-ui", requests: 8, errors: 0, error_rate: 0, needs_attention: false },
-        ],
   };
 }
 
@@ -199,7 +196,6 @@ beforeEach(() => {
     instances: [createInstanceRecord()],
   });
   fetchUsageSummaryMock.mockResolvedValue(createUsageSummary());
-  fetchClientOperationalViewMock.mockResolvedValue(createClientOps());
   fetchProviderDrilldownMock.mockResolvedValue({
     status: "ok",
     window: "24h",
@@ -209,17 +205,17 @@ beforeEach(() => {
       errors: 2,
       latest_health: [{ provider: "openai_api", model: "gpt-4o-mini", status: "healthy", check_type: "probe", checked_at: "2026-04-21T21:30:00Z" }],
       models: [{ model: "gpt-4o-mini", requests: 12, tokens: 4500, actual_cost: 3.4, errors: 2 }],
-      clients: [{ client_id: "billing-sync", requests: 6, tokens: 2200, actual_cost: 1.8, errors: 2 }],
+      clients: [{ client_id: "web-ui", requests: 8, tokens: 2000, actual_cost: 1.5, errors: 2 }],
     },
   });
   fetchClientDrilldownMock.mockResolvedValue({
     status: "ok",
     window: "24h",
     drilldown: {
-      client_id: "billing-sync",
-      requests: 6,
+      client_id: "web-ui",
+      requests: 8,
       errors: 2,
-      providers: [{ provider: "openai_api", requests: 6, tokens: 2200, actual_cost: 1.8, errors: 2 }],
+      providers: [{ provider: "openai_api", requests: 8, tokens: 2000, actual_cost: 1.5, errors: 2 }],
       recent_errors: [{ created_at: "2026-04-21T21:40:00Z", provider: "openai_api", model: "gpt-4o-mini", error_type: "provider_error" }],
       recent_usage: [{ created_at: "2026-04-21T21:38:00Z", provider: "openai_api", model: "gpt-4o-mini", total_tokens: 420, actual_cost: 0.32 }],
     },
@@ -242,160 +238,100 @@ afterEach(() => {
   root = null;
 });
 
-describe("Usage page operations drilldown", () => {
-  it("shows explicit viewer read-only framing", async () => {
+describe("Usage page analysis surface", () => {
+  it("shows explicit viewer framing and the blocked API-key axis", async () => {
     await renderUsagePage(viewerSession);
 
     expect(fetchInstancesMock).toHaveBeenCalledTimes(1);
     expect(fetchUsageSummaryMock).toHaveBeenCalledWith("24h", null);
-    expect(container.textContent).toContain("What needs operational attention?");
-    expect(container.textContent).toContain("Viewer read-only");
+    expect(container.textContent).toContain("Usage Analysis");
     expect(container.textContent).toContain("Viewer read-only usage drilldown");
-    expect(container.textContent).toContain("Provider Health & Runs");
-    expect(container.textContent).toContain("Client investigation");
+    expect(container.textContent).toContain("Usage filters");
+    expect(container.textContent).toContain("API-key filtering is currently blocked");
+    expect(container.textContent).toContain("Open Costs");
+    expect(container.textContent).toContain("Open Errors");
   });
 
-  it("preserves instance scope across usage fetches and secondary CTAs", async () => {
-    fetchUsageSummaryMock.mockResolvedValueOnce(createUsageSummary({
-      recordedErrors: 0,
-      alerts: [],
-    }));
-    fetchClientOperationalViewMock.mockResolvedValueOnce(createClientOps([
-      { client_id: "billing-sync", requests: 6, errors: 0, error_rate: 0, needs_attention: false },
-      { client_id: "web-ui", requests: 8, errors: 0, error_rate: 0, needs_attention: false },
-    ]));
-
+  it("preserves instance scope across fetches and primary navigation links", async () => {
     await renderUsagePage(operatorSession, "/usage?instanceId=instance_alpha");
 
-    expect(fetchInstancesMock).toHaveBeenCalledTimes(1);
     expect(fetchUsageSummaryMock).toHaveBeenCalledWith("24h", "instance_alpha");
-    expect(fetchClientOperationalViewMock).toHaveBeenCalledWith("24h", "instance_alpha");
-    expect(fetchProviderDrilldownMock).toHaveBeenCalledWith("openai_api", "24h", "instance_alpha");
-    expect(fetchClientDrilldownMock).toHaveBeenCalledWith("billing-sync", "24h", "instance_alpha");
     expect(container.textContent).toContain("Instance scope: Alpha Instance");
 
     const hrefs = collectLinkHrefs();
-    expect(hrefs).toContain("/usage?instanceId=instance_alpha");
-    expect(hrefs).toContain("/usage?instanceId=instance_alpha#client-investigation");
+    expect(hrefs).toContain("/costs?instanceId=instance_alpha");
+    expect(hrefs).toContain("/errors?instanceId=instance_alpha");
     expect(hrefs).toContain("/providers?instanceId=instance_alpha#provider-health-runs");
-    expect(hrefs).toContain("/logs?instanceId=instance_alpha");
-    expect(hrefs).toContain("/dashboard?instanceId=instance_alpha");
-    expect(hrefs).not.toContain("/providers#provider-health-runs");
-    expect(hrefs).not.toContain("/logs");
-    expect(hrefs).not.toContain("/dashboard");
+    expect(hrefs).not.toContain("/costs");
+    expect(hrefs).not.toContain("/errors");
   });
 
-  it("renders the empty-state drilldown without implying missing controls", async () => {
+  it("renders the honest no-traffic state instead of treating it as an error", async () => {
     fetchUsageSummaryMock.mockResolvedValueOnce(createUsageSummary({
       recordedRequests: 0,
       recordedErrors: 0,
       recordedHealthEvents: 0,
-      alerts: [],
       byProvider: [],
       byClient: [],
+      byModel: [],
+      byAuth: [],
       latestHealth: [],
       timeline24h: [{ bucket_start: "2026-04-21T21:00:00Z", requests: 0, errors: 0, error_rate: 0, actual_cost: 0 }],
+      streamModeCounts: { stream: 0, non_stream: 0, runtime_request_count: 0 },
+      runtimeDuration: { sample_count: 0, avg: null, p50: null, p95: null, max: null },
     }));
-    fetchClientOperationalViewMock.mockResolvedValueOnce(createClientOps([]));
 
     await renderUsagePage(operatorSession);
 
-    expect(container.textContent).toContain("No recent runtime or health traffic was recorded in this window");
-    expect(container.textContent).toContain("No provider activity recorded in this window.");
-    expect(container.textContent).toContain("No client activity recorded in this window.");
-    expect(fetchProviderDrilldownMock).not.toHaveBeenCalled();
+    expect(container.textContent).toContain("No traffic in selected window");
+    expect(container.textContent).toContain("No provider traffic in selected window");
+    expect(container.textContent).toContain("No client traffic in selected window");
+    expect(container.textContent).not.toContain("Usage analysis loading failed");
   });
 
-  it("surfaces partial and stale-data states while keeping summary monitoring visible", async () => {
-    fetchUsageSummaryMock.mockResolvedValueOnce(createUsageSummary({
-      latestHealth: [{ provider: "openai_api", model: "gpt-4o-mini", status: "healthy", check_type: "probe", checked_at: "2026-04-18T08:00:00Z" }],
-      timeline24h: [{ bucket_start: "2026-04-18T08:00:00Z", requests: 2, errors: 0, error_rate: 0, actual_cost: 0.8 }],
-    }));
-    fetchClientOperationalViewMock.mockRejectedValueOnce(new Error("client feed unavailable"));
-
-    await renderUsagePage(operatorSession);
-
-    expect(container.textContent).toContain("Partial data");
-    expect(container.textContent).toContain("Client hotspot ranking is unavailable: client feed unavailable");
-    expect(container.textContent).toContain("Recent evidence stale");
-    expect(container.textContent).toContain("Recent health checks and 24h timeline evidence are older than this window.");
-    expect(container.textContent).toContain("Monitoring overview");
-  });
-
-  it("does not overclaim selected-window freshness on 7d history", async () => {
+  it("applies provider filters through the summary endpoint and keeps the unfiltered catalog request", async () => {
     fetchUsageSummaryMock.mockResolvedValueOnce(createUsageSummary());
-    fetchClientOperationalViewMock.mockResolvedValueOnce(createClientOps());
     fetchUsageSummaryMock.mockResolvedValueOnce(createUsageSummary({
-      recordedRequests: 24,
+      recordedRequests: 7,
       recordedErrors: 1,
-      alerts: [],
-      latestHealth: [],
-      timeline24h: [{ bucket_start: "2026-04-22T03:00:00Z", requests: 0, errors: 0, error_rate: 0, actual_cost: 0 }],
+      byProvider: [{ provider: "openai_api", requests: 7, tokens: 2800, actual_cost: 2.1, hypothetical_cost: 2.7, avoided_cost: 0.6 }],
+      byClient: [{ client_id: "billing-sync", requests: 7, tokens: 2800, actual_cost: 2.1 }],
+      byModel: [{ model: "gpt-4o-mini", requests: 7, tokens: 2800 }],
     }));
-    fetchClientOperationalViewMock.mockResolvedValueOnce(createClientOps([]));
+    fetchUsageSummaryMock.mockResolvedValueOnce(createUsageSummary());
 
     await renderUsagePage(operatorSession);
 
-    const windowSelect = container.querySelector<HTMLSelectElement>('select[aria-label="Usage window"]');
-    expect(windowSelect).not.toBeNull();
+    const providerSelect = container.querySelector<HTMLSelectElement>('select[aria-label="Usage provider filter"]');
+    expect(providerSelect).not.toBeNull();
 
     await act(async () => {
-      windowSelect!.value = "7d";
-      windowSelect!.dispatchEvent(new Event("change", { bubbles: true }));
+      providerSelect!.value = "openai_api";
+      providerSelect!.dispatchEvent(new Event("change", { bubbles: true }));
     });
     await flushEffects();
 
-    expect(fetchUsageSummaryMock).toHaveBeenLastCalledWith("7d", null);
-    expect(fetchClientOperationalViewMock).toHaveBeenLastCalledWith("7d", null);
-    expect(container.textContent).toContain("Recent evidence unavailable");
-    expect(container.textContent).toContain("Freshness is based on recent health checks and the fixed 24h timeline only, not the entire selected history.");
-    expect(container.textContent).not.toContain("The selected window has no recorded runtime or health evidence yet.");
+    expect(fetchUsageSummaryMock).toHaveBeenCalledWith("24h", null, { provider: "openai_api", clientId: null, model: null });
+    expect(fetchUsageSummaryMock).toHaveBeenCalledWith("24h", null);
+    expect(fetchProviderDrilldownMock).toHaveBeenCalledWith("openai_api", "24h", null);
+    expect(container.textContent).toContain("Provider drilldown");
+    expect(container.textContent).toContain("Client drilldown");
+    expect(container.textContent).toContain("Model concentration");
+    expect(container.textContent).toContain("Provider detail");
   });
 
-  it("labels alerts as current pressure instead of selected-window truth", async () => {
-    fetchUsageSummaryMock.mockResolvedValueOnce(createUsageSummary());
-    fetchClientOperationalViewMock.mockResolvedValueOnce(createClientOps());
-    fetchUsageSummaryMock.mockResolvedValueOnce(createUsageSummary({
-      alerts: [{ severity: "warning", type: "error_rate_rising", message: "Error rate exceeded 10% in last hour.", value: 0.12 }],
-    }));
-    fetchClientOperationalViewMock.mockResolvedValueOnce(createClientOps());
+  it("surfaces row-specific usage deep-links plus separated Errors and Costs routes", async () => {
+    await renderUsagePage(operatorSession, "/usage?instanceId=instance_alpha");
 
-    await renderUsagePage(operatorSession);
+    expect(container.textContent).toContain("Provider drilldown");
+    expect(container.textContent).toContain("Client drilldown");
+    expect(container.textContent).toContain("API key / auth hotspots");
 
-    const windowSelect = container.querySelector<HTMLSelectElement>('select[aria-label="Usage window"]');
-    expect(windowSelect).not.toBeNull();
-
-    await act(async () => {
-      windowSelect!.value = "7d";
-      windowSelect!.dispatchEvent(new Event("change", { bubbles: true }));
-    });
-    await flushEffects();
-
-    expect(container.textContent).toContain("Current alert pressure");
-    expect(container.textContent).toContain("Last-hour alert indicators stay separate from the historical window below so the route does not overstate what the selector controls.");
-    expect(container.textContent).not.toContain("Alert indicators from the selected window.");
-  });
-
-  it("keeps the alert empty state honest when the selected window is wider than last-hour alerts", async () => {
-    fetchUsageSummaryMock.mockResolvedValueOnce(createUsageSummary());
-    fetchClientOperationalViewMock.mockResolvedValueOnce(createClientOps());
-    fetchUsageSummaryMock.mockResolvedValueOnce(createUsageSummary({
-      alerts: [],
-    }));
-    fetchClientOperationalViewMock.mockResolvedValueOnce(createClientOps());
-
-    await renderUsagePage(operatorSession);
-
-    const windowSelect = container.querySelector<HTMLSelectElement>('select[aria-label="Usage window"]');
-    expect(windowSelect).not.toBeNull();
-
-    await act(async () => {
-      windowSelect!.value = "7d";
-      windowSelect!.dispatchEvent(new Event("change", { bubbles: true }));
-    });
-    await flushEffects();
-
-    expect(container.textContent).toContain("No active last-hour alert indicators.");
-    expect(container.textContent).not.toContain("No active alert indicators in this window.");
+    const hrefs = collectLinkHrefs();
+    expect(hrefs).toContain("/usage?instanceId=instance_alpha&usageWindow=24h&provider=openai_api#provider-detail");
+    expect(hrefs).toContain("/usage?instanceId=instance_alpha&usageWindow=24h&client=web-ui#client-detail");
+    expect(hrefs).toContain("/errors?instanceId=instance_alpha");
+    expect(hrefs).toContain("/costs?instanceId=instance_alpha");
+    expect(hrefs).toContain("/providers?instanceId=instance_alpha#provider-health-runs");
   });
 });

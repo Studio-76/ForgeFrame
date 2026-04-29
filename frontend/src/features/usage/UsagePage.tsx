@@ -1,30 +1,25 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 
 import {
   fetchClientDrilldown,
-  fetchClientOperationalView,
   fetchProviderDrilldown,
   fetchUsageSummary,
+  type UsageSummaryFilters,
   type UsageSummaryResponse,
 } from "../../api/admin";
-import { CONTROL_PLANE_ROUTES } from "../../app/navigation";
 import { useAppSession } from "../../app/session";
 import { getInstanceIdFromSearchParams } from "../../app/tenantScope";
 import { useInstanceCatalog } from "../../app/useInstanceCatalog";
 import { InstanceScopeCard } from "../../components/InstanceScopeCard";
 import { PageIntro } from "../../components/PageIntro";
 import {
-  asRecordArray,
   describeFreshness,
   formatMetric,
   formatPercent,
   formatTimestamp,
-  getAttentionClients,
   getLatestEvidenceTimestamp,
-  getRecommendedRoute,
   getUsageAccess,
-  isUsageEmpty,
   toStringValue,
   WINDOW_LABELS,
   WINDOW_OPTIONS,
@@ -33,48 +28,105 @@ import {
 } from "./helpers";
 import { UsageContent } from "./sections";
 
+function hasSelectedFilters(filters: UsageSummaryFilters): boolean {
+  return Boolean(filters.provider || filters.clientId || filters.model);
+}
+
+function isUsageEmpty(summary: UsageSummaryResponse | null): boolean {
+  if (!summary) {
+    return false;
+  }
+  return (
+    (summary.metrics.recorded_request_count ?? 0) === 0 &&
+    (summary.metrics.recorded_error_count ?? 0) === 0 &&
+    (summary.metrics.recorded_health_event_count ?? 0) === 0
+  );
+}
+
+function normalizeWindowParam(value: string | null): UsageWindow {
+  if (value === "1h" || value === "24h" || value === "7d" || value === "all") {
+    return value;
+  }
+  return "24h";
+}
+
+function normalizeSearchValue(value: string | null): string {
+  return (value ?? "").trim();
+}
+
 export function UsagePage() {
   const [state, setState] = useState<LoadState>("idle");
   const [error, setError] = useState<string | null>(null);
   const [partialMessages, setPartialMessages] = useState<string[]>([]);
   const [summary, setSummary] = useState<UsageSummaryResponse | null>(null);
-  const [window, setWindow] = useState<UsageWindow>("24h");
-  const [clientOps, setClientOps] = useState<Array<Record<string, string | number | boolean>>>([]);
-  const [selectedProvider, setSelectedProvider] = useState<string>("");
-  const [selectedClient, setSelectedClient] = useState<string>("");
+  const [catalog, setCatalog] = useState<UsageSummaryResponse | null>(null);
+  const [searchParams, setSearchParams] = useSearchParams();
+  const { session, sessionReady } = useAppSession();
+  const instanceId = getInstanceIdFromSearchParams(searchParams);
+  const [window, setWindow] = useState<UsageWindow>(() => normalizeWindowParam(searchParams.get("usageWindow")));
+  const [providerFilter, setProviderFilter] = useState(() => normalizeSearchValue(searchParams.get("provider")));
+  const [clientFilter, setClientFilter] = useState(() => normalizeSearchValue(searchParams.get("client")));
+  const [modelFilter, setModelFilter] = useState(() => normalizeSearchValue(searchParams.get("model")));
   const [providerDrilldown, setProviderDrilldown] = useState<Record<string, unknown> | null>(null);
   const [providerDrilldownState, setProviderDrilldownState] = useState<LoadState>("idle");
   const [providerDrilldownError, setProviderDrilldownError] = useState<string | null>(null);
   const [clientDrilldown, setClientDrilldown] = useState<Record<string, unknown> | null>(null);
   const [clientDrilldownState, setClientDrilldownState] = useState<LoadState>("idle");
   const [clientDrilldownError, setClientDrilldownError] = useState<string | null>(null);
-  const [searchParams, setSearchParams] = useSearchParams();
-  const { session, sessionReady } = useAppSession();
-  const instanceId = getInstanceIdFromSearchParams(searchParams);
   const { instances, loadState, error: instancesError, selectedInstance } = useInstanceCatalog(instanceId);
 
   const access = getUsageAccess(session, sessionReady);
+  const filters = useMemo<UsageSummaryFilters>(() => ({
+    provider: providerFilter || null,
+    clientId: clientFilter || null,
+    model: modelFilter || null,
+  }), [clientFilter, modelFilter, providerFilter]);
+  const filtersActive = hasSelectedFilters(filters);
   const latestEvidenceAt = getLatestEvidenceTimestamp(summary);
   const freshness = describeFreshness(window, latestEvidenceAt);
-  const emptyUsage = isUsageEmpty(summary, clientOps);
-  const attentionClients = getAttentionClients(clientOps);
-  const recommendation = summary ? getRecommendedRoute(summary, clientOps) : null;
-  const providerModels = asRecordArray(providerDrilldown?.models);
-  const providerClients = asRecordArray(providerDrilldown?.clients);
-  const providerHealth = asRecordArray(providerDrilldown?.latest_health);
-  const clientProviders = asRecordArray(clientDrilldown?.providers);
-  const clientErrors = asRecordArray(clientDrilldown?.recent_errors);
-  const clientUsage = asRecordArray(clientDrilldown?.recent_usage);
+  const emptyUsage = isUsageEmpty(summary);
 
-  const onInstanceChange = (nextInstanceId: string | null) => {
+  const updateUsageSearchParams = (updates: {
+    usageWindow?: UsageWindow | null;
+    provider?: string | null;
+    client?: string | null;
+    model?: string | null;
+    instanceId?: string | null;
+  }) => {
     const nextSearchParams = new URLSearchParams(searchParams);
-    if (nextInstanceId) {
-      nextSearchParams.set("instanceId", nextInstanceId);
-    } else {
-      nextSearchParams.delete("instanceId");
-    }
+    const entries = Object.entries(updates);
+    entries.forEach(([key, value]) => {
+      if (value && value.trim().length > 0) {
+        nextSearchParams.set(key, value);
+      } else {
+        nextSearchParams.delete(key);
+      }
+    });
     setSearchParams(nextSearchParams);
   };
+
+  const onInstanceChange = (nextInstanceId: string | null) => {
+    updateUsageSearchParams({ instanceId: nextInstanceId });
+  };
+
+  useEffect(() => {
+    setWindow((current) => {
+      const nextValue = normalizeWindowParam(searchParams.get("usageWindow"));
+      return current === nextValue ? current : nextValue;
+    });
+    setProviderFilter((current) => {
+      const nextValue = normalizeSearchValue(searchParams.get("provider"));
+      return current === nextValue ? current : nextValue;
+    });
+    setClientFilter((current) => {
+      const nextValue = normalizeSearchValue(searchParams.get("client"));
+      return current === nextValue ? current : nextValue;
+    });
+    setModelFilter((current) => {
+      const nextValue = normalizeSearchValue(searchParams.get("model"));
+      return current === nextValue ? current : nextValue;
+    });
+  }, [searchParams]);
 
   useEffect(() => {
     let mounted = true;
@@ -84,17 +136,15 @@ export function UsagePage() {
       setError(null);
       setPartialMessages([]);
       setSummary(null);
-      setClientOps([]);
-      setProviderDrilldown(null);
-      setProviderDrilldownState("idle");
-      setProviderDrilldownError(null);
-      setClientDrilldown(null);
-      setClientDrilldownState("idle");
-      setClientDrilldownError(null);
 
-      const [summaryResult, clientOpsResult] = await Promise.allSettled([
-        fetchUsageSummary(window, instanceId),
-        fetchClientOperationalView(window, instanceId),
+      const summaryPromise = filtersActive
+        ? fetchUsageSummary(window, instanceId, filters)
+        : fetchUsageSummary(window, instanceId);
+      const catalogPromise = filtersActive ? fetchUsageSummary(window, instanceId) : null;
+
+      const [summaryResult, catalogResult] = await Promise.allSettled([
+        summaryPromise,
+        ...(catalogPromise ? [catalogPromise] : []),
       ]);
 
       if (!mounted) {
@@ -102,54 +152,27 @@ export function UsagePage() {
       }
 
       const nextPartialMessages: string[] = [];
-      let nextSummary: UsageSummaryResponse | null = null;
-      let nextClients: Array<Record<string, string | number | boolean>> = [];
-      let nextError: string | null = null;
 
-      if (summaryResult.status === "fulfilled") {
-        nextSummary = summaryResult.value;
-      } else {
-        const message = summaryResult.reason instanceof Error ? summaryResult.reason.message : "Usage summary loading failed.";
-        nextPartialMessages.push(`Summary monitoring is unavailable: ${message}`);
-        nextError = message;
-      }
-
-      if (clientOpsResult.status === "fulfilled") {
-        nextClients = clientOpsResult.value.clients;
-      } else {
-        const message = clientOpsResult.reason instanceof Error ? clientOpsResult.reason.message : "Client operational view loading failed.";
-        nextPartialMessages.push(`Client hotspot ranking is unavailable: ${message}`);
-        if (!nextError) {
-          nextError = message;
-        }
-      }
-
-      setSummary(nextSummary);
-      setClientOps(nextClients);
-      setPartialMessages(nextPartialMessages);
-
-      if (nextSummary) {
-        const providerOptions = nextSummary.aggregations.by_provider.map((item) => toStringValue(item.provider, ""));
-        setSelectedProvider((current) => (current && providerOptions.includes(current) ? current : (providerOptions[0] ?? "")));
-      } else {
-        setSelectedProvider("");
-      }
-
-      if (nextClients.length > 0) {
-        const clientOptions = nextClients.map((item) => toStringValue(item.client_id, ""));
-        setSelectedClient((current) => (current && clientOptions.includes(current) ? current : (clientOptions[0] ?? "")));
-      } else {
-        setSelectedClient("");
-      }
-
-      if (nextSummary || nextClients.length > 0) {
-        setState("success");
-        setError(nextSummary ? null : nextError);
+      if (summaryResult.status !== "fulfilled") {
+        setSummary(null);
+        setCatalog(null);
+        setState("error");
+        setError(summaryResult.reason instanceof Error ? summaryResult.reason.message : "Usage analysis loading failed.");
         return;
       }
 
-      setState("error");
-      setError(nextError ?? "Usage drilldown loading failed.");
+      const nextSummary = summaryResult.value;
+      const nextCatalog = catalogResult?.status === "fulfilled" ? catalogResult.value : nextSummary;
+      if (catalogResult?.status === "rejected") {
+        const message = catalogResult.reason instanceof Error ? catalogResult.reason.message : "Filter option catalog loading failed.";
+        nextPartialMessages.push(`Filter catalog unavailable: ${message}`);
+      }
+
+      setSummary(nextSummary);
+      setCatalog(nextCatalog);
+      setPartialMessages(nextPartialMessages);
+      setState("success");
+      setError(null);
     };
 
     void load();
@@ -157,12 +180,40 @@ export function UsagePage() {
     return () => {
       mounted = false;
     };
-  }, [instanceId, window]);
+  }, [filters, filtersActive, instanceId, window]);
+
+  const providerOptions = (catalog?.aggregations.by_provider ?? [])
+    .map((item) => toStringValue(item.provider, ""))
+    .filter((value) => value.length > 0);
+  const clientOptions = (catalog?.aggregations.by_client ?? [])
+    .map((item) => toStringValue(item.client_id, ""))
+    .filter((value) => value.length > 0);
+  const modelOptions = (catalog?.aggregations.by_model ?? [])
+    .map((item) => toStringValue(item.model, ""))
+    .filter((value) => value.length > 0);
+
+  useEffect(() => {
+    if (providerFilter && !providerOptions.includes(providerFilter)) {
+      updateUsageSearchParams({ provider: null });
+    }
+  }, [providerFilter, providerOptions, searchParams]);
+
+  useEffect(() => {
+    if (clientFilter && !clientOptions.includes(clientFilter)) {
+      updateUsageSearchParams({ client: null });
+    }
+  }, [clientFilter, clientOptions, searchParams]);
+
+  useEffect(() => {
+    if (modelFilter && !modelOptions.includes(modelFilter)) {
+      updateUsageSearchParams({ model: null });
+    }
+  }, [modelFilter, modelOptions, searchParams]);
 
   useEffect(() => {
     let mounted = true;
 
-    if (!summary || !selectedProvider) {
+    if (!providerFilter) {
       setProviderDrilldown(null);
       setProviderDrilldownState("idle");
       setProviderDrilldownError(null);
@@ -173,8 +224,7 @@ export function UsagePage() {
 
     setProviderDrilldownState("loading");
     setProviderDrilldownError(null);
-
-    void fetchProviderDrilldown(selectedProvider, window, instanceId)
+    void fetchProviderDrilldown(providerFilter, window, instanceId)
       .then((payload) => {
         if (!mounted) {
           return;
@@ -182,24 +232,24 @@ export function UsagePage() {
         setProviderDrilldown(payload.drilldown);
         setProviderDrilldownState("success");
       })
-      .catch((err) => {
+      .catch((loadError) => {
         if (!mounted) {
           return;
         }
         setProviderDrilldown(null);
         setProviderDrilldownState("error");
-        setProviderDrilldownError(err instanceof Error ? err.message : "Provider drilldown loading failed.");
+        setProviderDrilldownError(loadError instanceof Error ? loadError.message : "Provider drilldown loading failed.");
       });
 
     return () => {
       mounted = false;
     };
-  }, [instanceId, selectedProvider, summary, window]);
+  }, [instanceId, providerFilter, window]);
 
   useEffect(() => {
     let mounted = true;
 
-    if (!selectedClient) {
+    if (!clientFilter) {
       setClientDrilldown(null);
       setClientDrilldownState("idle");
       setClientDrilldownError(null);
@@ -210,8 +260,7 @@ export function UsagePage() {
 
     setClientDrilldownState("loading");
     setClientDrilldownError(null);
-
-    void fetchClientDrilldown(selectedClient, window, instanceId)
+    void fetchClientDrilldown(clientFilter, window, instanceId)
       .then((payload) => {
         if (!mounted) {
           return;
@@ -219,33 +268,33 @@ export function UsagePage() {
         setClientDrilldown(payload.drilldown);
         setClientDrilldownState("success");
       })
-      .catch((err) => {
+      .catch((loadError) => {
         if (!mounted) {
           return;
         }
         setClientDrilldown(null);
         setClientDrilldownState("error");
-        setClientDrilldownError(err instanceof Error ? err.message : "Client drilldown loading failed.");
+        setClientDrilldownError(loadError instanceof Error ? loadError.message : "Client drilldown loading failed.");
       });
 
     return () => {
       mounted = false;
     };
-  }, [instanceId, selectedClient, window]);
+  }, [clientFilter, instanceId, window]);
 
   return (
     <section className="fg-page">
       <PageIntro
         eyebrow="Operations"
-        title="Usage & Cost Operations Drilldown"
-        description="Historical traffic, cost pressure, and provider/client hotspot evidence separated from the live provider and incident routes."
-        question="What needs operational attention?"
+        title="Usage Analysis"
+        description="Inspect traffic volume, runtime pressure, provider hotspots, and client concentration without turning this route into the budget-control or incident-review surface."
+        question="Which traffic pattern is growing, failing, or concentrating enough to justify a jump to Costs or Errors?"
         badges={[
           { label: access.badgeLabel, tone: access.badgeTone },
           { label: freshness.label, tone: freshness.tone },
           ...(selectedInstance ? [{ label: `Instance scope: ${selectedInstance.display_name}`, tone: "success" as const }] : []),
         ]}
-        note={`${access.summaryDetail} Runtime truth stays adjacent on Provider Health & Runs, while this page remains the historical monitoring drilldown.`}
+        note={`${access.summaryDetail} Costs stays the place for budget control, and Errors stays the place for incident review.`}
       />
 
       <InstanceScopeCard
@@ -254,47 +303,43 @@ export function UsagePage() {
         instances={instances}
         loadState={loadState}
         error={instancesError}
-        surfaceLabel="usage and cost evidence"
+        surfaceLabel="usage analysis"
         onInstanceChange={onInstanceChange}
       />
 
       <UsageContent
         access={access}
-        window={window}
-        windowLabels={WINDOW_LABELS}
-        windowOptions={WINDOW_OPTIONS}
         state={state}
         error={error}
         partialMessages={partialMessages}
         summary={summary}
-        recommendation={recommendation}
-        freshness={freshness}
-        latestEvidenceAt={latestEvidenceAt}
-        attentionClients={attentionClients}
         emptyUsage={emptyUsage}
-        selectedProvider={selectedProvider}
+        latestEvidenceAt={latestEvidenceAt}
+        freshness={freshness}
+        instanceId={instanceId}
+        window={window}
+        windowLabels={WINDOW_LABELS}
+        windowOptions={WINDOW_OPTIONS}
+        providerFilter={providerFilter}
+        providerOptions={providerOptions}
+        clientFilter={clientFilter}
+        clientOptions={clientOptions}
+        modelFilter={modelFilter}
+        modelOptions={modelOptions}
+        providerDrilldown={providerDrilldown}
         providerDrilldownState={providerDrilldownState}
         providerDrilldownError={providerDrilldownError}
-        providerDrilldown={providerDrilldown}
-        providerModels={providerModels}
-        providerClients={providerClients}
-        providerHealth={providerHealth}
-        selectedClient={selectedClient}
+        clientDrilldown={clientDrilldown}
         clientDrilldownState={clientDrilldownState}
         clientDrilldownError={clientDrilldownError}
-        clientDrilldown={clientDrilldown}
-        clientOps={clientOps}
-        clientProviders={clientProviders}
-        clientErrors={clientErrors}
-        clientUsage={clientUsage}
-        instanceId={instanceId}
-        onWindowChange={setWindow}
-        onSelectedProviderChange={setSelectedProvider}
-        onSelectedClientChange={setSelectedClient}
+        onWindowChange={(nextWindow) => updateUsageSearchParams({ usageWindow: nextWindow })}
+        onProviderFilterChange={(nextProvider) => updateUsageSearchParams({ provider: nextProvider || null, client: null })}
+        onClientFilterChange={(nextClient) => updateUsageSearchParams({ client: nextClient || null, provider: null })}
+        onModelFilterChange={(nextModel) => updateUsageSearchParams({ model: nextModel || null })}
+        onResetFilters={() => updateUsageSearchParams({ provider: null, client: null, model: null })}
         formatMetric={formatMetric}
         formatPercent={formatPercent}
         formatTimestamp={formatTimestamp}
-        toStringValue={toStringValue}
       />
     </section>
   );

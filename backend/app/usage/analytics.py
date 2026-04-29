@@ -605,6 +605,7 @@ class UsageAnalyticsStore:
         grouped_auth = defaultdict(lambda: {"requests": 0, "tokens": 0})
         grouped_client = defaultdict(lambda: {"requests": 0, "tokens": 0, "actual_cost": 0.0, "hypothetical_cost": 0.0, "avoided_cost": 0.0})
         grouped_traffic = defaultdict(lambda: {"requests": 0, "tokens": 0, "actual_cost": 0.0, "hypothetical_cost": 0.0, "avoided_cost": 0.0})
+        grouped_stream_mode = defaultdict(lambda: {"requests": 0})
         grouped_error_provider = defaultdict(lambda: {"errors": 0})
         grouped_error_model = defaultdict(lambda: {"errors": 0})
         grouped_error_client = defaultdict(lambda: {"errors": 0})
@@ -638,6 +639,10 @@ class UsageAnalyticsStore:
             grouped_traffic[event.traffic_type]["hypothetical_cost"] += event.hypothetical_cost
             grouped_traffic[event.traffic_type]["avoided_cost"] += event.avoided_cost
 
+            if event.traffic_type == "runtime":
+                stream_mode = event.stream_mode or ("stream" if event.credential_type == "stream" else "non_stream")
+                grouped_stream_mode[stream_mode]["requests"] += 1
+
         for error in errors:
             grouped_error_provider[error.provider or "unknown"]["errors"] += 1
             grouped_error_model[error.model or "unknown"]["errors"] += 1
@@ -670,6 +675,11 @@ class UsageAnalyticsStore:
             "errors_by_integration": [{"integration_key": key, **value} for key, value in grouped_error_integration.items()],
             "errors_by_profile": [{"profile_key": key, **value} for key, value in grouped_error_profile.items()],
             "runtime_duration_ms": runtime_duration_ms,
+            "stream_mode_counts": {
+                "stream": int(grouped_stream_mode["stream"]["requests"]),
+                "non_stream": int(grouped_stream_mode["non_stream"]["requests"]),
+                "runtime_request_count": int(grouped_stream_mode["stream"]["requests"] + grouped_stream_mode["non_stream"]["requests"]),
+            },
             "latest_health": [
                 {
                     "provider": event.provider,

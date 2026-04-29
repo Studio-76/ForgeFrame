@@ -17,6 +17,7 @@ from app.main import app
 from app.providers import ProviderStreamEvent, ProviderStreamInterruptedError, ProviderUpstreamError
 from app.readiness import RuntimeReadinessCheck, RuntimeReadinessReport, build_public_runtime_readiness_payload
 from app.providers.openai_api.adapter import OpenAIAPIAdapter
+from app.usage.analytics import ClientIdentity, get_usage_analytics_store
 from app.usage.models import CostBreakdown, TokenUsage
 
 
@@ -1809,6 +1810,72 @@ def test_admin_usage_drilldown_endpoints_expose_provider_and_client_views() -> N
     client_response = client.get("/admin/usage/clients/integration-suite", headers=_admin_headers())
     assert client_response.status_code == 200
     assert client_response.json()["drilldown"]["client_id"] == "integration-suite"
+
+
+def test_admin_usage_summary_supports_provider_client_and_model_filters() -> None:
+    analytics = get_usage_analytics_store()
+    provider_name = "usage_filter_provider_alpha"
+    client_name = "usage-filter-client"
+    model_name = "usage-filter-model"
+    analytics.record_embedding_result(
+        provider=provider_name,
+        model=model_name,
+        usage=TokenUsage(input_tokens=12, output_tokens=0, total_tokens=12),
+        cost=CostBreakdown(actual_cost=0.12, hypothetical_cost=0.18, avoided_cost=0.06),
+        credential_type="api_key",
+        auth_source="runtime",
+        client=ClientIdentity(client_id=client_name, consumer="tests", integration="pytest"),
+    )
+    analytics.record_embedding_result(
+        provider="usage_filter_provider_beta",
+        model="usage-filter-model-beta",
+        usage=TokenUsage(input_tokens=8, output_tokens=0, total_tokens=8),
+        cost=CostBreakdown(actual_cost=0.08, hypothetical_cost=0.11, avoided_cost=0.03),
+        credential_type="api_key",
+        auth_source="runtime",
+        client=ClientIdentity(client_id="usage-filter-client-beta", consumer="tests", integration="pytest"),
+    )
+    analytics.record_runtime_error(
+        provider=provider_name,
+        model=model_name,
+        client=ClientIdentity(client_id=client_name, consumer="tests", integration="pytest"),
+        route="/v1/embeddings",
+        stream_mode="non_stream",
+        error_type="provider_timeout",
+        status_code=504,
+    )
+
+    provider_response = client.get(f"/admin/usage/?window=24h&provider={provider_name}", headers=_admin_headers())
+    assert provider_response.status_code == 200
+    provider_payload = provider_response.json()
+    assert provider_payload["metrics"]["recorded_request_count"] == 1
+    assert provider_payload["aggregations"]["by_provider"] == [
+        {
+            "provider": provider_name,
+            "requests": 1,
+            "tokens": 12,
+            "actual_cost": 0.12,
+            "hypothetical_cost": 0.18,
+            "avoided_cost": 0.06,
+        }
+    ]
+    assert provider_payload["selected_filters"]["provider"] == provider_name
+    assert provider_payload["stream_mode_counts"]["runtime_request_count"] == 1
+
+    client_response = client.get(f"/admin/usage/?window=24h&client_id={client_name}", headers=_admin_headers())
+    assert client_response.status_code == 200
+    client_payload = client_response.json()
+    assert client_payload["metrics"]["recorded_request_count"] == 1
+    assert client_payload["aggregations"]["by_client"][0]["client_id"] == client_name
+    assert client_payload["selected_filters"]["client_id"] == client_name
+
+    model_response = client.get(f"/admin/usage/?window=24h&model={model_name}", headers=_admin_headers())
+    assert model_response.status_code == 200
+    model_payload = model_response.json()
+    assert model_payload["metrics"]["recorded_request_count"] == 1
+    assert model_payload["aggregations"]["by_model"][0]["model"] == model_name
+    assert model_payload["metrics"]["recorded_error_count"] == 1
+    assert model_payload["selected_filters"]["model"] == model_name
 
 
 def test_responses_endpoint_openai_compatible_baseline() -> None:

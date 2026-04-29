@@ -435,6 +435,28 @@ class PostgresObservabilityRepository:
             usage_params,
         )
 
+        stream_mode_rows = self._mapped_rows(
+            f"""
+            SELECT
+              COALESCE(
+                payload ->> 'stream_mode',
+                CASE
+                  WHEN payload ->> 'credential_type' = 'stream' THEN 'stream'
+                  ELSE 'non_stream'
+                END
+              ) AS stream_mode,
+              count(*)::bigint AS requests
+            FROM usage_events
+            WHERE 1 = 1
+              {usage_tenant_clause}
+              {usage_window_clause}
+              AND traffic_type = 'runtime'
+            GROUP BY stream_mode
+            ORDER BY stream_mode ASC
+            """,
+            usage_params,
+        )
+
         errors_by_provider = self._mapped_rows(
             f"""
             SELECT
@@ -632,6 +654,11 @@ class PostgresObservabilityRepository:
                 "p50": int(duration_summary["p50_ms"]) if duration_summary.get("p50_ms") is not None else None,
                 "p95": int(duration_summary["p95_ms"]) if duration_summary.get("p95_ms") is not None else None,
                 "max": int(duration_summary["max_ms"]) if duration_summary.get("max_ms") is not None else None,
+            },
+            "stream_mode_counts": {
+                "stream": int(next((row["requests"] for row in stream_mode_rows if row["stream_mode"] == "stream"), 0) or 0),
+                "non_stream": int(next((row["requests"] for row in stream_mode_rows if row["stream_mode"] == "non_stream"), 0) or 0),
+                "runtime_request_count": int(sum(int(row.get("requests", 0) or 0) for row in stream_mode_rows)),
             },
             "latest_health": latest_health,
         }

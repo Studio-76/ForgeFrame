@@ -757,7 +757,30 @@ export type UsageSummaryResponse = {
   latest_health: Array<Record<string, string | number | null>>;
   timeline_24h: Array<Record<string, string | number>>;
   alerts: Array<Record<string, string | number>>;
+  runtime_duration_ms?: {
+    sample_count: number;
+    avg: number | null;
+    p50: number | null;
+    p95: number | null;
+    max: number | null;
+  };
+  stream_mode_counts?: {
+    stream: number;
+    non_stream: number;
+    runtime_request_count: number;
+  };
+  selected_filters?: {
+    provider?: string | null;
+    client_id?: string | null;
+    model?: string | null;
+  };
   pricing_snapshot: Record<string, number>;
+};
+
+export type UsageSummaryFilters = {
+  provider?: string | null;
+  clientId?: string | null;
+  model?: string | null;
 };
 
 export type RuntimeHealthResponse = {
@@ -5630,8 +5653,22 @@ export function runHealthChecks(instanceId?: string | null) {
   });
 }
 
-export function fetchUsageSummary(window: "1h" | "24h" | "7d" | "all" = "24h", instanceId?: string | null): Promise<UsageSummaryResponse> {
-  return fetchJson<UsageSummaryResponse>(appendTenantScope(`/admin/usage/?window=${window}`, undefined, instanceId));
+export function fetchUsageSummary(
+  window: "1h" | "24h" | "7d" | "all" = "24h",
+  instanceId?: string | null,
+  filters?: UsageSummaryFilters,
+): Promise<UsageSummaryResponse> {
+  const params = new URLSearchParams({ window });
+  if (filters?.provider) {
+    params.set("provider", filters.provider);
+  }
+  if (filters?.clientId) {
+    params.set("client_id", filters.clientId);
+  }
+  if (filters?.model) {
+    params.set("model", filters.model);
+  }
+  return fetchJson<UsageSummaryResponse>(appendTenantScope(`/admin/usage/?${params.toString()}`, undefined, instanceId));
 }
 
 export function fetchHarnessTemplates() {
