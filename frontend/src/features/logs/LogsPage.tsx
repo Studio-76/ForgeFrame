@@ -2,12 +2,14 @@ import { type FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 
 import {
+  AdminApiError,
   fetchAuditHistory,
   fetchAuditHistoryDetail,
   fetchLogs,
   generateAuditExport,
   type AuditExportFormat,
   type AuditExportResult,
+  type AuditExportWindow,
   type AuditHistoryDetailResponse,
   type AuditHistoryResponse,
   type AuditHistoryStatus,
@@ -138,15 +140,73 @@ function optionLabel(value: string, options: Array<{ value: string; label: strin
   return options.find((option) => option.value === value)?.label ?? value;
 }
 
-function scopeLabel(instanceName: string | null, window: AuditHistoryWindow, action: string | null, status: AuditHistoryStatus | null, limit: number) {
+function exportPackageLabel({
+  instanceName,
+  window,
+  action,
+  actor,
+  status,
+  includeRawDetails,
+  limit,
+}: {
+  instanceName: string | null;
+  window: AuditExportWindow;
+  action: string;
+  actor: string;
+  status: AuditHistoryStatus | "";
+  includeRawDetails: boolean;
+  limit: number;
+}) {
   return [
-    "Format: JSON",
     instanceName ? `Instance: ${instanceName}` : "Instance: default scope",
     `Window: ${window}`,
-    action ? `Action: ${action}` : null,
-    status ? `Status: ${status}` : null,
+    action.trim() ? `Action: ${action.trim()}` : null,
+    actor.trim() ? `Actor: ${actor.trim()}` : null,
+    status ? `Outcome: ${status}` : null,
+    includeRawDetails ? "Raw details included" : "Raw details excluded",
     `Limit: ${limit}`,
   ].filter(Boolean).join(" · ");
+}
+
+function formatBytes(sizeBytes: number): string {
+  if (sizeBytes < 1024) {
+    return `${sizeBytes} B`;
+  }
+  if (sizeBytes < 1024 * 1024) {
+    return `${(sizeBytes / 1024).toFixed(1)} KB`;
+  }
+  return `${(sizeBytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function exportFailureGuidance(error: unknown): { cause: string; correction: string } {
+  if (error instanceof AdminApiError) {
+    switch (error.code) {
+      case "tenant_filter_required":
+        return {
+          cause: error.message,
+          correction: "Pick an explicit instance or company scope before generating the evidence package.",
+        };
+      case "operator_role_required":
+        return {
+          cause: error.message,
+          correction: "Open a standard operator or admin session. Viewer and impersonation sessions cannot generate exports.",
+        };
+      case "password_rotation_required":
+        return {
+          cause: error.message,
+          correction: "Rotate the current password first, then restart the export from this page.",
+        };
+      default:
+        return {
+          cause: error.message,
+          correction: "Review the selected scope and filters, then retry the export.",
+        };
+    }
+  }
+  return {
+    cause: error instanceof Error ? error.message : "Audit export failed.",
+    correction: "Review the selected scope and export contents, then retry. If the failure persists, inspect the linked audit event and backend logs.",
+  };
 }
 
 export function LogsPage() {
@@ -173,12 +233,25 @@ export function LogsPage() {
   const [detailState, setDetailState] = useState<LoadState>("idle");
   const [detailError, setDetailError] = useState<string | null>(null);
   const [detail, setDetail] = useState<AuditHistoryDetailResponse | null>(null);
+  const [exportWindow, setExportWindow] = useState<AuditExportWindow>(auditWindow);
+  const [exportAction, setExportAction] = useState(auditAction ?? "");
+  const [exportActor, setExportActor] = useState(auditActor ?? "");
+  const [exportStatus, setExportStatus] = useState<AuditHistoryStatus | "">(auditStatus ?? "");
   const [exportFormat, setExportFormat] = useState<AuditExportFormat>("json");
-  const [exportSubject, setExportSubject] = useState("");
+  const [includeRawDetails, setIncludeRawDetails] = useState(true);
   const [exportLimit, setExportLimit] = useState(String(EXPORT_DEFAULT_LIMIT));
   const [exportState, setExportState] = useState<LoadState>("idle");
   const [exportError, setExportError] = useState<string | null>(null);
+  const [exportCorrection, setExportCorrection] = useState<string | null>(null);
   const [exportResult, setExportResult] = useState<AuditExportResult | null>(null);
+  const [lastExportSummary, setLastExportSummary] = useState<{
+    window: AuditExportWindow;
+    action: string;
+    actor: string;
+    status: AuditHistoryStatus | "";
+    includeRawDetails: boolean;
+    limit: number;
+  } | null>(null);
   const auditHistoryRef = useRef<HTMLElement | null>(null);
   const auditExportRef = useRef<HTMLElement | null>(null);
   const canReadAudit = sessionReady && sessionHasAnyInstancePermission(session, "audit.read");
@@ -230,6 +303,16 @@ export function LogsPage() {
     }
     target.focus();
   }, [location.hash]);
+
+  useEffect(() => {
+    if (location.hash !== AUDIT_EXPORT_HASH) {
+      return;
+    }
+    setExportWindow(auditWindow);
+    setExportAction(auditAction ?? "");
+    setExportActor(auditActor ?? "");
+    setExportStatus(auditStatus ?? "");
+  }, [auditAction, auditActor, auditStatus, auditWindow, location.hash]);
 
   useEffect(() => {
     let mounted = true;
@@ -348,7 +431,6 @@ export function LogsPage() {
     return Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : EXPORT_DEFAULT_LIMIT;
   }, [exportLimit]);
 
-  const exportPlaceholder = [auditActor, auditTargetType, auditTargetId].filter(Boolean).join(" ");
   const exportPath = buildAuditHashPath("audit-export", {
     instanceId,
     companyId,
@@ -377,20 +459,32 @@ export function LogsPage() {
     }
     setExportState("loading");
     setExportError(null);
+    setExportCorrection(null);
     try {
       const payload = await generateAuditExport({
         format: exportFormat,
-        window: auditWindow,
-        action: auditAction,
-        status: auditStatus,
-        subject: exportSubject.trim() ? exportSubject.trim() : null,
+        window: exportWindow,
+        action: exportAction.trim() ? exportAction.trim() : null,
+        actor: exportActor.trim() ? exportActor.trim() : null,
+        status: exportStatus || null,
+        includeRawDetails,
         limit: exportLimitNumber,
       }, instanceId, undefined, companyId);
       setExportResult(payload);
+      setLastExportSummary({
+        window: exportWindow,
+        action: exportAction,
+        actor: exportActor,
+        status: exportStatus,
+        includeRawDetails,
+        limit: exportLimitNumber,
+      });
       setExportState("success");
     } catch (loadError) {
+      const guidance = exportFailureGuidance(loadError);
       setExportState("error");
-      setExportError(loadError instanceof Error ? loadError.message : "Audit export failed.");
+      setExportError(guidance.cause);
+      setExportCorrection(guidance.correction);
     }
   };
 
@@ -593,7 +687,7 @@ export function LogsPage() {
         <div className="fg-panel-heading">
           <div>
             <h3>Audit export</h3>
-            <p className="fg-muted">Current export scope: {scopeLabel(selectedInstance?.display_name ?? null, auditWindow, auditAction, auditStatus, exportLimitNumber)}</p>
+            <p className="fg-muted">Build a downloadable evidence package. History review stays separate and does not silently become an export.</p>
           </div>
           <Link className="fg-nav-link" to={historyPath}>Open Audit History</Link>
         </div>
@@ -602,19 +696,50 @@ export function LogsPage() {
         ) : null}
         <form className="fg-inline-form" onSubmit={(event) => void handleExport(event)}>
           <label>
+            Instance
+            <input value={selectedInstance?.display_name ?? "Default instance path"} readOnly disabled />
+          </label>
+          <label>
+            Window
+            <select value={exportWindow} onChange={(event) => setExportWindow(event.target.value as AuditExportWindow)}>
+              {HISTORY_WINDOWS.map((window) => <option key={window} value={window}>{window}</option>)}
+            </select>
+          </label>
+          <label>
+            Actor
+            <input
+              value={exportActor}
+              onChange={(event) => setExportActor(event.target.value)}
+              onInput={(event) => setExportActor(event.currentTarget.value)}
+              placeholder="Optional actor filter"
+            />
+          </label>
+          <label>
+            Action
+            <select value={exportAction} onChange={(event) => setExportAction(event.target.value)}>
+              <option value="">Any action</option>
+              {(history?.filters.available.actions ?? []).map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+            </select>
+          </label>
+          <label>
+            Outcome
+            <select value={exportStatus} onChange={(event) => setExportStatus(event.target.value as AuditHistoryStatus | "")}>
+              <option value="">Any outcome</option>
+              {STATUS_OPTIONS.map((status) => <option key={status} value={status}>{optionLabel(status, history?.filters.available.statuses ?? [])}</option>)}
+            </select>
+          </label>
+          <label>
             Format
             <select value={exportFormat} onChange={(event) => setExportFormat(event.target.value as AuditExportFormat)}>
               {EXPORT_FORMATS.map((format) => <option key={format} value={format}>{format.toUpperCase()}</option>)}
             </select>
           </label>
           <label>
-            Subject
-            <input
-              value={exportSubject}
-              onChange={(event) => setExportSubject(event.target.value)}
-              onInput={(event) => setExportSubject(event.currentTarget.value)}
-              placeholder={exportPlaceholder || "ops runtime_key key_alpha"}
-            />
+            Include raw details
+            <select value={includeRawDetails ? "include" : "exclude"} onChange={(event) => setIncludeRawDetails(event.target.value === "include")}>
+              <option value="exclude">Exclude raw metadata</option>
+              <option value="include">Include redacted raw metadata</option>
+            </select>
           </label>
           <label>
             Limit
@@ -630,17 +755,38 @@ export function LogsPage() {
             {exportState === "loading" ? "Generating export" : `Generate ${exportFormat.toUpperCase()} export`}
           </button>
         </form>
+        <p className="fg-muted fg-mt-sm">
+          Package scope: {exportPackageLabel({
+            instanceName: selectedInstance?.display_name ?? null,
+            window: exportWindow,
+            action: exportAction,
+            actor: exportActor,
+            status: exportStatus,
+            includeRawDetails,
+            limit: exportLimitNumber,
+          })}
+        </p>
         {exportState === "error" ? (
-          <p className="fg-danger">Audit export failed: {exportError}</p>
+          <article className="fg-subcard fg-mt-md">
+            <h4 className="fg-danger">Export could not be generated</h4>
+            <p><strong>Cause:</strong> {exportError}</p>
+            <p><strong>How to fix:</strong> {exportCorrection}</p>
+          </article>
         ) : null}
         {exportResult ? (
           <article className="fg-subcard fg-mt-md">
             <h4>Latest exported package</h4>
             <ul className="fg-list">
-              <li>{exportResult.filename}</li>
+              <li>Filename: {exportResult.filename}</li>
+              <li>Artifact ID: {exportResult.exportId}</li>
               <li>Rows exported: {exportResult.rowCount}</li>
+              <li>Package size: {formatBytes(exportResult.sizeBytes)}</li>
               <li>Generated at: {stringifyValue(exportResult.generatedAt)}</li>
-              {exportSubject.trim() ? <li>{exportSubject.trim()}</li> : null}
+              {lastExportSummary ? <li>Window: {lastExportSummary.window}</li> : null}
+              {lastExportSummary?.action.trim() ? <li>Action filter: {lastExportSummary.action.trim()}</li> : null}
+              {lastExportSummary?.actor.trim() ? <li>Actor filter: {lastExportSummary.actor.trim()}</li> : null}
+              {lastExportSummary?.status ? <li>Outcome filter: {lastExportSummary.status}</li> : null}
+              {lastExportSummary ? <li>{lastExportSummary.includeRawDetails ? "Redacted raw metadata included" : "Raw metadata excluded"}</li> : null}
             </ul>
             <div className="fg-actions fg-mt-sm">
               <Link className="fg-nav-link" to={exportEventPath}>Open export audit event</Link>

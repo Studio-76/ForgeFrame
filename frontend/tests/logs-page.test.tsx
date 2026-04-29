@@ -252,6 +252,7 @@ function createAuditExportResult(format: "json" | "csv" = "json") {
     status: "ready" as const,
     rowCount: 2,
     generatedAt: "2026-04-21T21:50:00Z",
+    sizeBytes: format === "csv" ? 21 : 2,
     blob: new Blob([format === "csv" ? "event_id,action\n1,test" : "{}"], { type: format === "csv" ? "text/csv" : "application/json" }),
   };
 }
@@ -353,8 +354,7 @@ describe("Logs page audit history workflow", () => {
     expect(container.textContent).toContain("Errors, Activity, and Audit History");
     expect(container.textContent).toContain("Export stays on this route");
     expect(container.textContent).toContain("Audit export");
-    expect(container.textContent).toContain("Current export scope: Format: JSON · Instance: Alpha Instance · Window: 30d · Action: runtime_key_issue · Status: warning · Limit: 250");
-    expect(container.textContent).not.toContain("Subject: ops runtime_key key_alpha");
+    expect(container.textContent).toContain("Package scope: Instance: Alpha Instance · Window: 30d · Action: runtime_key_issue · Actor: ops · Outcome: warning · Raw details included · Limit: 250");
     expect(container.querySelector<HTMLSelectElement>("#audit-history select")?.value).toBe("30d");
     expect(container.querySelector<HTMLInputElement>('input[placeholder="Search actor"]')?.value).toBe("ops");
     expect(container.querySelector<HTMLInputElement>('input[placeholder="Search target or correlation"]')?.value).toBe("key_alpha");
@@ -395,23 +395,27 @@ describe("Logs page audit history workflow", () => {
 
   it("generates an export from the shipped backend contract and leaves a durable package summary", async () => {
     generateAuditExportMock.mockResolvedValueOnce(createAuditExportResult("csv"));
-    await renderLogsPage("/logs?instanceId=instance_alpha&auditWindow=30d&auditAction=runtime_key_issue&auditStatus=warning#audit-export");
+    await renderLogsPage("/logs?instanceId=instance_alpha&auditWindow=30d&auditAction=runtime_key_issue&auditActor=ops&auditStatus=warning#audit-export");
 
-    const formatSelect = container.querySelector<HTMLSelectElement>("#audit-export select");
+    const exportSelects = container.querySelectorAll<HTMLSelectElement>("#audit-export select");
+    const formatSelect = exportSelects[3];
+    const rawDetailsSelect = exportSelects[4];
     const exportInputs = container.querySelectorAll<HTMLInputElement>("#audit-export input");
-    const subjectInput = exportInputs[0];
-    const limitInput = exportInputs[1];
+    const actorInput = Array.from(exportInputs).find((input) => input.placeholder === "Optional actor filter");
+    const limitInput = Array.from(exportInputs).find((input) => input.type === "number");
     const button = container.querySelector<HTMLButtonElement>("#audit-export button");
     expect(formatSelect).not.toBeNull();
-    expect(subjectInput).toBeDefined();
+    expect(rawDetailsSelect).not.toBeNull();
+    expect(actorInput).toBeDefined();
     expect(limitInput).toBeDefined();
     expect(button).not.toBeNull();
 
     await act(async () => {
       formatSelect!.value = "csv";
       formatSelect?.dispatchEvent(new Event("change", { bubbles: true }));
-      subjectInput!.value = "runtime key evidence";
-      subjectInput!.dispatchEvent(new Event("input", { bubbles: true }));
+      rawDetailsSelect!.value = "exclude";
+      rawDetailsSelect!.dispatchEvent(new Event("change", { bubbles: true }));
+      setInputValue(actorInput as HTMLInputElement, "ops-admin");
       limitInput!.value = "40";
       limitInput!.dispatchEvent(new Event("input", { bubbles: true }));
     });
@@ -429,13 +433,19 @@ describe("Logs page audit history workflow", () => {
       format: "csv",
       window: "30d",
       action: "runtime_key_issue",
+      actor: "ops-admin",
       status: "warning",
-      subject: "runtime key evidence",
+      includeRawDetails: false,
       limit: 40,
     }, "instance_alpha", undefined, null);
     expect(container.textContent).toContain("Latest exported package");
-    expect(container.textContent).toContain("forgeframe-audit-export-acct_alpha-20260421T214500Z.csv");
+    expect(container.textContent).toContain("Filename: forgeframe-audit-export-acct_alpha-20260421T214500Z.csv");
+    expect(container.textContent).toContain("Artifact ID: audit_export_1");
     expect(container.textContent).toContain("Rows exported: 2");
+    expect(container.textContent).toContain("Package size:");
+    expect(container.textContent).toContain("Window: 30d");
+    expect(container.textContent).toContain("Actor filter: ops-admin");
+    expect(container.textContent).toContain("Raw metadata excluded");
     expect(container.textContent).toContain("Open export audit event");
     expect(container.textContent).toContain("Download latest export again");
 
@@ -446,14 +456,18 @@ describe("Logs page audit history workflow", () => {
     expect(auditEventLink?.getAttribute("href")).toContain("auditTargetId=audit_export_1");
   });
 
-  it("does not silently derive export subject from history-only filters", async () => {
+  it("prefills export actor, action, and outcome from the current history filters", async () => {
     await renderLogsPage("/logs?instanceId=instance_alpha&auditWindow=30d&auditAction=runtime_key_issue&auditActor=ops&auditTargetType=runtime_key&auditTargetId=key_alpha&auditStatus=warning#audit-export");
 
     const exportInputs = container.querySelectorAll<HTMLInputElement>("#audit-export input");
-    const subjectInput = exportInputs[0];
+    const actorInput = Array.from(exportInputs).find((input) => input.placeholder === "Optional actor filter");
+    const exportSelects = container.querySelectorAll<HTMLSelectElement>("#audit-export select");
+    const actionSelect = exportSelects[1];
+    const outcomeSelect = exportSelects[2];
     const button = container.querySelector<HTMLButtonElement>("#audit-export button");
-    expect(subjectInput?.value).toBe("");
-    expect(subjectInput?.getAttribute("placeholder")).toBe("ops runtime_key key_alpha");
+    expect(actorInput?.value).toBe("ops");
+    expect(actionSelect?.value).toBe("runtime_key_issue");
+    expect(outcomeSelect?.value).toBe("warning");
 
     await act(async () => {
       button?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
@@ -464,8 +478,9 @@ describe("Logs page audit history workflow", () => {
       format: "json",
       window: "30d",
       action: "runtime_key_issue",
+      actor: "ops",
       status: "warning",
-      subject: null,
+      includeRawDetails: true,
       limit: 250,
     }, "instance_alpha", undefined, null);
   });
@@ -475,17 +490,16 @@ describe("Logs page audit history workflow", () => {
     await renderLogsPage("/logs?instanceId=instance_alpha&auditWindow=30d&auditAction=runtime_key_issue&auditStatus=warning#audit-export");
 
     const exportInputs = container.querySelectorAll<HTMLInputElement>("#audit-export input");
-    const subjectInput = exportInputs[0];
+    const actorInput = Array.from(exportInputs).find((input) => input.placeholder === "Optional actor filter");
     const button = container.querySelector<HTMLButtonElement>("#audit-export button");
     const historySelects = container.querySelectorAll<HTMLSelectElement>("#audit-history select");
     const targetTypeSelect = historySelects[2];
-    expect(subjectInput).toBeDefined();
+    expect(actorInput).toBeDefined();
     expect(button).not.toBeNull();
     expect(targetTypeSelect).toBeDefined();
 
     await act(async () => {
-      subjectInput!.value = "runtime key evidence";
-      subjectInput!.dispatchEvent(new Event("input", { bubbles: true }));
+      setInputValue(actorInput as HTMLInputElement, "ops-admin");
     });
     await flushEffects();
 
@@ -515,7 +529,7 @@ describe("Logs page audit history workflow", () => {
     });
     expect(container.textContent).toContain("Latest exported package");
     expect(container.textContent).toContain("Open export audit event");
-    expect(container.textContent).toContain("runtime key evidence");
+    expect(container.textContent).toContain("Actor filter: ops-admin");
   });
 
   it("keeps export visible but disabled for viewer sessions", async () => {
@@ -548,8 +562,10 @@ describe("Logs page audit history workflow", () => {
     });
     await flushEffects();
 
-    expect(container.textContent).toContain("Audit export failed");
+    expect(container.textContent).toContain("Export could not be generated");
+    expect(container.textContent).toContain("Cause:");
     expect(container.textContent).toContain("upstream export failed");
+    expect(container.textContent).toContain("How to fix:");
   });
 
   it("renders the no-events state without implying missing controls", async () => {

@@ -213,8 +213,10 @@ class AuditExportRequest(BaseModel):
     format: Literal["csv", "json"] = "json"
     window: Literal["24h", "7d", "30d", "all"] = "24h"
     action: str | None = None
+    actor: str | None = None
     status: Literal["ok", "warning", "failed"] | None = None
     subject: str | None = None
+    include_raw_details: bool = True
     limit: int = Field(default=250, ge=1, le=5000)
 
 
@@ -722,15 +724,19 @@ def _audit_detail_payload(
     }
 
 
-def _redacted_audit_export_event_payload(event: AuditEventRecord) -> dict[str, Any]:
+def _redacted_audit_export_event_payload(
+    event: AuditEventRecord,
+    *,
+    include_raw_details: bool,
+) -> dict[str, Any]:
     redacted_metadata, _ = _redact_metadata(dict(event.metadata))
     payload = event.model_dump()
-    payload["metadata"] = redacted_metadata
+    payload["metadata"] = redacted_metadata if include_raw_details else {}
     return payload
 
 
-def _audit_export_subject_haystack(event: AuditEventRecord) -> str:
-    export_payload = _redacted_audit_export_event_payload(event)
+def _audit_export_subject_haystack(event: AuditEventRecord, *, include_raw_details: bool) -> str:
+    export_payload = _redacted_audit_export_event_payload(event, include_raw_details=include_raw_details)
     return " ".join(
         [
             event.actor_type,
@@ -749,6 +755,7 @@ def _filter_audit_events(
     *,
     subject: str | None,
     limit: int,
+    include_raw_details: bool,
 ) -> list[AuditEventRecord]:
     filtered = events
     normalized_subject = (subject or "").strip().lower()
@@ -756,13 +763,16 @@ def _filter_audit_events(
         filtered = [
             event
             for event in filtered
-            if normalized_subject in _audit_export_subject_haystack(event)
+            if normalized_subject in _audit_export_subject_haystack(
+                event,
+                include_raw_details=include_raw_details,
+            )
         ]
 
     return filtered[:limit]
 
 
-def _render_audit_export_csv(events: list[AuditEventRecord]) -> str:
+def _render_audit_export_csv(events: list[AuditEventRecord], *, include_raw_details: bool) -> str:
     buffer = io.StringIO()
     writer = csv.DictWriter(
         buffer,
@@ -783,7 +793,10 @@ def _render_audit_export_csv(events: list[AuditEventRecord]) -> str:
     )
     writer.writeheader()
     for event in events:
-        export_payload = _redacted_audit_export_event_payload(event)
+        export_payload = _redacted_audit_export_event_payload(
+            event,
+            include_raw_details=include_raw_details,
+        )
         writer.writerow(
             {
                 "event_id": export_payload["event_id"],
@@ -809,6 +822,7 @@ def _render_audit_export_json(
     generated_at: str,
     filters: dict[str, object],
     events: list[AuditEventRecord],
+    include_raw_details: bool,
 ) -> str:
     return json.dumps(
         {
@@ -818,7 +832,13 @@ def _render_audit_export_json(
             "generated_at": generated_at,
             "row_count": len(events),
             "filters": filters,
-            "events": [_redacted_audit_export_event_payload(event) for event in events],
+            "events": [
+                _redacted_audit_export_event_payload(
+                    event,
+                    include_raw_details=include_raw_details,
+                )
+                for event in events
+            ],
         },
         indent=2,
         sort_keys=True,
@@ -1128,7 +1148,7 @@ def export_audit_events(
     retained_limit = _retained_audit_limit(settings)
     effective_limit = min(payload.limit, retained_limit)
     normalized_action = _normalize_filter_value(payload.action)
-    window_seconds = int(_AUDIT_EXPORT_WINDOWS[payload.window].total_seconds()) if _AUDIT_EXPORT_WINDOWS[payload.window] is not None else None
+    normalized_actor = _normalize_filter_value(payload.actor)
     # Export must honor the mixed-tenant scope guard before row slicing.
     try:
         audit_events = governance.query_audit_events(
@@ -1136,24 +1156,40 @@ def export_audit_events(
             tenant_id=resolved_tenant_id,
             company_id=resolved_company_id,
             require_explicit_scope=True,
-            window_seconds=window_seconds,
-            action=normalized_action,
-            status=payload.status,
+            window_seconds=None,
         )
     except TenantFilterRequiredError as exc:
         return _admin_error(400, "tenant_filter_required", str(exc))
-    filtered_events = _filter_audit_events(
+    indexes = _build_lookup_indexes(
+        governance,
+        instance_id=instance.instance_id,
+        tenant_id=resolved_tenant_id,
+    )
+    _window_scoped_events, filtered_export_events = _filter_audit_history_events(
         audit_events,
+        indexes=indexes,
+        window=payload.window,
+        action=normalized_action,
+        actor=normalized_actor,
+        target_type=None,
+        target_id=None,
+        status_filter=payload.status,
+    )
+    filtered_events = _filter_audit_events(
+        filtered_export_events,
         subject=payload.subject,
         limit=effective_limit,
+        include_raw_details=payload.include_raw_details,
     )
     generated_at = datetime.now(tz=UTC).isoformat()
     export_id = f"audit_export_{uuid4().hex[:12]}"
     filters = {
         "window": payload.window,
         "action": normalized_action,
+        "actor": normalized_actor,
         "status": payload.status,
         "subject": payload.subject,
+        "include_raw_details": payload.include_raw_details,
         "tenant_id": resolved_tenant_id,
         "company_id": resolved_company_id,
         "instance_id": instance.instance_id,
@@ -1169,7 +1205,10 @@ def export_audit_events(
     filename = f"forgeframe-audit-export-{scope_label.replace('/', '_')}-{timestamp}.{payload.format}"
 
     if payload.format == "csv":
-        content = _render_audit_export_csv(filtered_events)
+        content = _render_audit_export_csv(
+            filtered_events,
+            include_raw_details=payload.include_raw_details,
+        )
         media_type = "text/csv; charset=utf-8"
     else:
         content = _render_audit_export_json(
@@ -1177,6 +1216,7 @@ def export_audit_events(
             generated_at=generated_at,
             filters=filters,
             events=filtered_events,
+            include_raw_details=payload.include_raw_details,
         )
         media_type = "application/json"
 
@@ -1197,6 +1237,8 @@ def export_audit_events(
             "row_count": len(filtered_events),
             "format": payload.format,
             "effective_limit": effective_limit,
+            "actor": normalized_actor,
+            "include_raw_details": payload.include_raw_details,
         },
         instance_id=instance.instance_id,
         tenant_id=resolved_tenant_id,

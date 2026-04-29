@@ -1984,8 +1984,10 @@ export type AuditExportRequest = {
   format: AuditExportFormat;
   window: AuditExportWindow;
   action?: string | null;
+  actor?: string | null;
   status?: AuditExportStatus | null;
   subject?: string | null;
+  includeRawDetails?: boolean;
   limit?: number;
 };
 
@@ -1995,6 +1997,7 @@ export type AuditExportResult = {
   status: "ready";
   rowCount: number;
   generatedAt: string | null;
+  sizeBytes: number;
   blob: Blob;
 };
 
@@ -3823,8 +3826,10 @@ export async function generateAuditExport(
     body: JSON.stringify({
       ...payload,
       action: payload.action?.trim() ? payload.action.trim() : null,
+      actor: payload.actor?.trim() ? payload.actor.trim() : null,
       status: payload.status ?? null,
       subject: payload.subject?.trim() ? payload.subject.trim() : null,
+      include_raw_details: payload.includeRawDetails ?? true,
       limit: payload.limit ?? 250,
     }),
   });
@@ -3859,6 +3864,7 @@ export async function generateAuditExport(
     status: "ready",
     rowCount: Number(getResponseHeader(response.headers, "X-ForgeFrame-Audit-Export-Row-Count", "X-ForgeGate-Audit-Export-Row-Count") ?? "0"),
     generatedAt: getResponseHeader(response.headers, "X-ForgeFrame-Audit-Export-Generated-At", "X-ForgeGate-Audit-Export-Generated-At"),
+    sizeBytes: blob.size,
     blob,
   };
 }

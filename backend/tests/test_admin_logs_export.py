@@ -403,6 +403,48 @@ def test_audit_export_subject_filter_uses_redacted_metadata_for_search(export_fo
         assert metadata["provider"]["api_secret"] == "[redacted]"
 
 
+def test_audit_export_can_filter_by_actor_and_exclude_raw_details() -> None:
+    client = TestClient(app)
+    admin_headers = _admin_headers(client)
+    instance_id = _default_instance_id(client, admin_headers)
+    governance = get_governance_service()
+    admin = governance.authenticate_admin_token(admin_headers["Authorization"].removeprefix("Bearer "))
+
+    governance.record_admin_audit_event(
+        actor=admin,
+        action="setting_override_upsert",
+        target_type="setting",
+        target_id="app_name",
+        status="ok",
+        details="Setting updated for actor-filter export coverage.",
+        metadata={
+            "reason": "actor-filter coverage",
+            "request_id": "req-export-42",
+        },
+        tenant_id=DEFAULT_BOOTSTRAP_TENANT_ID,
+    )
+
+    export_response = client.post(
+        f"/admin/logs/audit-export?instanceId={instance_id}&tenantId={DEFAULT_BOOTSTRAP_TENANT_ID}",
+        headers=admin_headers,
+        json={
+            "format": "json",
+            "window": "all",
+            "action": "setting_override_upsert",
+            "actor": admin.username,
+            "include_raw_details": False,
+            "limit": 10,
+        },
+    )
+
+    assert export_response.status_code == 200
+    payload = export_response.json()
+    assert payload["filters"]["actor"] == admin.username
+    assert payload["filters"]["include_raw_details"] is False
+    assert payload["row_count"] == 1
+    assert payload["events"][0]["metadata"] == {}
+
+
 def test_audit_export_normalizes_action_whitespace_like_audit_history() -> None:
     client = TestClient(app)
     admin_headers = _admin_headers(client)
