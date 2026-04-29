@@ -64,3 +64,12 @@
   - `cd frontend && npm test` -> erfolgreich, `42/42` Testdateien, `160/160` Tests
   - `cd frontend && npm test -- header-command-palette sidebar-navigation navigation` -> erfolgreich, `3/3` Testdateien, `11/11` Tests
   - Gepruefter Quelltext: `frontend/src/app/navigation.ts`, `frontend/src/components/layout/AppSidebar.tsx`, `frontend/src/components/layout/SidebarContext.tsx`, `frontend/src/components/layout/AppHeader.tsx`
+
+## Post-00 Revalidation 2026-04-29
+
+- Audit-Ergebnis: `APPROVED`
+- Konkrete Audit-Maengel: `keine`
+- Finale Freigabe: `APPROVED`
+- Begruendung:
+  - Der nachgezogene Global-Contract-Fix aus `00` hat die Navigationsdateien nicht veraendert; betroffen war nur das generische blocked-State-Styling.
+  - Die auf aktuellem HEAD erfolgreich gelaufenen Pruefkommandos `cd frontend && npm run build`, `cd frontend && npm test -- --runInBand` (Vitest-Option weiterhin objektiv unsupported) und `cd frontend && npm test` decken den Navigation-Stand mit ab.
