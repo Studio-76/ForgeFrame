@@ -9,6 +9,7 @@ const {
   fetchAgentsMock,
   fetchConversationsMock,
   fetchConversationDetailMock,
+  fetchTasksMock,
   createConversationMock,
   updateConversationMock,
   appendConversationMessageMock,
@@ -21,6 +22,7 @@ const {
   fetchAgentsMock: vi.fn(),
   fetchConversationsMock: vi.fn(),
   fetchConversationDetailMock: vi.fn(),
+  fetchTasksMock: vi.fn(),
   createConversationMock: vi.fn(),
   updateConversationMock: vi.fn(),
   appendConversationMessageMock: vi.fn(),
@@ -39,6 +41,7 @@ vi.mock("../src/api/admin", async () => {
     fetchAgents: fetchAgentsMock,
     fetchConversations: fetchConversationsMock,
     fetchConversationDetail: fetchConversationDetailMock,
+    fetchTasks: fetchTasksMock,
     createConversation: createConversationMock,
     updateConversation: updateConversationMock,
     appendConversationMessage: appendConversationMessageMock,
@@ -56,6 +59,7 @@ import type {
   ConversationSummary,
   InboxDetail,
   InboxSummary,
+  TaskSummary,
 } from "../src/api/admin";
 import { ConversationsPage } from "../src/pages/ConversationsPage";
 import { InboxPage } from "../src/pages/InboxPage";
@@ -289,6 +293,31 @@ function createInboxDetail(overrides: Partial<InboxDetail> = {}): InboxDetail {
   };
 }
 
+function createTaskSummary(overrides: Partial<TaskSummary> = {}): TaskSummary {
+  return {
+    task_id: "task_alpha",
+    instance_id: "instance_alpha",
+    company_id: "company_alpha",
+    task_kind: "task",
+    title: "Confirm pricing package",
+    summary: "Confirm the final package before sending the response.",
+    status: "open",
+    priority: "high",
+    owner_id: "agent_operator",
+    conversation_id: "conversation_alpha",
+    inbox_id: "inbox_alpha",
+    workspace_id: "ws_alpha",
+    due_at: null,
+    completed_at: null,
+    metadata: {},
+    reminder_count: 0,
+    notification_count: 0,
+    created_at: "2026-04-23T10:10:00Z",
+    updated_at: "2026-04-23T10:10:00Z",
+    ...overrides,
+  };
+}
+
 let container: HTMLDivElement;
 let root: Root | null = null;
 
@@ -408,6 +437,17 @@ beforeEach(() => {
   fetchConversationDetailMock.mockResolvedValue({
     status: "ok",
     conversation: createConversationDetail(),
+  });
+  fetchTasksMock.mockResolvedValue({
+    status: "ok",
+    tasks: [
+      createTaskSummary(),
+      createTaskSummary({
+        task_id: "task_beta",
+        title: "Unrelated task",
+        conversation_id: "conversation_beta",
+      }),
+    ],
   });
   createConversationMock.mockResolvedValue({
     status: "ok",
@@ -559,14 +599,55 @@ describe("conversation and inbox pages", () => {
       limit: 100,
     });
     expect(fetchConversationDetailMock).toHaveBeenCalledWith("conversation_alpha", "instance_alpha");
-    expect(container.textContent).toContain("Conversation inventory");
+    expect(fetchTasksMock).toHaveBeenCalledWith("instance_alpha", {
+      status: "all",
+      limit: 100,
+    });
+    expect(container.textContent).toContain("Conversation and thread inventory");
+    expect(container.textContent).toContain("Continuation timeline");
+    expect(container.textContent).toContain("Context and objects");
+    expect(container.textContent).toContain("Conversation lenses");
     expect(container.textContent).toContain("Customer pricing conversation");
     expect(container.textContent).toContain("Incoming thread");
     expect(container.textContent).toContain("Agent participation");
     expect(container.textContent).toContain("Review requested from Reviewer");
+    expect(container.textContent).toContain("Related tasks");
+    expect(container.textContent).toContain("Confirm pricing package");
+    expect(container.textContent).toContain("Structured agent routing");
 
     const inboxLink = Array.from(container.querySelectorAll("a")).find((link) => link.textContent === "Open inbox item");
     expect(inboxLink?.getAttribute("href")).toBe("/inbox?instanceId=instance_alpha&inboxId=inbox_alpha");
+    const taskLink = Array.from(container.querySelectorAll("a")).find((link) => link.textContent === "Open task");
+    expect(taskLink?.getAttribute("href")).toBe("/tasks?instanceId=instance_alpha&taskId=task_alpha");
+  });
+
+  it("applies conversation lenses and exposes structured agent composer routing", async () => {
+    await renderIntoDom(withAppContext({
+      path: "/conversations?instanceId=instance_alpha&conversationId=conversation_alpha",
+      element: <ConversationsPage />,
+      session: adminSession,
+    }));
+    await flushEffects();
+
+    await act(async () => {
+      setControlValue(getControlByLabel(container, "An/von Agent"), "from_agent");
+    });
+    await flushEffects();
+
+    expect(container.textContent).toContain("No timeline items matched the selected thread and agent lenses.");
+
+    const appendForm = getFormByText("Append message");
+
+    await act(async () => {
+      setMultiSelectValues(getControlByLabel(appendForm, "Mention agents") as HTMLSelectElement, ["agent_operator"]);
+      setControlValue(getControlByLabel(appendForm, "Handoff to"), "agent_worker");
+      setControlValue(getControlByLabel(appendForm, "Review request"), "agent_reviewer");
+    });
+    await flushEffects();
+
+    expect(container.textContent).toContain("Mention Operator");
+    expect(container.textContent).toContain("Handoff to Worker");
+    expect(container.textContent).toContain("Review from Reviewer");
   });
 
   it("creates, updates, and appends conversation history against the selected instance scope", async () => {

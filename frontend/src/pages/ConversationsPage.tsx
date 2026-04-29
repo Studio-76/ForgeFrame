@@ -1,4 +1,4 @@
-import { startTransition, useEffect, useState, type FormEvent } from "react";
+import { startTransition, useEffect, useMemo, useState, type FormEvent } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 
 import {
@@ -7,14 +7,18 @@ import {
   fetchAgents,
   fetchConversationDetail,
   fetchConversations,
+  fetchTasks,
   fetchInstances,
   type AgentSummary,
   updateConversation,
   type ConversationDetail,
+  type ConversationEventRecord,
   type ConversationMessageRole,
+  type ConversationMessageRecord,
   type ConversationSessionKind,
   type ConversationStatus,
   type ConversationSummary,
+  type TaskSummary,
   type TriageStatus,
   type WorkItemPriority,
 } from "../api/admin";
@@ -25,6 +29,7 @@ import {
   buildArtifactsPath,
   buildConversationPath,
   buildInboxPath,
+  buildTaskPath,
   buildWorkspacePath,
 } from "../app/workInteractionRoutes";
 import { useAppSession } from "../app/session";
@@ -37,6 +42,26 @@ const TRIAGE_OPTIONS: Array<TriageStatus | "all"> = ["all", "new", "relevant", "
 const PRIORITY_OPTIONS: WorkItemPriority[] = ["low", "normal", "high", "critical"];
 const SESSION_KIND_OPTIONS: ConversationSessionKind[] = ["runtime", "operator", "assistant", "external"];
 const MESSAGE_ROLE_OPTIONS: ConversationMessageRole[] = ["user", "assistant", "system", "operator", "tool"];
+const MESSAGE_DIRECTION_OPTIONS = ["all", "to_agent", "from_agent", "human", "system"] as const;
+const LINK_LENS_OPTIONS = ["all", "task", "run", "approval", "artifact", "workspace"] as const;
+
+type MessageDirectionLens = typeof MESSAGE_DIRECTION_OPTIONS[number];
+type ConversationLinkLens = typeof LINK_LENS_OPTIONS[number];
+type TimelineItem =
+  | {
+    kind: "message";
+    sortAt: string;
+    threadId: string;
+    message: ConversationMessageRecord;
+    mentions: ConversationDetail["mentions"];
+    events: ConversationEventRecord[];
+  }
+  | {
+    kind: "event";
+    sortAt: string;
+    threadId: string;
+    event: ConversationEventRecord;
+  };
 
 const DEFAULT_CREATE_FORM = {
   conversationId: "",
@@ -116,6 +141,29 @@ function buildApprovalRoute(instanceId: string, approvalId: string): string {
   return `${CONTROL_PLANE_ROUTES.approvals}?${new URLSearchParams({ instanceId, approvalId, status: "all" }).toString()}`;
 }
 
+function conversationMatchesLinkLens(
+  conversation: ConversationSummary,
+  linkLens: ConversationLinkLens,
+  conversationIdsWithTasks: Set<string>,
+): boolean {
+  if (linkLens === "all") {
+    return true;
+  }
+  if (linkLens === "task") {
+    return conversationIdsWithTasks.has(conversation.conversation_id);
+  }
+  if (linkLens === "run") {
+    return Boolean(conversation.run_id);
+  }
+  if (linkLens === "approval") {
+    return Boolean(conversation.approval_id);
+  }
+  if (linkLens === "artifact") {
+    return Boolean(conversation.artifact_id);
+  }
+  return Boolean(conversation.workspace_id);
+}
+
 export function ConversationsPage() {
   const { session, sessionReady } = useAppSession();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -136,6 +184,8 @@ export function ConversationsPage() {
   const [instances, setInstances] = useState<Array<{ instance_id: string; display_name: string }>>([]);
   const [agentsState, setAgentsState] = useState<LoadState>("idle");
   const [agents, setAgents] = useState<AgentSummary[]>([]);
+  const [tasksState, setTasksState] = useState<LoadState>("idle");
+  const [tasks, setTasks] = useState<TaskSummary[]>([]);
   const [listState, setListState] = useState<LoadState>("idle");
   const [detailState, setDetailState] = useState<LoadState>("idle");
   const [conversations, setConversations] = useState<ConversationSummary[]>([]);
@@ -149,6 +199,10 @@ export function ConversationsPage() {
   const [savingUpdate, setSavingUpdate] = useState(false);
   const [savingAppend, setSavingAppend] = useState(false);
   const [refreshNonce, setRefreshNonce] = useState(0);
+  const [threadLensId, setThreadLensId] = useState("all");
+  const [messageDirectionLens, setMessageDirectionLens] = useState<MessageDirectionLens>("all");
+  const [messageAgentLensId, setMessageAgentLensId] = useState("");
+  const [linkLens, setLinkLens] = useState<ConversationLinkLens>("all");
 
   const updateRoute = (mutate: (next: URLSearchParams) => void, replace = false) => {
     const next = new URLSearchParams(searchParams);
@@ -220,6 +274,38 @@ export function ConversationsPage() {
         setAgents([]);
         setAgentsState("error");
         setError(loadError instanceof Error ? loadError.message : "Agent registry could not be loaded for conversation routing.");
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [canRead, instanceId, refreshNonce]);
+
+  useEffect(() => {
+    if (!canRead || !instanceId) {
+      setTasks([]);
+      setTasksState("idle");
+      return;
+    }
+
+    let cancelled = false;
+    setTasksState("loading");
+
+    void fetchTasks(instanceId, { status: "all", limit: 100 })
+      .then((payload) => {
+        if (cancelled) {
+          return;
+        }
+        setTasks(payload.tasks);
+        setTasksState("success");
+      })
+      .catch((loadError: unknown) => {
+        if (cancelled) {
+          return;
+        }
+        setTasks([]);
+        setTasksState("error");
+        setError(loadError instanceof Error ? loadError.message : "Conversation task links could not be loaded.");
       });
 
     return () => {
@@ -317,6 +403,9 @@ export function ConversationsPage() {
     if (!detail) {
       setEditForm(DEFAULT_EDIT_FORM);
       setAppendForm(DEFAULT_APPEND_FORM);
+      setThreadLensId("all");
+      setMessageDirectionLens("all");
+      setMessageAgentLensId("");
       return;
     }
 
@@ -349,6 +438,9 @@ export function ConversationsPage() {
       blockerAgentId: "",
       roundtableAgentIds: [],
     }));
+    setThreadLensId("all");
+    setMessageDirectionLens("all");
+    setMessageAgentLensId("");
   }, [detail]);
 
   const handleCreate = async (event: FormEvent<HTMLFormElement>) => {
@@ -526,6 +618,129 @@ export function ConversationsPage() {
     }
     return agents.find((agent) => agent.agent_id === agentId)?.display_name ?? agentId;
   };
+  const conversationIdsWithTasks = useMemo(
+    () => new Set(tasks.filter((task) => task.conversation_id).map((task) => task.conversation_id as string)),
+    [tasks],
+  );
+  const visibleConversations = useMemo(
+    () => conversations.filter((conversation) => conversationMatchesLinkLens(conversation, linkLens, conversationIdsWithTasks)),
+    [conversations, conversationIdsWithTasks, linkLens],
+  );
+  const visibleTasks = useMemo(
+    () => detail ? tasks.filter((task) => task.conversation_id === detail.conversation_id) : [],
+    [detail, tasks],
+  );
+  const mentionsByMessageId = useMemo(() => {
+    const grouped = new Map<string, ConversationDetail["mentions"]>();
+    if (!detail) {
+      return grouped;
+    }
+    detail.mentions.forEach((mention) => {
+      const current = grouped.get(mention.message_id) ?? [];
+      current.push(mention);
+      grouped.set(mention.message_id, current);
+    });
+    return grouped;
+  }, [detail]);
+  const eventsByMessageId = useMemo(() => {
+    const grouped = new Map<string, ConversationEventRecord[]>();
+    if (!detail) {
+      return grouped;
+    }
+    detail.events.forEach((eventItem) => {
+      if (!eventItem.source_message_id) {
+        return;
+      }
+      const current = grouped.get(eventItem.source_message_id) ?? [];
+      current.push(eventItem);
+      grouped.set(eventItem.source_message_id, current);
+    });
+    return grouped;
+  }, [detail]);
+  const threadTitleById = useMemo(
+    () => new Map((detail?.threads ?? []).map((thread) => [thread.thread_id, thread.title])),
+    [detail],
+  );
+  const sessionById = useMemo(
+    () => new Map((detail?.sessions ?? []).map((sessionItem) => [sessionItem.session_id, sessionItem])),
+    [detail],
+  );
+  const timelineItems = useMemo<TimelineItem[]>(() => {
+    if (!detail) {
+      return [];
+    }
+    const items: TimelineItem[] = [
+      ...detail.messages.map((messageItem) => ({
+        kind: "message" as const,
+        sortAt: messageItem.created_at,
+        threadId: messageItem.thread_id,
+        message: messageItem,
+        mentions: mentionsByMessageId.get(messageItem.message_id) ?? [],
+        events: eventsByMessageId.get(messageItem.message_id) ?? [],
+      })),
+      ...detail.events.map((eventItem) => ({
+        kind: "event" as const,
+        sortAt: eventItem.created_at,
+        threadId: eventItem.thread_id,
+        event: eventItem,
+      })),
+    ];
+    return items.sort((left, right) => left.sortAt.localeCompare(right.sortAt));
+  }, [detail, eventsByMessageId, mentionsByMessageId]);
+  const filteredTimelineItems = useMemo(() => timelineItems.filter((item) => {
+    if (threadLensId !== "all" && item.threadId !== threadLensId) {
+      return false;
+    }
+
+    if (item.kind === "event") {
+      if (messageAgentLensId && item.event.target_agent_id !== messageAgentLensId && item.event.source_agent_id !== messageAgentLensId) {
+        return false;
+      }
+      if (messageDirectionLens === "to_agent" && !item.event.target_agent_id) {
+        return false;
+      }
+      if (messageDirectionLens === "from_agent") {
+        return false;
+      }
+      if (messageDirectionLens === "human") {
+        return false;
+      }
+      return true;
+    }
+
+    const isAgentAuthored = item.message.author_type === "agent" || item.message.message_role === "assistant";
+    const isHumanAuthored = item.message.message_role === "user" || item.message.message_role === "operator";
+    const isSystemAuthored = item.message.message_role === "system" || item.message.message_role === "tool";
+    const agentIds = [
+      ...item.mentions.map((mention) => mention.agent_id),
+      ...item.events.flatMap((eventItem) => [eventItem.source_agent_id, eventItem.target_agent_id].filter(Boolean) as string[]),
+      item.message.author_id ?? "",
+    ].filter(Boolean);
+
+    if (messageAgentLensId && !agentIds.includes(messageAgentLensId)) {
+      return false;
+    }
+    if (messageDirectionLens === "to_agent" && item.mentions.length === 0 && item.events.every((eventItem) => !eventItem.target_agent_id)) {
+      return false;
+    }
+    if (messageDirectionLens === "from_agent" && !isAgentAuthored) {
+      return false;
+    }
+    if (messageDirectionLens === "human" && !isHumanAuthored) {
+      return false;
+    }
+    if (messageDirectionLens === "system" && !isSystemAuthored) {
+      return false;
+    }
+    return true;
+  }), [messageAgentLensId, messageDirectionLens, threadLensId, timelineItems]);
+  const composerStructuredSelections = [
+    ...appendForm.mentionAgentIds.map((agentId) => `Mention ${resolveAgentLabel(agentId)}`),
+    appendForm.handoffToAgentId ? `Handoff to ${resolveAgentLabel(appendForm.handoffToAgentId)}` : null,
+    appendForm.reviewRequestAgentId ? `Review from ${resolveAgentLabel(appendForm.reviewRequestAgentId)}` : null,
+    appendForm.blockerAgentId ? `Blocker owner ${resolveAgentLabel(appendForm.blockerAgentId)}` : null,
+    ...appendForm.roundtableAgentIds.map((agentId) => `Roundtable ${resolveAgentLabel(agentId)}`),
+  ].filter((item): item is string => Boolean(item));
 
   return (
     <section className="fg-page">
@@ -554,19 +769,19 @@ export function ConversationsPage() {
         <div className="fg-panel-heading">
           <div>
             <h3>Scope and filter</h3>
-            <p className="fg-muted">Choose the instance boundary, then constrain the conversation inventory by lifecycle and triage posture.</p>
+            <p className="fg-muted">Choose the instance boundary, then constrain the work surface by lifecycle, triage, responsible agents, and linked task/run/approval objects.</p>
           </div>
           <span
             className="fg-pill"
             data-tone={
-              instancesState === "error" || agentsState === "error"
+              instancesState === "error" || agentsState === "error" || tasksState === "error"
                 ? "danger"
-                : instancesState === "success" && agentsState !== "loading"
+                : instancesState === "success" && agentsState !== "loading" && tasksState !== "loading"
                   ? "success"
                   : "neutral"
             }
           >
-            instances {instancesState} · agents {agentsState}
+            instances {instancesState} · agents {agentsState} · tasks {tasksState}
           </span>
         </div>
         <div className="fg-inline-form">
@@ -654,15 +869,29 @@ export function ConversationsPage() {
               ))}
             </select>
           </label>
+          <label>
+            Link lens
+            <select
+              aria-label="Conversation link lens"
+              value={linkLens}
+              onChange={(event) => setLinkLens(event.target.value as ConversationLinkLens)}
+            >
+              {LINK_LENS_OPTIONS.map((option) => (
+                <option key={option} value={option}>
+                  {option}
+                </option>
+              ))}
+            </select>
+          </label>
         </div>
       </article>
 
-      <div className="fg-grid">
+      <div className="fg-card-grid">
         <article className="fg-card">
           <div className="fg-panel-heading">
             <div>
-              <h3>Conversation inventory</h3>
-              <p className="fg-muted">Each row is a persistent conversation object with inbox count and message continuity, not an orphaned note.</p>
+              <h3>Conversation and thread inventory</h3>
+              <p className="fg-muted">Choose the work item on the left, then stay in the middle timeline to continue the thread instead of drifting into metadata-only editing.</p>
             </div>
             <span className="fg-pill" data-tone={listState === "success" ? "success" : listState === "error" ? "danger" : "neutral"}>
               {listState}
@@ -670,11 +899,11 @@ export function ConversationsPage() {
           </div>
 
           {listState === "loading" ? <p className="fg-muted">Loading conversation inventory.</p> : null}
-          {listState === "success" && conversations.length === 0 ? <p className="fg-muted">No conversations matched the selected filters.</p> : null}
+          {listState === "success" && visibleConversations.length === 0 ? <p className="fg-muted">No conversations matched the selected filters and link lens.</p> : null}
 
-          {conversations.length > 0 ? (
+          {visibleConversations.length > 0 ? (
             <div className="fg-stack">
-              {conversations.map((conversation) => (
+              {visibleConversations.map((conversation) => (
                 <button
                   key={conversation.conversation_id}
                   type="button"
@@ -703,190 +932,445 @@ export function ConversationsPage() {
               ))}
             </div>
           ) : null}
+
+          {detail?.threads.length ? (
+            <article className="fg-subcard">
+              <h4>Thread lane</h4>
+              <div className="fg-stack">
+                {detail.threads.map((thread) => (
+                  <button
+                    key={thread.thread_id}
+                    type="button"
+                    className={`fg-data-row${thread.thread_id === detail.active_thread_id ? " is-current" : ""}`}
+                    onClick={() => {
+                      setThreadLensId(thread.thread_id);
+                      setEditForm((current) => ({ ...current, activeThreadId: thread.thread_id }));
+                    }}
+                  >
+                    <strong>{thread.title}</strong>
+                    <span className="fg-muted">{thread.status} · messages {thread.message_count} · sessions {thread.session_count}</span>
+                  </button>
+                ))}
+              </div>
+            </article>
+          ) : null}
         </article>
 
         <article className="fg-card">
           <div className="fg-panel-heading">
             <div>
-              <h3>Conversation detail</h3>
-              <p className="fg-muted">Thread history, session continuity, triage posture, and runtime links converge here.</p>
+              <h3>Continuation timeline</h3>
+              <p className="fg-muted">Messages and system events stay in one chronological stream, with thread/session context and structured agent routing visible beside each contribution.</p>
             </div>
             {detail ? <span className="fg-pill">{detail.conversation_id}</span> : null}
           </div>
 
-          {detailState === "idle" ? <p className="fg-muted">Select a conversation to inspect history, context, triage, and inbox linkage.</p> : null}
+          {detailState === "idle" ? <p className="fg-muted">Select a conversation to inspect the live thread and continue work from the correct session context.</p> : null}
           {detailState === "loading" ? <p className="fg-muted">Loading conversation detail.</p> : null}
 
           {detail ? (
             <div className="fg-stack">
-              <div className="fg-card-grid">
-                <article className="fg-subcard">
-                  <h4>Summary</h4>
-                  <ul className="fg-list">
-                    <li>Conversation ID: <span className="fg-code">{detail.conversation_id}</span></li>
-                    <li>Instance scope: <span className="fg-code">{detail.instance_id}</span></li>
-                    <li>Execution scope: <span className="fg-code">{detail.company_id}</span></li>
-                    <li>Status: {detail.status}</li>
-                    <li>Triage: {detail.triage_status}</li>
-                    <li>Priority: {detail.priority}</li>
-                    <li>Participants: {detail.participant_count}</li>
-                    <li>Mentions: {detail.mention_count}</li>
-                    <li>Agent events: {detail.event_count}</li>
-                    <li>Latest message: {detail.latest_message_at ?? "Not recorded"}</li>
-                  </ul>
-                </article>
-                <article className="fg-subcard">
-                  <h4>Links</h4>
-                  <ul className="fg-list">
-                    <li>Workspace: {detail.workspace_id ?? "Not linked"}</li>
-                    <li>Run: {detail.run_id ?? "Not linked"}</li>
-                    <li>Approval: {detail.approval_id ?? "Not linked"}</li>
-                    <li>Artifact: {detail.artifact_id ?? "Not linked"}</li>
-                    <li>Decision: {detail.decision_id ?? "Not linked"}</li>
-                    <li>Contact: {detail.contact_ref ?? "Not recorded"}</li>
-                  </ul>
-                  <div className="fg-actions">
-                    {detail.workspace_id ? <Link className="fg-nav-link" to={buildWorkspacePath({ instanceId, workspaceId: detail.workspace_id })}>Open workspace</Link> : null}
-                    {detail.artifact_id ? <Link className="fg-nav-link" to={buildArtifactsPath({ instanceId, artifactId: detail.artifact_id })}>Open artifact</Link> : null}
-                    {detail.run_id ? <Link className="fg-nav-link" to={buildExecutionRoute(instanceId, detail.run_id)}>Open execution review</Link> : null}
-                    {detail.approval_id ? <Link className="fg-nav-link" to={buildApprovalRoute(instanceId, detail.approval_id)}>Open approval review</Link> : null}
-                    {detail.inbox_items[0] ? <Link className="fg-nav-link" to={buildInboxPath({ instanceId, inboxId: detail.inbox_items[0].inbox_id })}>Open inbox item</Link> : null}
-                  </div>
-                </article>
-              </div>
-
               <article className="fg-subcard">
-                <h4>Summary text</h4>
+                <h4>Current work header</h4>
+                <div className="fg-detail-grid">
+                  <span className="fg-muted">{detail.subject}</span>
+                  <span className="fg-muted">active thread {threadTitleById.get(detail.active_thread_id ?? "") ?? detail.active_thread_id ?? "not set"}</span>
+                  <span className="fg-muted">latest message {detail.latest_message_at ?? "not recorded"}</span>
+                  <span className="fg-muted">structured @Agent routing ready</span>
+                </div>
                 <p>{detail.summary || "No conversation summary was recorded."}</p>
               </article>
 
-              <div className="fg-card-grid">
-                <article className="fg-subcard">
-                  <h4>Agent participation</h4>
-                  {detail.participants.length === 0 ? <p className="fg-muted">No agent participants were recorded.</p> : (
-                    <ul className="fg-list">
-                      {detail.participants.map((participant) => (
-                        <li key={participant.participant_id}>
-                          <Link
-                            className="fg-nav-link"
-                            to={buildConversationPath({
-                              instanceId,
-                              conversationId: detail.conversation_id,
-                              agentId: participant.agent_id ?? undefined,
-                            })}
-                          >
-                            {participant.display_label}
-                          </Link>
-                          {" · "}{participant.participant_kind}
-                          {" · "}{participant.participant_status}
-                          {participant.thread_id ? ` · thread ${participant.thread_id}` : ""}
-                          {participant.agent_id ? (
-                            <>
-                              {" · "}
-                              <Link className="fg-nav-link" to={buildAgentsPath({ instanceId, agentId: participant.agent_id })}>
-                                Open agent
-                              </Link>
-                            </>
+              <article className="fg-subcard">
+                <h4>Timeline</h4>
+                {filteredTimelineItems.length === 0 ? <p className="fg-muted">No timeline items matched the selected thread and agent lenses.</p> : null}
+                {filteredTimelineItems.length > 0 ? (
+                  <div className="fg-stack">
+                    {filteredTimelineItems.map((item) => {
+                      if (item.kind === "event") {
+                        return (
+                          <article key={item.event.event_id} className="fg-subcard">
+                            <div className="fg-panel-heading">
+                              <div>
+                                <strong>System event</strong>
+                                <p className="fg-muted">{item.event.created_at} · {threadTitleById.get(item.event.thread_id) ?? item.event.thread_id}</p>
+                              </div>
+                              <span className="fg-pill" data-tone="warning">{item.event.event_type}</span>
+                            </div>
+                            <p>{item.event.summary}</p>
+                            <p className="fg-muted">
+                              {item.event.target_agent_id ? `Target ${resolveAgentLabel(item.event.target_agent_id)}` : "No target agent"}
+                              {item.event.related_object_type && item.event.related_object_id ? ` · ${item.event.related_object_type}:${item.event.related_object_id}` : ""}
+                            </p>
+                          </article>
+                        );
+                      }
+
+                      const sessionItem = item.message.session_id ? sessionById.get(item.message.session_id) : null;
+                      const contributorLabel = item.message.message_role === "assistant" || item.message.author_type === "agent"
+                        ? "Agent"
+                        : item.message.message_role === "system" || item.message.message_role === "tool"
+                          ? "System"
+                          : "Human";
+                      const contributorTone = contributorLabel === "Agent"
+                        ? "success"
+                        : contributorLabel === "System"
+                          ? "warning"
+                          : "neutral";
+                      const authorLabel = contributorLabel === "Agent"
+                        ? resolveAgentLabel(item.events[0]?.target_agent_id ?? item.mentions[0]?.agent_id ?? item.message.author_id)
+                        : contributorLabel === "System"
+                          ? "System event stream"
+                          : "Human operator";
+
+                      return (
+                        <article key={item.message.message_id} className="fg-subcard">
+                          <div className="fg-panel-heading">
+                            <div>
+                              <strong>{authorLabel}</strong>
+                              <p className="fg-muted">
+                                {item.message.created_at}
+                                {" · "}{threadTitleById.get(item.message.thread_id) ?? item.message.thread_id}
+                                {sessionItem ? ` · ${sessionItem.session_kind} session` : " · no session"}
+                                {sessionItem?.continuity_key ? ` · ${sessionItem.continuity_key}` : ""}
+                              </p>
+                            </div>
+                            <span className="fg-pill" data-tone={contributorTone}>{contributorLabel}</span>
+                          </div>
+                          <p>{item.message.body}</p>
+                          {Object.keys(item.message.structured_payload).length > 0 ? (
+                            <pre>{JSON.stringify(item.message.structured_payload, null, 2)}</pre>
                           ) : null}
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                </article>
+                          <div className="fg-detail-grid">
+                            <span className="fg-muted">role {item.message.message_role}</span>
+                            <span className="fg-muted">author {item.message.author_type}</span>
+                            <span className="fg-muted">mentions {item.mentions.length}</span>
+                            <span className="fg-muted">events {item.events.length}</span>
+                          </div>
+                          {item.mentions.length > 0 ? (
+                            <ul className="fg-list">
+                              {item.mentions.map((mention) => (
+                                <li key={mention.mention_id}>
+                                  <Link className="fg-nav-link" to={buildAgentsPath({ instanceId, agentId: mention.agent_id })}>{mention.token}</Link>
+                                  {" · "}{mention.agent_display_name}
+                                  {" · "}{mention.status}
+                                </li>
+                              ))}
+                            </ul>
+                          ) : null}
+                        </article>
+                      );
+                    })}
+                  </div>
+                ) : null}
+              </article>
+
+              <form className="fg-stack" onSubmit={handleAppend}>
+                <h4>Append message</h4>
+                <p className="fg-muted">Message composer with structured @Agent routing. Mentions, handoffs, review requests, blockers, and roundtables are persisted as first-class conversation objects.</p>
                 <article className="fg-subcard">
-                  <h4>Mentions</h4>
-                  {detail.mentions.length === 0 ? <p className="fg-muted">No structured mentions were recorded.</p> : (
+                  <h4>Structured agent routing</h4>
+                  {composerStructuredSelections.length === 0 ? (
+                    <p className="fg-muted">No structured agent routing is selected yet. The composer will still persist the message against the chosen thread/session context.</p>
+                  ) : (
                     <ul className="fg-list">
-                      {detail.mentions.map((mention) => (
-                        <li key={mention.mention_id}>
-                          <Link
-                            className="fg-nav-link"
-                            to={buildConversationPath({
-                              instanceId,
-                              conversationId: detail.conversation_id,
-                              agentId: mention.agent_id,
-                            })}
-                          >
-                            {mention.token}
-                          </Link>
-                          {" · "}{mention.agent_display_name}
-                          {" · "}{mention.status}
-                          {" · message "}<span className="fg-code">{mention.message_id}</span>
-                        </li>
-                      ))}
+                      {composerStructuredSelections.map((item) => <li key={item}>{item}</li>)}
                     </ul>
                   )}
                 </article>
-                <article className="fg-subcard">
-                  <h4>Agent events</h4>
-                  {detail.events.length === 0 ? <p className="fg-muted">No structured handoff, review, blocker, or roundtable events were recorded.</p> : (
-                    <ul className="fg-list">
-                      {detail.events.map((eventItem) => (
-                        <li key={eventItem.event_id}>
-                          <strong>{eventItem.summary}</strong>
-                          {" · "}{eventItem.event_type}
-                          {eventItem.target_agent_id ? ` · ${resolveAgentLabel(eventItem.target_agent_id)}` : ""}
-                          {eventItem.related_object_type && eventItem.related_object_id
-                            ? ` · ${eventItem.related_object_type}:${eventItem.related_object_id}`
-                            : ""}
-                        </li>
+                <div className="fg-grid fg-grid-compact">
+                  <label>
+                    Thread
+                    <select value={appendForm.threadId} onChange={(event) => setAppendForm((current) => ({ ...current, threadId: event.target.value }))}>
+                      <option value="">active thread</option>
+                      {detail.threads.map((thread) => <option key={thread.thread_id} value={thread.thread_id}>{thread.title} ({thread.thread_id})</option>)}
+                    </select>
+                  </label>
+                  <label>
+                    Session
+                    <select value={appendForm.sessionId} onChange={(event) => setAppendForm((current) => ({ ...current, sessionId: event.target.value }))}>
+                      <option value="">latest or new</option>
+                      {detail.sessions.map((sessionItem) => <option key={sessionItem.session_id} value={sessionItem.session_id}>{sessionItem.session_kind} ({sessionItem.session_id})</option>)}
+                    </select>
+                  </label>
+                  <label>
+                    Start new session
+                    <select value={appendForm.startNewSession} onChange={(event) => setAppendForm((current) => ({ ...current, startNewSession: event.target.value as "yes" | "no" }))}>
+                      <option value="yes">yes</option>
+                      <option value="no">no</option>
+                    </select>
+                  </label>
+                </div>
+                <div className="fg-grid fg-grid-compact">
+                  <label>
+                    Session kind
+                    <select value={appendForm.sessionKind} onChange={(event) => setAppendForm((current) => ({ ...current, sessionKind: event.target.value as ConversationSessionKind }))}>
+                      {SESSION_KIND_OPTIONS.map((option) => <option key={option} value={option}>{option}</option>)}
+                    </select>
+                  </label>
+                  <label>
+                    Message role
+                    <select value={appendForm.messageRole} onChange={(event) => setAppendForm((current) => ({ ...current, messageRole: event.target.value as ConversationMessageRole }))}>
+                      {MESSAGE_ROLE_OPTIONS.map((option) => <option key={option} value={option}>{option}</option>)}
+                    </select>
+                  </label>
+                  <label>
+                    Continuity key
+                    <input value={appendForm.continuityKey} onChange={(event) => setAppendForm((current) => ({ ...current, continuityKey: event.target.value }))} placeholder="assistant-review-2" />
+                  </label>
+                </div>
+                <label>
+                  Thread title
+                  <input value={appendForm.threadTitle} onChange={(event) => setAppendForm((current) => ({ ...current, threadTitle: event.target.value }))} placeholder="Follow-up" />
+                </label>
+                <div className="fg-card-grid">
+                  <label>
+                    Mention agents
+                    <select
+                      multiple
+                      size={Math.min(Math.max(selectableAgents.length, 3), 6)}
+                      value={appendForm.mentionAgentIds}
+                      onChange={(event) => setAppendForm((current) => ({
+                        ...current,
+                        mentionAgentIds: Array.from(event.target.selectedOptions, (option) => option.value),
+                      }))}
+                    >
+                      {selectableAgents.map((agent) => (
+                        <option key={agent.agent_id} value={agent.agent_id}>
+                          @{agent.display_name}
+                        </option>
                       ))}
-                    </ul>
-                  )}
-                </article>
-                <article className="fg-subcard">
-                  <h4>Threads</h4>
-                  {detail.threads.length === 0 ? <p className="fg-muted">No threads were recorded.</p> : (
-                    <ul className="fg-list">
-                      {detail.threads.map((thread) => (
-                        <li key={thread.thread_id}>
-                          <span className="fg-code">{thread.thread_id}</span> · {thread.title} · {thread.status} · messages {thread.message_count}
-                        </li>
+                    </select>
+                  </label>
+                  <label>
+                    Roundtable agents
+                    <select
+                      multiple
+                      size={Math.min(Math.max(selectableAgents.length, 3), 6)}
+                      value={appendForm.roundtableAgentIds}
+                      onChange={(event) => setAppendForm((current) => ({
+                        ...current,
+                        roundtableAgentIds: Array.from(event.target.selectedOptions, (option) => option.value),
+                      }))}
+                    >
+                      {selectableAgents.map((agent) => (
+                        <option key={agent.agent_id} value={agent.agent_id}>
+                          {agent.display_name}
+                        </option>
                       ))}
-                    </ul>
-                  )}
-                </article>
-                <article className="fg-subcard">
-                  <h4>Sessions</h4>
-                  {detail.sessions.length === 0 ? <p className="fg-muted">No sessions were recorded.</p> : (
-                    <ul className="fg-list">
-                      {detail.sessions.map((sessionItem) => (
-                        <li key={sessionItem.session_id}>
-                          <span className="fg-code">{sessionItem.session_id}</span> · {sessionItem.session_kind} · {sessionItem.continuity_key ?? "no continuity key"}
-                        </li>
+                    </select>
+                  </label>
+                </div>
+                <div className="fg-grid fg-grid-compact">
+                  <label>
+                    Handoff to
+                    <select
+                      value={appendForm.handoffToAgentId}
+                      onChange={(event) => setAppendForm((current) => ({ ...current, handoffToAgentId: event.target.value }))}
+                    >
+                      <option value="">none</option>
+                      {selectableAgents.map((agent) => (
+                        <option key={agent.agent_id} value={agent.agent_id}>
+                          {agent.display_name}
+                        </option>
                       ))}
-                    </ul>
-                  )}
-                </article>
-                <article className="fg-subcard">
-                  <h4>Inbox linkage</h4>
-                  {detail.inbox_items.length === 0 ? <p className="fg-muted">No inbox items are linked to this conversation.</p> : (
-                    <ul className="fg-list">
-                      {detail.inbox_items.map((item) => (
-                        <li key={item.inbox_id}>
-                          <Link to={buildInboxPath({ instanceId, inboxId: item.inbox_id })}>{item.title}</Link>
-                          {" · "}{item.triage_status}{" · "}{item.status}
-                        </li>
+                    </select>
+                  </label>
+                  <label>
+                    Review request
+                    <select
+                      value={appendForm.reviewRequestAgentId}
+                      onChange={(event) => setAppendForm((current) => ({ ...current, reviewRequestAgentId: event.target.value }))}
+                    >
+                      <option value="">none</option>
+                      {selectableAgents.map((agent) => (
+                        <option key={agent.agent_id} value={agent.agent_id}>
+                          {agent.display_name}
+                        </option>
                       ))}
-                    </ul>
-                  )}
-                </article>
-              </div>
+                    </select>
+                  </label>
+                  <label>
+                    Blocker owner
+                    <select
+                      value={appendForm.blockerAgentId}
+                      onChange={(event) => setAppendForm((current) => ({ ...current, blockerAgentId: event.target.value }))}
+                    >
+                      <option value="">none</option>
+                      {selectableAgents.map((agent) => (
+                        <option key={agent.agent_id} value={agent.agent_id}>
+                          {agent.display_name}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                </div>
+                <label>
+                  Structured payload JSON
+                  <textarea rows={4} value={appendForm.structuredPayloadJson} onChange={(event) => setAppendForm((current) => ({ ...current, structuredPayloadJson: event.target.value }))} />
+                </label>
+                <label>
+                  Message body
+                  <textarea rows={4} value={appendForm.body} onChange={(event) => setAppendForm((current) => ({ ...current, body: event.target.value }))} />
+                </label>
+                <div className="fg-actions">
+                  <button type="submit" disabled={!canMutate || savingAppend || !appendForm.body.trim()}>
+                    {savingAppend ? "Appending message" : "Append message"}
+                  </button>
+                </div>
+              </form>
+            </div>
+          ) : null}
+        </article>
+
+        <article className="fg-card">
+          <div className="fg-panel-heading">
+            <div>
+              <h3>Context and objects</h3>
+              <p className="fg-muted">Thread, session, tasks, runs, approvals, workspaces, artifacts, and agent events stay visible on the right so continuation never loses its runtime or governance context.</p>
+            </div>
+            <span className="fg-pill" data-tone={detail ? "success" : "neutral"}>{detail ? "Context loaded" : "No conversation selected"}</span>
+          </div>
+
+          {detail ? (
+            <div className="fg-stack">
+              <article className="fg-subcard">
+                <h4>Conversation lenses</h4>
+                <div className="fg-grid fg-grid-compact">
+                  <label>
+                    Thread lens
+                    <select value={threadLensId} onChange={(event) => setThreadLensId(event.target.value)}>
+                      <option value="all">all threads</option>
+                      {detail.threads.map((thread) => <option key={thread.thread_id} value={thread.thread_id}>{thread.title}</option>)}
+                    </select>
+                  </label>
+                  <label>
+                    An/von Agent
+                    <select value={messageDirectionLens} onChange={(event) => setMessageDirectionLens(event.target.value as MessageDirectionLens)}>
+                      {MESSAGE_DIRECTION_OPTIONS.map((option) => <option key={option} value={option}>{option}</option>)}
+                    </select>
+                  </label>
+                  <label>
+                    Agent
+                    <select value={messageAgentLensId} onChange={(event) => setMessageAgentLensId(event.target.value)}>
+                      <option value="">all agents</option>
+                      {selectableAgents.map((agent) => <option key={agent.agent_id} value={agent.agent_id}>{agent.display_name}</option>)}
+                    </select>
+                  </label>
+                </div>
+              </article>
 
               <article className="fg-subcard">
-                <h4>Messages</h4>
-                {detail.messages.length === 0 ? <p className="fg-muted">No messages were recorded.</p> : (
+                <h4>Linked objects</h4>
+                <ul className="fg-list">
+                  <li>Workspace: {detail.workspace_id ?? "Not linked"}</li>
+                  <li>Run: {detail.run_id ?? "Not linked"}</li>
+                  <li>Approval: {detail.approval_id ?? "Not linked"}</li>
+                  <li>Artifact: {detail.artifact_id ?? "Not linked"}</li>
+                  <li>Decision: {detail.decision_id ?? "Not linked"}</li>
+                  <li>Tasks: {visibleTasks.length > 0 ? `${visibleTasks.length} linked` : tasksState === "loading" ? "Loading" : "No linked tasks"}</li>
+                </ul>
+                <div className="fg-actions">
+                  {detail.workspace_id ? <Link className="fg-nav-link" to={buildWorkspacePath({ instanceId, workspaceId: detail.workspace_id })}>Open workspace</Link> : null}
+                  {detail.run_id ? <Link className="fg-nav-link" to={buildExecutionRoute(instanceId, detail.run_id)}>Open execution review</Link> : null}
+                  {detail.approval_id ? <Link className="fg-nav-link" to={buildApprovalRoute(instanceId, detail.approval_id)}>Open approval review</Link> : null}
+                  {detail.artifact_id ? <Link className="fg-nav-link" to={buildArtifactsPath({ instanceId, artifactId: detail.artifact_id })}>Open artifact</Link> : null}
+                  {detail.inbox_items[0] ? <Link className="fg-nav-link" to={buildInboxPath({ instanceId, inboxId: detail.inbox_items[0].inbox_id })}>Open inbox item</Link> : null}
+                  {visibleTasks[0] ? <Link className="fg-nav-link" to={buildTaskPath({ instanceId, taskId: visibleTasks[0].task_id })}>Open task</Link> : null}
+                </div>
+              </article>
+
+              <article className="fg-subcard">
+                <h4>Related tasks</h4>
+                {tasksState === "loading" ? <p className="fg-muted">Loading task links.</p> : null}
+                {visibleTasks.length === 0 ? <p className="fg-muted">No tasks are currently linked to this conversation.</p> : null}
+                {visibleTasks.length > 0 ? (
                   <ul className="fg-list">
-                    {detail.messages.map((messageItem) => (
-                      <li key={messageItem.message_id}>
-                        <strong>{messageItem.message_role}</strong> · {messageItem.created_at} · {messageItem.body}
+                    {visibleTasks.map((task) => (
+                      <li key={task.task_id}>
+                        <Link className="fg-nav-link" to={buildTaskPath({ instanceId, taskId: task.task_id })}>{task.title}</Link>
+                        {" · "}{task.status}
+                        {" · "}{task.priority}
+                      </li>
+                    ))}
+                  </ul>
+                ) : null}
+              </article>
+
+              <article className="fg-subcard">
+                <h4>Thread and session context</h4>
+                <ul className="fg-list">
+                  {detail.threads.map((thread) => (
+                    <li key={thread.thread_id}>
+                      <span className="fg-code">{thread.thread_id}</span>
+                      {" · "}{thread.title}
+                      {" · "}{thread.status}
+                      {" · messages "}{thread.message_count}
+                    </li>
+                  ))}
+                  {detail.sessions.map((sessionItem) => (
+                    <li key={sessionItem.session_id}>
+                      <span className="fg-code">{sessionItem.session_id}</span>
+                      {" · "}{sessionItem.session_kind}
+                      {" · "}{sessionItem.continuity_key ?? "no continuity key"}
+                    </li>
+                  ))}
+                </ul>
+              </article>
+
+              <article className="fg-subcard">
+                <h4>Agent participation</h4>
+                {detail.participants.length === 0 ? <p className="fg-muted">No agent participants were recorded.</p> : (
+                  <ul className="fg-list">
+                    {detail.participants.map((participant) => (
+                      <li key={participant.participant_id}>
+                        <Link className="fg-nav-link" to={buildConversationPath({ instanceId, conversationId: detail.conversation_id, agentId: participant.agent_id ?? undefined })}>
+                          {participant.display_label}
+                        </Link>
+                        {" · "}{participant.participant_kind}
+                        {" · "}{participant.participant_status}
+                        {participant.agent_id ? (
+                          <>
+                            {" · "}
+                            <Link className="fg-nav-link" to={buildAgentsPath({ instanceId, agentId: participant.agent_id })}>Open agent</Link>
+                          </>
+                        ) : null}
                       </li>
                     ))}
                   </ul>
                 )}
               </article>
+
+              <article className="fg-subcard">
+                <h4>Mentions and events</h4>
+                {detail.mentions.length === 0 && detail.events.length === 0 ? <p className="fg-muted">No structured mentions or agent events were recorded.</p> : null}
+                {detail.mentions.length > 0 ? (
+                  <ul className="fg-list">
+                    {detail.mentions.map((mention) => (
+                      <li key={mention.mention_id}>
+                        <Link className="fg-nav-link" to={buildAgentsPath({ instanceId, agentId: mention.agent_id })}>{mention.token}</Link>
+                        {" · "}{mention.agent_display_name}
+                        {" · "}{mention.status}
+                      </li>
+                    ))}
+                  </ul>
+                ) : null}
+                {detail.events.length > 0 ? (
+                  <ul className="fg-list">
+                    {detail.events.map((eventItem) => (
+                      <li key={eventItem.event_id}>
+                        <strong>{eventItem.summary}</strong>
+                        {" · "}{eventItem.event_type}
+                        {eventItem.target_agent_id ? ` · ${resolveAgentLabel(eventItem.target_agent_id)}` : ""}
+                      </li>
+                    ))}
+                  </ul>
+                ) : null}
+              </article>
             </div>
-          ) : null}
+          ) : (
+            <p className="fg-muted">Select a conversation to expose lenses, tasks, sessions, approvals, workspace links, and agent events.</p>
+          )}
         </article>
       </div>
 
@@ -1052,8 +1536,8 @@ export function ConversationsPage() {
         <article className="fg-card">
           <div className="fg-panel-heading">
             <div>
-              <h3>Edit and continue</h3>
-              <p className="fg-muted">Keep triage, links, and active thread truth coherent, then append the next message against the right context.</p>
+              <h3>Conversation settings</h3>
+              <p className="fg-muted">Create and edit remain secondary actions. Use them to keep summary, triage, and object linkage coherent around the active work thread.</p>
             </div>
             <span className="fg-pill" data-tone={detail ? "neutral" : "warning"}>
               {detail ? detail.conversation_id : "Select a conversation"}
@@ -1133,150 +1617,6 @@ export function ConversationsPage() {
                 <div className="fg-actions">
                   <button type="submit" disabled={!canMutate || savingUpdate}>
                     {savingUpdate ? "Saving conversation" : "Save conversation"}
-                  </button>
-                </div>
-              </form>
-
-              <form className="fg-stack" onSubmit={handleAppend}>
-                <h4>Append message</h4>
-                <div className="fg-grid fg-grid-compact">
-                  <label>
-                    Thread
-                    <select value={appendForm.threadId} onChange={(event) => setAppendForm((current) => ({ ...current, threadId: event.target.value }))}>
-                      <option value="">active thread</option>
-                      {detail.threads.map((thread) => <option key={thread.thread_id} value={thread.thread_id}>{thread.title} ({thread.thread_id})</option>)}
-                    </select>
-                  </label>
-                  <label>
-                    Session
-                    <select value={appendForm.sessionId} onChange={(event) => setAppendForm((current) => ({ ...current, sessionId: event.target.value }))}>
-                      <option value="">latest or new</option>
-                      {detail.sessions.map((sessionItem) => <option key={sessionItem.session_id} value={sessionItem.session_id}>{sessionItem.session_kind} ({sessionItem.session_id})</option>)}
-                    </select>
-                  </label>
-                  <label>
-                    Start new session
-                    <select value={appendForm.startNewSession} onChange={(event) => setAppendForm((current) => ({ ...current, startNewSession: event.target.value as "yes" | "no" }))}>
-                      <option value="yes">yes</option>
-                      <option value="no">no</option>
-                    </select>
-                  </label>
-                </div>
-                <div className="fg-grid fg-grid-compact">
-                  <label>
-                    Session kind
-                    <select value={appendForm.sessionKind} onChange={(event) => setAppendForm((current) => ({ ...current, sessionKind: event.target.value as ConversationSessionKind }))}>
-                      {SESSION_KIND_OPTIONS.map((option) => <option key={option} value={option}>{option}</option>)}
-                    </select>
-                  </label>
-                  <label>
-                    Message role
-                    <select value={appendForm.messageRole} onChange={(event) => setAppendForm((current) => ({ ...current, messageRole: event.target.value as ConversationMessageRole }))}>
-                      {MESSAGE_ROLE_OPTIONS.map((option) => <option key={option} value={option}>{option}</option>)}
-                    </select>
-                  </label>
-                  <label>
-                    Continuity key
-                    <input value={appendForm.continuityKey} onChange={(event) => setAppendForm((current) => ({ ...current, continuityKey: event.target.value }))} placeholder="assistant-review-2" />
-                  </label>
-                </div>
-                <label>
-                  Thread title
-                  <input value={appendForm.threadTitle} onChange={(event) => setAppendForm((current) => ({ ...current, threadTitle: event.target.value }))} placeholder="Follow-up" />
-                </label>
-                <div className="fg-card-grid">
-                  <label>
-                    Mention agents
-                    <select
-                      multiple
-                      size={Math.min(Math.max(selectableAgents.length, 3), 6)}
-                      value={appendForm.mentionAgentIds}
-                      onChange={(event) => setAppendForm((current) => ({
-                        ...current,
-                        mentionAgentIds: Array.from(event.target.selectedOptions, (option) => option.value),
-                      }))}
-                    >
-                      {selectableAgents.map((agent) => (
-                        <option key={agent.agent_id} value={agent.agent_id}>
-                          @{agent.display_name}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  <label>
-                    Roundtable agents
-                    <select
-                      multiple
-                      size={Math.min(Math.max(selectableAgents.length, 3), 6)}
-                      value={appendForm.roundtableAgentIds}
-                      onChange={(event) => setAppendForm((current) => ({
-                        ...current,
-                        roundtableAgentIds: Array.from(event.target.selectedOptions, (option) => option.value),
-                      }))}
-                    >
-                      {selectableAgents.map((agent) => (
-                        <option key={agent.agent_id} value={agent.agent_id}>
-                          {agent.display_name}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                </div>
-                <div className="fg-grid fg-grid-compact">
-                  <label>
-                    Handoff to
-                    <select
-                      value={appendForm.handoffToAgentId}
-                      onChange={(event) => setAppendForm((current) => ({ ...current, handoffToAgentId: event.target.value }))}
-                    >
-                      <option value="">none</option>
-                      {selectableAgents.map((agent) => (
-                        <option key={agent.agent_id} value={agent.agent_id}>
-                          {agent.display_name}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  <label>
-                    Review request
-                    <select
-                      value={appendForm.reviewRequestAgentId}
-                      onChange={(event) => setAppendForm((current) => ({ ...current, reviewRequestAgentId: event.target.value }))}
-                    >
-                      <option value="">none</option>
-                      {selectableAgents.map((agent) => (
-                        <option key={agent.agent_id} value={agent.agent_id}>
-                          {agent.display_name}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  <label>
-                    Blocker owner
-                    <select
-                      value={appendForm.blockerAgentId}
-                      onChange={(event) => setAppendForm((current) => ({ ...current, blockerAgentId: event.target.value }))}
-                    >
-                      <option value="">none</option>
-                      {selectableAgents.map((agent) => (
-                        <option key={agent.agent_id} value={agent.agent_id}>
-                          {agent.display_name}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                </div>
-                <label>
-                  Structured payload JSON
-                  <textarea rows={4} value={appendForm.structuredPayloadJson} onChange={(event) => setAppendForm((current) => ({ ...current, structuredPayloadJson: event.target.value }))} />
-                </label>
-                <label>
-                  Message body
-                  <textarea rows={4} value={appendForm.body} onChange={(event) => setAppendForm((current) => ({ ...current, body: event.target.value }))} />
-                </label>
-                <div className="fg-actions">
-                  <button type="submit" disabled={!canMutate || savingAppend || !appendForm.body.trim()}>
-                    {savingAppend ? "Appending message" : "Append message"}
                   </button>
                 </div>
               </form>
