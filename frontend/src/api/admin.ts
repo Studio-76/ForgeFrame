@@ -751,6 +751,15 @@ export type UsageSummaryResponse = {
     runtime: Record<string, string | number>;
     health_check: Record<string, string | number>;
   };
+  cost_truths: Record<string, {
+    label: string;
+    status: "tracked" | "derived" | "unsupported";
+    billing_truth: boolean;
+    description: string;
+    runtime_cost: number | null;
+    health_check_cost: number | null;
+    total_cost: number | null;
+  }>;
   cost_axes: Record<string, string>;
   window: "1h" | "24h" | "7d" | "all";
   instance?: Pick<InstanceRecord, "instance_id" | "tenant_id" | "company_id">;

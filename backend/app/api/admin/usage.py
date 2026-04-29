@@ -194,6 +194,72 @@ def _build_alerts(
     return alerts
 
 
+def _cost_truths(
+    *,
+    runtime: dict[str, object],
+    health_check: dict[str, object],
+) -> dict[str, object]:
+    runtime_actual = float(runtime.get("actual_cost", 0.0) or 0.0)
+    runtime_hypothetical = float(runtime.get("hypothetical_cost", 0.0) or 0.0)
+    runtime_avoided = float(runtime.get("avoided_cost", 0.0) or 0.0)
+    health_actual = float(health_check.get("actual_cost", 0.0) or 0.0)
+    health_hypothetical = float(health_check.get("hypothetical_cost", 0.0) or 0.0)
+    health_avoided = float(health_check.get("avoided_cost", 0.0) or 0.0)
+
+    estimated_runtime = round(runtime_hypothetical, 6)
+    estimated_health = round(health_hypothetical, 6)
+    modeled_runtime = round(max(runtime_hypothetical - runtime_actual, 0.0), 6)
+    modeled_health = round(max(health_hypothetical - health_actual, 0.0), 6)
+
+    return {
+        "actual": {
+            "label": "Actual",
+            "status": "tracked",
+            "billing_truth": True,
+            "description": "Persisted runtime and health costs when ForgeFrame is the direct metering path.",
+            "runtime_cost": round(runtime_actual, 6),
+            "health_check_cost": round(health_actual, 6),
+            "total_cost": round(runtime_actual + health_actual, 6),
+        },
+        "provider_reported": {
+            "label": "Provider reported",
+            "status": "unsupported",
+            "billing_truth": True,
+            "description": "ForgeFrame does not ingest provider invoices or billing exports on this host.",
+            "runtime_cost": None,
+            "health_check_cost": None,
+            "total_cost": None,
+        },
+        "estimated": {
+            "label": "Estimated",
+            "status": "derived",
+            "billing_truth": False,
+            "description": "Configured price-card estimate across recorded traffic. Useful for forecast, not billing truth.",
+            "runtime_cost": estimated_runtime,
+            "health_check_cost": estimated_health,
+            "total_cost": round(estimated_runtime + estimated_health, 6),
+        },
+        "modeled": {
+            "label": "Modeled",
+            "status": "derived",
+            "billing_truth": False,
+            "description": "Estimated cost exposure that is not directly metered by ForgeFrame actual-cost records.",
+            "runtime_cost": modeled_runtime,
+            "health_check_cost": modeled_health,
+            "total_cost": round(modeled_runtime + modeled_health, 6),
+        },
+        "avoided": {
+            "label": "Avoided",
+            "status": "derived",
+            "billing_truth": False,
+            "description": "Estimated spend avoided when traffic would have been billable under a metered equivalent.",
+            "runtime_cost": round(runtime_avoided, 6),
+            "health_check_cost": round(health_avoided, 6),
+            "total_cost": round(runtime_avoided + health_avoided, 6),
+        },
+    }
+
+
 def _filtered_usage_summary_payload(
     *,
     window: str,
@@ -336,6 +402,9 @@ def _filtered_usage_summary_payload(
         key=lambda item: (-int(item["errors"]), str(item["profile_key"])),
     )
 
+    runtime_split = next((item for item in by_traffic_type if item["traffic_type"] == "runtime"), {"traffic_type": "runtime", "requests": 0, "tokens": 0, "actual_cost": 0.0, "hypothetical_cost": 0.0, "avoided_cost": 0.0})
+    health_split = next((item for item in by_traffic_type if item["traffic_type"] == "health_check"), {"traffic_type": "health_check", "requests": 0, "tokens": 0, "actual_cost": 0.0, "hypothetical_cost": 0.0, "avoided_cost": 0.0})
+
     return {
         "status": "ok",
         "object": "usage_summary",
@@ -361,14 +430,17 @@ def _filtered_usage_summary_payload(
             "errors_by_profile": errors_by_profile,
         },
         "traffic_split": {
-            "runtime": next((item for item in by_traffic_type if item["traffic_type"] == "runtime"), {"traffic_type": "runtime", "requests": 0, "tokens": 0, "actual_cost": 0.0, "hypothetical_cost": 0.0, "avoided_cost": 0.0}),
-            "health_check": next((item for item in by_traffic_type if item["traffic_type"] == "health_check"), {"traffic_type": "health_check", "requests": 0, "tokens": 0, "actual_cost": 0.0, "hypothetical_cost": 0.0, "avoided_cost": 0.0}),
+            "runtime": runtime_split,
+            "health_check": health_split,
         },
         "cost_axes": {
             "actual": "tracked for metered API providers",
-            "hypothetical": "tracked for comparison and forecast",
+            "provider_reported": "unsupported in the current control plane",
+            "estimated": "derived from configured pricing, never billing truth",
+            "modeled": "derived gap between estimated and metered actual cost",
             "avoided": "derived from actual vs hypothetical",
         },
+        "cost_truths": _cost_truths(runtime=runtime_split, health_check=health_split),
         "window": window,
         "instance": {
             "instance_id": instance.instance_id,
@@ -439,6 +511,9 @@ def usage_summary(
         alerts = analytics.alert_indicators(tenant_id=instance.tenant_id)
     except TenantFilterRequiredError as exc:
         return _tenant_filter_error(exc)
+    runtime_split = next((item for item in aggregates["by_traffic_type"] if item["traffic_type"] == "runtime"), {"traffic_type": "runtime", "requests": 0, "tokens": 0, "actual_cost": 0.0, "hypothetical_cost": 0.0, "avoided_cost": 0.0})
+    health_split = next((item for item in aggregates["by_traffic_type"] if item["traffic_type"] == "health_check"), {"traffic_type": "health_check", "requests": 0, "tokens": 0, "actual_cost": 0.0, "hypothetical_cost": 0.0, "avoided_cost": 0.0})
+
     return {
         "status": "ok",
         "object": "usage_summary",
@@ -464,14 +539,17 @@ def usage_summary(
             "errors_by_profile": aggregates["errors_by_profile"],
         },
         "traffic_split": {
-            "runtime": next((item for item in aggregates["by_traffic_type"] if item["traffic_type"] == "runtime"), {"traffic_type": "runtime", "requests": 0, "tokens": 0, "actual_cost": 0.0, "hypothetical_cost": 0.0, "avoided_cost": 0.0}),
-            "health_check": next((item for item in aggregates["by_traffic_type"] if item["traffic_type"] == "health_check"), {"traffic_type": "health_check", "requests": 0, "tokens": 0, "actual_cost": 0.0, "hypothetical_cost": 0.0, "avoided_cost": 0.0}),
+            "runtime": runtime_split,
+            "health_check": health_split,
         },
         "cost_axes": {
             "actual": "tracked for metered API providers",
-            "hypothetical": "tracked for comparison and forecast",
+            "provider_reported": "unsupported in the current control plane",
+            "estimated": "derived from configured pricing, never billing truth",
+            "modeled": "derived gap between estimated and metered actual cost",
             "avoided": "derived from actual vs hypothetical",
         },
+        "cost_truths": _cost_truths(runtime=runtime_split, health_check=health_split),
         "window": window,
         "instance": {
             "instance_id": instance.instance_id,

@@ -127,7 +127,60 @@ beforeEach(() => {
       runtime: { actual_cost: 3.4, hypothetical_cost: 4.1, avoided_cost: 0.7 },
       health_check: { actual_cost: 0.2 },
     },
-    cost_axes: { actual: "tracked", hypothetical: "tracked", avoided: "tracked" },
+    cost_truths: {
+      actual: {
+        label: "Actual",
+        status: "tracked",
+        billing_truth: true,
+        description: "Persisted runtime and health costs when ForgeFrame is the direct metering path.",
+        runtime_cost: 3.4,
+        health_check_cost: 0.2,
+        total_cost: 3.6,
+      },
+      provider_reported: {
+        label: "Provider reported",
+        status: "unsupported",
+        billing_truth: true,
+        description: "ForgeFrame does not ingest provider invoices or billing exports on this host.",
+        runtime_cost: null,
+        health_check_cost: null,
+        total_cost: null,
+      },
+      estimated: {
+        label: "Estimated",
+        status: "derived",
+        billing_truth: false,
+        description: "Configured price-card estimate across recorded traffic. Useful for forecast, not billing truth.",
+        runtime_cost: 4.1,
+        health_check_cost: 0.2,
+        total_cost: 4.3,
+      },
+      modeled: {
+        label: "Modeled",
+        status: "derived",
+        billing_truth: false,
+        description: "Estimated cost exposure that is not directly metered by ForgeFrame actual-cost records.",
+        runtime_cost: 0.7,
+        health_check_cost: 0,
+        total_cost: 0.7,
+      },
+      avoided: {
+        label: "Avoided",
+        status: "derived",
+        billing_truth: false,
+        description: "Estimated spend avoided when traffic would have been billable under a metered equivalent.",
+        runtime_cost: 0.7,
+        health_check_cost: 0,
+        total_cost: 0.7,
+      },
+    },
+    cost_axes: {
+      actual: "tracked",
+      provider_reported: "unsupported",
+      estimated: "derived",
+      modeled: "derived",
+      avoided: "tracked",
+    },
     window: "24h",
     latest_health: [],
     timeline_24h: [],
@@ -405,9 +458,10 @@ describe("observability pages", () => {
     await flushEffects();
 
     expect(container.textContent).toContain("Costs & Budget Controls");
-    expect(container.textContent).toContain("Budget Posture");
-    expect(container.textContent).toContain("Provider Cost Hotspots");
-    expect(container.textContent).toContain("Recent Routing Cost Mix");
+    expect(container.textContent).toContain("Cost truth ledger");
+    expect(container.textContent).toContain("Budget posture");
+    expect(container.textContent).toContain("Blocked cost classes");
+    expect(container.textContent).toContain("Routing cost mix");
   });
 
   it("renders the dedicated errors surface", async () => {

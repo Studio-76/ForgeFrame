@@ -1720,6 +1720,10 @@ def test_admin_usage_summary_endpoint_available() -> None:
     assert payload["object"] == "usage_summary"
     assert "pricing_snapshot" in payload
     assert "aggregations" in payload
+    assert payload["cost_truths"]["actual"]["billing_truth"] is True
+    assert payload["cost_truths"]["provider_reported"]["status"] == "unsupported"
+    assert payload["cost_truths"]["estimated"]["billing_truth"] is False
+    assert payload["cost_truths"]["modeled"]["billing_truth"] is False
 
 
 def test_admin_oauth_operations_endpoint_available() -> None:
