@@ -412,9 +412,9 @@
           "escalation_allowed": false,
           "escalation_target_keys": [],
           "health_status": "unknown",
-          "availability_status": "healthy",
-          "readiness_status": "ready",
-          "status_reason": "Live runtime evidence is recorded for this provider.",
+          "availability_status": "unknown",
+          "readiness_status": "partial",
+          "status_reason": null,
           "last_seen_at": null,
           "last_probe_at": null,
           "stale_since": null
@@ -430,7 +430,7 @@
           "auth_type": "oauth_or_api_key",
           "credential_type": "oauth_grant",
           "capability_profile": {
-            "streaming": false,
+            "streaming": true,
             "tool_calling": true,
             "vision": true,
             "queue_eligible": true,
@@ -438,7 +438,7 @@
             "capability_profile": "general"
           },
           "technical_capabilities": {
-            "streaming": false,
+            "streaming": true,
             "tool_calling": true,
             "vision": true,
             "reasoning_band": "multimodal"
@@ -465,7 +465,7 @@
           "enabled": true,
           "priority": 95,
           "queue_eligible": true,
-          "stream_capable": false,
+          "stream_capable": true,
           "tool_capable": true,
           "vision_capable": true,
           "fallback_allowed": true,
@@ -473,9 +473,9 @@
           "escalation_allowed": true,
           "escalation_target_keys": [],
           "health_status": "unknown",
-          "availability_status": "degraded",
+          "availability_status": "unknown",
           "readiness_status": "partial",
-          "status_reason": "Gemini OAuth/account mode requires FORGEFRAME_GEMINI_OAUTH_ACCESS_TOKEN.",
+          "status_reason": null,
           "last_seen_at": null,
           "last_probe_at": null,
           "stale_since": null
@@ -534,9 +534,9 @@
           "escalation_allowed": true,
           "escalation_target_keys": [],
           "health_status": "unknown",
-          "availability_status": "degraded",
+          "availability_status": "unknown",
           "readiness_status": "unavailable",
-          "status_reason": "No harness provider profile configured in control plane.",
+          "status_reason": null,
           "last_seen_at": null,
           "last_probe_at": null,
           "stale_since": null
@@ -595,9 +595,9 @@
           "escalation_allowed": true,
           "escalation_target_keys": [],
           "health_status": "unknown",
-          "availability_status": "healthy",
-          "readiness_status": "ready",
-          "status_reason": "Live runtime evidence is recorded for this provider.",
+          "availability_status": "unknown",
+          "readiness_status": "partial",
+          "status_reason": null,
           "last_seen_at": null,
           "last_probe_at": null,
           "stale_since": null
@@ -656,9 +656,9 @@
           "escalation_allowed": true,
           "escalation_target_keys": [],
           "health_status": "unknown",
-          "availability_status": "degraded",
+          "availability_status": "unknown",
           "readiness_status": "partial",
-          "status_reason": "FORGEFRAME_OPENAI_API_KEY is required.",
+          "status_reason": null,
           "last_seen_at": null,
           "last_probe_at": null,
           "stale_since": null
@@ -717,9 +717,9 @@
           "escalation_allowed": true,
           "escalation_target_keys": [],
           "health_status": "unknown",
-          "availability_status": "degraded",
+          "availability_status": "unknown",
           "readiness_status": "partial",
-          "status_reason": "FORGEFRAME_OPENAI_API_KEY is required.",
+          "status_reason": null,
           "last_seen_at": null,
           "last_probe_at": null,
           "stale_since": null
@@ -735,7 +735,7 @@
           "auth_type": "oauth_or_api_key",
           "credential_type": "oauth_grant",
           "capability_profile": {
-            "streaming": false,
+            "streaming": true,
             "tool_calling": true,
             "vision": false,
             "queue_eligible": true,
@@ -743,7 +743,7 @@
             "capability_profile": "general"
           },
           "technical_capabilities": {
-            "streaming": false,
+            "streaming": true,
             "tool_calling": true,
             "vision": false,
             "reasoning_band": "coding"
@@ -770,7 +770,7 @@
           "enabled": true,
           "priority": 90,
           "queue_eligible": true,
-          "stream_capable": false,
+          "stream_capable": true,
           "tool_capable": true,
           "vision_capable": false,
           "fallback_allowed": true,
@@ -778,9 +778,9 @@
           "escalation_allowed": true,
           "escalation_target_keys": [],
           "health_status": "unknown",
-          "availability_status": "degraded",
+          "availability_status": "unknown",
           "readiness_status": "partial",
-          "status_reason": "OpenAI Codex OAuth mode 'manual_redirect_completion' expects a pre-issued access token in FORGEFRAME_OPENAI_CODEX_OAUTH_ACCESS_TOKEN. ForgeFrame does not initiate or complete that OAuth flow itself.",
+          "status_reason": null,
           "last_seen_at": null,
           "last_probe_at": null,
           "stale_since": null
@@ -931,9 +931,9 @@
           ],
           "local_reference_paths": [
             "reference/Provider/API-Anthropic.md",
+            "reference/OpenAI/API/Anthropic/INDEX.md",
             "reference/OpenAI/API/Anthropic/administration-api.html",
             "reference/OpenAI/API/Anthropic/administration-api.txt",
-            "reference/OpenAI/API/Anthropic/INDEX.md",
             "reference/OpenAI/API/Anthropic/openai-sdk.html",
             "reference/OpenAI/API/Anthropic/openai-sdk.txt",
             "reference/OpenAI/API/Anthropic/overview.html",
@@ -963,19 +963,18 @@
           "runtime_provider_binding": "anthropic",
           "oauth_target_binding": null,
           "product_axis_binding": null,
-          "evidence_status": "docs_declared",
-          "maturity_status": "documented-only",
+          "evidence_status": "repo_observed",
+          "maturity_status": "adapter-ready-without-live-proof",
           "live_signoff_status": "blocked-by-live-evidence",
           "last_probe_at": null,
           "live_signoff_at": null,
           "signoff_notes": "Missing live evidence blocks any truthful signoff for this provider row.",
           "missing_evidence": [
             "live probe",
-            "repo observed",
             "streaming",
             "tool calling"
           ],
-          "safe_next_action": "Add a real repo surface for this provider before claiming anything beyond documentation.",
+          "safe_next_action": "Provide real credentials, run probe/runtime traffic, and record streaming/tool evidence.",
           "evidence_log": [
             {
               "provider_id": "anthropic",
@@ -1036,6 +1035,46 @@
               "source_ref": "backend/tests/test_runtime_error_mapping.py",
               "recorded_at": "2026-04-24T05:26:04.776877+00:00",
               "details": "Typed runtime error mapping is covered by repository tests for the shipped surface behind this row."
+            },
+            {
+              "provider_id": "anthropic",
+              "target_key": null,
+              "evidence_class": "repo_observed",
+              "status": "observed",
+              "source_kind": "repo_runtime_binding",
+              "source_ref": "runtime:anthropic",
+              "recorded_at": "2026-04-29T02:54:07.368442+00:00",
+              "details": "Native runtime provider binding 'anthropic' is shipped in the repository, even if it is not active on this host."
+            },
+            {
+              "provider_id": "anthropic",
+              "target_key": "anthropic",
+              "evidence_class": "live_probe_verified",
+              "status": "blocked-by-live-evidence",
+              "source_kind": "none",
+              "source_ref": "anthropic",
+              "recorded_at": "2026-04-29T02:54:07.368442+00:00",
+              "details": "No successful live probe recorded yet."
+            },
+            {
+              "provider_id": "anthropic",
+              "target_key": "anthropic",
+              "evidence_class": "streaming_verified",
+              "status": "blocked-by-live-evidence",
+              "source_kind": "none",
+              "source_ref": "anthropic",
+              "recorded_at": "2026-04-29T02:54:07.368442+00:00",
+              "details": "No successful streaming runtime request recorded yet."
+            },
+            {
+              "provider_id": "anthropic",
+              "target_key": "anthropic",
+              "evidence_class": "tool_calling_verified",
+              "status": "blocked-by-live-evidence",
+              "source_kind": "none",
+              "source_ref": "anthropic",
+              "recorded_at": "2026-04-29T02:54:07.368442+00:00",
+              "details": "No successful runtime request with tool-call output recorded yet."
             }
           ],
           "signoff_history": [
@@ -1066,11 +1105,11 @@
           "local_reference_paths": [
             "reference/Oauth/OAUTH-Antigravity.md",
             "reference/Provider/API-Antigravity.md",
+            "reference/Provider/Antigravity/INDEX.md",
             "reference/Provider/Antigravity/getting-started-codelab.html",
             "reference/Provider/Antigravity/getting-started-codelab.txt",
             "reference/Provider/Antigravity/home.html",
             "reference/Provider/Antigravity/home.txt",
-            "reference/Provider/Antigravity/INDEX.md",
             "reference/Oauth/Antigravity/INDEX.md",
             "reference/Oauth/Antigravity/mcp.html",
             "reference/Oauth/Antigravity/mcp.txt",
@@ -1356,9 +1395,9 @@
           ],
           "local_reference_paths": [
             "reference/Provider/API-AzureOpenAI.md",
+            "reference/OpenAI/API/AzureOpenAI/INDEX.md",
             "reference/OpenAI/API/AzureOpenAI/api-version-lifecycle.html",
             "reference/OpenAI/API/AzureOpenAI/api-version-lifecycle.txt",
-            "reference/OpenAI/API/AzureOpenAI/INDEX.md",
             "reference/OpenAI/API/AzureOpenAI/operation-groups.html",
             "reference/OpenAI/API/AzureOpenAI/operation-groups.txt",
             "reference/OpenAI/API/AzureOpenAI/reference.html",
@@ -1510,7 +1549,7 @@
             "Bedrock Runtime Converse"
           ],
           "base_url_default": null,
-          "base_url_override_env": null,
+          "base_url_override_env": "FORGEFRAME_BEDROCK_BASE_URL",
           "token_env_vars": [
             "AWS",
             "SDK",
@@ -1521,21 +1560,20 @@
           "tools_support_claim": "unknown",
           "responses_support_claim": "unknown",
           "product_axis": "unmapped_native_runtime",
-          "runtime_provider_binding": null,
+          "runtime_provider_binding": "bedrock",
           "oauth_target_binding": null,
           "product_axis_binding": null,
-          "evidence_status": "docs_declared",
-          "maturity_status": "documented-only",
+          "evidence_status": "repo_observed",
+          "maturity_status": "adapter-ready-without-live-proof",
           "live_signoff_status": "blocked-by-live-evidence",
           "last_probe_at": null,
           "live_signoff_at": null,
           "signoff_notes": "Missing live evidence blocks any truthful signoff for this provider row.",
           "missing_evidence": [
             "live probe",
-            "repo observed",
             "streaming"
           ],
-          "safe_next_action": "Add a real repo surface for this provider before claiming anything beyond documentation.",
+          "safe_next_action": "Provide real credentials, run probe/runtime traffic, and record streaming/tool evidence.",
           "evidence_log": [
             {
               "provider_id": "bedrock",
@@ -1576,6 +1614,56 @@
               "source_ref": null,
               "recorded_at": "2026-04-24T05:26:04.776877+00:00",
               "details": "No runtime adapter, onboarding surface, or generic framework binding is currently wired for this provider row."
+            },
+            {
+              "provider_id": "bedrock",
+              "target_key": null,
+              "evidence_class": "repo_observed",
+              "status": "observed",
+              "source_kind": "repo_runtime_binding",
+              "source_ref": "runtime:bedrock",
+              "recorded_at": "2026-04-29T02:54:07.368442+00:00",
+              "details": "Native runtime provider binding 'bedrock' is shipped in the repository, even if it is not active on this host."
+            },
+            {
+              "provider_id": "bedrock",
+              "target_key": "bedrock",
+              "evidence_class": "live_probe_verified",
+              "status": "blocked-by-live-evidence",
+              "source_kind": "none",
+              "source_ref": "bedrock",
+              "recorded_at": "2026-04-29T02:54:07.368442+00:00",
+              "details": "No successful live probe recorded yet."
+            },
+            {
+              "provider_id": "bedrock",
+              "target_key": "bedrock",
+              "evidence_class": "streaming_verified",
+              "status": "blocked-by-live-evidence",
+              "source_kind": "none",
+              "source_ref": "bedrock",
+              "recorded_at": "2026-04-29T02:54:07.368442+00:00",
+              "details": "No successful streaming runtime request recorded yet."
+            },
+            {
+              "provider_id": "bedrock",
+              "target_key": "bedrock",
+              "evidence_class": "tool_calling_verified",
+              "status": "blocked-by-live-evidence",
+              "source_kind": "none",
+              "source_ref": "bedrock",
+              "recorded_at": "2026-04-29T02:54:07.368442+00:00",
+              "details": "No successful runtime request with tool-call output recorded yet."
+            },
+            {
+              "provider_id": "bedrock",
+              "target_key": null,
+              "evidence_class": "unit_tested",
+              "status": "observed",
+              "source_kind": "repo_tests",
+              "source_ref": "backend/tests/test_provider_contract.py",
+              "recorded_at": "2026-04-29T02:54:07.368442+00:00",
+              "details": "Repository unit tests cover a first-party runtime or auth surface for this provider row."
             }
           ],
           "signoff_history": [
@@ -1584,6 +1672,18 @@
               "target_key": null,
               "status": "blocked-by-live-evidence",
               "recorded_at": "2026-04-24T05:26:04.776877+00:00",
+              "details": "Missing live evidence blocks any truthful signoff for this provider row.",
+              "evidence_basis": [
+                "live_probe_verified",
+                "streaming_verified",
+                "tool_calling_verified"
+              ]
+            },
+            {
+              "provider_id": "bedrock",
+              "target_key": "bedrock",
+              "status": "blocked-by-live-evidence",
+              "recorded_at": "2026-04-29T02:54:07.368442+00:00",
               "details": "Missing live evidence blocks any truthful signoff for this provider row.",
               "evidence_basis": [
                 "live_probe_verified",
@@ -1742,16 +1842,16 @@
           "local_reference_paths": [
             "reference/Oauth/OAUTH-ClaudeCode.md",
             "reference/Provider/API-ClaudeCode.md",
+            "reference/Provider/ClaudeCode/INDEX.md",
             "reference/Provider/ClaudeCode/agent-loop.html",
             "reference/Provider/ClaudeCode/agent-loop.txt",
             "reference/Provider/ClaudeCode/agent-sdk-overview.html",
             "reference/Provider/ClaudeCode/agent-sdk-overview.txt",
-            "reference/Provider/ClaudeCode/INDEX.md",
             "reference/Provider/ClaudeCode/quickstart.html",
             "reference/Provider/ClaudeCode/quickstart.txt",
+            "reference/Oauth/ClaudeCode/INDEX.md",
             "reference/Oauth/ClaudeCode/authentication.html",
             "reference/Oauth/ClaudeCode/authentication.txt",
-            "reference/Oauth/ClaudeCode/INDEX.md",
             "reference/Oauth/ClaudeCode/server-managed-settings.html",
             "reference/Oauth/ClaudeCode/server-managed-settings.txt",
             "reference/Oauth/ClaudeCode/setup.md",
@@ -2289,11 +2389,11 @@
           ],
           "local_reference_paths": [
             "reference/Provider/API-Gemini.md",
+            "reference/Provider/Gemini/INDEX.md",
             "reference/Provider/Gemini/chat-gemini.html",
             "reference/Provider/Gemini/chat-gemini.txt",
             "reference/Provider/Gemini/gemini-cli.html",
             "reference/Provider/Gemini/gemini-cli.txt",
-            "reference/Provider/Gemini/INDEX.md",
             "reference/Provider/Gemini/set-up-code-assist-github.html",
             "reference/Provider/Gemini/set-up-code-assist-github.txt",
             "reference/Provider/Gemini/use-agentic-chat-pair-programmer.html",
@@ -2427,6 +2527,16 @@
               "source_ref": "backend/tests/test_runtime_error_mapping.py",
               "recorded_at": "2026-04-24T05:26:04.776877+00:00",
               "details": "Typed runtime error mapping is covered by repository tests for the shipped surface behind this row."
+            },
+            {
+              "provider_id": "gemini_native",
+              "target_key": null,
+              "evidence_class": "repo_observed",
+              "status": "observed",
+              "source_kind": "repo_runtime",
+              "source_ref": "runtime:gemini",
+              "recorded_at": "2026-04-29T02:54:07.368442+00:00",
+              "details": "Native runtime provider binding 'gemini' is active in the current repository."
             }
           ],
           "signoff_history": [
@@ -2602,13 +2712,14 @@
           "local_reference_paths": [
             "reference/Oauth/OAUTH-GitHubCopilot.md",
             "reference/Provider/API-GitHubCopilot.md",
+            "reference/Provider/GitHubCopilot/INDEX.md",
             "reference/Provider/GitHubCopilot/about-the-rest-api.html",
             "reference/Provider/GitHubCopilot/about-the-rest-api.txt",
-            "reference/Provider/GitHubCopilot/INDEX.md",
             "reference/Provider/GitHubCopilot/rest-copilot.html",
             "reference/Provider/GitHubCopilot/rest-copilot.txt",
             "reference/Provider/GitHubCopilot/rest.html",
             "reference/Provider/GitHubCopilot/rest.txt",
+            "reference/Oauth/GitHubCopilot/INDEX.md",
             "reference/Oauth/GitHubCopilot/authenticate-copilot-cli.html",
             "reference/Oauth/GitHubCopilot/authenticate-copilot-cli.txt",
             "reference/Oauth/GitHubCopilot/authenticate-copilot-sdk-2.html",
@@ -2629,7 +2740,6 @@
             "reference/Oauth/GitHubCopilot/copilot-sdk.txt",
             "reference/Oauth/GitHubCopilot/github-oauth.html",
             "reference/Oauth/GitHubCopilot/github-oauth.txt",
-            "reference/Oauth/GitHubCopilot/INDEX.md",
             "reference/Oauth/GitHubCopilot/oauth-apps.html",
             "reference/Oauth/GitHubCopilot/oauth-apps.txt",
             "reference/Oauth/GitHubCopilot/set-up-copilot-sdk.html",
@@ -2784,22 +2894,22 @@
           "local_reference_paths": [
             "reference/Oauth/OAUTH-GoogleGemini.md",
             "reference/Provider/API-Gemini.md",
+            "reference/Oauth/Gemini/INDEX.md",
             "reference/Oauth/Gemini/chat-overview.html",
             "reference/Oauth/Gemini/chat-overview.txt",
             "reference/Oauth/Gemini/gemini-api-oauth.html",
             "reference/Oauth/Gemini/gemini-api-oauth.txt",
             "reference/Oauth/Gemini/gemini-cli-authentication.html",
             "reference/Oauth/Gemini/gemini-cli-authentication.txt",
-            "reference/Oauth/Gemini/INDEX.md",
             "reference/Oauth/Gemini/set-up-gemini.html",
             "reference/Oauth/Gemini/set-up-gemini.txt",
             "reference/Oauth/Gemini/use-gemini-code-assist-chat.html",
             "reference/Oauth/Gemini/use-gemini-code-assist-chat.txt",
+            "reference/Provider/Gemini/INDEX.md",
             "reference/Provider/Gemini/chat-gemini.html",
             "reference/Provider/Gemini/chat-gemini.txt",
             "reference/Provider/Gemini/gemini-cli.html",
             "reference/Provider/Gemini/gemini-cli.txt",
-            "reference/Provider/Gemini/INDEX.md",
             "reference/Provider/Gemini/set-up-code-assist-github.html",
             "reference/Provider/Gemini/set-up-code-assist-github.txt",
             "reference/Provider/Gemini/use-agentic-chat-pair-programmer.html",
@@ -2933,6 +3043,16 @@
               "source_ref": "gemini",
               "recorded_at": "2026-04-24T05:26:04.776877+00:00",
               "details": "Credential refresh semantics are modeled, but no live refresh evidence is recorded on this host."
+            },
+            {
+              "provider_id": "google_gemini_oauth",
+              "target_key": null,
+              "evidence_class": "repo_observed",
+              "status": "observed",
+              "source_kind": "repo_runtime",
+              "source_ref": "runtime:gemini",
+              "recorded_at": "2026-04-29T02:54:07.368442+00:00",
+              "details": "Native runtime provider binding 'gemini' is active in the current repository."
             }
           ],
           "signoff_history": [
@@ -2961,11 +3081,11 @@
           ],
           "local_reference_paths": [
             "reference/Provider/API-GoogleVertexAI.md",
+            "reference/OpenAI/API/GoogleVertexAI/INDEX.md",
             "reference/OpenAI/API/GoogleVertexAI/cross-product-overviews.html",
             "reference/OpenAI/API/GoogleVertexAI/cross-product-overviews.txt",
             "reference/OpenAI/API/GoogleVertexAI/devtools.html",
             "reference/OpenAI/API/GoogleVertexAI/devtools.txt",
-            "reference/OpenAI/API/GoogleVertexAI/INDEX.md",
             "reference/OpenAI/API/GoogleVertexAI/openai.html",
             "reference/OpenAI/API/GoogleVertexAI/openai.txt"
           ],
@@ -3099,9 +3219,9 @@
           ],
           "local_reference_paths": [
             "reference/Provider/API-Groq.md",
+            "reference/OpenAI/API/Groq/INDEX.md",
             "reference/OpenAI/API/Groq/api-reference.html",
             "reference/OpenAI/API/Groq/api-reference.txt",
-            "reference/OpenAI/API/Groq/INDEX.md",
             "reference/OpenAI/API/Groq/openai.html",
             "reference/OpenAI/API/Groq/openai.txt"
           ],
@@ -3672,20 +3792,19 @@
           "product_axis": "local_providers",
           "runtime_provider_binding": null,
           "oauth_target_binding": null,
-          "product_axis_binding": null,
-          "evidence_status": "docs_declared",
-          "maturity_status": "documented-only",
+          "product_axis_binding": "llama_cpp",
+          "evidence_status": "repo_observed",
+          "maturity_status": "adapter-ready-without-live-proof",
           "live_signoff_status": "blocked-by-live-evidence",
           "last_probe_at": null,
           "live_signoff_at": null,
           "signoff_notes": "Missing live evidence blocks any truthful signoff for this provider row.",
           "missing_evidence": [
             "live probe",
-            "repo observed",
             "streaming",
             "tool calling"
           ],
-          "safe_next_action": "Add a real repo surface for this provider before claiming anything beyond documentation.",
+          "safe_next_action": "Provide real credentials, run probe/runtime traffic, and record streaming/tool evidence.",
           "evidence_log": [
             {
               "provider_id": "llama_cpp",
@@ -3726,6 +3845,46 @@
               "source_ref": null,
               "recorded_at": "2026-04-24T05:26:04.776877+00:00",
               "details": "No runtime adapter, onboarding surface, or generic framework binding is currently wired for this provider row."
+            },
+            {
+              "provider_id": "llama_cpp",
+              "target_key": null,
+              "evidence_class": "repo_observed",
+              "status": "observed",
+              "source_kind": "repo_harness_template",
+              "source_ref": "openai_provider_llama_cpp",
+              "recorded_at": "2026-04-29T02:54:07.368442+00:00",
+              "details": "Exact generic harness template 'openai_provider_llama_cpp' exists for this provider row."
+            },
+            {
+              "provider_id": "llama_cpp",
+              "target_key": null,
+              "evidence_class": "live_probe_verified",
+              "status": "blocked-by-live-evidence",
+              "source_kind": "repo_harness_template",
+              "source_ref": "openai_provider_llama_cpp",
+              "recorded_at": "2026-04-29T02:54:07.368442+00:00",
+              "details": "Exact provider wiring exists, but this row still has no live probe evidence."
+            },
+            {
+              "provider_id": "llama_cpp",
+              "target_key": null,
+              "evidence_class": "streaming_verified",
+              "status": "blocked-by-live-evidence",
+              "source_kind": "repo_harness_template",
+              "source_ref": "openai_provider_llama_cpp",
+              "recorded_at": "2026-04-29T02:54:07.368442+00:00",
+              "details": "Streaming-capable framework wiring exists, but this exact provider has no recorded streaming evidence yet."
+            },
+            {
+              "provider_id": "llama_cpp",
+              "target_key": null,
+              "evidence_class": "tool_calling_verified",
+              "status": "blocked-by-live-evidence",
+              "source_kind": "repo_harness_template",
+              "source_ref": "openai_provider_llama_cpp",
+              "recorded_at": "2026-04-29T02:54:07.368442+00:00",
+              "details": "Tool-capable framework wiring exists, but this exact provider has no recorded tool-call evidence yet."
             }
           ],
           "signoff_history": [
@@ -3777,20 +3936,19 @@
           "product_axis": "local_providers",
           "runtime_provider_binding": null,
           "oauth_target_binding": null,
-          "product_axis_binding": null,
-          "evidence_status": "docs_declared",
-          "maturity_status": "documented-only",
+          "product_axis_binding": "llama_cpp_python",
+          "evidence_status": "repo_observed",
+          "maturity_status": "adapter-ready-without-live-proof",
           "live_signoff_status": "blocked-by-live-evidence",
           "last_probe_at": null,
           "live_signoff_at": null,
           "signoff_notes": "Missing live evidence blocks any truthful signoff for this provider row.",
           "missing_evidence": [
             "live probe",
-            "repo observed",
             "streaming",
             "tool calling"
           ],
-          "safe_next_action": "Add a real repo surface for this provider before claiming anything beyond documentation.",
+          "safe_next_action": "Provide real credentials, run probe/runtime traffic, and record streaming/tool evidence.",
           "evidence_log": [
             {
               "provider_id": "llama_cpp_python",
@@ -3831,6 +3989,46 @@
               "source_ref": null,
               "recorded_at": "2026-04-24T05:26:04.776877+00:00",
               "details": "No runtime adapter, onboarding surface, or generic framework binding is currently wired for this provider row."
+            },
+            {
+              "provider_id": "llama_cpp_python",
+              "target_key": null,
+              "evidence_class": "repo_observed",
+              "status": "observed",
+              "source_kind": "repo_harness_template",
+              "source_ref": "openai_provider_llama_cpp_python",
+              "recorded_at": "2026-04-29T02:54:07.368442+00:00",
+              "details": "Exact generic harness template 'openai_provider_llama_cpp_python' exists for this provider row."
+            },
+            {
+              "provider_id": "llama_cpp_python",
+              "target_key": null,
+              "evidence_class": "live_probe_verified",
+              "status": "blocked-by-live-evidence",
+              "source_kind": "repo_harness_template",
+              "source_ref": "openai_provider_llama_cpp_python",
+              "recorded_at": "2026-04-29T02:54:07.368442+00:00",
+              "details": "Exact provider wiring exists, but this row still has no live probe evidence."
+            },
+            {
+              "provider_id": "llama_cpp_python",
+              "target_key": null,
+              "evidence_class": "streaming_verified",
+              "status": "blocked-by-live-evidence",
+              "source_kind": "repo_harness_template",
+              "source_ref": "openai_provider_llama_cpp_python",
+              "recorded_at": "2026-04-29T02:54:07.368442+00:00",
+              "details": "Streaming-capable framework wiring exists, but this exact provider has no recorded streaming evidence yet."
+            },
+            {
+              "provider_id": "llama_cpp_python",
+              "target_key": null,
+              "evidence_class": "tool_calling_verified",
+              "status": "blocked-by-live-evidence",
+              "source_kind": "repo_harness_template",
+              "source_ref": "openai_provider_llama_cpp_python",
+              "recorded_at": "2026-04-29T02:54:07.368442+00:00",
+              "details": "Tool-capable framework wiring exists, but this exact provider has no recorded tool-call evidence yet."
             }
           ],
           "signoff_history": [
@@ -3880,20 +4078,19 @@
           "product_axis": "local_providers",
           "runtime_provider_binding": null,
           "oauth_target_binding": null,
-          "product_axis_binding": null,
-          "evidence_status": "docs_declared",
-          "maturity_status": "documented-only",
+          "product_axis_binding": "localai",
+          "evidence_status": "repo_observed",
+          "maturity_status": "adapter-ready-without-live-proof",
           "live_signoff_status": "blocked-by-live-evidence",
           "last_probe_at": null,
           "live_signoff_at": null,
           "signoff_notes": "Missing live evidence blocks any truthful signoff for this provider row.",
           "missing_evidence": [
             "live probe",
-            "repo observed",
             "streaming",
             "tool calling"
           ],
-          "safe_next_action": "Add a real repo surface for this provider before claiming anything beyond documentation.",
+          "safe_next_action": "Provide real credentials, run probe/runtime traffic, and record streaming/tool evidence.",
           "evidence_log": [
             {
               "provider_id": "localai",
@@ -3934,6 +4131,46 @@
               "source_ref": null,
               "recorded_at": "2026-04-24T05:26:04.776877+00:00",
               "details": "No runtime adapter, onboarding surface, or generic framework binding is currently wired for this provider row."
+            },
+            {
+              "provider_id": "localai",
+              "target_key": null,
+              "evidence_class": "repo_observed",
+              "status": "observed",
+              "source_kind": "repo_harness_template",
+              "source_ref": "openai_provider_localai",
+              "recorded_at": "2026-04-29T02:54:07.368442+00:00",
+              "details": "Exact generic harness template 'openai_provider_localai' exists for this provider row."
+            },
+            {
+              "provider_id": "localai",
+              "target_key": null,
+              "evidence_class": "live_probe_verified",
+              "status": "blocked-by-live-evidence",
+              "source_kind": "repo_harness_template",
+              "source_ref": "openai_provider_localai",
+              "recorded_at": "2026-04-29T02:54:07.368442+00:00",
+              "details": "Exact provider wiring exists, but this row still has no live probe evidence."
+            },
+            {
+              "provider_id": "localai",
+              "target_key": null,
+              "evidence_class": "streaming_verified",
+              "status": "blocked-by-live-evidence",
+              "source_kind": "repo_harness_template",
+              "source_ref": "openai_provider_localai",
+              "recorded_at": "2026-04-29T02:54:07.368442+00:00",
+              "details": "Streaming-capable framework wiring exists, but this exact provider has no recorded streaming evidence yet."
+            },
+            {
+              "provider_id": "localai",
+              "target_key": null,
+              "evidence_class": "tool_calling_verified",
+              "status": "blocked-by-live-evidence",
+              "source_kind": "repo_harness_template",
+              "source_ref": "openai_provider_localai",
+              "recorded_at": "2026-04-29T02:54:07.368442+00:00",
+              "details": "Tool-capable framework wiring exists, but this exact provider has no recorded tool-call evidence yet."
             }
           ],
           "signoff_history": [
@@ -4073,7 +4310,7 @@
           "provider_id": "minimax",
           "display_name": "MiniMax",
           "raw_class": "anthropic_compatible",
-          "provider_class": "anthropic_messages",
+          "provider_class": "openai_compatible",
           "source_kind": "api_matrix",
           "source_docs": [
             "API-MiniMax.md"
@@ -4095,27 +4332,26 @@
           "token_env_vars": [
             "MINIMAX_API_KEY"
           ],
-          "model_name_policy": "Anthropic model identifier supplied by caller",
+          "model_name_policy": "caller-supplied provider model identifier",
           "streaming_support_claim": "documented",
           "tools_support_claim": "documented",
-          "responses_support_claim": "unknown",
-          "product_axis": "unmapped_native_runtime",
+          "responses_support_claim": "possible-via-generic-openai-compatible-framework",
+          "product_axis": "openai_compatible_providers",
           "runtime_provider_binding": null,
           "oauth_target_binding": null,
-          "product_axis_binding": null,
-          "evidence_status": "docs_declared",
-          "maturity_status": "documented-only",
+          "product_axis_binding": "openai_compatible_generic",
+          "evidence_status": "repo_observed",
+          "maturity_status": "adapter-ready-without-live-proof",
           "live_signoff_status": "blocked-by-live-evidence",
           "last_probe_at": null,
           "live_signoff_at": null,
           "signoff_notes": "Missing live evidence blocks any truthful signoff for this provider row.",
           "missing_evidence": [
             "live probe",
-            "repo observed",
             "streaming",
             "tool calling"
           ],
-          "safe_next_action": "Add a real repo surface for this provider before claiming anything beyond documentation.",
+          "safe_next_action": "Provide real credentials, run probe/runtime traffic, and record streaming/tool evidence.",
           "evidence_log": [
             {
               "provider_id": "minimax",
@@ -4156,6 +4392,56 @@
               "source_ref": null,
               "recorded_at": "2026-04-24T05:26:04.776877+00:00",
               "details": "No runtime adapter, onboarding surface, or generic framework binding is currently wired for this provider row."
+            },
+            {
+              "provider_id": "minimax",
+              "target_key": null,
+              "evidence_class": "repo_observed",
+              "status": "observed",
+              "source_kind": "repo_harness_template",
+              "source_ref": "openai_provider_minimax",
+              "recorded_at": "2026-04-29T02:54:07.368442+00:00",
+              "details": "Exact generic harness template 'openai_provider_minimax' exists for this provider row."
+            },
+            {
+              "provider_id": "minimax",
+              "target_key": null,
+              "evidence_class": "live_probe_verified",
+              "status": "blocked-by-live-evidence",
+              "source_kind": "repo_harness_template",
+              "source_ref": "openai_provider_minimax",
+              "recorded_at": "2026-04-29T02:54:07.368442+00:00",
+              "details": "Exact provider wiring exists, but this row still has no live probe evidence."
+            },
+            {
+              "provider_id": "minimax",
+              "target_key": null,
+              "evidence_class": "streaming_verified",
+              "status": "blocked-by-live-evidence",
+              "source_kind": "repo_harness_template",
+              "source_ref": "openai_provider_minimax",
+              "recorded_at": "2026-04-29T02:54:07.368442+00:00",
+              "details": "Streaming-capable framework wiring exists, but this exact provider has no recorded streaming evidence yet."
+            },
+            {
+              "provider_id": "minimax",
+              "target_key": null,
+              "evidence_class": "tool_calling_verified",
+              "status": "blocked-by-live-evidence",
+              "source_kind": "repo_harness_template",
+              "source_ref": "openai_provider_minimax",
+              "recorded_at": "2026-04-29T02:54:07.368442+00:00",
+              "details": "Tool-capable framework wiring exists, but this exact provider has no recorded tool-call evidence yet."
+            },
+            {
+              "provider_id": "minimax",
+              "target_key": null,
+              "evidence_class": "unit_tested",
+              "status": "observed",
+              "source_kind": "repo_tests",
+              "source_ref": "backend/tests/test_provider_contract.py",
+              "recorded_at": "2026-04-29T02:54:07.368442+00:00",
+              "details": "Repository unit tests cover a first-party runtime or auth surface for this provider row."
             }
           ],
           "signoff_history": [
@@ -4184,9 +4470,9 @@
           ],
           "local_reference_paths": [
             "reference/Provider/API-Mistral.md",
+            "reference/OpenAI/API/Mistral/INDEX.md",
             "reference/OpenAI/API/Mistral/endpoint-chat.html",
             "reference/OpenAI/API/Mistral/endpoint-chat.txt",
-            "reference/OpenAI/API/Mistral/INDEX.md",
             "reference/OpenAI/API/Mistral/migration-guides.html",
             "reference/OpenAI/API/Mistral/migration-guides.txt"
           ],
@@ -4450,7 +4736,7 @@
           "provider_id": "nous_oauth",
           "display_name": "Nous Portal OAuth",
           "raw_class": "oauth_device_code_agent_key",
-          "provider_class": "oauth_cli_bridge",
+          "provider_class": "oauth_account_runtime",
           "source_kind": "oauth_matrix",
           "source_docs": [
             "OAUTH-NousPortal.md",
@@ -4473,27 +4759,27 @@
           "base_url_default": null,
           "base_url_override_env": null,
           "token_env_vars": [],
-          "model_name_policy": "provider-controlled or bridge-configured",
-          "streaming_support_claim": "bridge-only",
-          "tools_support_claim": "bridge-only",
-          "responses_support_claim": "not-applicable",
+          "model_name_policy": "provider-defined",
+          "streaming_support_claim": "documented",
+          "tools_support_claim": "documented",
+          "responses_support_claim": "unknown",
           "product_axis": "oauth_account_providers",
           "runtime_provider_binding": null,
-          "oauth_target_binding": null,
-          "product_axis_binding": null,
-          "evidence_status": "docs_declared",
-          "maturity_status": "documented-only",
+          "oauth_target_binding": "nous_oauth",
+          "product_axis_binding": "nous_oauth",
+          "evidence_status": "repo_observed",
+          "maturity_status": "onboarding-only",
           "live_signoff_status": "blocked-by-live-evidence",
           "last_probe_at": null,
           "live_signoff_at": null,
           "signoff_notes": "Missing live evidence blocks any truthful signoff for this provider row.",
           "missing_evidence": [
+            "credential refresh",
             "live probe",
-            "repo observed",
             "streaming",
             "tool calling"
           ],
-          "safe_next_action": "Add a real repo surface for this provider before claiming anything beyond documentation.",
+          "safe_next_action": "Configure credentials and enable the native account runtime path before attempting signoff.",
           "evidence_log": [
             {
               "provider_id": "nous_oauth",
@@ -4534,6 +4820,56 @@
               "source_ref": null,
               "recorded_at": "2026-04-24T05:26:04.776877+00:00",
               "details": "No runtime adapter, onboarding surface, or generic framework binding is currently wired for this provider row."
+            },
+            {
+              "provider_id": "nous_oauth",
+              "target_key": null,
+              "evidence_class": "repo_observed",
+              "status": "observed",
+              "source_kind": "repo_oauth_surface",
+              "source_ref": "oauth:nous_oauth",
+              "recorded_at": "2026-04-29T02:54:07.368442+00:00",
+              "details": "OAuth/account onboarding surface 'nous_oauth' exists in the current repository."
+            },
+            {
+              "provider_id": "nous_oauth",
+              "target_key": "nous_oauth",
+              "evidence_class": "live_probe_verified",
+              "status": "missing",
+              "source_kind": "none",
+              "source_ref": "nous_oauth",
+              "recorded_at": "2026-04-29T02:54:07.368442+00:00",
+              "details": "No successful live probe recorded yet."
+            },
+            {
+              "provider_id": "nous_oauth",
+              "target_key": "nous_oauth",
+              "evidence_class": "streaming_verified",
+              "status": "missing",
+              "source_kind": "none",
+              "source_ref": "nous_oauth",
+              "recorded_at": "2026-04-29T02:54:07.368442+00:00",
+              "details": "No successful streaming runtime request recorded yet."
+            },
+            {
+              "provider_id": "nous_oauth",
+              "target_key": "nous_oauth",
+              "evidence_class": "tool_calling_verified",
+              "status": "missing",
+              "source_kind": "none",
+              "source_ref": "nous_oauth",
+              "recorded_at": "2026-04-29T02:54:07.368442+00:00",
+              "details": "No successful runtime request with tool-call output recorded yet."
+            },
+            {
+              "provider_id": "nous_oauth",
+              "target_key": "nous_oauth",
+              "evidence_class": "error_fidelity_verified",
+              "status": "missing",
+              "source_kind": "repo_runtime_gap",
+              "source_ref": "nous_oauth",
+              "recorded_at": "2026-04-29T02:54:07.368442+00:00",
+              "details": "No successful non-stream runtime request recorded yet."
             }
           ],
           "signoff_history": [
@@ -4542,6 +4878,18 @@
               "target_key": null,
               "status": "blocked-by-live-evidence",
               "recorded_at": "2026-04-24T05:26:04.776877+00:00",
+              "details": "Missing live evidence blocks any truthful signoff for this provider row.",
+              "evidence_basis": [
+                "live_probe_verified",
+                "streaming_verified",
+                "tool_calling_verified"
+              ]
+            },
+            {
+              "provider_id": "nous_oauth",
+              "target_key": "nous_oauth",
+              "status": "blocked-by-live-evidence",
+              "recorded_at": "2026-04-29T02:54:07.368442+00:00",
               "details": "Missing live evidence blocks any truthful signoff for this provider row.",
               "evidence_basis": [
                 "live_probe_verified",
@@ -4724,7 +5072,7 @@
           "product_axis": "local_providers",
           "runtime_provider_binding": "ollama",
           "oauth_target_binding": null,
-          "product_axis_binding": null,
+          "product_axis_binding": "ollama",
           "evidence_status": "repo_observed",
           "maturity_status": "adapter-ready-without-live-proof",
           "live_signoff_status": "blocked-by-live-evidence",
@@ -4827,6 +5175,16 @@
               "source_ref": "backend/tests/test_runtime_error_mapping.py",
               "recorded_at": "2026-04-24T05:26:04.776877+00:00",
               "details": "Typed runtime error mapping is covered by repository tests for the shipped surface behind this row."
+            },
+            {
+              "provider_id": "ollama",
+              "target_key": null,
+              "evidence_class": "repo_observed",
+              "status": "observed",
+              "source_kind": "repo_runtime",
+              "source_ref": "runtime:ollama",
+              "recorded_at": "2026-04-29T02:54:07.368442+00:00",
+              "details": "Native runtime provider binding 'ollama' is active in the current repository."
             }
           ],
           "signoff_history": [
@@ -4988,6 +5346,7 @@
           ],
           "local_reference_paths": [
             "reference/Provider/API-OpenAI.md",
+            "reference/OpenAI/API/OpenAI/INDEX.md",
             "reference/OpenAI/API/OpenAI/blog.html",
             "reference/OpenAI/API/OpenAI/blog.txt",
             "reference/OpenAI/API/OpenAI/chat-completions-overview.html",
@@ -4998,7 +5357,6 @@
             "reference/OpenAI/API/OpenAI/completions-guide.txt",
             "reference/OpenAI/API/OpenAI/cookbook.html",
             "reference/OpenAI/API/OpenAI/cookbook.txt",
-            "reference/OpenAI/API/OpenAI/INDEX.md",
             "reference/OpenAI/API/OpenAI/migrate-to-responses.html",
             "reference/OpenAI/API/OpenAI/migrate-to-responses.txt",
             "reference/OpenAI/API/OpenAI/models.html",
@@ -5138,6 +5496,16 @@
               "source_ref": "backend/tests/test_runtime_error_mapping.py",
               "recorded_at": "2026-04-24T05:26:04.776877+00:00",
               "details": "Typed runtime error mapping is covered by repository tests for the shipped surface behind this row."
+            },
+            {
+              "provider_id": "openai",
+              "target_key": null,
+              "evidence_class": "repo_observed",
+              "status": "observed",
+              "source_kind": "repo_runtime",
+              "source_ref": "runtime:openai_api",
+              "recorded_at": "2026-04-29T02:54:07.368442+00:00",
+              "details": "Native runtime provider binding 'openai_api' is active in the current repository."
             }
           ],
           "signoff_history": [
@@ -5168,6 +5536,7 @@
           "local_reference_paths": [
             "reference/Oauth/OAUTH-OpenAICodex.md",
             "reference/Provider/API-OpenAICodex.md",
+            "reference/Provider/OpenAICodex/INDEX.md",
             "reference/Provider/OpenAICodex/apps-sdk.html",
             "reference/Provider/OpenAICodex/apps-sdk.txt",
             "reference/Provider/OpenAICodex/chatgpt.html",
@@ -5176,11 +5545,11 @@
             "reference/Provider/OpenAICodex/cli.txt",
             "reference/Provider/OpenAICodex/commerce.html",
             "reference/Provider/OpenAICodex/commerce.txt",
-            "reference/Provider/OpenAICodex/INDEX.md",
             "reference/Provider/OpenAICodex/learn.html",
             "reference/Provider/OpenAICodex/learn.txt",
             "reference/Provider/OpenAICodex/sdk.html",
             "reference/Provider/OpenAICodex/sdk.txt",
+            "reference/Oauth/OpenAICodex/INDEX.md",
             "reference/Oauth/OpenAICodex/api.html",
             "reference/Oauth/OpenAICodex/api.txt",
             "reference/Oauth/OpenAICodex/app-server.html",
@@ -5195,7 +5564,6 @@
             "reference/Oauth/OpenAICodex/docs.txt",
             "reference/Oauth/OpenAICodex/document.html",
             "reference/Oauth/OpenAICodex/document.txt",
-            "reference/Oauth/OpenAICodex/INDEX.md",
             "reference/Oauth/OpenAICodex/overview.html",
             "reference/Oauth/OpenAICodex/overview.txt",
             "reference/Oauth/OpenAICodex/use-cases.html",
@@ -5228,7 +5596,7 @@
           "product_axis": "oauth_account_providers",
           "runtime_provider_binding": "openai_codex",
           "oauth_target_binding": "openai_codex",
-          "product_axis_binding": null,
+          "product_axis_binding": "openai_codex",
           "evidence_status": "repo_observed",
           "maturity_status": "onboarding-only",
           "live_signoff_status": "blocked-by-live-evidence",
@@ -5342,6 +5710,16 @@
               "source_ref": "openai_codex",
               "recorded_at": "2026-04-24T05:26:04.776877+00:00",
               "details": "Credential refresh semantics are modeled, but no live refresh evidence is recorded on this host."
+            },
+            {
+              "provider_id": "openai_codex",
+              "target_key": null,
+              "evidence_class": "repo_observed",
+              "status": "observed",
+              "source_kind": "repo_runtime",
+              "source_ref": "runtime:openai_codex",
+              "recorded_at": "2026-04-29T02:54:07.368442+00:00",
+              "details": "Native runtime provider binding 'openai_codex' is active in the current repository."
             }
           ],
           "signoff_history": [
@@ -5638,9 +6016,9 @@
           ],
           "local_reference_paths": [
             "reference/Provider/API-OpenRouter.md",
+            "reference/OpenAI/API/OpenRouter/INDEX.md",
             "reference/OpenAI/API/OpenRouter/api-reference-overview.html",
             "reference/OpenAI/API/OpenRouter/api-reference-overview.txt",
-            "reference/OpenAI/API/OpenRouter/INDEX.md",
             "reference/OpenAI/API/OpenRouter/openai-sdk.html",
             "reference/OpenAI/API/OpenRouter/openai-sdk.txt"
           ],
@@ -6052,10 +6430,10 @@
           "responses_support_claim": "unknown",
           "product_axis": "oauth_account_providers",
           "runtime_provider_binding": null,
-          "oauth_target_binding": null,
-          "product_axis_binding": null,
-          "evidence_status": "docs_declared",
-          "maturity_status": "documented-only",
+          "oauth_target_binding": "qwen_oauth",
+          "product_axis_binding": "qwen_oauth",
+          "evidence_status": "repo_observed",
+          "maturity_status": "onboarding-only",
           "live_signoff_status": "blocked-by-live-evidence",
           "last_probe_at": null,
           "live_signoff_at": null,
@@ -6063,11 +6441,10 @@
           "missing_evidence": [
             "credential refresh",
             "live probe",
-            "repo observed",
             "streaming",
             "tool calling"
           ],
-          "safe_next_action": "Add a real repo surface for this provider before claiming anything beyond documentation.",
+          "safe_next_action": "Configure credentials and enable the native account runtime path before attempting signoff.",
           "evidence_log": [
             {
               "provider_id": "qwen_oauth",
@@ -6108,6 +6485,56 @@
               "source_ref": null,
               "recorded_at": "2026-04-24T05:26:04.776877+00:00",
               "details": "No runtime adapter, onboarding surface, or generic framework binding is currently wired for this provider row."
+            },
+            {
+              "provider_id": "qwen_oauth",
+              "target_key": null,
+              "evidence_class": "repo_observed",
+              "status": "observed",
+              "source_kind": "repo_oauth_surface",
+              "source_ref": "oauth:qwen_oauth",
+              "recorded_at": "2026-04-29T02:54:07.368442+00:00",
+              "details": "OAuth/account onboarding surface 'qwen_oauth' exists in the current repository."
+            },
+            {
+              "provider_id": "qwen_oauth",
+              "target_key": "qwen_oauth",
+              "evidence_class": "live_probe_verified",
+              "status": "missing",
+              "source_kind": "none",
+              "source_ref": "qwen_oauth",
+              "recorded_at": "2026-04-29T02:54:07.368442+00:00",
+              "details": "No successful live probe recorded yet."
+            },
+            {
+              "provider_id": "qwen_oauth",
+              "target_key": "qwen_oauth",
+              "evidence_class": "streaming_verified",
+              "status": "missing",
+              "source_kind": "none",
+              "source_ref": "qwen_oauth",
+              "recorded_at": "2026-04-29T02:54:07.368442+00:00",
+              "details": "No successful streaming runtime request recorded yet."
+            },
+            {
+              "provider_id": "qwen_oauth",
+              "target_key": "qwen_oauth",
+              "evidence_class": "tool_calling_verified",
+              "status": "missing",
+              "source_kind": "none",
+              "source_ref": "qwen_oauth",
+              "recorded_at": "2026-04-29T02:54:07.368442+00:00",
+              "details": "No successful runtime request with tool-call output recorded yet."
+            },
+            {
+              "provider_id": "qwen_oauth",
+              "target_key": "qwen_oauth",
+              "evidence_class": "error_fidelity_verified",
+              "status": "missing",
+              "source_kind": "repo_runtime_gap",
+              "source_ref": "qwen_oauth",
+              "recorded_at": "2026-04-29T02:54:07.368442+00:00",
+              "details": "No successful non-stream runtime request recorded yet."
             }
           ],
           "signoff_history": [
@@ -6116,6 +6543,18 @@
               "target_key": null,
               "status": "blocked-by-live-evidence",
               "recorded_at": "2026-04-24T05:26:04.776877+00:00",
+              "details": "Missing live evidence blocks any truthful signoff for this provider row.",
+              "evidence_basis": [
+                "live_probe_verified",
+                "streaming_verified",
+                "tool_calling_verified"
+              ]
+            },
+            {
+              "provider_id": "qwen_oauth",
+              "target_key": "qwen_oauth",
+              "status": "blocked-by-live-evidence",
+              "recorded_at": "2026-04-29T02:54:07.368442+00:00",
               "details": "Missing live evidence blocks any truthful signoff for this provider row.",
               "evidence_basis": [
                 "live_probe_verified",
@@ -6431,20 +6870,19 @@
           "product_axis": "local_providers",
           "runtime_provider_binding": null,
           "oauth_target_binding": null,
-          "product_axis_binding": null,
-          "evidence_status": "docs_declared",
-          "maturity_status": "documented-only",
+          "product_axis_binding": "vllm",
+          "evidence_status": "repo_observed",
+          "maturity_status": "adapter-ready-without-live-proof",
           "live_signoff_status": "blocked-by-live-evidence",
           "last_probe_at": null,
           "live_signoff_at": null,
           "signoff_notes": "Missing live evidence blocks any truthful signoff for this provider row.",
           "missing_evidence": [
             "live probe",
-            "repo observed",
             "streaming",
             "tool calling"
           ],
-          "safe_next_action": "Add a real repo surface for this provider before claiming anything beyond documentation.",
+          "safe_next_action": "Provide real credentials, run probe/runtime traffic, and record streaming/tool evidence.",
           "evidence_log": [
             {
               "provider_id": "vllm",
@@ -6485,6 +6923,46 @@
               "source_ref": null,
               "recorded_at": "2026-04-24T05:26:04.776877+00:00",
               "details": "No runtime adapter, onboarding surface, or generic framework binding is currently wired for this provider row."
+            },
+            {
+              "provider_id": "vllm",
+              "target_key": null,
+              "evidence_class": "repo_observed",
+              "status": "observed",
+              "source_kind": "repo_harness_template",
+              "source_ref": "openai_provider_vllm",
+              "recorded_at": "2026-04-29T02:54:07.368442+00:00",
+              "details": "Exact generic harness template 'openai_provider_vllm' exists for this provider row."
+            },
+            {
+              "provider_id": "vllm",
+              "target_key": null,
+              "evidence_class": "live_probe_verified",
+              "status": "blocked-by-live-evidence",
+              "source_kind": "repo_harness_template",
+              "source_ref": "openai_provider_vllm",
+              "recorded_at": "2026-04-29T02:54:07.368442+00:00",
+              "details": "Exact provider wiring exists, but this row still has no live probe evidence."
+            },
+            {
+              "provider_id": "vllm",
+              "target_key": null,
+              "evidence_class": "streaming_verified",
+              "status": "blocked-by-live-evidence",
+              "source_kind": "repo_harness_template",
+              "source_ref": "openai_provider_vllm",
+              "recorded_at": "2026-04-29T02:54:07.368442+00:00",
+              "details": "Streaming-capable framework wiring exists, but this exact provider has no recorded streaming evidence yet."
+            },
+            {
+              "provider_id": "vllm",
+              "target_key": null,
+              "evidence_class": "tool_calling_verified",
+              "status": "blocked-by-live-evidence",
+              "source_kind": "repo_harness_template",
+              "source_ref": "openai_provider_vllm",
+              "recorded_at": "2026-04-29T02:54:07.368442+00:00",
+              "details": "Tool-capable framework wiring exists, but this exact provider has no recorded tool-call evidence yet."
             }
           ],
           "signoff_history": [
@@ -6958,10 +7436,30 @@
         "hard_blocked": false,
         "blocked_cost_classes": [],
         "reason": null,
-        "scopes": [],
+        "scopes": [
+          {
+            "scope_type": "agent",
+            "scope_key": "assistant-alpha",
+            "window": "24h",
+            "enabled": true,
+            "soft_cost_limit": 5.0,
+            "hard_cost_limit": null,
+            "soft_token_limit": null,
+            "hard_token_limit": null,
+            "soft_blocked_cost_classes": [],
+            "note": null,
+            "observed_cost": 0.0,
+            "observed_tokens": 0,
+            "previous_window_cost": 0.0,
+            "previous_window_tokens": 0,
+            "soft_limit_exceeded": false,
+            "hard_limit_exceeded": false,
+            "last_evaluated_at": "2026-04-29T02:54:29.984940+00:00"
+          }
+        ],
         "anomalies": [],
-        "last_evaluated_at": null,
-        "updated_at": null
+        "last_evaluated_at": "2026-04-29T02:54:29.984940+00:00",
+        "updated_at": "2026-04-29T02:54:29.984915+00:00"
       },
       "routing_circuits": [],
       "routing_decisions": [],
@@ -7118,8 +7616,8 @@
         ],
         "checked_at": "2026-04-24T05:26:04.773870+00:00"
       },
-      "updated_at": "2026-04-24T05:35:34.747449+00:00"
+      "updated_at": "2026-04-29T11:21:14.832614+00:00"
     }
   },
-  "updated_at": "2026-04-24T05:35:34.748450+00:00"
+  "updated_at": "2026-04-29T11:21:14.835646+00:00"
 }

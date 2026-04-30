@@ -1,0 +1,729 @@
+{
+  "schema_version": 6,
+  "admin_users": [
+    {
+      "user_id": "admin_b77be977e3",
+      "username": "admin",
+      "display_name": "ForgeFrame Bootstrap Admin",
+      "role": "admin",
+      "status": "active",
+      "password_hash": "fd123a5aeaabd6280a05475941011b6281b3932c8239a5e9e0c8ae332e4b2406",
+      "password_salt": "da0406fa1df3d0e70d825aab79659859",
+      "must_rotate_password": false,
+      "created_at": "2026-04-29T02:54:06.096752+00:00",
+      "updated_at": "2026-04-29T11:21:14.169614+00:00",
+      "last_login_at": "2026-04-29T11:21:14.169614+00:00",
+      "created_by": "system"
+    },
+    {
+      "user_id": "admin_5d2545e5ca",
+      "username": "cancel-viewer-9d179c17",
+      "display_name": "Cancel Viewer",
+      "role": "operator",
+      "status": "active",
+      "password_hash": "ed1881d9a7f92c9a96bcaed181d7e6497e01f5831a039d1ab71c6dfc02e442bf",
+      "password_salt": "f9402fd8cdfd6f677ea808d9f1f17232",
+      "must_rotate_password": false,
+      "created_at": "2026-04-29T10:47:30.217932+00:00",
+      "updated_at": "2026-04-29T10:47:30.973064+00:00",
+      "last_login_at": "2026-04-29T10:47:30.955459+00:00",
+      "created_by": "admin_b77be977e3"
+    }
+  ],
+  "instance_memberships": [
+    {
+      "membership_id": "membership_tenant_bootstrap_admin_5d2545e5ca",
+      "user_id": "admin_5d2545e5ca",
+      "instance_id": "tenant_bootstrap",
+      "tenant_id": "tenant_bootstrap",
+      "company_id": "tenant_bootstrap",
+      "role": "viewer",
+      "status": "active",
+      "created_at": "2026-04-29T10:47:30.217932+00:00",
+      "updated_at": "2026-04-29T10:47:30.973064+00:00",
+      "created_by": "admin_b77be977e3"
+    },
+    {
+      "membership_id": "membership_tenant_bootstrap_admin_5d2545e5ca",
+      "user_id": "admin_5d2545e5ca",
+      "instance_id": "tenant_bootstrap",
+      "tenant_id": "tenant_bootstrap",
+      "company_id": "tenant_bootstrap",
+      "role": "operator",
+      "status": "active",
+      "created_at": "2026-04-29T10:47:30.217932+00:00",
+      "updated_at": "2026-04-29T10:47:30.217932+00:00",
+      "created_by": "admin_b77be977e3"
+    },
+    {
+      "membership_id": "membership_tenant_bootstrap_admin_b77be977e3",
+      "user_id": "admin_b77be977e3",
+      "instance_id": "tenant_bootstrap",
+      "tenant_id": "tenant_bootstrap",
+      "company_id": "tenant_bootstrap",
+      "role": "admin",
+      "status": "active",
+      "created_at": "2026-04-29T02:54:06.096752+00:00",
+      "updated_at": "2026-04-29T10:47:29.549457+00:00",
+      "created_by": "system"
+    }
+  ],
+  "admin_sessions": [
+    {
+      "session_id": "sess_c3281ab636ee",
+      "user_id": "admin_b77be977e3",
+      "token_hash": "063a7f169e98576fda31142449a50d04c4b752a38066cf07631a1e29e694e713",
+      "role": "admin",
+      "membership_id": "membership_tenant_bootstrap_admin_b77be977e3",
+      "instance_id": "tenant_bootstrap",
+      "tenant_id": "tenant_bootstrap",
+      "session_type": "standard",
+      "created_at": "2026-04-29T02:54:06.340807+00:00",
+      "expires_at": "2026-04-29T14:54:06.340807+00:00",
+      "last_used_at": "2026-04-29T02:54:06.346209+00:00",
+      "issued_by_user_id": "admin_b77be977e3",
+      "approved_by_user_id": null,
+      "approval_request_id": null,
+      "approval_reference": null,
+      "justification": null,
+      "notification_targets": [],
+      "revoked_at": null,
+      "revoked_reason": null
+    },
+    {
+      "session_id": "sess_8b969480a2e1",
+      "user_id": "admin_b77be977e3",
+      "token_hash": "4d7d84231ae5fc61f8397270f93d88af487eedafcec6b39dcd9f1bb4e4f07925",
+      "role": "admin",
+      "membership_id": "membership_tenant_bootstrap_admin_b77be977e3",
+      "instance_id": "tenant_bootstrap",
+      "tenant_id": "tenant_bootstrap",
+      "session_type": "standard",
+      "created_at": "2026-04-29T02:54:06.855853+00:00",
+      "expires_at": "2026-04-29T14:54:06.855853+00:00",
+      "last_used_at": "2026-04-29T02:54:07.476443+00:00",
+      "issued_by_user_id": "admin_b77be977e3",
+      "approved_by_user_id": null,
+      "approval_request_id": null,
+      "approval_reference": null,
+      "justification": null,
+      "notification_targets": [],
+      "revoked_at": null,
+      "revoked_reason": null
+    },
+    {
+      "session_id": "sess_0e9924f3b280",
+      "user_id": "admin_b77be977e3",
+      "token_hash": "d4cdaca2899193978ae6e889ca5e66ce4cc1de72e65146d826056d0b4f2d06f2",
+      "role": "admin",
+      "membership_id": "membership_tenant_bootstrap_admin_b77be977e3",
+      "instance_id": "tenant_bootstrap",
+      "tenant_id": "tenant_bootstrap",
+      "session_type": "standard",
+      "created_at": "2026-04-29T02:54:29.357216+00:00",
+      "expires_at": "2026-04-29T14:54:29.357216+00:00",
+      "last_used_at": "2026-04-29T02:54:29.982860+00:00",
+      "issued_by_user_id": "admin_b77be977e3",
+      "approved_by_user_id": null,
+      "approval_request_id": null,
+      "approval_reference": null,
+      "justification": null,
+      "notification_targets": [],
+      "revoked_at": null,
+      "revoked_reason": null
+    },
+    {
+      "session_id": "sess_21af954e1116",
+      "user_id": "admin_b77be977e3",
+      "token_hash": "3ca88024525e74becd4380f83f3da7825c07bff77ba91738a88a41861f8f262d",
+      "role": "admin",
+      "membership_id": "membership_tenant_bootstrap_admin_b77be977e3",
+      "instance_id": "tenant_bootstrap",
+      "tenant_id": "tenant_bootstrap",
+      "session_type": "standard",
+      "created_at": "2026-04-29T03:00:26.547022+00:00",
+      "expires_at": "2026-04-29T15:00:26.547022+00:00",
+      "last_used_at": "2026-04-29T03:00:27.234608+00:00",
+      "issued_by_user_id": "admin_b77be977e3",
+      "approved_by_user_id": null,
+      "approval_request_id": null,
+      "approval_reference": null,
+      "justification": null,
+      "notification_targets": [],
+      "revoked_at": null,
+      "revoked_reason": null
+    },
+    {
+      "session_id": "sess_75b89e99dd24",
+      "user_id": "admin_b77be977e3",
+      "token_hash": "ea09803b3f4a8835a8b5e2a021f795ec2c070aab2f0fffb0fe73232d74090e41",
+      "role": "admin",
+      "membership_id": "membership_tenant_bootstrap_admin_b77be977e3",
+      "instance_id": "tenant_bootstrap",
+      "tenant_id": "tenant_bootstrap",
+      "session_type": "standard",
+      "created_at": "2026-04-29T10:47:29.549457+00:00",
+      "expires_at": "2026-04-29T22:47:29.549457+00:00",
+      "last_used_at": "2026-04-29T10:47:30.970472+00:00",
+      "issued_by_user_id": "admin_b77be977e3",
+      "approved_by_user_id": null,
+      "approval_request_id": null,
+      "approval_reference": null,
+      "justification": null,
+      "notification_targets": [],
+      "revoked_at": null,
+      "revoked_reason": null
+    },
+    {
+      "session_id": "sess_2425716016e5",
+      "user_id": "admin_5d2545e5ca",
+      "token_hash": "db8d5c657593248d82037e89456b7cc7c62c397807ebc750e5fbaaa2542d33ea",
+      "role": "operator",
+      "membership_id": "membership_tenant_bootstrap_admin_5d2545e5ca",
+      "instance_id": "tenant_bootstrap",
+      "tenant_id": "tenant_bootstrap",
+      "session_type": "standard",
+      "created_at": "2026-04-29T10:47:30.462937+00:00",
+      "expires_at": "2026-04-29T22:47:30.462937+00:00",
+      "last_used_at": "2026-04-29T10:47:30.469330+00:00",
+      "issued_by_user_id": "admin_5d2545e5ca",
+      "approved_by_user_id": null,
+      "approval_request_id": null,
+      "approval_reference": null,
+      "justification": null,
+      "notification_targets": [],
+      "revoked_at": null,
+      "revoked_reason": null
+    },
+    {
+      "session_id": "sess_114eb1b9b45d",
+      "user_id": "admin_5d2545e5ca",
+      "token_hash": "56bd30163438b7d6df4b9883a49ad2b558dd15486760b6732b27c0ed0764891b",
+      "role": "operator",
+      "membership_id": "membership_tenant_bootstrap_admin_5d2545e5ca",
+      "instance_id": "tenant_bootstrap",
+      "tenant_id": "tenant_bootstrap",
+      "session_type": "standard",
+      "created_at": "2026-04-29T10:47:30.955459+00:00",
+      "expires_at": "2026-04-29T22:47:30.955459+00:00",
+      "last_used_at": "2026-04-29T10:47:30.961548+00:00",
+      "issued_by_user_id": "admin_5d2545e5ca",
+      "approved_by_user_id": null,
+      "approval_request_id": null,
+      "approval_reference": null,
+      "justification": null,
+      "notification_targets": [],
+      "revoked_at": null,
+      "revoked_reason": null
+    },
+    {
+      "session_id": "sess_7e0d7a40ceb5",
+      "user_id": "admin_b77be977e3",
+      "token_hash": "2518944b0eb986ed414b16b50cd369fe81217dcede3b842b89e952d5622451be",
+      "role": "admin",
+      "membership_id": "membership_tenant_bootstrap_admin_b77be977e3",
+      "instance_id": "tenant_bootstrap",
+      "tenant_id": "tenant_bootstrap",
+      "session_type": "standard",
+      "created_at": "2026-04-29T11:21:14.169614+00:00",
+      "expires_at": "2026-04-29T23:21:14.169614+00:00",
+      "last_used_at": "2026-04-29T11:21:14.984506+00:00",
+      "issued_by_user_id": "admin_b77be977e3",
+      "approved_by_user_id": null,
+      "approval_request_id": null,
+      "approval_reference": null,
+      "justification": null,
+      "notification_targets": [],
+      "revoked_at": null,
+      "revoked_reason": null
+    }
+  ],
+  "elevated_access_requests": [
+    {
+      "request_id": "elev_4aac8f9c45f6",
+      "request_type": "break_glass",
+      "gate_status": "timed_out",
+      "issuance_status": "pending",
+      "requested_by_user_id": "admin_5d2545e5ca",
+      "target_user_id": "admin_5d2545e5ca",
+      "target_role": "operator",
+      "session_role": "admin",
+      "approval_reference": "INC-CANCEL-VIEWER",
+      "justification": "Need temporary admin to validate a downgrade regression.",
+      "notification_targets": [
+        "pagerduty://security-review"
+      ],
+      "duration_minutes": 20,
+      "approval_expires_at": "2026-04-29T11:17:30.963460+00:00",
+      "decision_note": null,
+      "decided_at": null,
+      "decided_by_user_id": null,
+      "issued_at": null,
+      "issued_by_user_id": null,
+      "issued_session_id": null,
+      "created_at": "2026-04-29T10:47:30.963460+00:00",
+      "updated_at": "2026-04-29T11:21:13.794072+00:00"
+    }
+  ],
+  "gateway_accounts": [
+    {
+      "account_id": "acct_717e5617a6",
+      "instance_id": "tenant_bootstrap",
+      "tenant_id": "tenant_bootstrap",
+      "label": "Probe Tenant",
+      "status": "active",
+      "provider_bindings": [],
+      "notes": "",
+      "created_at": "2026-04-29T11:21:14.979084+00:00",
+      "updated_at": "2026-04-29T11:21:14.979084+00:00",
+      "last_activity_at": null
+    }
+  ],
+  "runtime_keys": [
+    {
+      "key_id": "key_ea72d14852ab",
+      "instance_id": "tenant_bootstrap",
+      "tenant_id": "tenant_bootstrap",
+      "account_id": "acct_717e5617a6",
+      "label": "Probe Key",
+      "prefix": "fgk_g68ywfMa_b93",
+      "secret_hash": "7c0be38d1bba978a7488754de7b6c27d95a889da0943e796cc75d929e9eb1619",
+      "scopes": [
+        "chat:write",
+        "models:read",
+        "responses:write"
+      ],
+      "status": "active",
+      "created_at": "2026-04-29T11:21:14.987355+00:00",
+      "updated_at": "2026-04-29T11:21:14.987355+00:00",
+      "expires_at": "2026-07-28T11:21:14.987452+00:00",
+      "last_used_at": null,
+      "last_rotated_at": "2026-04-29T11:21:14.987355+00:00",
+      "rotated_from": null,
+      "revoked_at": null,
+      "revoked_reason": null,
+      "created_by": "admin_b77be977e3",
+      "allowed_request_paths": [
+        "smart_routing"
+      ],
+      "default_request_path": "smart_routing",
+      "pinned_target_key": null,
+      "local_only_policy": "require_local_target",
+      "review_required_conditions": []
+    }
+  ],
+  "setting_overrides": [],
+  "audit_events": [
+    {
+      "event_id": "audit_ff462cdbbc92",
+      "actor_type": "system",
+      "actor_id": null,
+      "instance_id": "tenant_bootstrap",
+      "tenant_id": "tenant_bootstrap",
+      "company_id": null,
+      "action": "bootstrap_admin_created",
+      "target_type": "admin_user",
+      "target_id": "admin_b77be977e3",
+      "status": "warning",
+      "details": "Bootstrap admin account created.",
+      "metadata": {
+        "username": "admin",
+        "instance_id": "tenant_bootstrap",
+        "tenant_id": "tenant_bootstrap"
+      },
+      "created_at": "2026-04-29T02:54:06.218469+00:00"
+    },
+    {
+      "event_id": "audit_39c88571343a",
+      "actor_type": "admin_user",
+      "actor_id": "admin_b77be977e3",
+      "instance_id": "tenant_bootstrap",
+      "tenant_id": "tenant_bootstrap",
+      "company_id": null,
+      "action": "admin_login",
+      "target_type": "admin_session",
+      "target_id": "sess_c3281ab636ee",
+      "status": "ok",
+      "details": "Admin session issued.",
+      "metadata": {
+        "instance_id": "tenant_bootstrap",
+        "tenant_id": "tenant_bootstrap"
+      },
+      "created_at": "2026-04-29T02:54:06.341065+00:00"
+    },
+    {
+      "event_id": "audit_ef97bcd485ab",
+      "actor_type": "admin_user",
+      "actor_id": "admin_b77be977e3",
+      "instance_id": "tenant_bootstrap",
+      "tenant_id": "tenant_bootstrap",
+      "company_id": null,
+      "action": "admin_password_rotate",
+      "target_type": "admin_user",
+      "target_id": "admin_b77be977e3",
+      "status": "ok",
+      "details": "Admin password rotated for 'admin'.",
+      "metadata": {
+        "instance_id": "tenant_bootstrap",
+        "tenant_id": "tenant_bootstrap"
+      },
+      "created_at": "2026-04-29T02:54:06.728725+00:00"
+    },
+    {
+      "event_id": "audit_cda8388b88c2",
+      "actor_type": "admin_user",
+      "actor_id": "admin_b77be977e3",
+      "instance_id": "tenant_bootstrap",
+      "tenant_id": "tenant_bootstrap",
+      "company_id": null,
+      "action": "admin_login",
+      "target_type": "admin_session",
+      "target_id": "sess_8b969480a2e1",
+      "status": "ok",
+      "details": "Admin session issued.",
+      "metadata": {
+        "instance_id": "tenant_bootstrap",
+        "tenant_id": "tenant_bootstrap"
+      },
+      "created_at": "2026-04-29T02:54:06.856055+00:00"
+    },
+    {
+      "event_id": "audit_cc99d65dc333",
+      "actor_type": "anonymous",
+      "actor_id": "admin",
+      "instance_id": "tenant_bootstrap",
+      "tenant_id": "tenant_bootstrap",
+      "company_id": null,
+      "action": "admin_login",
+      "target_type": "admin_session",
+      "target_id": null,
+      "status": "failed",
+      "details": "Invalid admin credentials.",
+      "metadata": {
+        "instance_id": "tenant_bootstrap",
+        "tenant_id": "tenant_bootstrap"
+      },
+      "created_at": "2026-04-29T02:54:29.230192+00:00"
+    },
+    {
+      "event_id": "audit_d49615c222f0",
+      "actor_type": "admin_user",
+      "actor_id": "admin_b77be977e3",
+      "instance_id": "tenant_bootstrap",
+      "tenant_id": "tenant_bootstrap",
+      "company_id": null,
+      "action": "admin_login",
+      "target_type": "admin_session",
+      "target_id": "sess_0e9924f3b280",
+      "status": "ok",
+      "details": "Admin session issued.",
+      "metadata": {
+        "instance_id": "tenant_bootstrap",
+        "tenant_id": "tenant_bootstrap"
+      },
+      "created_at": "2026-04-29T02:54:29.357499+00:00"
+    },
+    {
+      "event_id": "audit_4e576fc7b682",
+      "actor_type": "anonymous",
+      "actor_id": "admin",
+      "instance_id": "tenant_bootstrap",
+      "tenant_id": "tenant_bootstrap",
+      "company_id": null,
+      "action": "admin_login",
+      "target_type": "admin_session",
+      "target_id": null,
+      "status": "failed",
+      "details": "Invalid admin credentials.",
+      "metadata": {
+        "instance_id": "tenant_bootstrap",
+        "tenant_id": "tenant_bootstrap"
+      },
+      "created_at": "2026-04-29T03:00:26.417471+00:00"
+    },
+    {
+      "event_id": "audit_b2bc75a877b8",
+      "actor_type": "admin_user",
+      "actor_id": "admin_b77be977e3",
+      "instance_id": "tenant_bootstrap",
+      "tenant_id": "tenant_bootstrap",
+      "company_id": null,
+      "action": "admin_login",
+      "target_type": "admin_session",
+      "target_id": "sess_21af954e1116",
+      "status": "ok",
+      "details": "Admin session issued.",
+      "metadata": {
+        "instance_id": "tenant_bootstrap",
+        "tenant_id": "tenant_bootstrap"
+      },
+      "created_at": "2026-04-29T03:00:26.547286+00:00"
+    },
+    {
+      "event_id": "audit_792d8de12b95",
+      "actor_type": "anonymous",
+      "actor_id": "admin",
+      "instance_id": "tenant_bootstrap",
+      "tenant_id": "tenant_bootstrap",
+      "company_id": null,
+      "action": "admin_login",
+      "target_type": "admin_session",
+      "target_id": null,
+      "status": "failed",
+      "details": "Invalid admin credentials.",
+      "metadata": {
+        "instance_id": "tenant_bootstrap",
+        "tenant_id": "tenant_bootstrap"
+      },
+      "created_at": "2026-04-29T10:47:29.422887+00:00"
+    },
+    {
+      "event_id": "audit_9b5350c89801",
+      "actor_type": "admin_user",
+      "actor_id": "admin_b77be977e3",
+      "instance_id": "tenant_bootstrap",
+      "tenant_id": "tenant_bootstrap",
+      "company_id": null,
+      "action": "admin_login",
+      "target_type": "admin_session",
+      "target_id": "sess_75b89e99dd24",
+      "status": "ok",
+      "details": "Admin session issued.",
+      "metadata": {
+        "instance_id": "tenant_bootstrap",
+        "tenant_id": "tenant_bootstrap"
+      },
+      "created_at": "2026-04-29T10:47:29.549716+00:00"
+    },
+    {
+      "event_id": "audit_7a1301b110f0",
+      "actor_type": "admin_user",
+      "actor_id": "admin_b77be977e3",
+      "instance_id": "tenant_bootstrap",
+      "tenant_id": "tenant_bootstrap",
+      "company_id": null,
+      "action": "admin_user_create",
+      "target_type": "admin_user",
+      "target_id": "admin_5d2545e5ca",
+      "status": "ok",
+      "details": "Admin user 'cancel-viewer-9d179c17' created.",
+      "metadata": {
+        "role": "operator",
+        "instance_id": "tenant_bootstrap",
+        "tenant_id": "tenant_bootstrap"
+      },
+      "created_at": "2026-04-29T10:47:30.337467+00:00"
+    },
+    {
+      "event_id": "audit_d88dea1743a3",
+      "actor_type": "admin_user",
+      "actor_id": "admin_5d2545e5ca",
+      "instance_id": "tenant_bootstrap",
+      "tenant_id": "tenant_bootstrap",
+      "company_id": null,
+      "action": "admin_login",
+      "target_type": "admin_session",
+      "target_id": "sess_2425716016e5",
+      "status": "ok",
+      "details": "Admin session issued.",
+      "metadata": {
+        "instance_id": "tenant_bootstrap",
+        "tenant_id": "tenant_bootstrap"
+      },
+      "created_at": "2026-04-29T10:47:30.463149+00:00"
+    },
+    {
+      "event_id": "audit_81361ccae685",
+      "actor_type": "admin_user",
+      "actor_id": "admin_5d2545e5ca",
+      "instance_id": "tenant_bootstrap",
+      "tenant_id": "tenant_bootstrap",
+      "company_id": null,
+      "action": "admin_password_rotate",
+      "target_type": "admin_user",
+      "target_id": "admin_5d2545e5ca",
+      "status": "ok",
+      "details": "Admin password rotated for 'cancel-viewer-9d179c17'.",
+      "metadata": {
+        "instance_id": "tenant_bootstrap",
+        "tenant_id": "tenant_bootstrap"
+      },
+      "created_at": "2026-04-29T10:47:30.830238+00:00"
+    },
+    {
+      "event_id": "audit_6b06b7abbdec",
+      "actor_type": "admin_user",
+      "actor_id": "admin_5d2545e5ca",
+      "instance_id": "tenant_bootstrap",
+      "tenant_id": "tenant_bootstrap",
+      "company_id": null,
+      "action": "admin_login",
+      "target_type": "admin_session",
+      "target_id": "sess_114eb1b9b45d",
+      "status": "ok",
+      "details": "Admin session issued.",
+      "metadata": {
+        "instance_id": "tenant_bootstrap",
+        "tenant_id": "tenant_bootstrap"
+      },
+      "created_at": "2026-04-29T10:47:30.955670+00:00"
+    },
+    {
+      "event_id": "audit_9dbd59081f47",
+      "actor_type": "admin_user",
+      "actor_id": "admin_5d2545e5ca",
+      "instance_id": "tenant_bootstrap",
+      "tenant_id": "tenant_bootstrap",
+      "company_id": null,
+      "action": "admin_break_glass_requested",
+      "target_type": "elevated_access_request",
+      "target_id": "elev_4aac8f9c45f6",
+      "status": "warning",
+      "details": "Break-Glass approval request created for 'cancel-viewer-9d179c17'.",
+      "metadata": {
+        "request_type": "break_glass",
+        "request_id": "elev_4aac8f9c45f6",
+        "target_user_id": "admin_5d2545e5ca",
+        "approval_reference": "INC-CANCEL-VIEWER",
+        "notification_targets": [
+          "pagerduty://security-review"
+        ],
+        "duration_minutes": 20,
+        "approval_expires_at": "2026-04-29T11:17:30.963460+00:00",
+        "instance_id": "tenant_bootstrap",
+        "tenant_id": "tenant_bootstrap"
+      },
+      "created_at": "2026-04-29T10:47:30.963562+00:00"
+    },
+    {
+      "event_id": "audit_874edb4bd34c",
+      "actor_type": "admin_user",
+      "actor_id": "admin_b77be977e3",
+      "instance_id": "tenant_bootstrap",
+      "tenant_id": "tenant_bootstrap",
+      "company_id": null,
+      "action": "admin_user_update",
+      "target_type": "admin_user",
+      "target_id": "admin_5d2545e5ca",
+      "status": "ok",
+      "details": "Admin user 'cancel-viewer-9d179c17' updated.",
+      "metadata": {
+        "role": "operator",
+        "status": "active",
+        "instance_id": "tenant_bootstrap",
+        "tenant_id": "tenant_bootstrap"
+      },
+      "created_at": "2026-04-29T10:47:30.973138+00:00"
+    },
+    {
+      "event_id": "audit_916492576268",
+      "actor_type": "system",
+      "actor_id": null,
+      "instance_id": "tenant_bootstrap",
+      "tenant_id": "tenant_bootstrap",
+      "company_id": null,
+      "action": "admin_break_glass_timed_out",
+      "target_type": "elevated_access_request",
+      "target_id": "elev_4aac8f9c45f6",
+      "status": "warning",
+      "details": "Pending break-glass request for 'cancel-viewer-9d179c17' timed out before approval.",
+      "metadata": {
+        "request_type": "break_glass",
+        "request_id": "elev_4aac8f9c45f6",
+        "target_user_id": "admin_5d2545e5ca",
+        "approval_reference": "INC-CANCEL-VIEWER",
+        "instance_id": "tenant_bootstrap",
+        "tenant_id": "tenant_bootstrap"
+      },
+      "created_at": "2026-04-29T11:21:13.794132+00:00"
+    },
+    {
+      "event_id": "audit_8654529fa021",
+      "actor_type": "anonymous",
+      "actor_id": "admin",
+      "instance_id": "tenant_bootstrap",
+      "tenant_id": "tenant_bootstrap",
+      "company_id": null,
+      "action": "admin_login",
+      "target_type": "admin_session",
+      "target_id": null,
+      "status": "failed",
+      "details": "Invalid admin credentials.",
+      "metadata": {
+        "instance_id": "tenant_bootstrap",
+        "tenant_id": "tenant_bootstrap"
+      },
+      "created_at": "2026-04-29T11:21:14.039799+00:00"
+    },
+    {
+      "event_id": "audit_86b8b2d6c51d",
+      "actor_type": "admin_user",
+      "actor_id": "admin_b77be977e3",
+      "instance_id": "tenant_bootstrap",
+      "tenant_id": "tenant_bootstrap",
+      "company_id": null,
+      "action": "admin_login",
+      "target_type": "admin_session",
+      "target_id": "sess_7e0d7a40ceb5",
+      "status": "ok",
+      "details": "Admin session issued.",
+      "metadata": {
+        "instance_id": "tenant_bootstrap",
+        "tenant_id": "tenant_bootstrap"
+      },
+      "created_at": "2026-04-29T11:21:14.169850+00:00"
+    },
+    {
+      "event_id": "audit_d9b9e74d43db",
+      "actor_type": "admin_user",
+      "actor_id": "admin_b77be977e3",
+      "instance_id": "tenant_bootstrap",
+      "tenant_id": "tenant_bootstrap",
+      "company_id": null,
+      "action": "account_create",
+      "target_type": "gateway_account",
+      "target_id": "acct_717e5617a6",
+      "status": "ok",
+      "details": "Account 'Probe Tenant' created.",
+      "metadata": {
+        "account_id": "acct_717e5617a6",
+        "instance_id": "tenant_bootstrap",
+        "tenant_id": "tenant_bootstrap"
+      },
+      "created_at": "2026-04-29T11:21:14.979154+00:00"
+    },
+    {
+      "event_id": "audit_8a814e1be0c3",
+      "actor_type": "admin_user",
+      "actor_id": "admin_b77be977e3",
+      "instance_id": "tenant_bootstrap",
+      "tenant_id": "tenant_bootstrap",
+      "company_id": null,
+      "action": "runtime_key_issue",
+      "target_type": "runtime_key",
+      "target_id": "key_ea72d14852ab",
+      "status": "ok",
+      "details": "Runtime key 'Probe Key' issued.",
+      "metadata": {
+        "account_id": "acct_717e5617a6",
+        "scopes": [
+          "chat:write",
+          "models:read",
+          "responses:write"
+        ],
+        "expires_at": "2026-07-28T11:21:14.987452+00:00",
+        "default_request_path": "smart_routing",
+        "allowed_request_paths": [
+          "smart_routing"
+        ],
+        "pinned_target_key": null,
+        "instance_id": "tenant_bootstrap",
+        "tenant_id": "tenant_bootstrap"
+      },
+      "created_at": "2026-04-29T11:21:14.987508+00:00"
+    }
+  ],
+  "admin_login_failures": [],
+  "secret_rotation_events": [],
+  "updated_at": "2026-04-29T11:21:14.987531+00:00"
+}
