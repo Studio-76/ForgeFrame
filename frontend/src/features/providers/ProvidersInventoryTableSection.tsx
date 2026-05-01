@@ -1,15 +1,13 @@
-import { useState } from "react";
-import { Link } from "react-router-dom";
+import { useEffect, useRef, useState } from "react";
+import { Link, useLocation } from "react-router-dom";
 
 import type { ProviderClassKey } from "../../api/admin";
 import { CONTROL_PLANE_ROUTES } from "../../app/navigation";
 import { withInstanceScope } from "../../app/tenantScope";
-import { formatMetric, formatProviderAxis, formatTimestamp } from "./providersShared";
+import { formatMetric, formatTimestamp } from "./providersShared";
 import {
   authTypeLabel,
   currentProviderClassDescriptor,
-  formatCompatibilityDepth,
-  formatContractClassification,
   formatHealthLabel,
   formatProviderClassLabel,
   MetricTile,
@@ -21,14 +19,31 @@ import {
   toneFromReadinessAxis,
 } from "./providersSectionUtils";
 
+function visibleModels(provider: ProvidersManagementSectionProps["data"]["providers"][number]): string {
+  const models = provider.models.slice(0, 2).map((model) => model.id);
+  if (models.length === 0) {
+    return "No models recorded";
+  }
+  return models.join(", ");
+}
+
 /**
- * Providers inventory table section with create/edit provider forms,
- * inventory table, and inline draft editing for selected providers.
+ * Providers record section with a compact status summary, toggleable
+ * create form, provider cards, and inline draft editing for the selected
+ * provider.
  */
 export function ProvidersInventoryTableSection({ data, actions, instanceId }: ProvidersManagementSectionProps) {
+  const location = useLocation();
+  const anchorRef = useRef<HTMLDivElement | null>(null);
   const [activeProvider, setActiveProvider] = useState<string | null>(data.providers[0]?.provider ?? null);
+  const [showAddProvider, setShowAddProvider] = useState(false);
   const selectedProvider = data.providers.find((provider) => provider.provider === activeProvider) ?? data.providers[0] ?? null;
   const selectedDraft = selectedProvider ? data.providerDrafts[selectedProvider.provider] : null;
+  const enabledProviders = data.providers.filter((provider) => provider.enabled).length;
+  const readyProviders = data.providers.filter((provider) => provider.ready).length;
+  const attentionProviders = data.providers.filter((provider) => provider.health_status !== "healthy").length;
+  const readyTargets = data.providers.reduce((total, provider) => total + provider.ready_target_count, 0);
+  const allTargets = data.providers.reduce((total, provider) => total + provider.target_count, 0);
 
   const applyProviderClassToCreateDraft = (providerClass: ProviderClassKey) => {
     const descriptor = currentProviderClassDescriptor(providerClass, data.supportedProviderClasses);
@@ -53,163 +68,146 @@ export function ProvidersInventoryTableSection({ data, actions, instanceId }: Pr
     actions.setProviderDraftField(provider, "oauthMode", descriptor.default_config.oauth_mode ?? "account_portal");
   };
 
+  useEffect(() => {
+    if (location.hash !== "#provider-health-runs") {
+      return;
+    }
+    const target = anchorRef.current;
+    if (!target) {
+      return;
+    }
+    if (typeof target.scrollIntoView === "function") {
+      target.scrollIntoView({ block: "start" });
+    }
+    target.focus();
+  }, [location.hash]);
+
+  const providerAction = (provider: ProvidersManagementSectionProps["data"]["providers"][number]) => {
+    if (provider.next_action_kind === "connect_oauth") {
+      return <Link className="fg-nav-link" to={withInstanceScope(CONTROL_PLANE_ROUTES.oauthTargets, instanceId)}>{provider.next_action}</Link>;
+    }
+    if (provider.next_action_kind === "review_sync") {
+      return <Link className="fg-nav-link" to={withInstanceScope(CONTROL_PLANE_ROUTES.providerTargets, instanceId)}>{provider.next_action}</Link>;
+    }
+    if (provider.next_action_kind === "activate_provider" && data.access.canMutate) {
+      return <button type="button" onClick={() => void actions.toggleProvider(provider.provider, provider.enabled)}>Activate</button>;
+    }
+    if (provider.next_action_kind === "sync_models" && data.access.canMutate) {
+      return <button type="button" onClick={() => void actions.syncProviderModels(provider.provider)}>{provider.next_action}</button>;
+    }
+    if (provider.next_action_kind === "run_health" && data.access.canMutate) {
+      return <button type="button" onClick={() => void actions.runHealthChecks()}>{provider.next_action}</button>;
+    }
+    if (provider.next_action_kind === "edit_provider" && data.access.canMutate) {
+      return <button type="button" onClick={() => setActiveProvider(provider.provider)}>{provider.next_action}</button>;
+    }
+    return <span className="fg-muted">{provider.next_action}</span>;
+  };
+
   return (
-    <>
-      <SectionCard title="Add provider" description="Register a new provider with its endpoint, auth scheme, and runtime class.">
-        {data.access.canMutate ? (
-          <div className="fg-inline-form">
-            <label>
-              Provider key
-              <input
-                value={data.newProvider.provider}
-                onChange={(event) => actions.setNewProvider((current) => ({ ...current, provider: event.target.value }))}
-                placeholder="provider_key"
-              />
-            </label>
-            <label>
-              Label
-              <input
-                value={data.newProvider.label}
-                onChange={(event) => actions.setNewProvider((current) => ({ ...current, label: event.target.value }))}
-                placeholder="Provider label"
-              />
-            </label>
-            <ProviderClassFields
-              prefix="Provider "
-              providerClass={data.newProvider.providerClass}
-              integrationClass={data.newProvider.integrationClass}
-              templateId={data.newProvider.templateId}
-              endpointBaseUrl={data.newProvider.endpointBaseUrl}
-              authScheme={data.newProvider.authScheme}
-              oauthMode={data.newProvider.oauthMode}
-              supportedProviderClasses={data.supportedProviderClasses}
-              onProviderClassChange={applyProviderClassToCreateDraft}
-              onFieldChange={(field, value) => actions.setNewProvider((current) => ({ ...current, [field]: value }))}
-            />
-            <div className="fg-actions fg-actions-end">
-              <button type="button" onClick={() => void actions.createProvider()}>
-                Provider hinzufügen
-              </button>
-            </div>
-          </div>
-        ) : (
-          <p className="fg-note">{data.access.summaryDetail}</p>
-        )}
-      </SectionCard>
+    <SectionCard
+      id="provider-health-runs"
+      cardRef={anchorRef}
+      tabIndex={-1}
+      className={location.hash === "#provider-health-runs" ? "is-anchor-target" : ""}
+      title="Providers"
+      description="Provider records only. Target routing, OAuth sessions, and harness proof live on their dedicated pages."
+      actions={
+        <>
+          <button type="button" onClick={() => void actions.load()}>Refresh</button>
+          {data.access.canMutate ? <button type="button" onClick={() => void actions.syncAllProviders()}>Sync all</button> : null}
+          {data.access.canMutate ? (
+            <button type="button" onClick={() => setShowAddProvider((current) => !current)}>
+              {showAddProvider ? "Hide add form" : "Add provider"}
+            </button>
+          ) : null}
+        </>
+      }
+    >
+      <div className="fg-grid fg-grid-compact fg-mb-md">
+        <MetricTile label="Registered" value={formatMetric(data.providers.length)} note={`${formatMetric(enabledProviders)} enabled`} />
+        <MetricTile label="Runtime ready" value={formatMetric(readyProviders)} note={`${formatMetric(data.providers.length - readyProviders)} not ready`} />
+        <MetricTile label="Needs attention" value={formatMetric(attentionProviders)} note="health or readiness" />
+        <MetricTile label="Ready targets" value={`${formatMetric(readyTargets)} / ${formatMetric(allTargets)}`} note="details on Provider Targets" />
+      </div>
 
-      <SectionCard
-        title="Provider Inventory"
-        description="Live provider records only. OAuth/account work and harness proof stay on their dedicated pages."
-        actions={
-          selectedProvider && data.access.canMutate ? (
-            <div className="fg-actions">
-              <button type="button" onClick={() => void actions.saveProvider(selectedProvider.provider)}>
-                Save provider
-              </button>
-              <button type="button" onClick={() => void actions.syncProviderModels(selectedProvider.provider)}>
-                Sync models
-              </button>
-              <button type="button" onClick={() => void actions.toggleProvider(selectedProvider.provider, selectedProvider.enabled)}>
-                {selectedProvider.enabled ? "Disable" : "Enable"}
-              </button>
+      {showAddProvider ? (
+        <div className="fg-subcard fg-mb-md">
+          {data.access.canMutate ? (
+            <div className="fg-inline-form">
+              <label>
+                Provider key
+                <input
+                  value={data.newProvider.provider}
+                  onChange={(event) => actions.setNewProvider((current) => ({ ...current, provider: event.target.value }))}
+                  placeholder="provider_key"
+                />
+              </label>
+              <label>
+                Label
+                <input
+                  value={data.newProvider.label}
+                  onChange={(event) => actions.setNewProvider((current) => ({ ...current, label: event.target.value }))}
+                  placeholder="Provider label"
+                />
+              </label>
+              <ProviderClassFields
+                prefix="Provider "
+                providerClass={data.newProvider.providerClass}
+                integrationClass={data.newProvider.integrationClass}
+                templateId={data.newProvider.templateId}
+                endpointBaseUrl={data.newProvider.endpointBaseUrl}
+                authScheme={data.newProvider.authScheme}
+                oauthMode={data.newProvider.oauthMode}
+                supportedProviderClasses={data.supportedProviderClasses}
+                onProviderClassChange={applyProviderClassToCreateDraft}
+                onFieldChange={(field, value) => actions.setNewProvider((current) => ({ ...current, [field]: value }))}
+              />
+              <div className="fg-actions fg-actions-end">
+                <button type="button" onClick={() => void actions.createProvider()}>
+                  Add provider
+                </button>
+              </div>
             </div>
-          ) : undefined
-        }
-      >
-        <div className="fg-table-wrap">
-          <table className="fg-table">
-            <thead>
-              <tr>
-                <th>Provider</th>
-                <th>Axis</th>
-                <th>Auth type</th>
-                <th>Runtime status</th>
-                <th>Health</th>
-                <th>Models</th>
-                <th>Targets</th>
-                <th>Last probe</th>
-                <th>Next action</th>
-              </tr>
-            </thead>
-            <tbody>
-              {data.providers.map((provider) => {
-                const isSelected = provider.provider === selectedProvider?.provider;
-                return (
-                  <tr key={provider.provider} className={isSelected ? "is-selected" : ""}>
-                    <td>
-                      <button className="fg-table-trigger" type="button" onClick={() => setActiveProvider(provider.provider)}>
-                        <strong>{provider.label}</strong>
-                      </button>
-                      <div className="fg-muted">
-                        <span className="fg-code">{provider.provider}</span> · {formatProviderClassLabel(String(provider.provider_class))}
-                      </div>
-                      <div className="fg-muted">
-                        compatibility {formatContractClassification(provider.contract_classification)} · {formatCompatibilityDepth(provider.compatibility_depth ?? "none")}
-                      </div>
-                    </td>
-                    <td>{formatProviderAxis(provider.provider_axis)}</td>
-                    <td>{authTypeLabel(provider)}</td>
-                    <td>
-                      <div className="fg-actions">
-                        <TonePill label={provider.enabled ? "enabled" : "disabled"} tone={provider.enabled ? "success" : "neutral"} />
-                        <TonePill label={provider.ready ? "ready" : provider.runtime_readiness} tone={provider.ready ? "success" : toneFromReadinessAxis(provider.runtime_readiness)} />
-                        {provider.oauth_connect_required ? <TonePill label="connect required" tone="warning" /> : null}
-                      </div>
-                    </td>
-                    <td>
-                      <TonePill label={formatHealthLabel(provider.health_status)} tone={toneFromHealthStatus(provider.health_status)} />
-                      <div className="fg-muted">
-                        {formatMetric(provider.healthy_model_count)} healthy / {formatMetric(provider.attention_model_count)} attention
-                      </div>
-                    </td>
-                    <td>
-                      {formatMetric(provider.model_count)}
-                      <div className="fg-muted">{provider.models.slice(0, 2).map((model) => model.id).join(", ") || "none"}</div>
-                    </td>
-                    <td>
-                      {formatMetric(provider.ready_target_count)} ready / {formatMetric(provider.enabled_target_count)} enabled / {formatMetric(provider.target_count)} total
-                    </td>
-                    <td>{formatTimestamp(provider.last_probe_at)}</td>
-                    <td>
-                      <div className="fg-actions">
-                        {provider.next_action_kind === "connect_oauth" ? (
-                          <Link className="fg-nav-link" to={withInstanceScope(CONTROL_PLANE_ROUTES.oauthTargets, instanceId)}>
-                            {provider.next_action}
-                          </Link>
-                        ) : null}
-                        {provider.next_action_kind === "activate_provider" && data.access.canMutate ? (
-                          <button type="button" onClick={() => void actions.toggleProvider(provider.provider, provider.enabled)}>
-                            Activate
-                          </button>
-                        ) : null}
-                        {(provider.next_action_kind === "sync_models" || provider.next_action_kind === "review_sync") && data.access.canMutate ? (
-                          <button type="button" onClick={() => void actions.syncProviderModels(provider.provider)}>
-                            {provider.next_action}
-                          </button>
-                        ) : null}
-                        {provider.next_action_kind === "run_health" && data.access.canMutate ? (
-                          <button type="button" onClick={() => void actions.runHealthChecks()}>
-                            {provider.next_action}
-                          </button>
-                        ) : null}
-                        {provider.next_action_kind === "edit_provider" && data.access.canMutate ? (
-                          <button type="button" onClick={() => setActiveProvider(provider.provider)}>
-                            {provider.next_action}
-                          </button>
-                        ) : null}
-                        {!data.access.canMutate && provider.next_action_kind !== "connect_oauth" ? (
-                          <span className="fg-muted">{provider.next_action}</span>
-                        ) : null}
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+          ) : (
+            <p className="fg-note">{data.access.summaryDetail}</p>
+          )}
         </div>
+      ) : null}
 
-        {selectedProvider && selectedDraft ? (
+      <div className="fg-stack">
+        {data.providers.map((provider) => {
+          const isSelected = provider.provider === selectedProvider?.provider;
+          return (
+            <div key={provider.provider} className={`fg-subcard${isSelected ? " is-selected" : ""}`}>
+              <div className="fg-panel-heading">
+                <div>
+                  <button className="fg-table-trigger" type="button" onClick={() => setActiveProvider(provider.provider)}>
+                    <h4>{provider.label}</h4>
+                  </button>
+                  <p className="fg-muted">
+                    <span className="fg-code">{provider.provider}</span> · {formatProviderClassLabel(String(provider.provider_class))} · {authTypeLabel(provider)}
+                  </p>
+                </div>
+                <div className="fg-actions">
+                  <TonePill label={provider.enabled ? "enabled" : "disabled"} tone={provider.enabled ? "success" : "neutral"} />
+                  <TonePill label={provider.ready ? "ready" : provider.runtime_readiness} tone={provider.ready ? "success" : toneFromReadinessAxis(provider.runtime_readiness)} />
+                  <TonePill label={formatHealthLabel(provider.health_status)} tone={toneFromHealthStatus(provider.health_status)} />
+                  {providerAction(provider)}
+                </div>
+              </div>
+              <div className="fg-detail-grid">
+                <p>Models: {formatMetric(provider.model_count)} · {visibleModels(provider)}</p>
+                <p>Targets: {formatMetric(provider.ready_target_count)} ready / {formatMetric(provider.target_count)} total</p>
+                <p>Last probe: {formatTimestamp(provider.last_probe_at)}</p>
+                <p>{provider.ready ? "Runtime is ready." : provider.readiness_reason ?? "Runtime is not ready."}</p>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {selectedProvider && selectedDraft ? (
           <div className="fg-subcard fg-mt-md">
             <div className="fg-panel-heading">
               <div>
@@ -267,7 +265,6 @@ export function ProvidersInventoryTableSection({ data, actions, instanceId }: Pr
             {selectedProvider.last_sync_error ? <p className="fg-danger fg-mt-sm">Last sync error: {selectedProvider.last_sync_error}</p> : null}
           </div>
         ) : null}
-      </SectionCard>
-    </>
+    </SectionCard>
   );
 }

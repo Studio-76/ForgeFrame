@@ -7,12 +7,9 @@ import { useInstanceCatalog } from "../app/useInstanceCatalog";
 import { InstanceScopeCard } from "../components/InstanceScopeCard";
 import { PageIntro } from "../components/PageIntro";
 import { ActionBar } from "../components/ui/ActionBar";
-import { BlockedState, EmptyState } from "../components/ui/StateBlocks";
+import { BlockedState } from "../components/ui/StateBlocks";
 import {
-  ProviderHealthSection,
-  ProvidersAdvancedDiagnosticsSection,
   ProvidersInventoryTableSection,
-  ProvidersManagementOverviewSection,
 } from "../features/providers/ProvidersSections";
 import type { ProvidersPageActions, ProvidersPageData } from "../features/providers/providersShared";
 import { getProvidersAccess } from "../features/providers/providersShared";
@@ -25,11 +22,9 @@ import { useProvidersControlPlane } from "../features/providers/useProvidersCont
 function FirstProviderSetupCard({
   data,
   actions,
-  instanceId,
 }: {
   data: ProvidersPageData;
   actions: ProvidersPageActions;
-  instanceId?: string | null;
 }) {
   return (
     <div className="fg-card">
@@ -86,7 +81,7 @@ export function ProvidersPage() {
   const access = getProvidersAccess(session, sessionReady, instanceId);
   const { data, actions } = useProvidersControlPlane(access, instanceId, {
     includeUsageSummary: false,
-    includeHarness: true,
+    includeHarness: false,
     includeOauthTargets: false,
     includeCompatibilityMatrix: false,
     includeBootstrapReadiness: false,
@@ -98,16 +93,16 @@ export function ProvidersPage() {
     ? access.summaryDetail
     : access.canMutate
     ? hasProviders
-      ? "Provider records, health checks, and target configuration. Harness verification and OAuth provider setup live on their dedicated pages."
+      ? "This page is only for provider records: add, edit, enable, sync, or run the provider's next repair action. Targets, OAuth accounts, and harness proof stay on their own pages."
       : "Start by adding a provider record — this tells the instance which AI backend to use."
     : `${access.summaryDetail} Provider truth and health stay visible here without surfacing mutations that the backend will block.`;
 
   const description = hasProviders
-    ? "Provider records tell ForgeFrame which AI backends are available — API gateways, local models, or OAuth-connected accounts. Each provider tracks health, readiness, and runtime compatibility."
+    ? `${data.providers.length} provider${data.providers.length === 1 ? "" : "s"} registered for this instance.`
     : "Provider records tell ForgeFrame which AI backends are available. Add one to start routing requests through this instance.";
 
   const question = hasProviders
-    ? "Select a provider from the inventory below to inspect or edit its configuration."
+    ? undefined
     : undefined;
 
   const onInstanceChange = (nextInstanceId: string | null) => {
@@ -151,7 +146,7 @@ export function ProvidersPage() {
         />
       ) : !hasProviders && data.state === "success" ? (
         <>
-          <FirstProviderSetupCard data={data} actions={actions} instanceId={instanceId} />
+          <FirstProviderSetupCard data={data} actions={actions} />
           <ActionBar title="Related surfaces" description="Explore once you have providers set up.">
             <div className="fg-actions">
               <Link className="fg-nav-link" to={withInstanceScope(CONTROL_PLANE_ROUTES.harness, instanceId)}>Harness</Link>
@@ -161,25 +156,9 @@ export function ProvidersPage() {
           </ActionBar>
         </>
       ) : (
-        <>
-          <ActionBar>
-            <div className="fg-actions">
-              <Link className="fg-nav-link" to={withInstanceScope(CONTROL_PLANE_ROUTES.harness, instanceId)}>Harness</Link>
-              <Link className="fg-nav-link" to={withInstanceScope(CONTROL_PLANE_ROUTES.providerTargets, instanceId)}>Provider Targets</Link>
-              <Link className="fg-nav-link" to={withInstanceScope(CONTROL_PLANE_ROUTES.oauthTargets, instanceId)}>OAuth Targets</Link>
-            </div>
-          </ActionBar>
-          <div className="fg-stack">
-            <div id="provider-overview">
-              <ProvidersManagementOverviewSection data={data} actions={actions} instanceId={instanceId} />
-            </div>
-            <ProviderHealthSection data={data} actions={actions} instanceId={instanceId} />
-            <div id="provider-inventory">
-              <ProvidersInventoryTableSection data={data} actions={actions} instanceId={instanceId} />
-            </div>
-            <ProvidersAdvancedDiagnosticsSection data={data} />
-          </div>
-        </>
+        <div className="fg-stack">
+          <ProvidersInventoryTableSection data={data} actions={actions} instanceId={instanceId} />
+        </div>
       )}
     </section>
   );

@@ -260,7 +260,7 @@ describe("control-plane navigation", () => {
     );
 
     for (const [routeKey, routeValue] of Object.entries(CONTROL_PLANE_ROUTES)) {
-      if (routeKey === "login" || routeKey === "passwordRotation" || routeKey === "onboarding") {
+      if (routeKey === "login" || routeKey === "passwordRotation" || routeKey === "onboarding" || routeKey === "providerHealthRuns") {
         continue;
       }
 

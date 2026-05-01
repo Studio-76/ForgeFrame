@@ -203,11 +203,6 @@ const NAVIGATION_SECTIONS: NavigationSection[] = [
         description: "Worker leases, outbox pressure, stalled attempts, and dispatch reconciliation.",
       },
       {
-        label: "Provider Health & Runs",
-        to: CONTROL_PLANE_ROUTES.providerHealthRuns,
-        description: "Jump directly to the live provider inventory and run posture.",
-      },
-      {
         label: "Recovery / Backup / Restore",
         to: CONTROL_PLANE_ROUTES.recovery,
         description: "Backup target classes, restore evidence, freshness, and source-identity truth.",

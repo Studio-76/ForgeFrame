@@ -277,23 +277,21 @@ describe("Providers page hierarchy", () => {
     );
 
     expect(markup).toContain("<section class=\"fg-page\">");
-    expect(markup).toContain("Select a provider from the inventory below to inspect or edit its configuration.");
-    expect(markup).toContain(">Harness<");
-    expect(markup).toContain("href=\"/harness\"");
-    expect(markup).toContain(">Provider Targets<");
-    expect(markup).toContain(">Provider Runtime Inventory</h3>");
-    expect(markup).toContain(">Provider Health &amp; Runs</h3>");
+    expect(markup).toContain("1 provider registered for this instance.");
     expect(markup).toContain("id=\"provider-health-runs\"");
-    expect(markup).toContain("Show probe");
-    expect(markup).toContain(">Provider Inventory</h3>");
-    expect(markup).toContain(">Add provider</h3>");
-    expect(markup).toContain(">Advanced Diagnostics</strong>");
+    expect(markup).toContain(">Providers</h3>");
+    expect(markup).toContain("Provider records only. Target routing, OAuth sessions, and harness proof live on their dedicated pages.");
     expect(markup).toContain("Admin mutations enabled");
-    expect(markup).toContain("Sync all providers");
+    expect(markup).toContain("Sync all");
+    expect(markup).toContain("Add provider");
+    expect(markup).toContain("Activate");
     expect(markup).toContain("Providers");
+    expect(markup).not.toContain(">Provider Runtime Inventory</h3>");
+    expect(markup).not.toContain(">Provider Health &amp; Runs</h3>");
+    expect(markup).not.toContain("Show probe");
+    expect(markup).not.toContain(">Advanced Diagnostics</strong>");
     expect(markup).not.toContain("Save profile");
     expect(markup).not.toContain("Preview + Verify");
-    expect(markup.indexOf("Providers")).toBeLessThan(markup.indexOf(">Provider Runtime Inventory</h3>"));
   });
 
   it("shows an honest blocked state when the session lacks scoped providers.read", () => {
@@ -326,7 +324,7 @@ describe("Providers page hierarchy", () => {
       "instance_alpha",
       expect.objectContaining({
         includeUsageSummary: false,
-        includeHarness: true,
+        includeHarness: false,
         includeOauthTargets: false,
         includeCompatibilityMatrix: false,
         includeBootstrapReadiness: false,
@@ -352,9 +350,9 @@ describe("Providers page hierarchy", () => {
     );
 
     expect(alphaMarkup).toContain("Operator mutations enabled");
-    expect(alphaMarkup).toContain("Sync all providers");
+    expect(alphaMarkup).toContain("Sync all");
     expect(betaMarkup).not.toContain("Operator mutations enabled");
-    expect(betaMarkup).not.toContain("Sync all providers");
+    expect(betaMarkup).not.toContain("Sync all");
     expect(betaMarkup).toContain("Operate only");
   });
 
