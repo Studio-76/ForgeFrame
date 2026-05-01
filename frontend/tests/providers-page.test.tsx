@@ -292,7 +292,7 @@ describe("Providers page hierarchy", () => {
     expect(markup).toContain("1 provider registered for this instance.");
     expect(markup).toContain("id=\"provider-health-runs\"");
     expect(markup).toContain(">Providers</h3>");
-    expect(markup).toContain("Provider records only. Sync updates inventory; live endpoint requests happen from Harness probes.");
+    expect(markup).toContain("Manage provider records. Sync updates inventory; live endpoint probes run from Harness.");
     expect(markup).toContain("Enable after endpoint settings are saved and at least one target is ready.");
     expect(markup).toContain("Open Harness live probe");
     expect(markup).toContain("These buttons do not send chat/completions requests. Use Harness when you want to see LM Studio receive a real request.");

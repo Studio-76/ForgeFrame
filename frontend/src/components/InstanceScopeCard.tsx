@@ -39,12 +39,12 @@ export function InstanceScopeCard({
   const selectedLabel = selectedInstance?.display_name ?? selectedInstance?.instance_id ?? "Default instance path";
 
   return (
-    <article className="fg-card">
+    <article className="fg-card fg-instance-scope-card">
       <div className="fg-panel-heading">
         <div>
           <h3>Instance Scope</h3>
           <p className="fg-muted">
-            Pick the concrete instance boundary for {surfaceLabel}, then continue through the scoped route links below.
+            Choose which instance this page controls.
           </p>
         </div>
         <span className="fg-pill" data-tone={scopeTone}>
@@ -52,7 +52,7 @@ export function InstanceScopeCard({
         </span>
       </div>
 
-      <div className="fg-inline-form">
+      <div className="fg-inline-form fg-instance-scope-layout">
         <label>
           Instance
           <select
@@ -68,34 +68,36 @@ export function InstanceScopeCard({
             ))}
           </select>
         </label>
-        {instanceId ? (
-          <Button onPress={() => onInstanceChange(null)}>
-            Clear scope
-          </Button>
-        ) : null}
-        <Link className="fg-nav-link" to={withInstanceScope(CONTROL_PLANE_ROUTES.instances, instanceId)}>
-          Open Instances
-        </Link>
-        {instanceId ? (
-          <Link className="fg-nav-link" to={withInstanceScope(CONTROL_PLANE_ROUTES.providerTargets, instanceId)}>
-            Open Targets
+        <div className="fg-actions fg-instance-scope-actions">
+          {instanceId ? (
+            <Button onPress={() => onInstanceChange(null)}>
+              Clear
+            </Button>
+          ) : null}
+          <Link className="fg-nav-link" to={withInstanceScope(CONTROL_PLANE_ROUTES.instances, instanceId)}>
+            Instances
           </Link>
-        ) : null}
-        {instanceId ? (
-          <Link className="fg-nav-link" to={withInstanceScope(CONTROL_PLANE_ROUTES.routing, instanceId)}>
-            Open Routing
-          </Link>
-        ) : null}
+          {instanceId ? (
+            <Link className="fg-nav-link" to={withInstanceScope(CONTROL_PLANE_ROUTES.providerTargets, instanceId)}>
+              Targets
+            </Link>
+          ) : null}
+          {instanceId ? (
+            <Link className="fg-nav-link" to={withInstanceScope(CONTROL_PLANE_ROUTES.routing, instanceId)}>
+              Routing
+            </Link>
+          ) : null}
+        </div>
       </div>
 
       {selectedInstance ? (
-        <p className="fg-note fg-mt-md">
-          Current binding: tenant {selectedInstance.tenant_id} · execution {selectedInstance.company_id} · deployment {selectedInstance.deployment_mode}
+        <p className="fg-note fg-mt-sm">
+          Bound: tenant {selectedInstance.tenant_id} · execution {selectedInstance.company_id} · deployment {selectedInstance.deployment_mode}
           {" "}· exposure {selectedInstance.exposure_mode}.
         </p>
       ) : (
-        <p className="fg-note fg-mt-md">
-          No explicit instance is pinned in the URL yet. Choose one here before trusting downstream setup or runtime views.
+        <p className="fg-note fg-mt-sm">
+          No instance pinned yet. Choose one when you need scoped control-plane actions.
         </p>
       )}
 
@@ -104,7 +106,7 @@ export function InstanceScopeCard({
       {error ? <p className="fg-danger">{error}</p> : null}
       {instanceId && !selectedInstance ? (
         <p className="fg-danger">
-          The selected instance is not present in the current registry. Clear the scope or repair the instance inventory before trusting this view.
+          Selected instance is missing from the registry. Clear scope or repair instance inventory.
         </p>
       ) : null}
     </article>

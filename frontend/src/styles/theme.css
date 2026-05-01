@@ -357,9 +357,13 @@ a {
   gap: 0.75rem;
 }
 
-.ff-mobile-toggle,
+.ff-icon-button.ff-mobile-toggle,
 .ff-sidebar-close {
   display: none;
+}
+
+.ff-icon-button.ff-desktop-toggle {
+  display: inline-flex;
 }
 
 .ff-icon-button {
@@ -1021,6 +1025,28 @@ a {
 .fg-note {
   border-left: 3px solid var(--fg-color-action-primary);
   padding-left: var(--fg-space-3);
+}
+
+.fg-instance-scope-card {
+  padding: var(--fg-space-3);
+}
+
+.fg-instance-scope-layout {
+  align-items: center;
+}
+
+.fg-instance-scope-layout > label {
+  flex: 1 1 340px;
+}
+
+.fg-instance-scope-actions {
+  flex: 0 0 auto;
+}
+
+.fg-instance-scope-actions .fg-nav-link,
+.fg-instance-scope-actions button {
+  min-width: auto;
+  white-space: nowrap;
 }
 
 .fg-code {
@@ -2828,11 +2854,11 @@ details summary {
   }
 
   .ff-sidebar-close,
-  .ff-mobile-toggle {
+  .ff-icon-button.ff-mobile-toggle {
     display: inline-flex;
   }
 
-  .ff-desktop-toggle,
+  .ff-icon-button.ff-desktop-toggle,
   .ff-topbar-title,
   .ff-user-copy,
   .ff-user-button > svg {

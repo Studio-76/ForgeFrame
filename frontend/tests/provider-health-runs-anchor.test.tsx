@@ -339,6 +339,6 @@ describe("Provider health runs anchor", () => {
     expect(anchor?.className).toContain("is-anchor-target");
     expect(document.activeElement).toBe(anchor);
     expect(scrollIntoViewMock).toHaveBeenCalled();
-    expect(container.textContent).toContain("Provider records only");
+    expect(container.textContent).toContain("Manage provider records");
   });
 });

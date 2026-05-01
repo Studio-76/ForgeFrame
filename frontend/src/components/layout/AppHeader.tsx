@@ -48,7 +48,7 @@ function flattenNavigation(sections: NavigationSection[], instanceId: string | n
 
 export function AppHeader({ navigationSections, instanceId, session, sessionError, onLogout }: AppHeaderProps) {
   const { mode, toggleMode } = useTheme();
-  const { isExpanded, isMobileOpen, toggleSidebar, toggleMobileSidebar } = useSidebar();
+  const { isExpanded, isMobile, isMobileOpen, toggleSidebar, toggleMobileSidebar } = useSidebar();
   const navigate = useNavigate();
   const location = useLocation();
   const inputRef = useRef<HTMLInputElement | null>(null);
@@ -122,24 +122,27 @@ export function AppHeader({ navigationSections, instanceId, session, sessionErro
     return findNavigationMatch(navigationSections, location.pathname, location.hash, instanceId);
   }, [instanceId, location.hash, location.pathname, navigationSections]);
 
+  const sidebarToggleLabel = isMobile
+    ? (isMobileOpen ? "Close navigation" : "Open navigation")
+    : (isExpanded ? "Collapse navigation" : "Expand navigation");
+
+  const sidebarToggleExpanded = isMobile ? isMobileOpen : isExpanded;
+
+  const sidebarToggleClassName = isMobile
+    ? "ff-icon-button ff-mobile-toggle"
+    : "ff-icon-button ff-desktop-toggle";
+
+  const onSidebarTogglePress = isMobile ? toggleMobileSidebar : toggleSidebar;
+
   return (
     <header className="ff-topbar">
       <div className="ff-topbar-left">
         <Button
-          className="ff-icon-button ff-mobile-toggle"
-          aria-label={isMobileOpen ? "Close navigation" : "Open navigation"}
+          className={sidebarToggleClassName}
+          aria-label={sidebarToggleLabel}
           aria-controls="ff-sidebar"
-          aria-expanded={isMobileOpen}
-          onPress={toggleMobileSidebar}
-        >
-          <MenuIcon />
-        </Button>
-        <Button
-          className="ff-icon-button ff-desktop-toggle"
-          aria-label={isExpanded ? "Collapse navigation" : "Expand navigation"}
-          aria-controls="ff-sidebar"
-          aria-expanded={isExpanded}
-          onPress={toggleSidebar}
+          aria-expanded={sidebarToggleExpanded}
+          onPress={onSidebarTogglePress}
         >
           <MenuIcon />
         </Button>

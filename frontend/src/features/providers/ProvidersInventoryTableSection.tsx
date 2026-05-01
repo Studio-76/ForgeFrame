@@ -183,7 +183,7 @@ export function ProvidersInventoryTableSection({ data, actions, instanceId }: Pr
       tabIndex={-1}
       className={location.hash === "#provider-health-runs" ? "is-anchor-target" : ""}
       title="Providers"
-      description="Provider records only. Sync updates inventory; live endpoint requests happen from Harness probes."
+      description="Manage provider records. Sync updates inventory; live endpoint probes run from Harness."
       actions={
         <>
           <button type="button" disabled={isLoading} onClick={() => void actions.load()}>{isLoading ? "Refreshing…" : "Refresh"}</button>
@@ -246,9 +246,7 @@ export function ProvidersInventoryTableSection({ data, actions, instanceId }: Pr
                   {isPending("create-provider") ? "Adding provider…" : "Add provider"}
                 </button>
               </div>
-              <p className="fg-note">
-                After adding it, save endpoint/auth settings, sync inventory, then use Harness for a live endpoint probe.
-              </p>
+              <p className="fg-note">Save endpoint/auth, sync inventory, then run a Harness live probe.</p>
             </div>
           ) : (
             <p className="fg-note">{data.access.summaryDetail}</p>
