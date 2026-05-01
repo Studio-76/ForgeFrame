@@ -509,22 +509,42 @@ export function useProvidersControlPlane(
       setHealthConfig(payload.health_config);
       setProviderErrors(
         usage
-          ? Object.fromEntries(usage.aggregations.errors_by_provider.map((item) => [String(item.provider), Number(item.errors)]))
+          ? Object.fromEntries(
+            (usage.aggregations?.errors_by_provider ?? []).map((item) => [
+              String(item.provider),
+              Number(item.errors),
+            ]),
+          )
           : {},
       );
       setModelErrors(
         usage
-          ? Object.fromEntries(usage.aggregations.errors_by_model.map((item) => [String(item.model), Number(item.errors)]))
+          ? Object.fromEntries(
+            (usage.aggregations?.errors_by_model ?? []).map((item) => [
+              String(item.model),
+              Number(item.errors),
+            ]),
+          )
           : {},
       );
       setIntegrationErrors(
         usage
-          ? Object.fromEntries(usage.aggregations.errors_by_integration.map((item) => [String(item.integration_key), Number(item.errors)]))
+          ? Object.fromEntries(
+            (usage.aggregations?.errors_by_integration ?? []).map((item) => [
+              String(item.integration_key),
+              Number(item.errors),
+            ]),
+          )
           : {},
       );
       setProfileErrors(
         usage
-          ? Object.fromEntries(usage.aggregations.errors_by_profile.map((item) => [String(item.profile_key), Number(item.errors)]))
+          ? Object.fromEntries(
+            (usage.aggregations?.errors_by_profile ?? []).map((item) => [
+              String(item.profile_key),
+              Number(item.errors),
+            ]),
+          )
           : {},
       );
       setProviderCatalog(payload.provider_catalog ?? []);
