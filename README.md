@@ -17,6 +17,7 @@ Linux-first control plane and runtime platform for autonomous AI instances.
 - [Requirements](#requirements)
 - [Installation](#installation)
 - [Quick Start](#quick-start)
+- [Production Mode](#production-mode)
 - [Project Structure](#project-structure)
 - [Development Commands](#development-commands)
 - [Documentation](#documentation)
@@ -104,6 +105,28 @@ npm run dev
 ```
 
 Then open the Vite URL printed in your terminal (typically `http://localhost:5173`).
+
+---
+
+## Production Mode
+
+Your production path is:
+
+1. Build the frontend bundle:
+
+```bash
+cd frontend
+npm run build
+```
+
+2. Start ForgeFrame with the backend startup script (serves API + built frontend):
+
+```bash
+cd ..
+./scripts/start-forgeframe.sh
+```
+
+By default this starts on `127.0.0.1:8080` (configurable via `FORGEFRAME_HOST` and `FORGEFRAME_PORT`).
 
 ---
 
