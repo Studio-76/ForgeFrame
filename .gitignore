@@ -145,3 +145,4 @@ pytest.xml
 # exports/
 # data/
 opencode.json
+AGENTS.md
