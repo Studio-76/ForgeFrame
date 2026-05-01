@@ -238,6 +238,16 @@ async function renderIntoDom(element: ReactNode) {
 }
 
 /**
+ * Flush the microtask queue deeply by yielding via setTimeout(fn, 0).
+ * Unlike Promise.resolve() chains, this guarantees ALL cascading microtasks
+ * (TanStack Query batch notifications, React concurrent renders) complete
+ * before resolving.
+ */
+async function flushMicrotasks(): Promise<void> {
+  await new Promise((resolve) => setTimeout(resolve, 0));
+}
+
+/**
  * Render the dashboard and wait for TanStack Query to settle.
  */
 async function renderDashboardPage(session: AdminSessionUser, path = "/dashboard") {
@@ -248,13 +258,19 @@ async function renderDashboardPage(session: AdminSessionUser, path = "/dashboard
     queryClient: testQueryClient,
   }));
 
-  /* Flush micro-tasks so TanStack Query's async resolution
-   * and React's re-render settle. */
+  /* Flush all cascading microtasks (TanStack Query batch scheduler,
+   * React concurrent commit) inside act(). setTimeout(fn, 0) creates a
+   * macrotask boundary that only fires after ALL pending microtasks drain,
+   * catching deeply-nested batch notification chains. */
+  await act(async () => {
+    await flushMicrotasks();
+    await flushMicrotasks();
+  });
+
+  /* Verify the loading state has resolved and data is rendered. */
   await vi.waitFor(async () => {
     await act(async () => {
-      await Promise.resolve();
-      await Promise.resolve();
-      await Promise.resolve();
+      await flushMicrotasks();
     });
     expect(container.textContent).not.toContain("Loading command-center truth");
   }, { timeout: 2000, interval: 10 });
