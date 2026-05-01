@@ -2289,6 +2289,244 @@ details summary {
 }
 
 /* ──────────────────────────────────────────────
+ * Setup flow: guided checklist and progress
+ * ────────────────────────────────────────────── */
+
+.ff-setup-steps {
+  display: grid;
+  gap: var(--fg-space-4);
+}
+
+.ff-setup-step-card {
+  display: grid;
+  gap: var(--fg-space-3);
+  border: 1px solid var(--fg-color-border-default);
+  border-radius: var(--fg-radius-lg);
+  background: var(--fg-color-surface-default);
+  box-shadow: var(--fg-shadow-panel);
+  padding: var(--fg-space-4);
+  transition:
+    border-color var(--fg-motion-base) var(--fg-ease-standard),
+    opacity var(--fg-motion-base) var(--fg-ease-standard);
+}
+
+.ff-setup-step-current {
+  border-color: var(--fg-color-action-primary);
+  box-shadow:
+    0 0 0 1px var(--fg-color-action-primary),
+    var(--fg-shadow-panel);
+}
+
+.ff-setup-step-complete {
+  opacity: 0.75;
+}
+
+.ff-setup-step-blocked {
+  border-color: var(--fg-color-status-danger-border);
+}
+
+.ff-setup-step-upcoming {
+  opacity: 0.5;
+  pointer-events: none;
+}
+
+.ff-setup-step-header {
+  display: flex;
+  gap: var(--fg-space-3);
+  align-items: flex-start;
+}
+
+.ff-setup-step-number {
+  flex: 0 0 2.25rem;
+  width: 2.25rem;
+  height: 2.25rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--fg-radius-pill);
+  background: var(--fg-color-surface-strong);
+  color: var(--fg-color-text-secondary);
+  font-size: var(--fg-type-size-card);
+  font-weight: 700;
+}
+
+.ff-setup-step-number-done {
+  background: var(--fg-color-status-success-soft);
+  color: var(--fg-color-status-success);
+}
+
+.ff-setup-step-info {
+  display: grid;
+  gap: var(--fg-space-1);
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.ff-setup-step-title {
+  margin: 0;
+  font-size: var(--fg-type-size-card);
+  font-weight: 600;
+}
+
+.ff-setup-step-description {
+  margin: 0;
+  color: var(--fg-color-text-secondary);
+}
+
+.ff-setup-step-blockers {
+  padding: var(--fg-space-3);
+  border-radius: var(--fg-radius-md);
+  background: var(--fg-color-status-danger-soft);
+  border: 1px solid var(--fg-color-status-danger-border);
+}
+
+.ff-setup-step-blocker-title {
+  display: block;
+  margin-bottom: var(--fg-space-2);
+  color: var(--fg-color-status-danger);
+  font-size: var(--fg-type-size-meta);
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.ff-setup-step-blocker-list {
+  margin: 0;
+  color: var(--fg-color-text-primary);
+}
+
+.ff-setup-step-action {
+  padding-top: var(--fg-space-2);
+  border-top: 1px solid var(--fg-color-border-default);
+}
+
+/* Progress bar */
+
+.ff-setup-status-bar {
+  display: flex;
+  flex-direction: column;
+  gap: var(--fg-space-2);
+  padding: var(--fg-space-3);
+  border-radius: var(--fg-radius-md);
+  background: var(--fg-color-surface-strong);
+  border: 1px solid var(--fg-color-border-default);
+}
+
+.ff-setup-status-bar[data-tone="danger"] {
+  border-color: var(--fg-color-status-danger-border);
+}
+
+.ff-setup-status-bar[data-tone="warning"] {
+  border-color: var(--fg-color-status-warning-border);
+}
+
+.ff-setup-status-bar[data-tone="success"] {
+  border-color: var(--fg-color-status-success-border);
+}
+
+.ff-setup-status-bar-info {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.ff-setup-step-indicator {
+  font-size: var(--fg-type-size-meta);
+  font-weight: 600;
+  color: var(--fg-color-text-primary);
+}
+
+.ff-setup-status-label {
+  font-size: var(--fg-type-size-meta);
+  color: var(--fg-color-text-secondary);
+}
+
+.ff-setup-progress {
+  display: flex;
+  height: 0.5rem;
+  border-radius: var(--fg-radius-pill);
+  overflow: hidden;
+  background: var(--fg-color-surface-subtle);
+}
+
+.ff-setup-progress-fill {
+  background: var(--fg-color-action-primary);
+  transition: width 0.3s ease;
+  border-radius: var(--fg-radius-pill);
+}
+
+/* Primary action bar */
+
+.ff-setup-primary-action-bar {
+  display: flex;
+  gap: var(--fg-space-3);
+  align-items: center;
+  padding: var(--fg-space-4);
+  border-radius: var(--fg-radius-lg);
+  background: var(--fg-color-action-primary-soft);
+  border: 1px solid var(--fg-color-action-primary);
+}
+
+.ff-setup-primary-action-content {
+  display: flex;
+  flex: 1 1 auto;
+  align-items: center;
+  gap: var(--fg-space-3);
+}
+
+.ff-setup-primary-action-description {
+  margin: 0;
+  color: var(--fg-color-text-primary);
+  font-size: var(--fg-type-size-body);
+  flex: 1 1 auto;
+}
+
+.ff-setup-primary-action-button {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.6rem 1.25rem;
+  border-radius: var(--fg-radius-md);
+  background: var(--fg-color-action-primary);
+  color: #ffffff;
+  font-size: var(--fg-type-size-body);
+  font-weight: 700;
+  text-decoration: none;
+  white-space: nowrap;
+  transition:
+    background var(--fg-motion-base) var(--fg-ease-standard),
+    box-shadow var(--fg-motion-base) var(--fg-ease-standard);
+}
+
+.ff-setup-primary-action-button:hover {
+  background: color-mix(in srgb, var(--fg-color-action-primary) 85%, #000000);
+  box-shadow: 0 2px 8px color-mix(in srgb, var(--fg-color-action-primary) 30%, transparent);
+}
+
+.ff-setup-primary-action-button:disabled {
+  opacity: 0.5;
+  pointer-events: none;
+}
+
+/* Password rotation inline form */
+
+.ff-setup-password-requirements {
+  padding: var(--fg-space-3);
+  border-radius: var(--fg-radius-md);
+  background: var(--fg-color-surface-strong);
+}
+
+.ff-setup-password-requirements h4 {
+  margin: 0 0 var(--fg-space-2);
+  font-size: var(--fg-type-size-meta);
+  text-transform: uppercase;
+  color: var(--fg-color-text-secondary);
+}
+
+.ff-setup-password-form {
+  display: grid;
+  gap: var(--fg-space-3);
+}
+
+/* ──────────────────────────────────────────────
  * Tablet + mobile: shared responsive adjustments
  * Applies at viewports narrower than 1024px.
  * ────────────────────────────────────────────── */

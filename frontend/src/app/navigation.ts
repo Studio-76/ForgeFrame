@@ -117,9 +117,9 @@ const NAVIGATION_SECTIONS: NavigationSection[] = [
     icon: "command",
     links: [
       {
-        label: "Command Center",
+        label: "Setup and status",
         to: CONTROL_PLANE_ROUTES.dashboard,
-        description: "KPIs, alerts, security posture, and the next route to open.",
+        description: "Guided setup flow with step progression, system status, and next action.",
       },
     ],
   },
@@ -130,9 +130,9 @@ const NAVIGATION_SECTIONS: NavigationSection[] = [
     icon: "setup",
     links: [
       {
-        label: "Bootstrap / Readiness",
-        to: CONTROL_PLANE_ROUTES.onboarding,
-        description: "Bootstrap readiness, next steps, and go-live handoff.",
+        label: "Setup progress",
+        to: "/dashboard",
+        description: "Guided setup flow with step progression, blockers, and next action.",
       },
       {
         label: "Instances",

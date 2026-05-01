@@ -11,7 +11,6 @@ import "./theme/index.css";
 import { ThemeProvider } from "./theme/ThemeProvider";
 import { LoginPage } from "./pages/LoginPage";
 
-const OnboardingPage = lazy(async () => import("./pages/OnboardingPage").then((module) => ({ default: module.OnboardingPage })));
 const PasswordRotationPage = lazy(async () => import("./pages/PasswordRotationPage").then((module) => ({ default: module.PasswordRotationPage })));
 const DashboardPage = lazy(async () => import("./pages/DashboardPage").then((module) => ({ default: module.DashboardPage })));
 const ProvidersPage = lazy(async () => import("./pages/ProvidersPage").then((module) => ({ default: module.ProvidersPage })));
@@ -109,7 +108,7 @@ const router = createBrowserRouter([
       { index: true, element: <Navigate replace to="/dashboard" /> },
       { path: "rotate-password", element: lazyRoute(<PasswordRotationPage />) },
       { path: "dashboard", element: lazyRoute(<DashboardPage />) },
-      { path: "onboarding", element: lazyRoute(<OnboardingPage />) },
+      { path: "onboarding", element: <Navigate replace to="/dashboard" /> },
       { path: "instances", element: lazyRoute(<InstancesPage />) },
       { path: "harness", element: lazyRoute(<HarnessPage />) },
       { path: "providers", element: lazyRoute(<ProvidersPage />) },
