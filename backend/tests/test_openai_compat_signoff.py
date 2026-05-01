@@ -1,5 +1,5 @@
-import os
 import base64
+import os
 
 from fastapi.testclient import TestClient
 
@@ -19,7 +19,10 @@ def _admin_headers(client: TestClient) -> dict[str, str]:
         rotate = client.post(
             "/admin/auth/rotate-password",
             headers={"Authorization": f"Bearer {access_token}"},
-            json={"current_password": bootstrap_password, "new_password": rotated_password},
+            json={
+                "current_password": bootstrap_password,
+                "new_password": rotated_password,
+            },
         )
         assert rotate.status_code == 200
         relogin = client.post(
@@ -43,7 +46,10 @@ def test_openai_compatibility_signoff_reports_evidence_without_false_green() -> 
     with client.stream(
         "POST",
         "/v1/chat/completions",
-        json={"messages": [{"role": "user", "content": "compat chat stream"}], "stream": True},
+        json={
+            "messages": [{"role": "user", "content": "compat chat stream"}],
+            "stream": True,
+        },
     ) as chat_stream:
         assert chat_stream.status_code == 200
         assert "[DONE]" in "".join(chat_stream.iter_text())
@@ -52,8 +58,16 @@ def test_openai_compatibility_signoff_reports_evidence_without_false_green() -> 
         "/v1/responses",
         json={
             "input": [
-                {"type": "message", "role": "user", "content": [{"type": "input_text", "text": "compat responses"}]},
-                {"type": "function_call_output", "call_id": "tool_prev", "output": "prior output"},
+                {
+                    "type": "message",
+                    "role": "user",
+                    "content": [{"type": "input_text", "text": "compat responses"}],
+                },
+                {
+                    "type": "function_call_output",
+                    "call_id": "tool_prev",
+                    "output": "prior output",
+                },
             ],
         },
     )

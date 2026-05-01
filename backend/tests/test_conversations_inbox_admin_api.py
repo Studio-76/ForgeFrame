@@ -1,6 +1,6 @@
+from conftest import admin_headers as shared_admin_headers
 from fastapi.testclient import TestClient
 
-from conftest import admin_headers as shared_admin_headers
 from app.approvals.models import build_execution_approval_id
 from app.execution.dependencies import get_execution_transition_service
 from app.main import app
@@ -89,7 +89,7 @@ def _create_workspace(
 
 def _open_execution_approval(*, company_id: str, workspace_id: str, issue_id: str) -> tuple[str, str]:
     service = get_execution_transition_service()
-    created = service.admit_create(
+    service.admit_create(
         company_id=company_id,
         actor_type="agent",
         actor_id="agent_conversation_runtime",
@@ -309,7 +309,12 @@ def test_inbox_item_update_persists_triage_links_and_conversation_reference() ->
 def test_conversation_agent_participants_mentions_events_and_session_learning_are_persisted() -> None:
     client = TestClient(app)
     headers = _admin_headers(client)
-    instance_id = _create_instance(client, headers, instance_id="instance_agents_alpha", company_id="company_agents_alpha")
+    instance_id = _create_instance(
+        client,
+        headers,
+        instance_id="instance_agents_alpha",
+        company_id="company_agents_alpha",
+    )
 
     agents = client.get("/admin/agents", headers=headers, params=_instance_scope(instance_id))
     assert agents.status_code == 200
@@ -397,9 +402,19 @@ def test_conversation_agent_participants_mentions_events_and_session_learning_ar
     assert payload["messages"][0]["structured_payload"]["source"] == "structured_follow_up"
 
     event_types = {item["event_type"] for item in payload["events"]}
-    assert {"mention_event", "handoff_event", "review_request_event", "blocker_event", "roundtable_event"} <= event_types
+    assert {
+        "mention_event",
+        "handoff_event",
+        "review_request_event",
+        "blocker_event",
+        "roundtable_event",
+    } <= event_types
     participant_statuses = {item["agent_id"]: item["participant_status"] for item in payload["participants"] if item["agent_id"]}
-    assert participant_statuses[worker_id] in {"mentioned", "handoff_pending", "roundtable"}
+    assert participant_statuses[worker_id] in {
+        "mentioned",
+        "handoff_pending",
+        "roundtable",
+    }
     assert participant_statuses[reviewer_id] in {"review_requested", "roundtable"}
     assert participant_statuses[default_operator["agent_id"]] == "blocked"
 

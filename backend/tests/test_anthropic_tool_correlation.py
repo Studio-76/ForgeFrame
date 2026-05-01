@@ -20,7 +20,7 @@ def _anthropic_tool_follow_up_messages() -> list[dict[str, object]]:
                     "type": "function",
                     "function": {
                         "name": "lookup_weather",
-                        "arguments": "{\"city\":\"Berlin\"}",
+                        "arguments": '{"city":"Berlin"}',
                     },
                 }
             ],
@@ -34,7 +34,9 @@ def _anthropic_tool_follow_up_messages() -> list[dict[str, object]]:
     ]
 
 
-def test_anthropic_adapter_preserves_openai_tool_call_correlation_in_follow_up_turns(monkeypatch) -> None:
+def test_anthropic_adapter_preserves_openai_tool_call_correlation_in_follow_up_turns(
+    monkeypatch,
+) -> None:
     captured: dict[str, object] = {}
 
     class _MockResponse:
@@ -94,7 +96,7 @@ def test_anthropic_adapter_preserves_openai_tool_call_correlation_in_follow_up_t
             "type": "function",
             "function": {
                 "name": "lookup_weather",
-                "arguments": "{\"city\":\"Berlin\"}",
+                "arguments": '{"city":"Berlin"}',
             },
         }
     ]
@@ -144,7 +146,9 @@ def test_anthropic_adapter_preserves_openai_tool_call_correlation_in_follow_up_t
     }
 
 
-def test_chat_endpoint_preserves_tool_call_fields_for_anthropic_follow_up_turns(monkeypatch) -> None:
+def test_chat_endpoint_preserves_tool_call_fields_for_anthropic_follow_up_turns(
+    monkeypatch,
+) -> None:
     captured: dict[str, object] = {}
 
     class _MockResponse:

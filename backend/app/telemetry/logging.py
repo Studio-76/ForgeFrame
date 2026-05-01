@@ -35,14 +35,7 @@ def build_logging_operability_snapshot(
         *[event for event in analytics.list_usage_events(tenant_id=tenant_id) if event.traffic_type == "runtime"],
         *[event for event in analytics.list_error_events(tenant_id=tenant_id) if event.traffic_type == "runtime"],
     ]
-    field_coverage = {
-        field: sum(
-            1
-            for entry in runtime_entries
-            if (value := getattr(entry, field, None)) not in (None, "")
-        )
-        for field in _STRUCTURED_LOG_FIELDS
-    }
+    field_coverage = {field: sum(1 for entry in runtime_entries if getattr(entry, field, None) not in (None, "")) for field in _STRUCTURED_LOG_FIELDS}
     runtime_event_count = len(runtime_entries)
     return {
         "storage_backend": settings.governance_storage_backend,
@@ -54,9 +47,5 @@ def build_logging_operability_snapshot(
         "event_channels": ["usage", "error", "health", "audit"],
         "runtime_event_count": runtime_event_count,
         "field_coverage": field_coverage,
-        "trace_coverage_ratio": (
-            field_coverage["trace_id"] / runtime_event_count
-            if runtime_event_count
-            else None
-        ),
+        "trace_coverage_ratio": (field_coverage["trace_id"] / runtime_event_count if runtime_event_count else None),
     }

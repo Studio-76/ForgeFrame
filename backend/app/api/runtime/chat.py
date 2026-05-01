@@ -8,29 +8,35 @@ from fastapi import APIRouter, Body, Depends, Request, status
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import ValidationError
 
-from app.authz import RequestActor
 from app.api.runtime.access import (
     allowed_provider_set,
     ensure_runtime_model_access,
     list_public_runtime_model_ids,
     requested_model_blocked_by_disabled_public_bridge,
 )
-from app.api.runtime.errors import public_runtime_exception_message
-from app.api.runtime.errors import public_runtime_error_code
 from app.api.runtime.dependencies import (
     get_dispatch_service,
     get_model_registry,
     get_routing_service,
     get_runtime_gateway_identity,
     get_runtime_request_path_decision,
-    require_runtime_permission,
     get_settings,
+    require_runtime_permission,
     runtime_request_path_metadata,
 )
+from app.api.runtime.errors import (
+    public_runtime_error_code,
+    public_runtime_exception_message,
+)
 from app.api.runtime.schemas import ChatCompletionsRequest, normalize_chat_messages
+from app.authz import RequestActor
 from app.core.dispatch import DispatchService
 from app.core.model_registry import ModelRegistry
-from app.core.response_normalization import build_chat_completion_payload, new_chat_completion_created, new_chat_completion_id
+from app.core.response_normalization import (
+    build_chat_completion_payload,
+    new_chat_completion_created,
+    new_chat_completion_id,
+)
 from app.core.routing import (
     RoutingBudgetExceededError,
     RoutingCircuitOpenError,
@@ -47,20 +53,19 @@ from app.providers import (
     ProviderConfigurationError,
     ProviderConflictError,
     ProviderError,
-    ProviderNotImplementedError,
     ProviderModelNotFoundError,
+    ProviderNotImplementedError,
     ProviderNotReadyError,
+    ProviderPayloadTooLargeError,
     ProviderProtocolError,
     ProviderRateLimitError,
+    ProviderRequestTimeoutError,
     ProviderResourceGoneError,
     ProviderStreamEvent,
-    ProviderStreamInterruptedError,
     ProviderTimeoutError,
-    ProviderRequestTimeoutError,
     ProviderUnavailableError,
-    ProviderUnsupportedMediaTypeError,
-    ProviderPayloadTooLargeError,
     ProviderUnsupportedFeatureError,
+    ProviderUnsupportedMediaTypeError,
     ProviderUpstreamError,
     ProviderValidationError,
 )
@@ -109,19 +114,13 @@ def _validation_error_response(exc: ValidationError) -> JSONResponse:
     issues: list[dict[str, object]] = []
     for item in exc.errors():
         loc = [part for part in item.get("loc", ()) if part != "body"]
-        issues.append(
-            {
-                "loc": list(loc),
-                "type": str(item.get("type", "invalid_request")),
-                "message": str(item.get("msg", "Request validation failed.")),
-            }
-        )
+        issues.append({
+            "loc": list(loc),
+            "type": str(item.get("type", "invalid_request")),
+            "message": str(item.get("msg", "Request validation failed.")),
+        })
 
-    unsupported_fields = [
-        str(issue["loc"][-1])
-        for issue in issues
-        if isinstance(issue.get("loc"), list) and issue["loc"] and issue.get("type") == "extra_forbidden"
-    ]
+    unsupported_fields = [str(issue["loc"][-1]) for issue in issues if isinstance(issue.get("loc"), list) and issue["loc"] and issue.get("type") == "extra_forbidden"]
     if unsupported_fields:
         if len(unsupported_fields) == 1:
             message = f"Unsupported field '{unsupported_fields[0]}' in /v1/chat/completions request."
@@ -144,26 +143,70 @@ def _validation_error_response(exc: ValidationError) -> JSONResponse:
     )
 
 
-def _provider_exception_to_http(exc: Exception) -> tuple[int, str, str | None, str, dict[str, object]]:
+def _provider_exception_to_http(
+    exc: Exception,
+) -> tuple[int, str, str | None, str, dict[str, object]]:
     message = public_runtime_exception_message(exc)
     if isinstance(exc, RuntimeAuthorizationError):
-        return exc.status_code, public_runtime_error_code(exc.error_type) or exc.error_type, None, message, {}
+        return (
+            exc.status_code,
+            public_runtime_error_code(exc.error_type) or exc.error_type,
+            None,
+            message,
+            {},
+        )
     if isinstance(exc, RoutingBudgetExceededError):
-        return status.HTTP_429_TOO_MANY_REQUESTS, public_runtime_error_code(exc.error_type) or exc.error_type, None, message, {"retryable": False}
+        return (
+            status.HTTP_429_TOO_MANY_REQUESTS,
+            public_runtime_error_code(exc.error_type) or exc.error_type,
+            None,
+            message,
+            {"retryable": False},
+        )
     if isinstance(exc, RoutingCircuitOpenError):
-        return status.HTTP_503_SERVICE_UNAVAILABLE, public_runtime_error_code(exc.error_type) or exc.error_type, None, message, {"retryable": True}
+        return (
+            status.HTTP_503_SERVICE_UNAVAILABLE,
+            public_runtime_error_code(exc.error_type) or exc.error_type,
+            None,
+            message,
+            {"retryable": True},
+        )
     if isinstance(exc, RoutingNoCandidateError):
-        return status.HTTP_503_SERVICE_UNAVAILABLE, public_runtime_error_code(exc.error_type) or exc.error_type, None, message, {}
+        return (
+            status.HTTP_503_SERVICE_UNAVAILABLE,
+            public_runtime_error_code(exc.error_type) or exc.error_type,
+            None,
+            message,
+            {},
+        )
     if isinstance(exc, ProviderNotImplementedError):
-        return status.HTTP_501_NOT_IMPLEMENTED, exc.error_type, exc.provider, message, {}
+        return (
+            status.HTTP_501_NOT_IMPLEMENTED,
+            exc.error_type,
+            exc.provider,
+            message,
+            {},
+        )
     if isinstance(exc, ProviderUnsupportedFeatureError):
         return status.HTTP_400_BAD_REQUEST, exc.error_type, exc.provider, message, {}
     if isinstance(exc, ProviderModelNotFoundError):
         return status.HTTP_404_NOT_FOUND, exc.error_type, exc.provider, message, {}
     if isinstance(exc, ProviderNotReadyError):
-        return status.HTTP_503_SERVICE_UNAVAILABLE, exc.error_type, exc.provider, message, {}
+        return (
+            status.HTTP_503_SERVICE_UNAVAILABLE,
+            exc.error_type,
+            exc.provider,
+            message,
+            {},
+        )
     if isinstance(exc, ProviderConfigurationError):
-        return status.HTTP_503_SERVICE_UNAVAILABLE, exc.error_type, exc.provider, message, {}
+        return (
+            status.HTTP_503_SERVICE_UNAVAILABLE,
+            exc.error_type,
+            exc.provider,
+            message,
+            {},
+        )
     if isinstance(exc, ProviderAuthenticationError):
         return status.HTTP_401_UNAUTHORIZED, exc.error_type, exc.provider, message, {}
     if isinstance(exc, ProviderRateLimitError):
@@ -171,31 +214,79 @@ def _provider_exception_to_http(exc: Exception) -> tuple[int, str, str | None, s
         retry_after = getattr(exc, "retry_after_seconds", None)
         if retry_after is not None:
             extras["retry_after_seconds"] = retry_after
-        return status.HTTP_429_TOO_MANY_REQUESTS, exc.error_type, exc.provider, message, extras
+        return (
+            status.HTTP_429_TOO_MANY_REQUESTS,
+            exc.error_type,
+            exc.provider,
+            message,
+            extras,
+        )
     if isinstance(exc, ProviderConflictError):
         return status.HTTP_409_CONFLICT, exc.error_type, exc.provider, message, {}
     if isinstance(exc, ProviderResourceGoneError):
         return status.HTTP_410_GONE, exc.error_type, exc.provider, message, {}
     if isinstance(exc, ProviderPayloadTooLargeError):
-        return status.HTTP_413_CONTENT_TOO_LARGE, exc.error_type, exc.provider, message, {}
+        return (
+            status.HTTP_413_CONTENT_TOO_LARGE,
+            exc.error_type,
+            exc.provider,
+            message,
+            {},
+        )
     if isinstance(exc, ProviderUnsupportedMediaTypeError):
-        return status.HTTP_415_UNSUPPORTED_MEDIA_TYPE, exc.error_type, exc.provider, message, {}
+        return (
+            status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
+            exc.error_type,
+            exc.provider,
+            message,
+            {},
+        )
     if isinstance(exc, ProviderUnavailableError):
-        return status.HTTP_503_SERVICE_UNAVAILABLE, exc.error_type, exc.provider, message, {"retryable": True}
+        return (
+            status.HTTP_503_SERVICE_UNAVAILABLE,
+            exc.error_type,
+            exc.provider,
+            message,
+            {"retryable": True},
+        )
     if isinstance(exc, ProviderProtocolError):
         return status.HTTP_502_BAD_GATEWAY, exc.error_type, exc.provider, message, {}
     if isinstance(exc, ProviderTimeoutError):
-        return status.HTTP_504_GATEWAY_TIMEOUT, exc.error_type, exc.provider, message, {"retryable": True}
+        return (
+            status.HTTP_504_GATEWAY_TIMEOUT,
+            exc.error_type,
+            exc.provider,
+            message,
+            {"retryable": True},
+        )
     if isinstance(exc, ProviderRequestTimeoutError):
-        return status.HTTP_408_REQUEST_TIMEOUT, exc.error_type, exc.provider, message, {"retryable": True}
+        return (
+            status.HTTP_408_REQUEST_TIMEOUT,
+            exc.error_type,
+            exc.provider,
+            message,
+            {"retryable": True},
+        )
     if isinstance(exc, ProviderBadRequestError):
         return status.HTTP_400_BAD_REQUEST, exc.error_type, exc.provider, message, {}
     if isinstance(exc, ProviderValidationError):
-        return status.HTTP_422_UNPROCESSABLE_CONTENT, exc.error_type, exc.provider, message, {}
+        return (
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
+            exc.error_type,
+            exc.provider,
+            message,
+            {},
+        )
     if isinstance(exc, (ProviderUpstreamError, ProviderError)):
         return status.HTTP_502_BAD_GATEWAY, exc.error_type, exc.provider, message, {}
     if isinstance(exc, ValueError):
-        return status.HTTP_422_UNPROCESSABLE_CONTENT, "invalid_request", None, str(exc), {}
+        return (
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
+            "invalid_request",
+            None,
+            str(exc),
+            {},
+        )
     raise exc
 
 
@@ -214,25 +305,9 @@ def _resolve_client_identity(
             tenant_id=gateway_identity.account_id or default_tenant_id,
         )
     return ClientIdentity(
-        client_id=(
-            payload.client.get("client_id")
-            or request.headers.get("x-forgeframe-client")
-            or request.headers.get("x-forgegate-client")
-            or request.headers.get("user-agent")
-            or "unknown_client"
-        ),
-        consumer=(
-            payload.client.get("consumer")
-            or request.headers.get("x-forgeframe-consumer")
-            or request.headers.get("x-forgegate-consumer")
-            or "unknown_consumer"
-        ),
-        integration=(
-            payload.client.get("integration")
-            or request.headers.get("x-forgeframe-integration")
-            or request.headers.get("x-forgegate-integration")
-            or "unknown_integration"
-        ),
+        client_id=(payload.client.get("client_id") or request.headers.get("x-forgeframe-client") or request.headers.get("x-forgegate-client") or request.headers.get("user-agent") or "unknown_client"),
+        consumer=(payload.client.get("consumer") or request.headers.get("x-forgeframe-consumer") or request.headers.get("x-forgegate-consumer") or "unknown_consumer"),
+        integration=(payload.client.get("integration") or request.headers.get("x-forgeframe-integration") or request.headers.get("x-forgegate-integration") or "unknown_integration"),
         tenant_id=default_tenant_id,
     )
 
@@ -243,9 +318,7 @@ def _runtime_request_metadata(
     gateway_identity: RuntimeGatewayIdentity | None,
     settings: Settings,
 ) -> dict[str, str]:
-    instance_id = normalize_tenant_id(
-        gateway_identity.instance_id if gateway_identity is not None else settings.bootstrap_tenant_id
-    )
+    instance_id = normalize_tenant_id(gateway_identity.instance_id if gateway_identity is not None else settings.bootstrap_tenant_id)
     supplemental: dict[str, object] = {"instance_id": instance_id}
     if gateway_identity is not None and gateway_identity.account_id:
         supplemental["account_id"] = gateway_identity.account_id
@@ -370,7 +443,9 @@ def create_chat_completion(
             status_code=status.HTTP_404_NOT_FOUND,
             error_type="model_not_found",
             message=f"Requested model '{requested_model}' is not available.",
-            available_models=public_model_ids if public_model_ids is not None else list_public_runtime_model_ids(
+            available_models=public_model_ids
+            if public_model_ids is not None
+            else list_public_runtime_model_ids(
                 routing=routing,
                 identity=gateway_identity,
                 route_context=path_metadata,
@@ -391,6 +466,7 @@ def create_chat_completion(
 
             def _sse_body() -> Iterator[str]:
                 try:
+
                     def _event_iterator() -> Iterator[ProviderStreamEvent]:
                         for event in events:
                             if event.event == "done":

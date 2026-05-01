@@ -9,7 +9,6 @@ from app.harness.models import (
 )
 from app.harness.openai_provider_presets import OPENAI_PROVIDER_PRESET_TEMPLATES
 
-
 BUILTIN_TEMPLATES: dict[str, HarnessTemplate] = {
     "openai_compatible": HarnessTemplate(
         id="openai_compatible",

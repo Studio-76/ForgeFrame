@@ -9,20 +9,49 @@ from pydantic import BaseModel, Field
 
 from app.knowledge.models import RecordLink
 
-
-LEARNING_TRIGGER_KINDS = ("run_completion", "session_rotation", "pattern_detected", "operator_action")
+LEARNING_TRIGGER_KINDS = (
+    "run_completion",
+    "session_rotation",
+    "pattern_detected",
+    "operator_action",
+)
 LearningTriggerKind = Literal["run_completion", "session_rotation", "pattern_detected", "operator_action"]
 
-LEARNING_DECISIONS = ("discard", "history_only", "boot_memory", "durable_memory", "skill_draft", "review_required")
-LearningDecision = Literal["discard", "history_only", "boot_memory", "durable_memory", "skill_draft", "review_required"]
+LEARNING_DECISIONS = (
+    "discard",
+    "history_only",
+    "boot_memory",
+    "durable_memory",
+    "skill_draft",
+    "review_required",
+)
+LearningDecision = Literal[
+    "discard",
+    "history_only",
+    "boot_memory",
+    "durable_memory",
+    "skill_draft",
+    "review_required",
+]
 
 LEARNING_STATUSES = ("pending", "applied", "discarded", "review_required")
 LearningStatus = Literal["pending", "applied", "discarded", "review_required"]
 
-LEARNING_REVIEW_BUCKETS = ("suggested", "review_required", "approved_promoted", "rejected")
+LEARNING_REVIEW_BUCKETS = (
+    "suggested",
+    "review_required",
+    "approved_promoted",
+    "rejected",
+)
 LearningReviewBucket = Literal["suggested", "review_required", "approved_promoted", "rejected"]
 
-LEARNING_DECISION_LANES = ("auto_reject", "auto_draft", "auto_suggest", "review_required", "auto_promote")
+LEARNING_DECISION_LANES = (
+    "auto_reject",
+    "auto_draft",
+    "auto_suggest",
+    "review_required",
+    "auto_promote",
+)
 LearningDecisionLane = Literal["auto_reject", "auto_draft", "auto_suggest", "review_required", "auto_promote"]
 
 LEARNING_RISK_LEVELS = ("low", "medium", "high")

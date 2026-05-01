@@ -125,13 +125,18 @@ def test_request_idempotency_reservation_recovers_from_concurrent_insert_race(
     assert len(in_progress) == 1
 
     with request_idempotency_session_factory() as session:
-        records = session.execute(
-            select(RequestIdempotencyRecordORM).where(
-                RequestIdempotencyRecordORM.scope_key == "admin.providers.sync",
-                RequestIdempotencyRecordORM.subject_key == envelope.subject_key,
-                RequestIdempotencyRecordORM.idempotency_key == envelope.idempotency_key,
+        records = (
+            session
+            .execute(
+                select(RequestIdempotencyRecordORM).where(
+                    RequestIdempotencyRecordORM.scope_key == "admin.providers.sync",
+                    RequestIdempotencyRecordORM.subject_key == envelope.subject_key,
+                    RequestIdempotencyRecordORM.idempotency_key == envelope.idempotency_key,
+                )
             )
-        ).scalars().all()
+            .scalars()
+            .all()
+        )
 
         assert len(records) == 1
         assert records[0].record_state == "in_progress"
@@ -213,13 +218,18 @@ def test_request_idempotency_reservation_rejects_mismatched_fingerprint_after_co
     assert len(mismatches) == 1
 
     with request_idempotency_session_factory() as session:
-        records = session.execute(
-            select(RequestIdempotencyRecordORM).where(
-                RequestIdempotencyRecordORM.scope_key == "admin.providers.sync",
-                RequestIdempotencyRecordORM.subject_key == "bearer:reserve-race",
-                RequestIdempotencyRecordORM.idempotency_key == "idem_http_reserve_conflict",
+        records = (
+            session
+            .execute(
+                select(RequestIdempotencyRecordORM).where(
+                    RequestIdempotencyRecordORM.scope_key == "admin.providers.sync",
+                    RequestIdempotencyRecordORM.subject_key == "bearer:reserve-race",
+                    RequestIdempotencyRecordORM.idempotency_key == "idem_http_reserve_conflict",
+                )
             )
-        ).scalars().all()
+            .scalars()
+            .all()
+        )
 
         assert len(records) == 1
         assert records[0].record_state == "in_progress"

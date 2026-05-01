@@ -9,7 +9,7 @@ from functools import lru_cache
 from app.instances.models import InstanceRecord
 from app.settings.config import Settings, get_settings
 from app.storage.instance_repository import InstanceRepository, get_instance_repository
-from app.tenancy import DEFAULT_BOOTSTRAP_TENANT_ID, normalize_tenant_id
+from app.tenancy import normalize_tenant_id
 
 _SLUG_SANITIZER = re.compile(r"[^a-z0-9]+")
 
@@ -200,16 +200,8 @@ class InstanceService:
                 "slug": _slugify(slug or current.slug),
                 "display_name": display_name.strip() if display_name is not None else current.display_name,
                 "description": description.strip() if description is not None else current.description,
-                "tenant_id": (
-                    normalize_tenant_id(tenant_id, fallback_tenant_id=current.instance_id)
-                    if tenant_id is not None
-                    else current.tenant_id
-                ),
-                "company_id": (
-                    _normalize_scope_value(company_id) or current.company_id
-                    if company_id is not None
-                    else current.company_id
-                ),
+                "tenant_id": (normalize_tenant_id(tenant_id, fallback_tenant_id=current.instance_id) if tenant_id is not None else current.tenant_id),
+                "company_id": (_normalize_scope_value(company_id) or current.company_id if company_id is not None else current.company_id),
                 "status": "disabled" if status == "disabled" else "active" if status == "active" else current.status,
                 "deployment_mode": deployment_mode or current.deployment_mode,
                 "exposure_mode": exposure_mode or current.exposure_mode,
@@ -224,10 +216,7 @@ class InstanceService:
             company_id=updated.company_id,
             ignore_instance_id=current.instance_id,
         )
-        self._instances = [
-            updated if item.instance_id == current.instance_id else item
-            for item in self._instances
-        ]
+        self._instances = [updated if item.instance_id == current.instance_id else item for item in self._instances]
         self._persist()
         return updated
 

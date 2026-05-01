@@ -22,7 +22,6 @@ from app.storage.runtime_responses_repository import (
 )
 from app.usage.models import CostBreakdown, TokenUsage
 
-
 client = TestClient(app)
 
 
@@ -46,7 +45,10 @@ def _sse_payload(raw: str, event_name: str) -> dict[str, object]:
 def test_responses_sync_path_persists_native_projection_and_follow_objects() -> None:
     response = client.post(
         "/v1/responses",
-        json={"input": "persist native sync truth", "metadata": {"case": "native-sync"}},
+        json={
+            "input": "persist native sync truth",
+            "metadata": {"case": "native-sync"},
+        },
     )
 
     assert response.status_code == 200
@@ -60,7 +62,8 @@ def test_responses_sync_path_persists_native_projection_and_follow_objects() -> 
             native_row = session.get(NativeResponseORM, response_id)
             mapping_row = session.get(NativeResponseMappingORM, response_id)
             input_rows = (
-                session.query(NativeResponseItemORM)
+                session
+                .query(NativeResponseItemORM)
                 .filter(
                     NativeResponseItemORM.response_id == response_id,
                     NativeResponseItemORM.phase == "input",
@@ -69,7 +72,8 @@ def test_responses_sync_path_persists_native_projection_and_follow_objects() -> 
                 .all()
             )
             output_rows = (
-                session.query(NativeResponseItemORM)
+                session
+                .query(NativeResponseItemORM)
                 .filter(
                     NativeResponseItemORM.response_id == response_id,
                     NativeResponseItemORM.phase == "output",
@@ -77,18 +81,8 @@ def test_responses_sync_path_persists_native_projection_and_follow_objects() -> 
                 .order_by(NativeResponseItemORM.item_index.asc())
                 .all()
             )
-            follow_rows = (
-                session.query(NativeResponseFollowObjectORM)
-                .filter(NativeResponseFollowObjectORM.response_id == response_id)
-                .order_by(NativeResponseFollowObjectORM.row_id.asc())
-                .all()
-            )
-            events = (
-                session.query(NativeResponseEventORM)
-                .filter(NativeResponseEventORM.response_id == response_id)
-                .order_by(NativeResponseEventORM.sequence_no.asc())
-                .all()
-            )
+            follow_rows = session.query(NativeResponseFollowObjectORM).filter(NativeResponseFollowObjectORM.response_id == response_id).order_by(NativeResponseFollowObjectORM.row_id.asc()).all()
+            events = session.query(NativeResponseEventORM).filter(NativeResponseEventORM.response_id == response_id).order_by(NativeResponseEventORM.sequence_no.asc()).all()
 
         assert runtime_row is not None
         assert runtime_row.lifecycle_status == "completed"
@@ -105,7 +99,10 @@ def test_responses_sync_path_persists_native_projection_and_follow_objects() -> 
         assert input_rows and input_rows[0].payload_json["type"] == "message"
         assert output_rows
         assert any(row.object_kind == "response" and row.object_id == response_id for row in follow_rows)
-        assert [event.event_type for event in events] == ["response.created", "response.completed"]
+        assert [event.event_type for event in events] == [
+            "response.created",
+            "response.completed",
+        ]
 
         input_items_response = client.get(f"/v1/responses/{response_id}/input_items")
         assert input_items_response.status_code == 200
@@ -129,7 +126,9 @@ def test_responses_sync_path_persists_native_projection_and_follow_objects() -> 
         engine.dispose()
 
 
-def test_responses_sync_failure_persists_failed_native_response_object(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_responses_sync_failure_persists_failed_native_response_object(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     monkeypatch.setenv("FORGEGATE_OPENAI_API_KEY", "test-key")
 
     def _fake_post(self, payload: dict) -> dict:
@@ -152,30 +151,26 @@ def test_responses_sync_failure_persists_failed_native_response_object(monkeypat
             assert runtime_row is not None
             response_id = runtime_row.id
             native_row = session.get(NativeResponseORM, response_id)
-            events = (
-                session.query(NativeResponseEventORM)
-                .filter(NativeResponseEventORM.response_id == response_id)
-                .order_by(NativeResponseEventORM.sequence_no.asc())
-                .all()
-            )
-            follow_rows = (
-                session.query(NativeResponseFollowObjectORM)
-                .filter(NativeResponseFollowObjectORM.response_id == response_id)
-                .all()
-            )
+            events = session.query(NativeResponseEventORM).filter(NativeResponseEventORM.response_id == response_id).order_by(NativeResponseEventORM.sequence_no.asc()).all()
+            follow_rows = session.query(NativeResponseFollowObjectORM).filter(NativeResponseFollowObjectORM.response_id == response_id).all()
 
         assert runtime_row.lifecycle_status == "failed"
         assert runtime_row.error_json["code"] == "provider_bad_request"
         assert native_row is not None
         assert native_row.lifecycle_status == "failed"
         assert native_row.error_json["code"] == "provider_bad_request"
-        assert [event.event_type for event in events] == ["response.created", "response.failed"]
+        assert [event.event_type for event in events] == [
+            "response.created",
+            "response.failed",
+        ]
         assert any(row.object_kind == "response" and row.object_id == response_id for row in follow_rows)
     finally:
         engine.dispose()
 
 
-def test_responses_stream_persists_stream_events_and_completed_projection(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_responses_stream_persists_stream_events_and_completed_projection(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     monkeypatch.setenv("FORGEGATE_OPENAI_API_KEY", "test-key")
 
     def _fake_stream(self, payload: dict, messages: list[dict]):
@@ -191,7 +186,13 @@ def test_responses_stream_persists_stream_events_and_completed_projection(monkey
                 avoided_cost=0.0,
                 pricing_basis="api_metered",
             ),
-            tool_calls=[{"id": "call_1", "type": "function", "function": {"name": "lookup", "arguments": "{\"q\":\"forgeframe\"}"}}],
+            tool_calls=[
+                {
+                    "id": "call_1",
+                    "type": "function",
+                    "function": {"name": "lookup", "arguments": '{"q":"forgeframe"}'},
+                }
+            ],
         )
 
     monkeypatch.setattr(OpenAIAPIAdapter, "_stream_chat_completion", _fake_stream)
@@ -211,14 +212,10 @@ def test_responses_stream_persists_stream_events_and_completed_projection(monkey
     try:
         with factory() as session:
             native_row = session.get(NativeResponseORM, response_id)
-            stream_events = (
-                session.query(NativeResponseStreamEventORM)
-                .filter(NativeResponseStreamEventORM.response_id == response_id)
-                .order_by(NativeResponseStreamEventORM.sequence_no.asc())
-                .all()
-            )
+            stream_events = session.query(NativeResponseStreamEventORM).filter(NativeResponseStreamEventORM.response_id == response_id).order_by(NativeResponseStreamEventORM.sequence_no.asc()).all()
             output_items = (
-                session.query(NativeResponseItemORM)
+                session
+                .query(NativeResponseItemORM)
                 .filter(
                     NativeResponseItemORM.response_id == response_id,
                     NativeResponseItemORM.phase == "output",
@@ -227,7 +224,8 @@ def test_responses_stream_persists_stream_events_and_completed_projection(monkey
                 .all()
             )
             tool_calls = (
-                session.query(NativeResponseToolCallORM)
+                session
+                .query(NativeResponseToolCallORM)
                 .filter(
                     NativeResponseToolCallORM.response_id == response_id,
                     NativeResponseToolCallORM.phase == "output",
@@ -254,7 +252,7 @@ def test_responses_stream_persists_stream_events_and_completed_projection(monkey
                 "type": "function_call",
                 "call_id": "call_1",
                 "name": "lookup",
-                "arguments": "{\"q\":\"forgeframe\"}",
+                "arguments": '{"q":"forgeframe"}',
                 "status": "completed",
             }
         ]
@@ -272,7 +270,9 @@ def test_responses_stream_persists_stream_events_and_completed_projection(monkey
         engine.dispose()
 
 
-def test_responses_tool_roundtrip_persists_native_input_and_output_tool_rows(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_responses_tool_roundtrip_persists_native_input_and_output_tool_rows(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     monkeypatch.setenv("FORGEGATE_OPENAI_API_KEY", "test-key")
 
     def _fake_post(self, payload: dict) -> dict:
@@ -285,7 +285,16 @@ def test_responses_tool_roundtrip_persists_native_input_and_output_tool_rows(mon
                     "message": {
                         "role": "assistant",
                         "content": "",
-                        "tool_calls": [{"id": "call_out", "type": "function", "function": {"name": "lookup", "arguments": "{\"q\":\"x\"}"}}],
+                        "tool_calls": [
+                            {
+                                "id": "call_out",
+                                "type": "function",
+                                "function": {
+                                    "name": "lookup",
+                                    "arguments": '{"q":"x"}',
+                                },
+                            }
+                        ],
                     },
                     "finish_reason": "tool_calls",
                 }
@@ -299,9 +308,22 @@ def test_responses_tool_roundtrip_persists_native_input_and_output_tool_rows(mon
         json={
             "model": "gpt-4.1-mini",
             "input": [
-                {"type": "message", "role": "user", "content": [{"type": "input_text", "text": "use tool roundtrip"}]},
-                {"type": "function_call", "call_id": "call_in", "name": "lookup", "arguments": "{\"q\":\"forgeframe\"}"},
-                {"type": "function_call_output", "call_id": "call_in", "output": "lookup result"},
+                {
+                    "type": "message",
+                    "role": "user",
+                    "content": [{"type": "input_text", "text": "use tool roundtrip"}],
+                },
+                {
+                    "type": "function_call",
+                    "call_id": "call_in",
+                    "name": "lookup",
+                    "arguments": '{"q":"forgeframe"}',
+                },
+                {
+                    "type": "function_call_output",
+                    "call_id": "call_in",
+                    "output": "lookup result",
+                },
             ],
         },
     )
@@ -313,19 +335,21 @@ def test_responses_tool_roundtrip_persists_native_input_and_output_tool_rows(mon
     try:
         with factory() as session:
             tool_calls = (
-                session.query(NativeResponseToolCallORM)
+                session
+                .query(NativeResponseToolCallORM)
                 .filter(NativeResponseToolCallORM.response_id == response_id)
-                .order_by(NativeResponseToolCallORM.phase.asc(), NativeResponseToolCallORM.call_id.asc())
+                .order_by(
+                    NativeResponseToolCallORM.phase.asc(),
+                    NativeResponseToolCallORM.call_id.asc(),
+                )
                 .all()
             )
-            tool_outputs = (
-                session.query(NativeResponseToolOutputORM)
-                .filter(NativeResponseToolOutputORM.response_id == response_id)
-                .order_by(NativeResponseToolOutputORM.output_index.asc())
-                .all()
-            )
+            tool_outputs = session.query(NativeResponseToolOutputORM).filter(NativeResponseToolOutputORM.response_id == response_id).order_by(NativeResponseToolOutputORM.output_index.asc()).all()
 
-        assert [(row.phase, row.call_id) for row in tool_calls] == [("input", "call_in"), ("output", "call_out")]
+        assert [(row.phase, row.call_id) for row in tool_calls] == [
+            ("input", "call_in"),
+            ("output", "call_out"),
+        ]
         assert len(tool_outputs) == 1
         assert tool_outputs[0].call_id == "call_in"
         assert tool_outputs[0].payload_json["output"] == "lookup result"
@@ -335,7 +359,7 @@ def test_responses_tool_roundtrip_persists_native_input_and_output_tool_rows(mon
                 "type": "function_call",
                 "call_id": "call_out",
                 "name": "lookup",
-                "arguments": "{\"q\":\"x\"}",
+                "arguments": '{"q":"x"}',
                 "status": "completed",
             }
         ]
@@ -343,7 +367,10 @@ def test_responses_tool_roundtrip_persists_native_input_and_output_tool_rows(mon
         native_projection_response = client.get(f"/v1/responses/{response_id}/native")
         assert native_projection_response.status_code == 200
         native_projection = native_projection_response.json()
-        assert [item["call_id"] for item in native_projection["tool_calls"]] == ["call_in", "call_out"]
+        assert [item["call_id"] for item in native_projection["tool_calls"]] == [
+            "call_in",
+            "call_out",
+        ]
         assert native_projection["tool_outputs"][0]["call_id"] == "call_in"
         assert any(item["kind"] == "response_tool_output" for item in native_projection["native_mapping"]["objects"])
     finally:

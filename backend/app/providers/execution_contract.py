@@ -15,12 +15,17 @@ from typing import Literal, Protocol, runtime_checkable
 
 from pydantic import BaseModel, Field, SecretStr, field_validator, model_validator
 
-
 ExecutionPhase = Literal["execute", "cancel", "webhook_reconcile"]
 ProviderExecutionStatus = Literal["succeeded", "retryable_error", "terminal_error", "cancelled", "awaiting_webhook"]
 ProviderCancelStatus = Literal["cancelled", "already_terminal", "not_found", "pending"]
 WebhookReconcileStatus = Literal["matched", "ignored", "rejected", "retry_later"]
-SecretPurpose = Literal["provider_api_key", "oauth_access_token", "oauth_refresh_token", "webhook_signing_secret", "session_token"]
+SecretPurpose = Literal[
+    "provider_api_key",
+    "oauth_access_token",
+    "oauth_refresh_token",
+    "webhook_signing_secret",
+    "session_token",
+]
 SecretRotationState = Literal["active", "rotating", "superseded", "revoked"]
 SecretMaterializationMode = Literal["plaintext", "bearer_header", "provider_session"]
 SecretRedactionTarget = Literal["log", "trace", "audit", "api_response"]
@@ -320,7 +325,13 @@ class SecretBroker(Protocol):
     def audit(self, event: SecretAuditEvent) -> None:
         """Persist a secret-access audit record."""
 
-    def redact(self, *, reference: ProviderSecretReference, plaintext: str, target: SecretRedactionTarget) -> str:
+    def redact(
+        self,
+        *,
+        reference: ProviderSecretReference,
+        plaintext: str,
+        target: SecretRedactionTarget,
+    ) -> str:
         """Redact provider-secret material for logs, traces, audit, or API surfaces."""
 
 
@@ -345,4 +356,3 @@ class ProviderExecutionAdapter(Protocol):
         metadata: AdapterCallMetadata | None = None,
     ) -> NormalizedProviderError:
         """Map provider-specific failures into ForgeFrame's normalized error contract."""
-

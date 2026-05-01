@@ -19,8 +19,7 @@ from app.instances.service import InstanceService, get_instance_service
 
 router = APIRouter(prefix="/keys", tags=["admin-keys"])
 _RUNTIME_KEY_IDEMPOTENCY_MESSAGE = (
-    "Idempotency-Key is not supported for runtime key issuance, rotation, or status mutations until ForgeFrame "
-    "defines replay-safe redaction for secret-bearing key-admin responses."
+    "Idempotency-Key is not supported for runtime key issuance, rotation, or status mutations until ForgeFrame defines replay-safe redaction for secret-bearing key-admin responses."
 )
 _ONBOARDING_LAST_FIRST_SUCCESS_PROBE_KEY = "onboarding_last_first_success_probe"
 
@@ -60,7 +59,10 @@ def list_runtime_keys(
     instance: InstanceRecord = Depends(resolve_admin_instance_scope),
     service: GovernanceService = Depends(get_governance_service),
 ) -> dict[str, object]:
-    return {"status": "ok", "keys": [_runtime_key_response(item) for item in service.list_runtime_keys(instance_id=instance.instance_id)]}
+    return {
+        "status": "ok",
+        "keys": [_runtime_key_response(item) for item in service.list_runtime_keys(instance_id=instance.instance_id)],
+    }
 
 
 @router.post("/", status_code=status.HTTP_201_CREATED)
@@ -104,7 +106,10 @@ def rotate_runtime_key(
     try:
         issued = service.rotate_runtime_key(key_id, admin, instance_id=instance.instance_id)
     except ValueError as exc:
-        return JSONResponse(status_code=404, content={"error": {"type": "runtime_key_not_found", "message": str(exc)}})
+        return JSONResponse(
+            status_code=404,
+            content={"error": {"type": "runtime_key_not_found", "message": str(exc)}},
+        )
     return {"status": "ok", "issued": issued.model_dump()}
 
 
@@ -122,7 +127,10 @@ def disable_runtime_key(
     try:
         key = service.set_runtime_key_status(key_id, "disabled", admin, instance_id=instance.instance_id)
     except ValueError as exc:
-        return JSONResponse(status_code=404, content={"error": {"type": "runtime_key_not_found", "message": str(exc)}})
+        return JSONResponse(
+            status_code=404,
+            content={"error": {"type": "runtime_key_not_found", "message": str(exc)}},
+        )
     return {"status": "ok", "key": _runtime_key_response(key)}
 
 
@@ -140,7 +148,10 @@ def activate_runtime_key(
     try:
         key = service.set_runtime_key_status(key_id, "active", admin, instance_id=instance.instance_id)
     except ValueError as exc:
-        return JSONResponse(status_code=404, content={"error": {"type": "runtime_key_not_found", "message": str(exc)}})
+        return JSONResponse(
+            status_code=404,
+            content={"error": {"type": "runtime_key_not_found", "message": str(exc)}},
+        )
     return {"status": "ok", "key": _runtime_key_response(key)}
 
 
@@ -158,7 +169,10 @@ def revoke_runtime_key(
     try:
         key = service.set_runtime_key_status(key_id, "revoked", admin, instance_id=instance.instance_id)
     except ValueError as exc:
-        return JSONResponse(status_code=404, content={"error": {"type": "runtime_key_not_found", "message": str(exc)}})
+        return JSONResponse(
+            status_code=404,
+            content={"error": {"type": "runtime_key_not_found", "message": str(exc)}},
+        )
     return {"status": "ok", "key": _runtime_key_response(key)}
 
 
@@ -169,17 +183,18 @@ def get_runtime_key_request_path_policy(
     service: GovernanceService = Depends(get_governance_service),
 ) -> dict[str, object]:
     key = next(
-        (
-            item
-            for item in service.list_runtime_keys(instance_id=instance.instance_id)
-            if item.key_id == key_id
-        ),
+        (item for item in service.list_runtime_keys(instance_id=instance.instance_id) if item.key_id == key_id),
         None,
     )
     if key is None:
         return JSONResponse(
             status_code=404,
-            content={"error": {"type": "runtime_key_not_found", "message": f"Runtime key '{key_id}' not found."}},
+            content={
+                "error": {
+                    "type": "runtime_key_not_found",
+                    "message": f"Runtime key '{key_id}' not found.",
+                }
+            },
         )
     return {
         "status": "ok",
@@ -215,7 +230,10 @@ def update_runtime_key_request_path_policy(
     except ValueError as exc:
         error_type = "runtime_key_not_found" if "not found" in str(exc).lower() else "invalid_request"
         status_code = 404 if error_type == "runtime_key_not_found" else 422
-        return JSONResponse(status_code=status_code, content={"error": {"type": error_type, "message": str(exc)}})
+        return JSONResponse(
+            status_code=status_code,
+            content={"error": {"type": error_type, "message": str(exc)}},
+        )
     return {"status": "ok", "key": _runtime_key_response(key)}
 
 
@@ -248,10 +266,7 @@ async def run_runtime_key_first_success_probe(
             content={
                 "error": {
                     "type": "runtime_key_instance_mismatch",
-                    "message": (
-                        f"Runtime key is scoped to instance '{identity.instance_id}', "
-                        f"but onboarding is scoped to '{instance.instance_id}'."
-                    ),
+                    "message": (f"Runtime key is scoped to instance '{identity.instance_id}', but onboarding is scoped to '{instance.instance_id}'."),
                 }
             },
         )
@@ -277,7 +292,10 @@ async def run_runtime_key_first_success_probe(
     }
 
     models_payload: dict[str, object] | None = None
-    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=request.app), base_url="http://forgeframe.local") as client:
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=request.app),
+        base_url="http://forgeframe.local",
+    ) as client:
         try:
             models_response = await client.get("/v1/models", headers=headers)
             models_probe["status_code"] = models_response.status_code
@@ -311,7 +329,12 @@ async def run_runtime_key_first_success_probe(
                     headers=headers,
                     json={
                         "model": requested_model,
-                        "messages": [{"role": "user", "content": payload.message.strip() or "ForgeFrame first success probe"}],
+                        "messages": [
+                            {
+                                "role": "user",
+                                "content": payload.message.strip() or "ForgeFrame first success probe",
+                            }
+                        ],
                         "stream": False,
                     },
                 )

@@ -147,11 +147,7 @@ class ControlPlaneTruthDomainMixin:
                     details=str(probe_operation.details),
                 )
                 if probe_operation is not None and probe_operation.status == "failed"
-                else CapabilityEvidenceRecord(
-                    details=str(probe_operation.details)
-                    if probe_operation is not None
-                    else "No successful live probe recorded yet."
-                )
+                else CapabilityEvidenceRecord(details=str(probe_operation.details) if probe_operation is not None else "No successful live probe recorded yet.")
             )
         )
         return ProviderCapabilityEvidenceRecord(
@@ -261,8 +257,7 @@ class ControlPlaneTruthDomainMixin:
                     "so Anthropic stays outside the current product-axis taxonomy and is intentionally omitted from beta targets."
                 )
             return (
-                "This provider uses native runtime semantics outside ForgeFrame's current shipped product-axis taxonomy "
-                "and stays intentionally omitted from beta targets until a truthful axis exists."
+                "This provider uses native runtime semantics outside ForgeFrame's current shipped product-axis taxonomy and stays intentionally omitted from beta targets until a truthful axis exists."
             )
 
         if provider_name == "generic_harness":
@@ -355,11 +350,7 @@ class ControlPlaneTruthDomainMixin:
             streaming,
             tool_calling_level,
         )
-        oauth_mode = (
-            self._settings.openai_codex_oauth_mode
-            if provider.provider == "openai_codex" and self._settings.openai_codex_auth_mode == "oauth"
-            else None
-        )
+        oauth_mode = self._settings.openai_codex_oauth_mode if provider.provider == "openai_codex" and self._settings.openai_codex_auth_mode == "oauth" else None
         return RuntimeProviderTruthRecord(
             provider=provider.provider,
             wired=True,
@@ -389,30 +380,25 @@ class ControlPlaneTruthDomainMixin:
         harness_profiles: list[object],
         harness_runs: list[object],
     ) -> HarnessProviderTruthRecord:
-        relevant_profiles = [
-            profile
-            for profile in harness_profiles
-            if provider.provider == "generic_harness"
-            or profile.provider_key.startswith(f"{provider.provider}_")
-        ]
-        relevant_runs = [
-            run
-            for run in harness_runs
-            if provider.provider == "generic_harness"
-            or run.provider_key.startswith(f"{provider.provider}_")
-        ]
+        relevant_profiles = [profile for profile in harness_profiles if provider.provider == "generic_harness" or profile.provider_key.startswith(f"{provider.provider}_")]
+        relevant_runs = [run for run in harness_runs if provider.provider == "generic_harness" or run.provider_key.startswith(f"{provider.provider}_")]
         successful_modes_by_profile: dict[str, set[str]] = {}
         for run in relevant_runs:
             if run.success:
                 successful_modes_by_profile.setdefault(run.provider_key, set()).add(run.mode)
         enabled_profiles = [profile for profile in relevant_profiles if profile.enabled]
         runtime_profiles = [profile for profile in enabled_profiles if self._profile_has_owned_models(profile)]
-        required_proof_modes = {"preview", "verify", "probe", "runtime_non_stream", "runtime_stream"}
+        required_proof_modes = {
+            "preview",
+            "verify",
+            "probe",
+            "runtime_non_stream",
+            "runtime_stream",
+        }
         proven_profile_keys = sorted(
             profile.provider_key
             for profile in relevant_profiles
-            if profile.integration_class == "openai_compatible"
-            and required_proof_modes.issubset(successful_modes_by_profile.get(profile.provider_key, set()))
+            if profile.integration_class == "openai_compatible" and required_proof_modes.issubset(successful_modes_by_profile.get(profile.provider_key, set()))
         )
         successful_modes = sorted({mode for modes in successful_modes_by_profile.values() for mode in modes})
         proof_status: str
@@ -440,30 +426,16 @@ class ControlPlaneTruthDomainMixin:
 
     @staticmethod
     def _latest_iso_timestamp(*values: object) -> str | None:
-        timestamps = sorted(
-            {
-                str(value)
-                for value in values
-                if isinstance(value, str) and value.strip()
-            }
-        )
+        timestamps = sorted({str(value) for value in values if isinstance(value, str) and value.strip()})
         return timestamps[-1] if timestamps else None
 
     @staticmethod
     def _provider_target_summary(targets: list[object]) -> dict[str, object]:
-        last_probe_at = ControlPlaneTruthDomainMixin._latest_iso_timestamp(
-            *[getattr(target, "last_probe_at", None) for target in targets]
-        )
+        last_probe_at = ControlPlaneTruthDomainMixin._latest_iso_timestamp(*[getattr(target, "last_probe_at", None) for target in targets])
         return {
             "target_count": len(targets),
             "enabled_target_count": len([target for target in targets if bool(getattr(target, "enabled", False))]),
-            "ready_target_count": len(
-                [
-                    target
-                    for target in targets
-                    if str(getattr(target, "readiness_status", "planned")) == "ready"
-                ]
-            ),
+            "ready_target_count": len([target for target in targets if str(getattr(target, "readiness_status", "planned")) == "ready"]),
             "last_probe_at": last_probe_at,
         }
 
@@ -490,9 +462,7 @@ class ControlPlaneTruthDomainMixin:
             "health_status": health_status,
             "healthy_model_count": healthy_count,
             "attention_model_count": attention_count,
-            "last_health_check_at": ControlPlaneTruthDomainMixin._latest_iso_timestamp(
-                *[getattr(record, "last_check_at", None) for record in records]
-            ),
+            "last_health_check_at": ControlPlaneTruthDomainMixin._latest_iso_timestamp(*[getattr(record, "last_check_at", None) for record in records]),
         }
 
     @staticmethod
@@ -544,13 +514,7 @@ class ControlPlaneTruthDomainMixin:
         target_summary = self._provider_target_summary(provider_targets_by_provider.get(provider_name, []))
         health_summary = self._provider_health_summary(health_records_by_provider.get(provider_name, []))
         oauth_target_state = oauth_target_states.get(provider_name, {})
-        oauth_connect_required = bool(
-            runtime_truth.oauth_required
-            and (
-                not bool(oauth_target_state.get("configured"))
-                or str(oauth_target_state.get("readiness", "planned")) != "ready"
-            )
-        )
+        oauth_connect_required = bool(runtime_truth.oauth_required and (not bool(oauth_target_state.get("configured")) or str(oauth_target_state.get("readiness", "planned")) != "ready"))
         last_probe_at = self._latest_iso_timestamp(
             target_summary["last_probe_at"],
             health_summary["last_health_check_at"],

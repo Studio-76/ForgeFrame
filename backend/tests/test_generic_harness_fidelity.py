@@ -1,10 +1,9 @@
 import json
-import os
 
 import pytest
+from conftest import admin_headers as shared_admin_headers
 from fastapi.testclient import TestClient
 
-from conftest import admin_headers as shared_admin_headers
 from app.api.admin.control_plane import get_control_plane_service
 from app.api.runtime.dependencies import clear_runtime_dependency_caches
 from app.main import app
@@ -78,7 +77,13 @@ def _upsert_harness_profile(
 
 
 class _MockResponse:
-    def __init__(self, *, status_code: int, payload: dict[str, object], content_type: str = "application/json"):
+    def __init__(
+        self,
+        *,
+        status_code: int,
+        payload: dict[str, object],
+        content_type: str = "application/json",
+    ):
         self.status_code = status_code
         self._payload = payload
         self.headers = {"content-type": content_type}
@@ -112,14 +117,22 @@ class _MockStreamResponse:
         yield from self._lines
 
 
-def test_generic_harness_openai_compatible_profile_proves_fidelity(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_generic_harness_openai_compatible_profile_proves_fidelity(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     client = TestClient(app)
     headers = _admin_headers(client)
     provider_key = "acme_openai_profile"
     model_id = "acme-chat-1"
     captured_runtime_headers: dict[str, str] = {}
 
-    def _mock_request(method: str, url: str, headers: dict[str, str] | None = None, json: dict[str, object] | None = None, timeout: int | None = None):
+    def _mock_request(
+        method: str,
+        url: str,
+        headers: dict[str, str] | None = None,
+        json: dict[str, object] | None = None,
+        timeout: int | None = None,
+    ):
         del method, timeout
         assert url == "https://acme.invalid/v1/chat/completions"
         if headers and not captured_runtime_headers and headers.get("X-ForgeFrame-Route") == "/v1/chat/completions":
@@ -141,7 +154,7 @@ def test_generic_harness_openai_compatible_profile_proves_fidelity(monkeypatch: 
                 {
                     "id": "call_1",
                     "type": "function",
-                    "function": {"name": "lookup", "arguments": "{\"q\":\"forgegate\"}"},
+                    "function": {"name": "lookup", "arguments": '{"q":"forgegate"}'},
                 }
             ]
         finish_reason = "tool_calls" if tool_calls else "stop"
@@ -160,11 +173,21 @@ def test_generic_harness_openai_compatible_profile_proves_fidelity(monkeypatch: 
                         "finish_reason": finish_reason,
                     }
                 ],
-                "usage": {"prompt_tokens": 5, "completion_tokens": 2, "total_tokens": 7},
+                "usage": {
+                    "prompt_tokens": 5,
+                    "completion_tokens": 2,
+                    "total_tokens": 7,
+                },
             },
         )
 
-    def _mock_stream(method: str, url: str, headers: dict[str, str] | None = None, json: dict[str, object] | None = None, timeout: int | None = None):
+    def _mock_stream(
+        method: str,
+        url: str,
+        headers: dict[str, str] | None = None,
+        json: dict[str, object] | None = None,
+        timeout: int | None = None,
+    ):
         del method, headers, timeout
         assert url == "https://acme.invalid/v1/chat/completions"
         payload = json or {}
@@ -248,7 +271,12 @@ def test_generic_harness_openai_compatible_profile_proves_fidelity(monkeypatch: 
             "model": model_id,
             "message": "preview me",
             "stream": False,
-            "tools": [{"type": "function", "function": {"name": "lookup", "parameters": {"type": "object"}}}],
+            "tools": [
+                {
+                    "type": "function",
+                    "function": {"name": "lookup", "parameters": {"type": "object"}},
+                }
+            ],
             "tool_choice": {"type": "function", "function": {"name": "lookup"}},
         },
     )
@@ -261,13 +289,15 @@ def test_generic_harness_openai_compatible_profile_proves_fidelity(monkeypatch: 
     verify_response = client.post(
         "/admin/providers/harness/verify",
         headers=headers,
-        json={"provider_key": provider_key, "model": model_id, "include_preview": True, "live_probe": False},
+        json={
+            "provider_key": provider_key,
+            "model": model_id,
+            "include_preview": True,
+            "live_probe": False,
+        },
     )
     assert verify_response.status_code == 200
-    verify_steps = {
-        step["step"]: step
-        for step in verify_response.json()["verification"]["steps"]
-    }
+    verify_steps = {step["step"]: step for step in verify_response.json()["verification"]["steps"]}
     assert verify_steps["tool_calling_support"]["support"] == "supported"
     assert verify_steps["stream_readiness"]["status"] == "ok"
 
@@ -279,7 +309,12 @@ def test_generic_harness_openai_compatible_profile_proves_fidelity(monkeypatch: 
             "model": model_id,
             "message": "probe me",
             "stream": False,
-            "tools": [{"type": "function", "function": {"name": "lookup", "parameters": {"type": "object"}}}],
+            "tools": [
+                {
+                    "type": "function",
+                    "function": {"name": "lookup", "parameters": {"type": "object"}},
+                }
+            ],
         },
     )
     assert probe_response.status_code == 200
@@ -298,7 +333,12 @@ def test_generic_harness_openai_compatible_profile_proves_fidelity(monkeypatch: 
         json={
             "model": model_id,
             "messages": [{"role": "user", "content": "use a tool"}],
-            "tools": [{"type": "function", "function": {"name": "lookup", "parameters": {"type": "object"}}}],
+            "tools": [
+                {
+                    "type": "function",
+                    "function": {"name": "lookup", "parameters": {"type": "object"}},
+                }
+            ],
         },
     )
     assert chat_response.status_code == 200
@@ -319,7 +359,12 @@ def test_generic_harness_openai_compatible_profile_proves_fidelity(monkeypatch: 
         json={
             "model": model_id,
             "input": "respond with tool",
-            "tools": [{"type": "function", "function": {"name": "lookup", "parameters": {"type": "object"}}}],
+            "tools": [
+                {
+                    "type": "function",
+                    "function": {"name": "lookup", "parameters": {"type": "object"}},
+                }
+            ],
         },
     )
     assert responses_response.status_code == 200
@@ -331,7 +376,7 @@ def test_generic_harness_openai_compatible_profile_proves_fidelity(monkeypatch: 
             "status": "completed",
             "call_id": "call_1",
             "name": "lookup",
-            "arguments": "{\"q\":\"forgegate\"}",
+            "arguments": '{"q":"forgegate"}',
         }
     ]
 
@@ -342,7 +387,12 @@ def test_generic_harness_openai_compatible_profile_proves_fidelity(monkeypatch: 
             "model": model_id,
             "messages": [{"role": "user", "content": "stream a tool"}],
             "stream": True,
-            "tools": [{"type": "function", "function": {"name": "lookup", "parameters": {"type": "object"}}}],
+            "tools": [
+                {
+                    "type": "function",
+                    "function": {"name": "lookup", "parameters": {"type": "object"}},
+                }
+            ],
         },
     ) as response:
         assert response.status_code == 200
@@ -357,7 +407,12 @@ def test_generic_harness_openai_compatible_profile_proves_fidelity(monkeypatch: 
             "model": model_id,
             "input": "stream a tool",
             "stream": True,
-            "tools": [{"type": "function", "function": {"name": "lookup", "parameters": {"type": "object"}}}],
+            "tools": [
+                {
+                    "type": "function",
+                    "function": {"name": "lookup", "parameters": {"type": "object"}},
+                }
+            ],
         },
     ) as response:
         assert response.status_code == 200
@@ -385,9 +440,9 @@ def test_generic_harness_openai_compatible_profile_proves_fidelity(monkeypatch: 
             "input": "force-stream-miss",
             "stream": True,
         },
-        ) as response:
-            assert response.status_code == 200
-            raw_error_stream = "".join(response.iter_text())
+    ) as response:
+        assert response.status_code == 200
+        raw_error_stream = "".join(response.iter_text())
     error_payload = _sse_payload(raw_error_stream, "response.error")
     assert error_payload["error"]["code"] == "provider_model_not_found"
     assert "provider" not in error_payload["error"]
@@ -500,7 +555,13 @@ def test_generic_harness_matrix_keeps_current_reason_when_historical_proof_profi
     proven_profile_key = "proven_disabled"
     proven_model_id = "proven-disabled-model"
 
-    def _mock_request(method: str, url: str, headers: dict[str, str] | None = None, json: dict[str, object] | None = None, timeout: int | None = None):
+    def _mock_request(
+        method: str,
+        url: str,
+        headers: dict[str, str] | None = None,
+        json: dict[str, object] | None = None,
+        timeout: int | None = None,
+    ):
         del method, headers, timeout
         assert url == "https://acme.invalid/v1/chat/completions"
         payload = json or {}
@@ -508,12 +569,27 @@ def test_generic_harness_matrix_keeps_current_reason_when_historical_proof_profi
             status_code=200,
             payload={
                 "model": str(payload.get("model", proven_model_id)),
-                "choices": [{"message": {"role": "assistant", "content": "historical-proof"}, "finish_reason": "stop"}],
-                "usage": {"prompt_tokens": 5, "completion_tokens": 2, "total_tokens": 7},
+                "choices": [
+                    {
+                        "message": {"role": "assistant", "content": "historical-proof"},
+                        "finish_reason": "stop",
+                    }
+                ],
+                "usage": {
+                    "prompt_tokens": 5,
+                    "completion_tokens": 2,
+                    "total_tokens": 7,
+                },
             },
         )
 
-    def _mock_stream(method: str, url: str, headers: dict[str, str] | None = None, json: dict[str, object] | None = None, timeout: int | None = None):
+    def _mock_stream(
+        method: str,
+        url: str,
+        headers: dict[str, str] | None = None,
+        json: dict[str, object] | None = None,
+        timeout: int | None = None,
+    ):
         del method, headers, json, timeout
         assert url == "https://acme.invalid/v1/chat/completions"
         return _MockStreamResponse(
@@ -546,27 +622,45 @@ def test_generic_harness_matrix_keeps_current_reason_when_historical_proof_profi
     preview_response = client.post(
         "/admin/providers/harness/preview",
         headers=headers,
-        json={"provider_key": proven_profile_key, "model": proven_model_id, "message": "preview me", "stream": False},
+        json={
+            "provider_key": proven_profile_key,
+            "model": proven_model_id,
+            "message": "preview me",
+            "stream": False,
+        },
     )
     assert preview_response.status_code == 200
 
     verify_response = client.post(
         "/admin/providers/harness/verify",
         headers=headers,
-        json={"provider_key": proven_profile_key, "model": proven_model_id, "include_preview": True, "live_probe": False},
+        json={
+            "provider_key": proven_profile_key,
+            "model": proven_model_id,
+            "include_preview": True,
+            "live_probe": False,
+        },
     )
     assert verify_response.status_code == 200
 
     probe_response = client.post(
         "/admin/providers/harness/probe",
         headers=headers,
-        json={"provider_key": proven_profile_key, "model": proven_model_id, "message": "probe me", "stream": False},
+        json={
+            "provider_key": proven_profile_key,
+            "model": proven_model_id,
+            "message": "probe me",
+            "stream": False,
+        },
     )
     assert probe_response.status_code == 200
 
     chat_response = client.post(
         "/v1/chat/completions",
-        json={"model": proven_model_id, "messages": [{"role": "user", "content": "record runtime proof"}]},
+        json={
+            "model": proven_model_id,
+            "messages": [{"role": "user", "content": "record runtime proof"}],
+        },
     )
     assert chat_response.status_code == 200
 
@@ -582,7 +676,10 @@ def test_generic_harness_matrix_keeps_current_reason_when_historical_proof_profi
         assert response.status_code == 200
         assert "historical-" in "".join(response.iter_text())
 
-    deactivate_response = client.post(f"/admin/providers/harness/profiles/{proven_profile_key}/deactivate", headers=headers)
+    deactivate_response = client.post(
+        f"/admin/providers/harness/profiles/{proven_profile_key}/deactivate",
+        headers=headers,
+    )
     assert deactivate_response.status_code == 200
 
     empty_profile_response = client.put(
@@ -645,7 +742,9 @@ def test_generic_harness_matrix_keeps_current_reason_when_historical_proof_profi
     assert "no enabled profile currently owns a runtime model" in generic_axis_row["status_summary"]
 
 
-def test_generic_harness_runtime_preserves_multiturn_multimodal_chat_sequence(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_generic_harness_runtime_preserves_multiturn_multimodal_chat_sequence(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     client = TestClient(app)
     headers = _admin_headers(client)
     provider_key = "chat_sequence_profile"
@@ -672,7 +771,10 @@ def test_generic_harness_runtime_preserves_multiturn_multimodal_chat_sequence(mo
                 {
                     "id": "call_1",
                     "type": "function",
-                    "function": {"name": "calculator", "arguments": "{\"expression\":\"6*7\"}"},
+                    "function": {
+                        "name": "calculator",
+                        "arguments": '{"expression":"6*7"}',
+                    },
                 }
             ],
         },
@@ -682,7 +784,13 @@ def test_generic_harness_runtime_preserves_multiturn_multimodal_chat_sequence(mo
     captured_non_stream_messages: list[dict[str, object]] | None = None
     captured_stream_messages: list[dict[str, object]] | None = None
 
-    def _mock_request(method: str, url: str, headers: dict[str, str] | None = None, json: dict[str, object] | None = None, timeout: int | None = None):
+    def _mock_request(
+        method: str,
+        url: str,
+        headers: dict[str, str] | None = None,
+        json: dict[str, object] | None = None,
+        timeout: int | None = None,
+    ):
         del method, headers, timeout
         nonlocal captured_non_stream_messages
         assert url == "https://acme.invalid/v1/chat/completions"
@@ -691,12 +799,27 @@ def test_generic_harness_runtime_preserves_multiturn_multimodal_chat_sequence(mo
             status_code=200,
             payload={
                 "model": model_id,
-                "choices": [{"message": {"role": "assistant", "content": "sequence-ok"}, "finish_reason": "stop"}],
-                "usage": {"prompt_tokens": 9, "completion_tokens": 2, "total_tokens": 11},
+                "choices": [
+                    {
+                        "message": {"role": "assistant", "content": "sequence-ok"},
+                        "finish_reason": "stop",
+                    }
+                ],
+                "usage": {
+                    "prompt_tokens": 9,
+                    "completion_tokens": 2,
+                    "total_tokens": 11,
+                },
             },
         )
 
-    def _mock_stream(method: str, url: str, headers: dict[str, str] | None = None, json: dict[str, object] | None = None, timeout: int | None = None):
+    def _mock_stream(
+        method: str,
+        url: str,
+        headers: dict[str, str] | None = None,
+        json: dict[str, object] | None = None,
+        timeout: int | None = None,
+    ):
         del method, headers, timeout
         nonlocal captured_stream_messages
         assert url == "https://acme.invalid/v1/chat/completions"
@@ -946,7 +1069,10 @@ def test_generic_harness_admin_truth_keeps_partial_support_for_mixed_profiles() 
     generic_ui = next(item for item in payload["providers"] if item["provider"] == "generic_harness")
 
     assert generic_truth["auth_mechanism"] == "mixed"
-    assert generic_truth["capabilities"]["auth_mechanisms"] == ["api_key_header", "none"]
+    assert generic_truth["capabilities"]["auth_mechanisms"] == [
+        "api_key_header",
+        "none",
+    ]
     assert generic_truth["capabilities"]["streaming"] is True
     assert generic_truth["capabilities"]["streaming_level"] == "partial"
     assert generic_truth["tool_calling_level"] == "partial"
@@ -985,8 +1111,17 @@ def test_generic_harness_compatibility_matrix_demotes_mixed_proven_and_model_les
             status_code=200,
             payload={
                 "model": payload["model"],
-                "choices": [{"message": {"role": "assistant", "content": "ok"}, "finish_reason": "stop"}],
-                "usage": {"prompt_tokens": 4, "completion_tokens": 2, "total_tokens": 6},
+                "choices": [
+                    {
+                        "message": {"role": "assistant", "content": "ok"},
+                        "finish_reason": "stop",
+                    }
+                ],
+                "usage": {
+                    "prompt_tokens": 4,
+                    "completion_tokens": 2,
+                    "total_tokens": 6,
+                },
             },
         )
 
@@ -1029,34 +1164,56 @@ def test_generic_harness_compatibility_matrix_demotes_mixed_proven_and_model_les
     preview_response = client.post(
         "/admin/providers/harness/preview",
         headers=headers,
-        json={"provider_key": proven_profile_key, "model": proven_model_id, "message": "preview me", "stream": False},
+        json={
+            "provider_key": proven_profile_key,
+            "model": proven_model_id,
+            "message": "preview me",
+            "stream": False,
+        },
     )
     assert preview_response.status_code == 200
 
     verify_response = client.post(
         "/admin/providers/harness/verify",
         headers=headers,
-        json={"provider_key": proven_profile_key, "model": proven_model_id, "include_preview": False, "live_probe": False},
+        json={
+            "provider_key": proven_profile_key,
+            "model": proven_model_id,
+            "include_preview": False,
+            "live_probe": False,
+        },
     )
     assert verify_response.status_code == 200
 
     probe_response = client.post(
         "/admin/providers/harness/probe",
         headers=headers,
-        json={"provider_key": proven_profile_key, "model": proven_model_id, "message": "probe me", "stream": False},
+        json={
+            "provider_key": proven_profile_key,
+            "model": proven_model_id,
+            "message": "probe me",
+            "stream": False,
+        },
     )
     assert probe_response.status_code == 200
 
     chat_response = client.post(
         "/v1/chat/completions",
-        json={"model": proven_model_id, "messages": [{"role": "user", "content": "hello"}]},
+        json={
+            "model": proven_model_id,
+            "messages": [{"role": "user", "content": "hello"}],
+        },
     )
     assert chat_response.status_code == 200
 
     with client.stream(
         "POST",
         "/v1/chat/completions",
-        json={"model": proven_model_id, "messages": [{"role": "user", "content": "stream hello"}], "stream": True},
+        json={
+            "model": proven_model_id,
+            "messages": [{"role": "user", "content": "stream hello"}],
+            "stream": True,
+        },
     ) as stream_response:
         assert stream_response.status_code == 200
         assert "[DONE]" in "".join(stream_response.iter_text())
@@ -1101,9 +1258,7 @@ def test_generic_harness_compatibility_matrix_demotes_mixed_proven_and_model_les
 
     providers_response = client.get("/admin/providers/", headers=headers)
     assert providers_response.status_code == 200
-    generic_truth = next(
-        item for item in providers_response.json()["truth_axes"] if item["provider"]["provider"] == "generic_harness"
-    )
+    generic_truth = next(item for item in providers_response.json()["truth_axes"] if item["provider"]["provider"] == "generic_harness")
     assert generic_truth["harness"]["proof_status"] == "proven"
     assert proven_profile_key in generic_truth["harness"]["proven_profile_keys"]
 

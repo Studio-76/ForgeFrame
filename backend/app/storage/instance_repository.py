@@ -9,7 +9,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Protocol
 
-from sqlalchemy import JSON, DateTime, String, create_engine, delete, select
+from sqlalchemy import JSON, DateTime, String, create_engine, select
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, Session, mapped_column, sessionmaker
 
@@ -75,9 +75,7 @@ class FileInstanceRepository:
         instances = [
             InstanceRecord(**({
                 **item,
-                "slug": _slugify(
-                    str(item.get("slug") or item.get("instance_id") or item.get("tenant_id") or "instance")
-                ),
+                "slug": _slugify(str(item.get("slug") or item.get("instance_id") or item.get("tenant_id") or "instance")),
             }))
             for item in normalized.get("instances", [])
         ]
@@ -168,16 +166,10 @@ class PostgresInstanceRepository:
             return [self._from_row(row) for row in rows]
 
     def save_instances(self, instances: list[InstanceRecord]) -> list[InstanceRecord]:
-        normalized = [
-            item.model_copy(update={"slug": _slugify(item.slug or item.instance_id)})
-            for item in instances
-        ]
+        normalized = [item.model_copy(update={"slug": _slugify(item.slug or item.instance_id)}) for item in instances]
         incoming_ids = {item.instance_id for item in normalized}
         with self._session() as session:
-            existing = {
-                row.instance_id: row
-                for row in session.execute(select(InstanceORM)).scalars().all()
-            }
+            existing = {row.instance_id: row for row in session.execute(select(InstanceORM)).scalars().all()}
 
             for stale_id in set(existing) - incoming_ids:
                 session.delete(existing[stale_id])
@@ -224,11 +216,7 @@ class PostgresInstanceRepository:
 
 def get_instance_repository(settings: Settings) -> InstanceRepository:
     if settings.instances_storage_backend == "postgresql":
-        database_url = (
-            settings.instances_postgres_url.strip()
-            or settings.governance_postgres_url.strip()
-            or settings.harness_postgres_url
-        )
+        database_url = settings.instances_postgres_url.strip() or settings.governance_postgres_url.strip() or settings.harness_postgres_url
         return PostgresInstanceRepository(database_url)
     return FileInstanceRepository(paths=InstanceStatePaths(state_path=Path(settings.instances_state_path)))
 

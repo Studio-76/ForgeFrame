@@ -1,8 +1,8 @@
 from uuid import uuid4
 
+from conftest import admin_headers as shared_admin_headers
 from fastapi.testclient import TestClient
 
-from conftest import admin_headers as shared_admin_headers
 from app.approvals.models import build_execution_approval_id
 from app.execution.dependencies import get_execution_transition_service
 from app.main import app
@@ -67,7 +67,7 @@ def _create_workspace(
 def _open_execution_approval(*, company_id: str, workspace_id: str, issue_id: str) -> tuple[str, str]:
     service = get_execution_transition_service()
     suffix = uuid4().hex[:8]
-    created = service.admit_create(
+    service.admit_create(
         company_id=company_id,
         actor_type="agent",
         actor_id="agent_workspace_runtime",
@@ -152,7 +152,12 @@ def test_workspaces_and_artifacts_routes_persist_preview_and_handoff_truth() -> 
     headers = _admin_headers(client)
     suffix = uuid4().hex[:8]
     company_id = f"company_workspace_{suffix}"
-    instance_id = _create_instance(client, headers, instance_id=f"instance_workspace_{suffix}", company_id=company_id)
+    instance_id = _create_instance(
+        client,
+        headers,
+        instance_id=f"instance_workspace_{suffix}",
+        company_id=company_id,
+    )
 
     workspace = _create_workspace(
         client,
@@ -177,7 +182,11 @@ def test_workspaces_and_artifacts_routes_persist_preview_and_handoff_truth() -> 
             "uri": "https://forgeframe.local/previews/ws-alpha",
             "preview_url": "https://forgeframe.local/previews/ws-alpha",
             "attachments": [
-                {"target_kind": "instance", "target_id": instance_id, "role": "instance_scope"},
+                {
+                    "target_kind": "instance",
+                    "target_id": instance_id,
+                    "role": "instance_scope",
+                },
             ],
             "metadata": {"channel": "preview"},
         },
@@ -223,7 +232,12 @@ def test_execution_and_approvals_detail_include_workspace_and_artifact_context()
     headers = _admin_headers(client)
     suffix = uuid4().hex[:8]
     company_id = f"company_workspace_exec_{suffix}"
-    instance_id = _create_instance(client, headers, instance_id=f"instance_workspace_exec_{suffix}", company_id=company_id)
+    instance_id = _create_instance(
+        client,
+        headers,
+        instance_id=f"instance_workspace_exec_{suffix}",
+        company_id=company_id,
+    )
 
     workspace = _create_workspace(
         client,
@@ -271,7 +285,11 @@ def test_execution_and_approvals_detail_include_workspace_and_artifact_context()
             "uri": "file:///tmp/handoff.patch",
             "attachments": [
                 {"target_kind": "run", "target_id": run_id, "role": "run_output"},
-                {"target_kind": "approval", "target_id": shared_approval_id, "role": "approval_evidence"},
+                {
+                    "target_kind": "approval",
+                    "target_id": shared_approval_id,
+                    "role": "approval_evidence",
+                },
             ],
             "metadata": {"format": "patch"},
         },
@@ -338,7 +356,12 @@ def test_artifact_creation_rejects_unknown_runtime_targets() -> None:
     headers = _admin_headers(client)
     suffix = uuid4().hex[:8]
     company_id = f"company_workspace_invalid_{suffix}"
-    instance_id = _create_instance(client, headers, instance_id=f"instance_workspace_invalid_{suffix}", company_id=company_id)
+    instance_id = _create_instance(
+        client,
+        headers,
+        instance_id=f"instance_workspace_invalid_{suffix}",
+        company_id=company_id,
+    )
     workspace = _create_workspace(
         client,
         headers,
@@ -357,7 +380,11 @@ def test_artifact_creation_rejects_unknown_runtime_targets() -> None:
             "label": "invalid-target.json",
             "uri": "file:///tmp/invalid-target.json",
             "attachments": [
-                {"target_kind": "run", "target_id": "run_missing", "role": "run_output"},
+                {
+                    "target_kind": "run",
+                    "target_id": "run_missing",
+                    "role": "run_output",
+                },
             ],
         },
     )
@@ -375,7 +402,11 @@ def test_artifact_creation_rejects_unknown_runtime_targets() -> None:
             "label": "invalid-approval.json",
             "uri": "file:///tmp/invalid-approval.json",
             "attachments": [
-                {"target_kind": "approval", "target_id": "elevated:req_x", "role": "approval_evidence"},
+                {
+                    "target_kind": "approval",
+                    "target_id": "elevated:req_x",
+                    "role": "approval_evidence",
+                },
             ],
         },
     )
@@ -389,7 +420,12 @@ def test_artifact_detail_surfaces_structured_metadata_and_clears_optional_access
     headers = _admin_headers(client)
     suffix = uuid4().hex[:8]
     company_id = f"company_workspace_artifact_meta_{suffix}"
-    instance_id = _create_instance(client, headers, instance_id=f"instance_workspace_artifact_meta_{suffix}", company_id=company_id)
+    instance_id = _create_instance(
+        client,
+        headers,
+        instance_id=f"instance_workspace_artifact_meta_{suffix}",
+        company_id=company_id,
+    )
     workspace = _create_workspace(
         client,
         headers,
@@ -467,7 +503,12 @@ def test_workspace_lifecycle_transitions_reject_impossible_manual_jumps() -> Non
     headers = _admin_headers(client)
     suffix = uuid4().hex[:8]
     company_id = f"company_workspace_lifecycle_{suffix}"
-    instance_id = _create_instance(client, headers, instance_id=f"instance_workspace_lifecycle_{suffix}", company_id=company_id)
+    instance_id = _create_instance(
+        client,
+        headers,
+        instance_id=f"instance_workspace_lifecycle_{suffix}",
+        company_id=company_id,
+    )
 
     invalid_create = client.post(
         "/admin/workspaces",

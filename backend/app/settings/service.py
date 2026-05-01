@@ -283,28 +283,26 @@ def serialize_mutable_settings(raw_settings, effective_settings, override_record
     rows: list[dict[str, Any]] = []
     for definition in mutable_setting_catalog():
         overridden = definition.key in override_map
-        rows.append(
-            {
-                "key": definition.key,
-                "label": definition.label,
-                "group": definition.group,
-                "group_label": group_labels.get(definition.group, definition.group.title()),
-                "category": definition.group,
-                "value_type": definition.value_type,
-                "description": definition.description,
-                "default_value": getattr(raw_settings, definition.key),
-                "effective_value": getattr(effective_settings, definition.key),
-                "source": "override" if overridden else "default",
-                "source_label": "Persisted override" if overridden else "Environment default",
-                "mutable": definition.mutable,
-                "risk_level": definition.risk_level,
-                "risk_label": risk_labels.get(definition.risk_level, definition.risk_level.title()),
-                "risk_note": definition.risk_note,
-                "confirmation_required": definition.confirmation_required,
-                "allowed_values": list(definition.allowed_values),
-                "overridden": overridden,
-                "updated_at": override_map.get(definition.key).updated_at if overridden else None,
-                "updated_by": override_map.get(definition.key).updated_by if overridden else None,
-            }
-        )
+        rows.append({
+            "key": definition.key,
+            "label": definition.label,
+            "group": definition.group,
+            "group_label": group_labels.get(definition.group, definition.group.title()),
+            "category": definition.group,
+            "value_type": definition.value_type,
+            "description": definition.description,
+            "default_value": getattr(raw_settings, definition.key),
+            "effective_value": getattr(effective_settings, definition.key),
+            "source": "override" if overridden else "default",
+            "source_label": "Persisted override" if overridden else "Environment default",
+            "mutable": definition.mutable,
+            "risk_level": definition.risk_level,
+            "risk_label": risk_labels.get(definition.risk_level, definition.risk_level.title()),
+            "risk_note": definition.risk_note,
+            "confirmation_required": definition.confirmation_required,
+            "allowed_values": list(definition.allowed_values),
+            "overridden": overridden,
+            "updated_at": override_map.get(definition.key).updated_at if overridden else None,
+            "updated_by": override_map.get(definition.key).updated_by if overridden else None,
+        })
     return rows

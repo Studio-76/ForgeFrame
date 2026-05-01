@@ -34,7 +34,9 @@ def _normalize_metadata_value(value: Any) -> str | None:
     return normalized or None
 
 
-def normalize_request_metadata(request_metadata: Mapping[str, Any] | None) -> dict[str, str]:
+def normalize_request_metadata(
+    request_metadata: Mapping[str, Any] | None,
+) -> dict[str, str]:
     if not request_metadata:
         return {}
 
@@ -76,7 +78,9 @@ def extract_scope_attributes(
     return scope_attributes
 
 
-def forgeframe_request_metadata_headers(request_metadata: Mapping[str, str] | None) -> dict[str, str]:
+def forgeframe_request_metadata_headers(
+    request_metadata: Mapping[str, str] | None,
+) -> dict[str, str]:
     """Project runtime request metadata into stable upstream correlation headers."""
 
     normalized_metadata = normalize_request_metadata(request_metadata)

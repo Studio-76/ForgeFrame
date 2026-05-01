@@ -82,23 +82,14 @@ class PluginCatalogService:
 
         unknown_required_keys = sorted(key for key in required_keys if key not in properties)
         if unknown_required_keys:
-            raise ValueError(
-                "Plugin config schema marks undeclared required keys: "
-                + ", ".join(unknown_required_keys)
-            )
+            raise ValueError("Plugin config schema marks undeclared required keys: " + ", ".join(unknown_required_keys))
 
         unknown_keys = sorted(key for key in config if key not in properties)
         if unknown_keys:
-            raise ValueError(
-                f"{config_label} contains keys not declared by the manifest schema: "
-                + ", ".join(unknown_keys)
-            )
+            raise ValueError(f"{config_label} contains keys not declared by the manifest schema: " + ", ".join(unknown_keys))
         missing_required_keys = sorted(key for key in required_keys if key not in config)
         if missing_required_keys:
-            raise ValueError(
-                f"{config_label} is missing required manifest keys: "
-                + ", ".join(missing_required_keys)
-            )
+            raise ValueError(f"{config_label} is missing required manifest keys: " + ", ".join(missing_required_keys))
 
     def _validate_manifest_contract(self, manifest: PluginManifestRecord) -> None:
         self._validate_config_against_schema(
@@ -125,10 +116,7 @@ class PluginCatalogService:
             except ValueError:
                 invalid_instances.append(binding.instance_id)
         if invalid_instances:
-            raise ValueError(
-                "Manifest update would invalidate existing bindings for instances: "
-                + ", ".join(sorted(dict.fromkeys(invalid_instances)))
-            )
+            raise ValueError("Manifest update would invalidate existing bindings for instances: " + ", ".join(sorted(dict.fromkeys(invalid_instances))))
 
     @staticmethod
     def _validate_binding_lists(
@@ -146,20 +134,11 @@ class PluginCatalogService:
         invalid_ui_slots = sorted(item for item in enabled_ui_slots if item not in manifest_ui_slots)
         invalid_api_mounts = sorted(item for item in enabled_api_mounts if item not in manifest_api_mounts)
         if invalid_capabilities:
-            raise ValueError(
-                "Plugin binding references capabilities outside the manifest: "
-                + ", ".join(invalid_capabilities)
-            )
+            raise ValueError("Plugin binding references capabilities outside the manifest: " + ", ".join(invalid_capabilities))
         if invalid_ui_slots:
-            raise ValueError(
-                "Plugin binding references UI slots outside the manifest: "
-                + ", ".join(invalid_ui_slots)
-            )
+            raise ValueError("Plugin binding references UI slots outside the manifest: " + ", ".join(invalid_ui_slots))
         if invalid_api_mounts:
-            raise ValueError(
-                "Plugin binding references API mounts outside the manifest: "
-                + ", ".join(invalid_api_mounts)
-            )
+            raise ValueError("Plugin binding references API mounts outside the manifest: " + ", ".join(invalid_api_mounts))
 
     @staticmethod
     def _status_summary(manifest: PluginManifestRecord, binding: InstancePluginBindingRecord | None) -> tuple[str, str]:
@@ -168,7 +147,10 @@ class PluginCatalogService:
         if binding is None:
             return "available", "Registered but not yet activated for this instance."
         if not binding.enabled:
-            return "disabled", "Binding persisted for this instance but currently disabled."
+            return (
+                "disabled",
+                "Binding persisted for this instance but currently disabled.",
+            )
         return "enabled", "Enabled for this instance with persisted binding and config."
 
     @staticmethod
@@ -184,16 +166,8 @@ class PluginCatalogService:
         binding: InstancePluginBindingRecord | None,
     ) -> PluginCatalogEntry:
         effective_status, status_summary = self._status_summary(manifest, binding)
-        all_bindings = [
-            item
-            for item in self._state.bindings
-            if item.plugin_id == manifest.plugin_id
-        ]
-        enabled_bindings = [
-            item
-            for item in all_bindings
-            if item.enabled
-        ]
+        all_bindings = [item for item in self._state.bindings if item.plugin_id == manifest.plugin_id]
+        enabled_bindings = [item for item in all_bindings if item.enabled]
         return PluginCatalogEntry(
             plugin_id=manifest.plugin_id,
             display_name=manifest.display_name,
@@ -256,10 +230,7 @@ class PluginCatalogService:
     def list_plugins(self, *, instance: InstanceRecord) -> tuple[list[PluginCatalogEntry], PluginCatalogSummary]:
         manifest_map = self._manifest_map()
         binding_map = self._binding_map_for_instance(instance)
-        entries = [
-            self._catalog_entry(manifest, binding_map.get(manifest.plugin_id))
-            for manifest in sorted(manifest_map.values(), key=lambda item: item.display_name.lower())
-        ]
+        entries = [self._catalog_entry(manifest, binding_map.get(manifest.plugin_id)) for manifest in sorted(manifest_map.values(), key=lambda item: item.display_name.lower())]
         return entries, self._summary(entries)
 
     def get_plugin(self, *, instance: InstanceRecord, plugin_id: str) -> PluginCatalogEntry:

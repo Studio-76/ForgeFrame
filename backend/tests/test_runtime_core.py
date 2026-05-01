@@ -1,6 +1,6 @@
+import base64
 import json
 import os
-import base64
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
@@ -9,17 +9,24 @@ import pytest
 from fastapi.testclient import TestClient
 from pydantic import ValidationError
 
-from app.api.runtime.schemas import ChatCompletionsRequest
 from app.api.runtime.dependencies import clear_runtime_dependency_caches
+from app.api.runtime.schemas import ChatCompletionsRequest
 from app.harness.models import HarnessVerificationRun
 from app.harness.service import get_harness_service
 from app.main import app
-from app.providers import ProviderStreamEvent, ProviderStreamInterruptedError, ProviderUpstreamError
-from app.readiness import RuntimeReadinessCheck, RuntimeReadinessReport, build_public_runtime_readiness_payload
+from app.providers import (
+    ProviderStreamEvent,
+    ProviderStreamInterruptedError,
+    ProviderUpstreamError,
+)
 from app.providers.openai_api.adapter import OpenAIAPIAdapter
+from app.readiness import (
+    RuntimeReadinessCheck,
+    RuntimeReadinessReport,
+    build_public_runtime_readiness_payload,
+)
 from app.usage.analytics import ClientIdentity, get_usage_analytics_store
 from app.usage.models import CostBreakdown, TokenUsage
-
 
 client = TestClient(app)
 _ROTATED_ADMIN_PASSWORD = "ForgeFrame-Test-Admin-Secret-456"
@@ -94,22 +101,20 @@ def _mock_anthropic_tool_use_stream_response():
 
         @staticmethod
         def iter_lines():
-            return iter(
-                [
-                    "event: message_start",
-                    'data: {"type":"message_start","message":{"usage":{"input_tokens":5,"output_tokens":0}}}',
-                    "event: content_block_start",
-                    'data: {"type":"content_block_start","index":0,"content_block":{"type":"tool_use","id":"toolu_1","name":"lookup"}}',
-                    "event: content_block_delta",
-                    'data: {"type":"content_block_delta","index":0,"delta":{"type":"input_json_delta","partial_json":"{\\"q\\":\\"forge"}}',
-                    "event: content_block_delta",
-                    'data: {"type":"content_block_delta","index":0,"delta":{"type":"input_json_delta","partial_json":"gate\\"}"}}',
-                    "event: message_delta",
-                    'data: {"type":"message_delta","delta":{"stop_reason":"tool_use"},"usage":{"input_tokens":5,"output_tokens":2,"total_tokens":7}}',
-                    "event: message_stop",
-                    'data: {"type":"message_stop"}',
-                ]
-            )
+            return iter([
+                "event: message_start",
+                'data: {"type":"message_start","message":{"usage":{"input_tokens":5,"output_tokens":0}}}',
+                "event: content_block_start",
+                'data: {"type":"content_block_start","index":0,"content_block":{"type":"tool_use","id":"toolu_1","name":"lookup"}}',
+                "event: content_block_delta",
+                'data: {"type":"content_block_delta","index":0,"delta":{"type":"input_json_delta","partial_json":"{\\"q\\":\\"forge"}}',
+                "event: content_block_delta",
+                'data: {"type":"content_block_delta","index":0,"delta":{"type":"input_json_delta","partial_json":"gate\\"}"}}',
+                "event: message_delta",
+                'data: {"type":"message_delta","delta":{"stop_reason":"tool_use"},"usage":{"input_tokens":5,"output_tokens":2,"total_tokens":7}}',
+                "event: message_stop",
+                'data: {"type":"message_stop"}',
+            ])
 
     return _MockStreamResponse()
 
@@ -328,7 +333,9 @@ def test_health_endpoint_reports_booting_for_insecure_bootstrap_admin_password(
     assert all("details" not in item for item in body["readiness"]["checks"])
 
 
-def test_health_endpoint_reports_booting_when_startup_validation_fails(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_health_endpoint_reports_booting_when_startup_validation_fails(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     monkeypatch.setenv("FORGEGATE_HARNESS_STORAGE_BACKEND", "postgresql")
     monkeypatch.setenv("FORGEGATE_HARNESS_POSTGRES_URL", "sqlite:///tmp/forgegate.db")
     clear_runtime_dependency_caches()
@@ -343,7 +350,9 @@ def test_health_endpoint_reports_booting_when_startup_validation_fails(monkeypat
     assert "sqlite:///tmp/forgegate.db" not in json.dumps(body)
 
 
-def test_public_startup_failure_response_redacts_runtime_details(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_public_startup_failure_response_redacts_runtime_details(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     monkeypatch.setenv("FORGEGATE_HARNESS_STORAGE_BACKEND", "postgresql")
     monkeypatch.setenv("FORGEGATE_HARNESS_POSTGRES_URL", "sqlite:///tmp/forgegate.db")
     clear_runtime_dependency_caches()
@@ -398,7 +407,9 @@ def test_admin_runtime_readiness_endpoint_accepts_password_rotation_required_ses
     assert "checks" in response.json()["readiness"]
 
 
-def test_models_endpoint_returns_sanitized_openai_compatible_list(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_models_endpoint_returns_sanitized_openai_compatible_list(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     monkeypatch.setattr("app.providers.ollama.adapter.httpx.get", _mock_ollama_models_unreachable)
     clear_runtime_dependency_caches()
     local_client = TestClient(app)
@@ -513,7 +524,10 @@ def test_models_endpoint_keeps_anthropic_hidden_from_public_inventory_after_non_
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     _enable_isolated_anthropic_runtime(monkeypatch)
-    monkeypatch.setattr("app.providers.anthropic.adapter.httpx.post", lambda *args, **kwargs: _mock_anthropic_text_response())
+    monkeypatch.setattr(
+        "app.providers.anthropic.adapter.httpx.post",
+        lambda *args, **kwargs: _mock_anthropic_text_response(),
+    )
     clear_runtime_dependency_caches()
     anthropic_client = TestClient(app)
 
@@ -536,7 +550,10 @@ def test_models_endpoint_keeps_anthropic_hidden_from_public_inventory_after_resp
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     _enable_isolated_anthropic_runtime(monkeypatch)
-    monkeypatch.setattr("app.providers.anthropic.adapter.httpx.post", lambda *args, **kwargs: _mock_anthropic_text_response())
+    monkeypatch.setattr(
+        "app.providers.anthropic.adapter.httpx.post",
+        lambda *args, **kwargs: _mock_anthropic_text_response(),
+    )
     clear_runtime_dependency_caches()
     anthropic_client = TestClient(app)
 
@@ -559,7 +576,10 @@ def test_chat_unknown_model_keeps_anthropic_public_inventory_hidden_after_runtim
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     _enable_isolated_anthropic_runtime(monkeypatch)
-    monkeypatch.setattr("app.providers.anthropic.adapter.httpx.post", lambda *args, **kwargs: _mock_anthropic_text_response())
+    monkeypatch.setattr(
+        "app.providers.anthropic.adapter.httpx.post",
+        lambda *args, **kwargs: _mock_anthropic_text_response(),
+    )
     clear_runtime_dependency_caches()
     anthropic_client = TestClient(app)
 
@@ -590,7 +610,10 @@ def test_responses_unknown_model_keeps_anthropic_public_inventory_hidden_after_r
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     _enable_isolated_anthropic_runtime(monkeypatch)
-    monkeypatch.setattr("app.providers.anthropic.adapter.httpx.post", lambda *args, **kwargs: _mock_anthropic_text_response())
+    monkeypatch.setattr(
+        "app.providers.anthropic.adapter.httpx.post",
+        lambda *args, **kwargs: _mock_anthropic_text_response(),
+    )
     clear_runtime_dependency_caches()
     anthropic_client = TestClient(app)
 
@@ -622,7 +645,10 @@ def test_models_endpoint_keeps_anthropic_hidden_from_public_inventory_after_resp
 ) -> None:
     _enable_isolated_anthropic_runtime(monkeypatch)
     clear_runtime_dependency_caches()
-    monkeypatch.setattr("app.providers.anthropic.adapter.httpx.stream", lambda *args, **kwargs: _mock_anthropic_tool_use_stream_response())
+    monkeypatch.setattr(
+        "app.providers.anthropic.adapter.httpx.stream",
+        lambda *args, **kwargs: _mock_anthropic_tool_use_stream_response(),
+    )
     anthropic_client = TestClient(app)
 
     with anthropic_client.stream(
@@ -632,7 +658,12 @@ def test_models_endpoint_keeps_anthropic_hidden_from_public_inventory_after_resp
             "model": "claude-3-5-sonnet-latest",
             "input": "record streaming runtime evidence",
             "stream": True,
-            "tools": [{"type": "function", "function": {"name": "lookup", "parameters": {"type": "object"}}}],
+            "tools": [
+                {
+                    "type": "function",
+                    "function": {"name": "lookup", "parameters": {"type": "object"}},
+                }
+            ],
         },
     ) as response:
         assert response.status_code == 200
@@ -652,7 +683,10 @@ def test_models_endpoint_keeps_anthropic_hidden_from_public_inventory_after_chat
 ) -> None:
     _enable_isolated_anthropic_runtime(monkeypatch)
     clear_runtime_dependency_caches()
-    monkeypatch.setattr("app.providers.anthropic.adapter.httpx.stream", lambda *args, **kwargs: _mock_anthropic_tool_use_stream_response())
+    monkeypatch.setattr(
+        "app.providers.anthropic.adapter.httpx.stream",
+        lambda *args, **kwargs: _mock_anthropic_tool_use_stream_response(),
+    )
     anthropic_client = TestClient(app)
 
     with anthropic_client.stream(
@@ -662,7 +696,12 @@ def test_models_endpoint_keeps_anthropic_hidden_from_public_inventory_after_chat
             "model": "claude-3-5-sonnet-latest",
             "messages": [{"role": "user", "content": "record streaming runtime evidence"}],
             "stream": True,
-            "tools": [{"type": "function", "function": {"name": "lookup", "parameters": {"type": "object"}}}],
+            "tools": [
+                {
+                    "type": "function",
+                    "function": {"name": "lookup", "parameters": {"type": "object"}},
+                }
+            ],
         },
     ) as response:
         assert response.status_code == 200
@@ -871,7 +910,11 @@ def test_models_endpoint_keeps_generic_harness_model_hidden_after_admin_probe_on
                         "finish_reason": "stop",
                     }
                 ],
-                "usage": {"prompt_tokens": 4, "completion_tokens": 2, "total_tokens": 6},
+                "usage": {
+                    "prompt_tokens": 4,
+                    "completion_tokens": 2,
+                    "total_tokens": 6,
+                },
             }
 
     def _mock_request(*args, **kwargs):
@@ -960,11 +1003,18 @@ def test_models_endpoint_only_promotes_generic_harness_models_with_model_specifi
                 "model": self._model,
                 "choices": [
                     {
-                        "message": {"role": "assistant", "content": f"{self._model}-ok"},
+                        "message": {
+                            "role": "assistant",
+                            "content": f"{self._model}-ok",
+                        },
                         "finish_reason": "stop",
                     }
                 ],
-                "usage": {"prompt_tokens": 4, "completion_tokens": 2, "total_tokens": 6},
+                "usage": {
+                    "prompt_tokens": 4,
+                    "completion_tokens": 2,
+                    "total_tokens": 6,
+                },
             }
 
     def _mock_request(*args, **kwargs):
@@ -1068,11 +1118,18 @@ def test_models_endpoint_keeps_generic_harness_public_model_when_unrelated_newer
                 "model": self._model,
                 "choices": [
                     {
-                        "message": {"role": "assistant", "content": f"{self._model}-ok"},
+                        "message": {
+                            "role": "assistant",
+                            "content": f"{self._model}-ok",
+                        },
                         "finish_reason": "stop",
                     }
                 ],
-                "usage": {"prompt_tokens": 4, "completion_tokens": 2, "total_tokens": 6},
+                "usage": {
+                    "prompt_tokens": 4,
+                    "completion_tokens": 2,
+                    "total_tokens": 6,
+                },
             }
 
     def _mock_request(*args, **kwargs):
@@ -1142,7 +1199,10 @@ def test_models_endpoint_keeps_generic_harness_public_model_when_unrelated_newer
             mode="runtime_non_stream",
             status="ok",
             success=True,
-            steps=[{"step": "request_render", "status": "ok"}, {"step": "response_mapping", "status": "ok"}],
+            steps=[
+                {"step": "request_render", "status": "ok"},
+                {"step": "response_mapping", "status": "ok"},
+            ],
             executed_at=proof_recorded_at.isoformat(),
             client_id="runtime",
             consumer="runtime",
@@ -1159,7 +1219,10 @@ def test_models_endpoint_keeps_generic_harness_public_model_when_unrelated_newer
                 mode="runtime_non_stream",
                 status="ok",
                 success=True,
-                steps=[{"step": "request_render", "status": "ok"}, {"step": "response_mapping", "status": "ok"}],
+                steps=[
+                    {"step": "request_render", "status": "ok"},
+                    {"step": "response_mapping", "status": "ok"},
+                ],
                 executed_at=(newer_runtime_base + timedelta(seconds=offset + 1)).isoformat(),
                 client_id="runtime",
                 consumer="runtime",
@@ -1197,7 +1260,11 @@ def test_models_endpoint_lists_generic_harness_model_after_live_runtime_proof(
                         "finish_reason": "stop",
                     }
                 ],
-                "usage": {"prompt_tokens": 4, "completion_tokens": 2, "total_tokens": 6},
+                "usage": {
+                    "prompt_tokens": 4,
+                    "completion_tokens": 2,
+                    "total_tokens": 6,
+                },
             }
 
     def _mock_request(*args, **kwargs):
@@ -1561,7 +1628,10 @@ def test_chat_endpoint_rejects_unknown_model() -> None:
 def test_chat_endpoint_rejects_tool_choice_without_tools() -> None:
     response = client.post(
         "/v1/chat/completions",
-        json={"messages": [{"role": "user", "content": "Hello"}], "tool_choice": "auto"},
+        json={
+            "messages": [{"role": "user", "content": "Hello"}],
+            "tool_choice": "auto",
+        },
     )
     assert response.status_code == 422
     assert response.json()["error"]["type"] == "invalid_request"
@@ -1585,11 +1655,7 @@ def test_chat_endpoint_rejects_unsupported_classic_control_fields() -> None:
     assert "temperature" in error["message"]
     assert "max_tokens" in error["message"]
     assert "top_p" in error["message"]
-    assert {
-        issue["loc"][-1]
-        for issue in error["details"]["issues"]
-        if issue["type"] == "extra_forbidden"
-    } == {"temperature", "max_tokens", "top_p"}
+    assert {issue["loc"][-1] for issue in error["details"]["issues"] if issue["type"] == "extra_forbidden"} == {"temperature", "max_tokens", "top_p"}
 
 
 def test_chat_endpoint_rejects_tool_calling_for_baseline_provider() -> None:
@@ -1597,7 +1663,16 @@ def test_chat_endpoint_rejects_tool_calling_for_baseline_provider() -> None:
         "/v1/chat/completions",
         json={
             "messages": [{"role": "user", "content": "Hello"}],
-            "tools": [{"type": "function", "function": {"name": "ping", "description": "Ping", "parameters": {"type": "object"}}}],
+            "tools": [
+                {
+                    "type": "function",
+                    "function": {
+                        "name": "ping",
+                        "description": "Ping",
+                        "parameters": {"type": "object"},
+                    },
+                }
+            ],
         },
     )
     assert response.status_code == 503
@@ -1629,7 +1704,9 @@ def test_chat_endpoint_rejects_tool_choice_name_not_in_tools() -> None:
     assert response.json()["error"]["type"] == "invalid_request"
 
 
-def test_chat_endpoint_rejects_unsupported_message_content_before_forwarding(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_chat_endpoint_rejects_unsupported_message_content_before_forwarding(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     monkeypatch.setenv("FORGEGATE_OPENAI_API_KEY", "test-key")
     clear_runtime_dependency_caches()
 
@@ -1663,7 +1740,9 @@ def test_chat_endpoint_rejects_unsupported_message_content_before_forwarding(mon
     assert "unsupported content block type 'input_audio'" in error["message"]
 
 
-def test_chat_endpoint_rejects_message_extra_fields_before_forwarding(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_chat_endpoint_rejects_message_extra_fields_before_forwarding(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     monkeypatch.setenv("FORGEGATE_OPENAI_API_KEY", "test-key")
     clear_runtime_dependency_caches()
 
@@ -1695,21 +1774,15 @@ def test_chat_endpoint_rejects_message_extra_fields_before_forwarding(monkeypatc
 
 def test_chat_request_schema_rejects_unsupported_classic_control_fields() -> None:
     with pytest.raises(ValidationError) as exc_info:
-        ChatCompletionsRequest.model_validate(
-            {
-                "messages": [{"role": "user", "content": "Hello"}],
-                "model": "gpt-4.1-mini",
-                "temperature": 1.3,
-                "max_tokens": 17,
-                "top_p": 0.2,
-            }
-        )
+        ChatCompletionsRequest.model_validate({
+            "messages": [{"role": "user", "content": "Hello"}],
+            "model": "gpt-4.1-mini",
+            "temperature": 1.3,
+            "max_tokens": 17,
+            "top_p": 0.2,
+        })
 
-    assert {
-        error["loc"][-1]
-        for error in exc_info.value.errors()
-        if error["type"] == "extra_forbidden"
-    } == {"temperature", "max_tokens", "top_p"}
+    assert {error["loc"][-1] for error in exc_info.value.errors() if error["type"] == "extra_forbidden"} == {"temperature", "max_tokens", "top_p"}
 
 
 def test_admin_usage_summary_endpoint_available() -> None:
@@ -1802,7 +1875,11 @@ def test_admin_usage_drilldown_endpoints_expose_provider_and_client_views() -> N
         "/v1/chat/completions",
         json={
             "messages": [{"role": "user", "content": "Drilldown me"}],
-            "client": {"client_id": "integration-suite", "consumer": "tests", "integration": "pytest"},
+            "client": {
+                "client_id": "integration-suite",
+                "consumer": "tests",
+                "integration": "pytest",
+            },
         },
     )
     assert chat_response.status_code == 200
@@ -2006,9 +2083,22 @@ def test_responses_endpoint_preserves_function_call_output_inputs_and_retrieves_
         json={
             "model": "gpt-4.1-mini",
             "input": [
-                {"type": "message", "role": "user", "content": [{"type": "input_text", "text": "use tool output"}]},
-                {"type": "function_call", "call_id": "call_123", "name": "lookup", "arguments": "{\"q\":\"forgeframe\"}"},
-                {"type": "function_call_output", "call_id": "call_123", "output": "lookup result"},
+                {
+                    "type": "message",
+                    "role": "user",
+                    "content": [{"type": "input_text", "text": "use tool output"}],
+                },
+                {
+                    "type": "function_call",
+                    "call_id": "call_123",
+                    "name": "lookup",
+                    "arguments": '{"q":"forgeframe"}',
+                },
+                {
+                    "type": "function_call_output",
+                    "call_id": "call_123",
+                    "output": "lookup result",
+                },
             ],
         },
     )
@@ -2024,7 +2114,7 @@ def test_responses_endpoint_preserves_function_call_output_inputs_and_retrieves_
                 {
                     "id": "call_123",
                     "type": "function",
-                    "function": {"name": "lookup", "arguments": "{\"q\":\"forgeframe\"}"},
+                    "function": {"name": "lookup", "arguments": '{"q":"forgeframe"}'},
                 }
             ],
         },
@@ -2038,7 +2128,11 @@ def test_responses_endpoint_preserves_function_call_output_inputs_and_retrieves_
     input_items_response = client.get(f"/v1/responses/{response.json()['id']}/input_items")
     assert input_items_response.status_code == 200
     input_items = input_items_response.json()["data"]
-    assert [item["type"] for item in input_items] == ["message", "function_call", "function_call_output"]
+    assert [item["type"] for item in input_items] == [
+        "message",
+        "function_call",
+        "function_call_output",
+    ]
     assert input_items[1]["call_id"] == "call_123"
     assert input_items[2]["call_id"] == "call_123"
     assert input_items[2]["output"] == "lookup result"
@@ -2070,7 +2164,10 @@ def test_responses_stream_unknown_model_keeps_anthropic_public_inventory_hidden_
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     _enable_isolated_anthropic_runtime(monkeypatch)
-    monkeypatch.setattr("app.providers.anthropic.adapter.httpx.post", lambda *args, **kwargs: _mock_anthropic_text_response())
+    monkeypatch.setattr(
+        "app.providers.anthropic.adapter.httpx.post",
+        lambda *args, **kwargs: _mock_anthropic_text_response(),
+    )
     clear_runtime_dependency_caches()
     anthropic_client = TestClient(app)
 
@@ -2158,12 +2255,7 @@ def test_responses_stream_hidden_codex_requests_persist_model_not_found_error_ev
     assert error["available_models"] == ["forgeframe-baseline-chat-v1"]
     assert "provider" not in error
 
-    error_events = [
-        item["data"]
-        for item in _observability_events()
-        if item.get("kind") == "error"
-        and item.get("data", {}).get("client_id") == "responses-stream-startup-failure"
-    ]
+    error_events = [item["data"] for item in _observability_events() if item.get("kind") == "error" and item.get("data", {}).get("client_id") == "responses-stream-startup-failure"]
     assert error_events
     latest_error = error_events[-1]
     assert latest_error["model"] == "gpt-5.3-codex"
@@ -2251,12 +2343,7 @@ def test_chat_endpoint_persists_trace_context_in_usage_event() -> None:
 
     assert response.status_code == 200
     assert response.headers["X-ForgeFrame-Trace-Id"] == "trace_chat_usage_1"
-    usage_events = [
-        item["data"]
-        for item in _observability_events()
-        if item.get("kind") == "usage"
-        and item.get("data", {}).get("client_id") == "trace-runtime-usage"
-    ]
+    usage_events = [item["data"] for item in _observability_events() if item.get("kind") == "usage" and item.get("data", {}).get("client_id") == "trace-runtime-usage"]
     assert usage_events
     latest_usage = usage_events[-1]
     assert latest_usage["route"] == "/v1/chat/completions"
@@ -2269,7 +2356,9 @@ def test_chat_endpoint_persists_trace_context_in_usage_event() -> None:
     assert latest_usage["duration_ms"] >= 0
 
 
-def test_chat_endpoint_sanitizes_raw_provider_error_body(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_chat_endpoint_sanitizes_raw_provider_error_body(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     monkeypatch.setenv("FORGEGATE_OPENAI_API_KEY", "test-key")
 
     def _fake_post(self, payload: dict) -> dict:
@@ -2298,7 +2387,9 @@ def test_chat_endpoint_sanitizes_raw_provider_error_body(monkeypatch: pytest.Mon
     assert "trace-id=fg-123" not in serialized
 
 
-def test_responses_endpoint_sanitizes_raw_provider_error_body(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_responses_endpoint_sanitizes_raw_provider_error_body(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     monkeypatch.setenv("FORGEGATE_OPENAI_API_KEY", "test-key")
 
     def _fake_post(self, payload: dict) -> dict:
@@ -2321,7 +2412,9 @@ def test_responses_endpoint_sanitizes_raw_provider_error_body(monkeypatch: pytes
     assert "stack=xyz" not in serialized
 
 
-def test_responses_stream_sanitizes_raw_provider_error_event(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_responses_stream_sanitizes_raw_provider_error_event(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     monkeypatch.setenv("FORGEGATE_OPENAI_API_KEY", "test-key")
 
     def _fake_stream(self, payload: dict, messages: list[dict]):
@@ -2333,7 +2426,11 @@ def test_responses_stream_sanitizes_raw_provider_error_event(monkeypatch: pytest
         yield ProviderStreamEvent(event="delta", delta="unreachable")
 
     monkeypatch.setattr(OpenAIAPIAdapter, "_stream_chat_completion", _fake_stream)
-    with client.stream("POST", "/v1/responses", json={"input": "hello", "model": "gpt-4.1-mini", "stream": True}) as response:
+    with client.stream(
+        "POST",
+        "/v1/responses",
+        json={"input": "hello", "model": "gpt-4.1-mini", "stream": True},
+    ) as response:
         assert response.status_code == 200
         raw = "".join(response.iter_text())
 
@@ -2352,7 +2449,9 @@ def test_responses_stream_sanitizes_raw_provider_error_event(monkeypatch: pytest
     assert "openai_api" not in raw
 
 
-def test_chat_stream_sanitizes_yielded_provider_error_event(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_chat_stream_sanitizes_yielded_provider_error_event(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     monkeypatch.setenv("FORGEGATE_OPENAI_API_KEY", "test-key")
 
     def _fake_stream(self, payload: dict, messages: list[dict]):
@@ -2364,7 +2463,15 @@ def test_chat_stream_sanitizes_yielded_provider_error_event(monkeypatch: pytest.
         )
 
     monkeypatch.setattr(OpenAIAPIAdapter, "_stream_chat_completion", _fake_stream)
-    with client.stream("POST", "/v1/chat/completions", json={"messages": [{"role": "user", "content": "hello"}], "model": "gpt-4.1-mini", "stream": True}) as response:
+    with client.stream(
+        "POST",
+        "/v1/chat/completions",
+        json={
+            "messages": [{"role": "user", "content": "hello"}],
+            "model": "gpt-4.1-mini",
+            "stream": True,
+        },
+    ) as response:
         assert response.status_code == 200
         raw = "".join(response.iter_text())
 
@@ -2377,7 +2484,9 @@ def test_chat_stream_sanitizes_yielded_provider_error_event(monkeypatch: pytest.
     assert "openai_api" not in raw
 
 
-def test_chat_stream_yielded_provider_error_event_persists_runtime_error_event(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_chat_stream_yielded_provider_error_event_persists_runtime_error_event(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     monkeypatch.setenv("FORGEGATE_OPENAI_API_KEY", "test-key")
 
     def _fake_stream(self, payload: dict, messages: list[dict]):
@@ -2412,12 +2521,7 @@ def test_chat_stream_yielded_provider_error_event_persists_runtime_error_event(m
         raw = "".join(response.iter_text())
 
     assert '"type": "provider_stream_interrupted"' in raw
-    error_events = [
-        item["data"]
-        for item in _observability_events()
-        if item.get("kind") == "error"
-        and item.get("data", {}).get("client_id") == "chat-stream-yielded-error"
-    ]
+    error_events = [item["data"] for item in _observability_events() if item.get("kind") == "error" and item.get("data", {}).get("client_id") == "chat-stream-yielded-error"]
     assert error_events
     latest_error = error_events[-1]
     assert latest_error["provider"] == "openai_api"
@@ -2433,7 +2537,9 @@ def test_chat_stream_yielded_provider_error_event_persists_runtime_error_event(m
     assert latest_error["duration_ms"] >= 0
 
 
-def test_responses_stream_sanitizes_yielded_provider_error_event(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_responses_stream_sanitizes_yielded_provider_error_event(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     monkeypatch.setenv("FORGEGATE_OPENAI_API_KEY", "test-key")
 
     def _fake_stream(self, payload: dict, messages: list[dict]):
@@ -2445,7 +2551,11 @@ def test_responses_stream_sanitizes_yielded_provider_error_event(monkeypatch: py
         )
 
     monkeypatch.setattr(OpenAIAPIAdapter, "_stream_chat_completion", _fake_stream)
-    with client.stream("POST", "/v1/responses", json={"input": "hello", "model": "gpt-4.1-mini", "stream": True}) as response:
+    with client.stream(
+        "POST",
+        "/v1/responses",
+        json={"input": "hello", "model": "gpt-4.1-mini", "stream": True},
+    ) as response:
         assert response.status_code == 200
         raw = "".join(response.iter_text())
 
@@ -2464,7 +2574,9 @@ def test_responses_stream_sanitizes_yielded_provider_error_event(monkeypatch: py
     assert "openai_api" not in raw
 
 
-def test_runtime_models_endpoint_requires_key_when_enabled(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_runtime_models_endpoint_requires_key_when_enabled(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     monkeypatch.setenv("FORGEGATE_RUNTIME_AUTH_REQUIRED", "true")
     clear_runtime_dependency_caches()
     secure_client = TestClient(app)
@@ -2498,7 +2610,9 @@ def test_responses_endpoint_rejects_unsupported_extra_control_fields() -> None:
     assert "store" in error["message"]
 
 
-def test_responses_endpoint_forwards_supported_control_fields_to_openai_provider(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_responses_endpoint_forwards_supported_control_fields_to_openai_provider(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     captured: dict[str, object] = {}
     monkeypatch.setenv("FORGEGATE_OPENAI_API_KEY", "test-key")
 
@@ -2535,7 +2649,9 @@ def test_responses_endpoint_forwards_supported_control_fields_to_openai_provider
     assert captured["payload"]["metadata"] == {"ticket": "FOR-409"}
 
 
-def test_responses_stream_forwards_supported_control_fields_to_openai_provider(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_responses_stream_forwards_supported_control_fields_to_openai_provider(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     captured: dict[str, object] = {}
     monkeypatch.setenv("FORGEGATE_OPENAI_API_KEY", "test-key")
 
@@ -2547,7 +2663,12 @@ def test_responses_stream_forwards_supported_control_fields_to_openai_provider(m
             event="done",
             finish_reason="stop",
             usage=TokenUsage(input_tokens=7, output_tokens=3, total_tokens=10),
-            cost=CostBreakdown(actual_cost=0.01, hypothetical_cost=0.01, avoided_cost=0.0, pricing_basis="api_metered"),
+            cost=CostBreakdown(
+                actual_cost=0.01,
+                hypothetical_cost=0.01,
+                avoided_cost=0.0,
+                pricing_basis="api_metered",
+            ),
         )
 
     monkeypatch.setattr(OpenAIAPIAdapter, "_stream_chat_completion", _fake_stream)
@@ -2710,7 +2831,9 @@ def test_files_endpoint_upload_list_get_content_and_delete() -> None:
     assert missing.json()["error"]["type"] == "file_not_found"
 
 
-def test_responses_endpoint_accepts_input_image_file_ids(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_responses_endpoint_accepts_input_image_file_ids(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     monkeypatch.setenv("FORGEGATE_OPENAI_API_KEY", "test-key")
     clear_runtime_dependency_caches()
 
@@ -2721,7 +2844,12 @@ def test_responses_endpoint_accepts_input_image_file_ids(monkeypatch: pytest.Mon
         return {
             "model": "gpt-4.1-mini",
             "usage": {"prompt_tokens": 6, "completion_tokens": 2, "total_tokens": 8},
-            "choices": [{"message": {"role": "assistant", "content": "image accepted"}, "finish_reason": "stop"}],
+            "choices": [
+                {
+                    "message": {"role": "assistant", "content": "image accepted"},
+                    "finish_reason": "stop",
+                }
+            ],
         }
 
     monkeypatch.setattr(OpenAIAPIAdapter, "_post_chat_completion", _fake_post)
@@ -2750,14 +2878,16 @@ def test_responses_endpoint_accepts_input_image_file_ids(monkeypatch: pytest.Mon
                         {"type": "input_text", "text": "describe"},
                     ],
                 }
-            ]
+            ],
         },
     )
     assert response.status_code == 200
     assert response.json()["output_text"] == "image accepted"
 
 
-def test_chat_default_routing_prefers_vision_capable_provider_for_image_messages(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_chat_default_routing_prefers_vision_capable_provider_for_image_messages(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     captured: dict[str, object] = {}
     monkeypatch.setenv("FORGEGATE_DEFAULT_MODEL", "forgeframe-baseline-chat-v1")
     monkeypatch.setenv("FORGEGATE_DEFAULT_PROVIDER", "forgeframe_baseline")
@@ -2783,7 +2913,10 @@ def test_chat_default_routing_prefers_vision_capable_provider_for_image_messages
                     "role": "user",
                     "content": [
                         {"type": "text", "text": "What is shown?"},
-                        {"type": "image_url", "image_url": {"url": "https://example.com/invoice.png"}},
+                        {
+                            "type": "image_url",
+                            "image_url": {"url": "https://example.com/invoice.png"},
+                        },
                     ],
                 }
             ]
@@ -2809,7 +2942,10 @@ def test_chat_endpoint_rejects_image_inputs_for_non_vision_requested_model() -> 
                     "role": "user",
                     "content": [
                         {"type": "text", "text": "What is shown?"},
-                        {"type": "image_url", "image_url": {"url": "https://example.com/invoice.png"}},
+                        {
+                            "type": "image_url",
+                            "image_url": {"url": "https://example.com/invoice.png"},
+                        },
                     ],
                 }
             ],
@@ -2820,7 +2956,9 @@ def test_chat_endpoint_rejects_image_inputs_for_non_vision_requested_model() -> 
     assert response.json()["error"]["type"] == "provider_unsupported_feature"
 
 
-def test_chat_endpoint_preserves_image_inputs_for_anthropic_runtime(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_chat_endpoint_preserves_image_inputs_for_anthropic_runtime(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     captured: dict[str, object] = {}
     _enable_isolated_anthropic_runtime(monkeypatch)
     clear_runtime_dependency_caches()
@@ -2855,7 +2993,10 @@ def test_chat_endpoint_preserves_image_inputs_for_anthropic_runtime(monkeypatch:
                     "role": "user",
                     "content": [
                         {"type": "text", "text": "What is shown?"},
-                        {"type": "image_url", "image_url": {"url": "https://example.com/invoice.png"}},
+                        {
+                            "type": "image_url",
+                            "image_url": {"url": "https://example.com/invoice.png"},
+                        },
                     ],
                 },
             ],
@@ -2892,7 +3033,10 @@ def test_responses_endpoint_rejects_image_inputs_for_non_vision_requested_model(
                     "role": "user",
                     "content": [
                         {"type": "input_text", "text": "What is shown?"},
-                        {"type": "input_image", "image_url": "https://example.com/invoice.png"},
+                        {
+                            "type": "input_image",
+                            "image_url": "https://example.com/invoice.png",
+                        },
                     ],
                 }
             ],
@@ -2903,7 +3047,9 @@ def test_responses_endpoint_rejects_image_inputs_for_non_vision_requested_model(
     assert response.json()["error"]["type"] == "provider_unsupported_feature"
 
 
-def test_responses_endpoint_preserves_image_inputs_for_anthropic_runtime(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_responses_endpoint_preserves_image_inputs_for_anthropic_runtime(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     captured: dict[str, object] = {}
     _enable_isolated_anthropic_runtime(monkeypatch)
     clear_runtime_dependency_caches()
@@ -2940,7 +3086,10 @@ def test_responses_endpoint_preserves_image_inputs_for_anthropic_runtime(monkeyp
                     "role": "user",
                     "content": [
                         {"type": "input_text", "text": "What is shown?"},
-                        {"type": "input_image", "image_url": "https://example.com/invoice.png"},
+                        {
+                            "type": "input_image",
+                            "image_url": "https://example.com/invoice.png",
+                        },
                     ],
                 }
             ],
@@ -2966,7 +3115,9 @@ def test_responses_endpoint_preserves_image_inputs_for_anthropic_runtime(monkeyp
     ]
 
 
-def test_responses_endpoint_includes_tool_call_output(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_responses_endpoint_includes_tool_call_output(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     monkeypatch.setenv("FORGEGATE_OPENAI_API_KEY", "test-key")
 
     def _fake_post(self, payload: dict) -> dict:
@@ -2979,7 +3130,16 @@ def test_responses_endpoint_includes_tool_call_output(monkeypatch: pytest.Monkey
                     "message": {
                         "role": "assistant",
                         "content": "",
-                        "tool_calls": [{"id": "call_1", "type": "function", "function": {"name": "lookup", "arguments": "{\"q\":\"x\"}"}}],
+                        "tool_calls": [
+                            {
+                                "id": "call_1",
+                                "type": "function",
+                                "function": {
+                                    "name": "lookup",
+                                    "arguments": '{"q":"x"}',
+                                },
+                            }
+                        ],
                     },
                     "finish_reason": "tool_calls",
                 }
@@ -2996,13 +3156,15 @@ def test_responses_endpoint_includes_tool_call_output(monkeypatch: pytest.Monkey
             "type": "function_call",
             "call_id": "call_1",
             "name": "lookup",
-            "arguments": "{\"q\":\"x\"}",
+            "arguments": '{"q":"x"}',
             "status": "completed",
         }
     ]
 
 
-def test_responses_stream_completed_payload_includes_tool_call_output(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_responses_stream_completed_payload_includes_tool_call_output(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     monkeypatch.setenv("FORGEGATE_OPENAI_API_KEY", "test-key")
 
     def _fake_stream(self, payload: dict, messages: list[dict]):
@@ -3011,14 +3173,29 @@ def test_responses_stream_completed_payload_includes_tool_call_output(monkeypatc
             event="done",
             finish_reason="tool_calls",
             usage=TokenUsage(input_tokens=6, output_tokens=3, total_tokens=9),
-            cost=CostBreakdown(actual_cost=0.01, hypothetical_cost=0.01, avoided_cost=0.0, pricing_basis="api_metered"),
-            tool_calls=[{"id": "call_1", "type": "function", "function": {"name": "lookup", "arguments": "{\"q\":\"forgegate\"}"}}],
+            cost=CostBreakdown(
+                actual_cost=0.01,
+                hypothetical_cost=0.01,
+                avoided_cost=0.0,
+                pricing_basis="api_metered",
+            ),
+            tool_calls=[
+                {
+                    "id": "call_1",
+                    "type": "function",
+                    "function": {"name": "lookup", "arguments": '{"q":"forgegate"}'},
+                }
+            ],
             credential_type="api_key",
             auth_source="openai_api_key",
         )
 
     monkeypatch.setattr(OpenAIAPIAdapter, "_stream_chat_completion", _fake_stream)
-    with client.stream("POST", "/v1/responses", json={"input": "hello", "model": "gpt-4.1-mini", "stream": True}) as response:
+    with client.stream(
+        "POST",
+        "/v1/responses",
+        json={"input": "hello", "model": "gpt-4.1-mini", "stream": True},
+    ) as response:
         assert response.status_code == 200
         raw = "".join(response.iter_text())
 
@@ -3029,7 +3206,7 @@ def test_responses_stream_completed_payload_includes_tool_call_output(monkeypatc
             "type": "function_call",
             "call_id": "call_1",
             "name": "lookup",
-            "arguments": "{\"q\":\"forgegate\"}",
+            "arguments": '{"q":"forgegate"}',
             "status": "completed",
         }
     ]
@@ -3039,10 +3216,15 @@ def test_responses_stream_completed_payload_includes_tool_call_output(monkeypatc
     assert "auth_source" not in completed
 
 
-def test_chat_stream_anthropic_tool_use_blocks_surface_as_tool_calls(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_chat_stream_anthropic_tool_use_blocks_surface_as_tool_calls(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     _enable_isolated_anthropic_runtime(monkeypatch)
     clear_runtime_dependency_caches()
-    monkeypatch.setattr("app.providers.anthropic.adapter.httpx.stream", lambda *args, **kwargs: _mock_anthropic_tool_use_stream_response())
+    monkeypatch.setattr(
+        "app.providers.anthropic.adapter.httpx.stream",
+        lambda *args, **kwargs: _mock_anthropic_tool_use_stream_response(),
+    )
     anthropic_client = TestClient(app)
 
     with anthropic_client.stream(
@@ -3052,7 +3234,12 @@ def test_chat_stream_anthropic_tool_use_blocks_surface_as_tool_calls(monkeypatch
             "model": "claude-3-5-sonnet-latest",
             "messages": [{"role": "user", "content": "use a tool"}],
             "stream": True,
-            "tools": [{"type": "function", "function": {"name": "lookup", "parameters": {"type": "object"}}}],
+            "tools": [
+                {
+                    "type": "function",
+                    "function": {"name": "lookup", "parameters": {"type": "object"}},
+                }
+            ],
         },
     ) as response:
         assert response.status_code == 200
@@ -3062,10 +3249,15 @@ def test_chat_stream_anthropic_tool_use_blocks_surface_as_tool_calls(monkeypatch
     assert '"finish_reason": "tool_calls"' in raw
 
 
-def test_responses_stream_anthropic_tool_use_blocks_surface_as_tool_call_output(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_responses_stream_anthropic_tool_use_blocks_surface_as_tool_call_output(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     _enable_isolated_anthropic_runtime(monkeypatch)
     clear_runtime_dependency_caches()
-    monkeypatch.setattr("app.providers.anthropic.adapter.httpx.stream", lambda *args, **kwargs: _mock_anthropic_tool_use_stream_response())
+    monkeypatch.setattr(
+        "app.providers.anthropic.adapter.httpx.stream",
+        lambda *args, **kwargs: _mock_anthropic_tool_use_stream_response(),
+    )
     anthropic_client = TestClient(app)
 
     with anthropic_client.stream(
@@ -3075,7 +3267,12 @@ def test_responses_stream_anthropic_tool_use_blocks_surface_as_tool_call_output(
             "model": "claude-3-5-sonnet-latest",
             "input": "use a tool",
             "stream": True,
-            "tools": [{"type": "function", "function": {"name": "lookup", "parameters": {"type": "object"}}}],
+            "tools": [
+                {
+                    "type": "function",
+                    "function": {"name": "lookup", "parameters": {"type": "object"}},
+                }
+            ],
         },
     ) as response:
         assert response.status_code == 200
@@ -3088,14 +3285,16 @@ def test_responses_stream_anthropic_tool_use_blocks_surface_as_tool_call_output(
             "type": "function_call",
             "call_id": "toolu_1",
             "name": "lookup",
-            "arguments": "{\"q\":\"forgegate\"}",
+            "arguments": '{"q":"forgegate"}',
             "status": "completed",
         }
     ]
     assert completed["output_text"] == ""
 
 
-def test_chat_stream_usage_event_preserves_provider_auth_attribution(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_chat_stream_usage_event_preserves_provider_auth_attribution(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     monkeypatch.setenv("FORGEGATE_OPENAI_API_KEY", "test-key")
 
     def _fake_stream(self, payload: dict, messages: list[dict]):
@@ -3105,7 +3304,12 @@ def test_chat_stream_usage_event_preserves_provider_auth_attribution(monkeypatch
             event="done",
             finish_reason="stop",
             usage=TokenUsage(input_tokens=6, output_tokens=3, total_tokens=9),
-            cost=CostBreakdown(actual_cost=0.01, hypothetical_cost=0.01, avoided_cost=0.0, pricing_basis="api_metered"),
+            cost=CostBreakdown(
+                actual_cost=0.01,
+                hypothetical_cost=0.01,
+                avoided_cost=0.0,
+                pricing_basis="api_metered",
+            ),
             credential_type="api_key",
             auth_source="openai_api_key",
         )
@@ -3131,12 +3335,7 @@ def test_chat_stream_usage_event_preserves_provider_auth_attribution(monkeypatch
 
     assert "[DONE]" in raw
 
-    usage_events = [
-        item["data"]
-        for item in _observability_events()
-        if item.get("kind") == "usage"
-        and item.get("data", {}).get("client_id") == "stream-auth-chat"
-    ]
+    usage_events = [item["data"] for item in _observability_events() if item.get("kind") == "usage" and item.get("data", {}).get("client_id") == "stream-auth-chat"]
     assert usage_events
     latest_usage = usage_events[-1]
     assert latest_usage["stream_mode"] == "stream"
@@ -3149,18 +3348,30 @@ def test_chat_stream_usage_event_preserves_provider_auth_attribution(monkeypatch
     assert by_auth == [{"auth_key": "api_key:openai_api_key", "requests": 1, "tokens": 9}]
 
 
-def test_responses_stream_usage_event_preserves_provider_auth_attribution(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_responses_stream_usage_event_preserves_provider_auth_attribution(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     monkeypatch.setenv("FORGEGATE_OPENAI_CODEX_AUTH_MODE", "oauth")
     monkeypatch.setenv("FORGEGATE_OPENAI_CODEX_OAUTH_ACCESS_TOKEN", "test-token")
     monkeypatch.setenv("FORGEGATE_OPENAI_CODEX_BRIDGE_ENABLED", "true")
 
-    def _fake_stream(self, payload: dict, messages: list[dict], request_metadata: dict[str, str] | None = None):
+    def _fake_stream(
+        self,
+        payload: dict,
+        messages: list[dict],
+        request_metadata: dict[str, str] | None = None,
+    ):
         del self, payload, messages, request_metadata
         yield ProviderStreamEvent(
             event="done",
             finish_reason="stop",
             usage=TokenUsage(input_tokens=8, output_tokens=4, total_tokens=12),
-            cost=CostBreakdown(actual_cost=0.0, hypothetical_cost=0.02, avoided_cost=0.02, pricing_basis="oauth_hypothetical"),
+            cost=CostBreakdown(
+                actual_cost=0.0,
+                hypothetical_cost=0.02,
+                avoided_cost=0.02,
+                pricing_basis="oauth_hypothetical",
+            ),
             credential_type="oauth_access_token",
             auth_source="codex_oauth_account_bridge",
         )
@@ -3186,12 +3397,7 @@ def test_responses_stream_usage_event_preserves_provider_auth_attribution(monkey
 
     assert "response.completed" in raw
 
-    usage_events = [
-        item["data"]
-        for item in _observability_events()
-        if item.get("kind") == "usage"
-        and item.get("data", {}).get("client_id") == "stream-auth-responses"
-    ]
+    usage_events = [item["data"] for item in _observability_events() if item.get("kind") == "usage" and item.get("data", {}).get("client_id") == "stream-auth-responses"]
     assert usage_events
     latest_usage = usage_events[-1]
     assert latest_usage["route"] == "/v1/responses"
@@ -3202,4 +3408,10 @@ def test_responses_stream_usage_event_preserves_provider_auth_attribution(monkey
     summary = client.get("/admin/usage/", headers=_admin_headers())
     assert summary.status_code == 200
     by_auth = summary.json()["aggregations"]["by_auth"]
-    assert by_auth == [{"auth_key": "oauth_access_token:codex_oauth_account_bridge", "requests": 1, "tokens": 12}]
+    assert by_auth == [
+        {
+            "auth_key": "oauth_access_token:codex_oauth_account_bridge",
+            "requests": 1,
+            "tokens": 12,
+        }
+    ]

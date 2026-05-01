@@ -1,10 +1,10 @@
 import json
-import os
 from uuid import uuid4
 
+from conftest import admin_headers as shared_admin_headers
+from conftest import login_headers_allowing_password_rotation
 from fastapi.testclient import TestClient
 
-from conftest import admin_headers as shared_admin_headers, login_headers_allowing_password_rotation
 from app.api.admin.control_plane import get_control_plane_service
 from app.harness.models import HarnessVerificationRun
 from app.main import app
@@ -217,7 +217,14 @@ def test_probe_and_run_history_redact_echoed_secrets_for_operator_and_read_only_
         target_user_id=str(target_user["user_id"]),
     )
 
-    def _mock_request(method: str, url: str, *, headers: dict[str, str], json: dict[str, object], timeout: int):
+    def _mock_request(
+        method: str,
+        url: str,
+        *,
+        headers: dict[str, str],
+        json: dict[str, object],
+        timeout: int,
+    ):
         assert method == "POST"
         assert url.endswith("/chat/completions")
         assert timeout == 30
@@ -235,7 +242,11 @@ def test_probe_and_run_history_redact_echoed_secrets_for_operator_and_read_only_
                         "finish_reason": "stop",
                     }
                 ],
-                "usage": {"prompt_tokens": 1, "completion_tokens": 1, "total_tokens": 2},
+                "usage": {
+                    "prompt_tokens": 1,
+                    "completion_tokens": 1,
+                    "total_tokens": 2,
+                },
                 "echoed_authorization": headers["Authorization"],
                 "auth_value": secret,
                 "error": {

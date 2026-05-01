@@ -1,11 +1,14 @@
-import os
 from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
+from conftest import admin_headers as shared_admin_headers
+from conftest import login_headers_allowing_password_rotation
 from fastapi.testclient import TestClient
 
-from conftest import admin_headers as shared_admin_headers, login_headers_allowing_password_rotation
-from app.execution.dependencies import get_execution_transition_service, get_execution_worker_service
+from app.execution.dependencies import (
+    get_execution_transition_service,
+    get_execution_worker_service,
+)
 from app.main import app
 from app.storage.execution_repository import RunAttemptORM, RunORM
 
@@ -161,7 +164,11 @@ def test_execution_queue_dispatch_and_operator_action_endpoints() -> None:
     assert any(item["execution_lane"] == "background_agentic" for item in queue_listing.json()["lanes"])
     assert any(item["run_id"] == run_id for item in queue_listing.json()["runs"])
 
-    dispatch = client.get("/admin/execution/dispatch", headers=headers, params=_execution_scope(instance_id))
+    dispatch = client.get(
+        "/admin/execution/dispatch",
+        headers=headers,
+        params=_execution_scope(instance_id),
+    )
     assert dispatch.status_code == 200
     dispatch_payload = dispatch.json()["dispatch"]
     assert any(item["attempt_id"] == attempt_id for item in dispatch_payload["leased_attempts"])
@@ -187,7 +194,11 @@ def test_execution_dispatch_surfaces_expired_leases_for_reconciliation() -> None
     run_id, attempt_id = _seed_leased_run(company_id="company_alpha")
     _expire_leased_attempt(run_id=run_id, attempt_id=attempt_id)
 
-    dispatch = client.get("/admin/execution/dispatch", headers=headers, params=_execution_scope(instance_id))
+    dispatch = client.get(
+        "/admin/execution/dispatch",
+        headers=headers,
+        params=_execution_scope(instance_id),
+    )
 
     assert dispatch.status_code == 200
     dispatch_payload = dispatch.json()["dispatch"]

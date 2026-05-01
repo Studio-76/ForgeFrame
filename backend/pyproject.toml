@@ -30,10 +30,17 @@ testpaths = ["tests"]
 
 [tool.ruff]
 target-version = "py311"
-select = ["E", "F", "I", "N"]
+line-length = 200
 
 [tool.ruff.format]
 preview = true
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/conftest.py" = ["E402"]
+"tests/*" = ["E501"]
 
 [tool.mypy]
 python_version = "3.11"

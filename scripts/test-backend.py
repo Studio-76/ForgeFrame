@@ -20,7 +20,9 @@ def _venv_python(venv_dir: Path) -> Path:
     return venv_dir / "bin" / "python"
 
 
-def _run(command: list[str], *, cwd: Path | None = None) -> subprocess.CompletedProcess[str]:
+def _run(
+    command: list[str], *, cwd: Path | None = None
+) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
         command,
         cwd=str(cwd) if cwd is not None else None,
@@ -46,7 +48,9 @@ def backend_env_current() -> bool:
         "if expected not in origin.parents:\n"
         "    raise SystemExit(1)\n"
     )
-    result = _run([str(venv_python), "-c", check_script, str(BACKEND_DIR)], cwd=ROOT_DIR)
+    result = _run(
+        [str(venv_python), "-c", check_script, str(BACKEND_DIR)], cwd=ROOT_DIR
+    )
     return result.returncode == 0
 
 
@@ -63,7 +67,9 @@ def refresh_backend_env() -> None:
 
 
 def _parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Run ForgeFrame backend tests inside the managed backend test venv.")
+    parser = argparse.ArgumentParser(
+        description="Run ForgeFrame backend tests inside the managed backend test venv."
+    )
     parser.add_argument(
         "pytest_args",
         nargs="*",
@@ -79,7 +85,10 @@ def main() -> int:
         refresh_backend_env()
 
     if not backend_env_current():
-        print(f"Backend test environment is still not aligned with {BACKEND_DIR}", file=sys.stderr)
+        print(
+            f"Backend test environment is still not aligned with {BACKEND_DIR}",
+            file=sys.stderr,
+        )
         return 1
 
     venv_python = _venv_python(VENV_DIR)

@@ -7,7 +7,11 @@ from typing import Any, Literal, Protocol, cast
 
 from app.api.admin.control_plane_models import OAuthTargetOperationSnapshot
 from app.control_plane import OAuthOperationRecord
-from app.tenancy import DEFAULT_BOOTSTRAP_TENANT_ID, effective_tenant_filter, normalize_tenant_id
+from app.tenancy import (
+    DEFAULT_BOOTSTRAP_TENANT_ID,
+    effective_tenant_filter,
+    normalize_tenant_id,
+)
 
 
 class SqlBackedOAuthOperationsRepository(Protocol):
@@ -40,7 +44,9 @@ class SqlBackedOAuthOperationsRepository(Protocol):
 
 class ControlPlaneOAuthOperationsDomainMixin:
     @staticmethod
-    def _oauth_operation_snapshot(item: OAuthOperationRecord | None) -> OAuthTargetOperationSnapshot | None:
+    def _oauth_operation_snapshot(
+        item: OAuthOperationRecord | None,
+    ) -> OAuthTargetOperationSnapshot | None:
         if item is None:
             return None
         return OAuthTargetOperationSnapshot(
@@ -58,11 +64,7 @@ class ControlPlaneOAuthOperationsDomainMixin:
         normalized_requested = (requested_instance_id or "").strip() or None
         if normalized_requested is None:
             return True
-        normalized_record = (
-            (item.instance_id or "").strip()
-            or (item.tenant_id or "").strip()
-            or DEFAULT_BOOTSTRAP_TENANT_ID
-        )
+        normalized_record = (item.instance_id or "").strip() or (item.tenant_id or "").strip() or DEFAULT_BOOTSTRAP_TENANT_ID
         return normalized_record == normalized_requested
 
     def _effective_truth_projection_tenant_id(self, tenant_id: str | None = None) -> str | None:
@@ -93,7 +95,9 @@ class ControlPlaneOAuthOperationsDomainMixin:
             instance_id=instance_id,
         )
 
-    def _sql_oauth_operations_repository(self) -> SqlBackedOAuthOperationsRepository | None:
+    def _sql_oauth_operations_repository(
+        self,
+    ) -> SqlBackedOAuthOperationsRepository | None:
         required = (
             "effective_tenant_id",
             "recent_operations",
@@ -124,11 +128,7 @@ class ControlPlaneOAuthOperationsDomainMixin:
         if tenant_id is not None:
             filtered = [item for item in filtered if item.tenant_id == tenant_id]
         if instance_id is not None:
-            filtered = [
-                item
-                for item in filtered
-                if self._oauth_operation_matches_instance_scope(item, instance_id)
-            ]
+            filtered = [item for item in filtered if self._oauth_operation_matches_instance_scope(item, instance_id)]
         return filtered[-200:]
 
     def latest_oauth_operation(
@@ -233,24 +233,22 @@ class ControlPlaneOAuthOperationsDomainMixin:
                     "last_bridge_sync": None,
                 },
             )
-            per_provider.append(
-                {
-                    "provider_key": provider_key,
-                    "configured": status.configured,
-                    "probe_enabled": status.probe_enabled,
-                    "bridge_profile_enabled": status.harness_profile_enabled,
-                    "needs_attention": int(provider_summary["failures"]) >= 2,
-                    "failures": int(provider_summary["failures"]),
-                    "failures_24h": int(provider_summary["failures_24h"]),
-                    "probe_count": int(provider_summary["probe_count"]),
-                    "bridge_sync_count": int(provider_summary["bridge_sync_count"]),
-                    "operation_count": int(provider_summary["operation_count"]),
-                    "failure_rate": float(provider_summary["failure_rate"]),
-                    "last_failed_operation": provider_summary["last_failed_operation"],
-                    "last_probe": provider_summary["last_probe"],
-                    "last_bridge_sync": provider_summary["last_bridge_sync"],
-                }
-            )
+            per_provider.append({
+                "provider_key": provider_key,
+                "configured": status.configured,
+                "probe_enabled": status.probe_enabled,
+                "bridge_profile_enabled": status.harness_profile_enabled,
+                "needs_attention": int(provider_summary["failures"]) >= 2,
+                "failures": int(provider_summary["failures"]),
+                "failures_24h": int(provider_summary["failures_24h"]),
+                "probe_count": int(provider_summary["probe_count"]),
+                "bridge_sync_count": int(provider_summary["bridge_sync_count"]),
+                "operation_count": int(provider_summary["operation_count"]),
+                "failure_rate": float(provider_summary["failure_rate"]),
+                "last_failed_operation": provider_summary["last_failed_operation"],
+                "last_probe": provider_summary["last_probe"],
+                "last_bridge_sync": provider_summary["last_bridge_sync"],
+            })
         return {
             "status": "ok",
             "operations": per_provider,

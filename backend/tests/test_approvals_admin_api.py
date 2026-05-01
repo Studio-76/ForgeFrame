@@ -1,10 +1,13 @@
-import os
 from uuid import uuid4
 
+from conftest import admin_headers as shared_admin_headers
+from conftest import login_headers_allowing_password_rotation
 from fastapi.testclient import TestClient
 
-from conftest import admin_headers as shared_admin_headers, login_headers_allowing_password_rotation
-from app.approvals.models import build_elevated_access_approval_id, build_execution_approval_id
+from app.approvals.models import (
+    build_elevated_access_approval_id,
+    build_execution_approval_id,
+)
 from app.execution.dependencies import get_execution_transition_service
 from app.governance.service import get_governance_service
 from app.main import app
@@ -41,7 +44,7 @@ def _create_admin_user_and_headers(
 def _open_execution_approval(*, company_id: str) -> tuple[str, str]:
     service = get_execution_transition_service()
     suffix = uuid4().hex[:8]
-    created = service.admit_create(
+    service.admit_create(
         company_id=company_id,
         actor_type="agent",
         actor_id="agent_backend_api_lead",
@@ -276,11 +279,14 @@ def test_shared_approvals_support_instance_scope_but_reject_legacy_tenant_and_co
     )
     assert approvals.status_code == 200
     approval_ids = {item["approval_id"] for item in approvals.json()["approvals"]}
-    assert build_execution_approval_id(
-        instance_id=alpha_instance_id,
-        company_id="company_alpha",
-        approval_id=alpha_native_id,
-    ) in approval_ids
+    assert (
+        build_execution_approval_id(
+            instance_id=alpha_instance_id,
+            company_id="company_alpha",
+            approval_id=alpha_native_id,
+        )
+        in approval_ids
+    )
     assert not any(item.endswith("company_beta:" + _beta_native_id) for item in approval_ids)
     assert not any(item.startswith("elevated:") for item in approval_ids)
 
@@ -299,9 +305,7 @@ def test_shared_approvals_support_instance_scope_but_reject_legacy_tenant_and_co
     )
     assert company_scoped.status_code == 400
     assert company_scoped.json()["error"]["type"] == "approval_company_scope_unsupported"
-    assert company_scoped.json()["error"]["message"] == (
-        "companyId is not supported on /admin/approvals because elevated-access approvals are not company-scoped."
-    )
+    assert company_scoped.json()["error"]["message"] == ("companyId is not supported on /admin/approvals because elevated-access approvals are not company-scoped.")
 
     tenant_scoped = client.get(
         "/admin/approvals",
@@ -337,11 +341,7 @@ def test_shared_execution_approval_decisions_record_instance_scoped_audit_truth(
     assert approval_payload["source"]["instance_id"] == instance_id
 
     governance = get_governance_service()
-    audit_event = next(
-        item
-        for item in governance.list_audit_events(limit=20, company_id="company_alpha")
-        if item.action == "execution_approval_approved" and item.target_id == approval_id
-    )
+    audit_event = next(item for item in governance.list_audit_events(limit=20, company_id="company_alpha") if item.action == "execution_approval_approved" and item.target_id == approval_id)
     assert audit_event.instance_id == instance_id
     assert audit_event.metadata["instance_id"] == instance_id
     assert audit_event.metadata["decision_note"] == ""
@@ -386,7 +386,12 @@ def test_shared_approvals_server_side_filters_survive_large_shared_queue_snapsho
             duration_minutes=15,
         )
 
-    instance_id = _create_instance(client, headers, instance_id=f"instance_filter_{suffix}", company_id=f"company_filter_{suffix}")
+    instance_id = _create_instance(
+        client,
+        headers,
+        instance_id=f"instance_filter_{suffix}",
+        company_id=f"company_filter_{suffix}",
+    )
     _run_id, execution_native_id = _open_execution_approval(company_id=f"company_filter_{suffix}")
     execution_approval_id = build_execution_approval_id(
         instance_id=instance_id,
@@ -416,7 +421,12 @@ def test_shared_execution_approvals_require_instance_membership_and_separate_rea
     client = TestClient(app)
     admin_headers = _admin_headers(client)
     suffix = uuid4().hex[:8]
-    instance_id = _create_instance(client, admin_headers, instance_id=f"instance_{suffix}", company_id=f"company_{suffix}")
+    instance_id = _create_instance(
+        client,
+        admin_headers,
+        instance_id=f"instance_{suffix}",
+        company_id=f"company_{suffix}",
+    )
     _run_id, execution_native_id = _open_execution_approval(company_id=f"company_{suffix}")
     approval_id = build_execution_approval_id(
         instance_id=instance_id,

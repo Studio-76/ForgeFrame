@@ -3,10 +3,15 @@ import importlib.util
 from pathlib import Path
 from threading import Thread
 
+from conftest import admin_headers as shared_admin_headers
 from fastapi.testclient import TestClient
 
-from conftest import admin_headers as shared_admin_headers
-from app.ingress.service import IngressTlsStatus, TlsCertificateStatus, build_ingress_tls_status, run_tls_renewal
+from app.ingress.service import (
+    IngressTlsStatus,
+    TlsCertificateStatus,
+    build_ingress_tls_status,
+    run_tls_renewal,
+)
 from app.main import app
 from app.settings.config import Settings
 
@@ -68,10 +73,15 @@ def _load_acme_helper_module():
     return module
 
 
-def test_build_ingress_tls_status_requires_integrated_acme_for_normative_mode(monkeypatch) -> None:
+def test_build_ingress_tls_status_requires_integrated_acme_for_normative_mode(
+    monkeypatch,
+) -> None:
     settings = _base_settings(public_tls_mode="manual")
     monkeypatch.setattr("app.ingress.service._resolve_dns", lambda fqdn, port: (True, ["203.0.113.10"]))
-    monkeypatch.setattr("app.ingress.service._load_certificate_status", lambda current: _certificate_status())
+    monkeypatch.setattr(
+        "app.ingress.service._load_certificate_status",
+        lambda current: _certificate_status(),
+    )
     monkeypatch.setattr("app.ingress.service.has_integrated_tls_automation", lambda repo_root: True)
 
     status = build_ingress_tls_status(settings)
@@ -82,10 +92,15 @@ def test_build_ingress_tls_status_requires_integrated_acme_for_normative_mode(mo
     assert status.renewal_blocked_reason == "tls_mode_not_integrated_acme"
 
 
-def test_build_ingress_tls_status_reports_normative_public_https_only_when_all_contracts_hold(monkeypatch) -> None:
+def test_build_ingress_tls_status_reports_normative_public_https_only_when_all_contracts_hold(
+    monkeypatch,
+) -> None:
     settings = _base_settings()
     monkeypatch.setattr("app.ingress.service._resolve_dns", lambda fqdn, port: (True, ["203.0.113.10"]))
-    monkeypatch.setattr("app.ingress.service._load_certificate_status", lambda current: _certificate_status())
+    monkeypatch.setattr(
+        "app.ingress.service._load_certificate_status",
+        lambda current: _certificate_status(),
+    )
     monkeypatch.setattr("app.ingress.service.has_integrated_tls_automation", lambda repo_root: True)
 
     status = build_ingress_tls_status(settings)
@@ -97,14 +112,19 @@ def test_build_ingress_tls_status_reports_normative_public_https_only_when_all_c
     assert status.certificate.trust_state == "public_ca"
 
 
-def test_build_ingress_tls_status_treats_placeholder_public_contract_values_as_missing(monkeypatch) -> None:
+def test_build_ingress_tls_status_treats_placeholder_public_contract_values_as_missing(
+    monkeypatch,
+) -> None:
     settings = _base_settings(
         public_tls_mode="manual",
         public_fqdn="replace-with-public-fqdn.example.invalid",
         public_tls_acme_email="replace-with-acme-email@example.invalid",
     )
     monkeypatch.setattr("app.ingress.service._resolve_dns", lambda fqdn, port: (False, []))
-    monkeypatch.setattr("app.ingress.service._load_certificate_status", lambda current: _certificate_status())
+    monkeypatch.setattr(
+        "app.ingress.service._load_certificate_status",
+        lambda current: _certificate_status(),
+    )
     monkeypatch.setattr("app.ingress.service.has_integrated_tls_automation", lambda repo_root: True)
 
     status = build_ingress_tls_status(settings)
@@ -116,7 +136,9 @@ def test_build_ingress_tls_status_treats_placeholder_public_contract_values_as_m
     assert status.renewal_blocked_reason == "tls_mode_not_integrated_acme"
 
 
-def test_ingress_admin_api_requires_auth_and_returns_operator_truth(monkeypatch) -> None:
+def test_ingress_admin_api_requires_auth_and_returns_operator_truth(
+    monkeypatch,
+) -> None:
     client = TestClient(app)
     expected = IngressTlsStatus(
         fqdn="forgeframe.example.com",
@@ -172,13 +194,21 @@ def test_ingress_admin_api_exposes_certificate_renewal_result(monkeypatch) -> No
     assert response.status_code == 200
     assert response.json()["renewal"]["status"] == "failed"
     assert response.json()["renewal"]["stderr"] == "certbot failed"
-    assert response.json()["ingress"]["mode_classification"] in {"normative_public_https", "limited_exception"}
+    assert response.json()["ingress"]["mode_classification"] in {
+        "normative_public_https",
+        "limited_exception",
+    }
 
 
-def test_run_tls_renewal_blocks_until_integrated_acme_contract_is_ready(monkeypatch) -> None:
+def test_run_tls_renewal_blocks_until_integrated_acme_contract_is_ready(
+    monkeypatch,
+) -> None:
     settings = _base_settings(public_tls_mode="manual")
     monkeypatch.setattr("app.ingress.service._resolve_dns", lambda fqdn, port: (True, ["203.0.113.10"]))
-    monkeypatch.setattr("app.ingress.service._load_certificate_status", lambda current: _certificate_status())
+    monkeypatch.setattr(
+        "app.ingress.service._load_certificate_status",
+        lambda current: _certificate_status(),
+    )
     monkeypatch.setattr("app.ingress.service.has_integrated_tls_automation", lambda repo_root: True)
 
     result = run_tls_renewal(settings)
@@ -187,7 +217,9 @@ def test_run_tls_renewal_blocks_until_integrated_acme_contract_is_ready(monkeypa
     assert result["blocked_reason"] == "tls_mode_not_integrated_acme"
 
 
-def test_acme_http_helper_only_serves_challenges_and_redirects_other_paths(tmp_path) -> None:
+def test_acme_http_helper_only_serves_challenges_and_redirects_other_paths(
+    tmp_path,
+) -> None:
     module = _load_acme_helper_module()
     module.WEBROOT = tmp_path
     module.FQDN = "forgeframe.example.com"

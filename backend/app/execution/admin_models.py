@@ -8,10 +8,10 @@ from pydantic import BaseModel, Field
 
 from app.artifacts.models import ArtifactRecord
 from app.execution.models import (
-    RunExecutionLane,
     RunAttemptState,
     RunCommandStatus,
     RunCommandType,
+    RunExecutionLane,
     RunFailureClass,
     RunLeaseStatus,
     RunOperatorState,

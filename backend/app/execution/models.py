@@ -10,7 +10,6 @@ from pydantic import BaseModel, Field
 from app.approvals.models import APPROVAL_STATUSES, ApprovalStatus
 from app.providers.execution_contract import SecretPurpose
 
-
 RUN_COMMAND_TYPES = (
     "create",
     "cancel",

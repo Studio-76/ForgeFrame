@@ -5,7 +5,17 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import Any
 
-from sqlalchemy import JSON, Boolean, CheckConstraint, DateTime, ForeignKeyConstraint, Index, Integer, String, Text
+from sqlalchemy import (
+    JSON,
+    Boolean,
+    CheckConstraint,
+    DateTime,
+    ForeignKeyConstraint,
+    Index,
+    Integer,
+    String,
+    Text,
+)
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -61,7 +71,13 @@ class TaskORM(Base):
         _enum_check("tasks_priority_ck", "priority", WORK_ITEM_PRIORITIES),
         Index("tasks_company_id_id_uq", "company_id", "id", unique=True),
         Index("tasks_instance_status_due_idx", "instance_id", "status", "due_at"),
-        Index("tasks_company_links_idx", "company_id", "conversation_id", "inbox_id", "workspace_id"),
+        Index(
+            "tasks_company_links_idx",
+            "company_id",
+            "conversation_id",
+            "inbox_id",
+            "workspace_id",
+        ),
     )
 
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
@@ -91,11 +107,19 @@ class TaskORM(Base):
 class DeliveryChannelORM(Base):
     __tablename__ = "delivery_channels"
     __table_args__ = (
-        CheckConstraint("fallback_channel_id IS NULL OR fallback_channel_id <> id", name="delivery_channels_fallback_self_ck"),
+        CheckConstraint(
+            "fallback_channel_id IS NULL OR fallback_channel_id <> id",
+            name="delivery_channels_fallback_self_ck",
+        ),
         _enum_check("delivery_channels_kind_ck", "channel_kind", DELIVERY_CHANNEL_KINDS),
         _enum_check("delivery_channels_status_ck", "status", DELIVERY_CHANNEL_STATUSES),
         Index("delivery_channels_company_id_id_uq", "company_id", "id", unique=True),
-        Index("delivery_channels_instance_status_idx", "instance_id", "status", "updated_at"),
+        Index(
+            "delivery_channels_instance_status_idx",
+            "instance_id",
+            "status",
+            "updated_at",
+        ),
     )
 
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
@@ -121,7 +145,10 @@ class AutomationORM(Base):
     __table_args__ = (
         _enum_check("automations_status_ck", "status", AUTOMATION_STATUSES),
         _enum_check("automations_action_kind_ck", "action_kind", AUTOMATION_ACTION_KINDS),
-        CheckConstraint("cadence_minutes >= 1 AND cadence_minutes <= 10080", name="automations_cadence_minutes_ck"),
+        CheckConstraint(
+            "cadence_minutes >= 1 AND cadence_minutes <= 10080",
+            name="automations_cadence_minutes_ck",
+        ),
         ForeignKeyConstraint(
             ["company_id", "channel_id"],
             ["delivery_channels.company_id", "delivery_channels.id"],
@@ -159,7 +186,12 @@ class AutomationORM(Base):
             ondelete="SET NULL",
         ),
         Index("automations_company_id_id_uq", "company_id", "id", unique=True),
-        Index("automations_instance_status_next_run_idx", "instance_id", "status", "next_run_at"),
+        Index(
+            "automations_instance_status_next_run_idx",
+            "instance_id",
+            "status",
+            "next_run_at",
+        ),
     )
 
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
@@ -199,7 +231,11 @@ class AutomationORM(Base):
 class NotificationORM(Base):
     __tablename__ = "notifications"
     __table_args__ = (
-        _enum_check("notifications_delivery_status_ck", "delivery_status", NOTIFICATION_DELIVERY_STATUSES),
+        _enum_check(
+            "notifications_delivery_status_ck",
+            "delivery_status",
+            NOTIFICATION_DELIVERY_STATUSES,
+        ),
         _enum_check("notifications_priority_ck", "priority", WORK_ITEM_PRIORITIES),
         CheckConstraint("retry_count >= 0", name="notifications_retry_count_ck"),
         CheckConstraint("max_retries >= 0", name="notifications_max_retries_ck"),
@@ -240,8 +276,20 @@ class NotificationORM(Base):
             ondelete="SET NULL",
         ),
         Index("notifications_company_id_id_uq", "company_id", "id", unique=True),
-        Index("notifications_instance_status_attempt_idx", "instance_id", "delivery_status", "next_attempt_at"),
-        Index("notifications_company_links_idx", "company_id", "task_id", "reminder_id", "conversation_id", "inbox_id"),
+        Index(
+            "notifications_instance_status_attempt_idx",
+            "instance_id",
+            "delivery_status",
+            "next_attempt_at",
+        ),
+        Index(
+            "notifications_company_links_idx",
+            "company_id",
+            "task_id",
+            "reminder_id",
+            "conversation_id",
+            "inbox_id",
+        ),
     )
 
     id: Mapped[str] = mapped_column(String(64), primary_key=True)

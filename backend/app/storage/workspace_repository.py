@@ -5,7 +5,15 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import Any
 
-from sqlalchemy import JSON, CheckConstraint, DateTime, ForeignKeyConstraint, Index, String, Text
+from sqlalchemy import (
+    JSON,
+    CheckConstraint,
+    DateTime,
+    ForeignKeyConstraint,
+    Index,
+    String,
+    Text,
+)
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -81,7 +89,12 @@ class WorkspaceEventORM(Base):
             ondelete="CASCADE",
         ),
         _enum_check("workspace_events_kind_ck", "event_kind", WORKSPACE_EVENT_KINDS),
-        Index("workspace_events_company_workspace_created_idx", "company_id", "workspace_id", "created_at"),
+        Index(
+            "workspace_events_company_workspace_created_idx",
+            "company_id",
+            "workspace_id",
+            "created_at",
+        ),
     )
 
     id: Mapped[str] = mapped_column(String(64), primary_key=True)

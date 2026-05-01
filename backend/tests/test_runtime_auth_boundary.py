@@ -1,9 +1,7 @@
-import os
-
-from fastapi.testclient import TestClient
 import pytest
-
 from conftest import admin_headers as shared_admin_headers
+from fastapi.testclient import TestClient
+
 from app.api.runtime.dependencies import clear_runtime_dependency_caches
 from app.authz.evaluator import PolicyEvaluator
 from app.governance.service import get_governance_service
@@ -130,11 +128,7 @@ def test_unbound_runtime_keys_are_rejected_before_policy_evaluation(
     assert response.headers["X-ForgeFrame-Correlation-Id"] == error["request_id"]
 
     governance = get_governance_service()
-    denial = next(
-        item
-        for item in reversed(governance.list_audit_events(limit=50))
-        if item.action == "runtime_key_binding_denied" and item.actor_id == issued["key_id"]
-    )
+    denial = next(item for item in reversed(governance.list_audit_events(limit=50)) if item.action == "runtime_key_binding_denied" and item.actor_id == issued["key_id"])
     assert denial.target_id == issued["key_id"]
     assert denial.metadata["runtime_key_id"] == issued["key_id"]
     assert denial.metadata["binding_state"] == "missing_account_id"
@@ -153,7 +147,12 @@ def test_unbound_runtime_keys_are_rejected_before_policy_evaluation(
             {"messages": [{"role": "user", "content": "stale boundary check"}]},
             ["chat:write"],
         ),
-        ("POST", "/v1/responses", {"input": "stale boundary check"}, ["responses:write"]),
+        (
+            "POST",
+            "/v1/responses",
+            {"input": "stale boundary check"},
+            ["responses:write"],
+        ),
     ],
 )
 def test_stale_account_runtime_keys_are_rejected_before_policy_evaluation(
@@ -191,11 +190,7 @@ def test_stale_account_runtime_keys_are_rejected_before_policy_evaluation(
     assert response.headers["X-ForgeFrame-Correlation-Id"] == error["request_id"]
 
     governance = get_governance_service()
-    denial = next(
-        item
-        for item in reversed(governance.list_audit_events(limit=50))
-        if item.action == "runtime_key_binding_denied" and item.actor_id == issued["key_id"]
-    )
+    denial = next(item for item in reversed(governance.list_audit_events(limit=50)) if item.action == "runtime_key_binding_denied" and item.actor_id == issued["key_id"])
     assert denial.target_id == issued["key_id"]
     assert denial.metadata["runtime_key_id"] == issued["key_id"]
     assert denial.metadata["binding_state"] == "account_not_found"

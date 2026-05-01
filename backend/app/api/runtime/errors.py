@@ -65,7 +65,10 @@ def public_runtime_auth_message(error_type: str | None) -> str:
 def public_runtime_provider_message(error_type: str | None) -> str:
     normalized_error_type = public_runtime_error_code(error_type)
     if normalized_error_type:
-        return _PROVIDER_ERROR_MESSAGES.get(normalized_error_type, "Selected provider failed while processing the request.")
+        return _PROVIDER_ERROR_MESSAGES.get(
+            normalized_error_type,
+            "Selected provider failed while processing the request.",
+        )
     return "Selected provider failed while processing the request."
 
 

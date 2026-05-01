@@ -52,7 +52,12 @@ def build_responses_output_items(result: ChatDispatchResult) -> list[dict[str, o
     return output_items
 
 
-def build_responses_payload(result: ChatDispatchResult, *, response_id: str | None = None, status: str = "completed") -> dict[str, object]:
+def build_responses_payload(
+    result: ChatDispatchResult,
+    *,
+    response_id: str | None = None,
+    status: str = "completed",
+) -> dict[str, object]:
     output_items, output_text = build_response_output_items(
         text=result.content,
         tool_calls=result.tool_calls,

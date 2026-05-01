@@ -8,7 +8,6 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.types import ASGIApp, Receive, Scope, Send
 
-from app.public_surface import FRONTEND_MOUNT_PATH, ROOT_SURFACE_KIND
 from app.api.admin import build_admin_router
 from app.api.runtime import router as runtime_router
 from app.authz.route_guards import RouteGuardHTTPException
@@ -17,6 +16,7 @@ from app.idempotency import (
     build_request_envelope,
     validate_idempotency_key,
 )
+from app.public_surface import FRONTEND_MOUNT_PATH, ROOT_SURFACE_KIND
 from app.readiness import (
     RuntimeReadinessReport,
     StartupValidationError,
@@ -129,7 +129,9 @@ def _mount_frontend(app: FastAPI, dist_path: Path) -> None:
         return render_frontend()
 
     @app.get("/{full_path:path}", include_in_schema=False, response_model=None)
-    def frontend_app(full_path: str) -> Response:  # pragma: no cover - simple static route
+    def frontend_app(
+        full_path: str,
+    ) -> Response:  # pragma: no cover - simple static route
         if full_path == "health" or full_path.startswith("v1/") or full_path.startswith("admin/") or full_path.startswith(".well-known/"):
             raise HTTPException(status_code=404, detail="not_found")
         return render_frontend()
@@ -217,7 +219,12 @@ def create_app() -> FastAPI:
             except InvalidIdempotencyKeyError as exc:
                 response = JSONResponse(
                     status_code=400,
-                    content={"error": {"type": "invalid_idempotency_key", "message": str(exc)}},
+                    content={
+                        "error": {
+                            "type": "invalid_idempotency_key",
+                            "message": str(exc),
+                        }
+                    },
                 )
                 _apply_request_envelope_headers(response, request)
                 return response

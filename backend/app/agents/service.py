@@ -14,7 +14,11 @@ from app.instances.models import InstanceRecord
 from app.knowledge.models import RecordLink
 from app.storage.agent_repository import AgentORM
 from app.storage.assistant_profile_repository import AssistantProfileORM
-from app.storage.conversation_repository import ConversationEventORM, ConversationMentionORM, ConversationParticipantORM
+from app.storage.conversation_repository import (
+    ConversationEventORM,
+    ConversationMentionORM,
+    ConversationParticipantORM,
+)
 
 SessionFactory = Callable[[], Session]
 
@@ -62,30 +66,56 @@ class AgentAdminService:
     @staticmethod
     def _addressability(row: AgentORM) -> tuple[bool, str]:
         if row.status != "active":
-            return False, "Paused or archived agents stay visible in history but are not offered for active conversation routing."
+            return (
+                False,
+                "Paused or archived agents stay visible in history but are not offered for active conversation routing.",
+            )
         if row.participation_mode == "direct":
-            return True, "Addressable for assignment, mentions, and active conversation participation."
+            return (
+                True,
+                "Addressable for assignment, mentions, and active conversation participation.",
+            )
         if row.participation_mode == "mentioned_only":
-            return True, "Addressable as a mention target only; ownership and handoff controls stay disabled."
+            return (
+                True,
+                "Addressable as a mention target only; ownership and handoff controls stay disabled.",
+            )
         if row.participation_mode == "roundtable":
-            return True, "Addressable for mentions and broadcast/roundtable participation, but not as a dedicated owner."
+            return (
+                True,
+                "Addressable for mentions and broadcast/roundtable participation, but not as a dedicated owner.",
+            )
         if row.participation_mode == "handoff_only":
-            return True, "Addressable only for handoff or blocker ownership, not for mention-based routing."
-        return False, "Conversation addressability is not available for this backend participation mode."
+            return (
+                True,
+                "Addressable only for handoff or blocker ownership, not for mention-based routing.",
+            )
+        return (
+            False,
+            "Conversation addressability is not available for this backend participation mode.",
+        )
 
     def _summary(self, session: Session, row: AgentORM) -> AgentSummary:
-        conversation_count = session.scalar(
-            select(func.count(func.distinct(ConversationParticipantORM.conversation_id))).where(
-                ConversationParticipantORM.company_id == row.company_id,
-                ConversationParticipantORM.agent_id == row.id,
+        conversation_count = (
+            session.scalar(
+                select(func.count(func.distinct(ConversationParticipantORM.conversation_id))).where(
+                    ConversationParticipantORM.company_id == row.company_id,
+                    ConversationParticipantORM.agent_id == row.id,
+                )
             )
-        ) or 0
-        mention_count = session.scalar(
-            select(func.count()).select_from(ConversationMentionORM).where(
-                ConversationMentionORM.company_id == row.company_id,
-                ConversationMentionORM.agent_id == row.id,
+            or 0
+        )
+        mention_count = (
+            session.scalar(
+                select(func.count())
+                .select_from(ConversationMentionORM)
+                .where(
+                    ConversationMentionORM.company_id == row.company_id,
+                    ConversationMentionORM.agent_id == row.id,
+                )
             )
-        ) or 0
+            or 0
+        )
         participant_last_activity = session.scalar(
             select(func.max(ConversationParticipantORM.updated_at)).where(
                 ConversationParticipantORM.company_id == row.company_id,
@@ -101,7 +131,10 @@ class AgentAdminService:
         event_last_activity = session.scalar(
             select(func.max(ConversationEventORM.created_at)).where(
                 ConversationEventORM.company_id == row.company_id,
-                or_(ConversationEventORM.source_agent_id == row.id, ConversationEventORM.target_agent_id == row.id),
+                or_(
+                    ConversationEventORM.source_agent_id == row.id,
+                    ConversationEventORM.target_agent_id == row.id,
+                ),
             )
         )
         addressable_in_conversations, addressability_reason = self._addressability(row)
@@ -111,7 +144,10 @@ class AgentAdminService:
             mention_last_activity,
             event_last_activity,
         ]
-        last_activity_at = max((item for item in last_activity_candidates if item is not None), default=row.updated_at)
+        last_activity_at = max(
+            (item for item in last_activity_candidates if item is not None),
+            default=row.updated_at,
+        )
         return AgentSummary(
             agent_id=row.id,
             instance_id=row.instance_id,
@@ -143,14 +179,25 @@ class AgentAdminService:
                 assistant_profile = self._record_link(profile.id, profile.display_name, profile.status)
         return AgentDetail(**summary.model_dump(), assistant_profile=assistant_profile)
 
-    def _clear_default_operator(self, session: Session, *, instance: InstanceRecord, current_agent_id: str | None = None) -> None:
-        for existing in session.execute(
-            select(AgentORM).where(
-                AgentORM.company_id == instance.company_id,
-                AgentORM.instance_id == instance.instance_id,
-                AgentORM.is_default_operator.is_(True),
+    def _clear_default_operator(
+        self,
+        session: Session,
+        *,
+        instance: InstanceRecord,
+        current_agent_id: str | None = None,
+    ) -> None:
+        for existing in (
+            session
+            .execute(
+                select(AgentORM).where(
+                    AgentORM.company_id == instance.company_id,
+                    AgentORM.instance_id == instance.instance_id,
+                    AgentORM.is_default_operator.is_(True),
+                )
             )
-        ).scalars().all():
+            .scalars()
+            .all()
+        ):
             if current_agent_id is not None and existing.id == current_agent_id:
                 continue
             existing.is_default_operator = False
@@ -160,13 +207,18 @@ class AgentAdminService:
 
     def inspect_default_operator(self, *, instance: InstanceRecord) -> AgentDetail | None:
         with self._session_factory() as session:
-            row = session.execute(
-                select(AgentORM).where(
-                    AgentORM.company_id == instance.company_id,
-                    AgentORM.instance_id == instance.instance_id,
-                    AgentORM.is_default_operator.is_(True),
+            row = (
+                session
+                .execute(
+                    select(AgentORM).where(
+                        AgentORM.company_id == instance.company_id,
+                        AgentORM.instance_id == instance.instance_id,
+                        AgentORM.is_default_operator.is_(True),
+                    )
                 )
-            ).scalars().first()
+                .scalars()
+                .first()
+            )
             if row is None:
                 return None
             return self._detail(session, row)
@@ -176,13 +228,18 @@ class AgentAdminService:
         if existing is not None:
             return existing, False
         with self._session_factory() as session, session.begin():
-            current = session.execute(
-                select(AgentORM).where(
-                    AgentORM.company_id == instance.company_id,
-                    AgentORM.instance_id == instance.instance_id,
-                    AgentORM.is_default_operator.is_(True),
+            current = (
+                session
+                .execute(
+                    select(AgentORM).where(
+                        AgentORM.company_id == instance.company_id,
+                        AgentORM.instance_id == instance.instance_id,
+                        AgentORM.is_default_operator.is_(True),
+                    )
                 )
-            ).scalars().first()
+                .scalars()
+                .first()
+            )
             if current is None:
                 current = AgentORM(
                     id=self._new_id("agent"),
@@ -227,9 +284,7 @@ class AgentAdminService:
             )
             if status is not None:
                 stmt = stmt.where(AgentORM.status == status)
-            rows = session.execute(
-                stmt.order_by(AgentORM.is_default_operator.desc(), AgentORM.updated_at.desc()).limit(max(1, min(limit, 200)))
-            ).scalars().all()
+            rows = session.execute(stmt.order_by(AgentORM.is_default_operator.desc(), AgentORM.updated_at.desc()).limit(max(1, min(limit, 200)))).scalars().all()
             return [self._summary(session, row) for row in rows]
 
     def get_agent(self, *, instance: InstanceRecord, agent_id: str) -> AgentDetail:
@@ -245,7 +300,11 @@ class AgentAdminService:
             if existing is not None and existing.company_id == instance.company_id:
                 raise ValueError(f"Agent '{agent_id}' already exists.")
             if payload.assistant_profile_id:
-                self._load_profile(session, instance=instance, assistant_profile_id=payload.assistant_profile_id)
+                self._load_profile(
+                    session,
+                    instance=instance,
+                    assistant_profile_id=payload.assistant_profile_id,
+                )
             if payload.is_default_operator:
                 self._clear_default_operator(session, instance=instance)
             row = AgentORM(
@@ -273,26 +332,22 @@ class AgentAdminService:
             row = self._load_agent(session, instance=instance, agent_id=agent_id)
             next_default = payload.is_default_operator if payload.is_default_operator is not None else row.is_default_operator
             if payload.assistant_profile_id:
-                self._load_profile(session, instance=instance, assistant_profile_id=payload.assistant_profile_id)
+                self._load_profile(
+                    session,
+                    instance=instance,
+                    assistant_profile_id=payload.assistant_profile_id,
+                )
             if next_default:
                 self._clear_default_operator(session, instance=instance, current_agent_id=row.id)
             next_display_name = payload.display_name.strip() if payload.display_name is not None else row.display_name
             if row.is_default_operator and payload.default_name is not None and payload.default_name.strip() != "Operator":
                 raise ValueError("The default operator keeps 'Operator' as its default name.")
             row.display_name = next_display_name
-            row.default_name = (
-                "Operator"
-                if next_default
-                else (payload.default_name.strip() if payload.default_name is not None else row.default_name)
-            )
-            row.role_kind = ("operator" if next_default else (payload.role_kind or row.role_kind))
+            row.default_name = "Operator" if next_default else (payload.default_name.strip() if payload.default_name is not None else row.default_name)
+            row.role_kind = "operator" if next_default else (payload.role_kind or row.role_kind)
             row.status = payload.status or row.status
             row.participation_mode = payload.participation_mode or row.participation_mode
-            row.allowed_targets_json = (
-                self._normalize_allowed_targets(payload.allowed_targets)
-                if payload.allowed_targets is not None
-                else list(row.allowed_targets_json or [])
-            )
+            row.allowed_targets_json = self._normalize_allowed_targets(payload.allowed_targets) if payload.allowed_targets is not None else list(row.allowed_targets_json or [])
             row.assistant_profile_id = payload.assistant_profile_id if payload.assistant_profile_id is not None else row.assistant_profile_id
             row.is_default_operator = next_default
             row.metadata_json = dict(payload.metadata) if payload.metadata is not None else dict(row.metadata_json or {})

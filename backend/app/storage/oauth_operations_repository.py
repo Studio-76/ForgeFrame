@@ -9,7 +9,16 @@ from pathlib import Path
 from typing import Any, Protocol
 
 from pydantic import ValidationError
-from sqlalchemy import JSON, DateTime, Integer, String, Text, create_engine, select, text
+from sqlalchemy import (
+    JSON,
+    DateTime,
+    Integer,
+    String,
+    Text,
+    create_engine,
+    select,
+    text,
+)
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, Session, mapped_column, sessionmaker
 
@@ -88,7 +97,12 @@ class PostgresOAuthOperationsRepository:
         return datetime.fromisoformat(value)
 
     @staticmethod
-    def _scope_clause(*, tenant_id: str | None, instance_id: str | None, tenant_column: str = "tenant_id") -> tuple[str, dict[str, Any]]:
+    def _scope_clause(
+        *,
+        tenant_id: str | None,
+        instance_id: str | None,
+        tenant_column: str = "tenant_id",
+    ) -> tuple[str, dict[str, Any]]:
         clauses: list[str] = []
         params: dict[str, Any] = {}
         if tenant_id is not None:
@@ -96,9 +110,7 @@ class PostgresOAuthOperationsRepository:
             params["tenant_id"] = tenant_id
         normalized_instance_id = (instance_id or "").strip() or None
         if normalized_instance_id is not None:
-            clauses.append(
-                "COALESCE(NULLIF(payload->>'instance_id', ''), NULLIF(payload->>'tenant_id', ''), :default_instance_id) = :instance_id"
-            )
+            clauses.append("COALESCE(NULLIF(payload->>'instance_id', ''), NULLIF(payload->>'tenant_id', ''), :default_instance_id) = :instance_id")
             params["instance_id"] = normalized_instance_id
             params["default_instance_id"] = DEFAULT_BOOTSTRAP_TENANT_ID
         if not clauses:

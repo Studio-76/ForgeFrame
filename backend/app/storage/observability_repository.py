@@ -646,18 +646,26 @@ class PostgresObservabilityRepository:
             "errors_by_profile": errors_by_profile,
             "runtime_duration_ms": {
                 "sample_count": int(duration_summary.get("sample_count", 0) or 0),
-                "avg": (
-                    round(float(duration_summary.get("avg_ms", 0.0) or 0.0), 2)
-                    if int(duration_summary.get("sample_count", 0) or 0) > 0
-                    else None
-                ),
+                "avg": (round(float(duration_summary.get("avg_ms", 0.0) or 0.0), 2) if int(duration_summary.get("sample_count", 0) or 0) > 0 else None),
                 "p50": int(duration_summary["p50_ms"]) if duration_summary.get("p50_ms") is not None else None,
                 "p95": int(duration_summary["p95_ms"]) if duration_summary.get("p95_ms") is not None else None,
                 "max": int(duration_summary["max_ms"]) if duration_summary.get("max_ms") is not None else None,
             },
             "stream_mode_counts": {
-                "stream": int(next((row["requests"] for row in stream_mode_rows if row["stream_mode"] == "stream"), 0) or 0),
-                "non_stream": int(next((row["requests"] for row in stream_mode_rows if row["stream_mode"] == "non_stream"), 0) or 0),
+                "stream": int(
+                    next(
+                        (row["requests"] for row in stream_mode_rows if row["stream_mode"] == "stream"),
+                        0,
+                    )
+                    or 0
+                ),
+                "non_stream": int(
+                    next(
+                        (row["requests"] for row in stream_mode_rows if row["stream_mode"] == "non_stream"),
+                        0,
+                    )
+                    or 0
+                ),
                 "runtime_request_count": int(sum(int(row.get("requests", 0) or 0) for row in stream_mode_rows)),
             },
             "latest_health": latest_health,
@@ -741,8 +749,7 @@ class PostgresObservabilityRepository:
                 "actual_cost": float(row.get("actual_cost", 0.0) or 0.0),
                 "hypothetical_cost": float(row.get("hypothetical_cost", 0.0) or 0.0),
                 "avoided_cost": float(row.get("avoided_cost", 0.0) or 0.0),
-                "error_rate": int(row.get("errors", 0) or 0)
-                / max(1, int(row.get("requests", 0) or 0) + int(row.get("errors", 0) or 0)),
+                "error_rate": int(row.get("errors", 0) or 0) / max(1, int(row.get("requests", 0) or 0) + int(row.get("errors", 0) or 0)),
             }
             for row in rows
         ]

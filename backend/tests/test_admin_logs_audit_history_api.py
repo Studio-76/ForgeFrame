@@ -1,9 +1,9 @@
-import os
 from uuid import uuid4
 
+from conftest import admin_headers as shared_admin_headers
+from conftest import login_headers_allowing_password_rotation
 from fastapi.testclient import TestClient
 
-from conftest import admin_headers as shared_admin_headers, login_headers_allowing_password_rotation
 from app.api.runtime.dependencies import clear_runtime_dependency_caches
 from app.governance.service import get_governance_service
 from app.main import app
@@ -536,4 +536,7 @@ def test_audit_history_target_search_matches_target_labels_and_returns_correlati
     payload = history.json()
     assert payload["items"]
     assert payload["items"][0]["target"]["label"] == "App Name"
-    assert payload["items"][0]["correlation"] == {"label": "Request", "value": "req-audit-42"}
+    assert payload["items"][0]["correlation"] == {
+        "label": "Request",
+        "value": "req-audit-42",
+    }

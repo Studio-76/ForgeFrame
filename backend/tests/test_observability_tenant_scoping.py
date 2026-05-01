@@ -4,10 +4,10 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from uuid import uuid4
 
+from conftest import admin_headers as shared_admin_headers
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, text
 
-from conftest import admin_headers as shared_admin_headers
 from app.api.admin.control_plane import get_control_plane_service
 from app.api.runtime.dependencies import clear_runtime_dependency_caches
 from app.governance.models import AuthenticatedAdmin
@@ -61,7 +61,9 @@ def _write_observability_events(*events: dict[str, object]) -> None:
     get_usage_analytics_store.cache_clear()
 
 
-def test_usage_summary_requires_tenant_filter_for_mixed_runtime_history(monkeypatch) -> None:
+def test_usage_summary_requires_tenant_filter_for_mixed_runtime_history(
+    monkeypatch,
+) -> None:
     monkeypatch.setenv("FORGEGATE_RUNTIME_AUTH_REQUIRED", "true")
     clear_runtime_dependency_caches()
     get_governance_service.cache_clear()
@@ -190,16 +192,24 @@ def test_windowed_usage_endpoints_require_tenant_filter_for_mixed_history_outsid
     assert filtered_dashboard.status_code == 200
     assert filtered_dashboard.json()["kpis"]["runtime_requests_24h"] == 1
 
-    filtered_provider_drilldown = client.get("/admin/usage/providers/openai_api?window=24h&tenantId=tenant_a", headers=headers)
+    filtered_provider_drilldown = client.get(
+        "/admin/usage/providers/openai_api?window=24h&tenantId=tenant_a",
+        headers=headers,
+    )
     assert filtered_provider_drilldown.status_code == 200
     assert filtered_provider_drilldown.json()["drilldown"]["requests"] == 1
 
-    filtered_client_drilldown = client.get("/admin/usage/clients/shared-client?window=24h&tenantId=tenant_a", headers=headers)
+    filtered_client_drilldown = client.get(
+        "/admin/usage/clients/shared-client?window=24h&tenantId=tenant_a",
+        headers=headers,
+    )
     assert filtered_client_drilldown.status_code == 200
     assert filtered_client_drilldown.json()["drilldown"]["requests"] == 1
 
 
-def test_dashboard_filters_governance_kpis_and_omits_global_security_for_tenant_scope(monkeypatch) -> None:
+def test_dashboard_filters_governance_kpis_and_omits_global_security_for_tenant_scope(
+    monkeypatch,
+) -> None:
     monkeypatch.setenv("FORGEGATE_RUNTIME_AUTH_REQUIRED", "true")
     clear_runtime_dependency_caches()
     get_governance_service.cache_clear()
@@ -273,7 +283,10 @@ def test_observability_and_oauth_writes_persist_tenant_ids(monkeypatch) -> None:
     runtime_error = client.post(
         "/v1/chat/completions",
         headers={"Authorization": f"Bearer {token_a}"},
-        json={"model": "missing-tenant-model", "messages": [{"role": "user", "content": "error path"}]},
+        json={
+            "model": "missing-tenant-model",
+            "messages": [{"role": "user", "content": "error path"}],
+        },
     )
     assert runtime_error.status_code == 404
 
@@ -301,30 +314,24 @@ def test_observability_and_oauth_writes_persist_tenant_ids(monkeypatch) -> None:
 def test_oauth_operations_endpoint_requires_tenant_filter_for_mixed_history() -> None:
     path = Path(os.environ["FORGEGATE_OAUTH_OPERATIONS_PATH"])
     path.write_text(
-        "\n".join(
-            [
-                json.dumps(
-                    {
-                        "tenant_id": "tenant_a",
-                        "provider_key": "antigravity",
-                        "action": "probe",
-                        "status": "ok",
-                        "details": "Tenant A probe",
-                        "executed_at": "2026-04-21T20:00:00+00:00",
-                    }
-                ),
-                json.dumps(
-                    {
-                        "tenant_id": "tenant_b",
-                        "provider_key": "antigravity",
-                        "action": "probe",
-                        "status": "failed",
-                        "details": "Tenant B probe",
-                        "executed_at": "2026-04-21T21:00:00+00:00",
-                    }
-                ),
-            ]
-        )
+        "\n".join([
+            json.dumps({
+                "tenant_id": "tenant_a",
+                "provider_key": "antigravity",
+                "action": "probe",
+                "status": "ok",
+                "details": "Tenant A probe",
+                "executed_at": "2026-04-21T20:00:00+00:00",
+            }),
+            json.dumps({
+                "tenant_id": "tenant_b",
+                "provider_key": "antigravity",
+                "action": "probe",
+                "status": "failed",
+                "details": "Tenant B probe",
+                "executed_at": "2026-04-21T21:00:00+00:00",
+            }),
+        ])
         + "\n",
         encoding="utf-8",
     )
@@ -422,7 +429,11 @@ def test_governance_audit_scope_persists_company_and_tenant_metadata_in_postgres
             company_id="company_alpha",
         )
 
-        reloaded = GovernanceService(settings, repository=PostgresGovernanceRepository(scoped_url), harness_service=object())
+        reloaded = GovernanceService(
+            settings,
+            repository=PostgresGovernanceRepository(scoped_url),
+            harness_service=object(),
+        )
         tenant_events = reloaded.list_audit_events(limit=50, tenant_id=account.account_id)
         assert tenant_events
         assert any(item.action == "account_create" for item in tenant_events)

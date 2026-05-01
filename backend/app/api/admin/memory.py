@@ -10,14 +10,23 @@ from app.api.admin.security import require_admin_mutation_role, require_admin_ro
 from app.governance.models import AuthenticatedAdmin
 from app.instances.models import InstanceRecord
 from app.knowledge.dependencies import get_knowledge_context_admin_service
-from app.knowledge.models import CorrectMemory, CreateMemory, DeleteMemory, RevokeMemory, UpdateMemory
+from app.knowledge.models import (
+    CorrectMemory,
+    CreateMemory,
+    DeleteMemory,
+    RevokeMemory,
+    UpdateMemory,
+)
 from app.knowledge.service import KnowledgeContextAdminService
 
 router = APIRouter(prefix="/memory", tags=["admin-memory"])
 
 
 def _error(status_code: int, error_type: str, message: str) -> JSONResponse:
-    return JSONResponse(status_code=status_code, content={"error": {"type": error_type, "message": message}})
+    return JSONResponse(
+        status_code=status_code,
+        content={"error": {"type": error_type, "message": message}},
+    )
 
 
 @router.get("")
@@ -29,8 +38,18 @@ def list_memory(
     instance: InstanceRecord = Depends(resolve_admin_instance_scope),
     service: KnowledgeContextAdminService = Depends(get_knowledge_context_admin_service),
 ) -> dict[str, object]:
-    entries = service.list_memory(instance=instance, actor=admin, status=status_filter, visibility_scope=visibility_scope, limit=limit)
-    return {"status": "ok", "instance": instance.model_dump(mode="json"), "memory": [item.model_dump(mode="json") for item in entries]}
+    entries = service.list_memory(
+        instance=instance,
+        actor=admin,
+        status=status_filter,
+        visibility_scope=visibility_scope,
+        limit=limit,
+    )
+    return {
+        "status": "ok",
+        "instance": instance.model_dump(mode="json"),
+        "memory": [item.model_dump(mode="json") for item in entries],
+    }
 
 
 @router.get("/{memory_id}")
@@ -94,7 +113,11 @@ def correct_memory(
         error_type = "memory_not_found" if "not found" in str(exc) else "memory_invalid"
         code = status.HTTP_404_NOT_FOUND if error_type == "memory_not_found" else status.HTTP_409_CONFLICT
         return _error(code, error_type, str(exc))
-    return {"status": "ok", "action": result.action, "memory": result.memory.model_dump(mode="json")}
+    return {
+        "status": "ok",
+        "action": result.action,
+        "memory": result.memory.model_dump(mode="json"),
+    }
 
 
 @router.post("/{memory_id}/delete")
@@ -111,7 +134,11 @@ def delete_memory(
         error_type = "memory_not_found" if "not found" in str(exc) else "memory_invalid"
         code = status.HTTP_404_NOT_FOUND if error_type == "memory_not_found" else status.HTTP_409_CONFLICT
         return _error(code, error_type, str(exc))
-    return {"status": "ok", "action": result.action, "memory": result.memory.model_dump(mode="json")}
+    return {
+        "status": "ok",
+        "action": result.action,
+        "memory": result.memory.model_dump(mode="json"),
+    }
 
 
 @router.post("/{memory_id}/revoke")
@@ -128,4 +155,8 @@ def revoke_memory(
         error_type = "memory_not_found" if "not found" in str(exc) else "memory_invalid"
         code = status.HTTP_404_NOT_FOUND if error_type == "memory_not_found" else status.HTTP_409_CONFLICT
         return _error(code, error_type, str(exc))
-    return {"status": "ok", "action": result.action, "memory": result.memory.model_dump(mode="json")}
+    return {
+        "status": "ok",
+        "action": result.action,
+        "memory": result.memory.model_dump(mode="json"),
+    }

@@ -28,11 +28,7 @@ class ProviderRegistry:
             "generic_harness": GenericHarnessAdapter(settings, harness),
             "ollama": OllamaAdapter(settings),
         }
-        self._adapters = {
-            name: adapter
-            for name, adapter in candidate_adapters.items()
-            if settings.is_provider_enabled(name)
-        }
+        self._adapters = {name: adapter for name, adapter in candidate_adapters.items() if settings.is_provider_enabled(name)}
 
     def get(self, provider_name: str) -> ProviderAdapter:
         try:

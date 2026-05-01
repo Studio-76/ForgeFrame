@@ -19,16 +19,16 @@ from app.execution.admin_models import (
     ExecutionOperatorActionResult,
     ExecutionQueueLaneSummary,
     ExecutionQueueRunView,
-    ExecutionRunApprovalLinkView,
     ExecutionReplayResult,
+    ExecutionRunApprovalLinkView,
     ExecutionRunAttemptView,
     ExecutionRunCommandView,
     ExecutionRunDetail,
     ExecutionRunOutboxView,
     ExecutionRunSummary,
 )
-from app.instances.models import InstanceRecord
 from app.execution.service import ExecutionTransitionService
+from app.instances.models import InstanceRecord
 from app.product_taxonomy import (
     NativeCommandRecord,
     NativeEventRecord,
@@ -252,7 +252,10 @@ class ExecutionAdminService:
                         related_object_kind="run",
                         related_object_id=run.id,
                         status=command.command_status,
-                        details={"command_id": command.id, "raw_command_type": command.command_type},
+                        details={
+                            "command_id": command.id,
+                            "raw_command_type": command.command_type,
+                        },
                     )
                 )
             elif command.command_type in {"retry", "restart_from_scratch"}:
@@ -262,7 +265,10 @@ class ExecutionAdminService:
                         related_object_kind="run",
                         related_object_id=run.id,
                         status=command.command_status,
-                        details={"command_id": command.id, "raw_command_type": command.command_type},
+                        details={
+                            "command_id": command.id,
+                            "raw_command_type": command.command_type,
+                        },
                     )
                 )
             elif command.command_type == "escalate":
@@ -272,7 +278,10 @@ class ExecutionAdminService:
                         related_object_kind="run",
                         related_object_id=run.id,
                         status=command.command_status,
-                        details={"command_id": command.id, "raw_command_type": command.command_type},
+                        details={
+                            "command_id": command.id,
+                            "raw_command_type": command.command_type,
+                        },
                     )
                 )
 
@@ -288,7 +297,13 @@ class ExecutionAdminService:
                     )
                 )
 
-        if run.state in {"waiting_on_approval", "retry_backoff", "failed", "timed_out", "dead_lettered"} or run.operator_state in {
+        if run.state in {
+            "waiting_on_approval",
+            "retry_backoff",
+            "failed",
+            "timed_out",
+            "dead_lettered",
+        } or run.operator_state in {
             "paused",
             "quarantined",
             "failed",
@@ -311,11 +326,7 @@ class ExecutionAdminService:
 
         views: list[NativeViewRecord] = []
         preview_artifact = next(
-            (
-                artifact
-                for artifact in artifacts
-                if artifact.status == "active" and artifact.artifact_type in {"preview_link", "external_action_preview"}
-            ),
+            (artifact for artifact in artifacts if artifact.status == "active" and artifact.artifact_type in {"preview_link", "external_action_preview"}),
             None,
         )
         if preview_artifact is not None:
@@ -335,13 +346,9 @@ class ExecutionAdminService:
         response_id = result_summary.get("response_id") if isinstance(result_summary.get("response_id"), str) else None
         notes = []
         if run.run_kind == "responses_background":
-            notes.append(
-                "This execution run is the durable native follow-object behind a background /v1/responses request."
-            )
+            notes.append("This execution run is the durable native follow-object behind a background /v1/responses request.")
         else:
-            notes.append(
-                "This execution view exposes ForgeFrame-native objects, events, commands, and views without hiding them behind runtime-only labels."
-            )
+            notes.append("This execution view exposes ForgeFrame-native objects, events, commands, and views without hiding them behind runtime-only labels.")
 
         return RuntimeNativeMapping(
             contract_surface="forgeframe_execution",
@@ -404,7 +411,12 @@ class ExecutionAdminService:
         direct_target = routing.get("selected_target_key")
         if isinstance(direct_target, str) and direct_target.strip():
             return direct_target.strip()
-        for key in ("structured_details", "structured_explainability", "raw_details", "raw_explainability"):
+        for key in (
+            "structured_details",
+            "structured_explainability",
+            "raw_details",
+            "raw_explainability",
+        ):
             candidate = routing.get(key)
             if not isinstance(candidate, dict):
                 continue
@@ -447,10 +459,7 @@ class ExecutionAdminService:
             return True
         last_failure = result_summary.get("last_failure")
         if isinstance(last_failure, dict):
-            return any(
-                isinstance(last_failure.get(field), str) and str(last_failure[field]).strip()
-                for field in ("error_code", "error_detail")
-            )
+            return any(isinstance(last_failure.get(field), str) and str(last_failure[field]).strip() for field in ("error_code", "error_detail"))
         return False
 
     @staticmethod
@@ -503,11 +512,7 @@ class ExecutionAdminService:
             if execution_lane:
                 stmt = stmt.where(RunORM.execution_lane == execution_lane)
             if approval_wait is True:
-                stmt = stmt.where(
-                    (RunORM.state == "waiting_on_approval")
-                    | (RunORM.operator_state == "waiting_on_approval")
-                    | (RunORM.current_approval_link_id.is_not(None))
-                )
+                stmt = stmt.where((RunORM.state == "waiting_on_approval") | (RunORM.operator_state == "waiting_on_approval") | (RunORM.current_approval_link_id.is_not(None)))
             cutoff = self._window_cutoff(window)
             if cutoff is not None:
                 stmt = stmt.where(RunORM.updated_at >= cutoff)
@@ -530,10 +535,7 @@ class ExecutionAdminService:
                         continue
                 filtered.append(row)
 
-            return [
-                self._map_run_summary(session, row, instance=instance)
-                for row in filtered[: max(1, min(limit, 200))]
-            ]
+            return [self._map_run_summary(session, row, instance=instance) for row in filtered[: max(1, min(limit, 200))]]
 
     def get_run_detail(self, *, instance: InstanceRecord, run_id: str) -> ExecutionRunDetail:
         with self._session_factory() as session:
@@ -541,26 +543,58 @@ class ExecutionAdminService:
             if run is None or run.company_id != instance.company_id:
                 raise ValueError(f"Run '{run_id}' not found.")
 
-            attempts = session.execute(
-                select(RunAttemptORM)
-                .where(RunAttemptORM.company_id == instance.company_id, RunAttemptORM.run_id == run_id)
-                .order_by(RunAttemptORM.attempt_no.desc())
-            ).scalars().all()
-            commands = session.execute(
-                select(RunCommandORM)
-                .where(RunCommandORM.company_id == instance.company_id, RunCommandORM.run_id == run_id)
-                .order_by(RunCommandORM.issued_at.desc())
-            ).scalars().all()
-            outbox = session.execute(
-                select(RunOutboxORM)
-                .where(RunOutboxORM.company_id == instance.company_id, RunOutboxORM.run_id == run_id)
-                .order_by(RunOutboxORM.created_at.desc())
-            ).scalars().all()
-            approval_links = session.execute(
-                select(RunApprovalLinkORM)
-                .where(RunApprovalLinkORM.company_id == instance.company_id, RunApprovalLinkORM.run_id == run_id)
-                .order_by(RunApprovalLinkORM.opened_at.desc())
-            ).scalars().all()
+            attempts = (
+                session
+                .execute(
+                    select(RunAttemptORM)
+                    .where(
+                        RunAttemptORM.company_id == instance.company_id,
+                        RunAttemptORM.run_id == run_id,
+                    )
+                    .order_by(RunAttemptORM.attempt_no.desc())
+                )
+                .scalars()
+                .all()
+            )
+            commands = (
+                session
+                .execute(
+                    select(RunCommandORM)
+                    .where(
+                        RunCommandORM.company_id == instance.company_id,
+                        RunCommandORM.run_id == run_id,
+                    )
+                    .order_by(RunCommandORM.issued_at.desc())
+                )
+                .scalars()
+                .all()
+            )
+            outbox = (
+                session
+                .execute(
+                    select(RunOutboxORM)
+                    .where(
+                        RunOutboxORM.company_id == instance.company_id,
+                        RunOutboxORM.run_id == run_id,
+                    )
+                    .order_by(RunOutboxORM.created_at.desc())
+                )
+                .scalars()
+                .all()
+            )
+            approval_links = (
+                session
+                .execute(
+                    select(RunApprovalLinkORM)
+                    .where(
+                        RunApprovalLinkORM.company_id == instance.company_id,
+                        RunApprovalLinkORM.run_id == run_id,
+                    )
+                    .order_by(RunApprovalLinkORM.opened_at.desc())
+                )
+                .scalars()
+                .all()
+            )
             artifacts = self._work.list_artifacts_for_target(
                 company_id=instance.company_id,
                 target_kind="run",
@@ -574,11 +608,7 @@ class ExecutionAdminService:
                 commands=[self._map_command(item) for item in commands],
                 outbox=[self._map_outbox(item) for item in outbox],
                 approval_links=[self._map_approval_link(item) for item in approval_links],
-                workspace=(
-                    self._work.get_workspace_summary(company_id=instance.company_id, workspace_id=run.workspace_id)
-                    if run.workspace_id
-                    else None
-                ),
+                workspace=(self._work.get_workspace_summary(company_id=instance.company_id, workspace_id=run.workspace_id) if run.workspace_id else None),
                 artifacts=artifacts,
                 native_mapping=self._build_native_mapping(
                     instance=instance,
@@ -610,7 +640,10 @@ class ExecutionAdminService:
             return "Quarantined after a terminal or operator-forced failure."
         if run.operator_state == "retry_scheduled":
             return "Retry is scheduled but not yet runnable."
-        if run.operator_state in {"leased", "waiting_external"} or run.state in {"dispatching", "executing"}:
+        if run.operator_state in {"leased", "waiting_external"} or run.state in {
+            "dispatching",
+            "executing",
+        }:
             return "Currently running on a worker lease or waiting on upstream runtime work."
         if run.state == "cancel_requested" or run.operator_state == "interrupted":
             return "Cancellation is in flight for the current attempt."
@@ -624,13 +657,20 @@ class ExecutionAdminService:
             return "Open approval or Execution Review"
         if run.operator_state == "paused":
             return "Resume on Execution Review"
-        if run.operator_state == "quarantined" or run.state in {"dead_lettered", "failed", "timed_out"}:
+        if run.operator_state == "quarantined" or run.state in {
+            "dead_lettered",
+            "failed",
+            "timed_out",
+        }:
             return "Replay or restart on Execution Review"
         if run.state == "cancel_requested" or run.operator_state == "interrupted":
             return "Monitor cancellation on Execution Review"
         if run.operator_state == "retry_scheduled":
             return "Inspect retry schedule on Execution Review"
-        if run.operator_state in {"leased", "waiting_external"} or run.state in {"dispatching", "executing"}:
+        if run.operator_state in {"leased", "waiting_external"} or run.state in {
+            "dispatching",
+            "executing",
+        }:
             return "Monitor running attempt on Execution Review"
         return "Open Execution Review"
 
@@ -661,15 +701,8 @@ class ExecutionAdminService:
             stmt = select(RunORM).where(RunORM.company_id == instance.company_id)
             if execution_lane:
                 stmt = stmt.where(RunORM.execution_lane == execution_lane)
-            runs = session.execute(
-                stmt.order_by(RunORM.updated_at.desc()).limit(200)
-            ).scalars().all()
-            attempts_by_id = {
-                attempt.id: attempt
-                for attempt in session.execute(
-                    select(RunAttemptORM).where(RunAttemptORM.company_id == instance.company_id)
-                ).scalars().all()
-            }
+            runs = session.execute(stmt.order_by(RunORM.updated_at.desc()).limit(200)).scalars().all()
+            attempts_by_id = {attempt.id: attempt for attempt in session.execute(select(RunAttemptORM).where(RunAttemptORM.company_id == instance.company_id)).scalars().all()}
 
             queue_rows: list[ExecutionQueueRunView] = []
             lane_counters: dict[str, Counter[str]] = defaultdict(Counter)
@@ -691,7 +724,11 @@ class ExecutionAdminService:
                     continue
                 normalized_target = (target or "").strip().lower()
                 if normalized_target:
-                    target_values = [self._current_target_key(run), run.workspace_id, run.issue_id]
+                    target_values = [
+                        self._current_target_key(run),
+                        run.workspace_id,
+                        run.issue_id,
+                    ]
                     if normalized_target not in " ".join(value for value in target_values if value).lower():
                         continue
 
@@ -723,7 +760,10 @@ class ExecutionAdminService:
                 counters["total_runs"] += 1
                 if run.operator_state in {"admitted", "leased"}:
                     counters["runnable_runs"] += 1
-                if run.operator_state in {"leased", "waiting_external"} or run.state in {"dispatching", "executing"}:
+                if run.operator_state in {
+                    "leased",
+                    "waiting_external",
+                } or run.state in {"dispatching", "executing"}:
                     counters["running_runs"] += 1
                 if run.operator_state == "paused":
                     counters["paused_runs"] += 1
@@ -740,13 +780,11 @@ class ExecutionAdminService:
                 if attempt is not None and attempt.scheduled_at is not None:
                     scheduled_at = self._as_utc(attempt.scheduled_at)
                     oldest = lane_oldest_schedule[run.execution_lane]
-                    lane_oldest_schedule[run.execution_lane] = (
-                        scheduled_at if scheduled_at is not None and (oldest is None or scheduled_at < oldest) else oldest
-                    )
+                    lane_oldest_schedule[run.execution_lane] = scheduled_at if scheduled_at is not None and (oldest is None or scheduled_at < oldest) else oldest
 
             lane_summaries = [
                 ExecutionQueueLaneSummary(
-                    execution_lane=lane_key, 
+                    execution_lane=lane_key,
                     display_name=_LANE_LABELS[lane_key],
                     total_runs=lane_counters[lane_key]["total_runs"],
                     runnable_runs=lane_counters[lane_key]["runnable_runs"],
@@ -764,19 +802,10 @@ class ExecutionAdminService:
 
     def get_dispatch_snapshot(self, *, instance: InstanceRecord) -> ExecutionDispatchSnapshot:
         with self._session_factory() as session:
-            runs = {
-                run.id: run
-                for run in session.execute(select(RunORM).where(RunORM.company_id == instance.company_id)).scalars().all()
-            }
-            attempts = session.execute(
-                select(RunAttemptORM).where(RunAttemptORM.company_id == instance.company_id)
-            ).scalars().all()
-            worker_rows = session.execute(
-                select(ExecutionWorkerORM).where(ExecutionWorkerORM.company_id == instance.company_id)
-            ).scalars().all()
-            outbox_entries = session.execute(
-                select(RunOutboxORM).where(RunOutboxORM.company_id == instance.company_id)
-            ).scalars().all()
+            runs = {run.id: run for run in session.execute(select(RunORM).where(RunORM.company_id == instance.company_id)).scalars().all()}
+            attempts = session.execute(select(RunAttemptORM).where(RunAttemptORM.company_id == instance.company_id)).scalars().all()
+            worker_rows = session.execute(select(ExecutionWorkerORM).where(ExecutionWorkerORM.company_id == instance.company_id)).scalars().all()
+            outbox_entries = session.execute(select(RunOutboxORM).where(RunOutboxORM.company_id == instance.company_id)).scalars().all()
 
             outbox_counts = Counter(entry.publish_state for entry in outbox_entries)
             event_counts = Counter(entry.event_type for entry in outbox_entries)
@@ -824,11 +853,7 @@ class ExecutionAdminService:
                 items = worker_runs.get(row.worker_key, [])
                 worker_state = row.worker_state
                 heartbeat_expires_at = self._as_utc(row.heartbeat_expires_at)
-                if (
-                    worker_state in {"starting", "idle", "busy"}
-                    and heartbeat_expires_at is not None
-                    and heartbeat_expires_at <= now
-                ):
+                if worker_state in {"starting", "idle", "busy"} and heartbeat_expires_at is not None and heartbeat_expires_at <= now:
                     worker_state = "stale"
                 workers.append(
                     ExecutionDispatchWorkerView(

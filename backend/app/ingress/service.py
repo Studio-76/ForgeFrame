@@ -14,12 +14,12 @@ from pydantic import BaseModel, Field
 
 from app.public_surface import (
     FRONTEND_MOUNT_PATH,
-    ROOT_SURFACE_KIND,
     NORMATIVE_ADMIN_BASE,
     NORMATIVE_API_BASE,
+    NORMATIVE_HTTP_HELPER_PORT,
     NORMATIVE_HTTPS_HOST,
     NORMATIVE_HTTPS_PORT,
-    NORMATIVE_HTTP_HELPER_PORT,
+    ROOT_SURFACE_KIND,
     has_configured_public_acme_email,
     has_configured_public_fqdn,
     has_integrated_tls_automation,
@@ -117,11 +117,7 @@ def _load_certificate_status(settings: Settings) -> TlsCertificateStatus:
         present=True,
         certificate_path=str(cert_path),
         key_path=str(key_path),
-        trust_state=(
-            "self_signed"
-            if decoded.get("issuer") and decoded.get("subject") and decoded.get("issuer") == decoded.get("subject")
-            else "public_ca"
-        ),
+        trust_state=("self_signed" if decoded.get("issuer") and decoded.get("subject") and decoded.get("issuer") == decoded.get("subject") else "public_ca"),
         issuer=_join_name(decoded.get("issuer")),
         subject=_join_name(decoded.get("subject")),
         valid_from=valid_from,
@@ -234,10 +230,7 @@ def run_tls_renewal(settings: Settings) -> dict[str, object]:
             "status": "blocked",
             "command": command,
             "blocked_reason": status.renewal_blocked_reason,
-            "details": (
-                "Certificate renewal is unavailable until the integrated ACME contract is satisfied: "
-                f"{status.renewal_blocked_reason}."
-            ),
+            "details": (f"Certificate renewal is unavailable until the integrated ACME contract is satisfied: {status.renewal_blocked_reason}."),
         }
     try:
         completed = subprocess.run(
@@ -245,7 +238,10 @@ def run_tls_renewal(settings: Settings) -> dict[str, object]:
             text=True,
             capture_output=True,
             check=False,
-            env={**os.environ, "FORGEFRAME_ENV_FILE": os.environ.get("FORGEFRAME_ENV_FILE", "")},
+            env={
+                **os.environ,
+                "FORGEFRAME_ENV_FILE": os.environ.get("FORGEFRAME_ENV_FILE", ""),
+            },
         )
     except FileNotFoundError as exc:  # pragma: no cover - depends on host shell
         return {

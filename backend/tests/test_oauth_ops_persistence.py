@@ -1,9 +1,8 @@
-import os
 from pathlib import Path
 
+from conftest import admin_headers as shared_admin_headers
 from fastapi.testclient import TestClient
 
-from conftest import admin_headers as shared_admin_headers
 from app.api.admin.control_plane import get_control_plane_service
 from app.main import app
 
@@ -31,6 +30,9 @@ def test_oauth_operations_are_persisted(monkeypatch, tmp_path: Path) -> None:
 
     get_control_plane_service.cache_clear()
     reloaded_client = TestClient(app)
-    summary_after_reload = reloaded_client.get("/admin/providers/oauth-account/operations", headers=_admin_headers(reloaded_client))
+    summary_after_reload = reloaded_client.get(
+        "/admin/providers/oauth-account/operations",
+        headers=_admin_headers(reloaded_client),
+    )
     assert summary_after_reload.status_code == 200
     assert summary_after_reload.json()["total_operations"] >= 1

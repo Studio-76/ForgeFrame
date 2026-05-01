@@ -9,7 +9,4 @@ class ControlPlaneSnapshotDomainMixin:
         tenant_id: str | None = None,
         instance_id: str | None = None,
     ) -> list[dict[str, object]]:
-        return [
-            truth.ui.model_dump()
-            for truth in self.provider_truth_axes(tenant_id=tenant_id, instance_id=instance_id)
-        ]
+        return [truth.ui.model_dump() for truth in self.provider_truth_axes(tenant_id=tenant_id, instance_id=instance_id)]

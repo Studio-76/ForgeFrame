@@ -23,13 +23,17 @@ def _normalize_chat_content_block(block: dict[str, Any]) -> dict[str, Any]:
     raise ValueError(f"Unsupported response content block type '{block_type or 'unknown'}'.")
 
 
-def _response_output_to_chat_content(output: str | list[dict[str, Any]]) -> str | list[dict[str, Any]]:
+def _response_output_to_chat_content(
+    output: str | list[dict[str, Any]],
+) -> str | list[dict[str, Any]]:
     if isinstance(output, str):
         return output
     return [_normalize_chat_content_block(block) for block in output]
 
 
-def _message_blocks_to_chat_content(blocks: list[dict[str, Any]]) -> str | list[dict[str, Any]]:
+def _message_blocks_to_chat_content(
+    blocks: list[dict[str, Any]],
+) -> str | list[dict[str, Any]]:
     if blocks and all(str(block.get("type", "") or "") in {"input_text", "text", "output_text"} for block in blocks):
         return "".join(str(block.get("text", "") or "") for block in blocks)
     return [_normalize_chat_content_block(block) for block in blocks]
@@ -54,31 +58,27 @@ def response_input_items_to_chat_messages(
             messages.append({"role": role, "content": content})
             continue
         if item_type == "function_call":
-            messages.append(
-                {
-                    "role": "assistant",
-                    "content": "",
-                    "tool_calls": [
-                        {
-                            "id": str(item.get("call_id") or item.get("id") or ""),
-                            "type": "function",
-                            "function": {
-                                "name": str(item.get("name", "") or ""),
-                                "arguments": str(item.get("arguments", "") or ""),
-                            },
-                        }
-                    ],
-                }
-            )
+            messages.append({
+                "role": "assistant",
+                "content": "",
+                "tool_calls": [
+                    {
+                        "id": str(item.get("call_id") or item.get("id") or ""),
+                        "type": "function",
+                        "function": {
+                            "name": str(item.get("name", "") or ""),
+                            "arguments": str(item.get("arguments", "") or ""),
+                        },
+                    }
+                ],
+            })
             continue
         if item_type == "function_call_output":
-            messages.append(
-                {
-                    "role": "tool",
-                    "tool_call_id": str(item.get("call_id") or ""),
-                    "content": _response_output_to_chat_content(item.get("output", "")),
-                }
-            )
+            messages.append({
+                "role": "tool",
+                "tool_call_id": str(item.get("call_id") or ""),
+                "content": _response_output_to_chat_content(item.get("output", "")),
+            })
             continue
         raise ValueError(f"Unsupported response input item type '{item_type or 'unknown'}'.")
 

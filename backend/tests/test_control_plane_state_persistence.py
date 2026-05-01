@@ -1,10 +1,10 @@
-import os
 import json
+import os
 from pathlib import Path
 
+from conftest import admin_headers as shared_admin_headers
 from fastapi.testclient import TestClient
 
-from conftest import admin_headers as shared_admin_headers
 from app.api.admin.control_plane import get_control_plane_service
 from app.main import app
 
@@ -23,11 +23,19 @@ def test_provider_state_is_persisted_across_control_plane_reload() -> None:
     response = client.post(
         "/admin/providers/",
         headers=headers,
-        json={"provider": "persisted_provider", "label": "Persisted Provider", "config": {"endpoint": "https://example.invalid"}},
+        json={
+            "provider": "persisted_provider",
+            "label": "Persisted Provider",
+            "config": {"endpoint": "https://example.invalid"},
+        },
     )
     assert response.status_code == 201
 
-    response = client.patch("/admin/providers/persisted_provider", headers=headers, json={"label": "Persisted Provider v2"})
+    response = client.patch(
+        "/admin/providers/persisted_provider",
+        headers=headers,
+        json={"label": "Persisted Provider v2"},
+    )
     assert response.status_code == 200
 
     response = client.post("/admin/providers/persisted_provider/deactivate", headers=headers, json={})
@@ -46,10 +54,7 @@ def test_provider_state_is_persisted_across_control_plane_reload() -> None:
     persisted_states = list((payload.get("states") or {}).values())
     assert persisted_states
     assert any("provider_catalog" in item for item in persisted_states)
-    assert any(
-        any(catalog_item["provider_id"] == "openai" for catalog_item in item.get("provider_catalog", []))
-        for item in persisted_states
-    )
+    assert any(any(catalog_item["provider_id"] == "openai" for catalog_item in item.get("provider_catalog", [])) for item in persisted_states)
 
 
 def test_health_config_health_records_and_bootstrap_report_are_persisted() -> None:

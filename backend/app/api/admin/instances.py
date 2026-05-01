@@ -9,11 +9,11 @@ from fastapi import APIRouter, Depends, status
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
-from app.api.admin.control_plane import build_control_plane_service
-from app.api.admin.security import require_admin_session, require_admin_write_session
 from app.agents.dependencies import get_agent_admin_service
 from app.agents.models import AgentDetail
 from app.agents.service import AgentAdminService
+from app.api.admin.control_plane import build_control_plane_service
+from app.api.admin.security import require_admin_session, require_admin_write_session
 from app.auth.local_auth import role_allows
 from app.conversations.dependencies import get_conversation_inbox_admin_service
 from app.conversations.models import ConversationSummary
@@ -58,7 +58,10 @@ class InstanceUpdateRequest(BaseModel):
 
 
 def _instance_error(status_code: int, error_type: str, message: str) -> JSONResponse:
-    return JSONResponse(status_code=status_code, content={"error": {"type": error_type, "message": message}})
+    return JSONResponse(
+        status_code=status_code,
+        content={"error": {"type": error_type, "message": message}},
+    )
 
 
 def _parse_timestamp(value: str | None) -> datetime | None:
@@ -100,11 +103,7 @@ def _operator_agent_summary(agent: AgentDetail | None) -> dict[str, object]:
     ready = agent.status == "active" and agent.is_default_operator
     return {
         "status": _READY if ready else _NOT_READY,
-        "reason": (
-            "Default Operator agent is active."
-            if ready
-            else f"Default Operator agent is present but currently {agent.status}."
-        ),
+        "reason": ("Default Operator agent is active." if ready else f"Default Operator agent is present but currently {agent.status}."),
         "agent_id": agent.agent_id,
         "display_name": agent.display_name,
         "role_kind": agent.role_kind,
@@ -119,16 +118,7 @@ def _provider_targets_summary(instance: InstanceRecord) -> dict[str, object]:
     control_plane = build_control_plane_service(instance.instance_id)
     providers = control_plane.provider_control_snapshot(tenant_id=instance.tenant_id)
     targets = control_plane.provider_target_snapshot()
-    configured_provider_count = len(
-        [
-            item
-            for item in providers
-            if bool(item.get("enabled"))
-            or bool(item.get("config"))
-            or int(item.get("model_count") or 0) > 0
-            or bool(item.get("last_sync_at"))
-        ]
-    )
+    configured_provider_count = len([item for item in providers if bool(item.get("enabled")) or bool(item.get("config")) or int(item.get("model_count") or 0) > 0 or bool(item.get("last_sync_at"))])
     enabled_targets = [item for item in targets if bool(item.get("enabled"))]
     ready_targets = [item for item in enabled_targets if str(item.get("readiness_status") or "") == _READY]
     bridge_only_providers = [item for item in providers if str(item.get("contract_classification") or "") == _BRIDGE_ONLY]
@@ -136,14 +126,12 @@ def _provider_targets_summary(instance: InstanceRecord) -> dict[str, object]:
     onboarding_only_providers = [item for item in providers if str(item.get("contract_classification") or "") == _ONBOARDING_ONLY]
     primary_targets = sorted(
         enabled_targets,
-        key=lambda item: (int(item.get("priority") or 0), str(item.get("target_key") or "")),
+        key=lambda item: (
+            int(item.get("priority") or 0),
+            str(item.get("target_key") or ""),
+        ),
     )[:3]
-    last_target_activity_at = _latest_timestamp(
-        *[
-            str(item.get("last_probe_at") or item.get("last_seen_at") or "")
-            for item in targets
-        ]
-    )
+    last_target_activity_at = _latest_timestamp(*[str(item.get("last_probe_at") or item.get("last_seen_at") or "") for item in targets])
 
     if ready_targets:
         status_value = _READY
@@ -191,11 +179,7 @@ def _routing_summary(instance: InstanceRecord) -> dict[str, object]:
     budget = snapshot["budget"]
     simple_policy = next((item for item in policies if item["classification"] == "simple"), None)
     non_simple_policy = next((item for item in policies if item["classification"] == "non_simple"), None)
-    ready_targets = [
-        item
-        for item in targets
-        if bool(item.get("enabled")) and str(item.get("readiness_status") or "") == _READY
-    ]
+    ready_targets = [item for item in targets if bool(item.get("enabled")) and str(item.get("readiness_status") or "") == _READY]
     last_decision_at = _latest_timestamp(*[str(item.get("created_at") or "") for item in snapshot["recent_decisions"]])
 
     if len(targets) == 0:
@@ -210,11 +194,7 @@ def _routing_summary(instance: InstanceRecord) -> dict[str, object]:
     else:
         status_value = _READY
         open_circuits = int(summary.get("open_circuits") or 0)
-        reason = (
-            "Routing policies are persisted and have ready targets."
-            if open_circuits == 0
-            else f"Routing policies are persisted, with {open_circuits} open circuit(s) still under review."
-        )
+        reason = "Routing policies are persisted and have ready targets." if open_circuits == 0 else f"Routing policies are persisted, with {open_circuits} open circuit(s) still under review."
 
     return {
         "status": status_value,
@@ -234,12 +214,7 @@ def _runtime_access_summary(governance: GovernanceService, instance: InstanceRec
     keys = governance.list_runtime_keys(instance_id=instance.instance_id)
     active_accounts = [item for item in accounts if item.status == "active"]
     active_keys = [item for item in keys if item.status == "active"]
-    last_key_activity_at = _latest_timestamp(
-        *[
-            item.last_used_at or item.updated_at
-            for item in keys
-        ]
-    )
+    last_key_activity_at = _latest_timestamp(*[item.last_used_at or item.updated_at for item in keys])
     if active_keys:
         status_value = _READY
         reason = f"{len(active_keys)} active runtime key(s) can reach this instance."
@@ -287,11 +262,7 @@ def _work_interaction_summary(
 
     if latest_conversation is not None or inbox_enabled or tasks_enabled or notifications_enabled:
         status_value = _READY
-        reason = (
-            f"Mode '{mode}' is configured for this instance."
-            if onboarding
-            else "Work interaction history exists for this instance."
-        )
+        reason = f"Mode '{mode}' is configured for this instance." if onboarding else "Work interaction history exists for this instance."
     elif onboarding:
         status_value = _NOT_READY
         reason = "Work-interaction metadata exists, but no operator-facing lane is enabled."

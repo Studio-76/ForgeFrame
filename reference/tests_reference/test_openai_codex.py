@@ -77,11 +77,18 @@ def test_resolve_runtime_model_accepts_direct_runtime_id():
 
 def test_discovery_first_endpoint_fails_second_succeeds(monkeypatch):
     runtime = OpenAICodexRuntime()
-    fake = _FakeAsyncClient([
-        _FakeResponse(500, text="boom"),
-        _FakeResponse(200, payload={"data": [{"id": "gpt-5.4"}, {"id": "text-embedding-3-large"}]}),
-    ])
-    monkeypatch.setattr("nadirclaw.openai_codex.httpx.AsyncClient", lambda timeout=20: fake)
+    fake = _FakeAsyncClient(
+        [
+            _FakeResponse(500, text="boom"),
+            _FakeResponse(
+                200,
+                payload={"data": [{"id": "gpt-5.4"}, {"id": "text-embedding-3-large"}]},
+            ),
+        ]
+    )
+    monkeypatch.setattr(
+        "nadirclaw.openai_codex.httpx.AsyncClient", lambda timeout=20: fake
+    )
 
     models = asyncio.run(runtime.refresh_if_stale("tok", force=True))
     assert models == ["gpt-5.4"]
@@ -89,8 +96,12 @@ def test_discovery_first_endpoint_fails_second_succeeds(monkeypatch):
 
 def test_discovery_handles_unexpected_schema(monkeypatch):
     runtime = OpenAICodexRuntime()
-    fake = _FakeAsyncClient([_FakeResponse(200, payload={"unexpected": {"foo": "bar"}})])
-    monkeypatch.setattr("nadirclaw.openai_codex.httpx.AsyncClient", lambda timeout=20: fake)
+    fake = _FakeAsyncClient(
+        [_FakeResponse(200, payload={"unexpected": {"foo": "bar"}})]
+    )
+    monkeypatch.setattr(
+        "nadirclaw.openai_codex.httpx.AsyncClient", lambda timeout=20: fake
+    )
 
     models = asyncio.run(runtime.refresh_if_stale("tok", force=True))
     assert models == []
@@ -99,7 +110,9 @@ def test_discovery_handles_unexpected_schema(monkeypatch):
 def test_discovery_empty_result_is_cached_and_marked_fresh(monkeypatch):
     runtime = OpenAICodexRuntime()
     fake = _FakeAsyncClient([_FakeResponse(200, payload={"data": []})])
-    monkeypatch.setattr("nadirclaw.openai_codex.httpx.AsyncClient", lambda timeout=20: fake)
+    monkeypatch.setattr(
+        "nadirclaw.openai_codex.httpx.AsyncClient", lambda timeout=20: fake
+    )
 
     models = asyncio.run(runtime.refresh_if_stale("tok", force=True))
     assert models == []
@@ -111,8 +124,12 @@ def test_discovery_invalid_json_falls_back_to_next_endpoint(monkeypatch):
     runtime = OpenAICodexRuntime()
     bad = _FakeResponse(200, text="<html>proxy</html>")
     bad.json = lambda: (_ for _ in ()).throw(ValueError("not json"))
-    fake = _FakeAsyncClient([bad, _FakeResponse(200, payload={"data": [{"id": "gpt-5.4"}]})])
-    monkeypatch.setattr("nadirclaw.openai_codex.httpx.AsyncClient", lambda timeout=20: fake)
+    fake = _FakeAsyncClient(
+        [bad, _FakeResponse(200, payload={"data": [{"id": "gpt-5.4"}]})]
+    )
+    monkeypatch.setattr(
+        "nadirclaw.openai_codex.httpx.AsyncClient", lambda timeout=20: fake
+    )
 
     models = asyncio.run(runtime.refresh_if_stale("tok", force=True))
     assert models == ["gpt-5.4"]
@@ -139,7 +156,9 @@ def test_non_dict_cache_root_is_ignored(tmp_path, monkeypatch):
 
 def test_invalid_fetched_at_in_cache_is_ignored(tmp_path, monkeypatch):
     cache_file = tmp_path / "openai_codex_models.json"
-    cache_file.write_text(json.dumps({"models": ["gpt-5.4"], "fetched_at": "not-an-int"}))
+    cache_file.write_text(
+        json.dumps({"models": ["gpt-5.4"], "fetched_at": "not-an-int"})
+    )
     monkeypatch.setenv("NADIRCLAW_OPENAI_CODEX_MODEL_CACHE", str(cache_file))
 
     runtime = OpenAICodexRuntime()

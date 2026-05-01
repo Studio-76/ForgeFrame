@@ -4,7 +4,11 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 
-from app.control_plane.models import ManagedModelRecord, ManagedProviderRecord, ManagedProviderTargetRecord
+from app.control_plane.models import (
+    ManagedModelRecord,
+    ManagedProviderRecord,
+    ManagedProviderTargetRecord,
+)
 from app.control_plane.profile_taxonomy import (
     build_legacy_capability_profile,
     provider_economic_profile,
@@ -207,10 +211,7 @@ def merge_targets_with_defaults(
     default_targets: Iterable[ManagedProviderTargetRecord],
     stored_targets: Iterable[ManagedProviderTargetRecord] | None,
 ) -> list[ManagedProviderTargetRecord]:
-    stored_map = {
-        target.target_key: target.model_copy(deep=True)
-        for target in (stored_targets or [])
-    }
+    stored_map = {target.target_key: target.model_copy(deep=True) for target in (stored_targets or [])}
     merged: list[ManagedProviderTargetRecord] = []
     for default_target in default_targets:
         existing = stored_map.get(default_target.target_key)
@@ -246,8 +247,15 @@ def merge_targets_with_defaults(
     return sort_targets(merged)
 
 
-def sort_targets(targets: Iterable[ManagedProviderTargetRecord]) -> list[ManagedProviderTargetRecord]:
+def sort_targets(
+    targets: Iterable[ManagedProviderTargetRecord],
+) -> list[ManagedProviderTargetRecord]:
     return sorted(
         targets,
-        key=lambda item: (item.provider, -item.priority, item.model_id, item.target_key),
+        key=lambda item: (
+            item.provider,
+            -item.priority,
+            item.model_id,
+            item.target_key,
+        ),
     )

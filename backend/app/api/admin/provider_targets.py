@@ -38,9 +38,7 @@ def list_provider_targets(
 def update_provider_target(
     target_key: str,
     payload: ProviderTargetUpdateRequest,
-    _admin: AuthenticatedAdmin = Depends(
-        require_admin_instance_permission("provider_targets.write", allow_impersonation=False)
-    ),
+    _admin: AuthenticatedAdmin = Depends(require_admin_instance_permission("provider_targets.write", allow_impersonation=False)),
     service: ControlPlaneService = Depends(get_control_plane_service),
 ) -> dict[str, object]:
     try:

@@ -2,11 +2,19 @@ from pathlib import Path
 
 import pytest
 
-from app.harness.models import HarnessPreviewRequest, HarnessProviderProfile, HarnessVerificationRequest
+from app.harness.models import (
+    HarnessPreviewRequest,
+    HarnessProviderProfile,
+    HarnessVerificationRequest,
+)
 from app.harness.service import HarnessService
 from app.harness.store import HarnessStore
 from app.providers import ProviderRegistry
-from app.providers.base import ChatDispatchRequest, EmbeddingDispatchRequest, ProviderUnsupportedFeatureError
+from app.providers.base import (
+    ChatDispatchRequest,
+    EmbeddingDispatchRequest,
+    ProviderUnsupportedFeatureError,
+)
 from app.providers.generic_harness.adapter import GenericHarnessAdapter
 from app.settings.config import Settings
 from app.storage.harness_repository import FileHarnessRepository, HarnessStoragePaths
@@ -160,16 +168,35 @@ def test_generic_harness_adapter_stream_mapping(tmp_path: Path) -> None:
 
     def fake_execute_stream(provider_key: str, *, model: str, messages: list[dict]):
         yield {"event": "delta", "delta": "hello"}
-        yield {"event": "done", "finish_reason": "stop", "usage": {"prompt_tokens": 1, "completion_tokens": 1, "total_tokens": 2}, "content": "hello"}
+        yield {
+            "event": "done",
+            "finish_reason": "stop",
+            "usage": {"prompt_tokens": 1, "completion_tokens": 1, "total_tokens": 2},
+            "content": "hello",
+        }
 
     service.execute_stream = fake_execute_stream  # type: ignore[method-assign]
-    events = list(adapter.stream_chat_completion(request=type("Req", (), {"model": "stream-model", "messages": [{"role": "user", "content": "x"}], "stream": True})()))
+    events = list(
+        adapter.stream_chat_completion(
+            request=type(
+                "Req",
+                (),
+                {
+                    "model": "stream-model",
+                    "messages": [{"role": "user", "content": "x"}],
+                    "stream": True,
+                },
+            )()
+        )
+    )
 
     assert events[0].event == "delta"
     assert events[-1].event == "done"
 
 
-def test_generic_harness_adapter_scopes_duplicate_profile_keys_by_runtime_instance(tmp_path: Path) -> None:
+def test_generic_harness_adapter_scopes_duplicate_profile_keys_by_runtime_instance(
+    tmp_path: Path,
+) -> None:
     service = build_service(tmp_path)
     provider_key = "shared-profile"
     model_id = "shared-model"
@@ -183,7 +210,11 @@ def test_generic_harness_adapter_scopes_duplicate_profile_keys_by_runtime_instan
             auth_scheme="none",
             models=[model_id],
             stream_mapping={"enabled": True},
-            capabilities={"streaming": True, "embeddings": True, "model_source": "manual"},
+            capabilities={
+                "streaming": True,
+                "embeddings": True,
+                "model_source": "manual",
+            },
         ),
         instance_id="instance-alpha",
     )
@@ -197,7 +228,11 @@ def test_generic_harness_adapter_scopes_duplicate_profile_keys_by_runtime_instan
             auth_scheme="none",
             models=[model_id],
             stream_mapping={"enabled": True},
-            capabilities={"streaming": True, "embeddings": True, "model_source": "manual"},
+            capabilities={
+                "streaming": True,
+                "embeddings": True,
+                "model_source": "manual",
+            },
         ),
         instance_id="instance-beta",
     )
@@ -255,7 +290,14 @@ def test_generic_harness_adapter_scopes_duplicate_profile_keys_by_runtime_instan
         encoding_format: str = "float",
         dimensions: int | None = None,
     ) -> dict[str, object]:
-        del provider_key, model, input_items, request_metadata, encoding_format, dimensions
+        del (
+            provider_key,
+            model,
+            input_items,
+            request_metadata,
+            encoding_format,
+            dimensions,
+        )
         seen_embeddings.append(instance_id)
         return {
             "model": model_id,
@@ -295,7 +337,9 @@ def test_generic_harness_adapter_scopes_duplicate_profile_keys_by_runtime_instan
     assert seen_embeddings == ["instance-beta"]
 
 
-def test_generic_harness_adapter_status_capabilities_require_declared_streaming_support(tmp_path: Path) -> None:
+def test_generic_harness_adapter_status_capabilities_require_declared_streaming_support(
+    tmp_path: Path,
+) -> None:
     service = build_service(tmp_path)
     service.upsert_profile(
         HarnessProviderProfile(
@@ -306,7 +350,11 @@ def test_generic_harness_adapter_status_capabilities_require_declared_streaming_
             auth_scheme="none",
             models=["batch-model"],
             stream_mapping={"enabled": True},
-            capabilities={"streaming": False, "tool_calling": False, "model_source": "manual"},
+            capabilities={
+                "streaming": False,
+                "tool_calling": False,
+                "model_source": "manual",
+            },
         )
     )
 
@@ -326,7 +374,9 @@ def test_generic_harness_adapter_status_capabilities_require_declared_streaming_
     )
 
 
-def test_generic_harness_adapter_status_capabilities_keep_partial_truth_for_mixed_profiles(tmp_path: Path) -> None:
+def test_generic_harness_adapter_status_capabilities_keep_partial_truth_for_mixed_profiles(
+    tmp_path: Path,
+) -> None:
     service = build_service(tmp_path)
     service.upsert_profile(
         HarnessProviderProfile(
@@ -337,7 +387,11 @@ def test_generic_harness_adapter_status_capabilities_keep_partial_truth_for_mixe
             auth_scheme="none",
             models=["stream-tool-model"],
             stream_mapping={"enabled": True},
-            capabilities={"streaming": True, "tool_calling": True, "model_source": "manual"},
+            capabilities={
+                "streaming": True,
+                "tool_calling": True,
+                "model_source": "manual",
+            },
         )
     )
     service.upsert_profile(
@@ -350,7 +404,11 @@ def test_generic_harness_adapter_status_capabilities_keep_partial_truth_for_mixe
             auth_value="batch-secret",
             models=["batch-only-model"],
             stream_mapping={"enabled": False},
-            capabilities={"streaming": False, "tool_calling": False, "model_source": "manual"},
+            capabilities={
+                "streaming": False,
+                "tool_calling": False,
+                "model_source": "manual",
+            },
         )
     )
 
@@ -366,14 +424,19 @@ def test_generic_harness_adapter_status_capabilities_keep_partial_truth_for_mixe
     assert capabilities["tool_calling"] is True
     assert capabilities["tool_calling_level"] == "partial"
     assert capabilities["tool_calling_profile_count"] == 1
-    assert adapter.can_dispatch_model("stream-tool-model", require_streaming=True) == (True, None)
+    assert adapter.can_dispatch_model("stream-tool-model", require_streaming=True) == (
+        True,
+        None,
+    )
     assert adapter.can_dispatch_model("batch-only-model", require_streaming=True) == (
         False,
         "streaming_not_enabled_in_profile",
     )
 
 
-def test_generic_harness_adapter_status_capabilities_aggregate_vision_truth_from_runtime_profiles(tmp_path: Path) -> None:
+def test_generic_harness_adapter_status_capabilities_aggregate_vision_truth_from_runtime_profiles(
+    tmp_path: Path,
+) -> None:
     service = build_service(tmp_path)
     service.upsert_profile(
         HarnessProviderProfile(
@@ -383,7 +446,12 @@ def test_generic_harness_adapter_status_capabilities_aggregate_vision_truth_from
             endpoint_base_url="https://example.invalid/v1",
             auth_scheme="none",
             models=["vision-model"],
-            capabilities={"streaming": False, "tool_calling": False, "vision": True, "model_source": "manual"},
+            capabilities={
+                "streaming": False,
+                "tool_calling": False,
+                "vision": True,
+                "model_source": "manual",
+            },
         )
     )
     service.upsert_profile(
@@ -394,7 +462,12 @@ def test_generic_harness_adapter_status_capabilities_aggregate_vision_truth_from
             endpoint_base_url="https://example.invalid/v1",
             auth_scheme="none",
             models=["batch-model"],
-            capabilities={"streaming": False, "tool_calling": False, "vision": False, "model_source": "manual"},
+            capabilities={
+                "streaming": False,
+                "tool_calling": False,
+                "vision": False,
+                "model_source": "manual",
+            },
         )
     )
 
@@ -411,7 +484,9 @@ def test_generic_harness_adapter_status_capabilities_aggregate_vision_truth_from
     assert provider_status["capabilities"]["vision_level"] == "partial"
 
 
-def test_generic_harness_adapter_status_capabilities_require_enabled_declared_discovery_support(tmp_path: Path) -> None:
+def test_generic_harness_adapter_status_capabilities_require_enabled_declared_discovery_support(
+    tmp_path: Path,
+) -> None:
     service = build_service(tmp_path)
     service.upsert_profile(
         HarnessProviderProfile(
@@ -422,7 +497,12 @@ def test_generic_harness_adapter_status_capabilities_require_enabled_declared_di
             auth_scheme="none",
             models=["catalog-model"],
             discovery_enabled=False,
-            capabilities={"streaming": False, "tool_calling": False, "discovery_support": True, "model_source": "manual"},
+            capabilities={
+                "streaming": False,
+                "tool_calling": False,
+                "discovery_support": True,
+                "model_source": "manual",
+            },
         )
     )
 
@@ -440,7 +520,12 @@ def test_generic_harness_adapter_status_capabilities_require_enabled_declared_di
             auth_scheme="none",
             models=["catalog-model"],
             discovery_enabled=True,
-            capabilities={"streaming": False, "tool_calling": False, "discovery_support": True, "model_source": "manual"},
+            capabilities={
+                "streaming": False,
+                "tool_calling": False,
+                "discovery_support": True,
+                "model_source": "manual",
+            },
         )
     )
 
@@ -457,7 +542,12 @@ def test_generic_harness_adapter_status_capabilities_require_enabled_declared_di
             auth_scheme="none",
             models=["catalog-model"],
             discovery_enabled=True,
-            capabilities={"streaming": False, "tool_calling": False, "discovery_support": False, "model_source": "manual"},
+            capabilities={
+                "streaming": False,
+                "tool_calling": False,
+                "discovery_support": False,
+                "model_source": "manual",
+            },
         )
     )
 
@@ -466,7 +556,9 @@ def test_generic_harness_adapter_status_capabilities_require_enabled_declared_di
     assert capabilities["discovery_support"] is False
 
 
-def test_generic_harness_adapter_requires_owned_models_without_fallback(tmp_path: Path) -> None:
+def test_generic_harness_adapter_requires_owned_models_without_fallback(
+    tmp_path: Path,
+) -> None:
     service = build_service(tmp_path)
     service.upsert_profile(
         HarnessProviderProfile(
@@ -476,7 +568,11 @@ def test_generic_harness_adapter_requires_owned_models_without_fallback(tmp_path
             endpoint_base_url="https://example.invalid/v1",
             auth_scheme="none",
             models=[],
-            capabilities={"streaming": True, "tool_calling": True, "model_source": "manual"},
+            capabilities={
+                "streaming": True,
+                "tool_calling": True,
+                "model_source": "manual",
+            },
         )
     )
 
@@ -500,7 +596,9 @@ def test_generic_harness_adapter_requires_owned_models_without_fallback(tmp_path
     )
 
 
-def test_generic_harness_adapter_keeps_blind_dispatch_when_model_fallback_is_enabled(tmp_path: Path) -> None:
+def test_generic_harness_adapter_keeps_blind_dispatch_when_model_fallback_is_enabled(
+    tmp_path: Path,
+) -> None:
     service = build_service(tmp_path)
     service.upsert_profile(
         HarnessProviderProfile(
@@ -510,7 +608,11 @@ def test_generic_harness_adapter_keeps_blind_dispatch_when_model_fallback_is_ena
             endpoint_base_url="https://example.invalid/v1",
             auth_scheme="none",
             models=[],
-            capabilities={"streaming": True, "tool_calling": False, "model_source": "manual"},
+            capabilities={
+                "streaming": True,
+                "tool_calling": False,
+                "model_source": "manual",
+            },
         )
     )
 
@@ -527,7 +629,9 @@ def test_generic_harness_adapter_keeps_blind_dispatch_when_model_fallback_is_ena
     assert adapter.can_dispatch_model("ad-hoc-model") == (True, None)
 
 
-def test_generic_harness_adapter_non_stream_legacy_signature_compatibility(tmp_path: Path) -> None:
+def test_generic_harness_adapter_non_stream_legacy_signature_compatibility(
+    tmp_path: Path,
+) -> None:
     service = build_service(tmp_path)
     service.upsert_profile(
         HarnessProviderProfile(
@@ -572,7 +676,9 @@ def test_generic_harness_adapter_non_stream_legacy_signature_compatibility(tmp_p
     assert result.usage.total_tokens == 2
 
 
-def test_generic_harness_adapter_rejects_image_messages_when_profile_lacks_vision(tmp_path: Path) -> None:
+def test_generic_harness_adapter_rejects_image_messages_when_profile_lacks_vision(
+    tmp_path: Path,
+) -> None:
     service = build_service(tmp_path)
     service.upsert_profile(
         HarnessProviderProfile(
@@ -588,7 +694,10 @@ def test_generic_harness_adapter_rejects_image_messages_when_profile_lacks_visio
 
     adapter = GenericHarnessAdapter(Settings(), service)
 
-    assert adapter.can_dispatch_model("legacy-model", require_vision=True) == (False, "vision_not_enabled_in_profile")
+    assert adapter.can_dispatch_model("legacy-model", require_vision=True) == (
+        False,
+        "vision_not_enabled_in_profile",
+    )
     with pytest.raises(ProviderUnsupportedFeatureError, match="vision"):
         adapter.create_chat_completion(
             ChatDispatchRequest(
@@ -598,7 +707,10 @@ def test_generic_harness_adapter_rejects_image_messages_when_profile_lacks_visio
                         "role": "user",
                         "content": [
                             {"type": "text", "text": "Describe this image."},
-                            {"type": "image_url", "image_url": {"url": "https://example.invalid/runtime-proof.png"}},
+                            {
+                                "type": "image_url",
+                                "image_url": {"url": "https://example.invalid/runtime-proof.png"},
+                            },
                         ],
                     }
                 ],
@@ -606,7 +718,9 @@ def test_generic_harness_adapter_rejects_image_messages_when_profile_lacks_visio
         )
 
 
-def test_generic_harness_adapter_non_stream_internal_type_error_is_not_retried(tmp_path: Path) -> None:
+def test_generic_harness_adapter_non_stream_internal_type_error_is_not_retried(
+    tmp_path: Path,
+) -> None:
     service = build_service(tmp_path)
     service.upsert_profile(
         HarnessProviderProfile(
@@ -654,7 +768,9 @@ def test_generic_harness_adapter_non_stream_internal_type_error_is_not_retried(t
     assert call_count == 1
 
 
-def test_generic_harness_adapter_stream_internal_type_error_is_not_retried(tmp_path: Path) -> None:
+def test_generic_harness_adapter_stream_internal_type_error_is_not_retried(
+    tmp_path: Path,
+) -> None:
     service = build_service(tmp_path)
     service.upsert_profile(
         HarnessProviderProfile(
@@ -665,7 +781,11 @@ def test_generic_harness_adapter_stream_internal_type_error_is_not_retried(tmp_p
             auth_scheme="none",
             models=["stream-typeerror-model"],
             stream_mapping={"enabled": True},
-            capabilities={"streaming": True, "tool_calling": True, "model_source": "manual"},
+            capabilities={
+                "streaming": True,
+                "tool_calling": True,
+                "model_source": "manual",
+            },
         )
     )
 
@@ -704,7 +824,6 @@ def test_generic_harness_adapter_stream_internal_type_error_is_not_retried(tmp_p
         )
 
     assert call_count == 1
-
 
 
 def test_harness_store_recovers_from_corrupt_file(tmp_path: Path) -> None:

@@ -10,7 +10,6 @@ from pydantic import BaseModel, Field
 from app.knowledge.models import RecordLink
 from app.tasks.models import WorkItemPriority
 
-
 ASSISTANT_PROFILE_STATUSES = ("active", "paused")
 AssistantProfileStatus = Literal["active", "paused"]
 
@@ -32,10 +31,27 @@ DirectActionPolicy = Literal["never", "preview_required", "approval_required", "
 ASSISTANT_ACTION_MODES = ("suggest", "ask", "direct")
 AssistantActionMode = Literal["suggest", "ask", "direct"]
 
-ASSISTANT_ACTION_KINDS = ("draft_message", "send_notification", "create_follow_up", "schedule_calendar", "delegate_follow_up")
-AssistantActionKind = Literal["draft_message", "send_notification", "create_follow_up", "schedule_calendar", "delegate_follow_up"]
+ASSISTANT_ACTION_KINDS = (
+    "draft_message",
+    "send_notification",
+    "create_follow_up",
+    "schedule_calendar",
+    "delegate_follow_up",
+)
+AssistantActionKind = Literal[
+    "draft_message",
+    "send_notification",
+    "create_follow_up",
+    "schedule_calendar",
+    "delegate_follow_up",
+]
 
-ASSISTANT_ACTION_DECISIONS = ("allow", "requires_preview", "requires_approval", "blocked")
+ASSISTANT_ACTION_DECISIONS = (
+    "allow",
+    "requires_preview",
+    "requires_approval",
+    "blocked",
+)
 AssistantActionDecision = Literal["allow", "requires_preview", "requires_approval", "blocked"]
 
 ASSISTANT_OPERATING_MODES = (

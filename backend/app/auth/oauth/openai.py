@@ -62,28 +62,16 @@ class OpenAICodexAuthState(BaseModel):
         if self.auth_mode != "oauth":
             return None
         if self.oauth_mode == "browser_callback":
-            return (
-                "Browser callback is modeled as the desired Codex OAuth mode, but ForgeFrame does not ship the "
-                "callback exchange or token persistence path yet."
-            )
+            return "Browser callback is modeled as the desired Codex OAuth mode, but ForgeFrame does not ship the callback exchange or token persistence path yet."
         if self.oauth_mode == "device_hosted_code":
-            return (
-                "Device/hosted code is documented for Codex, but ForgeFrame does not start that flow or capture the "
-                "resulting token yet."
-            )
-        return (
-            "Manual redirect completion is the documented Codex path here: obtain the token outside ForgeFrame and "
-            "place it into the runtime env before probing."
-        )
+            return "Device/hosted code is documented for Codex, but ForgeFrame does not start that flow or capture the resulting token yet."
+        return "Manual redirect completion is the documented Codex path here: obtain the token outside ForgeFrame and place it into the runtime env before probing."
 
     @property
     def oauth_operator_truth(self) -> str | None:
         if self.auth_mode != "oauth":
             return None
-        return (
-            f"ForgeFrame consumes a pre-issued access token for Codex OAuth mode '{self.oauth_mode}' "
-            f"({self.oauth_mode_label}) and does not initiate or complete that OAuth flow itself."
-        )
+        return f"ForgeFrame consumes a pre-issued access token for Codex OAuth mode '{self.oauth_mode}' ({self.oauth_mode_label}) and does not initiate or complete that OAuth flow itself."
 
     def missing_credential_reason(self, *, provider_label: str = "OpenAI Codex") -> str:
         if self.auth_mode != "oauth":

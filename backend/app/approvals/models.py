@@ -9,7 +9,6 @@ from pydantic import BaseModel, Field
 
 from app.artifacts.models import ArtifactRecord
 
-
 APPROVAL_STATUSES = ("open", "approved", "rejected", "timed_out", "cancelled")
 ApprovalStatus = Literal["open", "approved", "rejected", "timed_out", "cancelled"]
 
@@ -62,7 +61,10 @@ def parse_shared_approval_id(value: str) -> tuple[ApprovalSourceKind, dict[str, 
                 "approval_id": parts[3].strip(),
             }
         if len(parts) == 3 and parts[1].strip() and parts[2].strip():
-            return "execution_run", {"company_id": parts[1].strip(), "approval_id": parts[2].strip()}
+            return "execution_run", {
+                "company_id": parts[1].strip(),
+                "approval_id": parts[2].strip(),
+            }
         raise ValueError("shared_approval_id_invalid")
     raise ValueError("shared_approval_id_invalid")
 

@@ -25,8 +25,8 @@ from app.knowledge.models import (
     KnowledgeSourceConfigField,
     KnowledgeSourceDetail,
     KnowledgeSourceIndexCounts,
-    KnowledgeSourceSyncPosture,
     KnowledgeSourceSummary,
+    KnowledgeSourceSyncPosture,
     MemoryActionResult,
     MemoryDetail,
     MemoryLayer,
@@ -34,15 +34,19 @@ from app.knowledge.models import (
     MemoryRevisionRecord,
     MemorySummary,
     MemoryUsageSummary,
-    RevokeMemory,
     RecordLink,
+    RevokeMemory,
     UpdateContact,
     UpdateKnowledgeSource,
     UpdateMemory,
 )
 from app.storage.conversation_repository import ConversationORM
 from app.storage.execution_repository import RunORM
-from app.storage.knowledge_repository import ContactORM, KnowledgeSourceORM, MemoryEntryORM
+from app.storage.knowledge_repository import (
+    ContactORM,
+    KnowledgeSourceORM,
+    MemoryEntryORM,
+)
 from app.storage.skill_repository import SkillORM, SkillUsageEventORM
 from app.storage.tasking_repository import NotificationORM, TaskORM
 from app.storage.workspace_repository import WorkspaceORM
@@ -200,9 +204,21 @@ class KnowledgeContextAdminService:
                 warnings.append(channel_warning)
 
         if row.primary_email:
-            append_channel(kind="email", label="Primary email", address=row.primary_email, is_primary=True, source="contact profile")
+            append_channel(
+                kind="email",
+                label="Primary email",
+                address=row.primary_email,
+                is_primary=True,
+                source="contact profile",
+            )
         if row.primary_phone:
-            append_channel(kind="phone", label="Primary phone", address=row.primary_phone, is_primary=True, source="contact profile")
+            append_channel(
+                kind="phone",
+                label="Primary phone",
+                address=row.primary_phone,
+                is_primary=True,
+                source="contact profile",
+            )
 
         metadata_channels = metadata.get("channels")
         if isinstance(metadata_channels, list):
@@ -221,12 +237,7 @@ class KnowledgeContextAdminService:
                     continue
                 kind = cls._string_value(item.get("kind")) or cls._string_value(item.get("type")) or "other"
                 label = cls._string_value(item.get("label")) or f"{kind.title()} route"
-                address = (
-                    cls._string_value(item.get("address"))
-                    or cls._string_value(item.get("value"))
-                    or cls._string_value(item.get("target"))
-                    or cls._string_value(item.get("handle"))
-                )
+                address = cls._string_value(item.get("address")) or cls._string_value(item.get("value")) or cls._string_value(item.get("target")) or cls._string_value(item.get("handle"))
                 source = cls._string_value(item.get("source")) or cls._string_value(item.get("provenance"))
                 warning = cls._string_value(item.get("warning"))
                 route_status = cls._string_value(item.get("route_status")) or cls._string_value(item.get("status"))
@@ -243,13 +254,31 @@ class KnowledgeContextAdminService:
 
         legacy_secondary_email = cls._string_value(metadata.get("secondary_email")) or cls._string_value(metadata.get("alternate_email"))
         if legacy_secondary_email:
-            append_channel(kind="email", label="Secondary email", address=legacy_secondary_email, is_primary=False, source="metadata")
+            append_channel(
+                kind="email",
+                label="Secondary email",
+                address=legacy_secondary_email,
+                is_primary=False,
+                source="metadata",
+            )
         legacy_secondary_phone = cls._string_value(metadata.get("secondary_phone")) or cls._string_value(metadata.get("alternate_phone"))
         if legacy_secondary_phone:
-            append_channel(kind="phone", label="Secondary phone", address=legacy_secondary_phone, is_primary=False, source="metadata")
+            append_channel(
+                kind="phone",
+                label="Secondary phone",
+                address=legacy_secondary_phone,
+                is_primary=False,
+                source="metadata",
+            )
         legacy_slack = cls._string_value(metadata.get("slack_handle")) or cls._string_value(metadata.get("slack_channel"))
         if legacy_slack:
-            append_channel(kind="slack", label="Slack", address=legacy_slack, is_primary=False, source="metadata")
+            append_channel(
+                kind="slack",
+                label="Slack",
+                address=legacy_slack,
+                is_primary=False,
+                source="metadata",
+            )
 
         reachable_routes = [channel for channel in channels if channel.route_status == "reachable"]
         if not reachable_routes:
@@ -261,29 +290,11 @@ class KnowledgeContextAdminService:
         metadata = cls._metadata_record(row.metadata_json)
         provenance = cls._metadata_record(metadata.get("provenance"))
         return ContactProvenance(
-            provider=(
-                cls._string_value(provenance.get("provider"))
-                or cls._string_value(provenance.get("system"))
-                or cls._string_value(metadata.get("source_provider"))
-            ),
-            import_reference=(
-                cls._string_value(provenance.get("import_reference"))
-                or cls._string_value(provenance.get("external_id"))
-                or cls._string_value(provenance.get("record_id"))
-            ),
-            imported_at=(
-                cls._parse_datetime_value(provenance.get("imported_at"))
-                or cls._parse_datetime_value(metadata.get("imported_at"))
-            ),
-            last_verified_at=(
-                cls._parse_datetime_value(provenance.get("last_verified_at"))
-                or cls._parse_datetime_value(metadata.get("last_verified_at"))
-            ),
-            note=(
-                cls._string_value(provenance.get("note"))
-                or cls._string_value(provenance.get("summary"))
-                or cls._string_value(metadata.get("source_note"))
-            ),
+            provider=(cls._string_value(provenance.get("provider")) or cls._string_value(provenance.get("system")) or cls._string_value(metadata.get("source_provider"))),
+            import_reference=(cls._string_value(provenance.get("import_reference")) or cls._string_value(provenance.get("external_id")) or cls._string_value(provenance.get("record_id"))),
+            imported_at=(cls._parse_datetime_value(provenance.get("imported_at")) or cls._parse_datetime_value(metadata.get("imported_at"))),
+            last_verified_at=(cls._parse_datetime_value(provenance.get("last_verified_at")) or cls._parse_datetime_value(metadata.get("last_verified_at"))),
+            note=(cls._string_value(provenance.get("note")) or cls._string_value(provenance.get("summary")) or cls._string_value(metadata.get("source_note"))),
         )
 
     @classmethod
@@ -291,33 +302,18 @@ class KnowledgeContextAdminService:
         metadata = cls._metadata_record(row.metadata_json)
         consent = cls._metadata_record(metadata.get("consent"))
         return ContactConsent(
-            status=(
-                cls._string_value(consent.get("status"))
-                or cls._string_value(consent.get("state"))
-                or cls._string_value(metadata.get("consent_status"))
-                or "unknown"
-            ),
+            status=(cls._string_value(consent.get("status")) or cls._string_value(consent.get("state")) or cls._string_value(metadata.get("consent_status")) or "unknown"),
             captured_at=(
-                cls._parse_datetime_value(consent.get("captured_at"))
-                or cls._parse_datetime_value(consent.get("updated_at"))
-                or cls._parse_datetime_value(metadata.get("consent_captured_at"))
+                cls._parse_datetime_value(consent.get("captured_at")) or cls._parse_datetime_value(consent.get("updated_at")) or cls._parse_datetime_value(metadata.get("consent_captured_at"))
             ),
-            note=(
-                cls._string_value(consent.get("note"))
-                or cls._string_value(consent.get("policy_basis"))
-                or cls._string_value(metadata.get("consent_note"))
-            ),
+            note=(cls._string_value(consent.get("note")) or cls._string_value(consent.get("policy_basis")) or cls._string_value(metadata.get("consent_note"))),
         )
 
     @classmethod
     def _contact_visibility_note(cls, row: ContactORM) -> str | None:
         metadata = cls._metadata_record(row.metadata_json)
         visibility = cls._metadata_record(metadata.get("visibility"))
-        return (
-            cls._string_value(visibility.get("note"))
-            or cls._string_value(visibility.get("summary"))
-            or cls._string_value(metadata.get("visibility_note"))
-        )
+        return cls._string_value(visibility.get("note")) or cls._string_value(visibility.get("summary")) or cls._string_value(metadata.get("visibility_note"))
 
     @classmethod
     def _source_scope_label(cls, row: KnowledgeSourceORM) -> str:
@@ -344,10 +340,7 @@ class KnowledgeContextAdminService:
     @classmethod
     def _source_sync_posture(cls, row: KnowledgeSourceORM) -> KnowledgeSourceSyncPosture:
         metadata = cls._metadata_record(row.metadata_json)
-        configured_next_step = (
-            cls._string_value(cls._metadata_record(metadata.get("error_guidance")).get("next_step"))
-            or cls._string_value(metadata.get("sync_next_step"))
-        )
+        configured_next_step = cls._string_value(cls._metadata_record(metadata.get("error_guidance")).get("next_step")) or cls._string_value(metadata.get("sync_next_step"))
         if row.last_error:
             next_step = configured_next_step or "Inspect connector configuration, repair the upstream credential or target, then resync through the bridge runtime."
             return KnowledgeSourceSyncPosture(
@@ -390,11 +383,31 @@ class KnowledgeContextAdminService:
             ),
         ]
         structured_fields = [
-            ("connector_account", "Connector account", cls._string_value(connector.get("account")) or cls._string_value(metadata.get("connector_account"))),
-            ("connector_collection", "Collection / folder", cls._string_value(connector.get("collection")) or cls._string_value(metadata.get("collection"))),
-            ("index_mode", "Index mode", cls._string_value(connector.get("index_mode")) or cls._string_value(metadata.get("index_mode"))),
-            ("recall_class", "Recall class", cls._string_value(boundary.get("recall_class")) or cls._string_value(metadata.get("recall_class"))),
-            ("scope_note", "Scope note", cls._string_value(boundary.get("scope_note")) or cls._string_value(metadata.get("scope_note"))),
+            (
+                "connector_account",
+                "Connector account",
+                cls._string_value(connector.get("account")) or cls._string_value(metadata.get("connector_account")),
+            ),
+            (
+                "connector_collection",
+                "Collection / folder",
+                cls._string_value(connector.get("collection")) or cls._string_value(metadata.get("collection")),
+            ),
+            (
+                "index_mode",
+                "Index mode",
+                cls._string_value(connector.get("index_mode")) or cls._string_value(metadata.get("index_mode")),
+            ),
+            (
+                "recall_class",
+                "Recall class",
+                cls._string_value(boundary.get("recall_class")) or cls._string_value(metadata.get("recall_class")),
+            ),
+            (
+                "scope_note",
+                "Scope note",
+                cls._string_value(boundary.get("scope_note")) or cls._string_value(metadata.get("scope_note")),
+            ),
         ]
         for key, label, value in structured_fields:
             if value:
@@ -405,13 +418,20 @@ class KnowledgeContextAdminService:
     def _source_conversation_ids_for_contact_refs(session: Session, *, instance: InstanceRecord, contact_refs: list[str]) -> list[str]:
         if not contact_refs:
             return []
-        return list(dict.fromkeys(session.execute(
-            select(ConversationORM.id).where(
-                ConversationORM.company_id == instance.company_id,
-                ConversationORM.instance_id == instance.instance_id,
-                ConversationORM.contact_ref.in_(contact_refs),
-            ),
-        ).scalars().all()))
+        return list(
+            dict.fromkeys(
+                session
+                .execute(
+                    select(ConversationORM.id).where(
+                        ConversationORM.company_id == instance.company_id,
+                        ConversationORM.instance_id == instance.instance_id,
+                        ConversationORM.contact_ref.in_(contact_refs),
+                    ),
+                )
+                .scalars()
+                .all()
+            )
+        )
 
     @staticmethod
     def _skill_matches_source(skill: SkillORM, source_id: str) -> bool:
@@ -435,7 +455,9 @@ class KnowledgeContextAdminService:
         channels, route_warnings = self._contact_channels(row)
         conversation_count = int(
             session.scalar(
-                select(func.count()).select_from(ConversationORM).where(
+                select(func.count())
+                .select_from(ConversationORM)
+                .where(
                     ConversationORM.company_id == row.company_id,
                     ConversationORM.instance_id == row.instance_id,
                     ConversationORM.contact_ref == row.contact_ref,
@@ -452,7 +474,9 @@ class KnowledgeContextAdminService:
         )
         memory_count = int(
             session.scalar(
-                select(func.count()).select_from(MemoryEntryORM).where(
+                select(func.count())
+                .select_from(MemoryEntryORM)
+                .where(
                     MemoryEntryORM.company_id == row.company_id,
                     MemoryEntryORM.contact_id == row.id,
                 ),
@@ -488,7 +512,9 @@ class KnowledgeContextAdminService:
     def _source_index_counts(self, session: Session, row: KnowledgeSourceORM) -> KnowledgeSourceIndexCounts:
         contact_count = int(
             session.scalar(
-                select(func.count()).select_from(ContactORM).where(
+                select(func.count())
+                .select_from(ContactORM)
+                .where(
                     ContactORM.company_id == row.company_id,
                     ContactORM.source_id == row.id,
                 ),
@@ -497,44 +523,62 @@ class KnowledgeContextAdminService:
         )
         memory_count = int(
             session.scalar(
-                select(func.count()).select_from(MemoryEntryORM).where(
+                select(func.count())
+                .select_from(MemoryEntryORM)
+                .where(
                     MemoryEntryORM.company_id == row.company_id,
                     MemoryEntryORM.source_id == row.id,
                 ),
             )
             or 0,
         )
-        contact_refs = session.execute(
-            select(ContactORM.contact_ref).where(
-                ContactORM.company_id == row.company_id,
-                ContactORM.source_id == row.id,
-            ),
-        ).scalars().all()
-        conversation_ids = set(session.execute(
-            select(MemoryEntryORM.conversation_id).where(
-                MemoryEntryORM.company_id == row.company_id,
-                MemoryEntryORM.source_id == row.id,
-                MemoryEntryORM.conversation_id.is_not(None),
-            ),
-        ).scalars().all())
+        contact_refs = (
+            session
+            .execute(
+                select(ContactORM.contact_ref).where(
+                    ContactORM.company_id == row.company_id,
+                    ContactORM.source_id == row.id,
+                ),
+            )
+            .scalars()
+            .all()
+        )
+        conversation_ids = set(
+            session
+            .execute(
+                select(MemoryEntryORM.conversation_id).where(
+                    MemoryEntryORM.company_id == row.company_id,
+                    MemoryEntryORM.source_id == row.id,
+                    MemoryEntryORM.conversation_id.is_not(None),
+                ),
+            )
+            .scalars()
+            .all()
+        )
         if contact_refs:
             conversation_ids.update(
-                session.execute(
+                session
+                .execute(
                     select(ConversationORM.id).where(
                         ConversationORM.company_id == row.company_id,
                         ConversationORM.instance_id == row.instance_id,
                         ConversationORM.contact_ref.in_(contact_refs),
                     ),
-                ).scalars().all(),
+                )
+                .scalars()
+                .all(),
             )
         skills = [
             skill
-            for skill in session.execute(
+            for skill in session
+            .execute(
                 select(SkillORM).where(
                     SkillORM.company_id == row.company_id,
                     SkillORM.instance_id == row.instance_id,
                 ),
-            ).scalars().all()
+            )
+            .scalars()
+            .all()
             if self._skill_matches_source(skill, row.id)
         ]
         return KnowledgeSourceIndexCounts(
@@ -589,11 +633,7 @@ class KnowledgeContextAdminService:
         source_trust_class: str,
     ) -> MemoryLayer:
         memory_block = cls._metadata_record(metadata.get("memory"))
-        tier = (
-            cls._string_value(metadata.get("memory_tier"))
-            or cls._string_value(memory_block.get("tier"))
-            or cls._string_value(metadata.get("memory_layer"))
-        )
+        tier = cls._string_value(metadata.get("memory_tier")) or cls._string_value(memory_block.get("tier")) or cls._string_value(metadata.get("memory_layer"))
         if tier:
             normalized = tier.lower().replace("-", "_").strip()
             if "boot" in normalized:
@@ -623,13 +663,12 @@ class KnowledgeContextAdminService:
     def _memory_review(cls, row: MemoryEntryORM) -> MemoryReviewPosture:
         metadata = cls._metadata_record(row.metadata_json)
         review = cls._metadata_record(metadata.get("review"))
-        review_at = (
-            cls._parse_datetime_value(review.get("review_at"))
-            or cls._parse_datetime_value(review.get("at"))
-            or cls._parse_datetime_value(metadata.get("review_at"))
-        )
+        review_at = cls._parse_datetime_value(review.get("review_at")) or cls._parse_datetime_value(review.get("at")) or cls._parse_datetime_value(metadata.get("review_at"))
         note = cls._string_value(review.get("note")) or cls._string_value(metadata.get("review_note"))
-        requires_review = row.source_trust_class in {"runtime_inferred", "external_unverified"}
+        requires_review = row.source_trust_class in {
+            "runtime_inferred",
+            "external_unverified",
+        }
         now = cls._now()
         if review_at is not None and review_at <= now:
             return MemoryReviewPosture(
@@ -685,12 +724,19 @@ class KnowledgeContextAdminService:
         return False
 
     def _memory_usage_events(self, session: Session, row: MemoryEntryORM) -> list[SkillUsageEventORM]:
-        usage_rows = session.execute(
-            select(SkillUsageEventORM).where(
-                SkillUsageEventORM.company_id == row.company_id,
-                SkillUsageEventORM.instance_id == row.instance_id,
-            ).order_by(SkillUsageEventORM.created_at.desc())
-        ).scalars().all()
+        usage_rows = (
+            session
+            .execute(
+                select(SkillUsageEventORM)
+                .where(
+                    SkillUsageEventORM.company_id == row.company_id,
+                    SkillUsageEventORM.instance_id == row.instance_id,
+                )
+                .order_by(SkillUsageEventORM.created_at.desc())
+            )
+            .scalars()
+            .all()
+        )
         return [item for item in usage_rows if self._usage_event_matches_memory(row, item)]
 
     @staticmethod
@@ -700,21 +746,28 @@ class KnowledgeContextAdminService:
             source_row = None
         return source_row
 
-    def _memory_skill_links(self, session: Session, row: MemoryEntryORM, usage_rows: list[SkillUsageEventORM]) -> list[RecordLink]:
+    def _memory_skill_links(
+        self,
+        session: Session,
+        row: MemoryEntryORM,
+        usage_rows: list[SkillUsageEventORM],
+    ) -> list[RecordLink]:
         skill_rows = [
             skill
-            for skill in session.execute(
-                select(SkillORM).where(
+            for skill in session
+            .execute(
+                select(SkillORM)
+                .where(
                     SkillORM.company_id == row.company_id,
                     SkillORM.instance_id == row.instance_id,
-                ).order_by(SkillORM.updated_at.desc())
-            ).scalars().all()
+                )
+                .order_by(SkillORM.updated_at.desc())
+            )
+            .scalars()
+            .all()
             if self._skill_matches_memory(skill, row.id) or any(item.skill_id == skill.id for item in usage_rows)
         ]
-        return [
-            self._record_link(record_id=item.id, label=item.display_name, status=item.status)
-            for item in skill_rows[:10]
-        ]
+        return [self._record_link(record_id=item.id, label=item.display_name, status=item.status) for item in skill_rows[:10]]
 
     def _memory_conversation_links(
         self,
@@ -725,31 +778,47 @@ class KnowledgeContextAdminService:
     ) -> list[RecordLink]:
         conversation_ids = {
             item_id
-            for item_id in [row.conversation_id, *(item.conversation_id for item in usage_rows)]
+            for item_id in [
+                row.conversation_id,
+                *(item.conversation_id for item in usage_rows),
+            ]
             if item_id
         }
         if not conversation_ids:
             return []
-        rows = session.execute(
-            select(ConversationORM).where(
-                ConversationORM.company_id == row.company_id,
-                ConversationORM.instance_id == row.instance_id,
-                ConversationORM.id.in_(conversation_ids),
-            ).order_by(ConversationORM.updated_at.desc())
-        ).scalars().all()
+        rows = (
+            session
+            .execute(
+                select(ConversationORM)
+                .where(
+                    ConversationORM.company_id == row.company_id,
+                    ConversationORM.instance_id == row.instance_id,
+                    ConversationORM.id.in_(conversation_ids),
+                )
+                .order_by(ConversationORM.updated_at.desc())
+            )
+            .scalars()
+            .all()
+        )
         rows_by_id = {item.id: item for item in rows}
-        links = [
-            self._record_link(record_id=item.id, label=item.subject, status=item.status)
-            for item in rows
-        ]
+        links = [self._record_link(record_id=item.id, label=item.subject, status=item.status) for item in rows]
         missing_ids = [conversation_id for conversation_id in conversation_ids if conversation_id not in rows_by_id]
         links.extend(
-            self._record_link(record_id=conversation_id, label=f"Conversation {conversation_id}", status="not-resolved")
+            self._record_link(
+                record_id=conversation_id,
+                label=f"Conversation {conversation_id}",
+                status="not-resolved",
+            )
             for conversation_id in sorted(missing_ids)
         )
         return links[:10]
 
-    def _memory_run_links(self, session: Session, row: MemoryEntryORM, usage_rows: list[SkillUsageEventORM]) -> list[RecordLink]:
+    def _memory_run_links(
+        self,
+        session: Session,
+        row: MemoryEntryORM,
+        usage_rows: list[SkillUsageEventORM],
+    ) -> list[RecordLink]:
         conversation_run_ids = []
         if row.conversation_id:
             conversation_row = session.get(ConversationORM, row.conversation_id)
@@ -757,27 +826,31 @@ class KnowledgeContextAdminService:
                 conversation_run_ids.append(conversation_row.run_id)
         run_ids = {
             item_id
-            for item_id in [*conversation_run_ids, *(item.run_id for item in usage_rows)]
+            for item_id in [
+                *conversation_run_ids,
+                *(item.run_id for item in usage_rows),
+            ]
             if item_id
         }
         if not run_ids:
             return []
-        rows = session.execute(
-            select(RunORM).where(
-                RunORM.company_id == row.company_id,
-                RunORM.id.in_(run_ids),
-            ).order_by(RunORM.updated_at.desc())
-        ).scalars().all()
-        rows_by_id = {item.id: item for item in rows}
-        links = [
-            self._record_link(record_id=item.id, label=f"Run {item.id}", status=item.state)
-            for item in rows
-        ]
-        missing_ids = [run_id for run_id in run_ids if run_id not in rows_by_id]
-        links.extend(
-            self._record_link(record_id=run_id, label=f"Run {run_id}", status="not-resolved")
-            for run_id in sorted(missing_ids)
+        rows = (
+            session
+            .execute(
+                select(RunORM)
+                .where(
+                    RunORM.company_id == row.company_id,
+                    RunORM.id.in_(run_ids),
+                )
+                .order_by(RunORM.updated_at.desc())
+            )
+            .scalars()
+            .all()
         )
+        rows_by_id = {item.id: item for item in rows}
+        links = [self._record_link(record_id=item.id, label=f"Run {item.id}", status=item.state) for item in rows]
+        missing_ids = [run_id for run_id in run_ids if run_id not in rows_by_id]
+        links.extend(self._record_link(record_id=run_id, label=f"Run {run_id}", status="not-resolved") for run_id in sorted(missing_ids))
         return links[:10]
 
     def _memory_usage_summary(
@@ -791,9 +864,7 @@ class KnowledgeContextAdminService:
         run_links: list[RecordLink] | None = None,
     ) -> MemoryUsageSummary:
         resolved_skill_links = skill_links if skill_links is not None else self._memory_skill_links(session, row, usage_rows)
-        resolved_conversation_links = (
-            conversation_links if conversation_links is not None else self._memory_conversation_links(session, row=row, usage_rows=usage_rows)
-        )
+        resolved_conversation_links = conversation_links if conversation_links is not None else self._memory_conversation_links(session, row=row, usage_rows=usage_rows)
         resolved_run_links = run_links if run_links is not None else self._memory_run_links(session, row, usage_rows)
         return MemoryUsageSummary(
             runs=len({item.record_id for item in resolved_run_links}),
@@ -846,13 +917,18 @@ class KnowledgeContextAdminService:
             cursor = parent
         frontier = [item_id for item_id in related]
         while frontier:
-            descendants = session.execute(
-                select(MemoryEntryORM).where(
-                    MemoryEntryORM.company_id == row.company_id,
-                    MemoryEntryORM.instance_id == row.instance_id,
-                    MemoryEntryORM.supersedes_memory_id.in_(frontier),
+            descendants = (
+                session
+                .execute(
+                    select(MemoryEntryORM).where(
+                        MemoryEntryORM.company_id == row.company_id,
+                        MemoryEntryORM.instance_id == row.instance_id,
+                        MemoryEntryORM.supersedes_memory_id.in_(frontier),
+                    )
                 )
-            ).scalars().all()
+                .scalars()
+                .all()
+            )
             frontier = []
             for item in descendants:
                 if item.id in related:
@@ -870,17 +946,20 @@ class KnowledgeContextAdminService:
                 created_at=item.created_at,
                 updated_at=item.updated_at,
             )
-            for item in sorted(related.values(), key=lambda candidate: (candidate.created_at, candidate.updated_at, candidate.id))
+            for item in sorted(
+                related.values(),
+                key=lambda candidate: (
+                    candidate.created_at,
+                    candidate.updated_at,
+                    candidate.id,
+                ),
+            )
         ]
 
     @classmethod
     def _memory_review_at_from_metadata(cls, metadata: dict[str, object]) -> datetime | None:
         review = cls._metadata_record(metadata.get("review"))
-        return (
-            cls._parse_datetime_value(review.get("review_at"))
-            or cls._parse_datetime_value(review.get("at"))
-            or cls._parse_datetime_value(metadata.get("review_at"))
-        )
+        return cls._parse_datetime_value(review.get("review_at")) or cls._parse_datetime_value(review.get("at")) or cls._parse_datetime_value(metadata.get("review_at"))
 
     @classmethod
     def _validate_memory_governance(
@@ -907,11 +986,19 @@ class KnowledgeContextAdminService:
         )
         if visibility_scope == "restricted" and sensitivity == "normal":
             raise ValueError("Restricted memory must use sensitive or restricted sensitivity.")
-        if memory_layer == "working" and not any([conversation_id, task_id, notification_id, workspace_id]):
+        if memory_layer == "working" and not any([
+            conversation_id,
+            task_id,
+            notification_id,
+            workspace_id,
+        ]):
             raise ValueError("Working-context memory must stay linked to a conversation, task, notification, or workspace.")
         if memory_layer == "boot" and not learned_from_event_id:
             raise ValueError("Boot memory candidates must stay linked to a learning event.")
-        if memory_layer == "durable" and source_trust_class in {"runtime_inferred", "external_unverified"}:
+        if memory_layer == "durable" and source_trust_class in {
+            "runtime_inferred",
+            "external_unverified",
+        }:
             review_at = cls._memory_review_at_from_metadata(metadata)
             if review_at is None:
                 raise ValueError("Durable memory with runtime-inferred or external-unverified trust must include a scheduled review date.")
@@ -970,38 +1057,55 @@ class KnowledgeContextAdminService:
         )
 
     def _sanitize_contact(self, summary: ContactSummary, *, actor: AuthenticatedAdmin) -> ContactSummary:
-        if self._can_view_sensitive(actor) or summary.visibility_scope not in {"personal", "restricted"}:
+        if self._can_view_sensitive(actor) or summary.visibility_scope not in {
+            "personal",
+            "restricted",
+        }:
             return summary
         redacted_channels = [
-            channel.model_copy(update={
-                "address": "[redacted]" if channel.address and channel.address != "[missing address]" else channel.address,
-            })
+            channel.model_copy(
+                update={
+                    "address": "[redacted]" if channel.address and channel.address != "[missing address]" else channel.address,
+                }
+            )
             for channel in summary.channels
         ]
-        return summary.model_copy(update={
-            "primary_email": None,
-            "primary_phone": None,
-            "channels": redacted_channels,
-            "metadata": {"redacted": True},
-        })
+        return summary.model_copy(
+            update={
+                "primary_email": None,
+                "primary_phone": None,
+                "channels": redacted_channels,
+                "metadata": {"redacted": True},
+            }
+        )
 
     def _sanitize_source(self, summary: KnowledgeSourceSummary, *, actor: AuthenticatedAdmin) -> KnowledgeSourceSummary:
-        if self._can_view_sensitive(actor) or summary.visibility_scope not in {"personal", "restricted"}:
+        if self._can_view_sensitive(actor) or summary.visibility_scope not in {
+            "personal",
+            "restricted",
+        }:
             return summary
-        return summary.model_copy(update={
-            "connection_target": "[redacted]",
-            "last_error": None,
-            "metadata": {"redacted": True},
-        })
+        return summary.model_copy(
+            update={
+                "connection_target": "[redacted]",
+                "last_error": None,
+                "metadata": {"redacted": True},
+            }
+        )
 
     def _sanitize_memory(self, summary: MemorySummary, *, actor: AuthenticatedAdmin) -> MemorySummary:
-        sensitive = summary.visibility_scope in {"personal", "restricted"} or summary.sensitivity in {"sensitive", "restricted"}
+        sensitive = summary.visibility_scope in {
+            "personal",
+            "restricted",
+        } or summary.sensitivity in {"sensitive", "restricted"}
         if self._can_view_sensitive(actor) or not sensitive:
             return summary
-        return summary.model_copy(update={
-            "body": "[redacted]",
-            "metadata": {"redacted": True},
-        })
+        return summary.model_copy(
+            update={
+                "body": "[redacted]",
+                "metadata": {"redacted": True},
+            }
+        )
 
     @staticmethod
     def _record_link(record_id: str, label: str, status: str | None = None) -> RecordLink:
@@ -1061,40 +1165,55 @@ class KnowledgeContextAdminService:
             provenance = self._contact_provenance(row)
             consent = self._contact_consent(row)
             visibility_note = self._contact_visibility_note(row)
-            conversation_rows = session.execute(
-                select(ConversationORM).where(
-                    ConversationORM.company_id == instance.company_id,
-                    ConversationORM.instance_id == instance.instance_id,
-                    ConversationORM.contact_ref == row.contact_ref,
-                ).order_by(ConversationORM.updated_at.desc()).limit(10),
-            ).scalars().all()
-            recent_conversations = [
-                self._record_link(record_id=item.id, label=item.subject, status=item.status)
-                for item in conversation_rows
-            ]
-            recent_memory_rows = session.execute(
-                select(MemoryEntryORM).where(
-                    MemoryEntryORM.company_id == instance.company_id,
-                    MemoryEntryORM.contact_id == contact_id,
-                ).order_by(MemoryEntryORM.updated_at.desc()).limit(10),
-            ).scalars().all()
-            recent_memory = [
-                self._sanitize_memory(self._memory_summary(session, item), actor=actor)
-                for item in recent_memory_rows
-            ]
+            conversation_rows = (
+                session
+                .execute(
+                    select(ConversationORM)
+                    .where(
+                        ConversationORM.company_id == instance.company_id,
+                        ConversationORM.instance_id == instance.instance_id,
+                        ConversationORM.contact_ref == row.contact_ref,
+                    )
+                    .order_by(ConversationORM.updated_at.desc())
+                    .limit(10),
+                )
+                .scalars()
+                .all()
+            )
+            recent_conversations = [self._record_link(record_id=item.id, label=item.subject, status=item.status) for item in conversation_rows]
+            recent_memory_rows = (
+                session
+                .execute(
+                    select(MemoryEntryORM)
+                    .where(
+                        MemoryEntryORM.company_id == instance.company_id,
+                        MemoryEntryORM.contact_id == contact_id,
+                    )
+                    .order_by(MemoryEntryORM.updated_at.desc())
+                    .limit(10),
+                )
+                .scalars()
+                .all()
+            )
+            recent_memory = [self._sanitize_memory(self._memory_summary(session, item), actor=actor) for item in recent_memory_rows]
             task_ids = [item.task_id for item in recent_memory_rows if item.task_id]
             task_rows = []
             if task_ids:
-                task_rows = session.execute(
-                    select(TaskORM).where(
-                        TaskORM.company_id == instance.company_id,
-                        TaskORM.id.in_(task_ids),
-                    ).order_by(TaskORM.updated_at.desc()).limit(10),
-                ).scalars().all()
-            recent_tasks = [
-                self._record_link(record_id=item.id, label=item.title, status=item.status)
-                for item in task_rows
-            ]
+                task_rows = (
+                    session
+                    .execute(
+                        select(TaskORM)
+                        .where(
+                            TaskORM.company_id == instance.company_id,
+                            TaskORM.id.in_(task_ids),
+                        )
+                        .order_by(TaskORM.updated_at.desc())
+                        .limit(10),
+                    )
+                    .scalars()
+                    .all()
+                )
+            recent_tasks = [self._record_link(record_id=item.id, label=item.title, status=item.status) for item in task_rows]
             conversation_ids = [item.id for item in conversation_rows]
             notification_rows = []
             if conversation_ids or task_ids:
@@ -1106,14 +1225,19 @@ class KnowledgeContextAdminService:
                     clauses.append(NotificationORM.task_id.in_(task_ids))
                 if clauses:
                     notification_stmt = notification_stmt.where(or_(*clauses))
-                notification_rows = session.execute(
-                    notification_stmt.order_by(NotificationORM.updated_at.desc()).limit(10),
-                ).scalars().all()
-            recent_notifications = [
-                self._record_link(record_id=item.id, label=item.title, status=item.delivery_status)
-                for item in notification_rows
-            ]
-            if not self._can_view_sensitive(actor) and summary.visibility_scope in {"personal", "restricted"}:
+                notification_rows = (
+                    session
+                    .execute(
+                        notification_stmt.order_by(NotificationORM.updated_at.desc()).limit(10),
+                    )
+                    .scalars()
+                    .all()
+                )
+            recent_notifications = [self._record_link(record_id=item.id, label=item.title, status=item.delivery_status) for item in notification_rows]
+            if not self._can_view_sensitive(actor) and summary.visibility_scope in {
+                "personal",
+                "restricted",
+            }:
                 provenance = provenance.model_copy(update={"import_reference": None, "note": None})
                 consent = consent.model_copy(update={"note": None})
                 visibility_note = None
@@ -1138,7 +1262,10 @@ class KnowledgeContextAdminService:
                 raise ValueError(f"Contact '{contact_id}' already exists.")
             contact_ref = (payload.contact_ref or f"contact://{instance.instance_id}/{contact_id}").strip()
             existing_ref = session.execute(
-                select(ContactORM).where(ContactORM.company_id == instance.company_id, ContactORM.contact_ref == contact_ref),
+                select(ContactORM).where(
+                    ContactORM.company_id == instance.company_id,
+                    ContactORM.contact_ref == contact_ref,
+                ),
             ).scalar_one_or_none()
             if existing_ref is not None:
                 raise ValueError(f"Contact ref '{contact_ref}' already exists.")
@@ -1161,13 +1288,17 @@ class KnowledgeContextAdminService:
                     updated_at=self._now(),
                 ),
             )
-        return self.get_contact(instance=instance, actor=AuthenticatedAdmin(
-            session_id="system",
-            user_id="system",
-            username="system",
-            display_name="system",
-            role="admin",
-        ), contact_id=contact_id)
+        return self.get_contact(
+            instance=instance,
+            actor=AuthenticatedAdmin(
+                session_id="system",
+                user_id="system",
+                username="system",
+                display_name="system",
+                role="admin",
+            ),
+            contact_id=contact_id,
+        )
 
     def update_contact(self, *, instance: InstanceRecord, contact_id: str, payload: UpdateContact) -> ContactDetail:
         with self._session_factory() as session, session.begin():
@@ -1211,13 +1342,17 @@ class KnowledgeContextAdminService:
             if "metadata" in fields_set:
                 row.metadata_json = dict(payload.metadata or {})
             row.updated_at = self._now()
-        return self.get_contact(instance=instance, actor=AuthenticatedAdmin(
-            session_id="system",
-            user_id="system",
-            username="system",
-            display_name="system",
-            role="admin",
-        ), contact_id=contact_id)
+        return self.get_contact(
+            instance=instance,
+            actor=AuthenticatedAdmin(
+                session_id="system",
+                user_id="system",
+                username="system",
+                display_name="system",
+                role="admin",
+            ),
+            contact_id=contact_id,
+        )
 
     def list_sources(
         self,
@@ -1246,63 +1381,88 @@ class KnowledgeContextAdminService:
             summary = self._sanitize_source(self._source_summary(session, row), actor=actor)
             contacts = [
                 self._sanitize_contact(self._contact_summary(session, item), actor=actor)
-                for item in session.execute(
-                    select(ContactORM).where(
+                for item in session
+                .execute(
+                    select(ContactORM)
+                    .where(
                         ContactORM.company_id == instance.company_id,
                         ContactORM.source_id == source_id,
-                    ).order_by(ContactORM.updated_at.desc()).limit(10),
-                ).scalars().all()
+                    )
+                    .order_by(ContactORM.updated_at.desc())
+                    .limit(10),
+                )
+                .scalars()
+                .all()
             ]
             memory_entries = [
                 self._sanitize_memory(self._memory_summary(session, item), actor=actor)
-                for item in session.execute(
-                    select(MemoryEntryORM).where(
+                for item in session
+                .execute(
+                    select(MemoryEntryORM)
+                    .where(
                         MemoryEntryORM.company_id == instance.company_id,
                         MemoryEntryORM.source_id == source_id,
-                    ).order_by(MemoryEntryORM.updated_at.desc()).limit(10),
-                ).scalars().all()
+                    )
+                    .order_by(MemoryEntryORM.updated_at.desc())
+                    .limit(10),
+                )
+                .scalars()
+                .all()
             ]
-            contact_refs = [item.contact_ref for item in session.execute(
-                select(ContactORM).where(
-                    ContactORM.company_id == instance.company_id,
-                    ContactORM.source_id == source_id,
-                ),
-            ).scalars().all()]
+            contact_refs = [
+                item.contact_ref
+                for item in session
+                .execute(
+                    select(ContactORM).where(
+                        ContactORM.company_id == instance.company_id,
+                        ContactORM.source_id == source_id,
+                    ),
+                )
+                .scalars()
+                .all()
+            ]
             conversation_ids = set(self._source_conversation_ids_for_contact_refs(session, instance=instance, contact_refs=contact_refs))
             conversation_ids.update(item.conversation_id for item in memory_entries if item.conversation_id)
             conversation_rows = []
             if conversation_ids:
-                conversation_rows = session.execute(
-                    select(ConversationORM).where(
-                        ConversationORM.company_id == instance.company_id,
-                        ConversationORM.instance_id == instance.instance_id,
-                        ConversationORM.id.in_(conversation_ids),
-                    ).order_by(ConversationORM.updated_at.desc()).limit(10),
-                ).scalars().all()
-            linked_conversations = [
-                self._record_link(record_id=item.id, label=item.subject, status=item.status)
-                for item in conversation_rows
-            ]
+                conversation_rows = (
+                    session
+                    .execute(
+                        select(ConversationORM)
+                        .where(
+                            ConversationORM.company_id == instance.company_id,
+                            ConversationORM.instance_id == instance.instance_id,
+                            ConversationORM.id.in_(conversation_ids),
+                        )
+                        .order_by(ConversationORM.updated_at.desc())
+                        .limit(10),
+                    )
+                    .scalars()
+                    .all()
+                )
+            linked_conversations = [self._record_link(record_id=item.id, label=item.subject, status=item.status) for item in conversation_rows]
             skill_rows = [
                 skill
-                for skill in session.execute(
-                    select(SkillORM).where(
+                for skill in session
+                .execute(
+                    select(SkillORM)
+                    .where(
                         SkillORM.company_id == instance.company_id,
                         SkillORM.instance_id == instance.instance_id,
-                    ).order_by(SkillORM.updated_at.desc()),
-                ).scalars().all()
+                    )
+                    .order_by(SkillORM.updated_at.desc()),
+                )
+                .scalars()
+                .all()
                 if self._skill_matches_source(skill, source_id)
             ][:10]
-            linked_skills = [
-                self._record_link(record_id=item.id, label=item.display_name, status=item.status)
-                for item in skill_rows
-            ]
+            linked_skills = [self._record_link(record_id=item.id, label=item.display_name, status=item.status) for item in skill_rows]
             connector_fields = self._source_connector_fields(
                 row,
                 redacted=not self._can_view_sensitive(actor) and summary.visibility_scope in {"personal", "restricted"},
             )
             recall_vs_memory_note = (
-                "Source recall stays connector-backed and can drift after the next sync. Durable Memory is the governed, operator-correctable layer for facts that must outlive connector state."
+                "Source recall stays connector-backed and can drift after the next sync. Durable Memory is the governed, operator-correctable layer for facts that must outlive connector state."  # noqa: E501
             )
             return KnowledgeSourceDetail(
                 **summary.model_dump(),
@@ -1337,15 +1497,25 @@ class KnowledgeContextAdminService:
                     updated_at=self._now(),
                 ),
             )
-        return self.get_source(instance=instance, actor=AuthenticatedAdmin(
-            session_id="system",
-            user_id="system",
-            username="system",
-            display_name="system",
-            role="admin",
-        ), source_id=source_id)
+        return self.get_source(
+            instance=instance,
+            actor=AuthenticatedAdmin(
+                session_id="system",
+                user_id="system",
+                username="system",
+                display_name="system",
+                role="admin",
+            ),
+            source_id=source_id,
+        )
 
-    def update_source(self, *, instance: InstanceRecord, source_id: str, payload: UpdateKnowledgeSource) -> KnowledgeSourceDetail:
+    def update_source(
+        self,
+        *,
+        instance: InstanceRecord,
+        source_id: str,
+        payload: UpdateKnowledgeSource,
+    ) -> KnowledgeSourceDetail:
         with self._session_factory() as session, session.begin():
             row = self._load_source(session, instance=instance, source_id=source_id)
             fields_set = payload.model_fields_set
@@ -1372,13 +1542,17 @@ class KnowledgeContextAdminService:
             if "metadata" in fields_set:
                 row.metadata_json = dict(payload.metadata or {})
             row.updated_at = self._now()
-        return self.get_source(instance=instance, actor=AuthenticatedAdmin(
-            session_id="system",
-            user_id="system",
-            username="system",
-            display_name="system",
-            role="admin",
-        ), source_id=source_id)
+        return self.get_source(
+            instance=instance,
+            actor=AuthenticatedAdmin(
+                session_id="system",
+                user_id="system",
+                username="system",
+                display_name="system",
+                role="admin",
+            ),
+            source_id=source_id,
+        )
 
     def list_memory(
         self,
@@ -1407,11 +1581,25 @@ class KnowledgeContextAdminService:
             summary = self._sanitize_memory(self._memory_summary(session, row), actor=actor)
             source_row = self._source_row_for_memory(session, row)
             source = self._sanitize_source(self._source_summary(session, source_row), actor=actor) if source_row is not None else None
-            contact = self._sanitize_contact(self._contact_summary(session, self._load_contact(session, instance=instance, contact_id=row.contact_id)), actor=actor) if row.contact_id else None
+            contact = (
+                self._sanitize_contact(
+                    self._contact_summary(
+                        session,
+                        self._load_contact(session, instance=instance, contact_id=row.contact_id),
+                    ),
+                    actor=actor,
+                )
+                if row.contact_id
+                else None
+            )
             conversation = None
             if row.conversation_id:
                 conversation_row = self._load_conversation(session, instance=instance, conversation_id=row.conversation_id)
-                conversation = self._record_link(conversation_row.id, conversation_row.subject, conversation_row.status)
+                conversation = self._record_link(
+                    conversation_row.id,
+                    conversation_row.subject,
+                    conversation_row.status,
+                )
             task = None
             if row.task_id:
                 task_row = self._load_task(session, instance=instance, task_id=row.task_id)
@@ -1419,7 +1607,11 @@ class KnowledgeContextAdminService:
             notification = None
             if row.notification_id:
                 notification_row = self._load_notification(session, instance=instance, notification_id=row.notification_id)
-                notification = self._record_link(notification_row.id, notification_row.title, notification_row.delivery_status)
+                notification = self._record_link(
+                    notification_row.id,
+                    notification_row.title,
+                    notification_row.delivery_status,
+                )
             workspace = None
             if row.workspace_id:
                 workspace_row = self._load_workspace(session, instance=instance, workspace_id=row.workspace_id)
@@ -1506,13 +1698,17 @@ class KnowledgeContextAdminService:
                     updated_at=self._now(),
                 ),
             )
-        return self.get_memory(instance=instance, actor=AuthenticatedAdmin(
-            session_id="system",
-            user_id="system",
-            username="system",
-            display_name="system",
-            role="admin",
-        ), memory_id=memory_id)
+        return self.get_memory(
+            instance=instance,
+            actor=AuthenticatedAdmin(
+                session_id="system",
+                user_id="system",
+                username="system",
+                display_name="system",
+                role="admin",
+            ),
+            memory_id=memory_id,
+        )
 
     def update_memory(self, *, instance: InstanceRecord, memory_id: str, payload: UpdateMemory) -> MemoryDetail:
         if payload.expires_at is not None and payload.expires_at <= self._now():
@@ -1590,13 +1786,17 @@ class KnowledgeContextAdminService:
             if "metadata" in fields_set:
                 row.metadata_json = metadata
             row.updated_at = self._now()
-        return self.get_memory(instance=instance, actor=AuthenticatedAdmin(
-            session_id="system",
-            user_id="system",
-            username="system",
-            display_name="system",
-            role="admin",
-        ), memory_id=memory_id)
+        return self.get_memory(
+            instance=instance,
+            actor=AuthenticatedAdmin(
+                session_id="system",
+                user_id="system",
+                username="system",
+                display_name="system",
+                role="admin",
+            ),
+            memory_id=memory_id,
+        )
 
     def correct_memory(self, *, instance: InstanceRecord, memory_id: str, payload: CorrectMemory) -> MemoryActionResult:
         if payload.expires_at is not None and payload.expires_at <= self._now():
@@ -1663,13 +1863,17 @@ class KnowledgeContextAdminService:
                     updated_at=now,
                 ),
             )
-        memory = self.get_memory(instance=instance, actor=AuthenticatedAdmin(
-            session_id="system",
-            user_id="system",
-            username="system",
-            display_name="system",
-            role="admin",
-        ), memory_id=corrected_memory_id)
+        memory = self.get_memory(
+            instance=instance,
+            actor=AuthenticatedAdmin(
+                session_id="system",
+                user_id="system",
+                username="system",
+                display_name="system",
+                role="admin",
+            ),
+            memory_id=corrected_memory_id,
+        )
         return MemoryActionResult(memory=memory, action="correct")
 
     def delete_memory(self, *, instance: InstanceRecord, memory_id: str, payload: DeleteMemory) -> MemoryActionResult:
@@ -1682,13 +1886,17 @@ class KnowledgeContextAdminService:
             if payload.deletion_note:
                 row.correction_note = payload.deletion_note
             row.updated_at = now
-        memory = self.get_memory(instance=instance, actor=AuthenticatedAdmin(
-            session_id="system",
-            user_id="system",
-            username="system",
-            display_name="system",
-            role="admin",
-        ), memory_id=memory_id)
+        memory = self.get_memory(
+            instance=instance,
+            actor=AuthenticatedAdmin(
+                session_id="system",
+                user_id="system",
+                username="system",
+                display_name="system",
+                role="admin",
+            ),
+            memory_id=memory_id,
+        )
         return MemoryActionResult(memory=memory, action="delete")
 
     def revoke_memory(self, *, instance: InstanceRecord, memory_id: str, payload: RevokeMemory) -> MemoryActionResult:
@@ -1700,11 +1908,15 @@ class KnowledgeContextAdminService:
             row.correction_note = payload.revocation_note
             row.human_override = True
             row.updated_at = self._now()
-        memory = self.get_memory(instance=instance, actor=AuthenticatedAdmin(
-            session_id="system",
-            user_id="system",
-            username="system",
-            display_name="system",
-            role="admin",
-        ), memory_id=memory_id)
+        memory = self.get_memory(
+            instance=instance,
+            actor=AuthenticatedAdmin(
+                session_id="system",
+                user_id="system",
+                username="system",
+                display_name="system",
+                role="admin",
+            ),
+            memory_id=memory_id,
+        )
         return MemoryActionResult(memory=memory, action="revoke")

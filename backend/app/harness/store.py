@@ -4,7 +4,11 @@ from __future__ import annotations
 
 from typing import Any
 
-from app.harness.models import HarnessModelInventoryItem, HarnessProfileRecord, HarnessVerificationRun
+from app.harness.models import (
+    HarnessModelInventoryItem,
+    HarnessProfileRecord,
+    HarnessVerificationRun,
+)
 from app.storage.harness_repository import HarnessRepository, HarnessRunQuery
 
 
@@ -16,11 +20,7 @@ class HarnessStore:
         normalized_instance_id = (run.instance_id or "").strip() or None
         if normalized_instance_id is not None:
             return normalized_instance_id
-        matching_profiles = [
-            profile
-            for profile in self._repository.list_profiles()
-            if profile.provider_key == run.provider_key
-        ]
+        matching_profiles = [profile for profile in self._repository.list_profiles() if profile.provider_key == run.provider_key]
         if len(matching_profiles) != 1:
             return None
         return (matching_profiles[0].instance_id or "").strip() or None
@@ -40,10 +40,29 @@ class HarnessStore:
     def set_profile_active(self, provider_key: str, enabled: bool, instance_id: str | None = None) -> HarnessProfileRecord:
         return self._repository.set_profile_active(provider_key, enabled, instance_id)
 
-    def update_inventory(self, provider_key: str, inventory: list[HarnessModelInventoryItem], *, status: str, error: str | None = None, instance_id: str | None = None) -> HarnessProfileRecord:
+    def update_inventory(
+        self,
+        provider_key: str,
+        inventory: list[HarnessModelInventoryItem],
+        *,
+        status: str,
+        error: str | None = None,
+        instance_id: str | None = None,
+    ) -> HarnessProfileRecord:
         return self._repository.update_inventory(provider_key, inventory, status=status, error=error, instance_id=instance_id)
 
-    def record_profile_usage(self, *, provider_key: str, instance_id: str | None = None, model: str, stream: bool, total_tokens: int, actual_cost: float = 0.0, hypothetical_cost: float = 0.0, avoided_cost: float = 0.0) -> HarnessProfileRecord | None:
+    def record_profile_usage(
+        self,
+        *,
+        provider_key: str,
+        instance_id: str | None = None,
+        model: str,
+        stream: bool,
+        total_tokens: int,
+        actual_cost: float = 0.0,
+        hypothetical_cost: float = 0.0,
+        avoided_cost: float = 0.0,
+    ) -> HarnessProfileRecord | None:
         return self._repository.record_profile_usage(
             provider_key=provider_key,
             instance_id=instance_id,
@@ -59,9 +78,7 @@ class HarnessStore:
         resolved_instance_id = self._record_run_instance_id(run)
         if resolved_instance_id is None:
             return self._repository.record_run(run)
-        return self._repository.record_run(
-            run.model_copy(update={"instance_id": resolved_instance_id})
-        )
+        return self._repository.record_run(run.model_copy(update={"instance_id": resolved_instance_id}))
 
     def list_runs(self, query: HarnessRunQuery | None = None) -> list[HarnessVerificationRun]:
         return self._repository.list_runs(query)

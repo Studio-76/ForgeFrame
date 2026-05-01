@@ -13,20 +13,16 @@ NORMATIVE_HTTPS_HOST = "0.0.0.0"
 NORMATIVE_HTTPS_PORT = 443
 NORMATIVE_HTTP_HELPER_PORT = 80
 ACME_CHALLENGE_PREFIX = "/.well-known/acme-challenge/"
-PUBLIC_FQDN_PLACEHOLDERS = frozenset(
-    {
-        "",
-        "replace-with-public-fqdn.example.invalid",
-        "forgeframe.example.invalid",
-    }
-)
-PUBLIC_ACME_EMAIL_PLACEHOLDERS = frozenset(
-    {
-        "",
-        "replace-with-acme-email@example.invalid",
-        "ops@example.invalid",
-    }
-)
+PUBLIC_FQDN_PLACEHOLDERS = frozenset({
+    "",
+    "replace-with-public-fqdn.example.invalid",
+    "forgeframe.example.invalid",
+})
+PUBLIC_ACME_EMAIL_PLACEHOLDERS = frozenset({
+    "",
+    "replace-with-acme-email@example.invalid",
+    "ops@example.invalid",
+})
 
 
 def _normalized_public_value(value: str | None) -> str:

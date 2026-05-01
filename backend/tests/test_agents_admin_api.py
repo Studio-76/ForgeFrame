@@ -1,11 +1,12 @@
+from uuid import uuid4
+
+from conftest import admin_headers as shared_admin_headers
 from fastapi.testclient import TestClient
 from sqlalchemy import select
-from uuid import uuid4
 
 from app.execution.dependencies import get_execution_session_factory
 from app.main import app
 from app.storage.agent_repository import AgentORM
-from conftest import admin_headers as shared_admin_headers
 
 
 def _admin_headers(client: TestClient) -> dict[str, str]:
@@ -116,7 +117,10 @@ def test_default_operator_is_autocreated_and_can_be_replaced_when_archived() -> 
         f"/admin/agents/{default_operator['agent_id']}/archive",
         headers=headers,
         params=_instance_scope(instance_id),
-        json={"replacement_agent_id": reviewer_id, "reason": "Promote reviewer to operator."},
+        json={
+            "replacement_agent_id": reviewer_id,
+            "reason": "Promote reviewer to operator.",
+        },
     )
     assert archived.status_code == 200
     archived_payload = archived.json()["agent"]

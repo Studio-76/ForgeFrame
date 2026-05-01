@@ -10,14 +10,22 @@ from app.api.admin.security import require_admin_mutation_role, require_admin_ro
 from app.governance.models import AuthenticatedAdmin
 from app.instances.models import InstanceRecord
 from app.skills.dependencies import get_skill_admin_service
-from app.skills.models import ActivateSkillVersion, CreateSkill, RecordSkillUsage, UpdateSkill
+from app.skills.models import (
+    ActivateSkillVersion,
+    CreateSkill,
+    RecordSkillUsage,
+    UpdateSkill,
+)
 from app.skills.service import SkillAdminService
 
 router = APIRouter(prefix="/skills", tags=["admin-skills"])
 
 
 def _error(status_code: int, error_type: str, message: str) -> JSONResponse:
-    return JSONResponse(status_code=status_code, content={"error": {"type": error_type, "message": message}})
+    return JSONResponse(
+        status_code=status_code,
+        content={"error": {"type": error_type, "message": message}},
+    )
 
 
 @router.get("")
@@ -30,7 +38,11 @@ def list_skills(
     service: SkillAdminService = Depends(get_skill_admin_service),
 ) -> dict[str, object]:
     skills = service.list_skills(instance=instance, status=status_filter, scope=scope, limit=limit)
-    return {"status": "ok", "instance": instance.model_dump(mode="json"), "skills": [item.model_dump(mode="json") for item in skills]}
+    return {
+        "status": "ok",
+        "instance": instance.model_dump(mode="json"),
+        "skills": [item.model_dump(mode="json") for item in skills],
+    }
 
 
 @router.get("/{skill_id}")
@@ -89,7 +101,13 @@ def activate_skill(
     service: SkillAdminService = Depends(get_skill_admin_service),
 ) -> object:
     try:
-        skill = service.activate_skill(instance=instance, skill_id=skill_id, payload=payload, actor_type="user", actor_id=admin.user_id)
+        skill = service.activate_skill(
+            instance=instance,
+            skill_id=skill_id,
+            payload=payload,
+            actor_type="user",
+            actor_id=admin.user_id,
+        )
     except ValueError as exc:
         error_type = "skill_not_found" if "not found" in str(exc) else "skill_invalid"
         code = status.HTTP_404_NOT_FOUND if error_type == "skill_not_found" else status.HTTP_409_CONFLICT

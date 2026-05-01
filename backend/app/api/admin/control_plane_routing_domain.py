@@ -95,27 +95,15 @@ class ControlPlaneRoutingDomainMixin:
         )
 
     def _refresh_routing_state(self) -> None:
-        self._routing_policies_state = self._load_routing_policies(
-            list(getattr(self, "_routing_policies_state", {}).values()) or None
-        )
-        self._routing_budget_state = self._load_routing_budget_state(
-            getattr(self, "_routing_budget_state", None)
-        )
-        self._routing_circuits_state = self._load_routing_circuits(
-            list(getattr(self, "_routing_circuits_state", {}).values()) or None
-        )
+        self._routing_policies_state = self._load_routing_policies(list(getattr(self, "_routing_policies_state", {}).values()) or None)
+        self._routing_budget_state = self._load_routing_budget_state(getattr(self, "_routing_budget_state", None))
+        self._routing_circuits_state = self._load_routing_circuits(list(getattr(self, "_routing_circuits_state", {}).values()) or None)
 
     def list_routing_policies(self) -> list[RoutingPolicyRecord]:
-        return [
-            self._routing_policies_state[key]
-            for key in sorted(self._routing_policies_state.keys())
-        ]
+        return [self._routing_policies_state[key] for key in sorted(self._routing_policies_state.keys())]
 
     def list_routing_circuits(self) -> list[RoutingCircuitStateRecord]:
-        return [
-            self._routing_circuits_state[key]
-            for key in sorted(self._routing_circuits_state.keys())
-        ]
+        return [self._routing_circuits_state[key] for key in sorted(self._routing_circuits_state.keys())]
 
     def list_routing_decisions(self, *, limit: int = 20) -> list[RoutingDecisionRecord]:
         decisions = sorted(
@@ -159,7 +147,9 @@ class ControlPlaneRoutingDomainMixin:
         }
 
     @staticmethod
-    def _budget_scope_record(payload: RoutingBudgetScopeUpdateRequest) -> RoutingBudgetScopeRecord:
+    def _budget_scope_record(
+        payload: RoutingBudgetScopeUpdateRequest,
+    ) -> RoutingBudgetScopeRecord:
         return RoutingBudgetScopeRecord(
             scope_type=payload.scope_type,
             scope_key=payload.scope_key.strip(),
@@ -169,11 +159,7 @@ class ControlPlaneRoutingDomainMixin:
             hard_cost_limit=payload.hard_cost_limit,
             soft_token_limit=payload.soft_token_limit,
             hard_token_limit=payload.hard_token_limit,
-            soft_blocked_cost_classes=[
-                value.strip()
-                for value in payload.soft_blocked_cost_classes
-                if value.strip()
-            ],
+            soft_blocked_cost_classes=[value.strip() for value in payload.soft_blocked_cost_classes if value.strip()],
             note=payload.note.strip() if payload.note and payload.note.strip() else None,
         )
 
@@ -220,9 +206,7 @@ class ControlPlaneRoutingDomainMixin:
                 if target_key not in normalized:
                     normalized.append(target_key)
             if invalid:
-                raise ValueError(
-                    f"Unknown routing targets in {field_name}: {', '.join(invalid)}"
-                )
+                raise ValueError(f"Unknown routing targets in {field_name}: {', '.join(invalid)}")
             setattr(policy, field_name, normalized)
 
         self._routing_policies_state[classification] = policy
@@ -239,19 +223,11 @@ class ControlPlaneRoutingDomainMixin:
         if payload.hard_blocked is not None:
             budget.hard_blocked = payload.hard_blocked
         if payload.blocked_cost_classes is not None:
-            budget.blocked_cost_classes = [
-                value.strip()
-                for value in payload.blocked_cost_classes
-                if value.strip()
-            ]
+            budget.blocked_cost_classes = [value.strip() for value in payload.blocked_cost_classes if value.strip()]
         if payload.reason is not None:
             budget.reason = payload.reason.strip() or None
         if payload.scopes is not None:
-            budget.scopes = [
-                self._budget_scope_record(scope)
-                for scope in payload.scopes
-                if scope.scope_key.strip()
-            ]
+            budget.scopes = [self._budget_scope_record(scope) for scope in payload.scopes if scope.scope_key.strip()]
         budget.updated_at = self._routing_now_iso()
         self._routing_budget_state = evaluate_routing_budget_state(
             budget,
@@ -276,9 +252,7 @@ class ControlPlaneRoutingDomainMixin:
         circuit.reason = payload.reason.strip() or None if payload.reason is not None else None
         circuit.updated_at = self._routing_now_iso()
         self._routing_circuits_state[target_key] = circuit
-        self._routing_circuits_state = self._load_routing_circuits(
-            list(self._routing_circuits_state.values())
-        )
+        self._routing_circuits_state = self._load_routing_circuits(list(self._routing_circuits_state.values()))
         self._persist_state()
         clear_runtime_dependency_caches()
         return self._routing_circuits_state[target_key]
@@ -304,16 +278,8 @@ class ControlPlaneRoutingDomainMixin:
         response_controls: dict[str, object] = {}
         if payload.max_output_tokens is not None:
             response_controls["max_output_tokens"] = payload.max_output_tokens
-        allowed_providers = {
-            str(value).strip()
-            for value in (payload.allowed_providers or [])
-            if str(value).strip()
-        } or None
-        route_context = {
-            str(key).strip(): str(value).strip()
-            for key, value in (payload.route_context or {}).items()
-            if str(key).strip() and str(value).strip()
-        } or None
+        allowed_providers = {str(value).strip() for value in (payload.allowed_providers or []) if str(value).strip()} or None
+        route_context = {str(key).strip(): str(value).strip() for key, value in (payload.route_context or {}).items() if str(key).strip() and str(value).strip()} or None
 
         try:
             routing.resolve_model(
@@ -327,11 +293,13 @@ class ControlPlaneRoutingDomainMixin:
                 route_context=route_context,
                 decision_source="admin_simulation",
             )
-        except (RoutingBudgetExceededError, RoutingCircuitOpenError, RoutingNoCandidateError) as exc:
+        except (
+            RoutingBudgetExceededError,
+            RoutingCircuitOpenError,
+            RoutingNoCandidateError,
+        ) as exc:
             refreshed = self._state_repository.load_state(self._instance.instance_id)
-            self._routing_decisions_state = self._load_routing_decisions(
-                refreshed.routing_decisions if refreshed else []
-            )
+            self._routing_decisions_state = self._load_routing_decisions(refreshed.routing_decisions if refreshed else [])
             latest = self._latest_admin_simulation_decision()
             return {
                 "status": "blocked",
@@ -340,9 +308,7 @@ class ControlPlaneRoutingDomainMixin:
             }
 
         refreshed = self._state_repository.load_state(self._instance.instance_id)
-        self._routing_decisions_state = self._load_routing_decisions(
-            refreshed.routing_decisions if refreshed else []
-        )
+        self._routing_decisions_state = self._load_routing_decisions(refreshed.routing_decisions if refreshed else [])
         latest = self._latest_admin_simulation_decision()
         return {
             "status": "ok",

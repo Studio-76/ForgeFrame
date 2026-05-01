@@ -9,7 +9,11 @@ from pathlib import Path
 from urllib.parse import urlsplit
 
 
-WEBROOT = Path(os.environ.get("FORGEFRAME_PUBLIC_TLS_WEBROOT_PATH", "/var/lib/forgeframe/acme-webroot"))
+WEBROOT = Path(
+    os.environ.get(
+        "FORGEFRAME_PUBLIC_TLS_WEBROOT_PATH", "/var/lib/forgeframe/acme-webroot"
+    )
+)
 FQDN = os.environ.get("FORGEFRAME_PUBLIC_FQDN", "").strip()
 HOST = os.environ.get("FORGEFRAME_PUBLIC_HTTP_HELPER_HOST", "0.0.0.0")
 PORT = int(os.environ.get("FORGEFRAME_PUBLIC_HTTP_HELPER_PORT", "80"))
@@ -33,7 +37,9 @@ class AcmeHelperHandler(BaseHTTPRequestHandler):
             return
 
         redirect_host = FQDN or (self.headers.get("Host") or "")
-        redirect_target = f"https://{redirect_host}{self.path}" if redirect_host else self.path
+        redirect_target = (
+            f"https://{redirect_host}{self.path}" if redirect_host else self.path
+        )
         self.send_response(301)
         self.send_header("Location", redirect_target)
         self.end_headers()

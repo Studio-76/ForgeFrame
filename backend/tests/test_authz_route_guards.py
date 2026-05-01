@@ -160,39 +160,111 @@ def _make_client(actor: RequestActor | None) -> TestClient:
         return None
 
     @app.get("/api/v1/tenants/{tenant_id}")
-    def tenant_read(_context=Depends(build_route_guard(policy=get_route_policy("tenant.read"), resolve_actor=resolve_actor, resolve_target=resolve_target))) -> dict[str, str]:
+    def tenant_read(
+        _context=Depends(
+            build_route_guard(
+                policy=get_route_policy("tenant.read"),
+                resolve_actor=resolve_actor,
+                resolve_target=resolve_target,
+            )
+        ),
+    ) -> dict[str, str]:
         return {"status": "ok"}
 
     @app.get("/api/v1/projects/{project_id}")
-    def project_read(_context=Depends(build_route_guard(policy=get_route_policy("project.read"), resolve_actor=resolve_actor, resolve_target=resolve_target))) -> dict[str, str]:
+    def project_read(
+        _context=Depends(
+            build_route_guard(
+                policy=get_route_policy("project.read"),
+                resolve_actor=resolve_actor,
+                resolve_target=resolve_target,
+            )
+        ),
+    ) -> dict[str, str]:
         return {"status": "ok"}
 
     @app.post("/api/v1/workspaces/{workspace_id}:pause")
-    def workspace_pause(_context=Depends(build_route_guard(policy=get_route_policy("workspace.pause"), resolve_actor=resolve_actor, resolve_target=resolve_target))) -> dict[str, str]:
+    def workspace_pause(
+        _context=Depends(
+            build_route_guard(
+                policy=get_route_policy("workspace.pause"),
+                resolve_actor=resolve_actor,
+                resolve_target=resolve_target,
+            )
+        ),
+    ) -> dict[str, str]:
         return {"status": "ok"}
 
     @app.post("/api/v1/environments/{environment_id}:lock")
-    def environment_lock(_context=Depends(build_route_guard(policy=get_route_policy("environment.lock"), resolve_actor=resolve_actor, resolve_target=resolve_target))) -> dict[str, str]:
+    def environment_lock(
+        _context=Depends(
+            build_route_guard(
+                policy=get_route_policy("environment.lock"),
+                resolve_actor=resolve_actor,
+                resolve_target=resolve_target,
+            )
+        ),
+    ) -> dict[str, str]:
         return {"status": "ok"}
 
     @app.post("/api/v1/tasks/{task_id}:claim")
-    def task_claim(_context=Depends(build_route_guard(policy=get_route_policy("task.claim"), resolve_actor=resolve_actor, resolve_target=resolve_target))) -> dict[str, str]:
+    def task_claim(
+        _context=Depends(
+            build_route_guard(
+                policy=get_route_policy("task.claim"),
+                resolve_actor=resolve_actor,
+                resolve_target=resolve_target,
+            )
+        ),
+    ) -> dict[str, str]:
         return {"status": "ok"}
 
     @app.post("/api/v1/runs/{run_id}:cancel")
-    def run_cancel(_context=Depends(build_route_guard(policy=get_route_policy("run.cancel"), resolve_actor=resolve_actor, resolve_target=resolve_target))) -> dict[str, str]:
+    def run_cancel(
+        _context=Depends(
+            build_route_guard(
+                policy=get_route_policy("run.cancel"),
+                resolve_actor=resolve_actor,
+                resolve_target=resolve_target,
+            )
+        ),
+    ) -> dict[str, str]:
         return {"status": "ok"}
 
     @app.post("/api/v1/service-accounts/{service_account_id}:rotate-key")
-    def rotate_service_account_key(_context=Depends(build_route_guard(policy=get_route_policy("service_account.rotate_key"), resolve_actor=resolve_actor, resolve_target=resolve_target))) -> dict[str, str]:
+    def rotate_service_account_key(
+        _context=Depends(
+            build_route_guard(
+                policy=get_route_policy("service_account.rotate_key"),
+                resolve_actor=resolve_actor,
+                resolve_target=resolve_target,
+            )
+        ),
+    ) -> dict[str, str]:
         return {"status": "ok"}
 
     @app.get("/api/v1/audit-events")
-    def audit_events(_context=Depends(build_route_guard(policy=get_route_policy("tenant.audit.read"), resolve_actor=resolve_actor, resolve_target=resolve_target))) -> dict[str, str]:
+    def audit_events(
+        _context=Depends(
+            build_route_guard(
+                policy=get_route_policy("tenant.audit.read"),
+                resolve_actor=resolve_actor,
+                resolve_target=resolve_target,
+            )
+        ),
+    ) -> dict[str, str]:
         return {"status": "ok"}
 
     @app.post("/api/v1/webhooks/provider-events:ingest")
-    def webhook_ingest(_context=Depends(build_route_guard(policy=get_route_policy("webhook.ingest"), resolve_actor=resolve_actor, resolve_target=resolve_target))) -> dict[str, str]:
+    def webhook_ingest(
+        _context=Depends(
+            build_route_guard(
+                policy=get_route_policy("webhook.ingest"),
+                resolve_actor=resolve_actor,
+                resolve_target=resolve_target,
+            )
+        ),
+    ) -> dict[str, str]:
         return {"status": "ok"}
 
     return TestClient(app)
@@ -370,7 +442,10 @@ def test_audit_read_by_contributor_returns_403() -> None:
 def test_webhook_ingest_with_invalid_signature_returns_401() -> None:
     client = _make_client(None)
 
-    response = client.post("/api/v1/webhooks/provider-events:ingest", headers={"x-request-id": "req_bad_webhook"})
+    response = client.post(
+        "/api/v1/webhooks/provider-events:ingest",
+        headers={"x-request-id": "req_bad_webhook"},
+    )
 
     assert response.status_code == 401
     error = response.json()["error"]

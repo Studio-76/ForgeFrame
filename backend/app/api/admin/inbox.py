@@ -17,7 +17,10 @@ router = APIRouter(prefix="/inbox", tags=["admin-inbox"])
 
 
 def _error(status_code: int, error_type: str, message: str) -> JSONResponse:
-    return JSONResponse(status_code=status_code, content={"error": {"type": error_type, "message": message}})
+    return JSONResponse(
+        status_code=status_code,
+        content={"error": {"type": error_type, "message": message}},
+    )
 
 
 @router.get("")

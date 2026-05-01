@@ -33,11 +33,7 @@ class ControlPlaneHealthDomainMixin:
         check_type = self._health_config.probe_mode
         active_runtime_providers = {model.provider for model in self._registry.list_active_models()}
         for provider in self.list_providers():
-            runtime_status = (
-                self._providers.get_provider_status(provider.provider)
-                if provider.provider in active_runtime_providers
-                else None
-            )
+            runtime_status = self._providers.get_provider_status(provider.provider) if provider.provider in active_runtime_providers else None
             for model in provider.managed_models:
                 if self._health_config.selected_models and model.id not in self._health_config.selected_models:
                     continue

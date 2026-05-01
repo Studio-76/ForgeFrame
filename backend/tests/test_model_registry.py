@@ -3,7 +3,10 @@ from pathlib import Path
 from app.control_plane import ControlPlaneStateRecord
 from app.core.model_registry import ModelRegistry
 from app.settings.config import Settings
-from app.storage.control_plane_repository import FileControlPlaneStateRepository, ControlPlaneStatePaths
+from app.storage.control_plane_repository import (
+    ControlPlaneStatePaths,
+    FileControlPlaneStateRepository,
+)
 
 
 def test_model_registry_default_model_is_available() -> None:
@@ -69,9 +72,14 @@ def test_model_registry_falls_back_to_anthropic_probe_model_when_catalog_seed_is
     assert registry.default_model().id == "claude-sonnet-bootstrap"
 
 
-def test_model_registry_repairs_persisted_state_with_new_anthropic_bootstrap_models(tmp_path: Path) -> None:
+def test_model_registry_repairs_persisted_state_with_new_anthropic_bootstrap_models(
+    tmp_path: Path,
+) -> None:
     state_path = tmp_path / "control_plane_state.json"
-    state_path.write_text(ControlPlaneStateRecord(providers=[]).model_dump_json(indent=2) + "\n", encoding="utf-8")
+    state_path.write_text(
+        ControlPlaneStateRecord(providers=[]).model_dump_json(indent=2) + "\n",
+        encoding="utf-8",
+    )
     settings = Settings(
         default_model="claude-3-5-sonnet-latest",
         default_provider="anthropic",
@@ -127,7 +135,9 @@ def test_model_registry_builds_runtime_targets_for_active_models() -> None:
     assert baseline_target.product_axis == "openai_compatible_clients"
 
 
-def test_model_registry_excludes_stale_models_from_active_runtime_inventory(tmp_path: Path) -> None:
+def test_model_registry_excludes_stale_models_from_active_runtime_inventory(
+    tmp_path: Path,
+) -> None:
     state_path = tmp_path / "control_plane_state.json"
     state_path.write_text(
         ControlPlaneStateRecord(

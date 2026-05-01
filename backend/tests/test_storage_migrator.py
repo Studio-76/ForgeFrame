@@ -3,7 +3,11 @@ from uuid import uuid4
 import pytest
 from sqlalchemy import create_engine, text
 
-from app.storage.migrator import _simple_index_target, apply_storage_migrations, list_storage_migrations
+from app.storage.migrator import (
+    _simple_index_target,
+    apply_storage_migrations,
+    list_storage_migrations,
+)
 
 BASE_POSTGRES_URL = "postgresql+psycopg://forgegate:forgegate@localhost:5432/forgegate"
 
@@ -20,62 +24,42 @@ def _migration_versions(admin_engine, schema_name: str) -> list[int]:
         ).scalar_one()
         if relation_exists is None:
             return []
-        return connection.execute(
-            text(
-                f'''
+        return (
+            connection
+            .execute(
+                text(
+                    f'''
                 SELECT version
                 FROM "{schema_name}".forgegate_schema_migrations
                 ORDER BY version ASC
                 '''
+                )
             )
-        ).scalars().all()
+            .scalars()
+            .all()
+        )
 
 
 def test_storage_migrations_are_discovered_in_order() -> None:
     migrations = list_storage_migrations()
 
-    assert [migration.version for migration in migrations] == sorted(
-        migration.version for migration in migrations
-    )
+    assert [migration.version for migration in migrations] == sorted(migration.version for migration in migrations)
     assert migrations[-1].version >= 15
 
 
 def test_storage_migrations_include_governance_relational_schema() -> None:
     migrations = list_storage_migrations()
 
-    assert any(
-        migration.version == 9 and "governance_relational_tenant_auth" in migration.name
-        for migration in migrations
-    )
-    assert any(
-        migration.version == 10 and "governance_relational_integrity_guards" in migration.name
-        for migration in migrations
-    )
-    assert any(
-        migration.version == 11 and "governance_legacy_shape_repair" in migration.name
-        for migration in migrations
-    )
-    assert any(
-        migration.version == 12 and "governance_principal_default_repair" in migration.name
-        for migration in migrations
-    )
-    assert any(
-        migration.version == 13 and "governance_shadow_legacy_default_repair" in migration.name
-        for migration in migrations
-    )
-    assert any(
-        migration.version == 14 and "audit_events_backfill" in migration.name
-        for migration in migrations
-    )
-    assert any(
-        migration.version == 15 and "observability_query_index_pack" in migration.name
-        for migration in migrations
-    )
+    assert any(migration.version == 9 and "governance_relational_tenant_auth" in migration.name for migration in migrations)
+    assert any(migration.version == 10 and "governance_relational_integrity_guards" in migration.name for migration in migrations)
+    assert any(migration.version == 11 and "governance_legacy_shape_repair" in migration.name for migration in migrations)
+    assert any(migration.version == 12 and "governance_principal_default_repair" in migration.name for migration in migrations)
+    assert any(migration.version == 13 and "governance_shadow_legacy_default_repair" in migration.name for migration in migrations)
+    assert any(migration.version == 14 and "audit_events_backfill" in migration.name for migration in migrations)
+    assert any(migration.version == 15 and "observability_query_index_pack" in migration.name for migration in migrations)
 
 
-def test_storage_migrations_reject_duplicate_versions(
-    tmp_path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_storage_migrations_reject_duplicate_versions(tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
     migrations_dir = tmp_path / "migrations"
     migrations_dir.mkdir()
     (migrations_dir / "0014_first.sql").write_text("SELECT 1;\n", encoding="utf-8")
@@ -103,9 +87,7 @@ def test_storage_migrator_parses_simple_create_index_targets() -> None:
     assert target.column_names == ("tenant_id", "traffic_type", "created_at")
 
 
-def test_apply_storage_migrations_fails_when_partial_index_relation_is_missing(
-    tmp_path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_apply_storage_migrations_fails_when_partial_index_relation_is_missing(tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
     migrations_dir = tmp_path / "migrations"
     migrations_dir.mkdir()
     (migrations_dir / "0001_add_missing_relation_index.sql").write_text(
@@ -138,9 +120,7 @@ def test_apply_storage_migrations_fails_when_partial_index_relation_is_missing(
         admin_engine.dispose()
 
 
-def test_apply_storage_migrations_fails_when_partial_index_column_is_missing(
-    tmp_path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_apply_storage_migrations_fails_when_partial_index_column_is_missing(tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
     migrations_dir = tmp_path / "migrations"
     migrations_dir.mkdir()
     (migrations_dir / "0001_add_missing_column_index.sql").write_text(

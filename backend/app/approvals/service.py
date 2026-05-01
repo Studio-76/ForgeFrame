@@ -182,11 +182,7 @@ class ApprovalAdminService:
         limit: int = 6,
     ) -> dict[str, object]:
         events = self._governance.list_audit_events(limit=200, tenant_id=tenant_id, company_id=company_id)
-        matching = [
-            event
-            for event in events
-            if event.target_type == target_type and event.target_id == target_id
-        ][:limit]
+        matching = [event for event in events if event.target_type == target_type and event.target_id == target_id][:limit]
         entries = [
             {
                 "event_id": event.event_id,
@@ -262,7 +258,9 @@ class ApprovalAdminService:
         return "Review retained audit history and access-session posture."
 
     @staticmethod
-    def _requester_from_payload(payload: dict[str, object]) -> ApprovalActorSummary | None:
+    def _requester_from_payload(
+        payload: dict[str, object],
+    ) -> ApprovalActorSummary | None:
         requested_by_user_id = payload.get("requested_by_user_id")
         if requested_by_user_id is None:
             return None
@@ -286,7 +284,9 @@ class ApprovalAdminService:
         )
 
     @staticmethod
-    def _decision_actor_from_payload(payload: dict[str, object]) -> ApprovalActorSummary | None:
+    def _decision_actor_from_payload(
+        payload: dict[str, object],
+    ) -> ApprovalActorSummary | None:
         decided_by_user_id = payload.get("decided_by_user_id")
         if decided_by_user_id is None:
             return None
@@ -328,9 +328,7 @@ class ApprovalAdminService:
                 ready_to_issue=ready_to_issue,
                 session_status=str(session_status) if session_status is not None else None,
             ),
-            consequence_summary=(
-                "Approving records access eligibility only. The requester must still issue the session from Security & Policies."
-            ),
+            consequence_summary=("Approving records access eligibility only. The requester must still issue the session from Security & Policies."),
             irreversible=irreversible,
         )
 
@@ -414,9 +412,7 @@ class ApprovalAdminService:
             action_preview={
                 "decision_surface": "Approve or reject only",
                 "decision_boundary": "This page records the approval outcome. Session issuance, expiry review, and revocation stay on Security & Policies.",
-                "approve_effect": (
-                    "Marks the request approved and makes the session eligible to start; it does not issue the elevated session."
-                ),
+                "approve_effect": ("Marks the request approved and makes the session eligible to start; it does not issue the elevated session."),
                 "reject_effect": "Closes the request as rejected and prevents any session issuance from this approval item.",
                 "risk_level": summary.risk_level,
                 "risk_label": summary.risk_label,
@@ -442,7 +438,11 @@ class ApprovalAdminService:
                 "irreversible": summary.irreversible,
                 "follow_up_surface": "Security & Policies",
             },
-            audit_history={**audit_history, "approval_id": summary.approval_id, "status": summary.status},
+            audit_history={
+                **audit_history,
+                "approval_id": summary.approval_id,
+                "status": summary.status,
+            },
         )
 
     def _resolve_instance_for_company(self, company_id: str) -> InstanceRecord | None:
@@ -518,9 +518,7 @@ class ApprovalAdminService:
             risk_label=risk_label,
             due_state=self._due_state(status=link.gate_status, expires_at=None),  # type: ignore[arg-type]
             next_step=self._execution_next_step(link.gate_status),
-            consequence_summary=(
-                "Approving re-opens the paused execution path. Rejecting sends the run into its configured deny flow."
-            ),
+            consequence_summary=("Approving re-opens the paused execution path. Rejecting sends the run into its configured deny flow."),
             irreversible=irreversible,
         )
 
@@ -535,11 +533,7 @@ class ApprovalAdminService:
     ) -> ApprovalDetail:
         instance = instance or self._resolve_instance_for_company(link.company_id)
         summary = self._build_execution_summary(link, run, instance=instance, requester=requester)
-        workspace = (
-            self._work.get_workspace_summary(company_id=link.company_id, workspace_id=run.workspace_id)
-            if run.workspace_id
-            else None
-        )
+        workspace = self._work.get_workspace_summary(company_id=link.company_id, workspace_id=run.workspace_id) if run.workspace_id else None
         decision_permission_error: str | None = None
         if instance is None:
             decision_permission_error = "instance_membership_required"
@@ -912,6 +906,7 @@ class ApprovalAdminService:
             instance=resolved_instance,
             requester=requester,
         )
+
     @staticmethod
     def _sort_opened_at(item: ApprovalSummary) -> datetime:
         return item.opened_at if item.opened_at.tzinfo is not None else item.opened_at.replace(tzinfo=UTC)

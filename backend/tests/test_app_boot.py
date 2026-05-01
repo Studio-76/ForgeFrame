@@ -48,11 +48,7 @@ def test_admin_audit_history_routes_disable_response_model_generation() -> None:
         "/admin/logs/audit-events",
         "/admin/logs/audit-events/{event_id}",
     }
-    registered_routes = {
-        route.path: route
-        for route in app.routes
-        if isinstance(route, APIRoute) and route.path in audit_history_paths
-    }
+    registered_routes = {route.path: route for route in app.routes if isinstance(route, APIRoute) and route.path in audit_history_paths}
 
     assert set(registered_routes) == audit_history_paths
     for route in registered_routes.values():
@@ -60,7 +56,9 @@ def test_admin_audit_history_routes_disable_response_model_generation() -> None:
         assert route.response_field is None
 
 
-def test_startup_validation_fails_fast_for_invalid_storage_contract(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_startup_validation_fails_fast_for_invalid_storage_contract(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     monkeypatch.delenv("FORGEFRAME_HARNESS_STORAGE_BACKEND", raising=False)
     monkeypatch.delenv("FORGEFRAME_HARNESS_POSTGRES_URL", raising=False)
     monkeypatch.setenv("FORGEGATE_HARNESS_STORAGE_BACKEND", "postgresql")

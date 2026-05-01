@@ -1,4 +1,8 @@
-from app.control_plane import RoutingBudgetScopeRecord, RoutingBudgetStateRecord, RoutingCircuitStateRecord
+from app.control_plane import (
+    RoutingBudgetScopeRecord,
+    RoutingBudgetStateRecord,
+    RoutingCircuitStateRecord,
+)
 from app.core.model_registry import ModelRegistry
 from app.core.routing import (
     RoutingBudgetExceededError,
@@ -91,9 +95,7 @@ def test_routing_service_uses_fallback_stage_when_preferred_non_simple_target_is
     registry, _ = _build_routing(settings)
 
     def _mutate(state) -> None:
-        non_simple_policy = next(
-            policy for policy in state.routing_policies if policy.classification == "non_simple"
-        )
+        non_simple_policy = next(policy for policy in state.routing_policies if policy.classification == "non_simple")
         non_simple_policy.preferred_target_keys = ["openai_api::gpt-4.1-mini"]
         non_simple_policy.fallback_target_keys = ["openai_api::gpt-4.1"]
         non_simple_policy.escalation_target_keys = []
@@ -126,11 +128,7 @@ def test_routing_service_uses_fallback_stage_when_preferred_non_simple_target_is
     assert decision.fallback_used is True
     assert decision.resolved_target.provider == "openai_api"
     assert decision.resolved_target.target_key == "openai_api::gpt-4.1"
-    preferred_candidate = next(
-        candidate
-        for candidate in decision.considered_candidates
-        if candidate.target_key == "openai_api::gpt-4.1-mini"
-    )
+    preferred_candidate = next(candidate for candidate in decision.considered_candidates if candidate.target_key == "openai_api::gpt-4.1-mini")
     assert "circuit_open:operator_test_open" in preferred_candidate.exclusion_reasons
     fallback_candidate = next(candidate for candidate in decision.considered_candidates if candidate.selected)
     assert fallback_candidate.target_key == decision.resolved_target.target_key
@@ -243,7 +241,10 @@ def test_routing_service_blocks_requested_model_when_scoped_budget_soft_limit_is
     decision = stored.routing_decisions[-1]
     assert decision.error_type == "routing_budget_exceeded"
     assert decision.raw_details["selection_basis"]["budget_matching_scopes"][0]["scope_key"] == "assistant-alpha"
-    assert decision.raw_details["selection_basis"]["blocked_cost_classes"] == ["high", "premium"]
+    assert decision.raw_details["selection_basis"]["blocked_cost_classes"] == [
+        "high",
+        "premium",
+    ]
 
     get_settings.cache_clear()
     get_usage_analytics_store.cache_clear()

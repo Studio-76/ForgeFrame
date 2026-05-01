@@ -7,7 +7,6 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
-
 CONVERSATION_STATUSES = ("open", "paused", "closed", "archived")
 ConversationStatus = Literal["open", "paused", "closed", "archived"]
 
@@ -32,14 +31,42 @@ InboxStatus = Literal["open", "snoozed", "closed", "archived"]
 PARTICIPANT_KINDS = ("agent", "user", "contact", "system")
 ConversationParticipantKind = Literal["agent", "user", "contact", "system"]
 
-PARTICIPANT_STATUSES = ("active", "mentioned", "roundtable", "handoff_pending", "review_requested", "blocked", "archived")
-ConversationParticipantStatus = Literal["active", "mentioned", "roundtable", "handoff_pending", "review_requested", "blocked", "archived"]
+PARTICIPANT_STATUSES = (
+    "active",
+    "mentioned",
+    "roundtable",
+    "handoff_pending",
+    "review_requested",
+    "blocked",
+    "archived",
+)
+ConversationParticipantStatus = Literal[
+    "active",
+    "mentioned",
+    "roundtable",
+    "handoff_pending",
+    "review_requested",
+    "blocked",
+    "archived",
+]
 
 MENTION_STATUSES = ("active", "acknowledged", "resolved")
 ConversationMentionStatus = Literal["active", "acknowledged", "resolved"]
 
-CONVERSATION_EVENT_TYPES = ("mention_event", "handoff_event", "review_request_event", "blocker_event", "roundtable_event")
-ConversationEventType = Literal["mention_event", "handoff_event", "review_request_event", "blocker_event", "roundtable_event"]
+CONVERSATION_EVENT_TYPES = (
+    "mention_event",
+    "handoff_event",
+    "review_request_event",
+    "blocker_event",
+    "roundtable_event",
+)
+ConversationEventType = Literal[
+    "mention_event",
+    "handoff_event",
+    "review_request_event",
+    "blocker_event",
+    "roundtable_event",
+]
 
 
 class ConversationParticipantRecord(BaseModel):

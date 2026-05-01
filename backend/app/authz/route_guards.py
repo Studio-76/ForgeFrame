@@ -7,7 +7,12 @@ from collections.abc import Callable
 from fastapi import HTTPException, Request
 
 from app.authz.evaluator import PolicyEvaluator
-from app.authz.models import AuthorizationContext, RequestActor, RoutePolicy, TenantBoundTarget
+from app.authz.models import (
+    AuthorizationContext,
+    RequestActor,
+    RoutePolicy,
+    TenantBoundTarget,
+)
 
 ActorResolver = Callable[[Request], RequestActor | None]
 TargetResolver = Callable[[Request], TenantBoundTarget | None]

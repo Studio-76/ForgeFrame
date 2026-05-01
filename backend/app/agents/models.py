@@ -9,7 +9,6 @@ from pydantic import BaseModel, Field
 
 from app.knowledge.models import RecordLink
 
-
 AGENT_ROLE_KINDS = ("operator", "specialist", "reviewer", "worker", "observer")
 AgentRoleKind = Literal["operator", "specialist", "reviewer", "worker", "observer"]
 

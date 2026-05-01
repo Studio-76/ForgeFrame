@@ -31,16 +31,8 @@ def effective_tenant_filter(
     if requested:
         return requested
 
-    unique_tenant_ids = sorted(
-        {
-            item.strip()
-            for item in tenant_ids
-            if item is not None and item.strip()
-        }
-    )
+    unique_tenant_ids = sorted({item.strip() for item in tenant_ids if item is not None and item.strip()})
     if len(unique_tenant_ids) <= 1:
         return unique_tenant_ids[0] if unique_tenant_ids else None
 
-    raise TenantFilterRequiredError(
-        "tenantId query parameter is required once observability history contains multiple tenants."
-    )
+    raise TenantFilterRequiredError("tenantId query parameter is required once observability history contains multiple tenants.")

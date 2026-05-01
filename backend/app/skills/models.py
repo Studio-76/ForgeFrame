@@ -9,7 +9,6 @@ from pydantic import BaseModel, Field
 
 from app.knowledge.models import RecordLink
 
-
 SKILL_SCOPES = ("instance", "agent")
 SkillScope = Literal["instance", "agent"]
 
@@ -25,7 +24,14 @@ SkillUsageOutcome = Literal["success", "blocked", "error"]
 SKILL_APPROVAL_POSTURES = ("draft", "review_required", "approved", "archived")
 SkillApprovalPosture = Literal["draft", "review_required", "approved", "archived"]
 
-SKILL_PROVENANCE_KINDS = ("operator", "learning", "memory", "knowledge_source", "plugin", "unknown")
+SKILL_PROVENANCE_KINDS = (
+    "operator",
+    "learning",
+    "memory",
+    "knowledge_source",
+    "plugin",
+    "unknown",
+)
 SkillProvenanceKind = Literal["operator", "learning", "memory", "knowledge_source", "plugin", "unknown"]
 
 

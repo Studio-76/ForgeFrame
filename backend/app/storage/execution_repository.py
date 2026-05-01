@@ -114,12 +114,29 @@ class SecretReferenceORM(Base):
 class ExecutionWorkerORM(Base):
     __tablename__ = "execution_workers"
     __table_args__ = (
-        CheckConstraint("active_attempts >= 0", name="execution_workers_active_attempts_nonnegative_ck"),
+        CheckConstraint(
+            "active_attempts >= 0",
+            name="execution_workers_active_attempts_nonnegative_ck",
+        ),
         _enum_check("execution_workers_execution_lane_ck", "execution_lane", RUN_EXECUTION_LANES),
         _enum_check("execution_workers_worker_state_ck", "worker_state", EXECUTION_WORKER_STATES),
-        Index("execution_workers_company_worker_key_uq", "company_id", "worker_key", unique=True),
-        Index("execution_workers_company_state_heartbeat_idx", "company_id", "worker_state", "heartbeat_expires_at"),
-        Index("execution_workers_company_current_attempt_idx", "company_id", "current_attempt_id"),
+        Index(
+            "execution_workers_company_worker_key_uq",
+            "company_id",
+            "worker_key",
+            unique=True,
+        ),
+        Index(
+            "execution_workers_company_state_heartbeat_idx",
+            "company_id",
+            "worker_state",
+            "heartbeat_expires_at",
+        ),
+        Index(
+            "execution_workers_company_current_attempt_idx",
+            "company_id",
+            "current_attempt_id",
+        ),
     )
 
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
@@ -155,10 +172,24 @@ class RunORM(Base):
         _enum_check("runs_operator_state_ck", "operator_state", RUN_OPERATOR_STATES),
         _enum_check("runs_failure_class_ck", "failure_class", RUN_FAILURE_CLASSES, nullable=True),
         Index("runs_company_id_id_uq", "company_id", "id", unique=True),
-        Index("runs_company_state_next_wakeup_idx", "company_id", "state", "next_wakeup_at"),
-        Index("runs_company_lane_operator_idx", "company_id", "execution_lane", "operator_state"),
+        Index(
+            "runs_company_state_next_wakeup_idx",
+            "company_id",
+            "state",
+            "next_wakeup_at",
+        ),
+        Index(
+            "runs_company_lane_operator_idx",
+            "company_id",
+            "execution_lane",
+            "operator_state",
+        ),
         Index("runs_company_issue_created_idx", "company_id", "issue_id", "created_at"),
-        Index("runs_company_current_approval_idx", "company_id", "current_approval_link_id"),
+        Index(
+            "runs_company_current_approval_idx",
+            "company_id",
+            "current_approval_link_id",
+        ),
     )
 
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
@@ -308,8 +339,19 @@ class RunAttemptORM(Base):
         _enum_check("run_attempts_operator_state_ck", "operator_state", RUN_OPERATOR_STATES),
         _enum_check("run_attempts_lease_status_ck", "lease_status", RUN_LEASE_STATUSES),
         Index("run_attempts_company_id_id_uq", "company_id", "id", unique=True),
-        Index("run_attempts_company_run_attempt_no_uq", "company_id", "run_id", "attempt_no", unique=True),
-        Index("run_attempts_company_operator_state_idx", "company_id", "operator_state", "scheduled_at"),
+        Index(
+            "run_attempts_company_run_attempt_no_uq",
+            "company_id",
+            "run_id",
+            "attempt_no",
+            unique=True,
+        ),
+        Index(
+            "run_attempts_company_operator_state_idx",
+            "company_id",
+            "operator_state",
+            "scheduled_at",
+        ),
         Index(
             "run_attempts_company_scheduled_idx",
             "company_id",
@@ -365,7 +407,11 @@ class RunApprovalLinkORM(Base):
             ondelete="CASCADE",
         ),
         CheckConstraint("version >= 0", name="run_approval_links_version_nonnegative_ck"),
-        _enum_check("run_approval_links_gate_status_ck", "gate_status", RUN_APPROVAL_GATE_STATUSES),
+        _enum_check(
+            "run_approval_links_gate_status_ck",
+            "gate_status",
+            RUN_APPROVAL_GATE_STATUSES,
+        ),
         _enum_check(
             "run_approval_links_resume_disposition_ck",
             "resume_disposition",
@@ -377,8 +423,18 @@ class RunApprovalLinkORM(Base):
             RUN_COMMAND_ACTOR_TYPES,
             nullable=True,
         ),
-        Index("run_approval_links_company_approval_uq", "company_id", "approval_id", unique=True),
-        Index("run_approval_links_company_run_opened_idx", "company_id", "run_id", "opened_at"),
+        Index(
+            "run_approval_links_company_approval_uq",
+            "company_id",
+            "approval_id",
+            unique=True,
+        ),
+        Index(
+            "run_approval_links_company_run_opened_idx",
+            "company_id",
+            "run_id",
+            "opened_at",
+        ),
         Index(
             "run_approval_links_company_gate_status_opened_idx",
             "company_id",
@@ -474,8 +530,17 @@ class RunExternalCallORM(Base):
             name="run_external_calls_company_attempt_fk",
             ondelete="CASCADE",
         ),
-        _enum_check("run_external_calls_call_status_ck", "call_status", RUN_EXTERNAL_CALL_STATUSES),
-        Index("run_external_calls_company_run_started_idx", "company_id", "run_id", "started_at"),
+        _enum_check(
+            "run_external_calls_call_status_ck",
+            "call_status",
+            RUN_EXTERNAL_CALL_STATUSES,
+        ),
+        Index(
+            "run_external_calls_company_run_started_idx",
+            "company_id",
+            "run_id",
+            "started_at",
+        ),
         Index(
             "run_external_calls_company_provider_request_idx",
             "company_id",
@@ -535,7 +600,10 @@ class RunSecretBindingORM(Base):
             name="run_secret_bindings_company_secret_reference_fk",
             ondelete="CASCADE",
         ),
-        CheckConstraint("required_version >= 1", name="run_secret_bindings_required_version_positive_ck"),
+        CheckConstraint(
+            "required_version >= 1",
+            name="run_secret_bindings_required_version_positive_ck",
+        ),
         _enum_check(
             "run_secret_bindings_binding_status_ck",
             "binding_status",
@@ -550,7 +618,12 @@ class RunSecretBindingORM(Base):
             "secret_reference_id",
             unique=True,
         ),
-        Index("run_secret_bindings_company_run_created_idx", "company_id", "run_id", "created_at"),
+        Index(
+            "run_secret_bindings_company_run_created_idx",
+            "company_id",
+            "run_id",
+            "created_at",
+        ),
     )
 
     id: Mapped[str] = mapped_column(String(64), primary_key=True)

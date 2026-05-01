@@ -13,6 +13,7 @@ from fastapi.testclient import TestClient
 def client():
     """Create a test client for the NadirClaw FastAPI app."""
     from nadirclaw.server import app
+
     return TestClient(app)
 
 
@@ -90,8 +91,10 @@ class TestClassifyEndpoint:
 # X-Routed-* response headers
 # ---------------------------------------------------------------------------
 
+
 def _mock_fallback(content="OK", prompt_tokens=10, completion_tokens=5, model=None):
     """Build a side_effect callable for patching _call_with_fallback."""
+
     async def _side_effect(selected_model, request, provider, analysis_info):
         actual_model = model or selected_model
         return (
@@ -104,6 +107,7 @@ def _mock_fallback(content="OK", prompt_tokens=10, completion_tokens=5, model=No
             actual_model,
             {**analysis_info, "selected_model": actual_model},
         )
+
     return _side_effect
 
 
@@ -113,23 +117,38 @@ class TestRoutingHeaders:
     @patch("nadirclaw.server._call_with_fallback")
     def test_non_streaming_response_has_routing_headers(self, mock_fb, client):
         mock_fb.side_effect = _mock_fallback(content="hi")
-        resp = client.post("/v1/chat/completions", json={
-            "messages": [{"role": "user", "content": "routing header test 8x2q"}],
-        })
+        resp = client.post(
+            "/v1/chat/completions",
+            json={
+                "messages": [{"role": "user", "content": "routing header test 8x2q"}],
+            },
+        )
         assert resp.status_code == 200
         assert "X-Routed-Model" in resp.headers
         assert resp.headers["X-Routed-Model"] != ""
         assert "X-Routed-Tier" in resp.headers
-        assert resp.headers["X-Routed-Tier"] in ("simple", "mid", "complex", "reasoning", "direct", "free")
+        assert resp.headers["X-Routed-Tier"] in (
+            "simple",
+            "mid",
+            "complex",
+            "reasoning",
+            "direct",
+            "free",
+        )
         assert "X-Complexity-Score" in resp.headers
 
     @patch("nadirclaw.server._call_with_fallback")
     def test_direct_model_has_routing_headers(self, mock_fb, client):
         mock_fb.side_effect = _mock_fallback(content="hi", model="gpt-4o")
-        resp = client.post("/v1/chat/completions", json={
-            "messages": [{"role": "user", "content": "direct model header test 3v7w"}],
-            "model": "gpt-4o",
-        })
+        resp = client.post(
+            "/v1/chat/completions",
+            json={
+                "messages": [
+                    {"role": "user", "content": "direct model header test 3v7w"}
+                ],
+                "model": "gpt-4o",
+            },
+        )
         assert resp.status_code == 200
         assert resp.headers["X-Routed-Model"] == "gpt-4o"
         assert resp.headers["X-Routed-Tier"] == "direct"
@@ -139,11 +158,15 @@ class TestRoutingHeaders:
         async def _fake_stream(*args, **kwargs):
             yield 'data: {"choices":[{"delta":{"content":"hi"}}]}\n\n'
             yield "data: [DONE]\n\n"
+
         mock_stream.return_value = _fake_stream()
-        resp = client.post("/v1/chat/completions", json={
-            "messages": [{"role": "user", "content": "streaming header test 5k9z"}],
-            "stream": True,
-        })
+        resp = client.post(
+            "/v1/chat/completions",
+            json={
+                "messages": [{"role": "user", "content": "streaming header test 5k9z"}],
+                "stream": True,
+            },
+        )
         assert resp.status_code == 200
         assert "X-Routed-Model" in resp.headers
         assert "X-Routed-Tier" in resp.headers
@@ -152,12 +175,17 @@ class TestRoutingHeaders:
 
 class TestGeminiStreamingNormalization:
     class _FakeGeminiChunk:
-        def __init__(self, text="", prompt_tokens=0, completion_tokens=0, finish_reason="STOP"):
+        def __init__(
+            self, text="", prompt_tokens=0, completion_tokens=0, finish_reason="STOP"
+        ):
             self.text = text
             self.usage_metadata = type(
                 "Usage",
                 (),
-                {"prompt_token_count": prompt_tokens, "candidates_token_count": completion_tokens},
+                {
+                    "prompt_token_count": prompt_tokens,
+                    "candidates_token_count": completion_tokens,
+                },
             )()
             cand = type("Cand", (), {"finish_reason": finish_reason})()
             self.candidates = [cand]
@@ -167,7 +195,11 @@ class TestGeminiStreamingNormalization:
             model = kwargs.get("model")
             if model == "gemini-1":
                 raise RuntimeError("connection reset by peer")
-            return [TestGeminiStreamingNormalization._FakeGeminiChunk(text="fallback-content", prompt_tokens=3, completion_tokens=2)]
+            return [
+                TestGeminiStreamingNormalization._FakeGeminiChunk(
+                    text="fallback-content", prompt_tokens=3, completion_tokens=2
+                )
+            ]
 
     class _FakeGeminiClient:
         def __init__(self):
@@ -176,19 +208,31 @@ class TestGeminiStreamingNormalization:
     @patch("nadirclaw.server.settings")
     @patch("nadirclaw.credentials.get_credential", return_value="tok")
     @patch("nadirclaw.server._get_gemini_client")
-    def test_gemini_pre_content_error_normalized_and_fallback_used(self, mock_get_client, _mock_get_cred, mock_settings):
+    def test_gemini_pre_content_error_normalized_and_fallback_used(
+        self, mock_get_client, _mock_get_cred, mock_settings
+    ):
         from nadirclaw.server import ChatCompletionRequest, _stream_with_fallback
 
         mock_get_client.return_value = self._FakeGeminiClient()
         mock_settings.FALLBACK_CHAIN = ["gemini-1", "gemini-2"]
-        mock_settings.get_tier_fallback_chain.side_effect = lambda tier: mock_settings.FALLBACK_CHAIN
+        mock_settings.get_tier_fallback_chain.side_effect = lambda tier: (
+            mock_settings.FALLBACK_CHAIN
+        )
 
-        req = ChatCompletionRequest(messages=[{"role": "user", "content": "hello"}], stream=True)
-        analysis = {"tier": "", "strategy": "smart-routing", "selected_model": "gemini-1"}
+        req = ChatCompletionRequest(
+            messages=[{"role": "user", "content": "hello"}], stream=True
+        )
+        analysis = {
+            "tier": "",
+            "strategy": "smart-routing",
+            "selected_model": "gemini-1",
+        }
 
         async def _collect():
             events = []
-            async for item in _stream_with_fallback("gemini-1", req, "google", analysis, "req-g1"):
+            async for item in _stream_with_fallback(
+                "gemini-1", req, "google", analysis, "req-g1"
+            ):
                 events.append(item)
             return events
 
@@ -199,23 +243,41 @@ class TestGeminiStreamingNormalization:
 
     @patch("nadirclaw.server.settings")
     @patch("nadirclaw.server._dispatch_model_stream")
-    def test_gemini_mid_stream_upstream_error_no_restart(self, mock_dispatch_stream, mock_settings):
-        from nadirclaw.server import ChatCompletionRequest, UpstreamModelError, _stream_with_fallback
+    def test_gemini_mid_stream_upstream_error_no_restart(
+        self, mock_dispatch_stream, mock_settings
+    ):
+        from nadirclaw.server import (
+            ChatCompletionRequest,
+            UpstreamModelError,
+            _stream_with_fallback,
+        )
 
         mock_settings.FALLBACK_CHAIN = ["gemini-1", "gemini-2"]
-        mock_settings.get_tier_fallback_chain.side_effect = lambda tier: mock_settings.FALLBACK_CHAIN
+        mock_settings.get_tier_fallback_chain.side_effect = lambda tier: (
+            mock_settings.FALLBACK_CHAIN
+        )
 
         async def _gen(*args, **kwargs):
             yield {"content": "partial"}, None, None
-            raise UpstreamModelError(model="gemini-1", provider="google", message="stream broke")
+            raise UpstreamModelError(
+                model="gemini-1", provider="google", message="stream broke"
+            )
 
         mock_dispatch_stream.return_value = _gen()
-        req = ChatCompletionRequest(messages=[{"role": "user", "content": "hello"}], stream=True)
-        analysis = {"tier": "", "strategy": "smart-routing", "selected_model": "gemini-1"}
+        req = ChatCompletionRequest(
+            messages=[{"role": "user", "content": "hello"}], stream=True
+        )
+        analysis = {
+            "tier": "",
+            "strategy": "smart-routing",
+            "selected_model": "gemini-1",
+        }
 
         async def _collect():
             events = []
-            async for item in _stream_with_fallback("gemini-1", req, "google", analysis, "req-g2"):
+            async for item in _stream_with_fallback(
+                "gemini-1", req, "google", analysis, "req-g2"
+            ):
                 events.append(item)
             return events
 
@@ -227,19 +289,33 @@ class TestGeminiStreamingNormalization:
 
     @patch("nadirclaw.server.settings")
     @patch("nadirclaw.server._dispatch_model_stream")
-    def test_gemini_http_exception_does_not_fallback(self, mock_dispatch_stream, mock_settings):
+    def test_gemini_http_exception_does_not_fallback(
+        self, mock_dispatch_stream, mock_settings
+    ):
         from fastapi import HTTPException
         from nadirclaw.server import ChatCompletionRequest, _stream_with_fallback
 
         mock_settings.FALLBACK_CHAIN = ["gemini-1", "gemini-2"]
-        mock_settings.get_tier_fallback_chain.side_effect = lambda tier: mock_settings.FALLBACK_CHAIN
-        mock_dispatch_stream.side_effect = HTTPException(status_code=401, detail="bad key")
+        mock_settings.get_tier_fallback_chain.side_effect = lambda tier: (
+            mock_settings.FALLBACK_CHAIN
+        )
+        mock_dispatch_stream.side_effect = HTTPException(
+            status_code=401, detail="bad key"
+        )
 
-        req = ChatCompletionRequest(messages=[{"role": "user", "content": "hello"}], stream=True)
-        analysis = {"tier": "", "strategy": "smart-routing", "selected_model": "gemini-1"}
+        req = ChatCompletionRequest(
+            messages=[{"role": "user", "content": "hello"}], stream=True
+        )
+        analysis = {
+            "tier": "",
+            "strategy": "smart-routing",
+            "selected_model": "gemini-1",
+        }
 
         async def _consume():
-            async for _ in _stream_with_fallback("gemini-1", req, "google", analysis, "req-g3"):
+            async for _ in _stream_with_fallback(
+                "gemini-1", req, "google", analysis, "req-g3"
+            ):
                 pass
 
         with pytest.raises(HTTPException):
@@ -249,7 +325,11 @@ class TestGeminiStreamingNormalization:
     @patch("nadirclaw.server._get_gemini_client")
     def test_gemini_rate_limit_stays_separate(self, mock_get_client, _mock_get_cred):
         from google.genai.errors import ClientError
-        from nadirclaw.server import ChatCompletionRequest, RateLimitExhausted, _stream_gemini
+        from nadirclaw.server import (
+            ChatCompletionRequest,
+            RateLimitExhausted,
+            _stream_gemini,
+        )
 
         class _Models:
             def generate_content_stream(self, **kwargs):
@@ -259,7 +339,9 @@ class TestGeminiStreamingNormalization:
             models = _Models()
 
         mock_get_client.return_value = _Client()
-        req = ChatCompletionRequest(messages=[{"role": "user", "content": "hello"}], stream=True)
+        req = ChatCompletionRequest(
+            messages=[{"role": "user", "content": "hello"}], stream=True
+        )
 
         async def _consume():
             async for _ in _stream_gemini("gemini-1", req, "google"):
@@ -290,7 +372,11 @@ class TestDispatchOpenAICodex:
         from nadirclaw.server import ChatCompletionRequest, _dispatch_model_stream
 
         async def _fake_stream(*args, **kwargs):
-            yield {"content": "ok"}, {"prompt_tokens": 1, "completion_tokens": 1}, "stop"
+            yield (
+                {"content": "ok"},
+                {"prompt_tokens": 1, "completion_tokens": 1},
+                "stop",
+            )
 
         mock_stream.return_value = _fake_stream()
 
@@ -298,7 +384,9 @@ class TestDispatchOpenAICodex:
 
         async def _collect():
             got = []
-            async for item in _dispatch_model_stream("openai-codex/gpt-5.4", req, "openai-codex"):
+            async for item in _dispatch_model_stream(
+                "openai-codex/gpt-5.4", req, "openai-codex"
+            ):
                 got.append(item)
             return got
 
@@ -311,14 +399,22 @@ class TestOpenAICodexFallbackBehavior:
     @patch("nadirclaw.server.settings")
     @patch("nadirclaw.server._dispatch_model")
     def test_fallback_on_retryable_upstream_error(self, mock_dispatch, mock_settings):
-        from nadirclaw.server import ChatCompletionRequest, UpstreamModelError, _call_with_fallback
+        from nadirclaw.server import (
+            ChatCompletionRequest,
+            UpstreamModelError,
+            _call_with_fallback,
+        )
 
         mock_settings.FALLBACK_CHAIN = ["openai-codex/gpt-5.4", "gemini-2.5-flash"]
-        mock_settings.get_tier_fallback_chain.side_effect = lambda tier: mock_settings.FALLBACK_CHAIN
+        mock_settings.get_tier_fallback_chain.side_effect = lambda tier: (
+            mock_settings.FALLBACK_CHAIN
+        )
 
         async def _dispatch_side_effect(model, request, provider):
             if model == "openai-codex/gpt-5.4":
-                raise UpstreamModelError(model=model, provider="openai-codex", message="timeout")
+                raise UpstreamModelError(
+                    model=model, provider="openai-codex", message="timeout"
+                )
             return {
                 "content": "fallback-ok",
                 "finish_reason": "stop",
@@ -329,7 +425,11 @@ class TestOpenAICodexFallbackBehavior:
         mock_dispatch.side_effect = _dispatch_side_effect
 
         req = ChatCompletionRequest(messages=[{"role": "user", "content": "hello"}])
-        analysis = {"tier": "", "strategy": "smart-routing", "selected_model": "openai-codex/gpt-5.4"}
+        analysis = {
+            "tier": "",
+            "strategy": "smart-routing",
+            "selected_model": "openai-codex/gpt-5.4",
+        }
         response, model_used, updated = asyncio.run(
             _call_with_fallback("openai-codex/gpt-5.4", req, "openai-codex", analysis)
         )
@@ -344,13 +444,25 @@ class TestOpenAICodexFallbackBehavior:
         from nadirclaw.server import ChatCompletionRequest, _call_with_fallback
 
         mock_settings.FALLBACK_CHAIN = ["openai-codex/gpt-5.4", "gemini-2.5-flash"]
-        mock_settings.get_tier_fallback_chain.side_effect = lambda tier: mock_settings.FALLBACK_CHAIN
-        mock_dispatch.side_effect = HTTPException(status_code=500, detail="No credential")
+        mock_settings.get_tier_fallback_chain.side_effect = lambda tier: (
+            mock_settings.FALLBACK_CHAIN
+        )
+        mock_dispatch.side_effect = HTTPException(
+            status_code=500, detail="No credential"
+        )
 
         req = ChatCompletionRequest(messages=[{"role": "user", "content": "hello"}])
-        analysis = {"tier": "", "strategy": "smart-routing", "selected_model": "openai-codex/gpt-5.4"}
+        analysis = {
+            "tier": "",
+            "strategy": "smart-routing",
+            "selected_model": "openai-codex/gpt-5.4",
+        }
         with pytest.raises(HTTPException):
-            asyncio.run(_call_with_fallback("openai-codex/gpt-5.4", req, "openai-codex", analysis))
+            asyncio.run(
+                _call_with_fallback(
+                    "openai-codex/gpt-5.4", req, "openai-codex", analysis
+                )
+            )
 
 
 class _FakeHttpxResponse:
@@ -433,10 +545,19 @@ class TestCodexTransportDecisions:
         runtime.chat_completions_url = "https://chat"
         runtime.refresh_if_stale = AsyncMock(return_value=[])
         runtime.resolve_runtime_model.return_value = ("gpt-5.4", "discovery")
-        fake_client = _FakeHttpxClient(posts=[_FakeHttpxResponse(200, payload={"status": "completed", "output_text": "ok", "usage": {}})])
+        fake_client = _FakeHttpxClient(
+            posts=[
+                _FakeHttpxResponse(
+                    200,
+                    payload={"status": "completed", "output_text": "ok", "usage": {}},
+                )
+            ]
+        )
         with patch("httpx.AsyncClient", return_value=fake_client):
             req = ChatCompletionRequest(messages=[{"role": "user", "content": "hello"}])
-            out = asyncio.run(_call_openai_codex("openai-codex/gpt-5.4", req, "openai-codex"))
+            out = asyncio.run(
+                _call_openai_codex("openai-codex/gpt-5.4", req, "openai-codex")
+            )
         assert out["content"] == "ok"
         assert fake_client.post_calls[0][0] == "https://resp"
 
@@ -454,19 +575,34 @@ class TestCodexTransportDecisions:
         fake_client = _FakeHttpxClient(
             posts=[
                 _FakeHttpxResponse(400, text="bad request"),
-                _FakeHttpxResponse(200, payload={"choices": [{"message": {"content": "chat-ok"}, "finish_reason": "stop"}], "usage": {}}),
+                _FakeHttpxResponse(
+                    200,
+                    payload={
+                        "choices": [
+                            {"message": {"content": "chat-ok"}, "finish_reason": "stop"}
+                        ],
+                        "usage": {},
+                    },
+                ),
             ]
         )
         with patch("httpx.AsyncClient", return_value=fake_client):
             req = ChatCompletionRequest(messages=[{"role": "user", "content": "hello"}])
-            out = asyncio.run(_call_openai_codex("openai-codex/gpt-5.4", req, "openai-codex"))
+            out = asyncio.run(
+                _call_openai_codex("openai-codex/gpt-5.4", req, "openai-codex")
+            )
         assert out["content"] == "chat-ok"
-        assert [c[0] for c in fake_client.post_calls] == ["https://resp", "https://chat"]
+        assert [c[0] for c in fake_client.post_calls] == [
+            "https://resp",
+            "https://chat",
+        ]
 
     @patch("nadirclaw.credentials.get_credential_source", return_value="oauth")
     @patch("nadirclaw.credentials.get_credential", return_value="tok")
     @patch("nadirclaw.server.get_openai_codex_runtime")
-    def test_non_streaming_invalid_json_falls_back_to_chat(self, mock_runtime_factory, *_):
+    def test_non_streaming_invalid_json_falls_back_to_chat(
+        self, mock_runtime_factory, *_
+    ):
         from nadirclaw.server import ChatCompletionRequest, _call_openai_codex
 
         runtime = mock_runtime_factory.return_value
@@ -476,15 +612,30 @@ class TestCodexTransportDecisions:
         runtime.resolve_runtime_model.return_value = ("gpt-5.4", "configured")
         fake_client = _FakeHttpxClient(
             posts=[
-                _FakeHttpxResponse(200, text="<html>proxy</html>", json_error=ValueError("not json")),
-                _FakeHttpxResponse(200, payload={"choices": [{"message": {"content": "chat-ok"}, "finish_reason": "stop"}], "usage": {}}),
+                _FakeHttpxResponse(
+                    200, text="<html>proxy</html>", json_error=ValueError("not json")
+                ),
+                _FakeHttpxResponse(
+                    200,
+                    payload={
+                        "choices": [
+                            {"message": {"content": "chat-ok"}, "finish_reason": "stop"}
+                        ],
+                        "usage": {},
+                    },
+                ),
             ]
         )
         with patch("httpx.AsyncClient", return_value=fake_client):
             req = ChatCompletionRequest(messages=[{"role": "user", "content": "hello"}])
-            out = asyncio.run(_call_openai_codex("openai-codex/gpt-5.4", req, "openai-codex"))
+            out = asyncio.run(
+                _call_openai_codex("openai-codex/gpt-5.4", req, "openai-codex")
+            )
         assert out["content"] == "chat-ok"
-        assert [c[0] for c in fake_client.post_calls] == ["https://resp", "https://chat"]
+        assert [c[0] for c in fake_client.post_calls] == [
+            "https://resp",
+            "https://chat",
+        ]
 
     @patch("nadirclaw.credentials.get_credential_source", return_value="oauth")
     @patch("nadirclaw.credentials.get_credential", return_value="tok")
@@ -500,11 +651,20 @@ class TestCodexTransportDecisions:
         runtime.resolve_runtime_model.return_value = ("gpt-5.4", "configured")
 
         for status in (400, 404, 422):
-            fake_client = _FakeHttpxClient(posts=[_FakeHttpxResponse(status, text="bad"), _FakeHttpxResponse(status, text="bad")])
+            fake_client = _FakeHttpxClient(
+                posts=[
+                    _FakeHttpxResponse(status, text="bad"),
+                    _FakeHttpxResponse(status, text="bad"),
+                ]
+            )
             with patch("httpx.AsyncClient", return_value=fake_client):
-                req = ChatCompletionRequest(messages=[{"role": "user", "content": "hello"}])
+                req = ChatCompletionRequest(
+                    messages=[{"role": "user", "content": "hello"}]
+                )
                 with pytest.raises(HTTPException) as err:
-                    asyncio.run(_call_openai_codex("openai-codex/gpt-5.4", req, "openai-codex"))
+                    asyncio.run(
+                        _call_openai_codex("openai-codex/gpt-5.4", req, "openai-codex")
+                    )
                 assert err.value.status_code == 400
 
     @patch("nadirclaw.credentials.get_credential_source", return_value="oauth")
@@ -519,18 +679,26 @@ class TestCodexTransportDecisions:
         runtime.chat_completions_url = "https://chat"
         runtime.refresh_if_stale = AsyncMock(return_value=[])
         runtime.resolve_runtime_model.return_value = ("gpt-5.4", "configured")
-        fake_client = _FakeHttpxClient(posts=[_FakeHttpxResponse(401, text="unauthorized")])
+        fake_client = _FakeHttpxClient(
+            posts=[_FakeHttpxResponse(401, text="unauthorized")]
+        )
         with patch("httpx.AsyncClient", return_value=fake_client):
             req = ChatCompletionRequest(messages=[{"role": "user", "content": "hello"}])
             with pytest.raises(HTTPException) as err:
-                asyncio.run(_call_openai_codex("openai-codex/gpt-5.4", req, "openai-codex"))
+                asyncio.run(
+                    _call_openai_codex("openai-codex/gpt-5.4", req, "openai-codex")
+                )
         assert err.value.status_code == 401
 
     @patch("nadirclaw.credentials.get_credential_source", return_value="oauth")
     @patch("nadirclaw.credentials.get_credential", return_value="tok")
     @patch("nadirclaw.server.get_openai_codex_runtime")
     def test_non_streaming_5xx_is_upstream_error(self, mock_runtime_factory, *_):
-        from nadirclaw.server import ChatCompletionRequest, UpstreamModelError, _call_openai_codex
+        from nadirclaw.server import (
+            ChatCompletionRequest,
+            UpstreamModelError,
+            _call_openai_codex,
+        )
 
         runtime = mock_runtime_factory.return_value
         runtime.responses_url = "https://resp"
@@ -541,29 +709,41 @@ class TestCodexTransportDecisions:
         with patch("httpx.AsyncClient", return_value=fake_client):
             req = ChatCompletionRequest(messages=[{"role": "user", "content": "hello"}])
             with pytest.raises(UpstreamModelError):
-                asyncio.run(_call_openai_codex("openai-codex/gpt-5.4", req, "openai-codex"))
+                asyncio.run(
+                    _call_openai_codex("openai-codex/gpt-5.4", req, "openai-codex")
+                )
 
     @patch("nadirclaw.credentials.get_credential_source", return_value="oauth")
     @patch("nadirclaw.credentials.get_credential", return_value="tok")
     @patch("nadirclaw.server.get_openai_codex_runtime")
     def test_non_streaming_429_raises_rate_limit(self, mock_runtime_factory, *_):
-        from nadirclaw.server import ChatCompletionRequest, RateLimitExhausted, _call_openai_codex
+        from nadirclaw.server import (
+            ChatCompletionRequest,
+            RateLimitExhausted,
+            _call_openai_codex,
+        )
 
         runtime = mock_runtime_factory.return_value
         runtime.responses_url = "https://resp"
         runtime.chat_completions_url = "https://chat"
         runtime.refresh_if_stale = AsyncMock(return_value=[])
         runtime.resolve_runtime_model.return_value = ("gpt-5.4", "configured")
-        fake_client = _FakeHttpxClient(posts=[_FakeHttpxResponse(429, text="rate limit")])
+        fake_client = _FakeHttpxClient(
+            posts=[_FakeHttpxResponse(429, text="rate limit")]
+        )
         with patch("httpx.AsyncClient", return_value=fake_client):
             req = ChatCompletionRequest(messages=[{"role": "user", "content": "hello"}])
             with pytest.raises(RateLimitExhausted):
-                asyncio.run(_call_openai_codex("openai-codex/gpt-5.4", req, "openai-codex"))
+                asyncio.run(
+                    _call_openai_codex("openai-codex/gpt-5.4", req, "openai-codex")
+                )
 
     @patch("nadirclaw.credentials.get_credential_source", return_value="oauth")
     @patch("nadirclaw.credentials.get_credential", return_value="tok")
     @patch("nadirclaw.server.get_openai_codex_runtime")
-    def test_tool_path_with_tools_tool_choice_message_and_tool_call_id_uses_chat(self, mock_runtime_factory, *_):
+    def test_tool_path_with_tools_tool_choice_message_and_tool_call_id_uses_chat(
+        self, mock_runtime_factory, *_
+    ):
         from nadirclaw.server import ChatCompletionRequest, _call_openai_codex
 
         runtime = mock_runtime_factory.return_value
@@ -571,14 +751,32 @@ class TestCodexTransportDecisions:
         runtime.chat_completions_url = "https://chat"
         runtime.refresh_if_stale = AsyncMock(return_value=[])
         runtime.resolve_runtime_model.return_value = ("gpt-5.4", "configured")
-        fake_client = _FakeHttpxClient(posts=[_FakeHttpxResponse(200, payload={"choices": [{"message": {"content": "ok"}, "finish_reason": "stop"}], "usage": {}})])
+        fake_client = _FakeHttpxClient(
+            posts=[
+                _FakeHttpxResponse(
+                    200,
+                    payload={
+                        "choices": [
+                            {"message": {"content": "ok"}, "finish_reason": "stop"}
+                        ],
+                        "usage": {},
+                    },
+                )
+            ]
+        )
         with patch("httpx.AsyncClient", return_value=fake_client):
             req = ChatCompletionRequest(
                 messages=[
                     {
                         "role": "assistant",
                         "content": "call",
-                        "tool_calls": [{"id": "call_1", "type": "function", "function": {"name": "lookup", "arguments": "{}"}}],
+                        "tool_calls": [
+                            {
+                                "id": "call_1",
+                                "type": "function",
+                                "function": {"name": "lookup", "arguments": "{}"},
+                            }
+                        ],
                         "function_call": {"name": "lookup", "arguments": "{}"},
                     },
                     {
@@ -589,10 +787,21 @@ class TestCodexTransportDecisions:
                     },
                     {"role": "user", "content": "continue"},
                 ],
-                tools=[{"type": "function", "function": {"name": "lookup", "description": "d", "parameters": {}}}],
+                tools=[
+                    {
+                        "type": "function",
+                        "function": {
+                            "name": "lookup",
+                            "description": "d",
+                            "parameters": {},
+                        },
+                    }
+                ],
                 tool_choice="auto",
             )
-            out = asyncio.run(_call_openai_codex("openai-codex/gpt-5.4", req, "openai-codex"))
+            out = asyncio.run(
+                _call_openai_codex("openai-codex/gpt-5.4", req, "openai-codex")
+            )
         assert out["content"] == "ok"
         assert fake_client.post_calls[0][0] == "https://chat"
         sent_payload = fake_client.post_calls[0][1]
@@ -610,14 +819,26 @@ class TestCodexTransportDecisions:
         runtime.chat_completions_url = "https://chat"
         runtime.refresh_if_stale = AsyncMock(return_value=[])
         runtime.resolve_runtime_model.return_value = ("gpt-5.4", "configured")
-        lines = ['data: ' + json.dumps({"choices": [{"delta": {"content": "hi"}, "finish_reason": None}]})]
-        fake_client = _FakeHttpxClient(streams=[_FakeHttpxStreamResponse(status_code=400, text="bad"), _FakeHttpxStreamResponse(status_code=200, lines=lines)])
+        lines = [
+            "data: "
+            + json.dumps(
+                {"choices": [{"delta": {"content": "hi"}, "finish_reason": None}]}
+            )
+        ]
+        fake_client = _FakeHttpxClient(
+            streams=[
+                _FakeHttpxStreamResponse(status_code=400, text="bad"),
+                _FakeHttpxStreamResponse(status_code=200, lines=lines),
+            ]
+        )
         with patch("httpx.AsyncClient", return_value=fake_client):
             req = ChatCompletionRequest(messages=[{"role": "user", "content": "hello"}])
 
             async def _collect():
                 out = []
-                async for item in _stream_openai_codex("openai-codex/gpt-5.4", req, "openai-codex"):
+                async for item in _stream_openai_codex(
+                    "openai-codex/gpt-5.4", req, "openai-codex"
+                ):
                     out.append(item)
                 return out
 
@@ -630,24 +851,40 @@ class TestCodexTransportDecisions:
 class TestStreamingMidStreamAbort:
     @patch("nadirclaw.server.settings")
     @patch("nadirclaw.server._dispatch_model_stream")
-    def test_mid_stream_error_does_not_restart_chain(self, mock_dispatch_stream, mock_settings):
-        from nadirclaw.server import ChatCompletionRequest, UpstreamModelError, _stream_with_fallback
+    def test_mid_stream_error_does_not_restart_chain(
+        self, mock_dispatch_stream, mock_settings
+    ):
+        from nadirclaw.server import (
+            ChatCompletionRequest,
+            UpstreamModelError,
+            _stream_with_fallback,
+        )
 
         mock_settings.FALLBACK_CHAIN = ["openai-codex/gpt-5.4", "gemini-2.5-flash"]
-        mock_settings.get_tier_fallback_chain.side_effect = lambda tier: mock_settings.FALLBACK_CHAIN
+        mock_settings.get_tier_fallback_chain.side_effect = lambda tier: (
+            mock_settings.FALLBACK_CHAIN
+        )
 
         async def _generator(*args, **kwargs):
             yield {"content": "partial"}, None, None
-            raise UpstreamModelError("openai-codex/gpt-5.4", "openai-codex", "stream broke")
+            raise UpstreamModelError(
+                "openai-codex/gpt-5.4", "openai-codex", "stream broke"
+            )
 
         mock_dispatch_stream.return_value = _generator()
 
         req = ChatCompletionRequest(messages=[{"role": "user", "content": "hello"}])
-        analysis = {"tier": "", "strategy": "smart-routing", "selected_model": "openai-codex/gpt-5.4"}
+        analysis = {
+            "tier": "",
+            "strategy": "smart-routing",
+            "selected_model": "openai-codex/gpt-5.4",
+        }
 
         async def _collect():
             events = []
-            async for item in _stream_with_fallback("openai-codex/gpt-5.4", req, "openai-codex", analysis, "req-1"):
+            async for item in _stream_with_fallback(
+                "openai-codex/gpt-5.4", req, "openai-codex", analysis, "req-1"
+            ):
                 events.append(item)
             return events
 
@@ -663,8 +900,14 @@ class TestCodexTransportDecisionsMore:
     @patch("nadirclaw.credentials.get_credential_source", return_value="oauth")
     @patch("nadirclaw.credentials.get_credential", return_value="tok")
     @patch("nadirclaw.server.get_openai_codex_runtime")
-    def test_non_streaming_responses_schema_missing_expected_fields_is_upstream_error(self, mock_runtime_factory, *_):
-        from nadirclaw.server import ChatCompletionRequest, UpstreamModelError, _call_openai_codex
+    def test_non_streaming_responses_schema_missing_expected_fields_is_upstream_error(
+        self, mock_runtime_factory, *_
+    ):
+        from nadirclaw.server import (
+            ChatCompletionRequest,
+            UpstreamModelError,
+            _call_openai_codex,
+        )
 
         runtime = mock_runtime_factory.return_value
         runtime.responses_url = "https://resp"
@@ -680,34 +923,58 @@ class TestCodexTransportDecisionsMore:
         with patch("httpx.AsyncClient", return_value=fake_client):
             req = ChatCompletionRequest(messages=[{"role": "user", "content": "hello"}])
             with pytest.raises(UpstreamModelError):
-                asyncio.run(_call_openai_codex("openai-codex/gpt-5.4", req, "openai-codex"))
-        assert [c[0] for c in fake_client.post_calls] == ["https://resp", "https://chat"]
+                asyncio.run(
+                    _call_openai_codex("openai-codex/gpt-5.4", req, "openai-codex")
+                )
+        assert [c[0] for c in fake_client.post_calls] == [
+            "https://resp",
+            "https://chat",
+        ]
 
     @patch("nadirclaw.credentials.get_credential_source", return_value="oauth")
     @patch("nadirclaw.credentials.get_credential", return_value="tok")
     @patch("nadirclaw.server.get_openai_codex_runtime")
-    def test_non_streaming_chat_schema_missing_choices_is_upstream_error(self, mock_runtime_factory, *_):
-        from nadirclaw.server import ChatCompletionRequest, UpstreamModelError, _call_openai_codex
+    def test_non_streaming_chat_schema_missing_choices_is_upstream_error(
+        self, mock_runtime_factory, *_
+    ):
+        from nadirclaw.server import (
+            ChatCompletionRequest,
+            UpstreamModelError,
+            _call_openai_codex,
+        )
 
         runtime = mock_runtime_factory.return_value
         runtime.responses_url = "https://resp"
         runtime.chat_completions_url = "https://chat"
         runtime.refresh_if_stale = AsyncMock(return_value=[])
         runtime.resolve_runtime_model.return_value = ("gpt-5.4", "configured")
-        fake_client = _FakeHttpxClient(posts=[_FakeHttpxResponse(200, payload={"choices": []})])
+        fake_client = _FakeHttpxClient(
+            posts=[_FakeHttpxResponse(200, payload={"choices": []})]
+        )
         with patch("httpx.AsyncClient", return_value=fake_client):
             req = ChatCompletionRequest(
                 messages=[{"role": "user", "content": "hello"}],
-                tools=[{"type": "function", "function": {"name": "x", "description": "x", "parameters": {}}}],
+                tools=[
+                    {
+                        "type": "function",
+                        "function": {"name": "x", "description": "x", "parameters": {}},
+                    }
+                ],
             )
             with pytest.raises(UpstreamModelError):
-                asyncio.run(_call_openai_codex("openai-codex/gpt-5.4", req, "openai-codex"))
+                asyncio.run(
+                    _call_openai_codex("openai-codex/gpt-5.4", req, "openai-codex")
+                )
 
     @patch("nadirclaw.credentials.get_credential_source", return_value="oauth")
     @patch("nadirclaw.credentials.get_credential", return_value="tok")
     @patch("nadirclaw.server.get_openai_codex_runtime")
     def test_non_streaming_408_409_are_upstream_errors(self, mock_runtime_factory, *_):
-        from nadirclaw.server import ChatCompletionRequest, UpstreamModelError, _call_openai_codex
+        from nadirclaw.server import (
+            ChatCompletionRequest,
+            UpstreamModelError,
+            _call_openai_codex,
+        )
 
         runtime = mock_runtime_factory.return_value
         runtime.responses_url = "https://resp"
@@ -716,11 +983,17 @@ class TestCodexTransportDecisionsMore:
         runtime.resolve_runtime_model.return_value = ("gpt-5.4", "configured")
 
         for status in (408, 409):
-            fake_client = _FakeHttpxClient(posts=[_FakeHttpxResponse(status, text="transient")])
+            fake_client = _FakeHttpxClient(
+                posts=[_FakeHttpxResponse(status, text="transient")]
+            )
             with patch("httpx.AsyncClient", return_value=fake_client):
-                req = ChatCompletionRequest(messages=[{"role": "user", "content": "hello"}])
+                req = ChatCompletionRequest(
+                    messages=[{"role": "user", "content": "hello"}]
+                )
                 with pytest.raises(UpstreamModelError):
-                    asyncio.run(_call_openai_codex("openai-codex/gpt-5.4", req, "openai-codex"))
+                    asyncio.run(
+                        _call_openai_codex("openai-codex/gpt-5.4", req, "openai-codex")
+                    )
 
     @patch("nadirclaw.credentials.get_credential_source", return_value="oauth")
     @patch("nadirclaw.credentials.get_credential", return_value="tok")
@@ -733,10 +1006,29 @@ class TestCodexTransportDecisionsMore:
         runtime.chat_completions_url = "https://chat"
         runtime.refresh_if_stale = AsyncMock(return_value=[])
         runtime.resolve_runtime_model.return_value = ("gpt-5.4", "configured")
-        fake_client = _FakeHttpxClient(posts=[_FakeHttpxResponse(200, payload={"choices": [{"message": {"content": "chat-tool"}, "finish_reason": "stop"}], "usage": {}})])
+        fake_client = _FakeHttpxClient(
+            posts=[
+                _FakeHttpxResponse(
+                    200,
+                    payload={
+                        "choices": [
+                            {
+                                "message": {"content": "chat-tool"},
+                                "finish_reason": "stop",
+                            }
+                        ],
+                        "usage": {},
+                    },
+                )
+            ]
+        )
         with patch("httpx.AsyncClient", return_value=fake_client):
-            req = ChatCompletionRequest(messages=[{"role": "tool", "content": "tool result"}])
-            out = asyncio.run(_call_openai_codex("openai-codex/gpt-5.4", req, "openai-codex"))
+            req = ChatCompletionRequest(
+                messages=[{"role": "tool", "content": "tool result"}]
+            )
+            out = asyncio.run(
+                _call_openai_codex("openai-codex/gpt-5.4", req, "openai-codex")
+            )
         assert out["content"] == "chat-tool"
         assert fake_client.post_calls[0][0] == "https://chat"
 
@@ -744,19 +1036,27 @@ class TestCodexTransportDecisionsMore:
     @patch("nadirclaw.credentials.get_credential", return_value="tok")
     @patch("nadirclaw.server.get_openai_codex_runtime")
     def test_streaming_5xx_raises_upstream_error(self, mock_runtime_factory, *_):
-        from nadirclaw.server import ChatCompletionRequest, UpstreamModelError, _stream_openai_codex
+        from nadirclaw.server import (
+            ChatCompletionRequest,
+            UpstreamModelError,
+            _stream_openai_codex,
+        )
 
         runtime = mock_runtime_factory.return_value
         runtime.responses_url = "https://resp"
         runtime.chat_completions_url = "https://chat"
         runtime.refresh_if_stale = AsyncMock(return_value=[])
         runtime.resolve_runtime_model.return_value = ("gpt-5.4", "configured")
-        fake_client = _FakeHttpxClient(streams=[_FakeHttpxStreamResponse(status_code=503, text="outage")])
+        fake_client = _FakeHttpxClient(
+            streams=[_FakeHttpxStreamResponse(status_code=503, text="outage")]
+        )
         with patch("httpx.AsyncClient", return_value=fake_client):
             req = ChatCompletionRequest(messages=[{"role": "user", "content": "hello"}])
 
             async def _consume():
-                async for _ in _stream_openai_codex("openai-codex/gpt-5.4", req, "openai-codex"):
+                async for _ in _stream_openai_codex(
+                    "openai-codex/gpt-5.4", req, "openai-codex"
+                ):
                     pass
 
             with pytest.raises(UpstreamModelError):
@@ -765,7 +1065,9 @@ class TestCodexTransportDecisionsMore:
     @patch("nadirclaw.credentials.get_credential_source", return_value="oauth")
     @patch("nadirclaw.credentials.get_credential", return_value="tok")
     @patch("nadirclaw.server.get_openai_codex_runtime")
-    def test_streaming_invalid_json_chunk_falls_back_pre_content(self, mock_runtime_factory, *_):
+    def test_streaming_invalid_json_chunk_falls_back_pre_content(
+        self, mock_runtime_factory, *_
+    ):
         from nadirclaw.server import ChatCompletionRequest, _stream_openai_codex
 
         runtime = mock_runtime_factory.return_value
@@ -773,7 +1075,12 @@ class TestCodexTransportDecisionsMore:
         runtime.chat_completions_url = "https://chat"
         runtime.refresh_if_stale = AsyncMock(return_value=[])
         runtime.resolve_runtime_model.return_value = ("gpt-5.4", "configured")
-        lines = ['data: ' + json.dumps({"choices": [{"delta": {"content": "fallback"}, "finish_reason": None}]})]
+        lines = [
+            "data: "
+            + json.dumps(
+                {"choices": [{"delta": {"content": "fallback"}, "finish_reason": None}]}
+            )
+        ]
         fake_client = _FakeHttpxClient(
             streams=[
                 _FakeHttpxStreamResponse(status_code=200, lines=["data: {not-json"]),
@@ -785,18 +1092,25 @@ class TestCodexTransportDecisionsMore:
 
             async def _collect():
                 out = []
-                async for item in _stream_openai_codex("openai-codex/gpt-5.4", req, "openai-codex"):
+                async for item in _stream_openai_codex(
+                    "openai-codex/gpt-5.4", req, "openai-codex"
+                ):
                     out.append(item)
                 return out
 
             out = asyncio.run(_collect())
         assert out and out[0][0]["content"] == "fallback"
-        assert [c[1] for c in fake_client.stream_calls] == ["https://resp", "https://chat"]
+        assert [c[1] for c in fake_client.stream_calls] == [
+            "https://resp",
+            "https://chat",
+        ]
 
     @patch("nadirclaw.credentials.get_credential_source", return_value="oauth")
     @patch("nadirclaw.credentials.get_credential", return_value="tok")
     @patch("nadirclaw.server.get_openai_codex_runtime")
-    def test_streaming_unknown_event_type_is_ignored_when_other_events_present(self, mock_runtime_factory, *_):
+    def test_streaming_unknown_event_type_is_ignored_when_other_events_present(
+        self, mock_runtime_factory, *_
+    ):
         from nadirclaw.server import ChatCompletionRequest, _stream_openai_codex
 
         runtime = mock_runtime_factory.return_value
@@ -805,17 +1119,31 @@ class TestCodexTransportDecisionsMore:
         runtime.refresh_if_stale = AsyncMock(return_value=[])
         runtime.resolve_runtime_model.return_value = ("gpt-5.4", "configured")
         lines = [
-            'data: ' + json.dumps({"type": "response.unknown_event", "foo": "bar"}),
-            'data: ' + json.dumps({"type": "response.output_text.delta", "delta": "hi"}),
-            'data: ' + json.dumps({"type": "response.completed", "response": {"status": "completed", "usage": {"input_tokens": 1, "output_tokens": 2}}}),
+            "data: " + json.dumps({"type": "response.unknown_event", "foo": "bar"}),
+            "data: "
+            + json.dumps({"type": "response.output_text.delta", "delta": "hi"}),
+            "data: "
+            + json.dumps(
+                {
+                    "type": "response.completed",
+                    "response": {
+                        "status": "completed",
+                        "usage": {"input_tokens": 1, "output_tokens": 2},
+                    },
+                }
+            ),
         ]
-        fake_client = _FakeHttpxClient(streams=[_FakeHttpxStreamResponse(status_code=200, lines=lines)])
+        fake_client = _FakeHttpxClient(
+            streams=[_FakeHttpxStreamResponse(status_code=200, lines=lines)]
+        )
         with patch("httpx.AsyncClient", return_value=fake_client):
             req = ChatCompletionRequest(messages=[{"role": "user", "content": "hello"}])
 
             async def _collect():
                 out = []
-                async for item in _stream_openai_codex("openai-codex/gpt-5.4", req, "openai-codex"):
+                async for item in _stream_openai_codex(
+                    "openai-codex/gpt-5.4", req, "openai-codex"
+                ):
                     out.append(item)
                 return out
 
@@ -826,8 +1154,14 @@ class TestCodexTransportDecisionsMore:
     @patch("nadirclaw.credentials.get_credential_source", return_value="oauth")
     @patch("nadirclaw.credentials.get_credential", return_value="tok")
     @patch("nadirclaw.server.get_openai_codex_runtime")
-    def test_streaming_response_failed_event_raises_upstream_error(self, mock_runtime_factory, *_):
-        from nadirclaw.server import ChatCompletionRequest, UpstreamModelError, _stream_openai_codex
+    def test_streaming_response_failed_event_raises_upstream_error(
+        self, mock_runtime_factory, *_
+    ):
+        from nadirclaw.server import (
+            ChatCompletionRequest,
+            UpstreamModelError,
+            _stream_openai_codex,
+        )
 
         runtime = mock_runtime_factory.return_value
         runtime.responses_url = "https://resp"
@@ -835,14 +1169,24 @@ class TestCodexTransportDecisionsMore:
         runtime.refresh_if_stale = AsyncMock(return_value=[])
         runtime.resolve_runtime_model.return_value = ("gpt-5.4", "configured")
         lines = [
-            'data: ' + json.dumps({"type": "response.failed", "response": {"error": {"message": "bad upstream"}}}),
+            "data: "
+            + json.dumps(
+                {
+                    "type": "response.failed",
+                    "response": {"error": {"message": "bad upstream"}},
+                }
+            ),
         ]
-        fake_client = _FakeHttpxClient(streams=[_FakeHttpxStreamResponse(status_code=200, lines=lines)])
+        fake_client = _FakeHttpxClient(
+            streams=[_FakeHttpxStreamResponse(status_code=200, lines=lines)]
+        )
         with patch("httpx.AsyncClient", return_value=fake_client):
             req = ChatCompletionRequest(messages=[{"role": "user", "content": "hello"}])
 
             async def _consume():
-                async for _ in _stream_openai_codex("openai-codex/gpt-5.4", req, "openai-codex"):
+                async for _ in _stream_openai_codex(
+                    "openai-codex/gpt-5.4", req, "openai-codex"
+                ):
                     pass
 
             with pytest.raises(UpstreamModelError):
@@ -852,7 +1196,11 @@ class TestCodexTransportDecisionsMore:
     @patch("nadirclaw.credentials.get_credential", return_value="tok")
     @patch("nadirclaw.server.get_openai_codex_runtime")
     def test_streaming_408_409_raise_upstream_error(self, mock_runtime_factory, *_):
-        from nadirclaw.server import ChatCompletionRequest, UpstreamModelError, _stream_openai_codex
+        from nadirclaw.server import (
+            ChatCompletionRequest,
+            UpstreamModelError,
+            _stream_openai_codex,
+        )
 
         runtime = mock_runtime_factory.return_value
         runtime.responses_url = "https://resp"
@@ -861,12 +1209,18 @@ class TestCodexTransportDecisionsMore:
         runtime.resolve_runtime_model.return_value = ("gpt-5.4", "configured")
 
         for status in (408, 409):
-            fake_client = _FakeHttpxClient(streams=[_FakeHttpxStreamResponse(status_code=status, text="transient")])
+            fake_client = _FakeHttpxClient(
+                streams=[_FakeHttpxStreamResponse(status_code=status, text="transient")]
+            )
             with patch("httpx.AsyncClient", return_value=fake_client):
-                req = ChatCompletionRequest(messages=[{"role": "user", "content": "hello"}])
+                req = ChatCompletionRequest(
+                    messages=[{"role": "user", "content": "hello"}]
+                )
 
                 async def _consume():
-                    async for _ in _stream_openai_codex("openai-codex/gpt-5.4", req, "openai-codex"):
+                    async for _ in _stream_openai_codex(
+                        "openai-codex/gpt-5.4", req, "openai-codex"
+                    ):
                         pass
 
                 with pytest.raises(UpstreamModelError):
@@ -876,19 +1230,27 @@ class TestCodexTransportDecisionsMore:
     @patch("nadirclaw.credentials.get_credential", return_value="tok")
     @patch("nadirclaw.server.get_openai_codex_runtime")
     def test_streaming_429_raises_rate_limit(self, mock_runtime_factory, *_):
-        from nadirclaw.server import ChatCompletionRequest, RateLimitExhausted, _stream_openai_codex
+        from nadirclaw.server import (
+            ChatCompletionRequest,
+            RateLimitExhausted,
+            _stream_openai_codex,
+        )
 
         runtime = mock_runtime_factory.return_value
         runtime.responses_url = "https://resp"
         runtime.chat_completions_url = "https://chat"
         runtime.refresh_if_stale = AsyncMock(return_value=[])
         runtime.resolve_runtime_model.return_value = ("gpt-5.4", "configured")
-        fake_client = _FakeHttpxClient(streams=[_FakeHttpxStreamResponse(status_code=429, text="rate limit")])
+        fake_client = _FakeHttpxClient(
+            streams=[_FakeHttpxStreamResponse(status_code=429, text="rate limit")]
+        )
         with patch("httpx.AsyncClient", return_value=fake_client):
             req = ChatCompletionRequest(messages=[{"role": "user", "content": "hello"}])
 
             async def _consume():
-                async for _ in _stream_openai_codex("openai-codex/gpt-5.4", req, "openai-codex"):
+                async for _ in _stream_openai_codex(
+                    "openai-codex/gpt-5.4", req, "openai-codex"
+                ):
                     pass
 
             with pytest.raises(RateLimitExhausted):
@@ -897,7 +1259,9 @@ class TestCodexTransportDecisionsMore:
     @patch("nadirclaw.credentials.get_credential_source", return_value="oauth")
     @patch("nadirclaw.credentials.get_credential", return_value="tok")
     @patch("nadirclaw.server.get_openai_codex_runtime")
-    def test_streaming_chat_usage_only_chunk_is_forwarded(self, mock_runtime_factory, *_):
+    def test_streaming_chat_usage_only_chunk_is_forwarded(
+        self, mock_runtime_factory, *_
+    ):
         from nadirclaw.server import ChatCompletionRequest, _stream_openai_codex
 
         runtime = mock_runtime_factory.return_value
@@ -905,14 +1269,31 @@ class TestCodexTransportDecisionsMore:
         runtime.chat_completions_url = "https://chat"
         runtime.refresh_if_stale = AsyncMock(return_value=[])
         runtime.resolve_runtime_model.return_value = ("gpt-5.4", "configured")
-        lines = ['data: ' + json.dumps({"usage": {"prompt_tokens": 5, "completion_tokens": 0}, "choices": []})]
-        fake_client = _FakeHttpxClient(streams=[_FakeHttpxStreamResponse(status_code=200, lines=lines)])
+        lines = [
+            "data: "
+            + json.dumps(
+                {"usage": {"prompt_tokens": 5, "completion_tokens": 0}, "choices": []}
+            )
+        ]
+        fake_client = _FakeHttpxClient(
+            streams=[_FakeHttpxStreamResponse(status_code=200, lines=lines)]
+        )
         with patch("httpx.AsyncClient", return_value=fake_client):
-            req = ChatCompletionRequest(messages=[{"role": "user", "content": "hello"}], tools=[{"type": "function", "function": {"name": "x", "description": "d", "parameters": {}}}])
+            req = ChatCompletionRequest(
+                messages=[{"role": "user", "content": "hello"}],
+                tools=[
+                    {
+                        "type": "function",
+                        "function": {"name": "x", "description": "d", "parameters": {}},
+                    }
+                ],
+            )
 
             async def _collect():
                 out = []
-                async for item in _stream_openai_codex("openai-codex/gpt-5.4", req, "openai-codex"):
+                async for item in _stream_openai_codex(
+                    "openai-codex/gpt-5.4", req, "openai-codex"
+                ):
                     out.append(item)
                 return out
 
@@ -923,21 +1304,39 @@ class TestCodexTransportDecisionsMore:
     @patch("nadirclaw.credentials.get_credential_source", return_value="oauth")
     @patch("nadirclaw.credentials.get_credential", return_value="tok")
     @patch("nadirclaw.server.get_openai_codex_runtime")
-    def test_streaming_chat_non_list_choices_raises_upstream_error(self, mock_runtime_factory, *_):
-        from nadirclaw.server import ChatCompletionRequest, UpstreamModelError, _stream_openai_codex
+    def test_streaming_chat_non_list_choices_raises_upstream_error(
+        self, mock_runtime_factory, *_
+    ):
+        from nadirclaw.server import (
+            ChatCompletionRequest,
+            UpstreamModelError,
+            _stream_openai_codex,
+        )
 
         runtime = mock_runtime_factory.return_value
         runtime.responses_url = "https://resp"
         runtime.chat_completions_url = "https://chat"
         runtime.refresh_if_stale = AsyncMock(return_value=[])
         runtime.resolve_runtime_model.return_value = ("gpt-5.4", "configured")
-        lines = ['data: ' + json.dumps({"choices": {"delta": {"content": "x"}}})]
-        fake_client = _FakeHttpxClient(streams=[_FakeHttpxStreamResponse(status_code=200, lines=lines)])
+        lines = ["data: " + json.dumps({"choices": {"delta": {"content": "x"}}})]
+        fake_client = _FakeHttpxClient(
+            streams=[_FakeHttpxStreamResponse(status_code=200, lines=lines)]
+        )
         with patch("httpx.AsyncClient", return_value=fake_client):
-            req = ChatCompletionRequest(messages=[{"role": "user", "content": "hello"}], tools=[{"type": "function", "function": {"name": "x", "description": "d", "parameters": {}}}])
+            req = ChatCompletionRequest(
+                messages=[{"role": "user", "content": "hello"}],
+                tools=[
+                    {
+                        "type": "function",
+                        "function": {"name": "x", "description": "d", "parameters": {}},
+                    }
+                ],
+            )
 
             async def _consume():
-                async for _ in _stream_openai_codex("openai-codex/gpt-5.4", req, "openai-codex"):
+                async for _ in _stream_openai_codex(
+                    "openai-codex/gpt-5.4", req, "openai-codex"
+                ):
                     pass
 
             with pytest.raises(UpstreamModelError):
@@ -954,14 +1353,23 @@ class TestCodexTransportDecisionsMore:
         runtime.chat_completions_url = "https://chat"
         runtime.refresh_if_stale = AsyncMock(return_value=[])
         runtime.resolve_runtime_model.return_value = ("gpt-5.4", "configured")
-        lines = ['data: ' + json.dumps({"choices": [{"delta": {"content": "tool"}, "finish_reason": None}]})]
-        fake_client = _FakeHttpxClient(streams=[_FakeHttpxStreamResponse(status_code=200, lines=lines)])
+        lines = [
+            "data: "
+            + json.dumps(
+                {"choices": [{"delta": {"content": "tool"}, "finish_reason": None}]}
+            )
+        ]
+        fake_client = _FakeHttpxClient(
+            streams=[_FakeHttpxStreamResponse(status_code=200, lines=lines)]
+        )
         with patch("httpx.AsyncClient", return_value=fake_client):
             req = ChatCompletionRequest(messages=[{"role": "tool", "content": "res"}])
 
             async def _collect():
                 out = []
-                async for item in _stream_openai_codex("openai-codex/gpt-5.4", req, "openai-codex"):
+                async for item in _stream_openai_codex(
+                    "openai-codex/gpt-5.4", req, "openai-codex"
+                ):
                     out.append(item)
                 return out
 
@@ -972,7 +1380,9 @@ class TestCodexTransportDecisionsMore:
     @patch("nadirclaw.credentials.get_credential_source", return_value="oauth")
     @patch("nadirclaw.credentials.get_credential", return_value="tok")
     @patch("nadirclaw.server.get_openai_codex_runtime")
-    def test_streaming_responses_completed_maps_finish_reason(self, mock_runtime_factory, *_):
+    def test_streaming_responses_completed_maps_finish_reason(
+        self, mock_runtime_factory, *_
+    ):
         from nadirclaw.server import ChatCompletionRequest, _stream_openai_codex
 
         runtime = mock_runtime_factory.return_value
@@ -981,16 +1391,30 @@ class TestCodexTransportDecisionsMore:
         runtime.refresh_if_stale = AsyncMock(return_value=[])
         runtime.resolve_runtime_model.return_value = ("gpt-5.4", "configured")
         lines = [
-            'data: ' + json.dumps({"type": "response.output_text.delta", "delta": "hi"}),
-            'data: ' + json.dumps({"type": "response.completed", "response": {"status": "completed", "usage": {"input_tokens": 1, "output_tokens": 2}}}),
+            "data: "
+            + json.dumps({"type": "response.output_text.delta", "delta": "hi"}),
+            "data: "
+            + json.dumps(
+                {
+                    "type": "response.completed",
+                    "response": {
+                        "status": "completed",
+                        "usage": {"input_tokens": 1, "output_tokens": 2},
+                    },
+                }
+            ),
         ]
-        fake_client = _FakeHttpxClient(streams=[_FakeHttpxStreamResponse(status_code=200, lines=lines)])
+        fake_client = _FakeHttpxClient(
+            streams=[_FakeHttpxStreamResponse(status_code=200, lines=lines)]
+        )
         with patch("httpx.AsyncClient", return_value=fake_client):
             req = ChatCompletionRequest(messages=[{"role": "user", "content": "hello"}])
 
             async def _collect():
                 out = []
-                async for item in _stream_openai_codex("openai-codex/gpt-5.4", req, "openai-codex"):
+                async for item in _stream_openai_codex(
+                    "openai-codex/gpt-5.4", req, "openai-codex"
+                ):
                     out.append(item)
                 return out
 
@@ -1001,7 +1425,9 @@ class TestCodexTransportDecisionsMore:
     @patch("nadirclaw.credentials.get_credential_source", return_value="oauth")
     @patch("nadirclaw.credentials.get_credential", return_value="tok")
     @patch("nadirclaw.server.get_openai_codex_runtime")
-    def test_streaming_empty_stream_falls_back_pre_content(self, mock_runtime_factory, *_):
+    def test_streaming_empty_stream_falls_back_pre_content(
+        self, mock_runtime_factory, *_
+    ):
         from nadirclaw.server import ChatCompletionRequest, _stream_openai_codex
 
         runtime = mock_runtime_factory.return_value
@@ -1009,7 +1435,12 @@ class TestCodexTransportDecisionsMore:
         runtime.chat_completions_url = "https://chat"
         runtime.refresh_if_stale = AsyncMock(return_value=[])
         runtime.resolve_runtime_model.return_value = ("gpt-5.4", "configured")
-        lines = ['data: ' + json.dumps({"choices": [{"delta": {"content": "chat-ok"}, "finish_reason": None}]})]
+        lines = [
+            "data: "
+            + json.dumps(
+                {"choices": [{"delta": {"content": "chat-ok"}, "finish_reason": None}]}
+            )
+        ]
         fake_client = _FakeHttpxClient(
             streams=[
                 _FakeHttpxStreamResponse(status_code=200, lines=[]),
@@ -1021,18 +1452,25 @@ class TestCodexTransportDecisionsMore:
 
             async def _collect():
                 out = []
-                async for item in _stream_openai_codex("openai-codex/gpt-5.4", req, "openai-codex"):
+                async for item in _stream_openai_codex(
+                    "openai-codex/gpt-5.4", req, "openai-codex"
+                ):
                     out.append(item)
                 return out
 
             out = asyncio.run(_collect())
         assert out and out[0][0]["content"] == "chat-ok"
-        assert [c[1] for c in fake_client.stream_calls] == ["https://resp", "https://chat"]
+        assert [c[1] for c in fake_client.stream_calls] == [
+            "https://resp",
+            "https://chat",
+        ]
 
     @patch("nadirclaw.credentials.get_credential_source", return_value="oauth")
     @patch("nadirclaw.credentials.get_credential", return_value="tok")
     @patch("nadirclaw.server.get_openai_codex_runtime")
-    def test_streaming_pre_content_network_error_falls_back_to_chat(self, mock_runtime_factory, *_):
+    def test_streaming_pre_content_network_error_falls_back_to_chat(
+        self, mock_runtime_factory, *_
+    ):
         import httpx
         from nadirclaw.server import ChatCompletionRequest, _stream_openai_codex
 
@@ -1048,7 +1486,19 @@ class TestCodexTransportDecisionsMore:
                     streams=[
                         _FakeHttpxStreamResponse(
                             status_code=200,
-                            lines=['data: ' + json.dumps({"choices": [{"delta": {"content": "chat-net"}, "finish_reason": None}]})],
+                            lines=[
+                                "data: "
+                                + json.dumps(
+                                    {
+                                        "choices": [
+                                            {
+                                                "delta": {"content": "chat-net"},
+                                                "finish_reason": None,
+                                            }
+                                        ]
+                                    }
+                                )
+                            ],
                         )
                     ]
                 )
@@ -1066,7 +1516,9 @@ class TestCodexTransportDecisionsMore:
 
             async def _collect():
                 out = []
-                async for item in _stream_openai_codex("openai-codex/gpt-5.4", req, "openai-codex"):
+                async for item in _stream_openai_codex(
+                    "openai-codex/gpt-5.4", req, "openai-codex"
+                ):
                     out.append(item)
                 return out
 

@@ -27,10 +27,7 @@ from app.usage.analytics import UsageAnalyticsStore, get_usage_analytics_store
 
 router = APIRouter(prefix="/auth", tags=["admin-auth"])
 _bearer = HTTPBearer(auto_error=False)
-_AUTH_IDEMPOTENCY_MESSAGE = (
-    "Idempotency-Key is not supported for admin auth mutations because these routes mint or revoke sessions and "
-    "rotate passwords."
-)
+_AUTH_IDEMPOTENCY_MESSAGE = "Idempotency-Key is not supported for admin auth mutations because these routes mint or revoke sessions and rotate passwords."
 
 
 class LoginRequest(BaseModel):
@@ -103,14 +100,26 @@ def login(
         result = service.login(payload.username, payload.password)
     except ValueError as exc:
         if str(exc) == "login_rate_limited":
-            return JSONResponse(status_code=status.HTTP_429_TOO_MANY_REQUESTS, content={
+            return JSONResponse(
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                content={
+                    "status": "error",
+                    "error": {
+                        "type": "login_rate_limited",
+                        "message": "Too many failed login attempts. Try again later.",
+                    },
+                },
+            )
+        return JSONResponse(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            content={
                 "status": "error",
-                "error": {"type": "login_rate_limited", "message": "Too many failed login attempts. Try again later."},
-            })
-        return JSONResponse(status_code=status.HTTP_401_UNAUTHORIZED, content={
-            "status": "error",
-            "error": {"type": "invalid_credentials", "message": "Invalid admin credentials."},
-        })
+                "error": {
+                    "type": "invalid_credentials",
+                    "message": "Invalid admin credentials.",
+                },
+            },
+        )
     return {"status": "ok", **result.model_dump()}
 
 
@@ -139,7 +148,9 @@ def runtime_readiness(
 
 
 @router.get("/me")
-def me(admin: AuthenticatedAdmin = Depends(require_admin_session_allowing_password_rotation)) -> dict[str, object]:
+def me(
+    admin: AuthenticatedAdmin = Depends(require_admin_session_allowing_password_rotation),
+) -> dict[str, object]:
     return {"status": "ok", "user": admin.model_dump()}
 
 

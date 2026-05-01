@@ -33,12 +33,16 @@ def _provider_env_var(suffix: str) -> str:
 def oauth_target_env_contract(provider_key: str, *, auth_mode: str = "oauth_account") -> dict[str, tuple[str, ...]]:
     if provider_key == "openai_codex":
         required = (
-            _provider_env_var("OPENAI_CODEX_API_KEY"),
-            _provider_env_var("OPENAI_CODEX_AUTH_MODE"),
-        ) if auth_mode == "api_key" else (
-            _provider_env_var("OPENAI_CODEX_OAUTH_ACCESS_TOKEN"),
-            _provider_env_var("OPENAI_CODEX_AUTH_MODE"),
-            _provider_env_var("OPENAI_CODEX_OAUTH_MODE"),
+            (
+                _provider_env_var("OPENAI_CODEX_API_KEY"),
+                _provider_env_var("OPENAI_CODEX_AUTH_MODE"),
+            )
+            if auth_mode == "api_key"
+            else (
+                _provider_env_var("OPENAI_CODEX_OAUTH_ACCESS_TOKEN"),
+                _provider_env_var("OPENAI_CODEX_AUTH_MODE"),
+                _provider_env_var("OPENAI_CODEX_OAUTH_MODE"),
+            )
         )
         return {
             "required": required,
@@ -50,11 +54,15 @@ def oauth_target_env_contract(provider_key: str, *, auth_mode: str = "oauth_acco
         }
     if provider_key == "gemini":
         required = (
-            _provider_env_var("GEMINI_API_KEY"),
-            _provider_env_var("GEMINI_AUTH_MODE"),
-        ) if auth_mode == "api_key" else (
-            _provider_env_var("GEMINI_OAUTH_ACCESS_TOKEN"),
-            _provider_env_var("GEMINI_AUTH_MODE"),
+            (
+                _provider_env_var("GEMINI_API_KEY"),
+                _provider_env_var("GEMINI_AUTH_MODE"),
+            )
+            if auth_mode == "api_key"
+            else (
+                _provider_env_var("GEMINI_OAUTH_ACCESS_TOKEN"),
+                _provider_env_var("GEMINI_AUTH_MODE"),
+            )
         )
         return {
             "required": required,
@@ -116,6 +124,7 @@ def oauth_target_env_contract(provider_key: str, *, auth_mode: str = "oauth_acco
     }
     return contracts.get(provider_key, {"required": tuple(), "optional": tuple()})
 
+
 def _coerce_env_value(value: str) -> str:
     return value.strip().strip('"').strip("'")
 
@@ -159,11 +168,7 @@ def _legacy_brand_env_fallbacks(*, explicit_values: dict[str, Any]) -> dict[str,
             continue
 
         legacy_value = next(
-            (
-                raw_values[key]
-                for key in (legacy_key, *legacy_aliases.get(field_name, ()))
-                if key in raw_values
-            ),
+            (raw_values[key] for key in (legacy_key, *legacy_aliases.get(field_name, ())) if key in raw_values),
             None,
         )
         if legacy_value is not None:

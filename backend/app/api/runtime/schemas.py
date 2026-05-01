@@ -116,7 +116,10 @@ def _normalize_chat_content_block(block: object, *, message_index: int, block_in
     image_url = str(raw_image_url or "").strip()
     if not image_url:
         raise ValueError(f"{path} must include a non-empty image_url.")
-    normalized_block: dict[str, object] = {"type": "image_url", "image_url": {"url": image_url}}
+    normalized_block: dict[str, object] = {
+        "type": "image_url",
+        "image_url": {"url": image_url},
+    }
     if detail is not None:
         normalized_block["image_url"]["detail"] = detail
     return normalized_block
@@ -129,10 +132,7 @@ def _normalize_chat_message_content(content: object, *, message_index: int) -> o
     if isinstance(content, dict):
         return [_normalize_chat_content_block(content, message_index=message_index, block_index=0)]
     if isinstance(content, list):
-        return [
-            _normalize_chat_content_block(block, message_index=message_index, block_index=block_index)
-            for block_index, block in enumerate(content)
-        ]
+        return [_normalize_chat_content_block(block, message_index=message_index, block_index=block_index) for block_index, block in enumerate(content)]
     raise ValueError(f"{path} must be a string, null, or a list of supported content blocks.")
 
 
@@ -181,16 +181,14 @@ def _normalize_chat_tool_calls(raw_tool_calls: object, *, message_index: int) ->
         else:
             raise ValueError(f"{tool_call_path}.function.arguments must be a string or object.")
 
-        normalized.append(
-            {
-                "id": tool_call_id,
-                "type": "function",
-                "function": {
-                    "name": function_name,
-                    "arguments": arguments,
-                },
-            }
-        )
+        normalized.append({
+            "id": tool_call_id,
+            "type": "function",
+            "function": {
+                "name": function_name,
+                "arguments": arguments,
+            },
+        })
     return normalized
 
 

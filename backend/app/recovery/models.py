@@ -158,7 +158,14 @@ class RecoveryBackupReportRecord(BaseModel):
     def _normalize_mismatch_reasons(cls, value: object) -> list[str]:
         return _normalize_string_list(value, field_name="mismatch_reasons")
 
-    @field_validator("report_id", "policy_id", "target_locator", "backup_path", "manifest_path", "notes")
+    @field_validator(
+        "report_id",
+        "policy_id",
+        "target_locator",
+        "backup_path",
+        "manifest_path",
+        "notes",
+    )
     @classmethod
     def _normalize_report_text(cls, value: str) -> str:
         return value.strip()

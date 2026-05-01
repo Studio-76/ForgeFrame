@@ -1,7 +1,7 @@
+from conftest import admin_headers as shared_admin_headers
 from fastapi.testclient import TestClient
 
 from app.main import app
-from conftest import admin_headers as shared_admin_headers
 
 
 def _admin_headers(client: TestClient) -> dict[str, str]:
@@ -76,7 +76,12 @@ def _create_memory(client: TestClient, headers: dict[str, str], *, instance_id: 
 def test_learning_event_can_promote_durable_memory_with_provenance() -> None:
     client = TestClient(app)
     headers = _admin_headers(client)
-    instance_id = _create_instance(client, headers, instance_id="instance_learning_memory", company_id="company_learning_memory")
+    instance_id = _create_instance(
+        client,
+        headers,
+        instance_id="instance_learning_memory",
+        company_id="company_learning_memory",
+    )
     conversation_id = _create_conversation(client, headers, instance_id=instance_id)
 
     created = client.post(
@@ -146,7 +151,12 @@ def test_learning_event_can_promote_durable_memory_with_provenance() -> None:
 def test_learning_pattern_scan_detects_repeat_corrections_and_can_create_skill_draft() -> None:
     client = TestClient(app)
     headers = _admin_headers(client)
-    instance_id = _create_instance(client, headers, instance_id="instance_learning_patterns", company_id="company_learning_patterns")
+    instance_id = _create_instance(
+        client,
+        headers,
+        instance_id="instance_learning_patterns",
+        company_id="company_learning_patterns",
+    )
 
     first_memory_id = _create_memory(client, headers, instance_id=instance_id, title="Repeated pricing correction")
     second_memory_id = _create_memory(client, headers, instance_id=instance_id, title="Repeated pricing correction")
@@ -212,7 +222,12 @@ def test_learning_pattern_scan_detects_repeat_corrections_and_can_create_skill_d
 def test_learning_event_rejects_mixed_memory_and_skill_proposals() -> None:
     client = TestClient(app)
     headers = _admin_headers(client)
-    instance_id = _create_instance(client, headers, instance_id="instance_learning_invalid", company_id="company_learning_invalid")
+    instance_id = _create_instance(
+        client,
+        headers,
+        instance_id="instance_learning_invalid",
+        company_id="company_learning_invalid",
+    )
 
     created = client.post(
         "/admin/learning",
@@ -241,7 +256,12 @@ def test_learning_event_rejects_mixed_memory_and_skill_proposals() -> None:
 def test_learning_promotion_failure_does_not_leak_partial_decision_audit_state() -> None:
     client = TestClient(app)
     headers = _admin_headers(client)
-    instance_id = _create_instance(client, headers, instance_id="instance_learning_rollback", company_id="company_learning_rollback")
+    instance_id = _create_instance(
+        client,
+        headers,
+        instance_id="instance_learning_rollback",
+        company_id="company_learning_rollback",
+    )
 
     created = client.post(
         "/admin/learning",

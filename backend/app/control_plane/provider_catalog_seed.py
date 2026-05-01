@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
-import re
 
 
 @dataclass(frozen=True)
@@ -89,21 +89,49 @@ _BASE_URL_ENV_OVERRIDES = {
 
 _REFERENCE_HINTS = {
     "openai": ("reference/Provider/API-OpenAI.md", "reference/OpenAI/API/OpenAI"),
-    "azure_openai": ("reference/Provider/API-AzureOpenAI.md", "reference/OpenAI/API/AzureOpenAI"),
-    "anthropic": ("reference/Provider/API-Anthropic.md", "reference/OpenAI/API/Anthropic"),
-    "gemini_openai": ("reference/Provider/API-GeminiOpenAICompatible.md", "reference/OpenAI/API/GoogleGemini"),
-    "gemini_native": ("reference/Provider/API-Gemini.md", "reference/Provider/Gemini", "reference/OpenAI/API/GoogleGemini"),
-    "google_vertex_ai": ("reference/Provider/API-GoogleVertexAI.md", "reference/OpenAI/API/GoogleVertexAI"),
+    "azure_openai": (
+        "reference/Provider/API-AzureOpenAI.md",
+        "reference/OpenAI/API/AzureOpenAI",
+    ),
+    "anthropic": (
+        "reference/Provider/API-Anthropic.md",
+        "reference/OpenAI/API/Anthropic",
+    ),
+    "gemini_openai": (
+        "reference/Provider/API-GeminiOpenAICompatible.md",
+        "reference/OpenAI/API/GoogleGemini",
+    ),
+    "gemini_native": (
+        "reference/Provider/API-Gemini.md",
+        "reference/Provider/Gemini",
+        "reference/OpenAI/API/GoogleGemini",
+    ),
+    "google_vertex_ai": (
+        "reference/Provider/API-GoogleVertexAI.md",
+        "reference/OpenAI/API/GoogleVertexAI",
+    ),
     "bedrock": ("reference/Provider/API-Bedrock.md",),
     "groq": ("reference/Provider/API-Groq.md", "reference/OpenAI/API/Groq"),
     "deepseek": ("reference/Provider/API-DeepSeek.md",),
     "mistral": ("reference/Provider/API-Mistral.md", "reference/OpenAI/API/Mistral"),
-    "together": ("reference/Provider/API-TogetherAI.md", "reference/OpenAI/API/TogetherAI"),
-    "fireworks": ("reference/Provider/API-FireworksAI.md", "reference/OpenAI/API/FireworksAI"),
+    "together": (
+        "reference/Provider/API-TogetherAI.md",
+        "reference/OpenAI/API/TogetherAI",
+    ),
+    "fireworks": (
+        "reference/Provider/API-FireworksAI.md",
+        "reference/OpenAI/API/FireworksAI",
+    ),
     "cerebras": ("reference/Provider/API-Cerebras.md", "reference/OpenAI/API/Cerebras"),
-    "openrouter": ("reference/Provider/API-OpenRouter.md", "reference/OpenAI/API/OpenRouter"),
+    "openrouter": (
+        "reference/Provider/API-OpenRouter.md",
+        "reference/OpenAI/API/OpenRouter",
+    ),
     "vercel_ai_gateway": ("reference/Provider/API-VercelAIGateway.md",),
-    "nous": ("reference/Provider/API-NousPortal.md", "reference/Oauth/OAUTH-NousPortal.md"),
+    "nous": (
+        "reference/Provider/API-NousPortal.md",
+        "reference/Oauth/OAUTH-NousPortal.md",
+    ),
     "kilocode": ("reference/Provider/API-KiloCode.md",),
     "huggingface": ("reference/Provider/API-HuggingFace.md",),
     "nvidia_nim": ("reference/Provider/API-NvidiaNIM.md",),
@@ -111,27 +139,68 @@ _REFERENCE_HINTS = {
     "alibaba_dashscope": ("reference/Provider/API-AlibabaDashScope.md",),
     "kimi_moonshot": ("reference/Provider/API-KimiMoonshot.md",),
     "minimax": ("reference/Provider/API-MiniMax.md",),
-    "perplexity": ("reference/Provider/API-Perplexity.md", "reference/OpenAI/API/Perplexity"),
+    "perplexity": (
+        "reference/Provider/API-Perplexity.md",
+        "reference/OpenAI/API/Perplexity",
+    ),
     "ollama": ("reference/Provider/API-Ollama.md", "reference/OpenAI/API/Ollama"),
     "ollama_cloud": ("reference/Provider/API-OllamaCloud.md",),
     "localai": ("reference/Provider/API-LocalAI.md", "reference/OpenAI/API/LocalAI"),
-    "llama_cpp": ("reference/Provider/API-LlamaCpp.md", "reference/OpenAI/API/LlamaCpp"),
-    "llama_cpp_python": ("reference/Provider/API-LlamaCppPython.md", "reference/OpenAI/API/LlamaCppPython"),
+    "llama_cpp": (
+        "reference/Provider/API-LlamaCpp.md",
+        "reference/OpenAI/API/LlamaCpp",
+    ),
+    "llama_cpp_python": (
+        "reference/Provider/API-LlamaCppPython.md",
+        "reference/OpenAI/API/LlamaCppPython",
+    ),
     "vllm": ("reference/Provider/API-vLLM.md", "reference/OpenAI/API/vLLM"),
     "xai": ("reference/Provider/API-xAI.md", "reference/OpenAI/API/xAI"),
     "zai": ("reference/Provider/API-ZAI.md",),
     "xiaomi_mimo": ("reference/Provider/API-XiaomiMiMo.md",),
     "opencode_zen": ("reference/Provider/API-OpenCodeZen.md",),
     "opencode_go": ("reference/Provider/API-OpenCodeGo.md",),
-    "openwebui": ("reference/Provider/API-OpenWebUI.md", "reference/OpenAI/API/OpenWebUI"),
-    "continue_openai": ("reference/Provider/API-ContinueOpenAI.md", "reference/OpenAI/API/Continue"),
-    "microsoft_agent_framework": ("reference/Provider/API-MicrosoftAgentFramework.md", "reference/OpenAI/API/MicrosoftAgentFramework"),
-    "openai_codex": ("reference/Provider/API-OpenAICodex.md", "reference/Provider/OpenAICodex", "reference/Oauth/OpenAICodex"),
-    "github_copilot": ("reference/Provider/API-GitHubCopilot.md", "reference/Provider/GitHubCopilot", "reference/Oauth/GitHubCopilot"),
-    "claude_code": ("reference/Provider/API-ClaudeCode.md", "reference/Provider/ClaudeCode", "reference/Oauth/ClaudeCode"),
-    "antigravity": ("reference/Provider/API-Antigravity.md", "reference/Provider/Antigravity", "reference/Oauth/Antigravity"),
-    "google_gemini_oauth": ("reference/Oauth/OAUTH-GoogleGemini.md", "reference/Oauth/Gemini", "reference/Provider/Gemini"),
-    "nous_oauth": ("reference/Oauth/OAUTH-NousPortal.md", "reference/Provider/API-NousPortal.md"),
+    "openwebui": (
+        "reference/Provider/API-OpenWebUI.md",
+        "reference/OpenAI/API/OpenWebUI",
+    ),
+    "continue_openai": (
+        "reference/Provider/API-ContinueOpenAI.md",
+        "reference/OpenAI/API/Continue",
+    ),
+    "microsoft_agent_framework": (
+        "reference/Provider/API-MicrosoftAgentFramework.md",
+        "reference/OpenAI/API/MicrosoftAgentFramework",
+    ),
+    "openai_codex": (
+        "reference/Provider/API-OpenAICodex.md",
+        "reference/Provider/OpenAICodex",
+        "reference/Oauth/OpenAICodex",
+    ),
+    "github_copilot": (
+        "reference/Provider/API-GitHubCopilot.md",
+        "reference/Provider/GitHubCopilot",
+        "reference/Oauth/GitHubCopilot",
+    ),
+    "claude_code": (
+        "reference/Provider/API-ClaudeCode.md",
+        "reference/Provider/ClaudeCode",
+        "reference/Oauth/ClaudeCode",
+    ),
+    "antigravity": (
+        "reference/Provider/API-Antigravity.md",
+        "reference/Provider/Antigravity",
+        "reference/Oauth/Antigravity",
+    ),
+    "google_gemini_oauth": (
+        "reference/Oauth/OAUTH-GoogleGemini.md",
+        "reference/Oauth/Gemini",
+        "reference/Provider/Gemini",
+    ),
+    "nous_oauth": (
+        "reference/Oauth/OAUTH-NousPortal.md",
+        "reference/Provider/API-NousPortal.md",
+    ),
     "qwen_oauth": ("reference/Oauth/OAUTH-Qwen.md",),
 }
 
@@ -230,7 +299,11 @@ def _extract_api_modes(value: str, docs: tuple[str, ...], provider_class: str) -
         modes.append("sdk")
     if "cli" in lowered or any("cli" in item.lower() for item in docs):
         modes.append("cli")
-    if "agent" in lowered or provider_class in {"oauth_cli_bridge", "external_process", "agent_endpoint_compat"}:
+    if "agent" in lowered or provider_class in {
+        "oauth_cli_bridge",
+        "external_process",
+        "agent_endpoint_compat",
+    }:
         modes.append("agent")
     return tuple(dict.fromkeys(modes))
 
@@ -242,7 +315,15 @@ def _parse_base_url(value: str) -> str | None:
 
 def _claim_for_streaming(provider_class: str, api_modes: tuple[str, ...], primary_contract: str) -> str:
     lowered = primary_contract.lower()
-    if "stream" in lowered or provider_class in {"openai_compatible", "openai_compatible_aggregator", "openai_compatible_local", "anthropic_messages", "gemini_native", "bedrock_converse", "oauth_account_runtime"}:
+    if "stream" in lowered or provider_class in {
+        "openai_compatible",
+        "openai_compatible_aggregator",
+        "openai_compatible_local",
+        "anthropic_messages",
+        "gemini_native",
+        "bedrock_converse",
+        "oauth_account_runtime",
+    }:
         return "documented"
     if provider_class in {"oauth_cli_bridge", "external_process"}:
         return "bridge-only"
@@ -253,7 +334,14 @@ def _claim_for_streaming(provider_class: str, api_modes: tuple[str, ...], primar
 
 def _claim_for_tools(provider_class: str, api_modes: tuple[str, ...], primary_contract: str) -> str:
     lowered = primary_contract.lower()
-    if provider_class in {"openai_compatible", "openai_compatible_aggregator", "openai_compatible_local", "anthropic_messages", "gemini_native", "oauth_account_runtime"}:
+    if provider_class in {
+        "openai_compatible",
+        "openai_compatible_aggregator",
+        "openai_compatible_local",
+        "anthropic_messages",
+        "gemini_native",
+        "oauth_account_runtime",
+    }:
         return "documented"
     if "tool" in lowered or "function" in lowered:
         return "documented"
@@ -267,15 +355,27 @@ def _claim_for_tools(provider_class: str, api_modes: tuple[str, ...], primary_co
 def _claim_for_responses(api_modes: tuple[str, ...], provider_class: str) -> str:
     if "responses" in api_modes:
         return "documented"
-    if provider_class in {"openai_compatible", "openai_compatible_aggregator", "openai_compatible_local"}:
+    if provider_class in {
+        "openai_compatible",
+        "openai_compatible_aggregator",
+        "openai_compatible_local",
+    }:
         return "possible-via-generic-openai-compatible-framework"
-    if provider_class in {"oauth_cli_bridge", "external_process", "client_config_reference"}:
+    if provider_class in {
+        "oauth_cli_bridge",
+        "external_process",
+        "client_config_reference",
+    }:
         return "not-applicable"
     return "unknown"
 
 
 def _model_name_policy(provider_class: str) -> str:
-    if provider_class in {"openai_compatible", "openai_compatible_aggregator", "openai_compatible_local"}:
+    if provider_class in {
+        "openai_compatible",
+        "openai_compatible_aggregator",
+        "openai_compatible_local",
+    }:
         return "caller-supplied provider model identifier"
     if provider_class == "gemini_native":
         return "Gemini model path or alias supplied by caller"
@@ -312,7 +412,11 @@ def _resolve_reference_paths(provider_id: str, source_docs: tuple[str, ...]) -> 
         doc_name = source_doc.strip()
         if not doc_name:
             continue
-        for base in (_reference_root() / "Provider", _reference_root() / "Oauth", _reference_root() / "OpenAI" / "API"):
+        for base in (
+            _reference_root() / "Provider",
+            _reference_root() / "Oauth",
+            _reference_root() / "OpenAI" / "API",
+        ):
             direct = base / doc_name
             if direct.exists():
                 _append_path(direct)

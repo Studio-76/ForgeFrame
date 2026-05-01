@@ -11,10 +11,15 @@ from sqlalchemy import and_, func, select
 from sqlalchemy.orm import Session
 
 from app.approvals.models import build_execution_approval_id, parse_shared_approval_id
-from app.artifacts.models import ArtifactAttachmentRecord, ArtifactRecord, CreateArtifact, UpdateArtifact
+from app.artifacts.models import (
+    ArtifactAttachmentRecord,
+    ArtifactRecord,
+    CreateArtifact,
+    UpdateArtifact,
+)
 from app.instances.models import InstanceRecord
-from app.storage.conversation_repository import ConversationORM
 from app.storage.artifact_repository import ArtifactAttachmentORM, ArtifactORM
+from app.storage.conversation_repository import ConversationORM
 from app.storage.execution_repository import RunApprovalLinkORM, RunORM
 from app.storage.tasking_repository import TaskORM
 from app.storage.workspace_repository import WorkspaceEventORM, WorkspaceORM
@@ -24,8 +29,8 @@ from app.workspaces.models import (
     WorkspaceApprovalSummary,
     WorkspaceConversationSummary,
     WorkspaceDetail,
-    WorkspaceEventRecord,
     WorkspaceEventKind,
+    WorkspaceEventRecord,
     WorkspaceRunSummary,
     WorkspaceSummary,
     WorkspaceTaskSummary,
@@ -47,7 +52,13 @@ class WorkInteractionAdminService:
         return f"{prefix}_{uuid4().hex[:16]}"
 
     @staticmethod
-    def _workspace_status(preview_status: str, review_status: str, handoff_status: str, *, archived: bool = False) -> str:
+    def _workspace_status(
+        preview_status: str,
+        review_status: str,
+        handoff_status: str,
+        *,
+        archived: bool = False,
+    ) -> str:
         if archived:
             return "archived"
         if handoff_status == "delivered":
@@ -86,16 +97,41 @@ class WorkInteractionAdminService:
     @staticmethod
     def _next_action(row: WorkspaceORM) -> tuple[str, str, str, str]:
         if row.status == "archived":
-            return ("archived", "Archived", "done", "Workspace is archived and no further handoff action is expected.")
+            return (
+                "archived",
+                "Archived",
+                "done",
+                "Workspace is archived and no further handoff action is expected.",
+            )
         if row.handoff_status == "delivered":
-            return ("handoff_delivered", "Handoff delivered", "done", "The handoff already left ForgeFrame and now lives in the downstream system.")
+            return (
+                "handoff_delivered",
+                "Handoff delivered",
+                "done",
+                "The handoff already left ForgeFrame and now lives in the downstream system.",
+            )
         if row.handoff_status == "ready":
-            return ("handoff_ready", "Handoff ready", "waiting", "Handoff evidence is prepared, but delivery still happens outside this page.")
+            return (
+                "handoff_ready",
+                "Handoff ready",
+                "waiting",
+                "Handoff evidence is prepared, but delivery still happens outside this page.",
+            )
         if row.review_status == "pending":
-            return ("review_in_progress", "Review in progress", "waiting", "Review is already pending. Use approvals and artifacts to close the gate.")
+            return (
+                "review_in_progress",
+                "Review in progress",
+                "waiting",
+                "Review is already pending. Use approvals and artifacts to close the gate.",
+            )
         if row.review_status == "approved":
             if row.handoff_artifact_id or row.handoff_reference or row.pr_reference:
-                return ("prepare_handoff", "Prepare handoff", "available", "Handoff evidence is linked. Mark the workspace ready for delivery.")
+                return (
+                    "prepare_handoff",
+                    "Prepare handoff",
+                    "available",
+                    "Handoff evidence is linked. Mark the workspace ready for delivery.",
+                )
             return (
                 "prepare_handoff",
                 "Prepare handoff",
@@ -103,7 +139,12 @@ class WorkInteractionAdminService:
                 "No dedicated handoff API exists here. Link a handoff artifact, PR reference, or handoff reference first.",
             )
         if row.preview_status in {"ready", "approved"}:
-            return ("request_review", "Request review", "available", "Preview evidence is linked. Move the workspace into review.")
+            return (
+                "request_review",
+                "Request review",
+                "available",
+                "Preview evidence is linked. Move the workspace into review.",
+            )
         if row.active_run_id or row.preview_artifact_id:
             return (
                 "start_preview",
@@ -161,12 +202,31 @@ class WorkInteractionAdminService:
     def _artifact_attachments(self, session: Session, *, company_id: str, artifact_ids: list[str]) -> dict[str, list[ArtifactAttachmentRecord]]:
         if not artifact_ids:
             return {}
-        rows = session.execute(
-            select(ArtifactAttachmentORM)
-            .where(ArtifactAttachmentORM.company_id == company_id, ArtifactAttachmentORM.artifact_id.in_(artifact_ids))
-            .order_by(ArtifactAttachmentORM.created_at.asc(), ArtifactAttachmentORM.target_kind.asc(), ArtifactAttachmentORM.target_id.asc(), ArtifactAttachmentORM.role.asc())
-        ).scalars().all()
-        priority = {"workspace": 0, "run": 1, "approval": 2, "instance": 3, "decision": 4}
+        rows = (
+            session
+            .execute(
+                select(ArtifactAttachmentORM)
+                .where(
+                    ArtifactAttachmentORM.company_id == company_id,
+                    ArtifactAttachmentORM.artifact_id.in_(artifact_ids),
+                )
+                .order_by(
+                    ArtifactAttachmentORM.created_at.asc(),
+                    ArtifactAttachmentORM.target_kind.asc(),
+                    ArtifactAttachmentORM.target_id.asc(),
+                    ArtifactAttachmentORM.role.asc(),
+                )
+            )
+            .scalars()
+            .all()
+        )
+        priority = {
+            "workspace": 0,
+            "run": 1,
+            "approval": 2,
+            "instance": 3,
+            "decision": 4,
+        }
         rows = sorted(
             rows,
             key=lambda row: (
@@ -296,7 +356,12 @@ class WorkInteractionAdminService:
 
         return next_metadata
 
-    def _artifact_record(self, row: ArtifactORM, *, attachments: dict[str, list[ArtifactAttachmentRecord]]) -> ArtifactRecord:
+    def _artifact_record(
+        self,
+        row: ArtifactORM,
+        *,
+        attachments: dict[str, list[ArtifactAttachmentRecord]],
+    ) -> ArtifactRecord:
         artifact_attachments = list(attachments.get(row.id, []))
         metadata = dict(row.metadata_json or {})
         workspace_role = self._artifact_workspace_role(row=row, artifact_attachments=artifact_attachments)
@@ -318,7 +383,11 @@ class WorkInteractionAdminService:
             version=self._artifact_metadata_string(metadata, "version", "artifact_version", "version_label"),
             checksum_sha256=self._artifact_metadata_string(metadata, "checksum_sha256", "sha256", "checksum"),
             retention_policy=self._artifact_metadata_string(metadata, "retention_policy")
-            or self._artifact_metadata_string(metadata.get("retention", {}) if isinstance(metadata.get("retention"), dict) else {}, "policy", "classification"),
+            or self._artifact_metadata_string(
+                metadata.get("retention", {}) if isinstance(metadata.get("retention"), dict) else {},
+                "policy",
+                "classification",
+            ),
             retained_until=self._artifact_metadata_datetime(metadata, ("retention", "retained_until"), ("retained_until",)),
             archive_reason=self._artifact_metadata_string(metadata, "archive_reason"),
             status=row.status,  # type: ignore[arg-type]
@@ -410,9 +479,7 @@ class WorkInteractionAdminService:
                 ArtifactAttachmentORM.target_kind == target_kind,
                 ArtifactAttachmentORM.target_id == target_id,
             )
-        rows = session.execute(
-            stmt.order_by(ArtifactORM.created_at.desc()).limit(max(1, min(limit, 200)))
-        ).scalars().all()
+        rows = session.execute(stmt.order_by(ArtifactORM.created_at.desc()).limit(max(1, min(limit, 200)))).scalars().all()
         attachments = self._artifact_attachments(session, company_id=company_id, artifact_ids=[row.id for row in rows])
         return [self._artifact_record(row, attachments=attachments) for row in rows]
 
@@ -586,9 +653,7 @@ class WorkInteractionAdminService:
             )
             if status is not None:
                 stmt = stmt.where(WorkspaceORM.status == status)
-            rows = session.execute(
-                stmt.order_by(WorkspaceORM.updated_at.desc()).limit(max(1, min(limit, 200)))
-            ).scalars().all()
+            rows = session.execute(stmt.order_by(WorkspaceORM.updated_at.desc()).limit(max(1, min(limit, 200)))).scalars().all()
             return [self._workspace_summary(session, row) for row in rows]
 
     def get_workspace(self, *, instance: InstanceRecord, workspace_id: str) -> WorkspaceDetail:
@@ -598,21 +663,45 @@ class WorkInteractionAdminService:
                 raise ValueError(f"Workspace '{workspace_id}' was not found.")
 
             summary = self._workspace_summary(session, row)
-            run_rows = session.execute(
-                select(RunORM)
-                .where(RunORM.company_id == instance.company_id, RunORM.workspace_id == workspace_id)
-                .order_by(RunORM.updated_at.desc())
-            ).scalars().all()
-            conversation_rows = session.execute(
-                select(ConversationORM)
-                .where(ConversationORM.company_id == instance.company_id, ConversationORM.workspace_id == workspace_id)
-                .order_by(ConversationORM.updated_at.desc())
-            ).scalars().all()
-            task_rows = session.execute(
-                select(TaskORM)
-                .where(TaskORM.company_id == instance.company_id, TaskORM.workspace_id == workspace_id)
-                .order_by(TaskORM.updated_at.desc())
-            ).scalars().all()
+            run_rows = (
+                session
+                .execute(
+                    select(RunORM)
+                    .where(
+                        RunORM.company_id == instance.company_id,
+                        RunORM.workspace_id == workspace_id,
+                    )
+                    .order_by(RunORM.updated_at.desc())
+                )
+                .scalars()
+                .all()
+            )
+            conversation_rows = (
+                session
+                .execute(
+                    select(ConversationORM)
+                    .where(
+                        ConversationORM.company_id == instance.company_id,
+                        ConversationORM.workspace_id == workspace_id,
+                    )
+                    .order_by(ConversationORM.updated_at.desc())
+                )
+                .scalars()
+                .all()
+            )
+            task_rows = (
+                session
+                .execute(
+                    select(TaskORM)
+                    .where(
+                        TaskORM.company_id == instance.company_id,
+                        TaskORM.workspace_id == workspace_id,
+                    )
+                    .order_by(TaskORM.updated_at.desc())
+                )
+                .scalars()
+                .all()
+            )
             approval_rows = session.execute(
                 select(RunApprovalLinkORM, RunORM)
                 .join(
@@ -622,14 +711,25 @@ class WorkInteractionAdminService:
                         RunORM.company_id == RunApprovalLinkORM.company_id,
                     ),
                 )
-                .where(RunApprovalLinkORM.company_id == instance.company_id, RunORM.workspace_id == workspace_id)
+                .where(
+                    RunApprovalLinkORM.company_id == instance.company_id,
+                    RunORM.workspace_id == workspace_id,
+                )
                 .order_by(RunApprovalLinkORM.opened_at.desc())
             ).all()
-            event_rows = session.execute(
-                select(WorkspaceEventORM)
-                .where(WorkspaceEventORM.company_id == instance.company_id, WorkspaceEventORM.workspace_id == workspace_id)
-                .order_by(WorkspaceEventORM.created_at.desc())
-            ).scalars().all()
+            event_rows = (
+                session
+                .execute(
+                    select(WorkspaceEventORM)
+                    .where(
+                        WorkspaceEventORM.company_id == instance.company_id,
+                        WorkspaceEventORM.workspace_id == workspace_id,
+                    )
+                    .order_by(WorkspaceEventORM.created_at.desc())
+                )
+                .scalars()
+                .all()
+            )
             artifacts = self._list_artifact_records(
                 session,
                 company_id=instance.company_id,
@@ -750,7 +850,11 @@ class WorkInteractionAdminService:
             if existing is not None and existing.company_id == instance.company_id:
                 raise ValueError(f"Workspace '{workspace_id}' already exists.")
             if payload.active_run_id is not None:
-                self._ensure_run_exists(session, company_id=instance.company_id, run_id=payload.active_run_id)
+                self._ensure_run_exists(
+                    session,
+                    company_id=instance.company_id,
+                    run_id=payload.active_run_id,
+                )
             if payload.latest_approval_id is not None:
                 self._ensure_execution_approval_exists(
                     session,
@@ -950,13 +1054,11 @@ class WorkInteractionAdminService:
 
             attachments = list(payload.attachments)
             if payload.workspace_id is not None:
-                attachments.append(
-                    {
-                        "target_kind": "workspace",
-                        "target_id": payload.workspace_id,
-                        "role": payload.workspace_role or "artifact",
-                    }
-                )
+                attachments.append({
+                    "target_kind": "workspace",
+                    "target_id": payload.workspace_id,
+                    "role": payload.workspace_role or "artifact",
+                })
 
             dedupe: set[tuple[str, str, str]] = set()
             for attachment_payload in attachments:
@@ -1038,13 +1140,7 @@ class WorkInteractionAdminService:
                 row.size_bytes = payload.size_bytes
             if "status" in fields_set and payload.status is not None:
                 row.status = payload.status
-            base_metadata = (
-                {}
-                if "metadata" in fields_set and payload.metadata is None
-                else dict(payload.metadata)
-                if payload.metadata is not None
-                else dict(row.metadata_json or {})
-            )
+            base_metadata = {} if "metadata" in fields_set and payload.metadata is None else dict(payload.metadata) if payload.metadata is not None else dict(row.metadata_json or {})
             row.metadata_json = self._apply_structured_artifact_metadata(
                 base_metadata,
                 fields_set=fields_set,

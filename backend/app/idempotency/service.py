@@ -141,23 +141,18 @@ def build_request_fingerprint(
         raw_body = json.dumps(body, sort_keys=True, separators=(",", ":"), ensure_ascii=True).encode("utf-8")
     canonical_body = _canonical_body(raw_body, content_type or request.headers.get("content-type", ""))
     body_digest = hashlib.sha256(canonical_body).hexdigest()
-    fingerprint = "\n".join(
-        [
-            request.method.upper(),
-            request.url.path,
-            _query_fingerprint(request),
-            (content_type or request.headers.get("content-type", "")).split(";", 1)[0].strip().lower(),
-            body_digest,
-        ]
-    )
+    fingerprint = "\n".join([
+        request.method.upper(),
+        request.url.path,
+        _query_fingerprint(request),
+        (content_type or request.headers.get("content-type", "")).split(";", 1)[0].strip().lower(),
+        body_digest,
+    ])
     return hashlib.sha256(fingerprint.encode("utf-8")).hexdigest()
 
 
 def build_request_envelope(request: Request, body: bytes | None = None) -> RequestEnvelope:
-    request_id = (
-        _first_header(request, "x-request-id", "x-forgeframe-request-id", "x-forgegate-request-id")
-        or f"req_{uuid4().hex[:12]}"
-    )
+    request_id = _first_header(request, "x-request-id", "x-forgeframe-request-id", "x-forgegate-request-id") or f"req_{uuid4().hex[:12]}"
     correlation_id = _first_header(request, "x-forgeframe-correlation-id", "x-forgegate-correlation-id") or request_id
     causation_id = _first_header(request, "x-forgeframe-causation-id", "x-forgegate-causation-id") or request_id
     traceparent = request.headers.get("traceparent", "").strip()
@@ -246,13 +241,18 @@ class RequestIdempotencyService:
     ) -> Any | None:
         from app.storage.execution_repository import RequestIdempotencyRecordORM
 
-        return session.execute(
-            select(RequestIdempotencyRecordORM).where(
-                RequestIdempotencyRecordORM.scope_key == scope_key,
-                RequestIdempotencyRecordORM.subject_key == subject_key,
-                RequestIdempotencyRecordORM.idempotency_key == idempotency_key,
+        return (
+            session
+            .execute(
+                select(RequestIdempotencyRecordORM).where(
+                    RequestIdempotencyRecordORM.scope_key == scope_key,
+                    RequestIdempotencyRecordORM.subject_key == subject_key,
+                    RequestIdempotencyRecordORM.idempotency_key == idempotency_key,
+                )
             )
-        ).scalars().first()
+            .scalars()
+            .first()
+        )
 
     @staticmethod
     def _reservation_from_existing_or_raise(
@@ -262,9 +262,7 @@ class RequestIdempotencyService:
         request_fingerprint_hash: str,
     ) -> IdempotencyReservation:
         if existing.request_fingerprint_hash != request_fingerprint_hash:
-            raise IdempotencyFingerprintMismatchError(
-                f"Idempotency-Key '{idempotency_key}' was already used for a different request fingerprint."
-            )
+            raise IdempotencyFingerprintMismatchError(f"Idempotency-Key '{idempotency_key}' was already used for a different request fingerprint.")
 
         if existing.record_state == "completed" and existing.response_status_code is not None and existing.response_body is not None:
             return IdempotencyReservation(
@@ -277,9 +275,7 @@ class RequestIdempotencyService:
                 ),
             )
 
-        raise IdempotencyRequestInProgressError(
-            f"Request with Idempotency-Key '{idempotency_key}' is still in progress."
-        )
+        raise IdempotencyRequestInProgressError(f"Request with Idempotency-Key '{idempotency_key}' is still in progress.")
 
     @staticmethod
     def _flush_reservation_or_raise_insert_race(

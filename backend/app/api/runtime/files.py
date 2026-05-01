@@ -7,15 +7,19 @@ import base64
 from fastapi import APIRouter, Depends, Request, Response, status
 from fastapi.responses import JSONResponse
 
-from app.authz import RequestActor
 from app.api.runtime.dependencies import (
     get_runtime_files_service,
     get_runtime_gateway_identity,
     get_settings,
     require_runtime_permission,
 )
+from app.authz import RequestActor
 from app.governance.models import RuntimeGatewayIdentity
-from app.runtime_files.service import RuntimeFileNotFoundError, RuntimeFileResolutionError, RuntimeFilesService
+from app.runtime_files.service import (
+    RuntimeFileNotFoundError,
+    RuntimeFileResolutionError,
+    RuntimeFilesService,
+)
 from app.settings.config import Settings
 
 from .responses import _runtime_account_id, _runtime_company_id, _runtime_instance_id
@@ -26,7 +30,12 @@ router = APIRouter(tags=["runtime-files"])
 def _file_not_found(file_id: str) -> JSONResponse:
     return JSONResponse(
         status_code=status.HTTP_404_NOT_FOUND,
-        content={"error": {"type": "file_not_found", "message": f"File '{file_id}' was not found."}},
+        content={
+            "error": {
+                "type": "file_not_found",
+                "message": f"File '{file_id}' was not found.",
+            }
+        },
     )
 
 
@@ -65,7 +74,12 @@ async def create_file(
         if uploaded_file is None:
             return JSONResponse(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                content={"error": {"type": "invalid_request", "message": "multipart file uploads require a 'file' field."}},
+                content={
+                    "error": {
+                        "type": "invalid_request",
+                        "message": "multipart file uploads require a 'file' field.",
+                    }
+                },
             )
         filename = str(getattr(uploaded_file, "filename", "") or filename)
         payload_content_type = str(getattr(uploaded_file, "content_type", "") or payload_content_type)
@@ -75,7 +89,12 @@ async def create_file(
         if not isinstance(body, dict):
             return JSONResponse(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                content={"error": {"type": "invalid_request", "message": "JSON file uploads must provide an object payload."}},
+                content={
+                    "error": {
+                        "type": "invalid_request",
+                        "message": "JSON file uploads must provide an object payload.",
+                    }
+                },
             )
         purpose = str(body.get("purpose") or purpose)
         filename = str(body.get("filename") or filename)
@@ -84,14 +103,24 @@ async def create_file(
         if not encoded:
             return JSONResponse(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                content={"error": {"type": "invalid_request", "message": "JSON file uploads require content_base64."}},
+                content={
+                    "error": {
+                        "type": "invalid_request",
+                        "message": "JSON file uploads require content_base64.",
+                    }
+                },
             )
         try:
             content_bytes = base64.b64decode(encoded, validate=True)
         except ValueError:
             return JSONResponse(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                content={"error": {"type": "invalid_request", "message": "content_base64 is not valid base64."}},
+                content={
+                    "error": {
+                        "type": "invalid_request",
+                        "message": "content_base64 is not valid base64.",
+                    }
+                },
             )
     else:
         content_bytes = await request.body()

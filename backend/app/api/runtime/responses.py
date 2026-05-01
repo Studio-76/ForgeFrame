@@ -11,14 +11,18 @@ from typing import Any
 from fastapi import APIRouter, Depends, Request, status
 from fastapi.responses import JSONResponse, StreamingResponse
 
-from app.authz import RequestActor
 from app.api.runtime.access import (
     allowed_provider_set,
     ensure_runtime_model_access,
     list_public_runtime_model_ids,
     requested_model_blocked_by_disabled_public_bridge,
 )
-from app.api.runtime.chat import _duration_ms, _error_response, _provider_exception_to_http, _routing_headers
+from app.api.runtime.chat import (
+    _duration_ms,
+    _error_response,
+    _provider_exception_to_http,
+    _routing_headers,
+)
 from app.api.runtime.dependencies import (
     get_dispatch_service,
     get_model_registry,
@@ -37,12 +41,14 @@ from app.api.runtime.errors import (
     public_runtime_provider_message,
 )
 from app.api.runtime.schemas import ResponsesRequest
+from app.authz import RequestActor
 from app.core.dispatch import DispatchService
 from app.core.model_registry import ModelRegistry
 from app.core.routing import RoutingService
 from app.governance.errors import RuntimeAuthorizationError
 from app.governance.models import RuntimeGatewayIdentity, RuntimeRequestPathDecision
 from app.governance.service import GovernanceService, get_governance_service
+from app.request_metadata import merge_request_metadata
 from app.responses.models import (
     NormalizedResponsesRequest,
     build_message_output_item,
@@ -51,11 +57,14 @@ from app.responses.models import (
     new_response_created,
     new_response_id,
 )
-from app.responses.service import ResponseNotFoundError, ResponsesRequestValidationError, ResponsesService
-from app.responses.service import ResponseStructuredOutputValidationError
+from app.responses.service import (
+    ResponseNotFoundError,
+    ResponsesRequestValidationError,
+    ResponsesService,
+    ResponseStructuredOutputValidationError,
+)
 from app.responses.translation import response_input_items_to_chat_messages
 from app.runtime_files.service import RuntimeFileResolutionError, RuntimeFilesService
-from app.request_metadata import merge_request_metadata
 from app.settings.config import Settings
 from app.telemetry.context import telemetry_context_from_request
 from app.tenancy import normalize_tenant_id
@@ -79,25 +88,9 @@ def _resolve_client_identity(
             tenant_id=gateway_identity.account_id or default_tenant_id,
         )
     return ClientIdentity(
-        client_id=(
-            payload.client.get("client_id")
-            or request.headers.get("x-forgeframe-client")
-            or request.headers.get("x-forgegate-client")
-            or request.headers.get("user-agent")
-            or "unknown_client"
-        ),
-        consumer=(
-            payload.client.get("consumer")
-            or request.headers.get("x-forgeframe-consumer")
-            or request.headers.get("x-forgegate-consumer")
-            or "unknown_consumer"
-        ),
-        integration=(
-            payload.client.get("integration")
-            or request.headers.get("x-forgeframe-integration")
-            or request.headers.get("x-forgegate-integration")
-            or "unknown_integration"
-        ),
+        client_id=(payload.client.get("client_id") or request.headers.get("x-forgeframe-client") or request.headers.get("x-forgegate-client") or request.headers.get("user-agent") or "unknown_client"),
+        consumer=(payload.client.get("consumer") or request.headers.get("x-forgeframe-consumer") or request.headers.get("x-forgegate-consumer") or "unknown_consumer"),
+        integration=(payload.client.get("integration") or request.headers.get("x-forgeframe-integration") or request.headers.get("x-forgegate-integration") or "unknown_integration"),
         tenant_id=default_tenant_id,
     )
 
@@ -140,7 +133,9 @@ def _request_fingerprint(request: NormalizedResponsesRequest) -> str:
     return hashlib.sha256(serialized.encode("utf-8")).hexdigest()
 
 
-def _responses_validation_error_response(exc: ResponsesRequestValidationError) -> JSONResponse:
+def _responses_validation_error_response(
+    exc: ResponsesRequestValidationError,
+) -> JSONResponse:
     extra: dict[str, object] = {}
     if exc.param:
         extra["param"] = exc.param
@@ -260,7 +255,9 @@ def _response_incomplete_payload(
     ).model_dump(mode="json")
 
 
-def _responses_control_payload(request: NormalizedResponsesRequest) -> dict[str, object]:
+def _responses_control_payload(
+    request: NormalizedResponsesRequest,
+) -> dict[str, object]:
     return ResponsesService.response_controls_for_request(request)
 
 
@@ -315,18 +312,10 @@ def create_response(
     normalized_request = normalized_request.model_copy(
         update={
             "metadata": merge_request_metadata(normalized_request.metadata, path_metadata),
-            "background": (
-                True
-                if request_path_decision is not None and request_path_decision.request_path == "queue_background"
-                else normalized_request.background
-            ),
+            "background": (True if request_path_decision is not None and request_path_decision.request_path == "queue_background" else normalized_request.background),
         }
     )
-    if (
-        request_path_decision is not None
-        and request_path_decision.request_path == "queue_background"
-        and normalized_request.stream
-    ):
+    if request_path_decision is not None and request_path_decision.request_path == "queue_background" and normalized_request.stream:
         return _error_response(
             status_code=status.HTTP_409_CONFLICT,
             error_type="request_path_blocked",
@@ -411,7 +400,9 @@ def create_response(
             status_code=status.HTTP_404_NOT_FOUND,
             error_type="model_not_found",
             message=f"Requested model '{requested_model}' is not available.",
-            available_models=public_model_ids if public_model_ids is not None else list_public_runtime_model_ids(
+            available_models=public_model_ids
+            if public_model_ids is not None
+            else list_public_runtime_model_ids(
                 routing=routing,
                 identity=gateway_identity,
                 route_context=path_metadata,
@@ -605,10 +596,7 @@ def create_response(
                 event_name="response.created",
                 payload=created_payload,
             )
-            yield (
-                "event: response.created\ndata: "
-                f"{JSONResponse(content=created_payload).body.decode()}\n\n"
-            )
+            yield (f"event: response.created\ndata: {JSONResponse(content=created_payload).body.decode()}\n\n")
             try:
                 for event in events:
                     if event.event == "delta":
@@ -620,10 +608,7 @@ def create_response(
                             payload=delta_payload,
                         )
                         collected += event.delta
-                        yield (
-                            "event: response.output_text.delta\ndata: "
-                            f"{JSONResponse(content=delta_payload).body.decode()}\n\n"
-                        )
+                        yield (f"event: response.output_text.delta\ndata: {JSONResponse(content=delta_payload).body.decode()}\n\n")
                         continue
 
                     if event.event == "error":
@@ -680,10 +665,7 @@ def create_response(
                             payload=failed_payload,
                         )
                         terminal_state = True
-                        yield (
-                            "event: response.error\ndata: "
-                            f"{JSONResponse(content=failed_payload).body.decode()}\n\n"
-                        )
+                        yield (f"event: response.error\ndata: {JSONResponse(content=failed_payload).body.decode()}\n\n")
                         break
 
                     if event.event == "done":
@@ -745,10 +727,7 @@ def create_response(
                                 payload=failed_payload,
                             )
                             terminal_state = True
-                            yield (
-                                "event: response.error\ndata: "
-                                f"{JSONResponse(content=failed_payload).body.decode()}\n\n"
-                            )
+                            yield (f"event: response.error\ndata: {JSONResponse(content=failed_payload).body.decode()}\n\n")
                             break
                         analytics.record_stream_done_event(
                             provider=provider,
@@ -800,10 +779,7 @@ def create_response(
                             payload=completed_payload,
                         )
                         terminal_state = True
-                        yield (
-                            "event: response.completed\ndata: "
-                            f"{JSONResponse(content=completed_payload).body.decode()}\n\n"
-                        )
+                        yield (f"event: response.completed\ndata: {JSONResponse(content=completed_payload).body.decode()}\n\n")
                         break
             except GeneratorExit:
                 if not terminal_state:
@@ -906,10 +882,7 @@ def create_response(
                     payload=failed_payload,
                 )
                 terminal_state = True
-                yield (
-                    "event: response.error\ndata: "
-                    f"{JSONResponse(content=failed_payload).body.decode()}\n\n"
-                )
+                yield (f"event: response.error\ndata: {JSONResponse(content=failed_payload).body.decode()}\n\n")
             yield "data: [DONE]\n\n"
 
         return StreamingResponse(

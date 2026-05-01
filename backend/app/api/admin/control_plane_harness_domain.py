@@ -2,7 +2,12 @@
 
 from __future__ import annotations
 
-from app.harness import HarnessImportRequest, HarnessPreviewRequest, HarnessProviderProfile, HarnessVerificationRequest
+from app.harness import (
+    HarnessImportRequest,
+    HarnessPreviewRequest,
+    HarnessProviderProfile,
+    HarnessVerificationRequest,
+)
 from app.harness.redaction import redact_sensitive_payload as _redact_sensitive_payload
 
 
@@ -52,7 +57,11 @@ class ControlPlaneHarnessDomainMixin:
         return {
             "status": "ok",
             "preview": preview,
-            "run": self._latest_harness_run_payload(provider_key=payload.provider_key, mode="preview", instance_id=resolved_instance_id),
+            "run": self._latest_harness_run_payload(
+                provider_key=payload.provider_key,
+                mode="preview",
+                instance_id=resolved_instance_id,
+            ),
         }
 
     def harness_dry_run(self, payload: HarnessPreviewRequest, instance_id: str | None = None) -> dict[str, object]:
@@ -115,17 +124,27 @@ class ControlPlaneHarnessDomainMixin:
 
     def harness_snapshot(self, instance_id: str | None = None) -> dict[str, object]:
         resolved_instance_id = self._resolved_harness_instance_id(instance_id)
-        return {"status": "ok", "snapshot": self._harness.export_snapshot(instance_id=resolved_instance_id)}
+        return {
+            "status": "ok",
+            "snapshot": self._harness.export_snapshot(instance_id=resolved_instance_id),
+        }
 
     def export_harness_config(self, *, redact_secrets: bool = True, instance_id: str | None = None) -> dict[str, object]:
         resolved_instance_id = self._resolved_harness_instance_id(instance_id)
-        return {"status": "ok", "snapshot": self._harness.export_config_snapshot(redact_secrets=redact_secrets, instance_id=resolved_instance_id)}
+        return {
+            "status": "ok",
+            "snapshot": self._harness.export_config_snapshot(redact_secrets=redact_secrets, instance_id=resolved_instance_id),
+        }
 
     def import_harness_config(self, payload: HarnessImportRequest, instance_id: str | None = None) -> dict[str, object]:
         return self._harness.import_config_snapshot(payload, instance_id=self._resolved_harness_instance_id(instance_id))
 
     def rollback_harness_profile(self, provider_key: str, revision: int, instance_id: str | None = None):
-        return self._harness.rollback_profile(provider_key, revision, instance_id=self._resolved_harness_instance_id(instance_id))
+        return self._harness.rollback_profile(
+            provider_key,
+            revision,
+            instance_id=self._resolved_harness_instance_id(instance_id),
+        )
 
     def harness_runs(
         self,

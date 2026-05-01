@@ -1,8 +1,6 @@
-import os
-
+from conftest import admin_headers as shared_admin_headers
 from fastapi.testclient import TestClient
 
-from conftest import admin_headers as shared_admin_headers
 from app.api.runtime.dependencies import clear_runtime_dependency_caches
 from app.governance.service import get_governance_service
 from app.main import app
@@ -21,7 +19,11 @@ def _issue_runtime_key(client: TestClient, *, scopes: list[str]) -> str:
     key_response = client.post(
         "/admin/keys/",
         headers=headers,
-        json={"label": f"Key {'-'.join(scopes)}", "account_id": account_id, "scopes": scopes},
+        json={
+            "label": f"Key {'-'.join(scopes)}",
+            "account_id": account_id,
+            "scopes": scopes,
+        },
     )
     assert key_response.status_code == 201
     return key_response.json()["issued"]["token"]
@@ -40,7 +42,11 @@ def _issue_runtime_key_record(
     key_response = client.post(
         "/admin/keys/",
         headers=headers,
-        json={"label": f"Key {'-'.join(scopes)}", "account_id": account_id, "scopes": scopes},
+        json={
+            "label": f"Key {'-'.join(scopes)}",
+            "account_id": account_id,
+            "scopes": scopes,
+        },
     )
     assert key_response.status_code == 201
     return key_response.json()["issued"]
@@ -129,7 +135,9 @@ def test_responses_route_accepts_runtime_key_with_responses_scope(monkeypatch) -
     assert body["output"][0]["content"][0]["type"] == "output_text"
 
 
-def test_responses_retrieval_route_accepts_runtime_key_with_responses_scope(monkeypatch) -> None:
+def test_responses_retrieval_route_accepts_runtime_key_with_responses_scope(
+    monkeypatch,
+) -> None:
     monkeypatch.setenv("FORGEGATE_RUNTIME_AUTH_REQUIRED", "true")
     clear_runtime_dependency_caches()
     get_governance_service.cache_clear()
@@ -176,7 +184,9 @@ def test_runtime_request_path_blocked_rejects_runtime_execution(monkeypatch) -> 
     assert response.json()["error"]["type"] == "request_path_blocked"
 
 
-def test_runtime_request_path_review_required_rejects_runtime_execution(monkeypatch) -> None:
+def test_runtime_request_path_review_required_rejects_runtime_execution(
+    monkeypatch,
+) -> None:
     monkeypatch.setenv("FORGEGATE_RUNTIME_AUTH_REQUIRED", "true")
     clear_runtime_dependency_caches()
     get_governance_service.cache_clear()
@@ -200,7 +210,9 @@ def test_runtime_request_path_review_required_rejects_runtime_execution(monkeypa
     assert response.json()["error"]["type"] == "request_path_review_required"
 
 
-def test_runtime_local_only_filters_public_inventory_to_local_targets(monkeypatch) -> None:
+def test_runtime_local_only_filters_public_inventory_to_local_targets(
+    monkeypatch,
+) -> None:
     monkeypatch.setenv("FORGEGATE_RUNTIME_AUTH_REQUIRED", "true")
     clear_runtime_dependency_caches()
     get_governance_service.cache_clear()
@@ -222,7 +234,10 @@ def test_runtime_local_only_filters_public_inventory_to_local_targets(monkeypatc
     records = response.json()["data"]
     assert records
     assert {item["owned_by"] for item in records} <= {"ForgeFrame", "Ollama"}
-    assert {item["id"] for item in records} <= {"forgeframe-baseline-chat-v1", "llama3.2"}
+    assert {item["id"] for item in records} <= {
+        "forgeframe-baseline-chat-v1",
+        "llama3.2",
+    }
 
 
 def test_runtime_pinned_target_routes_to_the_configured_target(monkeypatch) -> None:
@@ -233,11 +248,7 @@ def test_runtime_pinned_target_routes_to_the_configured_target(monkeypatch) -> N
     issued = _issue_runtime_key_record(client, scopes=["responses:write"])
     targets_response = client.get("/admin/provider-targets/", headers=_admin_headers(client))
     assert targets_response.status_code == 200
-    pinned_target_key = next(
-        item["target_key"]
-        for item in targets_response.json()["targets"]
-        if item["provider"] == "forgeframe_baseline"
-    )
+    pinned_target_key = next(item["target_key"] for item in targets_response.json()["targets"] if item["provider"] == "forgeframe_baseline")
     _update_runtime_key_policy(
         client,
         key_id=str(issued["key_id"]),

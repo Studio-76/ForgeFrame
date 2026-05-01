@@ -54,9 +54,7 @@ class DispatchService:
                 response_controls=response_controls,
             )
         except RuntimeError as exc:
-            if require_vision and (
-                isinstance(exc, RoutingNoCandidateError) or str(exc) == "No active models satisfy current routing requirements."
-            ):
+            if require_vision and (isinstance(exc, RoutingNoCandidateError) or str(exc) == "No active models satisfy current routing requirements."):
                 raise ProviderUnsupportedFeatureError("runtime", "vision") from exc
             raise
         adapter = self._providers.get(decision.resolved_model.provider)
@@ -167,9 +165,7 @@ class DispatchService:
                 response_controls=response_controls,
             )
         except RuntimeError as exc:
-            if require_vision and (
-                isinstance(exc, RoutingNoCandidateError) or str(exc) == "No active models satisfy current routing requirements."
-            ):
+            if require_vision and (isinstance(exc, RoutingNoCandidateError) or str(exc) == "No active models satisfy current routing requirements."):
                 raise ProviderUnsupportedFeatureError("runtime", "vision") from exc
             raise
         adapter = self._providers.get(decision.resolved_model.provider)

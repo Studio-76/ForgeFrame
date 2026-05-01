@@ -12,14 +12,27 @@ from sqlalchemy.orm import Session
 
 from app.core.dispatch import DispatchService
 from app.core.model_registry import ModelRegistry
-from app.core.routing import RoutingBudgetExceededError, RoutingCircuitOpenError, RoutingNoCandidateError, RoutingService
+from app.core.routing import (
+    RoutingBudgetExceededError,
+    RoutingCircuitOpenError,
+    RoutingNoCandidateError,
+    RoutingService,
+)
 from app.execution.service import ClaimResult, ExecutionTransitionService
 from app.instances.service import InstanceService, get_instance_service
+from app.product_taxonomy import (
+    NativeEventRecord,
+    NativeProductObjectRef,
+    RuntimeNativeMapping,
+)
 from app.providers import ProviderError, ProviderRegistry
-from app.product_taxonomy import NativeEventRecord, NativeProductObjectRef, RuntimeNativeMapping
 from app.request_metadata import merge_request_metadata
 from app.responses.models import build_response_object, build_response_output_items
-from app.responses.service import QueuedResponseExecutionPayload, ResponseNotFoundError, ResponsesService
+from app.responses.service import (
+    QueuedResponseExecutionPayload,
+    ResponseNotFoundError,
+    ResponsesService,
+)
 from app.responses.translation import response_input_items_to_chat_messages
 from app.settings.config import Settings
 from app.storage.execution_repository import ExecutionWorkerORM
@@ -237,12 +250,17 @@ class ExecutionWorkerService:
         current_time = self._now(now)
         resolved_instance_id = self._resolve_instance_id(company_id=company_id, instance_id=instance_id)
         with self._session_factory() as session, session.begin():
-            row = session.execute(
-                select(ExecutionWorkerORM).where(
-                    ExecutionWorkerORM.company_id == company_id,
-                    ExecutionWorkerORM.worker_key == worker_key,
+            row = (
+                session
+                .execute(
+                    select(ExecutionWorkerORM).where(
+                        ExecutionWorkerORM.company_id == company_id,
+                        ExecutionWorkerORM.worker_key == worker_key,
+                    )
                 )
-            ).scalars().first()
+                .scalars()
+                .first()
+            )
             if row is None:
                 row = ExecutionWorkerORM(
                     id=self._new_id("worker"),
@@ -578,9 +596,7 @@ class ExecutionWorkerService:
                 stream=False,
                 background=True,
                 primary_native_object_kind="run",
-                notes=[
-                    "This background /v1/responses path created durable ForgeFrame execution objects instead of completing inline on the OpenAI-compatible surface."
-                ],
+                notes=["This background /v1/responses path created durable ForgeFrame execution objects instead of completing inline on the OpenAI-compatible surface."],
             )
         )
         events = list(previous.events)
@@ -595,17 +611,15 @@ class ExecutionWorkerService:
                 )
             )
         route_context = dict(previous.route_context)
-        route_context.update(
-            {
-                "run_id": run_id,
-                "attempt_id": attempt_id,
-                "run_state": run_state,
-                "operator_state": operator_state,
-                "execution_lane": execution_lane,
-                "resolved_model": resolved_model,
-                "provider_key": provider_key,
-            }
-        )
+        route_context.update({
+            "run_id": run_id,
+            "attempt_id": attempt_id,
+            "run_state": run_state,
+            "operator_state": operator_state,
+            "execution_lane": execution_lane,
+            "resolved_model": resolved_model,
+            "provider_key": provider_key,
+        })
         notes = list(previous.notes)
         if note and note not in notes:
             notes.append(note)
@@ -735,17 +749,52 @@ class ExecutionWorkerService:
         if isinstance(exc, RoutingBudgetExceededError):
             return "policy", error_code, error_message, error_detail, False, None
         if isinstance(exc, RoutingCircuitOpenError):
-            return "provider_transient", error_code, error_message, error_detail, True, None
+            return (
+                "provider_transient",
+                error_code,
+                error_message,
+                error_detail,
+                True,
+                None,
+            )
         if isinstance(exc, RoutingNoCandidateError):
             return "policy", error_code, error_message, error_detail, False, None
         if isinstance(exc, ProviderError):
             if exc.retryable or exc.error_type in self._TRANSIENT_PROVIDER_ERRORS:
-                return "provider_transient", error_code, error_message, error_detail, True, retry_after_seconds
+                return (
+                    "provider_transient",
+                    error_code,
+                    error_message,
+                    error_detail,
+                    True,
+                    retry_after_seconds,
+                )
             if exc.error_type in self._VALIDATION_PROVIDER_ERRORS:
-                return "validation", error_code, error_message, error_detail, False, None
+                return (
+                    "validation",
+                    error_code,
+                    error_message,
+                    error_detail,
+                    False,
+                    None,
+                )
             if exc.error_type in self._TERMINAL_PROVIDER_ERRORS:
-                return "provider_terminal", error_code, error_message, error_detail, False, None
-            return "provider_terminal", error_code, error_message, error_detail, False, None
+                return (
+                    "provider_terminal",
+                    error_code,
+                    error_message,
+                    error_detail,
+                    False,
+                    None,
+                )
+            return (
+                "provider_terminal",
+                error_code,
+                error_message,
+                error_detail,
+                False,
+                None,
+            )
         if isinstance(exc, ValueError):
             return "validation", "invalid_request", str(exc), str(exc), False, None
         return "internal", error_code, error_message, error_detail, False, None
@@ -762,7 +811,14 @@ class ExecutionWorkerService:
         heartbeat_ttl_seconds: int,
         current_time: datetime,
     ) -> ExecutionWorkerCycleResult:
-        failure_class, error_code, error_message, error_detail, retryable, retry_after_seconds = self._classify_failure(exc)
+        (
+            failure_class,
+            error_code,
+            error_message,
+            error_detail,
+            retryable,
+            retry_after_seconds,
+        ) = self._classify_failure(exc)
         if payload is not None:
             analytics = self._analytics()
             request_metadata = merge_request_metadata(
@@ -819,9 +875,7 @@ class ExecutionWorkerService:
             raise
 
         if payload is not None:
-            operator_state = "retry_scheduled" if failure.retry_scheduled else (
-                "quarantined" if failure.run_state in {"dead_lettered", "timed_out"} else "failed"
-            )
+            operator_state = "retry_scheduled" if failure.retry_scheduled else ("quarantined" if failure.run_state in {"dead_lettered", "timed_out"} else "failed")
             native_mapping = self._background_native_mapping(
                 payload,
                 run_id=claim.run_id,

@@ -1,11 +1,12 @@
-from fastapi.testclient import TestClient
 from datetime import UTC, datetime
 from uuid import uuid4
+
+from conftest import admin_headers as shared_admin_headers
+from fastapi.testclient import TestClient
 
 from app.execution.dependencies import get_execution_session_factory
 from app.main import app
 from app.storage.execution_repository import RunORM
-from conftest import admin_headers as shared_admin_headers
 
 
 def _admin_headers(client: TestClient) -> dict[str, str]:
@@ -317,7 +318,12 @@ def _create_run(
 def test_contacts_sources_and_memory_linkage_persist_context_truth() -> None:
     client = TestClient(app)
     headers = _admin_headers(client)
-    instance_id = _create_instance(client, headers, instance_id="instance_context_alpha", company_id="company_context_alpha")
+    instance_id = _create_instance(
+        client,
+        headers,
+        instance_id="instance_context_alpha",
+        company_id="company_context_alpha",
+    )
     contact_ref = _unique_contact_ref("contact://customers/alex")
     source_id = _create_source(
         client,
@@ -353,7 +359,12 @@ def test_contacts_sources_and_memory_linkage_persist_context_truth() -> None:
         primary_phone="+49-30-555-200",
         metadata={
             "channels": [
-                {"kind": "slack", "label": "Escalation slack", "address": "@alex-customer", "source": "crm-sync"},
+                {
+                    "kind": "slack",
+                    "label": "Escalation slack",
+                    "address": "@alex-customer",
+                    "source": "crm-sync",
+                },
                 {"kind": "email", "label": "Escalation mailbox"},
             ],
             "provenance": {
@@ -485,7 +496,12 @@ def test_contacts_sources_and_memory_linkage_persist_context_truth() -> None:
 def test_contact_route_warnings_surface_incomplete_routes() -> None:
     client = TestClient(app)
     headers = _admin_headers(client)
-    instance_id = _create_instance(client, headers, instance_id="instance_contact_warning", company_id="company_contact_warning")
+    instance_id = _create_instance(
+        client,
+        headers,
+        instance_id="instance_contact_warning",
+        company_id="company_contact_warning",
+    )
     contact_ref = _unique_contact_ref("contact://warning/contact")
     source_id = _create_source(
         client,
@@ -523,7 +539,12 @@ def test_contact_route_warnings_surface_incomplete_routes() -> None:
 def test_contact_updates_can_clear_optional_route_and_source_fields() -> None:
     client = TestClient(app)
     headers = _admin_headers(client)
-    instance_id = _create_instance(client, headers, instance_id="instance_contact_clear", company_id="company_contact_clear")
+    instance_id = _create_instance(
+        client,
+        headers,
+        instance_id="instance_contact_clear",
+        company_id="company_contact_clear",
+    )
     contact_ref = _unique_contact_ref("contact://clear/contact")
     source_id = _create_source(
         client,
@@ -569,7 +590,12 @@ def test_contact_updates_can_clear_optional_route_and_source_fields() -> None:
 def test_source_updates_can_clear_sync_and_error_fields() -> None:
     client = TestClient(app)
     headers = _admin_headers(client)
-    instance_id = _create_instance(client, headers, instance_id="instance_source_clear", company_id="company_source_clear")
+    instance_id = _create_instance(
+        client,
+        headers,
+        instance_id="instance_source_clear",
+        company_id="company_source_clear",
+    )
     source_id = _create_source(
         client,
         headers,
@@ -615,7 +641,12 @@ def test_source_updates_can_clear_sync_and_error_fields() -> None:
 def test_memory_correction_and_delete_preserve_linkage_and_status_truth() -> None:
     client = TestClient(app)
     headers = _admin_headers(client)
-    instance_id = _create_instance(client, headers, instance_id="instance_memory_alpha", company_id="company_memory_alpha")
+    instance_id = _create_instance(
+        client,
+        headers,
+        instance_id="instance_memory_alpha",
+        company_id="company_memory_alpha",
+    )
     run_id = _create_run(company_id="company_memory_alpha", run_id=f"run_memory_alpha_{uuid4().hex[:8]}")
     contact_ref = _unique_contact_ref("contact://reviewers/nina")
     workspace_id = _create_workspace(client, headers, instance_id=instance_id, title="Context workspace")
@@ -779,7 +810,12 @@ def test_memory_correction_and_delete_preserve_linkage_and_status_truth() -> Non
 def test_memory_revoke_marks_truth_state_and_human_override() -> None:
     client = TestClient(app)
     headers = _admin_headers(client)
-    instance_id = _create_instance(client, headers, instance_id="instance_memory_revoke", company_id="company_memory_revoke")
+    instance_id = _create_instance(
+        client,
+        headers,
+        instance_id="instance_memory_revoke",
+        company_id="company_memory_revoke",
+    )
     contact_ref = _unique_contact_ref("contact://revocation/contact")
     source_id = _create_source(
         client,
@@ -848,7 +884,12 @@ def test_memory_revoke_marks_truth_state_and_human_override() -> None:
 def test_memory_governance_validation_rejects_invalid_layer_and_review_states() -> None:
     client = TestClient(app)
     headers = _admin_headers(client)
-    instance_id = _create_instance(client, headers, instance_id="instance_memory_validation", company_id="company_memory_validation")
+    instance_id = _create_instance(
+        client,
+        headers,
+        instance_id="instance_memory_validation",
+        company_id="company_memory_validation",
+    )
     contact_ref = _unique_contact_ref("contact://validation/contact")
     source_id = _create_source(
         client,
@@ -932,8 +973,18 @@ def test_memory_governance_validation_rejects_invalid_layer_and_review_states() 
 def test_contacts_sources_and_memory_are_hard_scoped_to_the_selected_instance() -> None:
     client = TestClient(app)
     headers = _admin_headers(client)
-    instance_alpha = _create_instance(client, headers, instance_id="instance_scope_alpha", company_id="company_scope_alpha")
-    instance_beta = _create_instance(client, headers, instance_id="instance_scope_beta", company_id="company_scope_beta")
+    instance_alpha = _create_instance(
+        client,
+        headers,
+        instance_id="instance_scope_alpha",
+        company_id="company_scope_alpha",
+    )
+    instance_beta = _create_instance(
+        client,
+        headers,
+        instance_id="instance_scope_beta",
+        company_id="company_scope_beta",
+    )
     contact_ref = _unique_contact_ref("contact://scoped/contact")
     source_id = _create_source(
         client,

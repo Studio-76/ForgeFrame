@@ -109,11 +109,20 @@ class TestOpenAIHeadlessOAuth:
         [
             ("", "No redirect URL provided"),
             ("not-a-url", "Invalid redirect URL format"),
-            ("https://localhost:1455/auth/callback?code=a&state=st", "scheme does not match"),
+            (
+                "https://localhost:1455/auth/callback?code=a&state=st",
+                "scheme does not match",
+            ),
             ("http://localhost:1455/wrong?code=a&state=st", "path does not match"),
             ("http://localhost:1455/auth/callback?state=st", "No authorization code"),
-            ("http://localhost:1455/auth/callback?error=access_denied&state=st", "Authorization failed"),
-            ("http://localhost:1455/auth/callback?code=a&state=wrong", "State mismatch"),
+            (
+                "http://localhost:1455/auth/callback?error=access_denied&state=st",
+                "Authorization failed",
+            ),
+            (
+                "http://localhost:1455/auth/callback?code=a&state=wrong",
+                "State mismatch",
+            ),
         ],
     )
     def test_parse_redirect_errors(self, url, expected_error):
@@ -125,8 +134,15 @@ class TestOpenAIHeadlessOAuth:
             )
 
     def test_headless_login_exchanges_token(self, monkeypatch):
-        monkeypatch.setattr("nadirclaw.oauth.secrets.token_urlsafe", lambda n=32: "fixed-state")
-        monkeypatch.setattr("builtins.input", lambda _prompt="": "http://localhost:1455/auth/callback?code=abc&state=fixed-state")
+        monkeypatch.setattr(
+            "nadirclaw.oauth.secrets.token_urlsafe", lambda n=32: "fixed-state"
+        )
+        monkeypatch.setattr(
+            "builtins.input",
+            lambda _prompt="": (
+                "http://localhost:1455/auth/callback?code=abc&state=fixed-state"
+            ),
+        )
 
         class _Resp:
             def __enter__(self):
@@ -147,17 +163,24 @@ class TestOpenAIHeadlessOAuth:
         monkeypatch.setattr("urllib.request.urlopen", _fake_urlopen)
         out = login_openai(timeout=1, auth_mode="headless")
         assert out["access_token"] == "tok"
-        assert "redirect_uri=http%3A%2F%2Flocalhost%3A1455%2Fauth%2Fcallback" in captured["data"]
+        assert (
+            "redirect_uri=http%3A%2F%2Flocalhost%3A1455%2Fauth%2Fcallback"
+            in captured["data"]
+        )
 
     def test_headless_login_invalid_mode(self):
         with pytest.raises(RuntimeError, match="Unsupported auth_mode"):
             login_openai(auth_mode="invalid-mode")
 
     def test_browser_mode_uses_localhost_redirect(self, monkeypatch):
-        monkeypatch.setattr("nadirclaw.oauth.secrets.token_urlsafe", lambda n=32: "browser-state")
+        monkeypatch.setattr(
+            "nadirclaw.oauth.secrets.token_urlsafe", lambda n=32: "browser-state"
+        )
 
         opened = {}
-        monkeypatch.setattr("nadirclaw.oauth.webbrowser.open", lambda url: opened.setdefault("url", url))
+        monkeypatch.setattr(
+            "nadirclaw.oauth.webbrowser.open", lambda url: opened.setdefault("url", url)
+        )
 
         class _Queue:
             def get(self, timeout=None):
@@ -167,7 +190,10 @@ class TestOpenAIHeadlessOAuth:
             def shutdown(self):
                 opened["shutdown"] = True
 
-        monkeypatch.setattr("nadirclaw.oauth._start_callback_server", lambda timeout, bind_host="localhost": (_Server(), _Queue()))
+        monkeypatch.setattr(
+            "nadirclaw.oauth._start_callback_server",
+            lambda timeout, bind_host="localhost": (_Server(), _Queue()),
+        )
 
         class _Resp:
             def __enter__(self):
@@ -182,5 +208,8 @@ class TestOpenAIHeadlessOAuth:
         monkeypatch.setattr("urllib.request.urlopen", lambda req, timeout=30: _Resp())
         out = login_openai(timeout=1, auth_mode="browser")
         assert out["access_token"] == "tok"
-        assert "redirect_uri=http%3A%2F%2Flocalhost%3A1455%2Fauth%2Fcallback" in opened["url"]
+        assert (
+            "redirect_uri=http%3A%2F%2Flocalhost%3A1455%2Fauth%2Fcallback"
+            in opened["url"]
+        )
         assert opened["shutdown"] is True

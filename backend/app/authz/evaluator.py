@@ -3,7 +3,12 @@
 from __future__ import annotations
 
 from app.authz.catalog import ROLE_PERMISSION_KEYS
-from app.authz.models import AuthorizationDecision, RequestActor, RoutePolicy, TenantBoundTarget
+from app.authz.models import (
+    AuthorizationDecision,
+    RequestActor,
+    RoutePolicy,
+    TenantBoundTarget,
+)
 
 _TENANT_WIDE_ROLES = frozenset({"tenant_owner", "tenant_admin"})
 
@@ -90,12 +95,7 @@ class PolicyEvaluator:
                 },
             )
 
-        if (
-            actor.impersonation is not None
-            and actor.impersonation.read_only
-            and policy.is_mutating
-            and not policy.allow_impersonated_write
-        ):
+        if actor.impersonation is not None and actor.impersonation.read_only and policy.is_mutating and not policy.allow_impersonated_write:
             return AuthorizationDecision(
                 allowed=False,
                 status_code=403,
@@ -183,17 +183,10 @@ class PolicyEvaluator:
             return target.project_id in actor.scope.project_ids
 
         if policy.resource_scope == "workspace":
-            return (
-                target.workspace_id in actor.scope.workspace_ids
-                or target.project_id in actor.scope.project_ids
-            )
+            return target.workspace_id in actor.scope.workspace_ids or target.project_id in actor.scope.project_ids
 
         if policy.resource_scope == "environment":
-            return (
-                target.environment_id in actor.scope.environment_ids
-                or target.workspace_id in actor.scope.workspace_ids
-                or target.project_id in actor.scope.project_ids
-            )
+            return target.environment_id in actor.scope.environment_ids or target.workspace_id in actor.scope.workspace_ids or target.project_id in actor.scope.project_ids
 
         if policy.resource_scope == "task":
             if "task.assign" in policy.permission_keys:
@@ -203,20 +196,12 @@ class PolicyEvaluator:
                     or target.workspace_id in actor.scope.workspace_ids
                     or target.project_id in actor.scope.project_ids
                 )
-            return (
-                target.task_id in actor.scope.task_ids
-                or target.workspace_id in actor.scope.workspace_ids
-                or target.project_id in actor.scope.project_ids
-            )
+            return target.task_id in actor.scope.task_ids or target.workspace_id in actor.scope.workspace_ids or target.project_id in actor.scope.project_ids
 
         if policy.resource_scope == "run":
             explicit_run_scope = target.run_id in actor.scope.run_ids or target.task_id in actor.scope.task_ids
             if "run.read" in policy.permission_keys:
-                return (
-                    explicit_run_scope
-                    or target.workspace_id in actor.scope.workspace_ids
-                    or target.project_id in actor.scope.project_ids
-                )
+                return explicit_run_scope or target.workspace_id in actor.scope.workspace_ids or target.project_id in actor.scope.project_ids
             return explicit_run_scope
 
         return False
@@ -232,26 +217,22 @@ class PolicyEvaluator:
             return True
 
         if target.environment_id is not None:
-            return (
-                target.environment_id in actor.scope.environment_ids
-                or target.workspace_id in actor.scope.workspace_ids
-                or target.project_id in actor.scope.project_ids
-            )
+            return target.environment_id in actor.scope.environment_ids or target.workspace_id in actor.scope.workspace_ids or target.project_id in actor.scope.project_ids
 
         if target.task_id is not None or target.run_id is not None:
-            return self._scope_matches(actor=actor, policy=RoutePolicy(
-                policy_key=f"{policy.policy_key}.delegated",
-                permission_keys=policy.permission_keys,
-                resource_scope="run" if target.run_id is not None else "task",
-                tenant_resolver=policy.tenant_resolver,
-                audit_action=policy.audit_action,
-            ), target=target)
+            return self._scope_matches(
+                actor=actor,
+                policy=RoutePolicy(
+                    policy_key=f"{policy.policy_key}.delegated",
+                    permission_keys=policy.permission_keys,
+                    resource_scope="run" if target.run_id is not None else "task",
+                    tenant_resolver=policy.tenant_resolver,
+                    audit_action=policy.audit_action,
+                ),
+                target=target,
+            )
 
         if target.queue_id is not None:
-            return (
-                target.queue_id in actor.scope.queue_ids
-                or target.workspace_id in actor.scope.workspace_ids
-                or target.project_id in actor.scope.project_ids
-            )
+            return target.queue_id in actor.scope.queue_ids or target.workspace_id in actor.scope.workspace_ids or target.project_id in actor.scope.project_ids
 
         return True

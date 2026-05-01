@@ -148,7 +148,12 @@ class LearningAdminService:
         return False
 
     @staticmethod
-    def _validate_proposal_shape(*, decision: str, proposed_memory: dict[str, Any], proposed_skill: dict[str, Any]) -> None:
+    def _validate_proposal_shape(
+        *,
+        decision: str,
+        proposed_memory: dict[str, Any],
+        proposed_skill: dict[str, Any],
+    ) -> None:
         has_memory = LearningAdminService._has_payload_content(proposed_memory)
         has_skill = LearningAdminService._has_payload_content(proposed_skill)
         if has_memory and has_skill:
@@ -243,14 +248,17 @@ class LearningAdminService:
             details.append(str(trigger))
 
         unique_details = list(dict.fromkeys(details))
-        return LearningSourceSummary(kind=kind, label=label, detail=" · ".join(unique_details) if unique_details else None)
+        return LearningSourceSummary(
+            kind=kind,
+            label=label,
+            detail=" · ".join(unique_details) if unique_details else None,
+        )
 
     def _proposal_summary(self, row: LearningEventORM) -> LearningProposalSummary:
         memory_seed = dict(row.proposed_memory_json or {})
         skill_seed = dict(row.proposed_skill_json or {})
         decision = row.suggested_decision
         target_label = DECISION_LABELS.get(decision, decision.replace("_", " "))
-        surface = DECISION_SURFACES.get(decision, "review")
 
         if decision in {"boot_memory", "durable_memory"}:
             title = str(memory_seed.get("title") or row.summary)
@@ -375,7 +383,10 @@ class LearningAdminService:
         if str(memory_seed.get("sensitivity") or "") in {"sensitive", "restricted"}:
             reasons.append("Proposed memory carries elevated sensitivity.")
             high_risk = True
-        if str(memory_seed.get("source_trust_class") or "") in {"runtime_inferred", "external_unverified"} and decision in {"boot_memory", "durable_memory"}:
+        if str(memory_seed.get("source_trust_class") or "") in {
+            "runtime_inferred",
+            "external_unverified",
+        } and decision in {"boot_memory", "durable_memory"}:
             reasons.append("Proposed memory relies on inferred or unverified source trust.")
             medium_risk = True
         if str(skill_seed.get("scope") or "") == "agent":
@@ -395,7 +406,10 @@ class LearningAdminService:
             medium_risk = True
 
         if not reasons:
-            return LearningRiskSummary(level="low", reasons=["Explainability payload and promotion path are low risk."])
+            return LearningRiskSummary(
+                level="low",
+                reasons=["Explainability payload and promotion path are low risk."],
+            )
         if high_risk:
             return LearningRiskSummary(level="high", reasons=reasons)
         if medium_risk:
@@ -442,27 +456,47 @@ class LearningAdminService:
         if row.agent_id:
             agent_row = session.get(AgentORM, row.agent_id)
             if agent_row is not None and agent_row.company_id == row.company_id and agent_row.instance_id == row.instance_id:
-                agent = {"record_id": agent_row.id, "label": agent_row.display_name, "status": agent_row.status}
+                agent = {
+                    "record_id": agent_row.id,
+                    "label": agent_row.display_name,
+                    "status": agent_row.status,
+                }
         conversation = None
         if row.conversation_id:
             conversation_row = session.get(ConversationORM, row.conversation_id)
             if conversation_row is not None and conversation_row.company_id == row.company_id and conversation_row.instance_id == row.instance_id:
-                conversation = {"record_id": conversation_row.id, "label": conversation_row.subject, "status": conversation_row.status}
+                conversation = {
+                    "record_id": conversation_row.id,
+                    "label": conversation_row.subject,
+                    "status": conversation_row.status,
+                }
         run = None
         if row.run_id:
             run_row = session.get(RunORM, row.run_id)
             if run_row is not None and run_row.company_id == row.company_id:
-                run = {"record_id": run_row.id, "label": run_row.run_kind, "status": run_row.lifecycle_status}
+                run = {
+                    "record_id": run_row.id,
+                    "label": run_row.run_kind,
+                    "status": run_row.lifecycle_status,
+                }
         promoted_memory = None
         if row.promoted_memory_id:
             memory_row = session.get(MemoryEntryORM, row.promoted_memory_id)
             if memory_row is not None and memory_row.company_id == row.company_id:
-                promoted_memory = {"record_id": memory_row.id, "label": memory_row.title, "status": memory_row.truth_state}
+                promoted_memory = {
+                    "record_id": memory_row.id,
+                    "label": memory_row.title,
+                    "status": memory_row.truth_state,
+                }
         promoted_skill = None
         if row.promoted_skill_id:
             skill_row = session.get(SkillORM, row.promoted_skill_id)
             if skill_row is not None and skill_row.company_id == row.company_id:
-                promoted_skill = {"record_id": skill_row.id, "label": skill_row.display_name, "status": skill_row.status}
+                promoted_skill = {
+                    "record_id": skill_row.id,
+                    "label": skill_row.display_name,
+                    "status": skill_row.status,
+                }
         return LearningEventDetail(
             **summary.model_dump(),
             agent=agent,
@@ -472,7 +506,14 @@ class LearningAdminService:
             promoted_skill=promoted_skill,
         )
 
-    def list_events(self, *, instance: InstanceRecord, status: str | None = None, trigger_kind: str | None = None, limit: int = 100) -> list[LearningEventSummary]:
+    def list_events(
+        self,
+        *,
+        instance: InstanceRecord,
+        status: str | None = None,
+        trigger_kind: str | None = None,
+        limit: int = 100,
+    ) -> list[LearningEventSummary]:
         with self._session_factory() as session:
             stmt = select(LearningEventORM).where(
                 LearningEventORM.company_id == instance.company_id,
@@ -482,9 +523,7 @@ class LearningAdminService:
                 stmt = stmt.where(LearningEventORM.status == status)
             if trigger_kind is not None:
                 stmt = stmt.where(LearningEventORM.trigger_kind == trigger_kind)
-            rows = session.execute(
-                stmt.order_by(LearningEventORM.created_at.desc()).limit(max(1, min(limit, 200)))
-            ).scalars().all()
+            rows = session.execute(stmt.order_by(LearningEventORM.created_at.desc()).limit(max(1, min(limit, 200)))).scalars().all()
             return [self._summary(session, row) for row in rows]
 
     def get_event(self, *, instance: InstanceRecord, event_id: str) -> LearningEventDetail:
@@ -545,15 +584,20 @@ class LearningAdminService:
                 .having(func.count(MemoryEntryORM.id) >= 2)
             ).all()
             for title, count in repeated_titles:
-                exists = session.execute(
-                    select(LearningEventORM).where(
-                        LearningEventORM.company_id == instance.company_id,
-                        LearningEventORM.instance_id == instance.instance_id,
-                        LearningEventORM.trigger_kind == "pattern_detected",
-                        LearningEventORM.summary == f"Repeated correction pattern: {title}",
-                        LearningEventORM.status.in_(("pending", "review_required")),
+                exists = (
+                    session
+                    .execute(
+                        select(LearningEventORM).where(
+                            LearningEventORM.company_id == instance.company_id,
+                            LearningEventORM.instance_id == instance.instance_id,
+                            LearningEventORM.trigger_kind == "pattern_detected",
+                            LearningEventORM.summary == f"Repeated correction pattern: {title}",
+                            LearningEventORM.status.in_(("pending", "review_required")),
+                        )
                     )
-                ).scalars().first()
+                    .scalars()
+                    .first()
+                )
                 if exists is not None:
                     continue
                 event_id = self._new_id("learning")
@@ -569,7 +613,10 @@ class LearningAdminService:
                         explanation="ForgeFrame observed repeated corrected memory titles and surfaced a review item for durable learning.",
                         evidence_json={"title": title, "correction_count": int(count)},
                         proposed_memory_json={},
-                        proposed_skill_json={"display_name": title, "summary": "Skill draft suggested from repeated memory corrections."},
+                        proposed_skill_json={
+                            "display_name": title,
+                            "summary": "Skill draft suggested from repeated memory corrections.",
+                        },
                         created_at=self._now(),
                     )
                 )

@@ -23,8 +23,7 @@ from app.usage.analytics import get_usage_analytics_store
 
 router = APIRouter(prefix="/settings", tags=["admin-settings"])
 _SETTINGS_IDEMPOTENCY_MESSAGE = (
-    "Idempotency-Key is not supported for settings mutations until ForgeFrame persists replay-safe override write "
-    "responses without duplicating configuration audit side effects."
+    "Idempotency-Key is not supported for settings mutations until ForgeFrame persists replay-safe override write responses without duplicating configuration audit side effects."
 )
 
 
@@ -45,7 +44,9 @@ def _settings_payload(service: GovernanceService, *, operation: dict[str, object
 
 
 @router.get("/")
-def list_settings(service: GovernanceService = Depends(get_governance_service)) -> dict[str, object]:
+def list_settings(
+    service: GovernanceService = Depends(get_governance_service),
+) -> dict[str, object]:
     return _settings_payload(service)
 
 
@@ -63,11 +64,22 @@ def patch_settings(
     for key, raw_value in payload.updates.items():
         definition = MUTABLE_SETTINGS.get(key)
         if definition is None:
-            return JSONResponse(status_code=404, content={"error": {"type": "setting_not_found", "message": f"Unknown mutable setting '{key}'."}})
+            return JSONResponse(
+                status_code=404,
+                content={
+                    "error": {
+                        "type": "setting_not_found",
+                        "message": f"Unknown mutable setting '{key}'.",
+                    }
+                },
+            )
         try:
             value = coerce_mutable_setting_value(key, raw_value)
         except ValueError as exc:
-            return JSONResponse(status_code=409, content={"error": {"type": "setting_invalid", "message": str(exc)}})
+            return JSONResponse(
+                status_code=409,
+                content={"error": {"type": "setting_invalid", "message": str(exc)}},
+            )
         service.upsert_setting_override(key=key, value=value, category=definition.group, actor=admin)
         updated.append(key)
     clear_runtime_dependency_caches()
@@ -76,11 +88,7 @@ def patch_settings(
     get_usage_analytics_store.cache_clear()
     service = get_governance_service()
     highest_risk = next(
-        (
-            risk
-            for risk in ("high", "medium", "low")
-            if any(MUTABLE_SETTINGS[key].risk_level == risk for key in updated)
-        ),
+        (risk for risk in ("high", "medium", "low") if any(MUTABLE_SETTINGS[key].risk_level == risk for key in updated)),
         "low",
     )
     return {
@@ -110,11 +118,22 @@ def reset_setting(
         return unsupported
     definition = MUTABLE_SETTINGS.get(key)
     if definition is None:
-        return JSONResponse(status_code=404, content={"error": {"type": "setting_not_found", "message": f"Unknown mutable setting '{key}'."}})
+        return JSONResponse(
+            status_code=404,
+            content={
+                "error": {
+                    "type": "setting_not_found",
+                    "message": f"Unknown mutable setting '{key}'.",
+                }
+            },
+        )
     try:
         service.remove_setting_override(key=key, actor=admin)
     except ValueError as exc:
-        return JSONResponse(status_code=404, content={"error": {"type": "setting_override_not_found", "message": str(exc)}})
+        return JSONResponse(
+            status_code=404,
+            content={"error": {"type": "setting_override_not_found", "message": str(exc)}},
+        )
     clear_runtime_dependency_caches()
     get_governance_service.cache_clear()
     get_control_plane_service.cache_clear()

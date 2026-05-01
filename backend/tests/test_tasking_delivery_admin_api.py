@@ -1,10 +1,10 @@
 import json
 from datetime import UTC, datetime, timedelta
 
+from conftest import admin_headers as shared_admin_headers
 from fastapi.testclient import TestClient
 
 from app.main import app
-from conftest import admin_headers as shared_admin_headers
 
 
 def _admin_headers(client: TestClient) -> dict[str, str]:
@@ -131,7 +131,12 @@ def _create_channel(
 def test_task_and_reminder_flow_persists_links_and_due_state() -> None:
     client = TestClient(app)
     headers = _admin_headers(client)
-    instance_id = _create_instance(client, headers, instance_id="instance_tasks_alpha", company_id="company_tasks_alpha")
+    instance_id = _create_instance(
+        client,
+        headers,
+        instance_id="instance_tasks_alpha",
+        company_id="company_tasks_alpha",
+    )
     workspace_id = _create_workspace(
         client,
         headers,
@@ -200,7 +205,12 @@ def test_task_and_reminder_flow_persists_links_and_due_state() -> None:
 def test_notification_preview_reject_retry_and_fallback_truth() -> None:
     client = TestClient(app)
     headers = _admin_headers(client)
-    instance_id = _create_instance(client, headers, instance_id="instance_notify_alpha", company_id="company_notify_alpha")
+    instance_id = _create_instance(
+        client,
+        headers,
+        instance_id="instance_notify_alpha",
+        company_id="company_notify_alpha",
+    )
     primary_channel_id = _create_channel(
         client,
         headers,
@@ -302,7 +312,12 @@ def test_notification_preview_reject_retry_and_fallback_truth() -> None:
 def test_automation_trigger_materializes_follow_up_and_notification_records() -> None:
     client = TestClient(app)
     headers = _admin_headers(client)
-    instance_id = _create_instance(client, headers, instance_id="instance_auto_alpha", company_id="company_auto_alpha")
+    instance_id = _create_instance(
+        client,
+        headers,
+        instance_id="instance_auto_alpha",
+        company_id="company_auto_alpha",
+    )
     workspace_id = _create_workspace(
         client,
         headers,
@@ -422,7 +437,12 @@ def test_automation_trigger_materializes_follow_up_and_notification_records() ->
 def test_channels_filter_redact_credentials_and_expose_fallback_posture() -> None:
     client = TestClient(app)
     headers = _admin_headers(client)
-    instance_id = _create_instance(client, headers, instance_id="instance_channels_alpha", company_id="company_channels_alpha")
+    instance_id = _create_instance(
+        client,
+        headers,
+        instance_id="instance_channels_alpha",
+        company_id="company_channels_alpha",
+    )
     fallback_channel_id = _create_channel(
         client,
         headers,
@@ -505,7 +525,11 @@ def test_channels_filter_redact_credentials_and_expose_fallback_posture() -> Non
     filtered = client.get(
         "/admin/channels",
         headers=headers,
-        params={**_instance_scope(instance_id), "kind": "webhook", "status": "degraded"},
+        params={
+            **_instance_scope(instance_id),
+            "kind": "webhook",
+            "status": "degraded",
+        },
     )
     assert filtered.status_code == 200
     filtered_payload = filtered.json()["channels"]
@@ -520,7 +544,11 @@ def test_channels_filter_redact_credentials_and_expose_fallback_posture() -> Non
     assert "[redacted]" in webhook_summary["target"]
     assert "secret-123" not in webhook_summary["target"]
 
-    primary_list = client.get("/admin/channels", headers=headers, params={**_instance_scope(instance_id), "kind": "email"})
+    primary_list = client.get(
+        "/admin/channels",
+        headers=headers,
+        params={**_instance_scope(instance_id), "kind": "email"},
+    )
     assert primary_list.status_code == 200
     primary_summary = primary_list.json()["channels"][0]
     assert primary_summary["channel_id"] == primary_channel_id
@@ -540,7 +568,10 @@ def test_channels_filter_redact_credentials_and_expose_fallback_posture() -> Non
     assert "credential_ref" in detail_payload["credential_posture"]["external_reference_fields"]
     assert detail_payload["advanced_metadata"]["api_key"] == "[redacted]"
     assert detail_payload["scope_reference"] == "contact://customer/acme"
-    assert [item["channel_id"] for item in detail_payload["fallback_chain"]] == [webhook_channel_id, fallback_channel_id]
+    assert [item["channel_id"] for item in detail_payload["fallback_chain"]] == [
+        webhook_channel_id,
+        fallback_channel_id,
+    ]
     assert [item["channel_id"] for item in detail_payload["fallback_sources"]] == [primary_channel_id]
     assert detail_payload["test_delivery_supported"] is False
     assert detail_payload["test_delivery_state"] == "not_ready"

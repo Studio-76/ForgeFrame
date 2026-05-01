@@ -68,7 +68,11 @@ def test_codex_auth_mode_defaults_to_oauth(monkeypatch: pytest.MonkeyPatch) -> N
 def test_bridge_only_oauth_targets_do_not_expose_dead_provider_enabled_flags() -> None:
     fields = set(Settings.model_fields)
 
-    assert {"antigravity_enabled", "github_copilot_enabled", "claude_code_enabled"}.isdisjoint(fields)
+    assert {
+        "antigravity_enabled",
+        "github_copilot_enabled",
+        "claude_code_enabled",
+    }.isdisjoint(fields)
     assert {
         "antigravity_probe_enabled",
         "antigravity_bridge_profile_enabled",
@@ -96,14 +100,18 @@ def test_pricing_settings_are_operationalized(monkeypatch: pytest.MonkeyPatch) -
     assert settings.pricing_internal_hypothetical_output_per_1m_tokens > 0
 
 
-def test_security_lifecycle_defaults_are_bounded(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_security_lifecycle_defaults_are_bounded(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     settings = _build_default_settings(monkeypatch)
     assert settings.runtime_key_ttl_days >= 30
     assert settings.impersonation_session_max_minutes <= settings.break_glass_session_max_minutes
     assert settings.admin_login_rate_limit_attempts >= 1
 
 
-def test_governance_postgres_defaults_to_relational_reads(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_governance_postgres_defaults_to_relational_reads(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     settings = _build_default_settings(monkeypatch)
     assert settings.harness_storage_backend == "postgresql"
     assert settings.governance_storage_backend == "postgresql"
@@ -113,7 +121,10 @@ def test_governance_postgres_defaults_to_relational_reads(monkeypatch: pytest.Mo
 
 def test_postgres_storage_requires_postgresql_url() -> None:
     with pytest.raises(ValueError, match="FORGEFRAME_HARNESS_POSTGRES_URL"):
-        Settings(harness_storage_backend="postgresql", harness_postgres_url="sqlite:///tmp/forgegate.db")
+        Settings(
+            harness_storage_backend="postgresql",
+            harness_postgres_url="sqlite:///tmp/forgegate.db",
+        )
 
 
 def test_admin_auth_requires_bootstrap_password() -> None:

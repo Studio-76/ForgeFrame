@@ -26,10 +26,17 @@ def _dedupe_preserve_order(values: Iterable[str]) -> list[str]:
     return deduped
 
 
-def _sorted_targets(targets: Iterable[ManagedProviderTargetRecord]) -> list[ManagedProviderTargetRecord]:
+def _sorted_targets(
+    targets: Iterable[ManagedProviderTargetRecord],
+) -> list[ManagedProviderTargetRecord]:
     return sorted(
         targets,
-        key=lambda item: (-item.priority, item.provider, item.model_id, item.target_key),
+        key=lambda item: (
+            -item.priority,
+            item.provider,
+            item.model_id,
+            item.target_key,
+        ),
     )
 
 
@@ -38,7 +45,10 @@ def _target_keys(targets: Iterable[ManagedProviderTargetRecord]) -> list[str]:
 
 
 def _is_local_target(target: ManagedProviderTargetRecord) -> bool:
-    return target.product_axis in {"local_providers", "openai_compatible_clients"} or target.auth_type in {
+    return target.product_axis in {
+        "local_providers",
+        "openai_compatible_clients",
+    } or target.auth_type in {
         "internal",
         "local_none",
     }
@@ -54,24 +64,14 @@ def build_default_routing_policies(
     target_list = _sorted_targets(targets)
     local_targets = [target for target in target_list if _is_local_target(target)]
     premium_targets = [target for target in target_list if _is_premium_target(target)]
-    standard_external_targets = [
-        target
-        for target in target_list
-        if not _is_local_target(target) and not _is_premium_target(target)
-    ]
+    standard_external_targets = [target for target in target_list if not _is_local_target(target) and not _is_premium_target(target)]
 
     simple_preferred = _target_keys(local_targets)
     simple_fallback = _target_keys(standard_external_targets)
     simple_escalation = _target_keys(premium_targets)
 
-    non_simple_preferred = _target_keys(
-        [target for target in standard_external_targets if target.queue_eligible]
-        or standard_external_targets
-    )
-    non_simple_fallback = _target_keys(
-        [target for target in local_targets if target.queue_eligible]
-        or local_targets
-    )
+    non_simple_preferred = _target_keys([target for target in standard_external_targets if target.queue_eligible] or standard_external_targets)
+    non_simple_fallback = _target_keys([target for target in local_targets if target.queue_eligible] or local_targets)
     non_simple_escalation = _target_keys(premium_targets)
 
     return [
@@ -115,24 +115,15 @@ def merge_routing_policies(
     available_target_keys: Iterable[str],
 ) -> list[RoutingPolicyRecord]:
     available = set(_dedupe_preserve_order(available_target_keys))
-    stored_map = {
-        policy.classification: policy.model_copy(deep=True)
-        for policy in (stored_policies or [])
-    }
+    stored_map = {policy.classification: policy.model_copy(deep=True) for policy in (stored_policies or [])}
     merged: list[RoutingPolicyRecord] = []
     for default_policy in default_policies:
         policy = stored_map.get(default_policy.classification, default_policy.model_copy(deep=True))
         policy.display_name = policy.display_name or default_policy.display_name
         policy.description = policy.description or default_policy.description
-        policy.preferred_target_keys = [
-            key for key in _dedupe_preserve_order(policy.preferred_target_keys or default_policy.preferred_target_keys) if key in available
-        ]
-        policy.fallback_target_keys = [
-            key for key in _dedupe_preserve_order(policy.fallback_target_keys or default_policy.fallback_target_keys) if key in available
-        ]
-        policy.escalation_target_keys = [
-            key for key in _dedupe_preserve_order(policy.escalation_target_keys or default_policy.escalation_target_keys) if key in available
-        ]
+        policy.preferred_target_keys = [key for key in _dedupe_preserve_order(policy.preferred_target_keys or default_policy.preferred_target_keys) if key in available]
+        policy.fallback_target_keys = [key for key in _dedupe_preserve_order(policy.fallback_target_keys or default_policy.fallback_target_keys) if key in available]
+        policy.escalation_target_keys = [key for key in _dedupe_preserve_order(policy.escalation_target_keys or default_policy.escalation_target_keys) if key in available]
         merged.append(policy)
     return merged
 
@@ -209,5 +200,11 @@ def _normalize_budget_anomalies(
         normalized_anomalies.append(normalized)
     return sorted(
         normalized_anomalies,
-        key=lambda item: (item.severity, item.scope_type, item.scope_key, item.window, item.anomaly_type),
+        key=lambda item: (
+            item.severity,
+            item.scope_type,
+            item.scope_key,
+            item.window,
+            item.anomaly_type,
+        ),
     )

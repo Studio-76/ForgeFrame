@@ -174,7 +174,10 @@ OPENAI_PROVIDER_PRESET_TEMPLATES: dict[str, HarnessTemplate] = {
         model_prefix="openai",
         responses=False,
         embeddings=False,
-        headers={"HTTP-Referer": "https://forgeframe.local", "X-OpenRouter-Title": "ForgeFrame"},
+        headers={
+            "HTTP-Referer": "https://forgeframe.local",
+            "X-OpenRouter-Title": "ForgeFrame",
+        },
         unsupported_features=["responses parity varies by upstream model"],
     ),
     "vercel_ai_gateway": _preset(

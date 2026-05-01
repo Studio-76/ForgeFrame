@@ -33,4 +33,3 @@ class InstanceStateRecord(BaseModel):
     schema_version: int = 1
     instances: list[InstanceRecord] = Field(default_factory=list)
     updated_at: str = ""
-

@@ -80,16 +80,29 @@ class GovernanceTenantMembershipORM(Base):
     __tablename__ = "tenant_memberships"
     __table_args__ = (
         ForeignKeyConstraint(["tenant_id"], ["tenants.tenant_id"], name="tenant_memberships_tenant_fk"),
-        ForeignKeyConstraint(["principal_id"], ["principals.principal_id"], name="tenant_memberships_principal_fk"),
+        ForeignKeyConstraint(
+            ["principal_id"],
+            ["principals.principal_id"],
+            name="tenant_memberships_principal_fk",
+        ),
         ForeignKeyConstraint(
             ["tenant_id", "created_by_membership_id"],
             ["tenant_memberships.tenant_id", "tenant_memberships.membership_id"],
             name="tenant_memberships_created_by_membership_tenant_fk",
         ),
         UniqueConstraint("tenant_id", "principal_id", name="tenant_memberships_tenant_principal_key"),
-        UniqueConstraint("tenant_id", "membership_id", name="tenant_memberships_tenant_membership_key"),
+        UniqueConstraint(
+            "tenant_id",
+            "membership_id",
+            name="tenant_memberships_tenant_membership_key",
+        ),
         Index("tenant_memberships_principal_status_idx", "principal_id", "status"),
-        Index("tenant_memberships_tenant_role_status_idx", "tenant_id", "membership_role", "status"),
+        Index(
+            "tenant_memberships_tenant_role_status_idx",
+            "tenant_id",
+            "membership_role",
+            "status",
+        ),
     )
 
     membership_id: Mapped[str] = mapped_column(String(191), primary_key=True)
@@ -148,7 +161,11 @@ class GovernanceServiceAccountORM(Base):
             name="service_accounts_owner_membership_tenant_fk",
         ),
         UniqueConstraint("tenant_id", "slug", name="service_accounts_tenant_slug_key"),
-        UniqueConstraint("tenant_id", "service_account_id", name="service_accounts_tenant_service_account_key"),
+        UniqueConstraint(
+            "tenant_id",
+            "service_account_id",
+            name="service_accounts_tenant_service_account_key",
+        ),
         Index("service_accounts_tenant_status_idx", "tenant_id", "status"),
         Index("service_accounts_tenant_owner_idx", "tenant_id", "owner_membership_id"),
     )
@@ -191,8 +208,18 @@ class GovernanceAgentCredentialORM(Base):
             "slot",
             name="agent_credentials_tenant_service_account_provider_slot_key",
         ),
-        Index("agent_credentials_provider_status_idx", "tenant_id", "provider_key", "status"),
-        Index("agent_credentials_service_account_last_used_idx", "tenant_id", "service_account_id", "last_used_at"),
+        Index(
+            "agent_credentials_provider_status_idx",
+            "tenant_id",
+            "provider_key",
+            "status",
+        ),
+        Index(
+            "agent_credentials_service_account_last_used_idx",
+            "tenant_id",
+            "service_account_id",
+            "last_used_at",
+        ),
     )
 
     credential_id: Mapped[str] = mapped_column(String(191), primary_key=True)
@@ -225,7 +252,12 @@ class GovernanceAuthSessionORM(Base):
             name="auth_sessions_membership_tenant_fk",
         ),
         UniqueConstraint("session_hash", name="auth_sessions_session_hash_key"),
-        Index("auth_sessions_membership_status_idx", "tenant_id", "membership_id", "status"),
+        Index(
+            "auth_sessions_membership_status_idx",
+            "tenant_id",
+            "membership_id",
+            "status",
+        ),
         Index("auth_sessions_expires_idx", "tenant_id", "expires_at"),
     )
 
@@ -257,9 +289,25 @@ class GovernanceAuditEventORM(Base):
             name="audit_events_actor_service_account_tenant_fk",
         ),
         Index("audit_events_tenant_created_idx", "tenant_id", "created_at"),
-        Index("audit_events_tenant_target_idx", "tenant_id", "target_type", "target_id", "created_at"),
-        Index("audit_events_tenant_actor_membership_idx", "tenant_id", "actor_membership_id", "created_at"),
-        Index("audit_events_tenant_actor_service_account_idx", "tenant_id", "actor_service_account_id", "created_at"),
+        Index(
+            "audit_events_tenant_target_idx",
+            "tenant_id",
+            "target_type",
+            "target_id",
+            "created_at",
+        ),
+        Index(
+            "audit_events_tenant_actor_membership_idx",
+            "tenant_id",
+            "actor_membership_id",
+            "created_at",
+        ),
+        Index(
+            "audit_events_tenant_actor_service_account_idx",
+            "tenant_id",
+            "actor_service_account_id",
+            "created_at",
+        ),
     )
 
     event_id: Mapped[str] = mapped_column(String(191), primary_key=True)
@@ -340,9 +388,7 @@ class FileGovernanceRepository:
                 membership.get("instance_id") or tenant_scope,
                 fallback_tenant_id=tenant_scope,
             )
-            membership["company_id"] = str(
-                membership.get("company_id") or membership["instance_id"] or tenant_scope
-            )
+            membership["company_id"] = str(membership.get("company_id") or membership["instance_id"] or tenant_scope)
             membership["membership_id"] = str(
                 membership.get("membership_id")
                 or FileGovernanceRepository._membership_id_for_user(
@@ -929,10 +975,7 @@ class PostgresGovernanceRepository:
         if delete_missing_audit_events:
             audit_rows_to_sync = audit_event_rows
         else:
-            audit_rows_to_sync_map = {
-                row.event_id: self._clone_relational_audit_row(row)
-                for row in session.scalars(select(GovernanceAuditEventORM)).all()
-            }
+            audit_rows_to_sync_map = {row.event_id: self._clone_relational_audit_row(row) for row in session.scalars(select(GovernanceAuditEventORM)).all()}
             for row in audit_event_rows:
                 # Under the phase-23 default posture, relational audit rows are already the
                 # PostgreSQL read truth. A stale JSON shadow may fill gaps, but it must not
@@ -985,7 +1028,9 @@ class PostgresGovernanceRepository:
         existing.created_at = incoming.created_at
 
     @staticmethod
-    def _clone_relational_audit_row(row: GovernanceAuditEventORM) -> GovernanceAuditEventORM:
+    def _clone_relational_audit_row(
+        row: GovernanceAuditEventORM,
+    ) -> GovernanceAuditEventORM:
         return GovernanceAuditEventORM(
             event_id=row.event_id,
             tenant_id=row.tenant_id,
@@ -1013,18 +1058,13 @@ class PostgresGovernanceRepository:
         if not audit_event_rows:
             return
 
-        existing_rows = {
-            row.event_id: row
-            for row in session.scalars(select(GovernanceAuditEventORM)).all()
-        }
+        existing_rows = {row.event_id: row for row in session.scalars(select(GovernanceAuditEventORM)).all()}
         desired_ids = {row.event_id for row in audit_event_rows}
 
         if delete_missing:
             stale_ids = [event_id for event_id in existing_rows if event_id not in desired_ids]
             if stale_ids:
-                session.execute(
-                    delete(GovernanceAuditEventORM).where(GovernanceAuditEventORM.event_id.in_(stale_ids))
-                )
+                session.execute(delete(GovernanceAuditEventORM).where(GovernanceAuditEventORM.event_id.in_(stale_ids)))
 
         for row in audit_event_rows:
             existing = existing_rows.get(row.event_id)
@@ -1064,12 +1104,7 @@ class PostgresGovernanceRepository:
                     event_id=row.event_id,
                     actor_type=row.actor_type,  # type: ignore[arg-type]
                     actor_id=actor_id,
-                    instance_id=str(
-                        metadata.get("instance_id")
-                        or metadata.get("tenant_id")
-                        or row.tenant_id
-                        or self._bootstrap_tenant_id
-                    ),
+                    instance_id=str(metadata.get("instance_id") or metadata.get("tenant_id") or row.tenant_id or self._bootstrap_tenant_id),
                     tenant_id=row.tenant_id or self._bootstrap_tenant_id,
                     company_id=row.company_id,
                     action=row.action,
@@ -1122,7 +1157,10 @@ class PostgresGovernanceRepository:
 
         admin_memberships: list[AdminInstanceMembershipRecord] = []
         for membership in membership_rows:
-            principal = next((item for item in principal_rows if item.principal_id == membership.principal_id), None)
+            principal = next(
+                (item for item in principal_rows if item.principal_id == membership.principal_id),
+                None,
+            )
             if principal is None or principal.principal_type != "admin_user":
                 continue
             attrs = dict(membership.attributes or {})
@@ -1191,16 +1229,8 @@ class PostgresGovernanceRepository:
                     token_hash=session_row.session_hash,
                     role=role,  # type: ignore[arg-type]
                     membership_id=session_row.membership_id,
-                    instance_id=str(
-                        attrs.get("instance_id")
-                        or (membership.tenant_id if membership is not None else None)
-                        or self._bootstrap_tenant_id
-                    ),
-                    tenant_id=str(
-                        attrs.get("tenant_id")
-                        or (membership.tenant_id if membership is not None else None)
-                        or self._bootstrap_tenant_id
-                    ),
+                    instance_id=str(attrs.get("instance_id") or (membership.tenant_id if membership is not None else None) or self._bootstrap_tenant_id),
+                    tenant_id=str(attrs.get("tenant_id") or (membership.tenant_id if membership is not None else None) or self._bootstrap_tenant_id),
                     session_type=attrs.get("session_type", "standard"),  # type: ignore[arg-type]
                     created_at=session_row.issued_at.isoformat(),
                     expires_at=session_row.expires_at.isoformat(),
@@ -1293,16 +1323,14 @@ class PostgresGovernanceRepository:
 
     @staticmethod
     def _has_relational_shadow_data(state: GovernanceStateRecord) -> bool:
-        return any(
-            [
-                bool(state.admin_users),
-                bool(state.instance_memberships),
-                bool(state.admin_sessions),
-                bool(state.gateway_accounts),
-                bool(state.runtime_keys),
-                bool(state.audit_events),
-            ]
-        )
+        return any([
+            bool(state.admin_users),
+            bool(state.instance_memberships),
+            bool(state.admin_sessions),
+            bool(state.gateway_accounts),
+            bool(state.runtime_keys),
+            bool(state.audit_events),
+        ])
 
     def load_state(self) -> GovernanceStateRecord:
         with self._session() as session:

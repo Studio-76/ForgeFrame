@@ -17,13 +17,21 @@ def main() -> int:
     settings = get_settings()
     targets = storage_postgres_targets(settings)
     if not targets:
-        print(json.dumps({"status": "skipped", "reason": "no_postgresql_storage_targets"}, indent=2))
+        print(
+            json.dumps(
+                {"status": "skipped", "reason": "no_postgresql_storage_targets"},
+                indent=2,
+            )
+        )
         return 0
 
     try:
         reports = [apply_storage_migrations(target) for target in targets]
     except ValueError as exc:
-        print(json.dumps({"status": "error", "reason": str(exc)}, indent=2), file=sys.stderr)
+        print(
+            json.dumps({"status": "error", "reason": str(exc)}, indent=2),
+            file=sys.stderr,
+        )
         return 1
     print(json.dumps({"status": "ok", "reports": reports}, indent=2))
     return 0

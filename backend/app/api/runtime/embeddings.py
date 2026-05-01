@@ -8,14 +8,18 @@ from typing import Any
 from fastapi import APIRouter, Depends, Request, status
 from fastapi.responses import JSONResponse
 
-from app.authz import RequestActor
 from app.api.runtime.access import (
     allowed_provider_set,
     ensure_runtime_model_access,
     list_public_runtime_model_ids,
     requested_model_blocked_by_disabled_public_bridge,
 )
-from app.api.runtime.chat import _duration_ms, _error_response, _provider_exception_to_http, _routing_headers
+from app.api.runtime.chat import (
+    _duration_ms,
+    _error_response,
+    _provider_exception_to_http,
+    _routing_headers,
+)
 from app.api.runtime.dependencies import (
     get_dispatch_service,
     get_model_registry,
@@ -27,19 +31,25 @@ from app.api.runtime.dependencies import (
     runtime_request_path_metadata,
 )
 from app.api.runtime.schemas import EmbeddingsRequest
+from app.authz import RequestActor
 from app.core.dispatch import DispatchService
 from app.core.model_registry import ModelRegistry
 from app.core.routing import RoutingService
 from app.governance.errors import RuntimeAuthorizationError
 from app.governance.models import RuntimeGatewayIdentity, RuntimeRequestPathDecision
 from app.governance.service import GovernanceService, get_governance_service
+from app.providers.base import floats_to_base64_embedding
 from app.request_metadata import merge_request_metadata
 from app.settings.config import Settings
 from app.telemetry.context import telemetry_context_from_request
-from app.usage.analytics import ClientIdentity, get_usage_analytics_store
-from app.providers.base import floats_to_base64_embedding
+from app.usage.analytics import get_usage_analytics_store
 
-from .responses import _resolve_client_identity, _runtime_account_id, _runtime_company_id, _runtime_instance_id
+from .responses import (
+    _resolve_client_identity,
+    _runtime_account_id,
+    _runtime_company_id,
+    _runtime_instance_id,
+)
 
 router = APIRouter(tags=["runtime-embeddings"])
 
@@ -162,7 +172,9 @@ def create_embeddings(
             status_code=status.HTTP_404_NOT_FOUND,
             error_type="model_not_found",
             message=f"Requested model '{requested_model}' is not available.",
-            available_models=public_model_ids if public_model_ids is not None else list_public_runtime_model_ids(
+            available_models=public_model_ids
+            if public_model_ids is not None
+            else list_public_runtime_model_ids(
                 routing=routing,
                 identity=gateway_identity,
                 route_context=path_metadata,
@@ -203,7 +215,11 @@ def create_embeddings(
         embedding_payload = embedding
         if (payload.encoding_format or "float") == "base64" and isinstance(embedding, list):
             embedding_payload = floats_to_base64_embedding([float(value) for value in embedding])
-        data.append({"object": "embedding", "index": index, "embedding": embedding_payload})
+        data.append({
+            "object": "embedding",
+            "index": index,
+            "embedding": embedding_payload,
+        })
 
     analytics.record_embedding_result(
         provider=result.provider,

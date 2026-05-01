@@ -397,7 +397,16 @@ class HealthStatusRecord(BaseModel):
     provider: str
     model: str
     check_type: Literal["provider", "discovery", "synthetic_probe"]
-    status: Literal["healthy", "degraded", "unavailable", "auth_failed", "not_configured", "discovery_only", "probe_failed", "unknown"]
+    status: Literal[
+        "healthy",
+        "degraded",
+        "unavailable",
+        "auth_failed",
+        "not_configured",
+        "discovery_only",
+        "probe_failed",
+        "unknown",
+    ]
     readiness_reason: str | None = None
     last_check_at: str | None = None
     last_success_at: str | None = None
@@ -429,7 +438,13 @@ class OAuthOperationRecord(BaseModel):
 
 class CapabilityEvidenceRecord(BaseModel):
     status: Literal["missing", "observed", "failed"] = "missing"
-    source: Literal["none", "oauth_probe", "runtime_non_stream", "runtime_stream", "runtime_tool_call"] = "none"
+    source: Literal[
+        "none",
+        "oauth_probe",
+        "runtime_non_stream",
+        "runtime_stream",
+        "runtime_tool_call",
+    ] = "none"
     recorded_at: str | None = None
     details: str = "No evidence recorded yet."
 
@@ -446,7 +461,13 @@ class RuntimeProviderTruthRecord(BaseModel):
     wired: bool = False
     ready: bool = False
     readiness_reason: str = "provider_not_wired"
-    contract_classification: Literal["runtime-ready", "partial-runtime", "bridge-only", "onboarding-only", "unsupported"] = "unsupported"
+    contract_classification: Literal[
+        "runtime-ready",
+        "partial-runtime",
+        "bridge-only",
+        "onboarding-only",
+        "unsupported",
+    ] = "unsupported"
     runtime_readiness: Literal["planned", "partial", "ready"] = "planned"
     streaming_readiness: Literal["planned", "partial", "ready"] = "planned"
     capabilities: dict[str, object] = Field(default_factory=dict)
@@ -502,7 +523,13 @@ class ProviderUiTruthRecord(BaseModel):
     last_sync_error: str | None = None
     ready: bool = False
     readiness_reason: str = "provider_not_wired"
-    contract_classification: Literal["runtime-ready", "partial-runtime", "bridge-only", "onboarding-only", "unsupported"] = "unsupported"
+    contract_classification: Literal[
+        "runtime-ready",
+        "partial-runtime",
+        "bridge-only",
+        "onboarding-only",
+        "unsupported",
+    ] = "unsupported"
     runtime_readiness: Literal["planned", "partial", "ready"] = "planned"
     streaming_readiness: Literal["planned", "partial", "ready"] = "planned"
     capabilities: dict[str, object] = Field(default_factory=dict)

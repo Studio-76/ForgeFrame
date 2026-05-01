@@ -45,7 +45,9 @@ class Handler(BaseHTTPRequestHandler):
     server_version = "ForgeFrameLimited/0.1"
 
     def log_message(self, fmt: str, *args: object) -> None:
-        print(f"[forgeframe-limited] {self.address_string()} - {fmt % args}", flush=True)
+        print(
+            f"[forgeframe-limited] {self.address_string()} - {fmt % args}", flush=True
+        )
 
     def _send_json(self, status: int, payload: object) -> None:
         body = _json_bytes(payload)
@@ -148,7 +150,10 @@ class Handler(BaseHTTPRequestHandler):
         path = urlparse(self.path).path
         if path == "/admin/auth/login":
             payload = self._read_json()
-            if payload.get("username") != ADMIN_USERNAME or payload.get("password") != ADMIN_PASSWORD:
+            if (
+                payload.get("username") != ADMIN_USERNAME
+                or payload.get("password") != ADMIN_PASSWORD
+            ):
                 self._send_json(401, {"detail": "invalid_credentials"})
                 return
             self._send_json(

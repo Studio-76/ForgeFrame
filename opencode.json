@@ -1,0 +1,11 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+     "task-manager": {
+        "type": "remote",
+        "url": "http://127.0.0.1:9005/mcp",
+        "headers": { "PYMCP-PROJECT": "ForgeFrame" },
+        "enabled": true
+      }
+   }
+}

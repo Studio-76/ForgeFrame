@@ -6,19 +6,20 @@ from functools import lru_cache
 
 from fastapi import Depends
 
-from app.api.admin.instance_scope import resolve_admin_instance_scope
-from app.api.admin.control_plane_axis_contracts_domain import ControlPlaneAxisContractsDomainMixin
-from app.api.admin.control_plane_bootstrap_domain import ControlPlaneBootstrapDomainMixin
+from app.api.admin.control_plane_axis_contracts_domain import (
+    ControlPlaneAxisContractsDomainMixin,
+)
+from app.api.admin.control_plane_bootstrap_domain import (
+    ControlPlaneBootstrapDomainMixin,
+)
 from app.api.admin.control_plane_harness_domain import ControlPlaneHarnessDomainMixin
 from app.api.admin.control_plane_health_domain import ControlPlaneHealthDomainMixin
-from app.api.admin.control_plane_openai_compat_domain import ControlPlaneOpenAICompatibilityDomainMixin
-from app.api.admin.control_plane_provider_catalog_domain import ControlPlaneProviderCatalogDomainMixin
 from app.api.admin.control_plane_models import (
     HealthConfigUpdateRequest,
     OAuthAccountProbeResult,
     OAuthAccountTargetStatus,
-    ProviderCreateRequest,
     ProductAxisTarget,
+    ProviderCreateRequest,
     ProviderSyncRequest,
     ProviderUpdateRequest,
 )
@@ -28,11 +29,18 @@ from app.api.admin.control_plane_oauth_operations_domain import (
 from app.api.admin.control_plane_oauth_targets_domain import (
     ControlPlaneOAuthTargetsDomainMixin,
 )
+from app.api.admin.control_plane_openai_compat_domain import (
+    ControlPlaneOpenAICompatibilityDomainMixin,
+)
+from app.api.admin.control_plane_provider_catalog_domain import (
+    ControlPlaneProviderCatalogDomainMixin,
+)
 from app.api.admin.control_plane_provider_domain import ControlPlaneProviderDomainMixin
 from app.api.admin.control_plane_routing_domain import ControlPlaneRoutingDomainMixin
 from app.api.admin.control_plane_snapshot_domain import ControlPlaneSnapshotDomainMixin
 from app.api.admin.control_plane_targets_domain import ControlPlaneTargetsDomainMixin
 from app.api.admin.control_plane_truth_domain import ControlPlaneTruthDomainMixin
+from app.api.admin.instance_scope import resolve_admin_instance_scope
 from app.control_plane import HealthConfig, RoutingBudgetStateRecord
 from app.core.model_registry import ModelRegistry
 from app.harness.service import HarnessService, get_harness_service
@@ -90,36 +98,18 @@ class ControlPlaneService(
         self._oauth_operations_repository = oauth_operations_repository or get_oauth_operations_repository(settings)
 
         stored_state = self._state_repository.load_state(instance.instance_id)
-        self._providers_state = self._load_provider_state(
-            stored_state.providers if stored_state else None
-        )
+        self._providers_state = self._load_provider_state(stored_state.providers if stored_state else None)
         self._health_config = stored_state.health_config if stored_state else HealthConfig()
-        self._health_records = self._load_health_records(
-            stored_state.health_records if stored_state else []
-        )
-        self._last_bootstrap_readiness = (
-            stored_state.last_bootstrap_readiness if stored_state else None
-        )
+        self._health_records = self._load_health_records(stored_state.health_records if stored_state else [])
+        self._last_bootstrap_readiness = stored_state.last_bootstrap_readiness if stored_state else None
         if self._last_bootstrap_readiness is None:
             self._last_bootstrap_readiness = self._build_bootstrap_readiness_report()
-        self._provider_catalog_state = self._materialize_provider_catalog(
-            stored_state.provider_catalog if stored_state else None
-        )
-        self._provider_targets_state = self._load_provider_targets(
-            stored_state.provider_targets if stored_state else None
-        )
-        self._routing_policies_state = self._load_routing_policies(
-            stored_state.routing_policies if stored_state else None
-        )
-        self._routing_budget_state = self._load_routing_budget_state(
-            stored_state.routing_budget_state if stored_state else RoutingBudgetStateRecord()
-        )
-        self._routing_circuits_state = self._load_routing_circuits(
-            stored_state.routing_circuits if stored_state else None
-        )
-        self._routing_decisions_state = self._load_routing_decisions(
-            stored_state.routing_decisions if stored_state else []
-        )
+        self._provider_catalog_state = self._materialize_provider_catalog(stored_state.provider_catalog if stored_state else None)
+        self._provider_targets_state = self._load_provider_targets(stored_state.provider_targets if stored_state else None)
+        self._routing_policies_state = self._load_routing_policies(stored_state.routing_policies if stored_state else None)
+        self._routing_budget_state = self._load_routing_budget_state(stored_state.routing_budget_state if stored_state else RoutingBudgetStateRecord())
+        self._routing_circuits_state = self._load_routing_circuits(stored_state.routing_circuits if stored_state else None)
+        self._routing_decisions_state = self._load_routing_decisions(stored_state.routing_decisions if stored_state else [])
         self._persist_state()
 
 

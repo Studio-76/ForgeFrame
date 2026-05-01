@@ -17,7 +17,10 @@ router = APIRouter(prefix="/knowledge-sources", tags=["admin-knowledge-sources"]
 
 
 def _error(status_code: int, error_type: str, message: str) -> JSONResponse:
-    return JSONResponse(status_code=status_code, content={"error": {"type": error_type, "message": message}})
+    return JSONResponse(
+        status_code=status_code,
+        content={"error": {"type": error_type, "message": message}},
+    )
 
 
 @router.get("")
@@ -29,8 +32,18 @@ def list_sources(
     instance: InstanceRecord = Depends(resolve_admin_instance_scope),
     service: KnowledgeContextAdminService = Depends(get_knowledge_context_admin_service),
 ) -> dict[str, object]:
-    sources = service.list_sources(instance=instance, actor=admin, source_kind=source_kind, status=status_filter, limit=limit)
-    return {"status": "ok", "instance": instance.model_dump(mode="json"), "sources": [item.model_dump(mode="json") for item in sources]}
+    sources = service.list_sources(
+        instance=instance,
+        actor=admin,
+        source_kind=source_kind,
+        status=status_filter,
+        limit=limit,
+    )
+    return {
+        "status": "ok",
+        "instance": instance.model_dump(mode="json"),
+        "sources": [item.model_dump(mode="json") for item in sources],
+    }
 
 
 @router.get("/{source_id}")
@@ -78,4 +91,3 @@ def update_source(
         code = status.HTTP_404_NOT_FOUND if error_type == "knowledge_source_not_found" else status.HTTP_409_CONFLICT
         return _error(code, error_type, str(exc))
     return {"status": "ok", "source": source.model_dump(mode="json")}
-

@@ -38,7 +38,12 @@ ElevatedAccessRequestType = Literal["impersonation", "break_glass"]
 ElevatedAccessGateStatus = ApprovalStatus
 ElevatedAccessIssuanceStatus = Literal["pending", "issued"]
 SecretRotationTargetType = Literal["provider", "harness_profile"]
-SecretRotationKind = Literal["manual_env_rotation", "oauth_token_rotation", "api_key_rotation", "harness_profile_rotation"]
+SecretRotationKind = Literal[
+    "manual_env_rotation",
+    "oauth_token_rotation",
+    "api_key_rotation",
+    "harness_profile_rotation",
+]
 RuntimeRequestPathType = Literal[
     "smart_routing",
     "pinned_target",

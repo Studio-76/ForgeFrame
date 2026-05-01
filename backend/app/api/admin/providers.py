@@ -25,9 +25,10 @@ from app.harness.models import (
     HarnessProviderProfile,
     HarnessVerificationRequest,
 )
-from app.instances.models import InstanceRecord
 from app.harness.redaction import (
     redact_sensitive_payload as _redact_sensitive_payload,
+)
+from app.harness.redaction import (
     redacted_harness_profile_payload as _redacted_harness_profile_payload,
 )
 from app.idempotency import (
@@ -39,6 +40,7 @@ from app.idempotency import (
     build_request_fingerprint,
     get_request_envelope,
 )
+from app.instances.models import InstanceRecord
 from app.telemetry.context import telemetry_context_from_request
 from app.tenancy import TenantFilterRequiredError
 
@@ -55,7 +57,10 @@ _require_provider_write = require_admin_instance_permission(
 
 
 def _admin_error(status_code: int, error_type: str, message: str) -> JSONResponse:
-    return JSONResponse(status_code=status_code, content={"error": {"type": error_type, "message": message}})
+    return JSONResponse(
+        status_code=status_code,
+        content={"error": {"type": error_type, "message": message}},
+    )
 
 
 def _admin_error_payload(error_type: str, message: str) -> dict[str, object]:
@@ -323,7 +328,10 @@ def patch_health_config(
     _admin: AuthenticatedAdmin = Depends(_require_provider_write),
     service: ControlPlaneService = Depends(get_control_plane_service),
 ) -> dict[str, object]:
-    return {"status": "ok", "config": service.update_health_config(payload).model_dump()}
+    return {
+        "status": "ok",
+        "config": service.update_health_config(payload).model_dump(),
+    }
 
 
 @router.post("/health/run")
@@ -500,29 +508,31 @@ def compatibility_matrix(
                         + f"and {model_less_enabled_profiles} enabled {profile_word} currently own no models."
                     )
                 )
-        matrix.append(
-            {
-                "provider": item.provider.provider,
-                "label": item.provider.label,
-                "compatibility_depth": item.runtime.compatibility_depth,
-                "contract_classification": item.runtime.contract_classification,
-                "ready": item.runtime.ready,
-                "runtime_readiness": item.runtime.runtime_readiness,
-                "streaming_readiness": item.runtime.streaming_readiness,
-                "proof_status": proof_status,
-                "proven_profile_keys": item.harness.proven_profile_keys,
-                "provider_axis": item.runtime.provider_axis,
-                "streaming": streaming_level,
-                "tool_calling": str(capabilities.get("tool_calling_level", "none")),
-                "evidence": item.runtime.evidence.model_dump(),
-                "vision": vision_level,
-                "discovery": "full" if item.runtime.discovery_supported else "none",
-                "oauth_required": item.runtime.oauth_required,
-                "ui_models": item.ui.model_count,
-                "notes": notes,
-            }
-        )
-    return {"status": "ok", "instance": instance.model_dump(mode="json"), "matrix": matrix}
+        matrix.append({
+            "provider": item.provider.provider,
+            "label": item.provider.label,
+            "compatibility_depth": item.runtime.compatibility_depth,
+            "contract_classification": item.runtime.contract_classification,
+            "ready": item.runtime.ready,
+            "runtime_readiness": item.runtime.runtime_readiness,
+            "streaming_readiness": item.runtime.streaming_readiness,
+            "proof_status": proof_status,
+            "proven_profile_keys": item.harness.proven_profile_keys,
+            "provider_axis": item.runtime.provider_axis,
+            "streaming": streaming_level,
+            "tool_calling": str(capabilities.get("tool_calling_level", "none")),
+            "evidence": item.runtime.evidence.model_dump(),
+            "vision": vision_level,
+            "discovery": "full" if item.runtime.discovery_supported else "none",
+            "oauth_required": item.runtime.oauth_required,
+            "ui_models": item.ui.model_count,
+            "notes": notes,
+        })
+    return {
+        "status": "ok",
+        "instance": instance.model_dump(mode="json"),
+        "matrix": matrix,
+    }
 
 
 @router.post("/oauth-account/probe-all")
@@ -542,11 +552,13 @@ def probe_all_oauth_account_targets(
         "qwen_oauth",
     ]:
         try:
-            results.append(
-                service.probe_oauth_account_provider(provider_key, instance.instance_id).model_dump()
-            )
+            results.append(service.probe_oauth_account_provider(provider_key, instance.instance_id).model_dump())
         except ValueError as exc:
-            results.append({"provider_key": provider_key, "status": "failed", "details": str(exc)})
+            results.append({
+                "provider_key": provider_key,
+                "status": "failed",
+                "details": str(exc),
+            })
     return {"status": "ok", "probes": results}
 
 
@@ -606,12 +618,19 @@ def upsert_harness_profile(
     service: ControlPlaneService = Depends(get_control_plane_service),
 ) -> object:
     if payload.provider_key != provider_key:
-        return _admin_error(status.HTTP_400_BAD_REQUEST, "provider_key_mismatch", "Path provider_key and payload.provider_key must match.")
+        return _admin_error(
+            status.HTTP_400_BAD_REQUEST,
+            "provider_key_mismatch",
+            "Path provider_key and payload.provider_key must match.",
+        )
     scoped_payload = payload.model_copy(update={"instance_id": instance.instance_id})
     return _execute_idempotent_admin_json(
         request=request,
         scope_key=f"admin.providers.harness.profile.upsert:{instance.instance_id}:{provider_key}",
-        fingerprint_payload={"instance_id": instance.instance_id, "payload": scoped_payload.model_dump(mode="json")},
+        fingerprint_payload={
+            "instance_id": instance.instance_id,
+            "payload": scoped_payload.model_dump(mode="json"),
+        },
         execute=lambda: {
             "status": "ok",
             "profile": _redacted_harness_profile_payload(service.upsert_harness_profile(scoped_payload, instance.instance_id)),
@@ -695,7 +714,10 @@ def harness_preview(
     return _execute_idempotent_admin_json(
         request=request,
         scope_key=f"admin.providers.harness.preview:{instance.instance_id}",
-        fingerprint_payload={"instance_id": instance.instance_id, "payload": payload.model_dump(mode="json")},
+        fingerprint_payload={
+            "instance_id": instance.instance_id,
+            "payload": payload.model_dump(mode="json"),
+        },
         execute=lambda: _redact_sensitive_payload(service.harness_preview(payload, instance.instance_id)),
         errors=((ValueError, status.HTTP_404_NOT_FOUND, "harness_profile_not_found"),),
         resource_type="harness_preview",
@@ -714,7 +736,10 @@ def harness_dry_run(
     return _execute_idempotent_admin_json(
         request=request,
         scope_key=f"admin.providers.harness.dry_run:{instance.instance_id}",
-        fingerprint_payload={"instance_id": instance.instance_id, "payload": payload.model_dump(mode="json")},
+        fingerprint_payload={
+            "instance_id": instance.instance_id,
+            "payload": payload.model_dump(mode="json"),
+        },
         execute=lambda: _redact_sensitive_payload(service.harness_dry_run(payload, instance.instance_id)),
         errors=((ValueError, status.HTTP_404_NOT_FOUND, "harness_profile_not_found"),),
         resource_type="harness_dry_run",
@@ -759,14 +784,21 @@ def verify_harness_profile(
     return _execute_idempotent_admin_json(
         request=request,
         scope_key=f"admin.providers.harness.verify:{instance.instance_id}",
-        fingerprint_payload={"instance_id": instance.instance_id, "payload": payload.model_dump(mode="json")},
+        fingerprint_payload={
+            "instance_id": instance.instance_id,
+            "payload": payload.model_dump(mode="json"),
+        },
         execute=lambda: {
             "status": "ok",
             "verification": _redact_sensitive_payload(service.verify_harness_profile(payload, instance.instance_id)),
         },
         errors=(
             (ValueError, status.HTTP_404_NOT_FOUND, "harness_profile_not_found"),
-            (RuntimeError, status.HTTP_422_UNPROCESSABLE_ENTITY, "harness_verification_failed"),
+            (
+                RuntimeError,
+                status.HTTP_422_UNPROCESSABLE_ENTITY,
+                "harness_verification_failed",
+            ),
         ),
         resource_type="harness_verify",
         resource_id=f"{instance.instance_id}:{payload.provider_key}",
@@ -804,7 +836,10 @@ def import_harness_config(
     return _execute_idempotent_admin_json(
         request=request,
         scope_key=f"admin.providers.harness.import:{instance.instance_id}",
-        fingerprint_payload={"instance_id": instance.instance_id, "payload": payload.model_dump(mode="json")},
+        fingerprint_payload={
+            "instance_id": instance.instance_id,
+            "payload": payload.model_dump(mode="json"),
+        },
         execute=lambda: service.import_harness_config(payload, instance.instance_id),
         errors=((ValueError, status.HTTP_400_BAD_REQUEST, "harness_import_invalid"),),
         resource_type="harness_import",

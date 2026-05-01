@@ -5,18 +5,13 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, Request, status
 from fastapi.responses import JSONResponse
 
-from app.api.admin.security import require_admin_instance_permission
 from app.api.admin.instance_scope import require_admin_instance_scope
-from app.idempotency import (
-    IdempotencyFingerprintMismatchError,
-    IdempotencyRequestInProgressError,
-    InvalidIdempotencyKeyError,
-    RequestIdempotencyService,
-    StoredResponseSnapshot,
-    build_request_fingerprint,
-    get_request_envelope,
+from app.api.admin.security import require_admin_instance_permission
+from app.execution.admin_models import (
+    ExecutionReplayAuditReference,
+    RunOperatorActionRequest,
+    RunReplayRequest,
 )
-from app.execution.admin_models import ExecutionReplayAuditReference, RunOperatorActionRequest, RunReplayRequest
 from app.execution.admin_service import ExecutionAdminService
 from app.execution.dependencies import (
     get_execution_admin_service,
@@ -29,6 +24,15 @@ from app.execution.service import (
 )
 from app.governance.models import AuthenticatedAdmin
 from app.governance.service import GovernanceService, get_governance_service
+from app.idempotency import (
+    IdempotencyFingerprintMismatchError,
+    IdempotencyRequestInProgressError,
+    InvalidIdempotencyKeyError,
+    RequestIdempotencyService,
+    StoredResponseSnapshot,
+    build_request_fingerprint,
+    get_request_envelope,
+)
 from app.instances.models import InstanceRecord
 
 router = APIRouter(prefix="/execution", tags=["admin-execution"])
@@ -83,9 +87,7 @@ def list_execution_runs(
     has_error: bool | None = None,
     window: str | None = None,
     limit: int = 100,
-    _admin: AuthenticatedAdmin = Depends(
-        require_admin_instance_permission("execution.read", explicit_scope=True)
-    ),
+    _admin: AuthenticatedAdmin = Depends(require_admin_instance_permission("execution.read", explicit_scope=True)),
     instance: InstanceRecord = Depends(require_admin_instance_scope),
     service: ExecutionAdminService = Depends(get_execution_admin_service),
 ) -> dict[str, object]:
@@ -109,9 +111,7 @@ def list_execution_queues(
     target: str | None = None,
     age: str | None = None,
     limit: int = 100,
-    _admin: AuthenticatedAdmin = Depends(
-        require_admin_instance_permission("execution.read", explicit_scope=True)
-    ),
+    _admin: AuthenticatedAdmin = Depends(require_admin_instance_permission("execution.read", explicit_scope=True)),
     instance: InstanceRecord = Depends(require_admin_instance_scope),
     service: ExecutionAdminService = Depends(get_execution_admin_service),
 ) -> dict[str, object]:
@@ -132,9 +132,7 @@ def list_execution_queues(
 
 @router.get("/dispatch")
 def get_execution_dispatch(
-    _admin: AuthenticatedAdmin = Depends(
-        require_admin_instance_permission("execution.read", explicit_scope=True)
-    ),
+    _admin: AuthenticatedAdmin = Depends(require_admin_instance_permission("execution.read", explicit_scope=True)),
     instance: InstanceRecord = Depends(require_admin_instance_scope),
     service: ExecutionAdminService = Depends(get_execution_admin_service),
 ) -> dict[str, object]:
@@ -145,9 +143,7 @@ def get_execution_dispatch(
 @router.get("/runs/{run_id}")
 def execution_run_detail(
     run_id: str,
-    _admin: AuthenticatedAdmin = Depends(
-        require_admin_instance_permission("execution.read", explicit_scope=True)
-    ),
+    _admin: AuthenticatedAdmin = Depends(require_admin_instance_permission("execution.read", explicit_scope=True)),
     instance: InstanceRecord = Depends(require_admin_instance_scope),
     service: ExecutionAdminService = Depends(get_execution_admin_service),
 ) -> object:
@@ -163,9 +159,7 @@ def replay_execution_run(
     run_id: str,
     payload: RunReplayRequest,
     request: Request,
-    admin: AuthenticatedAdmin = Depends(
-        require_admin_instance_permission("execution.operate", allow_impersonation=False, explicit_scope=True)
-    ),
+    admin: AuthenticatedAdmin = Depends(require_admin_instance_permission("execution.operate", allow_impersonation=False, explicit_scope=True)),
     instance: InstanceRecord = Depends(require_admin_instance_scope),
     execution: ExecutionAdminService = Depends(get_execution_admin_service),
     governance: GovernanceService = Depends(get_governance_service),
@@ -318,9 +312,7 @@ def _run_operator_action(
 def pause_execution_run(
     run_id: str,
     payload: RunOperatorActionRequest,
-    admin: AuthenticatedAdmin = Depends(
-        require_admin_instance_permission("execution.operate", allow_impersonation=False, explicit_scope=True)
-    ),
+    admin: AuthenticatedAdmin = Depends(require_admin_instance_permission("execution.operate", allow_impersonation=False, explicit_scope=True)),
     instance: InstanceRecord = Depends(require_admin_instance_scope),
     execution: ExecutionAdminService = Depends(get_execution_admin_service),
     governance: GovernanceService = Depends(get_governance_service),
@@ -340,9 +332,7 @@ def pause_execution_run(
 def resume_execution_run(
     run_id: str,
     payload: RunOperatorActionRequest,
-    admin: AuthenticatedAdmin = Depends(
-        require_admin_instance_permission("execution.operate", allow_impersonation=False, explicit_scope=True)
-    ),
+    admin: AuthenticatedAdmin = Depends(require_admin_instance_permission("execution.operate", allow_impersonation=False, explicit_scope=True)),
     instance: InstanceRecord = Depends(require_admin_instance_scope),
     execution: ExecutionAdminService = Depends(get_execution_admin_service),
     governance: GovernanceService = Depends(get_governance_service),
@@ -362,9 +352,7 @@ def resume_execution_run(
 def interrupt_execution_run(
     run_id: str,
     payload: RunOperatorActionRequest,
-    admin: AuthenticatedAdmin = Depends(
-        require_admin_instance_permission("execution.operate", allow_impersonation=False, explicit_scope=True)
-    ),
+    admin: AuthenticatedAdmin = Depends(require_admin_instance_permission("execution.operate", allow_impersonation=False, explicit_scope=True)),
     instance: InstanceRecord = Depends(require_admin_instance_scope),
     execution: ExecutionAdminService = Depends(get_execution_admin_service),
     governance: GovernanceService = Depends(get_governance_service),
@@ -384,9 +372,7 @@ def interrupt_execution_run(
 def quarantine_execution_run(
     run_id: str,
     payload: RunOperatorActionRequest,
-    admin: AuthenticatedAdmin = Depends(
-        require_admin_instance_permission("execution.operate", allow_impersonation=False, explicit_scope=True)
-    ),
+    admin: AuthenticatedAdmin = Depends(require_admin_instance_permission("execution.operate", allow_impersonation=False, explicit_scope=True)),
     instance: InstanceRecord = Depends(require_admin_instance_scope),
     execution: ExecutionAdminService = Depends(get_execution_admin_service),
     governance: GovernanceService = Depends(get_governance_service),
@@ -406,9 +392,7 @@ def quarantine_execution_run(
 def restart_execution_run(
     run_id: str,
     payload: RunOperatorActionRequest,
-    admin: AuthenticatedAdmin = Depends(
-        require_admin_instance_permission("execution.operate", allow_impersonation=False, explicit_scope=True)
-    ),
+    admin: AuthenticatedAdmin = Depends(require_admin_instance_permission("execution.operate", allow_impersonation=False, explicit_scope=True)),
     instance: InstanceRecord = Depends(require_admin_instance_scope),
     execution: ExecutionAdminService = Depends(get_execution_admin_service),
     governance: GovernanceService = Depends(get_governance_service),
@@ -428,9 +412,7 @@ def restart_execution_run(
 def escalate_execution_run(
     run_id: str,
     payload: RunOperatorActionRequest,
-    admin: AuthenticatedAdmin = Depends(
-        require_admin_instance_permission("execution.operate", allow_impersonation=False, explicit_scope=True)
-    ),
+    admin: AuthenticatedAdmin = Depends(require_admin_instance_permission("execution.operate", allow_impersonation=False, explicit_scope=True)),
     instance: InstanceRecord = Depends(require_admin_instance_scope),
     execution: ExecutionAdminService = Depends(get_execution_admin_service),
     governance: GovernanceService = Depends(get_governance_service),
@@ -448,9 +430,7 @@ def escalate_execution_run(
 
 @router.post("/dispatch/reconcile-leases")
 def reconcile_execution_leases(
-    admin: AuthenticatedAdmin = Depends(
-        require_admin_instance_permission("execution.operate", allow_impersonation=False, explicit_scope=True)
-    ),
+    admin: AuthenticatedAdmin = Depends(require_admin_instance_permission("execution.operate", allow_impersonation=False, explicit_scope=True)),
     instance: InstanceRecord = Depends(require_admin_instance_scope),
     execution: ExecutionAdminService = Depends(get_execution_admin_service),
     governance: GovernanceService = Depends(get_governance_service),
@@ -465,4 +445,7 @@ def reconcile_execution_leases(
         reason="Expired execution leases reconciled.",
         metadata={"reconciled_runs": len(results)},
     )
-    return {"status": "ok", "reconciled": [item.model_dump(mode="json") for item in results]}
+    return {
+        "status": "ok",
+        "reconciled": [item.model_dump(mode="json") for item in results],
+    }

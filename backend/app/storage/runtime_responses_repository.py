@@ -10,8 +10,8 @@ from sqlalchemy import (
     Boolean,
     CheckConstraint,
     DateTime,
-    Integer,
     Index,
+    Integer,
     String,
     Text,
 )
@@ -21,7 +21,13 @@ from sqlalchemy.orm import Mapped, mapped_column
 from app.storage.harness_repository import Base
 
 RUNTIME_RESPONSE_PROCESSING_MODES = ("sync", "background")
-RUNTIME_RESPONSE_LIFECYCLE_STATUSES = ("queued", "in_progress", "completed", "failed", "incomplete")
+RUNTIME_RESPONSE_LIFECYCLE_STATUSES = (
+    "queued",
+    "in_progress",
+    "completed",
+    "failed",
+    "incomplete",
+)
 NATIVE_RESPONSE_ITEM_PHASES = ("input", "output")
 
 
@@ -136,7 +142,12 @@ class NativeResponseORM(Base):
             "lifecycle_status",
             RUNTIME_RESPONSE_LIFECYCLE_STATUSES,
         ),
-        Index("native_responses_company_id_id_uq", "company_id", "response_id", unique=True),
+        Index(
+            "native_responses_company_id_id_uq",
+            "company_id",
+            "response_id",
+            unique=True,
+        ),
         Index(
             "native_responses_company_status_created_idx",
             "company_id",
@@ -349,7 +360,12 @@ class NativeResponseStreamEventORM(Base):
 class NativeResponseMappingORM(Base):
     __tablename__ = "native_response_mappings"
     __table_args__ = (
-        Index("native_response_mappings_company_response_uq", "company_id", "response_id", unique=True),
+        Index(
+            "native_response_mappings_company_response_uq",
+            "company_id",
+            "response_id",
+            unique=True,
+        ),
     )
 
     response_id: Mapped[str] = mapped_column(String(64), primary_key=True)

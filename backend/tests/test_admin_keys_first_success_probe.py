@@ -1,6 +1,6 @@
+from conftest import admin_headers as shared_admin_headers
 from fastapi.testclient import TestClient
 
-from conftest import admin_headers as shared_admin_headers
 from app.api.runtime.dependencies import clear_runtime_dependency_caches
 from app.governance.service import get_governance_service
 from app.instances.service import clear_instance_service_cache
@@ -76,7 +76,9 @@ def test_admin_first_success_probe_rejects_invalid_runtime_key(monkeypatch) -> N
     assert payload["error"]["type"] == "runtime_key_invalid"
 
 
-def test_admin_first_success_probe_runs_models_probe_with_valid_runtime_key(monkeypatch) -> None:
+def test_admin_first_success_probe_runs_models_probe_with_valid_runtime_key(
+    monkeypatch,
+) -> None:
     monkeypatch.setenv("FORGEGATE_RUNTIME_AUTH_REQUIRED", "true")
     clear_runtime_dependency_caches()
     get_governance_service.cache_clear()
@@ -99,7 +101,9 @@ def test_admin_first_success_probe_runs_models_probe_with_valid_runtime_key(monk
     assert payload["probe"]["success"] is True
 
 
-def test_admin_first_success_probe_persists_last_result_per_instance_and_survives_reload(monkeypatch) -> None:
+def test_admin_first_success_probe_persists_last_result_per_instance_and_survives_reload(
+    monkeypatch,
+) -> None:
     monkeypatch.setenv("FORGEGATE_RUNTIME_AUTH_REQUIRED", "true")
     clear_runtime_dependency_caches()
     get_governance_service.cache_clear()

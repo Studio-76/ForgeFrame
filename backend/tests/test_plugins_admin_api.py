@@ -1,14 +1,17 @@
+from conftest import admin_headers as shared_admin_headers
+from conftest import login_headers_allowing_password_rotation
 from fastapi.testclient import TestClient
 
 from app.main import app
-from conftest import admin_headers as shared_admin_headers, login_headers_allowing_password_rotation
 
 
 def _admin_headers(client: TestClient) -> dict[str, str]:
     return shared_admin_headers(client)
 
 
-def _operator_session(client: TestClient) -> tuple[dict[str, object], dict[str, str], str]:
+def _operator_session(
+    client: TestClient,
+) -> tuple[dict[str, object], dict[str, str], str]:
     admin_headers = _admin_headers(client)
     password = "Plugin-Operator-123"
     created = client.post(
@@ -51,8 +54,18 @@ def _create_instance(client: TestClient, headers: dict[str, str], *, instance_id
 def test_plugins_admin_api_persists_manifest_registry_and_instance_scoped_bindings() -> None:
     client = TestClient(app)
     headers = _admin_headers(client)
-    instance_alpha = _create_instance(client, headers, instance_id="instance_plugin_alpha", company_id="company_plugin_alpha")
-    instance_beta = _create_instance(client, headers, instance_id="instance_plugin_beta", company_id="company_plugin_beta")
+    instance_alpha = _create_instance(
+        client,
+        headers,
+        instance_id="instance_plugin_alpha",
+        company_id="company_plugin_alpha",
+    )
+    instance_beta = _create_instance(
+        client,
+        headers,
+        instance_id="instance_plugin_beta",
+        company_id="company_plugin_beta",
+    )
 
     created = client.post(
         "/admin/plugins",
@@ -152,7 +165,12 @@ def test_plugins_admin_api_persists_manifest_registry_and_instance_scoped_bindin
 def test_plugins_admin_api_validates_binding_contract_against_manifest_schema_and_extension_points() -> None:
     client = TestClient(app)
     headers = _admin_headers(client)
-    instance_id = _create_instance(client, headers, instance_id="instance_plugin_contract", company_id="company_plugin_contract")
+    instance_id = _create_instance(
+        client,
+        headers,
+        instance_id="instance_plugin_contract",
+        company_id="company_plugin_contract",
+    )
 
     created = client.post(
         "/admin/plugins",
@@ -241,7 +259,12 @@ def test_plugins_admin_api_requires_operator_instance_membership_for_reads_and_b
     client = TestClient(app)
     admin_headers = _admin_headers(client)
     operator_user, operator_headers, operator_password = _operator_session(client)
-    instance_id = _create_instance(client, admin_headers, instance_id="instance_plugin_operator", company_id="company_plugin_operator")
+    instance_id = _create_instance(
+        client,
+        admin_headers,
+        instance_id="instance_plugin_operator",
+        company_id="company_plugin_operator",
+    )
 
     created = client.post(
         "/admin/plugins",
