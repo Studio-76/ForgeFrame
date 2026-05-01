@@ -29,6 +29,44 @@ function visibleModels(provider: ProvidersManagementSectionProps["data"]["provid
 }
 
 /**
+ * Explains what the provider inventory action actually does.
+ * @param provider - Provider currently shown in the action row.
+ * @returns Plain operator-facing explanation for the next action.
+ */
+function providerActionExplanation(provider: ProvidersManagementSectionProps["data"]["providers"][number]): string {
+  if (provider.next_action_kind === "sync_models") {
+    return "Sync updates inventory only. Live endpoint probes run in Harness.";
+  }
+  if (provider.next_action_kind === "run_health") {
+    return "Health updates readiness badges from runtime state. Use Harness for a live probe.";
+  }
+  if (provider.next_action_kind === "activate_provider") {
+    return "Enable after endpoint settings are saved and at least one target is ready.";
+  }
+  if (provider.next_action_kind === "review_sync") {
+    return "Routing is blocked until Provider Targets has a ready target.";
+  }
+  if (provider.next_action_kind === "connect_oauth") {
+    return "Connect the account target before routing requests.";
+  }
+  return "Save settings before running the next repair step.";
+}
+
+/**
+ * Builds the endpoint or account route summary for the selected provider.
+ * @param draft - Editable provider draft for the selected provider.
+ * @returns Human-readable route target summary.
+ */
+function providerEndpointSummary(draft: ProvidersManagementSectionProps["data"]["providerDrafts"][string]): string {
+  if (draft.providerClass === "oauth_account") {
+    return "OAuth account bridge — connect the account on OAuth Targets before probing.";
+  }
+  return draft.endpointBaseUrl.trim()
+    ? `Endpoint saved in this draft: ${draft.endpointBaseUrl.trim()}`
+    : "No endpoint URL is set yet.";
+}
+
+/**
  * Builds the stable key used to track a pending provider action.
  * @param kind - Provider action category.
  * @param provider - Optional provider identifier for scoped actions.
@@ -145,7 +183,7 @@ export function ProvidersInventoryTableSection({ data, actions, instanceId }: Pr
       tabIndex={-1}
       className={location.hash === "#provider-health-runs" ? "is-anchor-target" : ""}
       title="Providers"
-      description="Provider records only. Target routing, OAuth sessions, and harness proof live on their dedicated pages."
+      description="Provider records only. Sync updates inventory; live endpoint requests happen from Harness probes."
       actions={
         <>
           <button type="button" disabled={isLoading} onClick={() => void actions.load()}>{isLoading ? "Refreshing…" : "Refresh"}</button>
@@ -209,7 +247,7 @@ export function ProvidersInventoryTableSection({ data, actions, instanceId }: Pr
                 </button>
               </div>
               <p className="fg-note">
-                After adding it, enable the provider, sync models, then open Provider Targets if routing still shows zero ready targets.
+                After adding it, save endpoint/auth settings, sync inventory, then use Harness for a live endpoint probe.
               </p>
             </div>
           ) : (
@@ -244,6 +282,7 @@ export function ProvidersInventoryTableSection({ data, actions, instanceId }: Pr
                 <p>Targets: {formatMetric(provider.ready_target_count)} ready / {formatMetric(provider.target_count)} total</p>
                 <p>Last probe: {formatTimestamp(provider.last_probe_at)}</p>
                 <p>{provider.ready ? "Runtime is ready." : provider.readiness_reason ?? "Runtime is not ready."}</p>
+                <p className="fg-muted">{providerActionExplanation(provider)}</p>
               </div>
             </div>
           );
@@ -263,6 +302,26 @@ export function ProvidersInventoryTableSection({ data, actions, instanceId }: Pr
                 <TonePill label={selectedProvider.next_action} tone={selectedProvider.oauth_connect_required ? "warning" : "neutral"} />
                 {selectedProvider.readiness_reason ? <span className="fg-muted">{selectedProvider.readiness_reason}</span> : null}
               </div>
+            </div>
+
+            <div className="fg-provider-action-plan fg-mb-md">
+              <div>
+                <strong>Next step</strong>
+                <p>{providerActionExplanation(selectedProvider)}</p>
+              </div>
+              <div>
+                <strong>Live endpoint test</strong>
+                <p>
+                  These buttons do not send chat/completions requests. Use Harness when you want to see LM Studio receive a real request.
+                </p>
+              </div>
+              <div>
+                <strong>Endpoint</strong>
+                <p>{providerEndpointSummary(selectedDraft)}</p>
+              </div>
+              <Link className="fg-nav-link" to={withInstanceScope(CONTROL_PLANE_ROUTES.harness, instanceId)}>
+                Open Harness live probe
+              </Link>
             </div>
 
             <div className="fg-inline-form">
@@ -304,7 +363,7 @@ export function ProvidersInventoryTableSection({ data, actions, instanceId }: Pr
                     disabled={isPending(providerPendingKey("sync", selectedProvider.provider))}
                     onClick={() => void actions.syncProviderModels(selectedProvider.provider)}
                   >
-                    {isPending(providerPendingKey("sync", selectedProvider.provider)) ? "Syncing…" : "Sync models"}
+                    {isPending(providerPendingKey("sync", selectedProvider.provider)) ? "Syncing inventory…" : "Sync inventory"}
                   </button>
                   <button
                     type="button"
@@ -324,9 +383,11 @@ export function ProvidersInventoryTableSection({ data, actions, instanceId }: Pr
             </div>
             {data.access.canMutate ? (
               <p className="fg-note fg-mt-sm">
-                Best next step: save changes first, sync models after endpoint/auth edits, then enable only when at least one target is ready.
+                Save endpoint/auth edits, sync inventory, then run a Harness probe for live proof.
               </p>
             ) : null}
+
+            <ActionFeedbackNotice feedback={data.actionFeedback} />
 
             {selectedProvider.last_sync_error ? <p className="fg-danger fg-mt-sm">Last sync error: {selectedProvider.last_sync_error}</p> : null}
           </div>

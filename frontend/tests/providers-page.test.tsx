@@ -187,7 +187,17 @@ function createData(access: ProvidersAccessState): ProvidersPageData {
       authScheme: "bearer",
       oauthMode: "account_portal",
     },
-    providerDrafts: {},
+    providerDrafts: {
+      local_runtime: {
+        label: "Local Runtime",
+        providerClass: "local_ollama",
+        integrationClass: "local_ollama",
+        templateId: "ollama",
+        endpointBaseUrl: "http://localhost:11434/v1",
+        authScheme: "none",
+        oauthMode: "account_portal",
+      },
+    },
     providerLabelDrafts: {},
     providerErrors: {},
     modelErrors: {},
@@ -282,7 +292,10 @@ describe("Providers page hierarchy", () => {
     expect(markup).toContain("1 provider registered for this instance.");
     expect(markup).toContain("id=\"provider-health-runs\"");
     expect(markup).toContain(">Providers</h3>");
-    expect(markup).toContain("Provider records only. Target routing, OAuth sessions, and harness proof live on their dedicated pages.");
+    expect(markup).toContain("Provider records only. Sync updates inventory; live endpoint requests happen from Harness probes.");
+    expect(markup).toContain("Enable after endpoint settings are saved and at least one target is ready.");
+    expect(markup).toContain("Open Harness live probe");
+    expect(markup).toContain("These buttons do not send chat/completions requests. Use Harness when you want to see LM Studio receive a real request.");
     expect(markup).toContain("Admin mutations enabled");
     expect(markup).toContain("Sync all");
     expect(markup).toContain("Add provider");
@@ -294,6 +307,36 @@ describe("Providers page hierarchy", () => {
     expect(markup).not.toContain(">Advanced Diagnostics</strong>");
     expect(markup).not.toContain("Save profile");
     expect(markup).not.toContain("Preview + Verify");
+  });
+
+  it("explains that provider inventory sync is not a live endpoint request", () => {
+    mockedUseProvidersControlPlane.mockImplementation((access: ProvidersAccessState) => {
+      const data = createData(access);
+      return {
+        data: {
+          ...data,
+          providers: data.providers.map((provider) => ({
+            ...provider,
+            enabled: true,
+            next_action: "Sync inventory",
+            next_action_kind: "sync_models" as const,
+          })),
+        },
+        actions: createActions(),
+      };
+    });
+
+    const markup = renderToStaticMarkup(
+      withAppContext({
+        path: "/providers",
+        element: <ProvidersPage />,
+        session: createSession(),
+      }),
+    );
+
+    expect(markup).toContain("Sync updates inventory only. Live endpoint probes run in Harness.");
+    expect(markup).toContain("Sync inventory");
+    expect(markup).toContain("Open Harness live probe");
   });
 
   it("shows an honest blocked state when the session lacks scoped providers.read", () => {
