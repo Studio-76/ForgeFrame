@@ -14,8 +14,8 @@ from app.api.admin.control_plane_models import (
     OAuthTargetActionSpec,
     OAuthTargetSetupGuide,
 )
-from app.auth.oauth.gemini import resolve_gemini_auth_state
-from app.auth.oauth.openai import resolve_codex_auth_state
+from app.auth.oauth.gemini import GeminiAuthState, resolve_gemini_auth_state
+from app.auth.oauth.openai import OpenAICodexAuthState, resolve_codex_auth_state
 from app.harness import HarnessProviderProfile
 from app.settings.config import OAUTH_TARGET_PROVIDER_LABELS, oauth_target_env_contract
 
@@ -559,7 +559,7 @@ class ControlPlaneOAuthTargetsDomainMixin:
         instance_id: str | None = None,
     ) -> OAuthAccountTargetStatus:
         if provider_key == "openai_codex":
-            auth_state = resolve_codex_auth_state(self._settings)
+            auth_state: OpenAICodexAuthState | GeminiAuthState = resolve_codex_auth_state(self._settings)
             configured = auth_state.ready
             runtime_bridge_enabled = self._settings.openai_codex_bridge_enabled
             probe_enabled = runtime_bridge_enabled
@@ -586,7 +586,7 @@ class ControlPlaneOAuthTargetsDomainMixin:
             readiness = "partial"
             if runtime_bridge_enabled and not provider_ready and provider_reason:
                 reason = provider_reason
-            elif provider_key == "openai_codex" and auth_state.auth_mode == "oauth":
+            elif isinstance(auth_state, OpenAICodexAuthState) and auth_state.auth_mode == "oauth":
                 reason = f"Codex OAuth mode '{auth_state.oauth_mode}' is configured via a pre-issued access token, but no live probe or runtime evidence is recorded yet."
             else:
                 reason = "Credentials are configured, but no live probe or runtime evidence is recorded yet."
@@ -598,7 +598,7 @@ class ControlPlaneOAuthTargetsDomainMixin:
             reason = "Live runtime traffic is recorded for this provider."
 
         if configured and not runtime_bridge_enabled:
-            if provider_key == "openai_codex" and auth_state.auth_mode == "oauth":
+            if isinstance(auth_state, OpenAICodexAuthState) and auth_state.auth_mode == "oauth":
                 reason = f"Codex OAuth mode '{auth_state.oauth_mode}' is configured, but the native runtime bridge is still disabled."
             else:
                 reason = "Credentials are configured, but the native runtime bridge is still disabled."
@@ -622,8 +622,8 @@ class ControlPlaneOAuthTargetsDomainMixin:
                 readiness=readiness,
                 readiness_reason=reason,
                 auth_kind=auth_kind,
-                oauth_mode=(auth_state.oauth_mode if provider_key == "openai_codex" and auth_state.auth_mode == "oauth" else None),
-                oauth_flow_support=(auth_state.oauth_flow_support if provider_key == "openai_codex" and auth_state.auth_mode == "oauth" else None),
+                oauth_mode=(auth_state.oauth_mode if isinstance(auth_state, OpenAICodexAuthState) and auth_state.auth_mode == "oauth" else None),
+                oauth_flow_support=(auth_state.oauth_flow_support if isinstance(auth_state, OpenAICodexAuthState) and auth_state.auth_mode == "oauth" else None),
                 evidence=evidence,
             ),
         )
@@ -634,7 +634,7 @@ class ControlPlaneOAuthTargetsDomainMixin:
         )
         operator_truth = (
             auth_state.oauth_operator_truth
-            if provider_key == "openai_codex" and auth_state.auth_mode == "oauth"
+            if isinstance(auth_state, OpenAICodexAuthState) and auth_state.auth_mode == "oauth"
             else (
                 "ForgeFrame consumes a pre-issued Gemini OAuth access token and does not initiate or refresh that OAuth flow itself."
                 if provider_key == "gemini" and auth_state.auth_mode == "oauth"
@@ -660,8 +660,8 @@ class ControlPlaneOAuthTargetsDomainMixin:
             readiness=readiness,
             readiness_reason=reason,
             auth_kind=auth_kind,
-            oauth_mode=(auth_state.oauth_mode if provider_key == "openai_codex" and auth_state.auth_mode == "oauth" else None),
-            oauth_flow_support=(auth_state.oauth_flow_support if provider_key == "openai_codex" and auth_state.auth_mode == "oauth" else None),
+            oauth_mode=(auth_state.oauth_mode if isinstance(auth_state, OpenAICodexAuthState) and auth_state.auth_mode == "oauth" else None),
+            oauth_flow_support=(auth_state.oauth_flow_support if isinstance(auth_state, OpenAICodexAuthState) and auth_state.auth_mode == "oauth" else None),
             evidence=evidence,
         )
         if configured and not self._native_oauth_bridge_path_enabled(status):

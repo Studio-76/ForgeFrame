@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import type { GatewayAccount } from "../api/admin";
 import { CONTROL_PLANE_ROUTES } from "../app/navigation";
 import { withTenantScope } from "../app/tenantScope";
+import { Button } from "./ui/Button";
 
 type TenantScopeCardProps = {
   tenantId: string | null;
@@ -70,9 +71,9 @@ export function TenantScopeCard({
           </select>
         </label>
         {tenantId ? (
-          <button type="button" onClick={() => onTenantChange(null)}>
+          <Button onPress={() => onTenantChange(null)}>
             Clear scope
-          </button>
+          </Button>
         ) : null}
         <Link className="fg-nav-link" to={withTenantScope(CONTROL_PLANE_ROUTES.accounts, tenantId)}>
           Open Accounts

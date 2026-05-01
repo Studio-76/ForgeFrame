@@ -19,6 +19,7 @@ from sqlalchemy import (
     create_engine,
     delete,
     select,
+    text,
 )
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, Session, mapped_column, sessionmaker
@@ -40,6 +41,7 @@ _STATE_KEY = "default"
 _UNBOUND_RUNTIME_SERVICE_ACCOUNT_ID = "svc_bootstrap_runtime"
 _BOOTSTRAP_TENANT_DISPLAY_NAME = "ForgeFrame Bootstrap Tenant"
 _ADMIN_ROLE_RANK = {"viewer": 0, "operator": 1, "admin": 2, "owner": 3}
+_GOVERNANCE_PERSIST_ADVISORY_LOCK_KEY = 88421173
 
 
 class GovernanceStateORM(Base):
@@ -524,6 +526,14 @@ class PostgresGovernanceRepository:
 
     def _session(self) -> Session:
         return self._session_factory()
+
+    @staticmethod
+    def _acquire_persist_lock(session: Session) -> None:
+        """Serialize governance writes to avoid cross-request deadlocks."""
+        session.execute(
+            text("SELECT pg_advisory_xact_lock(:lock_key)"),
+            {"lock_key": _GOVERNANCE_PERSIST_ADVISORY_LOCK_KEY},
+        )
 
     def _default_admin_membership(
         self,
@@ -1362,6 +1372,7 @@ class PostgresGovernanceRepository:
 
     def save_state(self, state: GovernanceStateRecord) -> GovernanceStateRecord:
         with self._session() as session:
+            self._acquire_persist_lock(session)
             normalized = self._save_legacy_state(session, state)
             if self._should_sync_relational_shadow():
                 self._replace_relational_shadow(

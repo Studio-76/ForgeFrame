@@ -2066,6 +2066,149 @@ details summary {
   flex-wrap: wrap;
 }
 
+/* ──────────────────────────────────────────────
+ * React Aria focus-visible indicator
+ * Applied by Button wrapper when focused via keyboard.
+ * ────────────────────────────────────────────── */
+
+.ff-focus-visible {
+  outline: none;
+  border-color: var(--fg-color-focus-ring);
+  box-shadow: 0 0 0 3px rgba(83, 177, 253, 0.2);
+}
+
+/* ──────────────────────────────────────────────
+ * Dialog overlay (accessible modal)
+ * Centered modal panel with focus-trapping underlay.
+ * ────────────────────────────────────────────── */
+
+.ff-dialog-underlay {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(2, 6, 23, 0.58);
+}
+
+.ff-dialog-panel {
+  position: relative;
+  z-index: 1;
+  width: min(100% - 2rem, 32rem);
+  max-height: 85vh;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  border: 1px solid var(--fg-color-border-default);
+  border-radius: var(--fg-radius-lg);
+  background: var(--fg-color-surface-default);
+  box-shadow: 0 20px 60px rgba(2, 6, 23, 0.32);
+  padding: 1.5rem;
+  overflow-y: auto;
+}
+
+.ff-dialog-title {
+  margin: 0;
+  font-size: 1.15rem;
+  font-weight: 600;
+}
+
+/* ──────────────────────────────────────────────
+ * Combobox (accessible autocomplete)
+ * ────────────────────────────────────────────── */
+
+.ff-combobox {
+  position: relative;
+  display: inline-flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.ff-combobox-label {
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: var(--fg-color-text-secondary);
+}
+
+.ff-combobox-input-row {
+  display: flex;
+  border: 1px solid var(--fg-color-border-default);
+  border-radius: var(--fg-radius-md);
+  overflow: hidden;
+}
+
+.ff-combobox-input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  padding: 0.5rem 0.65rem;
+  background: var(--fg-color-surface-field);
+  color: var(--fg-color-text-primary);
+  font-size: 0.88rem;
+}
+
+.ff-combobox-input:focus {
+  outline: none;
+}
+
+.ff-combobox-trigger {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.2rem;
+  border: 0;
+  border-left: 1px solid var(--fg-color-border-default);
+  background: var(--fg-color-surface-field);
+  color: var(--fg-color-text-secondary);
+  cursor: pointer;
+}
+
+.ff-combobox-trigger:hover {
+  background: var(--fg-color-surface-subtle);
+}
+
+.ff-combobox-description {
+  font-size: 0.78rem;
+  color: var(--fg-color-text-secondary);
+}
+
+.ff-combobox-list {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  z-index: 50;
+  margin-top: 0.25rem;
+  max-height: 16rem;
+  overflow-y: auto;
+  border: 1px solid var(--fg-color-border-default);
+  border-radius: var(--fg-radius-md);
+  background: var(--fg-color-surface-default);
+  box-shadow: 0 8px 24px rgba(2, 6, 23, 0.2);
+  list-style: none;
+  padding: 0.25rem 0;
+}
+
+.ff-combobox-option {
+  padding: 0.5rem 0.75rem;
+  font-size: 0.88rem;
+  color: var(--fg-color-text-primary);
+  cursor: pointer;
+}
+
+.ff-combobox-option.is-focused {
+  background: rgba(70, 95, 255, 0.1);
+}
+
+.ff-combobox-option.is-selected {
+  font-weight: 600;
+}
+
+.ff-combobox-option:hover {
+  background: rgba(70, 95, 255, 0.08);
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

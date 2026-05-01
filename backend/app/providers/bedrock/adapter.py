@@ -6,7 +6,7 @@ import hashlib
 import hmac
 import json
 import os
-from collections.abc import Iterable, Mapping
+from collections.abc import Iterator, Mapping
 from datetime import UTC, datetime
 from urllib.parse import parse_qsl, quote, urlsplit
 
@@ -15,6 +15,8 @@ import httpx
 from app.providers.base import (
     ChatDispatchRequest,
     ChatDispatchResult,
+    EmbeddingDispatchRequest,
+    EmbeddingDispatchResult,
     ProviderAuthenticationError,
     ProviderBadRequestError,
     ProviderCapabilities,
@@ -106,7 +108,7 @@ class BedrockAdapter:
             auth_source="bedrock_sigv4",
         )
 
-    def stream_chat_completion(self, request: ChatDispatchRequest) -> Iterable[ProviderStreamEvent]:
+    def stream_chat_completion(self, request: ChatDispatchRequest) -> Iterator[ProviderStreamEvent]:
         del request
         raise ProviderUnsupportedFeatureError(self.provider_name, "streaming")
 
@@ -410,3 +412,7 @@ class BedrockAdapter:
         if response.status_code in {500, 502, 503, 504}:
             raise ProviderUnavailableError(self.provider_name, message)
         raise ProviderUpstreamError(self.provider_name, message)
+
+    def create_embeddings(self, request: EmbeddingDispatchRequest) -> EmbeddingDispatchResult:
+        """Dispatch an embeddings request to an upstream provider."""
+        raise NotImplementedError(f"{type(self).__name__} does not support embeddings")

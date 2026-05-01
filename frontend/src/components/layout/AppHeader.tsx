@@ -6,6 +6,7 @@ import type { NavigationSection } from "../../app/navigation";
 import { CONTROL_PLANE_ROUTES, findNavigationMatch } from "../../app/navigation";
 import { withQueryParams } from "../../app/tenantScope";
 import { useTheme } from "../../theme/ThemeProvider";
+import { Button } from "../ui/Button";
 import { useSidebar } from "./SidebarContext";
 import { BellIcon, ChevronDownIcon, MenuIcon, MoonIcon, SearchIcon, SunIcon } from "./icons";
 
@@ -124,26 +125,24 @@ export function AppHeader({ navigationSections, instanceId, session, sessionErro
   return (
     <header className="ff-topbar">
       <div className="ff-topbar-left">
-        <button
+        <Button
           className="ff-icon-button ff-mobile-toggle"
-          type="button"
-          onClick={toggleMobileSidebar}
           aria-label={isMobileOpen ? "Close navigation" : "Open navigation"}
           aria-controls="ff-sidebar"
           aria-expanded={isMobileOpen}
+          onPress={toggleMobileSidebar}
         >
           <MenuIcon />
-        </button>
-        <button
+        </Button>
+        <Button
           className="ff-icon-button ff-desktop-toggle"
-          type="button"
-          onClick={toggleSidebar}
           aria-label={isExpanded ? "Collapse navigation" : "Expand navigation"}
           aria-controls="ff-sidebar"
           aria-expanded={isExpanded}
+          onPress={toggleSidebar}
         >
           <MenuIcon />
-        </button>
+        </Button>
         <div className="ff-topbar-title">
           <span>{currentRoute?.section.label ?? "ForgeFrame"}</span>
           <strong>{currentRoute?.link.label ?? "Control Plane"}</strong>
@@ -212,18 +211,17 @@ export function AppHeader({ navigationSections, instanceId, session, sessionErro
 
       <div className="ff-topbar-actions">
         <div className="ff-menu-anchor">
-          <button
+          <Button
             className="ff-icon-button"
-            type="button"
-            onClick={() => {
+            aria-label="Open attention surfaces"
+            aria-expanded={notificationsOpen}
+            onPress={() => {
               setNotificationsOpen((current) => !current);
               setUserOpen(false);
             }}
-            aria-label="Open attention surfaces"
-            aria-expanded={notificationsOpen}
           >
             <BellIcon />
-          </button>
+          </Button>
           {notificationsOpen ? (
             <div className="ff-dropdown ff-dropdown-narrow">
               <div className="ff-dropdown-heading">
@@ -238,19 +236,18 @@ export function AppHeader({ navigationSections, instanceId, session, sessionErro
           ) : null}
         </div>
 
-        <button className="ff-icon-button" type="button" onClick={toggleMode} aria-label="Toggle theme">
+        <Button className="ff-icon-button" aria-label="Toggle theme" onPress={toggleMode}>
           {mode === "dark" ? <MoonIcon /> : <SunIcon />}
-        </button>
+        </Button>
 
         <div className="ff-menu-anchor">
-          <button
+          <Button
             className="ff-user-button"
-            type="button"
-            onClick={() => {
+            aria-expanded={userOpen}
+            onPress={() => {
               setUserOpen((current) => !current);
               setNotificationsOpen(false);
             }}
-            aria-expanded={userOpen}
           >
             <span className="ff-avatar" aria-hidden="true">
               {(session?.display_name ?? session?.username ?? "A").slice(0, 1).toUpperCase()}
@@ -260,7 +257,7 @@ export function AppHeader({ navigationSections, instanceId, session, sessionErro
               <small>{session?.role ?? "signed out"}</small>
             </span>
             <ChevronDownIcon />
-          </button>
+          </Button>
           {userOpen ? (
             <div className="ff-dropdown ff-user-dropdown">
               <div className="ff-dropdown-heading">
@@ -270,9 +267,9 @@ export function AppHeader({ navigationSections, instanceId, session, sessionErro
               {sessionError ? <p className="ff-dropdown-error">{sessionError}</p> : null}
               <Link to={CONTROL_PLANE_ROUTES.settings}>System Settings</Link>
               <Link to={CONTROL_PLANE_ROUTES.security}>Security & Policies</Link>
-              <button type="button" onClick={onLogout}>
+              <Button onPress={onLogout}>
                 Logout
-              </button>
+              </Button>
             </div>
           ) : null}
         </div>

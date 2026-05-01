@@ -11,6 +11,7 @@ from app.control_plane import (
     ProviderCatalogSignoffRecord,
     ProviderCatalogSummaryRecord,
 )
+from app.control_plane.models import ProviderCatalogEvidenceStatus, ProviderCatalogMaturityStatus
 from app.control_plane.provider_catalog_seed import (
     ProviderCatalogSeedRow,
     load_provider_catalog_seed,
@@ -527,7 +528,7 @@ class ControlPlaneProviderCatalogDomainMixin:
             relevant.add("tool_calling_verified")
         if entry.provider_class == "oauth_account_runtime":
             relevant.add("credential_refresh_verified")
-        statuses = {record.evidence_class: record.status for record in records}
+        statuses: dict[str, ProviderCatalogEvidenceStatus] = {record.evidence_class: record.status for record in records}
         labels = {
             "repo_observed": "repo observed",
             "live_probe_verified": "live probe",
@@ -594,7 +595,7 @@ class ControlPlaneProviderCatalogDomainMixin:
         )
 
     @staticmethod
-    def _catalog_maturity(entry: ProviderCatalogRecord, records: list[ProviderCatalogEvidenceRecord]) -> str:
+    def _catalog_maturity(entry: ProviderCatalogRecord, records: list[ProviderCatalogEvidenceRecord]) -> ProviderCatalogMaturityStatus:
         status_by_class = {record.evidence_class: record.status for record in records}
         repo_observed = status_by_class.get("repo_observed") == "observed"
         live_probe = status_by_class.get("live_probe_verified") == "observed"

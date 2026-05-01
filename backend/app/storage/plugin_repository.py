@@ -341,10 +341,10 @@ class PostgresPluginRepository:
                 row.updated_at = updated_at
 
             for binding in normalized.bindings:
-                row = existing_bindings.get((binding.instance_id, binding.plugin_id))
+                binding_row = existing_bindings.get((binding.instance_id, binding.plugin_id))
                 created_at = datetime.fromisoformat(binding.created_at)
                 updated_at = datetime.fromisoformat(binding.updated_at)
-                if row is None:
+                if binding_row is None:
                     session.add(
                         InstancePluginBindingORM(
                             plugin_id=binding.plugin_id,
@@ -361,15 +361,15 @@ class PostgresPluginRepository:
                         )
                     )
                     continue
-                row.company_id = binding.company_id
-                row.enabled = binding.enabled
-                row.config_json = dict(binding.config)
-                row.enabled_capabilities_json = list(binding.enabled_capabilities)
-                row.enabled_ui_slots_json = list(binding.enabled_ui_slots)
-                row.enabled_api_mounts_json = list(binding.enabled_api_mounts)
-                row.notes = binding.notes
-                row.created_at = created_at
-                row.updated_at = updated_at
+                binding_row.company_id = binding.company_id
+                binding_row.enabled = binding.enabled
+                binding_row.config_json = dict(binding.config)
+                binding_row.enabled_capabilities_json = list(binding.enabled_capabilities)
+                binding_row.enabled_ui_slots_json = list(binding.enabled_ui_slots)
+                binding_row.enabled_api_mounts_json = list(binding.enabled_api_mounts)
+                binding_row.notes = binding.notes
+                binding_row.created_at = created_at
+                binding_row.updated_at = updated_at
 
             session.commit()
 

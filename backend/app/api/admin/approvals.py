@@ -208,7 +208,8 @@ def _decide_approval(
                 request,
                 payload.model_dump(),
                 content_type="application/json",
-            ),
+            )
+            or "",
             instance=instance,
         )
     except ValueError as exc:

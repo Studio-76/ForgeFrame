@@ -6,7 +6,7 @@ import hashlib
 import json
 from collections.abc import Iterator
 from time import monotonic
-from typing import Any
+from typing import Any, Literal, Protocol
 
 from fastapi import APIRouter, Depends, Request, status
 from fastapi.responses import JSONResponse, StreamingResponse
@@ -77,12 +77,18 @@ def _decode_json_body(body: bytes | memoryview[int]) -> str:
     return body.tobytes().decode()
 
 
+class _ClientPayload(Protocol):
+    """Request model that carries a `client` metadata dict."""
+
+    client: dict[str, str]
+
+
 router = APIRouter(tags=["runtime-responses"])
 
 
 def _resolve_client_identity(
     request: Request,
-    payload: ResponsesRequest,
+    payload: _ClientPayload,
     gateway_identity: RuntimeGatewayIdentity | None,
     *,
     default_tenant_id: str,
@@ -305,7 +311,7 @@ def create_response(
         default_tenant_id=settings.bootstrap_tenant_id,
     )
     requested_model = normalized_request.model
-    stream_mode = "stream" if normalized_request.stream else "non_stream"
+    stream_mode: Literal["stream", "non_stream"] = "stream" if normalized_request.stream else "non_stream"
     company_id = _runtime_company_id(
         gateway_identity=gateway_identity,
         settings=settings,
@@ -496,6 +502,8 @@ def create_response(
         runtime_request_metadata,
         {"response_id": response_id},
     )
+
+    provider: str | None = None
 
     if normalized_request.stream:
         try:
@@ -736,6 +744,7 @@ def create_response(
                             terminal_state = True
                             yield (f"event: response.error\ndata: {_decode_json_body(JSONResponse(content=failed_payload).body)}\n\n")
                             break
+                        assert provider is not None
                         analytics.record_stream_done_event(
                             provider=provider,
                             model=model,

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import socket
+from collections.abc import Sequence
 from datetime import UTC, datetime, timedelta
 from functools import lru_cache
 from pathlib import Path
@@ -349,9 +350,9 @@ class RecoveryAdminService:
             return explicit
         return _now()
 
-    def _protected_data_classes(self, raw_report: dict[str, Any], explicit: list[str] | None) -> list[str]:
+    def _protected_data_classes(self, raw_report: dict[str, Any], explicit: Sequence[str] | None) -> list[str]:
         if explicit:
-            return explicit
+            return list(explicit)
         values = raw_report.get("protected_data_classes") or raw_report.get("covered_data_classes")
         if isinstance(values, list):
             normalized = [str(item).strip() for item in values if str(item).strip() in PROTECTED_DATA_CLASSES]

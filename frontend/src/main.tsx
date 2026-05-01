@@ -56,6 +56,15 @@ const ErrorsPage = lazy(async () => import("./pages/ErrorsPage").then((module) =
 const LogsPage = lazy(async () => import("./pages/LogsPage").then((module) => ({ default: module.LogsPage })));
 
 /**
+ * HydrateFallback for data-router hydration (client-only SPA, never rendered).
+ * React Router v7 warns without this for data-router route groups.
+ * @returns Null — hydration completes synchronously for client-only routes.
+ */
+function HydrateFallback() {
+  return null;
+}
+
+/**
  * Suspense fallback while route modules are loading.
  * @returns Loading shell for lazy route chunks.
  */
@@ -86,12 +95,14 @@ function lazyRoute(element: React.ReactNode) {
 const router = createBrowserRouter([
   {
     path: "/login",
+    HydrateFallback: HydrateFallback,
     loader: loginRouteLoader,
     element: <PublicShell />,
     children: [{ index: true, element: lazyRoute(<LoginPage />) }],
   },
   {
     path: "/",
+    HydrateFallback: HydrateFallback,
     loader: protectedRouteLoader,
     element: <App />,
     children: [

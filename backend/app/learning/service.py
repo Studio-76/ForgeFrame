@@ -477,7 +477,7 @@ class LearningAdminService:
                 run = {
                     "record_id": run_row.id,
                     "label": run_row.run_kind,
-                    "status": run_row.lifecycle_status,
+                    "status": run_row.state,
                 }
         promoted_memory = None
         if row.promoted_memory_id:
@@ -669,7 +669,7 @@ class LearningAdminService:
         elif payload.decision in {"boot_memory", "durable_memory"}:
             memory_seed = proposed_memory_seed
             memory_seed.update(payload.memory_payload)
-            created = self._knowledge.create_memory(
+            created_memory = self._knowledge.create_memory(
                 instance=instance,
                 payload=CreateMemory(
                     source_id=memory_seed.get("source_id"),
@@ -699,14 +699,14 @@ class LearningAdminService:
                 if row.status not in {"pending", "review_required"}:
                     raise ValueError("Only pending learning events can be decided.")
                 row.status = "applied"
-                row.promoted_memory_id = created.memory_id
+                row.promoted_memory_id = created_memory.memory_id
                 row.human_override = effective_override
                 row.decision_note = payload.decision_note
                 row.decided_at = self._now()
         elif payload.decision == "skill_draft":
             skill_seed = proposed_skill_seed
             skill_seed.update(payload.skill_payload)
-            created = self._skills.create_skill(
+            created_skill = self._skills.create_skill(
                 instance=instance,
                 payload=CreateSkill(
                     display_name=skill_seed.get("display_name") or row.summary[:191],
@@ -731,7 +731,7 @@ class LearningAdminService:
                 if row.status not in {"pending", "review_required"}:
                     raise ValueError("Only pending learning events can be decided.")
                 row.status = "applied"
-                row.promoted_skill_id = created.skill_id
+                row.promoted_skill_id = created_skill.skill_id
                 row.human_override = effective_override
                 row.decision_note = payload.decision_note
                 row.decided_at = self._now()

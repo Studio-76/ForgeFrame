@@ -3,6 +3,7 @@ import { Link, useLocation } from "react-router-dom";
 import type { NavigationSection } from "../../app/navigation";
 import { findNavigationMatch, isHrefCurrent } from "../../app/navigation";
 import { withQueryParams } from "../../app/tenantScope";
+import { Button } from "../ui/Button";
 import { useSidebar } from "./SidebarContext";
 import { ChevronDownIcon, CloseIcon, NavIcon } from "./icons";
 
@@ -49,9 +50,9 @@ export function AppSidebar({ navigationSections, instanceId }: AppSidebarProps) 
               <span>Control Plane</span>
             </span>
           </Link>
-          <button className="ff-icon-button ff-sidebar-close" type="button" onClick={closeMobileSidebar} aria-label="Close navigation">
+          <Button className="ff-icon-button ff-sidebar-close" aria-label="Close navigation" onPress={closeMobileSidebar}>
             <CloseIcon />
-          </button>
+          </Button>
         </div>
 
         <nav className="ff-sidebar-nav" aria-label="Control-plane navigation">
@@ -65,15 +66,13 @@ export function AppSidebar({ navigationSections, instanceId }: AppSidebarProps) 
 
             return (
               <section key={section.id} className="ff-sidebar-section">
-                <button
+                <Button
                   className={`ff-sidebar-section-trigger${isSectionVisible ? " is-open" : ""}${isCurrentSection ? " is-current" : ""}`}
-                  type="button"
                   aria-expanded={isSectionVisible}
                   aria-controls={linksId}
                   aria-label={isSidebarOpen ? `${section.label} section` : `Open ${section.label} section`}
                   data-tooltip={isSidebarOpen ? undefined : collapsedTooltip}
-                  title={isSidebarOpen ? undefined : collapsedTooltip}
-                  onClick={() => {
+                  onPress={() => {
                     if (isCurrentSection) {
                       openSection(section.id);
                       return;
@@ -89,7 +88,7 @@ export function AppSidebar({ navigationSections, instanceId }: AppSidebarProps) 
                     <span className="ff-mini-badge">{countLabel}</span>
                     <ChevronDownIcon />
                   </span>
-                </button>
+                </Button>
 
                 <div id={linksId} className="ff-sidebar-links" hidden={!isSectionVisible}>
                   {section.links.map((link) => {
@@ -131,7 +130,7 @@ export function AppSidebar({ navigationSections, instanceId }: AppSidebarProps) 
           })}
         </nav>
       </aside>
-      {isMobileOpen ? <button className="ff-backdrop" type="button" aria-label="Close navigation overlay" onClick={closeMobileSidebar} /> : null}
+      {isMobileOpen ? <Button className="ff-backdrop" aria-label="Close navigation overlay" onPress={closeMobileSidebar} /> : null}
     </>
   );
 }

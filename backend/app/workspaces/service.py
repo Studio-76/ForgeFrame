@@ -15,6 +15,7 @@ from app.artifacts.models import (
     ArtifactAttachmentRecord,
     ArtifactRecord,
     CreateArtifact,
+    CreateArtifactAttachment,
     UpdateArtifact,
 )
 from app.instances.models import InstanceRecord
@@ -1054,22 +1055,19 @@ class WorkInteractionAdminService:
 
             attachments = list(payload.attachments)
             if payload.workspace_id is not None:
-                attachments.append({
-                    "target_kind": "workspace",
-                    "target_id": payload.workspace_id,
-                    "role": payload.workspace_role or "artifact",
-                })
+                attachments.append(
+                    CreateArtifactAttachment(
+                        target_kind="workspace",
+                        target_id=payload.workspace_id,
+                        role=payload.workspace_role or "artifact",
+                    )
+                )
 
             dedupe: set[tuple[str, str, str]] = set()
             for attachment_payload in attachments:
-                if hasattr(attachment_payload, "target_kind"):
-                    target_kind = attachment_payload.target_kind
-                    target_id = attachment_payload.target_id
-                    role = attachment_payload.role
-                else:
-                    target_kind = str(attachment_payload["target_kind"])
-                    target_id = str(attachment_payload["target_id"])
-                    role = str(attachment_payload["role"])
+                target_kind = attachment_payload.target_kind
+                target_id = attachment_payload.target_id
+                role = attachment_payload.role
                 self._validate_attachment_target(
                     session,
                     instance=instance,

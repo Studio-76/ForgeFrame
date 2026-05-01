@@ -483,5 +483,6 @@ def load_provider_catalog_seed() -> tuple[ProviderCatalogSeedRow, ...]:
         source_kind="oauth_matrix",
         contract_column="Integration truth",
     )
+
     combined = {row.provider_id: row for row in (*api_rows, *oauth_rows)}
     return tuple(sorted(combined.values(), key=lambda item: item.provider_id))

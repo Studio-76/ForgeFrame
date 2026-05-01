@@ -452,6 +452,8 @@ def create_chat_completion(
             ),
         )
 
+    provider: str | None = None
+
     try:
         normalized_messages = normalize_chat_messages(payload.messages)
         if payload.stream:
@@ -470,6 +472,7 @@ def create_chat_completion(
                     def _event_iterator() -> Iterator[ProviderStreamEvent]:
                         for event in events:
                             if event.event == "done":
+                                assert provider is not None
                                 analytics.record_stream_done_event(
                                     provider=provider,
                                     model=model,

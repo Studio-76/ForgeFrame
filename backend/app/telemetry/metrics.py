@@ -90,12 +90,12 @@ def _dependency_metrics(
     grouped_errors: dict[str, list[ErrorEvent]] = defaultdict(list)
     latest_health: dict[str, HealthEvent] = {}
 
-    for event in runtime_usage:
-        grouped_usage[event.provider].append(event)
-    for event in runtime_errors:
-        grouped_errors[event.provider or "unknown"].append(event)
-    for event in health_events:
-        latest_health[event.provider] = event
+    for usage_event in runtime_usage:
+        grouped_usage[usage_event.provider].append(usage_event)
+    for error_event in runtime_errors:
+        grouped_errors[error_event.provider or "unknown"].append(error_event)
+    for health_event in health_events:
+        latest_health[health_event.provider] = health_event
 
     providers = sorted(set(grouped_usage) | set(grouped_errors) | set(latest_health))
     rows: list[dict[str, Any]] = []

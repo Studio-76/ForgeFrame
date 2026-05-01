@@ -4,6 +4,7 @@ import type { InstanceRecord } from "../api/admin";
 import { CONTROL_PLANE_ROUTES } from "../app/navigation";
 import { withInstanceScope } from "../app/tenantScope";
 import type { InstanceCatalogLoadState } from "../app/useInstanceCatalog";
+import { Button } from "./ui/Button";
 
 type InstanceScopeCardProps = {
   instanceId: string | null;
@@ -68,9 +69,9 @@ export function InstanceScopeCard({
           </select>
         </label>
         {instanceId ? (
-          <button type="button" onClick={() => onInstanceChange(null)}>
+          <Button onPress={() => onInstanceChange(null)}>
             Clear scope
-          </button>
+          </Button>
         ) : null}
         <Link className="fg-nav-link" to={withInstanceScope(CONTROL_PLANE_ROUTES.instances, instanceId)}>
           Open Instances

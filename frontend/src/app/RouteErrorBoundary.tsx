@@ -1,6 +1,8 @@
 import { Component, type ErrorInfo, type ReactNode } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 
+import { Button } from "../components/ui/Button";
+
 type RouteErrorBoundaryProps = {
   readonly children: ReactNode;
   readonly boundaryKey: string;
@@ -76,9 +78,9 @@ class RouteErrorBoundary extends Component<
             return to the dashboard while diagnostics continue in the console.
           </p>
           <div className="fg-inline-form">
-            <button className="fg-button" onClick={this.handleRetry} type="button">
+            <Button className="fg-button" onPress={this.handleRetry}>
               Retry module
-            </button>
+            </Button>
             <RouteFallbackNavigation />
           </div>
         </article>
@@ -95,13 +97,12 @@ function RouteFallbackNavigation(): ReactNode {
   const navigate = useNavigate();
 
   return (
-    <button
+    <Button
       className="fg-button fg-button-ghost"
-      onClick={() => navigate("/dashboard")}
-      type="button"
+      onPress={() => navigate("/dashboard")}
     >
       Go to dashboard
-    </button>
+    </Button>
   );
 }
 

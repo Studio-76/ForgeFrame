@@ -16,6 +16,8 @@ import httpx
 from app.providers.base import (
     ChatDispatchRequest,
     ChatDispatchResult,
+    EmbeddingDispatchRequest,
+    EmbeddingDispatchResult,
     ProviderAuthenticationError,
     ProviderBadRequestError,
     ProviderCapabilities,
@@ -814,3 +816,7 @@ class AnthropicAdapter:
             "tool_use": "tool_calls",
             "max_tokens": "length",
         }.get(normalized, normalized)
+
+    def create_embeddings(self, request: EmbeddingDispatchRequest) -> EmbeddingDispatchResult:
+        """Dispatch an embeddings request to an upstream provider."""
+        raise NotImplementedError(f"{type(self).__name__} does not support embeddings")

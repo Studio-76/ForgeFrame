@@ -27,37 +27,37 @@ ForgeFrame is a **Linux-first control-plane and runtime platform** for autonomou
                                  HTTP Request
                                       │
                               ┌───────▼────────┐
-                              │  StartupGate    │──→ 503 if startup checks fail
-                              │  Middleware      │
+                              │  StartupGate   │──→ 503 if startup checks fail
+                              │  Middleware    │
                               └───────┬────────┘
                                       │
                               ┌───────▼────────┐
-                              │  Request Env.   │──→ request_id, correlation_id,
-                              │  Middleware      │    causation_id, trace_id
+                              │  Request Env.  │──→ request_id, correlation_id,
+                              │  Middleware    │    causation_id, trace_id
                               └───────┬────────┘
                                       │
                     ┌─────────────────┼─────────────────┐
                     │                 │                 │
              ┌──────▼──────┐  ┌──────▼──────┐  ┌──────▼──────┐
-             │ Runtime API  │  │  Admin API   │  │  Frontend   │
-             │ /v1/*        │  │  /admin/*    │  │  / (SPA)    │
+             │ Runtime API │  │  Admin API  │  │  Frontend   │
+             │ /v1/*       │  │  /admin/*   │  │  / (SPA)    │
              └──────┬──────┘  └──────┬──────┘  └─────────────┘
                     │                │
              ┌──────▼──────┐  ┌──────▼──────────────────┐
-             │ Provider     │  │ Admin Services:          │
-             │ Registry     │  │ instances, providers,    │
-             │ + Adapters   │  │ routing, governance,     │
+             │ Provider    │  │ Admin Services:          │
+             │ Registry    │  │ instances, providers,    │
+             │ + Adapters  │  │ routing, governance,     │
              └──────┬──────┘  │ approvals, conversations,│
-                    │          │ skills, memory, plugins, │
+                    │         │ skills, memory, plugins, │
              ┌──────▼──────┐  │ workspaces, artifacts,   │
-             │ Execution   │  │ security, settings,       │
-             │ Engine      │  │ recovery, ingress, logs   │
+             │ Execution   │  │ security, settings,      │
+             │ Engine      │  │ recovery, ingress, logs  │
              │ + Harness   │  └──────────────────────────┘
              └──────┬──────┘
                     │
              ┌──────▼────────────────────────────────────┐
-             │  Storage Layer (SQLAlchemy → PostgreSQL)   │
-             │  + idempotency + migrations + retention    │
+             │  Storage Layer (SQLAlchemy → PostgreSQL)  │
+             │  + idempotency + migrations + retention   │
              └───────────────────────────────────────────┘
 ```
 

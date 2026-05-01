@@ -163,7 +163,7 @@ def create_app() -> FastAPI:
 
     @app.exception_handler(RouteGuardHTTPException)
     def handle_route_guard_exception(_request: Request, exc: RouteGuardHTTPException) -> JSONResponse:
-        detail = exc.detail if isinstance(exc.detail, dict) else {}
+        detail: dict[str, object] = exc.detail if isinstance(exc.detail, dict) else {}
         return JSONResponse(
             status_code=exc.status_code,
             content={
