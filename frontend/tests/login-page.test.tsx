@@ -122,8 +122,8 @@ describe("Login page", () => {
 
     const emptyValueMatches = markup.match(/value=""/g) ?? [];
 
-    expect(markup).toContain("Sign in with an administrator account");
-    expect(markup).toContain("Temporary passwords trigger a forced password-rotation flow");
+    expect(markup).toContain("Security boundary — admin credentials required");
+    expect(markup).toContain("Temporary passwords trigger a forced rotation");
     expect(markup).toContain('autoComplete="username"');
     expect(markup).toContain('autoComplete="current-password"');
     expect(markup).toContain(">Sign in</button>");

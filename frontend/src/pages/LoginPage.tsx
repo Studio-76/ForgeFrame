@@ -22,6 +22,7 @@ export function LoginPage() {
   const [searchParams] = useSearchParams();
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
+  const [passwordVisible, setPasswordVisible] = useState(false);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
 
@@ -32,7 +33,9 @@ export function LoginPage() {
       const result = await loginAdmin({ username, password });
       setAdminToken(result.access_token);
       setError("");
-      navigate(getPostLoginDestination(result.user, searchParams.get("next")), { replace: true });
+      navigate(getPostLoginDestination(result.user, searchParams.get("next")), {
+        replace: true,
+      });
     } catch (err) {
       setError(formatLoginError(err));
     } finally {
@@ -45,11 +48,14 @@ export function LoginPage() {
       <article className="fg-card">
         <div className="fg-panel-heading">
           <div>
-            <p className="fg-muted">Security boundary</p>
             <h2 id="login-title">Admin Login</h2>
-            <p className="fg-muted">Sign in with an administrator account to open the protected control-plane modules. Error feedback stays intentionally minimal and never discloses bootstrap secrets or account existence.</p>
+            <p className="fg-muted">
+              Security boundary — admin credentials required.
+            </p>
           </div>
-          <span className="fg-pill" data-tone="neutral">Protected</span>
+          <span className="fg-pill" data-tone="neutral">
+            Protected
+          </span>
         </div>
 
         <form className="fg-stack" onSubmit={(event) => void onSubmit(event)}>
@@ -66,28 +72,84 @@ export function LoginPage() {
           </label>
           <label>
             Password
-            <input
-              autoComplete="current-password"
-              name="password"
-              required
-              type="password"
-              value={password}
-              onChange={(event) => setPassword(event.target.value)}
-            />
+            <span style={{ position: "relative", display: "block" }}>
+              <input
+                autoComplete="current-password"
+                name="password"
+                required
+                type={passwordVisible ? "text" : "password"}
+                value={password}
+                onChange={(event) => setPassword(event.target.value)}
+              />
+              <button
+                type="button"
+                className="fg-password-toggle"
+                aria-label={passwordVisible ? "Hide password" : "Show password"}
+                onClick={() => setPasswordVisible((v) => !v)}
+                tabIndex={-1}
+              >
+                {passwordVisible ? (
+                  <svg
+                    width="16"
+                    height="16"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
+                    <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94" />
+                    <path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19" />
+                    <line x1="1" y1="1" x2="23" y2="23" />
+                  </svg>
+                ) : (
+                  <svg
+                    width="16"
+                    height="16"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
+                    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                    <circle cx="12" cy="12" r="3" />
+                  </svg>
+                )}
+              </button>
+            </span>
           </label>
 
-          {error ? <p className="fg-danger" role="alert">{error}</p> : null}
+          {error ? (
+            <p className="fg-danger" role="alert">
+              {error}
+            </p>
+          ) : null}
 
           <div className="fg-actions">
             <button type="submit" disabled={busy}>
-              {busy ? "Signing in..." : "Sign in"}
+              {busy ? (
+                <>
+                  <span className="fg-spinner" /> Signing in…
+                </>
+              ) : (
+                "Sign in"
+              )}
             </button>
           </div>
         </form>
 
-        <ul className="fg-list fg-muted">
-          <li>Temporary passwords trigger a forced password-rotation flow before the full control plane opens.</li>
-          <li>Signed-out users stay inside the auth-only boundary until the admin session is established.</li>
+        <ul className="fg-list">
+          <li className="fg-muted">
+            Temporary passwords trigger a forced rotation before the control
+            plane opens.
+          </li>
+          <li className="fg-muted">
+            Signed-out users stay in the auth-only boundary until session is
+            re-established.
+          </li>
         </ul>
       </article>
     </section>
