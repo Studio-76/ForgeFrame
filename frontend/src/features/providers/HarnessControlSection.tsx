@@ -107,7 +107,7 @@ export function HarnessControlSection({ data, actions, instanceId }: HarnessCont
     <>
       <SectionCard
         title="Harness Workspace"
-        description="Operate generic integration profiles directly from this surface: select templates and saved profiles, inspect the live config contract, run preview / verify / dry-run / probe, and manage imports, exports, and rollback."
+        description="Select templates and saved profiles, inspect config contracts, run harness actions, and manage imports, exports, and rollback."
         actions={
           <button type="button" onClick={() => void actions.load()}>
             Refresh workspace
@@ -134,14 +134,14 @@ export function HarnessControlSection({ data, actions, instanceId }: HarnessCont
         <div className="fg-stack">
           <SectionCard
             title="Profiles & Templates"
-            description="The left rail is the operator queue: pick a saved profile to work on or load a template into the editable draft."
+            description="Operator queue: select a saved profile or load a template into the editable draft."
           >
             <div className="fg-stack">
               <div className="fg-subcard">
                 <div className="fg-panel-heading">
                   <div>
                     <h4>Saved profiles</h4>
-                    <p className="fg-muted">Status, proof, and last-run cues stay visible before you open a profile.</p>
+                    <p className="fg-muted">Status, proof, and last-run history visible at a glance.</p>
                   </div>
                 </div>
                 {data.profiles.length === 0 ? <p className="fg-muted">No saved harness profiles yet.</p> : null}
@@ -182,29 +182,38 @@ export function HarnessControlSection({ data, actions, instanceId }: HarnessCont
                 <div className="fg-panel-heading">
                   <div>
                     <h4>Templates</h4>
-                    <p className="fg-muted">Template selections feed the editable draft instead of hiding behind the providers route.</p>
+                    <p className="fg-muted">Load a template into the editable draft to populate provider defaults.</p>
                   </div>
                 </div>
-                <ul className="fg-list">
+                <div className="fg-template-grid">
                   {data.templates.map((template) => (
-                    <li key={template.id}>
-                      <strong>{template.label}</strong> ({template.id}) · class={template.integration_class}
-                      {template.profile_defaults?.models?.length ? ` · models=${template.profile_defaults.models.join(", ")}` : ""}
-                      {template.description ? ` · ${template.description}` : ""}
+                    <div key={template.id} className="fg-subcard fg-template-card">
+                      <div className="fg-template-card-header">
+                        <strong className="fg-section-link-label">{template.label}</strong>
+                        <span className="fg-template-id">{template.id}</span>
+                      </div>
+                      <div className="fg-template-meta">
+                        <span className="fg-muted">class={template.integration_class}</span>
+                        {template.profile_defaults?.models?.length ? (
+                          <span className="fg-muted">models={template.profile_defaults.models.join(", ")}</span>
+                        ) : null}
+                      </div>
+                      {template.description ? (
+                        <p className="fg-muted fg-template-desc">{template.description}</p>
+                      ) : null}
                       {data.access.canMutate ? (
-                        <>
-                          {" "}
+                        <div className="fg-template-action">
                           <button
                             type="button"
                             onClick={() => actions.setNewHarness((current) => buildDraftFromTemplate(template, current))}
                           >
                             Load into draft
                           </button>
-                        </>
+                        </div>
                       ) : null}
-                    </li>
+                    </div>
                   ))}
-                </ul>
+                </div>
               </div>
             </div>
           </SectionCard>
@@ -213,7 +222,7 @@ export function HarnessControlSection({ data, actions, instanceId }: HarnessCont
         <div className="fg-stack">
           <SectionCard
             title="Selected Profile"
-            description="The center pane keeps the selected profile readable on its own: status, version, scope, last run, last error, proof posture, and the config contract it actually persists."
+            description="Status, version, scope, last run, and the persisted config contract for the selected profile."
             actions={
               selectedProfile && data.access.canMutate ? (
                 <button type="button" onClick={() => actions.setNewHarness(buildDraftFromProfile(selectedProfile))}>
@@ -249,53 +258,69 @@ export function HarnessControlSection({ data, actions, instanceId }: HarnessCont
                     </div>
                   </div>
 
-                  <div className="fg-detail-grid">
-                    <p>
-                      status={selectedProfile.lifecycle_status ?? "draft"} · version=v{formatMetric(selectedProfile.config_revision ?? 1)} · scope=
-                      {formatHarnessScope(selectedProfile)}
-                    </p>
-                    <p>
-                      last run=
-                      {selectedProfileLastRun
-                        ? `${formatTimestamp(selectedProfileLastRun.executed_at)} · ${formatHarnessMode(selectedProfileLastRun.mode)} · ${selectedProfileLastRun.status}`
-                        : "not recorded"}
-                    </p>
-                    <p>last error={toStringValue(selectedProfile.last_error, "none recorded")}</p>
-                    <p>proof={selectedProfileProof?.status ?? "none"} · {selectedProfileProof?.note ?? "No proof note available."}</p>
-                    <p>
-                      verify={toStringValue(selectedProfile.last_verify_status, "never")} · probe={toStringValue(selectedProfile.last_probe_status, "never")} ·
-                      sync={toStringValue(selectedProfile.last_sync_status, "never")}
-                    </p>
-                    <p>
-                      last used={formatTimestamp(selectedProfile.last_used_at)} · model={toStringValue(selectedProfile.last_used_model, "-")} · requests=
-                      {formatMetric(selectedProfile.request_count)} · stream={formatMetric(selectedProfile.stream_request_count)}
-                    </p>
+                  <div className="fg-detail-grid fg-detail-grid-compact">
+                    <span className="fg-detail-label">Status &amp; Identity</span>
+                    <div className="fg-detail-rows">
+                      <p><span className="fg-detail-key">status</span> {selectedProfile.lifecycle_status ?? "draft"}</p>
+                      <p><span className="fg-detail-key">version</span> v{formatMetric(selectedProfile.config_revision ?? 1)}</p>
+                      <p><span className="fg-detail-key">scope</span> {formatHarnessScope(selectedProfile)}</p>
+                      <p><span className="fg-detail-key">provider</span> {selectedProfile.provider_key} · {selectedProfile.integration_class}</p>
+                      <p><span className="fg-detail-key">template</span> {toStringValue(selectedProfile.template_id, "custom contract")}</p>
+                    </div>
+                  </div>
+                  <div className="fg-detail-grid fg-detail-grid-compact">
+                    <span className="fg-detail-label">Last Activity</span>
+                    <div className="fg-detail-rows">
+                      <p>
+                        <span className="fg-detail-key">last run</span>
+                        {selectedProfileLastRun
+                          ? `${formatTimestamp(selectedProfileLastRun.executed_at)} · ${formatHarnessMode(selectedProfileLastRun.mode)} · ${selectedProfileLastRun.status}`
+                          : "not recorded"}
+                      </p>
+                      <p><span className="fg-detail-key">last error</span> {toStringValue(selectedProfile.last_error, "none recorded")}</p>
+                      <p>
+                        <span className="fg-detail-key">proof</span> {selectedProfileProof?.status ?? "none"}
+                        <span className="fg-muted"> · {selectedProfileProof?.note ?? "No proof note available."}</span>
+                      </p>
+                      <p>
+                        <span className="fg-detail-key">verify</span> {toStringValue(selectedProfile.last_verify_status, "never")} ·
+                        <span className="fg-detail-key">probe</span> {toStringValue(selectedProfile.last_probe_status, "never")} ·
+                        <span className="fg-detail-key">sync</span> {toStringValue(selectedProfile.last_sync_status, "never")}
+                      </p>
+                      <p>
+                        <span className="fg-detail-key">last used</span> {formatTimestamp(selectedProfile.last_used_at)}
+                        <span className="fg-muted"> · model={toStringValue(selectedProfile.last_used_model, "-")}</span>
+                        <span className="fg-muted"> · requests={formatMetric(selectedProfile.request_count)}</span>
+                        <span className="fg-muted"> · stream={formatMetric(selectedProfile.stream_request_count)}</span>
+                      </p>
+                    </div>
                   </div>
                 </div>
 
                 <div className="fg-subcard">
                   <h4>Config contract</h4>
-                  <div className="fg-detail-grid">
-                    <p>endpoint={selectedProfile.endpoint_base_url}</p>
-                    <p>auth={selectedProfile.auth_scheme} · header={selectedProfile.auth_header}</p>
-                    <p>models={joinList(selectedProfile.models)}</p>
-                    <p>template={toStringValue(selectedProfile.template_id, "none")} · discovery={selectedProfile.discovery_enabled ? "enabled" : "disabled"}</p>
-                    <p>
-                      request path={toStringValue(selectedProfile.request_mapping?.path)} · method=
-                      {toStringValue(selectedProfile.request_mapping?.method, "POST")}
-                    </p>
-                    <p>
-                      response text path={toStringValue(selectedProfile.response_mapping?.text_path)} · error path=
-                      {toStringValue(selectedProfile.error_mapping?.message_path)}
-                    </p>
-                    <p>
-                      streaming={selectedProfile.stream_mapping?.enabled ? "enabled" : "disabled"} · tool calling=
-                      {selectedProfile.capabilities?.tool_calling ? "enabled" : "disabled"}
-                    </p>
-                    <p>
-                      responses={selectedProfile.capabilities?.responses ? "enabled" : "disabled"} · embeddings=
-                      {selectedProfile.capabilities?.embeddings ? "enabled" : "disabled"}
-                    </p>
+                  <div className="fg-detail-grid fg-detail-grid-compact fg-mb-sm">
+                    <span className="fg-detail-label">Connection</span>
+                    <div className="fg-detail-rows">
+                      <p><span className="fg-detail-key">endpoint</span> {selectedProfile.endpoint_base_url}</p>
+                      <p><span className="fg-detail-key">auth</span> {selectedProfile.auth_scheme} · header={selectedProfile.auth_header}</p>
+                      <p><span className="fg-detail-key">discovery</span> {selectedProfile.discovery_enabled ? "enabled" : "disabled"}</p>
+                    </div>
+                  </div>
+                  <div className="fg-detail-grid fg-detail-grid-compact fg-mb-sm">
+                    <span className="fg-detail-label">Capabilities</span>
+                    <div className="fg-detail-rows">
+                      <p><span className="fg-detail-key">models</span> {joinList(selectedProfile.models)}</p>
+                      <p><span className="fg-detail-key">streaming</span> {selectedProfile.stream_mapping?.enabled ? "enabled" : "disabled"} · <span className="fg-detail-key">tool calling</span> {selectedProfile.capabilities?.tool_calling ? "enabled" : "disabled"}</p>
+                      <p><span className="fg-detail-key">responses</span> {selectedProfile.capabilities?.responses ? "enabled" : "disabled"} · <span className="fg-detail-key">embeddings</span> {selectedProfile.capabilities?.embeddings ? "enabled" : "disabled"}</p>
+                    </div>
+                  </div>
+                  <div className="fg-detail-grid fg-detail-grid-compact fg-mb-sm">
+                    <span className="fg-detail-label">Mapping</span>
+                    <div className="fg-detail-rows">
+                      <p><span className="fg-detail-key">request path</span> {toStringValue(selectedProfile.request_mapping?.path)} · <span className="fg-detail-key">method</span> {toStringValue(selectedProfile.request_mapping?.method, "POST")}</p>
+                      <p><span className="fg-detail-key">response text path</span> {toStringValue(selectedProfile.response_mapping?.text_path)} · <span className="fg-detail-key">error path</span> {toStringValue(selectedProfile.error_mapping?.message_path)}</p>
+                    </div>
                   </div>
                   {selectedProfile.capabilities?.unsupported_features?.length ? (
                     <p className="fg-note">Unsupported features: {selectedProfile.capabilities.unsupported_features.join(", ")}</p>
@@ -305,14 +330,15 @@ export function HarnessControlSection({ data, actions, instanceId }: HarnessCont
                 {selectedProfile.model_inventory?.length ? (
                   <div className="fg-subcard">
                     <h4>Model inventory</h4>
-                    <ul className="fg-list">
+                    <div className="fg-stack">
                       {selectedProfile.model_inventory.map((item, index) => (
-                        <li key={`${toStringValue(item.model, "model")}-${index}`}>
-                          {item.model} · source={item.source} · status={item.status} · synced={formatTimestamp(item.synced_at)} · reason=
-                          {toStringValue(item.readiness_reason, "-")}
-                        </li>
+                        <div key={`${toStringValue(item.model, "model")}-${index}`} className="fg-detail-rows fg-model-inv-row">
+                          <strong>{item.model}</strong>
+                          <span className="fg-muted">source={item.source} · status={item.status}</span>
+                          <span className="fg-muted">synced={formatTimestamp(item.synced_at)} · reason={toStringValue(item.readiness_reason, "-")}</span>
+                        </div>
                       ))}
-                    </ul>
+                    </div>
                   </div>
                 ) : null}
               </div>
@@ -472,7 +498,7 @@ export function HarnessControlSection({ data, actions, instanceId }: HarnessCont
         <div className="fg-stack">
           <SectionCard
             title="Actions"
-            description="Run real harness APIs against the selected profile. Preview stays read-safe; verify, dry-run, and probe require a write-capable non-impersonation session."
+            description="Test harness APIs against the selected profile. Preview is read-safe; verify, dry-run, and probe require operator access."
           >
             {selectedProfile ? (
               <div className="fg-stack">
@@ -508,64 +534,71 @@ export function HarnessControlSection({ data, actions, instanceId }: HarnessCont
                   </label>
                 </div>
 
-                <div className="fg-actions">
-                  <button type="button" onClick={() => void actions.previewHarnessProfile(selectedProfile.provider_key, actionModel, actionMessage)}>
-                    Preview
-                  </button>
-                  {data.access.canOperate ? (
-                    <>
-                      <button type="button" onClick={() => void actions.verifyHarnessProfile(selectedProfile.provider_key, actionModel, actionMessage)}>
-                        Verify
-                      </button>
-                      <button type="button" onClick={() => void actions.dryRunHarnessProfile(selectedProfile.provider_key, actionModel, actionMessage)}>
-                        Dry-run
-                      </button>
-                      <button type="button" onClick={() => void actions.probeHarnessProfile(selectedProfile.provider_key, actionModel)}>
-                        Probe
-                      </button>
-                    </>
-                  ) : null}
+                <div className="fg-action-group">
+                  <span className="fg-detail-label">Test Actions</span>
+                  <div className="fg-actions">
+                    <button type="button" onClick={() => void actions.previewHarnessProfile(selectedProfile.provider_key, actionModel, actionMessage)}>
+                      Preview
+                    </button>
+                    {data.access.canOperate ? (
+                      <>
+                        <button type="button" onClick={() => void actions.verifyHarnessProfile(selectedProfile.provider_key, actionModel, actionMessage)}>
+                          Verify
+                        </button>
+                        <button type="button" onClick={() => void actions.dryRunHarnessProfile(selectedProfile.provider_key, actionModel, actionMessage)}>
+                          Dry-run
+                        </button>
+                        <button type="button" onClick={() => void actions.probeHarnessProfile(selectedProfile.provider_key, actionModel)}>
+                          Probe
+                        </button>
+                      </>
+                    ) : (
+                      <span className="fg-muted">verify, dry-run, and probe require operator access</span>
+                    )}
+                  </div>
                 </div>
 
-                <div className="fg-actions">
-                  {data.access.canMutate ? (
-                    <>
-                      <button type="button" onClick={() => void actions.toggleHarnessProfile(selectedProfile.provider_key, selectedProfile.enabled)}>
-                        {selectedProfile.enabled ? "Deactivate" : "Activate"}
+                <div className="fg-action-group">
+                  <span className="fg-detail-label">Management</span>
+                  <div className="fg-actions">
+                    {data.access.canMutate ? (
+                      <>
+                        <button type="button" onClick={() => void actions.toggleHarnessProfile(selectedProfile.provider_key, selectedProfile.enabled)}>
+                          {selectedProfile.enabled ? "Deactivate" : "Activate"}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => rollbackRevision !== null && void actions.rollbackHarnessProfile(selectedProfile.provider_key, rollbackRevision)}
+                          disabled={rollbackRevision === null}
+                        >
+                          Rollback
+                        </button>
+                      </>
+                    ) : (
+                      <span className="fg-muted">activation, rollback, and import require providers.write</span>
+                    )}
+                    {data.access.canExportRedacted ? (
+                      <button type="button" onClick={() => void actions.exportHarness(true)}>
+                        Export redacted
                       </button>
-                      <button
-                        type="button"
-                        onClick={() => rollbackRevision !== null && void actions.rollbackHarnessProfile(selectedProfile.provider_key, rollbackRevision)}
-                        disabled={rollbackRevision === null}
-                      >
-                        Rollback
+                    ) : null}
+                    {data.access.canExportFull ? (
+                      <button type="button" onClick={() => void actions.exportHarness(false)}>
+                        Export full snapshot
                       </button>
-                    </>
-                  ) : null}
-                  {data.access.canExportRedacted ? (
-                    <button type="button" onClick={() => void actions.exportHarness(true)}>
-                      Export redacted
-                    </button>
-                  ) : null}
-                  {data.access.canExportFull ? (
-                    <button type="button" onClick={() => void actions.exportHarness(false)}>
-                      Export full snapshot
-                    </button>
-                  ) : null}
-                  {data.access.canMutate ? (
-                    <>
-                      <button type="button" onClick={() => void actions.importHarness(true)}>
-                        Dry-run import
-                      </button>
-                      <button type="button" onClick={() => void actions.importHarness(false)}>
-                        Apply import
-                      </button>
-                    </>
-                  ) : null}
+                    ) : null}
+                    {data.access.canMutate ? (
+                      <>
+                        <button type="button" onClick={() => void actions.importHarness(true)}>
+                          Dry-run import
+                        </button>
+                        <button type="button" onClick={() => void actions.importHarness(false)}>
+                          Apply import
+                        </button>
+                      </>
+                    ) : null}
+                  </div>
                 </div>
-
-                {!data.access.canOperate ? <p className="fg-note">{data.access.operateBlockedMessage}</p> : null}
-                {!data.access.canMutate ? <p className="fg-note">Import, activation, rollback, and save actions require `providers.write` on this instance.</p> : null}
               </div>
             ) : (
               <p className="fg-muted">Select a profile before running harness actions.</p>
@@ -574,7 +607,7 @@ export function HarnessControlSection({ data, actions, instanceId }: HarnessCont
 
           <SectionCard
             title="Last Action Result"
-            description="The latest harness action stays summarized here with operator-facing status instead of a raw provider payload dump."
+            description="Summary of the most recent harness action with operator-facing status."
           >
             {data.lastHarnessAction ? (
               <div className="fg-stack">
@@ -618,7 +651,7 @@ export function HarnessControlSection({ data, actions, instanceId }: HarnessCont
 
           <SectionCard
             title="Run History"
-            description="The right rail keeps recent runs visible with time, mode, status, error, and the log handoff link."
+            description="Recent runs by time, mode, status, and error with log handoff links."
           >
             <div className="fg-grid fg-grid-compact fg-mb-sm">
               <MetricTile label="Preview / Dry-run" value={`${formatMetric(data.runSummary.preview)} / ${formatMetric(data.runSummary.dry_run)}`} note="request contract actions" />
@@ -692,7 +725,7 @@ export function HarnessControlSection({ data, actions, instanceId }: HarnessCont
       <div id="harness-advanced-diagnostics">
         <AdvancedDiagnostics
           title="Advanced Diagnostics"
-          description="Raw snapshots, import/export payloads, and proof carriers stay collapsed here so the main workspace remains operational."
+          description="Raw snapshots, import/export payloads, and proof carriers."
           status={`${proofProviders.length} proof carrier${proofProviders.length === 1 ? "" : "s"}`}
           statusTone={proofProviders.length > 0 ? "success" : "neutral"}
         >
