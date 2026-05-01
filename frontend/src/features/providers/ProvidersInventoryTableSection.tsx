@@ -55,7 +55,7 @@ export function ProvidersInventoryTableSection({ data, actions, instanceId }: Pr
 
   return (
     <>
-      <SectionCard title="Provider hinzufügen" description="Create a real provider record with a supported runtime class instead of leaving placeholder onboarding controls behind.">
+      <SectionCard title="Add provider" description="Register a new provider with its endpoint, auth scheme, and runtime class.">
         {data.access.canMutate ? (
           <div className="fg-inline-form">
             <label>

@@ -277,7 +277,7 @@ describe("Providers page hierarchy", () => {
     );
 
     expect(markup).toContain("<section class=\"fg-page\">");
-    expect(markup).toContain("Which provider are you configuring, syncing, validating, or recovering right now?");
+    expect(markup).toContain("Select a provider from the inventory below to inspect or edit its configuration.");
     expect(markup).toContain(">Harness<");
     expect(markup).toContain("href=\"/harness\"");
     expect(markup).toContain(">Provider Targets<");
@@ -286,7 +286,7 @@ describe("Providers page hierarchy", () => {
     expect(markup).toContain("id=\"provider-health-runs\"");
     expect(markup).toContain("Show probe");
     expect(markup).toContain(">Provider Inventory</h3>");
-    expect(markup).toContain(">Provider hinzufügen</h3>");
+    expect(markup).toContain(">Add provider</h3>");
     expect(markup).toContain(">Advanced Diagnostics</strong>");
     expect(markup).toContain("Admin mutations enabled");
     expect(markup).toContain("Sync all providers");

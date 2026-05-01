@@ -146,7 +146,7 @@ export function ProviderHealthSection({ data, actions, instanceId }: ProviderHea
       tabIndex={-1}
       className={location.hash === "#provider-health-runs" ? "is-anchor-target" : ""}
       title="Provider Health & Runs"
-      description="Provider probes and latest runs with direct handoff to inventory, OAuth, and targets."
+      description="Latest probe results, health check configuration, and run history for each provider."
       actions={
         <>
           {data.access.canMutate ? (

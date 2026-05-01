@@ -27,7 +27,7 @@ export function ProvidersManagementOverviewSection({
   return (
     <SectionCard
       title="Provider Runtime Inventory"
-      description="Live provider inventory, configuration, sync, compatibility, and health."
+      description="Summary of all providers registered for this instance — how many are enabled, runtime-ready, or need attention."
       actions={
         <>
           <button type="button" onClick={() => void actions.load()}>

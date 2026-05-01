@@ -23,7 +23,7 @@ export function ProvidersAdvancedDiagnosticsSection({ data }: { data: ProvidersP
   return (
     <AdvancedDiagnostics
       title="Advanced Diagnostics"
-      description="Product axis contract language and deeper compatibility proof stay collapsed here."
+      description="Contract classification, OpenAI compatibility signoff, and raw control-plane payloads for debugging."
       status={`${data.providers.length} providers`}
       statusTone="neutral"
     >
