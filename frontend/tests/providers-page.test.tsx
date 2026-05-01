@@ -49,6 +49,8 @@ function createData(access: ProvidersAccessState): ProvidersPageData {
   return {
     state: "success",
     error: null,
+    actionFeedback: null,
+    pendingAction: null,
     access,
     providers: [
       {
@@ -375,5 +377,59 @@ describe("Providers page hierarchy", () => {
     expect(markup).not.toContain(">Sync models<");
     expect(markup).not.toContain(">Run health now<");
     expect(markup).toContain("Enable provider in this instance");
+  });
+
+  it("announces provider action feedback and disables the matching action", () => {
+    mockedUseProvidersControlPlane.mockImplementation((access: ProvidersAccessState) => ({
+      data: {
+        ...createData(access),
+        actionFeedback: {
+          tone: "success",
+          message: "local_runtime was enabled.",
+        },
+        pendingAction: "toggle-provider:local_runtime",
+      },
+      actions: createActions(),
+    }));
+
+    const markup = renderToStaticMarkup(
+      withAppContext({
+        path: "/providers",
+        element: <ProvidersPage />,
+        session: createSession(),
+      }),
+    );
+
+    expect(markup).toContain("role=\"status\"");
+    expect(markup).toContain("local_runtime was enabled.");
+    expect(markup).toContain("Activating…");
+    expect(markup).toContain("disabled=\"\"");
+  });
+
+  it("renders provider action errors as accessible alerts", () => {
+    mockedUseProvidersControlPlane.mockImplementation((access: ProvidersAccessState) => ({
+      data: {
+        ...createData(access),
+        error: "Backend rejected the provider update.",
+        actionFeedback: {
+          tone: "error",
+          message: "Provider update failed.",
+          detail: "Backend rejected the provider update.",
+        },
+      },
+      actions: createActions(),
+    }));
+
+    const markup = renderToStaticMarkup(
+      withAppContext({
+        path: "/providers",
+        element: <ProvidersPage />,
+        session: createSession(),
+      }),
+    );
+
+    expect(markup).toContain("role=\"alert\"");
+    expect(markup).toContain("Provider update failed.");
+    expect(markup).toContain("Backend rejected the provider update.");
   });
 });

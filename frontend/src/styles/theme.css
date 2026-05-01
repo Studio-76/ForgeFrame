@@ -1033,6 +1033,33 @@ a {
   color: var(--fg-color-status-danger);
 }
 
+.fg-action-feedback {
+  display: grid;
+  gap: var(--fg-space-1);
+  min-height: 0;
+  margin-block: var(--fg-space-3);
+  padding: 0;
+  color: var(--fg-color-text-secondary);
+}
+
+.fg-action-feedback.is-success,
+.fg-action-feedback.is-error {
+  border: 1px solid var(--fg-color-border-default);
+  border-radius: var(--fg-radius-md);
+  padding: var(--fg-space-3);
+  background: var(--fg-color-surface-subtle);
+}
+
+.fg-action-feedback.is-success {
+  border-color: color-mix(in srgb, var(--fg-color-status-success) 55%, transparent);
+  color: var(--fg-color-status-success);
+}
+
+.fg-action-feedback.is-error {
+  border-color: color-mix(in srgb, var(--fg-color-status-danger) 55%, transparent);
+  color: var(--fg-color-status-danger);
+}
+
 .fg-nav {
   margin-bottom: var(--fg-space-4);
 }

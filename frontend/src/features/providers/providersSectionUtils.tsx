@@ -9,7 +9,7 @@ import type {
   ProviderCatalogEntry,
   ProviderCapabilityEvidenceRecord,
 } from "../../api/admin";
-import type { HarnessDraft, ProvidersPageData } from "./providersShared";
+import type { HarnessDraft, ProvidersActionFeedback, ProvidersPageData } from "./providersShared";
 import { asRecord, formatTimestamp, formatMetric, joinList, toStringValue } from "./providersShared";
 
 export type SectionCardProps = {
@@ -55,6 +55,29 @@ export function TonePill({ label, tone }: { label: string; tone: Tone }) {
     <span className="fg-pill" data-tone={tone}>
       {label}
     </span>
+  );
+}
+
+/**
+ * Announces the last provider action outcome next to the controls that caused it.
+ * @param feedback - Action result returned by the providers control-plane hook.
+ * @returns Accessible status or error markup when feedback exists.
+ */
+export function ActionFeedbackNotice({ feedback }: { feedback: ProvidersActionFeedback | null }) {
+  if (!feedback) {
+    return <div className="fg-action-feedback" role="status" aria-live="polite" aria-atomic="true" />;
+  }
+
+  return (
+    <div
+      className={`fg-action-feedback${feedback.tone === "error" ? " is-error" : " is-success"}`}
+      role={feedback.tone === "error" ? "alert" : "status"}
+      aria-live={feedback.tone === "error" ? "assertive" : "polite"}
+      aria-atomic="true"
+    >
+      <strong>{feedback.message}</strong>
+      {feedback.detail ? <span>{feedback.detail}</span> : null}
+    </div>
   );
 }
 

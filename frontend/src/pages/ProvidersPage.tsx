@@ -12,6 +12,7 @@ import {
   ProvidersInventoryTableSection,
 } from "../features/providers/ProvidersSections";
 import type { ProvidersPageActions, ProvidersPageData } from "../features/providers/providersShared";
+import { ActionFeedbackNotice } from "../features/providers/providersSectionUtils";
 import { getProvidersAccess } from "../features/providers/providersShared";
 import { useProvidersControlPlane } from "../features/providers/useProvidersControlPlane";
 
@@ -26,6 +27,8 @@ function FirstProviderSetupCard({
   data: ProvidersPageData;
   actions: ProvidersPageActions;
 }) {
+  const isCreatingProvider = data.pendingAction === "create-provider";
+
   return (
     <div className="fg-card">
       <div className="fg-panel-heading">
@@ -64,11 +67,15 @@ function FirstProviderSetupCard({
         </label>
       </div>
       <div className="fg-actions fg-mt-sm">
-        <button type="button" onClick={() => void actions.createProvider()}>
-          Add provider
+        <button type="button" disabled={isCreatingProvider} onClick={() => void actions.createProvider()}>
+          {isCreatingProvider ? "Adding provider…" : "Add provider"}
         </button>
       </div>
-      {data.error ? <p className="fg-danger fg-mt-sm">{data.error}</p> : null}
+      <p className="fg-note fg-mt-sm">
+        Use a stable key like <span className="fg-code">local_ollama</span>. After this, enable it and sync models from the Providers card.
+      </p>
+      <ActionFeedbackNotice feedback={data.actionFeedback} />
+      {data.error && !data.actionFeedback ? <p className="fg-danger fg-mt-sm" role="alert">{data.error}</p> : null}
     </div>
   );
 }

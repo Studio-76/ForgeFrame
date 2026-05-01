@@ -25,6 +25,15 @@ import type {
 
 export type LoadState = "idle" | "loading" | "success" | "error";
 
+/**
+ * User-visible outcome for the last provider control-plane action.
+ */
+export type ProvidersActionFeedback = {
+  tone: "success" | "error";
+  message: string;
+  detail?: string;
+};
+
 export type ProviderRunFilters = {
   mode: string;
   status: string;
@@ -127,6 +136,8 @@ export type HarnessActionResult = {
 export type ProvidersPageData = {
   state: LoadState;
   error: string | null;
+  actionFeedback: ProvidersActionFeedback | null;
+  pendingAction: string | null;
   access: ProvidersAccessState;
   providers: ProviderControlItem[];
   supportedProviderClasses: ProviderClassDescriptor[];

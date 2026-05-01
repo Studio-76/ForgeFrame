@@ -6,6 +6,7 @@ import { CONTROL_PLANE_ROUTES } from "../../app/navigation";
 import { withInstanceScope } from "../../app/tenantScope";
 import { formatMetric, formatTimestamp } from "./providersShared";
 import {
+  ActionFeedbackNotice,
   authTypeLabel,
   currentProviderClassDescriptor,
   formatHealthLabel,
@@ -28,6 +29,22 @@ function visibleModels(provider: ProvidersManagementSectionProps["data"]["provid
 }
 
 /**
+ * Builds the stable key used to track a pending provider action.
+ * @param kind - Provider action category.
+ * @param provider - Optional provider identifier for scoped actions.
+ * @returns Pending action key shared with the providers hook.
+ */
+function providerPendingKey(kind: "save" | "sync" | "toggle", provider: string): string {
+  if (kind === "save") {
+    return `save-provider:${provider}`;
+  }
+  if (kind === "sync") {
+    return `sync-provider:${provider}`;
+  }
+  return `toggle-provider:${provider}`;
+}
+
+/**
  * Providers record section with a compact status summary, toggleable
  * create form, provider cards, and inline draft editing for the selected
  * provider.
@@ -44,6 +61,8 @@ export function ProvidersInventoryTableSection({ data, actions, instanceId }: Pr
   const attentionProviders = data.providers.filter((provider) => provider.health_status !== "healthy").length;
   const readyTargets = data.providers.reduce((total, provider) => total + provider.ready_target_count, 0);
   const allTargets = data.providers.reduce((total, provider) => total + provider.target_count, 0);
+  const isLoading = data.state === "loading";
+  const isPending = (key: string) => data.pendingAction === key;
 
   const applyProviderClassToCreateDraft = (providerClass: ProviderClassKey) => {
     const descriptor = currentProviderClassDescriptor(providerClass, data.supportedProviderClasses);
@@ -90,13 +109,28 @@ export function ProvidersInventoryTableSection({ data, actions, instanceId }: Pr
       return <Link className="fg-nav-link" to={withInstanceScope(CONTROL_PLANE_ROUTES.providerTargets, instanceId)}>{provider.next_action}</Link>;
     }
     if (provider.next_action_kind === "activate_provider" && data.access.canMutate) {
-      return <button type="button" onClick={() => void actions.toggleProvider(provider.provider, provider.enabled)}>Activate</button>;
+      const pending = isPending(providerPendingKey("toggle", provider.provider));
+      return (
+        <button type="button" disabled={pending} onClick={() => void actions.toggleProvider(provider.provider, provider.enabled)}>
+          {pending ? "Activating…" : "Activate"}
+        </button>
+      );
     }
     if (provider.next_action_kind === "sync_models" && data.access.canMutate) {
-      return <button type="button" onClick={() => void actions.syncProviderModels(provider.provider)}>{provider.next_action}</button>;
+      const pending = isPending(providerPendingKey("sync", provider.provider));
+      return (
+        <button type="button" disabled={pending} onClick={() => void actions.syncProviderModels(provider.provider)}>
+          {pending ? "Syncing…" : provider.next_action}
+        </button>
+      );
     }
     if (provider.next_action_kind === "run_health" && data.access.canMutate) {
-      return <button type="button" onClick={() => void actions.runHealthChecks()}>{provider.next_action}</button>;
+      const pending = isPending("run-provider-health");
+      return (
+        <button type="button" disabled={pending} onClick={() => void actions.runHealthChecks()}>
+          {pending ? "Checking…" : provider.next_action}
+        </button>
+      );
     }
     if (provider.next_action_kind === "edit_provider" && data.access.canMutate) {
       return <button type="button" onClick={() => setActiveProvider(provider.provider)}>{provider.next_action}</button>;
@@ -114,8 +148,12 @@ export function ProvidersInventoryTableSection({ data, actions, instanceId }: Pr
       description="Provider records only. Target routing, OAuth sessions, and harness proof live on their dedicated pages."
       actions={
         <>
-          <button type="button" onClick={() => void actions.load()}>Refresh</button>
-          {data.access.canMutate ? <button type="button" onClick={() => void actions.syncAllProviders()}>Sync all</button> : null}
+          <button type="button" disabled={isLoading} onClick={() => void actions.load()}>{isLoading ? "Refreshing…" : "Refresh"}</button>
+          {data.access.canMutate ? (
+            <button type="button" disabled={isPending("sync-all-providers")} onClick={() => void actions.syncAllProviders()}>
+              {isPending("sync-all-providers") ? "Syncing all…" : "Sync all"}
+            </button>
+          ) : null}
           {data.access.canMutate ? (
             <button type="button" onClick={() => setShowAddProvider((current) => !current)}>
               {showAddProvider ? "Hide add form" : "Add provider"}
@@ -124,6 +162,8 @@ export function ProvidersInventoryTableSection({ data, actions, instanceId }: Pr
         </>
       }
     >
+      <ActionFeedbackNotice feedback={data.actionFeedback} />
+
       <div className="fg-grid fg-grid-compact fg-mb-md">
         <MetricTile label="Registered" value={formatMetric(data.providers.length)} note={`${formatMetric(enabledProviders)} enabled`} />
         <MetricTile label="Runtime ready" value={formatMetric(readyProviders)} note={`${formatMetric(data.providers.length - readyProviders)} not ready`} />
@@ -151,7 +191,7 @@ export function ProvidersInventoryTableSection({ data, actions, instanceId }: Pr
                   placeholder="Provider label"
                 />
               </label>
-              <ProviderClassFields
+                <ProviderClassFields
                 prefix="Provider "
                 providerClass={data.newProvider.providerClass}
                 integrationClass={data.newProvider.integrationClass}
@@ -164,10 +204,13 @@ export function ProvidersInventoryTableSection({ data, actions, instanceId }: Pr
                 onFieldChange={(field, value) => actions.setNewProvider((current) => ({ ...current, [field]: value }))}
               />
               <div className="fg-actions fg-actions-end">
-                <button type="button" onClick={() => void actions.createProvider()}>
-                  Add provider
+                <button type="button" disabled={isPending("create-provider")} onClick={() => void actions.createProvider()}>
+                  {isPending("create-provider") ? "Adding provider…" : "Add provider"}
                 </button>
               </div>
+              <p className="fg-note">
+                After adding it, enable the provider, sync models, then open Provider Targets if routing still shows zero ready targets.
+              </p>
             </div>
           ) : (
             <p className="fg-note">{data.access.summaryDetail}</p>
@@ -249,18 +292,41 @@ export function ProvidersInventoryTableSection({ data, actions, instanceId }: Pr
             <div className="fg-actions fg-mt-sm">
               {data.access.canMutate ? (
                 <>
-                  <button type="button" onClick={() => void actions.saveProvider(selectedProvider.provider)}>
-                    Save provider
+                  <button
+                    type="button"
+                    disabled={isPending(providerPendingKey("save", selectedProvider.provider))}
+                    onClick={() => void actions.saveProvider(selectedProvider.provider)}
+                  >
+                    {isPending(providerPendingKey("save", selectedProvider.provider)) ? "Saving…" : "Save provider"}
                   </button>
-                  <button type="button" onClick={() => void actions.syncProviderModels(selectedProvider.provider)}>
-                    Sync models
+                  <button
+                    type="button"
+                    disabled={isPending(providerPendingKey("sync", selectedProvider.provider))}
+                    onClick={() => void actions.syncProviderModels(selectedProvider.provider)}
+                  >
+                    {isPending(providerPendingKey("sync", selectedProvider.provider)) ? "Syncing…" : "Sync models"}
                   </button>
-                  <button type="button" onClick={() => void actions.toggleProvider(selectedProvider.provider, selectedProvider.enabled)}>
-                    {selectedProvider.enabled ? "Disable" : "Enable"}
+                  <button
+                    type="button"
+                    disabled={isPending(providerPendingKey("toggle", selectedProvider.provider))}
+                    onClick={() => void actions.toggleProvider(selectedProvider.provider, selectedProvider.enabled)}
+                  >
+                    {isPending(providerPendingKey("toggle", selectedProvider.provider))
+                      ? selectedProvider.enabled
+                        ? "Disabling…"
+                        : "Enabling…"
+                      : selectedProvider.enabled
+                        ? "Disable"
+                        : "Enable"}
                   </button>
                 </>
               ) : null}
             </div>
+            {data.access.canMutate ? (
+              <p className="fg-note fg-mt-sm">
+                Best next step: save changes first, sync models after endpoint/auth edits, then enable only when at least one target is ready.
+              </p>
+            ) : null}
 
             {selectedProvider.last_sync_error ? <p className="fg-danger fg-mt-sm">Last sync error: {selectedProvider.last_sync_error}</p> : null}
           </div>
