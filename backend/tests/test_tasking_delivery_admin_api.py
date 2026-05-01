@@ -1,5 +1,6 @@
 import json
 from datetime import UTC, datetime, timedelta
+from typing import Any
 
 from conftest import admin_headers as shared_admin_headers
 from fastapi.testclient import TestClient
@@ -109,7 +110,7 @@ def _create_channel(
     target: str,
     fallback_channel_id: str | None = None,
     status: str = "active",
-    metadata: dict[str, object] | None = None,
+    metadata: dict[str, Any] | None = None,
 ) -> str:
     response = client.post(
         "/admin/channels",

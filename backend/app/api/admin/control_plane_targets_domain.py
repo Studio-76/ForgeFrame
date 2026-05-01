@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING, Any
+
 from app.api.admin.control_plane_models import (
     ModelRegisterEvidenceSnapshot,
     ModelRegisterRecord,
@@ -23,6 +25,17 @@ from app.control_plane.target_defaults import (
 
 
 class ControlPlaneTargetsDomainMixin:
+    if TYPE_CHECKING:
+        _instance: Any
+        _settings: Any
+        _health_records: Any
+        _provider_targets_state: dict[str, ManagedProviderTargetRecord]
+        _routing_policies_state: Any
+
+        def list_providers(self) -> list[Any]: ...
+        def provider_truth_axes(self, *args: Any, **kwargs: Any) -> list[Any]: ...
+        def _persist_state(self) -> Any: ...
+
     @staticmethod
     def _target_routing_eligible(
         target: ManagedProviderTargetRecord,
@@ -88,8 +101,8 @@ class ControlPlaneTargetsDomainMixin:
         *,
         provider_truth,
         health_status: str,
-        model: object,
-        provider: object,
+        model: Any,
+        provider: Any,
         source: str,
     ) -> dict[str, ModelRegisterEvidenceSnapshot]:
         live_probe = provider_truth.runtime.evidence.live_probe
@@ -182,7 +195,7 @@ class ControlPlaneTargetsDomainMixin:
     @staticmethod
     def _model_sync_support(
         *,
-        provider: object,
+        provider: Any,
         source: str,
         discovery_supported: bool,
     ) -> ModelRegisterSyncSupport:
@@ -355,35 +368,25 @@ class ControlPlaneTargetsDomainMixin:
             raise ValueError(f"Provider target '{target_key}' is not managed in control plane.")
         return target
 
-    def provider_target_snapshot(self) -> list[dict[str, object]]:
+    def provider_target_snapshot(self) -> list[dict[str, Any]]:
         provider_map = {provider.provider: provider for provider in self.list_providers()}
         model_map = {(provider.provider, model.id): model for provider in self.list_providers() for model in provider.managed_models}
         runtime_truth_map = {truth.provider.provider: truth.runtime for truth in self.provider_truth_axes(tenant_id=self._instance.tenant_id)}
         return [
             ManagedProviderTargetUiRecord(
                 **target.model_dump(),
-                provider_label=provider_map.get(target.provider).label if provider_map.get(target.provider) else None,
-                model_display_name=model_map.get((
-                    target.provider,
-                    target.model_id,
-                )).display_name
-                if model_map.get((target.provider, target.model_id))
-                else None,
-                model_owned_by=model_map.get((
-                    target.provider,
-                    target.model_id,
-                )).owned_by
-                if model_map.get((target.provider, target.model_id))
-                else None,
-                runtime_ready=bool(runtime_truth_map.get(target.provider).ready) if runtime_truth_map.get(target.provider) else False,
-                runtime_readiness_reason=runtime_truth_map.get(target.provider).readiness_reason if runtime_truth_map.get(target.provider) else None,
-                provider_enabled=bool(provider_map.get(target.provider).enabled) if provider_map.get(target.provider) else False,
-                model_active=bool(model_map.get((target.provider, target.model_id)).active) if model_map.get((target.provider, target.model_id)) else False,
+                provider_label=provider_map[target.provider].label if target.provider in provider_map else None,
+                model_display_name=model_map[(target.provider, target.model_id)].display_name if (target.provider, target.model_id) in model_map else None,
+                model_owned_by=model_map[(target.provider, target.model_id)].owned_by if (target.provider, target.model_id) in model_map else None,
+                runtime_ready=bool(runtime_truth_map[target.provider].ready) if target.provider in runtime_truth_map else False,
+                runtime_readiness_reason=runtime_truth_map[target.provider].readiness_reason if target.provider in runtime_truth_map else None,
+                provider_enabled=bool(provider_map[target.provider].enabled) if target.provider in provider_map else False,
+                model_active=bool(model_map[(target.provider, target.model_id)].active) if (target.provider, target.model_id) in model_map else False,
             ).model_dump(mode="json")
             for target in self.list_provider_targets()
         ]
 
-    def model_register_snapshot(self) -> list[dict[str, object]]:
+    def model_register_snapshot(self) -> list[dict[str, Any]]:
         target_map: dict[tuple[str, str], list[ManagedProviderTargetRecord]] = {}
         for target in self.list_provider_targets():
             target_map.setdefault((target.provider, target.model_id), []).append(target)

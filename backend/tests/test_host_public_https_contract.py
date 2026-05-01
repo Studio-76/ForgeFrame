@@ -1,4 +1,5 @@
 from pathlib import Path
+from typing import Any
 
 from app.settings.config import Settings
 
@@ -6,7 +7,7 @@ ROOT = Path(__file__).resolve().parents[2]
 
 
 def _file_backend_settings(**overrides: object) -> Settings:
-    defaults: dict[str, object] = {
+    defaults: dict[str, Any] = {
         "bootstrap_admin_password": "ForgeFrame-Test-Admin-Secret-123",
         "harness_storage_backend": "file",
         "control_plane_storage_backend": "file",

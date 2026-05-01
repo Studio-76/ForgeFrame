@@ -169,8 +169,8 @@ class InstanceService:
             status="active" if status != "disabled" else "disabled",
             tenant_id=normalized_tenant_id,
             company_id=normalized_company_id,
-            deployment_mode=deployment_mode,  # type: ignore[arg-type]
-            exposure_mode=exposure_mode,  # type: ignore[arg-type]
+            deployment_mode=deployment_mode,
+            exposure_mode=exposure_mode,
             is_default=False,
             metadata=dict(metadata or {}),
             created_at=now,

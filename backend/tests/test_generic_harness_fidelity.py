@@ -1,4 +1,5 @@
 import json
+from typing import Any
 
 import pytest
 from conftest import admin_headers as shared_admin_headers
@@ -13,7 +14,7 @@ def _admin_headers(client: TestClient) -> dict[str, str]:
     return shared_admin_headers(client)
 
 
-def _sse_payload(raw: str, event_name: str) -> dict[str, object]:
+def _sse_payload(raw: str, event_name: str) -> dict[str, Any]:
     for chunk in raw.split("\n\n"):
         lines = [line for line in chunk.splitlines() if line]
         if f"event: {event_name}" not in lines:
@@ -81,7 +82,7 @@ class _MockResponse:
         self,
         *,
         status_code: int,
-        payload: dict[str, object],
+        payload: dict[str, Any],
         content_type: str = "application/json",
     ):
         self.status_code = status_code
@@ -89,7 +90,7 @@ class _MockResponse:
         self.headers = {"content-type": content_type}
         self.text = json.dumps(payload)
 
-    def json(self) -> dict[str, object]:
+    def json(self) -> dict[str, Any]:
         return self._payload
 
 
@@ -99,7 +100,7 @@ class _MockStreamResponse:
         *,
         status_code: int,
         lines: list[str],
-        payload: dict[str, object] | None = None,
+        payload: dict[str, Any] | None = None,
         content_type: str = "text/event-stream",
     ):
         self.status_code = status_code
@@ -130,7 +131,7 @@ def test_generic_harness_openai_compatible_profile_proves_fidelity(
         method: str,
         url: str,
         headers: dict[str, str] | None = None,
-        json: dict[str, object] | None = None,
+        json: dict[str, Any] | None = None,
         timeout: int | None = None,
     ):
         del method, timeout
@@ -185,7 +186,7 @@ def test_generic_harness_openai_compatible_profile_proves_fidelity(
         method: str,
         url: str,
         headers: dict[str, str] | None = None,
-        json: dict[str, object] | None = None,
+        json: dict[str, Any] | None = None,
         timeout: int | None = None,
     ):
         del method, headers, timeout
@@ -559,7 +560,7 @@ def test_generic_harness_matrix_keeps_current_reason_when_historical_proof_profi
         method: str,
         url: str,
         headers: dict[str, str] | None = None,
-        json: dict[str, object] | None = None,
+        json: dict[str, Any] | None = None,
         timeout: int | None = None,
     ):
         del method, headers, timeout
@@ -587,7 +588,7 @@ def test_generic_harness_matrix_keeps_current_reason_when_historical_proof_profi
         method: str,
         url: str,
         headers: dict[str, str] | None = None,
-        json: dict[str, object] | None = None,
+        json: dict[str, Any] | None = None,
         timeout: int | None = None,
     ):
         del method, headers, json, timeout
@@ -781,14 +782,14 @@ def test_generic_harness_runtime_preserves_multiturn_multimodal_chat_sequence(
         {"role": "tool", "tool_call_id": "call_1", "content": "42"},
         {"role": "user", "content": "Explain the result."},
     ]
-    captured_non_stream_messages: list[dict[str, object]] | None = None
-    captured_stream_messages: list[dict[str, object]] | None = None
+    captured_non_stream_messages: list[dict[str, Any]] | None = None
+    captured_stream_messages: list[dict[str, Any]] | None = None
 
     def _mock_request(
         method: str,
         url: str,
         headers: dict[str, str] | None = None,
-        json: dict[str, object] | None = None,
+        json: dict[str, Any] | None = None,
         timeout: int | None = None,
     ):
         del method, headers, timeout
@@ -817,7 +818,7 @@ def test_generic_harness_runtime_preserves_multiturn_multimodal_chat_sequence(
         method: str,
         url: str,
         headers: dict[str, str] | None = None,
-        json: dict[str, object] | None = None,
+        json: dict[str, Any] | None = None,
         timeout: int | None = None,
     ):
         del method, headers, timeout
@@ -1101,7 +1102,7 @@ def test_generic_harness_compatibility_matrix_demotes_mixed_proven_and_model_les
         method: str,
         url: str,
         headers: dict[str, str] | None = None,
-        json: dict[str, object] | None = None,
+        json: dict[str, Any] | None = None,
         timeout: int | None = None,
     ):
         del method, headers, timeout
@@ -1129,7 +1130,7 @@ def test_generic_harness_compatibility_matrix_demotes_mixed_proven_and_model_les
         method: str,
         url: str,
         headers: dict[str, str] | None = None,
-        json: dict[str, object] | None = None,
+        json: dict[str, Any] | None = None,
         timeout: int | None = None,
     ):
         del method, headers, json, timeout

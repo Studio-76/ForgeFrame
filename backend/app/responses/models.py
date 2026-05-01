@@ -90,7 +90,8 @@ def build_function_call_item(
     *,
     status: ResponseItemStatus = "completed",
 ) -> dict[str, Any]:
-    function = tool_call.get("function") if isinstance(tool_call.get("function"), dict) else {}
+    raw_function = tool_call.get("function")
+    function: dict[str, Any] = raw_function if isinstance(raw_function, dict) else {}
     call_id = str(tool_call.get("id") or tool_call.get("call_id") or _new_item_id("fc"))
     return {
         "id": call_id,

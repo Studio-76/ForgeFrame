@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from typing import cast
+from typing import TYPE_CHECKING, Any, cast
 
 from app.api.admin.control_plane_models import (
     ProviderClassDescriptor,
@@ -22,6 +22,28 @@ from app.control_plane.target_defaults import ensure_model_registry_metadata
 
 
 class ControlPlaneProviderDomainMixin:
+    if TYPE_CHECKING:
+        _registry: Any
+        _instance: Any
+        _settings: Any
+        _harness: Any
+        _analytics: Any
+        _health_config: Any
+        _health_records: Any
+        _last_bootstrap_readiness: Any
+        _state_repository: Any
+        _providers_state: dict[str, ManagedProviderRecord]
+        _routing_policies_state: Any
+        _routing_budget_state: Any
+        _routing_circuits_state: Any
+        _routing_decisions_state: Any
+        _provider_targets_state: Any
+        _provider_catalog_state: Any
+
+        def list_provider_targets(self) -> list[Any]: ...
+        def list_provider_catalog(self) -> list[Any]: ...
+        def _refresh_provider_targets(self) -> list[Any]: ...
+
     _SUPPORTED_PROVIDER_CLASSES: tuple[ProviderClassDescriptor, ...] = (
         ProviderClassDescriptor(
             key="openai_compatible",
@@ -201,9 +223,9 @@ class ControlPlaneProviderDomainMixin:
                     existing.provider,
                 )
                 if not model.runtime_status:
-                    model.runtime_status = self._managed_model_runtime_status(model)  # type: ignore[assignment]
+                    model.runtime_status = self._managed_model_runtime_status(model)
                 if not model.availability_status:
-                    model.availability_status = self._managed_model_availability(model)  # type: ignore[assignment]
+                    model.availability_status = self._managed_model_availability(model)
 
         return provider_map
 
@@ -524,9 +546,9 @@ class ControlPlaneProviderDomainMixin:
                     provider.provider,
                 )
                 if not model.runtime_status or model.runtime_status == "planned":
-                    model.runtime_status = self._managed_model_runtime_status(model)  # type: ignore[assignment]
+                    model.runtime_status = self._managed_model_runtime_status(model)
                 if not model.availability_status or model.availability_status == "unknown":
-                    model.availability_status = self._managed_model_availability(model)  # type: ignore[assignment]
+                    model.availability_status = self._managed_model_availability(model)
             provider.managed_models = sorted(provider.managed_models, key=lambda item: item.id)
         self._refresh_provider_targets()
         self._persist_state()

@@ -1,6 +1,7 @@
 import json
 import os
 from pathlib import Path
+from typing import Any, cast
 from uuid import uuid4
 
 import pytest
@@ -23,6 +24,7 @@ from app.governance.models import (
     RuntimeKeyRecord,
 )
 from app.governance.service import GovernanceService, get_governance_service
+from app.harness.service import HarnessService
 from app.main import app
 from app.settings.config import Settings, get_settings
 from app.storage.governance_repository import PostgresGovernanceRepository
@@ -66,7 +68,7 @@ def _approve_elevated_access_request(
     request_id: str,
     *,
     decision_note: str = "Approved after validating the incident context and target scope.",
-) -> dict[str, object]:
+) -> dict[str, Any]:
     response = client.post(
         f"/admin/security/elevated-access-requests/{request_id}/approve",
         headers=approver_headers,
@@ -80,7 +82,7 @@ def _issue_elevated_access_request(
     client: TestClient,
     requester_headers: dict[str, str],
     request_id: str,
-) -> dict[str, object]:
+) -> dict[str, Any]:
     response = client.post(
         f"/admin/security/elevated-access-requests/{request_id}/issue",
         headers=requester_headers,
@@ -98,7 +100,7 @@ def _activate_break_glass_session(
     justification: str,
     notification_targets: list[str] | None = None,
     duration_minutes: int = 20,
-) -> dict[str, object]:
+) -> dict[str, Any]:
     request = client.post(
         "/admin/security/break-glass",
         headers=requester_headers,
@@ -125,7 +127,7 @@ def _activate_impersonation_session(
     justification: str,
     notification_targets: list[str] | None = None,
     duration_minutes: int = 15,
-) -> dict[str, object]:
+) -> dict[str, Any]:
     request = client.post(
         "/admin/security/impersonations",
         headers=requester_headers,
@@ -149,7 +151,7 @@ def _create_runtime_account_and_key(
     *,
     provider_bindings: list[str] | None = None,
     scopes: list[str],
-) -> tuple[dict[str, object], dict[str, object]]:
+) -> tuple[dict[str, Any], dict[str, Any]]:
     suffix = uuid4().hex[:8]
     account_response = client.post(
         "/admin/accounts/",
@@ -175,7 +177,7 @@ def _create_runtime_account_and_key(
     return account, key_response.json()["issued"]
 
 
-def _read_observability_events() -> list[dict[str, object]]:
+def _read_observability_events() -> list[dict[str, Any]]:
     path = Path(os.environ["FORGEGATE_OBSERVABILITY_EVENTS_PATH"])
     if not path.exists():
         return []
@@ -650,7 +652,7 @@ def test_anthropic_public_models_stay_hidden_for_other_tenants_after_runtime_suc
         text = "ok"
 
         @staticmethod
-        def json() -> dict[str, object]:
+        def json() -> dict[str, Any]:
             return {
                 "model": "claude-3-5-sonnet-latest",
                 "content": [{"type": "text", "text": "tenant-a-ok"}],
@@ -2645,7 +2647,7 @@ def test_postgres_governance_relational_backfill_dual_write_and_read_cutover(
             }
         assert second_counts == first_counts
 
-        service = GovernanceService(settings, repository=repository, harness_service=object())
+        service = GovernanceService(settings, repository=repository, harness_service=cast("HarnessService | None", object()))
         actor = AuthenticatedAdmin(
             session_id="sess_seed",
             user_id="admin_seed",
@@ -2774,7 +2776,7 @@ def test_postgres_governance_relational_backfill_dual_write_and_read_cutover(
         audit_shadow_service = GovernanceService(
             settings,
             repository=audit_shadow_repository,
-            harness_service=object(),
+            harness_service=cast("HarnessService | None", object()),
         )
         tenant_events = audit_shadow_service.list_audit_events(limit=10, tenant_id=created_account.account_id)
         assert any(event.action == "account_create" and event.target_id == created_account.account_id for event in tenant_events)
@@ -2813,7 +2815,7 @@ def test_postgres_governance_relational_backfill_dual_write_and_read_cutover(
         cutover_service = GovernanceService(
             cutover_settings,
             repository=cutover_repository,
-            harness_service=object(),
+            harness_service=cast("HarnessService | None", object()),
         )
 
         assert [user.username for user in cutover_service.list_admin_users()] == ["admin"]
@@ -3741,7 +3743,7 @@ def test_postgres_governance_migrations_repair_legacy_tenant_shape_when_phase23_
         service = GovernanceService(
             settings,
             repository=PostgresGovernanceRepository(scoped_url),
-            harness_service=object(),
+            harness_service=cast("HarnessService | None", object()),
         )
 
         assert [user.username for user in service.list_admin_users()] == ["admin"]

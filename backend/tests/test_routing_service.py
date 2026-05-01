@@ -39,13 +39,13 @@ def _build_routing(settings: Settings) -> tuple[ModelRegistry, RoutingService]:
 
 
 def _persist_state(registry: ModelRegistry, mutator) -> None:
-    state = registry._state.model_copy(deep=True)  # type: ignore[attr-defined]
+    state = registry._state.model_copy(deep=True)
     mutator(state)
-    registry._state_repository.save_state(state)  # type: ignore[attr-defined]
+    registry._state_repository.save_state(state)
 
 
 def _load_state(registry: ModelRegistry, settings: Settings):
-    return registry._state_repository.load_state(settings.bootstrap_tenant_id)  # type: ignore[attr-defined]
+    return registry._state_repository.load_state(settings.bootstrap_tenant_id)
 
 
 def test_routing_service_prefers_local_simple_lane_with_explainability() -> None:

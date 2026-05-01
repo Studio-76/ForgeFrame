@@ -2,6 +2,7 @@ import json
 import os
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from typing import Any, cast
 from uuid import uuid4
 
 from conftest import admin_headers as shared_admin_headers
@@ -12,6 +13,7 @@ from app.api.admin.control_plane import get_control_plane_service
 from app.api.runtime.dependencies import clear_runtime_dependency_caches
 from app.governance.models import AuthenticatedAdmin
 from app.governance.service import GovernanceService, get_governance_service
+from app.harness.service import HarnessService
 from app.main import app
 from app.settings.config import Settings
 from app.storage.governance_repository import PostgresGovernanceRepository
@@ -43,7 +45,7 @@ def _issue_runtime_key(client: TestClient, *, label: str) -> tuple[str, str]:
     return account_id, key_response.json()["issued"]["token"]
 
 
-def _read_jsonl(path: Path) -> list[dict[str, object]]:
+def _read_jsonl(path: Path) -> list[dict[str, Any]]:
     if not path.exists():
         return []
     raw = path.read_text(encoding="utf-8").strip()
@@ -52,7 +54,7 @@ def _read_jsonl(path: Path) -> list[dict[str, object]]:
     return [json.loads(line) for line in raw.splitlines() if line.strip()]
 
 
-def _write_observability_events(*events: dict[str, object]) -> None:
+def _write_observability_events(*events: dict[str, Any]) -> None:
     path = Path(os.environ["FORGEGATE_OBSERVABILITY_EVENTS_PATH"])
     path.write_text(
         "\n".join(json.dumps(event) for event in events) + "\n",
@@ -409,7 +411,7 @@ def test_governance_audit_scope_persists_company_and_tenant_metadata_in_postgres
             governance_state_path=str(tmp_path / "ignored_governance_state.json"),
         )
         repository = PostgresGovernanceRepository(scoped_url)
-        service = GovernanceService(settings, repository=repository, harness_service=object())
+        service = GovernanceService(settings, repository=repository, harness_service=cast("HarnessService | None", object()))
         actor = AuthenticatedAdmin(
             session_id="sess_test_admin",
             user_id="admin_test_user",
@@ -432,7 +434,7 @@ def test_governance_audit_scope_persists_company_and_tenant_metadata_in_postgres
         reloaded = GovernanceService(
             settings,
             repository=PostgresGovernanceRepository(scoped_url),
-            harness_service=object(),
+            harness_service=cast("HarnessService | None", object()),
         )
         tenant_events = reloaded.list_audit_events(limit=50, tenant_id=account.account_id)
         assert tenant_events

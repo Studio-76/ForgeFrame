@@ -6,7 +6,7 @@ import hashlib
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from time import monotonic, sleep
-from typing import Any, Callable
+from typing import Any, Callable, cast
 from uuid import uuid4
 
 from sqlalchemy import Select, select, update
@@ -782,7 +782,7 @@ class ExecutionTransitionService:
                 updated_at=now,
             )
         )
-        if attempt_update.rowcount != 1:
+        if cast("Any", attempt_update).rowcount != 1:
             raise StaleWorkerClaimError(f"Attempt '{attempt_id}' is no longer claimable.")
 
         run_update = session.execute(
@@ -800,7 +800,7 @@ class ExecutionTransitionService:
                 updated_at=now,
             )
         )
-        if run_update.rowcount != 1:
+        if cast("Any", run_update).rowcount != 1:
             raise StaleWorkerClaimError(f"Run '{run_id}' changed while claiming attempt '{attempt_id}'.")
 
         refreshed_run = session.get(RunORM, run_id)

@@ -2,6 +2,7 @@ import http.client
 import importlib.util
 from pathlib import Path
 from threading import Thread
+from typing import Any
 
 from conftest import admin_headers as shared_admin_headers
 from fastapi.testclient import TestClient
@@ -21,7 +22,7 @@ def _admin_headers(client: TestClient) -> dict[str, str]:
 
 
 def _base_settings(**overrides: object) -> Settings:
-    defaults: dict[str, object] = {
+    defaults: dict[str, Any] = {
         "bootstrap_admin_password": "ForgeFrame-Test-Admin-Secret-123",
         "harness_storage_backend": "file",
         "control_plane_storage_backend": "file",

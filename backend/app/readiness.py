@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, Literal
+from typing import TYPE_CHECKING, Any, Literal
 
 from fastapi import FastAPI
 from pydantic import BaseModel
@@ -140,7 +140,7 @@ class RuntimeReadinessReport(BaseModel):
 
 def build_operator_runtime_readiness_payload(
     readiness: RuntimeReadinessReport,
-) -> dict[str, object]:
+) -> dict[str, Any]:
     return readiness.model_dump()
 
 
@@ -156,7 +156,7 @@ def _merge_public_check_severity(
 
 def build_public_runtime_readiness_payload(
     readiness: RuntimeReadinessReport,
-) -> dict[str, object]:
+) -> dict[str, Any]:
     public_checks: dict[str, RuntimeReadinessCheck] = {}
     observed_order: list[str] = []
     for check in readiness.checks:
@@ -590,7 +590,7 @@ def build_health_payload(
     app_version: str,
     api_base: str,
     readiness: RuntimeReadinessReport,
-) -> dict[str, object]:
+) -> dict[str, Any]:
     return {
         "status": "ok" if readiness.accepting_traffic else "starting",
         "app": app_name,

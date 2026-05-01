@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, cast
 
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse
@@ -210,7 +210,7 @@ def _section(
     to: str,
     action_label: str,
     details: list[str],
-) -> dict[str, object]:
+) -> Any:
     return {
         "key": key,
         "title": title,
@@ -222,7 +222,7 @@ def _section(
     }
 
 
-def _top_failing_check_message(checks: list[dict[str, object]], *, fallback: str) -> str:
+def _top_failing_check_message(checks: list[dict[str, Any]], *, fallback: str) -> str:
     for check in checks:
         if not bool(check.get("ok")):
             details = str(check.get("details") or "").strip()
@@ -232,14 +232,14 @@ def _top_failing_check_message(checks: list[dict[str, object]], *, fallback: str
     return fallback
 
 
-def _configured_provider_count(provider_snapshot: list[dict[str, object]]) -> int:
+def _configured_provider_count(provider_snapshot: list[dict[str, Any]]) -> int:
     return len([item for item in provider_snapshot if bool(item.get("enabled")) or _to_int(item.get("model_count")) > 0 or bool(item.get("config")) or bool(item.get("last_sync_at"))])
 
 
 def _provider_attention_candidates(
-    provider_snapshot: list[dict[str, object]],
-) -> list[dict[str, object]]:
-    def score(item: dict[str, object]) -> tuple[int, int, int, str]:
+    provider_snapshot: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    def score(item: dict[str, Any]) -> tuple[int, int, int, str]:
         oauth_failures = _to_int(item.get("oauth_failure_count"))
         harness_attention = _to_int(item.get("harness_needs_attention_count"))
         ready = bool(item.get("ready"))
@@ -256,7 +256,7 @@ def _provider_attention_candidates(
     ]
 
 
-def _provider_issue_status(item: dict[str, object]) -> str:
+def _provider_issue_status(item: dict[str, Any]) -> str:
     classification = str(item.get("contract_classification") or "").strip()
     if classification in {"bridge-only", "onboarding-only", "unsupported"}:
         return classification
@@ -265,7 +265,7 @@ def _provider_issue_status(item: dict[str, object]) -> str:
     return "degraded"
 
 
-def _provider_issue_action(item: dict[str, object]) -> tuple[str, str]:
+def _provider_issue_action(item: dict[str, Any]) -> tuple[str, str]:
     if bool(item.get("oauth_required")) and _to_int(item.get("oauth_failure_count")) > 0:
         return _ROUTES["oauth_targets"], "Fix OAuth targets"
     if not bool(item.get("ready")):
@@ -273,7 +273,7 @@ def _provider_issue_action(item: dict[str, object]) -> tuple[str, str]:
     return _ROUTES["providers"], "Review provider route"
 
 
-def _provider_issue_cause(item: dict[str, object]) -> str:
+def _provider_issue_cause(item: dict[str, Any]) -> str:
     parts: list[str] = []
     readiness_reason = str(item.get("readiness_reason") or "").strip()
     if readiness_reason:
@@ -290,7 +290,7 @@ def _provider_issue_cause(item: dict[str, object]) -> str:
     return " ".join(parts)
 
 
-def _alert_attention_items(alerts: list[dict[str, object]]) -> list[dict[str, str]]:
+def _alert_attention_items(alerts: list[dict[str, Any]]) -> list[dict[str, str]]:
     items: list[dict[str, str]] = []
     for alert in alerts:
         alert_type = str(alert.get("type") or "alert")
@@ -403,7 +403,7 @@ def dashboard_snapshot(
     settings: Settings = Depends(get_settings),
     execution: ExecutionAdminService = Depends(get_execution_admin_service),
     instance: InstanceRecord = Depends(resolve_admin_instance_scope),
-) -> dict[str, object]:
+) -> Any:
     requested_tenant_id = (request.query_params.get("tenantId") or "").strip()
     try:
         aggregates = analytics.aggregate(window_seconds=24 * 3600, tenant_id=instance.tenant_id)
@@ -496,7 +496,8 @@ def dashboard_snapshot(
             "to": _ROUTES["onboarding"],
         }
 
-    bootstrap_failures = [check for check in bootstrap_readiness["checks"] if not bool(check.get("ok"))]
+    checks = cast("list[dict[str, Any]]", bootstrap_readiness.get("checks", []))
+    bootstrap_failures = [check for check in checks if not bool(check.get("ok"))]
     readiness_details: list[str] = []
     if bootstrap_failures:
         readiness_details.append(f"{len(bootstrap_failures)} bootstrap checks are still failing.")
@@ -535,7 +536,7 @@ def dashboard_snapshot(
             "This session can still review runtime accounts and keys, but bootstrap-secret posture remains admin-only.",
         ]
     else:
-        security_details: list[str] = []
+        security_details = []
         if bool(admin_security.get("default_password_in_use")):
             security_details.append("The bootstrap admin still uses an insecure default or placeholder password.")
         if bool(admin_security.get("must_rotate_password")):
@@ -792,6 +793,7 @@ def dashboard_snapshot(
         attention,
         key=_attention_priority,
     )[:8]
+    primary_action: dict[str, str] | None
     if empty_state is not None:
         primary_action = {
             "kind": "provider_configuration",
@@ -844,7 +846,7 @@ def dashboard_snapshot(
         ),
     ]
 
-    response: dict[str, object] = {
+    response: dict[str, Any] = {
         "status": "ok",
         "object": "dashboard_command_center",
         "generated_at": runtime_readiness["checked_at"],

@@ -6,7 +6,7 @@ from collections import defaultdict
 from datetime import UTC, datetime, timedelta
 from functools import lru_cache
 from math import ceil
-from typing import Literal, Protocol, TypeVar, cast
+from typing import Any, Literal, Protocol, TypeVar, cast
 
 from pydantic import BaseModel
 
@@ -28,9 +28,9 @@ TModel = TypeVar("TModel", bound=BaseModel)
 class SqlBackedObservabilityRepository(Protocol):
     def effective_history_tenant_id(self, requested_tenant_id: str | None) -> str | None: ...
 
-    def aggregate_summary(self, *, window_seconds: int | None, tenant_id: str | None) -> dict[str, object]: ...
+    def aggregate_summary(self, *, window_seconds: int | None, tenant_id: str | None) -> dict[str, Any]: ...
 
-    def timeline(self, *, window_seconds: int, bucket_seconds: int, tenant_id: str | None) -> list[dict[str, object]]: ...
+    def timeline(self, *, window_seconds: int, bucket_seconds: int, tenant_id: str | None) -> list[dict[str, Any]]: ...
 
     def provider_drilldown(
         self,
@@ -38,7 +38,7 @@ class SqlBackedObservabilityRepository(Protocol):
         *,
         window_seconds: int | None,
         tenant_id: str | None,
-    ) -> dict[str, object]: ...
+    ) -> dict[str, Any]: ...
 
     def client_drilldown(
         self,
@@ -46,7 +46,7 @@ class SqlBackedObservabilityRepository(Protocol):
         *,
         window_seconds: int | None,
         tenant_id: str | None,
-    ) -> dict[str, object]: ...
+    ) -> dict[str, Any]: ...
 
     def latest_usage_event(
         self,
@@ -128,7 +128,7 @@ class UsageAnalyticsStore:
         return [entry for entry in entries if self._tenant_id(getattr(entry, "tenant_id", None)) == tenant_id]
 
     @staticmethod
-    def _context_fields(context: TelemetryContext | None) -> dict[str, object]:
+    def _context_fields(context: TelemetryContext | None) -> dict[str, Any]:
         if context is None:
             return {}
         return {
@@ -142,8 +142,8 @@ class UsageAnalyticsStore:
 
     @staticmethod
     def _scope_fields(
-        request_metadata: dict[str, object] | dict[str, str] | None,
-    ) -> dict[str, object]:
+        request_metadata: dict[str, Any] | dict[str, str] | None,
+    ) -> dict[str, Any]:
         return {"scope_attributes": extract_scope_attributes(request_metadata)}
 
     def record_non_stream_result(
@@ -152,7 +152,7 @@ class UsageAnalyticsStore:
         client: ClientIdentity | None = None,
         *,
         context: TelemetryContext | None = None,
-        request_metadata: dict[str, object] | dict[str, str] | None = None,
+        request_metadata: dict[str, Any] | dict[str, str] | None = None,
     ) -> None:
         identity = client or ClientIdentity()
         resolved_tenant_id = self._tenant_id(identity.tenant_id)
@@ -192,7 +192,7 @@ class UsageAnalyticsStore:
         auth_source: str,
         client: ClientIdentity | None = None,
         context: TelemetryContext | None = None,
-        request_metadata: dict[str, object] | dict[str, str] | None = None,
+        request_metadata: dict[str, Any] | dict[str, str] | None = None,
     ) -> None:
         identity = client or ClientIdentity()
         resolved_tenant_id = self._tenant_id(identity.tenant_id)
@@ -232,7 +232,7 @@ class UsageAnalyticsStore:
         error_type: str,
         status_code: int,
         context: TelemetryContext | None = None,
-        request_metadata: dict[str, object] | dict[str, str] | None = None,
+        request_metadata: dict[str, Any] | dict[str, str] | None = None,
     ) -> None:
         resolved_tenant_id = self._tenant_id(client.tenant_id)
         event = ErrorEvent(
@@ -265,7 +265,7 @@ class UsageAnalyticsStore:
         event: ProviderStreamEvent,
         client: ClientIdentity | None = None,
         context: TelemetryContext | None = None,
-        request_metadata: dict[str, object] | dict[str, str] | None = None,
+        request_metadata: dict[str, Any] | dict[str, str] | None = None,
     ) -> None:
         if not event.usage or not event.cost:
             return
@@ -468,7 +468,7 @@ class UsageAnalyticsStore:
         cls,
         events: list[UsageEvent],
         errors: list[ErrorEvent],
-    ) -> dict[str, object]:
+    ) -> dict[str, Any]:
         samples = sorted(int(duration_ms) for entry in [*events, *errors] if getattr(entry, "traffic_type", None) == "runtime" and (duration_ms := getattr(entry, "duration_ms", None)) is not None)
         if not samples:
             return {
@@ -565,7 +565,7 @@ class UsageAnalyticsStore:
         ]
         return filtered[-1] if filtered else None
 
-    def aggregate(self, window_seconds: int | None = None, *, tenant_id: str | None = None) -> dict[str, object]:
+    def aggregate(self, window_seconds: int | None = None, *, tenant_id: str | None = None) -> dict[str, Any]:
         sql_repository = self._sql_repository()
         effective_tenant_id = self._effective_history_tenant_id(tenant_id=tenant_id)
         if sql_repository is not None:
@@ -580,7 +580,7 @@ class UsageAnalyticsStore:
         errors = self._apply_tenant_filter(errors, effective_tenant_id)
         health = self._apply_tenant_filter(health, effective_tenant_id)
 
-        grouped_provider = defaultdict(
+        grouped_provider: dict[str, dict[str, int | float]] = defaultdict(
             lambda: {
                 "requests": 0,
                 "tokens": 0,
@@ -589,9 +589,9 @@ class UsageAnalyticsStore:
                 "avoided_cost": 0.0,
             }
         )
-        grouped_model = defaultdict(lambda: {"requests": 0, "tokens": 0})
-        grouped_auth = defaultdict(lambda: {"requests": 0, "tokens": 0})
-        grouped_client = defaultdict(
+        grouped_model: dict[str, dict[str, int | float]] = defaultdict(lambda: {"requests": 0, "tokens": 0})
+        grouped_auth: dict[str, dict[str, int | float]] = defaultdict(lambda: {"requests": 0, "tokens": 0})
+        grouped_client: dict[str, dict[str, int | float]] = defaultdict(
             lambda: {
                 "requests": 0,
                 "tokens": 0,
@@ -600,7 +600,7 @@ class UsageAnalyticsStore:
                 "avoided_cost": 0.0,
             }
         )
-        grouped_traffic = defaultdict(
+        grouped_traffic: dict[str, dict[str, int | float]] = defaultdict(
             lambda: {
                 "requests": 0,
                 "tokens": 0,
@@ -609,14 +609,14 @@ class UsageAnalyticsStore:
                 "avoided_cost": 0.0,
             }
         )
-        grouped_stream_mode = defaultdict(lambda: {"requests": 0})
-        grouped_error_provider = defaultdict(lambda: {"errors": 0})
-        grouped_error_model = defaultdict(lambda: {"errors": 0})
-        grouped_error_client = defaultdict(lambda: {"errors": 0})
-        grouped_error_traffic = defaultdict(lambda: {"errors": 0})
-        grouped_error_type = defaultdict(lambda: {"errors": 0})
-        grouped_error_integration = defaultdict(lambda: {"errors": 0})
-        grouped_error_profile = defaultdict(lambda: {"errors": 0})
+        grouped_stream_mode: dict[str, dict[str, int]] = defaultdict(lambda: {"requests": 0})
+        grouped_error_provider: dict[str, dict[str, int]] = defaultdict(lambda: {"errors": 0})
+        grouped_error_model: dict[str, dict[str, int]] = defaultdict(lambda: {"errors": 0})
+        grouped_error_client: dict[str, dict[str, int]] = defaultdict(lambda: {"errors": 0})
+        grouped_error_traffic: dict[str, dict[str, int]] = defaultdict(lambda: {"errors": 0})
+        grouped_error_type: dict[str, dict[str, int]] = defaultdict(lambda: {"errors": 0})
+        grouped_error_integration: dict[str, dict[str, int]] = defaultdict(lambda: {"errors": 0})
+        grouped_error_profile: dict[str, dict[str, int]] = defaultdict(lambda: {"errors": 0})
 
         for event in events:
             grouped_provider[event.provider]["requests"] += 1
@@ -704,7 +704,7 @@ class UsageAnalyticsStore:
         window_seconds: int = 24 * 3600,
         bucket_seconds: int = 3600,
         tenant_id: str | None = None,
-    ) -> list[dict[str, object]]:
+    ) -> list[dict[str, Any]]:
         now = datetime.now(tz=UTC)
         bucket_count = max(1, window_seconds // bucket_seconds)
         sql_repository = self._sql_repository()
@@ -743,7 +743,7 @@ class UsageAnalyticsStore:
         *,
         window_seconds: int | None = None,
         tenant_id: str | None = None,
-    ) -> dict[str, object]:
+    ) -> dict[str, Any]:
         sql_repository = self._sql_repository()
         effective_tenant_id = self._effective_history_tenant_id(tenant_id=tenant_id)
         if sql_repository is not None:
@@ -758,8 +758,8 @@ class UsageAnalyticsStore:
         events = self._apply_tenant_filter(events, effective_tenant_id)
         errors = self._apply_tenant_filter(errors, effective_tenant_id)
         health = self._apply_tenant_filter(health, effective_tenant_id)
-        models: dict[str, dict[str, object]] = {}
-        clients: dict[str, dict[str, object]] = {}
+        models: dict[str, dict[str, Any]] = {}
+        clients: dict[str, dict[str, Any]] = {}
         for event in events:
             model_row = models.setdefault(
                 event.model,
@@ -832,7 +832,7 @@ class UsageAnalyticsStore:
         *,
         window_seconds: int | None = None,
         tenant_id: str | None = None,
-    ) -> dict[str, object]:
+    ) -> dict[str, Any]:
         sql_repository = self._sql_repository()
         effective_tenant_id = self._effective_history_tenant_id(tenant_id=tenant_id)
         if sql_repository is not None:
@@ -845,7 +845,7 @@ class UsageAnalyticsStore:
         errors = [event for event in self._window_filter(self._error_events(), window_seconds) if event.client_id == client_id]
         events = self._apply_tenant_filter(events, effective_tenant_id)
         errors = self._apply_tenant_filter(errors, effective_tenant_id)
-        providers: dict[str, dict[str, object]] = {}
+        providers: dict[str, dict[str, Any]] = {}
         for event in events:
             row = providers.setdefault(
                 event.provider,
@@ -885,12 +885,12 @@ class UsageAnalyticsStore:
             "recent_usage": [item.model_dump() for item in sorted(events, key=lambda event: event.created_at, reverse=True)[:25]],
         }
 
-    def alert_indicators(self, *, tenant_id: str | None = None) -> list[dict[str, object]]:
+    def alert_indicators(self, *, tenant_id: str | None = None) -> list[dict[str, Any]]:
         last_hour = self.aggregate(window_seconds=3600, tenant_id=tenant_id)
         requests = int(last_hour["event_count"])
         errors = int(last_hour["error_event_count"])
         error_rate = errors / max(1, (requests + errors))
-        alerts: list[dict[str, object]] = []
+        alerts: list[dict[str, Any]] = []
         if error_rate >= 0.25 and errors >= 3:
             alerts.append({
                 "severity": "critical",

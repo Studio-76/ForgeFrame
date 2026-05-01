@@ -9,7 +9,7 @@ import io
 import json
 from collections import Counter, defaultdict
 from datetime import UTC, datetime, timedelta
-from typing import Any, Literal
+from typing import Any, Literal, NoReturn, cast
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
@@ -21,6 +21,7 @@ from app.api.admin.instance_scope import resolve_admin_instance_scope
 from app.api.admin.security import require_admin_mutation_role, require_admin_session
 from app.auth.local_auth import role_allows
 from app.governance.models import (
+    AdminRole,
     AdminUserRecord,
     AuditEventRecord,
     AuthenticatedAdmin,
@@ -287,7 +288,7 @@ def _timestamp_bounds(values: list[str]) -> tuple[str | None, str | None]:
     return timestamps[0], timestamps[-1]
 
 
-def _top_counts(values: list[str], *, limit: int = 5) -> list[dict[str, object]]:
+def _top_counts(values: list[str], *, limit: int = 5) -> list[dict[str, Any]]:
     counts = Counter(value for value in values if value)
     return [{"value": value, "count": count} for value, count in counts.most_common(limit)]
 
@@ -355,8 +356,8 @@ def _incident_entry(
     current_effect: str,
     next_step: str,
     summary: str,
-    raw_evidence: dict[str, object],
-) -> dict[str, object]:
+    raw_evidence: dict[str, Any],
+) -> dict[str, Any]:
     return {
         "incident_id": f"{axis}:{severity}:{count}:{last_seen_at or 'none'}",
         "axis": axis,
@@ -383,12 +384,12 @@ def _grouped_error_incidents(error_events: list[Any]) -> dict[str, list[Any]]:
 
 def _axis_incidents_snapshot(
     *,
-    metrics_snapshot: dict[str, object],
-    logging_snapshot: dict[str, object],
-    tracing_snapshot: dict[str, object],
+    metrics_snapshot: dict[str, Any],
+    logging_snapshot: dict[str, Any],
+    tracing_snapshot: dict[str, Any],
     error_events: list[Any],
     health_events: list[Any],
-) -> list[dict[str, object]]:
+) -> list[dict[str, Any]]:
     grouped_errors = _grouped_error_incidents(error_events)
     dependency_metrics = list(metrics_snapshot.get("dependency_metrics", []))
     routing_metrics = dict(metrics_snapshot.get("routing_metrics", {}))
@@ -701,11 +702,11 @@ def _axis_incidents_snapshot(
 
 
 def _blocked_routing_failures_snapshot(
-    metrics_snapshot: dict[str, object],
-) -> list[dict[str, object]]:
+    metrics_snapshot: dict[str, Any],
+) -> list[dict[str, Any]]:
     routing_metrics = dict(metrics_snapshot.get("routing_metrics", {}))
     failures = list(routing_metrics.get("recent_failures", []))
-    rows: list[dict[str, object]] = []
+    rows: list[dict[str, Any]] = []
     for failure in failures:
         error_type = str(failure.get("error_type") or "routing_failure")
         lowered = error_type.lower()
@@ -759,10 +760,10 @@ def _incident_review_snapshot(
     analytics: UsageAnalyticsStore,
     *,
     tenant_id: str | None,
-    metrics_snapshot: dict[str, object],
-    logging_snapshot: dict[str, object],
-    tracing_snapshot: dict[str, object],
-) -> dict[str, object]:
+    metrics_snapshot: dict[str, Any],
+    logging_snapshot: dict[str, Any],
+    tracing_snapshot: dict[str, Any],
+) -> dict[str, Any]:
     cutoff = datetime.now(tz=UTC) - timedelta(hours=24)
     error_events = [event for event in analytics.list_error_events(tenant_id=tenant_id) if datetime.fromisoformat(event.created_at) >= cutoff]
     health_events = [event for event in analytics.list_health_events(tenant_id=tenant_id) if datetime.fromisoformat(event.created_at) >= cutoff]
@@ -794,7 +795,7 @@ def _admin_error(status_code: int, code: str, message: str) -> JSONResponse:
     return JSONResponse(status_code=status_code, content={"error": {"type": code, "message": message}})
 
 
-def _audit_history_auth_error(code: str, *, status_code: int, message: str) -> None:
+def _audit_history_auth_error(code: str, *, status_code: int, message: str) -> NoReturn:
     raise HTTPException(
         status_code=status_code,
         detail={
@@ -841,7 +842,7 @@ def require_audit_history_role(required_role: str) -> Any:
                 status_code=status.HTTP_403_FORBIDDEN,
                 message="Rotate your password before accessing audit history.",
             )
-        if not role_allows(admin.role, required_role):  # type: ignore[arg-type]
+        if not role_allows(admin.role, cast(AdminRole, required_role)):
             _audit_history_auth_error(
                 f"{required_role}_role_required",
                 status_code=status.HTTP_403_FORBIDDEN,
@@ -994,8 +995,8 @@ def _actor_summary(
     *,
     indexes: dict[str, dict[str, Any]],
 ) -> dict[str, Any]:
-    users: dict[str, AdminUserRecord] = indexes["users"]  # type: ignore[assignment]
-    runtime_keys: dict[str, RuntimeKeyRecord] = indexes["runtime_keys"]  # type: ignore[assignment]
+    users: dict[str, AdminUserRecord] = indexes["users"]
+    runtime_keys: dict[str, RuntimeKeyRecord] = indexes["runtime_keys"]
 
     if event.actor_type == "admin_user" and event.actor_id:
         user = users.get(event.actor_id)
@@ -1046,10 +1047,10 @@ def _target_summary(
     *,
     indexes: dict[str, dict[str, Any]],
 ) -> dict[str, Any]:
-    users: dict[str, AdminUserRecord] = indexes["users"]  # type: ignore[assignment]
-    accounts: dict[str, GatewayAccountRecord] = indexes["accounts"]  # type: ignore[assignment]
-    runtime_keys: dict[str, RuntimeKeyRecord] = indexes["runtime_keys"]  # type: ignore[assignment]
-    settings: dict[str, MutableSettingRecord] = indexes["settings"]  # type: ignore[assignment]
+    users: dict[str, AdminUserRecord] = indexes["users"]
+    accounts: dict[str, GatewayAccountRecord] = indexes["accounts"]
+    runtime_keys: dict[str, RuntimeKeyRecord] = indexes["runtime_keys"]
+    settings: dict[str, MutableSettingRecord] = indexes["settings"]
 
     label = event.target_id or _target_type_label(event.target_type)
     secondary: str | None = None
@@ -1384,7 +1385,7 @@ def _render_audit_export_json(
     *,
     export_id: str,
     generated_at: str,
-    filters: dict[str, object],
+    filters: dict[str, Any],
     events: list[AuditEventRecord],
     include_raw_details: bool,
 ) -> str:

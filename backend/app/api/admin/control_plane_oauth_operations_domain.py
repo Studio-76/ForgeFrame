@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from typing import Any, Literal, Protocol, cast
+from typing import TYPE_CHECKING, Any, Literal, Protocol, cast
 
 from app.api.admin.control_plane_models import OAuthTargetOperationSnapshot
 from app.control_plane import OAuthOperationRecord
@@ -43,6 +43,15 @@ class SqlBackedOAuthOperationsRepository(Protocol):
 
 
 class ControlPlaneOAuthOperationsDomainMixin:
+    if TYPE_CHECKING:
+        _analytics: Any
+        _instance: Any
+        _default_tenant_id: Any
+        _oauth_operations_repository: Any
+
+        def _native_oauth_target_status(self, *args: Any, **kwargs: Any) -> Any: ...
+        def _oauth_target_status(self, *args: Any, **kwargs: Any) -> Any: ...
+
     @staticmethod
     def _oauth_operation_snapshot(
         item: OAuthOperationRecord | None,

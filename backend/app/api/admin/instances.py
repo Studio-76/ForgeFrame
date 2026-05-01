@@ -86,7 +86,7 @@ def _onboarding_metadata(instance: InstanceRecord) -> dict[str, Any]:
     return raw if isinstance(raw, dict) else {}
 
 
-def _operator_agent_summary(agent: AgentDetail | None) -> dict[str, object]:
+def _operator_agent_summary(agent: AgentDetail | None) -> dict[str, Any]:
     if agent is None:
         return {
             "status": _NOT_READY,
@@ -114,7 +114,7 @@ def _operator_agent_summary(agent: AgentDetail | None) -> dict[str, object]:
     }
 
 
-def _provider_targets_summary(instance: InstanceRecord) -> dict[str, object]:
+def _provider_targets_summary(instance: InstanceRecord) -> dict[str, Any]:
     control_plane = build_control_plane_service(instance.instance_id)
     providers = control_plane.provider_control_snapshot(tenant_id=instance.tenant_id)
     targets = control_plane.provider_target_snapshot()
@@ -170,7 +170,7 @@ def _provider_targets_summary(instance: InstanceRecord) -> dict[str, object]:
     }
 
 
-def _routing_summary(instance: InstanceRecord) -> dict[str, object]:
+def _routing_summary(instance: InstanceRecord) -> dict[str, Any]:
     control_plane = build_control_plane_service(instance.instance_id)
     snapshot = control_plane.routing_snapshot()
     policies = snapshot["policies"]
@@ -209,7 +209,7 @@ def _routing_summary(instance: InstanceRecord) -> dict[str, object]:
     }
 
 
-def _runtime_access_summary(governance: GovernanceService, instance: InstanceRecord) -> dict[str, object]:
+def _runtime_access_summary(governance: GovernanceService, instance: InstanceRecord) -> dict[str, Any]:
     accounts = governance.list_accounts(instance_id=instance.instance_id)
     keys = governance.list_runtime_keys(instance_id=instance.instance_id)
     active_accounts = [item for item in accounts if item.status == "active"]
@@ -240,7 +240,7 @@ def _work_interaction_summary(
     conversations: ConversationInboxAdminService,
     *,
     include_conversation_details: bool,
-) -> dict[str, object]:
+) -> dict[str, Any]:
     onboarding = _onboarding_metadata(instance)
     mode = str(onboarding.get("work_interaction_mode") or "not-configured")
     inbox_enabled = bool(onboarding.get("inbox_enabled")) if onboarding else False
@@ -286,12 +286,12 @@ def _work_interaction_summary(
 
 
 def _readiness_summary(
-    operator_agent: dict[str, object],
-    provider_targets: dict[str, object],
-    routing: dict[str, object],
-    runtime_access: dict[str, object],
-    work_interaction: dict[str, object],
-) -> dict[str, object]:
+    operator_agent: dict[str, Any],
+    provider_targets: dict[str, Any],
+    routing: dict[str, Any],
+    runtime_access: dict[str, Any],
+    work_interaction: dict[str, Any],
+) -> dict[str, Any]:
     checks = [
         {
             "id": "operator_agent",
@@ -368,7 +368,7 @@ def _instance_inventory_record(
     agents: AgentAdminService,
     conversations: ConversationInboxAdminService,
     operator_override: AgentDetail | None = None,
-) -> dict[str, object]:
+) -> dict[str, Any]:
     operator_agent = _operator_agent_summary(operator_override or agents.inspect_default_operator(instance=instance))
     provider_targets = _provider_targets_summary(instance)
     routing = _routing_summary(instance)
@@ -376,7 +376,7 @@ def _instance_inventory_record(
     work_interaction = _work_interaction_summary(
         instance,
         conversations,
-        include_conversation_details=role_allows(admin.role, "operator"),  # type: ignore[arg-type]
+        include_conversation_details=role_allows(admin.role, "operator"),
     )
     readiness = _readiness_summary(
         operator_agent=operator_agent,
@@ -412,7 +412,7 @@ def list_instances(
     governance: GovernanceService = Depends(get_governance_service),
     agents: AgentAdminService = Depends(get_agent_admin_service),
     conversations: ConversationInboxAdminService = Depends(get_conversation_inbox_admin_service),
-) -> dict[str, object]:
+) -> dict[str, Any]:
     instances = governance.list_accessible_instances(
         actor=admin,
         instances=service.list_instances(),

@@ -346,6 +346,12 @@ class FileGovernanceRepository:
         return datetime.now(tz=UTC).isoformat()
 
     @staticmethod
+    def _membership_id_for_user(user_id: str, tenant_id: str | None = None) -> str:
+        if tenant_id:
+            return f"membership_{normalize_tenant_id(tenant_id)}_{user_id}"
+        return f"membership_{user_id}"
+
+    @staticmethod
     def _upgrade_payload(payload: dict[str, Any]) -> dict[str, Any]:
         normalized = dict(payload)
         normalized["schema_version"] = max(6, int(normalized.get("schema_version") or 0))
@@ -1102,7 +1108,7 @@ class PostgresGovernanceRepository:
             audit_events.append(
                 AuditEventRecord(
                     event_id=row.event_id,
-                    actor_type=row.actor_type,  # type: ignore[arg-type]
+                    actor_type=row.actor_type,
                     actor_id=actor_id,
                     instance_id=str(metadata.get("instance_id") or metadata.get("tenant_id") or row.tenant_id or self._bootstrap_tenant_id),
                     tenant_id=row.tenant_id or self._bootstrap_tenant_id,
@@ -1110,7 +1116,7 @@ class PostgresGovernanceRepository:
                     action=row.action,
                     target_type=row.target_type,
                     target_id=row.target_id,
-                    status=row.status,  # type: ignore[arg-type]
+                    status=row.status,
                     details=row.details,
                     metadata=metadata,
                     created_at=row.created_at.isoformat(),
@@ -1171,8 +1177,8 @@ class PostgresGovernanceRepository:
                     instance_id=str(attrs.get("instance_id") or membership.tenant_id or self._bootstrap_tenant_id),
                     tenant_id=str(membership.tenant_id or self._bootstrap_tenant_id),
                     company_id=str(attrs.get("company_id") or attrs.get("instance_id") or membership.tenant_id or self._bootstrap_tenant_id),
-                    role=membership.membership_role,  # type: ignore[arg-type]
-                    status=membership.status,  # type: ignore[arg-type]
+                    role=membership.membership_role,
+                    status=membership.status,
                     created_at=membership.created_at.isoformat(),
                     updated_at=membership.updated_at.isoformat(),
                     created_by=attrs.get("created_by"),
@@ -1197,8 +1203,8 @@ class PostgresGovernanceRepository:
                     user_id=principal.principal_id,
                     username=principal.username or principal.principal_id,
                     display_name=principal.display_name,
-                    role=membership.membership_role,  # type: ignore[arg-type]
-                    status=principal.status,  # type: ignore[arg-type]
+                    role=membership.membership_role,
+                    status=principal.status,
                     password_hash=str(attrs.get("password_hash", "")),
                     password_salt=str(attrs.get("password_salt", "")),
                     must_rotate_password=bool(attrs.get("must_rotate_password", True)),
@@ -1218,20 +1224,20 @@ class PostgresGovernanceRepository:
         ).all()
         admin_sessions: list[AdminSessionRecord] = []
         for session_row in auth_session_rows:
-            membership = membership_by_id.get(session_row.membership_id)
+            session_membership = membership_by_id.get(session_row.membership_id)
             attrs = dict(session_row.attributes or {})
-            role = attrs.get("role") or (membership.membership_role if membership is not None else "viewer")
-            user_id = membership.principal_id if membership is not None else str(attrs.get("legacy_user_id", ""))
+            role = attrs.get("role") or (session_membership.membership_role if session_membership is not None else "viewer")
+            user_id = session_membership.principal_id if session_membership is not None else str(attrs.get("legacy_user_id", ""))
             admin_sessions.append(
                 AdminSessionRecord(
                     session_id=session_row.session_id,
                     user_id=user_id,
                     token_hash=session_row.session_hash,
-                    role=role,  # type: ignore[arg-type]
+                    role=role,
                     membership_id=session_row.membership_id,
-                    instance_id=str(attrs.get("instance_id") or (membership.tenant_id if membership is not None else None) or self._bootstrap_tenant_id),
-                    tenant_id=str(attrs.get("tenant_id") or (membership.tenant_id if membership is not None else None) or self._bootstrap_tenant_id),
-                    session_type=attrs.get("session_type", "standard"),  # type: ignore[arg-type]
+                    instance_id=str(attrs.get("instance_id") or (session_membership.tenant_id if session_membership is not None else None) or self._bootstrap_tenant_id),
+                    tenant_id=str(attrs.get("tenant_id") or (session_membership.tenant_id if session_membership is not None else None) or self._bootstrap_tenant_id),
+                    session_type=attrs.get("session_type", "standard"),
                     created_at=session_row.issued_at.isoformat(),
                     expires_at=session_row.expires_at.isoformat(),
                     last_used_at=session_row.last_used_at.isoformat(),
@@ -1264,7 +1270,7 @@ class PostgresGovernanceRepository:
                     instance_id=str(attrs.get("instance_id") or attrs.get("tenant_id") or row.tenant_id or self._bootstrap_tenant_id),
                     tenant_id=str(attrs.get("tenant_id") or row.tenant_id or self._bootstrap_tenant_id),
                     label=row.display_name,
-                    status=row.status,  # type: ignore[arg-type]
+                    status=row.status,
                     provider_bindings=list(attrs.get("provider_bindings", [])),
                     notes=str(attrs.get("notes", "")),
                     created_at=row.created_at.isoformat(),
@@ -1281,32 +1287,32 @@ class PostgresGovernanceRepository:
             )
         ).all()
         runtime_keys: list[RuntimeKeyRecord] = []
-        for row in credential_rows:
-            if row.credential_kind != "runtime_api_key":
+        for credential_row in credential_rows:
+            if credential_row.credential_kind != "runtime_api_key":
                 continue
-            attrs = dict(row.attributes or {})
+            attrs = dict(credential_row.attributes or {})
             runtime_keys.append(
                 RuntimeKeyRecord(
-                    key_id=row.credential_id,
-                    instance_id=str(attrs.get("instance_id") or attrs.get("tenant_id") or row.tenant_id or self._bootstrap_tenant_id),
-                    tenant_id=str(attrs.get("tenant_id") or row.tenant_id or self._bootstrap_tenant_id),
+                    key_id=credential_row.credential_id,
+                    instance_id=str(attrs.get("instance_id") or attrs.get("tenant_id") or credential_row.tenant_id or self._bootstrap_tenant_id),
+                    tenant_id=str(attrs.get("tenant_id") or credential_row.tenant_id or self._bootstrap_tenant_id),
                     account_id=attrs.get("legacy_account_id"),
-                    label=str(attrs.get("label", row.credential_id)),
-                    prefix=row.secret_prefix or "",
-                    secret_hash=row.secret_hash,
+                    label=str(attrs.get("label", credential_row.credential_id)),
+                    prefix=credential_row.secret_prefix or "",
+                    secret_hash=credential_row.secret_hash,
                     scopes=list(attrs.get("scopes", [])),
-                    status=row.status,  # type: ignore[arg-type]
-                    created_at=row.created_at.isoformat(),
-                    updated_at=row.updated_at.isoformat(),
-                    expires_at=self._iso(row.expires_at),
-                    last_used_at=self._iso(row.last_used_at),
+                    status=credential_row.status,
+                    created_at=credential_row.created_at.isoformat(),
+                    updated_at=credential_row.updated_at.isoformat(),
+                    expires_at=self._iso(credential_row.expires_at),
+                    last_used_at=self._iso(credential_row.last_used_at),
                     allowed_request_paths=list(attrs.get("allowed_request_paths", ["smart_routing"])),
                     default_request_path=str(attrs.get("default_request_path", "smart_routing")),
                     pinned_target_key=attrs.get("pinned_target_key"),
                     local_only_policy=str(attrs.get("local_only_policy", "require_local_target")),
                     review_required_conditions=list(attrs.get("review_required_conditions", [])),
                     last_rotated_at=attrs.get("last_rotated_at"),
-                    rotated_from=row.rotated_from_credential_id,
+                    rotated_from=credential_row.rotated_from_credential_id,
                     revoked_at=attrs.get("revoked_at"),
                     revoked_reason=attrs.get("revoked_reason"),
                     created_by=attrs.get("created_by"),

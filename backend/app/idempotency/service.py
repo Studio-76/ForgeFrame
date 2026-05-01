@@ -187,7 +187,7 @@ def attach_request_body(request: Request, body: bytes) -> None:
         delivered = True
         return {"type": "http.request", "body": body, "more_body": False}
 
-    request._receive = _receive  # type: ignore[attr-defined]
+    request._receive = _receive
 
 
 def get_request_envelope(request: Request) -> RequestEnvelope:

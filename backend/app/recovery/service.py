@@ -294,7 +294,7 @@ class RecoveryAdminService:
             state = "warning" if state != "blocked" else state
 
         return RecoveryPolicyValidation(
-            state=state,  # type: ignore[arg-type]
+            state=state,
             reasons=reasons,
             target_locator=target_locator,
             checked_at=_now_iso(),
@@ -490,7 +490,7 @@ class RecoveryAdminService:
         ).scalar_one_or_none()
 
     def _latest_upgrade_rows(self, session: Session, *, limit: int = 5) -> list[RecoveryUpgradeReportORM]:
-        return (
+        return list(
             session
             .execute(
                 select(RecoveryUpgradeReportORM)
@@ -574,7 +574,7 @@ class RecoveryAdminService:
             latest_no_loss_ok=latest.no_loss_ok,
             latest_queue_drain_ok=latest.queue_drain_ok,
             latest_source_identity_stable=latest.source_identity_stable,
-            runtime_status=runtime_status,  # type: ignore[arg-type]
+            runtime_status=runtime_status,
             blockers=sorted(dict.fromkeys(blockers)),
         )
 
@@ -639,7 +639,7 @@ class RecoveryAdminService:
             restore_fresh=restore_fresh,
             source_identity_verified=source_identity_verified,
             mismatches=sorted(dict.fromkeys(mismatches)),
-            overall_status=overall_status,  # type: ignore[arg-type]
+            overall_status=overall_status,
         )
 
     def list_overview(self) -> RecoveryOverviewRecord:
@@ -687,11 +687,11 @@ class RecoveryAdminService:
                 fresh_backup_policies=sum(1 for policy in effective_policies if policy.backup_fresh),
                 fresh_restore_policies=sum(1 for policy in effective_policies if policy.restore_fresh),
                 source_identity_verified_policies=sum(1 for policy in effective_policies if policy.source_identity_verified),
-                target_classes_present=target_classes_present,  # type: ignore[arg-type]
-                missing_target_classes=missing_target_classes,  # type: ignore[arg-type]
-                protected_data_classes_present=protected_data_classes_present,  # type: ignore[arg-type]
-                missing_protected_data_classes=missing_protected_data_classes,  # type: ignore[arg-type]
-                runtime_status=runtime_status,  # type: ignore[arg-type]
+                target_classes_present=target_classes_present,
+                missing_target_classes=missing_target_classes,
+                protected_data_classes_present=protected_data_classes_present,
+                missing_protected_data_classes=missing_protected_data_classes,
+                runtime_status=runtime_status,
                 checked_at=_now_iso(),
             ),
             upgrade_posture=upgrade_posture,

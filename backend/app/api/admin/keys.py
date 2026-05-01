@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from typing import Any
 
 import httpx
 from fastapi import APIRouter, Depends, Request, status
@@ -50,7 +51,7 @@ class RuntimeKeyFirstSuccessProbeRequest(BaseModel):
     message: str = "ForgeFrame first success probe"
 
 
-def _runtime_key_response(key) -> dict[str, object]:
+def _runtime_key_response(key) -> Any:
     return key.model_dump(exclude={"secret_hash"})
 
 
@@ -58,7 +59,7 @@ def _runtime_key_response(key) -> dict[str, object]:
 def list_runtime_keys(
     instance: InstanceRecord = Depends(resolve_admin_instance_scope),
     service: GovernanceService = Depends(get_governance_service),
-) -> dict[str, object]:
+) -> Any:
     return {
         "status": "ok",
         "keys": [_runtime_key_response(item) for item in service.list_runtime_keys(instance_id=instance.instance_id)],
@@ -72,7 +73,7 @@ def create_runtime_key(
     admin: AuthenticatedAdmin = Depends(require_admin_mutation_role("admin")),
     instance: InstanceRecord = Depends(resolve_admin_instance_scope),
     service: GovernanceService = Depends(get_governance_service),
-) -> dict[str, object]:
+) -> Any:
     unsupported = unsupported_idempotency_response(request, message=_RUNTIME_KEY_IDEMPOTENCY_MESSAGE)
     if unsupported is not None:
         return unsupported
@@ -99,7 +100,7 @@ def rotate_runtime_key(
     admin: AuthenticatedAdmin = Depends(require_admin_mutation_role("admin")),
     instance: InstanceRecord = Depends(resolve_admin_instance_scope),
     service: GovernanceService = Depends(get_governance_service),
-) -> dict[str, object]:
+) -> Any:
     unsupported = unsupported_idempotency_response(request, message=_RUNTIME_KEY_IDEMPOTENCY_MESSAGE)
     if unsupported is not None:
         return unsupported
@@ -120,7 +121,7 @@ def disable_runtime_key(
     admin: AuthenticatedAdmin = Depends(require_admin_mutation_role("admin")),
     instance: InstanceRecord = Depends(resolve_admin_instance_scope),
     service: GovernanceService = Depends(get_governance_service),
-) -> dict[str, object]:
+) -> Any:
     unsupported = unsupported_idempotency_response(request, message=_RUNTIME_KEY_IDEMPOTENCY_MESSAGE)
     if unsupported is not None:
         return unsupported
@@ -141,7 +142,7 @@ def activate_runtime_key(
     admin: AuthenticatedAdmin = Depends(require_admin_mutation_role("admin")),
     instance: InstanceRecord = Depends(resolve_admin_instance_scope),
     service: GovernanceService = Depends(get_governance_service),
-) -> dict[str, object]:
+) -> Any:
     unsupported = unsupported_idempotency_response(request, message=_RUNTIME_KEY_IDEMPOTENCY_MESSAGE)
     if unsupported is not None:
         return unsupported
@@ -162,7 +163,7 @@ def revoke_runtime_key(
     admin: AuthenticatedAdmin = Depends(require_admin_mutation_role("admin")),
     instance: InstanceRecord = Depends(resolve_admin_instance_scope),
     service: GovernanceService = Depends(get_governance_service),
-) -> dict[str, object]:
+) -> Any:
     unsupported = unsupported_idempotency_response(request, message=_RUNTIME_KEY_IDEMPOTENCY_MESSAGE)
     if unsupported is not None:
         return unsupported
@@ -181,7 +182,7 @@ def get_runtime_key_request_path_policy(
     key_id: str,
     instance: InstanceRecord = Depends(resolve_admin_instance_scope),
     service: GovernanceService = Depends(get_governance_service),
-) -> dict[str, object]:
+) -> Any:
     key = next(
         (item for item in service.list_runtime_keys(instance_id=instance.instance_id) if item.key_id == key_id),
         None,
@@ -215,7 +216,7 @@ def update_runtime_key_request_path_policy(
     admin: AuthenticatedAdmin = Depends(require_admin_mutation_role("admin")),
     instance: InstanceRecord = Depends(resolve_admin_instance_scope),
     service: GovernanceService = Depends(get_governance_service),
-) -> dict[str, object]:
+) -> Any:
     try:
         key = service.update_runtime_key_request_path_policy(
             key_id,
@@ -244,7 +245,7 @@ async def run_runtime_key_first_success_probe(
     instance: InstanceRecord = Depends(resolve_admin_instance_scope),
     service: GovernanceService = Depends(get_governance_service),
     instance_service: InstanceService = Depends(get_instance_service),
-) -> dict[str, object]:
+) -> Any:
     runtime_key = payload.runtime_key.strip()
     identity = service.authenticate_runtime_key(runtime_key)
     executed_at = datetime.now(tz=UTC).isoformat()
@@ -271,14 +272,14 @@ async def run_runtime_key_first_success_probe(
             },
         )
 
-    models_probe: dict[str, object] = {
+    models_probe: dict[str, Any] = {
         "attempted": True,
         "ok": False,
         "status_code": None,
         "model_count": 0,
         "error": None,
     }
-    chat_probe: dict[str, object] = {
+    chat_probe: dict[str, Any] = {
         "attempted": False,
         "ok": False,
         "status_code": None,
@@ -291,7 +292,7 @@ async def run_runtime_key_first_success_probe(
         "Content-Type": "application/json",
     }
 
-    models_payload: dict[str, object] | None = None
+    models_payload: dict[str, Any] | None = None
     async with httpx.AsyncClient(
         transport=httpx.ASGITransport(app=request.app),
         base_url="http://forgeframe.local",

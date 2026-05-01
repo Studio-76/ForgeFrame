@@ -243,7 +243,7 @@ class WorkInteractionAdminService:
                 ArtifactAttachmentRecord(
                     attachment_id=row.id,
                     artifact_id=row.artifact_id,
-                    target_kind=row.target_kind,  # type: ignore[arg-type]
+                    target_kind=row.target_kind,
                     target_id=row.target_id,
                     role=row.role,
                     created_at=row.created_at,
@@ -373,8 +373,8 @@ class WorkInteractionAdminService:
             workspace_id=row.workspace_id,
             scope=scope,
             scope_label=f"Workspace · {workspace_role or 'artifact'}" if row.workspace_id else "Instance",
-            workspace_role=workspace_role,  # type: ignore[arg-type]
-            artifact_type=row.artifact_type,  # type: ignore[arg-type]
+            workspace_role=workspace_role,
+            artifact_type=row.artifact_type,
             label=row.label,
             uri=row.uri,
             media_type=row.media_type,
@@ -390,7 +390,7 @@ class WorkInteractionAdminService:
             ),
             retained_until=self._artifact_metadata_datetime(metadata, ("retention", "retained_until"), ("retained_until",)),
             archive_reason=self._artifact_metadata_string(metadata, "archive_reason"),
-            status=row.status,  # type: ignore[arg-type]
+            status=row.status,
             created_by_type=row.created_by_type,
             created_by_id=row.created_by_id,
             metadata=metadata,
@@ -601,10 +601,10 @@ class WorkInteractionAdminService:
             issue_id=row.issue_id,
             title=row.title,
             summary=row.summary,
-            status=row.status,  # type: ignore[arg-type]
-            preview_status=row.preview_status,  # type: ignore[arg-type]
-            review_status=row.review_status,  # type: ignore[arg-type]
-            handoff_status=row.handoff_status,  # type: ignore[arg-type]
+            status=row.status,
+            preview_status=row.preview_status,
+            review_status=row.review_status,
+            handoff_status=row.handoff_status,
             owner_type=row.owner_type,
             owner_id=row.owner_id,
             active_run_id=row.active_run_id,
@@ -621,9 +621,9 @@ class WorkInteractionAdminService:
             approval_count=int(approval_count or 0),
             latest_conversation_id=latest_conversation.id if latest_conversation is not None else None,
             latest_conversation_subject=latest_conversation.subject if latest_conversation is not None else None,
-            next_action_key=next_action_key,  # type: ignore[arg-type]
+            next_action_key=next_action_key,
             next_action_label=next_action_label,
-            next_action_state=next_action_state,  # type: ignore[arg-type]
+            next_action_state=next_action_state,
             next_action_reason=next_action_reason,
             last_activity_at=self._latest_activity(
                 row.updated_at,
@@ -792,7 +792,7 @@ class WorkInteractionAdminService:
                     WorkspaceEventRecord(
                         event_id=event.id,
                         workspace_id=event.workspace_id,
-                        event_kind=event.event_kind,  # type: ignore[arg-type]
+                        event_kind=event.event_kind,
                         note=event.note,
                         artifact_id=event.artifact_id,
                         approval_id=event.approval_id,

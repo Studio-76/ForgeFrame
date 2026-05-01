@@ -5,6 +5,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 from sqlalchemy import text
 from sqlalchemy.engine import make_url
@@ -220,7 +221,7 @@ def storage_postgres_targets(settings: Settings) -> list[str]:
     return targets
 
 
-def apply_storage_migrations(database_url: str) -> dict[str, object]:
+def apply_storage_migrations(database_url: str) -> dict[str, Any]:
     engine = build_postgres_engine(database_url)
     migrations = list_storage_migrations()
     applied_versions: list[int] = []

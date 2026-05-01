@@ -186,7 +186,7 @@ class AssistantProfileAdminService:
         if not reasons:
             return None
         return AssistantProfileRiskWarning(
-            level=level,  # type: ignore[arg-type]
+            level=level,
             title="Direct external action rights",
             reasons=reasons,
         )
@@ -408,22 +408,22 @@ class AssistantProfileAdminService:
             company_id=row.company_id,
             display_name=row.display_name,
             summary=row.summary,
-            status=row.status,  # type: ignore[arg-type]
+            status=row.status,
             assistant_mode_enabled=row.assistant_mode_enabled,
             is_default=row.is_default,
             timezone=row.timezone,
             locale=row.locale,
-            tone=row.tone,  # type: ignore[arg-type]
+            tone=row.tone,
             preferred_contact_id=row.preferred_contact_id,
             primary_channel_id=delivery_preferences.primary_channel_id,
             fallback_channel_id=delivery_preferences.fallback_channel_id,
             mail_source_id=row.mail_source_id,
             calendar_source_id=row.calendar_source_id,
-            profile_scope=profile_scope,  # type: ignore[arg-type]
+            profile_scope=profile_scope,
             profile_scope_label=self._profile_scope_label(profile_scope),
-            memory_scope=memory_scope,  # type: ignore[arg-type]
+            memory_scope=memory_scope,
             memory_scope_label=self._memory_scope_label(memory_scope),
-            operating_mode=operating_mode,  # type: ignore[arg-type]
+            operating_mode=operating_mode,
             operating_mode_label=operating_mode_label,
             quiet_hours_summary=self._quiet_hours_summary(quiet_hours),
             direct_action_policy=action_policies.direct_action_policy,
@@ -542,8 +542,8 @@ class AssistantProfileAdminService:
             delivery_preferences=delivery_preferences,
             action_policies=action_policies,
             delegation_rules=delegation_rules,
-            allowed_action_kinds=allowed_action_kinds,  # type: ignore[arg-type]
-            blocked_action_kinds=blocked_action_kinds,  # type: ignore[arg-type]
+            allowed_action_kinds=allowed_action_kinds,
+            blocked_action_kinds=blocked_action_kinds,
             allowed_channels=allowed_channels,
             direct_channels=direct_channels,
         )
@@ -691,7 +691,7 @@ class AssistantProfileAdminService:
         try:
             zone = ZoneInfo(settings.timezone)
         except ZoneInfoNotFoundError:
-            zone = UTC
+            zone = ZoneInfo("UTC")
         localized = at.astimezone(zone)
         weekday = _WEEKDAY_NAMES[localized.weekday()]
         minute_of_day = localized.hour * 60 + localized.minute
@@ -800,7 +800,7 @@ class AssistantProfileAdminService:
 
             evaluation = AssistantActionEvaluation(
                 assistant_profile_id=row.id,
-                decision=decision,  # type: ignore[arg-type]
+                decision=decision,
                 action_mode=payload.action_mode,
                 action_kind=payload.action_kind,
                 priority=payload.priority,

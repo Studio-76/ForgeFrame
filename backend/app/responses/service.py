@@ -609,13 +609,13 @@ class ResponsesService:
             if not isinstance(schema_payload, dict):
                 raise ResponseStructuredOutputValidationError("Structured output json_schema request is missing a usable schema payload.")
             try:
-                import jsonschema  # type: ignore[import-not-found]
+                import jsonschema
             except ImportError:
                 cls._validate_schema_subset(parsed, schema_payload)
             else:
                 try:
                     jsonschema.validate(parsed, schema_payload)
-                except jsonschema.ValidationError as exc:  # type: ignore[attr-defined]
+                except jsonschema.ValidationError as exc:
                     raise ResponseStructuredOutputValidationError(f"Structured output does not satisfy the requested schema: {exc.message}") from exc
             return json.dumps(parsed, ensure_ascii=True, separators=(",", ":"))
         return output_text
@@ -990,9 +990,9 @@ class ResponsesService:
                 resolved_model=resolved_model,
                 provider_key=provider_key,
                 instructions=request.instructions,
-                metadata_json=dict(metadata),
-                usage_json=dict(usage),
-                cost_json=dict(cost),
+                metadata_json=dict(metadata or {}),
+                usage_json=dict(usage or {}),
+                cost_json=dict(cost or {}),
                 error_json=dict(error_json) if error_json else None,
                 output_text=output_text,
                 created_at=current_time,
@@ -1012,9 +1012,9 @@ class ResponsesService:
             native_record.resolved_model = resolved_model
             native_record.provider_key = provider_key
             native_record.instructions = request.instructions
-            native_record.metadata_json = dict(metadata)
-            native_record.usage_json = dict(usage)
-            native_record.cost_json = dict(cost)
+            native_record.metadata_json = dict(metadata or {})
+            native_record.usage_json = dict(usage or {})
+            native_record.cost_json = dict(cost or {})
             native_record.error_json = dict(error_json) if error_json else None
             native_record.output_text = output_text
             native_record.updated_at = current_time

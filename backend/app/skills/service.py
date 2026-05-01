@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from datetime import UTC, datetime
+from typing import Any
 from uuid import uuid4
 
 from sqlalchemy import func, select
@@ -113,7 +114,7 @@ class SkillAdminService:
         )
 
     @staticmethod
-    def _provenance_summary(provenance: dict[str, object]) -> SkillProvenanceSummary:
+    def _provenance_summary(provenance: dict[str, Any]) -> SkillProvenanceSummary:
         if learning_event_id := provenance.get("learning_event_id"):
             return SkillProvenanceSummary(
                 kind="learning",
@@ -157,7 +158,7 @@ class SkillAdminService:
         )
 
     @staticmethod
-    def _telemetry_summary(telemetry: dict[str, object]) -> SkillTelemetrySummary:
+    def _telemetry_summary(telemetry: dict[str, Any]) -> SkillTelemetrySummary:
         last_outcome = telemetry.get("last_outcome")
         return SkillTelemetrySummary(
             usage_count=int(telemetry.get("usage_count", 0) or 0),
@@ -224,11 +225,11 @@ class SkillAdminService:
             company_id=row.company_id,
             display_name=row.display_name,
             summary=row.summary,
-            scope=row.scope,  # type: ignore[arg-type]
+            scope=row.scope,
             scope_label=self._scope_label(row.scope, scope_agent_label),
             scope_agent_id=row.scope_agent_id,
             current_version_number=row.current_version_number,
-            status=row.status,  # type: ignore[arg-type]
+            status=row.status,
             approval=self._approval_summary(row.status),
             provenance=provenance,
             provenance_summary=self._provenance_summary(provenance),
@@ -240,7 +241,7 @@ class SkillAdminService:
             last_used_at=row.last_used_at,
             active_activation_count=active_activation_count,
             active_scope_labels=self._active_scope_labels(session, row),
-            last_outcome=telemetry.get("last_outcome") if telemetry.get("last_outcome") in {"success", "blocked", "error"} else None,  # type: ignore[arg-type]
+            last_outcome=telemetry.get("last_outcome") if telemetry.get("last_outcome") in {"success", "blocked", "error"} else None,
             created_at=row.created_at,
             updated_at=row.updated_at,
         )
@@ -253,7 +254,7 @@ class SkillAdminService:
             instance_id=row.instance_id,
             company_id=row.company_id,
             version_number=row.version_number,
-            status=row.status,  # type: ignore[arg-type]
+            status=row.status,
             summary=row.summary,
             instruction_core=row.instruction_core,
             provenance=dict(row.provenance_json or {}),
@@ -270,10 +271,10 @@ class SkillAdminService:
             version_id=row.version_id,
             instance_id=row.instance_id,
             company_id=row.company_id,
-            scope=row.scope,  # type: ignore[arg-type]
+            scope=row.scope,
             scope_label=scope_label,
             scope_agent_id=row.scope_agent_id,
-            status=row.status,  # type: ignore[arg-type]
+            status=row.status,
             activation_conditions=dict(row.activation_conditions_json or {}),
             activated_by_type=row.activated_by_type,
             activated_by_id=row.activated_by_id,
@@ -295,7 +296,7 @@ class SkillAdminService:
             agent_id=row.agent_id,
             run_id=row.run_id,
             conversation_id=row.conversation_id,
-            outcome=row.outcome,  # type: ignore[arg-type]
+            outcome=row.outcome,
             details=dict(row.details_json or {}),
             created_at=row.created_at,
         )
@@ -364,7 +365,7 @@ class SkillAdminService:
             recent_usage=[
                 self._usage_record(
                     item,
-                    versions_by_id.get(item.version_id).version_number if versions_by_id.get(item.version_id) is not None else None,
+                    versions_by_id[item.version_id].version_number if item.version_id in versions_by_id else None,
                 )
                 for item in usage_rows
             ],

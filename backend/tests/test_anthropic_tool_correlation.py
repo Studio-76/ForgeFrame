@@ -1,3 +1,5 @@
+from typing import Any
+
 from fastapi.testclient import TestClient
 
 from app.api.runtime.dependencies import clear_runtime_dependency_caches
@@ -7,7 +9,7 @@ from app.providers.base import ChatDispatchRequest
 from app.settings.config import Settings
 
 
-def _anthropic_tool_follow_up_messages() -> list[dict[str, object]]:
+def _anthropic_tool_follow_up_messages() -> list[dict[str, Any]]:
     return [
         {"role": "system", "content": "You are a weather assistant."},
         {"role": "user", "content": "What's the weather in Berlin?"},
@@ -37,7 +39,7 @@ def _anthropic_tool_follow_up_messages() -> list[dict[str, object]]:
 def test_anthropic_adapter_preserves_openai_tool_call_correlation_in_follow_up_turns(
     monkeypatch,
 ) -> None:
-    captured: dict[str, object] = {}
+    captured: dict[str, Any] = {}
 
     class _MockResponse:
         status_code = 200
@@ -45,7 +47,7 @@ def test_anthropic_adapter_preserves_openai_tool_call_correlation_in_follow_up_t
         text = "ok"
 
         @staticmethod
-        def json() -> dict[str, object]:
+        def json() -> dict[str, Any]:
             return {
                 "model": "claude-3-5-sonnet-latest",
                 "content": [
@@ -149,7 +151,7 @@ def test_anthropic_adapter_preserves_openai_tool_call_correlation_in_follow_up_t
 def test_chat_endpoint_preserves_tool_call_fields_for_anthropic_follow_up_turns(
     monkeypatch,
 ) -> None:
-    captured: dict[str, object] = {}
+    captured: dict[str, Any] = {}
 
     class _MockResponse:
         status_code = 200
@@ -157,7 +159,7 @@ def test_chat_endpoint_preserves_tool_call_fields_for_anthropic_follow_up_turns(
         text = "ok"
 
         @staticmethod
-        def json() -> dict[str, object]:
+        def json() -> dict[str, Any]:
             return {
                 "model": "claude-3-5-sonnet-latest",
                 "content": [

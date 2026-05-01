@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 from fastapi import APIRouter, Depends, Request, status
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
@@ -34,7 +36,7 @@ class AccountUpdateRequest(BaseModel):
 def list_accounts(
     instance: InstanceRecord = Depends(resolve_admin_instance_scope),
     service: GovernanceService = Depends(get_governance_service),
-) -> dict[str, object]:
+) -> Any:
     keys = service.list_runtime_keys(instance_id=instance.instance_id)
     key_counts: dict[str, int] = {}
     for item in keys:
@@ -59,7 +61,7 @@ def create_account(
     admin: AuthenticatedAdmin = Depends(require_admin_mutation_role("admin")),
     instance: InstanceRecord = Depends(resolve_admin_instance_scope),
     service: GovernanceService = Depends(get_governance_service),
-) -> dict[str, object]:
+) -> Any:
     unsupported = unsupported_idempotency_response(request, message=_ACCOUNT_IDEMPOTENCY_MESSAGE)
     if unsupported is not None:
         return unsupported
@@ -82,7 +84,7 @@ def update_account(
     admin: AuthenticatedAdmin = Depends(require_admin_mutation_role("admin")),
     instance: InstanceRecord = Depends(resolve_admin_instance_scope),
     service: GovernanceService = Depends(get_governance_service),
-) -> dict[str, object]:
+) -> Any:
     unsupported = unsupported_idempotency_response(request, message=_ACCOUNT_IDEMPOTENCY_MESSAGE)
     if unsupported is not None:
         return unsupported

@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from datetime import UTC, datetime, timedelta
+from typing import Any
 from urllib.parse import urlsplit
 from uuid import uuid4
 
@@ -107,7 +108,7 @@ class TaskAutomationAdminService:
         reference_fields: list[str],
     ) -> object:
         if isinstance(value, dict):
-            sanitized: dict[str, object] = {}
+            sanitized: dict[str, Any] = {}
             for raw_key, raw_item in value.items():
                 if not isinstance(raw_key, str):
                     continue
@@ -138,7 +139,7 @@ class TaskAutomationAdminService:
         return value
 
     @classmethod
-    def _channel_public_metadata(cls, row: DeliveryChannelORM) -> tuple[dict[str, object], list[str], list[str]]:
+    def _channel_public_metadata(cls, row: DeliveryChannelORM) -> tuple[dict[str, Any], list[str], list[str]]:
         redacted_fields: list[str] = []
         reference_fields: list[str] = []
         sanitized = cls._channel_sanitize_metadata_value(
@@ -154,7 +155,7 @@ class TaskAutomationAdminService:
         )
 
     @staticmethod
-    def _channel_scope_reference(metadata: dict[str, object]) -> str | None:
+    def _channel_scope_reference(metadata: dict[str, Any]) -> str | None:
         for key in ("contact_ref", "contact_id", "scope_ref"):
             value = metadata.get(key)
             if isinstance(value, str) and value.strip():
@@ -162,7 +163,7 @@ class TaskAutomationAdminService:
         return None
 
     @classmethod
-    def _channel_scope_label(cls, metadata: dict[str, object]) -> str:
+    def _channel_scope_label(cls, metadata: dict[str, Any]) -> str:
         if cls._channel_scope_reference(metadata):
             return "contact-bound"
         scope = metadata.get("scope")
@@ -206,7 +207,7 @@ class TaskAutomationAdminService:
             storage_state = "no_secret_material"
             summary = "No secret-bearing fields are currently persisted for this channel."
         return ChannelCredentialPosture(
-            storage_state=storage_state,  # type: ignore[arg-type]
+            storage_state=storage_state,
             target_masked=target_masked,
             redacted_fields=redacted_fields,
             external_reference_fields=reference_fields,
@@ -214,7 +215,7 @@ class TaskAutomationAdminService:
         )
 
     @staticmethod
-    def _channel_rank_map(rows: list[DeliveryChannelORM]) -> dict[str, int]:
+    def _channel_rank_map(rows: Sequence[DeliveryChannelORM]) -> dict[str, int]:
         parents_by_child: dict[str, list[str]] = {}
         for row in rows:
             if row.fallback_channel_id:
@@ -239,7 +240,7 @@ class TaskAutomationAdminService:
             rank_for(row.id)
         return cache
 
-    def _channel_notification_stats(self, session: Session, *, instance: InstanceRecord, channel_id: str) -> dict[str, object]:
+    def _channel_notification_stats(self, session: Session, *, instance: InstanceRecord, channel_id: str) -> dict[str, Any]:
         notification_count = int(
             session.scalar(
                 select(func.count())
@@ -309,10 +310,10 @@ class TaskAutomationAdminService:
             channel_id=row.id,
             instance_id=row.instance_id,
             company_id=row.company_id,
-            channel_kind=row.channel_kind,  # type: ignore[arg-type]
+            channel_kind=row.channel_kind,
             label=row.label,
             target=cls._channel_target_display(row),
-            status=row.status,  # type: ignore[arg-type]
+            status=row.status,
             fallback_channel_id=row.fallback_channel_id,
             metadata=public_metadata,
             scope_label=cls._channel_scope_label(dict(row.metadata_json or {})),
@@ -347,10 +348,14 @@ class TaskAutomationAdminService:
                 .all()
             )
             effective_rank_map = self._channel_rank_map(all_rows)
+        stats = self._channel_notification_stats(session, instance=instance, channel_id=row.id)
         return self._channel_summary(
             row,
             fallback_rank=effective_rank_map.get(row.id, 0),
-            **self._channel_notification_stats(session, instance=instance, channel_id=row.id),
+            notification_count=stats["notification_count"],
+            last_success_at=stats["last_success_at"],
+            last_failure_at=stats["last_failure_at"],
+            last_error=stats["last_error"],
         )
 
     @staticmethod
@@ -485,11 +490,11 @@ class TaskAutomationAdminService:
             task_id=row.id,
             instance_id=row.instance_id,
             company_id=row.company_id,
-            task_kind=row.task_kind,  # type: ignore[arg-type]
+            task_kind=row.task_kind,
             title=row.title,
             summary=row.summary,
-            status=row.status,  # type: ignore[arg-type]
-            priority=row.priority,  # type: ignore[arg-type]
+            status=row.status,
+            priority=row.priority,
             owner_id=row.owner_id,
             conversation_id=row.conversation_id,
             inbox_id=row.inbox_id,
@@ -514,7 +519,7 @@ class TaskAutomationAdminService:
             notification_id=row.notification_id,
             title=row.title,
             summary=row.summary,
-            status=row.status,  # type: ignore[arg-type]
+            status=row.status,
             due_at=row.due_at,
             triggered_at=row.triggered_at,
             metadata=dict(row.metadata_json or {}),
@@ -523,13 +528,13 @@ class TaskAutomationAdminService:
         )
 
     @staticmethod
-    def _notification_public_metadata(row: NotificationORM) -> dict[str, object]:
+    def _notification_public_metadata(row: NotificationORM) -> dict[str, Any]:
         metadata = dict(row.metadata_json or {})
         metadata.pop(_NOTIFICATION_INTERNAL_METADATA_KEY, None)
         return metadata
 
     @staticmethod
-    def _notification_internal_metadata(row: NotificationORM) -> dict[str, object]:
+    def _notification_internal_metadata(row: NotificationORM) -> dict[str, Any]:
         metadata = dict(row.metadata_json or {})
         internal = metadata.get(_NOTIFICATION_INTERNAL_METADATA_KEY)
         return dict(internal) if isinstance(internal, dict) else {}
@@ -563,14 +568,14 @@ class TaskAutomationAdminService:
         cls,
         row: NotificationORM,
         *,
-        user_metadata: dict[str, object] | None = None,
+        user_metadata: dict[str, Any] | None = None,
         attempts: list[NotificationDeliveryAttempt] | None = None,
         configured_channel_id: str | None = None,
     ) -> None:
         public_metadata = dict(user_metadata) if user_metadata is not None else cls._notification_public_metadata(row)
         effective_configured_channel_id = configured_channel_id if configured_channel_id is not None else cls._notification_configured_channel_id(row)
         raw_attempts = [attempt.model_dump(mode="json") for attempt in (attempts if attempts is not None else cls._notification_attempts(row))]
-        internal_metadata: dict[str, object] = {}
+        internal_metadata: dict[str, Any] = {}
         if raw_attempts:
             internal_metadata[_NOTIFICATION_ATTEMPTS_KEY] = raw_attempts
         if effective_configured_channel_id:
@@ -672,8 +677,8 @@ class TaskAutomationAdminService:
             fallback_channel_id=row.fallback_channel_id,
             title=row.title,
             body=row.body,
-            delivery_status=row.delivery_status,  # type: ignore[arg-type]
-            priority=row.priority,  # type: ignore[arg-type]
+            delivery_status=row.delivery_status,
+            priority=row.priority,
             preview_required=row.preview_required,
             retry_count=row.retry_count,
             max_retries=row.max_retries,
@@ -695,8 +700,8 @@ class TaskAutomationAdminService:
             company_id=row.company_id,
             title=row.title,
             summary=row.summary,
-            status=row.status,  # type: ignore[arg-type]
-            action_kind=row.action_kind,  # type: ignore[arg-type]
+            status=row.status,
+            action_kind=row.action_kind,
             cadence_minutes=row.cadence_minutes,
             next_run_at=row.next_run_at,
             last_run_at=row.last_run_at,

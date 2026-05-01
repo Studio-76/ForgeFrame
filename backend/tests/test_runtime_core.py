@@ -3,6 +3,7 @@ import json
 import os
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from typing import Any
 
 import httpx
 import pytest
@@ -54,7 +55,7 @@ def _admin_headers(test_client: TestClient = client) -> dict[str, str]:
     return {"Authorization": f"Bearer {token}"}
 
 
-def _sse_payload(raw: str, event_name: str) -> dict[str, object]:
+def _sse_payload(raw: str, event_name: str) -> dict[str, Any]:
     prefix = f"event: {event_name}\n"
     for frame in raw.split("\n\n"):
         if not frame.startswith(prefix):
@@ -65,8 +66,8 @@ def _sse_payload(raw: str, event_name: str) -> dict[str, object]:
     raise AssertionError(f"event {event_name!r} not found in stream payload")
 
 
-def _chat_sse_payloads(raw: str) -> list[dict[str, object]]:
-    payloads: list[dict[str, object]] = []
+def _chat_sse_payloads(raw: str) -> list[dict[str, Any]]:
+    payloads: list[dict[str, Any]] = []
     for frame in raw.split("\n\n"):
         if not frame.startswith("data: "):
             continue
@@ -77,7 +78,7 @@ def _chat_sse_payloads(raw: str) -> list[dict[str, object]]:
     return payloads
 
 
-def _observability_events() -> list[dict[str, object]]:
+def _observability_events() -> list[dict[str, Any]]:
     path = Path(os.environ["FORGEGATE_OBSERVABILITY_EVENTS_PATH"])
     if not path.exists():
         return []
@@ -126,7 +127,7 @@ def _mock_anthropic_text_response(content_text: str = "described"):
         text = "ok"
 
         @staticmethod
-        def json() -> dict[str, object]:
+        def json() -> dict[str, Any]:
             return {
                 "model": "claude-3-5-sonnet-latest",
                 "content": [{"type": "text", "text": content_text}],
@@ -901,7 +902,7 @@ def test_models_endpoint_keeps_generic_harness_model_hidden_after_admin_probe_on
             self.text = "ok"
             self._model = model
 
-        def json(self) -> dict[str, object]:
+        def json(self) -> dict[str, Any]:
             return {
                 "model": self._model,
                 "choices": [
@@ -998,7 +999,7 @@ def test_models_endpoint_only_promotes_generic_harness_models_with_model_specifi
             self.text = "ok"
             self._model = model
 
-        def json(self) -> dict[str, object]:
+        def json(self) -> dict[str, Any]:
             return {
                 "model": self._model,
                 "choices": [
@@ -1113,7 +1114,7 @@ def test_models_endpoint_keeps_generic_harness_public_model_when_unrelated_newer
             self.text = "ok"
             self._model = model
 
-        def json(self) -> dict[str, object]:
+        def json(self) -> dict[str, Any]:
             return {
                 "model": self._model,
                 "choices": [
@@ -1251,7 +1252,7 @@ def test_models_endpoint_lists_generic_harness_model_after_live_runtime_proof(
         text = "ok"
 
         @staticmethod
-        def json() -> dict[str, object]:
+        def json() -> dict[str, Any]:
             return {
                 "model": "acme-live-chat",
                 "choices": [
@@ -1508,7 +1509,7 @@ def test_chat_endpoint_stream_success_path_uses_baseline_provider_chain() -> Non
 
 
 def test_chat_endpoint_stream_reuses_one_unique_completion_id_per_request() -> None:
-    def _stream_payloads(prompt: str) -> list[dict[str, object]]:
+    def _stream_payloads(prompt: str) -> list[dict[str, Any]]:
         with client.stream(
             "POST",
             "/v1/chat/completions",
@@ -2060,7 +2061,7 @@ def test_responses_endpoint_background_path_returns_queued_response_and_location
 def test_responses_endpoint_preserves_function_call_output_inputs_and_retrieves_them(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    captured: dict[str, object] = {}
+    captured: dict[str, Any] = {}
     monkeypatch.setenv("FORGEGATE_OPENAI_API_KEY", "test-key")
 
     def _fake_post(self, payload: dict) -> dict:
@@ -2613,7 +2614,7 @@ def test_responses_endpoint_rejects_unsupported_extra_control_fields() -> None:
 def test_responses_endpoint_forwards_supported_control_fields_to_openai_provider(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    captured: dict[str, object] = {}
+    captured: dict[str, Any] = {}
     monkeypatch.setenv("FORGEGATE_OPENAI_API_KEY", "test-key")
 
     def _fake_post(self, payload: dict) -> dict:
@@ -2652,7 +2653,7 @@ def test_responses_endpoint_forwards_supported_control_fields_to_openai_provider
 def test_responses_stream_forwards_supported_control_fields_to_openai_provider(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    captured: dict[str, object] = {}
+    captured: dict[str, Any] = {}
     monkeypatch.setenv("FORGEGATE_OPENAI_API_KEY", "test-key")
 
     def _fake_stream(self, payload: dict, messages: list[dict]):
@@ -2888,7 +2889,7 @@ def test_responses_endpoint_accepts_input_image_file_ids(
 def test_chat_default_routing_prefers_vision_capable_provider_for_image_messages(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    captured: dict[str, object] = {}
+    captured: dict[str, Any] = {}
     monkeypatch.setenv("FORGEGATE_DEFAULT_MODEL", "forgeframe-baseline-chat-v1")
     monkeypatch.setenv("FORGEGATE_DEFAULT_PROVIDER", "forgeframe_baseline")
     monkeypatch.setenv("FORGEGATE_OPENAI_API_KEY", "test-key")
@@ -2959,7 +2960,7 @@ def test_chat_endpoint_rejects_image_inputs_for_non_vision_requested_model() -> 
 def test_chat_endpoint_preserves_image_inputs_for_anthropic_runtime(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    captured: dict[str, object] = {}
+    captured: dict[str, Any] = {}
     _enable_isolated_anthropic_runtime(monkeypatch)
     clear_runtime_dependency_caches()
 
@@ -3050,7 +3051,7 @@ def test_responses_endpoint_rejects_image_inputs_for_non_vision_requested_model(
 def test_responses_endpoint_preserves_image_inputs_for_anthropic_runtime(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    captured: dict[str, object] = {}
+    captured: dict[str, Any] = {}
     _enable_isolated_anthropic_runtime(monkeypatch)
     clear_runtime_dependency_caches()
 

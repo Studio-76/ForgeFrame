@@ -1,3 +1,4 @@
+from typing import Any
 from uuid import uuid4
 
 from conftest import admin_headers as shared_admin_headers
@@ -19,7 +20,7 @@ def _admin_headers(client: TestClient) -> dict[str, str]:
     return shared_admin_headers(client)
 
 
-def _scoped_postgres_url(schema_name: str) -> tuple[str, object]:
+def _scoped_postgres_url(schema_name: str) -> tuple[str, Any]:
     base_url = "postgresql+psycopg://forgegate:forgegate@localhost:5432/forgegate"
     admin_engine = create_engine(base_url, isolation_level="AUTOCOMMIT")
     scoped_url = f"{base_url}?options=-csearch_path%3D{schema_name}"

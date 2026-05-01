@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from typing import TYPE_CHECKING, Any
 
 from app.api.admin.control_plane_models import (
     RoutingBudgetScopeUpdateRequest,
@@ -36,6 +37,20 @@ from app.core.routing import (
 
 
 class ControlPlaneRoutingDomainMixin:
+    if TYPE_CHECKING:
+        _settings: Any
+        _instance: Any
+        _state_repository: Any
+        _providers: Any
+        _routing_policies_state: Any
+        _routing_budget_state: Any
+        _routing_circuits_state: Any
+        _routing_decisions_state: Any
+
+        def list_provider_targets(self) -> list[Any]: ...
+        def provider_target_snapshot(self) -> list[dict[str, Any]]: ...
+        def _persist_state(self) -> Any: ...
+
     @staticmethod
     def _routing_now_iso() -> str:
         return datetime.now(tz=UTC).isoformat()
@@ -113,7 +128,7 @@ class ControlPlaneRoutingDomainMixin:
         )
         return decisions[: max(1, limit)]
 
-    def routing_snapshot(self) -> dict[str, object]:
+    def routing_snapshot(self) -> dict[str, Any]:
         policies = self.list_routing_policies()
         circuits = self.list_routing_circuits()
         decisions = self.list_routing_decisions(limit=20)

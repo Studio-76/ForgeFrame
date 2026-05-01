@@ -434,7 +434,7 @@ def test_admin_oauth_account_targets_demote_codex_after_bridge_disable_even_with
     get_usage_analytics_store.cache_clear()
 
     service = get_control_plane_service()
-    service._record_oauth_operation(  # type: ignore[attr-defined]
+    service._record_oauth_operation(
         "openai_codex",
         "probe",
         "ok",
@@ -528,7 +528,7 @@ def test_admin_provider_truth_and_oauth_targets_keep_gemini_non_ready_when_bridg
     )
 
     service = get_control_plane_service()
-    service._record_oauth_operation(  # type: ignore[attr-defined]
+    service._record_oauth_operation(
         "gemini",
         "probe",
         "ok",
@@ -583,7 +583,7 @@ def test_admin_product_axis_targets_keep_gemini_probe_truth_partial_when_bridge_
     )
 
     service = get_control_plane_service()
-    service._record_oauth_operation(  # type: ignore[attr-defined]
+    service._record_oauth_operation(
         "gemini",
         "probe",
         "ok",
@@ -634,7 +634,7 @@ def test_admin_gemini_product_axis_and_oauth_targets_honor_tenant_id(
     )
 
     service = get_control_plane_service()
-    service._record_oauth_operation(  # type: ignore[attr-defined]
+    service._record_oauth_operation(
         "gemini",
         "probe",
         "ok",
@@ -701,7 +701,7 @@ def test_admin_provider_truth_and_oauth_targets_keep_codex_non_ready_when_bridge
     )
 
     service = get_control_plane_service()
-    service._record_oauth_operation(  # type: ignore[attr-defined]
+    service._record_oauth_operation(
         "openai_codex",
         "probe",
         "ok",
@@ -756,7 +756,7 @@ def test_admin_product_axis_targets_keep_codex_probe_truth_partial_when_bridge_b
     )
 
     service = get_control_plane_service()
-    service._record_oauth_operation(  # type: ignore[attr-defined]
+    service._record_oauth_operation(
         "openai_codex",
         "probe",
         "ok",
@@ -786,7 +786,7 @@ def test_admin_oauth_account_targets_keep_bridge_only_targets_partial_even_after
     get_control_plane_service.cache_clear()
 
     service = get_control_plane_service()
-    service._record_oauth_operation(  # type: ignore[attr-defined]
+    service._record_oauth_operation(
         "antigravity",
         "probe",
         "ok",
@@ -819,7 +819,7 @@ def test_admin_oauth_account_targets_surface_latest_failed_probe_status(
     get_control_plane_service.cache_clear()
 
     service = get_control_plane_service()
-    service._record_oauth_operation(  # type: ignore[attr-defined]
+    service._record_oauth_operation(
         "openai_codex",
         "probe",
         "failed",
@@ -852,7 +852,7 @@ def test_admin_product_axis_targets_keep_bridge_only_probe_truth_planned_without
         ("github_copilot", "Historical GitHub Copilot probe"),
         ("claude_code", "Historical Claude Code probe"),
     ):
-        service._record_oauth_operation(  # type: ignore[attr-defined]
+        service._record_oauth_operation(
             provider_key,
             "probe",
             "ok",
@@ -1001,14 +1001,14 @@ def test_admin_provider_truth_and_product_axis_targets_promote_native_oauth_axes
         "ok",
         "Codex bridge probe succeeded.",
         "2026-04-22T00:00:00+00:00",
-    )  # type: ignore[attr-defined]
+    )
     service._record_oauth_operation(
         "gemini",
         "probe",
         "ok",
         "Gemini OAuth/account probe succeeded.",
         "2026-04-22T00:01:00+00:00",
-    )  # type: ignore[attr-defined]
+    )
 
     headers = _admin_headers()
     providers_response = client.get("/admin/providers/", headers=headers)

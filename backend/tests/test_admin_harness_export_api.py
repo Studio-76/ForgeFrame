@@ -1,4 +1,5 @@
 import json
+from typing import Any
 from uuid import uuid4
 
 from conftest import admin_headers as shared_admin_headers
@@ -23,7 +24,7 @@ def _create_user_headers(
     creator_headers: dict[str, str],
     *,
     role: str,
-) -> tuple[dict[str, object], dict[str, str]]:
+) -> tuple[dict[str, Any], dict[str, str]]:
     suffix = uuid4().hex[:8]
     password = f"ForgeFrame-{role}-pass-123"
     created = client.post(
@@ -104,17 +105,17 @@ def _seed_harness_profile(
 
 
 class _MockProbeResponse:
-    def __init__(self, *, status_code: int, payload: dict[str, object]) -> None:
+    def __init__(self, *, status_code: int, payload: dict[str, Any]) -> None:
         self.status_code = status_code
         self._payload = payload
         self.headers = {"content-type": "application/json"}
         self.text = json.dumps(payload)
 
-    def json(self) -> dict[str, object]:
+    def json(self) -> dict[str, Any]:
         return self._payload
 
 
-def _find_exported_profile(payload: dict[str, object], provider_key: str) -> dict[str, object]:
+def _find_exported_profile(payload: dict[str, Any], provider_key: str) -> dict[str, Any]:
     profiles = payload["snapshot"]["profiles"]
     assert isinstance(profiles, list)
     profile = next(item for item in profiles if item["provider_key"] == provider_key)
@@ -222,7 +223,7 @@ def test_probe_and_run_history_redact_echoed_secrets_for_operator_and_read_only_
         url: str,
         *,
         headers: dict[str, str],
-        json: dict[str, object],
+        json: dict[str, Any],
         timeout: int,
     ):
         assert method == "POST"
@@ -372,7 +373,7 @@ def test_provider_truth_axes_redact_historical_harness_failures_for_operator_and
         target_user_id=str(target_user["user_id"]),
     )
 
-    historical_run = get_control_plane_service()._harness._store.record_run(  # type: ignore[attr-defined]
+    historical_run = get_control_plane_service()._harness._store.record_run(
         HarnessVerificationRun(
             provider_key=provider_key,
             integration_class="openai_compatible",

@@ -1,5 +1,6 @@
 import json
 import os
+from typing import Any
 
 import pytest
 from fastapi.testclient import TestClient
@@ -25,13 +26,13 @@ from app.usage.models import CostBreakdown, TokenUsage
 client = TestClient(app)
 
 
-def _runtime_session_factory() -> tuple[sessionmaker[Session], object]:
+def _runtime_session_factory() -> tuple[sessionmaker[Session], Any]:
     sqlite_path = os.environ["FORGEGATE_EXECUTION_SQLITE_PATH"]
     engine = create_engine(f"sqlite+pysqlite:///{sqlite_path}")
     return sessionmaker(engine, autoflush=False, expire_on_commit=False), engine
 
 
-def _sse_payload(raw: str, event_name: str) -> dict[str, object]:
+def _sse_payload(raw: str, event_name: str) -> dict[str, Any]:
     prefix = f"event: {event_name}\n"
     for frame in raw.split("\n\n"):
         if not frame.startswith(prefix):

@@ -318,7 +318,7 @@ class PostgresObservabilityRepository:
         *,
         window_seconds: int | None,
         tenant_id: str | None,
-    ) -> dict[str, object]:
+    ) -> dict[str, Any]:
         usage_tenant_clause, usage_tenant_params = self._tenant_clause(tenant_id=tenant_id)
         usage_window_clause, usage_window_params = self._window_clause(window_seconds=window_seconds)
         usage_params = {**usage_tenant_params, **usage_window_params}
@@ -677,7 +677,7 @@ class PostgresObservabilityRepository:
         window_seconds: int,
         bucket_seconds: int,
         tenant_id: str | None,
-    ) -> list[dict[str, object]]:
+    ) -> list[dict[str, Any]]:
         tenant_clause, tenant_params = self._tenant_clause(tenant_id=tenant_id)
         rows = self._mapped_rows(
             f"""
@@ -760,7 +760,7 @@ class PostgresObservabilityRepository:
         *,
         window_seconds: int | None,
         tenant_id: str | None,
-    ) -> dict[str, object]:
+    ) -> dict[str, Any]:
         tenant_clause, tenant_params = self._tenant_clause(tenant_id=tenant_id)
         window_clause, window_params = self._window_clause(window_seconds=window_seconds)
         params = {"provider": provider, **tenant_params, **window_params}
@@ -873,7 +873,7 @@ class PostgresObservabilityRepository:
         *,
         window_seconds: int | None,
         tenant_id: str | None,
-    ) -> dict[str, object]:
+    ) -> dict[str, Any]:
         tenant_clause, tenant_params = self._tenant_clause(tenant_id=tenant_id)
         window_clause, window_params = self._window_clause(window_seconds=window_seconds)
         params = {"client_id": client_id, **tenant_params, **window_params}

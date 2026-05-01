@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import platform
 from datetime import UTC, datetime
-from typing import Literal
+from typing import TYPE_CHECKING, Any, Literal
 
 import httpx
 
@@ -49,6 +49,20 @@ def _qwen_oauth_headers() -> dict[str, str]:
 
 
 class ControlPlaneOAuthTargetsDomainMixin:
+    if TYPE_CHECKING:
+        _settings: Any
+        _providers: Any
+        _harness: Any
+        _instance: Any
+        _oauth_operations_repository: Any
+        _effective_truth_projection_tenant_id: Any
+
+        def _oauth_operations(self, *args: Any, **kwargs: Any) -> list[Any]: ...
+        def _oauth_operation_snapshot(self, *args: Any, **kwargs: Any) -> Any: ...
+        def _provider_capability_evidence(self, *args: Any, **kwargs: Any) -> Any: ...
+        def _record_oauth_operation(self, *args: Any, **kwargs: Any) -> None: ...
+        def latest_oauth_operation(self, *args: Any, **kwargs: Any) -> Any: ...
+
     @staticmethod
     def _oauth_target_provider_label(provider_key: str) -> str:
         return OAUTH_TARGET_PROVIDER_LABELS.get(provider_key, provider_key)
@@ -634,9 +648,9 @@ class ControlPlaneOAuthTargetsDomainMixin:
             runtime_bridge_enabled=runtime_bridge_enabled,
             probe_enabled=probe_enabled,
             harness_profile_enabled=False,
-            contract_classification=contract_classification,  # type: ignore[arg-type]
-            queue_lane=self._oauth_target_queue_lane(contract_classification),  # type: ignore[arg-type]
-            parallelism_mode=self._oauth_target_parallelism_mode(contract_classification),  # type: ignore[arg-type]
+            contract_classification=contract_classification,
+            queue_lane=self._oauth_target_queue_lane(contract_classification),
+            parallelism_mode=self._oauth_target_parallelism_mode(contract_classification),
             parallelism_limit=None,
             session_reuse_strategy=session_reuse_strategy,
             escalation_support="not_modeled_in_oauth_axis",
@@ -705,9 +719,9 @@ class ControlPlaneOAuthTargetsDomainMixin:
             runtime_bridge_enabled=bridge_enabled,
             probe_enabled=probe_enabled,
             harness_profile_enabled=bridge_enabled,
-            contract_classification=contract_classification,  # type: ignore[arg-type]
-            queue_lane=self._oauth_target_queue_lane(contract_classification),  # type: ignore[arg-type]
-            parallelism_mode=self._oauth_target_parallelism_mode(contract_classification),  # type: ignore[arg-type]
+            contract_classification=contract_classification,
+            queue_lane=self._oauth_target_queue_lane(contract_classification),
+            parallelism_mode=self._oauth_target_parallelism_mode(contract_classification),
             parallelism_limit=None,
             session_reuse_strategy=self._bridge_oauth_target_session_reuse_strategy(provider_key),
             escalation_support="native_runtime_unavailable",

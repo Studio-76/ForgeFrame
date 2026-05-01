@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from datetime import UTC, datetime
+from typing import Any
 from uuid import uuid4
 
 from sqlalchemy import func, or_, select
@@ -191,12 +192,12 @@ class KnowledgeContextAdminService:
                     primary_routes[normalized_kind] = normalized_address
             channels.append(
                 ContactChannel(
-                    kind=normalized_kind,  # type: ignore[arg-type]
+                    kind=normalized_kind,
                     label=label,
                     address=normalized_address,
                     is_primary=is_primary,
                     source=source,
-                    route_status=(normalized_status or "reachable"),  # type: ignore[arg-type]
+                    route_status=(normalized_status or "reachable"),
                     warning=channel_warning,
                 ),
             )
@@ -490,14 +491,14 @@ class KnowledgeContextAdminService:
             contact_ref=row.contact_ref,
             source_id=row.source_id,
             source_label=source_row.label if source_row is not None else None,
-            source_kind=source_row.source_kind if source_row is not None else None,  # type: ignore[arg-type]
+            source_kind=source_row.source_kind if source_row is not None else None,
             display_name=row.display_name,
             primary_email=row.primary_email,
             primary_phone=row.primary_phone,
             organization=row.organization,
             title=row.title,
-            status=row.status,  # type: ignore[arg-type]
-            visibility_scope=row.visibility_scope,  # type: ignore[arg-type]
+            status=row.status,
+            visibility_scope=row.visibility_scope,
             metadata=dict(row.metadata_json or {}),
             channels=channels,
             reachable_channel_count=sum(1 for channel in channels if channel.route_status == "reachable"),
@@ -594,12 +595,12 @@ class KnowledgeContextAdminService:
             source_id=row.id,
             instance_id=row.instance_id,
             company_id=row.company_id,
-            source_kind=row.source_kind,  # type: ignore[arg-type]
+            source_kind=row.source_kind,
             label=row.label,
             description=row.description,
             connection_target=row.connection_target,
-            status=row.status,  # type: ignore[arg-type]
-            visibility_scope=row.visibility_scope,  # type: ignore[arg-type]
+            status=row.status,
+            visibility_scope=row.visibility_scope,
             scope_label=self._source_scope_label(row),
             last_synced_at=row.last_synced_at,
             last_error=row.last_error,
@@ -939,9 +940,9 @@ class KnowledgeContextAdminService:
             MemoryRevisionRecord(
                 memory_id=item.id,
                 title=item.title,
-                status=item.status,  # type: ignore[arg-type]
-                truth_state=item.truth_state,  # type: ignore[arg-type]
-                source_trust_class=item.source_trust_class,  # type: ignore[arg-type]
+                status=item.status,
+                truth_state=item.truth_state,
+                source_trust_class=item.source_trust_class,
                 correction_note=item.correction_note,
                 created_at=item.created_at,
                 updated_at=item.updated_at,
@@ -1026,22 +1027,22 @@ class KnowledgeContextAdminService:
             company_id=row.company_id,
             source_id=row.source_id,
             source_label=source_row.label if source_row is not None else None,
-            source_kind=source_row.source_kind if source_row is not None else None,  # type: ignore[arg-type]
+            source_kind=source_row.source_kind if source_row is not None else None,
             contact_id=row.contact_id,
             conversation_id=row.conversation_id,
             task_id=row.task_id,
             notification_id=row.notification_id,
             workspace_id=row.workspace_id,
-            memory_kind=row.memory_kind,  # type: ignore[arg-type]
+            memory_kind=row.memory_kind,
             title=row.title,
             body=row.body,
             memory_layer=memory_layer,
             memory_layer_label=self._memory_layer_label(memory_layer),
-            status=row.status,  # type: ignore[arg-type]
-            truth_state=truth_state,  # type: ignore[arg-type]
-            source_trust_class=row.source_trust_class,  # type: ignore[arg-type]
-            visibility_scope=row.visibility_scope,  # type: ignore[arg-type]
-            sensitivity=row.sensitivity,  # type: ignore[arg-type]
+            status=row.status,
+            truth_state=truth_state,
+            source_trust_class=row.source_trust_class,
+            visibility_scope=row.visibility_scope,
+            sensitivity=row.sensitivity,
             review=self._memory_review(row),
             last_used_at=last_used_at,
             usage=usage,
@@ -1197,7 +1198,7 @@ class KnowledgeContextAdminService:
             )
             recent_memory = [self._sanitize_memory(self._memory_summary(session, item), actor=actor) for item in recent_memory_rows]
             task_ids = [item.task_id for item in recent_memory_rows if item.task_id]
-            task_rows = []
+            task_rows: Sequence[Any] = []
             if task_ids:
                 task_rows = (
                     session
@@ -1215,7 +1216,7 @@ class KnowledgeContextAdminService:
                 )
             recent_tasks = [self._record_link(record_id=item.id, label=item.title, status=item.status) for item in task_rows]
             conversation_ids = [item.id for item in conversation_rows]
-            notification_rows = []
+            notification_rows: Sequence[Any] = []
             if conversation_ids or task_ids:
                 notification_stmt = select(NotificationORM).where(NotificationORM.company_id == instance.company_id)
                 clauses = []
@@ -1423,7 +1424,7 @@ class KnowledgeContextAdminService:
             ]
             conversation_ids = set(self._source_conversation_ids_for_contact_refs(session, instance=instance, contact_refs=contact_refs))
             conversation_ids.update(item.conversation_id for item in memory_entries if item.conversation_id)
-            conversation_rows = []
+            conversation_rows: Sequence[Any] = []
             if conversation_ids:
                 conversation_rows = (
                     session

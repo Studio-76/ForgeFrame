@@ -302,7 +302,7 @@ def serialize_mutable_settings(raw_settings, effective_settings, override_record
             "confirmation_required": definition.confirmation_required,
             "allowed_values": list(definition.allowed_values),
             "overridden": overridden,
-            "updated_at": override_map.get(definition.key).updated_at if overridden else None,
-            "updated_by": override_map.get(definition.key).updated_by if overridden else None,
+            "updated_at": override_map[definition.key].updated_at if overridden and definition.key in override_map else None,
+            "updated_by": override_map[definition.key].updated_by if overridden and definition.key in override_map else None,
         })
     return rows

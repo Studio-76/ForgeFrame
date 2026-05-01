@@ -1,5 +1,7 @@
 """Admin routing policy and simulation endpoints."""
 
+from typing import Any
+
 from fastapi import APIRouter, Depends, status
 from fastapi.responses import JSONResponse
 
@@ -23,7 +25,7 @@ def get_routing_snapshot(
     _admin: AuthenticatedAdmin = Depends(require_admin_instance_permission("routing.read")),
     instance: InstanceRecord = Depends(resolve_admin_instance_scope),
     service: ControlPlaneService = Depends(get_control_plane_service),
-) -> dict[str, object]:
+) -> Any:
     snapshot = service.routing_snapshot()
     return {
         "status": "ok",
@@ -39,7 +41,7 @@ def update_routing_policy(
     payload: RoutingPolicyUpdateRequest,
     _admin: AuthenticatedAdmin = Depends(require_admin_instance_permission("routing.write", allow_impersonation=False)),
     service: ControlPlaneService = Depends(get_control_plane_service),
-) -> dict[str, object]:
+) -> Any:
     try:
         policy = service.update_routing_policy(classification, payload)
     except ValueError as exc:
@@ -55,7 +57,7 @@ def update_routing_budget(
     payload: RoutingBudgetUpdateRequest,
     _admin: AuthenticatedAdmin = Depends(require_admin_instance_permission("routing.write", allow_impersonation=False)),
     service: ControlPlaneService = Depends(get_control_plane_service),
-) -> dict[str, object]:
+) -> Any:
     budget = service.update_routing_budget(payload)
     return {"status": "ok", "budget": budget.model_dump(mode="json")}
 
@@ -66,7 +68,7 @@ def update_routing_circuit(
     payload: RoutingCircuitUpdateRequest,
     _admin: AuthenticatedAdmin = Depends(require_admin_instance_permission("routing.write", allow_impersonation=False)),
     service: ControlPlaneService = Depends(get_control_plane_service),
-) -> dict[str, object]:
+) -> Any:
     try:
         circuit = service.update_routing_circuit(target_key, payload)
     except ValueError as exc:
@@ -82,7 +84,7 @@ def simulate_routing(
     payload: RoutingSimulationRequest,
     _admin: AuthenticatedAdmin = Depends(require_admin_instance_permission("routing.read")),
     service: ControlPlaneService = Depends(get_control_plane_service),
-) -> dict[str, object]:
+) -> Any:
     try:
         return service.simulate_routing(payload)
     except ValueError as exc:

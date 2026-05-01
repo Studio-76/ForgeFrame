@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
 from functools import lru_cache
-from typing import Any
+from typing import Any, cast
 from uuid import uuid4
 
 from app.approvals.models import APPROVAL_STATUSES, build_elevated_access_approval_id
@@ -25,10 +25,13 @@ from app.governance.errors import (
     RuntimeAuthorizationError,
 )
 from app.governance.models import (
+    AccountStatus,
     AdminInstanceMembershipRecord,
     AdminLoginFailureRecord,
     AdminLoginResult,
+    AdminRole,
     AdminSessionRecord,
+    AdminStatus,
     AdminUserRecord,
     AuditEventRecord,
     AuthenticatedAdmin,
@@ -36,6 +39,7 @@ from app.governance.models import (
     GatewayAccountRecord,
     GovernanceStateRecord,
     IssuedApiKey,
+    KeyStatus,
     MutableSettingRecord,
     RuntimeGatewayIdentity,
     RuntimeKeyRecord,
@@ -206,7 +210,7 @@ class GovernanceService:
         self,
         *,
         requested_by_user_id: str | None,
-    ) -> dict[str, object]:
+    ) -> dict[str, Any]:
         eligible_approvers = self._eligible_elevated_access_approvers(
             requested_by_user_id=requested_by_user_id,
         )
@@ -225,7 +229,7 @@ class GovernanceService:
         self,
         *,
         actor: AuthenticatedAdmin | None = None,
-    ) -> dict[str, object]:
+    ) -> dict[str, Any]:
         return self._elevated_access_approver_posture(
             requested_by_user_id=actor.user_id if actor is not None else None,
         )
@@ -315,7 +319,7 @@ class GovernanceService:
     def _ensure_no_active_elevated_session_conflict(self, user_id: str) -> None:
         self._ensure_no_active_elevated_session_conflicts(user_id)
 
-    def get_elevated_access_request_conflict_state(self, *, request_id: str) -> dict[str, object]:
+    def get_elevated_access_request_conflict_state(self, *, request_id: str) -> dict[str, Any]:
         self._prune_expired_elevated_access_requests()
         record = self._find_elevated_access_request(request_id)
         if record is None:
@@ -363,7 +367,7 @@ class GovernanceService:
         return normalized or None
 
     @staticmethod
-    def _normalize_runtime_request_paths(values: list[object] | None) -> list[str]:
+    def _normalize_runtime_request_paths(values: list[str] | None) -> list[str]:
         if not values:
             return ["smart_routing"]
         normalized: list[str] = []
@@ -381,12 +385,12 @@ class GovernanceService:
     def _normalize_runtime_request_policy(
         cls,
         *,
-        allowed_request_paths: list[object] | None,
+        allowed_request_paths: list[str] | None,
         default_request_path: object | None,
         pinned_target_key: object | None,
         local_only_policy: object | None,
-        review_required_conditions: list[object] | None,
-    ) -> dict[str, object]:
+        review_required_conditions: list[str] | None,
+    ) -> dict[str, Any]:
         allowed = cls._normalize_runtime_request_paths(allowed_request_paths)
         requested_default = str(default_request_path or "").strip().lower() or "smart_routing"
         if requested_default not in _RUNTIME_REQUEST_PATHS:
@@ -517,8 +521,8 @@ class GovernanceService:
                 instance_id=normalized_instance_id,
                 tenant_id=normalized_tenant_id,
                 company_id=normalized_company_id,
-                role=membership_role,  # type: ignore[arg-type]
-                status=membership_status,  # type: ignore[arg-type]
+                role=membership_role,
+                status=membership_status,
                 created_at=created_at,
                 updated_at=user.updated_at or now,
                 created_by=created_by or user.created_by,
@@ -562,7 +566,7 @@ class GovernanceService:
         for index, membership in enumerate(self._state.instance_memberships):
             if membership.user_id != user.user_id:
                 continue
-            updates: dict[str, object] = {}
+            updates: dict[str, Any] = {}
             # Global admin role is an explicit ceiling, not a value that should overwrite
             # every scoped membership on each authenticated request.
             if self._role_rank(membership.role) > self._role_rank(user.role):
@@ -778,10 +782,11 @@ class GovernanceService:
 
     def _audit_actor_search_values(self, event: AuditEventRecord) -> tuple[str, ...]:
         values: list[str] = []
-        if event.actor_id:
-            values.append(event.actor_id)
+        actor_id = event.actor_id
+        if actor_id:
+            values.append(actor_id)
         if event.actor_type == "admin_user":
-            user = self._find_user_by_id(event.actor_id)
+            user = self._find_user_by_id(actor_id) if actor_id else None
             if user is not None:
                 values.extend([user.username, user.display_name])
         elif event.actor_type == "runtime_key":
@@ -880,7 +885,7 @@ class GovernanceService:
         tenant_id: str | None = None,
         company_id: str | None = None,
         require_explicit_scope: bool = False,
-    ) -> dict[str, object]:
+    ) -> dict[str, Any]:
         events = self._audit_events_for_scope(
             tenant_id=tenant_id,
             company_id=company_id,
@@ -1155,7 +1160,7 @@ class GovernanceService:
             session_id=f"sess_{uuid4().hex[:12]}",
             user_id=user.user_id,
             token_hash=hash_token(token),
-            role=role,  # type: ignore[arg-type]
+            role=role,
             membership_id=primary_membership.membership_id if primary_membership is not None else None,
             instance_id=(self._normalize_instance_scope(primary_membership.instance_id) if primary_membership is not None else self._default_instance_id()),
             tenant_id=(
@@ -1166,7 +1171,7 @@ class GovernanceService:
                 if primary_membership is not None
                 else self._default_tenant_scope()
             ),
-            session_type=session_type,  # type: ignore[arg-type]
+            session_type=session_type,
             created_at=now.isoformat(),
             expires_at=(now + session_ttl).isoformat(),
             last_used_at=now.isoformat(),
@@ -1448,13 +1453,13 @@ class GovernanceService:
             self._persist()
             return
 
-        user = self._bootstrap_admin_user()
-        if user is None or not user.must_rotate_password:
+        admin_user: AdminUserRecord | None = self._bootstrap_admin_user()
+        if admin_user is None or not admin_user.must_rotate_password:
             return
         if verify_password(
             self._settings.bootstrap_admin_password,
-            salt=user.password_salt,
-            expected_hash=user.password_hash,
+            salt=admin_user.password_salt,
+            expected_hash=admin_user.password_hash,
         ):
             return
 
@@ -1489,7 +1494,7 @@ class GovernanceService:
         self._state.admin_sessions = [session for session in self._state.admin_sessions if session.revoked_at is not None or datetime.fromisoformat(session.expires_at) > now]
         self._prune_login_failures()
 
-    def bootstrap_status(self) -> dict[str, object]:
+    def bootstrap_status(self) -> dict[str, Any]:
         user = self._bootstrap_admin_user()
         default_password = self._bootstrap_admin_uses_insecure_password(user)
         active_sessions = len([session for session in self._state.admin_sessions if session.revoked_at is None])
@@ -1554,7 +1559,7 @@ class GovernanceService:
             return "expired"
         return "active"
 
-    def _serialize_elevated_access_request(self, record: ElevatedAccessRequestRecord) -> dict[str, object]:
+    def _serialize_elevated_access_request(self, record: ElevatedAccessRequestRecord) -> dict[str, Any]:
         users = {user.user_id: user for user in self._state.admin_users}
         requested_by = users.get(record.requested_by_user_id)
         target_user = users.get(record.target_user_id)
@@ -1840,7 +1845,7 @@ class GovernanceService:
             user_id=f"admin_{uuid4().hex[:10]}",
             username=normalized_username,
             display_name=display_name.strip() or normalized_username,
-            role=role,  # type: ignore[arg-type]
+            role=role,
             status="active",
             password_hash=hash_password(password, salt),
             password_salt=salt,
@@ -1892,9 +1897,9 @@ class GovernanceService:
         if display_name is not None:
             user.display_name = display_name.strip() or user.display_name
         if role is not None:
-            user.role = role  # type: ignore[assignment]
+            user.role = cast(AdminRole, role)
         if status is not None:
-            user.status = status  # type: ignore[assignment]
+            user.status = cast(AdminStatus, status)
         if must_rotate_password is True:
             user.must_rotate_password = True
         user.updated_at = self._now_iso()
@@ -2010,7 +2015,7 @@ class GovernanceService:
             must_rotate_password=False,
         )
 
-    def list_admin_sessions(self, *, include_revoked: bool = False) -> list[dict[str, object]]:
+    def list_admin_sessions(self, *, include_revoked: bool = False) -> list[dict[str, Any]]:
         sessions = self._state.admin_sessions
         if not include_revoked:
             sessions = [session for session in sessions if session.revoked_at is None]
@@ -2019,11 +2024,11 @@ class GovernanceService:
         return [
             {
                 **session.model_dump(),
-                "username": users.get(session.user_id).username if users.get(session.user_id) else "unknown",
-                "display_name": users.get(session.user_id).display_name if users.get(session.user_id) else "Unknown User",
-                "user_status": users.get(session.user_id).status if users.get(session.user_id) else "disabled",
-                "issued_by_username": users.get(session.issued_by_user_id).username if session.issued_by_user_id and users.get(session.issued_by_user_id) else None,
-                "approved_by_username": (users.get(session.approved_by_user_id).username if session.approved_by_user_id and users.get(session.approved_by_user_id) else None),
+                "username": users[session.user_id].username if session.user_id in users else "unknown",
+                "display_name": users[session.user_id].display_name if session.user_id in users else "Unknown User",
+                "user_status": users[session.user_id].status if session.user_id in users else "disabled",
+                "issued_by_username": users[session.issued_by_user_id].username if session.issued_by_user_id and session.issued_by_user_id in users else None,
+                "approved_by_username": (users[session.approved_by_user_id].username if session.approved_by_user_id and session.approved_by_user_id in users else None),
                 "active": self._session_is_active(session),
                 "expired": datetime.fromisoformat(session.expires_at) <= self._now(),
                 "elevated": session.session_type in {"impersonation", "break_glass"},
@@ -2062,7 +2067,7 @@ class GovernanceService:
         return session
 
     @staticmethod
-    def _rotation_summary(events: list[dict[str, object]]) -> dict[str, object]:
+    def _rotation_summary(events: list[dict[str, Any]]) -> dict[str, Any]:
         if not events:
             return {
                 "history_count": 0,
@@ -2084,7 +2089,7 @@ class GovernanceService:
         record: SecretRotationEventRecord,
         *,
         history_source: str = "governance_recorded_event",
-    ) -> dict[str, object]:
+    ) -> dict[str, Any]:
         payload = record.model_dump()
         payload["history_source"] = history_source
         return payload
@@ -2109,7 +2114,7 @@ class GovernanceService:
             "state_reason": "Credential is configured and ForgeFrame has recorded rotation evidence for it.",
         }
 
-    def _runtime_provider_secret_posture(self) -> list[dict[str, object]]:
+    def _runtime_provider_secret_posture(self) -> list[dict[str, Any]]:
         openai_codex_oauth = self._settings.openai_codex_auth_mode == "oauth"
         gemini_oauth = self._settings.gemini_auth_mode == "oauth"
         codex_auth_state = resolve_codex_auth_state(self._settings)
@@ -2175,12 +2180,12 @@ class GovernanceService:
             },
         ]
 
-    def _derived_harness_rotation_events(self) -> list[dict[str, object]]:
-        events: list[dict[str, object]] = []
+    def _derived_harness_rotation_events(self) -> list[dict[str, Any]]:
+        events: list[dict[str, Any]] = []
         for profile in self._harness.list_profiles():
             if profile.auth_scheme == "none":
                 continue
-            revision_snapshots: dict[int, dict[str, object]] = {}
+            revision_snapshots: dict[int, dict[str, Any]] = {}
             for entry in profile.config_history:
                 try:
                     revision = int(entry.get("revision", -1))
@@ -2208,8 +2213,8 @@ class GovernanceService:
                 })
         return events
 
-    def harness_secret_posture(self) -> list[dict[str, object]]:
-        events_by_profile: dict[str, list[dict[str, object]]] = {}
+    def harness_secret_posture(self) -> list[dict[str, Any]]:
+        events_by_profile: dict[str, list[dict[str, Any]]] = {}
         for record in self._state.secret_rotation_events:
             if record.target_type != "harness_profile":
                 continue
@@ -2217,7 +2222,7 @@ class GovernanceService:
         for event in self._derived_harness_rotation_events():
             events_by_profile.setdefault(str(event["target_id"]), []).append(event)
 
-        posture: list[dict[str, object]] = []
+        posture: list[dict[str, Any]] = []
         for profile in sorted(self._harness.list_profiles(), key=lambda item: item.provider_key):
             if profile.auth_scheme == "none":
                 continue
@@ -2242,7 +2247,7 @@ class GovernanceService:
             })
         return posture
 
-    def list_secret_rotation_events(self, *, limit: int = 200) -> list[dict[str, object]]:
+    def list_secret_rotation_events(self, *, limit: int = 200) -> list[dict[str, Any]]:
         explicit_events = [self._serialize_secret_rotation_event(record) for record in self._state.secret_rotation_events]
         ordered = sorted(
             [*explicit_events, *self._derived_harness_rotation_events()],
@@ -2297,9 +2302,9 @@ class GovernanceService:
 
         record = SecretRotationEventRecord(
             event_id=f"rotate_{uuid4().hex[:12]}",
-            target_type=normalized_target_type,  # type: ignore[arg-type]
+            target_type=normalized_target_type,
             target_id=normalized_target_id,
-            kind=normalized_kind,  # type: ignore[arg-type]
+            kind=normalized_kind,
             recorded_at=self._now_iso(),
             recorded_by_user_id=actor.user_id,
             reference=reference.strip() if reference and reference.strip() else None,
@@ -2325,8 +2330,8 @@ class GovernanceService:
         self._persist()
         return record
 
-    def provider_secret_posture(self) -> list[dict[str, object]]:
-        explicit_events: dict[str, list[dict[str, object]]] = {}
+    def provider_secret_posture(self) -> list[dict[str, Any]]:
+        explicit_events: dict[str, list[dict[str, Any]]] = {}
         for record in self._state.secret_rotation_events:
             if record.target_type != "provider":
                 continue
@@ -2377,7 +2382,7 @@ class GovernanceService:
 
         return posture
 
-    def secret_storage_controls(self) -> list[dict[str, object]]:
+    def secret_storage_controls(self) -> list[dict[str, Any]]:
         return [
             {
                 "credential_class": "admin_password",
@@ -2411,7 +2416,7 @@ class GovernanceService:
             },
         ]
 
-    def security_blockers(self, *, actor: AuthenticatedAdmin | None = None) -> list[dict[str, object]]:
+    def security_blockers(self, *, actor: AuthenticatedAdmin | None = None) -> list[dict[str, Any]]:
         bootstrap = self.bootstrap_status()
         approver_posture = self.elevated_access_approver_posture(actor=actor)
         secret_posture = self.provider_secret_posture()
@@ -2499,7 +2504,7 @@ class GovernanceService:
         self,
         *,
         actor: AuthenticatedAdmin | None = None,
-    ) -> dict[str, object]:
+    ) -> dict[str, Any]:
         approver_posture = self.elevated_access_approver_posture(actor=actor)
         return {
             "human_sessions": {
@@ -2670,7 +2675,7 @@ class GovernanceService:
         if status is not None:
             if status not in {"active", "suspended", "disabled"}:
                 raise ValueError(f"Unsupported account status '{status}'.")
-            account.status = status  # type: ignore[assignment]
+            account.status = cast(AccountStatus, status)
         account.updated_at = self._now_iso()
         self._append_audit(
             actor_type="admin_user",
@@ -2712,11 +2717,11 @@ class GovernanceService:
         scopes: list[str],
         actor: AuthenticatedAdmin,
         rotated_from: str | None = None,
-        allowed_request_paths: list[object] | None = None,
+        allowed_request_paths: list[str] | None = None,
         default_request_path: object | None = None,
         pinned_target_key: object | None = None,
         local_only_policy: object | None = None,
-        review_required_conditions: list[object] | None = None,
+        review_required_conditions: list[str] | None = None,
     ) -> IssuedApiKey:
         now = self._now_iso()
         normalized_account_id = self._normalize_scope_value(account_id)
@@ -2763,11 +2768,11 @@ class GovernanceService:
             last_rotated_at=now,
             rotated_from=rotated_from,
             created_by=actor.user_id,
-            allowed_request_paths=request_path_policy["allowed_request_paths"],  # type: ignore[arg-type]
-            default_request_path=request_path_policy["default_request_path"],  # type: ignore[arg-type]
-            pinned_target_key=request_path_policy["pinned_target_key"],  # type: ignore[arg-type]
-            local_only_policy=request_path_policy["local_only_policy"],  # type: ignore[arg-type]
-            review_required_conditions=request_path_policy["review_required_conditions"],  # type: ignore[arg-type]
+            allowed_request_paths=request_path_policy["allowed_request_paths"],
+            default_request_path=request_path_policy["default_request_path"],
+            pinned_target_key=request_path_policy["pinned_target_key"],
+            local_only_policy=request_path_policy["local_only_policy"],
+            review_required_conditions=request_path_policy["review_required_conditions"],
         )
         self._state.runtime_keys.append(record)
         self._append_audit(
@@ -2867,7 +2872,7 @@ class GovernanceService:
             raise ValueError(f"Runtime key '{key_id}' is not bound to instance '{instance_id}'.")
         if status not in {"active", "disabled", "revoked"}:
             raise ValueError(f"Unsupported runtime key status '{status}'.")
-        record.status = status  # type: ignore[assignment]
+        record.status = cast(KeyStatus, status)
         record.updated_at = self._now_iso()
         if status == "revoked":
             record.revoked_at = self._now_iso()
@@ -2896,11 +2901,11 @@ class GovernanceService:
         *,
         actor: AuthenticatedAdmin,
         instance_id: str | None = None,
-        allowed_request_paths: list[object] | None = None,
+        allowed_request_paths: list[str] | None = None,
         default_request_path: object | None = None,
         pinned_target_key: object | None = None,
         local_only_policy: object | None = None,
-        review_required_conditions: list[object] | None = None,
+        review_required_conditions: list[str] | None = None,
     ) -> RuntimeKeyRecord:
         record = next((item for item in self._state.runtime_keys if item.key_id == key_id), None)
         if record is None:
@@ -2914,11 +2919,11 @@ class GovernanceService:
             local_only_policy=local_only_policy if local_only_policy is not None else record.local_only_policy,
             review_required_conditions=review_required_conditions if review_required_conditions is not None else list(record.review_required_conditions),
         )
-        record.allowed_request_paths = policy["allowed_request_paths"]  # type: ignore[assignment]
-        record.default_request_path = policy["default_request_path"]  # type: ignore[assignment]
-        record.pinned_target_key = policy["pinned_target_key"]  # type: ignore[assignment]
-        record.local_only_policy = policy["local_only_policy"]  # type: ignore[assignment]
-        record.review_required_conditions = policy["review_required_conditions"]  # type: ignore[assignment]
+        record.allowed_request_paths = policy["allowed_request_paths"]
+        record.default_request_path = policy["default_request_path"]
+        record.pinned_target_key = policy["pinned_target_key"]
+        record.local_only_policy = policy["local_only_policy"]
+        record.review_required_conditions = policy["review_required_conditions"]
         record.updated_at = self._now_iso()
         self._append_audit(
             actor_type="admin_user",
@@ -2970,9 +2975,11 @@ class GovernanceService:
         account_id = self._normalize_scope_value(record.account_id)
         if account_id is None:
             self._deny_unbound_runtime_key(record=record, binding_state="missing_account_id")
+            return None
         account = self._find_account_by_id(account_id)
         if account is None:
             self._deny_unbound_runtime_key(record=record, binding_state="account_not_found")
+            return None
         if account.status != "active":
             self._deny_runtime_account_status(record=record, account=account)
         record.last_used_at = self._now_iso()
@@ -3104,13 +3111,13 @@ class GovernanceService:
                 details={},
             )
         return RuntimeRequestPathDecision(
-            request_path=selected,  # type: ignore[arg-type]
-            default_request_path=str(normalized_default["default_request_path"]),  # type: ignore[arg-type]
-            allowed_request_paths=list(allowed),  # type: ignore[arg-type]
+            request_path=selected,
+            default_request_path=str(normalized_default["default_request_path"]),
+            allowed_request_paths=list(allowed),
             pinned_target_key=self._normalize_scope_value(identity.pinned_target_key),
-            local_only_policy=str(normalized_default["local_only_policy"]),  # type: ignore[arg-type]
+            local_only_policy=str(normalized_default["local_only_policy"]),
             review_required_conditions=list(identity.review_required_conditions),
-            selected_via=selected_via,  # type: ignore[arg-type]
+            selected_via=selected_via,
         )
 
     def list_setting_overrides(self) -> list[MutableSettingRecord]:
@@ -3220,11 +3227,11 @@ class GovernanceService:
         normalized_targets = self._normalize_notification_targets(notification_targets)
         record = ElevatedAccessRequestRecord(
             request_id=f"elev_{uuid4().hex[:12]}",
-            request_type=request_type,  # type: ignore[arg-type]
+            request_type=request_type,
             requested_by_user_id=requested_by_user_id,
             target_user_id=target_user.user_id,
             target_role=target_user.role,
-            session_role=session_role,  # type: ignore[arg-type]
+            session_role=session_role,
             approval_reference=normalized_reference,
             justification=normalized_justification,
             notification_targets=normalized_targets,
@@ -3262,7 +3269,7 @@ class GovernanceService:
         *,
         actor: AuthenticatedAdmin,
         gate_status: str | None = None,
-    ) -> list[dict[str, object]]:
+    ) -> list[dict[str, Any]]:
         self._prune_expired_elevated_access_requests()
         normalized_status = gate_status.strip().lower() if gate_status else None
         requests = sorted(
@@ -3281,7 +3288,7 @@ class GovernanceService:
         *,
         actor: AuthenticatedAdmin,
         gate_status: str | None = None,
-    ) -> list[dict[str, object]]:
+    ) -> list[dict[str, Any]]:
         self._prune_expired_elevated_access_requests()
         self._authorize_shared_elevated_access_approval_read(actor=actor)
         normalized_status = gate_status.strip().lower() if gate_status else None
@@ -3299,7 +3306,7 @@ class GovernanceService:
         *,
         request_id: str,
         actor: AuthenticatedAdmin,
-    ) -> dict[str, object]:
+    ) -> dict[str, Any]:
         self._prune_expired_elevated_access_requests()
         record = self._find_elevated_access_request(request_id)
         if record is None:
@@ -3312,7 +3319,7 @@ class GovernanceService:
         *,
         request_id: str,
         actor: AuthenticatedAdmin,
-    ) -> dict[str, object]:
+    ) -> dict[str, Any]:
         self._prune_expired_elevated_access_requests()
         record = self._find_elevated_access_request(request_id)
         if record is None:
@@ -3329,7 +3336,7 @@ class GovernanceService:
         approval_reference: str,
         notification_targets: list[str],
         duration_minutes: int,
-    ) -> dict[str, object]:
+    ) -> dict[str, Any]:
         self._prune_expired_elevated_access_requests()
         if not role_allows(actor.role, "admin"):
             raise PermissionError("admin_role_required")
@@ -3365,7 +3372,7 @@ class GovernanceService:
         approval_reference: str,
         notification_targets: list[str],
         duration_minutes: int,
-    ) -> dict[str, object]:
+    ) -> dict[str, Any]:
         self._prune_expired_elevated_access_requests()
         if not role_allows(actor.role, "operator"):
             raise PermissionError("break_glass_role_not_eligible")
@@ -3400,7 +3407,7 @@ class GovernanceService:
         actor: AuthenticatedAdmin,
         approved: bool,
         decision_note: str,
-    ) -> dict[str, object]:
+    ) -> dict[str, Any]:
         self._prune_expired_elevated_access_requests()
         record = self._find_elevated_access_request(request_id)
         if record is None:
@@ -3450,7 +3457,7 @@ class GovernanceService:
         request_id: str,
         actor: AuthenticatedAdmin,
         decision_note: str,
-    ) -> dict[str, object]:
+    ) -> dict[str, Any]:
         return self._decide_elevated_access_request(
             request_id=request_id,
             actor=actor,
@@ -3464,7 +3471,7 @@ class GovernanceService:
         request_id: str,
         actor: AuthenticatedAdmin,
         decision_note: str,
-    ) -> dict[str, object]:
+    ) -> dict[str, Any]:
         return self._decide_elevated_access_request(
             request_id=request_id,
             actor=actor,
@@ -3477,7 +3484,7 @@ class GovernanceService:
         *,
         request_id: str,
         actor: AuthenticatedAdmin,
-    ) -> dict[str, object]:
+    ) -> dict[str, Any]:
         self._prune_expired_elevated_access_requests()
         record = self._find_elevated_access_request(request_id)
         if record is None:
@@ -3522,7 +3529,7 @@ class GovernanceService:
         *,
         request_id: str,
         actor: AuthenticatedAdmin,
-    ) -> tuple[dict[str, object], AdminLoginResult]:
+    ) -> tuple[dict[str, Any], AdminLoginResult]:
         self._prune_expired_elevated_access_requests()
         record = self._find_elevated_access_request(request_id)
         if record is None:
@@ -3542,6 +3549,7 @@ class GovernanceService:
             record.target_user_id,
         )
 
+        session_user: AdminUserRecord | None
         if record.request_type == "impersonation":
             session_user = target_user
             session_role = target_user.role

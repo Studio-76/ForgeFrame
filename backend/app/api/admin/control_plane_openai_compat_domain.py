@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from app.control_plane import (
     OpenAICompatibilitySignoffRecord,
@@ -35,6 +35,13 @@ _OPENAI_CORPUS_LABELS: dict[str, str] = {
 
 
 class ControlPlaneOpenAICompatibilityDomainMixin:
+    if TYPE_CHECKING:
+        _analytics: Any
+        _default_tenant_id: Any
+        _effective_truth_projection_tenant_id: Any
+
+        def provider_truth_axes(self, *args: Any, **kwargs: Any) -> list[Any]: ...
+
     @staticmethod
     def _signoff_row(
         corpus_class: str,
@@ -51,9 +58,9 @@ class ControlPlaneOpenAICompatibilityDomainMixin:
         notes: str | None = None,
     ) -> OpenAICompatibilitySignoffRecord:
         return OpenAICompatibilitySignoffRecord(
-            corpus_class=corpus_class,  # type: ignore[arg-type]
+            corpus_class=corpus_class,
             label=_OPENAI_CORPUS_LABELS[corpus_class],
-            status=status,  # type: ignore[arg-type]
+            status=status,
             route=route,
             provider_axis=provider_axis,
             live_evidence_required=live_evidence_required,
@@ -220,6 +227,11 @@ class ControlPlaneOpenAICompatibilityDomainMixin:
             return session.query(RuntimeFileORM).filter(RuntimeFileORM.company_id == company_id).order_by(RuntimeFileORM.created_at.desc()).first()
 
     @staticmethod
+    def _iso_attr(obj: object, attr: str) -> str | None:
+        value = getattr(obj, attr, None)
+        return value.isoformat() if value is not None else None
+
+    @staticmethod
     def _signoff_summary(
         rows: list[OpenAICompatibilitySignoffRecord],
     ) -> OpenAICompatibilitySummaryRecord:
@@ -338,7 +350,7 @@ class ControlPlaneOpenAICompatibilityDomainMixin:
                 evidence_source=(
                     "runtime_response_projection+backend/tests/test_native_responses_runtime_contract.py" if latest_response is not None else "backend/tests/test_native_responses_runtime_contract.py"
                 ),
-                last_verified_at=getattr(latest_response, "updated_at", None).isoformat() if latest_response is not None and getattr(latest_response, "updated_at", None) is not None else None,
+                last_verified_at=self._iso_attr(latest_response, "updated_at") if latest_response is not None else None,
                 raw_diff_summary=("The durable object model is native, but the provider-execution path remains a compatibility translation layer."),
             ),
             self._signoff_row(
@@ -357,9 +369,7 @@ class ControlPlaneOpenAICompatibilityDomainMixin:
                     if structured_response is not None and native_items_response is not None
                     else "backend/tests/test_native_responses_runtime_contract.py"
                 ),
-                last_verified_at=getattr(structured_response, "updated_at", None).isoformat()
-                if structured_response is not None and getattr(structured_response, "updated_at", None) is not None
-                else None,
+                last_verified_at=self._iso_attr(structured_response, "updated_at") if structured_response is not None else None,
                 raw_diff_summary="Input-items truth is durable, but provider execution remains chat-translated.",
             ),
             self._signoff_row(
@@ -388,9 +398,7 @@ class ControlPlaneOpenAICompatibilityDomainMixin:
                 evidence_source=(
                     "runtime_stream_projection+backend/tests/test_native_responses_runtime_contract.py" if streaming_response is not None else "backend/tests/test_native_responses_runtime_contract.py"
                 ),
-                last_verified_at=getattr(streaming_response, "updated_at", None).isoformat()
-                if streaming_response is not None and getattr(streaming_response, "updated_at", None) is not None
-                else None,
+                last_verified_at=self._iso_attr(streaming_response, "updated_at") if streaming_response is not None else None,
                 raw_diff_summary="SSE lifecycle truth is durable, but the upstream adapter contract is still chat-oriented.",
             ),
             self._signoff_row(
@@ -409,10 +417,7 @@ class ControlPlaneOpenAICompatibilityDomainMixin:
                     if tool_response is not None or tool_usage is not None
                     else "backend/tests/test_native_responses_runtime_contract.py"
                 ),
-                last_verified_at=(
-                    getattr(tool_usage, "created_at", None)
-                    or (getattr(tool_response, "updated_at", None).isoformat() if tool_response is not None and getattr(tool_response, "updated_at", None) is not None else None)
-                ),
+                last_verified_at=(getattr(tool_usage, "created_at", None) or (self._iso_attr(tool_response, "updated_at") if tool_response is not None else None)),
                 sample_request_id=getattr(tool_usage, "request_id", None),
                 raw_diff_summary="Tool roundtrips are durable and typed, but not yet provider-native end to end.",
             ),
@@ -426,9 +431,7 @@ class ControlPlaneOpenAICompatibilityDomainMixin:
                     None if structured_output_response is not None else "Structured-output controls are wired on `/v1/responses`, but no completed runtime evidence is recorded for this tenant yet."
                 ),
                 evidence_source=("runtime_response_projection+backend/tests/test_runtime_core.py" if structured_output_response is not None else "backend/tests/test_runtime_core.py"),
-                last_verified_at=getattr(structured_output_response, "updated_at", None).isoformat()
-                if structured_output_response is not None and getattr(structured_output_response, "updated_at", None) is not None
-                else None,
+                last_verified_at=self._iso_attr(structured_output_response, "updated_at") if structured_output_response is not None else None,
                 raw_diff_summary=(None if structured_output_response is not None else "Structured-output runtime proof is missing for the current tenant."),
             ),
             self._signoff_row(
@@ -473,7 +476,7 @@ class ControlPlaneOpenAICompatibilityDomainMixin:
                     else "The public files surface is wired, but no uploaded runtime file evidence is recorded for this tenant yet."
                 ),
                 evidence_source=("runtime_files_projection+backend/tests/test_runtime_core.py" if runtime_file is not None else "backend/tests/test_runtime_core.py"),
-                last_verified_at=getattr(runtime_file, "updated_at", None).isoformat() if runtime_file is not None and getattr(runtime_file, "updated_at", None) is not None else None,
+                last_verified_at=self._iso_attr(runtime_file, "updated_at") if runtime_file is not None else None,
                 raw_diff_summary=("Core file APIs exist, but broader file-purpose parity remains intentionally partial." if runtime_file is not None else "No runtime file evidence is present yet."),
             ),
             self._signoff_row(

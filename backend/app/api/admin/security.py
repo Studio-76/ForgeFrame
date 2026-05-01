@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from typing import cast
 
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
@@ -12,7 +13,7 @@ from app.api.admin.instance_scope import (
     resolve_admin_instance_scope,
 )
 from app.auth.local_auth import role_allows
-from app.governance.models import AuthenticatedAdmin
+from app.governance.models import AdminRole, AuthenticatedAdmin
 from app.governance.service import GovernanceService, get_governance_service
 from app.instances.models import InstanceRecord
 
@@ -96,7 +97,7 @@ def require_admin_role(
         if not allow_impersonation:
             admin = _ensure_write_capable_session(admin)
         admin = _ensure_password_rotation_complete(admin)
-        if not role_allows(admin.role, required_role):  # type: ignore[arg-type]
+        if not role_allows(admin.role, cast(AdminRole, required_role)):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail=f"{required_role}_role_required",

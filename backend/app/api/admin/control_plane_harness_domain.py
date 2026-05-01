@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING, Any
+
 from app.harness import (
     HarnessImportRequest,
     HarnessPreviewRequest,
@@ -12,6 +14,11 @@ from app.harness.redaction import redact_sensitive_payload as _redact_sensitive_
 
 
 class ControlPlaneHarnessDomainMixin:
+    if TYPE_CHECKING:
+        _harness: Any
+        _analytics: Any
+        _instance: Any
+
     def _resolved_harness_instance_id(self, instance_id: str | None = None) -> str | None:
         normalized_instance_id = (instance_id or "").strip()
         if normalized_instance_id:

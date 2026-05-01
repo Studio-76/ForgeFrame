@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import hashlib
 from collections import Counter, defaultdict
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import select
@@ -162,10 +162,10 @@ class ExecutionAdminService:
         *,
         instance: InstanceRecord,
         run: RunORM,
-        attempts: list[RunAttemptORM],
-        commands: list[RunCommandORM],
-        outbox: list[RunOutboxORM],
-        approval_links: list[RunApprovalLinkORM],
+        attempts: Sequence[RunAttemptORM],
+        commands: Sequence[RunCommandORM],
+        outbox: Sequence[RunOutboxORM],
+        approval_links: Sequence[RunApprovalLinkORM],
         artifacts: list[ArtifactRecord],
     ) -> RuntimeNativeMapping:
         current_attempt = next((item for item in attempts if item.id == run.current_attempt_id), None)
@@ -234,7 +234,7 @@ class ExecutionAdminService:
             if native_kind is not None:
                 native_commands.append(
                     NativeCommandRecord(
-                        command_kind=native_kind,  # type: ignore[arg-type]
+                        command_kind=native_kind,
                         command_id=command.id,
                         status=command.command_status,
                         actor_type=command.actor_type,

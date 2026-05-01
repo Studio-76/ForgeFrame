@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Any, cast
+
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
@@ -31,7 +33,7 @@ class SettingsPatchRequest(BaseModel):
     updates: dict[str, object] = Field(default_factory=dict)
 
 
-def _settings_payload(service: GovernanceService, *, operation: dict[str, object] | None = None) -> dict[str, object]:
+def _settings_payload(service: GovernanceService, *, operation: dict[str, object] | None = None) -> Any:
     raw = Settings()
     effective = get_effective_settings()
     payload: dict[str, object] = {
@@ -46,7 +48,7 @@ def _settings_payload(service: GovernanceService, *, operation: dict[str, object
 @router.get("/")
 def list_settings(
     service: GovernanceService = Depends(get_governance_service),
-) -> dict[str, object]:
+) -> Any:
     return _settings_payload(service)
 
 
@@ -56,7 +58,7 @@ def patch_settings(
     request: Request,
     admin: AuthenticatedAdmin = Depends(require_admin_mutation_role("admin")),
     service: GovernanceService = Depends(get_governance_service),
-) -> dict[str, object]:
+) -> Any:
     unsupported = unsupported_idempotency_response(request, message=_SETTINGS_IDEMPOTENCY_MESSAGE)
     if unsupported is not None:
         return unsupported
@@ -83,9 +85,9 @@ def patch_settings(
         service.upsert_setting_override(key=key, value=value, category=definition.group, actor=admin)
         updated.append(key)
     clear_runtime_dependency_caches()
-    get_governance_service.cache_clear()
-    get_control_plane_service.cache_clear()
-    get_usage_analytics_store.cache_clear()
+    cast(Any, get_governance_service).cache_clear()
+    cast(Any, get_control_plane_service).cache_clear()
+    cast(Any, get_usage_analytics_store).cache_clear()
     service = get_governance_service()
     highest_risk = next(
         (risk for risk in ("high", "medium", "low") if any(MUTABLE_SETTINGS[key].risk_level == risk for key in updated)),
@@ -112,7 +114,7 @@ def reset_setting(
     request: Request,
     admin: AuthenticatedAdmin = Depends(require_admin_mutation_role("admin")),
     service: GovernanceService = Depends(get_governance_service),
-) -> dict[str, object]:
+) -> Any:
     unsupported = unsupported_idempotency_response(request, message=_SETTINGS_IDEMPOTENCY_MESSAGE)
     if unsupported is not None:
         return unsupported
@@ -135,9 +137,9 @@ def reset_setting(
             content={"error": {"type": "setting_override_not_found", "message": str(exc)}},
         )
     clear_runtime_dependency_caches()
-    get_governance_service.cache_clear()
-    get_control_plane_service.cache_clear()
-    get_usage_analytics_store.cache_clear()
+    cast(Any, get_governance_service).cache_clear()
+    cast(Any, get_control_plane_service).cache_clear()
+    cast(Any, get_usage_analytics_store).cache_clear()
     service = get_governance_service()
     return {
         **_settings_payload(

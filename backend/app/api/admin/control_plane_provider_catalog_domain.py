@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from typing import TYPE_CHECKING, Any
 
 from app.control_plane import (
     ProviderCatalogEvidenceRecord,
@@ -80,6 +81,15 @@ _EVIDENCE_STATUS_ORDER = [
 
 
 class ControlPlaneProviderCatalogDomainMixin:
+    if TYPE_CHECKING:
+        _provider_catalog_state: Any
+        _effective_truth_projection_tenant_id: Any
+
+        def list_providers(self) -> list[Any]: ...
+        def list_oauth_account_target_statuses(self, *args: Any, **kwargs: Any) -> list[Any]: ...
+        def product_axis_targets(self, *args: Any, **kwargs: Any) -> list[Any]: ...
+        def _provider_capability_evidence(self, *args: Any, **kwargs: Any) -> Any: ...
+
     @staticmethod
     def _catalog_now_iso() -> str:
         return datetime.now(tz=UTC).isoformat()
@@ -138,8 +148,8 @@ class ControlPlaneProviderCatalogDomainMixin:
             provider_id=seed.provider_id,
             display_name=seed.display_name,
             raw_class=seed.raw_class,
-            provider_class=seed.provider_class,  # type: ignore[arg-type]
-            source_kind=seed.source_kind,  # type: ignore[arg-type]
+            provider_class=seed.provider_class,
+            source_kind=seed.source_kind,
             source_docs=list(seed.source_docs),
             local_reference_paths=list(seed.local_reference_paths),
             auth_modes_supported=list(seed.auth_modes_supported),
@@ -188,8 +198,8 @@ class ControlPlaneProviderCatalogDomainMixin:
             return
         existing.append(current.model_copy(update={"recorded_at": current.recorded_at or now_iso}))
 
-    def _oauth_target_status_by_key(self, tenant_id: str | None = None) -> dict[str, dict[str, object]]:
-        status_map: dict[str, dict[str, object]] = {}
+    def _oauth_target_status_by_key(self, tenant_id: str | None = None) -> dict[str, dict[str, Any]]:
+        status_map: dict[str, dict[str, Any]] = {}
         try:
             for item in self.list_oauth_account_target_statuses(tenant_id=tenant_id):
                 provider_key = str(item.get("provider_key") or "")
@@ -199,7 +209,7 @@ class ControlPlaneProviderCatalogDomainMixin:
             return {}
         return status_map
 
-    def _product_axis_target_map(self, tenant_id: str | None = None) -> dict[str, dict[str, object]]:
+    def _product_axis_target_map(self, tenant_id: str | None = None) -> dict[str, dict[str, Any]]:
         return {str(item.get("provider_key") or ""): item for item in self.product_axis_targets(tenant_id=tenant_id) if item.get("provider_key")}
 
     def _provider_catalog_evidence_snapshot(
@@ -208,8 +218,8 @@ class ControlPlaneProviderCatalogDomainMixin:
         *,
         tenant_id: str | None = None,
         current_provider_keys: set[str] | None = None,
-        oauth_statuses: dict[str, dict[str, object]] | None = None,
-        product_axis_targets: dict[str, dict[str, object]] | None = None,
+        oauth_statuses: dict[str, dict[str, Any]] | None = None,
+        product_axis_targets: dict[str, dict[str, Any]] | None = None,
     ) -> list[ProviderCatalogEvidenceRecord]:
         current_provider_keys = current_provider_keys or {provider.provider for provider in self.list_providers()}
         oauth_statuses = oauth_statuses or self._oauth_target_status_by_key(tenant_id=tenant_id)
@@ -264,7 +274,7 @@ class ControlPlaneProviderCatalogDomainMixin:
                     provider_id=entry.provider_id,
                     target_key=entry.runtime_provider_binding,
                     evidence_class="live_probe_verified",
-                    status=(provider_evidence.live_probe.status if provider_evidence.live_probe.status != "missing" else "blocked-by-live-evidence"),  # type: ignore[arg-type]
+                    status=(provider_evidence.live_probe.status if provider_evidence.live_probe.status != "missing" else "blocked-by-live-evidence"),
                     source_kind=provider_evidence.live_probe.source,
                     source_ref=entry.runtime_provider_binding,
                     recorded_at=provider_evidence.live_probe.recorded_at,
@@ -274,7 +284,7 @@ class ControlPlaneProviderCatalogDomainMixin:
                     provider_id=entry.provider_id,
                     target_key=entry.runtime_provider_binding,
                     evidence_class="streaming_verified",
-                    status=(provider_evidence.streaming.status if provider_evidence.streaming.status != "missing" else "blocked-by-live-evidence"),  # type: ignore[arg-type]
+                    status=(provider_evidence.streaming.status if provider_evidence.streaming.status != "missing" else "blocked-by-live-evidence"),
                     source_kind=provider_evidence.streaming.source,
                     source_ref=entry.runtime_provider_binding,
                     recorded_at=provider_evidence.streaming.recorded_at,
@@ -284,7 +294,7 @@ class ControlPlaneProviderCatalogDomainMixin:
                     provider_id=entry.provider_id,
                     target_key=entry.runtime_provider_binding,
                     evidence_class="tool_calling_verified",
-                    status=(provider_evidence.tool_calling.status if provider_evidence.tool_calling.status != "missing" else "blocked-by-live-evidence"),  # type: ignore[arg-type]
+                    status=(provider_evidence.tool_calling.status if provider_evidence.tool_calling.status != "missing" else "blocked-by-live-evidence"),
                     source_kind=provider_evidence.tool_calling.source,
                     source_ref=entry.runtime_provider_binding,
                     recorded_at=provider_evidence.tool_calling.recorded_at,
@@ -669,7 +679,7 @@ class ControlPlaneProviderCatalogDomainMixin:
             entry.signoff_notes = latest_signoff.details if latest_signoff else None
             entry.evidence_status = self._catalog_evidence_status(entry.evidence_log)
             entry.missing_evidence = self._catalog_missing_evidence(entry, entry.evidence_log)
-            entry.maturity_status = self._catalog_maturity(entry, entry.evidence_log)  # type: ignore[assignment]
+            entry.maturity_status = self._catalog_maturity(entry, entry.evidence_log)
             entry.safe_next_action = self._catalog_next_action(entry)
             materialized[entry.provider_id] = entry
         return materialized

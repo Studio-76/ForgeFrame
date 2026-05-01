@@ -1,4 +1,5 @@
 import json
+from typing import Any
 
 import httpx
 import pytest
@@ -133,7 +134,7 @@ def test_bedrock_provider_reports_invalid_base_url_as_not_ready() -> None:
 
 
 def test_bedrock_adapter_signs_converse_request(monkeypatch) -> None:
-    captured: dict[str, object] = {}
+    captured: dict[str, Any] = {}
 
     class _MockResponse:
         status_code = 200
@@ -203,7 +204,7 @@ def test_bedrock_adapter_signs_converse_request(monkeypatch) -> None:
 
 
 def test_openai_adapter_forwards_request_metadata_as_headers(monkeypatch) -> None:
-    captured: dict[str, object] = {}
+    captured: dict[str, Any] = {}
 
     class _MockResponse:
         status_code = 200
@@ -247,7 +248,7 @@ def test_openai_adapter_forwards_request_metadata_as_headers(monkeypatch) -> Non
 
 
 def test_gemini_adapter_forwards_request_metadata_as_headers(monkeypatch) -> None:
-    captured: dict[str, object] = {}
+    captured: dict[str, Any] = {}
 
     class _MockResponse:
         status_code = 200
@@ -296,7 +297,7 @@ def test_gemini_adapter_forwards_request_metadata_as_headers(monkeypatch) -> Non
 
 
 def test_anthropic_adapter_forwards_request_metadata_as_headers(monkeypatch) -> None:
-    captured: dict[str, object] = {}
+    captured: dict[str, Any] = {}
 
     class _MockResponse:
         status_code = 200
@@ -340,7 +341,7 @@ def test_anthropic_adapter_forwards_request_metadata_as_headers(monkeypatch) -> 
 def test_anthropic_adapter_uses_bearer_header_when_bearer_mode_is_selected(
     monkeypatch,
 ) -> None:
-    captured: dict[str, object] = {}
+    captured: dict[str, Any] = {}
 
     class _MockResponse:
         status_code = 200
@@ -385,7 +386,7 @@ def test_anthropic_adapter_uses_bearer_header_when_bearer_mode_is_selected(
 def test_anthropic_adapter_translates_data_url_image_blocks_to_messages_api(
     monkeypatch,
 ) -> None:
-    captured: dict[str, object] = {}
+    captured: dict[str, Any] = {}
 
     class _MockResponse:
         status_code = 200
@@ -444,7 +445,7 @@ def test_anthropic_adapter_translates_data_url_image_blocks_to_messages_api(
 
 
 def test_codex_adapter_forwards_request_metadata_as_headers(monkeypatch) -> None:
-    captured: dict[str, object] = {}
+    captured: dict[str, Any] = {}
 
     class _MockResponse:
         status_code = 200
@@ -493,7 +494,7 @@ def test_codex_adapter_forwards_request_metadata_as_headers(monkeypatch) -> None
 
 
 def test_ollama_adapter_forwards_request_metadata_as_headers(monkeypatch) -> None:
-    captured: dict[str, object] = {}
+    captured: dict[str, Any] = {}
 
     class _ReadyResponse:
         status_code = 200
@@ -544,7 +545,7 @@ def test_ollama_adapter_forwards_request_metadata_as_headers(monkeypatch) -> Non
 
 
 def test_anthropic_stream_forwards_request_metadata_as_headers(monkeypatch) -> None:
-    captured: dict[str, object] = {}
+    captured: dict[str, Any] = {}
 
     class _MockStreamResponse:
         status_code = 200
@@ -700,7 +701,7 @@ def test_anthropic_stream_maps_tool_use_blocks_to_openai_tool_calls(
 
 
 def test_gemini_stream_forwards_request_metadata_as_headers(monkeypatch) -> None:
-    captured: dict[str, object] = {}
+    captured: dict[str, Any] = {}
 
     class _MockStreamResponse:
         status_code = 200
@@ -753,7 +754,7 @@ def test_gemini_stream_forwards_request_metadata_as_headers(monkeypatch) -> None
 
 
 def test_codex_stream_forwards_request_metadata_as_headers(monkeypatch) -> None:
-    captured: dict[str, object] = {}
+    captured: dict[str, Any] = {}
 
     class _MockStreamResponse:
         status_code = 200
@@ -806,7 +807,7 @@ def test_codex_stream_forwards_request_metadata_as_headers(monkeypatch) -> None:
 
 
 def test_ollama_stream_forwards_request_metadata_as_headers(monkeypatch) -> None:
-    captured: dict[str, object] = {}
+    captured: dict[str, Any] = {}
 
     class _ReadyResponse:
         status_code = 200
@@ -1082,8 +1083,8 @@ def test_codex_bridge_partial_runtime_executes_with_mocked_httpx(monkeypatch) ->
 
 def test_oauth_target_status_for_antigravity_stays_partial_without_live_probe_evidence() -> None:
     service = get_control_plane_service()
-    service._settings.antigravity_oauth_access_token = "token"  # type: ignore[attr-defined]
-    service._settings.antigravity_probe_enabled = True  # type: ignore[attr-defined]
+    service._settings.antigravity_oauth_access_token = "token"
+    service._settings.antigravity_probe_enabled = True
     status = service._oauth_target_status("antigravity")
     assert status.configured is True
     assert status.probe_enabled is True
@@ -1322,7 +1323,7 @@ def test_retry_after_http_date_is_parsed_for_openai_compatible_adapters() -> Non
 
 
 def test_openai_stream_tool_call_chunks_are_merged() -> None:
-    merged: dict[int, dict[str, object]] = {}
+    merged: dict[int, dict[str, Any]] = {}
     merge_openai_tool_call_chunks(
         merged,
         [

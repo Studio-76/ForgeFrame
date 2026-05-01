@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
+from typing import Any, cast
 
 from sqlalchemy import and_, select
 from sqlalchemy.orm import Session
@@ -180,7 +181,7 @@ class ApprovalAdminService:
         company_id: str | None = None,
         tenant_id: str | None = None,
         limit: int = 6,
-    ) -> dict[str, object]:
+    ) -> dict[str, Any]:
         events = self._governance.list_audit_events(limit=200, tenant_id=tenant_id, company_id=company_id)
         matching = [event for event in events if event.target_type == target_type and event.target_id == target_id][:limit]
         entries = [
@@ -205,9 +206,9 @@ class ApprovalAdminService:
 
     @staticmethod
     def _with_fallback_audit_entry(
-        audit_history: dict[str, object],
-        fallback_entry: dict[str, object],
-    ) -> dict[str, object]:
+        audit_history: dict[str, Any],
+        fallback_entry: dict[str, Any],
+    ) -> dict[str, Any]:
         entries = audit_history.get("entries")
         if isinstance(entries, list) and entries:
             return audit_history
@@ -259,7 +260,7 @@ class ApprovalAdminService:
 
     @staticmethod
     def _requester_from_payload(
-        payload: dict[str, object],
+        payload: dict[str, Any],
     ) -> ApprovalActorSummary | None:
         requested_by_user_id = payload.get("requested_by_user_id")
         if requested_by_user_id is None:
@@ -271,7 +272,7 @@ class ApprovalAdminService:
         )
 
     @staticmethod
-    def _target_from_payload(payload: dict[str, object]) -> ApprovalActorSummary | None:
+    def _target_from_payload(payload: dict[str, Any]) -> ApprovalActorSummary | None:
         target_user_id = payload.get("target_user_id")
         if target_user_id is None:
             return None
@@ -285,7 +286,7 @@ class ApprovalAdminService:
 
     @staticmethod
     def _decision_actor_from_payload(
-        payload: dict[str, object],
+        payload: dict[str, Any],
     ) -> ApprovalActorSummary | None:
         decided_by_user_id = payload.get("decided_by_user_id")
         if decided_by_user_id is None:
@@ -295,7 +296,7 @@ class ApprovalAdminService:
             username=payload.get("decided_by_username"),
         )
 
-    def _build_elevated_access_summary(self, payload: dict[str, object]) -> ApprovalSummary:
+    def _build_elevated_access_summary(self, payload: dict[str, Any]) -> ApprovalSummary:
         request_type = str(payload["request_type"])
         target_label = payload.get("target_display_name") or payload.get("target_username") or payload.get("target_user_id")
         title_prefix = "Break-glass" if request_type == "break_glass" else "Impersonation"
@@ -303,26 +304,26 @@ class ApprovalAdminService:
         gate_status = str(payload["gate_status"])
         ready_to_issue = bool(payload.get("ready_to_issue", False))
         session_status = payload.get("session_status")
-        expires_at = self._parse_dt(payload.get("approval_expires_at"))
+        expires_at = self._parse_dt(cast("str | datetime | None", payload.get("approval_expires_at")))
         return ApprovalSummary(
             approval_id=str(payload.get("approval_id") or build_elevated_access_approval_id(str(payload["request_id"]))),
             source_kind="elevated_access",
             native_approval_id=str(payload["request_id"]),
-            approval_type=request_type,  # type: ignore[arg-type]
+            approval_type=request_type,
             approval_class="elevated_access",
-            status=gate_status,  # type: ignore[arg-type]
+            status=gate_status,
             title=f"{title_prefix} approval for {target_label}",
-            opened_at=self._parse_dt(payload["created_at"]),
-            decided_at=self._parse_dt(payload.get("decided_at")),
+            opened_at=self._parse_dt(cast("str | datetime", payload["created_at"])),
+            decided_at=self._parse_dt(cast("str | datetime | None", payload.get("decided_at"))),
             expires_at=expires_at,
             requester=self._requester_from_payload(payload),
             target=self._target_from_payload(payload),
             decision_actor=self._decision_actor_from_payload(payload),
             ready_to_issue=ready_to_issue,
-            session_status=session_status,  # type: ignore[arg-type]
-            risk_level=risk_level,  # type: ignore[arg-type]
+            session_status=session_status,
+            risk_level=risk_level,
             risk_label=risk_label,
-            due_state=self._due_state(status=gate_status, expires_at=expires_at),  # type: ignore[arg-type]
+            due_state=self._due_state(status=gate_status, expires_at=expires_at),
             next_step=self._elevated_access_next_step(
                 status=gate_status,
                 ready_to_issue=ready_to_issue,
@@ -334,7 +335,7 @@ class ApprovalAdminService:
 
     def _build_elevated_access_detail(
         self,
-        payload: dict[str, object],
+        payload: dict[str, Any],
         *,
         actor: AuthenticatedAdmin,
     ) -> ApprovalDetail:
@@ -503,7 +504,7 @@ class ApprovalAdminService:
             native_approval_id=link.approval_id,
             approval_type="execution_run",
             approval_class="execution_control",
-            status=link.gate_status,  # type: ignore[arg-type]
+            status=link.gate_status,
             title=f"Execution approval for {run.run_kind}",
             opened_at=link.opened_at,
             decided_at=link.decided_at,
@@ -514,9 +515,9 @@ class ApprovalAdminService:
             requester=requester,
             target=ApprovalActorSummary(display_name=self._target_label_for_run(run), role="execution_scope"),
             decision_actor=ApprovalActorSummary(user_id=link.decision_actor_id),
-            risk_level=risk_level,  # type: ignore[arg-type]
+            risk_level=risk_level,
             risk_label=risk_label,
-            due_state=self._due_state(status=link.gate_status, expires_at=None),  # type: ignore[arg-type]
+            due_state=self._due_state(status=link.gate_status, expires_at=None),
             next_step=self._execution_next_step(link.gate_status),
             consequence_summary=("Approving re-opens the paused execution path. Rejecting sends the run into its configured deny flow."),
             irreversible=irreversible,

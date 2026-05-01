@@ -1,4 +1,5 @@
 import os
+from typing import Any
 
 import pytest
 from conftest import admin_headers as shared_admin_headers
@@ -17,7 +18,7 @@ def _assert_idempotency_not_supported(
     *,
     method: str,
     path: str,
-    json: dict[str, object] | None = None,
+    json: dict[str, Any] | None = None,
     headers: dict[str, str] | None = None,
 ) -> None:
     request_headers = {"Idempotency-Key": f"idem_boundary_{method}_{path.replace('/', '_')}"}
@@ -96,7 +97,7 @@ def test_admin_auth_mutations_reject_idempotency_key() -> None:
 def test_account_key_and_settings_mutations_reject_idempotency_key(
     method: str,
     path: str,
-    payload: dict[str, object] | None,
+    payload: dict[str, Any] | None,
 ) -> None:
     client = TestClient(app)
     _assert_idempotency_not_supported(
@@ -189,7 +190,7 @@ def test_account_key_and_settings_mutations_reject_idempotency_key(
 def test_security_mutations_reject_idempotency_key(
     method: str,
     path: str,
-    payload: dict[str, object] | None,
+    payload: dict[str, Any] | None,
 ) -> None:
     client = TestClient(app)
     _assert_idempotency_not_supported(

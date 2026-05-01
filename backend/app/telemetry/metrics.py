@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections import Counter, defaultdict
 from datetime import UTC, datetime, timedelta
 from statistics import mean
+from typing import Any
 
 from sqlalchemy import func, select
 
@@ -58,7 +59,7 @@ def _health_events(
     return [event for event in analytics.list_health_events(tenant_id=tenant_id) if _within_window(event.created_at, window_seconds=window_seconds)]
 
 
-def _red_metrics(runtime_usage: list[UsageEvent], runtime_errors: list[ErrorEvent]) -> dict[str, object]:
+def _red_metrics(runtime_usage: list[UsageEvent], runtime_errors: list[ErrorEvent]) -> dict[str, Any]:
     total_requests = len(runtime_usage) + len(runtime_errors)
     durations = [
         int(duration)
@@ -84,7 +85,7 @@ def _dependency_metrics(
     runtime_usage: list[UsageEvent],
     runtime_errors: list[ErrorEvent],
     health_events: list[HealthEvent],
-) -> list[dict[str, object]]:
+) -> list[dict[str, Any]]:
     grouped_usage: dict[str, list[UsageEvent]] = defaultdict(list)
     grouped_errors: dict[str, list[ErrorEvent]] = defaultdict(list)
     latest_health: dict[str, HealthEvent] = {}
@@ -97,7 +98,7 @@ def _dependency_metrics(
         latest_health[event.provider] = event
 
     providers = sorted(set(grouped_usage) | set(grouped_errors) | set(latest_health))
-    rows: list[dict[str, object]] = []
+    rows: list[dict[str, Any]] = []
     for provider in providers:
         usage_events = grouped_usage.get(provider, [])
         error_events = grouped_errors.get(provider, [])
@@ -126,7 +127,7 @@ def _dependency_metrics(
     return rows
 
 
-def _queue_metrics(*, company_id: str | None) -> dict[str, object]:
+def _queue_metrics(*, company_id: str | None) -> dict[str, Any]:
     session_factory = get_execution_session_factory()
     with session_factory() as session:
         run_query = select(RunORM.state, func.count()).group_by(RunORM.state)
@@ -198,7 +199,7 @@ def _routing_metrics(
     *,
     instance_id: str | None,
     window_seconds: int,
-) -> dict[str, object]:
+) -> dict[str, Any]:
     repository = get_control_plane_state_repository(settings)
     state = repository.load_state(instance_id)
     if state is None:
@@ -231,7 +232,7 @@ def _routing_metrics(
     decisions = [decision for decision in state.routing_decisions if _within_window(decision.created_at, window_seconds=window_seconds)]
     selected_candidates = []
     explainability_coverage = {"summary": 0, "structured": 0, "raw": 0}
-    recent_failures: list[dict[str, object]] = []
+    recent_failures: list[dict[str, Any]] = []
 
     for decision in decisions:
         if decision.summary.strip():
@@ -281,7 +282,7 @@ def _routing_metrics(
     }
 
 
-def _slo_indicators(red_metrics: dict[str, object], dependency_metrics: list[dict[str, object]]) -> dict[str, object]:
+def _slo_indicators(red_metrics: dict[str, Any], dependency_metrics: list[dict[str, Any]]) -> dict[str, Any]:
     request_count = int(red_metrics["requests"])
     error_rate = float(red_metrics["error_rate"])
     degraded_dependencies = [item["provider"] for item in dependency_metrics if item["latest_health_status"] not in {None, "healthy", "discovery_only"}]
@@ -304,7 +305,7 @@ def build_metrics_operability_snapshot(
     tenant_id: str | None = None,
     company_id: str | None = None,
     instance_id: str | None = None,
-) -> dict[str, object]:
+) -> dict[str, Any]:
     aggregates = analytics.aggregate(window_seconds=window_seconds, tenant_id=tenant_id)
     traffic_by_type = {str(item["traffic_type"]): item for item in aggregates["by_traffic_type"]}
     runtime_usage = _runtime_usage_events(analytics, tenant_id=tenant_id, window_seconds=window_seconds)

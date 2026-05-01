@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any, Literal
+from typing import Any, Literal, TypeAlias
 
 from pydantic import BaseModel, Field
 
@@ -179,7 +179,7 @@ EXECUTION_WORKER_STATES = ("starting", "idle", "busy", "stopping", "stopped", "f
 ExecutionWorkerState = Literal["starting", "idle", "busy", "stopping", "stopped", "failed"]
 
 RUN_APPROVAL_GATE_STATUSES = APPROVAL_STATUSES
-RunApprovalGateStatus = ApprovalStatus
+RunApprovalGateStatus: TypeAlias = ApprovalStatus
 
 RUN_RESUME_DISPOSITIONS = ("resume", "fail", "compensate", "cancel")
 RunResumeDisposition = Literal["resume", "fail", "compensate", "cancel"]

@@ -1,3 +1,4 @@
+from typing import Any
 from uuid import uuid4
 
 from conftest import admin_headers as shared_admin_headers
@@ -105,7 +106,7 @@ def _activate_break_glass_session(
     approval_reference: str,
     justification: str,
     duration_minutes: int = 20,
-) -> dict[str, object]:
+) -> dict[str, Any]:
     request = client.post(
         "/admin/security/break-glass",
         headers=requester_headers,

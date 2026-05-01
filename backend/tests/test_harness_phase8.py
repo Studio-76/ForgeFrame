@@ -1,4 +1,5 @@
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -175,7 +176,7 @@ def test_generic_harness_adapter_stream_mapping(tmp_path: Path) -> None:
             "content": "hello",
         }
 
-    service.execute_stream = fake_execute_stream  # type: ignore[method-assign]
+    service.execute_stream = fake_execute_stream
     events = list(
         adapter.stream_chat_completion(
             request=type(
@@ -247,9 +248,9 @@ def test_generic_harness_adapter_scopes_duplicate_profile_keys_by_runtime_instan
         *,
         instance_id: str | None = None,
         model: str,
-        messages: list[dict[str, object]],
+        messages: list[dict[str, Any]],
         request_metadata: dict[str, str] | None = None,
-    ) -> dict[str, object]:
+    ) -> dict[str, Any]:
         del provider_key, model, messages, request_metadata
         seen_non_stream.append(instance_id)
         return {
@@ -267,7 +268,7 @@ def test_generic_harness_adapter_scopes_duplicate_profile_keys_by_runtime_instan
         *,
         instance_id: str | None = None,
         model: str,
-        messages: list[dict[str, object]],
+        messages: list[dict[str, Any]],
         request_metadata: dict[str, str] | None = None,
     ):
         del provider_key, model, messages, request_metadata
@@ -289,7 +290,7 @@ def test_generic_harness_adapter_scopes_duplicate_profile_keys_by_runtime_instan
         request_metadata: dict[str, str] | None = None,
         encoding_format: str = "float",
         dimensions: int | None = None,
-    ) -> dict[str, object]:
+    ) -> dict[str, Any]:
         del (
             provider_key,
             model,
@@ -306,9 +307,9 @@ def test_generic_harness_adapter_scopes_duplicate_profile_keys_by_runtime_instan
             "total_tokens": 1,
         }
 
-    service.execute_non_stream = fake_execute_non_stream  # type: ignore[method-assign]
-    service.execute_stream = fake_execute_stream  # type: ignore[method-assign]
-    service.execute_embeddings = fake_execute_embeddings  # type: ignore[method-assign]
+    service.execute_non_stream = fake_execute_non_stream
+    service.execute_stream = fake_execute_stream
+    service.execute_embeddings = fake_execute_embeddings
 
     request_metadata = {"instance_id": "instance-beta"}
     chat_request = ChatDispatchRequest(
@@ -661,7 +662,7 @@ def test_generic_harness_adapter_non_stream_legacy_signature_compatibility(
             "total_tokens": 2,
         }
 
-    service.execute_non_stream = fake_execute_non_stream  # type: ignore[method-assign]
+    service.execute_non_stream = fake_execute_non_stream
     result = adapter.create_chat_completion(
         ChatDispatchRequest(
             model="legacy-model",
@@ -752,7 +753,7 @@ def test_generic_harness_adapter_non_stream_internal_type_error_is_not_retried(
         del provider_key, model, messages, tools, tool_choice, request_metadata
         raise TypeError("internal non-stream type error")
 
-    service.execute_non_stream = fake_execute_non_stream  # type: ignore[method-assign]
+    service.execute_non_stream = fake_execute_non_stream
 
     with pytest.raises(TypeError, match="internal non-stream type error"):
         adapter.create_chat_completion(
@@ -807,7 +808,7 @@ def test_generic_harness_adapter_stream_internal_type_error_is_not_retried(
         del provider_key, model, messages, tools, tool_choice, request_metadata
         raise TypeError("internal stream type error")
 
-    service.execute_stream = fake_execute_stream  # type: ignore[method-assign]
+    service.execute_stream = fake_execute_stream
 
     with pytest.raises(TypeError, match="internal stream type error"):
         list(
@@ -853,6 +854,6 @@ def test_verify_with_live_probe_records_step(tmp_path: Path) -> None:
     def fake_probe(payload):
         return {"status_code": 200}
 
-    service.probe = fake_probe  # type: ignore[method-assign]
+    service.probe = fake_probe
     result = service.verify_profile(HarnessVerificationRequest(provider_key="probeable", live_probe=True))
     assert any(step["step"] == "live_probe" for step in result.steps)

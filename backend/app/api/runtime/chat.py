@@ -111,7 +111,7 @@ def _routing_headers(
 
 
 def _validation_error_response(exc: ValidationError) -> JSONResponse:
-    issues: list[dict[str, object]] = []
+    issues: list[dict[str, Any]] = []
     for item in exc.errors():
         loc = [part for part in item.get("loc", ()) if part != "body"]
         issues.append({
@@ -328,7 +328,7 @@ def _runtime_request_metadata(
 @router.post("/chat/completions", response_model=None)
 def create_chat_completion(
     request: Request,
-    payload: dict[str, Any] = Body(...),
+    body: dict[str, Any] = Body(...),
     registry: ModelRegistry = Depends(get_model_registry),
     dispatch: DispatchService = Depends(get_dispatch_service),
     settings: Settings = Depends(get_settings),
@@ -339,7 +339,7 @@ def create_chat_completion(
     _runtime_actor: RequestActor | None = Depends(require_runtime_permission("runtime.chat.write")),
 ) -> object:
     try:
-        payload = ChatCompletionsRequest.model_validate(payload)
+        payload = ChatCompletionsRequest.model_validate(body)
     except ValidationError as exc:
         return _validation_error_response(exc)
 

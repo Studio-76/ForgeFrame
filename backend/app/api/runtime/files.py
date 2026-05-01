@@ -83,7 +83,10 @@ async def create_file(
             )
         filename = str(getattr(uploaded_file, "filename", "") or filename)
         payload_content_type = str(getattr(uploaded_file, "content_type", "") or payload_content_type)
-        content_bytes = await uploaded_file.read()
+        if isinstance(uploaded_file, str):
+            content_bytes = uploaded_file.encode("utf-8")
+        else:
+            content_bytes = await uploaded_file.read()
     elif content_type.lower().startswith("application/json"):
         body = await request.json()
         if not isinstance(body, dict):

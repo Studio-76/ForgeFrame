@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from typing import Any
 from uuid import uuid4
 
 from app.control_plane import (
@@ -158,8 +159,8 @@ class RoutingService:
         self,
         provider: str,
         *,
-        status_cache: dict[str, dict[str, object]] | None = None,
-    ) -> dict[str, object]:
+        status_cache: dict[str, dict[str, Any]] | None = None,
+    ) -> dict[str, Any]:
         if status_cache is not None and provider in status_cache:
             return status_cache[provider]
         try:
@@ -253,7 +254,7 @@ class RoutingService:
         require_vision: bool,
         required_capabilities: set[str] | None,
         health_index: dict[tuple[str, str], str],
-        status_cache: dict[str, dict[str, object]] | None = None,
+        status_cache: dict[str, dict[str, Any]] | None = None,
         strict_requested_model: bool = False,
     ) -> RouteCandidate:
         provider_status = self._provider_status(target.provider, status_cache=status_cache)
@@ -485,20 +486,20 @@ class RoutingService:
         summary: str,
         error_type: str,
         candidates: list[RouteCandidate],
-        selection_basis: dict[str, object],
+        selection_basis: dict[str, Any],
         source: str,
     ) -> None:
         decision = RoutingDecisionRecord(
             decision_id=f"route_{uuid4().hex[:12]}",
-            source=source,  # type: ignore[arg-type]
+            source=source,
             instance_id=self._instance_id,
             requested_model=requested_model,
             selected_target_key=None,
             classification=classification.label,
             classification_summary=classification.summary,
             classification_rules=list(classification.rules),
-            policy_stage=policy_stage,  # type: ignore[arg-type]
-            execution_lane=execution_lane,  # type: ignore[arg-type]
+            policy_stage=policy_stage,
+            execution_lane=execution_lane,
             summary=summary,
             structured_details={
                 "classification": classification.label,
@@ -529,7 +530,7 @@ class RoutingService:
         selected_candidate: RouteCandidate,
         stage_keys: list[str],
         all_candidates: list[RouteCandidate],
-        selection_basis: dict[str, object],
+        selection_basis: dict[str, Any],
         source: str,
     ) -> RouteDecision:
         resolved_target = self._registry.get_target(selected_candidate.target_key)
@@ -583,15 +584,15 @@ class RoutingService:
             state,
             RoutingDecisionRecord(
                 decision_id=decision.decision_id,
-                source=source,  # type: ignore[arg-type]
+                source=source,
                 instance_id=self._instance_id,
                 requested_model=requested_model,
                 selected_target_key=resolved_target.target_key,
                 classification=classification.label,
                 classification_summary=classification.summary,
                 classification_rules=list(classification.rules),
-                policy_stage=policy_stage,  # type: ignore[arg-type]
-                execution_lane=policy.execution_lane,  # type: ignore[arg-type]
+                policy_stage=policy_stage,
+                execution_lane=policy.execution_lane,
                 summary=summary,
                 structured_details=decision.structured_explainability,
                 raw_details=decision.raw_explainability,
@@ -738,7 +739,7 @@ class RoutingService:
             }
         )
         circuit_map = self._circuit_map(state)
-        status_cache: dict[str, dict[str, object]] = {}
+        status_cache: dict[str, dict[str, Any]] = {}
         usable_models: list[RuntimeModel] = []
         seen_model_ids: set[str] = set()
         candidates: list[tuple[RuntimeTarget, RouteCandidate]] = []
@@ -795,7 +796,7 @@ class RoutingService:
         require_vision: bool = False,
         allowed_providers: set[str] | None = None,
         route_context: dict[str, str] | None = None,
-        response_controls: dict[str, object] | None = None,
+        response_controls: dict[str, Any] | None = None,
         required_capabilities: set[str] | None = None,
         decision_source: str = "runtime_dispatch",
     ) -> RouteDecision:
@@ -829,7 +830,7 @@ class RoutingService:
             }
         )
         circuit_map = self._circuit_map(state)
-        status_cache: dict[str, dict[str, object]] = {}
+        status_cache: dict[str, dict[str, Any]] = {}
         target_pool = self._candidate_pool(
             requested_model=requested_model,
             allowed_providers=allowed_providers,

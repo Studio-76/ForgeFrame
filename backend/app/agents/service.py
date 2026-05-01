@@ -154,9 +154,9 @@ class AgentAdminService:
             company_id=row.company_id,
             display_name=row.display_name,
             default_name=row.default_name,
-            role_kind=row.role_kind,  # type: ignore[arg-type]
-            status=row.status,  # type: ignore[arg-type]
-            participation_mode=row.participation_mode,  # type: ignore[arg-type]
+            role_kind=row.role_kind,
+            status=row.status,
+            participation_mode=row.participation_mode,
             allowed_targets=list(row.allowed_targets_json or []),
             assistant_profile_id=row.assistant_profile_id,
             is_default_operator=row.is_default_operator,

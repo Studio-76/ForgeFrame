@@ -1,3 +1,4 @@
+from typing import Any
 from uuid import uuid4
 
 from conftest import admin_headers as shared_admin_headers
@@ -70,7 +71,7 @@ def _create_user_headers(
     creator_headers: dict[str, str],
     *,
     role: str,
-) -> tuple[dict[str, object], dict[str, str]]:
+) -> tuple[dict[str, Any], dict[str, str]]:
     suffix = uuid4().hex[:8]
     password = f"ForgeFrame-{role}-pass-123"
     created = client.post(

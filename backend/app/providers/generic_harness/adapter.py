@@ -73,7 +73,7 @@ class GenericHarnessAdapter:
             return "Harness profiles exist, but no enabled profile owns any models."
         return None
 
-    def status_capabilities(self, instance_id: str | None = None) -> dict[str, object]:
+    def status_capabilities(self, instance_id: str | None = None) -> dict[str, Any]:
         capabilities = self.capabilities.model_dump()
         runtime_profiles = self._capability_truth_profiles(instance_id=instance_id)
         active_profiles = self._active_profiles(instance_id=instance_id)
@@ -292,7 +292,7 @@ class GenericHarnessAdapter:
         )
 
     @staticmethod
-    def _harness_execution_kwargs(method: object, **kwargs: Any) -> dict[str, Any]:
+    def _harness_execution_kwargs(method: Any, **kwargs: Any) -> dict[str, Any]:
         try:
             parameters = signature(method).parameters.values()
         except (TypeError, ValueError):

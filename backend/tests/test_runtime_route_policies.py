@@ -1,3 +1,5 @@
+from typing import Any
+
 from conftest import admin_headers as shared_admin_headers
 from fastapi.testclient import TestClient
 
@@ -33,7 +35,7 @@ def _issue_runtime_key_record(
     client: TestClient,
     *,
     scopes: list[str],
-) -> dict[str, object]:
+) -> dict[str, Any]:
     headers = _admin_headers(client)
     account_response = client.post("/admin/accounts/", headers=headers, json={"label": "Tenant A"})
     assert account_response.status_code == 201
@@ -61,7 +63,7 @@ def _update_runtime_key_policy(
     pinned_target_key: str | None = None,
     local_only_policy: str = "require_local_target",
     review_required_conditions: list[str] | None = None,
-) -> dict[str, object]:
+) -> dict[str, Any]:
     response = client.patch(
         f"/admin/keys/{key_id}/request-path-policy",
         headers=_admin_headers(client),

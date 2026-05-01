@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Callable
 from datetime import UTC, datetime
 from functools import lru_cache
 from inspect import Parameter, signature
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import httpx
 from pydantic import BaseModel
@@ -29,6 +30,7 @@ from app.request_metadata import forgeframe_request_metadata_headers
 from app.settings.config import get_settings
 from app.storage.harness_repository import (
     FileHarnessRepository,
+    HarnessRepository,
     HarnessRunQuery,
     HarnessStoragePaths,
     PostgresHarnessRepository,
@@ -46,7 +48,7 @@ class HarnessService:
     @staticmethod
     def _supports_instance_scope_argument(method: object) -> bool:
         try:
-            parameters = signature(method).parameters.values()
+            parameters = signature(cast(Callable[..., Any], method)).parameters.values()
         except (TypeError, ValueError):
             return True
         if any(parameter.kind is Parameter.VAR_KEYWORD for parameter in parameters):
@@ -89,7 +91,7 @@ class HarnessService:
 
         resolved = template.profile_defaults.model_copy(deep=True)
         resolved = self._merge_explicit_model(resolved, profile)
-        resolved.template_id = template_id
+        cast(HarnessProviderProfile, resolved).template_id = template_id
         return HarnessProviderProfile(**resolved.model_dump())
 
     @staticmethod
@@ -490,7 +492,7 @@ class HarnessService:
                 active=profile.enabled,
                 status="ready" if profile.enabled else "warning",
                 readiness_reason=None if profile.enabled else "profile_disabled",
-                discovered_at=previous.get(model).discovered_at if model in previous else now,
+                discovered_at=previous[model].discovered_at if model in previous else now,
                 synced_at=now,
             )
             for model in profile.models
@@ -611,7 +613,7 @@ class HarnessService:
         include_runs: bool = True,
         instance_id: str | None = None,
     ) -> dict[str, Any]:
-        profiles = []
+        profiles: list[dict[str, Any]] = []
         for profile in self.list_profiles(instance_id):
             payload = {
                 "provider_key": profile.provider_key,
@@ -1090,7 +1092,7 @@ class HarnessService:
 def get_harness_service() -> HarnessService:
     settings = get_settings()
     if settings.harness_storage_backend == "postgresql":
-        repository = PostgresHarnessRepository(settings.harness_postgres_url)
+        repository: HarnessRepository = PostgresHarnessRepository(settings.harness_postgres_url)
     else:
         repository = FileHarnessRepository(
             paths=HarnessStoragePaths(

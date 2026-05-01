@@ -251,7 +251,7 @@ class FileHarnessRepository:
         self._atomic_write(self._paths.profiles_path, payload)
 
     def _flush_runs(self) -> None:
-        payload = {
+        payload: dict[str, Any] = {
             "schema_version": _SCHEMA_VERSION,
             "updated_at": self._now_iso(),
             "runs": [item.model_dump() for item in self._runs][-1500:],

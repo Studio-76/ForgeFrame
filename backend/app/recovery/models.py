@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from typing import Any, Literal
+from typing import Any, Literal, cast
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -101,7 +101,7 @@ class RecoveryBackupPolicyRecord(BaseModel):
     target_class: BackupTargetClass
     target_label: str = ""
     target_config: dict[str, Any] = Field(default_factory=dict)
-    protected_data_classes: list[ProtectedDataClass] = Field(default_factory=lambda: ["database"])
+    protected_data_classes: list[ProtectedDataClass] = Field(default_factory=lambda: cast(list[ProtectedDataClass], ["database"]))
     expected_source_identity: RecoverySourceIdentity = Field(default_factory=RecoverySourceIdentity)
     schedule_hint: str = ""
     max_backup_age_hours: int = Field(default=24, ge=1, le=24 * 365)
@@ -129,7 +129,7 @@ class RecoveryBackupReportRecord(BaseModel):
     report_id: str
     policy_id: str
     status: RecoveryReportStatus
-    protected_data_classes: list[ProtectedDataClass] = Field(default_factory=lambda: ["database"])
+    protected_data_classes: list[ProtectedDataClass] = Field(default_factory=lambda: cast(list[ProtectedDataClass], ["database"]))
     source_identity: RecoverySourceIdentity = Field(default_factory=RecoverySourceIdentity)
     target_locator: str = ""
     backup_path: str = ""
@@ -175,7 +175,7 @@ class RecoveryRestoreReportRecord(BaseModel):
     report_id: str
     policy_id: str
     status: RecoveryReportStatus
-    protected_data_classes: list[ProtectedDataClass] = Field(default_factory=lambda: ["database"])
+    protected_data_classes: list[ProtectedDataClass] = Field(default_factory=lambda: cast(list[ProtectedDataClass], ["database"]))
     source_identity: RecoverySourceIdentity = Field(default_factory=RecoverySourceIdentity)
     validated_source_identities: list[RecoverySourceIdentity] = Field(default_factory=list)
     restored_database: str = ""
@@ -360,7 +360,7 @@ class CreateRecoveryBackupPolicy(BaseModel):
     target_class: BackupTargetClass
     target_label: str = Field(default="", max_length=191)
     target_config: dict[str, Any] = Field(default_factory=dict)
-    protected_data_classes: list[ProtectedDataClass] = Field(default_factory=lambda: ["database"])
+    protected_data_classes: list[ProtectedDataClass] = Field(default_factory=lambda: cast(list[ProtectedDataClass], ["database"]))
     expected_source_identity: RecoverySourceIdentity = Field(default_factory=RecoverySourceIdentity)
     schedule_hint: str = Field(default="", max_length=191)
     max_backup_age_hours: int = Field(default=24, ge=1, le=24 * 365)

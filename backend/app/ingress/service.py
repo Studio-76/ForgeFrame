@@ -8,7 +8,7 @@ import ssl
 import subprocess
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -83,7 +83,7 @@ def _load_certificate_status(settings: Settings) -> TlsCertificateStatus:
         )
 
     try:
-        decoded = ssl._ssl._test_decode_cert(str(cert_path))
+        decoded = ssl._ssl._test_decode_cert(str(cert_path))  # type: ignore[attr-defined]
     except Exception as exc:  # pragma: no cover - depends on local cert material
         return TlsCertificateStatus(
             present=False,
@@ -93,7 +93,7 @@ def _load_certificate_status(settings: Settings) -> TlsCertificateStatus:
             last_error=f"{type(exc).__name__}: {exc}",
         )
 
-    def _join_name(parts: object) -> str | None:
+    def _join_name(parts: Any) -> str | None:
         if not parts:
             return None
         pairs: list[str] = []
@@ -137,7 +137,7 @@ def _resolve_dns(fqdn: str | None, port: int) -> tuple[bool, list[str]]:
         results = socket.getaddrinfo(fqdn, port, type=socket.SOCK_STREAM)
     except OSError:
         return False, []
-    addresses = sorted({item[4][0] for item in results if item[4]})
+    addresses = sorted({str(item[4][0]) for item in results if item[4]})
     return bool(addresses), addresses
 
 
@@ -221,7 +221,7 @@ def build_ingress_tls_status(settings: Settings) -> IngressTlsStatus:
     )
 
 
-def run_tls_renewal(settings: Settings) -> dict[str, object]:
+def run_tls_renewal(settings: Settings) -> dict[str, Any]:
     status = build_ingress_tls_status(settings)
     script = Path(__file__).resolve().parents[3] / "scripts" / "renew-certificates.sh"
     command = ["bash", str(script)]

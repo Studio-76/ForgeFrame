@@ -70,6 +70,13 @@ from app.telemetry.context import telemetry_context_from_request
 from app.tenancy import normalize_tenant_id
 from app.usage.analytics import ClientIdentity, get_usage_analytics_store
 
+
+def _decode_json_body(body: bytes | memoryview[int]) -> str:
+    if isinstance(body, bytes):
+        return body.decode()
+    return body.tobytes().decode()
+
+
 router = APIRouter(tags=["runtime-responses"])
 
 
@@ -187,7 +194,7 @@ def _response_completed_payload(
     usage: Any,
     cost: Any,
     native_mapping: dict[str, Any],
-) -> dict[str, object]:
+) -> dict[str, Any]:
     output, output_text = build_response_output_items(
         text=text,
         tool_calls=tool_calls,
@@ -216,7 +223,7 @@ def _response_failed_payload(
     error_code: str,
     error_message: str,
     native_mapping: dict[str, Any],
-) -> dict[str, object]:
+) -> dict[str, Any]:
     return build_response_object(
         response_id=response_id,
         created_at=created_at,
@@ -596,7 +603,7 @@ def create_response(
                 event_name="response.created",
                 payload=created_payload,
             )
-            yield (f"event: response.created\ndata: {JSONResponse(content=created_payload).body.decode()}\n\n")
+            yield (f"event: response.created\ndata: {_decode_json_body(JSONResponse(content=created_payload).body)}\n\n")
             try:
                 for event in events:
                     if event.event == "delta":
@@ -608,7 +615,7 @@ def create_response(
                             payload=delta_payload,
                         )
                         collected += event.delta
-                        yield (f"event: response.output_text.delta\ndata: {JSONResponse(content=delta_payload).body.decode()}\n\n")
+                        yield (f"event: response.output_text.delta\ndata: {_decode_json_body(JSONResponse(content=delta_payload).body)}\n\n")
                         continue
 
                     if event.event == "error":
@@ -665,7 +672,7 @@ def create_response(
                             payload=failed_payload,
                         )
                         terminal_state = True
-                        yield (f"event: response.error\ndata: {JSONResponse(content=failed_payload).body.decode()}\n\n")
+                        yield (f"event: response.error\ndata: {_decode_json_body(JSONResponse(content=failed_payload).body)}\n\n")
                         break
 
                     if event.event == "done":
@@ -727,7 +734,7 @@ def create_response(
                                 payload=failed_payload,
                             )
                             terminal_state = True
-                            yield (f"event: response.error\ndata: {JSONResponse(content=failed_payload).body.decode()}\n\n")
+                            yield (f"event: response.error\ndata: {_decode_json_body(JSONResponse(content=failed_payload).body)}\n\n")
                             break
                         analytics.record_stream_done_event(
                             provider=provider,
@@ -779,7 +786,7 @@ def create_response(
                             payload=completed_payload,
                         )
                         terminal_state = True
-                        yield (f"event: response.completed\ndata: {JSONResponse(content=completed_payload).body.decode()}\n\n")
+                        yield (f"event: response.completed\ndata: {_decode_json_body(JSONResponse(content=completed_payload).body)}\n\n")
                         break
             except GeneratorExit:
                 if not terminal_state:
@@ -882,7 +889,7 @@ def create_response(
                     payload=failed_payload,
                 )
                 terminal_state = True
-                yield (f"event: response.error\ndata: {JSONResponse(content=failed_payload).body.decode()}\n\n")
+                yield (f"event: response.error\ndata: {_decode_json_body(JSONResponse(content=failed_payload).body)}\n\n")
             yield "data: [DONE]\n\n"
 
         return StreamingResponse(

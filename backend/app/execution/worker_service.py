@@ -603,7 +603,7 @@ class ExecutionWorkerService:
         if event_kind:
             events.append(
                 NativeEventRecord(
-                    event_kind=event_kind,  # type: ignore[arg-type]
+                    event_kind=event_kind,
                     related_object_kind="run",
                     related_object_id=run_id,
                     status=event_status,

@@ -105,14 +105,15 @@ def get_runtime_request_path_decision(
             details={},
             request_id=_request_id(request),
         )
+        return None
 
 
 def runtime_request_path_metadata(
     decision: RuntimeRequestPathDecision | None,
-) -> dict[str, str]:
+) -> dict[str, str | None]:
     if decision is None:
         return {}
-    metadata = {
+    metadata: dict[str, str | None] = {
         "request_path_policy": decision.request_path,
         "default_request_path": decision.default_request_path,
         "request_path_selected_via": decision.selected_via,

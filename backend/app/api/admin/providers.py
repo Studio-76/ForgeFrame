@@ -63,7 +63,7 @@ def _admin_error(status_code: int, error_type: str, message: str) -> JSONRespons
     )
 
 
-def _admin_error_payload(error_type: str, message: str) -> dict[str, object]:
+def _admin_error_payload(error_type: str, message: str) -> Any:
     return {"error": {"type": error_type, "message": message}}
 
 
@@ -173,7 +173,7 @@ def list_provider_control_plane(
     _admin: AuthenticatedAdmin = Depends(_require_provider_read),
     instance: InstanceRecord = Depends(resolve_admin_instance_scope),
     service: ControlPlaneService = Depends(get_control_plane_service),
-) -> dict[str, object]:
+) -> Any:
     bootstrap_readiness = service.get_last_bootstrap_readiness()
     try:
         truth_axes = service.provider_truth_axes(
@@ -228,7 +228,7 @@ def openai_compatibility_signoff(
     _admin: AuthenticatedAdmin = Depends(_require_provider_read),
     instance: InstanceRecord = Depends(resolve_admin_instance_scope),
     service: ControlPlaneService = Depends(get_control_plane_service),
-) -> dict[str, object]:
+) -> Any:
     try:
         payload = service.openai_compatibility_signoff(
             tenant_id=instance.tenant_id,
@@ -318,7 +318,7 @@ def sync_provider_models(
 def get_health_config(
     _admin: AuthenticatedAdmin = Depends(_require_provider_read),
     service: ControlPlaneService = Depends(get_control_plane_service),
-) -> dict[str, object]:
+) -> Any:
     return {"status": "ok", "config": service.get_health_config().model_dump()}
 
 
@@ -327,7 +327,7 @@ def patch_health_config(
     payload: HealthConfigUpdateRequest,
     _admin: AuthenticatedAdmin = Depends(_require_provider_write),
     service: ControlPlaneService = Depends(get_control_plane_service),
-) -> dict[str, object]:
+) -> Any:
     return {
         "status": "ok",
         "config": service.update_health_config(payload).model_dump(),
@@ -339,7 +339,7 @@ def run_health_checks(
     request: Request,
     _admin: AuthenticatedAdmin = Depends(_require_provider_operate),
     service: ControlPlaneService = Depends(get_control_plane_service),
-) -> dict[str, object]:
+) -> Any:
     telemetry_context = telemetry_context_from_request(
         request,
         route=request.url.path or "/admin/providers/health/run",
@@ -591,7 +591,7 @@ def bootstrap_readiness(
 def list_harness_templates(
     _admin: AuthenticatedAdmin = Depends(_require_provider_read),
     service: ControlPlaneService = Depends(get_control_plane_service),
-) -> dict[str, object]:
+) -> Any:
     return {"status": "ok", "templates": service.list_harness_templates()}
 
 
@@ -600,7 +600,7 @@ def list_harness_profiles(
     _admin: AuthenticatedAdmin = Depends(_require_provider_read),
     instance: InstanceRecord = Depends(resolve_admin_instance_scope),
     service: ControlPlaneService = Depends(get_control_plane_service),
-) -> dict[str, object]:
+) -> Any:
     return {
         "status": "ok",
         "instance": instance.model_dump(mode="json"),

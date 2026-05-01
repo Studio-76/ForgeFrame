@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import TYPE_CHECKING, Any
 
 from app.control_plane import (
     ControlPlaneBootstrapCheck,
@@ -24,6 +25,13 @@ from app.tenancy import TenantFilterRequiredError
 
 
 class ControlPlaneBootstrapDomainMixin:
+    if TYPE_CHECKING:
+        _settings: Any
+        _analytics: Any
+        _last_bootstrap_readiness: Any
+
+        def _persist_state(self) -> Any: ...
+
     def _build_bootstrap_readiness_report(self) -> ControlPlaneBootstrapReadinessReport:
         checked_at = datetime.now(tz=UTC).isoformat()
         root_dir = Path(__file__).resolve().parents[4]

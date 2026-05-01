@@ -31,7 +31,7 @@ def _actor(
     policy_flags: list[str] | None = None,
 ) -> RequestActor:
     return RequestActor(
-        principal_type=principal_type,  # type: ignore[arg-type]
+        principal_type=principal_type,
         principal_id=principal_id,
         credential_id="cred_1",
         auth_method="bearer_token",
@@ -48,7 +48,7 @@ def _actor(
             run_ids=run_ids or [],
             queue_ids=queue_ids or [],
         ),
-        membership_state=membership_state,  # type: ignore[arg-type]
+        membership_state=membership_state,
         request_id="req_test_guard",
         policy_flags=policy_flags or [],
     )

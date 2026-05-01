@@ -227,7 +227,7 @@ class PostgresPluginRepository:
             summary=row.summary,
             vendor=row.vendor,
             version=row.version,
-            status=row.status,  # type: ignore[arg-type]
+            status=row.status,
             capabilities=list(row.capabilities_json or []),
             ui_slots=list(row.ui_slots_json or []),
             api_mounts=list(row.api_mounts_json or []),

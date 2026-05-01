@@ -188,7 +188,7 @@ class PluginCatalogService:
             enabled_binding_count=len(enabled_bindings),
             bound_instance_ids=sorted({item.instance_id for item in all_bindings}),
             enabled_instance_ids=sorted({item.instance_id for item in enabled_bindings}),
-            effective_status=effective_status,  # type: ignore[arg-type]
+            effective_status=effective_status,
             status_summary=status_summary,
             effective_config=self._effective_config(manifest, binding),
             created_at=manifest.created_at,

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any, Literal
+from typing import Any, Literal, cast
 
 from pydantic import BaseModel, Field
 
@@ -82,7 +82,7 @@ class QuietHoursSettings(BaseModel):
     timezone: str = Field(default="UTC", min_length=1, max_length=64)
     start_minute: int = Field(default=1320, ge=0, le=1439)
     end_minute: int = Field(default=420, ge=0, le=1439)
-    days: list[QuietHoursDay] = Field(default_factory=lambda: ["mon", "tue", "wed", "thu", "fri"])
+    days: list[QuietHoursDay] = Field(default_factory=lambda: cast(list[QuietHoursDay], ["mon", "tue", "wed", "thu", "fri"]))
     allow_priority_override: bool = True
     override_min_priority: WorkItemPriority = "critical"
 

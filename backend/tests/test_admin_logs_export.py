@@ -3,6 +3,7 @@ import io
 import json
 from datetime import UTC, datetime, timedelta
 from itertools import count
+from typing import Any
 from uuid import uuid4
 
 import pytest
@@ -34,7 +35,7 @@ def _create_user_headers(
     creator_headers: dict[str, str],
     *,
     role: str,
-) -> tuple[dict[str, object], dict[str, str]]:
+) -> tuple[dict[str, Any], dict[str, str]]:
     suffix = uuid4().hex[:8]
     password = f"ForgeFrame-{role}-pass-123"
     created = client.post(

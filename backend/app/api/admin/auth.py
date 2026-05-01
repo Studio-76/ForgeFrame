@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 from fastapi import APIRouter, Depends, Request, status
 from fastapi.responses import JSONResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
@@ -53,7 +55,7 @@ def _password_rotation_failure_message(error_code: str) -> str:
 
 
 @router.get("/bootstrap")
-def auth_bootstrap_status() -> dict[str, object]:
+def auth_bootstrap_status() -> Any:
     return {"status": "ok", "bootstrap": SignedOutBootstrapHint().model_dump()}
 
 
@@ -92,7 +94,7 @@ def login(
     payload: LoginRequest,
     request: Request,
     service: GovernanceService = Depends(get_governance_service),
-) -> dict[str, object]:
+) -> Any:
     unsupported = unsupported_idempotency_response(request, message=_AUTH_IDEMPOTENCY_MESSAGE)
     if unsupported is not None:
         return unsupported
@@ -131,7 +133,7 @@ def runtime_readiness(
     governance: GovernanceService = Depends(get_governance_service),
     harness: HarnessService = Depends(get_harness_service),
     analytics: UsageAnalyticsStore = Depends(get_usage_analytics_store),
-) -> dict[str, object]:
+) -> Any:
     del admin
     return {
         "status": "ok",
@@ -150,7 +152,7 @@ def runtime_readiness(
 @router.get("/me")
 def me(
     admin: AuthenticatedAdmin = Depends(require_admin_session_allowing_password_rotation),
-) -> dict[str, object]:
+) -> Any:
     return {"status": "ok", "user": admin.model_dump()}
 
 
@@ -160,7 +162,7 @@ def logout(
     admin: AuthenticatedAdmin = Depends(require_admin_session_allowing_password_rotation),
     credentials: HTTPAuthorizationCredentials | None = Depends(_bearer),
     service: GovernanceService = Depends(get_governance_service),
-) -> dict[str, object]:
+) -> Any:
     unsupported = unsupported_idempotency_response(request, message=_AUTH_IDEMPOTENCY_MESSAGE)
     if unsupported is not None:
         return unsupported

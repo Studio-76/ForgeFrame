@@ -1,3 +1,4 @@
+from typing import Any
 from uuid import uuid4
 
 from conftest import admin_headers as shared_admin_headers
@@ -46,7 +47,7 @@ def _create_workspace(
     instance_id: str,
     title: str,
     issue_id: str,
-) -> dict[str, object]:
+) -> dict[str, Any]:
     response = client.post(
         "/admin/workspaces",
         headers=headers,

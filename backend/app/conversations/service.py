@@ -73,7 +73,7 @@ class ConversationInboxAdminService:
             conversation_id=row.conversation_id,
             thread_id=row.thread_id,
             session_id=row.session_id,
-            message_role=row.message_role,  # type: ignore[arg-type]
+            message_role=row.message_role,
             author_type=row.author_type,
             author_id=row.author_id,
             body=row.body,
@@ -87,7 +87,7 @@ class ConversationInboxAdminService:
             session_id=session_row.id,
             conversation_id=session_row.conversation_id,
             thread_id=session_row.thread_id,
-            session_kind=session_row.session_kind,  # type: ignore[arg-type]
+            session_kind=session_row.session_kind,
             continuity_key=session_row.continuity_key,
             started_by_type=session_row.started_by_type,
             started_by_id=session_row.started_by_id,
@@ -103,7 +103,7 @@ class ConversationInboxAdminService:
             thread_id=row.id,
             conversation_id=row.conversation_id,
             title=row.title,
-            status=row.status,  # type: ignore[arg-type]
+            status=row.status,
             latest_message_at=row.latest_message_at,
             message_count=message_count,
             session_count=session_count,
@@ -119,8 +119,8 @@ class ConversationInboxAdminService:
             participant_id=row.id,
             conversation_id=row.conversation_id,
             thread_id=row.thread_id,
-            participant_kind=row.participant_kind,  # type: ignore[arg-type]
-            participant_status=row.participant_status,  # type: ignore[arg-type]
+            participant_kind=row.participant_kind,
+            participant_status=row.participant_status,
             agent_id=row.agent_id,
             participant_ref=row.participant_ref,
             display_label=row.display_label,
@@ -139,7 +139,7 @@ class ConversationInboxAdminService:
             agent_id=row.agent_id,
             token=row.token,
             agent_display_name=row.agent_display_name,
-            status=row.status,  # type: ignore[arg-type]
+            status=row.status,
             metadata=dict(row.metadata_json or {}),
             created_at=row.created_at,
         )
@@ -151,7 +151,7 @@ class ConversationInboxAdminService:
             conversation_id=row.conversation_id,
             thread_id=row.thread_id,
             source_message_id=row.source_message_id,
-            event_type=row.event_type,  # type: ignore[arg-type]
+            event_type=row.event_type,
             source_agent_id=row.source_agent_id,
             target_agent_id=row.target_agent_id,
             related_object_type=row.related_object_type,
@@ -172,9 +172,9 @@ class ConversationInboxAdminService:
             workspace_id=row.workspace_id,
             title=row.title,
             summary=row.summary,
-            triage_status=row.triage_status,  # type: ignore[arg-type]
-            priority=row.priority,  # type: ignore[arg-type]
-            status=row.status,  # type: ignore[arg-type]
+            triage_status=row.triage_status,
+            priority=row.priority,
+            status=row.status,
             contact_ref=row.contact_ref,
             run_id=row.run_id,
             artifact_id=row.artifact_id,
@@ -341,9 +341,9 @@ class ConversationInboxAdminService:
             workspace_id=row.workspace_id,
             subject=row.subject,
             summary=row.summary,
-            status=row.status,  # type: ignore[arg-type]
-            triage_status=row.triage_status,  # type: ignore[arg-type]
-            priority=row.priority,  # type: ignore[arg-type]
+            status=row.status,
+            triage_status=row.triage_status,
+            priority=row.priority,
             contact_ref=row.contact_ref,
             run_id=row.run_id,
             artifact_id=row.artifact_id,

@@ -80,7 +80,7 @@ def _unsupported_fields_error(path: str, fields: set[str]) -> ValueError:
     return ValueError(f"{path} includes unsupported {suffix}: {listed}.")
 
 
-def _normalize_chat_content_block(block: object, *, message_index: int, block_index: int) -> dict[str, object]:
+def _normalize_chat_content_block(block: object, *, message_index: int, block_index: int) -> dict[str, Any]:
     path = f"{_chat_message_path(message_index)}.content[{block_index}]"
     if not isinstance(block, dict):
         raise ValueError(f"{path} must be an object.")
@@ -116,7 +116,7 @@ def _normalize_chat_content_block(block: object, *, message_index: int, block_in
     image_url = str(raw_image_url or "").strip()
     if not image_url:
         raise ValueError(f"{path} must include a non-empty image_url.")
-    normalized_block: dict[str, object] = {
+    normalized_block: dict[str, Any] = {
         "type": "image_url",
         "image_url": {"url": image_url},
     }
@@ -136,12 +136,12 @@ def _normalize_chat_message_content(content: object, *, message_index: int) -> o
     raise ValueError(f"{path} must be a string, null, or a list of supported content blocks.")
 
 
-def _normalize_chat_tool_calls(raw_tool_calls: object, *, message_index: int) -> list[dict[str, object]]:
+def _normalize_chat_tool_calls(raw_tool_calls: object, *, message_index: int) -> list[dict[str, Any]]:
     path = f"{_chat_message_path(message_index)}.tool_calls"
     if not isinstance(raw_tool_calls, list):
         raise ValueError(f"{path} must be a list.")
 
-    normalized: list[dict[str, object]] = []
+    normalized: list[dict[str, Any]] = []
     for tool_call_index, tool_call in enumerate(raw_tool_calls):
         tool_call_path = f"{path}[{tool_call_index}]"
         if not isinstance(tool_call, dict):
@@ -192,8 +192,8 @@ def _normalize_chat_tool_calls(raw_tool_calls: object, *, message_index: int) ->
     return normalized
 
 
-def normalize_chat_messages(messages: list[ChatMessage]) -> list[dict[str, object]]:
-    normalized: list[dict[str, object]] = []
+def normalize_chat_messages(messages: list[ChatMessage]) -> list[dict[str, Any]]:
+    normalized: list[dict[str, Any]] = []
     for index, message in enumerate(messages):
         message_path = _chat_message_path(index)
         extras = dict(message.model_extra or {})
@@ -207,7 +207,7 @@ def normalize_chat_messages(messages: list[ChatMessage]) -> list[dict[str, objec
         if unexpected_fields:
             raise _unsupported_fields_error(message_path, unexpected_fields)
 
-        normalized_message: dict[str, object] = {
+        normalized_message: dict[str, Any] = {
             "role": message.role,
             "content": _normalize_chat_message_content(message.content, message_index=index),
         }

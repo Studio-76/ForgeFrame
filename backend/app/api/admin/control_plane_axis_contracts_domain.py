@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING, Any
+
 from app.api.admin.control_plane_models import (
     OAuthAccountTargetStatus,
     ProductAxisTarget,
@@ -12,6 +14,16 @@ _LOCAL_EXACT_PROVIDER_KEYS = ("localai", "llama_cpp", "llama_cpp_python", "vllm"
 
 
 class ControlPlaneAxisContractsDomainMixin:
+    if TYPE_CHECKING:
+        _harness: Any
+        _instance: Any
+        _effective_truth_projection_tenant_id: Any
+
+        def _safe_provider_status(self, *args: Any, **kwargs: Any) -> Any: ...
+        def _oauth_target_status(self, *args: Any, **kwargs: Any) -> Any: ...
+        def _native_oauth_target_status(self, *args: Any, **kwargs: Any) -> Any: ...
+        def _provider_capability_evidence(self, *args: Any, **kwargs: Any) -> Any: ...
+
     @staticmethod
     def _bridge_only_verify_probe_readiness(status: OAuthAccountTargetStatus) -> str:
         if status.configured and status.probe_enabled and status.evidence.live_probe.status == "observed":
@@ -79,7 +91,7 @@ class ControlPlaneAxisContractsDomainMixin:
             ),
         )
 
-    def product_axis_targets(self, tenant_id: str | None = None) -> list[dict[str, object]]:
+    def product_axis_targets(self, tenant_id: str | None = None) -> list[dict[str, Any]]:
         effective_tenant_id = self._effective_truth_projection_tenant_id(tenant_id)
         codex_status = self._safe_provider_status("openai_codex")
         gemini_status = self._safe_provider_status("gemini")

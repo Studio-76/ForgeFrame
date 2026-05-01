@@ -263,7 +263,7 @@ class LearningAdminService:
         if decision in {"boot_memory", "durable_memory"}:
             title = str(memory_seed.get("title") or row.summary)
             return LearningProposalSummary(
-                target_kind=decision,  # type: ignore[arg-type]
+                target_kind=decision,
                 target_label=target_label,
                 surface="memory",
                 scope_label=self._memory_visibility_label(str(memory_seed.get("visibility_scope") or "team")),
@@ -353,9 +353,9 @@ class LearningAdminService:
                 scope_label=None,
             )
         return LearningOutcomeSummary(
-            target_kind=decision,  # type: ignore[arg-type]
+            target_kind=decision,
             target_label=DECISION_LABELS.get(decision, decision.replace("_", " ")),
-            surface=DECISION_SURFACES.get(decision, "review"),  # type: ignore[arg-type]
+            surface=DECISION_SURFACES.get(decision, "review"),
             scope_label=scope_label,
         )
 
@@ -423,9 +423,9 @@ class LearningAdminService:
             learning_event_id=row.id,
             instance_id=row.instance_id,
             company_id=row.company_id,
-            trigger_kind=row.trigger_kind,  # type: ignore[arg-type]
-            suggested_decision=row.suggested_decision,  # type: ignore[arg-type]
-            status=row.status,  # type: ignore[arg-type]
+            trigger_kind=row.trigger_kind,
+            suggested_decision=row.suggested_decision,
+            status=row.status,
             summary=row.summary,
             explanation=row.explanation,
             agent_id=row.agent_id,
@@ -438,9 +438,9 @@ class LearningAdminService:
             promoted_skill_id=row.promoted_skill_id,
             human_override=row.human_override,
             decision_note=row.decision_note,
-            review_bucket=review_bucket,  # type: ignore[arg-type]
+            review_bucket=review_bucket,
             review_bucket_label=review_bucket_label,
-            suggested_lane=suggested_lane,  # type: ignore[arg-type]
+            suggested_lane=suggested_lane,
             suggested_lane_label=suggested_lane_label,
             source=self._source_summary(session, row),
             proposal=self._proposal_summary(row),

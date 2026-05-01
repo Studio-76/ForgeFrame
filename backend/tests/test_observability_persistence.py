@@ -66,7 +66,7 @@ def test_health_events_are_persisted_across_store_reload() -> None:
 def test_responses_usage_events_persist_scope_attributes_from_request_metadata() -> None:
     client = TestClient(app)
     analytics = get_usage_analytics_store()
-    repository = analytics._repository  # type: ignore[attr-defined]
+    repository = analytics._repository
     before_count = len(repository.load_usage_events())
     settings = get_settings()
 
