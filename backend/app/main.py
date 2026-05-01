@@ -1,5 +1,6 @@
 """ForgeFrame backend application bootstrap."""
 
+import sys
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -9,7 +10,7 @@ from fastapi.staticfiles import StaticFiles
 from starlette.types import ASGIApp, Receive, Scope, Send
 
 from app.api.admin import build_admin_router
-from app.api.runtime import router as runtime_router
+from app.api.runtime import build_runtime_router
 from app.authz.route_guards import RouteGuardHTTPException
 from app.idempotency import (
     InvalidIdempotencyKeyError,
@@ -234,10 +235,18 @@ def create_app() -> FastAPI:
         return response
 
     app.add_middleware(StartupValidationGateMiddleware, default_api_base=settings.api_base)
-    app.include_router(runtime_router)
+    app.include_router(build_runtime_router(settings.api_base))
     app.include_router(build_admin_router())
     _mount_frontend(app, Path(settings.frontend_dist_path))
     return app
 
 
-app = create_app()
+try:
+    app = create_app()
+except Exception as exc:  # pragma: no cover - process bootstrap guard
+    message = str(exc).strip() or exc.__class__.__name__
+    print(
+        f"ForgeFrame backend failed to start due to invalid configuration.\n{message}",
+        file=sys.stderr,
+    )
+    raise SystemExit(1) from None
