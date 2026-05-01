@@ -76,7 +76,7 @@ export function ProvidersManagementOverviewSection({ data, actions, instanceId }
   return (
     <SectionCard
       title="Provider Runtime Inventory"
-      description="This route now stays focused on live provider management: inventory, configuration, enablement, sync, compatibility short status, and health."
+      description="Live provider inventory, configuration, sync, compatibility, and health."
       actions={
         <>
           <button type="button" onClick={() => void actions.load()}>
@@ -93,7 +93,7 @@ export function ProvidersManagementOverviewSection({ data, actions, instanceId }
       <div className="fg-grid fg-grid-compact">
         <MetricTile label="Providers" value={formatMetric(data.providers.length)} note={`${formatMetric(enabledProviders)} enabled`} />
         <MetricTile label="Runtime ready" value={formatMetric(readyProviders)} note={`${formatMetric(connectRequired)} connect required`} />
-        <MetricTile label="Health attention" value={formatMetric(healthAttention)} note={data.healthConfig ? `probe mode ${data.healthConfig.probe_mode}` : "health config unavailable"} />
+        <MetricTile label="Health attention" value={formatMetric(healthAttention)} note={data.healthConfig ? `probe mode ${data.healthConfig.probe_mode}` : "no health config"} />
         <MetricTile
           label="Cross-reference"
           value="Harness + OAuth"
@@ -241,7 +241,7 @@ export function ProviderHealthSection({ data, actions, instanceId }: ProviderHea
       tabIndex={-1}
       className={location.hash === "#provider-health-runs" ? "is-anchor-target" : ""}
       title="Provider Health & Runs"
-      description="Keep provider probes and latest runs as a focused operations surface with direct error handoffs to inventory, OAuth, and targets."
+      description="Provider probes and latest runs with direct handoff to inventory, OAuth, and targets."
       actions={
         <>
           {data.access.canMutate ? (
