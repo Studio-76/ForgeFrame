@@ -19,12 +19,6 @@ import {
   toBooleanValue,
   toStringValue,
 } from "./providersShared";
-
-type SectionProps = {
-  data: ProvidersPageData;
-  actions: ProvidersPageActions;
-};
-
 import {
   EvidenceSummary,
   HarnessProfileCard,
@@ -66,6 +60,11 @@ import {
   toneFromStatus,
   type ProvidersManagementSectionProps,
 } from "./providersSectionUtils";
+
+type SectionProps = {
+  data: ProvidersPageData;
+  actions: ProvidersPageActions;
+};
 
 export function ProvidersManagementOverviewSection({ data, actions, instanceId }: ProvidersManagementSectionProps) {
   const enabledProviders = data.providers.filter((provider) => provider.enabled).length;
