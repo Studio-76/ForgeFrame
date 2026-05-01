@@ -1,18 +1,38 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo } from "react";
 import { Navigate, Outlet, useLocation } from "react-router-dom";
 
 import { clearAdminToken, fetchAdminSession, getAdminToken, logoutAdmin, type AdminSessionUser } from "../api/admin";
+import { adminKeys } from "../api/adminQueries";
 import { AppShell } from "../components/layout/AppShell";
 import { LoadingState } from "../components/ui/StateBlocks";
 import { getSessionRouteState } from "./authRouting";
 import { CONTROL_PLANE_ROUTES, getControlPlaneNavigation, type NavigationSection } from "./navigation";
+import { queryClient } from "./queryClient";
 import { getInstanceIdFromSearchParams } from "./tenantScope";
+import { useQuery } from "@tanstack/react-query";
 
 export function App() {
   const location = useLocation();
-  const [session, setSession] = useState<AdminSessionUser | null>(null);
-  const [sessionError, setSessionError] = useState<string>("");
-  const [sessionReady, setSessionReady] = useState<boolean>(false);
+  const hasToken = Boolean(getAdminToken());
+
+  const sessionQuery = useQuery({
+    queryKey: adminKeys.session,
+    queryFn: fetchAdminSession,
+    enabled: hasToken,
+    staleTime: 5 * 60 * 1000,
+    retry: false,
+  });
+
+  const session: AdminSessionUser | null = sessionQuery.data?.user ?? null;
+  const sessionError: string = sessionQuery.error instanceof Error ? sessionQuery.error.message : "";
+  const sessionReady = !hasToken || sessionQuery.isFetched;
+
+  /* Clear the stored token when the session check itself fails (e.g. expired). */
+  useEffect(() => {
+    if (sessionQuery.isError) {
+      clearAdminToken();
+    }
+  }, [sessionQuery.isError]);
 
   const navigationSections = getControlPlaneNavigation(session);
   const scopeSearchParams = new URLSearchParams(location.search);
@@ -20,61 +40,37 @@ export function App() {
   const routeState = getSessionRouteState({
     pathname: location.pathname,
     requestedPath: `${location.pathname}${location.search}${location.hash}`,
-    hasToken: Boolean(getAdminToken()),
+    hasToken,
     session,
     sessionReady,
   });
 
-  useEffect(() => {
-    let mounted = true;
-
-    const load = async () => {
-      setSessionReady(false);
-      if (!getAdminToken()) {
-        setSession(null);
-        setSessionReady(true);
-        return;
-      }
-      try {
-        const payload = await fetchAdminSession();
-        if (!mounted) {
-          return;
-        }
-        setSession(payload.user);
-        setSessionError("");
-        setSessionReady(true);
-      } catch (error) {
-        clearAdminToken();
-        if (!mounted) {
-          return;
-        }
-        setSession(null);
-        setSessionError(error instanceof Error ? error.message : "Session check failed.");
-        setSessionReady(true);
-      }
-    };
-
-    void load();
-    return () => {
-      mounted = false;
-    };
-  }, [location.pathname]);
-
-  const onLogout = async () => {
+  const onLogout = useCallback(async () => {
     try {
       await logoutAdmin();
     } catch {
       // noop
     }
     clearAdminToken();
-    setSession(null);
-  };
+    queryClient.setQueryData(adminKeys.session, undefined);
+  }, []);
 
-  const markPasswordRotationComplete = () => {
-    setSession((current) => (current ? { ...current, must_rotate_password: false } : current));
-  };
+  const markPasswordRotationComplete = useCallback(() => {
+    queryClient.setQueryData(adminKeys.session, (old: { status: string; user: AdminSessionUser } | undefined) => {
+      if (!old) return old;
+      return { ...old, user: { ...old.user, must_rotate_password: false } };
+    });
+  }, []);
 
-  const passwordRotationNavigation: NavigationSection[] = [{
+  const replaceSession = useCallback((updatedUser: AdminSessionUser | null) => {
+    if (updatedUser) {
+      queryClient.setQueryData(adminKeys.session, { status: "ok", user: updatedUser });
+    } else {
+      queryClient.resetQueries({ queryKey: adminKeys.session });
+    }
+  }, []);
+
+  const passwordRotationNavigation: NavigationSection[] = useMemo(() => [{
     id: "system",
     label: "Session",
     description: "Temporary admin sessions can only rotate their password or log out.",
@@ -84,7 +80,7 @@ export function App() {
       to: CONTROL_PLANE_ROUTES.passwordRotation,
       description: "Replace the temporary admin password before opening the full control plane.",
     }],
-  }];
+  }], []);
 
   const shellNavigation = routeState.shellMode === "password_rotation" ? passwordRotationNavigation : navigationSections;
 
@@ -110,7 +106,7 @@ export function App() {
       ) : routeState.redirectTo ? (
         <Navigate replace to={routeState.redirectTo} />
       ) : (
-        <Outlet context={{ session, sessionReady, markPasswordRotationComplete, replaceSession: setSession }} />
+        <Outlet context={{ session, sessionReady, markPasswordRotationComplete, replaceSession }} />
       )}
     </AppShell>
   );

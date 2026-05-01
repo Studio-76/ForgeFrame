@@ -1,13 +1,11 @@
-import { useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 
 import {
   AdminApiError,
-  fetchDashboard,
   type DashboardAttentionItem,
   type DashboardPrimaryAction,
-  type DashboardResponse,
 } from "../api/admin";
+import { useDashboardQuery } from "../api/adminQueries";
 import { roleAllows, sessionHasAnyInstancePermission } from "../app/adminAccess";
 import { CONTROL_PLANE_ROUTES } from "../app/navigation";
 import { useAppSession } from "../app/session";
@@ -122,13 +120,17 @@ function buildPermissionActions({
 }
 
 export function DashboardPage() {
-  const [dashboard, setDashboard] = useState<DashboardResponse | null>(null);
-  const [error, setError] = useState<string>("");
-  const [errorCode, setErrorCode] = useState<string | null>(null);
   const [searchParams, setSearchParams] = useSearchParams();
   const { session, sessionReady } = useAppSession();
   const instanceId = getInstanceIdFromSearchParams(searchParams);
   const { instances, loadState, error: instancesError, selectedInstance } = useInstanceCatalog(instanceId);
+
+  const dashboardQuery = useDashboardQuery(instanceId);
+  const dashboard = dashboardQuery.data ?? null;
+  const error = dashboardQuery.error instanceof Error ? dashboardQuery.error.message : "";
+  const errorCode = getErrorCode(dashboardQuery.error);
+  const isLoading = dashboardQuery.isLoading;
+
   const instanceScopeLabel = selectedInstance?.display_name ?? selectedInstance?.instance_id ?? "Default instance path";
   const canManageSecurity = sessionHasAnyInstancePermission(session, "security.write");
   const canOpenSecurity = canManageSecurity || sessionHasAnyInstancePermission(session, "security.read") || roleAllows(session?.role, "admin");
@@ -155,32 +157,6 @@ export function DashboardPage() {
     }
     setSearchParams(nextSearchParams);
   };
-
-  useEffect(() => {
-    let mounted = true;
-    const load = async () => {
-      try {
-        const payload = instanceId ? await fetchDashboard(instanceId) : await fetchDashboard();
-        if (!mounted) {
-          return;
-        }
-        setDashboard(payload);
-        setError("");
-        setErrorCode(null);
-      } catch (err) {
-        if (!mounted) {
-          return;
-        }
-        setDashboard(null);
-        setErrorCode(getErrorCode(err));
-        setError(err instanceof Error ? err.message : "Dashboard loading failed.");
-      }
-    };
-    void load();
-    return () => {
-      mounted = false;
-    };
-  }, [instanceId]);
 
   return (
     <section className="fg-page">
@@ -219,7 +195,7 @@ export function DashboardPage() {
           )}
         />
       ) : null}
-      {!dashboard && !error ? (
+      {isLoading ? (
         <LoadingState
           title="Loading command-center truth"
           description="ForgeFrame is restoring the current next action, blockers, and release posture for the selected scope."

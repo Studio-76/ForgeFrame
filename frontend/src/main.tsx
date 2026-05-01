@@ -5,6 +5,7 @@ import { Navigate, RouterProvider, createBrowserRouter } from "react-router-dom"
 import { App } from "./app/App";
 import { loginRouteLoader, protectedRouteLoader } from "./app/authRouting";
 import { PublicShell } from "./app/PublicShell";
+import { QueryProvider } from "./app/QueryProvider";
 import "./theme/index.css";
 import { ThemeProvider } from "./theme/ThemeProvider";
 import { LoginPage } from "./pages/LoginPage";
@@ -131,7 +132,9 @@ const router = createBrowserRouter([
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
     <ThemeProvider>
-      <RouterProvider router={router} />
+      <QueryProvider>
+        <RouterProvider router={router} />
+      </QueryProvider>
     </ThemeProvider>
   </React.StrictMode>,
 );
