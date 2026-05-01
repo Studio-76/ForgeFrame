@@ -280,7 +280,7 @@ export function HarnessControlSection({ data, actions, instanceId }: HarnessCont
                       <p><span className="fg-detail-key">last error</span> {toStringValue(selectedProfile.last_error, "none recorded")}</p>
                       <p>
                         <span className="fg-detail-key">proof</span> {selectedProfileProof?.status ?? "none"}
-                        <span className="fg-muted"> · {selectedProfileProof?.note ?? "No proof note available."}</span>
+                        <span className="fg-muted"> · {selectedProfileProof?.note ?? "no note recorded"}</span>
                       </p>
                       <p>
                         <span className="fg-detail-key">verify</span> {toStringValue(selectedProfile.last_verify_status, "never")} ·
@@ -642,7 +642,7 @@ export function HarnessControlSection({ data, actions, instanceId }: HarnessCont
                     Open diagnostics payload
                   </a>
                 </div>
-                <p className="fg-note">Log handoff is currently `bridge-only`: ForgeFrame can route you to the shared logs surface, but it does not yet deep-link a single harness run there.</p>
+                <p className="fg-note">Log handoff is bridge-only — deep-linking to a single run is not yet available.</p>
               </div>
             ) : (
               <p className="fg-muted">No harness action has been run from this session yet.</p>
