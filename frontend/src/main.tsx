@@ -7,19 +7,19 @@ import { loginRouteLoader, protectedRouteLoader } from "./app/authRouting";
 import { PublicShell } from "./app/PublicShell";
 import "./theme/index.css";
 import { ThemeProvider } from "./theme/ThemeProvider";
-import { AccountsPage } from "./pages/AccountsPage";
-import { ApiKeysPage } from "./pages/ApiKeysPage";
-import { DashboardPage } from "./pages/DashboardPage";
 import { LoginPage } from "./pages/LoginPage";
-import { ModelsPage } from "./pages/ModelsPage";
-import { OAuthTargetsPage } from "./pages/OAuthTargetsPage";
-import { PasswordRotationPage } from "./pages/PasswordRotationPage";
-import { ProviderTargetsPage } from "./pages/ProviderTargetsPage";
-import { ProvidersPage } from "./pages/ProvidersPage";
-import { RoutingPage } from "./pages/RoutingPage";
-import { SettingsPage } from "./pages/SettingsPage";
 
 const OnboardingPage = lazy(async () => import("./pages/OnboardingPage").then((module) => ({ default: module.OnboardingPage })));
+const PasswordRotationPage = lazy(async () => import("./pages/PasswordRotationPage").then((module) => ({ default: module.PasswordRotationPage })));
+const DashboardPage = lazy(async () => import("./pages/DashboardPage").then((module) => ({ default: module.DashboardPage })));
+const ProvidersPage = lazy(async () => import("./pages/ProvidersPage").then((module) => ({ default: module.ProvidersPage })));
+const OAuthTargetsPage = lazy(async () => import("./pages/OAuthTargetsPage").then((module) => ({ default: module.OAuthTargetsPage })));
+const ModelsPage = lazy(async () => import("./pages/ModelsPage").then((module) => ({ default: module.ModelsPage })));
+const ProviderTargetsPage = lazy(async () => import("./pages/ProviderTargetsPage").then((module) => ({ default: module.ProviderTargetsPage })));
+const RoutingPage = lazy(async () => import("./pages/RoutingPage").then((module) => ({ default: module.RoutingPage })));
+const AccountsPage = lazy(async () => import("./pages/AccountsPage").then((module) => ({ default: module.AccountsPage })));
+const ApiKeysPage = lazy(async () => import("./pages/ApiKeysPage").then((module) => ({ default: module.ApiKeysPage })));
+const SettingsPage = lazy(async () => import("./pages/SettingsPage").then((module) => ({ default: module.SettingsPage })));
 const HarnessPage = lazy(async () => import("./pages/HarnessPage").then((module) => ({ default: module.HarnessPage })));
 const IngressTlsPage = lazy(async () => import("./pages/IngressTlsPage").then((module) => ({ default: module.IngressTlsPage })));
 const PluginsPage = lazy(async () => import("./pages/PluginsPage").then((module) => ({ default: module.PluginsPage })));
@@ -81,22 +81,22 @@ const router = createBrowserRouter([
     element: <App />,
     children: [
       { index: true, element: <Navigate replace to="/dashboard" /> },
-      { path: "rotate-password", element: <PasswordRotationPage /> },
-      { path: "dashboard", element: <DashboardPage /> },
+      { path: "rotate-password", element: lazyRoute(<PasswordRotationPage />) },
+      { path: "dashboard", element: lazyRoute(<DashboardPage />) },
       { path: "onboarding", element: lazyRoute(<OnboardingPage />) },
       { path: "instances", element: lazyRoute(<InstancesPage />) },
       { path: "harness", element: lazyRoute(<HarnessPage />) },
-      { path: "providers", element: <ProvidersPage /> },
-      { path: "oauth-targets", element: <OAuthTargetsPage /> },
-      { path: "models", element: <ModelsPage /> },
-      { path: "provider-targets", element: <ProviderTargetsPage /> },
-      { path: "routing", element: <RoutingPage /> },
+      { path: "providers", element: lazyRoute(<ProvidersPage />) },
+      { path: "oauth-targets", element: lazyRoute(<OAuthTargetsPage />) },
+      { path: "models", element: lazyRoute(<ModelsPage />) },
+      { path: "provider-targets", element: lazyRoute(<ProviderTargetsPage />) },
+      { path: "routing", element: lazyRoute(<RoutingPage />) },
       { path: "plugins", element: lazyRoute(<PluginsPage />) },
       { path: "ingress-tls", element: lazyRoute(<IngressTlsPage />) },
       { path: "release-validation", element: lazyRoute(<ReleaseValidationPage />) },
       { path: "recovery", element: lazyRoute(<RecoveryPage />) },
-      { path: "accounts", element: <AccountsPage /> },
-      { path: "api-keys", element: <ApiKeysPage /> },
+      { path: "accounts", element: lazyRoute(<AccountsPage />) },
+      { path: "api-keys", element: lazyRoute(<ApiKeysPage />) },
       { path: "approvals", element: lazyRoute(<ApprovalsPage />) },
       { path: "execution", element: lazyRoute(<ExecutionPage />) },
       { path: "queues", element: lazyRoute(<QueuesPage />) },
@@ -123,7 +123,7 @@ const router = createBrowserRouter([
       { path: "costs", element: lazyRoute(<CostsPage />) },
       { path: "errors", element: lazyRoute(<ErrorsPage />) },
       { path: "logs", element: lazyRoute(<LogsPage />) },
-      { path: "settings", element: <SettingsPage /> },
+      { path: "settings", element: lazyRoute(<SettingsPage />) },
     ],
   },
 ]);
