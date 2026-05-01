@@ -46,17 +46,17 @@ export function LoginPage() {
   return (
     <section className="fg-page" aria-labelledby="login-title">
       <article className="fg-card">
-        <div className="fg-panel-heading">
-          <div>
+        <header className="fg-panel-heading">
+          <span>
             <h2 id="login-title">Admin Login</h2>
             <p className="fg-muted">
               Security boundary — admin credentials required.
             </p>
-          </div>
+          </span>
           <span className="fg-pill" data-tone="neutral">
             Protected
           </span>
-        </div>
+        </header>
 
         <form className="fg-stack" onSubmit={(event) => void onSubmit(event)}>
           <label>
@@ -128,17 +128,15 @@ export function LoginPage() {
             </p>
           ) : null}
 
-          <div className="fg-actions">
-            <button type="submit" disabled={busy}>
-              {busy ? (
-                <>
-                  <span className="fg-spinner" /> Signing in…
-                </>
-              ) : (
-                "Sign in"
-              )}
-            </button>
-          </div>
+          <button type="submit" disabled={busy}>
+            {busy ? (
+              <>
+                <span className="fg-spinner" /> Signing in…
+              </>
+            ) : (
+              "Sign in"
+            )}
+          </button>
         </form>
 
         <ul className="fg-list">
