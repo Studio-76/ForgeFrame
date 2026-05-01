@@ -15,14 +15,17 @@ from sqlalchemy.orm import Mapped, Session, mapped_column, sessionmaker
 from app.control_plane.models import (
     ControlPlaneStateRecord,
     ManagedModelRecord,
-    ProviderCatalogRecord,
     ManagedProviderRecord,
     ManagedProviderTargetRecord,
+    ProviderCatalogRecord,
     RoutingBudgetStateRecord,
     RoutingCircuitStateRecord,
     RoutingPolicyRecord,
 )
-from app.control_plane.profile_taxonomy import build_legacy_capability_profile, split_legacy_capability_profile
+from app.control_plane.profile_taxonomy import (
+    build_legacy_capability_profile,
+    split_legacy_capability_profile,
+)
 from app.control_plane.routing_defaults import (
     build_default_routing_policies,
     merge_routing_circuits,
@@ -150,7 +153,12 @@ class FileControlPlaneStateRepository:
 
         if version < 4 or any(
             key not in normalized
-            for key in ("routing_policies", "routing_budget_state", "routing_circuits", "routing_decisions")
+            for key in (
+                "routing_policies",
+                "routing_budget_state",
+                "routing_circuits",
+                "routing_decisions",
+            )
         ):
             target_records: list[ManagedProviderTargetRecord] = []
             for raw_target in normalized.get("provider_targets", []):
@@ -211,7 +219,12 @@ class FileControlPlaneStateRepository:
                 for model in provider.get("managed_models", []):
                     if not isinstance(model, dict):
                         continue
-                    technical_capabilities, execution_traits, policy_flags, economic_profile = split_legacy_capability_profile(
+                    (
+                        technical_capabilities,
+                        execution_traits,
+                        policy_flags,
+                        economic_profile,
+                    ) = split_legacy_capability_profile(
                         provider=provider_name,
                         capability_profile=model.get("capabilities") if isinstance(model.get("capabilities"), dict) else {},
                     )
@@ -229,7 +242,12 @@ class FileControlPlaneStateRepository:
                 if not isinstance(target, dict):
                     continue
                 provider_name = str(target.get("provider") or "")
-                technical_capabilities, execution_traits, policy_flags, economic_profile = split_legacy_capability_profile(
+                (
+                    technical_capabilities,
+                    execution_traits,
+                    policy_flags,
+                    economic_profile,
+                ) = split_legacy_capability_profile(
                     provider=provider_name,
                     capability_profile=target.get("capability_profile") if isinstance(target.get("capability_profile"), dict) else {},
                     cost_class=str(target.get("cost_class") or "medium"),
@@ -261,10 +279,7 @@ class FileControlPlaneStateRepository:
                     stored_catalog.append(ProviderCatalogRecord(**raw_catalog))
                 except Exception:
                     continue
-            normalized["provider_catalog"] = [
-                item.model_dump(mode="json")
-                for item in stored_catalog
-            ]
+            normalized["provider_catalog"] = [item.model_dump(mode="json") for item in stored_catalog]
             normalized["schema_version"] = _CONTROL_PLANE_STATE_SCHEMA_VERSION
             changed = True
 
@@ -300,9 +315,7 @@ class FileControlPlaneStateRepository:
                     if not isinstance(state_payload, dict):
                         continue
                     upgraded_state, upgraded_changed = self._upgrade_payload(state_payload)
-                    upgraded_key = self._normalize_instance_id(
-                        upgraded_state.get("instance_id") or key
-                    )
+                    upgraded_key = self._normalize_instance_id(upgraded_state.get("instance_id") or key)
                     upgraded_state["instance_id"] = upgraded_key
                     normalized_states[upgraded_key] = upgraded_state
                     changed = changed or upgraded_changed or upgraded_key != key
@@ -450,7 +463,9 @@ class PostgresControlPlaneStateRepository:
         return normalized
 
 
-def get_control_plane_state_repository(settings: Settings) -> ControlPlaneStateRepository:
+def get_control_plane_state_repository(
+    settings: Settings,
+) -> ControlPlaneStateRepository:
     if settings.control_plane_storage_backend == "postgresql":
         database_url = settings.control_plane_postgres_url.strip() or settings.harness_postgres_url
         return PostgresControlPlaneStateRepository(database_url)

@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections import Counter, defaultdict
 from datetime import UTC, datetime, timedelta
 from statistics import mean
+from typing import Any
 
 from sqlalchemy import func, select
 
@@ -37,11 +38,7 @@ def _runtime_usage_events(
     tenant_id: str | None,
     window_seconds: int,
 ) -> list[UsageEvent]:
-    return [
-        event
-        for event in analytics.list_usage_events(tenant_id=tenant_id)
-        if event.traffic_type == "runtime" and _within_window(event.created_at, window_seconds=window_seconds)
-    ]
+    return [event for event in analytics.list_usage_events(tenant_id=tenant_id) if event.traffic_type == "runtime" and _within_window(event.created_at, window_seconds=window_seconds)]
 
 
 def _runtime_error_events(
@@ -50,11 +47,7 @@ def _runtime_error_events(
     tenant_id: str | None,
     window_seconds: int,
 ) -> list[ErrorEvent]:
-    return [
-        event
-        for event in analytics.list_error_events(tenant_id=tenant_id)
-        if event.traffic_type == "runtime" and _within_window(event.created_at, window_seconds=window_seconds)
-    ]
+    return [event for event in analytics.list_error_events(tenant_id=tenant_id) if event.traffic_type == "runtime" and _within_window(event.created_at, window_seconds=window_seconds)]
 
 
 def _health_events(
@@ -63,14 +56,10 @@ def _health_events(
     tenant_id: str | None,
     window_seconds: int,
 ) -> list[HealthEvent]:
-    return [
-        event
-        for event in analytics.list_health_events(tenant_id=tenant_id)
-        if _within_window(event.created_at, window_seconds=window_seconds)
-    ]
+    return [event for event in analytics.list_health_events(tenant_id=tenant_id) if _within_window(event.created_at, window_seconds=window_seconds)]
 
 
-def _red_metrics(runtime_usage: list[UsageEvent], runtime_errors: list[ErrorEvent]) -> dict[str, object]:
+def _red_metrics(runtime_usage: list[UsageEvent], runtime_errors: list[ErrorEvent]) -> dict[str, Any]:
     total_requests = len(runtime_usage) + len(runtime_errors)
     durations = [
         int(duration)
@@ -96,7 +85,7 @@ def _dependency_metrics(
     runtime_usage: list[UsageEvent],
     runtime_errors: list[ErrorEvent],
     health_events: list[HealthEvent],
-) -> list[dict[str, object]]:
+) -> list[dict[str, Any]]:
     grouped_usage: dict[str, list[UsageEvent]] = defaultdict(list)
     grouped_errors: dict[str, list[ErrorEvent]] = defaultdict(list)
     latest_health: dict[str, HealthEvent] = {}
@@ -109,7 +98,7 @@ def _dependency_metrics(
         latest_health[event.provider] = event
 
     providers = sorted(set(grouped_usage) | set(grouped_errors) | set(latest_health))
-    rows: list[dict[str, object]] = []
+    rows: list[dict[str, Any]] = []
     for provider in providers:
         usage_events = grouped_usage.get(provider, [])
         error_events = grouped_errors.get(provider, [])
@@ -123,24 +112,22 @@ def _dependency_metrics(
         ]
         request_count = len(usage_events) + len(error_events)
         health = latest_health.get(provider)
-        rows.append(
-            {
-                "provider": provider,
-                "requests": request_count,
-                "errors": len(error_events),
-                "error_rate": (len(error_events) / request_count) if request_count else 0.0,
-                "avg_duration_ms": round(mean(durations), 2) if durations else None,
-                "p95_duration_ms": _percentile(durations, 0.95),
-                "latest_health_status": health.status if health is not None else None,
-                "latest_health_reason": health.readiness_reason if health is not None else None,
-                "latest_health_error": health.last_error if health is not None else None,
-                "trace_coverage": sum(1 for event in [*usage_events, *error_events] if getattr(event, "trace_id", None)),
-            }
-        )
+        rows.append({
+            "provider": provider,
+            "requests": request_count,
+            "errors": len(error_events),
+            "error_rate": (len(error_events) / request_count) if request_count else 0.0,
+            "avg_duration_ms": round(mean(durations), 2) if durations else None,
+            "p95_duration_ms": _percentile(durations, 0.95),
+            "latest_health_status": health.status if health is not None else None,
+            "latest_health_reason": health.readiness_reason if health is not None else None,
+            "latest_health_error": health.last_error if health is not None else None,
+            "trace_coverage": sum(1 for event in [*usage_events, *error_events] if getattr(event, "trace_id", None)),
+        })
     return rows
 
 
-def _queue_metrics(*, company_id: str | None) -> dict[str, object]:
+def _queue_metrics(*, company_id: str | None) -> dict[str, Any]:
     session_factory = get_execution_session_factory()
     with session_factory() as session:
         run_query = select(RunORM.state, func.count()).group_by(RunORM.state)
@@ -149,7 +136,10 @@ def _queue_metrics(*, company_id: str | None) -> dict[str, object]:
         lease_status_query = select(RunAttemptORM.lease_status, func.count()).group_by(RunAttemptORM.lease_status)
         leased_workers_query = (
             select(RunAttemptORM.worker_key, func.count())
-            .where(RunAttemptORM.worker_key.is_not(None), RunAttemptORM.lease_status == "leased")
+            .where(
+                RunAttemptORM.worker_key.is_not(None),
+                RunAttemptORM.lease_status == "leased",
+            )
             .group_by(RunAttemptORM.worker_key)
         )
         outbox_query = select(RunOutboxORM.publish_state, func.count()).group_by(RunOutboxORM.publish_state)
@@ -166,11 +156,7 @@ def _queue_metrics(*, company_id: str | None) -> dict[str, object]:
         attempt_states = Counter({str(state): int(count) for state, count in session.execute(attempt_query).all()})
         lease_states = Counter({str(state): int(count) for state, count in session.execute(lease_status_query).all()})
         leased_workers = sorted(
-            (
-                {"worker_key": str(worker_key), "leased_attempts": int(count)}
-                for worker_key, count in session.execute(leased_workers_query).all()
-                if worker_key
-            ),
+            ({"worker_key": str(worker_key), "leased_attempts": int(count)} for worker_key, count in session.execute(leased_workers_query).all() if worker_key),
             key=lambda item: (item["leased_attempts"], item["worker_key"]),
             reverse=True,
         )
@@ -178,7 +164,15 @@ def _queue_metrics(*, company_id: str | None) -> dict[str, object]:
 
     active_backlog = sum(
         run_states.get(state, 0)
-        for state in ("queued", "dispatching", "executing", "waiting_on_approval", "retry_backoff", "cancel_requested", "compensating")
+        for state in (
+            "queued",
+            "dispatching",
+            "executing",
+            "waiting_on_approval",
+            "retry_backoff",
+            "cancel_requested",
+            "compensating",
+        )
     )
     return {
         "company_scope": company_id or "all",
@@ -205,7 +199,7 @@ def _routing_metrics(
     *,
     instance_id: str | None,
     window_seconds: int,
-) -> dict[str, object]:
+) -> dict[str, Any]:
     repository = get_control_plane_state_repository(settings)
     state = repository.load_state(instance_id)
     if state is None:
@@ -235,14 +229,10 @@ def _routing_metrics(
             "recent_failures": [],
         }
 
-    decisions = [
-        decision
-        for decision in state.routing_decisions
-        if _within_window(decision.created_at, window_seconds=window_seconds)
-    ]
+    decisions = [decision for decision in state.routing_decisions if _within_window(decision.created_at, window_seconds=window_seconds)]
     selected_candidates = []
     explainability_coverage = {"summary": 0, "structured": 0, "raw": 0}
-    recent_failures: list[dict[str, object]] = []
+    recent_failures: list[dict[str, Any]] = []
 
     for decision in decisions:
         if decision.summary.strip():
@@ -255,15 +245,13 @@ def _routing_metrics(
         if selected_candidate is not None:
             selected_candidates.append(selected_candidate)
         if decision.error_type:
-            recent_failures.append(
-                {
-                    "decision_id": decision.decision_id,
-                    "error_type": decision.error_type,
-                    "summary": decision.summary,
-                    "policy_stage": decision.policy_stage,
-                    "created_at": decision.created_at,
-                }
-            )
+            recent_failures.append({
+                "decision_id": decision.decision_id,
+                "error_type": decision.error_type,
+                "summary": decision.summary,
+                "policy_stage": decision.policy_stage,
+                "created_at": decision.created_at,
+            })
 
     selected_cost_classes = Counter(candidate.cost_class for candidate in selected_candidates)
     classification_counts = Counter(decision.classification for decision in decisions)
@@ -285,11 +273,7 @@ def _routing_metrics(
         "policy_stage_counts": dict(policy_stage_counts),
         "selected_cost_classes": dict(selected_cost_classes),
         "premium_selected": selected_cost_classes.get("premium", 0),
-        "low_cost_selected": sum(
-            count
-            for cost_class, count in selected_cost_classes.items()
-            if cost_class in {"baseline", "low"}
-        ),
+        "low_cost_selected": sum(count for cost_class, count in selected_cost_classes.items() if cost_class in {"baseline", "low"}),
         "queue_eligible_selected": sum(1 for candidate in selected_candidates if candidate.queue_eligible),
         "open_circuits": open_circuits,
         "budget": state.routing_budget_state.model_dump(mode="json"),
@@ -298,14 +282,10 @@ def _routing_metrics(
     }
 
 
-def _slo_indicators(red_metrics: dict[str, object], dependency_metrics: list[dict[str, object]]) -> dict[str, object]:
+def _slo_indicators(red_metrics: dict[str, Any], dependency_metrics: list[dict[str, Any]]) -> dict[str, Any]:
     request_count = int(red_metrics["requests"])
     error_rate = float(red_metrics["error_rate"])
-    degraded_dependencies = [
-        item["provider"]
-        for item in dependency_metrics
-        if item["latest_health_status"] not in {None, "healthy", "discovery_only"}
-    ]
+    degraded_dependencies = [item["provider"] for item in dependency_metrics if item["latest_health_status"] not in {None, "healthy", "discovery_only"}]
     return {
         "request_volume": request_count,
         "availability_ratio": 1.0 - error_rate if request_count else None,
@@ -325,7 +305,7 @@ def build_metrics_operability_snapshot(
     tenant_id: str | None = None,
     company_id: str | None = None,
     instance_id: str | None = None,
-) -> dict[str, object]:
+) -> dict[str, Any]:
     aggregates = analytics.aggregate(window_seconds=window_seconds, tenant_id=tenant_id)
     traffic_by_type = {str(item["traffic_type"]): item for item in aggregates["by_traffic_type"]}
     runtime_usage = _runtime_usage_events(analytics, tenant_id=tenant_id, window_seconds=window_seconds)

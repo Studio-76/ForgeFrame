@@ -50,11 +50,7 @@ def evaluate_routing_budget_state(
     resolved_instance_service = instance_service or get_instance_service()
     resolved_analytics_store = analytics_store or get_usage_analytics_store()
     tenant_id = _resolve_tenant_id(resolved_instance_service, instance_id)
-    usage_events = [
-        event
-        for event in resolved_analytics_store.list_usage_events(tenant_id=tenant_id)
-        if event.traffic_type == "runtime"
-    ]
+    usage_events = [event for event in resolved_analytics_store.list_usage_events(tenant_id=tenant_id) if event.traffic_type == "runtime"]
 
     evaluated_scopes: list[RoutingBudgetScopeRecord] = []
     anomalies: list[RoutingBudgetAnomalyRecord] = []
@@ -81,10 +77,7 @@ def evaluate_routing_budget_state(
                 if cost_class not in blocked_cost_classes:
                     blocked_cost_classes.append(cost_class)
         if evaluated_scope.hard_limit_exceeded and not hard_block_reason:
-            hard_block_reason = (
-                f"{evaluated_scope.scope_type} scope '{evaluated_scope.scope_key}' exceeded "
-                f"its hard budget in window {evaluated_scope.window}."
-            )
+            hard_block_reason = f"{evaluated_scope.scope_type} scope '{evaluated_scope.scope_key}' exceeded its hard budget in window {evaluated_scope.window}."
 
     evaluated_state = normalized_state.model_copy(
         update={
@@ -146,21 +139,9 @@ def _evaluate_scope(
     current_window_start = now - timedelta(seconds=window_seconds)
     previous_window_start = current_window_start - timedelta(seconds=window_seconds)
 
-    matching_events = [
-        event
-        for event in usage_events
-        if _event_matches_scope(event, scope=scope, instance_id=instance_id)
-    ]
-    current_events = [
-        event
-        for event in matching_events
-        if _parse_dt(event.created_at) >= current_window_start
-    ]
-    previous_events = [
-        event
-        for event in matching_events
-        if previous_window_start <= _parse_dt(event.created_at) < current_window_start
-    ]
+    matching_events = [event for event in usage_events if _event_matches_scope(event, scope=scope, instance_id=instance_id)]
+    current_events = [event for event in matching_events if _parse_dt(event.created_at) >= current_window_start]
+    previous_events = [event for event in matching_events if previous_window_start <= _parse_dt(event.created_at) < current_window_start]
     observed_cost = round(sum(event.actual_cost for event in current_events), 6)
     observed_tokens = sum(int(event.total_tokens) for event in current_events)
     previous_window_cost = round(sum(event.actual_cost for event in previous_events), 6)
@@ -251,9 +232,7 @@ def _scope_anomalies(
                 observed_tokens=scope.observed_tokens,
                 threshold_cost=scope.soft_cost_limit,
                 threshold_tokens=scope.soft_token_limit,
-                details=(
-                    f"{scope.scope_type} scope '{scope.scope_key}' exceeded its soft budget window {scope.window}."
-                ),
+                details=(f"{scope.scope_type} scope '{scope.scope_key}' exceeded its soft budget window {scope.window}."),
                 detected_at=now.isoformat(),
             )
         )
@@ -269,18 +248,12 @@ def _scope_anomalies(
                 observed_tokens=scope.observed_tokens,
                 threshold_cost=scope.hard_cost_limit,
                 threshold_tokens=scope.hard_token_limit,
-                details=(
-                    f"{scope.scope_type} scope '{scope.scope_key}' exceeded its hard budget window {scope.window}."
-                ),
+                details=(f"{scope.scope_type} scope '{scope.scope_key}' exceeded its hard budget window {scope.window}."),
                 detected_at=now.isoformat(),
             )
         )
 
-    if (
-        scope.previous_window_cost is not None
-        and scope.previous_window_cost > 0
-        and (scope.observed_cost or 0.0) >= scope.previous_window_cost * 2
-    ):
+    if scope.previous_window_cost is not None and scope.previous_window_cost > 0 and (scope.observed_cost or 0.0) >= scope.previous_window_cost * 2:
         anomalies.append(
             RoutingBudgetAnomalyRecord(
                 scope_type=scope.scope_type,
@@ -292,18 +265,11 @@ def _scope_anomalies(
                 observed_tokens=scope.observed_tokens,
                 threshold_cost=scope.previous_window_cost * 2,
                 threshold_tokens=None,
-                details=(
-                    f"{scope.scope_type} scope '{scope.scope_key}' doubled cost consumption against the previous "
-                    f"{scope.window} window."
-                ),
+                details=(f"{scope.scope_type} scope '{scope.scope_key}' doubled cost consumption against the previous {scope.window} window."),
                 detected_at=now.isoformat(),
             )
         )
-    if (
-        scope.previous_window_tokens is not None
-        and scope.previous_window_tokens > 0
-        and (scope.observed_tokens or 0) >= scope.previous_window_tokens * 2
-    ):
+    if scope.previous_window_tokens is not None and scope.previous_window_tokens > 0 and (scope.observed_tokens or 0) >= scope.previous_window_tokens * 2:
         anomalies.append(
             RoutingBudgetAnomalyRecord(
                 scope_type=scope.scope_type,
@@ -315,10 +281,7 @@ def _scope_anomalies(
                 observed_tokens=scope.observed_tokens,
                 threshold_cost=None,
                 threshold_tokens=scope.previous_window_tokens * 2,
-                details=(
-                    f"{scope.scope_type} scope '{scope.scope_key}' doubled token consumption against the previous "
-                    f"{scope.window} window."
-                ),
+                details=(f"{scope.scope_type} scope '{scope.scope_key}' doubled token consumption against the previous {scope.window} window."),
                 detected_at=now.isoformat(),
             )
         )

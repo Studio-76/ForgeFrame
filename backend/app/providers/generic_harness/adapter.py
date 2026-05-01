@@ -6,17 +6,19 @@ from collections.abc import Iterator
 from inspect import Parameter, signature
 from typing import Any
 
-from app.harness.service import HarnessService
 from app.core.message_features import messages_require_vision
+from app.harness.service import HarnessService
 from app.providers.base import (
     ChatDispatchRequest,
     ChatDispatchResult,
     EmbeddingDispatchRequest,
     EmbeddingDispatchResult,
+    ProviderAuthenticationError,
     ProviderBadRequestError,
     ProviderCapabilities,
-    ProviderConflictError,
     ProviderConfigurationError,
+    ProviderConflictError,
+    ProviderModelNotFoundError,
     ProviderNotReadyError,
     ProviderPayloadTooLargeError,
     ProviderProtocolError,
@@ -24,12 +26,10 @@ from app.providers.base import (
     ProviderRequestTimeoutError,
     ProviderResourceGoneError,
     ProviderStreamEvent,
-    ProviderUnsupportedFeatureError,
-    ProviderUnavailableError,
-    ProviderUnsupportedMediaTypeError,
-    ProviderAuthenticationError,
-    ProviderModelNotFoundError,
     ProviderTimeoutError,
+    ProviderUnavailableError,
+    ProviderUnsupportedFeatureError,
+    ProviderUnsupportedMediaTypeError,
     ProviderUpstreamError,
 )
 from app.request_metadata import extract_scope_attributes
@@ -73,7 +73,7 @@ class GenericHarnessAdapter:
             return "Harness profiles exist, but no enabled profile owns any models."
         return None
 
-    def status_capabilities(self, instance_id: str | None = None) -> dict[str, object]:
+    def status_capabilities(self, instance_id: str | None = None) -> dict[str, Any]:
         capabilities = self.capabilities.model_dump()
         runtime_profiles = self._capability_truth_profiles(instance_id=instance_id)
         active_profiles = self._active_profiles(instance_id=instance_id)
@@ -83,25 +83,23 @@ class GenericHarnessAdapter:
         supports_discovery = any(self._profile_supports_discovery(profile) for profile in active_profiles)
         auth_truth_profiles = runtime_profiles or active_profiles
         auth_mechanisms = self._active_auth_mechanisms(auth_truth_profiles)
-        capabilities.update(
-            {
-                "streaming": supports_streaming,
-                "streaming_level": "partial" if supports_streaming else "none",
-                "tool_calling": supports_tool_calling,
-                "tool_calling_level": "partial" if supports_tool_calling else "none",
-                "vision": supports_vision,
-                "vision_level": "partial" if supports_vision else "none",
-                "embeddings": any(self._profile_supports_embeddings(profile) for profile in runtime_profiles),
-                "discovery_support": supports_discovery,
-                "auth_mechanism": self._aggregate_auth_mechanism(auth_mechanisms),
-                "auth_mechanisms": auth_mechanisms,
-                "active_profile_count": len(active_profiles),
-                "streaming_profile_count": sum(1 for profile in runtime_profiles if self._profile_supports_streaming(profile)),
-                "tool_calling_profile_count": sum(1 for profile in runtime_profiles if self._profile_supports_tool_calling(profile)),
-                "vision_profile_count": sum(1 for profile in runtime_profiles if self._profile_supports_vision(profile)),
-                "embeddings_profile_count": sum(1 for profile in runtime_profiles if self._profile_supports_embeddings(profile)),
-            }
-        )
+        capabilities.update({
+            "streaming": supports_streaming,
+            "streaming_level": "partial" if supports_streaming else "none",
+            "tool_calling": supports_tool_calling,
+            "tool_calling_level": "partial" if supports_tool_calling else "none",
+            "vision": supports_vision,
+            "vision_level": "partial" if supports_vision else "none",
+            "embeddings": any(self._profile_supports_embeddings(profile) for profile in runtime_profiles),
+            "discovery_support": supports_discovery,
+            "auth_mechanism": self._aggregate_auth_mechanism(auth_mechanisms),
+            "auth_mechanisms": auth_mechanisms,
+            "active_profile_count": len(active_profiles),
+            "streaming_profile_count": sum(1 for profile in runtime_profiles if self._profile_supports_streaming(profile)),
+            "tool_calling_profile_count": sum(1 for profile in runtime_profiles if self._profile_supports_tool_calling(profile)),
+            "vision_profile_count": sum(1 for profile in runtime_profiles if self._profile_supports_vision(profile)),
+            "embeddings_profile_count": sum(1 for profile in runtime_profiles if self._profile_supports_embeddings(profile)),
+        })
         return capabilities
 
     def can_dispatch_model(
@@ -294,7 +292,7 @@ class GenericHarnessAdapter:
         )
 
     @staticmethod
-    def _harness_execution_kwargs(method: object, **kwargs: Any) -> dict[str, Any]:
+    def _harness_execution_kwargs(method: Any, **kwargs: Any) -> dict[str, Any]:
         try:
             parameters = signature(method).parameters.values()
         except (TypeError, ValueError):
@@ -322,11 +320,7 @@ class GenericHarnessAdapter:
         instance_id: str | None = None,
     ) -> list[Any]:
         scoped_instance_id = self._scoped_instance_id(request_metadata, instance_id)
-        return [
-            profile
-            for profile in self._harness.list_profiles(instance_id=scoped_instance_id)
-            if profile.enabled
-        ]
+        return [profile for profile in self._harness.list_profiles(instance_id=scoped_instance_id) if profile.enabled]
 
     @staticmethod
     def _profile_has_owned_models(profile: Any) -> bool:

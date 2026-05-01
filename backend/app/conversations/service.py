@@ -14,8 +14,8 @@ from app.conversations.models import (
     AppendConversationMessage,
     ConversationDetail,
     ConversationEventRecord,
-    ConversationMessageRecord,
     ConversationMentionRecord,
+    ConversationMessageRecord,
     ConversationParticipantRecord,
     ConversationSessionRecord,
     ConversationSummary,
@@ -31,9 +31,9 @@ from app.instances.models import InstanceRecord
 from app.storage.agent_repository import AgentORM
 from app.storage.artifact_repository import ArtifactORM
 from app.storage.conversation_repository import (
-    ConversationMessageORM,
     ConversationEventORM,
     ConversationMentionORM,
+    ConversationMessageORM,
     ConversationORM,
     ConversationParticipantORM,
     ConversationSessionORM,
@@ -73,7 +73,7 @@ class ConversationInboxAdminService:
             conversation_id=row.conversation_id,
             thread_id=row.thread_id,
             session_id=row.session_id,
-            message_role=row.message_role,  # type: ignore[arg-type]
+            message_role=row.message_role,
             author_type=row.author_type,
             author_id=row.author_id,
             body=row.body,
@@ -87,7 +87,7 @@ class ConversationInboxAdminService:
             session_id=session_row.id,
             conversation_id=session_row.conversation_id,
             thread_id=session_row.thread_id,
-            session_kind=session_row.session_kind,  # type: ignore[arg-type]
+            session_kind=session_row.session_kind,
             continuity_key=session_row.continuity_key,
             started_by_type=session_row.started_by_type,
             started_by_id=session_row.started_by_id,
@@ -103,7 +103,7 @@ class ConversationInboxAdminService:
             thread_id=row.id,
             conversation_id=row.conversation_id,
             title=row.title,
-            status=row.status,  # type: ignore[arg-type]
+            status=row.status,
             latest_message_at=row.latest_message_at,
             message_count=message_count,
             session_count=session_count,
@@ -112,13 +112,15 @@ class ConversationInboxAdminService:
         )
 
     @staticmethod
-    def _participant_record(row: ConversationParticipantORM) -> ConversationParticipantRecord:
+    def _participant_record(
+        row: ConversationParticipantORM,
+    ) -> ConversationParticipantRecord:
         return ConversationParticipantRecord(
             participant_id=row.id,
             conversation_id=row.conversation_id,
             thread_id=row.thread_id,
-            participant_kind=row.participant_kind,  # type: ignore[arg-type]
-            participant_status=row.participant_status,  # type: ignore[arg-type]
+            participant_kind=row.participant_kind,
+            participant_status=row.participant_status,
             agent_id=row.agent_id,
             participant_ref=row.participant_ref,
             display_label=row.display_label,
@@ -137,7 +139,7 @@ class ConversationInboxAdminService:
             agent_id=row.agent_id,
             token=row.token,
             agent_display_name=row.agent_display_name,
-            status=row.status,  # type: ignore[arg-type]
+            status=row.status,
             metadata=dict(row.metadata_json or {}),
             created_at=row.created_at,
         )
@@ -149,7 +151,7 @@ class ConversationInboxAdminService:
             conversation_id=row.conversation_id,
             thread_id=row.thread_id,
             source_message_id=row.source_message_id,
-            event_type=row.event_type,  # type: ignore[arg-type]
+            event_type=row.event_type,
             source_agent_id=row.source_agent_id,
             target_agent_id=row.target_agent_id,
             related_object_type=row.related_object_type,
@@ -170,9 +172,9 @@ class ConversationInboxAdminService:
             workspace_id=row.workspace_id,
             title=row.title,
             summary=row.summary,
-            triage_status=row.triage_status,  # type: ignore[arg-type]
-            priority=row.priority,  # type: ignore[arg-type]
-            status=row.status,  # type: ignore[arg-type]
+            triage_status=row.triage_status,
+            priority=row.priority,
+            status=row.status,
             contact_ref=row.contact_ref,
             run_id=row.run_id,
             artifact_id=row.artifact_id,
@@ -209,21 +211,23 @@ class ConversationInboxAdminService:
             (
                 row
                 for row in session.new
-                if isinstance(row, ConversationParticipantORM)
-                and row.company_id == instance.company_id
-                and row.conversation_id == conversation_id
-                and row.agent_id == agent_id
+                if isinstance(row, ConversationParticipantORM) and row.company_id == instance.company_id and row.conversation_id == conversation_id and row.agent_id == agent_id
             ),
             None,
         )
         if existing is None:
-            existing = session.execute(
-                select(ConversationParticipantORM).where(
-                    ConversationParticipantORM.company_id == instance.company_id,
-                    ConversationParticipantORM.conversation_id == conversation_id,
-                    ConversationParticipantORM.agent_id == agent_id,
+            existing = (
+                session
+                .execute(
+                    select(ConversationParticipantORM).where(
+                        ConversationParticipantORM.company_id == instance.company_id,
+                        ConversationParticipantORM.conversation_id == conversation_id,
+                        ConversationParticipantORM.agent_id == agent_id,
+                    )
                 )
-            ).scalars().first()
+                .scalars()
+                .first()
+            )
         now = self._now()
         if existing is not None:
             existing.thread_id = thread_id or existing.thread_id
@@ -253,48 +257,83 @@ class ConversationInboxAdminService:
         return row
 
     def _conversation_summary(self, session: Session, row: ConversationORM) -> ConversationSummary:
-        thread_count = session.scalar(
-            select(func.count()).select_from(ConversationThreadORM).where(
-                ConversationThreadORM.company_id == row.company_id,
-                ConversationThreadORM.conversation_id == row.id,
+        thread_count = (
+            session.scalar(
+                select(func.count())
+                .select_from(ConversationThreadORM)
+                .where(
+                    ConversationThreadORM.company_id == row.company_id,
+                    ConversationThreadORM.conversation_id == row.id,
+                )
             )
-        ) or 0
-        session_count = session.scalar(
-            select(func.count()).select_from(ConversationSessionORM).where(
-                ConversationSessionORM.company_id == row.company_id,
-                ConversationSessionORM.conversation_id == row.id,
+            or 0
+        )
+        session_count = (
+            session.scalar(
+                select(func.count())
+                .select_from(ConversationSessionORM)
+                .where(
+                    ConversationSessionORM.company_id == row.company_id,
+                    ConversationSessionORM.conversation_id == row.id,
+                )
             )
-        ) or 0
-        message_count = session.scalar(
-            select(func.count()).select_from(ConversationMessageORM).where(
-                ConversationMessageORM.company_id == row.company_id,
-                ConversationMessageORM.conversation_id == row.id,
+            or 0
+        )
+        message_count = (
+            session.scalar(
+                select(func.count())
+                .select_from(ConversationMessageORM)
+                .where(
+                    ConversationMessageORM.company_id == row.company_id,
+                    ConversationMessageORM.conversation_id == row.id,
+                )
             )
-        ) or 0
-        inbox_count = session.scalar(
-            select(func.count()).select_from(InboxItemORM).where(
-                InboxItemORM.company_id == row.company_id,
-                InboxItemORM.conversation_id == row.id,
+            or 0
+        )
+        inbox_count = (
+            session.scalar(
+                select(func.count())
+                .select_from(InboxItemORM)
+                .where(
+                    InboxItemORM.company_id == row.company_id,
+                    InboxItemORM.conversation_id == row.id,
+                )
             )
-        ) or 0
-        participant_rows = session.execute(
-            select(ConversationParticipantORM).where(
-                ConversationParticipantORM.company_id == row.company_id,
-                ConversationParticipantORM.conversation_id == row.id,
+            or 0
+        )
+        participant_rows = (
+            session
+            .execute(
+                select(ConversationParticipantORM).where(
+                    ConversationParticipantORM.company_id == row.company_id,
+                    ConversationParticipantORM.conversation_id == row.id,
+                )
             )
-        ).scalars().all()
-        mention_count = session.scalar(
-            select(func.count()).select_from(ConversationMentionORM).where(
-                ConversationMentionORM.company_id == row.company_id,
-                ConversationMentionORM.conversation_id == row.id,
+            .scalars()
+            .all()
+        )
+        mention_count = (
+            session.scalar(
+                select(func.count())
+                .select_from(ConversationMentionORM)
+                .where(
+                    ConversationMentionORM.company_id == row.company_id,
+                    ConversationMentionORM.conversation_id == row.id,
+                )
             )
-        ) or 0
-        event_count = session.scalar(
-            select(func.count()).select_from(ConversationEventORM).where(
-                ConversationEventORM.company_id == row.company_id,
-                ConversationEventORM.conversation_id == row.id,
+            or 0
+        )
+        event_count = (
+            session.scalar(
+                select(func.count())
+                .select_from(ConversationEventORM)
+                .where(
+                    ConversationEventORM.company_id == row.company_id,
+                    ConversationEventORM.conversation_id == row.id,
+                )
             )
-        ) or 0
+            or 0
+        )
         return ConversationSummary(
             conversation_id=row.id,
             instance_id=row.instance_id,
@@ -302,9 +341,9 @@ class ConversationInboxAdminService:
             workspace_id=row.workspace_id,
             subject=row.subject,
             summary=row.summary,
-            status=row.status,  # type: ignore[arg-type]
-            triage_status=row.triage_status,  # type: ignore[arg-type]
-            priority=row.priority,  # type: ignore[arg-type]
+            status=row.status,
+            triage_status=row.triage_status,
+            priority=row.priority,
             contact_ref=row.contact_ref,
             run_id=row.run_id,
             artifact_id=row.artifact_id,
@@ -420,27 +459,39 @@ class ConversationInboxAdminService:
                 rows = [
                     row
                     for row in rows
-                    if session.execute(
+                    if session
+                    .execute(
                         select(ConversationParticipantORM).where(
                             ConversationParticipantORM.company_id == instance.company_id,
                             ConversationParticipantORM.conversation_id == row.id,
                             ConversationParticipantORM.agent_id == agent_id,
                         )
-                    ).scalars().first() is not None
-                    or session.execute(
+                    )
+                    .scalars()
+                    .first()
+                    is not None
+                    or session
+                    .execute(
                         select(ConversationMentionORM).where(
                             ConversationMentionORM.company_id == instance.company_id,
                             ConversationMentionORM.conversation_id == row.id,
                             ConversationMentionORM.agent_id == agent_id,
                         )
-                    ).scalars().first() is not None
-                    or session.execute(
+                    )
+                    .scalars()
+                    .first()
+                    is not None
+                    or session
+                    .execute(
                         select(ConversationEventORM).where(
                             ConversationEventORM.company_id == instance.company_id,
                             ConversationEventORM.conversation_id == row.id,
                             ConversationEventORM.target_agent_id == agent_id,
                         )
-                    ).scalars().first() is not None
+                    )
+                    .scalars()
+                    .first()
+                    is not None
                 ]
             rows = rows[: max(1, min(limit, 200))]
             return [self._conversation_summary(session, row) for row in rows]
@@ -450,92 +501,142 @@ class ConversationInboxAdminService:
             row = self._load_conversation(session, instance=instance, conversation_id=conversation_id)
 
             summary = self._conversation_summary(session, row)
-            thread_rows = session.execute(
-                select(ConversationThreadORM)
-                .where(
-                    ConversationThreadORM.company_id == instance.company_id,
-                    ConversationThreadORM.conversation_id == conversation_id,
+            thread_rows = (
+                session
+                .execute(
+                    select(ConversationThreadORM)
+                    .where(
+                        ConversationThreadORM.company_id == instance.company_id,
+                        ConversationThreadORM.conversation_id == conversation_id,
+                    )
+                    .order_by(ConversationThreadORM.updated_at.desc())
                 )
-                .order_by(ConversationThreadORM.updated_at.desc())
-            ).scalars().all()
-            session_rows = session.execute(
-                select(ConversationSessionORM)
-                .where(
-                    ConversationSessionORM.company_id == instance.company_id,
-                    ConversationSessionORM.conversation_id == conversation_id,
+                .scalars()
+                .all()
+            )
+            session_rows = (
+                session
+                .execute(
+                    select(ConversationSessionORM)
+                    .where(
+                        ConversationSessionORM.company_id == instance.company_id,
+                        ConversationSessionORM.conversation_id == conversation_id,
+                    )
+                    .order_by(ConversationSessionORM.started_at.desc())
                 )
-                .order_by(ConversationSessionORM.started_at.desc())
-            ).scalars().all()
-            message_rows = session.execute(
-                select(ConversationMessageORM)
-                .where(
-                    ConversationMessageORM.company_id == instance.company_id,
-                    ConversationMessageORM.conversation_id == conversation_id,
+                .scalars()
+                .all()
+            )
+            message_rows = (
+                session
+                .execute(
+                    select(ConversationMessageORM)
+                    .where(
+                        ConversationMessageORM.company_id == instance.company_id,
+                        ConversationMessageORM.conversation_id == conversation_id,
+                    )
+                    .order_by(ConversationMessageORM.created_at.desc())
                 )
-                .order_by(ConversationMessageORM.created_at.desc())
-            ).scalars().all()
-            inbox_rows = session.execute(
-                select(InboxItemORM)
-                .where(
-                    InboxItemORM.company_id == instance.company_id,
-                    InboxItemORM.conversation_id == conversation_id,
+                .scalars()
+                .all()
+            )
+            inbox_rows = (
+                session
+                .execute(
+                    select(InboxItemORM)
+                    .where(
+                        InboxItemORM.company_id == instance.company_id,
+                        InboxItemORM.conversation_id == conversation_id,
+                    )
+                    .order_by(InboxItemORM.updated_at.desc())
                 )
-                .order_by(InboxItemORM.updated_at.desc())
-            ).scalars().all()
-            participant_rows = session.execute(
-                select(ConversationParticipantORM)
-                .where(
-                    ConversationParticipantORM.company_id == instance.company_id,
-                    ConversationParticipantORM.conversation_id == conversation_id,
+                .scalars()
+                .all()
+            )
+            participant_rows = (
+                session
+                .execute(
+                    select(ConversationParticipantORM)
+                    .where(
+                        ConversationParticipantORM.company_id == instance.company_id,
+                        ConversationParticipantORM.conversation_id == conversation_id,
+                    )
+                    .order_by(ConversationParticipantORM.updated_at.desc())
                 )
-                .order_by(ConversationParticipantORM.updated_at.desc())
-            ).scalars().all()
-            mention_rows = session.execute(
-                select(ConversationMentionORM)
-                .where(
-                    ConversationMentionORM.company_id == instance.company_id,
-                    ConversationMentionORM.conversation_id == conversation_id,
+                .scalars()
+                .all()
+            )
+            mention_rows = (
+                session
+                .execute(
+                    select(ConversationMentionORM)
+                    .where(
+                        ConversationMentionORM.company_id == instance.company_id,
+                        ConversationMentionORM.conversation_id == conversation_id,
+                    )
+                    .order_by(ConversationMentionORM.created_at.desc())
                 )
-                .order_by(ConversationMentionORM.created_at.desc())
-            ).scalars().all()
-            event_rows = session.execute(
-                select(ConversationEventORM)
-                .where(
-                    ConversationEventORM.company_id == instance.company_id,
-                    ConversationEventORM.conversation_id == conversation_id,
+                .scalars()
+                .all()
+            )
+            event_rows = (
+                session
+                .execute(
+                    select(ConversationEventORM)
+                    .where(
+                        ConversationEventORM.company_id == instance.company_id,
+                        ConversationEventORM.conversation_id == conversation_id,
+                    )
+                    .order_by(ConversationEventORM.created_at.desc())
                 )
-                .order_by(ConversationEventORM.created_at.desc())
-            ).scalars().all()
+                .scalars()
+                .all()
+            )
 
             return ConversationDetail(
                 **summary.model_dump(),
                 threads=[
                     self._thread_summary(
                         thread,
-                        message_count=int(session.scalar(
-                            select(func.count()).select_from(ConversationMessageORM).where(
-                                ConversationMessageORM.company_id == instance.company_id,
-                                ConversationMessageORM.thread_id == thread.id,
+                        message_count=int(
+                            session.scalar(
+                                select(func.count())
+                                .select_from(ConversationMessageORM)
+                                .where(
+                                    ConversationMessageORM.company_id == instance.company_id,
+                                    ConversationMessageORM.thread_id == thread.id,
+                                )
                             )
-                        ) or 0),
-                        session_count=int(session.scalar(
-                            select(func.count()).select_from(ConversationSessionORM).where(
-                                ConversationSessionORM.company_id == instance.company_id,
-                                ConversationSessionORM.thread_id == thread.id,
+                            or 0
+                        ),
+                        session_count=int(
+                            session.scalar(
+                                select(func.count())
+                                .select_from(ConversationSessionORM)
+                                .where(
+                                    ConversationSessionORM.company_id == instance.company_id,
+                                    ConversationSessionORM.thread_id == thread.id,
+                                )
                             )
-                        ) or 0),
+                            or 0
+                        ),
                     )
                     for thread in thread_rows
                 ],
                 sessions=[
                     self._session_record(
                         session_row,
-                        message_count=int(session.scalar(
-                            select(func.count()).select_from(ConversationMessageORM).where(
-                                ConversationMessageORM.company_id == instance.company_id,
-                                ConversationMessageORM.session_id == session_row.id,
+                        message_count=int(
+                            session.scalar(
+                                select(func.count())
+                                .select_from(ConversationMessageORM)
+                                .where(
+                                    ConversationMessageORM.company_id == instance.company_id,
+                                    ConversationMessageORM.session_id == session_row.id,
+                                )
                             )
-                        ) or 0),
+                            or 0
+                        ),
                     )
                     for session_row in session_rows
                 ],
@@ -1036,9 +1137,7 @@ class ConversationInboxAdminService:
                 if session_row is None or session_row.company_id != instance.company_id or session_row.conversation_id != conversation_id:
                     raise ValueError(f"Session '{payload.session_id}' was not found.")
                 if thread is not None and session_row.thread_id != thread.id:
-                    raise ValueError(
-                        f"Session '{payload.session_id}' does not belong to thread '{thread.id}'."
-                    )
+                    raise ValueError(f"Session '{payload.session_id}' does not belong to thread '{thread.id}'.")
             elif payload.start_new_session or conversation.latest_message_at is None:
                 session_row = ConversationSessionORM(
                     id=self._new_id("session"),
@@ -1055,14 +1154,19 @@ class ConversationInboxAdminService:
                 session.add(session_row)
                 started_new_session = True
             else:
-                session_row = session.execute(
-                    select(ConversationSessionORM)
-                    .where(
-                        ConversationSessionORM.company_id == instance.company_id,
-                        ConversationSessionORM.thread_id == thread.id,
+                session_row = (
+                    session
+                    .execute(
+                        select(ConversationSessionORM)
+                        .where(
+                            ConversationSessionORM.company_id == instance.company_id,
+                            ConversationSessionORM.thread_id == thread.id,
+                        )
+                        .order_by(ConversationSessionORM.started_at.desc())
                     )
-                    .order_by(ConversationSessionORM.started_at.desc())
-                ).scalars().first()
+                    .scalars()
+                    .first()
+                )
                 if session_row is None:
                     session_row = ConversationSessionORM(
                         id=self._new_id("session"),
@@ -1120,12 +1224,17 @@ class ConversationInboxAdminService:
             conversation.latest_message_at = now
             conversation.updated_at = now
             conversation.active_thread_id = thread.id
-            for inbox_row in session.execute(
-                select(InboxItemORM).where(
-                    InboxItemORM.company_id == instance.company_id,
-                    InboxItemORM.conversation_id == conversation_id,
+            for inbox_row in (
+                session
+                .execute(
+                    select(InboxItemORM).where(
+                        InboxItemORM.company_id == instance.company_id,
+                        InboxItemORM.conversation_id == conversation_id,
+                    )
                 )
-            ).scalars().all():
+                .scalars()
+                .all()
+            ):
                 inbox_row.latest_message_at = now
                 inbox_row.updated_at = now
         return self.get_conversation(instance=instance, conversation_id=conversation_id)
@@ -1150,9 +1259,7 @@ class ConversationInboxAdminService:
                 stmt = stmt.where(InboxItemORM.status == status)
             if priority is not None:
                 stmt = stmt.where(InboxItemORM.priority == priority)
-            rows = session.execute(
-                stmt.order_by(InboxItemORM.updated_at.desc()).limit(max(1, min(limit, 200)))
-            ).scalars().all()
+            rows = session.execute(stmt.order_by(InboxItemORM.updated_at.desc()).limit(max(1, min(limit, 200)))).scalars().all()
             return [self._inbox_summary(row) for row in rows]
 
     def get_inbox_item(self, *, instance: InstanceRecord, inbox_id: str) -> InboxDetail:
@@ -1190,11 +1297,13 @@ class ConversationInboxAdminService:
             if thread_id is not None:
                 thread = self._load_thread(session, company_id=instance.company_id, thread_id=thread_id)
                 if conversation_id is not None and thread.conversation_id != conversation_id:
-                    raise ValueError(
-                        f"Thread '{thread_id}' does not belong to conversation '{conversation_id}'."
-                    )
+                    raise ValueError(f"Thread '{thread_id}' does not belong to conversation '{conversation_id}'.")
                 if conversation_id is None:
-                    conversation = self._load_conversation(session, instance=instance, conversation_id=thread.conversation_id)
+                    conversation = self._load_conversation(
+                        session,
+                        instance=instance,
+                        conversation_id=thread.conversation_id,
+                    )
                     conversation_id = conversation.id
 
             inbox_id = (payload.inbox_id or "").strip() or self._new_id("inbox")
@@ -1254,9 +1363,7 @@ class ConversationInboxAdminService:
             if next_thread_id is not None:
                 thread = self._load_thread(session, company_id=instance.company_id, thread_id=next_thread_id)
                 if next_conversation_id is not None and thread.conversation_id != next_conversation_id:
-                    raise ValueError(
-                        f"Thread '{next_thread_id}' does not belong to conversation '{next_conversation_id}'."
-                    )
+                    raise ValueError(f"Thread '{next_thread_id}' does not belong to conversation '{next_conversation_id}'.")
                 next_conversation_id = thread.conversation_id
 
             row.conversation_id = next_conversation_id

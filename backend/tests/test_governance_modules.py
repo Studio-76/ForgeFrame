@@ -1,14 +1,16 @@
 import json
 import os
 from pathlib import Path
+from typing import Any, cast
 from uuid import uuid4
 
-from fastapi.testclient import TestClient
 import pytest
+from conftest import admin_headers as shared_admin_headers
+from conftest import login_headers_allowing_password_rotation, rotated_test_password
+from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, text
 from sqlalchemy.exc import IntegrityError
 
-from conftest import admin_headers as shared_admin_headers, login_headers_allowing_password_rotation, rotated_test_password
 from app.api.admin.dashboard import _primary_action_from_attention
 from app.api.runtime.dependencies import clear_runtime_dependency_caches
 from app.auth.local_auth import hash_password, hash_token, new_secret_salt
@@ -22,6 +24,7 @@ from app.governance.models import (
     RuntimeKeyRecord,
 )
 from app.governance.service import GovernanceService, get_governance_service
+from app.harness.service import HarnessService
 from app.main import app
 from app.settings.config import Settings, get_settings
 from app.storage.governance_repository import PostgresGovernanceRepository
@@ -65,7 +68,7 @@ def _approve_elevated_access_request(
     request_id: str,
     *,
     decision_note: str = "Approved after validating the incident context and target scope.",
-) -> dict[str, object]:
+) -> dict[str, Any]:
     response = client.post(
         f"/admin/security/elevated-access-requests/{request_id}/approve",
         headers=approver_headers,
@@ -79,7 +82,7 @@ def _issue_elevated_access_request(
     client: TestClient,
     requester_headers: dict[str, str],
     request_id: str,
-) -> dict[str, object]:
+) -> dict[str, Any]:
     response = client.post(
         f"/admin/security/elevated-access-requests/{request_id}/issue",
         headers=requester_headers,
@@ -97,7 +100,7 @@ def _activate_break_glass_session(
     justification: str,
     notification_targets: list[str] | None = None,
     duration_minutes: int = 20,
-) -> dict[str, object]:
+) -> dict[str, Any]:
     request = client.post(
         "/admin/security/break-glass",
         headers=requester_headers,
@@ -124,7 +127,7 @@ def _activate_impersonation_session(
     justification: str,
     notification_targets: list[str] | None = None,
     duration_minutes: int = 15,
-) -> dict[str, object]:
+) -> dict[str, Any]:
     request = client.post(
         "/admin/security/impersonations",
         headers=requester_headers,
@@ -148,7 +151,7 @@ def _create_runtime_account_and_key(
     *,
     provider_bindings: list[str] | None = None,
     scopes: list[str],
-) -> tuple[dict[str, object], dict[str, object]]:
+) -> tuple[dict[str, Any], dict[str, Any]]:
     suffix = uuid4().hex[:8]
     account_response = client.post(
         "/admin/accounts/",
@@ -174,7 +177,7 @@ def _create_runtime_account_and_key(
     return account, key_response.json()["issued"]
 
 
-def _read_observability_events() -> list[dict[str, object]]:
+def _read_observability_events() -> list[dict[str, Any]]:
     path = Path(os.environ["FORGEGATE_OBSERVABILITY_EVENTS_PATH"])
     if not path.exists():
         return []
@@ -230,7 +233,10 @@ def test_password_rotation_required_sessions_are_limited_to_self_rotation_until_
     assert rotated.status_code == 200
     assert rotated.json()["user"]["must_rotate_password"] is True
 
-    login = client.post("/admin/auth/login", json={"username": "rotation-admin", "password": "Rotation-Reset-456"})
+    login = client.post(
+        "/admin/auth/login",
+        json={"username": "rotation-admin", "password": "Rotation-Reset-456"},
+    )
     assert login.status_code == 201
     rotation_headers = {"Authorization": f"Bearer {login.json()['access_token']}"}
 
@@ -383,28 +389,29 @@ def test_dashboard_primary_action_prioritizes_blocked_routing_or_cost_over_degra
     expected_route: str,
     expected_action: str,
 ) -> None:
-    primary_action = _primary_action_from_attention(
-        [
-            {
-                "id": "alert:provider_hotspot",
-                "severity": "warning",
-                "title": "Runtime failures are climbing",
-                "cause": "Provider openai_api is the current error hotspot.",
-                "axis": "Runtime",
-                "to": "/errors",
-                "action_label": "Investigate runtime failures",
-                "status": "degraded",
-            },
-            blocking_item,
-        ]
-    )
+    primary_action = _primary_action_from_attention([
+        {
+            "id": "alert:provider_hotspot",
+            "severity": "warning",
+            "title": "Runtime failures are climbing",
+            "cause": "Provider openai_api is the current error hotspot.",
+            "axis": "Runtime",
+            "to": "/errors",
+            "action_label": "Investigate runtime failures",
+            "status": "degraded",
+        },
+        blocking_item,
+    ])
 
     assert primary_action is not None
     assert primary_action["kind"] == expected_kind
     assert primary_action["to"] == expected_route
     assert primary_action["action_label"] == expected_action
 
-def test_bootstrap_admin_password_reload_applies_before_first_rotation(monkeypatch) -> None:
+
+def test_bootstrap_admin_password_reload_applies_before_first_rotation(
+    monkeypatch,
+) -> None:
     client = TestClient(app)
     old_password = os.environ["FORGEGATE_BOOTSTRAP_ADMIN_PASSWORD"]
     first_login = client.post("/admin/auth/login", json={"username": "admin", "password": old_password})
@@ -421,7 +428,10 @@ def test_bootstrap_admin_password_reload_applies_before_first_rotation(monkeypat
 
     refreshed_login = reloaded_client.post(
         "/admin/auth/login",
-        json={"username": "admin", "password": os.environ["FORGEGATE_BOOTSTRAP_ADMIN_PASSWORD"]},
+        json={
+            "username": "admin",
+            "password": os.environ["FORGEGATE_BOOTSTRAP_ADMIN_PASSWORD"],
+        },
     )
     assert refreshed_login.status_code == 201
 
@@ -433,7 +443,11 @@ def test_accounts_and_runtime_keys_can_be_managed() -> None:
     create_account = client.post(
         "/admin/accounts/",
         headers=headers,
-        json={"label": "Integration Account", "provider_bindings": ["openai_api", "ollama"], "notes": "runtime consumer"},
+        json={
+            "label": "Integration Account",
+            "provider_bindings": ["openai_api", "ollama"],
+            "notes": "runtime consumer",
+        },
     )
     assert create_account.status_code == 201
     account_id = create_account.json()["account"]["account_id"]
@@ -441,21 +455,31 @@ def test_accounts_and_runtime_keys_can_be_managed() -> None:
     create_key = client.post(
         "/admin/keys/",
         headers=headers,
-        json={"label": "Integration Key", "account_id": account_id, "scopes": ["models:read", "chat:write"]},
+        json={
+            "label": "Integration Key",
+            "account_id": account_id,
+            "scopes": ["models:read", "chat:write"],
+        },
     )
     assert create_key.status_code == 201
     issued = create_key.json()["issued"]
     assert issued["token"].startswith("fgk_")
 
 
-def test_runtime_key_can_authenticate_models_endpoint_when_runtime_auth_required(monkeypatch) -> None:
+def test_runtime_key_can_authenticate_models_endpoint_when_runtime_auth_required(
+    monkeypatch,
+) -> None:
     client = TestClient(app)
     headers = _admin_headers(client)
     account = client.post("/admin/accounts/", headers=headers, json={"label": "Secured Account"}).json()["account"]
     issued = client.post(
         "/admin/keys/",
         headers=headers,
-        json={"label": "Secured Key", "account_id": account["account_id"], "scopes": ["models:read"]},
+        json={
+            "label": "Secured Key",
+            "account_id": account["account_id"],
+            "scopes": ["models:read"],
+        },
     ).json()["issued"]
 
     monkeypatch.setenv("FORGEGATE_RUNTIME_AUTH_REQUIRED", "true")
@@ -502,15 +526,13 @@ def test_runtime_key_rejects_disabled_and_suspended_accounts(monkeypatch) -> Non
         assert error["details"] == {}
 
     governance = get_governance_service()
-    denied_statuses = {
-        item.metadata.get("account_status")
-        for item in governance.list_audit_events(limit=50)
-        if item.action == "runtime_account_status_denied"
-    }
+    denied_statuses = {item.metadata.get("account_status") for item in governance.list_audit_events(limit=50) if item.action == "runtime_account_status_denied"}
     assert {"disabled", "suspended"}.issubset(denied_statuses)
 
 
-def test_runtime_provider_bindings_filter_models_and_block_disallowed_chat(monkeypatch) -> None:
+def test_runtime_provider_bindings_filter_models_and_block_disallowed_chat(
+    monkeypatch,
+) -> None:
     monkeypatch.setenv("FORGEGATE_OPENAI_API_KEY", "test-key")
     monkeypatch.setenv("FORGEGATE_RUNTIME_AUTH_REQUIRED", "true")
     clear_runtime_dependency_caches()
@@ -549,11 +571,7 @@ def test_runtime_provider_bindings_filter_models_and_block_disallowed_chat(monke
     assert "details" not in error
 
     governance = get_governance_service()
-    denial = next(
-        item
-        for item in governance.list_audit_events(limit=50)
-        if item.action == "runtime_provider_binding_denied" and item.target_id == "forgeframe_baseline"
-    )
+    denial = next(item for item in governance.list_audit_events(limit=50) if item.action == "runtime_provider_binding_denied" and item.target_id == "forgeframe_baseline")
     assert denial.metadata["requested_model"] == "forgeframe-baseline-chat-v1"
 
 
@@ -589,7 +607,9 @@ def test_runtime_provider_bindings_hide_unready_provider_models(monkeypatch) -> 
     assert unready_chat.json()["error"]["type"] == "provider_not_ready"
 
 
-def test_anthropic_public_models_stay_hidden_for_other_tenants_after_runtime_success(monkeypatch) -> None:
+def test_anthropic_public_models_stay_hidden_for_other_tenants_after_runtime_success(
+    monkeypatch,
+) -> None:
     for env_name in (
         "FORGEGATE_FORGEGATE_BASELINE_ENABLED",
         "FORGEGATE_OPENAI_API_ENABLED",
@@ -632,7 +652,7 @@ def test_anthropic_public_models_stay_hidden_for_other_tenants_after_runtime_suc
         text = "ok"
 
         @staticmethod
-        def json() -> dict[str, object]:
+        def json() -> dict[str, Any]:
             return {
                 "model": "claude-3-5-sonnet-latest",
                 "content": [{"type": "text", "text": "tenant-a-ok"}],
@@ -640,7 +660,10 @@ def test_anthropic_public_models_stay_hidden_for_other_tenants_after_runtime_suc
                 "stop_reason": "end_turn",
             }
 
-    monkeypatch.setattr("app.providers.anthropic.adapter.httpx.post", lambda *args, **kwargs: _MockAnthropicResponse())
+    monkeypatch.setattr(
+        "app.providers.anthropic.adapter.httpx.post",
+        lambda *args, **kwargs: _MockAnthropicResponse(),
+    )
 
     tenant_a_chat = client.post(
         "/v1/chat/completions",
@@ -661,17 +684,15 @@ def test_anthropic_public_models_stay_hidden_for_other_tenants_after_runtime_suc
         headers=headers,
     )
     assert tenant_b_truth_response.status_code == 200
-    tenant_b_truth = next(
-        item["runtime"]
-        for item in tenant_b_truth_response.json()["truth_axes"]
-        if item["provider"]["provider"] == "anthropic"
-    )
+    tenant_b_truth = next(item["runtime"] for item in tenant_b_truth_response.json()["truth_axes"] if item["provider"]["provider"] == "anthropic")
     assert tenant_b_truth["evidence"]["runtime"]["status"] == "missing"
     assert tenant_b_truth["runtime_readiness"] == "partial"
     assert tenant_b_truth["ready"] is False
 
 
-def test_runtime_provider_binding_denial_on_responses_persists_responses_route(monkeypatch) -> None:
+def test_runtime_provider_binding_denial_on_responses_persists_responses_route(
+    monkeypatch,
+) -> None:
     monkeypatch.setenv("FORGEGATE_RUNTIME_AUTH_REQUIRED", "true")
     clear_runtime_dependency_caches()
     get_governance_service.cache_clear()
@@ -700,11 +721,7 @@ def test_runtime_provider_binding_denial_on_responses_persists_responses_route(m
     assert error["message"] == "Requested model is not available for this runtime key."
     assert "details" not in error
 
-    denial_events = [
-        item["data"]
-        for item in _read_observability_events()
-        if item.get("kind") == "error" and item.get("data", {}).get("error_type") == "provider_not_allowed"
-    ]
+    denial_events = [item["data"] for item in _read_observability_events() if item.get("kind") == "error" and item.get("data", {}).get("error_type") == "provider_not_allowed"]
     assert denial_events
     latest_denial = denial_events[-1]
     assert latest_denial["model"] == "forgeframe-baseline-chat-v1"
@@ -786,7 +803,10 @@ def test_security_admin_endpoints_manage_users_sessions_and_secret_posture() -> 
     rotated_self = client.post(
         "/admin/auth/rotate-password",
         headers=viewer_headers,
-        json={"current_password": "operator-pass-456", "new_password": "operator-pass-789"},
+        json={
+            "current_password": "operator-pass-456",
+            "new_password": "operator-pass-789",
+        },
     )
     assert rotated_self.status_code == 200
     assert rotated_self.json()["user"]["must_rotate_password"] is False
@@ -820,10 +840,7 @@ def test_security_admin_endpoints_manage_users_sessions_and_secret_posture() -> 
 
     memberships_after = client.get(f"/admin/security/users/{user_id}/memberships", headers=headers)
     assert memberships_after.status_code == 200
-    assert any(
-        item["instance_id"] == scoped_instance_id and item["role"] == "viewer"
-        for item in memberships_after.json()["memberships"]
-    )
+    assert any(item["instance_id"] == scoped_instance_id and item["role"] == "viewer" for item in memberships_after.json()["memberships"])
 
     stale_viewer_session = client.get("/admin/auth/me", headers=viewer_headers)
     assert stale_viewer_session.status_code == 401
@@ -905,9 +922,7 @@ def test_security_admin_endpoints_manage_users_sessions_and_secret_posture() -> 
     impersonation_session = next(
         item
         for item in sessions_after_impersonation.json()["sessions"]
-        if item["approval_request_id"] == impersonation_request["request_id"]
-        and item["session_type"] == "impersonation"
-        and item["revoked_at"] is None
+        if item["approval_request_id"] == impersonation_request["request_id"] and item["session_type"] == "impersonation" and item["revoked_at"] is None
     )
     revoked_impersonation = client.post(
         f"/admin/security/sessions/{impersonation_session['session_id']}/revoke",
@@ -947,11 +962,12 @@ def test_security_admin_endpoints_manage_users_sessions_and_secret_posture() -> 
 
     sessions = client.get("/admin/security/sessions", headers=headers)
     assert sessions.status_code == 200
-    viewer_session = next(
-        item for item in sessions.json()["sessions"] if item["user_id"] == user_id and item["session_type"] == "standard" and item["revoked_at"] is None
-    )
+    viewer_session = next(item for item in sessions.json()["sessions"] if item["user_id"] == user_id and item["session_type"] == "standard" and item["revoked_at"] is None)
 
-    revoked = client.post(f"/admin/security/sessions/{viewer_session['session_id']}/revoke", headers=headers)
+    revoked = client.post(
+        f"/admin/security/sessions/{viewer_session['session_id']}/revoke",
+        headers=headers,
+    )
     assert revoked.status_code == 200
     assert revoked.json()["session"]["revoked_reason"] == "admin_revoked"
 
@@ -1009,9 +1025,7 @@ def test_security_admin_endpoints_manage_users_sessions_and_secret_posture() -> 
     assert "generic_harness" in providers
     assert providers_payload["openai_api"]["history_count"] == 1
     assert providers_payload["openai_api"]["last_rotation_reference"] == "ops-ticket-42"
-    assert providers_payload["openai_api"]["state"] == (
-        "rotatable" if providers_payload["openai_api"]["configured"] else "missing"
-    )
+    assert providers_payload["openai_api"]["state"] == ("rotatable" if providers_payload["openai_api"]["configured"] else "missing")
     assert providers_payload["generic_harness"]["state"] == "rotatable"
     assert secret_posture.json()["controls"]
     harness_profiles = {item["provider_key"]: item for item in secret_posture.json()["harness_profiles"]}
@@ -1047,7 +1061,9 @@ def test_security_admin_endpoints_manage_users_sessions_and_secret_posture() -> 
     }.issubset(actions)
 
 
-def test_security_secret_posture_exposes_codex_oauth_mode_contract(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_security_secret_posture_exposes_codex_oauth_mode_contract(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     monkeypatch.setenv("FORGEGATE_OPENAI_CODEX_AUTH_MODE", "oauth")
     monkeypatch.setenv("FORGEGATE_OPENAI_CODEX_OAUTH_MODE", "device_hosted_code")
     monkeypatch.setenv("FORGEGATE_OPENAI_CODEX_OAUTH_ACCESS_TOKEN", "test-token")
@@ -1106,11 +1122,7 @@ def test_impersonation_sessions_are_read_only_for_control_plane_writes() -> None
 
     settings_before = client.get("/admin/settings/", headers=headers)
     assert settings_before.status_code == 200
-    app_name_before = next(
-        item["effective_value"]
-        for item in settings_before.json()["settings"]
-        if item["key"] == "app_name"
-    )
+    app_name_before = next(item["effective_value"] for item in settings_before.json()["settings"] if item["key"] == "app_name")
 
     account_count_before = len(client.get("/admin/accounts/", headers=headers).json()["accounts"])
     key_count_before = len(client.get("/admin/keys/", headers=headers).json()["keys"])
@@ -1161,7 +1173,11 @@ def test_impersonation_sessions_are_read_only_for_control_plane_writes() -> None
         client.post(
             "/admin/keys/",
             headers=impersonation_headers,
-            json={"label": f"Blocked Key {suffix}", "account_id": account_id, "scopes": ["models:read"]},
+            json={
+                "label": f"Blocked Key {suffix}",
+                "account_id": account_id,
+                "scopes": ["models:read"],
+            },
         ),
         client.patch(
             "/admin/settings/",
@@ -1171,7 +1187,10 @@ def test_impersonation_sessions_are_read_only_for_control_plane_writes() -> None
         client.post(
             "/admin/auth/rotate-password",
             headers=impersonation_headers,
-            json={"current_password": "Impersonated-Admin-123", "new_password": "Blocked-Rotation-123"},
+            json={
+                "current_password": "Impersonated-Admin-123",
+                "new_password": "Blocked-Rotation-123",
+            },
         ),
         client.post(
             "/admin/security/break-glass",
@@ -1202,11 +1221,7 @@ def test_impersonation_sessions_are_read_only_for_control_plane_writes() -> None
 
     settings_after = client.get("/admin/settings/", headers=headers)
     assert settings_after.status_code == 200
-    app_name_after = next(
-        item["effective_value"]
-        for item in settings_after.json()["settings"]
-        if item["key"] == "app_name"
-    )
+    app_name_after = next(item["effective_value"] for item in settings_after.json()["settings"] if item["key"] == "app_name")
     assert app_name_after == app_name_before
 
     post_rotation_login = client.post(
@@ -1229,10 +1244,7 @@ def test_impersonation_sessions_are_read_only_for_control_plane_writes() -> None
     sessions_after = client.get("/admin/security/sessions", headers=headers)
     assert sessions_after.status_code == 200
     assert len(sessions_after.json()["sessions"]) == session_count_before + 4
-    assert not any(
-        item["session_type"] == "break_glass" and item["issued_by_user_id"] == impersonated_user_id
-        for item in sessions_after.json()["sessions"]
-    )
+    assert not any(item["session_type"] == "break_glass" and item["issued_by_user_id"] == impersonated_user_id for item in sessions_after.json()["sessions"])
 
 
 def test_elevated_access_requests_require_approval_before_issue_and_reject_self_approval() -> None:
@@ -1363,11 +1375,7 @@ def test_elevated_access_requests_require_recovery_when_no_second_admin_approver
     assert requests.status_code == 200
     assert requests.json()["requests"] == []
 
-    recovery_actions = {
-        item.action
-        for item in get_governance_service().list_audit_events(limit=100)
-        if item.metadata.get("blocked_reason") == "no_eligible_second_admin"
-    }
+    recovery_actions = {item.action for item in get_governance_service().list_audit_events(limit=100) if item.metadata.get("blocked_reason") == "no_eligible_second_admin"}
     assert {
         "admin_impersonation_recovery_required",
         "admin_break_glass_recovery_required",
@@ -1391,7 +1399,13 @@ def test_security_posture_routes_are_operator_readable_for_elevated_access_reque
     assert bootstrap.status_code == 200
     bootstrap_payload = bootstrap.json()
     blocker_ids = {item["blocker_id"] for item in bootstrap_payload["security_blockers"]}
-    assert {"default_password", "missing_rotation", "open_sessions", "secrets_missing", "break_glass_active"}.issubset(blocker_ids)
+    assert {
+        "default_password",
+        "missing_rotation",
+        "open_sessions",
+        "secrets_missing",
+        "break_glass_active",
+    }.issubset(blocker_ids)
     assert "bootstrap" not in bootstrap_payload
     assert "secret_posture" not in bootstrap_payload
 
@@ -1512,9 +1526,7 @@ def test_elevated_access_requests_reject_duplicate_active_subject_sessions_at_re
     )
     assert duplicate_request.status_code == 409
     assert duplicate_request.json()["error"]["type"] == "elevated_access_request_conflict"
-    assert duplicate_request.json()["error"]["message"] == (
-        "An elevated session is already active for this subject. Review the active session before creating a new request."
-    )
+    assert duplicate_request.json()["error"]["message"] == ("An elevated session is already active for this subject. Review the active session before creating a new request.")
 
 
 def test_elevated_access_requests_surface_active_session_conflicts_during_review() -> None:
@@ -1598,9 +1610,7 @@ def test_elevated_access_requests_surface_active_session_conflicts_during_review
     )
     assert approve_conflict.status_code == 409
     assert approve_conflict.json()["error"]["type"] == "elevated_access_request_conflict"
-    assert approve_conflict.json()["error"]["message"] == (
-        "An elevated session is already active for this subject. Review the active session before creating a new request."
-    )
+    assert approve_conflict.json()["error"]["message"] == ("An elevated session is already active for this subject. Review the active session before creating a new request.")
 
     issue_conflict = client.post(
         f"/admin/security/elevated-access-requests/{issue_conflict_request_id}/issue",
@@ -1608,9 +1618,7 @@ def test_elevated_access_requests_surface_active_session_conflicts_during_review
     )
     assert issue_conflict.status_code == 409
     assert issue_conflict.json()["error"]["type"] == "elevated_access_request_conflict"
-    assert issue_conflict.json()["error"]["message"] == (
-        "An elevated session is already active for this subject. Review the active session before creating a new request."
-    )
+    assert issue_conflict.json()["error"]["message"] == ("An elevated session is already active for this subject. Review the active session before creating a new request.")
 
 
 def test_impersonation_requests_reject_requesters_with_active_break_glass_sessions() -> None:
@@ -1659,9 +1667,7 @@ def test_impersonation_requests_reject_requesters_with_active_break_glass_sessio
     )
     assert impersonation.status_code == 409
     assert impersonation.json()["error"]["type"] == "elevated_access_request_conflict"
-    assert impersonation.json()["error"]["message"] == (
-        "An elevated session is already active for this subject. Review the active session before creating a new request."
-    )
+    assert impersonation.json()["error"]["message"] == ("An elevated session is already active for this subject. Review the active session before creating a new request.")
 
 
 def test_impersonation_requests_recheck_requester_break_glass_conflicts_during_review() -> None:
@@ -1718,9 +1724,7 @@ def test_impersonation_requests_recheck_requester_break_glass_conflicts_during_r
     )
     assert approval.status_code == 409
     assert approval.json()["error"]["type"] == "elevated_access_request_conflict"
-    assert approval.json()["error"]["message"] == (
-        "An elevated session is already active for this subject. Review the active session before creating a new request."
-    )
+    assert approval.json()["error"]["message"] == ("An elevated session is already active for this subject. Review the active session before creating a new request.")
 
 
 def test_impersonation_requests_recheck_requester_break_glass_conflicts_during_issuance() -> None:
@@ -1778,9 +1782,7 @@ def test_impersonation_requests_recheck_requester_break_glass_conflicts_during_i
     )
     assert issue.status_code == 409
     assert issue.json()["error"]["type"] == "elevated_access_request_conflict"
-    assert issue.json()["error"]["message"] == (
-        "An elevated session is already active for this subject. Review the active session before creating a new request."
-    )
+    assert issue.json()["error"]["message"] == ("An elevated session is already active for this subject. Review the active session before creating a new request.")
 
 
 def test_impersonation_requests_reject_requesters_with_active_impersonation_sessions() -> None:
@@ -1834,9 +1836,7 @@ def test_impersonation_requests_reject_requesters_with_active_impersonation_sess
     sessions = client.get("/admin/security/sessions", headers=headers)
     assert sessions.status_code == 200
     assert any(
-        item["session_type"] == "impersonation"
-        and item["user_id"] == first_target.json()["user"]["user_id"]
-        and item["issued_by_user_id"] == activated["request"]["requested_by_user_id"]
+        item["session_type"] == "impersonation" and item["user_id"] == first_target.json()["user"]["user_id"] and item["issued_by_user_id"] == activated["request"]["requested_by_user_id"]
         for item in sessions.json()["sessions"]
     )
 
@@ -1853,9 +1853,7 @@ def test_impersonation_requests_reject_requesters_with_active_impersonation_sess
     )
     assert impersonation.status_code == 409
     assert impersonation.json()["error"]["type"] == "elevated_access_request_conflict"
-    assert impersonation.json()["error"]["message"] == (
-        "An elevated session is already active for this subject. Review the active session before creating a new request."
-    )
+    assert impersonation.json()["error"]["message"] == ("An elevated session is already active for this subject. Review the active session before creating a new request.")
 
 
 def test_break_glass_requests_reject_requesters_with_active_impersonation_sessions() -> None:
@@ -1905,9 +1903,7 @@ def test_break_glass_requests_reject_requesters_with_active_impersonation_sessio
     )
     assert break_glass.status_code == 409
     assert break_glass.json()["error"]["type"] == "elevated_access_request_conflict"
-    assert break_glass.json()["error"]["message"] == (
-        "An elevated session is already active for this subject. Review the active session before creating a new request."
-    )
+    assert break_glass.json()["error"]["message"] == ("An elevated session is already active for this subject. Review the active session before creating a new request.")
 
 
 def test_impersonation_requests_recheck_requester_impersonation_conflicts_during_review() -> None:
@@ -1977,9 +1973,7 @@ def test_impersonation_requests_recheck_requester_impersonation_conflicts_during
     )
     assert approval.status_code == 409
     assert approval.json()["error"]["type"] == "elevated_access_request_conflict"
-    assert approval.json()["error"]["message"] == (
-        "An elevated session is already active for this subject. Review the active session before creating a new request."
-    )
+    assert approval.json()["error"]["message"] == ("An elevated session is already active for this subject. Review the active session before creating a new request.")
 
 
 def test_impersonation_requests_recheck_requester_impersonation_conflicts_during_issuance() -> None:
@@ -2050,9 +2044,7 @@ def test_impersonation_requests_recheck_requester_impersonation_conflicts_during
     )
     assert issue.status_code == 409
     assert issue.json()["error"]["type"] == "elevated_access_request_conflict"
-    assert issue.json()["error"]["message"] == (
-        "An elevated session is already active for this subject. Review the active session before creating a new request."
-    )
+    assert issue.json()["error"]["message"] == ("An elevated session is already active for this subject. Review the active session before creating a new request.")
 
 
 def test_elevated_access_requests_support_rejection_and_timeout_states() -> None:
@@ -2317,7 +2309,9 @@ def test_admin_login_rate_limit_is_enforced(monkeypatch) -> None:
     assert third.status_code == 429
 
 
-def test_postgres_governance_relational_backfill_dual_write_and_read_cutover(tmp_path: Path) -> None:
+def test_postgres_governance_relational_backfill_dual_write_and_read_cutover(
+    tmp_path: Path,
+) -> None:
     schema_name = f"test_governance_relational_{uuid4().hex[:12]}"
     base_url = "postgresql+psycopg://forgegate:forgegate@localhost:5432/forgegate"
     scoped_url = f"{base_url}?options=-csearch_path%3D{schema_name}"
@@ -2344,8 +2338,14 @@ def test_postgres_governance_relational_backfill_dual_write_and_read_cutover(tmp
 
         migration_result = apply_storage_migrations(scoped_url)
         assert migration_result["latest_version"] >= 10
-        assert 9 in [*migration_result["applied_versions"], *migration_result["skipped_versions"]]
-        assert 10 in [*migration_result["applied_versions"], *migration_result["skipped_versions"]]
+        assert 9 in [
+            *migration_result["applied_versions"],
+            *migration_result["skipped_versions"],
+        ]
+        assert 10 in [
+            *migration_result["applied_versions"],
+            *migration_result["skipped_versions"],
+        ]
 
         with admin_engine.connect() as connection:
             tables = {
@@ -2647,7 +2647,7 @@ def test_postgres_governance_relational_backfill_dual_write_and_read_cutover(tmp
             }
         assert second_counts == first_counts
 
-        service = GovernanceService(settings, repository=repository, harness_service=object())
+        service = GovernanceService(settings, repository=repository, harness_service=cast("HarnessService | None", object()))
         actor = AuthenticatedAdmin(
             session_id="sess_seed",
             user_id="admin_seed",
@@ -2678,7 +2678,10 @@ def test_postgres_governance_relational_backfill_dual_write_and_read_cutover(tmp
             "service_accounts": 2,
             "audit_events": 2,
         }
-        assert {item["label"] for item in payload["gateway_accounts"]} == {"Tenant A", "Tenant B"}
+        assert {item["label"] for item in payload["gateway_accounts"]} == {
+            "Tenant A",
+            "Tenant B",
+        }
 
         audit_shadow_payload = dict(payload)
         audit_shadow_payload["audit_events"] = []
@@ -2705,7 +2708,10 @@ def test_postgres_governance_relational_backfill_dual_write_and_read_cutover(tmp
         )
         audit_shadow_state = audit_shadow_repository.load_state()
         assert len(audit_shadow_state.audit_events) == 2
-        assert {event.target_id for event in audit_shadow_state.audit_events} == {"acct_seed", created_account.account_id}
+        assert {event.target_id for event in audit_shadow_state.audit_events} == {
+            "acct_seed",
+            created_account.account_id,
+        }
 
         stale_same_event_payload = dict(payload)
         stale_same_event_payload["audit_events"] = [
@@ -2752,9 +2758,7 @@ def test_postgres_governance_relational_backfill_dual_write_and_read_cutover(tmp
             relational_reads_enabled=False,
         )
         stale_same_event_state = stale_same_event_repository.load_state()
-        stale_same_event = next(
-            event for event in stale_same_event_state.audit_events if event.event_id == "audit_seed_account"
-        )
+        stale_same_event = next(event for event in stale_same_event_state.audit_events if event.event_id == "audit_seed_account")
         assert stale_same_event.details == "relational-truth-details"
         with admin_engine.connect() as connection:
             stored_same_event_details = connection.execute(
@@ -2772,7 +2776,7 @@ def test_postgres_governance_relational_backfill_dual_write_and_read_cutover(tmp
         audit_shadow_service = GovernanceService(
             settings,
             repository=audit_shadow_repository,
-            harness_service=object(),
+            harness_service=cast("HarnessService | None", object()),
         )
         tenant_events = audit_shadow_service.list_audit_events(limit=10, tenant_id=created_account.account_id)
         assert any(event.action == "account_create" and event.target_id == created_account.account_id for event in tenant_events)
@@ -2811,11 +2815,14 @@ def test_postgres_governance_relational_backfill_dual_write_and_read_cutover(tmp
         cutover_service = GovernanceService(
             cutover_settings,
             repository=cutover_repository,
-            harness_service=object(),
+            harness_service=cast("HarnessService | None", object()),
         )
 
         assert [user.username for user in cutover_service.list_admin_users()] == ["admin"]
-        assert {account.label for account in cutover_service.list_accounts()} == {"Tenant A", "Tenant B"}
+        assert {account.label for account in cutover_service.list_accounts()} == {
+            "Tenant A",
+            "Tenant B",
+        }
         assert [key.key_id for key in cutover_service.list_runtime_keys()] == ["key_seed"]
         tenant_events = cutover_service.list_audit_events(limit=10, tenant_id=created_account.account_id)
         assert any(event.action == "account_create" and event.target_id == created_account.account_id for event in tenant_events)
@@ -2864,7 +2871,10 @@ def test_postgres_governance_migration_backfills_legacy_audit_events_into_relati
                     target_id="openai_api",
                     status="failed",
                     details="Runtime key denied access to provider 'openai_api'.",
-                    metadata={"account_id": "acct_seed", "requested_model": "gpt-4.1-mini"},
+                    metadata={
+                        "account_id": "acct_seed",
+                        "requested_model": "gpt-4.1-mini",
+                    },
                     created_at="2026-04-22T00:05:00+00:00",
                 ),
             ],
@@ -2932,7 +2942,10 @@ def test_postgres_governance_migration_backfills_legacy_audit_events_into_relati
                 )
             ).all()
 
-        assert [row[0] for row in audit_rows] == ["audit_seed_admin", "audit_seed_runtime"]
+        assert [row[0] for row in audit_rows] == [
+            "audit_seed_admin",
+            "audit_seed_runtime",
+        ]
         assert all(row[1] == "acct_seed" for row in audit_rows)
         assert audit_rows[0][3] == "admin_seed"
         assert audit_rows[1][4] == "key_seed"
@@ -2952,9 +2965,7 @@ def test_postgres_governance_migration_backfills_legacy_audit_events_into_relati
         assert 14 in replay_result["applied_versions"]
 
         with admin_engine.connect() as connection:
-            replay_count = int(
-                connection.execute(text(f'SELECT count(*) FROM "{schema_name}".audit_events')).scalar_one()
-            )
+            replay_count = int(connection.execute(text(f'SELECT count(*) FROM "{schema_name}".audit_events')).scalar_one())
 
         assert replay_count == 2
     finally:
@@ -3284,11 +3295,7 @@ def test_postgres_governance_migrations_repair_legacy_tenant_shape_when_phase23_
         connection.execute(text(f'CREATE SCHEMA "{schema_name}"'))
 
     try:
-        latest_phase23_version = max(
-            migration.version
-            for migration in list_storage_migrations()
-            if migration.version <= 10
-        )
+        latest_phase23_version = max(migration.version for migration in list_storage_migrations() if migration.version <= 10)
         with admin_engine.begin() as connection:
             connection.execute(
                 text(
@@ -3736,7 +3743,7 @@ def test_postgres_governance_migrations_repair_legacy_tenant_shape_when_phase23_
         service = GovernanceService(
             settings,
             repository=PostgresGovernanceRepository(scoped_url),
-            harness_service=object(),
+            harness_service=cast("HarnessService | None", object()),
         )
 
         assert [user.username for user in service.list_admin_users()] == ["admin"]

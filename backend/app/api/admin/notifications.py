@@ -17,7 +17,10 @@ router = APIRouter(prefix="/notifications", tags=["admin-notifications"])
 
 
 def _error(status_code: int, error_type: str, message: str) -> JSONResponse:
-    return JSONResponse(status_code=status_code, content={"error": {"type": error_type, "message": message}})
+    return JSONResponse(
+        status_code=status_code,
+        content={"error": {"type": error_type, "message": message}},
+    )
 
 
 @router.get("")
@@ -29,8 +32,17 @@ def list_notifications(
     instance: InstanceRecord = Depends(resolve_admin_instance_scope),
     service: TaskAutomationAdminService = Depends(get_task_automation_admin_service),
 ) -> dict[str, object]:
-    notifications = service.list_notifications(instance=instance, delivery_status=delivery_status, priority=priority, limit=limit)
-    return {"status": "ok", "instance": instance.model_dump(mode="json"), "notifications": [item.model_dump(mode="json") for item in notifications]}
+    notifications = service.list_notifications(
+        instance=instance,
+        delivery_status=delivery_status,
+        priority=priority,
+        limit=limit,
+    )
+    return {
+        "status": "ok",
+        "instance": instance.model_dump(mode="json"),
+        "notifications": [item.model_dump(mode="json") for item in notifications],
+    }
 
 
 @router.get("/{notification_id}")
@@ -93,7 +105,11 @@ def confirm_notification(
         error_type = "notification_not_found" if "not found" in str(exc) else "notification_invalid"
         code = status.HTTP_404_NOT_FOUND if error_type == "notification_not_found" else status.HTTP_409_CONFLICT
         return _error(code, error_type, str(exc))
-    return {"status": "ok", "action": result.action, "notification": result.notification.model_dump(mode="json")}
+    return {
+        "status": "ok",
+        "action": result.action,
+        "notification": result.notification.model_dump(mode="json"),
+    }
 
 
 @router.post("/{notification_id}/reject")
@@ -109,7 +125,11 @@ def reject_notification(
         error_type = "notification_not_found" if "not found" in str(exc) else "notification_invalid"
         code = status.HTTP_404_NOT_FOUND if error_type == "notification_not_found" else status.HTTP_409_CONFLICT
         return _error(code, error_type, str(exc))
-    return {"status": "ok", "action": result.action, "notification": result.notification.model_dump(mode="json")}
+    return {
+        "status": "ok",
+        "action": result.action,
+        "notification": result.notification.model_dump(mode="json"),
+    }
 
 
 @router.post("/{notification_id}/retry")
@@ -125,4 +145,8 @@ def retry_notification(
         error_type = "notification_not_found" if "not found" in str(exc) else "notification_invalid"
         code = status.HTTP_404_NOT_FOUND if error_type == "notification_not_found" else status.HTTP_409_CONFLICT
         return _error(code, error_type, str(exc))
-    return {"status": "ok", "action": result.action, "notification": result.notification.model_dump(mode="json")}
+    return {
+        "status": "ok",
+        "action": result.action,
+        "notification": result.notification.model_dump(mode="json"),
+    }

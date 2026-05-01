@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import re
-from typing import Any, Literal
+from typing import Any, Literal, cast
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -44,7 +44,7 @@ def _coerce_string_list(value: object, *, field_label: str, allow_none: bool) ->
 
 
 class PluginSecurityPosture(BaseModel):
-    allowed_roles: list[AdminRoleValue] = Field(default_factory=lambda: ["admin", "owner"])
+    allowed_roles: list[AdminRoleValue] = Field(default_factory=lambda: cast(list[AdminRoleValue], ["admin", "owner"]))
     admin_approval_required: bool = True
     network_access: bool = False
     writes_external_state: bool = False

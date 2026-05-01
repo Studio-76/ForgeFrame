@@ -245,8 +245,16 @@ class TestCallLitellmMessages:
         """Legacy function_call/function_response fields should be forwarded unchanged."""
         request = _make_request(
             [
-                {"role": "assistant", "content": None, "function_call": {"name": "lookup", "arguments": "{}"}},
-                {"role": "tool", "content": "ok", "function_response": {"name": "lookup", "response": "ok"}},
+                {
+                    "role": "assistant",
+                    "content": None,
+                    "function_call": {"name": "lookup", "arguments": "{}"},
+                },
+                {
+                    "role": "tool",
+                    "content": "ok",
+                    "function_response": {"name": "lookup", "response": "ok"},
+                },
             ]
         )
 
@@ -394,19 +402,37 @@ class TestNonStreamingToolCalls:
 class TestStreamingToolCalls:
     """Verify tool_calls appear in SSE stream chunks."""
 
-    @pytest.mark.parametrize("response_data,expected_key,expected_value,expected_finish", [
-        (
-            {"content": None, "finish_reason": "tool_calls", "prompt_tokens": 10,
-             "completion_tokens": 5, "tool_calls": [SAMPLE_TOOL_CALL]},
-            "tool_calls", [SAMPLE_TOOL_CALL], "tool_calls",
-        ),
-        (
-            {"content": "Hello world", "finish_reason": "stop",
-             "prompt_tokens": 10, "completion_tokens": 5},
-            "content", "Hello world", "stop",
-        ),
-    ])
-    def test_streaming_delta(self, response_data, expected_key, expected_value, expected_finish):
+    @pytest.mark.parametrize(
+        "response_data,expected_key,expected_value,expected_finish",
+        [
+            (
+                {
+                    "content": None,
+                    "finish_reason": "tool_calls",
+                    "prompt_tokens": 10,
+                    "completion_tokens": 5,
+                    "tool_calls": [SAMPLE_TOOL_CALL],
+                },
+                "tool_calls",
+                [SAMPLE_TOOL_CALL],
+                "tool_calls",
+            ),
+            (
+                {
+                    "content": "Hello world",
+                    "finish_reason": "stop",
+                    "prompt_tokens": 10,
+                    "completion_tokens": 5,
+                },
+                "content",
+                "Hello world",
+                "stop",
+            ),
+        ],
+    )
+    def test_streaming_delta(
+        self, response_data, expected_key, expected_value, expected_finish
+    ):
         """SSE stream delta should contain the expected key/value and finish_reason."""
 
         sse_response = _build_streaming_response(
@@ -485,16 +511,23 @@ class TestChatMessageExtras:
 class TestToolMetadataExtraction:
     """Verify _extract_request_metadata properly detects tools."""
 
-    @pytest.mark.parametrize("messages,tools,expected_has_tools,expected_count", [
-        ([{"role": "user", "content": "Hi"}], [WEATHER_TOOL], True, 1),
-        (
-            [{"role": "user", "content": "Weather?"},
-             {"role": "assistant", "content": None},
-             {"role": "tool", "content": "72F"}],
-            None, True, 1,
-        ),
-        ([{"role": "user", "content": "Hi"}], None, False, 0),
-    ])
+    @pytest.mark.parametrize(
+        "messages,tools,expected_has_tools,expected_count",
+        [
+            ([{"role": "user", "content": "Hi"}], [WEATHER_TOOL], True, 1),
+            (
+                [
+                    {"role": "user", "content": "Weather?"},
+                    {"role": "assistant", "content": None},
+                    {"role": "tool", "content": "72F"},
+                ],
+                None,
+                True,
+                1,
+            ),
+            ([{"role": "user", "content": "Hi"}], None, False, 0),
+        ],
+    )
     def test_tool_metadata(self, messages, tools, expected_has_tools, expected_count):
         """Verify has_tools and tool_count for various inputs."""
 

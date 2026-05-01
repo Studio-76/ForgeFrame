@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from typing import Any
 from uuid import uuid4
 
 from app.control_plane import (
@@ -88,7 +89,10 @@ class RoutingService:
 
     @staticmethod
     def _is_local_target(target: RuntimeTarget) -> bool:
-        return target.product_axis in {"local_providers", "openai_compatible_clients"} or target.auth_type in {
+        return target.product_axis in {
+            "local_providers",
+            "openai_compatible_clients",
+        } or target.auth_type in {
             "internal",
             "local_none",
         }
@@ -149,17 +153,14 @@ class RoutingService:
         return merged
 
     def _health_index(self, state: ControlPlaneStateRecord) -> dict[tuple[str, str], str]:
-        return {
-            (record.provider, record.model): record.status
-            for record in state.health_records
-        }
+        return {(record.provider, record.model): record.status for record in state.health_records}
 
     def _provider_status(
         self,
         provider: str,
         *,
-        status_cache: dict[str, dict[str, object]] | None = None,
-    ) -> dict[str, object]:
+        status_cache: dict[str, dict[str, Any]] | None = None,
+    ) -> dict[str, Any]:
         if status_cache is not None and provider in status_cache:
             return status_cache[provider]
         try:
@@ -219,13 +220,12 @@ class RoutingService:
         for policy in state.routing_policies:
             if policy.classification == classification_label:
                 return policy
-        return next(
-            policy for policy in build_default_routing_policies(state.provider_targets)
-            if policy.classification == classification_label
-        )
+        return next(policy for policy in build_default_routing_policies(state.provider_targets) if policy.classification == classification_label)
 
     @staticmethod
-    def _circuit_map(state: ControlPlaneStateRecord) -> dict[str, RoutingCircuitStateRecord]:
+    def _circuit_map(
+        state: ControlPlaneStateRecord,
+    ) -> dict[str, RoutingCircuitStateRecord]:
         return {circuit.target_key: circuit for circuit in state.routing_circuits}
 
     @staticmethod
@@ -239,10 +239,7 @@ class RoutingService:
             "non_simple_capability_floor_not_met",
             "queue_eligibility_required",
         )
-        return not any(
-            reason == "target_disabled" or reason.startswith(prefixes)
-            for reason in exclusion_reasons
-        )
+        return not any(reason == "target_disabled" or reason.startswith(prefixes) for reason in exclusion_reasons)
 
     def _evaluate_candidate(
         self,
@@ -257,7 +254,7 @@ class RoutingService:
         require_vision: bool,
         required_capabilities: set[str] | None,
         health_index: dict[tuple[str, str], str],
-        status_cache: dict[str, dict[str, object]] | None = None,
+        status_cache: dict[str, dict[str, Any]] | None = None,
         strict_requested_model: bool = False,
     ) -> RouteCandidate:
         provider_status = self._provider_status(target.provider, status_cache=status_cache)
@@ -282,9 +279,7 @@ class RoutingService:
         if not target.enabled:
             exclusion_reasons.append("target_disabled")
 
-        if classification.label == "non_simple" and str(
-            target.execution_traits.get("task_complexity_floor", "")
-        ) == "simple_only":
+        if classification.label == "non_simple" and str(target.execution_traits.get("task_complexity_floor", "")) == "simple_only":
             exclusion_reasons.append("non_simple_capability_floor_not_met")
 
         if policy.require_queue_eligible and not target.queue_eligible:
@@ -312,9 +307,7 @@ class RoutingService:
             exclusion_reasons.append(f"model_dispatch_unavailable:{dispatch_reason or 'unknown'}")
 
         if not ready:
-            exclusion_reasons.append(
-                f"provider_not_ready:{provider_status.get('readiness_reason', 'unknown')}"
-            )
+            exclusion_reasons.append(f"provider_not_ready:{provider_status.get('readiness_reason', 'unknown')}")
         if self._settings.routing_require_healthy:
             if health_status not in _HEALTHY_STATES:
                 exclusion_reasons.append(f"health_gate_failed:{health_status}")
@@ -344,7 +337,10 @@ class RoutingService:
         else:
             score += _COST_CLASS_SCORE.get(target.cost_class, 8)
             reasons.append(f"economic_profile_cost:{target.cost_class}")
-        if classification.label == "simple" and target.cost_class in {"baseline", "low"}:
+        if classification.label == "simple" and target.cost_class in {
+            "baseline",
+            "low",
+        }:
             score += 12
             reasons.append("simple_cost_floor_match")
         if classification.label == "non_simple" and target.queue_eligible:
@@ -383,7 +379,13 @@ class RoutingService:
         if not order_index:
             return sorted(
                 candidates,
-                key=lambda item: (item.score, item.priority, item.quality_score, item.cost_score, item.model_id),
+                key=lambda item: (
+                    item.score,
+                    item.priority,
+                    item.quality_score,
+                    item.cost_score,
+                    item.model_id,
+                ),
                 reverse=True,
             )
         return sorted(
@@ -440,7 +442,7 @@ class RoutingService:
         updated_state = state.model_copy(
             update={
                 "routing_decisions": [
-                    *state.routing_decisions[-(_ROUTING_LEDGER_LIMIT - 1):],
+                    *state.routing_decisions[-(_ROUTING_LEDGER_LIMIT - 1) :],
                     decision,
                 ]
             }
@@ -484,20 +486,20 @@ class RoutingService:
         summary: str,
         error_type: str,
         candidates: list[RouteCandidate],
-        selection_basis: dict[str, object],
+        selection_basis: dict[str, Any],
         source: str,
     ) -> None:
         decision = RoutingDecisionRecord(
             decision_id=f"route_{uuid4().hex[:12]}",
-            source=source,  # type: ignore[arg-type]
+            source=source,
             instance_id=self._instance_id,
             requested_model=requested_model,
             selected_target_key=None,
             classification=classification.label,
             classification_summary=classification.summary,
             classification_rules=list(classification.rules),
-            policy_stage=policy_stage,  # type: ignore[arg-type]
-            execution_lane=execution_lane,  # type: ignore[arg-type]
+            policy_stage=policy_stage,
+            execution_lane=execution_lane,
             summary=summary,
             structured_details={
                 "classification": classification.label,
@@ -528,25 +530,17 @@ class RoutingService:
         selected_candidate: RouteCandidate,
         stage_keys: list[str],
         all_candidates: list[RouteCandidate],
-        selection_basis: dict[str, object],
+        selection_basis: dict[str, Any],
         source: str,
     ) -> RouteDecision:
         resolved_target = self._registry.get_target(selected_candidate.target_key)
         if resolved_target is None:
-            raise RoutingNoCandidateError(
-                f"Resolved target '{selected_candidate.target_key}' disappeared from registry."
-            )
+            raise RoutingNoCandidateError(f"Resolved target '{selected_candidate.target_key}' disappeared from registry.")
         reason = "requested_model_strict" if requested_model else f"smart_execution_{policy_stage}"
         fallback_used = requested_model is None and policy_stage != "preferred"
-        summary = (
-            f"{classification.label.replace('_', '-')} routing selected '{resolved_target.target_key}' "
-            f"on the {policy_stage} stage."
-        )
+        summary = f"{classification.label.replace('_', '-')} routing selected '{resolved_target.target_key}' on the {policy_stage} stage."
         if fallback_used:
-            summary = (
-                f"{classification.label.replace('_', '-')} routing had to leave the preferred path and selected "
-                f"'{resolved_target.target_key}' on the {policy_stage} stage."
-            )
+            summary = f"{classification.label.replace('_', '-')} routing had to leave the preferred path and selected '{resolved_target.target_key}' on the {policy_stage} stage."
         enriched_candidates = self._mark_stage_and_selection(
             all_candidates,
             stage_keys=stage_keys,
@@ -577,9 +571,7 @@ class RoutingService:
                 "request_path_policy": selection_basis.get("request_path_policy"),
                 "fallback_used": fallback_used,
                 "candidate_count": len(enriched_candidates),
-                "excluded_count": len(
-                    [candidate for candidate in enriched_candidates if candidate.exclusion_reasons]
-                ),
+                "excluded_count": len([candidate for candidate in enriched_candidates if candidate.exclusion_reasons]),
             },
             raw_explainability={
                 "policy": policy.model_dump(mode="json"),
@@ -592,15 +584,15 @@ class RoutingService:
             state,
             RoutingDecisionRecord(
                 decision_id=decision.decision_id,
-                source=source,  # type: ignore[arg-type]
+                source=source,
                 instance_id=self._instance_id,
                 requested_model=requested_model,
                 selected_target_key=resolved_target.target_key,
                 classification=classification.label,
                 classification_summary=classification.summary,
                 classification_rules=list(classification.rules),
-                policy_stage=policy_stage,  # type: ignore[arg-type]
-                execution_lane=policy.execution_lane,  # type: ignore[arg-type]
+                policy_stage=policy_stage,
+                execution_lane=policy.execution_lane,
                 summary=summary,
                 structured_details=decision.structured_explainability,
                 raw_details=decision.raw_explainability,
@@ -628,9 +620,7 @@ class RoutingService:
                 raise RoutingNoCandidateError("Pinned-target runtime path is configured without a target binding.")
             target = self._registry.get_target(pinned_target_key)
             if target is None or not target.enabled:
-                raise RoutingNoCandidateError(
-                    f"Pinned target '{pinned_target_key}' is not active for this instance."
-                )
+                raise RoutingNoCandidateError(f"Pinned target '{pinned_target_key}' is not active for this instance.")
             targets = [target]
         if allowed_providers is not None:
             targets = [target for target in targets if target.provider in allowed_providers]
@@ -656,7 +646,11 @@ class RoutingService:
             return None
         if requested_model is not None:
             ordered = self._sort_stage_candidates(selectable, [])
-            return "requested_model", [candidate.target_key for candidate in ordered], ordered[0]
+            return (
+                "requested_model",
+                [candidate.target_key for candidate in ordered],
+                ordered[0],
+            )
 
         preferred_candidates, preferred_keys = self._stage_candidates(
             selectable,
@@ -690,14 +684,8 @@ class RoutingService:
         return None
 
     def _blocked_error_from_candidates(self, candidates: list[RouteCandidate]) -> tuple[str, str]:
-        budget_blocked = any(
-            any(reason.startswith("budget_") for reason in candidate.exclusion_reasons)
-            for candidate in candidates
-        )
-        circuit_blocked = any(
-            any(reason.startswith("circuit_open:") for reason in candidate.exclusion_reasons)
-            for candidate in candidates
-        )
+        budget_blocked = any(any(reason.startswith("budget_") for reason in candidate.exclusion_reasons) for candidate in candidates)
+        circuit_blocked = any(any(reason.startswith("circuit_open:") for reason in candidate.exclusion_reasons) for candidate in candidates)
         if budget_blocked:
             return (
                 "routing_budget_exceeded",
@@ -751,7 +739,7 @@ class RoutingService:
             }
         )
         circuit_map = self._circuit_map(state)
-        status_cache: dict[str, dict[str, object]] = {}
+        status_cache: dict[str, dict[str, Any]] = {}
         usable_models: list[RuntimeModel] = []
         seen_model_ids: set[str] = set()
         candidates: list[tuple[RuntimeTarget, RouteCandidate]] = []
@@ -780,7 +768,13 @@ class RoutingService:
 
         ordered_candidates = sorted(
             candidates,
-            key=lambda item: (item[1].score, item[1].priority, item[1].quality_score, item[1].cost_score, item[1].model_id),
+            key=lambda item: (
+                item[1].score,
+                item[1].priority,
+                item[1].quality_score,
+                item[1].cost_score,
+                item[1].model_id,
+            ),
             reverse=True,
         )
         for target, candidate in ordered_candidates:
@@ -802,7 +796,7 @@ class RoutingService:
         require_vision: bool = False,
         allowed_providers: set[str] | None = None,
         route_context: dict[str, str] | None = None,
-        response_controls: dict[str, object] | None = None,
+        response_controls: dict[str, Any] | None = None,
         required_capabilities: set[str] | None = None,
         decision_source: str = "runtime_dispatch",
     ) -> RouteDecision:
@@ -836,7 +830,7 @@ class RoutingService:
             }
         )
         circuit_map = self._circuit_map(state)
-        status_cache: dict[str, dict[str, object]] = {}
+        status_cache: dict[str, dict[str, Any]] = {}
         target_pool = self._candidate_pool(
             requested_model=requested_model,
             allowed_providers=allowed_providers,
@@ -869,21 +863,11 @@ class RoutingService:
             },
             "policy": policy.model_dump(mode="json"),
             "budget_state": budget_state.model_dump(mode="json"),
-            "budget_matching_scopes": [
-                scope.model_dump(mode="json")
-                for scope in budget_evaluation.matching_scopes
-            ],
-            "budget_anomalies": [
-                anomaly.model_dump(mode="json")
-                for anomaly in budget_state.anomalies
-            ],
+            "budget_matching_scopes": [scope.model_dump(mode="json") for scope in budget_evaluation.matching_scopes],
+            "budget_anomalies": [anomaly.model_dump(mode="json") for anomaly in budget_state.anomalies],
             "hard_budget_block_reason": budget_evaluation.hard_block_reason,
             "blocked_cost_classes": list(budget_evaluation.blocked_cost_classes),
-            "open_circuits": [
-                circuit.model_dump(mode="json")
-                for circuit in circuit_map.values()
-                if circuit.state == "open"
-            ],
+            "open_circuits": [circuit.model_dump(mode="json") for circuit in circuit_map.values() if circuit.state == "open"],
             "allowed_providers": sorted(allowed_providers) if allowed_providers is not None else None,
             "route_context": dict(route_context or {}),
             "request_path_policy": selected_request_path,
@@ -893,7 +877,10 @@ class RoutingService:
             blocked_candidates = [
                 candidate.model_copy(
                     update={
-                        "exclusion_reasons": [*candidate.exclusion_reasons, "budget_hard_blocked"]
+                        "exclusion_reasons": [
+                            *candidate.exclusion_reasons,
+                            "budget_hard_blocked",
+                        ]
                     }
                 )
                 for candidate in all_candidates
@@ -944,13 +931,11 @@ class RoutingService:
             raise RoutingNoCandidateError(message)
 
         policy_stage, stage_keys, selected_candidate = resolved
-        selection_basis.update(
-            {
-                "policy_stage": policy_stage,
-                "stage_target_keys": stage_keys,
-                "selected_target": selected_candidate.target_key,
-            }
-        )
+        selection_basis.update({
+            "policy_stage": policy_stage,
+            "stage_target_keys": stage_keys,
+            "selected_target": selected_candidate.target_key,
+        })
         return self._finalize_route_decision(
             state=state,
             requested_model=requested_model,

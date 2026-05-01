@@ -9,8 +9,14 @@ from pydantic import BaseModel, Field
 
 from app.artifacts.models import ArtifactRecord
 
-
-WORKSPACE_STATUSES = ("draft", "previewing", "in_review", "handoff_ready", "handed_off", "archived")
+WORKSPACE_STATUSES = (
+    "draft",
+    "previewing",
+    "in_review",
+    "handoff_ready",
+    "handed_off",
+    "archived",
+)
 WorkspaceStatus = Literal["draft", "previewing", "in_review", "handoff_ready", "handed_off", "archived"]
 
 WORKSPACE_PREVIEW_STATUSES = ("missing", "draft", "ready", "approved", "rejected")

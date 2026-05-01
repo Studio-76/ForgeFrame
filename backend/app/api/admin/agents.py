@@ -17,7 +17,10 @@ router = APIRouter(prefix="/agents", tags=["admin-agents"])
 
 
 def _error(status_code: int, error_type: str, message: str) -> JSONResponse:
-    return JSONResponse(status_code=status_code, content={"error": {"type": error_type, "message": message}})
+    return JSONResponse(
+        status_code=status_code,
+        content={"error": {"type": error_type, "message": message}},
+    )
 
 
 @router.get("")
@@ -35,7 +38,11 @@ def list_agents(
         limit=limit,
         ensure_default_operator=ensure_default_operator,
     )
-    return {"status": "ok", "instance": instance.model_dump(mode="json"), "agents": [item.model_dump(mode="json") for item in agents]}
+    return {
+        "status": "ok",
+        "instance": instance.model_dump(mode="json"),
+        "agents": [item.model_dump(mode="json") for item in agents],
+    }
 
 
 @router.get("/{agent_id}")

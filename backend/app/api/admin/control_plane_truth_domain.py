@@ -2,23 +2,43 @@
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING, Any
+
 from app.control_plane import (
     CapabilityEvidenceRecord,
     HarnessProviderTruthRecord,
     ManagedModelUiRecord,
     ManagedProviderRecord,
     ManagedProviderTruthRecord,
+    OAuthOperationRecord,
     ProviderCapabilityEvidenceRecord,
     ProviderTruthAxesRecord,
     ProviderUiTruthRecord,
     RuntimeProviderTruthRecord,
 )
 from app.harness.redaction import redact_sensitive_payload as _redact_sensitive_payload
+from app.usage.events import ErrorEvent, UsageEvent
 
 
 class ControlPlaneTruthDomainMixin:
+    if TYPE_CHECKING:
+        _analytics: Any
+        _providers: Any
+        _settings: Any
+        _harness: Any
+        _health_records: Any
+        _infer_provider_class: Any
+        _effective_oauth_tenant_id: Any
+        _provider_targets_state: Any
+
+        def latest_oauth_operation(self, *args: Any, **kwargs: Any) -> Any: ...
+        def oauth_operation_provider_summary(self, *args: Any, **kwargs: Any) -> Any: ...
+        def list_providers(self) -> list[Any]: ...
+        def list_oauth_account_target_statuses(self, *args: Any, **kwargs: Any) -> list[Any]: ...
+        def product_axis_targets(self, *args: Any, **kwargs: Any) -> list[Any]: ...
+
     @staticmethod
-    def _profile_has_owned_models(profile: object) -> bool:
+    def _profile_has_owned_models(profile: Any) -> bool:
         return any(str(model).strip() for model in getattr(profile, "models", []))
 
     def _latest_usage_evidence(
@@ -28,7 +48,7 @@ class ControlPlaneTruthDomainMixin:
         tenant_id: str | None = None,
         stream_mode: str | None = None,
         require_tool_calls: bool = False,
-    ) -> object | None:
+    ) -> UsageEvent | None:
         return self._analytics.latest_usage_event(
             provider_name,
             tenant_id=tenant_id,
@@ -42,7 +62,7 @@ class ControlPlaneTruthDomainMixin:
         *,
         tenant_id: str | None = None,
         stream_mode: str | None = None,
-    ) -> object | None:
+    ) -> ErrorEvent | None:
         return self._analytics.latest_error_event(
             provider_name,
             tenant_id=tenant_id,
@@ -56,7 +76,7 @@ class ControlPlaneTruthDomainMixin:
         action: str,
         tenant_id: str | None = None,
         instance_id: str | None = None,
-    ) -> object | None:
+    ) -> OAuthOperationRecord | None:
         return self.latest_oauth_operation(
             provider_name,
             action=action,
@@ -147,11 +167,7 @@ class ControlPlaneTruthDomainMixin:
                     details=str(probe_operation.details),
                 )
                 if probe_operation is not None and probe_operation.status == "failed"
-                else CapabilityEvidenceRecord(
-                    details=str(probe_operation.details)
-                    if probe_operation is not None
-                    else "No successful live probe recorded yet."
-                )
+                else CapabilityEvidenceRecord(details=str(probe_operation.details) if probe_operation is not None else "No successful live probe recorded yet.")
             )
         )
         return ProviderCapabilityEvidenceRecord(
@@ -164,7 +180,7 @@ class ControlPlaneTruthDomainMixin:
     def _readiness_axes_for_provider(
         self,
         provider_name: str,
-        runtime_status: dict[str, object],
+        runtime_status: dict[str, Any],
         *,
         tenant_id: str | None = None,
     ) -> tuple[str, str]:
@@ -202,7 +218,7 @@ class ControlPlaneTruthDomainMixin:
     @staticmethod
     def _runtime_contract_classification(
         provider_name: str,
-        runtime_status: dict[str, object],
+        runtime_status: dict[str, Any],
         runtime_readiness: str,
     ) -> str:
         if runtime_readiness == "ready":
@@ -242,7 +258,7 @@ class ControlPlaneTruthDomainMixin:
     def _runtime_summary_reason(
         self,
         provider_name: str,
-        runtime_status: dict[str, object],
+        runtime_status: dict[str, Any],
         runtime_readiness: str,
         evidence: ProviderCapabilityEvidenceRecord,
         *,
@@ -261,8 +277,7 @@ class ControlPlaneTruthDomainMixin:
                     "so Anthropic stays outside the current product-axis taxonomy and is intentionally omitted from beta targets."
                 )
             return (
-                "This provider uses native runtime semantics outside ForgeFrame's current shipped product-axis taxonomy "
-                "and stays intentionally omitted from beta targets until a truthful axis exists."
+                "This provider uses native runtime semantics outside ForgeFrame's current shipped product-axis taxonomy and stays intentionally omitted from beta targets until a truthful axis exists."
             )
 
         if provider_name == "generic_harness":
@@ -355,11 +370,7 @@ class ControlPlaneTruthDomainMixin:
             streaming,
             tool_calling_level,
         )
-        oauth_mode = (
-            self._settings.openai_codex_oauth_mode
-            if provider.provider == "openai_codex" and self._settings.openai_codex_auth_mode == "oauth"
-            else None
-        )
+        oauth_mode = self._settings.openai_codex_oauth_mode if provider.provider == "openai_codex" and self._settings.openai_codex_auth_mode == "oauth" else None
         return RuntimeProviderTruthRecord(
             provider=provider.provider,
             wired=True,
@@ -386,33 +397,28 @@ class ControlPlaneTruthDomainMixin:
     def _harness_truth_for_provider(
         self,
         provider: ManagedProviderRecord,
-        harness_profiles: list[object],
-        harness_runs: list[object],
+        harness_profiles: list[Any],
+        harness_runs: list[Any],
     ) -> HarnessProviderTruthRecord:
-        relevant_profiles = [
-            profile
-            for profile in harness_profiles
-            if provider.provider == "generic_harness"
-            or profile.provider_key.startswith(f"{provider.provider}_")
-        ]
-        relevant_runs = [
-            run
-            for run in harness_runs
-            if provider.provider == "generic_harness"
-            or run.provider_key.startswith(f"{provider.provider}_")
-        ]
+        relevant_profiles = [profile for profile in harness_profiles if provider.provider == "generic_harness" or profile.provider_key.startswith(f"{provider.provider}_")]
+        relevant_runs = [run for run in harness_runs if provider.provider == "generic_harness" or run.provider_key.startswith(f"{provider.provider}_")]
         successful_modes_by_profile: dict[str, set[str]] = {}
         for run in relevant_runs:
             if run.success:
                 successful_modes_by_profile.setdefault(run.provider_key, set()).add(run.mode)
         enabled_profiles = [profile for profile in relevant_profiles if profile.enabled]
         runtime_profiles = [profile for profile in enabled_profiles if self._profile_has_owned_models(profile)]
-        required_proof_modes = {"preview", "verify", "probe", "runtime_non_stream", "runtime_stream"}
+        required_proof_modes = {
+            "preview",
+            "verify",
+            "probe",
+            "runtime_non_stream",
+            "runtime_stream",
+        }
         proven_profile_keys = sorted(
             profile.provider_key
             for profile in relevant_profiles
-            if profile.integration_class == "openai_compatible"
-            and required_proof_modes.issubset(successful_modes_by_profile.get(profile.provider_key, set()))
+            if profile.integration_class == "openai_compatible" and required_proof_modes.issubset(successful_modes_by_profile.get(profile.provider_key, set()))
         )
         successful_modes = sorted({mode for modes in successful_modes_by_profile.values() for mode in modes})
         proof_status: str
@@ -439,36 +445,22 @@ class ControlPlaneTruthDomainMixin:
         )
 
     @staticmethod
-    def _latest_iso_timestamp(*values: object) -> str | None:
-        timestamps = sorted(
-            {
-                str(value)
-                for value in values
-                if isinstance(value, str) and value.strip()
-            }
-        )
+    def _latest_iso_timestamp(*values: Any) -> str | None:
+        timestamps = sorted({str(value) for value in values if isinstance(value, str) and value.strip()})
         return timestamps[-1] if timestamps else None
 
     @staticmethod
-    def _provider_target_summary(targets: list[object]) -> dict[str, object]:
-        last_probe_at = ControlPlaneTruthDomainMixin._latest_iso_timestamp(
-            *[getattr(target, "last_probe_at", None) for target in targets]
-        )
+    def _provider_target_summary(targets: list[Any]) -> dict[str, Any]:
+        last_probe_at = ControlPlaneTruthDomainMixin._latest_iso_timestamp(*[getattr(target, "last_probe_at", None) for target in targets])
         return {
             "target_count": len(targets),
             "enabled_target_count": len([target for target in targets if bool(getattr(target, "enabled", False))]),
-            "ready_target_count": len(
-                [
-                    target
-                    for target in targets
-                    if str(getattr(target, "readiness_status", "planned")) == "ready"
-                ]
-            ),
+            "ready_target_count": len([target for target in targets if str(getattr(target, "readiness_status", "planned")) == "ready"]),
             "last_probe_at": last_probe_at,
         }
 
     @staticmethod
-    def _provider_health_summary(records: list[object]) -> dict[str, object]:
+    def _provider_health_summary(records: list[Any]) -> dict[str, Any]:
         if not records:
             return {
                 "health_status": "not-run",
@@ -490,9 +482,7 @@ class ControlPlaneTruthDomainMixin:
             "health_status": health_status,
             "healthy_model_count": healthy_count,
             "attention_model_count": attention_count,
-            "last_health_check_at": ControlPlaneTruthDomainMixin._latest_iso_timestamp(
-                *[getattr(record, "last_check_at", None) for record in records]
-            ),
+            "last_health_check_at": ControlPlaneTruthDomainMixin._latest_iso_timestamp(*[getattr(record, "last_check_at", None) for record in records]),
         }
 
     @staticmethod
@@ -527,12 +517,12 @@ class ControlPlaneTruthDomainMixin:
         harness_truth: HarnessProviderTruthRecord,
         *,
         health_by_provider: dict[str, dict[str, str]],
-        health_records_by_provider: dict[str, list[object]],
+        health_records_by_provider: dict[str, list[Any]],
         oauth_failures: dict[str, int],
-        oauth_last_probe: dict[str, dict[str, object]],
-        oauth_last_bridge: dict[str, dict[str, object]],
-        oauth_target_states: dict[str, dict[str, object]],
-        provider_targets_by_provider: dict[str, list[object]],
+        oauth_last_probe: dict[str, dict[str, Any]],
+        oauth_last_bridge: dict[str, dict[str, Any]],
+        oauth_target_states: dict[str, dict[str, Any]],
+        provider_targets_by_provider: dict[str, list[Any]],
     ) -> ProviderUiTruthRecord:
         provider_name = provider_truth.provider
         provider_class = self._infer_provider_class(
@@ -544,13 +534,7 @@ class ControlPlaneTruthDomainMixin:
         target_summary = self._provider_target_summary(provider_targets_by_provider.get(provider_name, []))
         health_summary = self._provider_health_summary(health_records_by_provider.get(provider_name, []))
         oauth_target_state = oauth_target_states.get(provider_name, {})
-        oauth_connect_required = bool(
-            runtime_truth.oauth_required
-            and (
-                not bool(oauth_target_state.get("configured"))
-                or str(oauth_target_state.get("readiness", "planned")) != "ready"
-            )
-        )
+        oauth_connect_required = bool(runtime_truth.oauth_required and (not bool(oauth_target_state.get("configured")) or str(oauth_target_state.get("readiness", "planned")) != "ready"))
         last_probe_at = self._latest_iso_timestamp(
             target_summary["last_probe_at"],
             health_summary["last_health_check_at"],
@@ -627,10 +611,10 @@ class ControlPlaneTruthDomainMixin:
         instance_id: str | None = None,
     ) -> list[ProviderTruthAxesRecord]:
         health_by_provider: dict[str, dict[str, str]] = {}
-        health_records_by_provider: dict[str, list[object]] = {}
+        health_records_by_provider: dict[str, list[Any]] = {}
         oauth_failures: dict[str, int] = {}
-        oauth_last_probe: dict[str, dict[str, object]] = {}
-        oauth_last_bridge: dict[str, dict[str, object]] = {}
+        oauth_last_probe: dict[str, dict[str, Any]] = {}
+        oauth_last_bridge: dict[str, dict[str, Any]] = {}
         effective_tenant_id = self._effective_oauth_tenant_id(tenant_id)
         scoped_instance_id = (instance_id or "").strip() or None
         oauth_summary = self.oauth_operation_provider_summary(
@@ -653,7 +637,7 @@ class ControlPlaneTruthDomainMixin:
                 instance_id=scoped_instance_id,
             )
         }
-        provider_targets_by_provider: dict[str, list[object]] = {}
+        provider_targets_by_provider: dict[str, list[Any]] = {}
         current_provider_targets = getattr(self, "_provider_targets_state", {})
         for target in current_provider_targets.values():
             provider_targets_by_provider.setdefault(target.provider, []).append(target)

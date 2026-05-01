@@ -17,7 +17,10 @@ router = APIRouter(prefix="/learning", tags=["admin-learning"])
 
 
 def _error(status_code: int, error_type: str, message: str) -> JSONResponse:
-    return JSONResponse(status_code=status_code, content={"error": {"type": error_type, "message": message}})
+    return JSONResponse(
+        status_code=status_code,
+        content={"error": {"type": error_type, "message": message}},
+    )
 
 
 @router.get("")
@@ -30,7 +33,11 @@ def list_learning_events(
     service: LearningAdminService = Depends(get_learning_admin_service),
 ) -> dict[str, object]:
     events = service.list_events(instance=instance, status=status_filter, trigger_kind=trigger_kind, limit=limit)
-    return {"status": "ok", "instance": instance.model_dump(mode="json"), "events": [item.model_dump(mode="json") for item in events]}
+    return {
+        "status": "ok",
+        "instance": instance.model_dump(mode="json"),
+        "events": [item.model_dump(mode="json") for item in events],
+    }
 
 
 @router.get("/{event_id}")

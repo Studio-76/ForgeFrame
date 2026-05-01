@@ -151,10 +151,7 @@ class RecoveryAdminService:
             status=row.status,
             protected_data_classes=list(row.protected_data_classes_json or []),
             source_identity=RecoverySourceIdentity(**dict(row.source_identity_json or {})),
-            validated_source_identities=[
-                RecoverySourceIdentity(**dict(item))
-                for item in list(row.validated_source_identities_json or [])
-            ],
+            validated_source_identities=[RecoverySourceIdentity(**dict(item)) for item in list(row.validated_source_identities_json or [])],
             restored_database=row.restored_database,
             tables_compared=row.tables_compared,
             source_identity_match=bool(row.source_identity_match),
@@ -177,11 +174,7 @@ class RecoveryAdminService:
         return RecoveryUpgradeSnapshot(
             captured_at=normalized.get("captured_at") or normalized.get("generated_at"),
             source_identity=RecoverySourceIdentity(**dict(normalized.get("source_identity") or {})),
-            migration_version=(
-                int(normalized["migration_version"])
-                if normalized.get("migration_version") is not None
-                else None
-            ),
+            migration_version=(int(normalized["migration_version"]) if normalized.get("migration_version") is not None else None),
             applied_migration_versions=list(normalized.get("applied_migration_versions") or []),
             critical_object_counts=dict(normalized.get("critical_object_counts") or {}),
             queue_state_counts=dict(normalized.get("queue_state_counts") or {}),
@@ -301,23 +294,15 @@ class RecoveryAdminService:
             state = "warning" if state != "blocked" else state
 
         return RecoveryPolicyValidation(
-            state=state,  # type: ignore[arg-type]
+            state=state,
             reasons=reasons,
             target_locator=target_locator,
             checked_at=_now_iso(),
         )
 
     def _extract_source_identity(self, raw_report: dict[str, Any]) -> RecoverySourceIdentity:
-        source_database = str(
-            raw_report.get("source_database")
-            or raw_report.get("database")
-            or ""
-        ).strip()
-        cluster_system_identifier = str(
-            raw_report.get("source_cluster_system_identifier")
-            or raw_report.get("cluster_system_identifier")
-            or ""
-        ).strip()
+        source_database = str(raw_report.get("source_database") or raw_report.get("database") or "").strip()
+        cluster_system_identifier = str(raw_report.get("source_cluster_system_identifier") or raw_report.get("cluster_system_identifier") or "").strip()
         deployment_slug = str(raw_report.get("deployment_slug") or "").strip()
         public_fqdn = str(raw_report.get("public_fqdn") or "").strip()
         metadata: dict[str, Any] = {}
@@ -342,17 +327,20 @@ class RecoveryAdminService:
                 identities.append(
                     RecoverySourceIdentity(
                         source_database=str(item.get("database") or item.get("source_database") or "").strip(),
-                        cluster_system_identifier=str(
-                            item.get("cluster_system_identifier")
-                            or item.get("source_cluster_system_identifier")
-                            or ""
-                        ).strip(),
+                        cluster_system_identifier=str(item.get("cluster_system_identifier") or item.get("source_cluster_system_identifier") or "").strip(),
                     )
                 )
         return identities
 
     def _report_timestamp(self, raw_report: dict[str, Any], reported_at: str | None) -> datetime:
-        for key in ("created_at", "checked_at", "restored_at", "completed_at", "generated_at", "captured_at"):
+        for key in (
+            "created_at",
+            "checked_at",
+            "restored_at",
+            "completed_at",
+            "generated_at",
+            "captured_at",
+        ):
             parsed = _parse_datetime(str(raw_report.get(key) or "").strip() or None)
             if parsed is not None:
                 return parsed
@@ -387,11 +375,12 @@ class RecoveryAdminService:
         if expected.deployment_slug and expected.deployment_slug != observed.deployment_slug:
             mismatches.append("deployment_slug_mismatch")
         if validated_identities:
-            expected_pair = (expected.source_database, expected.cluster_system_identifier)
+            expected_pair = (
+                expected.source_database,
+                expected.cluster_system_identifier,
+            )
             if any(expected_pair) and not any(
-                identity.source_database == expected.source_database
-                and identity.cluster_system_identifier == expected.cluster_system_identifier
-                for identity in validated_identities
+                identity.source_database == expected.source_database and identity.cluster_system_identifier == expected.cluster_system_identifier for identity in validated_identities
             ):
                 mismatches.append("validated_source_identity_missing")
         return not mismatches, mismatches
@@ -433,7 +422,11 @@ class RecoveryAdminService:
         )
 
     def _validate_restore_report_payload(self, raw_report: dict[str, Any]) -> None:
-        self._required_report_string(raw_report, ("restored_database", "target_database"), "restored_database or target_database")
+        self._required_report_string(
+            raw_report,
+            ("restored_database", "target_database"),
+            "restored_database or target_database",
+        )
         self._required_report_string(raw_report, ("database", "source_database"), "database or source_database")
         self._required_report_string(
             raw_report,
@@ -451,7 +444,12 @@ class RecoveryAdminService:
         self._required_report_object(before, ("source_identity",), "before.source_identity")
         self._required_report_object(after, ("source_identity",), "after.source_identity")
         upgrade_result = str(raw_report.get("upgrade_result") or raw_report.get("result") or "").strip() or "partial_failure"
-        if upgrade_result not in {"succeeded", "failed", "rolled_back", "partial_failure"}:
+        if upgrade_result not in {
+            "succeeded",
+            "failed",
+            "rolled_back",
+            "partial_failure",
+        }:
             raise RecoveryReportValidationError(f"Unsupported upgrade_result '{upgrade_result}'.")
         rollback_classification = str(raw_report.get("rollback_classification") or "").strip()
         failure_classification = str(raw_report.get("failure_classification") or "").strip()
@@ -463,14 +461,20 @@ class RecoveryAdminService:
         else:
             if failure_classification in {"", "none"}:
                 raise RecoveryReportValidationError("Non-success upgrade reports must describe failure_classification.")
-            if upgrade_result == "rolled_back" and rollback_classification in {"", "not_needed"}:
+            if upgrade_result == "rolled_back" and rollback_classification in {
+                "",
+                "not_needed",
+            }:
                 raise RecoveryReportValidationError("Rolled-back upgrade reports must describe rollback_classification.")
 
     def _latest_backup_row(self, session: Session, policy_id: str) -> RecoveryBackupReportORM | None:
         return session.execute(
             select(RecoveryBackupReportORM)
             .where(RecoveryBackupReportORM.policy_id == policy_id)
-            .order_by(RecoveryBackupReportORM.created_at.desc(), RecoveryBackupReportORM.imported_at.desc())
+            .order_by(
+                RecoveryBackupReportORM.created_at.desc(),
+                RecoveryBackupReportORM.imported_at.desc(),
+            )
             .limit(1)
         ).scalar_one_or_none()
 
@@ -478,16 +482,27 @@ class RecoveryAdminService:
         return session.execute(
             select(RecoveryRestoreReportORM)
             .where(RecoveryRestoreReportORM.policy_id == policy_id)
-            .order_by(RecoveryRestoreReportORM.created_at.desc(), RecoveryRestoreReportORM.imported_at.desc())
+            .order_by(
+                RecoveryRestoreReportORM.created_at.desc(),
+                RecoveryRestoreReportORM.imported_at.desc(),
+            )
             .limit(1)
         ).scalar_one_or_none()
 
     def _latest_upgrade_rows(self, session: Session, *, limit: int = 5) -> list[RecoveryUpgradeReportORM]:
-        return session.execute(
-            select(RecoveryUpgradeReportORM)
-            .order_by(RecoveryUpgradeReportORM.created_at.desc(), RecoveryUpgradeReportORM.imported_at.desc())
-            .limit(limit)
-        ).scalars().all()
+        return list(
+            session
+            .execute(
+                select(RecoveryUpgradeReportORM)
+                .order_by(
+                    RecoveryUpgradeReportORM.created_at.desc(),
+                    RecoveryUpgradeReportORM.imported_at.desc(),
+                )
+                .limit(limit)
+            )
+            .scalars()
+            .all()
+        )
 
     def _object_count_mismatches(
         self,
@@ -522,11 +537,7 @@ class RecoveryAdminService:
         mismatches: list[str] = []
         if before_identity.source_database and after_identity.source_database and before_identity.source_database != after_identity.source_database:
             mismatches.append("source_database_changed_across_upgrade")
-        if (
-            before_identity.cluster_system_identifier
-            and after_identity.cluster_system_identifier
-            and before_identity.cluster_system_identifier != after_identity.cluster_system_identifier
-        ):
+        if before_identity.cluster_system_identifier and after_identity.cluster_system_identifier and before_identity.cluster_system_identifier != after_identity.cluster_system_identifier:
             mismatches.append("cluster_system_identifier_changed_across_upgrade")
         return not mismatches, mismatches
 
@@ -563,7 +574,7 @@ class RecoveryAdminService:
             latest_no_loss_ok=latest.no_loss_ok,
             latest_queue_drain_ok=latest.queue_drain_ok,
             latest_source_identity_stable=latest.source_identity_stable,
-            runtime_status=runtime_status,  # type: ignore[arg-type]
+            runtime_status=runtime_status,
             blockers=sorted(dict.fromkeys(blockers)),
         )
 
@@ -611,12 +622,7 @@ class RecoveryAdminService:
         if not policy_effective:
             mismatches.append("policy_paused_non_effective")
 
-        source_identity_verified = bool(
-            latest_backup is not None
-            and latest_restore is not None
-            and latest_backup.source_identity_match
-            and latest_restore.source_identity_match
-        )
+        source_identity_verified = bool(latest_backup is not None and latest_restore is not None and latest_backup.source_identity_match and latest_restore.source_identity_match)
 
         overall_status = "ok"
         if validation.state == "blocked" or any(reason.endswith("_missing") for reason in mismatches):
@@ -633,14 +639,22 @@ class RecoveryAdminService:
             restore_fresh=restore_fresh,
             source_identity_verified=source_identity_verified,
             mismatches=sorted(dict.fromkeys(mismatches)),
-            overall_status=overall_status,  # type: ignore[arg-type]
+            overall_status=overall_status,
         )
 
     def list_overview(self) -> RecoveryOverviewRecord:
         with self._session_factory() as session:
-            rows = session.execute(
-                select(RecoveryBackupPolicyORM).order_by(RecoveryBackupPolicyORM.label.asc(), RecoveryBackupPolicyORM.created_at.asc())
-            ).scalars().all()
+            rows = (
+                session
+                .execute(
+                    select(RecoveryBackupPolicyORM).order_by(
+                        RecoveryBackupPolicyORM.label.asc(),
+                        RecoveryBackupPolicyORM.created_at.asc(),
+                    )
+                )
+                .scalars()
+                .all()
+            )
             policies = [self._build_policy_summary(session, row) for row in rows]
             recent_upgrades = [self._upgrade_report_record(row) for row in self._latest_upgrade_rows(session)]
 
@@ -653,12 +667,8 @@ class RecoveryAdminService:
             {item for policy in effective_policies for item in policy.policy.protected_data_classes},
             key=lambda item: PROTECTED_DATA_CLASSES.index(item),
         )
-        missing_target_classes = [
-            item for item in BACKUP_TARGET_CLASSES if item not in target_classes_present
-        ]
-        missing_protected_data_classes = [
-            item for item in PROTECTED_DATA_CLASSES if item not in protected_data_classes_present
-        ]
+        missing_target_classes = [item for item in BACKUP_TARGET_CLASSES if item not in target_classes_present]
+        missing_protected_data_classes = [item for item in PROTECTED_DATA_CLASSES if item not in protected_data_classes_present]
         healthy = [policy for policy in effective_policies if policy.overall_status == "ok"]
         warning = [policy for policy in effective_policies if policy.overall_status == "warning"]
         blocked = [policy for policy in effective_policies if policy.overall_status == "blocked"]
@@ -677,11 +687,11 @@ class RecoveryAdminService:
                 fresh_backup_policies=sum(1 for policy in effective_policies if policy.backup_fresh),
                 fresh_restore_policies=sum(1 for policy in effective_policies if policy.restore_fresh),
                 source_identity_verified_policies=sum(1 for policy in effective_policies if policy.source_identity_verified),
-                target_classes_present=target_classes_present,  # type: ignore[arg-type]
-                missing_target_classes=missing_target_classes,  # type: ignore[arg-type]
-                protected_data_classes_present=protected_data_classes_present,  # type: ignore[arg-type]
-                missing_protected_data_classes=missing_protected_data_classes,  # type: ignore[arg-type]
-                runtime_status=runtime_status,  # type: ignore[arg-type]
+                target_classes_present=target_classes_present,
+                missing_target_classes=missing_target_classes,
+                protected_data_classes_present=protected_data_classes_present,
+                missing_protected_data_classes=missing_protected_data_classes,
+                runtime_status=runtime_status,
                 checked_at=_now_iso(),
             ),
             upgrade_posture=upgrade_posture,
@@ -827,7 +837,12 @@ class RecoveryAdminService:
         if not release_id:
             raise RecoveryReportValidationError("Upgrade report must contain release_id.")
         upgrade_result = str(raw_report.get("upgrade_result") or raw_report.get("result") or "").strip() or "partial_failure"
-        if upgrade_result not in {"succeeded", "failed", "rolled_back", "partial_failure"}:
+        if upgrade_result not in {
+            "succeeded",
+            "failed",
+            "rolled_back",
+            "partial_failure",
+        }:
             raise RecoveryReportValidationError(f"Unsupported upgrade_result '{upgrade_result}'.")
         before_snapshot = self._upgrade_snapshot(dict(raw_report.get("before") or raw_report.get("before_snapshot") or {}))
         after_snapshot = self._upgrade_snapshot(dict(raw_report.get("after") or raw_report.get("after_snapshot") or {}))
@@ -848,11 +863,7 @@ class RecoveryAdminService:
             after_snapshot.queue_state_counts,
             raw_report.get("queue_drain_ok"),
         )
-        bootstrap_recovery_state = str(
-            raw_report.get("bootstrap_recovery_state")
-            or raw_report.get("restart_recovery_state")
-            or ""
-        ).strip()
+        bootstrap_recovery_state = str(raw_report.get("bootstrap_recovery_state") or raw_report.get("restart_recovery_state") or "").strip()
         explicit_no_loss_ok = raw_report.get("no_loss_ok")
         no_loss_ok = bool(explicit_no_loss_ok) if isinstance(explicit_no_loss_ok, bool) else not object_mismatches
         mismatches = list(object_mismatches) + list(source_identity_mismatches)
@@ -864,7 +875,11 @@ class RecoveryAdminService:
             mismatches.append("rollback_classification_missing")
         if upgrade_result != "succeeded" and not str(raw_report.get("failure_classification") or "").strip():
             mismatches.append("failure_classification_missing")
-        if bootstrap_recovery_state and bootstrap_recovery_state not in {"recovered", "not_required", "manual_follow_up"}:
+        if bootstrap_recovery_state and bootstrap_recovery_state not in {
+            "recovered",
+            "not_required",
+            "manual_follow_up",
+        }:
             mismatches.append(f"bootstrap_recovery_state:{bootstrap_recovery_state}")
         derived_status = payload.status
         if derived_status is None:

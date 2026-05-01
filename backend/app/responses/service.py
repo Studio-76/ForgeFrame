@@ -100,7 +100,13 @@ class ResponsesService:
         "reasoning": "reasoning controls are not implemented on the ForgeFrame responses path.",
     }
 
-    _CONTENT_BLOCK_TYPES = {"input_text", "text", "output_text", "input_image", "image_url"}
+    _CONTENT_BLOCK_TYPES = {
+        "input_text",
+        "text",
+        "output_text",
+        "input_image",
+        "image_url",
+    }
     _MESSAGE_ROLES = {"system", "developer", "user", "assistant", "tool"}
 
     def __init__(
@@ -129,7 +135,9 @@ class ResponsesService:
         return f"{prefix}_{new_response_id().split('_', 1)[1]}"
 
     @staticmethod
-    def response_controls_for_request(request: NormalizedResponsesRequest) -> dict[str, object]:
+    def response_controls_for_request(
+        request: NormalizedResponsesRequest,
+    ) -> dict[str, object]:
         controls: dict[str, object] = {}
         if request.max_output_tokens is not None:
             controls["max_output_tokens"] = request.max_output_tokens
@@ -204,9 +212,7 @@ class ResponsesService:
     ) -> dict[str, Any]:
         notes = [note] if note else []
         if not notes:
-            notes.append(
-                "This /v1/responses path emits an OpenAI-compatible envelope, but the durable product truth is persisted as native ForgeFrame response objects."
-            )
+            notes.append("This /v1/responses path emits an OpenAI-compatible envelope, but the durable product truth is persisted as native ForgeFrame response objects.")
         return RuntimeNativeMapping(
             request_path=request_path,
             response_id=response_id,
@@ -302,9 +308,7 @@ class ResponsesService:
                 "execution_lane": execution_lane,
                 "outbox_event": outbox_event,
             },
-            notes=[
-                "This background /v1/responses path created durable ForgeFrame execution objects instead of completing inline on the OpenAI-compatible surface."
-            ],
+            notes=["This background /v1/responses path created durable ForgeFrame execution objects instead of completing inline on the OpenAI-compatible surface."],
         ).model_dump(mode="json")
 
     @classmethod
@@ -528,7 +532,14 @@ class ResponsesService:
             valid = False
             for candidate_type in schema_type:
                 try:
-                    ResponsesService._validate_schema_subset(value, {"type": candidate_type, **{k: v for k, v in schema.items() if k != "type"}}, path=path)
+                    ResponsesService._validate_schema_subset(
+                        value,
+                        {
+                            "type": candidate_type,
+                            **{k: v for k, v in schema.items() if k != "type"},
+                        },
+                        path=path,
+                    )
                     valid = True
                     break
                 except ResponseStructuredOutputValidationError:
@@ -598,13 +609,13 @@ class ResponsesService:
             if not isinstance(schema_payload, dict):
                 raise ResponseStructuredOutputValidationError("Structured output json_schema request is missing a usable schema payload.")
             try:
-                import jsonschema  # type: ignore[import-not-found]
+                import jsonschema
             except ImportError:
                 cls._validate_schema_subset(parsed, schema_payload)
             else:
                 try:
                     jsonschema.validate(parsed, schema_payload)
-                except jsonschema.ValidationError as exc:  # type: ignore[attr-defined]
+                except jsonschema.ValidationError as exc:
                     raise ResponseStructuredOutputValidationError(f"Structured output does not satisfy the requested schema: {exc.message}") from exc
             return json.dumps(parsed, ensure_ascii=True, separators=(",", ":"))
         return output_text
@@ -776,7 +787,8 @@ class ResponsesService:
         current_time: datetime,
     ) -> None:
         last_event = (
-            session.query(NativeResponseEventORM)
+            session
+            .query(NativeResponseEventORM)
             .filter(
                 NativeResponseEventORM.company_id == company_id,
                 NativeResponseEventORM.response_id == response_id,
@@ -799,7 +811,7 @@ class ResponsesService:
                 payload_json=payload_json,
                 created_at=current_time,
             )
-            )
+        )
 
     def _augment_runtime_native_mapping(
         self,
@@ -859,10 +871,7 @@ class ResponsesService:
         for phase, items in (("input", input_items), ("output", output_items)):
             for item_index, item in enumerate(items):
                 payload = dict(item) if isinstance(item, dict) else {"value": item}
-                item_object_id = str(
-                    payload.get("id")
-                    or self._native_item_row_id(response_id, phase, item_index)
-                )
+                item_object_id = str(payload.get("id") or self._native_item_row_id(response_id, phase, item_index))
                 item_type = str(payload.get("type") or "unknown")
                 append_object(
                     NativeProductObjectRef(
@@ -882,7 +891,7 @@ class ResponsesService:
                 if item_type == "function_call":
                     call_id = str(payload.get("call_id") or payload.get("id") or "")
                     if call_id:
-                        tool_call_row_id = self._native_tool_call_row_id(response_id, phase, call_id)
+                        self._native_tool_call_row_id(response_id, phase, call_id)
                         append_object(
                             NativeProductObjectRef(
                                 kind="response_tool_call",
@@ -921,25 +930,20 @@ class ResponsesService:
                             )
                         )
 
-        route_context.update(
-            {
-                "requested_model": request.model,
-                "resolved_model": resolved_model,
-                "provider_key": provider_key,
-                "input_item_count": len(input_items),
-                "output_item_count": len(output_items),
-                "input_tool_call_count": input_tool_call_count,
-                "output_tool_call_count": output_tool_call_count,
-                "tool_output_count": tool_output_count,
-            }
-        )
+        route_context.update({
+            "requested_model": request.model,
+            "resolved_model": resolved_model,
+            "provider_key": provider_key,
+            "input_item_count": len(input_items),
+            "output_item_count": len(output_items),
+            "input_tool_call_count": input_tool_call_count,
+            "output_tool_call_count": output_tool_call_count,
+            "tool_output_count": tool_output_count,
+        })
         mapping["route_context"] = route_context
         mapping["objects"] = objects
         notes = [str(note) for note in mapping.get("notes") or [] if str(note).strip()]
-        native_projection_note = (
-            "Native response projections include persisted response items, tool calls, tool outputs, "
-            "follow objects, lifecycle events, and stream events."
-        )
+        native_projection_note = "Native response projections include persisted response items, tool calls, tool outputs, follow objects, lifecycle events, and stream events."
         if native_projection_note not in notes:
             notes.append(native_projection_note)
         mapping["notes"] = notes
@@ -986,9 +990,9 @@ class ResponsesService:
                 resolved_model=resolved_model,
                 provider_key=provider_key,
                 instructions=request.instructions,
-                metadata_json=dict(metadata),
-                usage_json=dict(usage),
-                cost_json=dict(cost),
+                metadata_json=dict(metadata or {}),
+                usage_json=dict(usage or {}),
+                cost_json=dict(cost or {}),
                 error_json=dict(error_json) if error_json else None,
                 output_text=output_text,
                 created_at=current_time,
@@ -1008,9 +1012,9 @@ class ResponsesService:
             native_record.resolved_model = resolved_model
             native_record.provider_key = provider_key
             native_record.instructions = request.instructions
-            native_record.metadata_json = dict(metadata)
-            native_record.usage_json = dict(usage)
-            native_record.cost_json = dict(cost)
+            native_record.metadata_json = dict(metadata or {})
+            native_record.usage_json = dict(usage or {})
+            native_record.cost_json = dict(cost or {})
             native_record.error_json = dict(error_json) if error_json else None
             native_record.output_text = output_text
             native_record.updated_at = current_time
@@ -1101,12 +1105,7 @@ class ResponsesService:
             mapping_record.updated_at = current_time
 
         follow_objects = list((normalized_native_mapping or {}).get("objects") or [])
-        if not any(
-            isinstance(item, dict)
-            and str(item.get("kind") or "") == "response"
-            and str(item.get("object_id") or "") == response_id
-            for item in follow_objects
-        ):
+        if not any(isinstance(item, dict) and str(item.get("kind") or "") == "response" and str(item.get("object_id") or "") == response_id for item in follow_objects):
             follow_objects.insert(
                 0,
                 NativeProductObjectRef(
@@ -1171,7 +1170,8 @@ class ResponsesService:
         current_time = self._now(now)
         with self._session_factory() as session, session.begin():
             last_event = (
-                session.query(NativeResponseStreamEventORM)
+                session
+                .query(NativeResponseStreamEventORM)
                 .filter(
                     NativeResponseStreamEventORM.company_id == company_id,
                     NativeResponseStreamEventORM.response_id == response_id,
@@ -1317,7 +1317,8 @@ class ResponsesService:
         phase: str,
     ) -> list[dict[str, Any]]:
         rows = (
-            session.query(NativeResponseItemORM)
+            session
+            .query(NativeResponseItemORM)
             .filter(
                 NativeResponseItemORM.company_id == company_id,
                 NativeResponseItemORM.response_id == response_id,
@@ -1349,7 +1350,8 @@ class ResponsesService:
     ) -> QueuedResponseExecutionPayload:
         with self._session_factory() as session:
             record = (
-                session.query(RuntimeResponseORM)
+                session
+                .query(RuntimeResponseORM)
                 .filter(
                     RuntimeResponseORM.company_id == company_id,
                     RuntimeResponseORM.execution_run_id == execution_run_id,
@@ -1358,9 +1360,7 @@ class ResponsesService:
                 .first()
             )
             if record is None:
-                raise ResponseNotFoundError(
-                    f"Background response for run '{execution_run_id}' was not found for company '{company_id}'."
-                )
+                raise ResponseNotFoundError(f"Background response for run '{execution_run_id}' was not found for company '{company_id}'.")
 
             controls = dict(record.request_controls or {})
             metadata = dict(record.request_metadata or {})
@@ -1378,16 +1378,8 @@ class ResponsesService:
                 tool_choice=record.request_tool_choice,
                 metadata=metadata,
                 client=dict(record.request_client or {}),
-                max_output_tokens=(
-                    int(controls["max_output_tokens"])
-                    if controls.get("max_output_tokens") is not None
-                    else None
-                ),
-                temperature=(
-                    float(controls["temperature"])
-                    if controls.get("temperature") is not None
-                    else None
-                ),
+                max_output_tokens=(int(controls["max_output_tokens"]) if controls.get("max_output_tokens") is not None else None),
+                temperature=(float(controls["temperature"]) if controls.get("temperature") is not None else None),
             )
             created_at = int(record.response_body.get("created_at") or int(record.created_at.timestamp()))
             return QueuedResponseExecutionPayload(
@@ -1426,7 +1418,10 @@ class ResponsesService:
             if not items:
                 items = list(record.input_items or [])
             first_id = next((str(item.get("id")) for item in items if item.get("id")), None)
-            last_id = next((str(item.get("id")) for item in reversed(items) if item.get("id")), None)
+            last_id = next(
+                (str(item.get("id")) for item in reversed(items) if item.get("id")),
+                None,
+            )
             return {
                 "object": "list",
                 "data": items,
@@ -1444,7 +1439,8 @@ class ResponsesService:
             native_record = session.get(NativeResponseORM, response_id)
             mapping_record = session.get(NativeResponseMappingORM, response_id)
             lifecycle_events = (
-                session.query(NativeResponseEventORM)
+                session
+                .query(NativeResponseEventORM)
                 .filter(
                     NativeResponseEventORM.company_id == company_id,
                     NativeResponseEventORM.response_id == response_id,
@@ -1453,7 +1449,8 @@ class ResponsesService:
                 .all()
             )
             stream_events = (
-                session.query(NativeResponseStreamEventORM)
+                session
+                .query(NativeResponseStreamEventORM)
                 .filter(
                     NativeResponseStreamEventORM.company_id == company_id,
                     NativeResponseStreamEventORM.response_id == response_id,
@@ -1462,7 +1459,8 @@ class ResponsesService:
                 .all()
             )
             tool_calls = (
-                session.query(NativeResponseToolCallORM)
+                session
+                .query(NativeResponseToolCallORM)
                 .filter(
                     NativeResponseToolCallORM.company_id == company_id,
                     NativeResponseToolCallORM.response_id == response_id,
@@ -1475,16 +1473,21 @@ class ResponsesService:
                 .all()
             )
             tool_outputs = (
-                session.query(NativeResponseToolOutputORM)
+                session
+                .query(NativeResponseToolOutputORM)
                 .filter(
                     NativeResponseToolOutputORM.company_id == company_id,
                     NativeResponseToolOutputORM.response_id == response_id,
                 )
-                .order_by(NativeResponseToolOutputORM.output_index.asc(), NativeResponseToolOutputORM.row_id.asc())
+                .order_by(
+                    NativeResponseToolOutputORM.output_index.asc(),
+                    NativeResponseToolOutputORM.row_id.asc(),
+                )
                 .all()
             )
             follow_objects = (
-                session.query(NativeResponseFollowObjectORM)
+                session
+                .query(NativeResponseFollowObjectORM)
                 .filter(
                     NativeResponseFollowObjectORM.company_id == company_id,
                     NativeResponseFollowObjectORM.response_id == response_id,
@@ -1508,9 +1511,7 @@ class ResponsesService:
                 "resolved_model": record.resolved_model,
                 "provider_key": record.provider_key,
                 "execution_run_id": record.execution_run_id,
-                "native_mapping": dict(
-                    (mapping_record.mapping_json if mapping_record is not None else record.native_mapping) or {}
-                ),
+                "native_mapping": dict((mapping_record.mapping_json if mapping_record is not None else record.native_mapping) or {}),
                 "response": {
                     "output_text": native_record.output_text if native_record is not None else record.response_body.get("output_text"),
                     "metadata": dict((native_record.metadata_json if native_record is not None else {}) or {}),

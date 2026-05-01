@@ -15,4 +15,3 @@ def get_assistant_profile_admin_service() -> AssistantProfileAdminService:
 
 def clear_assistant_profile_admin_service_cache() -> None:
     get_assistant_profile_admin_service.cache_clear()
-

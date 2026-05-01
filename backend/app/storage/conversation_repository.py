@@ -5,16 +5,24 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import Any
 
-from sqlalchemy import JSON, CheckConstraint, DateTime, ForeignKeyConstraint, Index, String, Text
+from sqlalchemy import (
+    JSON,
+    CheckConstraint,
+    DateTime,
+    ForeignKeyConstraint,
+    Index,
+    String,
+    Text,
+)
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.conversations.models import (
-    CONVERSATION_STATUSES,
     CONVERSATION_EVENT_TYPES,
+    CONVERSATION_STATUSES,
     INBOX_STATUSES,
-    MESSAGE_ROLES,
     MENTION_STATUSES,
+    MESSAGE_ROLES,
     PARTICIPANT_KINDS,
     PARTICIPANT_STATUSES,
     SESSION_KINDS,
@@ -44,8 +52,19 @@ class ConversationORM(Base):
         _enum_check("conversations_triage_status_ck", "triage_status", TRIAGE_STATUSES),
         _enum_check("conversations_priority_ck", "priority", WORK_ITEM_PRIORITIES),
         Index("conversations_company_id_id_uq", "company_id", "id", unique=True),
-        Index("conversations_instance_triage_updated_idx", "instance_id", "triage_status", "updated_at"),
-        Index("conversations_company_links_idx", "company_id", "workspace_id", "run_id", "approval_id"),
+        Index(
+            "conversations_instance_triage_updated_idx",
+            "instance_id",
+            "triage_status",
+            "updated_at",
+        ),
+        Index(
+            "conversations_company_links_idx",
+            "company_id",
+            "workspace_id",
+            "run_id",
+            "approval_id",
+        ),
     )
 
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
@@ -84,7 +103,12 @@ class ConversationThreadORM(Base):
             ondelete="CASCADE",
         ),
         _enum_check("conversation_threads_status_ck", "status", THREAD_STATUSES),
-        Index("conversation_threads_company_conversation_updated_idx", "company_id", "conversation_id", "updated_at"),
+        Index(
+            "conversation_threads_company_conversation_updated_idx",
+            "company_id",
+            "conversation_id",
+            "updated_at",
+        ),
     )
 
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
@@ -113,7 +137,12 @@ class ConversationSessionORM(Base):
             ondelete="CASCADE",
         ),
         _enum_check("conversation_sessions_kind_ck", "session_kind", SESSION_KINDS),
-        Index("conversation_sessions_company_thread_started_idx", "company_id", "thread_id", "started_at"),
+        Index(
+            "conversation_sessions_company_thread_started_idx",
+            "company_id",
+            "thread_id",
+            "started_at",
+        ),
     )
 
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
@@ -150,8 +179,18 @@ class ConversationMessageORM(Base):
             ondelete="CASCADE",
         ),
         _enum_check("conversation_messages_role_ck", "message_role", MESSAGE_ROLES),
-        Index("conversation_messages_company_thread_created_idx", "company_id", "thread_id", "created_at"),
-        Index("conversation_messages_company_session_created_idx", "company_id", "session_id", "created_at"),
+        Index(
+            "conversation_messages_company_thread_created_idx",
+            "company_id",
+            "thread_id",
+            "created_at",
+        ),
+        Index(
+            "conversation_messages_company_session_created_idx",
+            "company_id",
+            "session_id",
+            "created_at",
+        ),
     )
 
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
@@ -190,8 +229,19 @@ class InboxItemORM(Base):
         _enum_check("inbox_items_triage_status_ck", "triage_status", TRIAGE_STATUSES),
         _enum_check("inbox_items_priority_ck", "priority", WORK_ITEM_PRIORITIES),
         _enum_check("inbox_items_status_ck", "status", INBOX_STATUSES),
-        Index("inbox_items_instance_triage_updated_idx", "instance_id", "triage_status", "updated_at"),
-        Index("inbox_items_company_links_idx", "company_id", "conversation_id", "thread_id", "workspace_id"),
+        Index(
+            "inbox_items_instance_triage_updated_idx",
+            "instance_id",
+            "triage_status",
+            "updated_at",
+        ),
+        Index(
+            "inbox_items_company_links_idx",
+            "company_id",
+            "conversation_id",
+            "thread_id",
+            "workspace_id",
+        ),
     )
 
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
@@ -237,9 +287,23 @@ class ConversationParticipantORM(Base):
             ondelete="SET NULL",
         ),
         _enum_check("conversation_participants_kind_ck", "participant_kind", PARTICIPANT_KINDS),
-        _enum_check("conversation_participants_status_ck", "participant_status", PARTICIPANT_STATUSES),
-        Index("conversation_participants_company_conversation_idx", "company_id", "conversation_id", "updated_at"),
-        Index("conversation_participants_company_agent_idx", "company_id", "agent_id", "updated_at"),
+        _enum_check(
+            "conversation_participants_status_ck",
+            "participant_status",
+            PARTICIPANT_STATUSES,
+        ),
+        Index(
+            "conversation_participants_company_conversation_idx",
+            "company_id",
+            "conversation_id",
+            "updated_at",
+        ),
+        Index(
+            "conversation_participants_company_agent_idx",
+            "company_id",
+            "agent_id",
+            "updated_at",
+        ),
     )
 
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
@@ -283,7 +347,12 @@ class ConversationMentionORM(Base):
             ondelete="CASCADE",
         ),
         _enum_check("conversation_mentions_status_ck", "status", MENTION_STATUSES),
-        Index("conversation_mentions_company_agent_idx", "company_id", "agent_id", "created_at"),
+        Index(
+            "conversation_mentions_company_agent_idx",
+            "company_id",
+            "agent_id",
+            "created_at",
+        ),
         Index("conversation_mentions_company_message_idx", "company_id", "message_id"),
     )
 
@@ -327,8 +396,18 @@ class ConversationEventORM(Base):
             ondelete="SET NULL",
         ),
         _enum_check("conversation_events_type_ck", "event_type", CONVERSATION_EVENT_TYPES),
-        Index("conversation_events_company_conversation_idx", "company_id", "conversation_id", "created_at"),
-        Index("conversation_events_company_target_agent_idx", "company_id", "target_agent_id", "created_at"),
+        Index(
+            "conversation_events_company_conversation_idx",
+            "company_id",
+            "conversation_id",
+            "created_at",
+        ),
+        Index(
+            "conversation_events_company_target_agent_idx",
+            "company_id",
+            "target_agent_id",
+            "created_at",
+        ),
     )
 
     id: Mapped[str] = mapped_column(String(64), primary_key=True)

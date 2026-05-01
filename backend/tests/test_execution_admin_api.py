@@ -1,10 +1,10 @@
-import os
 from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
+from conftest import admin_headers as shared_admin_headers
+from conftest import login_headers_allowing_password_rotation
 from fastapi.testclient import TestClient
 
-from conftest import admin_headers as shared_admin_headers, login_headers_allowing_password_rotation
 from app.execution.dependencies import get_execution_transition_service
 from app.governance.service import get_governance_service
 from app.main import app
@@ -90,7 +90,11 @@ def _create_impersonation_target_user(client: TestClient, *, role: str = "operat
         },
     )
     assert created_user.status_code == 201
-    target_headers = _login_headers(client, username=f"impersonated-{role}-{suffix}", password="Impersonated-User-123")
+    target_headers = _login_headers(
+        client,
+        username=f"impersonated-{role}-{suffix}",
+        password="Impersonated-User-123",
+    )
     target_logout = client.post("/admin/auth/logout", headers=target_headers)
     assert target_logout.status_code == 200
     return created_user.json()["user"]["user_id"]
@@ -303,10 +307,15 @@ def _backdate_run(*, company_id: str, run_id: str, days: int) -> None:
         run.created_at = shifted
         run.updated_at = shifted
         run.terminal_at = shifted
-        attempts = session.query(RunAttemptORM).filter(
-            RunAttemptORM.company_id == company_id,
-            RunAttemptORM.run_id == run_id,
-        ).all()
+        attempts = (
+            session
+            .query(RunAttemptORM)
+            .filter(
+                RunAttemptORM.company_id == company_id,
+                RunAttemptORM.run_id == run_id,
+            )
+            .all()
+        )
         for attempt in attempts:
             attempt.scheduled_at = shifted
             attempt.started_at = shifted
@@ -490,7 +499,13 @@ def test_operator_execution_replay_allows_non_impersonated_sessions() -> None:
     admin_headers = _admin_headers(client)
     operator_user_id, operator_username, operator_password = _create_operator_user(client)
     instance_id = _create_instance(client, admin_headers, instance_id="instance_alpha", company_id="company_alpha")
-    _grant_instance_membership(client, admin_headers, user_id=operator_user_id, instance_id=instance_id, role="operator")
+    _grant_instance_membership(
+        client,
+        admin_headers,
+        user_id=operator_user_id,
+        instance_id=instance_id,
+        role="operator",
+    )
     operator_headers = _login_headers(client, username=operator_username, password=operator_password)
     run_id = _seed_dead_letter_run(company_id="company_alpha")
     reason = "Replay after provider credentials were rotated and verified."
@@ -521,18 +536,19 @@ def test_operator_execution_replay_allows_non_impersonated_sessions() -> None:
     assert run["commands"][0]["response_snapshot"]["replay_reason"] == reason
     assert run["attempts"][0]["attempt_no"] == 2
 
-    replay_audit = next(
-        item
-        for item in get_governance_service().list_audit_events(limit=20, company_id="company_alpha")
-        if item.action == "execution_run_replay" and item.target_id == run_id
-    )
+    replay_audit = next(item for item in get_governance_service().list_audit_events(limit=20, company_id="company_alpha") if item.action == "execution_run_replay" and item.target_id == run_id)
     assert replay_audit.company_id == "company_alpha"
 
 
 def test_admin_execution_replay_replays_original_outcome_for_matching_idempotency_key() -> None:
     client = TestClient(app)
     bootstrap_headers = _admin_headers(client)
-    instance_id = _create_instance(client, bootstrap_headers, instance_id="instance_alpha", company_id="company_alpha")
+    instance_id = _create_instance(
+        client,
+        bootstrap_headers,
+        instance_id="instance_alpha",
+        company_id="company_alpha",
+    )
     headers = {
         **bootstrap_headers,
         "Idempotency-Key": "idem_api_replay_1",
@@ -572,18 +588,19 @@ def test_admin_execution_replay_replays_original_outcome_for_matching_idempotenc
     retry_commands = [item for item in detail.json()["run"]["commands"] if item["command_type"] == "retry"]
     assert len(retry_commands) == 1
 
-    replay_audits = [
-        item
-        for item in get_governance_service().list_audit_events(limit=20, company_id="company_alpha")
-        if item.action == "execution_run_replay" and item.target_id == run_id
-    ]
+    replay_audits = [item for item in get_governance_service().list_audit_events(limit=20, company_id="company_alpha") if item.action == "execution_run_replay" and item.target_id == run_id]
     assert len(replay_audits) == 1
 
 
 def test_admin_execution_replay_rejects_idempotency_fingerprint_mismatch() -> None:
     client = TestClient(app)
     bootstrap_headers = _admin_headers(client)
-    instance_id = _create_instance(client, bootstrap_headers, instance_id="instance_alpha", company_id="company_alpha")
+    instance_id = _create_instance(
+        client,
+        bootstrap_headers,
+        instance_id="instance_alpha",
+        company_id="company_alpha",
+    )
     headers = {**bootstrap_headers, "Idempotency-Key": "idem_api_replay_conflict"}
     run_id = _seed_dead_letter_run(company_id="company_alpha")
 
@@ -708,7 +725,13 @@ def test_admin_execution_replay_rejects_read_only_impersonation_sessions() -> No
     instance_id = _create_instance(client, admin_headers, instance_id="instance_alpha", company_id="company_alpha")
     run_id = _seed_dead_letter_run(company_id="company_alpha")
     impersonated_user_id = _create_impersonation_target_user(client)
-    _grant_instance_membership(client, admin_headers, user_id=impersonated_user_id, instance_id=instance_id, role="operator")
+    _grant_instance_membership(
+        client,
+        admin_headers,
+        user_id=impersonated_user_id,
+        instance_id=instance_id,
+        role="operator",
+    )
     impersonation_headers = _issue_impersonation_session(client, target_user_id=impersonated_user_id)
 
     replay = client.post(
@@ -741,7 +764,13 @@ def test_admin_execution_reads_allow_read_only_impersonation_sessions() -> None:
     instance_id = _create_instance(client, admin_headers, instance_id="instance_alpha", company_id="company_alpha")
     run_id = _seed_dead_letter_run(company_id="company_alpha")
     impersonated_user_id = _create_impersonation_target_user(client)
-    _grant_instance_membership(client, admin_headers, user_id=impersonated_user_id, instance_id=instance_id, role="operator")
+    _grant_instance_membership(
+        client,
+        admin_headers,
+        user_id=impersonated_user_id,
+        instance_id=instance_id,
+        role="operator",
+    )
     impersonation_headers = _issue_impersonation_session(client, target_user_id=impersonated_user_id)
 
     listing = client.get(
@@ -798,11 +827,7 @@ def test_full_harness_export_requires_admin_and_keeps_redacted_exports_available
         headers=admin_headers,
     )
     assert admin_full_export.status_code == 200
-    admin_profile = next(
-        item["profile"]
-        for item in admin_full_export.json()["snapshot"]["profiles"]
-        if item["provider_key"] == provider_key
-    )
+    admin_profile = next(item["profile"] for item in admin_full_export.json()["snapshot"]["profiles"] if item["provider_key"] == provider_key)
     assert admin_full_export.json()["snapshot"]["redacted"] is False
     assert admin_profile["auth_value"] == "full-export-secret"
     assert admin_profile["request_mapping"]["headers"]["Authorization"] == "Bearer nested-full-export-secret"
@@ -821,11 +846,7 @@ def test_full_harness_export_requires_admin_and_keeps_redacted_exports_available
     assert operator_redacted_export.status_code == 200
     assert "full-export-secret" not in operator_redacted_export.text
     assert "nested-full-export-secret" not in operator_redacted_export.text
-    operator_profile = next(
-        item["profile"]
-        for item in operator_redacted_export.json()["snapshot"]["profiles"]
-        if item["provider_key"] == provider_key
-    )
+    operator_profile = next(item["profile"] for item in operator_redacted_export.json()["snapshot"]["profiles"] if item["provider_key"] == provider_key)
     assert operator_redacted_export.json()["snapshot"]["redacted"] is True
     assert operator_profile["auth_value"] == "***redacted***"
     assert operator_profile["request_mapping"]["headers"]["Authorization"] == "***redacted***"
@@ -845,11 +866,7 @@ def test_full_harness_export_requires_admin_and_keeps_redacted_exports_available
     assert impersonation_redacted_export.status_code == 200
     assert "full-export-secret" not in impersonation_redacted_export.text
     assert "nested-full-export-secret" not in impersonation_redacted_export.text
-    impersonation_profile = next(
-        item["profile"]
-        for item in impersonation_redacted_export.json()["snapshot"]["profiles"]
-        if item["provider_key"] == provider_key
-    )
+    impersonation_profile = next(item["profile"] for item in impersonation_redacted_export.json()["snapshot"]["profiles"] if item["provider_key"] == provider_key)
     assert impersonation_profile["auth_value"] == "***redacted***"
     assert impersonation_profile["request_mapping"]["headers"]["Authorization"] == "***redacted***"
 

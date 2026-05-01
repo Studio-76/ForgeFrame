@@ -144,21 +144,14 @@ def _filter_public_runtime_inventory(
     # Generic harness profiles also stay off the public inventory until a live
     # OpenAI-compatible public runtime path has been proven for the exact model.
     harness = get_harness_service() if any(model.provider == "generic_harness" for model in model_list) else None
-    generic_harness_public_model_ids = (
-        _generic_harness_public_runtime_proof_model_ids(harness)
-        if harness is not None
-        else set()
-    )
+    generic_harness_public_model_ids = _generic_harness_public_runtime_proof_model_ids(harness) if harness is not None else set()
     return [
         model
         for model in model_list
         if not (
             (model.provider == "openai_codex" and not settings.openai_codex_bridge_enabled)
             or model.provider == "anthropic"
-            or (
-                model.provider == "generic_harness"
-                and model.id not in generic_harness_public_model_ids
-            )
+            or (model.provider == "generic_harness" and model.id not in generic_harness_public_model_ids)
         )
     ]
 
@@ -173,15 +166,7 @@ def _generic_harness_public_runtime_proof_model_ids(
     # axis. Public `/v1/models` should only advertise generic harness models
     # when an enabled OpenAI-compatible profile has exact-model public runtime
     # evidence, not just a control-plane probe or a sibling-model success.
-    eligible_profiles = [
-        profile
-        for profile in harness.list_profiles()
-        if (
-            profile.enabled
-            and not profile.needs_attention
-            and profile.integration_class == "openai_compatible"
-        )
-    ]
+    eligible_profiles = [profile for profile in harness.list_profiles() if (profile.enabled and not profile.needs_attention and profile.integration_class == "openai_compatible")]
     if not eligible_profiles:
         return set()
 

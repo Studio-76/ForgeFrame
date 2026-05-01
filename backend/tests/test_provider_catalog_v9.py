@@ -18,7 +18,10 @@ def _admin_headers(client: TestClient) -> dict[str, str]:
         rotate = client.post(
             "/admin/auth/rotate-password",
             headers={"Authorization": f"Bearer {access_token}"},
-            json={"current_password": bootstrap_password, "new_password": rotated_password},
+            json={
+                "current_password": bootstrap_password,
+                "new_password": rotated_password,
+            },
         )
         assert rotate.status_code == 200
         relogin = client.post(
@@ -45,14 +48,8 @@ def test_provider_control_plane_exposes_v9_provider_catalog_seed() -> None:
     openai = catalog["openai"]
     assert openai["provider_class"] == "openai_compatible"
     assert openai["runtime_provider_binding"] == "openai_api"
-    assert any(
-        item["evidence_class"] == "docs_declared" and item["status"] == "observed"
-        for item in openai["evidence_log"]
-    )
-    assert any(
-        item["evidence_class"] == "repo_observed" and item["status"] == "observed"
-        for item in openai["evidence_log"]
-    )
+    assert any(item["evidence_class"] == "docs_declared" and item["status"] == "observed" for item in openai["evidence_log"])
+    assert any(item["evidence_class"] == "repo_observed" and item["status"] == "observed" for item in openai["evidence_log"])
 
     azure = catalog["azure_openai"]
     assert azure["source_kind"] == "api_matrix"
@@ -60,12 +57,7 @@ def test_provider_control_plane_exposes_v9_provider_catalog_seed() -> None:
     assert azure["product_axis_binding"] == "openai_compatible_generic"
     assert azure["live_signoff_status"] == "blocked-by-live-evidence"
     assert "live probe" in azure["missing_evidence"]
-    assert any(
-        item["evidence_class"] == "repo_observed"
-        and item["source_kind"] == "repo_harness_template"
-        and item["source_ref"] == "openai_provider_azure_openai"
-        for item in azure["evidence_log"]
-    )
+    assert any(item["evidence_class"] == "repo_observed" and item["source_kind"] == "repo_harness_template" and item["source_ref"] == "openai_provider_azure_openai" for item in azure["evidence_log"])
 
     copilot = catalog["github_copilot"]
     assert copilot["provider_class"] == "oauth_cli_bridge"
@@ -76,9 +68,7 @@ def test_provider_control_plane_exposes_v9_provider_catalog_seed() -> None:
     assert anthropic["runtime_provider_binding"] == "anthropic"
     assert anthropic["maturity_status"] == "adapter-ready-without-live-proof"
     assert any(
-        item["evidence_class"] == "repo_observed"
-        and item["source_kind"] in {"repo_runtime", "repo_runtime_binding"}
-        and item["source_ref"] == "runtime:anthropic"
+        item["evidence_class"] == "repo_observed" and item["source_kind"] in {"repo_runtime", "repo_runtime_binding"} and item["source_ref"] == "runtime:anthropic"
         for item in anthropic["evidence_log"]
     )
 
@@ -87,20 +77,13 @@ def test_provider_control_plane_exposes_v9_provider_catalog_seed() -> None:
     assert bedrock["runtime_provider_binding"] == "bedrock"
     assert bedrock["maturity_status"] == "adapter-ready-without-live-proof"
     assert any(
-        item["evidence_class"] == "repo_observed"
-        and item["source_kind"] in {"repo_runtime", "repo_runtime_binding"}
-        and item["source_ref"] == "runtime:bedrock"
-        for item in bedrock["evidence_log"]
+        item["evidence_class"] == "repo_observed" and item["source_kind"] in {"repo_runtime", "repo_runtime_binding"} and item["source_ref"] == "runtime:bedrock" for item in bedrock["evidence_log"]
     )
 
     nous = catalog["nous"]
     assert nous["provider_class"] == "openai_compatible_aggregator"
     assert nous["maturity_status"] == "adapter-ready-without-live-proof"
-    assert any(
-        item["evidence_class"] == "repo_observed"
-        and item["source_ref"] == "openai_provider_nous"
-        for item in nous["evidence_log"]
-    )
+    assert any(item["evidence_class"] == "repo_observed" and item["source_ref"] == "openai_provider_nous" for item in nous["evidence_log"])
 
     opencode_zen = catalog["opencode_zen"]
     assert opencode_zen["provider_class"] == "openai_compatible_aggregator"
@@ -111,12 +94,7 @@ def test_provider_control_plane_exposes_v9_provider_catalog_seed() -> None:
     assert minimax["provider_class"] == "openai_compatible"
     assert minimax["product_axis_binding"] == "openai_compatible_generic"
     assert minimax["maturity_status"] == "adapter-ready-without-live-proof"
-    assert any(
-        item["evidence_class"] == "repo_observed"
-        and item["source_kind"] == "repo_harness_template"
-        and item["source_ref"] == "openai_provider_minimax"
-        for item in minimax["evidence_log"]
-    )
+    assert any(item["evidence_class"] == "repo_observed" and item["source_kind"] == "repo_harness_template" and item["source_ref"] == "openai_provider_minimax" for item in minimax["evidence_log"])
 
     nous_oauth = catalog["nous_oauth"]
     assert nous_oauth["provider_class"] == "oauth_account_runtime"
@@ -136,10 +114,7 @@ def test_provider_control_plane_exposes_v9_provider_catalog_seed() -> None:
         assert row["product_axis_binding"] == provider_id
         assert row["maturity_status"] == "adapter-ready-without-live-proof"
         assert any(
-            item["evidence_class"] == "repo_observed"
-            and item["source_kind"] == "repo_harness_template"
-            and item["source_ref"] == f"openai_provider_{provider_id}"
-            for item in row["evidence_log"]
+            item["evidence_class"] == "repo_observed" and item["source_kind"] == "repo_harness_template" and item["source_ref"] == f"openai_provider_{provider_id}" for item in row["evidence_log"]
         )
 
     assert summary["blocked_live_signoffs"] >= 1

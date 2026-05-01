@@ -2,10 +2,25 @@
 
 from __future__ import annotations
 
-from app.api.admin.control_plane_models import BetaProviderTarget, OAuthAccountTargetStatus
+from typing import TYPE_CHECKING, Any
+
+from app.api.admin.control_plane_models import (
+    BetaProviderTarget,
+    OAuthAccountTargetStatus,
+)
 
 
 class ControlPlaneBetaDomainMixin:
+    if TYPE_CHECKING:
+        _harness: Any
+        _instance: Any
+        _effective_truth_projection_tenant_id: Any
+
+        def _safe_provider_status(self, *args: Any, **kwargs: Any) -> Any: ...
+        def _oauth_target_status(self, *args: Any, **kwargs: Any) -> Any: ...
+        def _native_oauth_target_status(self, *args: Any, **kwargs: Any) -> Any: ...
+        def _provider_capability_evidence(self, *args: Any, **kwargs: Any) -> Any: ...
+
     @staticmethod
     def _bridge_only_verify_probe_readiness(status: OAuthAccountTargetStatus) -> str:
         if status.configured and status.probe_enabled and status.evidence.live_probe.status == "observed":
@@ -27,8 +42,7 @@ class ControlPlaneBetaDomainMixin:
             "Generic harness is operational, but runtime compatibility and tool fidelity remain partial."
             if harness_runtime_ready
             else (
-                "Generic harness profiles exist, but no enabled profile currently owns a runtime model. "
-                "Keep the axis planned until a dispatchable profile is configured."
+                "Generic harness profiles exist, but no enabled profile currently owns a runtime model. Keep the axis planned until a dispatchable profile is configured."
                 if harness_profiles_configured
                 else "Generic harness profiles are not configured yet, so the openai-compatible provider axis remains planned."
             )
@@ -51,9 +65,7 @@ class ControlPlaneBetaDomainMixin:
             else ("partial" if codex_oauth_status.runtime_bridge_enabled and codex_oauth_status.configured else "planned")
         )
         codex_probe_readiness = (
-            "ready"
-            if codex_status["ready"] and codex_evidence.live_probe.status == "observed"
-            else ("partial" if codex_oauth_status.probe_enabled and codex_oauth_status.configured else "planned")
+            "ready" if codex_status["ready"] and codex_evidence.live_probe.status == "observed" else ("partial" if codex_oauth_status.probe_enabled and codex_oauth_status.configured else "planned")
         )
         gemini_runtime_readiness = (
             "ready"
@@ -119,11 +131,7 @@ class ControlPlaneBetaDomainMixin:
                 readiness_score=(
                     74
                     if gemini_runtime_readiness == "ready"
-                    else (
-                        52
-                        if gemini_oauth_status.runtime_bridge_enabled and gemini_oauth_status.configured and gemini_status["ready"]
-                        else (46 if gemini_oauth_status.configured else 34)
-                    )
+                    else (52 if gemini_oauth_status.runtime_bridge_enabled and gemini_oauth_status.configured and gemini_status["ready"] else (46 if gemini_oauth_status.configured else 34))
                 ),
                 runtime_readiness=gemini_runtime_readiness,
                 streaming_readiness=gemini_streaming_readiness,
@@ -258,11 +266,7 @@ class ControlPlaneBetaDomainMixin:
                 verify_probe_axis="verify/probe via local endpoint profile",
                 observability_axis="provider/model/client integration errors",
                 ui_axis="beta target table + harness profile template",
-                status_summary=(
-                    "Dedicated local runtime adapter and template are active."
-                    if ollama_status["ready"]
-                    else "Dedicated local axis with explicit template and control-plane lifecycle."
-                ),
+                status_summary=("Dedicated local runtime adapter and template are active." if ollama_status["ready"] else "Dedicated local axis with explicit template and control-plane lifecycle."),
                 notes="Dedicated Ollama axis explicitly in beta scope.",
             ),
             BetaProviderTarget(

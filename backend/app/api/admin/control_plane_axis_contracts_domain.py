@@ -2,14 +2,28 @@
 
 from __future__ import annotations
 
-from app.api.admin.control_plane_models import OAuthAccountTargetStatus, ProductAxisTarget
-from app.harness.templates import BUILTIN_TEMPLATES
+from typing import TYPE_CHECKING, Any
 
+from app.api.admin.control_plane_models import (
+    OAuthAccountTargetStatus,
+    ProductAxisTarget,
+)
+from app.harness.templates import BUILTIN_TEMPLATES
 
 _LOCAL_EXACT_PROVIDER_KEYS = ("localai", "llama_cpp", "llama_cpp_python", "vllm")
 
 
 class ControlPlaneAxisContractsDomainMixin:
+    if TYPE_CHECKING:
+        _harness: Any
+        _instance: Any
+        _effective_truth_projection_tenant_id: Any
+
+        def _safe_provider_status(self, *args: Any, **kwargs: Any) -> Any: ...
+        def _oauth_target_status(self, *args: Any, **kwargs: Any) -> Any: ...
+        def _native_oauth_target_status(self, *args: Any, **kwargs: Any) -> Any: ...
+        def _provider_capability_evidence(self, *args: Any, **kwargs: Any) -> Any: ...
+
     @staticmethod
     def _bridge_only_verify_probe_readiness(status: OAuthAccountTargetStatus) -> str:
         if status.configured and status.probe_enabled and status.evidence.live_probe.status == "observed":
@@ -26,11 +40,7 @@ class ControlPlaneAxisContractsDomainMixin:
         template = BUILTIN_TEMPLATES.get(template_id)
         if template is None:
             raise ValueError(f"Missing exact local provider template for {provider_key}")
-        profiles = [
-            profile
-            for profile in self._harness.list_profiles(instance_id=self._instance.instance_id)
-            if profile.template_id == template_id and profile.enabled
-        ]
+        profiles = [profile for profile in self._harness.list_profiles(instance_id=self._instance.instance_id) if profile.template_id == template_id and profile.enabled]
         dispatchable_profiles = [profile for profile in profiles if profile.models]
         capabilities = template.profile_defaults.capabilities
         evidence = self._provider_capability_evidence(provider_key, tenant_id=tenant_id)
@@ -81,7 +91,7 @@ class ControlPlaneAxisContractsDomainMixin:
             ),
         )
 
-    def product_axis_targets(self, tenant_id: str | None = None) -> list[dict[str, object]]:
+    def product_axis_targets(self, tenant_id: str | None = None) -> list[dict[str, Any]]:
         effective_tenant_id = self._effective_truth_projection_tenant_id(tenant_id)
         codex_status = self._safe_provider_status("openai_codex")
         gemini_status = self._safe_provider_status("gemini")
@@ -96,8 +106,7 @@ class ControlPlaneAxisContractsDomainMixin:
             "Generic harness is operational, but runtime compatibility and tool fidelity remain partial."
             if harness_runtime_ready
             else (
-                "Generic harness profiles exist, but no enabled profile currently owns a runtime model. "
-                "Keep the axis planned until a dispatchable profile is configured."
+                "Generic harness profiles exist, but no enabled profile currently owns a runtime model. Keep the axis planned until a dispatchable profile is configured."
                 if harness_profiles_configured
                 else "Generic harness profiles are not configured yet, so the openai-compatible provider axis remains planned."
             )
@@ -122,9 +131,7 @@ class ControlPlaneAxisContractsDomainMixin:
             else ("partial" if codex_oauth_status.runtime_bridge_enabled and codex_oauth_status.configured else "planned")
         )
         codex_probe_readiness = (
-            "ready"
-            if codex_status["ready"] and codex_evidence.live_probe.status == "observed"
-            else ("partial" if codex_oauth_status.probe_enabled and codex_oauth_status.configured else "planned")
+            "ready" if codex_status["ready"] and codex_evidence.live_probe.status == "observed" else ("partial" if codex_oauth_status.probe_enabled and codex_oauth_status.configured else "planned")
         )
         gemini_runtime_readiness = (
             "ready"
@@ -150,16 +157,12 @@ class ControlPlaneAxisContractsDomainMixin:
                 runtime_path="native provider adapter",
                 contract_classification=(
                     "runtime-ready"
-                    if codex_runtime_readiness == "ready"
-                    and codex_streaming_readiness == "ready"
-                    and codex_evidence.tool_calling.status == "observed"
+                    if codex_runtime_readiness == "ready" and codex_streaming_readiness == "ready" and codex_evidence.tool_calling.status == "observed"
                     else ("partial-runtime" if codex_oauth_status.configured and codex_oauth_status.runtime_bridge_enabled else "onboarding-only")
                 ),
                 classification_reason=(
                     "Codex native runtime traffic, streaming, and tool-call evidence are all recorded."
-                    if codex_runtime_readiness == "ready"
-                    and codex_streaming_readiness == "ready"
-                    and codex_evidence.tool_calling.status == "observed"
+                    if codex_runtime_readiness == "ready" and codex_streaming_readiness == "ready" and codex_evidence.tool_calling.status == "observed"
                     else (
                         "Codex can accept runtime traffic, but the shipped contract remains partial until runtime, streaming, and tool-call evidence are all present."
                         if codex_oauth_status.configured and codex_oauth_status.runtime_bridge_enabled
@@ -211,16 +214,12 @@ class ControlPlaneAxisContractsDomainMixin:
                 runtime_path="native provider adapter",
                 contract_classification=(
                     "runtime-ready"
-                    if gemini_runtime_readiness == "ready"
-                    and gemini_streaming_readiness == "ready"
-                    and gemini_evidence.tool_calling.status == "observed"
+                    if gemini_runtime_readiness == "ready" and gemini_streaming_readiness == "ready" and gemini_evidence.tool_calling.status == "observed"
                     else ("partial-runtime" if gemini_oauth_status.configured and gemini_oauth_status.runtime_bridge_enabled else "onboarding-only")
                 ),
                 classification_reason=(
                     "Gemini native runtime traffic, streaming, and tool-call evidence are all recorded."
-                    if gemini_runtime_readiness == "ready"
-                    and gemini_streaming_readiness == "ready"
-                    and gemini_evidence.tool_calling.status == "observed"
+                    if gemini_runtime_readiness == "ready" and gemini_streaming_readiness == "ready" and gemini_evidence.tool_calling.status == "observed"
                     else (
                         "Gemini can accept runtime traffic, but the shipped contract remains partial until runtime, streaming, and tool-call evidence are all present."
                         if gemini_oauth_status.configured and gemini_oauth_status.runtime_bridge_enabled
@@ -237,11 +236,7 @@ class ControlPlaneAxisContractsDomainMixin:
                 readiness_score=(
                     74
                     if gemini_runtime_readiness == "ready"
-                    else (
-                        52
-                        if gemini_oauth_status.runtime_bridge_enabled and gemini_oauth_status.configured and gemini_status["ready"]
-                        else (46 if gemini_oauth_status.configured else 34)
-                    )
+                    else (52 if gemini_oauth_status.runtime_bridge_enabled and gemini_oauth_status.configured and gemini_status["ready"] else (46 if gemini_oauth_status.configured else 34))
                 ),
                 runtime_readiness=gemini_runtime_readiness,
                 streaming_readiness=gemini_streaming_readiness,
@@ -278,11 +273,7 @@ class ControlPlaneAxisContractsDomainMixin:
                 product_axis="oauth_account_providers",
                 auth_model="oauth_account",
                 runtime_path="generic openai-compatible harness",
-                contract_classification=(
-                    "bridge-only"
-                    if antigravity_status.configured or antigravity_status.probe_enabled or antigravity_status.harness_profile_enabled
-                    else "onboarding-only"
-                ),
+                contract_classification=("bridge-only" if antigravity_status.configured or antigravity_status.probe_enabled or antigravity_status.harness_profile_enabled else "onboarding-only"),
                 classification_reason="This target has no native runtime adapter in the current release truth and remains limited to bridge/profile operations.",
                 technical_requirements=[
                     "Credentials must be configured before probe or bridge sync can run.",
@@ -311,11 +302,7 @@ class ControlPlaneAxisContractsDomainMixin:
                 product_axis="oauth_account_providers",
                 auth_model="oauth_account",
                 runtime_path="generic openai-compatible harness",
-                contract_classification=(
-                    "bridge-only"
-                    if copilot_status.configured or copilot_status.probe_enabled or copilot_status.harness_profile_enabled
-                    else "onboarding-only"
-                ),
+                contract_classification=("bridge-only" if copilot_status.configured or copilot_status.probe_enabled or copilot_status.harness_profile_enabled else "onboarding-only"),
                 classification_reason="This target has no native runtime adapter in the current release truth and remains limited to bridge/profile operations.",
                 technical_requirements=[
                     "Credentials must be configured before probe or bridge sync can run.",
@@ -344,11 +331,7 @@ class ControlPlaneAxisContractsDomainMixin:
                 product_axis="oauth_account_providers",
                 auth_model="oauth_account",
                 runtime_path="generic openai-compatible harness",
-                contract_classification=(
-                    "bridge-only"
-                    if claude_code_status.configured or claude_code_status.probe_enabled or claude_code_status.harness_profile_enabled
-                    else "onboarding-only"
-                ),
+                contract_classification=("bridge-only" if claude_code_status.configured or claude_code_status.probe_enabled or claude_code_status.harness_profile_enabled else "onboarding-only"),
                 classification_reason="This target has no native runtime adapter in the current release truth and remains limited to bridge/profile operations.",
                 technical_requirements=[
                     "Credentials must be configured before probe or bridge sync can run.",
@@ -377,14 +360,8 @@ class ControlPlaneAxisContractsDomainMixin:
                 product_axis="oauth_account_providers",
                 auth_model="oauth_account + minted runtime agent key",
                 runtime_path="generic openai-compatible harness with separate runtime credential truth",
-                contract_classification=(
-                    "bridge-only"
-                    if nous_oauth_status.configured or nous_oauth_status.probe_enabled or nous_oauth_status.harness_profile_enabled
-                    else "onboarding-only"
-                ),
-                classification_reason=(
-                    "Nous keeps a separate account-token and runtime-agent-key truth, so this release only ships onboarding/bridge semantics."
-                ),
+                contract_classification=("bridge-only" if nous_oauth_status.configured or nous_oauth_status.probe_enabled or nous_oauth_status.harness_profile_enabled else "onboarding-only"),
+                classification_reason=("Nous keeps a separate account-token and runtime-agent-key truth, so this release only ships onboarding/bridge semantics."),
                 technical_requirements=[
                     "Portal/account token must be configured for onboarding and account truth.",
                     "A separate minted runtime agent key must exist before bridge/runtime proof can be trusted.",
@@ -412,14 +389,8 @@ class ControlPlaneAxisContractsDomainMixin:
                 product_axis="oauth_account_providers",
                 auth_model="oauth_account with mandatory QwenCode headers",
                 runtime_path="generic openai-compatible harness with portal-specific request headers",
-                contract_classification=(
-                    "bridge-only"
-                    if qwen_oauth_status.configured or qwen_oauth_status.probe_enabled or qwen_oauth_status.harness_profile_enabled
-                    else "onboarding-only"
-                ),
-                classification_reason=(
-                    "Qwen OAuth remains a portal-backed bridge target; required QwenCode/DashScope headers block any flat API-key interpretation."
-                ),
+                contract_classification=("bridge-only" if qwen_oauth_status.configured or qwen_oauth_status.probe_enabled or qwen_oauth_status.harness_profile_enabled else "onboarding-only"),
+                classification_reason=("Qwen OAuth remains a portal-backed bridge target; required QwenCode/DashScope headers block any flat API-key interpretation."),
                 technical_requirements=[
                     "Portal OAuth token must be configured before probe or profile sync can run.",
                     "Every bridge request must carry the required QwenCode/DashScope headers.",
@@ -500,17 +471,10 @@ class ControlPlaneAxisContractsDomainMixin:
                 verify_probe_axis="verify/probe via local endpoint profile",
                 observability_axis="provider/model/client integration errors",
                 ui_axis="provider contract table + harness profile template",
-                status_summary=(
-                    "Dedicated local runtime adapter and template are active."
-                    if ollama_status["ready"]
-                    else "Dedicated local axis with explicit template and control-plane lifecycle."
-                ),
+                status_summary=("Dedicated local runtime adapter and template are active." if ollama_status["ready"] else "Dedicated local axis with explicit template and control-plane lifecycle."),
                 notes="Dedicated Ollama axis is shipped as a first-class local contract with explicit runtime truth.",
             ),
-            *[
-                self._local_provider_target(provider_key, tenant_id=effective_tenant_id)
-                for provider_key in _LOCAL_EXACT_PROVIDER_KEYS
-            ],
+            *[self._local_provider_target(provider_key, tenant_id=effective_tenant_id) for provider_key in _LOCAL_EXACT_PROVIDER_KEYS],
             ProductAxisTarget(
                 provider_key="openai_client_compat",
                 provider_type="openai_compatible",

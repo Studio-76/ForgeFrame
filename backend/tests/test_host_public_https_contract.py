@@ -1,13 +1,13 @@
 from pathlib import Path
+from typing import Any
 
 from app.settings.config import Settings
-
 
 ROOT = Path(__file__).resolve().parents[2]
 
 
 def _file_backend_settings(**overrides: object) -> Settings:
-    defaults: dict[str, object] = {
+    defaults: dict[str, Any] = {
         "bootstrap_admin_password": "ForgeFrame-Test-Admin-Secret-123",
         "harness_storage_backend": "file",
         "control_plane_storage_backend": "file",
@@ -88,7 +88,7 @@ def test_guided_host_install_driver_collects_login_inputs_and_reassigns_non_publ
     assert "setup_20.x" in install_script
     assert "pg_createcluster" in install_script
     assert "except ValueError" in install_script
-    assert "default_pg_port=\"5432\"" in install_script
+    assert 'default_pg_port="5432"' in install_script
     assert "npm ci" in install_script
     assert "npm install" in install_script
     assert "start_guided_runtime_services" in install_script
@@ -101,7 +101,7 @@ def test_guided_host_install_driver_collects_login_inputs_and_reassigns_non_publ
 def test_host_smoke_defaults_to_public_https_origin_and_same_origin_checks() -> None:
     host_smoke_script = (ROOT / "scripts" / "host-smoke.sh").read_text(encoding="utf-8")
 
-    assert 'printf \'https://%s\\n\' "$FORGEFRAME_PUBLIC_FQDN"' in host_smoke_script
+    assert "printf 'https://%s\\n' \"$FORGEFRAME_PUBLIC_FQDN\"" in host_smoke_script
     assert "Normative host smoke requires FORGEFRAME_PUBLIC_TLS_MODE=integrated_acme" in host_smoke_script
     assert 'ROOT_URL="${BASE_URL}/"' in host_smoke_script
     assert 'MODELS_URL="${BASE_URL}/v1/models"' in host_smoke_script

@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from pathlib import Path
-import re
+from typing import Any
 
 from sqlalchemy import text
 from sqlalchemy.engine import make_url
@@ -130,9 +131,7 @@ def _simple_index_target(statement: str) -> SimpleIndexTarget | None:
     )
 
 
-def _missing_index_prerequisites(
-    connection, statement: str
-) -> tuple[SimpleIndexTarget, tuple[str, ...]] | None:
+def _missing_index_prerequisites(connection, statement: str) -> tuple[SimpleIndexTarget, tuple[str, ...]] | None:
     target = _simple_index_target(statement)
     if target is None:
         return None
@@ -142,11 +141,7 @@ def _missing_index_prerequisites(
     ).scalar_one()
     if relation_exists is None:
         return target, ()
-    schema_clause = (
-        "table_schema = :schema_name"
-        if target.schema_name is not None
-        else "table_schema = current_schema()"
-    )
+    schema_clause = "table_schema = :schema_name" if target.schema_name is not None else "table_schema = current_schema()"
     rows = connection.execute(
         text(
             f"""
@@ -164,11 +159,7 @@ def _missing_index_prerequisites(
         else {"table_name": target.table_name},
     )
     existing_columns = {row[0] for row in rows}
-    missing_columns = tuple(
-        column_name
-        for column_name in target.column_names
-        if column_name not in existing_columns
-    )
+    missing_columns = tuple(column_name for column_name in target.column_names if column_name not in existing_columns)
     if missing_columns:
         return target, missing_columns
     return None
@@ -183,10 +174,7 @@ def list_storage_migrations() -> list[StorageMigration]:
         version = int(version_text)
         existing_path = seen_versions.get(version)
         if existing_path is not None:
-            raise ValueError(
-                "Duplicate storage migration version "
-                f"{version:04d}: {existing_path.name} and {path.name}"
-            )
+            raise ValueError(f"Duplicate storage migration version {version:04d}: {existing_path.name} and {path.name}")
         seen_versions[version] = path
         migrations.append(
             StorageMigration(
@@ -201,7 +189,10 @@ def list_storage_migrations() -> list[StorageMigration]:
 def storage_postgres_targets(settings: Settings) -> list[str]:
     targets: list[str] = []
     for enabled, database_url in [
-        (settings.harness_storage_backend == "postgresql", settings.harness_postgres_url.strip()),
+        (
+            settings.harness_storage_backend == "postgresql",
+            settings.harness_postgres_url.strip(),
+        ),
         (
             settings.control_plane_storage_backend == "postgresql",
             settings.control_plane_postgres_url.strip() or settings.harness_postgres_url.strip(),
@@ -216,9 +207,7 @@ def storage_postgres_targets(settings: Settings) -> list[str]:
         ),
         (
             settings.instances_storage_backend == "postgresql",
-            settings.instances_postgres_url.strip()
-            or settings.governance_postgres_url.strip()
-            or settings.harness_postgres_url.strip(),
+            settings.instances_postgres_url.strip() or settings.governance_postgres_url.strip() or settings.harness_postgres_url.strip(),
         ),
         (
             bool(settings.execution_postgres_url.strip()),
@@ -232,7 +221,7 @@ def storage_postgres_targets(settings: Settings) -> list[str]:
     return targets
 
 
-def apply_storage_migrations(database_url: str) -> dict[str, object]:
+def apply_storage_migrations(database_url: str) -> dict[str, Any]:
     engine = build_postgres_engine(database_url)
     migrations = list_storage_migrations()
     applied_versions: list[int] = []
@@ -253,41 +242,21 @@ def apply_storage_migrations(database_url: str) -> dict[str, object]:
             )
         existing_versions: set[int] = set()
         for migration_table in _MIGRATION_TABLES:
-            existing_versions.update(
-                int(row[0])
-                for row in connection.execute(
-                    text(f"SELECT version FROM {migration_table} ORDER BY version ASC")
-                )
-            )
+            existing_versions.update(int(row[0]) for row in connection.execute(text(f"SELECT version FROM {migration_table} ORDER BY version ASC")))
         for migration in migrations:
             if migration.version in existing_versions:
                 skipped_versions.append(migration.version)
                 continue
             sql = migration.path.read_text(encoding="utf-8")
-            statements = [
-                statement.strip()
-                for statement in sql.split(";")
-                if statement.strip()
-            ]
+            statements = [statement.strip() for statement in sql.split(";") if statement.strip()]
             for statement in statements:
-                missing_prerequisites = _missing_index_prerequisites(
-                    connection, statement
-                )
+                missing_prerequisites = _missing_index_prerequisites(connection, statement)
                 if missing_prerequisites is not None:
                     target, missing_columns = missing_prerequisites
                     if missing_columns:
                         missing_columns_text = ", ".join(missing_columns)
-                        raise ValueError(
-                            "Storage migration "
-                            f"{migration.version:04d}_{migration.name} cannot "
-                            f"apply index on {target.relation_name}: missing "
-                            f"required columns {missing_columns_text}"
-                        )
-                    raise ValueError(
-                        "Storage migration "
-                        f"{migration.version:04d}_{migration.name} cannot apply "
-                        f"index on missing relation {target.relation_name}"
-                    )
+                        raise ValueError(f"Storage migration {migration.version:04d}_{migration.name} cannot apply index on {target.relation_name}: missing required columns {missing_columns_text}")
+                    raise ValueError(f"Storage migration {migration.version:04d}_{migration.name} cannot apply index on missing relation {target.relation_name}")
                 connection.exec_driver_sql(statement)
             for migration_table in _MIGRATION_TABLES:
                 connection.execute(

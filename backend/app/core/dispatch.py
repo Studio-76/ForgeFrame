@@ -1,6 +1,7 @@
 """Runtime dispatch service tying routing and provider adapters together."""
 
 from collections.abc import Iterator
+from typing import Any
 
 from app.core.message_features import messages_require_vision
 from app.core.routing import RouteDecision, RoutingNoCandidateError, RoutingService
@@ -37,7 +38,7 @@ class DispatchService:
         tool_choice: str | dict | None = None,
         allowed_providers: set[str] | None = None,
         request_metadata: dict[str, str] | None = None,
-        response_controls: dict[str, object] | None = None,
+        response_controls: dict[str, Any] | None = None,
     ) -> tuple[ChatDispatchResult, RouteDecision]:
         validate_tools_and_choice(tools, tool_choice)
         scoped_instance_id = self._scoped_instance_id(request_metadata)
@@ -54,9 +55,7 @@ class DispatchService:
                 response_controls=response_controls,
             )
         except RuntimeError as exc:
-            if require_vision and (
-                isinstance(exc, RoutingNoCandidateError) or str(exc) == "No active models satisfy current routing requirements."
-            ):
+            if require_vision and (isinstance(exc, RoutingNoCandidateError) or str(exc) == "No active models satisfy current routing requirements."):
                 raise ProviderUnsupportedFeatureError("runtime", "vision") from exc
             raise
         adapter = self._providers.get(decision.resolved_model.provider)
@@ -150,7 +149,7 @@ class DispatchService:
         tool_choice: str | dict | None = None,
         allowed_providers: set[str] | None = None,
         request_metadata: dict[str, str] | None = None,
-        response_controls: dict[str, object] | None = None,
+        response_controls: dict[str, Any] | None = None,
     ) -> tuple[str, str, Iterator[ProviderStreamEvent], RouteDecision]:
         validate_tools_and_choice(tools, tool_choice)
         scoped_instance_id = self._scoped_instance_id(request_metadata)
@@ -167,9 +166,7 @@ class DispatchService:
                 response_controls=response_controls,
             )
         except RuntimeError as exc:
-            if require_vision and (
-                isinstance(exc, RoutingNoCandidateError) or str(exc) == "No active models satisfy current routing requirements."
-            ):
+            if require_vision and (isinstance(exc, RoutingNoCandidateError) or str(exc) == "No active models satisfy current routing requirements."):
                 raise ProviderUnsupportedFeatureError("runtime", "vision") from exc
             raise
         adapter = self._providers.get(decision.resolved_model.provider)

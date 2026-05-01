@@ -5,7 +5,17 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import Any
 
-from sqlalchemy import JSON, Boolean, CheckConstraint, DateTime, ForeignKey, Index, Integer, String, Text
+from sqlalchemy import (
+    JSON,
+    Boolean,
+    CheckConstraint,
+    DateTime,
+    ForeignKey,
+    Index,
+    Integer,
+    String,
+    Text,
+)
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -31,10 +41,25 @@ class RecoveryBackupPolicyORM(Base):
     __tablename__ = "recovery_backup_policies"
     __table_args__ = (
         _enum_check("recovery_backup_policy_status_ck", "status", RECOVERY_POLICY_STATUSES),
-        _enum_check("recovery_backup_policy_target_class_ck", "target_class", BACKUP_TARGET_CLASSES),
-        CheckConstraint("max_backup_age_hours >= 1", name="recovery_backup_policy_max_backup_age_hours_ck"),
-        CheckConstraint("max_restore_age_hours >= 1", name="recovery_backup_policy_max_restore_age_hours_ck"),
-        Index("recovery_backup_policy_target_class_idx", "target_class", "status", "updated_at"),
+        _enum_check(
+            "recovery_backup_policy_target_class_ck",
+            "target_class",
+            BACKUP_TARGET_CLASSES,
+        ),
+        CheckConstraint(
+            "max_backup_age_hours >= 1",
+            name="recovery_backup_policy_max_backup_age_hours_ck",
+        ),
+        CheckConstraint(
+            "max_restore_age_hours >= 1",
+            name="recovery_backup_policy_max_restore_age_hours_ck",
+        ),
+        Index(
+            "recovery_backup_policy_target_class_idx",
+            "target_class",
+            "status",
+            "updated_at",
+        ),
     )
 
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
@@ -175,7 +200,11 @@ class RecoveryUpgradeReportORM(Base):
     __tablename__ = "recovery_upgrade_reports"
     __table_args__ = (
         _enum_check("recovery_upgrade_report_status_ck", "status", RECOVERY_REPORT_STATUSES),
-        _enum_check("recovery_upgrade_report_result_ck", "upgrade_result", RECOVERY_UPGRADE_RESULTS),
+        _enum_check(
+            "recovery_upgrade_report_result_ck",
+            "upgrade_result",
+            RECOVERY_UPGRADE_RESULTS,
+        ),
         Index("recovery_upgrade_report_created_idx", "created_at", "imported_at"),
         Index("recovery_upgrade_report_release_idx", "release_id", "created_at"),
     )

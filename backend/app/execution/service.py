@@ -3,10 +3,10 @@
 from __future__ import annotations
 
 import hashlib
-from time import monotonic, sleep
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
-from typing import Any, Callable
+from time import monotonic, sleep
+from typing import Any, Callable, cast
 from uuid import uuid4
 
 from sqlalchemy import Select, select, update
@@ -23,12 +23,24 @@ from app.storage.execution_repository import (
 
 SessionFactory = Callable[[], Session]
 
-_TERMINAL_RUN_STATES = {"succeeded", "failed", "cancelled", "timed_out", "compensated", "dead_lettered"}
+_TERMINAL_RUN_STATES = {
+    "succeeded",
+    "failed",
+    "cancelled",
+    "timed_out",
+    "compensated",
+    "dead_lettered",
+}
 _CLAIMABLE_ATTEMPT_STATES = {"queued", "retry_backoff"}
 _RETRYABLE_RUN_STATES = {"failed", "timed_out", "compensated", "dead_lettered"}
 _TERMINAL_OPERATOR_STATES = {"completed", "quarantined", "failed"}
 _CLAIMABLE_OPERATOR_STATES = {"admitted", "retry_scheduled"}
-_IN_FLIGHT_ATTEMPT_STATES = {"dispatching", "executing", "cancel_requested", "compensating"}
+_IN_FLIGHT_ATTEMPT_STATES = {
+    "dispatching",
+    "executing",
+    "cancel_requested",
+    "compensating",
+}
 
 
 class ExecutionTransitionError(RuntimeError):
@@ -161,6 +173,15 @@ class ExecutionTransitionService:
         return now.astimezone(UTC)
 
     @staticmethod
+    def _coerce_utc(value: datetime | None) -> datetime | None:
+        """Normalize persisted datetimes to timezone-aware UTC values."""
+        if value is None:
+            return None
+        if value.tzinfo is None:
+            return value.replace(tzinfo=UTC)
+        return value.astimezone(UTC)
+
+    @staticmethod
     def _new_id(prefix: str) -> str:
         return f"{prefix}_{uuid4().hex}"
 
@@ -207,11 +228,19 @@ class ExecutionTransitionService:
             attempt = session.get(RunAttemptORM, run.current_attempt_id)
             if attempt and attempt.company_id == run.company_id:
                 return attempt
-        attempt = session.execute(
-            select(RunAttemptORM)
-            .where(RunAttemptORM.company_id == run.company_id, RunAttemptORM.run_id == run.id)
-            .order_by(RunAttemptORM.attempt_no.desc())
-        ).scalars().first()
+        attempt = (
+            session
+            .execute(
+                select(RunAttemptORM)
+                .where(
+                    RunAttemptORM.company_id == run.company_id,
+                    RunAttemptORM.run_id == run.id,
+                )
+                .order_by(RunAttemptORM.attempt_no.desc())
+            )
+            .scalars()
+            .first()
+        )
         if attempt is None:
             raise RunTransitionConflictError(f"Run '{run.id}' has no attempts to transition.")
         return attempt
@@ -226,15 +255,20 @@ class ExecutionTransitionService:
         actor_id: str,
         idempotency_key: str,
     ) -> RunCommandORM | None:
-        return session.execute(
-            select(RunCommandORM).where(
-                RunCommandORM.company_id == company_id,
-                RunCommandORM.command_type == command_type,
-                RunCommandORM.actor_type == actor_type,
-                RunCommandORM.actor_id == actor_id,
-                RunCommandORM.idempotency_key == idempotency_key,
+        return (
+            session
+            .execute(
+                select(RunCommandORM).where(
+                    RunCommandORM.company_id == company_id,
+                    RunCommandORM.command_type == command_type,
+                    RunCommandORM.actor_type == actor_type,
+                    RunCommandORM.actor_id == actor_id,
+                    RunCommandORM.idempotency_key == idempotency_key,
+                )
             )
-        ).scalars().first()
+            .scalars()
+            .first()
+        )
 
     @staticmethod
     def _find_command_or_raise_conflict(
@@ -289,9 +323,7 @@ class ExecutionTransitionService:
         command_type: str,
     ) -> RunCommandORM:
         if existing.request_fingerprint_hash != request_fingerprint_hash:
-            raise RunCommandIdempotencyConflictError(
-                f"Idempotency key '{idempotency_key}' was already used for a different {command_type} command."
-            )
+            raise RunCommandIdempotencyConflictError(f"Idempotency key '{idempotency_key}' was already used for a different {command_type} command.")
         return existing
 
     @staticmethod
@@ -376,7 +408,11 @@ class ExecutionTransitionService:
                 RunAttemptORM.operator_state.in_(_CLAIMABLE_OPERATOR_STATES),
                 RunAttemptORM.scheduled_at <= now,
             )
-            .order_by(RunAttemptORM.scheduled_at.asc(), RunAttemptORM.attempt_no.asc(), RunAttemptORM.created_at.asc())
+            .order_by(
+                RunAttemptORM.scheduled_at.asc(),
+                RunAttemptORM.attempt_no.asc(),
+                RunAttemptORM.created_at.asc(),
+            )
         )
         if execution_lane is not None:
             query = query.where(RunORM.execution_lane == execution_lane)
@@ -404,7 +440,13 @@ class ExecutionTransitionService:
         retry_after_seconds: int | None,
         jitter_ratio: float,
     ) -> int:
-        bounded_base = max(1, min(max_seconds, retry_after_seconds or base_seconds * (2 ** max(0, retry_count - 1))))
+        bounded_base = max(
+            1,
+            min(
+                max_seconds,
+                retry_after_seconds or base_seconds * (2 ** max(0, retry_count - 1)),
+            ),
+        )
         if jitter_ratio <= 0:
             return bounded_base
 
@@ -749,7 +791,7 @@ class ExecutionTransitionService:
                 updated_at=now,
             )
         )
-        if attempt_update.rowcount != 1:
+        if cast("Any", attempt_update).rowcount != 1:
             raise StaleWorkerClaimError(f"Attempt '{attempt_id}' is no longer claimable.")
 
         run_update = session.execute(
@@ -767,7 +809,7 @@ class ExecutionTransitionService:
                 updated_at=now,
             )
         )
-        if run_update.rowcount != 1:
+        if cast("Any", run_update).rowcount != 1:
             raise StaleWorkerClaimError(f"Run '{run_id}' changed while claiming attempt '{attempt_id}'.")
 
         refreshed_run = session.get(RunORM, run_id)
@@ -889,7 +931,10 @@ class ExecutionTransitionService:
                 raise RunTransitionConflictError(f"Attempt '{attempt_id}' does not belong to run '{run_id}'.")
             if run.current_attempt_id != attempt_id:
                 raise RunTransitionConflictError(f"Attempt '{attempt_id}' is not the active attempt for run '{run_id}'.")
-            if run.state not in {"dispatching", "executing"} or attempt.attempt_state not in {
+            if run.state not in {
+                "dispatching",
+                "executing",
+            } or attempt.attempt_state not in {
                 "dispatching",
                 "executing",
             }:
@@ -1443,12 +1488,17 @@ class ExecutionTransitionService:
             if existing is not None:
                 return self._command_result(existing, deduplicated=True)
 
-            approval_link = session.execute(
-                select(RunApprovalLinkORM).where(
-                    RunApprovalLinkORM.company_id == company_id,
-                    RunApprovalLinkORM.approval_id == approval_id,
+            approval_link = (
+                session
+                .execute(
+                    select(RunApprovalLinkORM).where(
+                        RunApprovalLinkORM.company_id == company_id,
+                        RunApprovalLinkORM.approval_id == approval_id,
+                    )
                 )
-            ).scalars().first()
+                .scalars()
+                .first()
+            )
             if approval_link is None:
                 raise RunTransitionConflictError(f"Approval '{approval_id}' is not linked to a run.")
             if approval_link.gate_status != "open":
@@ -1640,11 +1690,7 @@ class ExecutionTransitionService:
             run.state = "succeeded"
             run.operator_state = "completed"
             run.status_reason = None
-            run.result_summary = (
-                self._merge_result_summary(run.result_summary, **result_summary)
-                if result_summary
-                else run.result_summary
-            )
+            run.result_summary = self._merge_result_summary(run.result_summary, **result_summary) if result_summary else run.result_summary
             run.next_wakeup_at = None
             run.terminal_at = current_time
             run.current_step_key = None
@@ -1709,14 +1755,15 @@ class ExecutionTransitionService:
             run.operator_state = "paused"
             run.status_reason = pause_reason
             run.latest_command_id = command.id
+            next_wakeup_at = self._coerce_utc(run.next_wakeup_at)
             run.result_summary = self._merge_result_summary(
                 run.result_summary,
                 wake_gate=self._detail_payload(
                     claim_allowed=False,
                     paused_at=current_time,
                     pause_reason=pause_reason,
-                    spurious_wake_blocked=bool(run.next_wakeup_at and run.next_wakeup_at > current_time),
-                    next_wakeup_at=run.next_wakeup_at,
+                    spurious_wake_blocked=bool(next_wakeup_at and next_wakeup_at > current_time),
+                    next_wakeup_at=next_wakeup_at,
                 ),
                 dispatch=self._detail_payload(
                     stage="paused",
@@ -1779,9 +1826,8 @@ class ExecutionTransitionService:
                 raise RunTransitionConflictError("Runs waiting on approval cannot be resumed outside the approval flow.")
 
             attempt = self._current_attempt(session, run)
-            spurious_wake_blocked = bool(
-                run.state == "retry_backoff" and run.next_wakeup_at is not None and run.next_wakeup_at > current_time
-            )
+            next_wakeup_at = self._coerce_utc(run.next_wakeup_at)
+            spurious_wake_blocked = bool(run.state == "retry_backoff" and next_wakeup_at is not None and next_wakeup_at > current_time)
             operator_state = "retry_scheduled" if spurious_wake_blocked else self._operator_state_for_resume(run.state)
 
             command = RunCommandORM(
@@ -1811,7 +1857,7 @@ class ExecutionTransitionService:
                 wake_gate=self._detail_payload(
                     claim_allowed=not spurious_wake_blocked,
                     spurious_wake_blocked=spurious_wake_blocked,
-                    next_wakeup_at=run.next_wakeup_at,
+                    next_wakeup_at=next_wakeup_at,
                     resumed_at=current_time,
                     resume_reason=resume_reason or None,
                 ),
@@ -2254,20 +2300,25 @@ class ExecutionTransitionService:
         current_time = self._now(now)
         results: list[LeaseReconcileResult] = []
         with self._session_factory() as session, session.begin():
-            attempts = session.execute(
-                select(RunAttemptORM)
-                .join(
-                    RunORM,
-                    (RunORM.company_id == RunAttemptORM.company_id) & (RunORM.id == RunAttemptORM.run_id),
+            attempts = (
+                session
+                .execute(
+                    select(RunAttemptORM)
+                    .join(
+                        RunORM,
+                        (RunORM.company_id == RunAttemptORM.company_id) & (RunORM.id == RunAttemptORM.run_id),
+                    )
+                    .where(
+                        RunAttemptORM.company_id == company_id,
+                        RunAttemptORM.lease_status == "leased",
+                        RunAttemptORM.attempt_state.in_(_IN_FLIGHT_ATTEMPT_STATES),
+                        RunAttemptORM.lease_expires_at.is_not(None),
+                        RunAttemptORM.lease_expires_at < current_time,
+                    )
                 )
-                .where(
-                    RunAttemptORM.company_id == company_id,
-                    RunAttemptORM.lease_status == "leased",
-                    RunAttemptORM.attempt_state.in_(_IN_FLIGHT_ATTEMPT_STATES),
-                    RunAttemptORM.lease_expires_at.is_not(None),
-                    RunAttemptORM.lease_expires_at < current_time,
-                )
-            ).scalars().all()
+                .scalars()
+                .all()
+            )
 
             for attempt in attempts:
                 run = session.get(RunORM, attempt.run_id)

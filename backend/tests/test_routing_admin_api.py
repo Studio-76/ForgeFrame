@@ -1,14 +1,12 @@
-import os
-
+from conftest import admin_headers as shared_admin_headers
 from fastapi.testclient import TestClient
 
-from conftest import admin_headers as shared_admin_headers
 from app.api.admin.control_plane import get_control_plane_service
 from app.api.runtime.dependencies import clear_runtime_dependency_caches
 from app.instances.service import clear_instance_service_cache
+from app.main import app
 from app.readiness import reset_runtime_readiness_state
 from app.settings.config import get_settings
-from app.main import app
 
 
 def _client() -> TestClient:
@@ -46,13 +44,12 @@ def test_routing_snapshot_and_policy_state_persist_across_reload(monkeypatch) ->
     assert initial.status_code == 200
     payload = initial.json()
     assert payload["object"] == "routing_control_plane"
-    assert {policy["classification"] for policy in payload["policies"]} == {"simple", "non_simple"}
+    assert {policy["classification"] for policy in payload["policies"]} == {
+        "simple",
+        "non_simple",
+    }
 
-    baseline_target = next(
-        target["target_key"]
-        for target in payload["targets"]
-        if target["provider"] == "forgeframe_baseline"
-    )
+    baseline_target = next(target["target_key"] for target in payload["targets"] if target["provider"] == "forgeframe_baseline")
 
     policy_update = client.patch(
         "/admin/routing/policies/simple",
@@ -117,7 +114,9 @@ def test_routing_snapshot_and_policy_state_persist_across_reload(monkeypatch) ->
     assert refreshed["summary"]["open_circuits"] >= 1
 
 
-def test_routing_simulation_returns_non_simple_explainability_for_tool_requests(monkeypatch) -> None:
+def test_routing_simulation_returns_non_simple_explainability_for_tool_requests(
+    monkeypatch,
+) -> None:
     _configure_fast_routing_test_env(monkeypatch)
     client = _client()
     headers = _admin_headers(client)
@@ -143,7 +142,9 @@ def test_routing_simulation_returns_non_simple_explainability_for_tool_requests(
     assert any(candidate["selected"] for candidate in decision["candidates"])
 
 
-def test_routing_simulation_honors_provider_scope_and_route_context(monkeypatch) -> None:
+def test_routing_simulation_honors_provider_scope_and_route_context(
+    monkeypatch,
+) -> None:
     _configure_fast_routing_test_env(monkeypatch)
     client = _client()
     headers = _admin_headers(client)
@@ -173,7 +174,9 @@ def test_routing_simulation_honors_provider_scope_and_route_context(monkeypatch)
     assert selection_basis["route_context"]["agent_id"] == "assistant-alpha"
 
 
-def test_routing_simulation_returns_typed_error_for_unknown_requested_model(monkeypatch) -> None:
+def test_routing_simulation_returns_typed_error_for_unknown_requested_model(
+    monkeypatch,
+) -> None:
     _configure_fast_routing_test_env(monkeypatch)
     client = _client()
     headers = _admin_headers(client)
@@ -190,7 +193,9 @@ def test_routing_simulation_returns_typed_error_for_unknown_requested_model(monk
     assert "Unknown or inactive model" in payload["error"]["message"]
 
 
-def test_routing_simulation_surfaces_budget_block_with_admin_decision_ledger(monkeypatch) -> None:
+def test_routing_simulation_surfaces_budget_block_with_admin_decision_ledger(
+    monkeypatch,
+) -> None:
     _configure_fast_routing_test_env(monkeypatch)
     client = _client()
     headers = _admin_headers(client)

@@ -1,9 +1,10 @@
 import os
+from typing import Any
 
 import pytest
+from conftest import admin_headers as shared_admin_headers
 from fastapi.testclient import TestClient
 
-from conftest import admin_headers as shared_admin_headers
 from app.approvals.models import build_elevated_access_approval_id
 from app.main import app
 
@@ -17,7 +18,7 @@ def _assert_idempotency_not_supported(
     *,
     method: str,
     path: str,
-    json: dict[str, object] | None = None,
+    json: dict[str, Any] | None = None,
     headers: dict[str, str] | None = None,
 ) -> None:
     request_headers = {"Idempotency-Key": f"idem_boundary_{method}_{path.replace('/', '_')}"}
@@ -58,21 +59,45 @@ def test_admin_auth_mutations_reject_idempotency_key() -> None:
 @pytest.mark.parametrize(
     ("method", "path", "payload"),
     [
-        ("post", "/admin/accounts/", {"label": "Boundary Account", "provider_bindings": ["openai_api"], "notes": "boundary"}),
-        ("patch", "/admin/accounts/account_boundary", {"label": "Boundary Account Updated"}),
-        ("post", "/admin/keys/", {"label": "Boundary Key", "account_id": "account_boundary", "scopes": ["models:read"]}),
+        (
+            "post",
+            "/admin/accounts/",
+            {
+                "label": "Boundary Account",
+                "provider_bindings": ["openai_api"],
+                "notes": "boundary",
+            },
+        ),
+        (
+            "patch",
+            "/admin/accounts/account_boundary",
+            {"label": "Boundary Account Updated"},
+        ),
+        (
+            "post",
+            "/admin/keys/",
+            {
+                "label": "Boundary Key",
+                "account_id": "account_boundary",
+                "scopes": ["models:read"],
+            },
+        ),
         ("post", "/admin/keys/key_boundary/rotate", None),
         ("post", "/admin/keys/key_boundary/disable", None),
         ("post", "/admin/keys/key_boundary/activate", None),
         ("post", "/admin/keys/key_boundary/revoke", None),
-        ("patch", "/admin/settings/", {"updates": {"default_model": "forgeframe-baseline-chat-v1"}}),
+        (
+            "patch",
+            "/admin/settings/",
+            {"updates": {"default_model": "forgeframe-baseline-chat-v1"}},
+        ),
         ("delete", "/admin/settings/runtime_auth_required", None),
     ],
 )
 def test_account_key_and_settings_mutations_reject_idempotency_key(
     method: str,
     path: str,
-    payload: dict[str, object] | None,
+    payload: dict[str, Any] | None,
 ) -> None:
     client = TestClient(app)
     _assert_idempotency_not_supported(
@@ -87,49 +112,85 @@ def test_account_key_and_settings_mutations_reject_idempotency_key(
 @pytest.mark.parametrize(
     ("method", "path", "payload"),
     [
-        ("post", "/admin/security/users", {
-            "username": "boundary-user",
-            "display_name": "Boundary User",
-            "role": "operator",
-            "password": "Boundary-User-123",
-        }),
+        (
+            "post",
+            "/admin/security/users",
+            {
+                "username": "boundary-user",
+                "display_name": "Boundary User",
+                "role": "operator",
+                "password": "Boundary-User-123",
+            },
+        ),
         ("patch", "/admin/security/users/user_boundary", {"status": "disabled"}),
-        ("post", "/admin/security/users/user_boundary/rotate-password", {"new_password": "Boundary-User-456"}),
+        (
+            "post",
+            "/admin/security/users/user_boundary/rotate-password",
+            {"new_password": "Boundary-User-456"},
+        ),
         ("post", "/admin/security/sessions/session_boundary/revoke", None),
-        ("post", "/admin/security/secret-rotations", {
-            "target_type": "provider",
-            "target_id": "openai_api",
-            "kind": "manual_rotation",
-            "reference": "INC-BOUNDARY",
-            "notes": "boundary",
-        }),
-        ("post", "/admin/security/impersonations", {
-            "target_user_id": "user_boundary",
-            "approval_reference": "INC-BOUNDARY-IMPERSONATION",
-            "justification": "Boundary test for idempotency rejection.",
-            "notification_targets": ["slack://security-boundary"],
-            "duration_minutes": 15,
-        }),
-        ("post", "/admin/security/break-glass", {
-            "approval_reference": "INC-BOUNDARY-BREAKGLASS",
-            "justification": "Boundary test for break-glass idempotency rejection.",
-            "notification_targets": ["slack://security-boundary"],
-            "duration_minutes": 15,
-        }),
-        ("post", "/admin/security/elevated-access-requests/request_boundary/approve", {
-            "decision_note": "Approved for idempotency-boundary test coverage.",
-        }),
-        ("post", "/admin/security/elevated-access-requests/request_boundary/reject", {
-            "decision_note": "Rejected for idempotency-boundary test coverage.",
-        }),
-        ("post", "/admin/security/elevated-access-requests/request_boundary/cancel", None),
-        ("post", "/admin/security/elevated-access-requests/request_boundary/issue", None),
+        (
+            "post",
+            "/admin/security/secret-rotations",
+            {
+                "target_type": "provider",
+                "target_id": "openai_api",
+                "kind": "manual_rotation",
+                "reference": "INC-BOUNDARY",
+                "notes": "boundary",
+            },
+        ),
+        (
+            "post",
+            "/admin/security/impersonations",
+            {
+                "target_user_id": "user_boundary",
+                "approval_reference": "INC-BOUNDARY-IMPERSONATION",
+                "justification": "Boundary test for idempotency rejection.",
+                "notification_targets": ["slack://security-boundary"],
+                "duration_minutes": 15,
+            },
+        ),
+        (
+            "post",
+            "/admin/security/break-glass",
+            {
+                "approval_reference": "INC-BOUNDARY-BREAKGLASS",
+                "justification": "Boundary test for break-glass idempotency rejection.",
+                "notification_targets": ["slack://security-boundary"],
+                "duration_minutes": 15,
+            },
+        ),
+        (
+            "post",
+            "/admin/security/elevated-access-requests/request_boundary/approve",
+            {
+                "decision_note": "Approved for idempotency-boundary test coverage.",
+            },
+        ),
+        (
+            "post",
+            "/admin/security/elevated-access-requests/request_boundary/reject",
+            {
+                "decision_note": "Rejected for idempotency-boundary test coverage.",
+            },
+        ),
+        (
+            "post",
+            "/admin/security/elevated-access-requests/request_boundary/cancel",
+            None,
+        ),
+        (
+            "post",
+            "/admin/security/elevated-access-requests/request_boundary/issue",
+            None,
+        ),
     ],
 )
 def test_security_mutations_reject_idempotency_key(
     method: str,
     path: str,
-    payload: dict[str, object] | None,
+    payload: dict[str, Any] | None,
 ) -> None:
     client = TestClient(app)
     _assert_idempotency_not_supported(
@@ -142,7 +203,9 @@ def test_security_mutations_reject_idempotency_key(
 
 
 @pytest.mark.parametrize("decision", ["approve", "reject"])
-def test_shared_elevated_access_approval_decisions_reject_idempotency_key(decision: str) -> None:
+def test_shared_elevated_access_approval_decisions_reject_idempotency_key(
+    decision: str,
+) -> None:
     client = TestClient(app)
     approval_id = build_elevated_access_approval_id("request_boundary")
     _assert_idempotency_not_supported(

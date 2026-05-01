@@ -17,7 +17,10 @@ router = APIRouter(prefix="/contacts", tags=["admin-contacts"])
 
 
 def _error(status_code: int, error_type: str, message: str) -> JSONResponse:
-    return JSONResponse(status_code=status_code, content={"error": {"type": error_type, "message": message}})
+    return JSONResponse(
+        status_code=status_code,
+        content={"error": {"type": error_type, "message": message}},
+    )
 
 
 @router.get("")
@@ -29,7 +32,11 @@ def list_contacts(
     service: KnowledgeContextAdminService = Depends(get_knowledge_context_admin_service),
 ) -> dict[str, object]:
     contacts = service.list_contacts(instance=instance, actor=admin, status=status_filter, limit=limit)
-    return {"status": "ok", "instance": instance.model_dump(mode="json"), "contacts": [item.model_dump(mode="json") for item in contacts]}
+    return {
+        "status": "ok",
+        "instance": instance.model_dump(mode="json"),
+        "contacts": [item.model_dump(mode="json") for item in contacts],
+    }
 
 
 @router.get("/{contact_id}")
@@ -77,4 +84,3 @@ def update_contact(
         code = status.HTTP_404_NOT_FOUND if error_type == "contact_not_found" else status.HTTP_409_CONFLICT
         return _error(code, error_type, str(exc))
     return {"status": "ok", "contact": contact.model_dump(mode="json")}
-

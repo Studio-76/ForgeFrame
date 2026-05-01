@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from typing import Any
 from uuid import uuid4
 
 from app.providers import ChatDispatchResult
@@ -22,7 +23,7 @@ def build_chat_completion_payload(
     *,
     completion_id: str | None = None,
     created: int | None = None,
-) -> dict[str, object]:
+) -> dict[str, Any]:
     return {
         "id": completion_id or new_chat_completion_id(),
         "object": "chat.completion",
@@ -44,7 +45,7 @@ def build_chat_completion_payload(
     }
 
 
-def build_responses_output_items(result: ChatDispatchResult) -> list[dict[str, object]]:
+def build_responses_output_items(result: ChatDispatchResult) -> list[dict[str, Any]]:
     output_items, _output_text = build_response_output_items(
         text=result.content,
         tool_calls=result.tool_calls,
@@ -52,7 +53,12 @@ def build_responses_output_items(result: ChatDispatchResult) -> list[dict[str, o
     return output_items
 
 
-def build_responses_payload(result: ChatDispatchResult, *, response_id: str | None = None, status: str = "completed") -> dict[str, object]:
+def build_responses_payload(
+    result: ChatDispatchResult,
+    *,
+    response_id: str | None = None,
+    status: str = "completed",
+) -> dict[str, Any]:
     output_items, output_text = build_response_output_items(
         text=result.content,
         tool_calls=result.tool_calls,
@@ -60,7 +66,7 @@ def build_responses_payload(result: ChatDispatchResult, *, response_id: str | No
     return build_response_object(
         response_id=response_id or f"resp_{uuid4().hex}",
         created_at=int(datetime.now(tz=UTC).timestamp()),
-        status=status,  # type: ignore[arg-type]
+        status=status,
         background=False,
         model=result.model,
         output=output_items,

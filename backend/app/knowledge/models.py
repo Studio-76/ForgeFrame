@@ -7,7 +7,6 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
-
 CONTACT_STATUSES = ("active", "snoozed", "archived")
 ContactStatus = Literal["active", "snoozed", "archived"]
 
@@ -35,10 +34,22 @@ MemoryStatus = Literal["active", "corrected", "deleted"]
 MEMORY_SENSITIVITIES = ("normal", "sensitive", "restricted")
 MemorySensitivity = Literal["normal", "sensitive", "restricted"]
 
-MEMORY_TRUTH_STATES = ("active", "corrected", "revoked", "superseded", "expired", "deleted")
+MEMORY_TRUTH_STATES = (
+    "active",
+    "corrected",
+    "revoked",
+    "superseded",
+    "expired",
+    "deleted",
+)
 MemoryTruthState = Literal["active", "corrected", "revoked", "superseded", "expired", "deleted"]
 
-MEMORY_SOURCE_TRUST_CLASSES = ("human_verified", "operator_verified", "runtime_inferred", "external_unverified")
+MEMORY_SOURCE_TRUST_CLASSES = (
+    "human_verified",
+    "operator_verified",
+    "runtime_inferred",
+    "external_unverified",
+)
 MemorySourceTrustClass = Literal["human_verified", "operator_verified", "runtime_inferred", "external_unverified"]
 
 MEMORY_LAYERS = ("durable", "boot", "working")

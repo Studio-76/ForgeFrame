@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Literal
+from typing import Any, Literal, TypeAlias, cast
 
 from pydantic import BaseModel, Field
 
@@ -35,10 +35,15 @@ KeyStatus = Literal["active", "disabled", "revoked"]
 AuditStatus = Literal["ok", "warning", "failed"]
 AdminSessionType = Literal["standard", "impersonation", "break_glass"]
 ElevatedAccessRequestType = Literal["impersonation", "break_glass"]
-ElevatedAccessGateStatus = ApprovalStatus
+ElevatedAccessGateStatus: TypeAlias = ApprovalStatus
 ElevatedAccessIssuanceStatus = Literal["pending", "issued"]
 SecretRotationTargetType = Literal["provider", "harness_profile"]
-SecretRotationKind = Literal["manual_env_rotation", "oauth_token_rotation", "api_key_rotation", "harness_profile_rotation"]
+SecretRotationKind = Literal[
+    "manual_env_rotation",
+    "oauth_token_rotation",
+    "api_key_rotation",
+    "harness_profile_rotation",
+]
 RuntimeRequestPathType = Literal[
     "smart_routing",
     "pinned_target",
@@ -186,7 +191,7 @@ class RuntimeKeyRecord(BaseModel):
     revoked_at: str | None = None
     revoked_reason: str | None = None
     created_by: str | None = None
-    allowed_request_paths: list[RuntimeRequestPathType] = Field(default_factory=lambda: ["smart_routing"])
+    allowed_request_paths: list[RuntimeRequestPathType] = Field(default_factory=lambda: cast(list[RuntimeRequestPathType], ["smart_routing"]))
     default_request_path: RuntimeRequestPathType = "smart_routing"
     pinned_target_key: str | None = None
     local_only_policy: LocalOnlyPolicy = "require_local_target"

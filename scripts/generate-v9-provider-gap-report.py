@@ -40,7 +40,9 @@ from fastapi.testclient import TestClient
 
 def _build_settings() -> Settings:
     return Settings(
-        bootstrap_admin_password=os.getenv("FORGEFRAME_BOOTSTRAP_ADMIN_PASSWORD", "report-bootstrap"),
+        bootstrap_admin_password=os.getenv(
+            "FORGEFRAME_BOOTSTRAP_ADMIN_PASSWORD", "report-bootstrap"
+        ),
         harness_storage_backend="file",
         control_plane_storage_backend="file",
         observability_storage_backend="file",
@@ -60,7 +62,9 @@ def _build_service(settings: Settings) -> ControlPlaneService:
             )
         )
     )
-    instance_service = InstanceService(settings, repository=get_instance_repository(settings))
+    instance_service = InstanceService(
+        settings, repository=get_instance_repository(settings)
+    )
     instance = instance_service.resolve_instance(allow_default=True)
     registry = ModelRegistry(settings, instance_id=instance.instance_id)
     providers = ProviderRegistry(settings, harness_service=harness)
@@ -112,26 +116,44 @@ def _seed_local_compatibility_evidence() -> list[str]:
             rotate = client.post(
                 "/admin/auth/rotate-password",
                 headers=headers,
-                json={"current_password": active_password, "new_password": rotated_password},
+                json={
+                    "current_password": active_password,
+                    "new_password": rotated_password,
+                },
             )
             if rotate.status_code != 200:
-                raise RuntimeError(f"admin password rotation failed with status={rotate.status_code}")
+                raise RuntimeError(
+                    f"admin password rotation failed with status={rotate.status_code}"
+                )
             relogin = client.post(
                 "/admin/auth/login",
                 json={"username": "admin", "password": rotated_password},
             )
             if relogin.status_code != 201:
-                raise RuntimeError(f"admin relogin failed with status={relogin.status_code}")
+                raise RuntimeError(
+                    f"admin relogin failed with status={relogin.status_code}"
+                )
             access_token = str(relogin.json()["access_token"])
             headers = {"Authorization": f"Bearer {access_token}"}
         return headers
 
-    def _ensure_runtime_headers(admin_headers: dict[str, str]) -> tuple[dict[str, str], str | None]:
+    def _ensure_runtime_headers(
+        admin_headers: dict[str, str],
+    ) -> tuple[dict[str, str], str | None]:
         accounts_response = client.get("/admin/accounts/", headers=admin_headers)
         if accounts_response.status_code != 200:
-            raise RuntimeError(f"account listing failed with status={accounts_response.status_code}")
+            raise RuntimeError(
+                f"account listing failed with status={accounts_response.status_code}"
+            )
         accounts = list(accounts_response.json().get("accounts", []))
-        account = next((item for item in accounts if str(item.get("label") or "") == "V9 Report Seed"), None)
+        account = next(
+            (
+                item
+                for item in accounts
+                if str(item.get("label") or "") == "V9 Report Seed"
+            ),
+            None,
+        )
         if account is None:
             create_account = client.post(
                 "/admin/accounts/",
@@ -143,11 +165,16 @@ def _seed_local_compatibility_evidence() -> list[str]:
                 },
             )
             if create_account.status_code != 201:
-                raise RuntimeError(f"account creation failed with status={create_account.status_code}")
+                raise RuntimeError(
+                    f"account creation failed with status={create_account.status_code}"
+                )
             account = create_account.json()["account"]
         else:
             bindings = {str(item) for item in account.get("provider_bindings", [])}
-            if "forgeframe_baseline" not in bindings or str(account.get("status") or "") != "active":
+            if (
+                "forgeframe_baseline" not in bindings
+                or str(account.get("status") or "") != "active"
+            ):
                 update_account = client.patch(
                     f"/admin/accounts/{account['account_id']}",
                     headers=admin_headers,
@@ -157,7 +184,9 @@ def _seed_local_compatibility_evidence() -> list[str]:
                     },
                 )
                 if update_account.status_code != 200:
-                    raise RuntimeError(f"account patch failed with status={update_account.status_code}")
+                    raise RuntimeError(
+                        f"account patch failed with status={update_account.status_code}"
+                    )
                 account = update_account.json()["account"]
 
         issue_key = client.post(
@@ -173,7 +202,9 @@ def _seed_local_compatibility_evidence() -> list[str]:
             },
         )
         if issue_key.status_code != 201:
-            raise RuntimeError(f"runtime key issue failed with status={issue_key.status_code}")
+            raise RuntimeError(
+                f"runtime key issue failed with status={issue_key.status_code}"
+            )
         issued = issue_key.json()["issued"]
         return {"Authorization": f"Bearer {issued['token']}"}, str(issued["key_id"])
 
@@ -187,12 +218,17 @@ def _seed_local_compatibility_evidence() -> list[str]:
             json={"messages": [{"role": "user", "content": "compat chat"}]},
             headers=runtime_headers,
         )
-        _record("chat_simple", response.status_code == 200, f"status={response.status_code}")
+        _record(
+            "chat_simple", response.status_code == 200, f"status={response.status_code}"
+        )
 
         with client.stream(
             "POST",
             "/v1/chat/completions",
-            json={"messages": [{"role": "user", "content": "compat chat stream"}], "stream": True},
+            json={
+                "messages": [{"role": "user", "content": "compat chat stream"}],
+                "stream": True,
+            },
             headers=runtime_headers,
         ) as stream_response:
             stream_body = "".join(stream_response.iter_text())
@@ -207,20 +243,43 @@ def _seed_local_compatibility_evidence() -> list[str]:
             json={"input": "compat responses"},
             headers=runtime_headers,
         )
-        _record("responses_simple", response.status_code == 200, f"status={response.status_code}")
+        _record(
+            "responses_simple",
+            response.status_code == 200,
+            f"status={response.status_code}",
+        )
 
         response = client.post(
             "/v1/responses",
             json={
                 "input": [
-                    {"type": "message", "role": "user", "content": [{"type": "input_text", "text": "compat tool input"}]},
-                    {"type": "function_call", "call_id": "call_in", "name": "lookup", "arguments": "{\"q\":\"forgeframe\"}"},
-                    {"type": "function_call_output", "call_id": "call_in", "output": "lookup result"},
+                    {
+                        "type": "message",
+                        "role": "user",
+                        "content": [
+                            {"type": "input_text", "text": "compat tool input"}
+                        ],
+                    },
+                    {
+                        "type": "function_call",
+                        "call_id": "call_in",
+                        "name": "lookup",
+                        "arguments": '{"q":"forgeframe"}',
+                    },
+                    {
+                        "type": "function_call_output",
+                        "call_id": "call_in",
+                        "output": "lookup result",
+                    },
                 ],
             },
             headers=runtime_headers,
         )
-        _record("responses_input_items_and_tools", response.status_code == 200, f"status={response.status_code}")
+        _record(
+            "responses_input_items_and_tools",
+            response.status_code == 200,
+            f"status={response.status_code}",
+        )
 
         response = client.post(
             "/v1/responses",
@@ -230,7 +289,11 @@ def _seed_local_compatibility_evidence() -> list[str]:
             },
             headers=runtime_headers,
         )
-        _record("structured_output", response.status_code == 200, f"status={response.status_code}")
+        _record(
+            "structured_output",
+            response.status_code == 200,
+            f"status={response.status_code}",
+        )
 
         with client.stream(
             "POST",
@@ -241,7 +304,8 @@ def _seed_local_compatibility_evidence() -> list[str]:
             stream_body = "".join(stream_response.iter_text())
             _record(
                 "streaming_responses",
-                stream_response.status_code == 200 and "response.completed" in stream_body,
+                stream_response.status_code == 200
+                and "response.completed" in stream_body,
                 f"status={stream_response.status_code}",
             )
 
@@ -250,7 +314,11 @@ def _seed_local_compatibility_evidence() -> list[str]:
             json={"input": "compat error", "model": "missing-model-for-signoff"},
             headers=runtime_headers,
         )
-        _record("error_semantics", response.status_code == 404, f"status={response.status_code}")
+        _record(
+            "error_semantics",
+            response.status_code == 404,
+            f"status={response.status_code}",
+        )
 
         response = client.post(
             "/v1/files",
@@ -258,7 +326,9 @@ def _seed_local_compatibility_evidence() -> list[str]:
                 "purpose": "assistants",
                 "filename": "compat.txt",
                 "content_type": "text/plain",
-                "content_base64": base64.b64encode(b"forgeframe compatibility file").decode("ascii"),
+                "content_base64": base64.b64encode(
+                    b"forgeframe compatibility file"
+                ).decode("ascii"),
             },
             headers=runtime_headers,
         )
@@ -269,14 +339,18 @@ def _seed_local_compatibility_evidence() -> list[str]:
             json={"input": "compat embeddings proof"},
             headers=runtime_headers,
         )
-        _record("embeddings", response.status_code == 200, f"status={response.status_code}")
+        _record(
+            "embeddings", response.status_code == 200, f"status={response.status_code}"
+        )
     except Exception as exc:
         _record("seed_setup", False, str(exc))
     finally:
         if runtime_key_id is not None:
             try:
                 admin_headers = _admin_headers()
-                client.post(f"/admin/keys/{runtime_key_id}/revoke", headers=admin_headers)
+                client.post(
+                    f"/admin/keys/{runtime_key_id}/revoke", headers=admin_headers
+                )
             except Exception:
                 pass
         client.close()
@@ -294,8 +368,12 @@ def _render_report(service: ControlPlaneService, seed_results: list[str]) -> str
     compatibility_rows = compatibility["rows"]
 
     provider_lines: list[str] = []
-    for entry in sorted(catalog, key=lambda item: (item["maturity_status"], item["provider_id"])):
-        if entry["maturity_status"] in {"runtime-ready", "fully-integrated"} and entry["live_signoff_status"] in {"pending-review", "signed-off"}:
+    for entry in sorted(
+        catalog, key=lambda item: (item["maturity_status"], item["provider_id"])
+    ):
+        if entry["maturity_status"] in {"runtime-ready", "fully-integrated"} and entry[
+            "live_signoff_status"
+        ] in {"pending-review", "signed-off"}:
             continue
         provider_lines.append(
             f"- `{entry['provider_id']}`: maturity=`{entry['maturity_status']}`, signoff=`{entry['live_signoff_status']}`, "

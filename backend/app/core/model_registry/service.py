@@ -1,6 +1,10 @@
 """In-memory model registry baseline for ForgeFrame phase 5."""
 
-from app.control_plane import ControlPlaneStateRecord, ManagedModelRecord, ManagedProviderRecord
+from app.control_plane import (
+    ControlPlaneStateRecord,
+    ManagedModelRecord,
+    ManagedProviderRecord,
+)
 from app.control_plane.routing_defaults import (
     build_default_routing_policies,
     merge_routing_circuits,
@@ -116,7 +120,7 @@ class ModelRegistry:
                     label="OpenAI Codex",
                     enabled=True,
                     integration_class="native",
-                )
+                ),
             )
             for model_id in self._settings.openai_codex_discovered_models:
                 existing_ids = {model.id for model in provider_record.managed_models}
@@ -154,20 +158,13 @@ class ModelRegistry:
             return stored_state
 
         anthropic_bootstrap_provider = next(
-            (
-                provider
-                for provider in self._bootstrap_provider_state()
-                if provider.provider == "anthropic"
-            ),
+            (provider for provider in self._bootstrap_provider_state() if provider.provider == "anthropic"),
             None,
         )
         if anthropic_bootstrap_provider is None:
             return stored_state
 
-        provider_map = {
-            provider.provider: provider.model_copy(deep=True)
-            for provider in stored_state.providers
-        }
+        provider_map = {provider.provider: provider.model_copy(deep=True) for provider in stored_state.providers}
 
         existing_provider = provider_map.get(anthropic_bootstrap_provider.provider)
         if existing_provider is None:
@@ -213,9 +210,7 @@ class ModelRegistry:
                         merged_state.routing_policies,
                         available_target_keys=available_target_keys,
                     ),
-                    "routing_budget_state": normalize_routing_budget_state(
-                        merged_state.routing_budget_state
-                    ),
+                    "routing_budget_state": normalize_routing_budget_state(merged_state.routing_budget_state),
                     "routing_circuits": merge_routing_circuits(
                         merged_state.routing_circuits,
                         available_target_keys=available_target_keys,
@@ -253,7 +248,11 @@ class ModelRegistry:
                 )
                 if not managed_model.active:
                     continue
-                if managed_model.discovery_status in {"stale", "removed", "removed_from_profile_models"}:
+                if managed_model.discovery_status in {
+                    "stale",
+                    "removed",
+                    "removed_from_profile_models",
+                }:
                     continue
                 if managed_model.runtime_status in {"stale", "unavailable"}:
                     continue
@@ -291,7 +290,11 @@ class ModelRegistry:
         for model_id in indexed:
             indexed[model_id] = sorted(
                 indexed[model_id],
-                key=lambda item: (item.provider != self._settings.default_provider, item.provider, item.routing_key or item.id),
+                key=lambda item: (
+                    item.provider != self._settings.default_provider,
+                    item.provider,
+                    item.routing_key or item.id,
+                ),
             )
         return indexed
 
@@ -371,9 +374,7 @@ class ModelRegistry:
         if model:
             return model
 
-        provider_candidates = [
-            m for m in self.list_active_models() if m.provider == self._settings.default_provider
-        ]
+        provider_candidates = [m for m in self.list_active_models() if m.provider == self._settings.default_provider]
         if provider_candidates:
             return provider_candidates[0]
 

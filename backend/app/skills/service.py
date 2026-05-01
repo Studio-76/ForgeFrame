@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from datetime import UTC, datetime
+from typing import Any
 from uuid import uuid4
 
 from sqlalchemy import func, select
@@ -15,8 +16,8 @@ from app.skills.models import (
     ActivateSkillVersion,
     CreateSkill,
     RecordSkillUsage,
-    SkillApprovalSummary,
     SkillActivationRecord,
+    SkillApprovalSummary,
     SkillDetail,
     SkillProvenanceSummary,
     SkillSummary,
@@ -26,7 +27,12 @@ from app.skills.models import (
     UpdateSkill,
 )
 from app.storage.agent_repository import AgentORM
-from app.storage.skill_repository import SkillActivationORM, SkillORM, SkillUsageEventORM, SkillVersionORM
+from app.storage.skill_repository import (
+    SkillActivationORM,
+    SkillORM,
+    SkillUsageEventORM,
+    SkillVersionORM,
+)
 
 SessionFactory = Callable[[], Session]
 
@@ -53,7 +59,14 @@ class SkillAdminService:
             raise ValueError(f"Agent '{agent_id}' was not found.")
         return row
 
-    def _validate_scope(self, session: Session, *, instance: InstanceRecord, scope: str, scope_agent_id: str | None) -> None:
+    def _validate_scope(
+        self,
+        session: Session,
+        *,
+        instance: InstanceRecord,
+        scope: str,
+        scope_agent_id: str | None,
+    ) -> None:
         if scope == "agent":
             if not scope_agent_id:
                 raise ValueError("Agent-scoped skills require a scope agent.")
@@ -101,7 +114,7 @@ class SkillAdminService:
         )
 
     @staticmethod
-    def _provenance_summary(provenance: dict[str, object]) -> SkillProvenanceSummary:
+    def _provenance_summary(provenance: dict[str, Any]) -> SkillProvenanceSummary:
         if learning_event_id := provenance.get("learning_event_id"):
             return SkillProvenanceSummary(
                 kind="learning",
@@ -145,7 +158,7 @@ class SkillAdminService:
         )
 
     @staticmethod
-    def _telemetry_summary(telemetry: dict[str, object]) -> SkillTelemetrySummary:
+    def _telemetry_summary(telemetry: dict[str, Any]) -> SkillTelemetrySummary:
         last_outcome = telemetry.get("last_outcome")
         return SkillTelemetrySummary(
             usage_count=int(telemetry.get("usage_count", 0) or 0),
@@ -157,13 +170,20 @@ class SkillAdminService:
 
     def _active_scope_labels(self, session: Session, row: SkillORM) -> list[str]:
         labels: list[str] = []
-        active_rows = session.execute(
-            select(SkillActivationORM).where(
-                SkillActivationORM.company_id == row.company_id,
-                SkillActivationORM.skill_id == row.id,
-                SkillActivationORM.status == "active",
-            ).order_by(SkillActivationORM.activated_at.desc())
-        ).scalars().all()
+        active_rows = (
+            session
+            .execute(
+                select(SkillActivationORM)
+                .where(
+                    SkillActivationORM.company_id == row.company_id,
+                    SkillActivationORM.skill_id == row.id,
+                    SkillActivationORM.status == "active",
+                )
+                .order_by(SkillActivationORM.activated_at.desc())
+            )
+            .scalars()
+            .all()
+        )
         for activation in active_rows:
             agent_label = None
             if activation.scope_agent_id:
@@ -182,7 +202,9 @@ class SkillAdminService:
     def _summary(self, session: Session, row: SkillORM) -> SkillSummary:
         active_activation_count = int(
             session.scalar(
-                select(func.count()).select_from(SkillActivationORM).where(
+                select(func.count())
+                .select_from(SkillActivationORM)
+                .where(
                     SkillActivationORM.company_id == row.company_id,
                     SkillActivationORM.skill_id == row.id,
                     SkillActivationORM.status == "active",
@@ -203,11 +225,11 @@ class SkillAdminService:
             company_id=row.company_id,
             display_name=row.display_name,
             summary=row.summary,
-            scope=row.scope,  # type: ignore[arg-type]
+            scope=row.scope,
             scope_label=self._scope_label(row.scope, scope_agent_label),
             scope_agent_id=row.scope_agent_id,
             current_version_number=row.current_version_number,
-            status=row.status,  # type: ignore[arg-type]
+            status=row.status,
             approval=self._approval_summary(row.status),
             provenance=provenance,
             provenance_summary=self._provenance_summary(provenance),
@@ -219,7 +241,7 @@ class SkillAdminService:
             last_used_at=row.last_used_at,
             active_activation_count=active_activation_count,
             active_scope_labels=self._active_scope_labels(session, row),
-            last_outcome=telemetry.get("last_outcome") if telemetry.get("last_outcome") in {"success", "blocked", "error"} else None,  # type: ignore[arg-type]
+            last_outcome=telemetry.get("last_outcome") if telemetry.get("last_outcome") in {"success", "blocked", "error"} else None,
             created_at=row.created_at,
             updated_at=row.updated_at,
         )
@@ -232,7 +254,7 @@ class SkillAdminService:
             instance_id=row.instance_id,
             company_id=row.company_id,
             version_number=row.version_number,
-            status=row.status,  # type: ignore[arg-type]
+            status=row.status,
             summary=row.summary,
             instruction_core=row.instruction_core,
             provenance=dict(row.provenance_json or {}),
@@ -249,10 +271,10 @@ class SkillAdminService:
             version_id=row.version_id,
             instance_id=row.instance_id,
             company_id=row.company_id,
-            scope=row.scope,  # type: ignore[arg-type]
+            scope=row.scope,
             scope_label=scope_label,
             scope_agent_id=row.scope_agent_id,
-            status=row.status,  # type: ignore[arg-type]
+            status=row.status,
             activation_conditions=dict(row.activation_conditions_json or {}),
             activated_by_type=row.activated_by_type,
             activated_by_id=row.activated_by_id,
@@ -274,31 +296,53 @@ class SkillAdminService:
             agent_id=row.agent_id,
             run_id=row.run_id,
             conversation_id=row.conversation_id,
-            outcome=row.outcome,  # type: ignore[arg-type]
+            outcome=row.outcome,
             details=dict(row.details_json or {}),
             created_at=row.created_at,
         )
 
     def _detail(self, session: Session, row: SkillORM) -> SkillDetail:
         summary = self._summary(session, row)
-        versions = session.execute(
-            select(SkillVersionORM).where(
-                SkillVersionORM.company_id == row.company_id,
-                SkillVersionORM.skill_id == row.id,
-            ).order_by(SkillVersionORM.version_number.desc())
-        ).scalars().all()
-        activations = session.execute(
-            select(SkillActivationORM).where(
-                SkillActivationORM.company_id == row.company_id,
-                SkillActivationORM.skill_id == row.id,
-            ).order_by(SkillActivationORM.activated_at.desc())
-        ).scalars().all()
-        usage_rows = session.execute(
-            select(SkillUsageEventORM).where(
-                SkillUsageEventORM.company_id == row.company_id,
-                SkillUsageEventORM.skill_id == row.id,
-            ).order_by(SkillUsageEventORM.created_at.desc()).limit(25)
-        ).scalars().all()
+        versions = (
+            session
+            .execute(
+                select(SkillVersionORM)
+                .where(
+                    SkillVersionORM.company_id == row.company_id,
+                    SkillVersionORM.skill_id == row.id,
+                )
+                .order_by(SkillVersionORM.version_number.desc())
+            )
+            .scalars()
+            .all()
+        )
+        activations = (
+            session
+            .execute(
+                select(SkillActivationORM)
+                .where(
+                    SkillActivationORM.company_id == row.company_id,
+                    SkillActivationORM.skill_id == row.id,
+                )
+                .order_by(SkillActivationORM.activated_at.desc())
+            )
+            .scalars()
+            .all()
+        )
+        usage_rows = (
+            session
+            .execute(
+                select(SkillUsageEventORM)
+                .where(
+                    SkillUsageEventORM.company_id == row.company_id,
+                    SkillUsageEventORM.skill_id == row.id,
+                )
+                .order_by(SkillUsageEventORM.created_at.desc())
+                .limit(25)
+            )
+            .scalars()
+            .all()
+        )
         versions_by_id = {item.id: item for item in versions}
         scope_agent = None
         if row.scope_agent_id:
@@ -318,10 +362,23 @@ class SkillAdminService:
             scope_agent=scope_agent,
             versions=[self._version_record(item) for item in versions],
             activations=activation_records,
-            recent_usage=[self._usage_record(item, versions_by_id.get(item.version_id).version_number if versions_by_id.get(item.version_id) is not None else None) for item in usage_rows],
+            recent_usage=[
+                self._usage_record(
+                    item,
+                    versions_by_id[item.version_id].version_number if item.version_id in versions_by_id else None,
+                )
+                for item in usage_rows
+            ],
         )
 
-    def list_skills(self, *, instance: InstanceRecord, status: str | None = None, scope: str | None = None, limit: int = 100) -> list[SkillSummary]:
+    def list_skills(
+        self,
+        *,
+        instance: InstanceRecord,
+        status: str | None = None,
+        scope: str | None = None,
+        limit: int = 100,
+    ) -> list[SkillSummary]:
         with self._session_factory() as session:
             stmt = select(SkillORM).where(
                 SkillORM.company_id == instance.company_id,
@@ -331,9 +388,7 @@ class SkillAdminService:
                 stmt = stmt.where(SkillORM.status == status)
             if scope is not None:
                 stmt = stmt.where(SkillORM.scope == scope)
-            rows = session.execute(
-                stmt.order_by(SkillORM.updated_at.desc()).limit(max(1, min(limit, 200)))
-            ).scalars().all()
+            rows = session.execute(stmt.order_by(SkillORM.updated_at.desc()).limit(max(1, min(limit, 200)))).scalars().all()
             return [self._summary(session, row) for row in rows]
 
     def get_skill(self, *, instance: InstanceRecord, skill_id: str) -> SkillDetail:
@@ -361,7 +416,12 @@ class SkillAdminService:
 
     def create_skill(self, *, instance: InstanceRecord, payload: CreateSkill) -> SkillDetail:
         with self._session_factory() as session, session.begin():
-            self._validate_scope(session, instance=instance, scope=payload.scope, scope_agent_id=payload.scope_agent_id)
+            self._validate_scope(
+                session,
+                instance=instance,
+                scope=payload.scope,
+                scope_agent_id=payload.scope_agent_id,
+            )
             skill_id = (payload.skill_id or "").strip() or self._new_id("skill")
             existing = session.get(SkillORM, skill_id)
             if existing is not None and existing.company_id == instance.company_id:
@@ -394,13 +454,14 @@ class SkillAdminService:
             next_scope = payload.scope or row.scope
             scope_agent_set = "scope_agent_id" in payload.model_fields_set
             next_scope_agent_id = payload.scope_agent_id if scope_agent_set else row.scope_agent_id
-            self._validate_scope(session, instance=instance, scope=next_scope, scope_agent_id=next_scope_agent_id)
+            self._validate_scope(
+                session,
+                instance=instance,
+                scope=next_scope,
+                scope_agent_id=next_scope_agent_id,
+            )
             versioned_change = (
-                payload.summary is not None
-                or payload.provenance is not None
-                or payload.activation_conditions is not None
-                or payload.instruction_core is not None
-                or payload.status is not None
+                payload.summary is not None or payload.provenance is not None or payload.activation_conditions is not None or payload.instruction_core is not None or payload.status is not None
             )
             row.display_name = payload.display_name.strip() if payload.display_name is not None else row.display_name
             row.scope = next_scope
@@ -423,7 +484,15 @@ class SkillAdminService:
             row.updated_at = self._now()
         return self.get_skill(instance=instance, skill_id=skill_id)
 
-    def activate_skill(self, *, instance: InstanceRecord, skill_id: str, payload: ActivateSkillVersion, actor_type: str, actor_id: str | None) -> SkillDetail:
+    def activate_skill(
+        self,
+        *,
+        instance: InstanceRecord,
+        skill_id: str,
+        payload: ActivateSkillVersion,
+        actor_type: str,
+        actor_id: str | None,
+    ) -> SkillDetail:
         with self._session_factory() as session, session.begin():
             row = self._load_skill(session, instance=instance, skill_id=skill_id)
             version: SkillVersionORM
@@ -432,23 +501,33 @@ class SkillAdminService:
                 if version.skill_id != row.id:
                     raise ValueError(f"Skill version '{payload.version_id}' does not belong to skill '{skill_id}'.")
             else:
-                version = session.execute(
-                    select(SkillVersionORM).where(
-                        SkillVersionORM.company_id == instance.company_id,
-                        SkillVersionORM.skill_id == row.id,
-                        SkillVersionORM.version_number == row.current_version_number,
+                version = (
+                    session
+                    .execute(
+                        select(SkillVersionORM).where(
+                            SkillVersionORM.company_id == instance.company_id,
+                            SkillVersionORM.skill_id == row.id,
+                            SkillVersionORM.version_number == row.current_version_number,
+                        )
                     )
-                ).scalars().one()
+                    .scalars()
+                    .one()
+                )
             scope = payload.scope or row.scope
             scope_agent_id = payload.scope_agent_id if payload.scope_agent_id is not None else row.scope_agent_id
             self._validate_scope(session, instance=instance, scope=scope, scope_agent_id=scope_agent_id)
-            for activation in session.execute(
-                select(SkillActivationORM).where(
-                    SkillActivationORM.company_id == instance.company_id,
-                    SkillActivationORM.skill_id == row.id,
-                    SkillActivationORM.status == "active",
+            for activation in (
+                session
+                .execute(
+                    select(SkillActivationORM).where(
+                        SkillActivationORM.company_id == instance.company_id,
+                        SkillActivationORM.skill_id == row.id,
+                        SkillActivationORM.status == "active",
+                    )
                 )
-            ).scalars().all():
+                .scalars()
+                .all()
+            ):
                 activation.status = "inactive"
                 activation.deactivated_at = self._now()
             session.add(
@@ -477,13 +556,18 @@ class SkillAdminService:
             row = self._load_skill(session, instance=instance, skill_id=skill_id)
             row.status = "archived"
             row.updated_at = self._now()
-            for activation in session.execute(
-                select(SkillActivationORM).where(
-                    SkillActivationORM.company_id == instance.company_id,
-                    SkillActivationORM.skill_id == row.id,
-                    SkillActivationORM.status == "active",
+            for activation in (
+                session
+                .execute(
+                    select(SkillActivationORM).where(
+                        SkillActivationORM.company_id == instance.company_id,
+                        SkillActivationORM.skill_id == row.id,
+                        SkillActivationORM.status == "active",
+                    )
                 )
-            ).scalars().all():
+                .scalars()
+                .all()
+            ):
                 activation.status = "archived"
                 activation.deactivated_at = self._now()
         return self.get_skill(instance=instance, skill_id=skill_id)
@@ -494,13 +578,16 @@ class SkillAdminService:
             version = (
                 self._load_version(session, instance=instance, version_id=payload.version_id)
                 if payload.version_id
-                else session.execute(
+                else session
+                .execute(
                     select(SkillVersionORM).where(
                         SkillVersionORM.company_id == instance.company_id,
                         SkillVersionORM.skill_id == row.id,
                         SkillVersionORM.version_number == row.current_version_number,
                     )
-                ).scalars().one()
+                )
+                .scalars()
+                .one()
             )
             if version.skill_id != row.id:
                 raise ValueError(f"Skill version '{version.id}' does not belong to skill '{skill_id}'.")

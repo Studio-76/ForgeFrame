@@ -13,6 +13,7 @@ from app.execution.service import (
     RunCommandIdempotencyConflictError,
     StaleWorkerClaimError,
 )
+from app.instances.models import InstanceRecord
 from app.storage.execution_repository import (
     RunApprovalLinkORM,
     RunAttemptORM,
@@ -23,7 +24,9 @@ from app.storage.execution_repository import (
 from app.storage.models import Base
 
 
-def _service(tmp_path: Path) -> tuple[ExecutionTransitionService, sessionmaker[Session]]:
+def _service(
+    tmp_path: Path,
+) -> tuple[ExecutionTransitionService, sessionmaker[Session]]:
     engine = create_engine(f"sqlite+pysqlite:///{tmp_path / 'execution.sqlite'}")
     Base.metadata.create_all(engine)
     session_factory = sessionmaker(engine, autoflush=False, expire_on_commit=False)
@@ -34,7 +37,9 @@ def _count(session: Session, orm_type: type[object]) -> int:
     return int(session.scalar(select(func.count()).select_from(orm_type)) or 0)
 
 
-def test_duplicate_create_command_returns_original_admission_snapshot(tmp_path: Path) -> None:
+def test_duplicate_create_command_returns_original_admission_snapshot(
+    tmp_path: Path,
+) -> None:
     service, session_factory = _service(tmp_path)
 
     first = service.admit_create(
@@ -64,11 +69,19 @@ def test_duplicate_create_command_returns_original_admission_snapshot(tmp_path: 
     assert duplicate.run_state == "queued"
 
     with session_factory() as session:
-        outbox = session.execute(
-            select(RunOutboxORM)
-            .where(RunOutboxORM.run_id == first.run_id, RunOutboxORM.event_type == "run_dispatch")
-            .order_by(RunOutboxORM.created_at.desc())
-        ).scalars().first()
+        outbox = (
+            session
+            .execute(
+                select(RunOutboxORM)
+                .where(
+                    RunOutboxORM.run_id == first.run_id,
+                    RunOutboxORM.event_type == "run_dispatch",
+                )
+                .order_by(RunOutboxORM.created_at.desc())
+            )
+            .scalars()
+            .first()
+        )
 
         assert _count(session, RunCommandORM) == 1
         assert _count(session, RunORM) == 1
@@ -78,7 +91,9 @@ def test_duplicate_create_command_returns_original_admission_snapshot(tmp_path: 
         assert outbox.dedupe_key == f"run:{first.run_id}:command:{first.command_id}:dispatch"
 
 
-def test_admin_replay_without_idempotency_key_recovers_from_concurrent_insert_race(tmp_path: Path) -> None:
+def test_admin_replay_without_idempotency_key_recovers_from_concurrent_insert_race(
+    tmp_path: Path,
+) -> None:
     engine = create_engine(
         f"sqlite+pysqlite:///{tmp_path / 'execution-threaded.sqlite'}",
         connect_args={"check_same_thread": False, "timeout": 5},
@@ -145,6 +160,14 @@ def test_admin_replay_without_idempotency_key_recovers_from_concurrent_insert_ra
                 self._barrier.wait(timeout=5)
             return existing
 
+    instance = InstanceRecord(
+        company_id="cmp_123",
+        instance_id="default",
+        tenant_id="default",
+        created_at=datetime.now(UTC).isoformat(),
+        updated_at=datetime.now(UTC).isoformat(),
+    )
+
     start_barrier = threading.Barrier(2)
     insert_barrier = threading.Barrier(2)
     admin_service = ExecutionAdminService(session_factory)
@@ -159,7 +182,7 @@ def test_admin_replay_without_idempotency_key_recovers_from_concurrent_insert_ra
         try:
             start_barrier.wait(timeout=5)
             result = admin_service.replay_run(
-                company_id="cmp_123",
+                instance=instance,
                 run_id=created.run_id,
                 actor_id="operator_alpha",
                 reason=reason,
@@ -184,16 +207,32 @@ def test_admin_replay_without_idempotency_key_recovers_from_concurrent_insert_ra
     assert len({result.attempt_id for result in results}) == 1
 
     with session_factory() as session:
-        commands = session.execute(
-            select(RunCommandORM)
-            .where(RunCommandORM.company_id == "cmp_123", RunCommandORM.run_id == created.run_id)
-            .order_by(RunCommandORM.issued_at.desc())
-        ).scalars().all()
-        attempts = session.execute(
-            select(RunAttemptORM)
-            .where(RunAttemptORM.company_id == "cmp_123", RunAttemptORM.run_id == created.run_id)
-            .order_by(RunAttemptORM.attempt_no.asc())
-        ).scalars().all()
+        commands = (
+            session
+            .execute(
+                select(RunCommandORM)
+                .where(
+                    RunCommandORM.company_id == "cmp_123",
+                    RunCommandORM.run_id == created.run_id,
+                )
+                .order_by(RunCommandORM.issued_at.desc())
+            )
+            .scalars()
+            .all()
+        )
+        attempts = (
+            session
+            .execute(
+                select(RunAttemptORM)
+                .where(
+                    RunAttemptORM.company_id == "cmp_123",
+                    RunAttemptORM.run_id == created.run_id,
+                )
+                .order_by(RunAttemptORM.attempt_no.asc())
+            )
+            .scalars()
+            .all()
+        )
 
         assert [command.command_type for command in commands] == ["retry", "create"]
         assert commands[0].response_snapshot["replay_reason"] == reason
@@ -278,11 +317,19 @@ def test_create_admission_recovers_from_concurrent_insert_race(tmp_path: Path) -
 
     primary = results[0]
     with session_factory() as session:
-        outbox = session.execute(
-            select(RunOutboxORM)
-            .where(RunOutboxORM.run_id == primary.run_id, RunOutboxORM.event_type == "run_dispatch")
-            .order_by(RunOutboxORM.created_at.desc())
-        ).scalars().first()
+        outbox = (
+            session
+            .execute(
+                select(RunOutboxORM)
+                .where(
+                    RunOutboxORM.run_id == primary.run_id,
+                    RunOutboxORM.event_type == "run_dispatch",
+                )
+                .order_by(RunOutboxORM.created_at.desc())
+            )
+            .scalars()
+            .first()
+        )
 
         assert _count(session, RunCommandORM) == 1
         assert _count(session, RunORM) == 1
@@ -381,7 +428,9 @@ def test_worker_claim_uses_compare_and_set_versions(tmp_path: Path) -> None:
         assert attempt.version == 1
 
 
-def test_cancel_during_execution_persists_command_run_attempt_and_outbox(tmp_path: Path) -> None:
+def test_cancel_during_execution_persists_command_run_attempt_and_outbox(
+    tmp_path: Path,
+) -> None:
     service, session_factory = _service(tmp_path)
 
     created = service.admit_create(
@@ -418,11 +467,19 @@ def test_cancel_during_execution_persists_command_run_attempt_and_outbox(tmp_pat
         run = session.get(RunORM, created.run_id)
         attempt = session.get(RunAttemptORM, created.attempt_id)
         command = session.get(RunCommandORM, cancel.command_id)
-        outbox = session.execute(
-            select(RunOutboxORM)
-            .where(RunOutboxORM.run_id == created.run_id, RunOutboxORM.event_type == "run_cancel")
-            .order_by(RunOutboxORM.created_at.desc())
-        ).scalars().first()
+        outbox = (
+            session
+            .execute(
+                select(RunOutboxORM)
+                .where(
+                    RunOutboxORM.run_id == created.run_id,
+                    RunOutboxORM.event_type == "run_cancel",
+                )
+                .order_by(RunOutboxORM.created_at.desc())
+            )
+            .scalars()
+            .first()
+        )
 
         assert run is not None
         assert attempt is not None
@@ -436,7 +493,9 @@ def test_cancel_during_execution_persists_command_run_attempt_and_outbox(tmp_pat
         assert outbox.dedupe_key == f"run:{created.run_id}:command:{cancel.command_id}:cancel"
 
 
-def test_retryable_failure_schedules_backoff_attempt_and_dispatch_outbox(tmp_path: Path) -> None:
+def test_retryable_failure_schedules_backoff_attempt_and_dispatch_outbox(
+    tmp_path: Path,
+) -> None:
     service, session_factory = _service(tmp_path)
 
     created = service.admit_create(
@@ -483,11 +542,19 @@ def test_retryable_failure_schedules_backoff_attempt_and_dispatch_outbox(tmp_pat
         run = session.get(RunORM, created.run_id)
         first_attempt = session.get(RunAttemptORM, created.attempt_id)
         retry_attempt = session.get(RunAttemptORM, result.next_attempt_id)
-        outbox = session.execute(
-            select(RunOutboxORM)
-            .where(RunOutboxORM.run_id == created.run_id, RunOutboxORM.attempt_id == result.next_attempt_id)
-            .order_by(RunOutboxORM.created_at.desc())
-        ).scalars().first()
+        outbox = (
+            session
+            .execute(
+                select(RunOutboxORM)
+                .where(
+                    RunOutboxORM.run_id == created.run_id,
+                    RunOutboxORM.attempt_id == result.next_attempt_id,
+                )
+                .order_by(RunOutboxORM.created_at.desc())
+            )
+            .scalars()
+            .first()
+        )
 
         assert run is not None
         assert first_attempt is not None
@@ -517,7 +584,9 @@ def test_retryable_failure_schedules_backoff_attempt_and_dispatch_outbox(tmp_pat
         assert outbox.dedupe_key == f"run:{created.run_id}:attempt:{retry_attempt.id}:dispatch"
 
 
-def test_terminal_failure_dead_letters_run_and_preserves_diagnostics(tmp_path: Path) -> None:
+def test_terminal_failure_dead_letters_run_and_preserves_diagnostics(
+    tmp_path: Path,
+) -> None:
     service, session_factory = _service(tmp_path)
 
     created = service.admit_create(
@@ -558,11 +627,19 @@ def test_terminal_failure_dead_letters_run_and_preserves_diagnostics(tmp_path: P
     with session_factory() as session:
         run = session.get(RunORM, created.run_id)
         attempt = session.get(RunAttemptORM, created.attempt_id)
-        outbox = session.execute(
-            select(RunOutboxORM)
-            .where(RunOutboxORM.run_id == created.run_id, RunOutboxORM.event_type == "dead_letter")
-            .order_by(RunOutboxORM.created_at.desc())
-        ).scalars().first()
+        outbox = (
+            session
+            .execute(
+                select(RunOutboxORM)
+                .where(
+                    RunOutboxORM.run_id == created.run_id,
+                    RunOutboxORM.event_type == "dead_letter",
+                )
+                .order_by(RunOutboxORM.created_at.desc())
+            )
+            .scalars()
+            .first()
+        )
 
         assert run is not None
         assert attempt is not None
@@ -629,11 +706,19 @@ def test_replay_reason_is_persisted_on_retry_command(tmp_path: Path) -> None:
 
     with session_factory() as session:
         command = session.get(RunCommandORM, replay.command_id)
-        outbox = session.execute(
-            select(RunOutboxORM)
-            .where(RunOutboxORM.run_id == created.run_id, RunOutboxORM.attempt_id == replay.attempt_id)
-            .order_by(RunOutboxORM.created_at.desc())
-        ).scalars().first()
+        outbox = (
+            session
+            .execute(
+                select(RunOutboxORM)
+                .where(
+                    RunOutboxORM.run_id == created.run_id,
+                    RunOutboxORM.attempt_id == replay.attempt_id,
+                )
+                .order_by(RunOutboxORM.created_at.desc())
+            )
+            .scalars()
+            .first()
+        )
 
         assert command is not None
         assert outbox is not None
@@ -728,19 +813,11 @@ def test_approval_resume_and_reject_transitions_are_durable(tmp_path: Path) -> N
         resume_run = session.get(RunORM, resumed.run_id)
         resume_attempt = session.get(RunAttemptORM, resumed.attempt_id)
         resume_link = session.get(RunApprovalLinkORM, approval.approval_link_id)
-        resume_outboxes = session.execute(
-            select(RunOutboxORM)
-            .where(RunOutboxORM.run_id == resumed.run_id)
-            .order_by(RunOutboxORM.created_at.asc())
-        ).scalars().all()
+        resume_outboxes = session.execute(select(RunOutboxORM).where(RunOutboxORM.run_id == resumed.run_id).order_by(RunOutboxORM.created_at.asc())).scalars().all()
         reject_run = session.get(RunORM, rejected.run_id)
         reject_attempt = session.get(RunAttemptORM, rejected.attempt_id)
         reject_link = session.get(RunApprovalLinkORM, reject_approval.approval_link_id)
-        reject_outboxes = session.execute(
-            select(RunOutboxORM)
-            .where(RunOutboxORM.run_id == rejected.run_id)
-            .order_by(RunOutboxORM.created_at.asc())
-        ).scalars().all()
+        reject_outboxes = session.execute(select(RunOutboxORM).where(RunOutboxORM.run_id == rejected.run_id).order_by(RunOutboxORM.created_at.asc())).scalars().all()
 
         assert resume_run is not None
         assert resume_attempt is not None
@@ -752,9 +829,7 @@ def test_approval_resume_and_reject_transitions_are_durable(tmp_path: Path) -> N
         resume_notify = next(outbox for outbox in resume_outboxes if outbox.event_type == "approval_notify")
         resume_dispatch = next(outbox for outbox in resume_outboxes if outbox.event_type == "run_resume")
         assert resume_notify.dedupe_key == "approval:approval_resume_1:notify"
-        assert resume_dispatch.dedupe_key == (
-            f"approval:{approval.approval_link_id}:command:{resume_result.command_id}:run_resume"
-        )
+        assert resume_dispatch.dedupe_key == (f"approval:{approval.approval_link_id}:command:{resume_result.command_id}:run_resume")
 
         assert reject_run is not None
         assert reject_attempt is not None
@@ -766,13 +841,15 @@ def test_approval_resume_and_reject_transitions_are_durable(tmp_path: Path) -> N
         reject_notify = next(outbox for outbox in reject_outboxes if outbox.event_type == "approval_notify")
         reject_cancel = next(outbox for outbox in reject_outboxes if outbox.event_type == "run_cancel")
         assert reject_notify.dedupe_key == "approval:approval_reject_1:notify"
-        assert reject_cancel.dedupe_key == (
-            f"approval:{reject_approval.approval_link_id}:command:{reject_result.command_id}:run_cancel"
-        )
+        assert reject_cancel.dedupe_key == (f"approval:{reject_approval.approval_link_id}:command:{reject_result.command_id}:run_cancel")
 
 
-def test_resume_does_not_force_spurious_wakeup_before_retry_window(tmp_path: Path) -> None:
+def test_resume_does_not_force_spurious_wakeup_before_retry_window(
+    tmp_path: Path,
+) -> None:
+    """Resuming during retry backoff must not wake work early."""
     service, session_factory = _service(tmp_path)
+    claimed_at = datetime(2026, 4, 23, 12, 0, tzinfo=UTC)
     admitted = service.admit_create(
         company_id="cmp_789",
         actor_type="agent",
@@ -780,8 +857,8 @@ def test_resume_does_not_force_spurious_wakeup_before_retry_window(tmp_path: Pat
         idempotency_key="idem_create_retry_resume",
         request_fingerprint_hash="fp_create_retry_resume",
         run_kind="provider_dispatch",
+        now=claimed_at,
     )
-    claimed_at = datetime(2026, 4, 23, 12, 0, tzinfo=UTC)
     claim = service.claim_next_attempt(
         company_id="cmp_789",
         worker_key="worker_alpha",
@@ -850,8 +927,9 @@ def test_resume_does_not_force_spurious_wakeup_before_retry_window(tmp_path: Pat
         assert run.status_reason == "retry_scheduled"
         assert attempt.operator_state == "retry_scheduled"
         assert run.next_wakeup_at is not None
-        assert run.next_wakeup_at > claimed_at + timedelta(seconds=10)
+        wakeup_at = run.next_wakeup_at if run.next_wakeup_at.tzinfo is not None else run.next_wakeup_at.replace(tzinfo=UTC)
+        assert wakeup_at > claimed_at + timedelta(seconds=10)
         assert run.result_summary is not None
         assert run.result_summary["wake_gate"]["spurious_wake_blocked"] is True
-        assert run.result_summary["wake_gate"]["next_wakeup_at"] == run.next_wakeup_at.isoformat()
+        assert run.result_summary["wake_gate"]["next_wakeup_at"] == wakeup_at.isoformat()
         assert run.result_summary["dispatch"]["stage"] == "resume_blocked_until_wakeup"

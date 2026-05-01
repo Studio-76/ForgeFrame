@@ -15,4 +15,3 @@ def get_knowledge_context_admin_service() -> KnowledgeContextAdminService:
 
 def clear_knowledge_context_admin_service_cache() -> None:
     get_knowledge_context_admin_service.cache_clear()
-

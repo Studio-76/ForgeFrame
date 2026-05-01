@@ -6,14 +6,17 @@ from collections import defaultdict
 from datetime import UTC, datetime, timedelta
 from functools import lru_cache
 from math import ceil
-from typing import Literal, Protocol, TypeVar, cast
+from typing import Any, Literal, Protocol, TypeVar, cast
 
 from pydantic import BaseModel
 
 from app.providers import ChatDispatchResult, ProviderStreamEvent
 from app.request_metadata import extract_scope_attributes
 from app.settings.config import get_settings
-from app.storage.observability_repository import ObservabilityRepository, get_observability_repository
+from app.storage.observability_repository import (
+    ObservabilityRepository,
+    get_observability_repository,
+)
 from app.telemetry.context import TelemetryContext
 from app.tenancy import effective_tenant_filter, normalize_tenant_id
 from app.usage.events import ClientIdentity, ErrorEvent, HealthEvent, UsageEvent
@@ -25,9 +28,9 @@ TModel = TypeVar("TModel", bound=BaseModel)
 class SqlBackedObservabilityRepository(Protocol):
     def effective_history_tenant_id(self, requested_tenant_id: str | None) -> str | None: ...
 
-    def aggregate_summary(self, *, window_seconds: int | None, tenant_id: str | None) -> dict[str, object]: ...
+    def aggregate_summary(self, *, window_seconds: int | None, tenant_id: str | None) -> dict[str, Any]: ...
 
-    def timeline(self, *, window_seconds: int, bucket_seconds: int, tenant_id: str | None) -> list[dict[str, object]]: ...
+    def timeline(self, *, window_seconds: int, bucket_seconds: int, tenant_id: str | None) -> list[dict[str, Any]]: ...
 
     def provider_drilldown(
         self,
@@ -35,7 +38,7 @@ class SqlBackedObservabilityRepository(Protocol):
         *,
         window_seconds: int | None,
         tenant_id: str | None,
-    ) -> dict[str, object]: ...
+    ) -> dict[str, Any]: ...
 
     def client_drilldown(
         self,
@@ -43,7 +46,7 @@ class SqlBackedObservabilityRepository(Protocol):
         *,
         window_seconds: int | None,
         tenant_id: str | None,
-    ) -> dict[str, object]: ...
+    ) -> dict[str, Any]: ...
 
     def latest_usage_event(
         self,
@@ -102,11 +105,7 @@ class UsageAnalyticsStore:
         *entry_groups: list[BaseModel],
         tenant_id: str | None = None,
     ) -> str | None:
-        tenant_ids = [
-            self._tenant_id(getattr(entry, "tenant_id", None))
-            for group in entry_groups
-            for entry in group
-        ]
+        tenant_ids = [self._tenant_id(getattr(entry, "tenant_id", None)) for group in entry_groups for entry in group]
         return effective_tenant_filter(tenant_ids, tenant_id)
 
     def _effective_history_tenant_id(self, *, tenant_id: str | None = None) -> str | None:
@@ -126,14 +125,10 @@ class UsageAnalyticsStore:
     def _apply_tenant_filter(self, entries: list[TModel], tenant_id: str | None) -> list[TModel]:
         if tenant_id is None:
             return entries
-        return [
-            entry
-            for entry in entries
-            if self._tenant_id(getattr(entry, "tenant_id", None)) == tenant_id
-        ]
+        return [entry for entry in entries if self._tenant_id(getattr(entry, "tenant_id", None)) == tenant_id]
 
     @staticmethod
-    def _context_fields(context: TelemetryContext | None) -> dict[str, object]:
+    def _context_fields(context: TelemetryContext | None) -> dict[str, Any]:
         if context is None:
             return {}
         return {
@@ -147,11 +142,9 @@ class UsageAnalyticsStore:
 
     @staticmethod
     def _scope_fields(
-        request_metadata: dict[str, object] | dict[str, str] | None,
-    ) -> dict[str, object]:
-        return {
-            "scope_attributes": extract_scope_attributes(request_metadata)
-        }
+        request_metadata: dict[str, Any] | dict[str, str] | None,
+    ) -> dict[str, Any]:
+        return {"scope_attributes": extract_scope_attributes(request_metadata)}
 
     def record_non_stream_result(
         self,
@@ -159,7 +152,7 @@ class UsageAnalyticsStore:
         client: ClientIdentity | None = None,
         *,
         context: TelemetryContext | None = None,
-        request_metadata: dict[str, object] | dict[str, str] | None = None,
+        request_metadata: dict[str, Any] | dict[str, str] | None = None,
     ) -> None:
         identity = client or ClientIdentity()
         resolved_tenant_id = self._tenant_id(identity.tenant_id)
@@ -199,7 +192,7 @@ class UsageAnalyticsStore:
         auth_source: str,
         client: ClientIdentity | None = None,
         context: TelemetryContext | None = None,
-        request_metadata: dict[str, object] | dict[str, str] | None = None,
+        request_metadata: dict[str, Any] | dict[str, str] | None = None,
     ) -> None:
         identity = client or ClientIdentity()
         resolved_tenant_id = self._tenant_id(identity.tenant_id)
@@ -239,7 +232,7 @@ class UsageAnalyticsStore:
         error_type: str,
         status_code: int,
         context: TelemetryContext | None = None,
-        request_metadata: dict[str, object] | dict[str, str] | None = None,
+        request_metadata: dict[str, Any] | dict[str, str] | None = None,
     ) -> None:
         resolved_tenant_id = self._tenant_id(client.tenant_id)
         event = ErrorEvent(
@@ -272,7 +265,7 @@ class UsageAnalyticsStore:
         event: ProviderStreamEvent,
         client: ClientIdentity | None = None,
         context: TelemetryContext | None = None,
-        request_metadata: dict[str, object] | dict[str, str] | None = None,
+        request_metadata: dict[str, Any] | dict[str, str] | None = None,
     ) -> None:
         if not event.usage or not event.cost:
             return
@@ -475,13 +468,8 @@ class UsageAnalyticsStore:
         cls,
         events: list[UsageEvent],
         errors: list[ErrorEvent],
-    ) -> dict[str, object]:
-        samples = sorted(
-            int(duration_ms)
-            for entry in [*events, *errors]
-            if getattr(entry, "traffic_type", None) == "runtime"
-            and (duration_ms := getattr(entry, "duration_ms", None)) is not None
-        )
+    ) -> dict[str, Any]:
+        samples = sorted(int(duration_ms) for entry in [*events, *errors] if getattr(entry, "traffic_type", None) == "runtime" and (duration_ms := getattr(entry, "duration_ms", None)) is not None)
         if not samples:
             return {
                 "sample_count": 0,
@@ -545,16 +533,8 @@ class UsageAnalyticsStore:
             and (
                 stream_mode is None
                 or (event.stream_mode == stream_mode)
-                or (
-                    event.stream_mode is None
-                    and stream_mode == "stream"
-                    and event.credential_type == "stream"
-                )
-                or (
-                    event.stream_mode is None
-                    and stream_mode == "non_stream"
-                    and event.credential_type != "stream"
-                )
+                or (event.stream_mode is None and stream_mode == "stream" and event.credential_type == "stream")
+                or (event.stream_mode is None and stream_mode == "non_stream" and event.credential_type != "stream")
             )
             and (not require_tool_calls or int(getattr(event, "tool_call_count", 0)) > 0)
         ]
@@ -585,7 +565,7 @@ class UsageAnalyticsStore:
         ]
         return filtered[-1] if filtered else None
 
-    def aggregate(self, window_seconds: int | None = None, *, tenant_id: str | None = None) -> dict[str, object]:
+    def aggregate(self, window_seconds: int | None = None, *, tenant_id: str | None = None) -> dict[str, Any]:
         sql_repository = self._sql_repository()
         effective_tenant_id = self._effective_history_tenant_id(tenant_id=tenant_id)
         if sql_repository is not None:
@@ -600,19 +580,43 @@ class UsageAnalyticsStore:
         errors = self._apply_tenant_filter(errors, effective_tenant_id)
         health = self._apply_tenant_filter(health, effective_tenant_id)
 
-        grouped_provider = defaultdict(lambda: {"requests": 0, "tokens": 0, "actual_cost": 0.0, "hypothetical_cost": 0.0, "avoided_cost": 0.0})
-        grouped_model = defaultdict(lambda: {"requests": 0, "tokens": 0})
-        grouped_auth = defaultdict(lambda: {"requests": 0, "tokens": 0})
-        grouped_client = defaultdict(lambda: {"requests": 0, "tokens": 0, "actual_cost": 0.0, "hypothetical_cost": 0.0, "avoided_cost": 0.0})
-        grouped_traffic = defaultdict(lambda: {"requests": 0, "tokens": 0, "actual_cost": 0.0, "hypothetical_cost": 0.0, "avoided_cost": 0.0})
-        grouped_stream_mode = defaultdict(lambda: {"requests": 0})
-        grouped_error_provider = defaultdict(lambda: {"errors": 0})
-        grouped_error_model = defaultdict(lambda: {"errors": 0})
-        grouped_error_client = defaultdict(lambda: {"errors": 0})
-        grouped_error_traffic = defaultdict(lambda: {"errors": 0})
-        grouped_error_type = defaultdict(lambda: {"errors": 0})
-        grouped_error_integration = defaultdict(lambda: {"errors": 0})
-        grouped_error_profile = defaultdict(lambda: {"errors": 0})
+        grouped_provider: dict[str, dict[str, int | float]] = defaultdict(
+            lambda: {
+                "requests": 0,
+                "tokens": 0,
+                "actual_cost": 0.0,
+                "hypothetical_cost": 0.0,
+                "avoided_cost": 0.0,
+            }
+        )
+        grouped_model: dict[str, dict[str, int | float]] = defaultdict(lambda: {"requests": 0, "tokens": 0})
+        grouped_auth: dict[str, dict[str, int | float]] = defaultdict(lambda: {"requests": 0, "tokens": 0})
+        grouped_client: dict[str, dict[str, int | float]] = defaultdict(
+            lambda: {
+                "requests": 0,
+                "tokens": 0,
+                "actual_cost": 0.0,
+                "hypothetical_cost": 0.0,
+                "avoided_cost": 0.0,
+            }
+        )
+        grouped_traffic: dict[str, dict[str, int | float]] = defaultdict(
+            lambda: {
+                "requests": 0,
+                "tokens": 0,
+                "actual_cost": 0.0,
+                "hypothetical_cost": 0.0,
+                "avoided_cost": 0.0,
+            }
+        )
+        grouped_stream_mode: dict[str, dict[str, int]] = defaultdict(lambda: {"requests": 0})
+        grouped_error_provider: dict[str, dict[str, int]] = defaultdict(lambda: {"errors": 0})
+        grouped_error_model: dict[str, dict[str, int]] = defaultdict(lambda: {"errors": 0})
+        grouped_error_client: dict[str, dict[str, int]] = defaultdict(lambda: {"errors": 0})
+        grouped_error_traffic: dict[str, dict[str, int]] = defaultdict(lambda: {"errors": 0})
+        grouped_error_type: dict[str, dict[str, int]] = defaultdict(lambda: {"errors": 0})
+        grouped_error_integration: dict[str, dict[str, int]] = defaultdict(lambda: {"errors": 0})
+        grouped_error_profile: dict[str, dict[str, int]] = defaultdict(lambda: {"errors": 0})
 
         for event in events:
             grouped_provider[event.provider]["requests"] += 1
@@ -700,7 +704,7 @@ class UsageAnalyticsStore:
         window_seconds: int = 24 * 3600,
         bucket_seconds: int = 3600,
         tenant_id: str | None = None,
-    ) -> list[dict[str, object]]:
+    ) -> list[dict[str, Any]]:
         now = datetime.now(tz=UTC)
         bucket_count = max(1, window_seconds // bucket_seconds)
         sql_repository = self._sql_repository()
@@ -721,18 +725,16 @@ class UsageAnalyticsStore:
             bucket_end = bucket_start + timedelta(seconds=bucket_seconds)
             bucket_events = [event for event in events if bucket_start <= self._parse_dt(event.created_at) < bucket_end]
             bucket_errors = [event for event in errors if bucket_start <= self._parse_dt(event.created_at) < bucket_end]
-            buckets.append(
-                {
-                    "bucket_start": bucket_start.isoformat(),
-                    "bucket_end": bucket_end.isoformat(),
-                    "requests": len(bucket_events),
-                    "errors": len(bucket_errors),
-                    "actual_cost": sum(event.actual_cost for event in bucket_events),
-                    "hypothetical_cost": sum(event.hypothetical_cost for event in bucket_events),
-                    "avoided_cost": sum(event.avoided_cost for event in bucket_events),
-                    "error_rate": (len(bucket_errors) / max(1, len(bucket_events) + len(bucket_errors))),
-                }
-            )
+            buckets.append({
+                "bucket_start": bucket_start.isoformat(),
+                "bucket_end": bucket_end.isoformat(),
+                "requests": len(bucket_events),
+                "errors": len(bucket_errors),
+                "actual_cost": sum(event.actual_cost for event in bucket_events),
+                "hypothetical_cost": sum(event.hypothetical_cost for event in bucket_events),
+                "avoided_cost": sum(event.avoided_cost for event in bucket_events),
+                "error_rate": (len(bucket_errors) / max(1, len(bucket_events) + len(bucket_errors))),
+            })
         return buckets
 
     def provider_drilldown(
@@ -741,7 +743,7 @@ class UsageAnalyticsStore:
         *,
         window_seconds: int | None = None,
         tenant_id: str | None = None,
-    ) -> dict[str, object]:
+    ) -> dict[str, Any]:
         sql_repository = self._sql_repository()
         effective_tenant_id = self._effective_history_tenant_id(tenant_id=tenant_id)
         if sql_repository is not None:
@@ -756,31 +758,72 @@ class UsageAnalyticsStore:
         events = self._apply_tenant_filter(events, effective_tenant_id)
         errors = self._apply_tenant_filter(errors, effective_tenant_id)
         health = self._apply_tenant_filter(health, effective_tenant_id)
-        models: dict[str, dict[str, object]] = {}
-        clients: dict[str, dict[str, object]] = {}
+        models: dict[str, dict[str, Any]] = {}
+        clients: dict[str, dict[str, Any]] = {}
         for event in events:
-            model_row = models.setdefault(event.model, {"model": event.model, "requests": 0, "tokens": 0, "actual_cost": 0.0})
+            model_row = models.setdefault(
+                event.model,
+                {"model": event.model, "requests": 0, "tokens": 0, "actual_cost": 0.0},
+            )
             model_row["requests"] = int(model_row["requests"]) + 1
             model_row["tokens"] = int(model_row["tokens"]) + event.total_tokens
             model_row["actual_cost"] = float(model_row["actual_cost"]) + event.actual_cost
-            client_row = clients.setdefault(event.client_id, {"client_id": event.client_id, "requests": 0, "tokens": 0, "actual_cost": 0.0, "errors": 0})
+            client_row = clients.setdefault(
+                event.client_id,
+                {
+                    "client_id": event.client_id,
+                    "requests": 0,
+                    "tokens": 0,
+                    "actual_cost": 0.0,
+                    "errors": 0,
+                },
+            )
             client_row["requests"] = int(client_row["requests"]) + 1
             client_row["tokens"] = int(client_row["tokens"]) + event.total_tokens
             client_row["actual_cost"] = float(client_row["actual_cost"]) + event.actual_cost
         for error in errors:
             client_id = error.client_id
-            client_row = clients.setdefault(client_id, {"client_id": client_id, "requests": 0, "tokens": 0, "actual_cost": 0.0, "errors": 0})
+            client_row = clients.setdefault(
+                client_id,
+                {
+                    "client_id": client_id,
+                    "requests": 0,
+                    "tokens": 0,
+                    "actual_cost": 0.0,
+                    "errors": 0,
+                },
+            )
             client_row["errors"] = int(client_row["errors"]) + 1
             model_key = error.model or "unknown"
-            model_row = models.setdefault(model_key, {"model": model_key, "requests": 0, "tokens": 0, "actual_cost": 0.0, "errors": 0})
+            model_row = models.setdefault(
+                model_key,
+                {
+                    "model": model_key,
+                    "requests": 0,
+                    "tokens": 0,
+                    "actual_cost": 0.0,
+                    "errors": 0,
+                },
+            )
             model_row["errors"] = int(model_row.get("errors", 0)) + 1
         return {
             "provider": provider,
             "requests": len(events),
             "errors": len(errors),
             "latest_health": [item.model_dump() for item in sorted(health, key=lambda event: event.created_at, reverse=True)[:20]],
-            "models": sorted(models.values(), key=lambda item: (int(item.get("errors", 0)), int(item["requests"])), reverse=True),
-            "clients": sorted(clients.values(), key=lambda item: (int(item.get("errors", 0)), float(item.get("actual_cost", 0.0))), reverse=True),
+            "models": sorted(
+                models.values(),
+                key=lambda item: (int(item.get("errors", 0)), int(item["requests"])),
+                reverse=True,
+            ),
+            "clients": sorted(
+                clients.values(),
+                key=lambda item: (
+                    int(item.get("errors", 0)),
+                    float(item.get("actual_cost", 0.0)),
+                ),
+                reverse=True,
+            ),
         }
 
     def client_drilldown(
@@ -789,7 +832,7 @@ class UsageAnalyticsStore:
         *,
         window_seconds: int | None = None,
         tenant_id: str | None = None,
-    ) -> dict[str, object]:
+    ) -> dict[str, Any]:
         sql_repository = self._sql_repository()
         effective_tenant_id = self._effective_history_tenant_id(tenant_id=tenant_id)
         if sql_repository is not None:
@@ -802,49 +845,110 @@ class UsageAnalyticsStore:
         errors = [event for event in self._window_filter(self._error_events(), window_seconds) if event.client_id == client_id]
         events = self._apply_tenant_filter(events, effective_tenant_id)
         errors = self._apply_tenant_filter(errors, effective_tenant_id)
-        providers: dict[str, dict[str, object]] = {}
+        providers: dict[str, dict[str, Any]] = {}
         for event in events:
-            row = providers.setdefault(event.provider, {"provider": event.provider, "requests": 0, "tokens": 0, "actual_cost": 0.0})
+            row = providers.setdefault(
+                event.provider,
+                {
+                    "provider": event.provider,
+                    "requests": 0,
+                    "tokens": 0,
+                    "actual_cost": 0.0,
+                },
+            )
             row["requests"] = int(row["requests"]) + 1
             row["tokens"] = int(row["tokens"]) + event.total_tokens
             row["actual_cost"] = float(row["actual_cost"]) + event.actual_cost
         for error in errors:
             provider_key = error.provider or "unknown"
-            row = providers.setdefault(provider_key, {"provider": provider_key, "requests": 0, "tokens": 0, "actual_cost": 0.0, "errors": 0})
+            row = providers.setdefault(
+                provider_key,
+                {
+                    "provider": provider_key,
+                    "requests": 0,
+                    "tokens": 0,
+                    "actual_cost": 0.0,
+                    "errors": 0,
+                },
+            )
             row["errors"] = int(row.get("errors", 0)) + 1
         return {
             "client_id": client_id,
             "requests": len(events),
             "errors": len(errors),
-            "providers": sorted(providers.values(), key=lambda item: (int(item.get("errors", 0)), int(item["requests"])), reverse=True),
+            "providers": sorted(
+                providers.values(),
+                key=lambda item: (int(item.get("errors", 0)), int(item["requests"])),
+                reverse=True,
+            ),
             "recent_errors": [item.model_dump() for item in sorted(errors, key=lambda event: event.created_at, reverse=True)[:25]],
             "recent_usage": [item.model_dump() for item in sorted(events, key=lambda event: event.created_at, reverse=True)[:25]],
         }
 
-    def alert_indicators(self, *, tenant_id: str | None = None) -> list[dict[str, object]]:
+    def alert_indicators(self, *, tenant_id: str | None = None) -> list[dict[str, Any]]:
         last_hour = self.aggregate(window_seconds=3600, tenant_id=tenant_id)
         requests = int(last_hour["event_count"])
         errors = int(last_hour["error_event_count"])
         error_rate = errors / max(1, (requests + errors))
-        alerts: list[dict[str, object]] = []
+        alerts: list[dict[str, Any]] = []
         if error_rate >= 0.25 and errors >= 3:
-            alerts.append({"severity": "critical", "type": "error_rate_spike", "message": "Error rate exceeded 25% in last hour.", "value": error_rate})
+            alerts.append({
+                "severity": "critical",
+                "type": "error_rate_spike",
+                "message": "Error rate exceeded 25% in last hour.",
+                "value": error_rate,
+            })
         elif error_rate >= 0.1 and errors >= 2:
-            alerts.append({"severity": "warning", "type": "error_rate_rising", "message": "Error rate exceeded 10% in last hour.", "value": error_rate})
+            alerts.append({
+                "severity": "warning",
+                "type": "error_rate_rising",
+                "message": "Error rate exceeded 10% in last hour.",
+                "value": error_rate,
+            })
 
         health_failures = sum(item["errors"] for item in last_hour["errors_by_traffic_type"] if item["traffic_type"] == "health_check")
         if health_failures >= 5:
-            alerts.append({"severity": "warning", "type": "health_failures", "message": "Health checks report repeated failures.", "value": health_failures})
+            alerts.append({
+                "severity": "warning",
+                "type": "health_failures",
+                "message": "Health checks report repeated failures.",
+                "value": health_failures,
+            })
 
-        health_cost = next((item["actual_cost"] for item in last_hour["by_traffic_type"] if item["traffic_type"] == "health_check"), 0.0)
-        runtime_cost = next((item["actual_cost"] for item in last_hour["by_traffic_type"] if item["traffic_type"] == "runtime"), 0.0)
+        health_cost = next(
+            (item["actual_cost"] for item in last_hour["by_traffic_type"] if item["traffic_type"] == "health_check"),
+            0.0,
+        )
+        runtime_cost = next(
+            (item["actual_cost"] for item in last_hour["by_traffic_type"] if item["traffic_type"] == "runtime"),
+            0.0,
+        )
         if health_cost > runtime_cost and health_cost > 0:
-            alerts.append({"severity": "warning", "type": "health_cost_pressure", "message": "Health-check costs exceeded runtime costs in last hour.", "value": health_cost})
+            alerts.append({
+                "severity": "warning",
+                "type": "health_cost_pressure",
+                "message": "Health-check costs exceeded runtime costs in last hour.",
+                "value": health_cost,
+            })
         if requests == 0 and errors > 0:
-            alerts.append({"severity": "warning", "type": "control_plane_only_errors", "message": "Only error traffic was recorded in the last hour.", "value": errors})
-        top_provider = max(last_hour["errors_by_provider"], key=lambda item: item["errors"], default=None)
+            alerts.append({
+                "severity": "warning",
+                "type": "control_plane_only_errors",
+                "message": "Only error traffic was recorded in the last hour.",
+                "value": errors,
+            })
+        top_provider = max(
+            last_hour["errors_by_provider"],
+            key=lambda item: item["errors"],
+            default=None,
+        )
         if top_provider and int(top_provider["errors"]) >= 3:
-            alerts.append({"severity": "warning", "type": "provider_hotspot", "message": f"Provider {top_provider['provider']} is the current error hotspot.", "value": top_provider["errors"]})
+            alerts.append({
+                "severity": "warning",
+                "type": "provider_hotspot",
+                "message": f"Provider {top_provider['provider']} is the current error hotspot.",
+                "value": top_provider["errors"],
+            })
 
         return alerts
 

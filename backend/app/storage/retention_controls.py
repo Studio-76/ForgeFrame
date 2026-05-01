@@ -254,7 +254,10 @@ def _normalize_validated_source_databases(value: Any) -> list[dict[str, str]] | 
         seen_keys.add(key)
         normalized.append(normalized_item)
 
-    return sorted(normalized, key=lambda item: (item["database"], item["cluster_system_identifier"]))
+    return sorted(
+        normalized,
+        key=lambda item: (item["database"], item["cluster_system_identifier"]),
+    )
 
 
 def assess_backup_restore_guard(

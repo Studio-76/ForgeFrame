@@ -50,7 +50,10 @@ def _execution_database_url() -> str:
     settings = get_settings()
     if settings.execution_postgres_url.strip():
         return settings.execution_postgres_url.strip()
-    if settings.harness_storage_backend == "postgresql" and settings.harness_postgres_url.strip():
+    if (
+        settings.harness_storage_backend == "postgresql"
+        and settings.harness_postgres_url.strip()
+    ):
         return settings.harness_postgres_url.strip()
     sqlite_path = (ROOT / settings.execution_sqlite_path).resolve()
     sqlite_path.parent.mkdir(parents=True, exist_ok=True)
@@ -74,13 +77,17 @@ def _table_exists(connection, table_name: str) -> bool:
 def _safe_count(connection, table_name: str) -> int:
     if not _table_exists(connection, table_name):
         return 0
-    return int(connection.execute(text(f'SELECT COUNT(*) FROM "{table_name}"')).scalar_one())
+    return int(
+        connection.execute(text(f'SELECT COUNT(*) FROM "{table_name}"')).scalar_one()
+    )
 
 
 def _queue_state_counts(connection) -> dict[str, int]:
     if not _table_exists(connection, "runs"):
         return {}
-    rows = connection.execute(text('SELECT state, COUNT(*) AS count FROM "runs" GROUP BY state')).all()
+    rows = connection.execute(
+        text('SELECT state, COUNT(*) AS count FROM "runs" GROUP BY state')
+    ).all()
     return {str(state): int(count) for state, count in rows}
 
 
@@ -90,7 +97,10 @@ def _migration_state(connection) -> tuple[int | None, list[int]]:
         if not _table_exists(connection, migration_table):
             continue
         versions.update(
-            int(row[0]) for row in connection.execute(text(f'SELECT version FROM "{migration_table}" ORDER BY version ASC'))
+            int(row[0])
+            for row in connection.execute(
+                text(f'SELECT version FROM "{migration_table}" ORDER BY version ASC')
+            )
         )
     if not versions:
         return None, []
@@ -100,15 +110,19 @@ def _migration_state(connection) -> tuple[int | None, list[int]]:
 
 def _source_identity(connection, database_url: str) -> dict[str, str]:
     if connection.dialect.name.startswith("postgresql"):
-        row = connection.execute(
-            text(
-                """
+        row = (
+            connection.execute(
+                text(
+                    """
                 SELECT
                   current_database() AS database,
                   (SELECT system_identifier::text FROM pg_control_system()) AS cluster_system_identifier
                 """
+                )
             )
-        ).mappings().one()
+            .mappings()
+            .one()
+        )
         return {
             "source_database": str(row["database"]),
             "cluster_system_identifier": str(row["cluster_system_identifier"]),
@@ -116,7 +130,11 @@ def _source_identity(connection, database_url: str) -> dict[str, str]:
             "public_fqdn": "",
         }
     return {
-        "source_database": str(Path(database_url.removeprefix("sqlite+pysqlite:///")).name) if database_url.startswith("sqlite") else database_url,
+        "source_database": str(
+            Path(database_url.removeprefix("sqlite+pysqlite:///")).name
+        )
+        if database_url.startswith("sqlite")
+        else database_url,
         "cluster_system_identifier": "",
         "deployment_slug": "",
         "public_fqdn": "",
@@ -132,9 +150,14 @@ def capture_snapshot(*, label: str | None) -> dict[str, Any]:
     source_identity: dict[str, str] | None = None
 
     for database_url in _database_targets():
-        engine = create_engine(database_url, pool_pre_ping=database_url.startswith("postgresql"))
+        engine = create_engine(
+            database_url, pool_pre_ping=database_url.startswith("postgresql")
+        )
         with engine.connect() as connection:
-            object_counts = {table_name: _safe_count(connection, table_name) for table_name in CRITICAL_OBJECT_TABLES}
+            object_counts = {
+                table_name: _safe_count(connection, table_name)
+                for table_name in CRITICAL_OBJECT_TABLES
+            }
             queue_state_counts = _queue_state_counts(connection)
             migration_version, migration_versions = _migration_state(connection)
             identity = _source_identity(connection, database_url)
@@ -149,11 +172,17 @@ def capture_snapshot(*, label: str | None) -> dict[str, Any]:
                 }
             )
             for key, value in object_counts.items():
-                merged_object_counts[key] = merged_object_counts.get(key, 0) + int(value)
+                merged_object_counts[key] = merged_object_counts.get(key, 0) + int(
+                    value
+                )
             for key, value in queue_state_counts.items():
-                merged_queue_state_counts[key] = merged_queue_state_counts.get(key, 0) + int(value)
+                merged_queue_state_counts[key] = merged_queue_state_counts.get(
+                    key, 0
+                ) + int(value)
             if migration_version is not None:
-                latest_migration_version = max(latest_migration_version or migration_version, migration_version)
+                latest_migration_version = max(
+                    latest_migration_version or migration_version, migration_version
+                )
             applied_versions.update(migration_versions)
             if source_identity is None and any(identity.values()):
                 source_identity = identity
@@ -161,7 +190,8 @@ def capture_snapshot(*, label: str | None) -> dict[str, Any]:
     return {
         "captured_at": _utcnow(),
         "label": label or "",
-        "source_identity": source_identity or {
+        "source_identity": source_identity
+        or {
             "source_database": "",
             "cluster_system_identifier": "",
             "deployment_slug": "",
@@ -177,19 +207,29 @@ def capture_snapshot(*, label: str | None) -> dict[str, Any]:
     }
 
 
-def _object_mismatches(before_counts: dict[str, Any], after_counts: dict[str, Any]) -> list[str]:
+def _object_mismatches(
+    before_counts: dict[str, Any], after_counts: dict[str, Any]
+) -> list[str]:
     mismatches: list[str] = []
     for table_name in CRITICAL_OBJECT_TABLES:
         before_count = int(before_counts.get(table_name, 0))
         after_count = int(after_counts.get(table_name, 0))
         if after_count < before_count:
-            mismatches.append(f"count_decreased:{table_name}:{before_count}->{after_count}")
+            mismatches.append(
+                f"count_decreased:{table_name}:{before_count}->{after_count}"
+            )
     return mismatches
 
 
-def _source_identity_mismatches(before: dict[str, Any], after: dict[str, Any]) -> list[str]:
+def _source_identity_mismatches(
+    before: dict[str, Any], after: dict[str, Any]
+) -> list[str]:
     mismatches: list[str] = []
-    if before.get("source_database") and after.get("source_database") and before["source_database"] != after["source_database"]:
+    if (
+        before.get("source_database")
+        and after.get("source_database")
+        and before["source_database"] != after["source_database"]
+    ):
         mismatches.append("source_database_changed_across_upgrade")
     if (
         before.get("cluster_system_identifier")
@@ -200,7 +240,9 @@ def _source_identity_mismatches(before: dict[str, Any], after: dict[str, Any]) -
     return mismatches
 
 
-def _queue_drain_ok(before_counts: dict[str, Any], after_counts: dict[str, Any]) -> bool:
+def _queue_drain_ok(
+    before_counts: dict[str, Any], after_counts: dict[str, Any]
+) -> bool:
     before_active = sum(int(before_counts.get(key, 0)) for key in ACTIVE_QUEUE_STATES)
     after_active = sum(int(after_counts.get(key, 0)) for key in ACTIVE_QUEUE_STATES)
     return before_active == 0 and after_active == 0
@@ -226,7 +268,11 @@ def build_report(args: argparse.Namespace) -> dict[str, Any]:
         else before.get("migration_version")
     )
     after_migration = after["migration"]["latest_version"]
-    if before_migration is not None and after_migration is not None and int(after_migration) < int(before_migration):
+    if (
+        before_migration is not None
+        and after_migration is not None
+        and int(after_migration) < int(before_migration)
+    ):
         mismatches.append("migration_version_regressed")
     queue_drain_ok = _queue_drain_ok(
         dict(before.get("queue_state_counts") or {}),
@@ -238,9 +284,18 @@ def build_report(args: argparse.Namespace) -> dict[str, Any]:
     )
     status = args.status
     if not status:
-        if args.upgrade_result == "succeeded" and no_loss_ok and queue_drain_ok and not mismatches:
+        if (
+            args.upgrade_result == "succeeded"
+            and no_loss_ok
+            and queue_drain_ok
+            and not mismatches
+        ):
             status = "ok"
-        elif args.upgrade_result == "failed" or "migration_version_regressed" in mismatches or not no_loss_ok:
+        elif (
+            args.upgrade_result == "failed"
+            or "migration_version_regressed" in mismatches
+            or not no_loss_ok
+        ):
             status = "failed"
         else:
             status = "warning"
@@ -270,23 +325,58 @@ def _write_output(payload: dict[str, Any], output: str | None) -> None:
 
 
 def _build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="Capture pre/post upgrade checkpoints and build a ForgeFrame no-loss proof report.")
+    parser = argparse.ArgumentParser(
+        description="Capture pre/post upgrade checkpoints and build a ForgeFrame no-loss proof report."
+    )
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     capture = subparsers.add_parser("capture", help="Capture a pre-upgrade checkpoint.")
     capture.add_argument("--label", default="", help="Optional checkpoint label.")
     capture.add_argument("--output", help="Optional JSON output path.")
 
-    compare = subparsers.add_parser("compare", help="Compare a checkpoint against the current state and emit an upgrade proof report.")
-    compare.add_argument("--checkpoint", required=True, help="Path to the JSON checkpoint created with capture.")
-    compare.add_argument("--release-id", required=True, help="Operator release identifier.")
-    compare.add_argument("--target-version", required=True, help="Target ForgeFrame version.")
-    compare.add_argument("--upgrade-result", choices=["succeeded", "failed", "rolled_back", "partial_failure"], required=True)
-    compare.add_argument("--status", choices=["ok", "warning", "failed"], help="Optional explicit report status override.")
-    compare.add_argument("--rollback-classification", default="not_needed", help="Rollback classification for failed or partial upgrades.")
-    compare.add_argument("--failure-classification", default="none", help="Failure classification for partial or failed upgrades.")
-    compare.add_argument("--bootstrap-recovery-state", default="recovered", help="Bootstrap/deploy recovery outcome after the upgrade.")
-    compare.add_argument("--label", default="", help="Optional post-upgrade capture label.")
+    compare = subparsers.add_parser(
+        "compare",
+        help="Compare a checkpoint against the current state and emit an upgrade proof report.",
+    )
+    compare.add_argument(
+        "--checkpoint",
+        required=True,
+        help="Path to the JSON checkpoint created with capture.",
+    )
+    compare.add_argument(
+        "--release-id", required=True, help="Operator release identifier."
+    )
+    compare.add_argument(
+        "--target-version", required=True, help="Target ForgeFrame version."
+    )
+    compare.add_argument(
+        "--upgrade-result",
+        choices=["succeeded", "failed", "rolled_back", "partial_failure"],
+        required=True,
+    )
+    compare.add_argument(
+        "--status",
+        choices=["ok", "warning", "failed"],
+        help="Optional explicit report status override.",
+    )
+    compare.add_argument(
+        "--rollback-classification",
+        default="not_needed",
+        help="Rollback classification for failed or partial upgrades.",
+    )
+    compare.add_argument(
+        "--failure-classification",
+        default="none",
+        help="Failure classification for partial or failed upgrades.",
+    )
+    compare.add_argument(
+        "--bootstrap-recovery-state",
+        default="recovered",
+        help="Bootstrap/deploy recovery outcome after the upgrade.",
+    )
+    compare.add_argument(
+        "--label", default="", help="Optional post-upgrade capture label."
+    )
     compare.add_argument("--notes", default="", help="Optional operator notes.")
     compare.add_argument("--output", help="Optional JSON output path.")
 

@@ -3,6 +3,7 @@
 from collections import defaultdict
 from datetime import UTC, datetime, timedelta
 from math import ceil
+from typing import Any, cast
 
 from fastapi import APIRouter, Depends, Query
 from fastapi.responses import JSONResponse
@@ -12,12 +13,17 @@ from app.core.model_registry import ModelRegistry
 from app.instances.models import InstanceRecord
 from app.settings.config import Settings, get_settings
 from app.tenancy import TenantFilterRequiredError
-from app.usage.events import ErrorEvent, HealthEvent, UsageEvent
 from app.usage.analytics import UsageAnalyticsStore, get_usage_analytics_store
+from app.usage.events import ErrorEvent, HealthEvent, UsageEvent
 
 router = APIRouter(prefix="/usage", tags=["admin-usage"])
 
-WINDOW_MAP: dict[str, int | None] = {"1h": 3600, "24h": 24 * 3600, "7d": 7 * 24 * 3600, "all": None}
+WINDOW_MAP: dict[str, int | None] = {
+    "1h": 3600,
+    "24h": 24 * 3600,
+    "7d": 7 * 24 * 3600,
+    "all": None,
+}
 
 
 def _tenant_filter_error(exc: TenantFilterRequiredError) -> JSONResponse:
@@ -42,7 +48,10 @@ def _parse_dt(value: str) -> datetime:
     return datetime.fromisoformat(value)
 
 
-def _window_filter(entries: list[UsageEvent] | list[ErrorEvent] | list[HealthEvent], window_seconds: int | None):
+def _window_filter(
+    entries: list[UsageEvent] | list[ErrorEvent] | list[HealthEvent],
+    window_seconds: int | None,
+):
     if window_seconds is None:
         return entries
     cutoff = datetime.now(tz=UTC) - timedelta(seconds=window_seconds)
@@ -56,11 +65,7 @@ def _matches_usage_filters(
     client_id: str | None,
     model: str | None,
 ) -> bool:
-    return (
-        (provider is None or event.provider == provider)
-        and (client_id is None or event.client_id == client_id)
-        and (model is None or event.model == model)
-    )
+    return (provider is None or event.provider == provider) and (client_id is None or event.client_id == client_id) and (model is None or event.model == model)
 
 
 def _matches_error_filters(
@@ -70,11 +75,7 @@ def _matches_error_filters(
     client_id: str | None,
     model: str | None,
 ) -> bool:
-    return (
-        (provider is None or event.provider == provider)
-        and (client_id is None or event.client_id == client_id)
-        and (model is None or event.model == model)
-    )
+    return (provider is None or event.provider == provider) and (client_id is None or event.client_id == client_id) and (model is None or event.model == model)
 
 
 def _matches_health_filters(
@@ -83,10 +84,7 @@ def _matches_health_filters(
     provider: str | None,
     model: str | None,
 ) -> bool:
-    return (
-        (provider is None or event.provider == provider)
-        and (model is None or event.model == model)
-    )
+    return (provider is None or event.provider == provider) and (model is None or event.model == model)
 
 
 def _normalized_stream_mode(event: UsageEvent) -> str:
@@ -105,13 +103,8 @@ def _duration_percentile(samples: list[int], percentile: float) -> int | None:
 def _runtime_duration_summary(
     events: list[UsageEvent],
     errors: list[ErrorEvent],
-) -> dict[str, object]:
-    samples = sorted(
-        int(duration_ms)
-        for entry in [*events, *errors]
-        if getattr(entry, "traffic_type", None) == "runtime"
-        and (duration_ms := getattr(entry, "duration_ms", None)) is not None
-    )
+) -> Any:
+    samples = sorted(int(duration_ms) for entry in [*events, *errors] if getattr(entry, "traffic_type", None) == "runtime" and (duration_ms := getattr(entry, "duration_ms", None)) is not None)
     if not samples:
         return {
             "sample_count": 0,
@@ -135,54 +128,77 @@ def _build_timeline(
     *,
     window_seconds: int = 24 * 3600,
     bucket_seconds: int = 3600,
-) -> list[dict[str, object]]:
+) -> list[dict[str, Any]]:
     now = datetime.now(tz=UTC)
     bucket_count = max(1, window_seconds // bucket_seconds)
-    buckets: list[dict[str, object]] = []
+    buckets: list[dict[str, Any]] = []
     for index in range(bucket_count):
         bucket_start = now - timedelta(seconds=(bucket_count - index) * bucket_seconds)
         bucket_end = bucket_start + timedelta(seconds=bucket_seconds)
         bucket_events = [event for event in events if bucket_start <= _parse_dt(event.created_at) < bucket_end]
         bucket_errors = [event for event in errors if bucket_start <= _parse_dt(event.created_at) < bucket_end]
-        buckets.append(
-            {
-                "bucket_start": bucket_start.isoformat(),
-                "bucket_end": bucket_end.isoformat(),
-                "requests": len(bucket_events),
-                "errors": len(bucket_errors),
-                "actual_cost": sum(event.actual_cost for event in bucket_events),
-                "hypothetical_cost": sum(event.hypothetical_cost for event in bucket_events),
-                "avoided_cost": sum(event.avoided_cost for event in bucket_events),
-                "error_rate": (len(bucket_errors) / max(1, len(bucket_events) + len(bucket_errors))),
-            }
-        )
+        buckets.append({
+            "bucket_start": bucket_start.isoformat(),
+            "bucket_end": bucket_end.isoformat(),
+            "requests": len(bucket_events),
+            "errors": len(bucket_errors),
+            "actual_cost": sum(event.actual_cost for event in bucket_events),
+            "hypothetical_cost": sum(event.hypothetical_cost for event in bucket_events),
+            "avoided_cost": sum(event.avoided_cost for event in bucket_events),
+            "error_rate": (len(bucket_errors) / max(1, len(bucket_events) + len(bucket_errors))),
+        })
     return buckets
 
 
 def _build_alerts(
     events: list[UsageEvent],
     errors: list[ErrorEvent],
-) -> list[dict[str, object]]:
+) -> list[dict[str, Any]]:
     runtime_events = [event for event in events if event.traffic_type == "runtime"]
     runtime_errors = [event for event in errors if event.traffic_type == "runtime"]
     requests = len(runtime_events)
     error_rate = len(runtime_errors) / max(1, requests + len(runtime_errors))
-    alerts: list[dict[str, object]] = []
+    alerts: list[dict[str, Any]] = []
     if error_rate >= 0.25 and len(runtime_errors) >= 3:
-        alerts.append({"severity": "critical", "type": "error_rate_spike", "message": "Error rate exceeded 25% in last hour.", "value": error_rate})
+        alerts.append({
+            "severity": "critical",
+            "type": "error_rate_spike",
+            "message": "Error rate exceeded 25% in last hour.",
+            "value": error_rate,
+        })
     elif error_rate >= 0.1 and len(runtime_errors) >= 2:
-        alerts.append({"severity": "warning", "type": "error_rate_rising", "message": "Error rate exceeded 10% in last hour.", "value": error_rate})
+        alerts.append({
+            "severity": "warning",
+            "type": "error_rate_rising",
+            "message": "Error rate exceeded 10% in last hour.",
+            "value": error_rate,
+        })
 
     health_failures = len([event for event in errors if event.traffic_type == "health_check"])
     if health_failures >= 5:
-        alerts.append({"severity": "warning", "type": "health_failures", "message": "Health checks report repeated failures.", "value": health_failures})
+        alerts.append({
+            "severity": "warning",
+            "type": "health_failures",
+            "message": "Health checks report repeated failures.",
+            "value": health_failures,
+        })
 
     health_cost = sum(event.actual_cost for event in events if event.traffic_type == "health_check")
     runtime_cost = sum(event.actual_cost for event in runtime_events)
     if health_cost > runtime_cost and health_cost > 0:
-        alerts.append({"severity": "warning", "type": "health_cost_pressure", "message": "Health-check costs exceeded runtime costs in last hour.", "value": health_cost})
+        alerts.append({
+            "severity": "warning",
+            "type": "health_cost_pressure",
+            "message": "Health-check costs exceeded runtime costs in last hour.",
+            "value": health_cost,
+        })
     if requests == 0 and len(runtime_errors) > 0:
-        alerts.append({"severity": "warning", "type": "control_plane_only_errors", "message": "Only error traffic was recorded in the last hour.", "value": len(runtime_errors)})
+        alerts.append({
+            "severity": "warning",
+            "type": "control_plane_only_errors",
+            "message": "Only error traffic was recorded in the last hour.",
+            "value": len(runtime_errors),
+        })
 
     errors_by_provider: dict[str, int] = defaultdict(int)
     for event in runtime_errors:
@@ -190,15 +206,20 @@ def _build_alerts(
     if errors_by_provider:
         top_provider, provider_errors = max(errors_by_provider.items(), key=lambda item: item[1])
         if provider_errors >= 3:
-            alerts.append({"severity": "warning", "type": "provider_hotspot", "message": f"Provider {top_provider} is the current error hotspot.", "value": provider_errors})
+            alerts.append({
+                "severity": "warning",
+                "type": "provider_hotspot",
+                "message": f"Provider {top_provider} is the current error hotspot.",
+                "value": provider_errors,
+            })
     return alerts
 
 
 def _cost_truths(
     *,
-    runtime: dict[str, object],
-    health_check: dict[str, object],
-) -> dict[str, object]:
+    runtime: dict[str, Any],
+    health_check: dict[str, Any],
+) -> Any:
     runtime_actual = float(runtime.get("actual_cost", 0.0) or 0.0)
     runtime_hypothetical = float(runtime.get("hypothetical_cost", 0.0) or 0.0)
     runtime_avoided = float(runtime.get("avoided_cost", 0.0) or 0.0)
@@ -270,7 +291,7 @@ def _filtered_usage_summary_payload(
     provider: str | None,
     client_id: str | None,
     model: str | None,
-) -> dict[str, object]:
+) -> Any:
     selected_window = _window_seconds(window)
     events = [
         event
@@ -282,26 +303,46 @@ def _filtered_usage_summary_payload(
         for event in _window_filter(analytics.list_error_events(tenant_id=instance.tenant_id), selected_window)
         if _matches_error_filters(event, provider=provider, client_id=client_id, model=model)
     ]
-    health = [
-        event
-        for event in _window_filter(analytics.list_health_events(tenant_id=instance.tenant_id), selected_window)
-        if _matches_health_filters(event, provider=provider, model=model)
-    ]
+    health = [event for event in _window_filter(analytics.list_health_events(tenant_id=instance.tenant_id), selected_window) if _matches_health_filters(event, provider=provider, model=model)]
 
     models = registry.list_active_models()
-    grouped_provider = defaultdict(lambda: {"requests": 0, "tokens": 0, "actual_cost": 0.0, "hypothetical_cost": 0.0, "avoided_cost": 0.0})
-    grouped_model = defaultdict(lambda: {"requests": 0, "tokens": 0})
-    grouped_auth = defaultdict(lambda: {"requests": 0, "tokens": 0})
-    grouped_client = defaultdict(lambda: {"requests": 0, "tokens": 0, "actual_cost": 0.0, "hypothetical_cost": 0.0, "avoided_cost": 0.0})
-    grouped_traffic = defaultdict(lambda: {"requests": 0, "tokens": 0, "actual_cost": 0.0, "hypothetical_cost": 0.0, "avoided_cost": 0.0})
-    grouped_stream_mode = defaultdict(lambda: {"requests": 0})
-    grouped_error_provider = defaultdict(lambda: {"errors": 0})
-    grouped_error_model = defaultdict(lambda: {"errors": 0})
-    grouped_error_client = defaultdict(lambda: {"errors": 0})
-    grouped_error_traffic = defaultdict(lambda: {"errors": 0})
-    grouped_error_type = defaultdict(lambda: {"errors": 0})
-    grouped_error_integration = defaultdict(lambda: {"errors": 0})
-    grouped_error_profile = defaultdict(lambda: {"errors": 0})
+    grouped_provider: defaultdict[str, dict[str, int | float]] = defaultdict(
+        lambda: {
+            "requests": 0,
+            "tokens": 0,
+            "actual_cost": 0.0,
+            "hypothetical_cost": 0.0,
+            "avoided_cost": 0.0,
+        }
+    )
+    grouped_model: defaultdict[str, dict[str, int | float]] = defaultdict(lambda: {"requests": 0, "tokens": 0})
+    grouped_auth: defaultdict[str, dict[str, int | float]] = defaultdict(lambda: {"requests": 0, "tokens": 0})
+    grouped_client: defaultdict[str, dict[str, int | float]] = defaultdict(
+        lambda: {
+            "requests": 0,
+            "tokens": 0,
+            "actual_cost": 0.0,
+            "hypothetical_cost": 0.0,
+            "avoided_cost": 0.0,
+        }
+    )
+    grouped_traffic: defaultdict[str, dict[str, int | float]] = defaultdict(
+        lambda: {
+            "requests": 0,
+            "tokens": 0,
+            "actual_cost": 0.0,
+            "hypothetical_cost": 0.0,
+            "avoided_cost": 0.0,
+        }
+    )
+    grouped_stream_mode: defaultdict[str, dict[str, int]] = defaultdict(lambda: {"requests": 0})
+    grouped_error_provider: defaultdict[str, dict[str, int]] = defaultdict(lambda: {"errors": 0})
+    grouped_error_model: defaultdict[str, dict[str, int]] = defaultdict(lambda: {"errors": 0})
+    grouped_error_client: defaultdict[str, dict[str, int]] = defaultdict(lambda: {"errors": 0})
+    grouped_error_traffic: defaultdict[str, dict[str, int]] = defaultdict(lambda: {"errors": 0})
+    grouped_error_type: defaultdict[str, dict[str, int]] = defaultdict(lambda: {"errors": 0})
+    grouped_error_integration: defaultdict[str, dict[str, int]] = defaultdict(lambda: {"errors": 0})
+    grouped_error_profile: defaultdict[str, dict[str, int]] = defaultdict(lambda: {"errors": 0})
 
     for event in events:
         grouped_provider[event.provider]["requests"] += 1
@@ -355,55 +396,75 @@ def _filtered_usage_summary_payload(
     last_hour_errors = _window_filter(errors, last_hour_cutoff)
     by_provider = sorted(
         [{"provider": key, **value} for key, value in grouped_provider.items()],
-        key=lambda item: (-int(item["requests"]), str(item["provider"])),
+        key=lambda item: (-int(cast(int, item["requests"])), str(item["provider"])),
     )
     by_model = sorted(
         [{"model": key, **value} for key, value in grouped_model.items()],
-        key=lambda item: (-int(item["requests"]), str(item["model"])),
+        key=lambda item: (-int(cast(int, item["requests"])), str(item["model"])),
     )
     by_auth = sorted(
         [{"auth_key": key, **value} for key, value in grouped_auth.items()],
-        key=lambda item: (-int(item["requests"]), str(item["auth_key"])),
+        key=lambda item: (-int(cast(int, item["requests"])), str(item["auth_key"])),
     )
     by_client = sorted(
         [{"client_id": key, **value} for key, value in grouped_client.items()],
-        key=lambda item: (-int(item["requests"]), str(item["client_id"])),
+        key=lambda item: (-int(cast(int, item["requests"])), str(item["client_id"])),
     )
     by_traffic_type = sorted(
         [{"traffic_type": key, **value} for key, value in grouped_traffic.items()],
-        key=lambda item: (-int(item["requests"]), str(item["traffic_type"])),
+        key=lambda item: (-int(cast(int, item["requests"])), str(item["traffic_type"])),
     )
     errors_by_provider = sorted(
         [{"provider": key, **value} for key, value in grouped_error_provider.items()],
-        key=lambda item: (-int(item["errors"]), str(item["provider"])),
+        key=lambda item: (-int(cast(int, item["errors"])), str(item["provider"])),
     )
     errors_by_model = sorted(
         [{"model": key, **value} for key, value in grouped_error_model.items()],
-        key=lambda item: (-int(item["errors"]), str(item["model"])),
+        key=lambda item: (-int(cast(int, item["errors"])), str(item["model"])),
     )
     errors_by_client = sorted(
         [{"client_id": key, **value} for key, value in grouped_error_client.items()],
-        key=lambda item: (-int(item["errors"]), str(item["client_id"])),
+        key=lambda item: (-int(cast(int, item["errors"])), str(item["client_id"])),
     )
     errors_by_traffic_type = sorted(
         [{"traffic_type": key, **value} for key, value in grouped_error_traffic.items()],
-        key=lambda item: (-int(item["errors"]), str(item["traffic_type"])),
+        key=lambda item: (-int(cast(int, item["errors"])), str(item["traffic_type"])),
     )
     errors_by_type = sorted(
         [{"error_key": key, **value} for key, value in grouped_error_type.items()],
-        key=lambda item: (-int(item["errors"]), str(item["error_key"])),
+        key=lambda item: (-int(cast(int, item["errors"])), str(item["error_key"])),
     )
     errors_by_integration = sorted(
         [{"integration_key": key, **value} for key, value in grouped_error_integration.items()],
-        key=lambda item: (-int(item["errors"]), str(item["integration_key"])),
+        key=lambda item: (-int(cast(int, item["errors"])), str(item["integration_key"])),
     )
     errors_by_profile = sorted(
         [{"profile_key": key, **value} for key, value in grouped_error_profile.items()],
-        key=lambda item: (-int(item["errors"]), str(item["profile_key"])),
+        key=lambda item: (-int(cast(int, item["errors"])), str(item["profile_key"])),
     )
 
-    runtime_split = next((item for item in by_traffic_type if item["traffic_type"] == "runtime"), {"traffic_type": "runtime", "requests": 0, "tokens": 0, "actual_cost": 0.0, "hypothetical_cost": 0.0, "avoided_cost": 0.0})
-    health_split = next((item for item in by_traffic_type if item["traffic_type"] == "health_check"), {"traffic_type": "health_check", "requests": 0, "tokens": 0, "actual_cost": 0.0, "hypothetical_cost": 0.0, "avoided_cost": 0.0})
+    runtime_split = next(
+        (item for item in by_traffic_type if item["traffic_type"] == "runtime"),
+        {
+            "traffic_type": "runtime",
+            "requests": 0,
+            "tokens": 0,
+            "actual_cost": 0.0,
+            "hypothetical_cost": 0.0,
+            "avoided_cost": 0.0,
+        },
+    )
+    health_split = next(
+        (item for item in by_traffic_type if item["traffic_type"] == "health_check"),
+        {
+            "traffic_type": "health_check",
+            "requests": 0,
+            "tokens": 0,
+            "actual_cost": 0.0,
+            "hypothetical_cost": 0.0,
+            "avoided_cost": 0.0,
+        },
+    )
 
     return {
         "status": "ok",
@@ -491,97 +552,13 @@ def usage_summary(
     settings: Settings = Depends(get_settings),
     registry: ModelRegistry = Depends(get_admin_model_registry),
     analytics: UsageAnalyticsStore = Depends(get_usage_analytics_store),
-) -> dict[str, object]:
-    selected_window = _window_seconds(window)
-    if provider or client_id or model:
-        return _filtered_usage_summary_payload(
-            window=window,
-            instance=instance,
-            settings=settings,
-            registry=registry,
-            analytics=analytics,
-            provider=provider,
-            client_id=client_id,
-            model=model,
-        )
-    models = registry.list_active_models()
-    try:
-        aggregates = analytics.aggregate(window_seconds=selected_window, tenant_id=instance.tenant_id)
-        timeline = analytics.timeline(window_seconds=24 * 3600, bucket_seconds=3600, tenant_id=instance.tenant_id)
-        alerts = analytics.alert_indicators(tenant_id=instance.tenant_id)
-    except TenantFilterRequiredError as exc:
-        return _tenant_filter_error(exc)
-    runtime_split = next((item for item in aggregates["by_traffic_type"] if item["traffic_type"] == "runtime"), {"traffic_type": "runtime", "requests": 0, "tokens": 0, "actual_cost": 0.0, "hypothetical_cost": 0.0, "avoided_cost": 0.0})
-    health_split = next((item for item in aggregates["by_traffic_type"] if item["traffic_type"] == "health_check"), {"traffic_type": "health_check", "requests": 0, "tokens": 0, "actual_cost": 0.0, "hypothetical_cost": 0.0, "avoided_cost": 0.0})
-
-    return {
-        "status": "ok",
-        "object": "usage_summary",
-        "metrics": {
-            "active_model_count": len(models),
-            "stream_capable_model_count": len([m for m in models if m.provider in {"forgeframe_baseline", "openai_api"}]),
-            "recorded_request_count": aggregates["event_count"],
-            "recorded_error_count": aggregates["error_event_count"],
-            "recorded_health_event_count": aggregates["health_event_count"],
-        },
-        "aggregations": {
-            "by_provider": aggregates["by_provider"],
-            "by_model": aggregates["by_model"],
-            "by_auth": aggregates["by_auth"],
-            "by_client": aggregates["by_client"],
-            "by_traffic_type": aggregates["by_traffic_type"],
-            "errors_by_provider": aggregates["errors_by_provider"],
-            "errors_by_model": aggregates["errors_by_model"],
-            "errors_by_client": aggregates["errors_by_client"],
-            "errors_by_traffic_type": aggregates["errors_by_traffic_type"],
-            "errors_by_type": aggregates["errors_by_type"],
-            "errors_by_integration": aggregates["errors_by_integration"],
-            "errors_by_profile": aggregates["errors_by_profile"],
-        },
-        "traffic_split": {
-            "runtime": runtime_split,
-            "health_check": health_split,
-        },
-        "cost_axes": {
-            "actual": "tracked for metered API providers",
-            "provider_reported": "unsupported in the current control plane",
-            "estimated": "derived from configured pricing, never billing truth",
-            "modeled": "derived gap between estimated and metered actual cost",
-            "avoided": "derived from actual vs hypothetical",
-        },
-        "cost_truths": _cost_truths(runtime=runtime_split, health_check=health_split),
-        "window": window,
-        "instance": {
-            "instance_id": instance.instance_id,
-            "tenant_id": instance.tenant_id,
-            "company_id": instance.company_id,
-        },
-        "latest_health": aggregates["latest_health"],
-        "timeline_24h": timeline,
-        "alerts": alerts,
-        "runtime_duration_ms": aggregates["runtime_duration_ms"],
-        "stream_mode_counts": aggregates["stream_mode_counts"],
-        "pricing_snapshot": {
-            "openai_input_per_1m": settings.pricing_openai_input_per_1m_tokens,
-            "openai_output_per_1m": settings.pricing_openai_output_per_1m_tokens,
-            "codex_hyp_input_per_1m": settings.pricing_codex_hypothetical_input_per_1m_tokens,
-            "codex_hyp_output_per_1m": settings.pricing_codex_hypothetical_output_per_1m_tokens,
-        },
-        "selected_filters": {
-            "provider": provider,
-            "client_id": client_id,
-            "model": model,
-        },
+) -> Any:
+    window_map: dict[str, int | None] = {
+        "1h": 3600,
+        "24h": 24 * 3600,
+        "7d": 7 * 24 * 3600,
+        "all": None,
     }
-
-
-@router.get("/clients")
-def client_operational_view(
-    window: str = Query(default="24h", pattern="^(1h|24h|7d|all)$"),
-    instance: InstanceRecord = Depends(resolve_admin_instance_scope),
-    analytics: UsageAnalyticsStore = Depends(get_usage_analytics_store),
-) -> dict[str, object]:
-    window_map: dict[str, int | None] = {"1h": 3600, "24h": 24 * 3600, "7d": 7 * 24 * 3600, "all": None}
     selected_window = window_map[window]
     try:
         aggregates = analytics.aggregate(window_seconds=selected_window, tenant_id=instance.tenant_id)
@@ -590,14 +567,32 @@ def client_operational_view(
     client_map = {str(item["client_id"]): item for item in aggregates["by_client"]}
     for err in aggregates["errors_by_client"]:
         cid = str(err["client_id"])
-        client_map.setdefault(cid, {"client_id": cid, "requests": 0, "tokens": 0, "actual_cost": 0.0, "hypothetical_cost": 0.0, "avoided_cost": 0.0})
+        client_map.setdefault(
+            cid,
+            {
+                "client_id": cid,
+                "requests": 0,
+                "tokens": 0,
+                "actual_cost": 0.0,
+                "hypothetical_cost": 0.0,
+                "avoided_cost": 0.0,
+            },
+        )
         client_map[cid]["errors"] = int(err["errors"])
     for value in client_map.values():
         requests = int(value.get("requests", 0))
         errors = int(value.get("errors", 0))
         value["error_rate"] = errors / max(1, errors + requests)
         value["needs_attention"] = bool(errors >= 3 or value["error_rate"] >= 0.2)
-    ranked = sorted(client_map.values(), key=lambda item: (bool(item["needs_attention"]), float(item.get("actual_cost", 0.0)), int(item.get("errors", 0))), reverse=True)
+    ranked = sorted(
+        client_map.values(),
+        key=lambda item: (
+            bool(item["needs_attention"]),
+            float(item.get("actual_cost", 0.0)),
+            int(item.get("errors", 0)),
+        ),
+        reverse=True,
+    )
     return {"status": "ok", "window": window, "clients": ranked[:50]}
 
 
@@ -607,8 +602,13 @@ def provider_drilldown(
     window: str = Query(default="24h", pattern="^(1h|24h|7d|all)$"),
     instance: InstanceRecord = Depends(resolve_admin_instance_scope),
     analytics: UsageAnalyticsStore = Depends(get_usage_analytics_store),
-) -> dict[str, object]:
-    window_map: dict[str, int | None] = {"1h": 3600, "24h": 24 * 3600, "7d": 7 * 24 * 3600, "all": None}
+) -> Any:
+    window_map: dict[str, int | None] = {
+        "1h": 3600,
+        "24h": 24 * 3600,
+        "7d": 7 * 24 * 3600,
+        "all": None,
+    }
     try:
         drilldown = analytics.provider_drilldown(
             provider_name,
@@ -626,8 +626,13 @@ def client_drilldown(
     window: str = Query(default="24h", pattern="^(1h|24h|7d|all)$"),
     instance: InstanceRecord = Depends(resolve_admin_instance_scope),
     analytics: UsageAnalyticsStore = Depends(get_usage_analytics_store),
-) -> dict[str, object]:
-    window_map: dict[str, int | None] = {"1h": 3600, "24h": 24 * 3600, "7d": 7 * 24 * 3600, "all": None}
+) -> Any:
+    window_map: dict[str, int | None] = {
+        "1h": 3600,
+        "24h": 24 * 3600,
+        "7d": 7 * 24 * 3600,
+        "all": None,
+    }
     try:
         drilldown = analytics.client_drilldown(
             client_id,

@@ -1,10 +1,15 @@
 import json
 from pathlib import Path
 
-from app.storage.control_plane_repository import ControlPlaneStatePaths, FileControlPlaneStateRepository
+from app.storage.control_plane_repository import (
+    ControlPlaneStatePaths,
+    FileControlPlaneStateRepository,
+)
 
 
-def test_file_control_plane_repository_upgrades_legacy_model_payload(tmp_path: Path) -> None:
+def test_file_control_plane_repository_upgrades_legacy_model_payload(
+    tmp_path: Path,
+) -> None:
     state_path = tmp_path / "control_plane_state.json"
     state_path.write_text(
         json.dumps(
@@ -54,5 +59,3 @@ def test_file_control_plane_repository_upgrades_legacy_model_payload(tmp_path: P
     assert model.category == "general"
     assert model.routing_key == "forgeframe_baseline/forgeframe-baseline-chat-v1"
     assert state.provider_targets[0].target_key == "forgeframe_baseline::forgeframe-baseline-chat-v1"
-
-

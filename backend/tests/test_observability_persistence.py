@@ -1,9 +1,9 @@
 import os
 from pathlib import Path
 
+from conftest import admin_headers as shared_admin_headers
 from fastapi.testclient import TestClient
 
-from conftest import admin_headers as shared_admin_headers
 from app.api.admin.control_plane import get_control_plane_service
 from app.api.runtime.dependencies import clear_runtime_dependency_caches
 from app.main import app
@@ -66,7 +66,7 @@ def test_health_events_are_persisted_across_store_reload() -> None:
 def test_responses_usage_events_persist_scope_attributes_from_request_metadata() -> None:
     client = TestClient(app)
     analytics = get_usage_analytics_store()
-    repository = analytics._repository  # type: ignore[attr-defined]
+    repository = analytics._repository
     before_count = len(repository.load_usage_events())
     settings = get_settings()
 
@@ -99,7 +99,11 @@ def test_logs_operability_and_bootstrap_readiness_reflect_observability_signal_p
         "/v1/chat/completions",
         json={
             "messages": [{"role": "user", "content": "operability signal"}],
-            "client": {"client_id": "observability-suite", "consumer": "tests", "integration": "pytest"},
+            "client": {
+                "client_id": "observability-suite",
+                "consumer": "tests",
+                "integration": "pytest",
+            },
         },
     )
     assert chat_response.status_code == 200
@@ -109,7 +113,11 @@ def test_logs_operability_and_bootstrap_readiness_reflect_observability_signal_p
         json={
             "model": "missing-operability-model",
             "messages": [{"role": "user", "content": "record an error path"}],
-            "client": {"client_id": "observability-suite", "consumer": "tests", "integration": "pytest"},
+            "client": {
+                "client_id": "observability-suite",
+                "consumer": "tests",
+                "integration": "pytest",
+            },
         },
     )
     assert missing_model.status_code == 404

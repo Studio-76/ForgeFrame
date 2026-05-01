@@ -3,15 +3,19 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from typing import cast
 
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
+from app.api.admin.instance_scope import (
+    require_admin_instance_scope,
+    resolve_admin_instance_scope,
+)
 from app.auth.local_auth import role_allows
-from app.governance.models import AuthenticatedAdmin
+from app.governance.models import AdminRole, AuthenticatedAdmin
 from app.governance.service import GovernanceService, get_governance_service
 from app.instances.models import InstanceRecord
-from app.api.admin.instance_scope import require_admin_instance_scope, resolve_admin_instance_scope
 
 _bearer = HTTPBearer(auto_error=False)
 
@@ -21,7 +25,10 @@ def authenticate_admin_session(
     service: GovernanceService = Depends(get_governance_service),
 ) -> AuthenticatedAdmin:
     if credentials is None or credentials.scheme.lower() != "bearer":
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Admin authentication required.")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Admin authentication required.",
+        )
     try:
         return service.authenticate_admin_token(credentials.credentials)
     except PermissionError as exc:
@@ -84,18 +91,25 @@ def require_admin_role(
     *,
     allow_impersonation: bool = True,
 ) -> Callable[[AuthenticatedAdmin], AuthenticatedAdmin]:
-    def _dependency(admin: AuthenticatedAdmin = Depends(authenticate_admin_session)) -> AuthenticatedAdmin:
+    def _dependency(
+        admin: AuthenticatedAdmin = Depends(authenticate_admin_session),
+    ) -> AuthenticatedAdmin:
         if not allow_impersonation:
             admin = _ensure_write_capable_session(admin)
         admin = _ensure_password_rotation_complete(admin)
-        if not role_allows(admin.role, required_role):  # type: ignore[arg-type]
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=f"{required_role}_role_required")
+        if not role_allows(admin.role, cast(AdminRole, required_role)):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"{required_role}_role_required",
+            )
         return admin
 
     return _dependency
 
 
-def require_admin_mutation_role(required_role: str) -> Callable[[AuthenticatedAdmin], AuthenticatedAdmin]:
+def require_admin_mutation_role(
+    required_role: str,
+) -> Callable[[AuthenticatedAdmin], AuthenticatedAdmin]:
     return require_admin_role(required_role, allow_impersonation=False)
 
 

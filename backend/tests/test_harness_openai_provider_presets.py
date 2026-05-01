@@ -1,6 +1,10 @@
 from pathlib import Path
 
-from app.harness.models import HarnessPreviewRequest, HarnessProviderProfile, HarnessRequestMapping
+from app.harness.models import (
+    HarnessPreviewRequest,
+    HarnessProviderProfile,
+    HarnessRequestMapping,
+)
 from app.harness.service import HarnessService
 from app.harness.store import HarnessStore
 from app.storage.harness_repository import FileHarnessRepository, HarnessStoragePaths
@@ -40,12 +44,12 @@ def test_openai_provider_presets_are_listed_with_defaults(tmp_path: Path) -> Non
 
     opencode_go = templates["openai_provider_opencode_go"]["profile_defaults"]
     assert opencode_go["endpoint_base_url"] == "https://opencode.ai/zen/go/v1"
-    assert opencode_go["capabilities"]["unsupported_features"] == [
-        "mixed `/messages` branch is not wired; this preset only targets the OpenAI-like path"
-    ]
+    assert opencode_go["capabilities"]["unsupported_features"] == ["mixed `/messages` branch is not wired; this preset only targets the OpenAI-like path"]
 
 
-def test_openrouter_preset_applies_model_slug_and_special_headers(tmp_path: Path) -> None:
+def test_openrouter_preset_applies_model_slug_and_special_headers(
+    tmp_path: Path,
+) -> None:
     service = build_service(tmp_path)
     service.upsert_profile(
         HarnessProviderProfile(
@@ -97,7 +101,9 @@ def test_aggregator_presets_infer_vendor_slug_for_common_models(tmp_path: Path) 
     assert grok_preview["json"]["model"] == "x-ai/grok-4.20-beta"
 
 
-def test_opencode_go_preset_keeps_openai_like_path_and_infers_glm_vendor(tmp_path: Path) -> None:
+def test_opencode_go_preset_keeps_openai_like_path_and_infers_glm_vendor(
+    tmp_path: Path,
+) -> None:
     service = build_service(tmp_path)
     service.upsert_profile(
         HarnessProviderProfile(

@@ -20,6 +20,7 @@ def build_tracing_operability_snapshot(*args, **kwargs):
 
     return _impl(*args, **kwargs)
 
+
 __all__ = [
     "TelemetryContext",
     "build_logging_operability_snapshot",

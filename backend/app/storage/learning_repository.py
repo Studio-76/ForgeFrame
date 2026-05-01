@@ -9,7 +9,11 @@ from sqlalchemy import JSON, CheckConstraint, DateTime, Index, String, Text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
-from app.learning.models import LEARNING_DECISIONS, LEARNING_STATUSES, LEARNING_TRIGGER_KINDS
+from app.learning.models import (
+    LEARNING_DECISIONS,
+    LEARNING_STATUSES,
+    LEARNING_TRIGGER_KINDS,
+)
 from app.storage.harness_repository import Base
 
 
@@ -29,11 +33,25 @@ class LearningEventORM(Base):
     __tablename__ = "learning_events"
     __table_args__ = (
         _enum_check("learning_events_trigger_kind_ck", "trigger_kind", LEARNING_TRIGGER_KINDS),
-        _enum_check("learning_events_suggested_decision_ck", "suggested_decision", LEARNING_DECISIONS),
+        _enum_check(
+            "learning_events_suggested_decision_ck",
+            "suggested_decision",
+            LEARNING_DECISIONS,
+        ),
         _enum_check("learning_events_status_ck", "status", LEARNING_STATUSES),
         Index("learning_events_company_id_id_uq", "company_id", "id", unique=True),
-        Index("learning_events_instance_status_created_idx", "instance_id", "status", "created_at"),
-        Index("learning_events_instance_trigger_created_idx", "instance_id", "trigger_kind", "created_at"),
+        Index(
+            "learning_events_instance_status_created_idx",
+            "instance_id",
+            "status",
+            "created_at",
+        ),
+        Index(
+            "learning_events_instance_trigger_created_idx",
+            "instance_id",
+            "trigger_kind",
+            "created_at",
+        ),
     )
 
     id: Mapped[str] = mapped_column(String(64), primary_key=True)

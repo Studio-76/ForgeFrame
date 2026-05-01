@@ -6,17 +6,27 @@ from fastapi import APIRouter, Depends, status
 from fastapi.responses import JSONResponse
 
 from app.api.admin.instance_scope import resolve_admin_instance_scope
-from app.api.admin.security import require_admin_instance_permission, require_admin_mutation_role
+from app.api.admin.security import (
+    require_admin_instance_permission,
+    require_admin_mutation_role,
+)
 from app.governance.models import AuthenticatedAdmin
 from app.instances.models import InstanceRecord
 from app.plugins.dependencies import PluginCatalogService, get_plugin_catalog_service
-from app.plugins.models import CreatePluginManifest, UpdatePluginManifest, UpsertPluginBinding
+from app.plugins.models import (
+    CreatePluginManifest,
+    UpdatePluginManifest,
+    UpsertPluginBinding,
+)
 
 router = APIRouter(prefix="/plugins", tags=["admin-plugins"])
 
 
 def _error(status_code: int, error_type: str, message: str) -> JSONResponse:
-    return JSONResponse(status_code=status_code, content={"error": {"type": error_type, "message": message}})
+    return JSONResponse(
+        status_code=status_code,
+        content={"error": {"type": error_type, "message": message}},
+    )
 
 
 @router.get("")
@@ -45,7 +55,11 @@ def get_plugin(
         plugin = service.get_plugin(instance=instance, plugin_id=plugin_id)
     except ValueError as exc:
         return _error(status.HTTP_404_NOT_FOUND, "plugin_not_found", str(exc))
-    return {"status": "ok", "instance": instance.model_dump(mode="json"), "plugin": plugin.model_dump(mode="json")}
+    return {
+        "status": "ok",
+        "instance": instance.model_dump(mode="json"),
+        "plugin": plugin.model_dump(mode="json"),
+    }
 
 
 @router.post("", status_code=status.HTTP_201_CREATED)
@@ -93,7 +107,11 @@ def upsert_plugin_binding(
         error_type = "plugin_not_found" if "was not found" in str(exc) else "plugin_binding_invalid"
         error_status = status.HTTP_404_NOT_FOUND if error_type == "plugin_not_found" else status.HTTP_400_BAD_REQUEST
         return _error(error_status, error_type, str(exc))
-    return {"status": "ok", "instance": instance.model_dump(mode="json"), "plugin": plugin.model_dump(mode="json")}
+    return {
+        "status": "ok",
+        "instance": instance.model_dump(mode="json"),
+        "plugin": plugin.model_dump(mode="json"),
+    }
 
 
 __all__ = ["router"]

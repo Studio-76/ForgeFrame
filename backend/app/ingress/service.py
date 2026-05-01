@@ -8,18 +8,18 @@ import ssl
 import subprocess
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
 from app.public_surface import (
     FRONTEND_MOUNT_PATH,
-    ROOT_SURFACE_KIND,
     NORMATIVE_ADMIN_BASE,
     NORMATIVE_API_BASE,
+    NORMATIVE_HTTP_HELPER_PORT,
     NORMATIVE_HTTPS_HOST,
     NORMATIVE_HTTPS_PORT,
-    NORMATIVE_HTTP_HELPER_PORT,
+    ROOT_SURFACE_KIND,
     has_configured_public_acme_email,
     has_configured_public_fqdn,
     has_integrated_tls_automation,
@@ -83,7 +83,7 @@ def _load_certificate_status(settings: Settings) -> TlsCertificateStatus:
         )
 
     try:
-        decoded = ssl._ssl._test_decode_cert(str(cert_path))
+        decoded = ssl._ssl._test_decode_cert(str(cert_path))  # type: ignore[attr-defined]
     except Exception as exc:  # pragma: no cover - depends on local cert material
         return TlsCertificateStatus(
             present=False,
@@ -93,7 +93,7 @@ def _load_certificate_status(settings: Settings) -> TlsCertificateStatus:
             last_error=f"{type(exc).__name__}: {exc}",
         )
 
-    def _join_name(parts: object) -> str | None:
+    def _join_name(parts: Any) -> str | None:
         if not parts:
             return None
         pairs: list[str] = []
@@ -117,11 +117,7 @@ def _load_certificate_status(settings: Settings) -> TlsCertificateStatus:
         present=True,
         certificate_path=str(cert_path),
         key_path=str(key_path),
-        trust_state=(
-            "self_signed"
-            if decoded.get("issuer") and decoded.get("subject") and decoded.get("issuer") == decoded.get("subject")
-            else "public_ca"
-        ),
+        trust_state=("self_signed" if decoded.get("issuer") and decoded.get("subject") and decoded.get("issuer") == decoded.get("subject") else "public_ca"),
         issuer=_join_name(decoded.get("issuer")),
         subject=_join_name(decoded.get("subject")),
         valid_from=valid_from,
@@ -141,7 +137,7 @@ def _resolve_dns(fqdn: str | None, port: int) -> tuple[bool, list[str]]:
         results = socket.getaddrinfo(fqdn, port, type=socket.SOCK_STREAM)
     except OSError:
         return False, []
-    addresses = sorted({item[4][0] for item in results if item[4]})
+    addresses = sorted({str(item[4][0]) for item in results if item[4]})
     return bool(addresses), addresses
 
 
@@ -225,7 +221,7 @@ def build_ingress_tls_status(settings: Settings) -> IngressTlsStatus:
     )
 
 
-def run_tls_renewal(settings: Settings) -> dict[str, object]:
+def run_tls_renewal(settings: Settings) -> dict[str, Any]:
     status = build_ingress_tls_status(settings)
     script = Path(__file__).resolve().parents[3] / "scripts" / "renew-certificates.sh"
     command = ["bash", str(script)]
@@ -234,10 +230,7 @@ def run_tls_renewal(settings: Settings) -> dict[str, object]:
             "status": "blocked",
             "command": command,
             "blocked_reason": status.renewal_blocked_reason,
-            "details": (
-                "Certificate renewal is unavailable until the integrated ACME contract is satisfied: "
-                f"{status.renewal_blocked_reason}."
-            ),
+            "details": (f"Certificate renewal is unavailable until the integrated ACME contract is satisfied: {status.renewal_blocked_reason}."),
         }
     try:
         completed = subprocess.run(
@@ -245,7 +238,10 @@ def run_tls_renewal(settings: Settings) -> dict[str, object]:
             text=True,
             capture_output=True,
             check=False,
-            env={**os.environ, "FORGEFRAME_ENV_FILE": os.environ.get("FORGEFRAME_ENV_FILE", "")},
+            env={
+                **os.environ,
+                "FORGEFRAME_ENV_FILE": os.environ.get("FORGEFRAME_ENV_FILE", ""),
+            },
         )
     except FileNotFoundError as exc:  # pragma: no cover - depends on host shell
         return {

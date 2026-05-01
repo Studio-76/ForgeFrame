@@ -1,12 +1,15 @@
 from __future__ import annotations
 
 import threading
+from collections.abc import Generator
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 from uuid import uuid4
 
 import pytest
 from sqlalchemy import create_engine, select, text
+from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.idempotency import (
@@ -24,7 +27,8 @@ from app.storage.models import Base
 def request_idempotency_session_factory(
     request: pytest.FixtureRequest,
     tmp_path: Path,
-) -> sessionmaker[Session]:
+) -> Generator[sessionmaker[Session], Any, None]:
+    engine: Engine | None
     if request.param == "sqlite":
         engine = create_engine(
             f"sqlite+pysqlite:///{tmp_path / 'request-idempotency-threaded.sqlite'}",
@@ -35,7 +39,8 @@ def request_idempotency_session_factory(
         try:
             yield session_factory
         finally:
-            engine.dispose()
+            if engine is not None:
+                engine.dispose()
         return
 
     schema_name = f"test_request_idempotency_{uuid4().hex[:12]}"
@@ -68,7 +73,7 @@ def test_request_idempotency_reservation_recovers_from_concurrent_insert_race(
             super().__init__(session_factory)
             self._barrier = barrier
 
-        def _new_id(self, prefix: str) -> str:  # type: ignore[override]
+        def _new_id(self, prefix: str) -> str:
             if prefix == "idem":
                 self._barrier.wait(timeout=5)
             return super()._new_id(prefix)
@@ -125,13 +130,18 @@ def test_request_idempotency_reservation_recovers_from_concurrent_insert_race(
     assert len(in_progress) == 1
 
     with request_idempotency_session_factory() as session:
-        records = session.execute(
-            select(RequestIdempotencyRecordORM).where(
-                RequestIdempotencyRecordORM.scope_key == "admin.providers.sync",
-                RequestIdempotencyRecordORM.subject_key == envelope.subject_key,
-                RequestIdempotencyRecordORM.idempotency_key == envelope.idempotency_key,
+        records = (
+            session
+            .execute(
+                select(RequestIdempotencyRecordORM).where(
+                    RequestIdempotencyRecordORM.scope_key == "admin.providers.sync",
+                    RequestIdempotencyRecordORM.subject_key == envelope.subject_key,
+                    RequestIdempotencyRecordORM.idempotency_key == envelope.idempotency_key,
+                )
             )
-        ).scalars().all()
+            .scalars()
+            .all()
+        )
 
         assert len(records) == 1
         assert records[0].record_state == "in_progress"
@@ -153,7 +163,7 @@ def test_request_idempotency_reservation_rejects_mismatched_fingerprint_after_co
             super().__init__(session_factory)
             self._barrier = barrier
 
-        def _new_id(self, prefix: str) -> str:  # type: ignore[override]
+        def _new_id(self, prefix: str) -> str:
             if prefix == "idem":
                 self._barrier.wait(timeout=5)
             return super()._new_id(prefix)
@@ -213,13 +223,18 @@ def test_request_idempotency_reservation_rejects_mismatched_fingerprint_after_co
     assert len(mismatches) == 1
 
     with request_idempotency_session_factory() as session:
-        records = session.execute(
-            select(RequestIdempotencyRecordORM).where(
-                RequestIdempotencyRecordORM.scope_key == "admin.providers.sync",
-                RequestIdempotencyRecordORM.subject_key == "bearer:reserve-race",
-                RequestIdempotencyRecordORM.idempotency_key == "idem_http_reserve_conflict",
+        records = (
+            session
+            .execute(
+                select(RequestIdempotencyRecordORM).where(
+                    RequestIdempotencyRecordORM.scope_key == "admin.providers.sync",
+                    RequestIdempotencyRecordORM.subject_key == "bearer:reserve-race",
+                    RequestIdempotencyRecordORM.idempotency_key == "idem_http_reserve_conflict",
+                )
             )
-        ).scalars().all()
+            .scalars()
+            .all()
+        )
 
         assert len(records) == 1
         assert records[0].record_state == "in_progress"

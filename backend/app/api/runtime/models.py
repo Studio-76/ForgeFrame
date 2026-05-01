@@ -2,6 +2,7 @@
 
 from fastapi import APIRouter, Depends
 
+from app.api.runtime.access import list_public_runtime_models
 from app.api.runtime.dependencies import (
     get_routing_service,
     get_runtime_gateway_identity,
@@ -9,7 +10,6 @@ from app.api.runtime.dependencies import (
     require_runtime_permission,
     runtime_request_path_metadata,
 )
-from app.api.runtime.access import list_public_runtime_models
 from app.api.runtime.schemas import RuntimeModelRecord, RuntimeModelsResponse
 from app.authz import RequestActor
 from app.core.routing import RoutingService

@@ -5,7 +5,16 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import Any
 
-from sqlalchemy import JSON, Boolean, CheckConstraint, DateTime, ForeignKeyConstraint, Index, Integer, String, Text
+from sqlalchemy import (
+    JSON,
+    Boolean,
+    CheckConstraint,
+    DateTime,
+    ForeignKeyConstraint,
+    Index,
+    String,
+    Text,
+)
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -49,7 +58,12 @@ class AssistantProfileORM(Base):
         _enum_check("assistant_profiles_status_ck", "status", ASSISTANT_PROFILE_STATUSES),
         _enum_check("assistant_profiles_tone_ck", "tone", ASSISTANT_TONES),
         Index("assistant_profiles_company_id_id_uq", "company_id", "id", unique=True),
-        Index("assistant_profiles_instance_status_idx", "instance_id", "status", "assistant_mode_enabled"),
+        Index(
+            "assistant_profiles_instance_status_idx",
+            "instance_id",
+            "status",
+            "assistant_mode_enabled",
+        ),
         Index("assistant_profiles_instance_default_idx", "instance_id", "is_default"),
     )
 
@@ -111,4 +125,3 @@ class AssistantProfileORM(Base):
     )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, nullable=False)
-

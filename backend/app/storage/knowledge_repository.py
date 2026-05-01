@@ -5,7 +5,15 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import Any
 
-from sqlalchemy import JSON, CheckConstraint, DateTime, ForeignKeyConstraint, Index, String, Text
+from sqlalchemy import (
+    JSON,
+    CheckConstraint,
+    DateTime,
+    ForeignKeyConstraint,
+    Index,
+    String,
+    Text,
+)
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -14,8 +22,8 @@ from app.knowledge.models import (
     KNOWLEDGE_SOURCE_KINDS,
     KNOWLEDGE_SOURCE_STATUSES,
     MEMORY_KINDS,
-    MEMORY_SOURCE_TRUST_CLASSES,
     MEMORY_SENSITIVITIES,
+    MEMORY_SOURCE_TRUST_CLASSES,
     MEMORY_STATUSES,
     MEMORY_TRUTH_STATES,
     VISIBILITY_SCOPES,
@@ -42,7 +50,12 @@ class KnowledgeSourceORM(Base):
         _enum_check("knowledge_sources_status_ck", "status", KNOWLEDGE_SOURCE_STATUSES),
         _enum_check("knowledge_sources_visibility_ck", "visibility_scope", VISIBILITY_SCOPES),
         Index("knowledge_sources_company_id_id_uq", "company_id", "id", unique=True),
-        Index("knowledge_sources_instance_kind_status_idx", "instance_id", "source_kind", "status"),
+        Index(
+            "knowledge_sources_instance_kind_status_idx",
+            "instance_id",
+            "source_kind",
+            "status",
+        ),
     )
 
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
@@ -149,17 +162,34 @@ class MemoryEntryORM(Base):
             name="memory_entries_company_supersedes_fk",
             ondelete="SET NULL",
         ),
-        CheckConstraint("supersedes_memory_id IS NULL OR supersedes_memory_id <> id", name="memory_entries_supersedes_self_ck"),
+        CheckConstraint(
+            "supersedes_memory_id IS NULL OR supersedes_memory_id <> id",
+            name="memory_entries_supersedes_self_ck",
+        ),
         _enum_check("memory_entries_kind_ck", "memory_kind", MEMORY_KINDS),
         _enum_check("memory_entries_status_ck", "status", MEMORY_STATUSES),
         _enum_check("memory_entries_truth_state_ck", "truth_state", MEMORY_TRUTH_STATES),
-        _enum_check("memory_entries_source_trust_class_ck", "source_trust_class", MEMORY_SOURCE_TRUST_CLASSES),
+        _enum_check(
+            "memory_entries_source_trust_class_ck",
+            "source_trust_class",
+            MEMORY_SOURCE_TRUST_CLASSES,
+        ),
         _enum_check("memory_entries_visibility_ck", "visibility_scope", VISIBILITY_SCOPES),
         _enum_check("memory_entries_sensitivity_ck", "sensitivity", MEMORY_SENSITIVITIES),
-        CheckConstraint("deleted_at IS NULL OR status = 'deleted'", name="memory_entries_deleted_status_ck"),
+        CheckConstraint(
+            "deleted_at IS NULL OR status = 'deleted'",
+            name="memory_entries_deleted_status_ck",
+        ),
         Index("memory_entries_company_id_id_uq", "company_id", "id", unique=True),
         Index("memory_entries_instance_status_idx", "instance_id", "status", "updated_at"),
-        Index("memory_entries_company_links_idx", "company_id", "source_id", "contact_id", "conversation_id", "task_id"),
+        Index(
+            "memory_entries_company_links_idx",
+            "company_id",
+            "source_id",
+            "contact_id",
+            "conversation_id",
+            "task_id",
+        ),
     )
 
     id: Mapped[str] = mapped_column(String(64), primary_key=True)

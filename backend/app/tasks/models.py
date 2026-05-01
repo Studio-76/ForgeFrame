@@ -7,7 +7,6 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
-
 WORK_ITEM_PRIORITIES = ("low", "normal", "high", "critical")
 WorkItemPriority = Literal["low", "normal", "high", "critical"]
 

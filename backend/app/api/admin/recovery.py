@@ -15,13 +15,19 @@ from app.recovery.models import (
     ImportRecoveryUpgradeReport,
     UpdateRecoveryBackupPolicy,
 )
-from app.recovery.service import RecoveryPolicyNotFoundError, RecoveryReportValidationError
+from app.recovery.service import (
+    RecoveryPolicyNotFoundError,
+    RecoveryReportValidationError,
+)
 
 router = APIRouter(prefix="/recovery", tags=["admin-recovery"])
 
 
 def _error(status_code: int, error_type: str, message: str) -> JSONResponse:
-    return JSONResponse(status_code=status_code, content={"error": {"type": error_type, "message": message}})
+    return JSONResponse(
+        status_code=status_code,
+        content={"error": {"type": error_type, "message": message}},
+    )
 
 
 @router.get("/")

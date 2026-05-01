@@ -17,7 +17,9 @@ def _run(command: list[str]) -> int:
 
 
 def _parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Run ForgeFrame frontend tests and build from a portable Python entrypoint.")
+    parser = argparse.ArgumentParser(
+        description="Run ForgeFrame frontend tests and build from a portable Python entrypoint."
+    )
     parser.add_argument(
         "--skip-build",
         action="store_true",

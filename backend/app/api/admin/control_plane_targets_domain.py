@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING, Any
+
 from app.api.admin.control_plane_models import (
     ModelRegisterEvidenceSnapshot,
     ModelRegisterRecord,
@@ -11,7 +13,10 @@ from app.api.admin.control_plane_models import (
 )
 from app.api.runtime.dependencies import clear_runtime_dependency_caches
 from app.control_plane import ManagedProviderTargetRecord, ManagedProviderTargetUiRecord
-from app.control_plane.profile_taxonomy import build_legacy_capability_profile, split_legacy_capability_profile
+from app.control_plane.profile_taxonomy import (
+    build_legacy_capability_profile,
+    split_legacy_capability_profile,
+)
 from app.control_plane.target_defaults import (
     build_default_targets_from_providers,
     merge_targets_with_defaults,
@@ -20,6 +25,17 @@ from app.control_plane.target_defaults import (
 
 
 class ControlPlaneTargetsDomainMixin:
+    if TYPE_CHECKING:
+        _instance: Any
+        _settings: Any
+        _health_records: Any
+        _provider_targets_state: dict[str, ManagedProviderTargetRecord]
+        _routing_policies_state: Any
+
+        def list_providers(self) -> list[Any]: ...
+        def provider_truth_axes(self, *args: Any, **kwargs: Any) -> list[Any]: ...
+        def _persist_state(self) -> Any: ...
+
     @staticmethod
     def _target_routing_eligible(
         target: ManagedProviderTargetRecord,
@@ -85,8 +101,8 @@ class ControlPlaneTargetsDomainMixin:
         *,
         provider_truth,
         health_status: str,
-        model: object,
-        provider: object,
+        model: Any,
+        provider: Any,
         source: str,
     ) -> dict[str, ModelRegisterEvidenceSnapshot]:
         live_probe = provider_truth.runtime.evidence.live_probe
@@ -150,17 +166,36 @@ class ControlPlaneTargetsDomainMixin:
         tested_evidence: dict[str, ModelRegisterEvidenceSnapshot],
     ) -> tuple[str, str]:
         if any(item.status == "failed" for item in tested_evidence.values()):
-            return ("verification_failed", "A recorded sync, health check, or live probe failed for this provider/model path.")
+            return (
+                "verification_failed",
+                "A recorded sync, health check, or live probe failed for this provider/model path.",
+            )
         if any(item.status == "observed" for item in tested_evidence.values()):
-            return ("tested", "Operator-visible verification exists through sync, health, or live probe records.")
-        if any(item.status == "observed" for item in (runtime_evidence.runtime, runtime_evidence.streaming, runtime_evidence.tool_calling)):
-            return ("observed", "Runtime traffic has observed this model capability profile, but no explicit verification record is present.")
-        return ("declared_only", "This model is currently backed only by declared catalog/profile metadata.")
+            return (
+                "tested",
+                "Operator-visible verification exists through sync, health, or live probe records.",
+            )
+        if any(
+            item.status == "observed"
+            for item in (
+                runtime_evidence.runtime,
+                runtime_evidence.streaming,
+                runtime_evidence.tool_calling,
+            )
+        ):
+            return (
+                "observed",
+                "Runtime traffic has observed this model capability profile, but no explicit verification record is present.",
+            )
+        return (
+            "declared_only",
+            "This model is currently backed only by declared catalog/profile metadata.",
+        )
 
     @staticmethod
     def _model_sync_support(
         *,
-        provider: object,
+        provider: Any,
         source: str,
         discovery_supported: bool,
     ) -> ModelRegisterSyncSupport:
@@ -181,7 +216,10 @@ class ControlPlaneTargetsDomainMixin:
             return []
         target_key_set = set(target_keys)
         policy_classes: list[str] = []
-        for policy in sorted(getattr(self, "_routing_policies_state", {}).values(), key=lambda item: item.classification):
+        for policy in sorted(
+            getattr(self, "_routing_policies_state", {}).values(),
+            key=lambda item: item.classification,
+        ):
             linked_keys = {
                 *policy.preferred_target_keys,
                 *policy.fallback_target_keys,
@@ -202,17 +240,41 @@ class ControlPlaneTargetsDomainMixin:
         linked_targets: list[ModelRegisterTargetLink],
     ) -> tuple[str, bool, str]:
         if not provider_enabled or not model_active:
-            return ("disabled", False, "Provider or model is disabled, so runtime routing excludes it.")
+            return (
+                "disabled",
+                False,
+                "Provider or model is disabled, so runtime routing excludes it.",
+            )
         if discovery_status in {"removed", "removed_from_profile_models"}:
-            return ("removed", False, "This model was removed from the backing profile or discovery inventory.")
+            return (
+                "removed",
+                False,
+                "This model was removed from the backing profile or discovery inventory.",
+            )
         if discovery_status == "stale" or runtime_status == "stale" or availability_status == "stale":
-            return ("stale", False, "This model is stale and is not treated as a healthy routing candidate.")
+            return (
+                "stale",
+                False,
+                "This model is stale and is not treated as a healthy routing candidate.",
+            )
         if not linked_targets:
-            return ("no_target_coverage", False, "No provider target is bound to this model on the selected instance.")
+            return (
+                "no_target_coverage",
+                False,
+                "No provider target is bound to this model on the selected instance.",
+            )
         eligible_targets = [target for target in linked_targets if target.routing_eligible]
         if not eligible_targets:
-            return ("degraded", False, "Targets exist, but none are currently routing-eligible because they are disabled or unavailable.")
-        return ("routable", True, f"{len(eligible_targets)} provider target(s) can route this model on the selected instance.")
+            return (
+                "degraded",
+                False,
+                "Targets exist, but none are currently routing-eligible because they are disabled or unavailable.",
+            )
+        return (
+            "routable",
+            True,
+            f"{len(eligible_targets)} provider target(s) can route this model on the selected instance.",
+        )
 
     def _load_provider_targets(
         self,
@@ -232,25 +294,10 @@ class ControlPlaneTargetsDomainMixin:
         self,
         targets: list[ManagedProviderTargetRecord],
     ) -> None:
-        health_index = {
-            (record.provider, record.model): record
-            for record in self._health_records.values()
-        }
-        provider_map = {
-            provider.provider: provider
-            for provider in self.list_providers()
-        }
-        model_index = {
-            (provider.provider, model.id): model
-            for provider in self.list_providers()
-            for model in provider.managed_models
-        }
-        runtime_truth_map = {
-            truth.provider.provider: truth.runtime
-            for truth in self.provider_truth_axes(tenant_id=self._instance.tenant_id)
-        }
+        health_index = {(record.provider, record.model): record for record in self._health_records.values()}
+        model_index = {(provider.provider, model.id): model for provider in self.list_providers() for model in provider.managed_models}
+        runtime_truth_map = {truth.provider.provider: truth.runtime for truth in self.provider_truth_axes(tenant_id=self._instance.tenant_id)}
         for target in targets:
-            provider = provider_map.get(target.provider)
             model = model_index.get((target.provider, target.model_id))
             runtime_truth = runtime_truth_map.get(target.provider)
             if model is not None:
@@ -260,18 +307,19 @@ class ControlPlaneTargetsDomainMixin:
                 target.stale_since = model.stale_since
                 target.availability_status = model.availability_status or target.availability_status
                 target.status_reason = model.status_reason or target.status_reason
-                target.readiness_status = (
-                    "ready"
-                    if model.runtime_status == "ready"
-                    else ("partial" if model.active else "unavailable")
-                )
+                target.readiness_status = "ready" if model.runtime_status == "ready" else ("partial" if model.active else "unavailable")
             health_record = health_index.get((target.provider, target.model_id))
             if health_record is not None:
                 target.health_status = health_record.status
                 if health_record.readiness_reason:
                     target.status_reason = health_record.readiness_reason
             if runtime_truth is not None:
-                technical_capabilities, execution_traits, policy_flags, economic_profile = split_legacy_capability_profile(
+                (
+                    technical_capabilities,
+                    execution_traits,
+                    policy_flags,
+                    economic_profile,
+                ) = split_legacy_capability_profile(
                     provider=target.provider,
                     capability_profile={
                         **target.capability_profile,
@@ -293,20 +341,14 @@ class ControlPlaneTargetsDomainMixin:
                     execution_traits=execution_traits,
                 )
                 target.stream_capable = bool(target.technical_capabilities.get("streaming", target.stream_capable))
-                target.tool_capable = runtime_truth.tool_calling_level == "full" or bool(
-                    target.technical_capabilities.get("tool_calling", target.tool_capable)
-                )
+                target.tool_capable = runtime_truth.tool_calling_level == "full" or bool(target.technical_capabilities.get("tool_calling", target.tool_capable))
                 target.vision_capable = bool(target.technical_capabilities.get("vision", target.vision_capable))
                 target.queue_eligible = bool(target.execution_traits.get("queue_eligible", target.queue_eligible))
                 if runtime_truth.ready and target.enabled and target.readiness_status != "unavailable":
                     target.readiness_status = "ready"
                 elif target.readiness_status != "unavailable":
                     target.readiness_status = "partial"
-                target.availability_status = (
-                    target.availability_status
-                    if target.availability_status not in {"unknown", ""}
-                    else ("healthy" if runtime_truth.ready else "degraded")
-                )
+                target.availability_status = target.availability_status if target.availability_status not in {"unknown", ""} else ("healthy" if runtime_truth.ready else "degraded")
                 target.status_reason = runtime_truth.readiness_reason or target.status_reason
 
     def _refresh_provider_targets(self) -> list[ManagedProviderTargetRecord]:
@@ -326,43 +368,30 @@ class ControlPlaneTargetsDomainMixin:
             raise ValueError(f"Provider target '{target_key}' is not managed in control plane.")
         return target
 
-    def provider_target_snapshot(self) -> list[dict[str, object]]:
-        provider_map = {
-            provider.provider: provider
-            for provider in self.list_providers()
-        }
-        model_map = {
-            (provider.provider, model.id): model
-            for provider in self.list_providers()
-            for model in provider.managed_models
-        }
-        runtime_truth_map = {
-            truth.provider.provider: truth.runtime
-            for truth in self.provider_truth_axes(tenant_id=self._instance.tenant_id)
-        }
+    def provider_target_snapshot(self) -> list[dict[str, Any]]:
+        provider_map = {provider.provider: provider for provider in self.list_providers()}
+        model_map = {(provider.provider, model.id): model for provider in self.list_providers() for model in provider.managed_models}
+        runtime_truth_map = {truth.provider.provider: truth.runtime for truth in self.provider_truth_axes(tenant_id=self._instance.tenant_id)}
         return [
             ManagedProviderTargetUiRecord(
                 **target.model_dump(),
-                provider_label=provider_map.get(target.provider).label if provider_map.get(target.provider) else None,
-                model_display_name=model_map.get((target.provider, target.model_id)).display_name if model_map.get((target.provider, target.model_id)) else None,
-                model_owned_by=model_map.get((target.provider, target.model_id)).owned_by if model_map.get((target.provider, target.model_id)) else None,
-                runtime_ready=bool(runtime_truth_map.get(target.provider).ready) if runtime_truth_map.get(target.provider) else False,
-                runtime_readiness_reason=runtime_truth_map.get(target.provider).readiness_reason if runtime_truth_map.get(target.provider) else None,
-                provider_enabled=bool(provider_map.get(target.provider).enabled) if provider_map.get(target.provider) else False,
-                model_active=bool(model_map.get((target.provider, target.model_id)).active) if model_map.get((target.provider, target.model_id)) else False,
+                provider_label=provider_map[target.provider].label if target.provider in provider_map else None,
+                model_display_name=model_map[(target.provider, target.model_id)].display_name if (target.provider, target.model_id) in model_map else None,
+                model_owned_by=model_map[(target.provider, target.model_id)].owned_by if (target.provider, target.model_id) in model_map else None,
+                runtime_ready=bool(runtime_truth_map[target.provider].ready) if target.provider in runtime_truth_map else False,
+                runtime_readiness_reason=runtime_truth_map[target.provider].readiness_reason if target.provider in runtime_truth_map else None,
+                provider_enabled=bool(provider_map[target.provider].enabled) if target.provider in provider_map else False,
+                model_active=bool(model_map[(target.provider, target.model_id)].active) if (target.provider, target.model_id) in model_map else False,
             ).model_dump(mode="json")
             for target in self.list_provider_targets()
         ]
 
-    def model_register_snapshot(self) -> list[dict[str, object]]:
+    def model_register_snapshot(self) -> list[dict[str, Any]]:
         target_map: dict[tuple[str, str], list[ManagedProviderTargetRecord]] = {}
         for target in self.list_provider_targets():
             target_map.setdefault((target.provider, target.model_id), []).append(target)
 
-        health_by_provider = {
-            (record.provider, record.model): record.status
-            for record in self._health_records.values()
-        }
+        health_by_provider = {(record.provider, record.model): record.status for record in self._health_records.values()}
         provider_truth_map = {
             truth.provider.provider: truth
             for truth in self.provider_truth_axes(
@@ -374,11 +403,7 @@ class ControlPlaneTargetsDomainMixin:
         for provider in self.list_providers():
             for model in provider.managed_models:
                 provider_truth = provider_truth_map.get(provider.provider)
-                runtime_evidence = (
-                    provider_truth.runtime.evidence.model_copy(deep=True)
-                    if provider_truth is not None
-                    else None
-                )
+                runtime_evidence = provider_truth.runtime.evidence.model_copy(deep=True) if provider_truth is not None else None
                 linked_targets = sort_targets(target_map.get((provider.provider, model.id), []))
                 linked_target_records = [
                     ModelRegisterTargetLink(
@@ -399,38 +424,46 @@ class ControlPlaneTargetsDomainMixin:
                     for target in linked_targets
                 ]
                 health_status = health_by_provider.get((provider.provider, model.id), "unknown")
-                tested_evidence = self._model_tested_evidence(
-                    provider_truth=provider_truth,
-                    health_status=health_status,
-                    model=model,
-                    provider=provider,
-                    source=model.source,
-                ) if provider_truth is not None else {
-                    "health_check": self._snapshot_evidence(
-                        status="missing",
-                        source="provider_health",
-                        recorded_at=None,
-                        details="No provider truth record exists for this model yet.",
-                    ),
-                    "discovery_sync": self._snapshot_evidence(
-                        status="missing",
-                        source="provider_sync",
-                        recorded_at=provider.last_sync_at,
-                        details="No provider truth record exists for this model yet.",
-                    ),
-                    "live_probe": self._snapshot_evidence(
-                        status="not_applicable",
-                        source="oauth_probe",
-                        recorded_at=model.last_probe_at,
-                        details="No provider truth record exists for this model yet.",
-                    ),
-                }
-                trust_status, trust_reason = self._model_trust_posture(
-                    runtime_evidence=runtime_evidence,
-                    tested_evidence=tested_evidence,
-                ) if runtime_evidence is not None else (
-                    "declared_only",
-                    "This model currently has no observed or verified evidence attached to its provider path.",
+                tested_evidence = (
+                    self._model_tested_evidence(
+                        provider_truth=provider_truth,
+                        health_status=health_status,
+                        model=model,
+                        provider=provider,
+                        source=model.source,
+                    )
+                    if provider_truth is not None
+                    else {
+                        "health_check": self._snapshot_evidence(
+                            status="missing",
+                            source="provider_health",
+                            recorded_at=None,
+                            details="No provider truth record exists for this model yet.",
+                        ),
+                        "discovery_sync": self._snapshot_evidence(
+                            status="missing",
+                            source="provider_sync",
+                            recorded_at=provider.last_sync_at,
+                            details="No provider truth record exists for this model yet.",
+                        ),
+                        "live_probe": self._snapshot_evidence(
+                            status="not_applicable",
+                            source="oauth_probe",
+                            recorded_at=model.last_probe_at,
+                            details="No provider truth record exists for this model yet.",
+                        ),
+                    }
+                )
+                trust_status, trust_reason = (
+                    self._model_trust_posture(
+                        runtime_evidence=runtime_evidence,
+                        tested_evidence=tested_evidence,
+                    )
+                    if runtime_evidence is not None
+                    else (
+                        "declared_only",
+                        "This model currently has no observed or verified evidence attached to its provider path.",
+                    )
                 )
                 routing_status, routing_ready, routing_reason = self._model_routing_posture(
                     provider_enabled=provider.enabled,

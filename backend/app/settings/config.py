@@ -31,14 +31,27 @@ def _provider_env_var(suffix: str) -> str:
 
 
 def oauth_target_env_contract(provider_key: str, *, auth_mode: str = "oauth_account") -> dict[str, tuple[str, ...]]:
+    """Return required and optional env keys for OAuth-capable providers.
+
+    :param provider_key: Canonical provider identifier.
+    :type provider_key: str
+    :param auth_mode: Requested authentication mode for the provider.
+    :type auth_mode: str
+    :return: Mapping with required and optional environment keys.
+    :rtype: dict[str, tuple[str, ...]]
+    """
     if provider_key == "openai_codex":
         required = (
-            _provider_env_var("OPENAI_CODEX_API_KEY"),
-            _provider_env_var("OPENAI_CODEX_AUTH_MODE"),
-        ) if auth_mode == "api_key" else (
-            _provider_env_var("OPENAI_CODEX_OAUTH_ACCESS_TOKEN"),
-            _provider_env_var("OPENAI_CODEX_AUTH_MODE"),
-            _provider_env_var("OPENAI_CODEX_OAUTH_MODE"),
+            (
+                _provider_env_var("OPENAI_CODEX_API_KEY"),
+                _provider_env_var("OPENAI_CODEX_AUTH_MODE"),
+            )
+            if auth_mode == "api_key"
+            else (
+                _provider_env_var("OPENAI_CODEX_OAUTH_ACCESS_TOKEN"),
+                _provider_env_var("OPENAI_CODEX_AUTH_MODE"),
+                _provider_env_var("OPENAI_CODEX_OAUTH_MODE"),
+            )
         )
         return {
             "required": required,
@@ -50,11 +63,15 @@ def oauth_target_env_contract(provider_key: str, *, auth_mode: str = "oauth_acco
         }
     if provider_key == "gemini":
         required = (
-            _provider_env_var("GEMINI_API_KEY"),
-            _provider_env_var("GEMINI_AUTH_MODE"),
-        ) if auth_mode == "api_key" else (
-            _provider_env_var("GEMINI_OAUTH_ACCESS_TOKEN"),
-            _provider_env_var("GEMINI_AUTH_MODE"),
+            (
+                _provider_env_var("GEMINI_API_KEY"),
+                _provider_env_var("GEMINI_AUTH_MODE"),
+            )
+            if auth_mode == "api_key"
+            else (
+                _provider_env_var("GEMINI_OAUTH_ACCESS_TOKEN"),
+                _provider_env_var("GEMINI_AUTH_MODE"),
+            )
         )
         return {
             "required": required,
@@ -116,6 +133,7 @@ def oauth_target_env_contract(provider_key: str, *, auth_mode: str = "oauth_acco
     }
     return contracts.get(provider_key, {"required": tuple(), "optional": tuple()})
 
+
 def _coerce_env_value(value: str) -> str:
     return value.strip().strip('"').strip("'")
 
@@ -159,11 +177,7 @@ def _legacy_brand_env_fallbacks(*, explicit_values: dict[str, Any]) -> dict[str,
             continue
 
         legacy_value = next(
-            (
-                raw_values[key]
-                for key in (legacy_key, *legacy_aliases.get(field_name, ()))
-                if key in raw_values
-            ),
+            (raw_values[key] for key in (legacy_key, *legacy_aliases.get(field_name, ())) if key in raw_values),
             None,
         )
         if legacy_value is not None:
@@ -180,6 +194,8 @@ def _legacy_brand_env_fallbacks(*, explicit_values: dict[str, Any]) -> dict[str,
 
 
 class Settings(BaseSettings):
+    """Application runtime settings sourced from environment variables."""
+
     model_config = SettingsConfigDict(env_prefix="FORGEFRAME_", env_file=".env", extra="ignore")
 
     def __init__(self, **values):
@@ -382,6 +398,12 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def validate_operational_contract(self) -> "Settings":
+        """Validate settings combinations required for runtime startup.
+
+        :return: The validated settings instance.
+        :rtype: Settings
+        :raises ValueError: If a required operational setting is missing or invalid.
+        """
         if self.admin_auth_enabled:
             if not self.bootstrap_admin_username.strip():
                 raise ValueError("FORGEFRAME_BOOTSTRAP_ADMIN_USERNAME must be set when admin auth is enabled.")
@@ -422,6 +444,13 @@ class Settings(BaseSettings):
         return self
 
     def is_provider_enabled(self, provider_name: str) -> bool:
+        """Report whether a provider is enabled by feature flag.
+
+        :param provider_name: Provider identifier.
+        :type provider_name: str
+        :return: True when the provider is enabled.
+        :rtype: bool
+        """
         flag_map = {
             "forgeframe_baseline": self.forgeframe_baseline_enabled,
             "openai_api": self.openai_api_enabled,
@@ -437,6 +466,11 @@ class Settings(BaseSettings):
 
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:
+    """Build cached runtime settings with persisted override support.
+
+    :return: Effective runtime settings.
+    :rtype: Settings
+    """
     base = Settings()
     try:
         from app.settings.service import load_persisted_setting_overrides

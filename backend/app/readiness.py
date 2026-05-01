@@ -4,16 +4,16 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, Literal
+from typing import TYPE_CHECKING, Any, Literal
 
 from fastapi import FastAPI
 from pydantic import BaseModel
 
 from app.public_surface import (
-    NORMATIVE_HTTPS_HOST,
-    NORMATIVE_HTTP_HELPER_PORT,
-    NORMATIVE_HTTPS_PORT,
     FRONTEND_MOUNT_PATH,
+    NORMATIVE_HTTP_HELPER_PORT,
+    NORMATIVE_HTTPS_HOST,
+    NORMATIVE_HTTPS_PORT,
     ROOT_SURFACE_KIND,
     has_configured_public_fqdn,
     has_integrated_tls_automation,
@@ -30,15 +30,13 @@ if TYPE_CHECKING:
 
 ReadinessState = Literal["booting", "degraded", "ready"]
 ReadinessSeverity = Literal["critical", "warning"]
-INSECURE_BOOTSTRAP_ADMIN_PASSWORDS = frozenset(
-    {
-        "",
-        "forgegate-admin",
-        "forgeframe-admin",
-        "replace-with-a-strong-password",
-        "replace-with-a-generated-bootstrap-password",
-    }
-)
+INSECURE_BOOTSTRAP_ADMIN_PASSWORDS = frozenset({
+    "",
+    "forgegate-admin",
+    "forgeframe-admin",
+    "replace-with-a-strong-password",
+    "replace-with-a-generated-bootstrap-password",
+})
 PUBLIC_READINESS_ID_MAP = {
     "settings_validation": "startup_validation",
     "bootstrap_admin_password": "security_configuration",
@@ -103,16 +101,14 @@ class RuntimeReadinessReport(BaseModel):
 
     @classmethod
     def booting(cls, details: str = "startup_validation_pending") -> "RuntimeReadinessReport":
-        return cls.from_checks(
-            [
-                RuntimeReadinessCheck(
-                    id="startup_validation",
-                    ok=False,
-                    severity="critical",
-                    details=details,
-                )
-            ]
-        )
+        return cls.from_checks([
+            RuntimeReadinessCheck(
+                id="startup_validation",
+                ok=False,
+                severity="critical",
+                details=details,
+            )
+        ])
 
     @classmethod
     def from_checks(
@@ -142,7 +138,9 @@ class RuntimeReadinessReport(BaseModel):
         )
 
 
-def build_operator_runtime_readiness_payload(readiness: RuntimeReadinessReport) -> dict[str, object]:
+def build_operator_runtime_readiness_payload(
+    readiness: RuntimeReadinessReport,
+) -> dict[str, Any]:
     return readiness.model_dump()
 
 
@@ -156,7 +154,9 @@ def _merge_public_check_severity(
     return "critical" if any(check.severity == "critical" for check in relevant_checks) else "warning"
 
 
-def build_public_runtime_readiness_payload(readiness: RuntimeReadinessReport) -> dict[str, object]:
+def build_public_runtime_readiness_payload(
+    readiness: RuntimeReadinessReport,
+) -> dict[str, Any]:
     public_checks: dict[str, RuntimeReadinessCheck] = {}
     observed_order: list[str] = []
     for check in readiness.checks:
@@ -180,7 +180,10 @@ def build_public_runtime_readiness_payload(readiness: RuntimeReadinessReport) ->
     order_rank = {check_id: index for index, check_id in enumerate(PUBLIC_READINESS_DISPLAY_ORDER)}
     ordered_ids = sorted(
         observed_order,
-        key=lambda check_id: (order_rank.get(check_id, len(order_rank)), observed_order.index(check_id)),
+        key=lambda check_id: (
+            order_rank.get(check_id, len(order_rank)),
+            observed_order.index(check_id),
+        ),
     )
     checks = [public_checks[check_id] for check_id in ordered_ids]
     return {
@@ -238,7 +241,9 @@ def _build_bootstrap_admin_password_check(settings: Settings) -> RuntimeReadines
     )
 
 
-def _build_bootstrap_admin_account_check(governance: GovernanceService) -> RuntimeReadinessCheck:
+def _build_bootstrap_admin_account_check(
+    governance: GovernanceService,
+) -> RuntimeReadinessCheck:
     bootstrap = governance.bootstrap_status()
     if not bool(bootstrap.get("admin_auth_enabled", True)):
         return RuntimeReadinessCheck(
@@ -298,16 +303,14 @@ def validate_runtime_startup() -> list[RuntimeReadinessCheck]:
     try:
         settings = get_settings()
     except Exception as exc:
-        raise StartupValidationError(
-            [
-                RuntimeReadinessCheck(
-                    id="settings_validation",
-                    ok=False,
-                    severity="critical",
-                    details=f"{type(exc).__name__}: {exc}",
-                )
-            ]
-        ) from exc
+        raise StartupValidationError([
+            RuntimeReadinessCheck(
+                id="settings_validation",
+                ok=False,
+                severity="critical",
+                details=f"{type(exc).__name__}: {exc}",
+            )
+        ]) from exc
 
     checks: list[RuntimeReadinessCheck] = [_build_bootstrap_admin_password_check(settings)]
     from app.api.admin.control_plane import get_control_plane_service
@@ -405,10 +408,7 @@ def _build_public_surface_checks(
             id="root_ui_delivery",
             ok=frontend_mount_path == "/" and root_surface_kind == "spa",
             severity="warning",
-            details=(
-                f"root_surface={root_surface_kind or ROOT_SURFACE_KIND};"
-                f"frontend_mount_path={frontend_mount_path or FRONTEND_MOUNT_PATH}"
-            ),
+            details=(f"root_surface={root_surface_kind or ROOT_SURFACE_KIND};frontend_mount_path={frontend_mount_path or FRONTEND_MOUNT_PATH}"),
         ),
         RuntimeReadinessCheck(
             id="same_origin_runtime_api",
@@ -430,20 +430,13 @@ def _build_public_surface_checks(
         ),
         RuntimeReadinessCheck(
             id="public_https_listener",
-            ok=(
-                settings.public_https_host == NORMATIVE_HTTPS_HOST
-                and settings.public_https_port == NORMATIVE_HTTPS_PORT
-                and settings.public_tls_mode == "integrated_acme"
-            ),
+            ok=(settings.public_https_host == NORMATIVE_HTTPS_HOST and settings.public_https_port == NORMATIVE_HTTPS_PORT and settings.public_tls_mode == "integrated_acme"),
             severity="warning",
             details=f"{settings.public_https_host}:{settings.public_https_port};mode={settings.public_tls_mode}",
         ),
         RuntimeReadinessCheck(
             id="port80_certificate_helper",
-            ok=(
-                settings.public_http_helper_port == NORMATIVE_HTTP_HELPER_PORT
-                and settings.public_tls_mode == "integrated_acme"
-            ),
+            ok=(settings.public_http_helper_port == NORMATIVE_HTTP_HELPER_PORT and settings.public_tls_mode == "integrated_acme"),
             severity="warning",
             details=f"{settings.public_http_helper_host}:{settings.public_http_helper_port}",
         ),
@@ -469,11 +462,7 @@ def _build_public_surface_checks(
             id="linux_host_runtime",
             ok=has_linux_host_installation_artifacts(repo_root),
             severity="warning",
-            details=(
-                "linux_host_installation_artifacts_present"
-                if has_linux_host_installation_artifacts(repo_root)
-                else "missing_install_script_or_systemd_units"
-            ),
+            details=("linux_host_installation_artifacts_present" if has_linux_host_installation_artifacts(repo_root) else "missing_install_script_or_systemd_units"),
         ),
     ]
 
@@ -511,11 +500,7 @@ def build_runtime_readiness_report(
             id="configured_default_model",
             ok=configured_default_model is not None,
             severity="warning",
-            details=(
-                f"default_model={settings.default_model}"
-                if configured_default_model is not None
-                else f"default_model_missing:{settings.default_model}"
-            ),
+            details=(f"default_model={settings.default_model}" if configured_default_model is not None else f"default_model_missing:{settings.default_model}"),
         )
     )
 
@@ -540,19 +525,11 @@ def build_runtime_readiness_report(
             id="admin_auth_enabled",
             ok=settings.admin_auth_enabled,
             severity="warning",
-            details=(
-                "admin_auth_enabled"
-                if settings.admin_auth_enabled
-                else "FORGEFRAME_ADMIN_AUTH_ENABLED=false"
-            ),
+            details=("admin_auth_enabled" if settings.admin_auth_enabled else "FORGEFRAME_ADMIN_AUTH_ENABLED=false"),
         )
     )
     secret_posture = governance.provider_secret_posture()
-    rotation_gaps = [
-        str(item["provider"])
-        for item in secret_posture
-        if bool(item.get("configured")) and bool(item.get("needs_rotation_evidence"))
-    ]
+    rotation_gaps = [str(item["provider"]) for item in secret_posture if bool(item.get("configured")) and bool(item.get("needs_rotation_evidence"))]
     checks.append(
         RuntimeReadinessCheck(
             id="secret_rotation_evidence",
@@ -565,10 +542,7 @@ def build_runtime_readiness_report(
     observability_details = ""
     try:
         aggregates = analytics.aggregate(window_seconds=24 * 3600)
-        observability_details = (
-            f"{settings.observability_storage_backend}:"
-            f"events_24h={aggregates['event_count']}:errors_24h={aggregates['error_event_count']}"
-        )
+        observability_details = f"{settings.observability_storage_backend}:events_24h={aggregates['event_count']}:errors_24h={aggregates['error_event_count']}"
     except TenantFilterRequiredError:
         observability_details = f"{settings.observability_storage_backend}:tenant_filter_required"
     checks.append(
@@ -616,7 +590,7 @@ def build_health_payload(
     app_version: str,
     api_base: str,
     readiness: RuntimeReadinessReport,
-) -> dict[str, object]:
+) -> dict[str, Any]:
     return {
         "status": "ok" if readiness.accepting_traffic else "starting",
         "app": app_name,

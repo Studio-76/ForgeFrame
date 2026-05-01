@@ -5,11 +5,25 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import Any
 
-from sqlalchemy import JSON, CheckConstraint, DateTime, ForeignKeyConstraint, Index, Integer, String, Text
+from sqlalchemy import (
+    JSON,
+    CheckConstraint,
+    DateTime,
+    ForeignKeyConstraint,
+    Index,
+    Integer,
+    String,
+    Text,
+)
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
-from app.skills.models import SKILL_ACTIVATION_STATUSES, SKILL_SCOPES, SKILL_STATUSES, SKILL_USAGE_OUTCOMES
+from app.skills.models import (
+    SKILL_ACTIVATION_STATUSES,
+    SKILL_SCOPES,
+    SKILL_STATUSES,
+    SKILL_USAGE_OUTCOMES,
+)
 from app.storage.harness_repository import Base
 
 
@@ -37,7 +51,13 @@ class SkillORM(Base):
         _enum_check("skills_scope_ck", "scope", SKILL_SCOPES),
         _enum_check("skills_status_ck", "status", SKILL_STATUSES),
         Index("skills_company_id_id_uq", "company_id", "id", unique=True),
-        Index("skills_instance_scope_status_idx", "instance_id", "scope", "status", "updated_at"),
+        Index(
+            "skills_instance_scope_status_idx",
+            "instance_id",
+            "scope",
+            "status",
+            "updated_at",
+        ),
     )
 
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
@@ -89,8 +109,19 @@ class SkillVersionORM(Base):
             ondelete="CASCADE",
         ),
         _enum_check("skill_versions_status_ck", "status", SKILL_STATUSES),
-        Index("skill_versions_company_skill_version_uq", "company_id", "skill_id", "version_number", unique=True),
-        Index("skill_versions_instance_skill_created_idx", "instance_id", "skill_id", "created_at"),
+        Index(
+            "skill_versions_company_skill_version_uq",
+            "company_id",
+            "skill_id",
+            "version_number",
+            unique=True,
+        ),
+        Index(
+            "skill_versions_instance_skill_created_idx",
+            "instance_id",
+            "skill_id",
+            "created_at",
+        ),
     )
 
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
@@ -145,7 +176,13 @@ class SkillActivationORM(Base):
         ),
         _enum_check("skill_activations_scope_ck", "scope", SKILL_SCOPES),
         _enum_check("skill_activations_status_ck", "status", SKILL_ACTIVATION_STATUSES),
-        Index("skill_activations_company_skill_status_idx", "company_id", "skill_id", "status", "activated_at"),
+        Index(
+            "skill_activations_company_skill_status_idx",
+            "company_id",
+            "skill_id",
+            "status",
+            "activated_at",
+        ),
     )
 
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
@@ -202,7 +239,12 @@ class SkillUsageEventORM(Base):
             ondelete="SET NULL",
         ),
         _enum_check("skill_usage_outcome_ck", "outcome", SKILL_USAGE_OUTCOMES),
-        Index("skill_usage_instance_skill_created_idx", "instance_id", "skill_id", "created_at"),
+        Index(
+            "skill_usage_instance_skill_created_idx",
+            "instance_id",
+            "skill_id",
+            "created_at",
+        ),
     )
 
     id: Mapped[str] = mapped_column(String(64), primary_key=True)

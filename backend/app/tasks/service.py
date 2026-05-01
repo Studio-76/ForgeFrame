@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from datetime import UTC, datetime, timedelta
+from typing import Any
 from urllib.parse import urlsplit
 from uuid import uuid4
 
@@ -11,7 +12,6 @@ from pydantic import ValidationError
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
-from app.conversations.models import ConversationSummary, InboxSummary
 from app.instances.models import InstanceRecord
 from app.storage.conversation_repository import ConversationORM, InboxItemORM
 from app.storage.tasking_repository import (
@@ -65,7 +65,13 @@ _CHANNEL_SECRET_KEY_TOKENS = (
     "signing_key",
     "signing_secret",
 )
-_CHANNEL_REFERENCE_KEY_TOKENS = ("credential_ref", "secret_ref", "vault_ref", "oauth_ref", "key_ref")
+_CHANNEL_REFERENCE_KEY_TOKENS = (
+    "credential_ref",
+    "secret_ref",
+    "vault_ref",
+    "oauth_ref",
+    "key_ref",
+)
 
 
 class TaskAutomationAdminService:
@@ -102,7 +108,7 @@ class TaskAutomationAdminService:
         reference_fields: list[str],
     ) -> object:
         if isinstance(value, dict):
-            sanitized: dict[str, object] = {}
+            sanitized: dict[str, Any] = {}
             for raw_key, raw_item in value.items():
                 if not isinstance(raw_key, str):
                     continue
@@ -133,7 +139,7 @@ class TaskAutomationAdminService:
         return value
 
     @classmethod
-    def _channel_public_metadata(cls, row: DeliveryChannelORM) -> tuple[dict[str, object], list[str], list[str]]:
+    def _channel_public_metadata(cls, row: DeliveryChannelORM) -> tuple[dict[str, Any], list[str], list[str]]:
         redacted_fields: list[str] = []
         reference_fields: list[str] = []
         sanitized = cls._channel_sanitize_metadata_value(
@@ -142,10 +148,14 @@ class TaskAutomationAdminService:
             redacted_fields=redacted_fields,
             reference_fields=reference_fields,
         )
-        return dict(sanitized) if isinstance(sanitized, dict) else {}, redacted_fields, reference_fields
+        return (
+            dict(sanitized) if isinstance(sanitized, dict) else {},
+            redacted_fields,
+            reference_fields,
+        )
 
     @staticmethod
-    def _channel_scope_reference(metadata: dict[str, object]) -> str | None:
+    def _channel_scope_reference(metadata: dict[str, Any]) -> str | None:
         for key in ("contact_ref", "contact_id", "scope_ref"):
             value = metadata.get(key)
             if isinstance(value, str) and value.strip():
@@ -153,7 +163,7 @@ class TaskAutomationAdminService:
         return None
 
     @classmethod
-    def _channel_scope_label(cls, metadata: dict[str, object]) -> str:
+    def _channel_scope_label(cls, metadata: dict[str, Any]) -> str:
         if cls._channel_scope_reference(metadata):
             return "contact-bound"
         scope = metadata.get("scope")
@@ -197,7 +207,7 @@ class TaskAutomationAdminService:
             storage_state = "no_secret_material"
             summary = "No secret-bearing fields are currently persisted for this channel."
         return ChannelCredentialPosture(
-            storage_state=storage_state,  # type: ignore[arg-type]
+            storage_state=storage_state,
             target_masked=target_masked,
             redacted_fields=redacted_fields,
             external_reference_fields=reference_fields,
@@ -205,7 +215,7 @@ class TaskAutomationAdminService:
         )
 
     @staticmethod
-    def _channel_rank_map(rows: list[DeliveryChannelORM]) -> dict[str, int]:
+    def _channel_rank_map(rows: Sequence[DeliveryChannelORM]) -> dict[str, int]:
         parents_by_child: dict[str, list[str]] = {}
         for row in rows:
             if row.fallback_channel_id:
@@ -230,10 +240,12 @@ class TaskAutomationAdminService:
             rank_for(row.id)
         return cache
 
-    def _channel_notification_stats(self, session: Session, *, instance: InstanceRecord, channel_id: str) -> dict[str, object]:
+    def _channel_notification_stats(self, session: Session, *, instance: InstanceRecord, channel_id: str) -> dict[str, Any]:
         notification_count = int(
             session.scalar(
-                select(func.count()).select_from(NotificationORM).where(
+                select(func.count())
+                .select_from(NotificationORM)
+                .where(
                     NotificationORM.company_id == instance.company_id,
                     NotificationORM.channel_id == channel_id,
                 )
@@ -252,17 +264,29 @@ class TaskAutomationAdminService:
                 NotificationORM.channel_id == channel_id,
                 or_(
                     NotificationORM.last_error.is_not(None),
-                    NotificationORM.delivery_status.in_(("failed", "cancelled", "rejected")),
+                    NotificationORM.delivery_status.in_((
+                        "failed",
+                        "cancelled",
+                        "rejected",
+                    )),
                 ),
             )
         )
-        last_error_row = session.execute(
-            select(NotificationORM).where(
-                NotificationORM.company_id == instance.company_id,
-                NotificationORM.channel_id == channel_id,
-                NotificationORM.last_error.is_not(None),
-            ).order_by(NotificationORM.updated_at.desc()).limit(1)
-        ).scalars().first()
+        last_error_row = (
+            session
+            .execute(
+                select(NotificationORM)
+                .where(
+                    NotificationORM.company_id == instance.company_id,
+                    NotificationORM.channel_id == channel_id,
+                    NotificationORM.last_error.is_not(None),
+                )
+                .order_by(NotificationORM.updated_at.desc())
+                .limit(1)
+            )
+            .scalars()
+            .first()
+        )
         return {
             "notification_count": notification_count,
             "last_success_at": last_success_at,
@@ -286,10 +310,10 @@ class TaskAutomationAdminService:
             channel_id=row.id,
             instance_id=row.instance_id,
             company_id=row.company_id,
-            channel_kind=row.channel_kind,  # type: ignore[arg-type]
+            channel_kind=row.channel_kind,
             label=row.label,
             target=cls._channel_target_display(row),
-            status=row.status,  # type: ignore[arg-type]
+            status=row.status,
             fallback_channel_id=row.fallback_channel_id,
             metadata=public_metadata,
             scope_label=cls._channel_scope_label(dict(row.metadata_json or {})),
@@ -312,17 +336,26 @@ class TaskAutomationAdminService:
     ) -> DeliveryChannelSummary:
         effective_rank_map = rank_map
         if effective_rank_map is None:
-            all_rows = session.execute(
-                select(DeliveryChannelORM).where(
-                    DeliveryChannelORM.company_id == instance.company_id,
-                    DeliveryChannelORM.instance_id == instance.instance_id,
+            all_rows = (
+                session
+                .execute(
+                    select(DeliveryChannelORM).where(
+                        DeliveryChannelORM.company_id == instance.company_id,
+                        DeliveryChannelORM.instance_id == instance.instance_id,
+                    )
                 )
-            ).scalars().all()
+                .scalars()
+                .all()
+            )
             effective_rank_map = self._channel_rank_map(all_rows)
+        stats = self._channel_notification_stats(session, instance=instance, channel_id=row.id)
         return self._channel_summary(
             row,
             fallback_rank=effective_rank_map.get(row.id, 0),
-            **self._channel_notification_stats(session, instance=instance, channel_id=row.id),
+            notification_count=stats["notification_count"],
+            last_success_at=stats["last_success_at"],
+            last_failure_at=stats["last_failure_at"],
+            last_error=stats["last_error"],
         )
 
     @staticmethod
@@ -414,39 +447,54 @@ class TaskAutomationAdminService:
 
     def _materialize_due_reminders(self, session: Session, *, instance: InstanceRecord) -> None:
         now = self._now()
-        for reminder in session.execute(
-            select(ReminderORM).where(
-                ReminderORM.company_id == instance.company_id,
-                ReminderORM.instance_id == instance.instance_id,
-                ReminderORM.status == "scheduled",
-                ReminderORM.due_at <= now,
+        for reminder in (
+            session
+            .execute(
+                select(ReminderORM).where(
+                    ReminderORM.company_id == instance.company_id,
+                    ReminderORM.instance_id == instance.instance_id,
+                    ReminderORM.status == "scheduled",
+                    ReminderORM.due_at <= now,
+                )
             )
-        ).scalars().all():
+            .scalars()
+            .all()
+        ):
             reminder.status = "due"
             reminder.updated_at = now
 
     def _task_summary(self, session: Session, row: TaskORM) -> TaskSummary:
-        reminder_count = session.scalar(
-            select(func.count()).select_from(ReminderORM).where(
-                ReminderORM.company_id == row.company_id,
-                ReminderORM.task_id == row.id,
+        reminder_count = (
+            session.scalar(
+                select(func.count())
+                .select_from(ReminderORM)
+                .where(
+                    ReminderORM.company_id == row.company_id,
+                    ReminderORM.task_id == row.id,
+                )
             )
-        ) or 0
-        notification_count = session.scalar(
-            select(func.count()).select_from(NotificationORM).where(
-                NotificationORM.company_id == row.company_id,
-                NotificationORM.task_id == row.id,
+            or 0
+        )
+        notification_count = (
+            session.scalar(
+                select(func.count())
+                .select_from(NotificationORM)
+                .where(
+                    NotificationORM.company_id == row.company_id,
+                    NotificationORM.task_id == row.id,
+                )
             )
-        ) or 0
+            or 0
+        )
         return TaskSummary(
             task_id=row.id,
             instance_id=row.instance_id,
             company_id=row.company_id,
-            task_kind=row.task_kind,  # type: ignore[arg-type]
+            task_kind=row.task_kind,
             title=row.title,
             summary=row.summary,
-            status=row.status,  # type: ignore[arg-type]
-            priority=row.priority,  # type: ignore[arg-type]
+            status=row.status,
+            priority=row.priority,
             owner_id=row.owner_id,
             conversation_id=row.conversation_id,
             inbox_id=row.inbox_id,
@@ -471,7 +519,7 @@ class TaskAutomationAdminService:
             notification_id=row.notification_id,
             title=row.title,
             summary=row.summary,
-            status=row.status,  # type: ignore[arg-type]
+            status=row.status,
             due_at=row.due_at,
             triggered_at=row.triggered_at,
             metadata=dict(row.metadata_json or {}),
@@ -480,13 +528,13 @@ class TaskAutomationAdminService:
         )
 
     @staticmethod
-    def _notification_public_metadata(row: NotificationORM) -> dict[str, object]:
+    def _notification_public_metadata(row: NotificationORM) -> dict[str, Any]:
         metadata = dict(row.metadata_json or {})
         metadata.pop(_NOTIFICATION_INTERNAL_METADATA_KEY, None)
         return metadata
 
     @staticmethod
-    def _notification_internal_metadata(row: NotificationORM) -> dict[str, object]:
+    def _notification_internal_metadata(row: NotificationORM) -> dict[str, Any]:
         metadata = dict(row.metadata_json or {})
         internal = metadata.get(_NOTIFICATION_INTERNAL_METADATA_KEY)
         return dict(internal) if isinstance(internal, dict) else {}
@@ -520,14 +568,14 @@ class TaskAutomationAdminService:
         cls,
         row: NotificationORM,
         *,
-        user_metadata: dict[str, object] | None = None,
+        user_metadata: dict[str, Any] | None = None,
         attempts: list[NotificationDeliveryAttempt] | None = None,
         configured_channel_id: str | None = None,
     ) -> None:
         public_metadata = dict(user_metadata) if user_metadata is not None else cls._notification_public_metadata(row)
         effective_configured_channel_id = configured_channel_id if configured_channel_id is not None else cls._notification_configured_channel_id(row)
         raw_attempts = [attempt.model_dump(mode="json") for attempt in (attempts if attempts is not None else cls._notification_attempts(row))]
-        internal_metadata: dict[str, object] = {}
+        internal_metadata: dict[str, Any] = {}
         if raw_attempts:
             internal_metadata[_NOTIFICATION_ATTEMPTS_KEY] = raw_attempts
         if effective_configured_channel_id:
@@ -547,7 +595,12 @@ class TaskAutomationAdminService:
             live_delivery = False
             next_step = "Confirm the preview to enter the live delivery queue, or reject it before any outward send."
             evidence_note = "No outward delivery has happened. The record is still a preview-only outbox item."
-        elif row.delivery_status in {"confirmed", "queued", "delivering", "fallback_queued"}:
+        elif row.delivery_status in {
+            "confirmed",
+            "queued",
+            "delivering",
+            "fallback_queued",
+        }:
             effect_state = "queued"
             live_delivery = True
             next_step = "Monitor the queue and retry only if the provider or channel fails."
@@ -624,8 +677,8 @@ class TaskAutomationAdminService:
             fallback_channel_id=row.fallback_channel_id,
             title=row.title,
             body=row.body,
-            delivery_status=row.delivery_status,  # type: ignore[arg-type]
-            priority=row.priority,  # type: ignore[arg-type]
+            delivery_status=row.delivery_status,
+            priority=row.priority,
             preview_required=row.preview_required,
             retry_count=row.retry_count,
             max_retries=row.max_retries,
@@ -647,8 +700,8 @@ class TaskAutomationAdminService:
             company_id=row.company_id,
             title=row.title,
             summary=row.summary,
-            status=row.status,  # type: ignore[arg-type]
-            action_kind=row.action_kind,  # type: ignore[arg-type]
+            status=row.status,
+            action_kind=row.action_kind,
             cadence_minutes=row.cadence_minutes,
             next_run_at=row.next_run_at,
             last_run_at=row.last_run_at,
@@ -669,7 +722,10 @@ class TaskAutomationAdminService:
 
     def list_tasks(self, *, instance: InstanceRecord, status: str | None = None, limit: int = 100) -> list[TaskSummary]:
         with self._session_factory() as session:
-            stmt = select(TaskORM).where(TaskORM.company_id == instance.company_id, TaskORM.instance_id == instance.instance_id)
+            stmt = select(TaskORM).where(
+                TaskORM.company_id == instance.company_id,
+                TaskORM.instance_id == instance.instance_id,
+            )
             if status is not None:
                 stmt = stmt.where(TaskORM.status == status)
             rows = session.execute(stmt.order_by(TaskORM.updated_at.desc()).limit(max(1, min(limit, 200)))).scalars().all()
@@ -679,12 +735,32 @@ class TaskAutomationAdminService:
         with self._session_factory() as session:
             row = self._load_task(session, instance=instance, task_id=task_id)
             summary = self._task_summary(session, row)
-            reminders = session.execute(
-                select(ReminderORM).where(ReminderORM.company_id == instance.company_id, ReminderORM.task_id == task_id).order_by(ReminderORM.due_at.asc())
-            ).scalars().all()
-            notifications = session.execute(
-                select(NotificationORM).where(NotificationORM.company_id == instance.company_id, NotificationORM.task_id == task_id).order_by(NotificationORM.updated_at.desc())
-            ).scalars().all()
+            reminders = (
+                session
+                .execute(
+                    select(ReminderORM)
+                    .where(
+                        ReminderORM.company_id == instance.company_id,
+                        ReminderORM.task_id == task_id,
+                    )
+                    .order_by(ReminderORM.due_at.asc())
+                )
+                .scalars()
+                .all()
+            )
+            notifications = (
+                session
+                .execute(
+                    select(NotificationORM)
+                    .where(
+                        NotificationORM.company_id == instance.company_id,
+                        NotificationORM.task_id == task_id,
+                    )
+                    .order_by(NotificationORM.updated_at.desc())
+                )
+                .scalars()
+                .all()
+            )
             return TaskDetail(
                 **summary.model_dump(),
                 reminders=[self._reminder_summary(item) for item in reminders],
@@ -753,7 +829,10 @@ class TaskAutomationAdminService:
     def list_reminders(self, *, instance: InstanceRecord, status: str | None = None, limit: int = 100) -> list[ReminderSummary]:
         with self._session_factory() as session, session.begin():
             self._materialize_due_reminders(session, instance=instance)
-            stmt = select(ReminderORM).where(ReminderORM.company_id == instance.company_id, ReminderORM.instance_id == instance.instance_id)
+            stmt = select(ReminderORM).where(
+                ReminderORM.company_id == instance.company_id,
+                ReminderORM.instance_id == instance.instance_id,
+            )
             if status is not None:
                 stmt = stmt.where(ReminderORM.status == status)
             rows = session.execute(stmt.order_by(ReminderORM.due_at.asc()).limit(max(1, min(limit, 200)))).scalars().all()
@@ -764,7 +843,14 @@ class TaskAutomationAdminService:
             self._materialize_due_reminders(session, instance=instance)
             row = self._load_reminder(session, instance=instance, reminder_id=reminder_id)
             summary = self._reminder_summary(row)
-            task = self._task_summary(session, self._load_task(session, instance=instance, task_id=row.task_id)) if row.task_id else None
+            task = (
+                self._task_summary(
+                    session,
+                    self._load_task(session, instance=instance, task_id=row.task_id),
+                )
+                if row.task_id
+                else None
+            )
             notification = self._notification_summary(self._load_notification(session, instance=instance, notification_id=row.notification_id)) if row.notification_id else None
             return ReminderDetail(**summary.model_dump(), task=task, notification=notification)
 
@@ -825,39 +911,60 @@ class TaskAutomationAdminService:
         limit: int = 100,
     ) -> list[DeliveryChannelSummary]:
         with self._session_factory() as session:
-            stmt = select(DeliveryChannelORM).where(DeliveryChannelORM.company_id == instance.company_id, DeliveryChannelORM.instance_id == instance.instance_id)
+            stmt = select(DeliveryChannelORM).where(
+                DeliveryChannelORM.company_id == instance.company_id,
+                DeliveryChannelORM.instance_id == instance.instance_id,
+            )
             if status is not None:
                 stmt = stmt.where(DeliveryChannelORM.status == status)
             if kind is not None:
                 stmt = stmt.where(DeliveryChannelORM.channel_kind == kind)
             rows = session.execute(stmt.order_by(DeliveryChannelORM.updated_at.desc()).limit(max(1, min(limit, 200)))).scalars().all()
-            all_rows = session.execute(
-                select(DeliveryChannelORM).where(
-                    DeliveryChannelORM.company_id == instance.company_id,
-                    DeliveryChannelORM.instance_id == instance.instance_id,
+            all_rows = (
+                session
+                .execute(
+                    select(DeliveryChannelORM).where(
+                        DeliveryChannelORM.company_id == instance.company_id,
+                        DeliveryChannelORM.instance_id == instance.instance_id,
+                    )
                 )
-            ).scalars().all()
+                .scalars()
+                .all()
+            )
             rank_map = self._channel_rank_map(all_rows)
-            return [
-                self._channel_summary_for_row(session, instance=instance, row=row, rank_map=rank_map)
-                for row in rows
-            ]
+            return [self._channel_summary_for_row(session, instance=instance, row=row, rank_map=rank_map) for row in rows]
 
     def get_channel(self, *, instance: InstanceRecord, channel_id: str) -> ChannelDetail:
         with self._session_factory() as session:
             row = self._load_channel(session, instance=instance, channel_id=channel_id)
-            all_rows = session.execute(
-                select(DeliveryChannelORM).where(
-                    DeliveryChannelORM.company_id == instance.company_id,
-                    DeliveryChannelORM.instance_id == instance.instance_id,
+            all_rows = (
+                session
+                .execute(
+                    select(DeliveryChannelORM).where(
+                        DeliveryChannelORM.company_id == instance.company_id,
+                        DeliveryChannelORM.instance_id == instance.instance_id,
+                    )
                 )
-            ).scalars().all()
+                .scalars()
+                .all()
+            )
             rank_map = self._channel_rank_map(all_rows)
             row_by_id = {item.id: item for item in all_rows}
             summary = self._channel_summary_for_row(session, instance=instance, row=row, rank_map=rank_map)
-            recent = session.execute(
-                select(NotificationORM).where(NotificationORM.company_id == instance.company_id, NotificationORM.channel_id == channel_id).order_by(NotificationORM.updated_at.desc()).limit(20)
-            ).scalars().all()
+            recent = (
+                session
+                .execute(
+                    select(NotificationORM)
+                    .where(
+                        NotificationORM.company_id == instance.company_id,
+                        NotificationORM.channel_id == channel_id,
+                    )
+                    .order_by(NotificationORM.updated_at.desc())
+                    .limit(20)
+                )
+                .scalars()
+                .all()
+            )
             fallback_chain: list[DeliveryChannelSummary] = []
             visited: set[str] = set()
             current: DeliveryChannelORM | None = row
@@ -867,11 +974,7 @@ class TaskAutomationAdminService:
                 if not current.fallback_channel_id:
                     break
                 current = row_by_id.get(current.fallback_channel_id)
-            fallback_sources = [
-                self._channel_summary_for_row(session, instance=instance, row=item, rank_map=rank_map)
-                for item in all_rows
-                if item.fallback_channel_id == row.id
-            ]
+            fallback_sources = [self._channel_summary_for_row(session, instance=instance, row=item, rank_map=rank_map) for item in all_rows if item.fallback_channel_id == row.id]
             public_metadata, _redacted_fields, _reference_fields = self._channel_public_metadata(row)
             return ChannelDetail(
                 **summary.model_dump(),
@@ -891,7 +994,11 @@ class TaskAutomationAdminService:
             channel_id = (payload.channel_id or "").strip() or self._new_id("channel")
             if payload.fallback_channel_id and payload.fallback_channel_id == channel_id:
                 raise ValueError("Primary and fallback channel must not be identical.")
-            self._validate_channel_links(session, instance=instance, fallback_channel_id=payload.fallback_channel_id)
+            self._validate_channel_links(
+                session,
+                instance=instance,
+                fallback_channel_id=payload.fallback_channel_id,
+            )
             existing = session.get(DeliveryChannelORM, channel_id)
             if existing is not None and existing.company_id == instance.company_id:
                 raise ValueError(f"Channel '{channel_id}' already exists.")
@@ -913,7 +1020,13 @@ class TaskAutomationAdminService:
             )
         return self.get_channel(instance=instance, channel_id=channel_id)
 
-    def update_channel(self, *, instance: InstanceRecord, channel_id: str, payload: UpdateDeliveryChannel) -> ChannelDetail:
+    def update_channel(
+        self,
+        *,
+        instance: InstanceRecord,
+        channel_id: str,
+        payload: UpdateDeliveryChannel,
+    ) -> ChannelDetail:
         with self._session_factory() as session, session.begin():
             row = self._load_channel(session, instance=instance, channel_id=channel_id)
             fallback_channel_id = payload.fallback_channel_id if payload.fallback_channel_id is not None else row.fallback_channel_id
@@ -935,7 +1048,10 @@ class TaskAutomationAdminService:
         limit: int = 100,
     ) -> list[NotificationSummary]:
         with self._session_factory() as session:
-            stmt = select(NotificationORM).where(NotificationORM.company_id == instance.company_id, NotificationORM.instance_id == instance.instance_id)
+            stmt = select(NotificationORM).where(
+                NotificationORM.company_id == instance.company_id,
+                NotificationORM.instance_id == instance.instance_id,
+            )
             if delivery_status is not None:
                 stmt = stmt.where(NotificationORM.delivery_status == delivery_status)
             if priority is not None:
@@ -948,23 +1064,42 @@ class TaskAutomationAdminService:
             row = self._load_notification(session, instance=instance, notification_id=notification_id)
             summary = self._notification_summary(row)
             configured_channel_id = self._notification_configured_channel_id(row)
-            task = self._task_summary(session, self._load_task(session, instance=instance, task_id=row.task_id)) if row.task_id else None
+            task = (
+                self._task_summary(
+                    session,
+                    self._load_task(session, instance=instance, task_id=row.task_id),
+                )
+                if row.task_id
+                else None
+            )
             reminder = self._reminder_summary(self._load_reminder(session, instance=instance, reminder_id=row.reminder_id)) if row.reminder_id else None
-            channel = self._channel_summary_for_row(
-                session,
-                instance=instance,
-                row=self._load_channel(session, instance=instance, channel_id=row.channel_id),
-            ) if row.channel_id else None
-            configured_channel = self._channel_summary_for_row(
-                session,
-                instance=instance,
-                row=self._load_channel(session, instance=instance, channel_id=configured_channel_id),
-            ) if configured_channel_id else None
-            fallback_channel = self._channel_summary_for_row(
-                session,
-                instance=instance,
-                row=self._load_channel(session, instance=instance, channel_id=row.fallback_channel_id),
-            ) if row.fallback_channel_id else None
+            channel = (
+                self._channel_summary_for_row(
+                    session,
+                    instance=instance,
+                    row=self._load_channel(session, instance=instance, channel_id=row.channel_id),
+                )
+                if row.channel_id
+                else None
+            )
+            configured_channel = (
+                self._channel_summary_for_row(
+                    session,
+                    instance=instance,
+                    row=self._load_channel(session, instance=instance, channel_id=configured_channel_id),
+                )
+                if configured_channel_id
+                else None
+            )
+            fallback_channel = (
+                self._channel_summary_for_row(
+                    session,
+                    instance=instance,
+                    row=self._load_channel(session, instance=instance, channel_id=row.fallback_channel_id),
+                )
+                if row.fallback_channel_id
+                else None
+            )
             return NotificationDetail(
                 **summary.model_dump(),
                 task=task,
@@ -1037,13 +1172,24 @@ class TaskAutomationAdminService:
             )
         return self.get_notification(instance=instance, notification_id=notification_id)
 
-    def update_notification(self, *, instance: InstanceRecord, notification_id: str, payload: UpdateNotification) -> NotificationDetail:
+    def update_notification(
+        self,
+        *,
+        instance: InstanceRecord,
+        notification_id: str,
+        payload: UpdateNotification,
+    ) -> NotificationDetail:
         with self._session_factory() as session, session.begin():
             row = self._load_notification(session, instance=instance, notification_id=notification_id)
             previous_status = row.delivery_status
             channel_id = payload.channel_id if payload.channel_id is not None else row.channel_id
             fallback_channel_id = payload.fallback_channel_id if payload.fallback_channel_id is not None else row.fallback_channel_id
-            self._validate_channel_links(session, instance=instance, channel_id=channel_id, fallback_channel_id=fallback_channel_id)
+            self._validate_channel_links(
+                session,
+                instance=instance,
+                channel_id=channel_id,
+                fallback_channel_id=fallback_channel_id,
+            )
             row.channel_id = channel_id
             row.fallback_channel_id = fallback_channel_id
             row.title = payload.title.strip() if payload.title is not None else row.title
@@ -1059,7 +1205,12 @@ class TaskAutomationAdminService:
             elif payload.delivery_status == "rejected":
                 row.rejected_at = self._now()
                 row.next_attempt_at = None
-            elif payload.delivery_status in {"queued", "confirmed", "delivering", "fallback_queued"}:
+            elif payload.delivery_status in {
+                "queued",
+                "confirmed",
+                "delivering",
+                "fallback_queued",
+            }:
                 row.rejected_at = None
                 row.next_attempt_at = row.next_attempt_at or self._now()
             elif payload.delivery_status in {"failed", "cancelled"}:
@@ -1082,7 +1233,13 @@ class TaskAutomationAdminService:
                     detail=f"Operator changed delivery state from {previous_status} to {row.delivery_status}.",
                     next_step=self._notification_evidence(
                         row,
-                        channel=self._channel_summary_for_row(session, instance=instance, row=self._load_channel(session, instance=instance, channel_id=row.channel_id)) if row.channel_id else None,
+                        channel=self._channel_summary_for_row(
+                            session,
+                            instance=instance,
+                            row=self._load_channel(session, instance=instance, channel_id=row.channel_id),
+                        )
+                        if row.channel_id
+                        else None,
                     ).next_step,
                     channel=self._load_channel(session, instance=instance, channel_id=row.channel_id) if row.channel_id else None,
                 )
@@ -1106,7 +1263,10 @@ class TaskAutomationAdminService:
                 next_step="Wait for the live send or retry if the provider path fails.",
                 channel=self._load_channel(session, instance=instance, channel_id=row.channel_id) if row.channel_id else None,
             )
-        return NotificationActionResult(notification=self.get_notification(instance=instance, notification_id=notification_id), action="confirm")
+        return NotificationActionResult(
+            notification=self.get_notification(instance=instance, notification_id=notification_id),
+            action="confirm",
+        )
 
     def reject_notification(self, *, instance: InstanceRecord, notification_id: str) -> NotificationActionResult:
         with self._session_factory() as session, session.begin():
@@ -1125,7 +1285,10 @@ class TaskAutomationAdminService:
                 next_step="Edit the notification content or routing, then confirm it again when it is ready.",
                 channel=self._load_channel(session, instance=instance, channel_id=row.channel_id) if row.channel_id else None,
             )
-        return NotificationActionResult(notification=self.get_notification(instance=instance, notification_id=notification_id), action="reject")
+        return NotificationActionResult(
+            notification=self.get_notification(instance=instance, notification_id=notification_id),
+            action="reject",
+        )
 
     def retry_notification(self, *, instance: InstanceRecord, notification_id: str) -> NotificationActionResult:
         with self._session_factory() as session, session.begin():
@@ -1159,11 +1322,17 @@ class TaskAutomationAdminService:
                 next_step=next_step,
                 channel=self._load_channel(session, instance=instance, channel_id=row.channel_id) if row.channel_id else None,
             )
-        return NotificationActionResult(notification=self.get_notification(instance=instance, notification_id=notification_id), action="retry")
+        return NotificationActionResult(
+            notification=self.get_notification(instance=instance, notification_id=notification_id),
+            action="retry",
+        )
 
     def list_automations(self, *, instance: InstanceRecord, status: str | None = None, limit: int = 100) -> list[AutomationSummary]:
         with self._session_factory() as session:
-            stmt = select(AutomationORM).where(AutomationORM.company_id == instance.company_id, AutomationORM.instance_id == instance.instance_id)
+            stmt = select(AutomationORM).where(
+                AutomationORM.company_id == instance.company_id,
+                AutomationORM.instance_id == instance.instance_id,
+            )
             if status is not None:
                 stmt = stmt.where(AutomationORM.status == status)
             rows = session.execute(stmt.order_by(AutomationORM.next_run_at.asc()).limit(max(1, min(limit, 200)))).scalars().all()
@@ -1173,12 +1342,23 @@ class TaskAutomationAdminService:
         with self._session_factory() as session:
             row = self._load_automation(session, instance=instance, automation_id=automation_id)
             summary = self._automation_summary(row)
-            task = self._task_summary(session, self._load_task(session, instance=instance, task_id=row.target_task_id)) if row.target_task_id else None
-            channel = self._channel_summary_for_row(
-                session,
-                instance=instance,
-                row=self._load_channel(session, instance=instance, channel_id=row.channel_id),
-            ) if row.channel_id else None
+            task = (
+                self._task_summary(
+                    session,
+                    self._load_task(session, instance=instance, task_id=row.target_task_id),
+                )
+                if row.target_task_id
+                else None
+            )
+            channel = (
+                self._channel_summary_for_row(
+                    session,
+                    instance=instance,
+                    row=self._load_channel(session, instance=instance, channel_id=row.channel_id),
+                )
+                if row.channel_id
+                else None
+            )
             return AutomationDetail(**summary.model_dump(), task=task, channel=channel)
 
     def create_automation(self, *, instance: InstanceRecord, payload: CreateAutomation) -> AutomationDetail:
@@ -1246,7 +1426,12 @@ class TaskAutomationAdminService:
             )
             channel_id = payload.channel_id if payload.channel_id is not None else row.channel_id
             fallback_channel_id = payload.fallback_channel_id if payload.fallback_channel_id is not None else row.fallback_channel_id
-            self._validate_channel_links(session, instance=instance, channel_id=channel_id, fallback_channel_id=fallback_channel_id)
+            self._validate_channel_links(
+                session,
+                instance=instance,
+                channel_id=channel_id,
+                fallback_channel_id=fallback_channel_id,
+            )
             row.title = payload.title.strip() if payload.title is not None else row.title
             row.summary = payload.summary.strip() if payload.summary is not None else row.summary
             row.status = payload.status or row.status

@@ -1,5 +1,7 @@
 """Routing types for ForgeFrame runtime dispatch."""
 
+from typing import Any
+
 from pydantic import BaseModel, Field
 
 from app.core.model_registry.models import RuntimeModel, RuntimeTarget
@@ -43,9 +45,9 @@ class RouteDecision(BaseModel):
     execution_lane: str = "sync_interactive"
     summary: str = ""
     fallback_used: bool = False
-    requirement: dict[str, object] = Field(default_factory=dict)
-    selection_basis: dict[str, object] = Field(default_factory=dict)
-    structured_explainability: dict[str, object] = Field(default_factory=dict)
-    raw_explainability: dict[str, object] = Field(default_factory=dict)
+    requirement: dict[str, Any] = Field(default_factory=dict)
+    selection_basis: dict[str, Any] = Field(default_factory=dict)
+    structured_explainability: dict[str, Any] = Field(default_factory=dict)
+    raw_explainability: dict[str, Any] = Field(default_factory=dict)
     considered_candidates: list[RouteCandidate] = Field(default_factory=list)
     created_at: str

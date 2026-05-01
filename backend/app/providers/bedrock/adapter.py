@@ -76,10 +76,7 @@ class BedrockAdapter:
             return "FORGEFRAME_BEDROCK_REGION is required or must be inferrable from FORGEFRAME_BEDROCK_BASE_URL."
         access_key_id, secret_access_key, _session_token = self._resolved_credentials()
         if not access_key_id or not secret_access_key:
-            return (
-                "Amazon Bedrock requires FORGEFRAME_BEDROCK_ACCESS_KEY_ID and FORGEFRAME_BEDROCK_SECRET_ACCESS_KEY "
-                "or ambient AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY credentials."
-            )
+            return "Amazon Bedrock requires FORGEFRAME_BEDROCK_ACCESS_KEY_ID and FORGEFRAME_BEDROCK_SECRET_ACCESS_KEY or ambient AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY credentials."
         return None
 
     def create_chat_completion(self, request: ChatDispatchRequest) -> ChatDispatchResult:
@@ -90,7 +87,11 @@ class BedrockAdapter:
             raise ProviderUnsupportedFeatureError(self.provider_name, "tool_calling")
 
         payload = self._build_payload(request)
-        data = self._post(model_id=request.model, payload=payload, request_metadata=request.request_metadata)
+        data = self._post(
+            model_id=request.model,
+            payload=payload,
+            request_metadata=request.request_metadata,
+        )
         content = self._extract_text_output(data)
         usage = self._usage_from_payload(data.get("usage", {}), request.messages, content)
         cost = self._usage.costs_for_provider(provider=self.provider_name, usage=usage)
@@ -147,7 +148,10 @@ class BedrockAdapter:
         if isinstance(value, list):
             chunks: list[str] = []
             for item in value:
-                if isinstance(item, dict) and item.get("type") in {"text", "input_text"}:
+                if isinstance(item, dict) and item.get("type") in {
+                    "text",
+                    "input_text",
+                }:
                     chunks.append(str(item.get("text", "")))
                 else:
                     chunks.append(json.dumps(item, ensure_ascii=True))
@@ -209,7 +213,10 @@ class BedrockAdapter:
                 continue
             messages.append({"role": role, "content": blocks})
         if not messages:
-            raise ProviderBadRequestError(self.provider_name, "Bedrock requires at least one user or assistant message.")
+            raise ProviderBadRequestError(
+                self.provider_name,
+                "Bedrock requires at least one user or assistant message.",
+            )
 
         payload: dict[str, object] = {"messages": messages}
         if system_blocks:
@@ -226,11 +233,7 @@ class BedrockAdapter:
 
         metadata = controls.get("metadata")
         if isinstance(metadata, dict) and metadata:
-            payload["requestMetadata"] = {
-                str(key): str(value)
-                for key, value in metadata.items()
-                if str(key).strip()
-            }
+            payload["requestMetadata"] = {str(key): str(value) for key, value in metadata.items() if str(key).strip()}
         return payload
 
     def _post(
@@ -244,7 +247,12 @@ class BedrockAdapter:
         body = json.dumps(payload, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
         headers = self._signed_headers("POST", endpoint, body, request_metadata=request_metadata)
         try:
-            response = httpx.post(endpoint, content=body, headers=headers, timeout=self._settings.bedrock_timeout_seconds)
+            response = httpx.post(
+                endpoint,
+                content=body,
+                headers=headers,
+                timeout=self._settings.bedrock_timeout_seconds,
+            )
         except httpx.TimeoutException as exc:
             raise ProviderTimeoutError(self.provider_name, f"Bedrock request timed out: {exc}") from exc
         except httpx.RequestError as exc:
@@ -253,7 +261,10 @@ class BedrockAdapter:
         headers_map = getattr(response, "headers", {}) or {}
         content_type = str(headers_map.get("content-type", ""))
         if content_type and "json" not in content_type.lower():
-            raise ProviderProtocolError(self.provider_name, f"Bedrock returned unexpected content-type '{content_type}'.")
+            raise ProviderProtocolError(
+                self.provider_name,
+                f"Bedrock returned unexpected content-type '{content_type}'.",
+            )
         try:
             data = response.json()
         except ValueError as exc:
@@ -273,7 +284,10 @@ class BedrockAdapter:
         access_key_id, secret_access_key, session_token = self._resolved_credentials()
         region = self._configured_region()
         if not access_key_id or not secret_access_key or region is None:  # pragma: no cover - guarded by readiness
-            raise ProviderConfigurationError(self.provider_name, self.readiness_reason() or "Bedrock is not configured.")
+            raise ProviderConfigurationError(
+                self.provider_name,
+                self.readiness_reason() or "Bedrock is not configured.",
+            )
 
         parsed = urlsplit(url)
         amz_now = datetime.now(tz=UTC)
@@ -292,44 +306,38 @@ class BedrockAdapter:
         headers.update(forgeframe_request_metadata_headers(request_metadata))
 
         canonical_uri = quote(parsed.path or "/", safe="/-_.~")
-        canonical_querystring = "&".join(
-            f"{quote(str(key), safe='-_.~')}={quote(str(value), safe='-_.~')}"
-            for key, value in sorted(parse_qsl(parsed.query, keep_blank_values=True))
-        )
-        normalized_headers = {
-            key.lower(): " ".join(str(value).strip().split())
-            for key, value in headers.items()
-        }
+        canonical_querystring = "&".join(f"{quote(str(key), safe='-_.~')}={quote(str(value), safe='-_.~')}" for key, value in sorted(parse_qsl(parsed.query, keep_blank_values=True)))
+        normalized_headers = {key.lower(): " ".join(str(value).strip().split()) for key, value in headers.items()}
         signed_header_names = sorted(normalized_headers)
         canonical_headers = "".join(f"{name}:{normalized_headers[name]}\n" for name in signed_header_names)
         signed_headers = ";".join(signed_header_names)
-        canonical_request = "\n".join(
-            [
-                method.upper(),
-                canonical_uri,
-                canonical_querystring,
-                canonical_headers,
-                signed_headers,
-                payload_hash,
-            ]
-        )
+        canonical_request = "\n".join([
+            method.upper(),
+            canonical_uri,
+            canonical_querystring,
+            canonical_headers,
+            signed_headers,
+            payload_hash,
+        ])
         credential_scope = f"{date_stamp}/{region}/bedrock/aws4_request"
-        string_to_sign = "\n".join(
-            [
-                "AWS4-HMAC-SHA256",
-                amz_date,
-                credential_scope,
-                _sha256_hex(canonical_request.encode("utf-8")),
-            ]
+        string_to_sign = "\n".join([
+            "AWS4-HMAC-SHA256",
+            amz_date,
+            credential_scope,
+            _sha256_hex(canonical_request.encode("utf-8")),
+        ])
+        signing_key = _sign(
+            _sign(
+                _sign(
+                    _sign(f"AWS4{secret_access_key}".encode("utf-8"), date_stamp),
+                    region,
+                ),
+                "bedrock",
+            ),
+            "aws4_request",
         )
-        signing_key = _sign(_sign(_sign(_sign(f"AWS4{secret_access_key}".encode("utf-8"), date_stamp), region), "bedrock"), "aws4_request")
         signature = hmac.new(signing_key, string_to_sign.encode("utf-8"), hashlib.sha256).hexdigest()
-        headers["Authorization"] = (
-            "AWS4-HMAC-SHA256 "
-            f"Credential={access_key_id}/{credential_scope}, "
-            f"SignedHeaders={signed_headers}, "
-            f"Signature={signature}"
-        )
+        headers["Authorization"] = f"AWS4-HMAC-SHA256 Credential={access_key_id}/{credential_scope}, SignedHeaders={signed_headers}, Signature={signature}"
         return headers
 
     @staticmethod
@@ -364,7 +372,11 @@ class BedrockAdapter:
             input_tokens = int(payload.get("inputTokens", 0) or 0)
             output_tokens = int(payload.get("outputTokens", 0) or 0)
             total_tokens = int(payload.get("totalTokens", input_tokens + output_tokens) or (input_tokens + output_tokens))
-            return TokenUsage(input_tokens=input_tokens, output_tokens=output_tokens, total_tokens=total_tokens)
+            return TokenUsage(
+                input_tokens=input_tokens,
+                output_tokens=output_tokens,
+                total_tokens=total_tokens,
+            )
         approximate_prompt = sum(len(json.dumps(message, ensure_ascii=True)) for message in messages)
         approximate_completion = len(content)
         return TokenUsage(

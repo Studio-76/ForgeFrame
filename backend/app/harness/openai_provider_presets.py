@@ -43,15 +43,15 @@ def _preset(
             label=label,
             integration_class="openai_compatible",
             endpoint_base_url=endpoint_base_url,
-            auth_scheme=auth_scheme,  # type: ignore[arg-type]
+            auth_scheme=auth_scheme,
             auth_header=auth_header,
             template_id=template_id,
-            model_slug_policy=model_slug_policy,  # type: ignore[arg-type]
+            model_slug_policy=model_slug_policy,
             model_prefix=model_prefix,
             models=[model],
             request_mapping=HarnessRequestMapping(
                 path=path,
-                path_join_policy=path_join_policy,  # type: ignore[arg-type]
+                path_join_policy=path_join_policy,
                 headers=headers or {},
             ),
             stream_mapping=HarnessStreamMapping(enabled=streaming),
@@ -174,7 +174,10 @@ OPENAI_PROVIDER_PRESET_TEMPLATES: dict[str, HarnessTemplate] = {
         model_prefix="openai",
         responses=False,
         embeddings=False,
-        headers={"HTTP-Referer": "https://forgeframe.local", "X-OpenRouter-Title": "ForgeFrame"},
+        headers={
+            "HTTP-Referer": "https://forgeframe.local",
+            "X-OpenRouter-Title": "ForgeFrame",
+        },
         unsupported_features=["responses parity varies by upstream model"],
     ),
     "vercel_ai_gateway": _preset(

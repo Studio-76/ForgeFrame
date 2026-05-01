@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 from fastapi import APIRouter, Depends, Request, status
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
@@ -14,10 +16,7 @@ from app.governance.service import GovernanceService, get_governance_service
 from app.instances.models import InstanceRecord
 
 router = APIRouter(prefix="/accounts", tags=["admin-accounts"])
-_ACCOUNT_IDEMPOTENCY_MESSAGE = (
-    "Idempotency-Key is not supported for account mutations until ForgeFrame persists replay-safe account write "
-    "responses without duplicating governance audit side effects."
-)
+_ACCOUNT_IDEMPOTENCY_MESSAGE = "Idempotency-Key is not supported for account mutations until ForgeFrame persists replay-safe account write responses without duplicating governance audit side effects."
 
 
 class AccountCreateRequest(BaseModel):
@@ -37,7 +36,7 @@ class AccountUpdateRequest(BaseModel):
 def list_accounts(
     instance: InstanceRecord = Depends(resolve_admin_instance_scope),
     service: GovernanceService = Depends(get_governance_service),
-) -> dict[str, object]:
+) -> Any:
     keys = service.list_runtime_keys(instance_id=instance.instance_id)
     key_counts: dict[str, int] = {}
     for item in keys:
@@ -62,7 +61,7 @@ def create_account(
     admin: AuthenticatedAdmin = Depends(require_admin_mutation_role("admin")),
     instance: InstanceRecord = Depends(resolve_admin_instance_scope),
     service: GovernanceService = Depends(get_governance_service),
-) -> dict[str, object]:
+) -> Any:
     unsupported = unsupported_idempotency_response(request, message=_ACCOUNT_IDEMPOTENCY_MESSAGE)
     if unsupported is not None:
         return unsupported
@@ -85,7 +84,7 @@ def update_account(
     admin: AuthenticatedAdmin = Depends(require_admin_mutation_role("admin")),
     instance: InstanceRecord = Depends(resolve_admin_instance_scope),
     service: GovernanceService = Depends(get_governance_service),
-) -> dict[str, object]:
+) -> Any:
     unsupported = unsupported_idempotency_response(request, message=_ACCOUNT_IDEMPOTENCY_MESSAGE)
     if unsupported is not None:
         return unsupported
@@ -100,5 +99,8 @@ def update_account(
             actor=admin,
         )
     except ValueError as exc:
-        return JSONResponse(status_code=404, content={"error": {"type": "account_not_found", "message": str(exc)}})
+        return JSONResponse(
+            status_code=404,
+            content={"error": {"type": "account_not_found", "message": str(exc)}},
+        )
     return {"status": "ok", "account": account.model_dump()}

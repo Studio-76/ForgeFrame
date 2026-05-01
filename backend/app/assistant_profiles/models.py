@@ -3,13 +3,12 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any, Literal
+from typing import Any, Literal, cast
 
 from pydantic import BaseModel, Field
 
 from app.knowledge.models import RecordLink
 from app.tasks.models import WorkItemPriority
-
 
 ASSISTANT_PROFILE_STATUSES = ("active", "paused")
 AssistantProfileStatus = Literal["active", "paused"]
@@ -32,10 +31,27 @@ DirectActionPolicy = Literal["never", "preview_required", "approval_required", "
 ASSISTANT_ACTION_MODES = ("suggest", "ask", "direct")
 AssistantActionMode = Literal["suggest", "ask", "direct"]
 
-ASSISTANT_ACTION_KINDS = ("draft_message", "send_notification", "create_follow_up", "schedule_calendar", "delegate_follow_up")
-AssistantActionKind = Literal["draft_message", "send_notification", "create_follow_up", "schedule_calendar", "delegate_follow_up"]
+ASSISTANT_ACTION_KINDS = (
+    "draft_message",
+    "send_notification",
+    "create_follow_up",
+    "schedule_calendar",
+    "delegate_follow_up",
+)
+AssistantActionKind = Literal[
+    "draft_message",
+    "send_notification",
+    "create_follow_up",
+    "schedule_calendar",
+    "delegate_follow_up",
+]
 
-ASSISTANT_ACTION_DECISIONS = ("allow", "requires_preview", "requires_approval", "blocked")
+ASSISTANT_ACTION_DECISIONS = (
+    "allow",
+    "requires_preview",
+    "requires_approval",
+    "blocked",
+)
 AssistantActionDecision = Literal["allow", "requires_preview", "requires_approval", "blocked"]
 
 ASSISTANT_OPERATING_MODES = (
@@ -66,7 +82,7 @@ class QuietHoursSettings(BaseModel):
     timezone: str = Field(default="UTC", min_length=1, max_length=64)
     start_minute: int = Field(default=1320, ge=0, le=1439)
     end_minute: int = Field(default=420, ge=0, le=1439)
-    days: list[QuietHoursDay] = Field(default_factory=lambda: ["mon", "tue", "wed", "thu", "fri"])
+    days: list[QuietHoursDay] = Field(default_factory=lambda: cast(list[QuietHoursDay], ["mon", "tue", "wed", "thu", "fri"]))
     allow_priority_override: bool = True
     override_min_priority: WorkItemPriority = "critical"
 

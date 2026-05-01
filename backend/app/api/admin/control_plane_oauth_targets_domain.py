@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import platform
 from datetime import UTC, datetime
-from typing import Literal
+from typing import TYPE_CHECKING, Any, Literal
 
 import httpx
 
@@ -18,7 +18,6 @@ from app.auth.oauth.gemini import resolve_gemini_auth_state
 from app.auth.oauth.openai import resolve_codex_auth_state
 from app.harness import HarnessProviderProfile
 from app.settings.config import OAUTH_TARGET_PROVIDER_LABELS, oauth_target_env_contract
-
 
 _NATIVE_OAUTH_TARGET_KEYS = ("openai_codex", "gemini")
 _BRIDGE_OAUTH_TARGET_KEYS = (
@@ -50,6 +49,20 @@ def _qwen_oauth_headers() -> dict[str, str]:
 
 
 class ControlPlaneOAuthTargetsDomainMixin:
+    if TYPE_CHECKING:
+        _settings: Any
+        _providers: Any
+        _harness: Any
+        _instance: Any
+        _oauth_operations_repository: Any
+        _effective_truth_projection_tenant_id: Any
+
+        def _oauth_operations(self, *args: Any, **kwargs: Any) -> list[Any]: ...
+        def _oauth_operation_snapshot(self, *args: Any, **kwargs: Any) -> Any: ...
+        def _provider_capability_evidence(self, *args: Any, **kwargs: Any) -> Any: ...
+        def _record_oauth_operation(self, *args: Any, **kwargs: Any) -> None: ...
+        def latest_oauth_operation(self, *args: Any, **kwargs: Any) -> Any: ...
+
     @staticmethod
     def _oauth_target_provider_label(provider_key: str) -> str:
         return OAUTH_TARGET_PROVIDER_LABELS.get(provider_key, provider_key)
@@ -66,7 +79,9 @@ class ControlPlaneOAuthTargetsDomainMixin:
             return True
 
     @staticmethod
-    def _oauth_failure_status(details: str) -> Literal["probe failed", "expired", "needs refresh"]:
+    def _oauth_failure_status(
+        details: str,
+    ) -> Literal["probe failed", "expired", "needs refresh"]:
         normalized = details.lower()
         if "expired" in normalized or "revoked" in normalized:
             return "expired"
@@ -142,14 +157,8 @@ class ControlPlaneOAuthTargetsDomainMixin:
                 "before the TTL floor, but ForgeFrame does not mint or refresh that key yet."
             )
         if provider_key == "qwen_oauth":
-            return (
-                "Pre-issued Qwen portal OAuth token is forwarded with required QwenCode/DashScope headers; "
-                "ForgeFrame does not own the upstream OAuth refresh cycle."
-            )
-        return (
-            "Pre-issued OAuth access token is forwarded through bridge/profile operations only; "
-            "no managed refresh or session reuse contract exists."
-        )
+            return "Pre-issued Qwen portal OAuth token is forwarded with required QwenCode/DashScope headers; ForgeFrame does not own the upstream OAuth refresh cycle."
+        return "Pre-issued OAuth access token is forwarded through bridge/profile operations only; no managed refresh or session reuse contract exists."
 
     @staticmethod
     def _bridge_oauth_target_operator_truth(provider_key: str) -> str:
@@ -164,10 +173,7 @@ class ControlPlaneOAuthTargetsDomainMixin:
                 "ForgeFrame treats Qwen as a portal-backed OAuth provider with mandatory QwenCode/DashScope headers; "
                 "no native runtime lane is shipped yet and DashScope API-key semantics must not replace that truth."
             )
-        return (
-            "ForgeFrame can probe or sync bridge profiles for this target, but no native runtime lane is shipped for it "
-            "in the current release truth."
-        )
+        return "ForgeFrame can probe or sync bridge profiles for this target, but no native runtime lane is shipped for it in the current release truth."
 
     def _bridge_oauth_probe_headers(self, provider_key: str, token: str) -> dict[str, str]:
         headers = {
@@ -190,11 +196,7 @@ class ControlPlaneOAuthTargetsDomainMixin:
         tenant_id: str | None = None,
         instance_id: str | None = None,
     ):
-        operations = [
-            item
-            for item in self._oauth_operations(tenant_id, instance_id)
-            if item.provider_key == provider_key
-        ]
+        operations = [item for item in self._oauth_operations(tenant_id, instance_id) if item.provider_key == provider_key]
         return operations[-1] if operations else None
 
     def _latest_failed_oauth_operation(
@@ -204,11 +206,7 @@ class ControlPlaneOAuthTargetsDomainMixin:
         tenant_id: str | None = None,
         instance_id: str | None = None,
     ):
-        operations = [
-            item
-            for item in self._oauth_operations(tenant_id, instance_id)
-            if item.provider_key == provider_key and item.status == "failed"
-        ]
+        operations = [item for item in self._oauth_operations(tenant_id, instance_id) if item.provider_key == provider_key and item.status == "failed"]
         return operations[-1] if operations else None
 
     def _oauth_target_connection_method(
@@ -264,25 +262,16 @@ class ControlPlaneOAuthTargetsDomainMixin:
                 missing_env_vars.append(required_agent_key)
 
         provider_label = self._oauth_target_provider_label(provider_key)
-        summary = (
-            f"{provider_label} is configured externally through ForgeFrame env settings. "
-            "This page shows the exact contract, but it does not write or rotate upstream OAuth tokens."
-        )
+        summary = f"{provider_label} is configured externally through ForgeFrame env settings. This page shows the exact contract, but it does not write or rotate upstream OAuth tokens."
         steps = [f"Set the required env vars for {provider_label} outside ForgeFrame and reload the runtime."]
         if provider_key == "openai_codex" and status.auth_kind == "oauth_account":
             oauth_mode = status.oauth_mode or "manual_redirect_completion"
             if oauth_mode == "device_hosted_code":
-                steps.append(
-                    "Complete the device/hosted-code flow outside ForgeFrame, then place the resulting token into FORGEFRAME_OPENAI_CODEX_OAUTH_ACCESS_TOKEN."
-                )
+                steps.append("Complete the device/hosted-code flow outside ForgeFrame, then place the resulting token into FORGEFRAME_OPENAI_CODEX_OAUTH_ACCESS_TOKEN.")
             elif oauth_mode == "browser_callback":
-                steps.append(
-                    "Use an external callback-capable tool to obtain the token; ForgeFrame does not accept the redirect or exchange the code itself."
-                )
+                steps.append("Use an external callback-capable tool to obtain the token; ForgeFrame does not accept the redirect or exchange the code itself.")
             else:
-                steps.append(
-                    "Complete the manual redirect flow outside ForgeFrame, then place the resulting token into FORGEFRAME_OPENAI_CODEX_OAUTH_ACCESS_TOKEN."
-                )
+                steps.append("Complete the manual redirect flow outside ForgeFrame, then place the resulting token into FORGEFRAME_OPENAI_CODEX_OAUTH_ACCESS_TOKEN.")
         if provider_key in _BRIDGE_OAUTH_TARGET_KEYS:
             steps.append("Use bridge profile sync only after the base URL, token, and probe model reflect the real upstream runtime lane.")
         if status.configured:
@@ -436,9 +425,7 @@ class ControlPlaneOAuthTargetsDomainMixin:
 
         if provider_key in _NATIVE_OAUTH_TARGET_KEYS and status.auth_kind == "api_key":
             status.connection_status = "oauth unsupported"
-            status.connection_status_reason = (
-                f"{status.provider_label} is currently in API-key mode, so this page cannot claim an active OAuth connection."
-            )
+            status.connection_status_reason = f"{status.provider_label} is currently in API-key mode, so this page cannot claim an active OAuth connection."
         elif not status.configured:
             status.connection_status = "not configured"
             status.connection_status_reason = status.readiness_reason
@@ -482,9 +469,7 @@ class ControlPlaneOAuthTargetsDomainMixin:
             steps.append("Keep the QwenCode/DashScope header set attached to every bridge probe and bridge profile request.")
         if not steps:
             if provider_key in _BRIDGE_OAUTH_TARGET_KEYS:
-                steps.append(
-                    f"Keep {provider_key} positioned as onboarding/bridge-only; probe success does not promote it to native runtime-ready truth."
-                )
+                steps.append(f"Keep {provider_key} positioned as onboarding/bridge-only; probe success does not promote it to native runtime-ready truth.")
             else:
                 steps.append(f"{provider_key} is operational; verify UI and runtime behavior against live upstreams.")
         return steps
@@ -539,9 +524,7 @@ class ControlPlaneOAuthTargetsDomainMixin:
                 tenant_id=effective_tenant_id,
                 instance_id=scoped_instance_id,
             )
-            statuses.append(
-                status.model_dump()
-            )
+            statuses.append(status.model_dump())
         return statuses
 
     def oauth_account_onboarding_summary(
@@ -556,13 +539,11 @@ class ControlPlaneOAuthTargetsDomainMixin:
             instance_id=instance_id,
         ):
             status = OAuthAccountTargetStatus(**item)
-            targets.append(
-                {
-                    **status.model_dump(),
-                    "next_steps": self._oauth_target_next_steps(status.provider_key, status),
-                    "operational_depth": self._oauth_target_operational_depth(status.provider_key, status),
-                }
-            )
+            targets.append({
+                **status.model_dump(),
+                "next_steps": self._oauth_target_next_steps(status.provider_key, status),
+                "operational_depth": self._oauth_target_operational_depth(status.provider_key, status),
+            })
         return {
             "status": "ok",
             "targets": targets,
@@ -590,9 +571,7 @@ class ControlPlaneOAuthTargetsDomainMixin:
         else:
             raise ValueError(f"Unsupported native oauth/account target: {provider_key}")
 
-        auth_kind: Literal["oauth_account", "api_key"] = (
-            "oauth_account" if auth_state.auth_mode == "oauth" else "api_key"
-        )
+        auth_kind: Literal["oauth_account", "api_key"] = "oauth_account" if auth_state.auth_mode == "oauth" else "api_key"
         provider_status = self._safe_provider_status(provider_key)
         provider_ready = bool(provider_status.get("ready"))
         provider_reason = str(provider_status.get("readiness_reason") or "")
@@ -608,10 +587,7 @@ class ControlPlaneOAuthTargetsDomainMixin:
             if runtime_bridge_enabled and not provider_ready and provider_reason:
                 reason = provider_reason
             elif provider_key == "openai_codex" and auth_state.auth_mode == "oauth":
-                reason = (
-                    f"Codex OAuth mode '{auth_state.oauth_mode}' is configured via a pre-issued access token, "
-                    "but no live probe or runtime evidence is recorded yet."
-                )
+                reason = f"Codex OAuth mode '{auth_state.oauth_mode}' is configured via a pre-issued access token, but no live probe or runtime evidence is recorded yet."
             else:
                 reason = "Credentials are configured, but no live probe or runtime evidence is recorded yet."
         if configured and runtime_bridge_enabled and provider_ready and evidence.live_probe.status == "observed":
@@ -623,9 +599,7 @@ class ControlPlaneOAuthTargetsDomainMixin:
 
         if configured and not runtime_bridge_enabled:
             if provider_key == "openai_codex" and auth_state.auth_mode == "oauth":
-                reason = (
-                    f"Codex OAuth mode '{auth_state.oauth_mode}' is configured, but the native runtime bridge is still disabled."
-                )
+                reason = f"Codex OAuth mode '{auth_state.oauth_mode}' is configured, but the native runtime bridge is still disabled."
             else:
                 reason = "Credentials are configured, but the native runtime bridge is still disabled."
         contract_classification = self._oauth_target_contract_classification(
@@ -674,9 +648,9 @@ class ControlPlaneOAuthTargetsDomainMixin:
             runtime_bridge_enabled=runtime_bridge_enabled,
             probe_enabled=probe_enabled,
             harness_profile_enabled=False,
-            contract_classification=contract_classification,  # type: ignore[arg-type]
-            queue_lane=self._oauth_target_queue_lane(contract_classification),  # type: ignore[arg-type]
-            parallelism_mode=self._oauth_target_parallelism_mode(contract_classification),  # type: ignore[arg-type]
+            contract_classification=contract_classification,
+            queue_lane=self._oauth_target_queue_lane(contract_classification),
+            parallelism_mode=self._oauth_target_parallelism_mode(contract_classification),
             parallelism_limit=None,
             session_reuse_strategy=session_reuse_strategy,
             escalation_support="not_modeled_in_oauth_axis",
@@ -718,24 +692,15 @@ class ControlPlaneOAuthTargetsDomainMixin:
         if configured:
             readiness = "partial"
             if provider_key == "nous_oauth":
-                reason = (
-                    "Nous account token is configured, but runtime truth still depends on a separately minted agent key "
-                    "and explicit bridge evidence."
-                )
+                reason = "Nous account token is configured, but runtime truth still depends on a separately minted agent key and explicit bridge evidence."
             elif provider_key == "qwen_oauth":
-                reason = (
-                    "Qwen portal token is configured, but runtime truth remains onboarding/bridge-only until live evidence "
-                    "exists with the required QwenCode/DashScope headers."
-                )
+                reason = "Qwen portal token is configured, but runtime truth remains onboarding/bridge-only until live evidence exists with the required QwenCode/DashScope headers."
             else:
                 reason = "OAuth/account credentials configured; runtime truth remains onboarding/bridge-only until explicit live evidence exists."
         if configured and evidence.live_probe.status == "observed":
             reason = "Live probe evidence is recorded, but this target remains onboarding/bridge-only in the current release truth."
         elif provider_key == "nous_oauth" and configured and bridge_enabled and not runtime_agent_key.strip():
-            reason = (
-                "Nous bridge knobs are enabled, but no minted runtime agent key is configured; account-token-only setup remains "
-                "onboarding/bridge-only."
-            )
+            reason = "Nous bridge knobs are enabled, but no minted runtime agent key is configured; account-token-only setup remains onboarding/bridge-only."
         elif configured and (probe_enabled or bridge_enabled):
             if provider_key == "qwen_oauth":
                 reason = (
@@ -743,15 +708,9 @@ class ControlPlaneOAuthTargetsDomainMixin:
                     "until live evidence exists with the required QwenCode/DashScope headers."
                 )
             elif provider_key == "nous_oauth":
-                reason = (
-                    "Nous account token is configured and bridge knobs are enabled, but runtime truth still depends on a separately "
-                    "minted agent key and explicit bridge evidence."
-                )
+                reason = "Nous account token is configured and bridge knobs are enabled, but runtime truth still depends on a separately minted agent key and explicit bridge evidence."
             else:
-                reason = (
-                    "OAuth/account operational knobs are enabled, but this axis still remains onboarding/bridge-only in the current "
-                    "release truth."
-                )
+                reason = "OAuth/account operational knobs are enabled, but this axis still remains onboarding/bridge-only in the current release truth."
         contract_classification = "bridge-only" if configured or probe_enabled or bridge_enabled else "onboarding-only"
         status = OAuthAccountTargetStatus(
             provider_key=provider_key,
@@ -760,9 +719,9 @@ class ControlPlaneOAuthTargetsDomainMixin:
             runtime_bridge_enabled=bridge_enabled,
             probe_enabled=probe_enabled,
             harness_profile_enabled=bridge_enabled,
-            contract_classification=contract_classification,  # type: ignore[arg-type]
-            queue_lane=self._oauth_target_queue_lane(contract_classification),  # type: ignore[arg-type]
-            parallelism_mode=self._oauth_target_parallelism_mode(contract_classification),  # type: ignore[arg-type]
+            contract_classification=contract_classification,
+            queue_lane=self._oauth_target_queue_lane(contract_classification),
+            parallelism_mode=self._oauth_target_parallelism_mode(contract_classification),
             parallelism_limit=None,
             session_reuse_strategy=self._bridge_oauth_target_session_reuse_strategy(provider_key),
             escalation_support="native_runtime_unavailable",
@@ -838,11 +797,7 @@ class ControlPlaneOAuthTargetsDomainMixin:
                 "max_tokens": 8,
             }
             endpoint = f"{self._settings.openai_codex_base_url.rstrip('/')}/chat/completions"
-            token = (
-                self._settings.openai_codex_oauth_access_token
-                if self._settings.openai_codex_auth_mode == "oauth"
-                else self._settings.openai_codex_api_key
-            )
+            token = self._settings.openai_codex_oauth_access_token if self._settings.openai_codex_auth_mode == "oauth" else self._settings.openai_codex_api_key
             try:
                 response = httpx.post(
                     endpoint,
@@ -876,11 +831,7 @@ class ControlPlaneOAuthTargetsDomainMixin:
                 ready=True,
                 probe_mode="live_http_probe",
                 status="ok" if response.status_code < 400 else "failed",
-                details=(
-                    "Codex bridge probe succeeded."
-                    if response.status_code < 400
-                    else f"Codex bridge probe failed: {response.text[:300]}"
-                ),
+                details=("Codex bridge probe succeeded." if response.status_code < 400 else f"Codex bridge probe failed: {response.text[:300]}"),
                 status_code=response.status_code,
                 checked_at=now,
             )
@@ -938,11 +889,7 @@ class ControlPlaneOAuthTargetsDomainMixin:
                 "stream": False,
                 "max_tokens": 8,
             }
-            token = (
-                self._settings.gemini_oauth_access_token
-                if self._settings.gemini_auth_mode == "oauth"
-                else self._settings.gemini_api_key
-            )
+            token = self._settings.gemini_oauth_access_token if self._settings.gemini_auth_mode == "oauth" else self._settings.gemini_api_key
             endpoint = f"{self._settings.gemini_probe_base_url.rstrip('/')}/chat/completions"
             try:
                 response = httpx.post(
@@ -977,11 +924,7 @@ class ControlPlaneOAuthTargetsDomainMixin:
                 ready=True,
                 probe_mode="live_http_probe",
                 status="ok" if response.status_code < 400 else "failed",
-                details=(
-                    "Gemini OAuth/account probe succeeded."
-                    if response.status_code < 400
-                    else f"Gemini probe failed: {response.text[:300]}"
-                ),
+                details=("Gemini OAuth/account probe succeeded." if response.status_code < 400 else f"Gemini probe failed: {response.text[:300]}"),
                 status_code=response.status_code,
                 checked_at=now,
             )
@@ -1059,10 +1002,7 @@ class ControlPlaneOAuthTargetsDomainMixin:
                 ready=True,
                 probe_mode="readiness_only",
                 status="warning",
-                details=(
-                    "Nous live probe skipped because no minted runtime agent key is configured; "
-                    "the account token alone must not be treated as runtime proof."
-                ),
+                details=("Nous live probe skipped because no minted runtime agent key is configured; the account token alone must not be treated as runtime proof."),
                 checked_at=now,
             )
             self._record_oauth_operation(
@@ -1114,11 +1054,7 @@ class ControlPlaneOAuthTargetsDomainMixin:
             ready=True,
             probe_mode="live_http_probe",
             status="ok" if response.status_code < 400 else "failed",
-            details=(
-                f"{provider_key} probe succeeded."
-                if response.status_code < 400
-                else f"{provider_key} probe failed: {response.text[:300]}"
-            ),
+            details=(f"{provider_key} probe succeeded." if response.status_code < 400 else f"{provider_key} probe failed: {response.text[:300]}"),
             status_code=response.status_code,
             checked_at=now,
         )

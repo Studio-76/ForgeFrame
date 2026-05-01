@@ -1,20 +1,22 @@
-from pathlib import Path
 import os
+from pathlib import Path
 from uuid import uuid4
 
+from conftest import admin_headers as shared_admin_headers
 from fastapi.testclient import TestClient
 
-from conftest import admin_headers as shared_admin_headers
 from app.api.admin.control_plane import get_control_plane_service
-from app.control_plane import ControlPlaneStateRecord
 from app.api.runtime.dependencies import clear_runtime_dependency_caches
+from app.control_plane import ControlPlaneStateRecord
 from app.main import app
 from app.providers import ChatDispatchResult, ProviderStreamEvent
-from app.storage.control_plane_repository import ControlPlaneStatePaths, FileControlPlaneStateRepository
+from app.storage.control_plane_repository import (
+    ControlPlaneStatePaths,
+    FileControlPlaneStateRepository,
+)
 from app.usage.analytics import get_usage_analytics_store
 from app.usage.events import ClientIdentity
 from app.usage.models import CostBreakdown, TokenUsage
-
 
 client = TestClient(app)
 
@@ -81,9 +83,7 @@ def test_anthropic_only_bootstrap_keeps_runtime_and_provider_control_plane_avail
     assert providers_response.status_code == 200
     payload = providers_response.json()
     anthropic_provider = next(item for item in payload["providers"] if item["provider"] == "anthropic")
-    anthropic_truth = next(
-        item["runtime"] for item in payload["truth_axes"] if item["provider"]["provider"] == "anthropic"
-    )
+    anthropic_truth = next(item["runtime"] for item in payload["truth_axes"] if item["provider"]["provider"] == "anthropic")
 
     assert anthropic_provider["model_count"] == 1
     assert anthropic_provider["models"][0]["id"] == "claude-3-5-sonnet-latest"
@@ -108,7 +108,9 @@ def test_anthropic_only_bootstrap_keeps_runtime_and_provider_control_plane_avail
     assert sync_response.json()["synced_providers"] == ["anthropic"]
 
 
-def test_anthropic_only_bootstrap_repairs_persisted_state_before_runtime_readiness(monkeypatch) -> None:
+def test_anthropic_only_bootstrap_repairs_persisted_state_before_runtime_readiness(
+    monkeypatch,
+) -> None:
     for env_name in (
         "FORGEGATE_FORGEGATE_BASELINE_ENABLED",
         "FORGEGATE_OPENAI_API_ENABLED",
@@ -136,10 +138,7 @@ def test_anthropic_only_bootstrap_repairs_persisted_state_before_runtime_readine
     health_response = client.get("/health")
     assert health_response.status_code == 200
     assert health_response.json()["readiness"]["state"] == "degraded"
-    readiness_checks = {
-        item["id"]: item
-        for item in health_response.json()["readiness"]["checks"]
-    }
+    readiness_checks = {item["id"]: item for item in health_response.json()["readiness"]["checks"]}
     assert readiness_checks["runtime_model_configuration"]["ok"] is True
 
     models_response = client.get("/v1/models")
@@ -224,7 +223,12 @@ def test_admin_providers_control_plane_exposes_supported_classes_and_compact_sta
     payload = response.json()
 
     supported_classes = {item["key"] for item in payload["supported_provider_classes"]}
-    assert {"openai_compatible", "local_ollama", "oauth_account", "custom"} <= supported_classes
+    assert {
+        "openai_compatible",
+        "local_ollama",
+        "oauth_account",
+        "custom",
+    } <= supported_classes
 
     openai_provider = next(item for item in payload["providers"] if item["provider"] == "openai_api")
     assert "provider_class" in openai_provider
@@ -252,7 +256,11 @@ def test_admin_provider_product_axis_targets_endpoint_available() -> None:
     localai = next(item for item in targets if item["provider_key"] == "localai")
     client_axis = next(item for item in targets if item["provider_key"] == "openai_client_compat")
     assert codex["product_axis"] == "oauth_account_providers"
-    assert codex["contract_classification"] in {"partial-runtime", "runtime-ready", "onboarding-only"}
+    assert codex["contract_classification"] in {
+        "partial-runtime",
+        "runtime-ready",
+        "onboarding-only",
+    }
     assert codex["operator_surface"] == "/oauth-targets"
     assert isinstance(codex["technical_requirements"], list)
     assert "readiness_score" in codex
@@ -426,7 +434,7 @@ def test_admin_oauth_account_targets_demote_codex_after_bridge_disable_even_with
     get_usage_analytics_store.cache_clear()
 
     service = get_control_plane_service()
-    service._record_oauth_operation(  # type: ignore[attr-defined]
+    service._record_oauth_operation(
         "openai_codex",
         "probe",
         "ok",
@@ -520,7 +528,7 @@ def test_admin_provider_truth_and_oauth_targets_keep_gemini_non_ready_when_bridg
     )
 
     service = get_control_plane_service()
-    service._record_oauth_operation(  # type: ignore[attr-defined]
+    service._record_oauth_operation(
         "gemini",
         "probe",
         "ok",
@@ -575,7 +583,7 @@ def test_admin_product_axis_targets_keep_gemini_probe_truth_partial_when_bridge_
     )
 
     service = get_control_plane_service()
-    service._record_oauth_operation(  # type: ignore[attr-defined]
+    service._record_oauth_operation(
         "gemini",
         "probe",
         "ok",
@@ -617,11 +625,16 @@ def test_admin_gemini_product_axis_and_oauth_targets_honor_tenant_id(
             credential_type="oauth_access_token",
             auth_source="gemini_oauth_account_bridge",
         ),
-        client=ClientIdentity(client_id="tenant-a-proof", consumer="tests", integration="pytest", tenant_id="tenant_a"),
+        client=ClientIdentity(
+            client_id="tenant-a-proof",
+            consumer="tests",
+            integration="pytest",
+            tenant_id="tenant_a",
+        ),
     )
 
     service = get_control_plane_service()
-    service._record_oauth_operation(  # type: ignore[attr-defined]
+    service._record_oauth_operation(
         "gemini",
         "probe",
         "ok",
@@ -688,7 +701,7 @@ def test_admin_provider_truth_and_oauth_targets_keep_codex_non_ready_when_bridge
     )
 
     service = get_control_plane_service()
-    service._record_oauth_operation(  # type: ignore[attr-defined]
+    service._record_oauth_operation(
         "openai_codex",
         "probe",
         "ok",
@@ -743,7 +756,7 @@ def test_admin_product_axis_targets_keep_codex_probe_truth_partial_when_bridge_b
     )
 
     service = get_control_plane_service()
-    service._record_oauth_operation(  # type: ignore[attr-defined]
+    service._record_oauth_operation(
         "openai_codex",
         "probe",
         "ok",
@@ -773,7 +786,7 @@ def test_admin_oauth_account_targets_keep_bridge_only_targets_partial_even_after
     get_control_plane_service.cache_clear()
 
     service = get_control_plane_service()
-    service._record_oauth_operation(  # type: ignore[attr-defined]
+    service._record_oauth_operation(
         "antigravity",
         "probe",
         "ok",
@@ -806,7 +819,7 @@ def test_admin_oauth_account_targets_surface_latest_failed_probe_status(
     get_control_plane_service.cache_clear()
 
     service = get_control_plane_service()
-    service._record_oauth_operation(  # type: ignore[attr-defined]
+    service._record_oauth_operation(
         "openai_codex",
         "probe",
         "failed",
@@ -839,7 +852,7 @@ def test_admin_product_axis_targets_keep_bridge_only_probe_truth_planned_without
         ("github_copilot", "Historical GitHub Copilot probe"),
         ("claude_code", "Historical Claude Code probe"),
     ):
-        service._record_oauth_operation(  # type: ignore[attr-defined]
+        service._record_oauth_operation(
             provider_key,
             "probe",
             "ok",
@@ -912,7 +925,13 @@ def test_admin_provider_truth_and_product_axis_targets_promote_native_oauth_axes
             cost=CostBreakdown(),
             credential_type="oauth_access_token",
             auth_source="codex_oauth_account_bridge",
-            tool_calls=[{"id": "call_1", "type": "function", "function": {"name": "lookup", "arguments": "{}"}}],
+            tool_calls=[
+                {
+                    "id": "call_1",
+                    "type": "function",
+                    "function": {"name": "lookup", "arguments": "{}"},
+                }
+            ],
         ),
         client=proof_client,
     )
@@ -924,7 +943,13 @@ def test_admin_provider_truth_and_product_axis_targets_promote_native_oauth_axes
             finish_reason="tool_calls",
             usage=TokenUsage(input_tokens=5, output_tokens=2, total_tokens=7),
             cost=CostBreakdown(),
-            tool_calls=[{"id": "call_1", "type": "function", "function": {"name": "lookup", "arguments": "{}"}}],
+            tool_calls=[
+                {
+                    "id": "call_1",
+                    "type": "function",
+                    "function": {"name": "lookup", "arguments": "{}"},
+                }
+            ],
             credential_type="oauth_access_token",
             auth_source="codex_oauth_account_bridge",
         ),
@@ -940,7 +965,13 @@ def test_admin_provider_truth_and_product_axis_targets_promote_native_oauth_axes
             cost=CostBreakdown(),
             credential_type="oauth_access_token",
             auth_source="gemini_oauth_account_bridge",
-            tool_calls=[{"id": "call_1", "type": "function", "function": {"name": "lookup", "arguments": "{}"}}],
+            tool_calls=[
+                {
+                    "id": "call_1",
+                    "type": "function",
+                    "function": {"name": "lookup", "arguments": "{}"},
+                }
+            ],
         ),
         client=proof_client,
     )
@@ -952,14 +983,32 @@ def test_admin_provider_truth_and_product_axis_targets_promote_native_oauth_axes
             finish_reason="tool_calls",
             usage=TokenUsage(input_tokens=4, output_tokens=2, total_tokens=6),
             cost=CostBreakdown(),
-            tool_calls=[{"id": "call_1", "type": "function", "function": {"name": "lookup", "arguments": "{}"}}],
+            tool_calls=[
+                {
+                    "id": "call_1",
+                    "type": "function",
+                    "function": {"name": "lookup", "arguments": "{}"},
+                }
+            ],
             credential_type="oauth_access_token",
             auth_source="gemini_oauth_account_bridge",
         ),
         client=proof_client,
     )
-    service._record_oauth_operation("openai_codex", "probe", "ok", "Codex bridge probe succeeded.", "2026-04-22T00:00:00+00:00")  # type: ignore[attr-defined]
-    service._record_oauth_operation("gemini", "probe", "ok", "Gemini OAuth/account probe succeeded.", "2026-04-22T00:01:00+00:00")  # type: ignore[attr-defined]
+    service._record_oauth_operation(
+        "openai_codex",
+        "probe",
+        "ok",
+        "Codex bridge probe succeeded.",
+        "2026-04-22T00:00:00+00:00",
+    )
+    service._record_oauth_operation(
+        "gemini",
+        "probe",
+        "ok",
+        "Gemini OAuth/account probe succeeded.",
+        "2026-04-22T00:01:00+00:00",
+    )
 
     headers = _admin_headers()
     providers_response = client.get("/admin/providers/", headers=headers)
@@ -1161,30 +1210,16 @@ def test_admin_oauth_bridge_profile_sync_preserves_separate_profiles_per_instanc
     assert alpha_export_response.status_code == 200
     assert beta_export_response.status_code == 200
 
-    alpha_bridge = next(
-        profile
-        for profile in alpha_profiles_response.json()["profiles"]
-        if str(profile["provider_key"]) == "qwen_oauth_bridge"
-    )
-    beta_bridge = next(
-        profile
-        for profile in beta_profiles_response.json()["profiles"]
-        if str(profile["provider_key"]) == "qwen_oauth_bridge"
-    )
+    alpha_bridge = next(profile for profile in alpha_profiles_response.json()["profiles"] if str(profile["provider_key"]) == "qwen_oauth_bridge")
+    beta_bridge = next(profile for profile in beta_profiles_response.json()["profiles"] if str(profile["provider_key"]) == "qwen_oauth_bridge")
 
     assert alpha_bridge["instance_id"] == instance_alpha
     assert beta_bridge["instance_id"] == instance_beta
     assert alpha_bridge["provider_key"] == beta_bridge["provider_key"] == "qwen_oauth_bridge"
     assert {profile["instance_id"] for profile in alpha_snapshot_response.json()["snapshot"]["profiles"]} == {instance_alpha}
     assert {profile["instance_id"] for profile in beta_snapshot_response.json()["snapshot"]["profiles"]} == {instance_beta}
-    assert {
-        item["profile"]["instance_id"]
-        for item in alpha_export_response.json()["snapshot"]["profiles"]
-    } == {instance_alpha}
-    assert {
-        item["profile"]["instance_id"]
-        for item in beta_export_response.json()["snapshot"]["profiles"]
-    } == {instance_beta}
+    assert {item["profile"]["instance_id"] for item in alpha_export_response.json()["snapshot"]["profiles"]} == {instance_alpha}
+    assert {item["profile"]["instance_id"] for item in beta_export_response.json()["snapshot"]["profiles"]} == {instance_beta}
 
 
 def test_admin_harness_profiles_remain_isolated_per_instance_for_shared_provider_keys() -> None:
@@ -1375,25 +1410,13 @@ def test_admin_oauth_operation_truth_stays_scoped_to_requested_instance() -> Non
     assert {item["instance_id"] for item in alpha_recent} == {instance_alpha}
     assert {item["instance_id"] for item in beta_recent} == {instance_beta}
 
-    alpha_antigravity = next(
-        item
-        for item in alpha_operations.json()["operations"]
-        if item["provider_key"] == provider_key
-    )
-    beta_antigravity = next(
-        item
-        for item in beta_operations.json()["operations"]
-        if item["provider_key"] == provider_key
-    )
+    alpha_antigravity = next(item for item in alpha_operations.json()["operations"] if item["provider_key"] == provider_key)
+    beta_antigravity = next(item for item in beta_operations.json()["operations"] if item["provider_key"] == provider_key)
     assert alpha_antigravity["probe_count"] == 1
     assert beta_antigravity["probe_count"] == 1
 
-    alpha_provider_row = next(
-        item for item in alpha_providers.json()["providers"] if item["provider"] == provider_key
-    )
-    beta_provider_row = next(
-        item for item in beta_providers.json()["providers"] if item["provider"] == provider_key
-    )
+    alpha_provider_row = next(item for item in alpha_providers.json()["providers"] if item["provider"] == provider_key)
+    beta_provider_row = next(item for item in beta_providers.json()["providers"] if item["provider"] == provider_key)
     assert alpha_provider_row["oauth_failure_count"] == 1
     assert beta_provider_row["oauth_failure_count"] == 1
     assert alpha_provider_row["last_probe_at"] == alpha_recent[-1]["executed_at"]
@@ -1462,22 +1485,10 @@ def test_admin_providers_generic_harness_truth_stays_scoped_to_requested_instanc
     assert alpha_providers.status_code == 200
     assert beta_providers.status_code == 200
 
-    alpha_truth = next(
-        item["runtime"]
-        for item in alpha_providers.json()["truth_axes"]
-        if item["provider"]["provider"] == "generic_harness"
-    )
-    beta_truth = next(
-        item["runtime"]
-        for item in beta_providers.json()["truth_axes"]
-        if item["provider"]["provider"] == "generic_harness"
-    )
-    alpha_provider_row = next(
-        item for item in alpha_providers.json()["providers"] if item["provider"] == "generic_harness"
-    )
-    beta_provider_row = next(
-        item for item in beta_providers.json()["providers"] if item["provider"] == "generic_harness"
-    )
+    alpha_truth = next(item["runtime"] for item in alpha_providers.json()["truth_axes"] if item["provider"]["provider"] == "generic_harness")
+    beta_truth = next(item["runtime"] for item in beta_providers.json()["truth_axes"] if item["provider"]["provider"] == "generic_harness")
+    alpha_provider_row = next(item for item in alpha_providers.json()["providers"] if item["provider"] == "generic_harness")
+    beta_provider_row = next(item for item in beta_providers.json()["providers"] if item["provider"] == "generic_harness")
 
     assert alpha_truth["capabilities"]["active_profile_count"] == 1
     assert beta_truth["capabilities"]["active_profile_count"] == 0

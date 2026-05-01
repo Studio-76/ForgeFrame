@@ -8,7 +8,11 @@ from fastapi.responses import JSONResponse
 from app.api.admin.instance_scope import resolve_admin_instance_scope
 from app.api.admin.security import require_admin_mutation_role, require_admin_role
 from app.conversations.dependencies import get_conversation_inbox_admin_service
-from app.conversations.models import AppendConversationMessage, CreateConversation, UpdateConversation
+from app.conversations.models import (
+    AppendConversationMessage,
+    CreateConversation,
+    UpdateConversation,
+)
 from app.conversations.service import ConversationInboxAdminService
 from app.governance.models import AuthenticatedAdmin
 from app.instances.models import InstanceRecord
@@ -17,7 +21,10 @@ router = APIRouter(prefix="/conversations", tags=["admin-conversations"])
 
 
 def _error(status_code: int, error_type: str, message: str) -> JSONResponse:
-    return JSONResponse(status_code=status_code, content={"error": {"type": error_type, "message": message}})
+    return JSONResponse(
+        status_code=status_code,
+        content={"error": {"type": error_type, "message": message}},
+    )
 
 
 @router.get("")

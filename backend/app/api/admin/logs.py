@@ -9,7 +9,7 @@ import io
 import json
 from collections import Counter, defaultdict
 from datetime import UTC, datetime, timedelta
-from typing import Any, Literal
+from typing import Any, Literal, NoReturn, cast
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
@@ -21,6 +21,7 @@ from app.api.admin.instance_scope import resolve_admin_instance_scope
 from app.api.admin.security import require_admin_mutation_role, require_admin_session
 from app.auth.local_auth import role_allows
 from app.governance.models import (
+    AdminRole,
     AdminUserRecord,
     AuditEventRecord,
     AuthenticatedAdmin,
@@ -31,12 +32,12 @@ from app.governance.models import (
 from app.governance.service import GovernanceService, get_governance_service
 from app.instances.models import InstanceRecord
 from app.settings.config import Settings, get_settings
-from app.tenancy import TenantFilterRequiredError
 from app.telemetry import (
     build_logging_operability_snapshot,
     build_metrics_operability_snapshot,
     build_tracing_operability_snapshot,
 )
+from app.tenancy import TenantFilterRequiredError
 from app.usage.analytics import UsageAnalyticsStore, get_usage_analytics_store
 
 router = APIRouter(prefix="/logs", tags=["admin-logs"])
@@ -115,7 +116,10 @@ _RELATED_ROUTE_BY_TARGET_TYPE = {
     "audit_export": {"label": "Open Audit History", "href": "/logs#audit-history"},
     "elevated_access_request": {"label": "Open Approvals", "href": "/approvals"},
     "execution_approval": {"label": "Open Approvals", "href": "/approvals"},
-    "execution_run": {"label": "Open Provider Health & Runs", "href": "/providers#provider-health-runs"},
+    "execution_run": {
+        "label": "Open Provider Health & Runs",
+        "href": "/providers#provider-health-runs",
+    },
     "gateway_account": {"label": "Open Accounts", "href": "/accounts"},
     "runtime_key": {"label": "Open API Keys", "href": "/api-keys"},
     "setting": {"label": "Open System Settings", "href": "/settings"},
@@ -221,14 +225,36 @@ _INCIDENT_AXIS_LABELS = {
 }
 
 _INCIDENT_AXIS_LINKS = {
-    "runtime": [{"label": "Open Logs", "href": "/logs"}, {"label": "Open Execution Review", "href": "/execution"}],
-    "provider": [{"label": "Open Health", "href": "/health-status"}, {"label": "Open Provider Targets", "href": "/provider-targets"}],
-    "oauth": [{"label": "Open OAuth Targets", "href": "/oauth-targets"}, {"label": "Open Health", "href": "/health-status"}],
-    "routing": [{"label": "Open Routing", "href": "/routing"}, {"label": "Open Provider Targets", "href": "/provider-targets"}],
-    "queue_dispatch": [{"label": "Open Queues", "href": "/queues"}, {"label": "Open Dispatch", "href": "/dispatch"}, {"label": "Open Execution Review", "href": "/execution"}],
+    "runtime": [
+        {"label": "Open Logs", "href": "/logs"},
+        {"label": "Open Execution Review", "href": "/execution"},
+    ],
+    "provider": [
+        {"label": "Open Health", "href": "/health-status"},
+        {"label": "Open Provider Targets", "href": "/provider-targets"},
+    ],
+    "oauth": [
+        {"label": "Open OAuth Targets", "href": "/oauth-targets"},
+        {"label": "Open Health", "href": "/health-status"},
+    ],
+    "routing": [
+        {"label": "Open Routing", "href": "/routing"},
+        {"label": "Open Provider Targets", "href": "/provider-targets"},
+    ],
+    "queue_dispatch": [
+        {"label": "Open Queues", "href": "/queues"},
+        {"label": "Open Dispatch", "href": "/dispatch"},
+        {"label": "Open Execution Review", "href": "/execution"},
+    ],
     "security": [{"label": "Open Security & Policies", "href": "/security"}],
-    "tls": [{"label": "Open Ingress / TLS", "href": "/ingress-tls"}, {"label": "Open Health", "href": "/health-status"}],
-    "work_interaction": [{"label": "Open Execution Review", "href": "/execution"}, {"label": "Open Logs", "href": "/logs"}],
+    "tls": [
+        {"label": "Open Ingress / TLS", "href": "/ingress-tls"},
+        {"label": "Open Health", "href": "/health-status"},
+    ],
+    "work_interaction": [
+        {"label": "Open Execution Review", "href": "/execution"},
+        {"label": "Open Logs", "href": "/logs"},
+    ],
 }
 
 _WORK_INTERACTION_ROUTE_FRAGMENTS = (
@@ -262,12 +288,9 @@ def _timestamp_bounds(values: list[str]) -> tuple[str | None, str | None]:
     return timestamps[0], timestamps[-1]
 
 
-def _top_counts(values: list[str], *, limit: int = 5) -> list[dict[str, object]]:
+def _top_counts(values: list[str], *, limit: int = 5) -> list[dict[str, Any]]:
     counts = Counter(value for value in values if value)
-    return [
-        {"value": value, "count": count}
-        for value, count in counts.most_common(limit)
-    ]
+    return [{"value": value, "count": count} for value, count in counts.most_common(limit)]
 
 
 def _severity_label(*, critical: bool, warning: bool, unsupported: bool = False) -> str:
@@ -333,8 +356,8 @@ def _incident_entry(
     current_effect: str,
     next_step: str,
     summary: str,
-    raw_evidence: dict[str, object],
-) -> dict[str, object]:
+    raw_evidence: dict[str, Any],
+) -> dict[str, Any]:
     return {
         "incident_id": f"{axis}:{severity}:{count}:{last_seen_at or 'none'}",
         "axis": axis,
@@ -361,30 +384,24 @@ def _grouped_error_incidents(error_events: list[Any]) -> dict[str, list[Any]]:
 
 def _axis_incidents_snapshot(
     *,
-    metrics_snapshot: dict[str, object],
-    logging_snapshot: dict[str, object],
-    tracing_snapshot: dict[str, object],
+    metrics_snapshot: dict[str, Any],
+    logging_snapshot: dict[str, Any],
+    tracing_snapshot: dict[str, Any],
     error_events: list[Any],
     health_events: list[Any],
-) -> list[dict[str, object]]:
+) -> list[dict[str, Any]]:
     grouped_errors = _grouped_error_incidents(error_events)
     dependency_metrics = list(metrics_snapshot.get("dependency_metrics", []))
     routing_metrics = dict(metrics_snapshot.get("routing_metrics", {}))
     queue_metrics = dict(metrics_snapshot.get("queue_metrics", {}))
     degraded_health_events = [
-        event
-        for event in health_events
-        if str(getattr(event, "status", "") or "").lower() not in {"healthy", "ok", "success", "discovery_only"}
-        or bool(getattr(event, "last_error", None))
+        event for event in health_events if str(getattr(event, "status", "") or "").lower() not in {"healthy", "ok", "success", "discovery_only"} or bool(getattr(event, "last_error", None))
     ]
 
     runtime_events = grouped_errors.get("runtime", [])
     runtime_first, runtime_last = _timestamp_bounds([str(event.created_at) for event in runtime_events])
     provider_events = grouped_errors.get("provider", [])
-    provider_first, provider_last = _timestamp_bounds(
-        [str(event.created_at) for event in provider_events]
-        + [str(event.created_at) for event in degraded_health_events]
-    )
+    provider_first, provider_last = _timestamp_bounds([str(event.created_at) for event in provider_events] + [str(event.created_at) for event in degraded_health_events])
     oauth_events = grouped_errors.get("oauth", [])
     oauth_first, oauth_last = _timestamp_bounds([str(event.created_at) for event in oauth_events])
     routing_events = grouped_errors.get("routing", [])
@@ -394,10 +411,7 @@ def _axis_incidents_snapshot(
     work_events = grouped_errors.get("work_interaction", [])
     work_first, work_last = _timestamp_bounds([str(event.created_at) for event in work_events])
     routing_failures = list(routing_metrics.get("recent_failures", []))
-    routing_first, routing_last = _timestamp_bounds(
-        [str(item.get("created_at") or "") for item in routing_failures]
-        + [str(event.created_at) for event in routing_events]
-    )
+    routing_first, routing_last = _timestamp_bounds([str(item.get("created_at") or "") for item in routing_failures] + [str(event.created_at) for event in routing_events])
     queue_first, queue_last = _timestamp_bounds([str(event.created_at) for event in queue_events])
     security_first, security_last = _timestamp_bounds([str(event.created_at) for event in security_events])
     tls_first, tls_last = _timestamp_bounds([str(event.created_at) for event in tls_events])
@@ -417,16 +431,8 @@ def _axis_incidents_snapshot(
     )
     routing_incident_active = routing_budget_blocked or routing_open_circuits or routing_count > 0
     queue_count = max(queue_pressure, len(queue_events))
-    security_denials = sum(
-        1
-        for event in security_events
-        if int(getattr(event, "status_code", 0) or 0) in {401, 403}
-    )
-    tls_fatal = sum(
-        1
-        for event in tls_events
-        if int(getattr(event, "status_code", 0) or 0) >= 500
-    )
+    security_denials = sum(1 for event in security_events if int(getattr(event, "status_code", 0) or 0) in {401, 403})
+    tls_fatal = sum(1 for event in tls_events if int(getattr(event, "status_code", 0) or 0) >= 500)
 
     incidents = [
         _incident_entry(
@@ -445,7 +451,7 @@ def _axis_incidents_snapshot(
             ),
             raw_evidence={
                 "top_error_types": _top_counts([str(event.error_type) for event in runtime_events]),
-                "top_routes": _top_counts([str(event.route or 'unknown') for event in runtime_events]),
+                "top_routes": _top_counts([str(event.route or "unknown") for event in runtime_events]),
                 "sample_errors": [
                     {
                         "created_at": str(event.created_at),
@@ -468,7 +474,9 @@ def _axis_incidents_snapshot(
             count=len(provider_events) + len(degraded_health_events),
             first_seen_at=provider_first,
             last_seen_at=provider_last,
-            current_effect="Provider failures or degraded health are affecting routing candidates and runtime stability." if provider_events or degraded_health_events else "No active provider-side failure signal is visible.",
+            current_effect="Provider failures or degraded health are affecting routing candidates and runtime stability."
+            if provider_events or degraded_health_events
+            else "No active provider-side failure signal is visible.",
             next_step="Open Health or Provider Targets to repair provider readiness and target posture." if provider_events or degraded_health_events else "Monitor only.",
             summary=(
                 f"Affected providers: {', '.join(sorted({str(getattr(event, 'provider', '') or 'unknown') for event in [*provider_events, *degraded_health_events]}))}."
@@ -509,9 +517,7 @@ def _axis_incidents_snapshot(
             current_effect="OAuth-backed provider flows are failing and can block account-based runtime paths." if oauth_events else "No OAuth-specific error is visible in the current logs scope.",
             next_step="Open OAuth Targets to reconnect or revalidate account-backed providers." if oauth_events else "Monitor only.",
             summary=(
-                f"Most common OAuth error: {_top_counts([str(event.error_type) for event in oauth_events], limit=1)[0]['value']}."
-                if oauth_events
-                else "No OAuth incident is currently recorded."
+                f"Most common OAuth error: {_top_counts([str(event.error_type) for event in oauth_events], limit=1)[0]['value']}." if oauth_events else "No OAuth incident is currently recorded."
             ),
             raw_evidence={
                 "top_error_types": _top_counts([str(event.error_type) for event in oauth_events]),
@@ -536,10 +542,12 @@ def _axis_incidents_snapshot(
             count=routing_count,
             first_seen_at=routing_first,
             last_seen_at=routing_last,
-            current_effect="Routing decisions are being blocked by policy, budget, circuit, or capability posture." if routing_incident_active else "No blocked routing decision is currently recorded.",
+            current_effect="Routing decisions are being blocked by policy, budget, circuit, or capability posture."
+            if routing_incident_active
+            else "No blocked routing decision is currently recorded.",
             next_step="Open Routing to inspect policy stage, budget gates, and blocked candidates." if routing_incident_active else "Monitor only.",
             summary=(
-                f"Blocked decisions: {int(routing_metrics.get('blocked_decisions', 0) or 0)} · open circuits: {int(routing_metrics.get('open_circuits', 0) or 0)} · budget blocked: {'yes' if routing_budget_blocked else 'no'}."
+                f"Blocked decisions: {int(routing_metrics.get('blocked_decisions', 0) or 0)} · open circuits: {int(routing_metrics.get('open_circuits', 0) or 0)} · budget blocked: {'yes' if routing_budget_blocked else 'no'}."  # noqa: E501
                 if routing_incident_active
                 else "No routing incident is currently recorded."
             ),
@@ -568,11 +576,11 @@ def _axis_incidents_snapshot(
             count=queue_count,
             first_seen_at=queue_first,
             last_seen_at=queue_last,
-            current_effect="Queue or dispatch pressure is delaying, dead-lettering, or stalling work." if queue_count > 0 else "No queue or dispatch pressure is visible in the current metrics snapshot.",
+            current_effect="Queue or dispatch pressure is delaying, dead-lettering, or stalling work."
+            if queue_count > 0
+            else "No queue or dispatch pressure is visible in the current metrics snapshot.",
             next_step="Open Queues, Dispatch, or Execution Review to recover leased attempts, outbox pressure, or dead letters." if queue_count > 0 else "Monitor only.",
-            summary=(
-                f"dead_letters={queue_dead_letters}, expired_leases={queue_expired_leases}, pending_dispatch={queue_pending_dispatch}, pending_outbox={queue_pending_outbox}"
-            ),
+            summary=(f"dead_letters={queue_dead_letters}, expired_leases={queue_expired_leases}, pending_dispatch={queue_pending_dispatch}, pending_outbox={queue_pending_outbox}"),
             raw_evidence={
                 "queue_metrics": queue_metrics,
                 "top_error_types": _top_counts([str(event.error_type) for event in queue_events]),
@@ -597,7 +605,9 @@ def _axis_incidents_snapshot(
             count=len(security_events),
             first_seen_at=security_first,
             last_seen_at=security_last,
-            current_effect="Authorization or permission failures are actively blocking runtime or admin flows." if security_events else "No security-linked failure is visible in the current logs scope.",
+            current_effect="Authorization or permission failures are actively blocking runtime or admin flows."
+            if security_events
+            else "No security-linked failure is visible in the current logs scope.",
             next_step="Open Security & Policies to inspect permissions, approvals, or request-path gates." if security_events else "Monitor only.",
             summary=(
                 f"Most common security error: {_top_counts([str(event.error_type) for event in security_events], limit=1)[0]['value']}."
@@ -606,7 +616,7 @@ def _axis_incidents_snapshot(
             ),
             raw_evidence={
                 "top_error_types": _top_counts([str(event.error_type) for event in security_events]),
-                "top_routes": _top_counts([str(event.route or 'unknown') for event in security_events]),
+                "top_routes": _top_counts([str(event.route or "unknown") for event in security_events]),
                 "sample_errors": [
                     {
                         "created_at": str(event.created_at),
@@ -628,16 +638,16 @@ def _axis_incidents_snapshot(
             count=len(tls_events),
             first_seen_at=tls_first,
             last_seen_at=tls_last,
-            current_effect="Ingress or certificate failures are preventing the expected public request path from completing." if tls_events else "No TLS or ingress failure is visible in the current logs scope.",
+            current_effect="Ingress or certificate failures are preventing the expected public request path from completing."
+            if tls_events
+            else "No TLS or ingress failure is visible in the current logs scope.",
             next_step="Open Ingress / TLS or Health to inspect listener exposure, certificates, and public readiness." if tls_events else "Monitor only.",
             summary=(
-                f"Most common TLS error: {_top_counts([str(event.error_type) for event in tls_events], limit=1)[0]['value']}."
-                if tls_events
-                else "No TLS or ingress incident is currently recorded."
+                f"Most common TLS error: {_top_counts([str(event.error_type) for event in tls_events], limit=1)[0]['value']}." if tls_events else "No TLS or ingress incident is currently recorded."
             ),
             raw_evidence={
                 "top_error_types": _top_counts([str(event.error_type) for event in tls_events]),
-                "top_routes": _top_counts([str(event.route or 'unknown') for event in tls_events]),
+                "top_routes": _top_counts([str(event.route or "unknown") for event in tls_events]),
                 "sample_errors": [
                     {
                         "created_at": str(event.created_at),
@@ -656,7 +666,9 @@ def _axis_incidents_snapshot(
             count=len(work_events),
             first_seen_at=work_first,
             last_seen_at=work_last,
-            current_effect="Conversation, tasking, or other work-interaction routes are failing on the active scope." if work_events else "No work-interaction error is visible in the current logs scope.",
+            current_effect="Conversation, tasking, or other work-interaction routes are failing on the active scope."
+            if work_events
+            else "No work-interaction error is visible in the current logs scope.",
             next_step="Open Execution Review or Logs to inspect the failing work-interaction path." if work_events else "Monitor only.",
             summary=(
                 f"Top work route: {_top_counts([str(event.route or 'unknown') for event in work_events], limit=1)[0]['value']}."
@@ -664,7 +676,7 @@ def _axis_incidents_snapshot(
                 else "No work-interaction incident is currently recorded."
             ),
             raw_evidence={
-                "top_routes": _top_counts([str(event.route or 'unknown') for event in work_events]),
+                "top_routes": _top_counts([str(event.route or "unknown") for event in work_events]),
                 "top_error_types": _top_counts([str(event.error_type) for event in work_events]),
                 "sample_errors": [
                     {
@@ -689,10 +701,12 @@ def _axis_incidents_snapshot(
     )
 
 
-def _blocked_routing_failures_snapshot(metrics_snapshot: dict[str, object]) -> list[dict[str, object]]:
+def _blocked_routing_failures_snapshot(
+    metrics_snapshot: dict[str, Any],
+) -> list[dict[str, Any]]:
     routing_metrics = dict(metrics_snapshot.get("routing_metrics", {}))
     failures = list(routing_metrics.get("recent_failures", []))
-    rows: list[dict[str, object]] = []
+    rows: list[dict[str, Any]] = []
     for failure in failures:
         error_type = str(failure.get("error_type") or "routing_failure")
         lowered = error_type.lower()
@@ -726,20 +740,18 @@ def _blocked_routing_failures_snapshot(metrics_snapshot: dict[str, object]) -> l
             next_step = "Open Routing to inspect stage eligibility, fallback, and escalation policy."
             links = [{"label": "Open Routing", "href": "/routing"}]
 
-        rows.append(
-            {
-                "decision_id": str(failure.get("decision_id") or ""),
-                "error_type": error_type,
-                "summary": str(failure.get("summary") or ""),
-                "policy_stage": failure.get("policy_stage"),
-                "created_at": str(failure.get("created_at") or ""),
-                "reason_category": reason_category,
-                "current_effect": current_effect,
-                "next_step": next_step,
-                "links": links,
-                "raw_evidence": dict(failure),
-            }
-        )
+        rows.append({
+            "decision_id": str(failure.get("decision_id") or ""),
+            "error_type": error_type,
+            "summary": str(failure.get("summary") or ""),
+            "policy_stage": failure.get("policy_stage"),
+            "created_at": str(failure.get("created_at") or ""),
+            "reason_category": reason_category,
+            "current_effect": current_effect,
+            "next_step": next_step,
+            "links": links,
+            "raw_evidence": dict(failure),
+        })
 
     return sorted(rows, key=lambda item: str(item["created_at"]), reverse=True)
 
@@ -748,21 +760,13 @@ def _incident_review_snapshot(
     analytics: UsageAnalyticsStore,
     *,
     tenant_id: str | None,
-    metrics_snapshot: dict[str, object],
-    logging_snapshot: dict[str, object],
-    tracing_snapshot: dict[str, object],
-) -> dict[str, object]:
+    metrics_snapshot: dict[str, Any],
+    logging_snapshot: dict[str, Any],
+    tracing_snapshot: dict[str, Any],
+) -> dict[str, Any]:
     cutoff = datetime.now(tz=UTC) - timedelta(hours=24)
-    error_events = [
-        event
-        for event in analytics.list_error_events(tenant_id=tenant_id)
-        if datetime.fromisoformat(event.created_at) >= cutoff
-    ]
-    health_events = [
-        event
-        for event in analytics.list_health_events(tenant_id=tenant_id)
-        if datetime.fromisoformat(event.created_at) >= cutoff
-    ]
+    error_events = [event for event in analytics.list_error_events(tenant_id=tenant_id) if datetime.fromisoformat(event.created_at) >= cutoff]
+    health_events = [event for event in analytics.list_health_events(tenant_id=tenant_id) if datetime.fromisoformat(event.created_at) >= cutoff]
 
     return {
         "axes": _axis_incidents_snapshot(
@@ -791,7 +795,7 @@ def _admin_error(status_code: int, code: str, message: str) -> JSONResponse:
     return JSONResponse(status_code=status_code, content={"error": {"type": code, "message": message}})
 
 
-def _audit_history_auth_error(code: str, *, status_code: int, message: str) -> None:
+def _audit_history_auth_error(code: str, *, status_code: int, message: str) -> NoReturn:
     raise HTTPException(
         status_code=status_code,
         detail={
@@ -838,7 +842,7 @@ def require_audit_history_role(required_role: str) -> Any:
                 status_code=status.HTTP_403_FORBIDDEN,
                 message="Rotate your password before accessing audit history.",
             )
-        if not role_allows(admin.role, required_role):  # type: ignore[arg-type]
+        if not role_allows(admin.role, cast(AdminRole, required_role)):
             _audit_history_auth_error(
                 f"{required_role}_role_required",
                 status_code=status.HTTP_403_FORBIDDEN,
@@ -916,11 +920,7 @@ def _apply_cursor(events: list[AuditEventRecord], *, cursor: str | None) -> list
     if not cursor:
         return events
     cursor_created_at, cursor_event_id = _decode_cursor(cursor)
-    return [
-        event
-        for event in events
-        if (event.created_at, event.event_id) < (cursor_created_at, cursor_event_id)
-    ]
+    return [event for event in events if (event.created_at, event.event_id) < (cursor_created_at, cursor_event_id)]
 
 
 def _safe_str(value: Any) -> str:
@@ -968,14 +968,8 @@ def _build_lookup_indexes(
     tenant_id: str | None,
 ) -> dict[str, dict[str, Any]]:
     users = {user.user_id: user for user in governance.list_admin_users()}
-    accounts = {
-        account.account_id: account
-        for account in governance.list_accounts(instance_id=instance_id, tenant_id=tenant_id)
-    }
-    runtime_keys = {
-        item.key_id: item
-        for item in governance.list_runtime_keys(instance_id=instance_id, tenant_id=tenant_id)
-    }
+    accounts = {account.account_id: account for account in governance.list_accounts(instance_id=instance_id, tenant_id=tenant_id)}
+    runtime_keys = {item.key_id: item for item in governance.list_runtime_keys(instance_id=instance_id, tenant_id=tenant_id)}
     settings = {item.key: item for item in governance.list_setting_overrides()}
     return {
         "users": users,
@@ -1001,8 +995,8 @@ def _actor_summary(
     *,
     indexes: dict[str, dict[str, Any]],
 ) -> dict[str, Any]:
-    users: dict[str, AdminUserRecord] = indexes["users"]  # type: ignore[assignment]
-    runtime_keys: dict[str, RuntimeKeyRecord] = indexes["runtime_keys"]  # type: ignore[assignment]
+    users: dict[str, AdminUserRecord] = indexes["users"]
+    runtime_keys: dict[str, RuntimeKeyRecord] = indexes["runtime_keys"]
 
     if event.actor_type == "admin_user" and event.actor_id:
         user = users.get(event.actor_id)
@@ -1053,10 +1047,10 @@ def _target_summary(
     *,
     indexes: dict[str, dict[str, Any]],
 ) -> dict[str, Any]:
-    users: dict[str, AdminUserRecord] = indexes["users"]  # type: ignore[assignment]
-    accounts: dict[str, GatewayAccountRecord] = indexes["accounts"]  # type: ignore[assignment]
-    runtime_keys: dict[str, RuntimeKeyRecord] = indexes["runtime_keys"]  # type: ignore[assignment]
-    settings: dict[str, MutableSettingRecord] = indexes["settings"]  # type: ignore[assignment]
+    users: dict[str, AdminUserRecord] = indexes["users"]
+    accounts: dict[str, GatewayAccountRecord] = indexes["accounts"]
+    runtime_keys: dict[str, RuntimeKeyRecord] = indexes["runtime_keys"]
+    settings: dict[str, MutableSettingRecord] = indexes["settings"]
 
     label = event.target_id or _target_type_label(event.target_type)
     secondary: str | None = None
@@ -1084,7 +1078,17 @@ def _target_summary(
         else:
             label = _humanize_key(event.target_id)
             secondary = event.target_id
-    elif event.target_type in {"execution_run", "execution_approval", "elevated_access_request", "admin_session", "audit_export"} and event.target_id:
+    elif (
+        event.target_type
+        in {
+            "execution_run",
+            "execution_approval",
+            "elevated_access_request",
+            "admin_session",
+            "audit_export",
+        }
+        and event.target_id
+    ):
         secondary = event.target_id
 
     return {
@@ -1119,18 +1123,21 @@ def _normalize_audit_row(
     }
 
 
-def _matches_actor(event: AuditEventRecord, *, indexes: dict[str, dict[str, Any]], actor_filter: str | None) -> bool:
+def _matches_actor(
+    event: AuditEventRecord,
+    *,
+    indexes: dict[str, dict[str, Any]],
+    actor_filter: str | None,
+) -> bool:
     if actor_filter is None:
         return True
     actor = _actor_summary(event, indexes=indexes)
-    haystack = " ".join(
-        [
-            _safe_str(actor.get("label")),
-            _safe_str(actor.get("secondary")),
-            _safe_str(actor.get("id")),
-            event.actor_type,
-        ]
-    ).lower()
+    haystack = " ".join([
+        _safe_str(actor.get("label")),
+        _safe_str(actor.get("secondary")),
+        _safe_str(actor.get("id")),
+        event.actor_type,
+    ]).lower()
     return actor_filter in haystack
 
 
@@ -1144,15 +1151,13 @@ def _matches_target(
         return True
     target = _target_summary(event, indexes=indexes)
     correlation = _correlation_summary(event)
-    haystack = " ".join(
-        [
-            _safe_str(target.get("label")),
-            _safe_str(target.get("secondary")),
-            _safe_str(target.get("id")),
-            event.target_type,
-            correlation["value"] if correlation is not None else "",
-        ]
-    ).lower()
+    haystack = " ".join([
+        _safe_str(target.get("label")),
+        _safe_str(target.get("secondary")),
+        _safe_str(target.get("id")),
+        event.target_type,
+        correlation["value"] if correlation is not None else "",
+    ]).lower()
     return target_filter in haystack
 
 
@@ -1215,13 +1220,11 @@ def _related_links_for_event(event: AuditEventRecord) -> list[dict[str, str]]:
     related_links: list[dict[str, str]] = []
     route_hint = _RELATED_ROUTE_BY_TARGET_TYPE.get(event.target_type)
     if route_hint is not None:
-        related_links.append(
-            {
-                "label": route_hint["label"],
-                "href": route_hint["href"],
-                "kind": "control_plane_route",
-            }
-        )
+        related_links.append({
+            "label": route_hint["label"],
+            "href": route_hint["href"],
+            "kind": "control_plane_route",
+        })
     return related_links
 
 
@@ -1236,12 +1239,10 @@ def _build_change_context(
         value = redacted_metadata.get(key)
         if value in (None, "", [], {}):
             continue
-        entries.append(
-            {
-                "label": _CHANGE_CONTEXT_FIELD_LABELS.get(key, _humanize_key(key)),
-                "value": _safe_str(value),
-            }
-        )
+        entries.append({
+            "label": _CHANGE_CONTEXT_FIELD_LABELS.get(key, _humanize_key(key)),
+            "value": _safe_str(value),
+        })
     return entries, len(entries) == 0
 
 
@@ -1304,17 +1305,15 @@ def _redacted_audit_export_event_payload(
 
 def _audit_export_subject_haystack(event: AuditEventRecord, *, include_raw_details: bool) -> str:
     export_payload = _redacted_audit_export_event_payload(event, include_raw_details=include_raw_details)
-    return " ".join(
-        [
-            event.actor_type,
-            event.actor_id or "",
-            event.action,
-            event.target_type,
-            event.target_id or "",
-            event.details,
-            json.dumps(export_payload["metadata"], sort_keys=True),
-        ]
-    ).lower()
+    return " ".join([
+        event.actor_type,
+        event.actor_id or "",
+        event.action,
+        event.target_type,
+        event.target_id or "",
+        event.details,
+        json.dumps(export_payload["metadata"], sort_keys=True),
+    ]).lower()
 
 
 def _filter_audit_events(
@@ -1330,7 +1329,8 @@ def _filter_audit_events(
         filtered = [
             event
             for event in filtered
-            if normalized_subject in _audit_export_subject_haystack(
+            if normalized_subject
+            in _audit_export_subject_haystack(
                 event,
                 include_raw_details=include_raw_details,
             )
@@ -1364,22 +1364,20 @@ def _render_audit_export_csv(events: list[AuditEventRecord], *, include_raw_deta
             event,
             include_raw_details=include_raw_details,
         )
-        writer.writerow(
-            {
-                "event_id": export_payload["event_id"],
-                "created_at": export_payload["created_at"],
-                "tenant_id": export_payload["tenant_id"],
-                "company_id": export_payload["company_id"] or "",
-                "status": export_payload["status"],
-                "action": export_payload["action"],
-                "actor_type": export_payload["actor_type"],
-                "actor_id": export_payload["actor_id"] or "",
-                "target_type": export_payload["target_type"],
-                "target_id": export_payload["target_id"] or "",
-                "details": export_payload["details"],
-                "metadata": json.dumps(export_payload["metadata"], sort_keys=True),
-            }
-        )
+        writer.writerow({
+            "event_id": export_payload["event_id"],
+            "created_at": export_payload["created_at"],
+            "tenant_id": export_payload["tenant_id"],
+            "company_id": export_payload["company_id"] or "",
+            "status": export_payload["status"],
+            "action": export_payload["action"],
+            "actor_type": export_payload["actor_type"],
+            "actor_id": export_payload["actor_id"] or "",
+            "target_type": export_payload["target_type"],
+            "target_id": export_payload["target_id"] or "",
+            "details": export_payload["details"],
+            "metadata": json.dumps(export_payload["metadata"], sort_keys=True),
+        })
     return buffer.getvalue()
 
 
@@ -1387,7 +1385,7 @@ def _render_audit_export_json(
     *,
     export_id: str,
     generated_at: str,
-    filters: dict[str, object],
+    filters: dict[str, Any],
     events: list[AuditEventRecord],
     include_raw_details: bool,
 ) -> str:
@@ -1642,10 +1640,7 @@ def logs_view(
         {
             "id": "structured_runtime_context",
             "ok": bool(logging_snapshot["field_coverage"].get("request_id")) and bool(logging_snapshot["field_coverage"].get("trace_id")),
-            "details": (
-                f"request_id={logging_snapshot['field_coverage'].get('request_id', 0)}, "
-                f"trace_id={logging_snapshot['field_coverage'].get('trace_id', 0)}"
-            ),
+            "details": (f"request_id={logging_snapshot['field_coverage'].get('request_id', 0)}, trace_id={logging_snapshot['field_coverage'].get('trace_id', 0)}"),
         },
         {
             "id": "tracing_scope_declared",
@@ -1659,16 +1654,8 @@ def logs_view(
         },
         {
             "id": "routing_explainability_path",
-            "ok": (
-                int(metrics_snapshot["routing_metrics"]["explainability_coverage"]["structured"]) > 0
-                and int(metrics_snapshot["routing_metrics"]["explainability_coverage"]["raw"]) > 0
-            ),
-            "details": (
-                "structured="
-                f"{metrics_snapshot['routing_metrics']['explainability_coverage']['structured']},"
-                "raw="
-                f"{metrics_snapshot['routing_metrics']['explainability_coverage']['raw']}"
-            ),
+            "ok": (int(metrics_snapshot["routing_metrics"]["explainability_coverage"]["structured"]) > 0 and int(metrics_snapshot["routing_metrics"]["explainability_coverage"]["raw"]) > 0),
+            "details": (f"structured={metrics_snapshot['routing_metrics']['explainability_coverage']['structured']},raw={metrics_snapshot['routing_metrics']['explainability_coverage']['raw']}"),
         },
     ]
     return {
@@ -1800,10 +1787,7 @@ def export_audit_events(
         target_type="audit_export",
         target_id=export_id,
         status="ok",
-        details=(
-            f"Generated {payload.format.upper()} audit export with {len(filtered_events)} event(s)"
-            f" for window '{payload.window}'."
-        ),
+        details=(f"Generated {payload.format.upper()} audit export with {len(filtered_events)} event(s) for window '{payload.window}'."),
         metadata={
             **filters,
             "export_id": export_id,

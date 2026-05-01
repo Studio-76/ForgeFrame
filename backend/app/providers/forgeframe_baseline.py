@@ -19,7 +19,13 @@ from app.usage.service import UsageAccountingService
 
 class ForgeFrameBaselineAdapter:
     provider_name = "forgeframe_baseline"
-    capabilities = ProviderCapabilities(streaming=True, tool_calling=False, vision=False, embeddings=True, external=False)
+    capabilities = ProviderCapabilities(
+        streaming=True,
+        tool_calling=False,
+        vision=False,
+        embeddings=True,
+        external=False,
+    )
 
     def __init__(self, settings: Settings | None = None):
         self._settings = settings or Settings()
@@ -159,10 +165,7 @@ class ForgeFrameBaselineAdapter:
 
     def create_embeddings(self, request: EmbeddingDispatchRequest) -> EmbeddingDispatchResult:
         dimensions = request.dimensions if isinstance(request.dimensions, int) and request.dimensions > 0 else 16
-        embeddings = [
-            self._vector_for_text(self._stringify_embedding_input(item), dimensions=dimensions)
-            for item in request.input_items
-        ]
+        embeddings = [self._vector_for_text(self._stringify_embedding_input(item), dimensions=dimensions) for item in request.input_items]
         joined_input = "\n".join(self._stringify_embedding_input(item) for item in request.input_items)
         usage = self._usage_accounting.usage_from_prompt_completion(
             [{"role": "user", "content": joined_input}],

@@ -1,12 +1,13 @@
 import os
-
-from fastapi.testclient import TestClient
+from typing import Any
 
 from conftest import admin_headers as shared_admin_headers
+from fastapi.testclient import TestClient
+
 from app.main import app
 
 
-def _login(client: TestClient, username: str, password: str) -> dict[str, object]:
+def _login(client: TestClient, username: str, password: str) -> dict[str, Any]:
     response = client.post(
         "/admin/auth/login",
         json={"username": username, "password": password},

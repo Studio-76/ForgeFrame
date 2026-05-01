@@ -1,17 +1,17 @@
 import csv
 import io
 import json
-import os
 from datetime import UTC, datetime, timedelta
 from itertools import count
+from typing import Any
 from uuid import uuid4
 
 import pytest
+from conftest import admin_headers as shared_admin_headers
+from conftest import login_headers_allowing_password_rotation
 from fastapi.testclient import TestClient
 
-from conftest import admin_headers as shared_admin_headers, login_headers_allowing_password_rotation
-from app.governance.service import GovernanceService
-from app.governance.service import get_governance_service
+from app.governance.service import GovernanceService, get_governance_service
 from app.main import app
 from app.tenancy import DEFAULT_BOOTSTRAP_TENANT_ID
 
@@ -35,7 +35,7 @@ def _create_user_headers(
     creator_headers: dict[str, str],
     *,
     role: str,
-) -> tuple[dict[str, object], dict[str, str]]:
+) -> tuple[dict[str, Any], dict[str, str]]:
     suffix = uuid4().hex[:8]
     password = f"ForgeFrame-{role}-pass-123"
     created = client.post(
@@ -108,7 +108,6 @@ def test_operator_can_generate_csv_audit_export_and_export_is_audited() -> None:
         },
     )
     assert account_response.status_code == 201
-    account_id = account_response.json()["account"]["account_id"]
 
     export_response = client.post(
         f"/admin/logs/audit-export?instanceId={instance_id}&tenantId={DEFAULT_BOOTSTRAP_TENANT_ID}",
@@ -131,13 +130,12 @@ def test_operator_can_generate_csv_audit_export_and_export_is_audited() -> None:
     assert any(row["action"] == "account_create" for row in rows)
 
     governance = get_governance_service()
-    assert any(
-        event.action == "audit_export_generated"
-        for event in governance.list_audit_events(limit=20)
-    )
+    assert any(event.action == "audit_export_generated" for event in governance.list_audit_events(limit=20))
 
 
-def test_audit_export_applies_filters_before_limit(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_audit_export_applies_filters_before_limit(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     start = datetime(2026, 1, 1, tzinfo=UTC)
     timeline = count()
     monkeypatch.setattr(
@@ -243,7 +241,9 @@ def test_audit_export_matches_audit_history_on_active_window() -> None:
 
 
 @pytest.mark.parametrize("export_format", ["json", "csv"])
-def test_audit_export_redacts_sensitive_metadata_but_keeps_safe_context(export_format: str) -> None:
+def test_audit_export_redacts_sensitive_metadata_but_keeps_safe_context(
+    export_format: str,
+) -> None:
     client = TestClient(app)
     admin_headers = _admin_headers(client)
     instance_id = _default_instance_id(client, admin_headers)
@@ -257,7 +257,6 @@ def test_audit_export_redacts_sensitive_metadata_but_keeps_safe_context(export_f
         },
     )
     assert account_response.status_code == 201
-    account_id = account_response.json()["account"]["account_id"]
 
     governance = get_governance_service()
     admin = governance.authenticate_admin_token(admin_headers["Authorization"].removeprefix("Bearer "))
@@ -311,7 +310,9 @@ def test_audit_export_redacts_sensitive_metadata_but_keeps_safe_context(export_f
 
 
 @pytest.mark.parametrize("export_format", ["json", "csv"])
-def test_audit_export_subject_filter_uses_redacted_metadata_for_search(export_format: str) -> None:
+def test_audit_export_subject_filter_uses_redacted_metadata_for_search(
+    export_format: str,
+) -> None:
     client = TestClient(app)
     admin_headers = _admin_headers(client)
     instance_id = _default_instance_id(client, admin_headers)
@@ -325,7 +326,6 @@ def test_audit_export_subject_filter_uses_redacted_metadata_for_search(export_fo
         },
     )
     assert account_response.status_code == 201
-    account_id = account_response.json()["account"]["account_id"]
 
     governance = get_governance_service()
     admin = governance.authenticate_admin_token(admin_headers["Authorization"].removeprefix("Bearer "))
@@ -551,10 +551,7 @@ def test_audit_export_honors_company_scope_and_self_audits_with_company_id() -> 
 
     export_id = export_response.headers["x-forgeframe-audit-export-id"]
     assert any(
-        event.action == "audit_export_generated"
-        and event.target_id == export_id
-        and event.company_id == company_alpha
-        for event in governance.list_audit_events(limit=50, company_id=company_alpha)
+        event.action == "audit_export_generated" and event.target_id == export_id and event.company_id == company_alpha for event in governance.list_audit_events(limit=50, company_id=company_alpha)
     )
 
 
@@ -615,7 +612,10 @@ def test_audit_export_uses_instance_scope_by_default_and_scoped_export_still_suc
     assert scoped_payload["filters"]["tenant_id"] == DEFAULT_BOOTSTRAP_TENANT_ID
     assert scoped_payload["row_count"] >= 2
     assert all(event["tenant_id"] == DEFAULT_BOOTSTRAP_TENANT_ID for event in scoped_payload["events"])
-    assert {event["target_id"] for event in scoped_payload["events"]} >= {tenant_a, tenant_b}
+    assert {event["target_id"] for event in scoped_payload["events"]} >= {
+        tenant_a,
+        tenant_b,
+    }
 
 
 def test_viewer_cannot_generate_audit_export() -> None:
@@ -660,7 +660,4 @@ def test_read_only_impersonation_cannot_generate_audit_export() -> None:
     assert response.json()["detail"] == "impersonation_session_read_only"
 
     governance = get_governance_service()
-    assert not any(
-        event.action == "audit_export_generated"
-        for event in governance.list_audit_events(limit=50)
-    )
+    assert not any(event.action == "audit_export_generated" for event in governance.list_audit_events(limit=50))

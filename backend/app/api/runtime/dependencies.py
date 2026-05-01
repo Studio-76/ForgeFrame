@@ -5,17 +5,22 @@ from uuid import uuid4
 
 from fastapi import Depends, Request, status
 
-from app.authz import ActorScope, PolicyEvaluator, RequestActor, TenantBoundTarget, get_route_policy
-from app.authz.route_guards import raise_route_guard_violation
 from app.api.runtime.errors import public_runtime_auth_message
+from app.authz import (
+    ActorScope,
+    PolicyEvaluator,
+    RequestActor,
+    TenantBoundTarget,
+    get_route_policy,
+)
+from app.authz.route_guards import raise_route_guard_violation
 from app.core.dispatch import DispatchService
 from app.core.model_registry import ModelRegistry
 from app.core.routing import RoutingService
 from app.execution.dependencies import (
     clear_execution_dependency_caches,
-    get_execution_session_factory,
     get_execution_responses_service,
-    get_execution_transition_service,
+    get_execution_session_factory,
 )
 from app.governance.errors import RuntimeAuthorizationError
 from app.governance.models import RuntimeGatewayIdentity, RuntimeRequestPathDecision
@@ -85,11 +90,7 @@ def get_runtime_request_path_decision(
 ) -> RuntimeRequestPathDecision | None:
     if gateway_identity is None:
         return None
-    requested_path = (
-        request.headers.get("x-forgeframe-request-path", "").strip()
-        or request.headers.get("x-forgegate-request-path", "").strip()
-        or None
-    )
+    requested_path = request.headers.get("x-forgeframe-request-path", "").strip() or request.headers.get("x-forgegate-request-path", "").strip() or None
     try:
         return governance.resolve_runtime_request_path(
             identity=gateway_identity,
@@ -104,14 +105,15 @@ def get_runtime_request_path_decision(
             details={},
             request_id=_request_id(request),
         )
+        return None
 
 
 def runtime_request_path_metadata(
     decision: RuntimeRequestPathDecision | None,
-) -> dict[str, str]:
+) -> dict[str, str | None]:
     if decision is None:
         return {}
-    metadata = {
+    metadata: dict[str, str | None] = {
         "request_path_policy": decision.request_path,
         "default_request_path": decision.default_request_path,
         "request_path_selected_via": decision.selected_via,
@@ -126,11 +128,7 @@ def _request_id(request: Request) -> str:
     envelope_request_id = getattr(envelope, "request_id", None)
     if isinstance(envelope_request_id, str) and envelope_request_id.strip():
         return envelope_request_id.strip()
-    raw_request_id = (
-        request.headers.get("x-request-id", "").strip()
-        or request.headers.get("x-forgeframe-request-id", "").strip()
-        or request.headers.get("x-forgegate-request-id", "").strip()
-    )
+    raw_request_id = request.headers.get("x-request-id", "").strip() or request.headers.get("x-forgeframe-request-id", "").strip() or request.headers.get("x-forgegate-request-id", "").strip()
     return raw_request_id or f"req_{uuid4().hex[:12]}"
 
 

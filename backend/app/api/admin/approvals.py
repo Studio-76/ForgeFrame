@@ -8,15 +8,18 @@ from fastapi import APIRouter, Depends, Query, Request, status
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
-from app.approvals.models import parse_shared_approval_id
-from app.approvals.service import ApprovalAdminService
 from app.api.admin.idempotency import unsupported_idempotency_response
 from app.api.admin.security import require_admin_session, require_admin_write_session
+from app.approvals.models import parse_shared_approval_id
+from app.approvals.service import ApprovalAdminService
 from app.execution.dependencies import (
     get_execution_session_factory,
     get_execution_transition_service,
 )
-from app.execution.service import RunCommandIdempotencyConflictError, RunTransitionConflictError
+from app.execution.service import (
+    RunCommandIdempotencyConflictError,
+    RunTransitionConflictError,
+)
 from app.governance.errors import GovernanceConflictError, GovernanceNotFoundError
 from app.governance.models import AuthenticatedAdmin
 from app.governance.service import GovernanceService, get_governance_service
@@ -26,15 +29,10 @@ from app.instances.service import InstanceService, get_instance_service
 
 router = APIRouter(prefix="/approvals", tags=["admin-approvals"])
 _ELEVATED_ACCESS_APPROVAL_IDEMPOTENCY_MESSAGE = (
-    "Idempotency-Key is not supported for elevated-access approval decisions until ForgeFrame persists replay-safe "
-    "governance approval outcomes for that branch."
+    "Idempotency-Key is not supported for elevated-access approval decisions until ForgeFrame persists replay-safe governance approval outcomes for that branch."
 )
-_SHARED_APPROVAL_COMPANY_SCOPE_MESSAGE = (
-    "companyId is not supported on /admin/approvals because elevated-access approvals are not company-scoped."
-)
-_SHARED_APPROVAL_TENANT_SCOPE_MESSAGE = (
-    "tenantId is not supported on /admin/approvals because approvals are instance-scoped, not tenant-primary."
-)
+_SHARED_APPROVAL_COMPANY_SCOPE_MESSAGE = "companyId is not supported on /admin/approvals because elevated-access approvals are not company-scoped."
+_SHARED_APPROVAL_TENANT_SCOPE_MESSAGE = "tenantId is not supported on /admin/approvals because approvals are instance-scoped, not tenant-primary."
 
 
 class ApprovalDecisionRequest(BaseModel):
@@ -42,7 +40,10 @@ class ApprovalDecisionRequest(BaseModel):
 
 
 def _approval_error(status_code: int, error_type: str, message: str) -> JSONResponse:
-    return JSONResponse(status_code=status_code, content={"error": {"type": error_type, "message": message}})
+    return JSONResponse(
+        status_code=status_code,
+        content={"error": {"type": error_type, "message": message}},
+    )
 
 
 def _get_approval_admin_service(
@@ -128,7 +129,10 @@ def list_approvals(
         return _approval_error(status.HTTP_400_BAD_REQUEST, "approval_filter_invalid", str(exc))
     except PermissionError as exc:
         return _approval_error(status.HTTP_403_FORBIDDEN, "approval_forbidden", str(exc))
-    return {"status": "ok", "approvals": [item.model_dump(mode="json") for item in approvals]}
+    return {
+        "status": "ok",
+        "approvals": [item.model_dump(mode="json") for item in approvals],
+    }
 
 
 @router.get("/{approval_id}")
@@ -213,7 +217,11 @@ def _decide_approval(
         return _approval_error(status.HTTP_404_NOT_FOUND, "approval_not_found", str(exc))
     except GovernanceNotFoundError as exc:
         return _approval_error(status.HTTP_404_NOT_FOUND, "approval_not_found", str(exc))
-    except (GovernanceConflictError, RunTransitionConflictError, RunCommandIdempotencyConflictError) as exc:
+    except (
+        GovernanceConflictError,
+        RunTransitionConflictError,
+        RunCommandIdempotencyConflictError,
+    ) as exc:
         return _approval_error(status.HTTP_409_CONFLICT, "approval_conflict", str(exc))
     except PermissionError as exc:
         return _approval_error(status.HTTP_403_FORBIDDEN, "approval_forbidden", str(exc))

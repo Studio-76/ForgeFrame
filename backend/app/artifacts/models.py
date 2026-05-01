@@ -7,7 +7,6 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
-
 ARTIFACT_TYPES = (
     "file",
     "download",
@@ -36,7 +35,13 @@ ArtifactType = Literal[
 ARTIFACT_STATUSES = ("active", "superseded", "archived")
 ArtifactStatus = Literal["active", "superseded", "archived"]
 
-ARTIFACT_ATTACHMENT_TARGET_KINDS = ("workspace", "run", "approval", "instance", "decision")
+ARTIFACT_ATTACHMENT_TARGET_KINDS = (
+    "workspace",
+    "run",
+    "approval",
+    "instance",
+    "decision",
+)
 ArtifactAttachmentTargetKind = Literal["workspace", "run", "approval", "instance", "decision"]
 
 ARTIFACT_WORKSPACE_ROLES = ("artifact", "preview", "handoff")

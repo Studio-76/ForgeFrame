@@ -21,7 +21,10 @@ def _admin_headers(client: TestClient) -> dict[str, str]:
         rotate = client.post(
             "/admin/auth/rotate-password",
             headers={"Authorization": f"Bearer {access_token}"},
-            json={"current_password": bootstrap_password, "new_password": rotated_password},
+            json={
+                "current_password": bootstrap_password,
+                "new_password": rotated_password,
+            },
         )
         assert rotate.status_code == 200
         relogin = client.post(
@@ -77,9 +80,7 @@ def test_admin_provider_sync_replays_original_outcome_for_matching_idempotency_k
 
     providers = client.get("/admin/providers/", headers=admin_headers)
     assert providers.status_code == 200
-    synced_provider = next(
-        item for item in providers.json()["providers"] if item["provider"] == provider_name
-    )
+    synced_provider = next(item for item in providers.json()["providers"] if item["provider"] == provider_name)
     assert synced_provider["last_sync_at"] == first.json()["sync_at"]
 
 
@@ -101,7 +102,10 @@ def test_admin_provider_sync_rejects_idempotency_fingerprint_mismatch() -> None:
         )
         assert response.status_code == 201
 
-    headers = {**admin_headers, "Idempotency-Key": f"idem_provider_sync_conflict_{uuid4().hex[:8]}"}
+    headers = {
+        **admin_headers,
+        "Idempotency-Key": f"idem_provider_sync_conflict_{uuid4().hex[:8]}",
+    }
     first = client.post("/admin/providers/sync", json={"provider": provider_a}, headers=headers)
     second = client.post("/admin/providers/sync", json={"provider": provider_b}, headers=headers)
 
@@ -138,7 +142,10 @@ def test_admin_provider_health_run_replays_original_outcome_without_repeating_si
 def test_admin_oauth_probe_replays_original_outcome_without_repeating_operation_log() -> None:
     client = TestClient(app)
     admin_headers = _admin_headers(client)
-    headers = {**admin_headers, "Idempotency-Key": f"idem_oauth_probe_{uuid4().hex[:8]}"}
+    headers = {
+        **admin_headers,
+        "Idempotency-Key": f"idem_oauth_probe_{uuid4().hex[:8]}",
+    }
 
     before = _oauth_operation_count(client, admin_headers)
     first = client.post("/admin/providers/oauth-account/probe/antigravity", headers=headers, json={})
@@ -157,7 +164,10 @@ def test_admin_oauth_probe_replays_original_outcome_without_repeating_operation_
 def test_admin_oauth_bridge_sync_replays_original_outcome_without_repeating_operation_log() -> None:
     client = TestClient(app)
     admin_headers = _admin_headers(client)
-    headers = {**admin_headers, "Idempotency-Key": f"idem_bridge_sync_{uuid4().hex[:8]}"}
+    headers = {
+        **admin_headers,
+        "Idempotency-Key": f"idem_bridge_sync_{uuid4().hex[:8]}",
+    }
 
     before = _oauth_operation_count(client, admin_headers)
     first = client.post("/admin/providers/oauth-account/bridge-profiles/sync", headers=headers, json={})
@@ -178,7 +188,10 @@ def test_admin_harness_profile_upsert_replays_redacted_outcome_for_matching_idem
     client = TestClient(app)
     admin_headers = _admin_headers(client)
     provider_key = f"idem_harness_{uuid4().hex[:8]}"
-    headers = {**admin_headers, "Idempotency-Key": f"idem_harness_upsert_{uuid4().hex[:8]}"}
+    headers = {
+        **admin_headers,
+        "Idempotency-Key": f"idem_harness_upsert_{uuid4().hex[:8]}",
+    }
     payload = {
         "provider_key": provider_key,
         "label": "Idempotent Harness Profile",
@@ -190,8 +203,16 @@ def test_admin_harness_profile_upsert_replays_redacted_outcome_for_matching_idem
         "request_mapping": {"headers": {"Authorization": "Bearer another-secret", "X-Custom": "keep"}},
     }
 
-    first = client.put(f"/admin/providers/harness/profiles/{provider_key}", headers=headers, json=payload)
-    second = client.put(f"/admin/providers/harness/profiles/{provider_key}", headers=headers, json=payload)
+    first = client.put(
+        f"/admin/providers/harness/profiles/{provider_key}",
+        headers=headers,
+        json=payload,
+    )
+    second = client.put(
+        f"/admin/providers/harness/profiles/{provider_key}",
+        headers=headers,
+        json=payload,
+    )
 
     assert first.status_code == 200
     assert second.status_code == 200
@@ -269,27 +290,19 @@ def test_admin_harness_profile_reads_redact_secrets_in_lists_snapshots_and_redac
     assert "nested-secret-a" not in export_response.text
     assert "nested-secret-b" not in export_response.text
 
-    listed_profile = next(
-        item for item in profiles_response.json()["profiles"] if item["provider_key"] == provider_key
-    )
+    listed_profile = next(item for item in profiles_response.json()["profiles"] if item["provider_key"] == provider_key)
     assert listed_profile["auth_value"] == "***redacted***"
     assert listed_profile["request_mapping"]["headers"]["Authorization"] == "***redacted***"
     assert listed_profile["request_mapping"]["headers"]["X-Custom"] == "keep-me"
     assert listed_profile["config_history"][0]["profile"]["auth_value"] == "***redacted***"
     assert listed_profile["config_history"][0]["profile"]["request_mapping"]["headers"]["Authorization"] == "***redacted***"
 
-    snapshot_profile = next(
-        item for item in snapshot_response.json()["snapshot"]["profiles"] if item["provider_key"] == provider_key
-    )
+    snapshot_profile = next(item for item in snapshot_response.json()["snapshot"]["profiles"] if item["provider_key"] == provider_key)
     assert snapshot_profile["auth_value"] == "***redacted***"
     assert snapshot_profile["request_mapping"]["headers"]["Authorization"] == "***redacted***"
     assert snapshot_profile["config_history"][0]["profile"]["auth_value"] == "***redacted***"
 
-    export_profile = next(
-        item["profile"]
-        for item in export_response.json()["snapshot"]["profiles"]
-        if item["provider_key"] == provider_key
-    )
+    export_profile = next(item["profile"] for item in export_response.json()["snapshot"]["profiles"] if item["provider_key"] == provider_key)
     assert export_response.json()["snapshot"]["redacted"] is True
     assert export_profile["auth_value"] == "***redacted***"
     assert export_profile["request_mapping"]["headers"]["Authorization"] == "***redacted***"
@@ -299,7 +312,10 @@ def test_admin_harness_profile_upsert_rejects_idempotency_fingerprint_mismatch()
     client = TestClient(app)
     admin_headers = _admin_headers(client)
     provider_key = f"idem_harness_conflict_{uuid4().hex[:8]}"
-    headers = {**admin_headers, "Idempotency-Key": f"idem_harness_conflict_{uuid4().hex[:8]}"}
+    headers = {
+        **admin_headers,
+        "Idempotency-Key": f"idem_harness_conflict_{uuid4().hex[:8]}",
+    }
     first_payload = {
         "provider_key": provider_key,
         "label": "Conflict Profile",
@@ -311,8 +327,16 @@ def test_admin_harness_profile_upsert_rejects_idempotency_fingerprint_mismatch()
     }
     second_payload = {**first_payload, "auth_value": "secret-b"}
 
-    first = client.put(f"/admin/providers/harness/profiles/{provider_key}", headers=headers, json=first_payload)
-    second = client.put(f"/admin/providers/harness/profiles/{provider_key}", headers=headers, json=second_payload)
+    first = client.put(
+        f"/admin/providers/harness/profiles/{provider_key}",
+        headers=headers,
+        json=first_payload,
+    )
+    second = client.put(
+        f"/admin/providers/harness/profiles/{provider_key}",
+        headers=headers,
+        json=second_payload,
+    )
 
     assert first.status_code == 200
     assert second.status_code == 409
@@ -339,10 +363,21 @@ def test_admin_harness_profile_deactivate_replays_original_outcome_without_repea
     )
     assert created.status_code == 200
 
-    headers = {**admin_headers, "Idempotency-Key": f"idem_harness_deactivate_{uuid4().hex[:8]}"}
-    first = client.post(f"/admin/providers/harness/profiles/{provider_key}/deactivate", headers=headers, json={})
+    headers = {
+        **admin_headers,
+        "Idempotency-Key": f"idem_harness_deactivate_{uuid4().hex[:8]}",
+    }
+    first = client.post(
+        f"/admin/providers/harness/profiles/{provider_key}/deactivate",
+        headers=headers,
+        json={},
+    )
     profiles_after_first = client.get("/admin/providers/harness/profiles", headers=admin_headers)
-    second = client.post(f"/admin/providers/harness/profiles/{provider_key}/deactivate", headers=headers, json={})
+    second = client.post(
+        f"/admin/providers/harness/profiles/{provider_key}/deactivate",
+        headers=headers,
+        json={},
+    )
     profiles_after_second = client.get("/admin/providers/harness/profiles", headers=admin_headers)
 
     assert first.status_code == 200
@@ -351,12 +386,8 @@ def test_admin_harness_profile_deactivate_replays_original_outcome_without_repea
     assert second.headers["X-ForgeFrame-Idempotent-Replay"] == "true"
     assert first.json()["profile"]["auth_value"] == "***redacted***"
 
-    first_profile = next(
-        item for item in profiles_after_first.json()["profiles"] if item["provider_key"] == provider_key
-    )
-    second_profile = next(
-        item for item in profiles_after_second.json()["profiles"] if item["provider_key"] == provider_key
-    )
+    first_profile = next(item for item in profiles_after_first.json()["profiles"] if item["provider_key"] == provider_key)
+    second_profile = next(item for item in profiles_after_second.json()["profiles"] if item["provider_key"] == provider_key)
     assert first_profile["updated_at"] == second_profile["updated_at"]
     assert second_profile["enabled"] is False
 
@@ -365,7 +396,10 @@ def test_admin_harness_import_replays_original_outcome_without_repeating_side_ef
     client = TestClient(app)
     admin_headers = _admin_headers(client)
     provider_key = f"idem_harness_import_{uuid4().hex[:8]}"
-    headers = {**admin_headers, "Idempotency-Key": f"idem_harness_import_{uuid4().hex[:8]}"}
+    headers = {
+        **admin_headers,
+        "Idempotency-Key": f"idem_harness_import_{uuid4().hex[:8]}",
+    }
     payload = {
         "snapshot": {
             "profiles": [
@@ -395,12 +429,8 @@ def test_admin_harness_import_replays_original_outcome_without_repeating_side_ef
     assert second.json() == first.json()
     assert second.headers["X-ForgeFrame-Idempotent-Replay"] == "true"
 
-    first_profile = next(
-        item for item in profiles_after_first.json()["profiles"] if item["provider_key"] == provider_key
-    )
-    second_profile = next(
-        item for item in profiles_after_second.json()["profiles"] if item["provider_key"] == provider_key
-    )
+    first_profile = next(item for item in profiles_after_first.json()["profiles"] if item["provider_key"] == provider_key)
+    second_profile = next(item for item in profiles_after_second.json()["profiles"] if item["provider_key"] == provider_key)
     assert first_profile["last_imported_at"] == second_profile["last_imported_at"]
 
 
@@ -424,8 +454,16 @@ def test_admin_harness_preview_replays_redacted_outcome_for_matching_idempotency
     )
     assert created.status_code == 200
 
-    headers = {**admin_headers, "Idempotency-Key": f"idem_harness_preview_{uuid4().hex[:8]}"}
-    payload = {"provider_key": provider_key, "model": "model-a", "message": "preview me", "stream": False}
+    headers = {
+        **admin_headers,
+        "Idempotency-Key": f"idem_harness_preview_{uuid4().hex[:8]}",
+    }
+    payload = {
+        "provider_key": provider_key,
+        "model": "model-a",
+        "message": "preview me",
+        "stream": False,
+    }
     first = client.post("/admin/providers/harness/preview", headers=headers, json=payload)
     second = client.post("/admin/providers/harness/preview", headers=headers, json=payload)
 
@@ -456,12 +494,26 @@ def test_admin_harness_dry_run_replays_redacted_outcome_without_repeating_side_e
     )
     assert created.status_code == 200
 
-    headers = {**admin_headers, "Idempotency-Key": f"idem_harness_dry_run_{uuid4().hex[:8]}"}
-    payload = {"provider_key": provider_key, "model": "model-a", "message": "dry run", "stream": False}
+    headers = {
+        **admin_headers,
+        "Idempotency-Key": f"idem_harness_dry_run_{uuid4().hex[:8]}",
+    }
+    payload = {
+        "provider_key": provider_key,
+        "model": "model-a",
+        "message": "dry run",
+        "stream": False,
+    }
     first = client.post("/admin/providers/harness/dry-run", headers=headers, json=payload)
-    runs_after_first = client.get(f"/admin/providers/harness/runs?provider_key={provider_key}", headers=admin_headers)
+    runs_after_first = client.get(
+        f"/admin/providers/harness/runs?provider_key={provider_key}",
+        headers=admin_headers,
+    )
     second = client.post("/admin/providers/harness/dry-run", headers=headers, json=payload)
-    runs_after_second = client.get(f"/admin/providers/harness/runs?provider_key={provider_key}", headers=admin_headers)
+    runs_after_second = client.get(
+        f"/admin/providers/harness/runs?provider_key={provider_key}",
+        headers=admin_headers,
+    )
 
     assert first.status_code == 200
     assert second.status_code == 200
@@ -490,12 +542,26 @@ def test_admin_harness_verify_replays_redacted_outcome_without_repeating_side_ef
     )
     assert created.status_code == 200
 
-    headers = {**admin_headers, "Idempotency-Key": f"idem_harness_verify_{uuid4().hex[:8]}"}
-    payload = {"provider_key": provider_key, "model": "model-a", "include_preview": True, "live_probe": False}
+    headers = {
+        **admin_headers,
+        "Idempotency-Key": f"idem_harness_verify_{uuid4().hex[:8]}",
+    }
+    payload = {
+        "provider_key": provider_key,
+        "model": "model-a",
+        "include_preview": True,
+        "live_probe": False,
+    }
     first = client.post("/admin/providers/harness/verify", headers=headers, json=payload)
-    runs_after_first = client.get(f"/admin/providers/harness/runs?provider_key={provider_key}", headers=admin_headers)
+    runs_after_first = client.get(
+        f"/admin/providers/harness/runs?provider_key={provider_key}",
+        headers=admin_headers,
+    )
     second = client.post("/admin/providers/harness/verify", headers=headers, json=payload)
-    runs_after_second = client.get(f"/admin/providers/harness/runs?provider_key={provider_key}", headers=admin_headers)
+    runs_after_second = client.get(
+        f"/admin/providers/harness/runs?provider_key={provider_key}",
+        headers=admin_headers,
+    )
 
     assert first.status_code == 200
     assert second.status_code == 200
@@ -515,14 +581,27 @@ def test_admin_harness_probe_rejects_idempotency_key_until_raw_upstream_redactio
 
     def _fake_probe(payload):  # pragma: no cover - exercised through the route
         called["value"] = True
-        return {"status_code": 200, "parsed": {"status": "ok"}, "raw": {"status": "ok"}, "run": {"status": "ok"}}
+        return {
+            "status_code": 200,
+            "parsed": {"status": "ok"},
+            "raw": {"status": "ok"},
+            "run": {"status": "ok"},
+        }
 
     monkeypatch.setattr(probe_service, "harness_probe", _fake_probe)
 
     response = client.post(
         "/admin/providers/harness/probe",
-        headers={**admin_headers, "Idempotency-Key": f"idem_harness_probe_{uuid4().hex[:8]}"},
-        json={"provider_key": "probe-profile", "model": "model-a", "message": "probe me", "stream": False},
+        headers={
+            **admin_headers,
+            "Idempotency-Key": f"idem_harness_probe_{uuid4().hex[:8]}",
+        },
+        json={
+            "provider_key": "probe-profile",
+            "model": "model-a",
+            "message": "probe me",
+            "stream": False,
+        },
     )
 
     assert response.status_code == 400

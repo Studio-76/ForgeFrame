@@ -6,7 +6,6 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
-
 IntegrationClass = Literal["openai_compatible", "templated_http", "static_catalog"]
 
 
@@ -165,7 +164,15 @@ class HarnessVerificationRun(BaseModel):
     instance_id: str | None = None
     integration_class: IntegrationClass
     model: str | None = None
-    mode: Literal["verify", "dry_run", "probe", "preview", "sync", "runtime_non_stream", "runtime_stream"]
+    mode: Literal[
+        "verify",
+        "dry_run",
+        "probe",
+        "preview",
+        "sync",
+        "runtime_non_stream",
+        "runtime_stream",
+    ]
     status: Literal["ok", "warning", "failed"] = "ok"
     success: bool
     steps: list[dict[str, Any]]

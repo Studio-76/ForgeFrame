@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from typing import TYPE_CHECKING, Any
 
 from app.api.admin.control_plane_models import HealthConfigUpdateRequest
 from app.control_plane import HealthConfig, HealthStatusRecord
@@ -11,6 +12,18 @@ from app.usage.models import TokenUsage
 
 
 class ControlPlaneHealthDomainMixin:
+    if TYPE_CHECKING:
+        _health_config: Any
+        _registry: Any
+        _providers: Any
+        _analytics: Any
+        _health_records: Any
+        _usage_accounting: Any
+
+        def list_providers(self) -> list[Any]: ...
+        def _health_record_key(self, *args: Any, **kwargs: Any) -> str: ...
+        def _persist_state(self) -> Any: ...
+
     def get_health_config(self) -> HealthConfig:
         return self._health_config
 
@@ -33,11 +46,7 @@ class ControlPlaneHealthDomainMixin:
         check_type = self._health_config.probe_mode
         active_runtime_providers = {model.provider for model in self._registry.list_active_models()}
         for provider in self.list_providers():
-            runtime_status = (
-                self._providers.get_provider_status(provider.provider)
-                if provider.provider in active_runtime_providers
-                else None
-            )
+            runtime_status = self._providers.get_provider_status(provider.provider) if provider.provider in active_runtime_providers else None
             for model in provider.managed_models:
                 if self._health_config.selected_models and model.id not in self._health_config.selected_models:
                     continue

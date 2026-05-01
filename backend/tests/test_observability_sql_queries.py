@@ -1,11 +1,10 @@
-import os
-from pathlib import Path
+from typing import Any
 from uuid import uuid4
 
+from conftest import admin_headers as shared_admin_headers
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, text
 
-from conftest import admin_headers as shared_admin_headers
 from app.api.admin.control_plane import get_control_plane_service
 from app.api.runtime.dependencies import clear_runtime_dependency_caches
 from app.control_plane import OAuthOperationRecord
@@ -21,7 +20,7 @@ def _admin_headers(client: TestClient) -> dict[str, str]:
     return shared_admin_headers(client)
 
 
-def _scoped_postgres_url(schema_name: str) -> tuple[str, object]:
+def _scoped_postgres_url(schema_name: str) -> tuple[str, Any]:
     base_url = "postgresql+psycopg://forgegate:forgegate@localhost:5432/forgegate"
     admin_engine = create_engine(base_url, isolation_level="AUTOCOMMIT")
     scoped_url = f"{base_url}?options=-csearch_path%3D{schema_name}"
@@ -151,12 +150,18 @@ def test_usage_admin_endpoints_use_postgres_pushdown_without_loading_full_event_
         assert aggregate_summary["runtime_duration_ms"]["sample_count"] == 2
         assert aggregate_summary["runtime_duration_ms"]["p95"] == 180
 
-        provider_drilldown = client.get("/admin/usage/providers/openai_api?window=24h&tenantId=tenant_a", headers=headers)
+        provider_drilldown = client.get(
+            "/admin/usage/providers/openai_api?window=24h&tenantId=tenant_a",
+            headers=headers,
+        )
         assert provider_drilldown.status_code == 200
         assert provider_drilldown.json()["drilldown"]["requests"] == 1
         assert provider_drilldown.json()["drilldown"]["errors"] == 1
 
-        client_drilldown = client.get("/admin/usage/clients/shared-client?window=24h&tenantId=tenant_a", headers=headers)
+        client_drilldown = client.get(
+            "/admin/usage/clients/shared-client?window=24h&tenantId=tenant_a",
+            headers=headers,
+        )
         assert client_drilldown.status_code == 200
         assert client_drilldown.json()["drilldown"]["requests"] == 1
         assert client_drilldown.json()["drilldown"]["errors"] == 1
@@ -234,7 +239,10 @@ def test_oauth_operations_endpoint_uses_postgres_tail_queries_without_loading_fu
         assert unfiltered.status_code == 400
         assert unfiltered.json()["error"]["type"] == "tenant_filter_required"
 
-        filtered = client.get("/admin/providers/oauth-account/operations?tenantId=tenant_a", headers=headers)
+        filtered = client.get(
+            "/admin/providers/oauth-account/operations?tenantId=tenant_a",
+            headers=headers,
+        )
         assert filtered.status_code == 200
         assert filtered.json()["tenant_id"] == "tenant_a"
         assert filtered.json()["total_operations"] == 2

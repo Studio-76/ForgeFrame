@@ -19,17 +19,17 @@ from app.providers.base import (
     ProviderAuthenticationError,
     ProviderBadRequestError,
     ProviderCapabilities,
-    ProviderConflictError,
     ProviderConfigurationError,
+    ProviderConflictError,
+    ProviderModelNotFoundError,
+    ProviderPayloadTooLargeError,
     ProviderProtocolError,
     ProviderRateLimitError,
     ProviderRequestTimeoutError,
-    ProviderModelNotFoundError,
+    ProviderResourceGoneError,
     ProviderStreamEvent,
     ProviderStreamInterruptedError,
     ProviderTimeoutError,
-    ProviderPayloadTooLargeError,
-    ProviderResourceGoneError,
     ProviderUnavailableError,
     ProviderUnsupportedMediaTypeError,
     ProviderUpstreamError,
@@ -47,7 +47,14 @@ from app.usage.service import UsageAccountingService
 
 class OpenAIAPIAdapter:
     provider_name = "openai_api"
-    capabilities = ProviderCapabilities(streaming=True, tool_calling=True, tool_calling_level="full", vision=True, embeddings=True, external=True)
+    capabilities = ProviderCapabilities(
+        streaming=True,
+        tool_calling=True,
+        tool_calling_level="full",
+        vision=True,
+        embeddings=True,
+        external=True,
+    )
 
     def __init__(self, settings: Settings):
         self._settings = settings
@@ -96,7 +103,10 @@ class OpenAIAPIAdapter:
             tool_calls = message.get("tool_calls", [])
             finish_reason = first_choice.get("finish_reason", "stop")
         except (KeyError, IndexError, TypeError) as exc:
-            raise ProviderUpstreamError(self.provider_name, f"Malformed response from OpenAI API: {response_payload}") from exc
+            raise ProviderUpstreamError(
+                self.provider_name,
+                f"Malformed response from OpenAI API: {response_payload}",
+            ) from exc
 
         usage = self._usage_from_response(response_payload, request.messages, content)
         cost = self._usage_accounting.costs_for_provider(provider=self.provider_name, usage=usage)
@@ -151,15 +161,24 @@ class OpenAIAPIAdapter:
         response_payload = self._post_json("/embeddings", payload, request.request_metadata)
         data = response_payload.get("data")
         if not isinstance(data, list):
-            raise ProviderProtocolError(self.provider_name, "OpenAI embeddings payload is missing a valid data array.")
+            raise ProviderProtocolError(
+                self.provider_name,
+                "OpenAI embeddings payload is missing a valid data array.",
+            )
 
         embeddings: list[object] = []
         for item in data:
             if not isinstance(item, dict):
-                raise ProviderProtocolError(self.provider_name, "OpenAI embeddings payload contains a malformed data item.")
+                raise ProviderProtocolError(
+                    self.provider_name,
+                    "OpenAI embeddings payload contains a malformed data item.",
+                )
             embedding = item.get("embedding")
             if not isinstance(embedding, (list, str)):
-                raise ProviderProtocolError(self.provider_name, "OpenAI embeddings payload contains an invalid embedding item.")
+                raise ProviderProtocolError(
+                    self.provider_name,
+                    "OpenAI embeddings payload contains an invalid embedding item.",
+                )
             embeddings.append(embedding)
 
         usage = self._usage_from_payload(dict(response_payload.get("usage") or {}))
@@ -249,7 +268,10 @@ class OpenAIAPIAdapter:
         headers = getattr(response, "headers", {}) or {}
         content_type = str(headers.get("content-type", ""))
         if content_type and "json" not in content_type.lower():
-            raise ProviderProtocolError(self.provider_name, f"OpenAI returned unexpected content-type '{content_type}'.")
+            raise ProviderProtocolError(
+                self.provider_name,
+                f"OpenAI returned unexpected content-type '{content_type}'.",
+            )
         try:
             return response.json()
         except ValueError as exc:
@@ -280,7 +302,10 @@ class OpenAIAPIAdapter:
                 headers = getattr(response, "headers", {}) or {}
                 content_type = str(headers.get("content-type", ""))
                 if content_type and "text/event-stream" not in content_type.lower():
-                    raise ProviderStreamInterruptedError(self.provider_name, f"OpenAI stream returned unexpected content-type '{content_type}'.")
+                    raise ProviderStreamInterruptedError(
+                        self.provider_name,
+                        f"OpenAI stream returned unexpected content-type '{content_type}'.",
+                    )
                 saw_done = False
                 for raw_line in response.iter_lines():
                     if not raw_line:
@@ -359,33 +384,70 @@ class OpenAIAPIAdapter:
 
     def _raise_for_status(self, response: httpx.Response) -> None:
         if response.status_code in (401, 403):
-            raise ProviderAuthenticationError(self.provider_name, f"OpenAI authentication failed ({response.status_code}).")
+            raise ProviderAuthenticationError(
+                self.provider_name,
+                f"OpenAI authentication failed ({response.status_code}).",
+            )
 
         if response.status_code == 408:
-            raise ProviderRequestTimeoutError(self.provider_name, f"OpenAI request timeout ({response.status_code}): {response.text[:500]}")
+            raise ProviderRequestTimeoutError(
+                self.provider_name,
+                f"OpenAI request timeout ({response.status_code}): {response.text[:500]}",
+            )
         if response.status_code == 404:
-            raise ProviderModelNotFoundError(self.provider_name, message=f"OpenAI model/resource not found ({response.status_code}): {response.text[:500]}")
+            raise ProviderModelNotFoundError(
+                self.provider_name,
+                message=f"OpenAI model/resource not found ({response.status_code}): {response.text[:500]}",
+            )
         if response.status_code in (400, 422):
-            raise ProviderBadRequestError(self.provider_name, f"OpenAI rejected request ({response.status_code}): {response.text[:500]}")
+            raise ProviderBadRequestError(
+                self.provider_name,
+                f"OpenAI rejected request ({response.status_code}): {response.text[:500]}",
+            )
         if response.status_code == 410:
-            raise ProviderResourceGoneError(self.provider_name, f"OpenAI resource gone ({response.status_code}): {response.text[:500]}")
+            raise ProviderResourceGoneError(
+                self.provider_name,
+                f"OpenAI resource gone ({response.status_code}): {response.text[:500]}",
+            )
         if response.status_code == 413:
-            raise ProviderPayloadTooLargeError(self.provider_name, f"OpenAI payload too large ({response.status_code}): {response.text[:500]}")
+            raise ProviderPayloadTooLargeError(
+                self.provider_name,
+                f"OpenAI payload too large ({response.status_code}): {response.text[:500]}",
+            )
         if response.status_code == 415:
-            raise ProviderUnsupportedMediaTypeError(self.provider_name, f"OpenAI media type unsupported ({response.status_code}): {response.text[:500]}")
+            raise ProviderUnsupportedMediaTypeError(
+                self.provider_name,
+                f"OpenAI media type unsupported ({response.status_code}): {response.text[:500]}",
+            )
         if response.status_code == 409:
-            raise ProviderConflictError(self.provider_name, f"OpenAI conflict ({response.status_code}): {response.text[:500]}")
+            raise ProviderConflictError(
+                self.provider_name,
+                f"OpenAI conflict ({response.status_code}): {response.text[:500]}",
+            )
         if response.status_code == 429:
             retry_after = self._parse_retry_after_seconds(response.headers.get("retry-after"))
-            raise ProviderRateLimitError(self.provider_name, f"OpenAI rate limit reached ({response.status_code}): {response.text[:500]}", retry_after_seconds=retry_after)
+            raise ProviderRateLimitError(
+                self.provider_name,
+                f"OpenAI rate limit reached ({response.status_code}): {response.text[:500]}",
+                retry_after_seconds=retry_after,
+            )
 
         if response.status_code >= 500:
             if response.status_code == 503:
-                raise ProviderUnavailableError(self.provider_name, f"OpenAI temporarily unavailable ({response.status_code}): {response.text[:500]}")
-            raise ProviderUpstreamError(self.provider_name, f"OpenAI upstream error ({response.status_code}): {response.text[:500]}")
+                raise ProviderUnavailableError(
+                    self.provider_name,
+                    f"OpenAI temporarily unavailable ({response.status_code}): {response.text[:500]}",
+                )
+            raise ProviderUpstreamError(
+                self.provider_name,
+                f"OpenAI upstream error ({response.status_code}): {response.text[:500]}",
+            )
 
         if response.status_code >= 300:
-            raise ProviderUpstreamError(self.provider_name, f"Unexpected OpenAI response ({response.status_code}): {response.text[:500]}")
+            raise ProviderUpstreamError(
+                self.provider_name,
+                f"Unexpected OpenAI response ({response.status_code}): {response.text[:500]}",
+            )
 
     @staticmethod
     def _parse_retry_after_seconds(value: str | None) -> int | None:

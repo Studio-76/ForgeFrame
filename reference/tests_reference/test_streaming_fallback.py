@@ -1,10 +1,8 @@
 """Tests for true streaming with mid-stream fallback."""
 
-import asyncio
 import json
 import os
-import time
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 
@@ -21,6 +19,7 @@ from nadirclaw.server import (
 def _make_request(messages=None):
     """Create a minimal ChatCompletionRequest-like object."""
     from nadirclaw.server import ChatCompletionRequest
+
     return ChatCompletionRequest(
         messages=messages or [{"role": "user", "content": "Hello"}],
         stream=True,
@@ -48,11 +47,11 @@ def _parse_sse_events(events):
 
 
 class TestStreamWithFallback:
-
     @pytest.mark.asyncio
     @patch("nadirclaw.server._dispatch_model_stream")
     async def test_successful_stream(self, mock_dispatch):
         """Primary model streams successfully — no fallback needed."""
+
         async def _fake_stream(model, request, provider):
             yield {"role": "assistant", "content": "Hello "}, None, None
             yield {"content": "world"}, None, None
@@ -70,7 +69,8 @@ class TestStreamWithFallback:
         # Should have content chunks + finish + [DONE]
         assert parsed[-1] == "[DONE]"
         assert any(
-            isinstance(p, dict) and p.get("choices", [{}])[0].get("delta", {}).get("content") == "Hello "
+            isinstance(p, dict)
+            and p.get("choices", [{}])[0].get("delta", {}).get("content") == "Hello "
             for p in parsed
         )
         assert "fallback_from" not in analysis
@@ -109,10 +109,15 @@ class TestStreamWithFallback:
 
         # Should have content from fallback
         content_chunks = [
-            p for p in parsed
-            if isinstance(p, dict) and p.get("choices", [{}])[0].get("delta", {}).get("content")
+            p
+            for p in parsed
+            if isinstance(p, dict)
+            and p.get("choices", [{}])[0].get("delta", {}).get("content")
         ]
-        assert any("From fallback" in c["choices"][0]["delta"]["content"] for c in content_chunks)
+        assert any(
+            "From fallback" in c["choices"][0]["delta"]["content"]
+            for c in content_chunks
+        )
         assert analysis.get("fallback_from") == "model-a"
 
     @pytest.mark.asyncio
@@ -210,6 +215,7 @@ class TestStreamWithFallback:
     @patch("nadirclaw.server._dispatch_model_stream")
     async def test_usage_tracked(self, mock_dispatch):
         """Usage from the stream is captured in analysis_info."""
+
         async def _stream(model, request, provider):
             yield {"role": "assistant", "content": "Hi"}, None, None
             yield {}, {"prompt_tokens": 15, "completion_tokens": 8}, "stop"

@@ -5,11 +5,24 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import Any
 
-from sqlalchemy import JSON, CheckConstraint, DateTime, ForeignKeyConstraint, Integer, Index, String, Text
+from sqlalchemy import (
+    JSON,
+    CheckConstraint,
+    DateTime,
+    ForeignKeyConstraint,
+    Index,
+    Integer,
+    String,
+    Text,
+)
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
-from app.artifacts.models import ARTIFACT_ATTACHMENT_TARGET_KINDS, ARTIFACT_STATUSES, ARTIFACT_TYPES
+from app.artifacts.models import (
+    ARTIFACT_ATTACHMENT_TARGET_KINDS,
+    ARTIFACT_STATUSES,
+    ARTIFACT_TYPES,
+)
 from app.storage.harness_repository import Base
 
 
@@ -35,10 +48,23 @@ class ArtifactORM(Base):
         ),
         _enum_check("artifacts_type_ck", "artifact_type", ARTIFACT_TYPES),
         _enum_check("artifacts_status_ck", "status", ARTIFACT_STATUSES),
-        CheckConstraint("size_bytes IS NULL OR size_bytes >= 0", name="artifacts_size_bytes_nonnegative_ck"),
+        CheckConstraint(
+            "size_bytes IS NULL OR size_bytes >= 0",
+            name="artifacts_size_bytes_nonnegative_ck",
+        ),
         Index("artifacts_company_id_id_uq", "company_id", "id", unique=True),
-        Index("artifacts_company_workspace_created_idx", "company_id", "workspace_id", "created_at"),
-        Index("artifacts_instance_status_created_idx", "instance_id", "status", "created_at"),
+        Index(
+            "artifacts_company_workspace_created_idx",
+            "company_id",
+            "workspace_id",
+            "created_at",
+        ),
+        Index(
+            "artifacts_instance_status_created_idx",
+            "instance_id",
+            "status",
+            "created_at",
+        ),
     )
 
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
@@ -73,7 +99,11 @@ class ArtifactAttachmentORM(Base):
             name="artifact_attachments_company_artifact_fk",
             ondelete="CASCADE",
         ),
-        _enum_check("artifact_attachments_target_kind_ck", "target_kind", ARTIFACT_ATTACHMENT_TARGET_KINDS),
+        _enum_check(
+            "artifact_attachments_target_kind_ck",
+            "target_kind",
+            ARTIFACT_ATTACHMENT_TARGET_KINDS,
+        ),
         Index(
             "artifact_attachments_company_artifact_target_role_uq",
             "company_id",
@@ -83,7 +113,13 @@ class ArtifactAttachmentORM(Base):
             "role",
             unique=True,
         ),
-        Index("artifact_attachments_target_lookup_idx", "company_id", "target_kind", "target_id", "created_at"),
+        Index(
+            "artifact_attachments_target_lookup_idx",
+            "company_id",
+            "target_kind",
+            "target_id",
+            "created_at",
+        ),
     )
 
     id: Mapped[str] = mapped_column(String(64), primary_key=True)

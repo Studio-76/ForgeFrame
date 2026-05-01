@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
-from sqlalchemy import create_engine, select
+from sqlalchemy import create_engine
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.execution.admin_service import ExecutionAdminService
@@ -13,11 +13,17 @@ from app.storage.execution_repository import RunAttemptORM, RunORM
 from app.storage.models import Base
 
 
-def _services(tmp_path: Path) -> tuple[ExecutionTransitionService, ExecutionAdminService, sessionmaker[Session]]:
+def _services(
+    tmp_path: Path,
+) -> tuple[ExecutionTransitionService, ExecutionAdminService, sessionmaker[Session]]:
     engine = create_engine(f"sqlite+pysqlite:///{tmp_path / 'execution-operator.sqlite'}")
     Base.metadata.create_all(engine)
     session_factory = sessionmaker(engine, autoflush=False, expire_on_commit=False)
-    return ExecutionTransitionService(session_factory), ExecutionAdminService(session_factory), session_factory
+    return (
+        ExecutionTransitionService(session_factory),
+        ExecutionAdminService(session_factory),
+        session_factory,
+    )
 
 
 def _instance(company_id: str = "company_alpha") -> InstanceRecord:

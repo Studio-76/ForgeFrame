@@ -21,9 +21,7 @@ SENSITIVE_KEY_NAMES = {
     "client_secret",
     "auth_value",
 }
-SENSITIVE_KEY_PATTERN = re.compile(
-    r"(?:^|_)(authorization|proxy_authorization|x_api_key|api_key|apikey|token|access_token|refresh_token|secret|client_secret|auth_value)(?:_|$)"
-)
+SENSITIVE_KEY_PATTERN = re.compile(r"(?:^|_)(authorization|proxy_authorization|x_api_key|api_key|apikey|token|access_token|refresh_token|secret|client_secret|auth_value)(?:_|$)")
 BEARER_TOKEN_PATTERN = re.compile(r"(?i)\b(Bearer)\s+([^\s,;\"'}\]]+)")
 SENSITIVE_STRING_PATTERN = re.compile(
     r"""
@@ -102,7 +100,9 @@ def redact_sensitive_payload(payload: Any) -> Any:
     return redacted
 
 
-def redacted_harness_profile_payload(profile: HarnessProviderProfile | HarnessProfileRecord) -> dict[str, Any]:
+def redacted_harness_profile_payload(
+    profile: HarnessProviderProfile | HarnessProfileRecord,
+) -> dict[str, Any]:
     return redact_sensitive_payload(profile.model_dump())
 
 

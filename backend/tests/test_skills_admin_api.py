@@ -1,8 +1,9 @@
-from fastapi.testclient import TestClient
 from uuid import uuid4
 
-from app.main import app
 from conftest import admin_headers as shared_admin_headers
+from fastapi.testclient import TestClient
+
+from app.main import app
 
 
 def _admin_headers(client: TestClient) -> dict[str, str]:
@@ -64,7 +65,12 @@ def _create_agent(
 def test_skill_lifecycle_versions_activation_and_usage_are_persisted() -> None:
     client = TestClient(app)
     headers = _admin_headers(client)
-    instance_id = _create_instance(client, headers, instance_id="instance_skills_alpha", company_id="company_skills_alpha")
+    instance_id = _create_instance(
+        client,
+        headers,
+        instance_id="instance_skills_alpha",
+        company_id="company_skills_alpha",
+    )
     skill_id = f"skill_review_alpha_{uuid4().hex[:8]}"
     reviewer_id = _create_agent(
         client,

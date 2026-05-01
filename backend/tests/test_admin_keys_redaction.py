@@ -1,6 +1,6 @@
+from conftest import admin_headers as shared_admin_headers
 from fastapi.testclient import TestClient
 
-from conftest import admin_headers as shared_admin_headers
 from app.api.runtime.dependencies import clear_runtime_dependency_caches
 from app.governance.service import get_governance_service
 from app.main import app
@@ -68,7 +68,10 @@ def test_admin_runtime_key_responses_never_serialize_secret_hash() -> None:
         },
     )
     assert policy_response.status_code == 200, policy_response.text
-    assert policy_response.json()["key"]["allowed_request_paths"] == ["smart_routing", "review_required"]
+    assert policy_response.json()["key"]["allowed_request_paths"] == [
+        "smart_routing",
+        "review_required",
+    ]
     assert "secret_hash" not in policy_response.json()["key"]
 
     revoke_response = client.post(f"/admin/keys/{key_id}/revoke", headers=headers, json={})

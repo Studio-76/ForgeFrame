@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from typing import TYPE_CHECKING, Any
 
 from app.control_plane import (
     ProviderCatalogEvidenceRecord,
@@ -15,7 +16,6 @@ from app.control_plane.provider_catalog_seed import (
     load_provider_catalog_seed,
 )
 from app.harness.templates import BUILTIN_TEMPLATES
-
 
 _EXACT_RUNTIME_BINDINGS = {
     "openai": "openai_api",
@@ -62,7 +62,13 @@ _UNIT_TESTED_PROVIDERS = {
     "ollama",
 }
 
-_ERROR_FIDELITY_PROVIDERS = {"openai", "openai_codex", "anthropic", "gemini_native", "ollama"}
+_ERROR_FIDELITY_PROVIDERS = {
+    "openai",
+    "openai_codex",
+    "anthropic",
+    "gemini_native",
+    "ollama",
+}
 _CREDENTIAL_REFRESH_PROVIDERS = {"openai_codex", "google_gemini_oauth"}
 
 _EVIDENCE_STATUS_ORDER = [
@@ -75,19 +81,36 @@ _EVIDENCE_STATUS_ORDER = [
 
 
 class ControlPlaneProviderCatalogDomainMixin:
+    if TYPE_CHECKING:
+        _provider_catalog_state: Any
+        _effective_truth_projection_tenant_id: Any
+
+        def list_providers(self) -> list[Any]: ...
+        def list_oauth_account_target_statuses(self, *args: Any, **kwargs: Any) -> list[Any]: ...
+        def product_axis_targets(self, *args: Any, **kwargs: Any) -> list[Any]: ...
+        def _provider_capability_evidence(self, *args: Any, **kwargs: Any) -> Any: ...
+
     @staticmethod
     def _catalog_now_iso() -> str:
         return datetime.now(tz=UTC).isoformat()
 
     @staticmethod
     def _catalog_product_axis(provider_class: str) -> str:
-        if provider_class in {"oauth_account_runtime", "oauth_cli_bridge", "external_process"}:
+        if provider_class in {
+            "oauth_account_runtime",
+            "oauth_cli_bridge",
+            "external_process",
+        }:
             return "oauth_account_providers"
         if provider_class in {"openai_compatible_local"}:
             return "local_providers"
         if provider_class in {"client_config_reference", "agent_endpoint_compat"}:
             return "openai_compatible_clients"
-        if provider_class in {"anthropic_messages", "gemini_native", "bedrock_converse"}:
+        if provider_class in {
+            "anthropic_messages",
+            "gemini_native",
+            "bedrock_converse",
+        }:
             return "unmapped_native_runtime"
         if provider_class in {"openai_compatible", "openai_compatible_aggregator"}:
             return "openai_compatible_providers"
@@ -97,9 +120,15 @@ class ControlPlaneProviderCatalogDomainMixin:
         runtime_provider = _EXACT_RUNTIME_BINDINGS.get(seed.provider_id)
         oauth_target = _OAUTH_TARGET_BINDINGS.get(seed.provider_id)
         product_axis_binding = _PRODUCT_AXIS_BINDINGS.get(seed.provider_id)
-        if product_axis_binding is None and seed.provider_class in {"openai_compatible", "openai_compatible_aggregator"}:
+        if product_axis_binding is None and seed.provider_class in {
+            "openai_compatible",
+            "openai_compatible_aggregator",
+        }:
             product_axis_binding = "openai_compatible_generic"
-        if product_axis_binding is None and seed.provider_class in {"openai_compatible_local", "oauth_account_runtime"}:
+        if product_axis_binding is None and seed.provider_class in {
+            "openai_compatible_local",
+            "oauth_account_runtime",
+        }:
             product_axis_binding = seed.provider_id
         return runtime_provider, oauth_target, product_axis_binding
 
@@ -119,8 +148,8 @@ class ControlPlaneProviderCatalogDomainMixin:
             provider_id=seed.provider_id,
             display_name=seed.display_name,
             raw_class=seed.raw_class,
-            provider_class=seed.provider_class,  # type: ignore[arg-type]
-            source_kind=seed.source_kind,  # type: ignore[arg-type]
+            provider_class=seed.provider_class,
+            source_kind=seed.source_kind,
             source_docs=list(seed.source_docs),
             local_reference_paths=list(seed.local_reference_paths),
             auth_modes_supported=list(seed.auth_modes_supported),
@@ -169,8 +198,8 @@ class ControlPlaneProviderCatalogDomainMixin:
             return
         existing.append(current.model_copy(update={"recorded_at": current.recorded_at or now_iso}))
 
-    def _oauth_target_status_by_key(self, tenant_id: str | None = None) -> dict[str, dict[str, object]]:
-        status_map: dict[str, dict[str, object]] = {}
+    def _oauth_target_status_by_key(self, tenant_id: str | None = None) -> dict[str, dict[str, Any]]:
+        status_map: dict[str, dict[str, Any]] = {}
         try:
             for item in self.list_oauth_account_target_statuses(tenant_id=tenant_id):
                 provider_key = str(item.get("provider_key") or "")
@@ -180,12 +209,8 @@ class ControlPlaneProviderCatalogDomainMixin:
             return {}
         return status_map
 
-    def _product_axis_target_map(self, tenant_id: str | None = None) -> dict[str, dict[str, object]]:
-        return {
-            str(item.get("provider_key") or ""): item
-            for item in self.product_axis_targets(tenant_id=tenant_id)
-            if item.get("provider_key")
-        }
+    def _product_axis_target_map(self, tenant_id: str | None = None) -> dict[str, dict[str, Any]]:
+        return {str(item.get("provider_key") or ""): item for item in self.product_axis_targets(tenant_id=tenant_id) if item.get("provider_key")}
 
     def _provider_catalog_evidence_snapshot(
         self,
@@ -193,8 +218,8 @@ class ControlPlaneProviderCatalogDomainMixin:
         *,
         tenant_id: str | None = None,
         current_provider_keys: set[str] | None = None,
-        oauth_statuses: dict[str, dict[str, object]] | None = None,
-        product_axis_targets: dict[str, dict[str, object]] | None = None,
+        oauth_statuses: dict[str, dict[str, Any]] | None = None,
+        product_axis_targets: dict[str, dict[str, Any]] | None = None,
     ) -> list[ProviderCatalogEvidenceRecord]:
         current_provider_keys = current_provider_keys or {provider.provider for provider in self.list_providers()}
         oauth_statuses = oauth_statuses or self._oauth_target_status_by_key(tenant_id=tenant_id)
@@ -227,23 +252,14 @@ class ControlPlaneProviderCatalogDomainMixin:
             ),
         ]
 
-        runtime_binding_shipped = (
-            entry.runtime_provider_binding is not None
-            and entry.runtime_provider_binding in _SHIPPED_RUNTIME_BINDINGS
-        )
-        if entry.runtime_provider_binding and (
-            entry.runtime_provider_binding in current_provider_keys or runtime_binding_shipped
-        ):
+        runtime_binding_shipped = entry.runtime_provider_binding is not None and entry.runtime_provider_binding in _SHIPPED_RUNTIME_BINDINGS
+        if entry.runtime_provider_binding and (entry.runtime_provider_binding in current_provider_keys or runtime_binding_shipped):
             records.append(
                 ProviderCatalogEvidenceRecord(
                     provider_id=entry.provider_id,
                     evidence_class="repo_observed",
                     status="observed",
-                    source_kind=(
-                        "repo_runtime"
-                        if entry.runtime_provider_binding in current_provider_keys
-                        else "repo_runtime_binding"
-                    ),
+                    source_kind=("repo_runtime" if entry.runtime_provider_binding in current_provider_keys else "repo_runtime_binding"),
                     source_ref=f"runtime:{entry.runtime_provider_binding}",
                     details=(
                         f"Native runtime provider binding '{entry.runtime_provider_binding}' is active in the current repository."
@@ -253,40 +269,38 @@ class ControlPlaneProviderCatalogDomainMixin:
                 )
             )
             provider_evidence = self._provider_capability_evidence(entry.runtime_provider_binding, tenant_id=tenant_id)
-            records.extend(
-                [
-                    ProviderCatalogEvidenceRecord(
-                        provider_id=entry.provider_id,
-                        target_key=entry.runtime_provider_binding,
-                        evidence_class="live_probe_verified",
-                        status=(provider_evidence.live_probe.status if provider_evidence.live_probe.status != "missing" else "blocked-by-live-evidence"),  # type: ignore[arg-type]
-                        source_kind=provider_evidence.live_probe.source,
-                        source_ref=entry.runtime_provider_binding,
-                        recorded_at=provider_evidence.live_probe.recorded_at,
-                        details=provider_evidence.live_probe.details,
-                    ),
-                    ProviderCatalogEvidenceRecord(
-                        provider_id=entry.provider_id,
-                        target_key=entry.runtime_provider_binding,
-                        evidence_class="streaming_verified",
-                        status=(provider_evidence.streaming.status if provider_evidence.streaming.status != "missing" else "blocked-by-live-evidence"),  # type: ignore[arg-type]
-                        source_kind=provider_evidence.streaming.source,
-                        source_ref=entry.runtime_provider_binding,
-                        recorded_at=provider_evidence.streaming.recorded_at,
-                        details=provider_evidence.streaming.details,
-                    ),
-                    ProviderCatalogEvidenceRecord(
-                        provider_id=entry.provider_id,
-                        target_key=entry.runtime_provider_binding,
-                        evidence_class="tool_calling_verified",
-                        status=(provider_evidence.tool_calling.status if provider_evidence.tool_calling.status != "missing" else "blocked-by-live-evidence"),  # type: ignore[arg-type]
-                        source_kind=provider_evidence.tool_calling.source,
-                        source_ref=entry.runtime_provider_binding,
-                        recorded_at=provider_evidence.tool_calling.recorded_at,
-                        details=provider_evidence.tool_calling.details,
-                    ),
-                ]
-            )
+            records.extend([
+                ProviderCatalogEvidenceRecord(
+                    provider_id=entry.provider_id,
+                    target_key=entry.runtime_provider_binding,
+                    evidence_class="live_probe_verified",
+                    status=(provider_evidence.live_probe.status if provider_evidence.live_probe.status != "missing" else "blocked-by-live-evidence"),
+                    source_kind=provider_evidence.live_probe.source,
+                    source_ref=entry.runtime_provider_binding,
+                    recorded_at=provider_evidence.live_probe.recorded_at,
+                    details=provider_evidence.live_probe.details,
+                ),
+                ProviderCatalogEvidenceRecord(
+                    provider_id=entry.provider_id,
+                    target_key=entry.runtime_provider_binding,
+                    evidence_class="streaming_verified",
+                    status=(provider_evidence.streaming.status if provider_evidence.streaming.status != "missing" else "blocked-by-live-evidence"),
+                    source_kind=provider_evidence.streaming.source,
+                    source_ref=entry.runtime_provider_binding,
+                    recorded_at=provider_evidence.streaming.recorded_at,
+                    details=provider_evidence.streaming.details,
+                ),
+                ProviderCatalogEvidenceRecord(
+                    provider_id=entry.provider_id,
+                    target_key=entry.runtime_provider_binding,
+                    evidence_class="tool_calling_verified",
+                    status=(provider_evidence.tool_calling.status if provider_evidence.tool_calling.status != "missing" else "blocked-by-live-evidence"),
+                    source_kind=provider_evidence.tool_calling.source,
+                    source_ref=entry.runtime_provider_binding,
+                    recorded_at=provider_evidence.tool_calling.recorded_at,
+                    details=provider_evidence.tool_calling.details,
+                ),
+            ])
         elif entry.oauth_target_binding and entry.oauth_target_binding in oauth_statuses:
             oauth_status = oauth_statuses[entry.oauth_target_binding]
             evidence = oauth_status.get("evidence") or {}
@@ -304,40 +318,38 @@ class ControlPlaneProviderCatalogDomainMixin:
                     details=f"OAuth/account onboarding surface '{entry.oauth_target_binding}' exists in the current repository.",
                 )
             )
-            records.extend(
-                [
-                    ProviderCatalogEvidenceRecord(
-                        provider_id=entry.provider_id,
-                        target_key=entry.oauth_target_binding,
-                        evidence_class="live_probe_verified",
-                        status=live_probe.get("status", "blocked-by-live-evidence"),
-                        source_kind=str(live_probe.get("source") or "oauth_probe"),
-                        source_ref=entry.oauth_target_binding,
-                        recorded_at=live_probe.get("recorded_at"),
-                        details=str(live_probe.get("details") or "No live probe evidence recorded yet."),
-                    ),
-                    ProviderCatalogEvidenceRecord(
-                        provider_id=entry.provider_id,
-                        target_key=entry.oauth_target_binding,
-                        evidence_class="streaming_verified",
-                        status=streaming.get("status", "blocked-by-live-evidence"),
-                        source_kind=str(streaming.get("source") or "none"),
-                        source_ref=entry.oauth_target_binding,
-                        recorded_at=streaming.get("recorded_at"),
-                        details=str(streaming.get("details") or "No streaming evidence recorded yet."),
-                    ),
-                    ProviderCatalogEvidenceRecord(
-                        provider_id=entry.provider_id,
-                        target_key=entry.oauth_target_binding,
-                        evidence_class="tool_calling_verified",
-                        status=tool_calling.get("status", "blocked-by-live-evidence"),
-                        source_kind=str(tool_calling.get("source") or "none"),
-                        source_ref=entry.oauth_target_binding,
-                        recorded_at=tool_calling.get("recorded_at"),
-                        details=str(tool_calling.get("details") or "No tool-calling evidence recorded yet."),
-                    ),
-                ]
-            )
+            records.extend([
+                ProviderCatalogEvidenceRecord(
+                    provider_id=entry.provider_id,
+                    target_key=entry.oauth_target_binding,
+                    evidence_class="live_probe_verified",
+                    status=live_probe.get("status", "blocked-by-live-evidence"),
+                    source_kind=str(live_probe.get("source") or "oauth_probe"),
+                    source_ref=entry.oauth_target_binding,
+                    recorded_at=live_probe.get("recorded_at"),
+                    details=str(live_probe.get("details") or "No live probe evidence recorded yet."),
+                ),
+                ProviderCatalogEvidenceRecord(
+                    provider_id=entry.provider_id,
+                    target_key=entry.oauth_target_binding,
+                    evidence_class="streaming_verified",
+                    status=streaming.get("status", "blocked-by-live-evidence"),
+                    source_kind=str(streaming.get("source") or "none"),
+                    source_ref=entry.oauth_target_binding,
+                    recorded_at=streaming.get("recorded_at"),
+                    details=str(streaming.get("details") or "No streaming evidence recorded yet."),
+                ),
+                ProviderCatalogEvidenceRecord(
+                    provider_id=entry.provider_id,
+                    target_key=entry.oauth_target_binding,
+                    evidence_class="tool_calling_verified",
+                    status=tool_calling.get("status", "blocked-by-live-evidence"),
+                    source_kind=str(tool_calling.get("source") or "none"),
+                    source_ref=entry.oauth_target_binding,
+                    recorded_at=tool_calling.get("recorded_at"),
+                    details=str(tool_calling.get("details") or "No tool-calling evidence recorded yet."),
+                ),
+            ])
             if runtime:
                 records.append(
                     ProviderCatalogEvidenceRecord(
@@ -350,7 +362,11 @@ class ControlPlaneProviderCatalogDomainMixin:
                         details=str(runtime.get("details") or "Runtime path exists, but typed error fidelity is not yet separately evidenced."),
                     )
                 )
-        elif template_id and entry.provider_class in {"openai_compatible", "openai_compatible_aggregator", "openai_compatible_local"}:
+        elif template_id and entry.provider_class in {
+            "openai_compatible",
+            "openai_compatible_aggregator",
+            "openai_compatible_local",
+        }:
             source_kind = "repo_harness_template" if template_id else "repo_harness"
             source_ref = template_id or "generic_harness"
             repo_details = (
@@ -358,79 +374,75 @@ class ControlPlaneProviderCatalogDomainMixin:
                 if template_id
                 else "Generic OpenAI-compatible provider framework exists through the harness adapter and onboarding surface."
             )
-            records.extend(
-                [
-                    ProviderCatalogEvidenceRecord(
-                        provider_id=entry.provider_id,
-                        evidence_class="repo_observed",
-                        status="observed",
-                        source_kind=source_kind,
-                        source_ref=source_ref,
-                        details=repo_details,
-                    ),
-                    ProviderCatalogEvidenceRecord(
-                        provider_id=entry.provider_id,
-                        evidence_class="live_probe_verified",
-                        status="blocked-by-live-evidence",
-                        source_kind=source_kind,
-                        source_ref=source_ref,
-                        details="Exact provider wiring exists, but this row still has no live probe evidence.",
-                    ),
-                    ProviderCatalogEvidenceRecord(
-                        provider_id=entry.provider_id,
-                        evidence_class="streaming_verified",
-                        status="blocked-by-live-evidence",
-                        source_kind=source_kind,
-                        source_ref=source_ref,
-                        details="Streaming-capable framework wiring exists, but this exact provider has no recorded streaming evidence yet.",
-                    ),
-                    ProviderCatalogEvidenceRecord(
-                        provider_id=entry.provider_id,
-                        evidence_class="tool_calling_verified",
-                        status="blocked-by-live-evidence",
-                        source_kind=source_kind,
-                        source_ref=source_ref,
-                        details="Tool-capable framework wiring exists, but this exact provider has no recorded tool-call evidence yet.",
-                    ),
-                ]
-            )
+            records.extend([
+                ProviderCatalogEvidenceRecord(
+                    provider_id=entry.provider_id,
+                    evidence_class="repo_observed",
+                    status="observed",
+                    source_kind=source_kind,
+                    source_ref=source_ref,
+                    details=repo_details,
+                ),
+                ProviderCatalogEvidenceRecord(
+                    provider_id=entry.provider_id,
+                    evidence_class="live_probe_verified",
+                    status="blocked-by-live-evidence",
+                    source_kind=source_kind,
+                    source_ref=source_ref,
+                    details="Exact provider wiring exists, but this row still has no live probe evidence.",
+                ),
+                ProviderCatalogEvidenceRecord(
+                    provider_id=entry.provider_id,
+                    evidence_class="streaming_verified",
+                    status="blocked-by-live-evidence",
+                    source_kind=source_kind,
+                    source_ref=source_ref,
+                    details="Streaming-capable framework wiring exists, but this exact provider has no recorded streaming evidence yet.",
+                ),
+                ProviderCatalogEvidenceRecord(
+                    provider_id=entry.provider_id,
+                    evidence_class="tool_calling_verified",
+                    status="blocked-by-live-evidence",
+                    source_kind=source_kind,
+                    source_ref=source_ref,
+                    details="Tool-capable framework wiring exists, but this exact provider has no recorded tool-call evidence yet.",
+                ),
+            ])
         elif entry.product_axis_binding == "openai_compatible_generic" and "generic_harness" in current_provider_keys:
-            records.extend(
-                [
-                    ProviderCatalogEvidenceRecord(
-                        provider_id=entry.provider_id,
-                        evidence_class="repo_observed",
-                        status="observed",
-                        source_kind="repo_harness",
-                        source_ref="generic_harness",
-                        details="Generic OpenAI-compatible provider framework exists through the harness adapter and onboarding surface.",
-                    ),
-                    ProviderCatalogEvidenceRecord(
-                        provider_id=entry.provider_id,
-                        evidence_class="live_probe_verified",
-                        status="blocked-by-live-evidence",
-                        source_kind="repo_harness",
-                        source_ref="generic_harness",
-                        details="Generic harness wiring exists, but this exact provider has no recorded live probe yet.",
-                    ),
-                    ProviderCatalogEvidenceRecord(
-                        provider_id=entry.provider_id,
-                        evidence_class="streaming_verified",
-                        status="blocked-by-live-evidence",
-                        source_kind="repo_harness",
-                        source_ref="generic_harness",
-                        details="Generic harness wiring exists, but this exact provider has no recorded streaming evidence yet.",
-                    ),
-                    ProviderCatalogEvidenceRecord(
-                        provider_id=entry.provider_id,
-                        evidence_class="tool_calling_verified",
-                        status="blocked-by-live-evidence",
-                        source_kind="repo_harness",
-                        source_ref="generic_harness",
-                        details="Generic harness wiring exists, but this exact provider has no recorded tool-call evidence yet.",
-                    ),
-                ]
-            )
+            records.extend([
+                ProviderCatalogEvidenceRecord(
+                    provider_id=entry.provider_id,
+                    evidence_class="repo_observed",
+                    status="observed",
+                    source_kind="repo_harness",
+                    source_ref="generic_harness",
+                    details="Generic OpenAI-compatible provider framework exists through the harness adapter and onboarding surface.",
+                ),
+                ProviderCatalogEvidenceRecord(
+                    provider_id=entry.provider_id,
+                    evidence_class="live_probe_verified",
+                    status="blocked-by-live-evidence",
+                    source_kind="repo_harness",
+                    source_ref="generic_harness",
+                    details="Generic harness wiring exists, but this exact provider has no recorded live probe yet.",
+                ),
+                ProviderCatalogEvidenceRecord(
+                    provider_id=entry.provider_id,
+                    evidence_class="streaming_verified",
+                    status="blocked-by-live-evidence",
+                    source_kind="repo_harness",
+                    source_ref="generic_harness",
+                    details="Generic harness wiring exists, but this exact provider has no recorded streaming evidence yet.",
+                ),
+                ProviderCatalogEvidenceRecord(
+                    provider_id=entry.provider_id,
+                    evidence_class="tool_calling_verified",
+                    status="blocked-by-live-evidence",
+                    source_kind="repo_harness",
+                    source_ref="generic_harness",
+                    details="Generic harness wiring exists, but this exact provider has no recorded tool-call evidence yet.",
+                ),
+            ])
         elif entry.product_axis_binding == "openai_client_compat" and "openai_client_compat" in product_axis_targets:
             records.append(
                 ProviderCatalogEvidenceRecord(
@@ -533,8 +545,19 @@ class ControlPlaneProviderCatalogDomainMixin:
     @staticmethod
     def _catalog_live_signoff(entry: ProviderCatalogRecord, records: list[ProviderCatalogEvidenceRecord]) -> ProviderCatalogSignoffRecord:
         status_by_class = {record.evidence_class: record for record in records}
-        runtime_like_classes = {"openai_compatible", "openai_compatible_aggregator", "openai_compatible_local", "anthropic_messages", "gemini_native", "bedrock_converse", "oauth_account_runtime"}
-        if entry.provider_class in {"client_config_reference", "unsupported_documented"}:
+        runtime_like_classes = {
+            "openai_compatible",
+            "openai_compatible_aggregator",
+            "openai_compatible_local",
+            "anthropic_messages",
+            "gemini_native",
+            "bedrock_converse",
+            "oauth_account_runtime",
+        }
+        if entry.provider_class in {
+            "client_config_reference",
+            "unsupported_documented",
+        }:
             return ProviderCatalogSignoffRecord(
                 provider_id=entry.provider_id,
                 status="skipped",
@@ -545,24 +568,29 @@ class ControlPlaneProviderCatalogDomainMixin:
         streaming = status_by_class.get("streaming_verified")
         tool_calling = status_by_class.get("tool_calling_verified")
         if live_probe and live_probe.status == "observed":
-            if (
-                entry.provider_class not in runtime_like_classes
-                or ((not streaming or streaming.status == "observed") and (not tool_calling or tool_calling.status == "observed"))
-            ):
+            if entry.provider_class not in runtime_like_classes or ((not streaming or streaming.status == "observed") and (not tool_calling or tool_calling.status == "observed")):
                 return ProviderCatalogSignoffRecord(
                     provider_id=entry.provider_id,
                     target_key=entry.runtime_provider_binding or entry.oauth_target_binding,
                     status="pending-review",
                     recorded_at=live_probe.recorded_at,
                     details="Live evidence exists, but no explicit V9 signoff record is stored yet.",
-                    evidence_basis=["live_probe_verified", "streaming_verified", "tool_calling_verified"],
+                    evidence_basis=[
+                        "live_probe_verified",
+                        "streaming_verified",
+                        "tool_calling_verified",
+                    ],
                 )
         return ProviderCatalogSignoffRecord(
             provider_id=entry.provider_id,
             target_key=entry.runtime_provider_binding or entry.oauth_target_binding,
             status="blocked-by-live-evidence",
             details="Missing live evidence blocks any truthful signoff for this provider row.",
-            evidence_basis=["live_probe_verified", "streaming_verified", "tool_calling_verified"],
+            evidence_basis=[
+                "live_probe_verified",
+                "streaming_verified",
+                "tool_calling_verified",
+            ],
         )
 
     @staticmethod
@@ -572,10 +600,7 @@ class ControlPlaneProviderCatalogDomainMixin:
         live_probe = status_by_class.get("live_probe_verified") == "observed"
         streaming = status_by_class.get("streaming_verified") == "observed"
         tool_calling = status_by_class.get("tool_calling_verified") == "observed"
-        template_bound = any(
-            record.evidence_class == "repo_observed" and record.source_kind == "repo_harness_template"
-            for record in records
-        )
+        template_bound = any(record.evidence_class == "repo_observed" and record.source_kind == "repo_harness_template" for record in records)
 
         if not repo_observed:
             return "documented-only"
@@ -644,11 +669,7 @@ class ControlPlaneProviderCatalogDomainMixin:
             self._append_signoff_if_changed(entry.signoff_history, current_signoff, now_iso=now_iso)
 
             latest_probe = next(
-                (
-                    item
-                    for item in reversed(entry.evidence_log)
-                    if item.evidence_class == "live_probe_verified" and item.status == "observed"
-                ),
+                (item for item in reversed(entry.evidence_log) if item.evidence_class == "live_probe_verified" and item.status == "observed"),
                 None,
             )
             latest_signoff = next((item for item in reversed(entry.signoff_history)), None)
@@ -658,13 +679,19 @@ class ControlPlaneProviderCatalogDomainMixin:
             entry.signoff_notes = latest_signoff.details if latest_signoff else None
             entry.evidence_status = self._catalog_evidence_status(entry.evidence_log)
             entry.missing_evidence = self._catalog_missing_evidence(entry, entry.evidence_log)
-            entry.maturity_status = self._catalog_maturity(entry, entry.evidence_log)  # type: ignore[assignment]
+            entry.maturity_status = self._catalog_maturity(entry, entry.evidence_log)
             entry.safe_next_action = self._catalog_next_action(entry)
             materialized[entry.provider_id] = entry
         return materialized
 
     def list_provider_catalog(self) -> list[ProviderCatalogRecord]:
-        return [item.model_copy(deep=True) for item in sorted(self._provider_catalog_state.values(), key=lambda entry: entry.provider_id)]
+        return [
+            item.model_copy(deep=True)
+            for item in sorted(
+                self._provider_catalog_state.values(),
+                key=lambda entry: entry.provider_id,
+            )
+        ]
 
     def provider_catalog_summary(self) -> ProviderCatalogSummaryRecord:
         summary = ProviderCatalogSummaryRecord(total_providers=len(self._provider_catalog_state))

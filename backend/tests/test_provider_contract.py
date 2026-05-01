@@ -1,18 +1,18 @@
 import json
+from typing import Any
 
 import httpx
 import pytest
 
-from app.auth.oauth.openai import resolve_codex_auth_state
 from app.api.admin.control_plane import get_control_plane_service
 from app.auth.oauth.gemini import resolve_gemini_auth_state
+from app.auth.oauth.openai import resolve_codex_auth_state
 from app.providers.anthropic.adapter import AnthropicAdapter
-from app.providers.bedrock.adapter import BedrockAdapter
 from app.providers.base import (
     ChatDispatchRequest,
     ProviderCapabilities,
-    ProviderConflictError,
     ProviderConfigurationError,
+    ProviderConflictError,
     ProviderNotImplementedError,
     ProviderNotReadyError,
     ProviderPayloadTooLargeError,
@@ -20,17 +20,21 @@ from app.providers.base import (
     ProviderResourceGoneError,
     ProviderStreamInterruptedError,
     ProviderTimeoutError,
-    ProviderUnsupportedMediaTypeError,
     ProviderUnavailableError,
     ProviderUnsupportedFeatureError,
+    ProviderUnsupportedMediaTypeError,
 )
+from app.providers.bedrock.adapter import BedrockAdapter
 from app.providers.forgeframe_baseline import ForgeFrameBaselineAdapter
 from app.providers.gemini.adapter import GeminiAdapter
 from app.providers.ollama.adapter import OllamaAdapter
 from app.providers.openai_api.adapter import OpenAIAPIAdapter
 from app.providers.openai_codex.adapter import OpenAICodexAdapter
+from app.providers.openai_streaming import (
+    finalize_openai_tool_calls,
+    merge_openai_tool_call_chunks,
+)
 from app.providers.registry import ProviderRegistry
-from app.providers.openai_streaming import finalize_openai_tool_calls, merge_openai_tool_call_chunks
 from app.settings.config import Settings
 from app.usage.models import TokenUsage
 from app.usage.service import UsageAccountingService
@@ -82,7 +86,9 @@ def test_anthropic_provider_supports_bearer_mode_without_flattening_to_api_key()
 
 
 @pytest.mark.parametrize("base_url", ("", "not-a-url"))
-def test_anthropic_provider_reports_invalid_base_url_as_not_ready(base_url: str) -> None:
+def test_anthropic_provider_reports_invalid_base_url_as_not_ready(
+    base_url: str,
+) -> None:
     adapter = AnthropicAdapter(Settings(anthropic_api_key="anthropic-key", anthropic_base_url=base_url))
     assert adapter.is_ready() is False
     assert adapter.readiness_reason() == "FORGEFRAME_ANTHROPIC_BASE_URL must be an absolute http(s) URL."
@@ -128,7 +134,7 @@ def test_bedrock_provider_reports_invalid_base_url_as_not_ready() -> None:
 
 
 def test_bedrock_adapter_signs_converse_request(monkeypatch) -> None:
-    captured: dict[str, object] = {}
+    captured: dict[str, Any] = {}
 
     class _MockResponse:
         status_code = 200
@@ -198,7 +204,7 @@ def test_bedrock_adapter_signs_converse_request(monkeypatch) -> None:
 
 
 def test_openai_adapter_forwards_request_metadata_as_headers(monkeypatch) -> None:
-    captured: dict[str, object] = {}
+    captured: dict[str, Any] = {}
 
     class _MockResponse:
         status_code = 200
@@ -210,7 +216,11 @@ def test_openai_adapter_forwards_request_metadata_as_headers(monkeypatch) -> Non
             return {
                 "model": "gpt-4.1-mini",
                 "choices": [{"message": {"content": "ok"}, "finish_reason": "stop"}],
-                "usage": {"prompt_tokens": 2, "completion_tokens": 1, "total_tokens": 3},
+                "usage": {
+                    "prompt_tokens": 2,
+                    "completion_tokens": 1,
+                    "total_tokens": 3,
+                },
             }
 
     def _mock_post(*args, **kwargs):
@@ -238,7 +248,7 @@ def test_openai_adapter_forwards_request_metadata_as_headers(monkeypatch) -> Non
 
 
 def test_gemini_adapter_forwards_request_metadata_as_headers(monkeypatch) -> None:
-    captured: dict[str, object] = {}
+    captured: dict[str, Any] = {}
 
     class _MockResponse:
         status_code = 200
@@ -250,7 +260,11 @@ def test_gemini_adapter_forwards_request_metadata_as_headers(monkeypatch) -> Non
             return {
                 "model": "gemini-2.5-flash",
                 "choices": [{"message": {"content": "ok"}, "finish_reason": "stop"}],
-                "usage": {"prompt_tokens": 2, "completion_tokens": 1, "total_tokens": 3},
+                "usage": {
+                    "prompt_tokens": 2,
+                    "completion_tokens": 1,
+                    "total_tokens": 3,
+                },
             }
 
     def _mock_post(*args, **kwargs):
@@ -283,7 +297,7 @@ def test_gemini_adapter_forwards_request_metadata_as_headers(monkeypatch) -> Non
 
 
 def test_anthropic_adapter_forwards_request_metadata_as_headers(monkeypatch) -> None:
-    captured: dict[str, object] = {}
+    captured: dict[str, Any] = {}
 
     class _MockResponse:
         status_code = 200
@@ -324,8 +338,10 @@ def test_anthropic_adapter_forwards_request_metadata_as_headers(monkeypatch) -> 
     assert captured["headers"]["anthropic-version"] == "2023-06-01"
 
 
-def test_anthropic_adapter_uses_bearer_header_when_bearer_mode_is_selected(monkeypatch) -> None:
-    captured: dict[str, object] = {}
+def test_anthropic_adapter_uses_bearer_header_when_bearer_mode_is_selected(
+    monkeypatch,
+) -> None:
+    captured: dict[str, Any] = {}
 
     class _MockResponse:
         status_code = 200
@@ -367,8 +383,10 @@ def test_anthropic_adapter_uses_bearer_header_when_bearer_mode_is_selected(monke
     assert result.auth_source == "anthropic_bearer_token"
 
 
-def test_anthropic_adapter_translates_data_url_image_blocks_to_messages_api(monkeypatch) -> None:
-    captured: dict[str, object] = {}
+def test_anthropic_adapter_translates_data_url_image_blocks_to_messages_api(
+    monkeypatch,
+) -> None:
+    captured: dict[str, Any] = {}
 
     class _MockResponse:
         status_code = 200
@@ -400,9 +418,7 @@ def test_anthropic_adapter_translates_data_url_image_blocks_to_messages_api(monk
                         {"type": "text", "text": "describe this"},
                         {
                             "type": "image_url",
-                            "image_url": {
-                                "url": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO8B9YkAAAAASUVORK5CYII="
-                            },
+                            "image_url": {"url": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO8B9YkAAAAASUVORK5CYII="},
                         },
                     ],
                 }
@@ -429,7 +445,7 @@ def test_anthropic_adapter_translates_data_url_image_blocks_to_messages_api(monk
 
 
 def test_codex_adapter_forwards_request_metadata_as_headers(monkeypatch) -> None:
-    captured: dict[str, object] = {}
+    captured: dict[str, Any] = {}
 
     class _MockResponse:
         status_code = 200
@@ -441,7 +457,11 @@ def test_codex_adapter_forwards_request_metadata_as_headers(monkeypatch) -> None
             return {
                 "model": "gpt-5.3-codex",
                 "choices": [{"message": {"content": "ok"}, "finish_reason": "stop"}],
-                "usage": {"prompt_tokens": 2, "completion_tokens": 1, "total_tokens": 3},
+                "usage": {
+                    "prompt_tokens": 2,
+                    "completion_tokens": 1,
+                    "total_tokens": 3,
+                },
             }
 
     def _mock_post(*args, **kwargs):
@@ -474,7 +494,7 @@ def test_codex_adapter_forwards_request_metadata_as_headers(monkeypatch) -> None
 
 
 def test_ollama_adapter_forwards_request_metadata_as_headers(monkeypatch) -> None:
-    captured: dict[str, object] = {}
+    captured: dict[str, Any] = {}
 
     class _ReadyResponse:
         status_code = 200
@@ -490,7 +510,11 @@ def test_ollama_adapter_forwards_request_metadata_as_headers(monkeypatch) -> Non
             return {
                 "model": "llama3.2",
                 "choices": [{"message": {"content": "ok"}, "finish_reason": "stop"}],
-                "usage": {"prompt_tokens": 2, "completion_tokens": 1, "total_tokens": 3},
+                "usage": {
+                    "prompt_tokens": 2,
+                    "completion_tokens": 1,
+                    "total_tokens": 3,
+                },
             }
 
     def _mock_get(*args, **kwargs):
@@ -521,7 +545,7 @@ def test_ollama_adapter_forwards_request_metadata_as_headers(monkeypatch) -> Non
 
 
 def test_anthropic_stream_forwards_request_metadata_as_headers(monkeypatch) -> None:
-    captured: dict[str, object] = {}
+    captured: dict[str, Any] = {}
 
     class _MockStreamResponse:
         status_code = 200
@@ -536,16 +560,14 @@ def test_anthropic_stream_forwards_request_metadata_as_headers(monkeypatch) -> N
 
         @staticmethod
         def iter_lines():
-            return iter(
-                [
-                    "event: content_block_delta",
-                    'data: {"delta":{"text":"ok"}}',
-                    "event: message_delta",
-                    'data: {"delta":{"stop_reason":"end_turn"},"usage":{"input_tokens":2,"output_tokens":1}}',
-                    "event: message_stop",
-                    "data: {}",
-                ]
-            )
+            return iter([
+                "event: content_block_delta",
+                'data: {"delta":{"text":"ok"}}',
+                "event: message_delta",
+                'data: {"delta":{"stop_reason":"end_turn"},"usage":{"input_tokens":2,"output_tokens":1}}',
+                "event: message_stop",
+                "data: {}",
+            ])
 
     def _mock_stream(*args, **kwargs):
         captured["headers"] = kwargs.get("headers", {})
@@ -596,7 +618,10 @@ def test_anthropic_adapter_maps_tool_use_to_openai_tool_calls(monkeypatch) -> No
                 "stop_reason": "tool_use",
             }
 
-    monkeypatch.setattr("app.providers.anthropic.adapter.httpx.post", lambda *args, **kwargs: _MockResponse())
+    monkeypatch.setattr(
+        "app.providers.anthropic.adapter.httpx.post",
+        lambda *args, **kwargs: _MockResponse(),
+    )
     adapter = AnthropicAdapter(Settings(anthropic_api_key="anthropic-key"))
     result = adapter.create_chat_completion(
         ChatDispatchRequest(
@@ -611,12 +636,14 @@ def test_anthropic_adapter_maps_tool_use_to_openai_tool_calls(monkeypatch) -> No
         {
             "id": "toolu_1",
             "type": "function",
-            "function": {"name": "lookup", "arguments": "{\"q\":\"forgegate\"}"},
+            "function": {"name": "lookup", "arguments": '{"q":"forgegate"}'},
         }
     ]
 
 
-def test_anthropic_stream_maps_tool_use_blocks_to_openai_tool_calls(monkeypatch) -> None:
+def test_anthropic_stream_maps_tool_use_blocks_to_openai_tool_calls(
+    monkeypatch,
+) -> None:
     class _MockStreamResponse:
         status_code = 200
         headers = {"content-type": "text/event-stream"}
@@ -630,24 +657,25 @@ def test_anthropic_stream_maps_tool_use_blocks_to_openai_tool_calls(monkeypatch)
 
         @staticmethod
         def iter_lines():
-            return iter(
-                [
-                    "event: message_start",
-                    'data: {"type":"message_start","message":{"usage":{"input_tokens":5,"output_tokens":0}}}',
-                    "event: content_block_start",
-                    'data: {"type":"content_block_start","index":0,"content_block":{"type":"tool_use","id":"toolu_1","name":"lookup"}}',
-                    "event: content_block_delta",
-                    'data: {"type":"content_block_delta","index":0,"delta":{"type":"input_json_delta","partial_json":"{\\"q\\":\\"forge"}}',
-                    "event: content_block_delta",
-                    'data: {"type":"content_block_delta","index":0,"delta":{"type":"input_json_delta","partial_json":"gate\\"}"}}',
-                    "event: message_delta",
-                    'data: {"type":"message_delta","delta":{"stop_reason":"tool_use"},"usage":{"input_tokens":5,"output_tokens":2,"total_tokens":7}}',
-                    "event: message_stop",
-                    'data: {"type":"message_stop"}',
-                ]
-            )
+            return iter([
+                "event: message_start",
+                'data: {"type":"message_start","message":{"usage":{"input_tokens":5,"output_tokens":0}}}',
+                "event: content_block_start",
+                'data: {"type":"content_block_start","index":0,"content_block":{"type":"tool_use","id":"toolu_1","name":"lookup"}}',
+                "event: content_block_delta",
+                'data: {"type":"content_block_delta","index":0,"delta":{"type":"input_json_delta","partial_json":"{\\"q\\":\\"forge"}}',
+                "event: content_block_delta",
+                'data: {"type":"content_block_delta","index":0,"delta":{"type":"input_json_delta","partial_json":"gate\\"}"}}',
+                "event: message_delta",
+                'data: {"type":"message_delta","delta":{"stop_reason":"tool_use"},"usage":{"input_tokens":5,"output_tokens":2,"total_tokens":7}}',
+                "event: message_stop",
+                'data: {"type":"message_stop"}',
+            ])
 
-    monkeypatch.setattr("app.providers.anthropic.adapter.httpx.stream", lambda *args, **kwargs: _MockStreamResponse())
+    monkeypatch.setattr(
+        "app.providers.anthropic.adapter.httpx.stream",
+        lambda *args, **kwargs: _MockStreamResponse(),
+    )
     adapter = AnthropicAdapter(Settings(anthropic_api_key="anthropic-key"))
     events = list(
         adapter.stream_chat_completion(
@@ -667,13 +695,13 @@ def test_anthropic_stream_maps_tool_use_blocks_to_openai_tool_calls(monkeypatch)
         {
             "id": "toolu_1",
             "type": "function",
-            "function": {"name": "lookup", "arguments": "{\"q\":\"forgegate\"}"},
+            "function": {"name": "lookup", "arguments": '{"q":"forgegate"}'},
         }
     ]
 
 
 def test_gemini_stream_forwards_request_metadata_as_headers(monkeypatch) -> None:
-    captured: dict[str, object] = {}
+    captured: dict[str, Any] = {}
 
     class _MockStreamResponse:
         status_code = 200
@@ -688,12 +716,10 @@ def test_gemini_stream_forwards_request_metadata_as_headers(monkeypatch) -> None
 
         @staticmethod
         def iter_lines():
-            return iter(
-                [
-                    'data: {"choices":[{"delta":{"content":"ok"},"finish_reason":"stop"}],"usage":{"prompt_tokens":2,"completion_tokens":1,"total_tokens":3}}',
-                    "data: [DONE]",
-                ]
-            )
+            return iter([
+                'data: {"choices":[{"delta":{"content":"ok"},"finish_reason":"stop"}],"usage":{"prompt_tokens":2,"completion_tokens":1,"total_tokens":3}}',
+                "data: [DONE]",
+            ])
 
     def _mock_stream(*args, **kwargs):
         captured["headers"] = kwargs.get("headers", {})
@@ -728,7 +754,7 @@ def test_gemini_stream_forwards_request_metadata_as_headers(monkeypatch) -> None
 
 
 def test_codex_stream_forwards_request_metadata_as_headers(monkeypatch) -> None:
-    captured: dict[str, object] = {}
+    captured: dict[str, Any] = {}
 
     class _MockStreamResponse:
         status_code = 200
@@ -743,12 +769,10 @@ def test_codex_stream_forwards_request_metadata_as_headers(monkeypatch) -> None:
 
         @staticmethod
         def iter_lines():
-            return iter(
-                [
-                    'data: {"choices":[{"delta":{"content":"ok"},"finish_reason":"stop"}],"usage":{"prompt_tokens":2,"completion_tokens":1,"total_tokens":3}}',
-                    "data: [DONE]",
-                ]
-            )
+            return iter([
+                'data: {"choices":[{"delta":{"content":"ok"},"finish_reason":"stop"}],"usage":{"prompt_tokens":2,"completion_tokens":1,"total_tokens":3}}',
+                "data: [DONE]",
+            ])
 
     def _mock_stream(*args, **kwargs):
         captured["headers"] = kwargs.get("headers", {})
@@ -783,7 +807,7 @@ def test_codex_stream_forwards_request_metadata_as_headers(monkeypatch) -> None:
 
 
 def test_ollama_stream_forwards_request_metadata_as_headers(monkeypatch) -> None:
-    captured: dict[str, object] = {}
+    captured: dict[str, Any] = {}
 
     class _ReadyResponse:
         status_code = 200
@@ -802,12 +826,10 @@ def test_ollama_stream_forwards_request_metadata_as_headers(monkeypatch) -> None
 
         @staticmethod
         def iter_lines():
-            return iter(
-                [
-                    'data: {"choices":[{"delta":{"content":"ok"},"finish_reason":"stop"}],"usage":{"prompt_tokens":2,"completion_tokens":1,"total_tokens":3}}',
-                    "data: [DONE]",
-                ]
-            )
+            return iter([
+                'data: {"choices":[{"delta":{"content":"ok"},"finish_reason":"stop"}],"usage":{"prompt_tokens":2,"completion_tokens":1,"total_tokens":3}}',
+                "data: [DONE]",
+            ])
 
     def _mock_get(*args, **kwargs):
         return _ReadyResponse()
@@ -881,7 +903,9 @@ def test_ollama_provider_recovers_after_readiness_cache_window(monkeypatch) -> N
     assert probe_calls["count"] == 2
 
 
-def test_ollama_provider_keeps_first_readiness_snapshot_for_immediate_reason_lookup(monkeypatch) -> None:
+def test_ollama_provider_keeps_first_readiness_snapshot_for_immediate_reason_lookup(
+    monkeypatch,
+) -> None:
     monotonic_values = iter((100.0, 101.3, 101.3))
     probe_calls = {"count": 0}
 
@@ -1008,12 +1032,25 @@ def test_codex_bridge_partial_runtime_executes_with_mocked_httpx(monkeypatch) ->
                     {
                         "message": {
                             "content": "ok",
-                            "tool_calls": [{"id": "call_1", "type": "function", "function": {"name": "lookup", "arguments": "{\"q\":\"forgegate\"}"}}],
+                            "tool_calls": [
+                                {
+                                    "id": "call_1",
+                                    "type": "function",
+                                    "function": {
+                                        "name": "lookup",
+                                        "arguments": '{"q":"forgegate"}',
+                                    },
+                                }
+                            ],
                         },
                         "finish_reason": "tool_calls",
                     }
                 ],
-                "usage": {"prompt_tokens": 5, "completion_tokens": 3, "total_tokens": 8},
+                "usage": {
+                    "prompt_tokens": 5,
+                    "completion_tokens": 3,
+                    "total_tokens": 8,
+                },
             }
 
         text = "ok"
@@ -1046,8 +1083,8 @@ def test_codex_bridge_partial_runtime_executes_with_mocked_httpx(monkeypatch) ->
 
 def test_oauth_target_status_for_antigravity_stays_partial_without_live_probe_evidence() -> None:
     service = get_control_plane_service()
-    service._settings.antigravity_oauth_access_token = "token"  # type: ignore[attr-defined]
-    service._settings.antigravity_probe_enabled = True  # type: ignore[attr-defined]
+    service._settings.antigravity_oauth_access_token = "token"
+    service._settings.antigravity_probe_enabled = True
     status = service._oauth_target_status("antigravity")
     assert status.configured is True
     assert status.probe_enabled is True
@@ -1068,12 +1105,25 @@ def test_gemini_bridge_partial_runtime_executes_with_mocked_httpx(monkeypatch) -
                     {
                         "message": {
                             "content": "gemini-ok",
-                            "tool_calls": [{"id": "call_1", "type": "function", "function": {"name": "lookup", "arguments": "{\"q\":\"gemini\"}"}}],
+                            "tool_calls": [
+                                {
+                                    "id": "call_1",
+                                    "type": "function",
+                                    "function": {
+                                        "name": "lookup",
+                                        "arguments": '{"q":"gemini"}',
+                                    },
+                                }
+                            ],
                         },
                         "finish_reason": "tool_calls",
                     }
                 ],
-                "usage": {"prompt_tokens": 4, "completion_tokens": 2, "total_tokens": 6},
+                "usage": {
+                    "prompt_tokens": 4,
+                    "completion_tokens": 2,
+                    "total_tokens": 6,
+                },
             }
 
     def _mock_post(*args, **kwargs):
@@ -1116,15 +1166,16 @@ def test_codex_stream_merges_tool_call_chunks_and_usage(monkeypatch) -> None:
 
         @staticmethod
         def iter_lines():
-                return iter(
-                    [
-                        'data: {"choices":[{"delta":{"content":"cod","tool_calls":[{"index":0,"id":"call_1","type":"function","function":{"name":"lookup","arguments":"{\\"q\\":"}}]}}]}',
-                        'data: {"choices":[{"delta":{"content":"ex","tool_calls":[{"index":0,"function":{"arguments":"\\"forgegate\\"}"}}]},"finish_reason":"tool_calls"}],"usage":{"prompt_tokens":5,"completion_tokens":2,"total_tokens":7}}',
-                        "data: [DONE]",
-                    ]
-                )
+            return iter([
+                'data: {"choices":[{"delta":{"content":"cod","tool_calls":[{"index":0,"id":"call_1","type":"function","function":{"name":"lookup","arguments":"{\\"q\\":"}}]}}]}',
+                'data: {"choices":[{"delta":{"content":"ex","tool_calls":[{"index":0,"function":{"arguments":"\\"forgegate\\"}"}}]},"finish_reason":"tool_calls"}],"usage":{"prompt_tokens":5,"completion_tokens":2,"total_tokens":7}}',
+                "data: [DONE]",
+            ])
 
-    monkeypatch.setattr("app.providers.openai_codex.adapter.httpx.stream", lambda *args, **kwargs: _MockStreamResponse())
+    monkeypatch.setattr(
+        "app.providers.openai_codex.adapter.httpx.stream",
+        lambda *args, **kwargs: _MockStreamResponse(),
+    )
     adapter = OpenAICodexAdapter(
         Settings(
             openai_codex_auth_mode="oauth",
@@ -1150,7 +1201,7 @@ def test_codex_stream_merges_tool_call_chunks_and_usage(monkeypatch) -> None:
         {
             "id": "call_1",
             "type": "function",
-            "function": {"name": "lookup", "arguments": "{\"q\":\"forgegate\"}"},
+            "function": {"name": "lookup", "arguments": '{"q":"forgegate"}'},
         }
     ]
 
@@ -1169,15 +1220,16 @@ def test_gemini_stream_merges_tool_call_chunks_and_usage(monkeypatch) -> None:
 
         @staticmethod
         def iter_lines():
-                return iter(
-                    [
-                        'data: {"choices":[{"delta":{"content":"gem","tool_calls":[{"index":0,"id":"call_1","type":"function","function":{"name":"lookup","arguments":"{\\"q\\":"}}]}}]}',
-                        'data: {"choices":[{"delta":{"content":"ini","tool_calls":[{"index":0,"function":{"arguments":"\\"bridge\\"}"}}]},"finish_reason":"tool_calls"}],"usage":{"prompt_tokens":4,"completion_tokens":2,"total_tokens":6}}',
-                        "data: [DONE]",
-                    ]
-                )
+            return iter([
+                'data: {"choices":[{"delta":{"content":"gem","tool_calls":[{"index":0,"id":"call_1","type":"function","function":{"name":"lookup","arguments":"{\\"q\\":"}}]}}]}',
+                'data: {"choices":[{"delta":{"content":"ini","tool_calls":[{"index":0,"function":{"arguments":"\\"bridge\\"}"}}]},"finish_reason":"tool_calls"}],"usage":{"prompt_tokens":4,"completion_tokens":2,"total_tokens":6}}',
+                "data: [DONE]",
+            ])
 
-    monkeypatch.setattr("app.providers.gemini.adapter.httpx.stream", lambda *args, **kwargs: _MockStreamResponse())
+    monkeypatch.setattr(
+        "app.providers.gemini.adapter.httpx.stream",
+        lambda *args, **kwargs: _MockStreamResponse(),
+    )
     adapter = GeminiAdapter(
         Settings(
             gemini_auth_mode="oauth",
@@ -1203,7 +1255,7 @@ def test_gemini_stream_merges_tool_call_chunks_and_usage(monkeypatch) -> None:
         {
             "id": "call_1",
             "type": "function",
-            "function": {"name": "lookup", "arguments": "{\"q\":\"bridge\"}"},
+            "function": {"name": "lookup", "arguments": '{"q":"bridge"}'},
         }
     ]
 
@@ -1214,7 +1266,10 @@ def test_codex_rate_limit_error_preserves_retry_after(monkeypatch) -> None:
         text = "slow down"
         headers = {"retry-after": "7"}
 
-    monkeypatch.setattr("app.providers.openai_codex.adapter.httpx.post", lambda *args, **kwargs: _MockResponse())
+    monkeypatch.setattr(
+        "app.providers.openai_codex.adapter.httpx.post",
+        lambda *args, **kwargs: _MockResponse(),
+    )
     adapter = OpenAICodexAdapter(
         Settings(
             openai_codex_auth_mode="oauth",
@@ -1223,7 +1278,13 @@ def test_codex_rate_limit_error_preserves_retry_after(monkeypatch) -> None:
         )
     )
     with pytest.raises(ProviderRateLimitError) as exc_info:
-        adapter.create_chat_completion(ChatDispatchRequest(model="gpt-5.3-codex", messages=[{"role": "user", "content": "hi"}], stream=False))
+        adapter.create_chat_completion(
+            ChatDispatchRequest(
+                model="gpt-5.3-codex",
+                messages=[{"role": "user", "content": "hi"}],
+                stream=False,
+            )
+        )
     assert exc_info.value.retry_after_seconds == 7
 
 
@@ -1233,7 +1294,10 @@ def test_gemini_rate_limit_error_preserves_retry_after(monkeypatch) -> None:
         text = "too many requests"
         headers = {"retry-after": "9"}
 
-    monkeypatch.setattr("app.providers.gemini.adapter.httpx.post", lambda *args, **kwargs: _MockResponse())
+    monkeypatch.setattr(
+        "app.providers.gemini.adapter.httpx.post",
+        lambda *args, **kwargs: _MockResponse(),
+    )
     adapter = GeminiAdapter(
         Settings(
             gemini_auth_mode="oauth",
@@ -1242,7 +1306,13 @@ def test_gemini_rate_limit_error_preserves_retry_after(monkeypatch) -> None:
         )
     )
     with pytest.raises(ProviderRateLimitError) as exc_info:
-        adapter.create_chat_completion(ChatDispatchRequest(model="gemini-2.5-flash", messages=[{"role": "user", "content": "hi"}], stream=False))
+        adapter.create_chat_completion(
+            ChatDispatchRequest(
+                model="gemini-2.5-flash",
+                messages=[{"role": "user", "content": "hi"}],
+                stream=False,
+            )
+        )
     assert exc_info.value.retry_after_seconds == 9
 
 
@@ -1253,18 +1323,23 @@ def test_retry_after_http_date_is_parsed_for_openai_compatible_adapters() -> Non
 
 
 def test_openai_stream_tool_call_chunks_are_merged() -> None:
-    merged: dict[int, dict[str, object]] = {}
+    merged: dict[int, dict[str, Any]] = {}
     merge_openai_tool_call_chunks(
         merged,
         [
-            {"index": 0, "id": "call_1", "type": "function", "function": {"name": "lookup", "arguments": "{\"q\":"}},
-            {"index": 0, "function": {"arguments": "\"forgegate\"}"}},
+            {
+                "index": 0,
+                "id": "call_1",
+                "type": "function",
+                "function": {"name": "lookup", "arguments": '{"q":'},
+            },
+            {"index": 0, "function": {"arguments": '"forgegate"}'}},
         ],
     )
     assert finalize_openai_tool_calls(merged) == [
         {
             "id": "call_1",
             "type": "function",
-            "function": {"name": "lookup", "arguments": "{\"q\":\"forgegate\"}"},
+            "function": {"name": "lookup", "arguments": '{"q":"forgegate"}'},
         }
     ]

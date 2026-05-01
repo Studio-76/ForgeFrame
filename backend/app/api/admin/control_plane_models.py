@@ -8,7 +8,6 @@ from pydantic import BaseModel, Field
 
 from app.control_plane import ProviderCapabilityEvidenceRecord
 
-
 ProviderClassKey = Literal["openai_compatible", "local_ollama", "oauth_account", "custom"]
 
 
@@ -113,10 +112,21 @@ class HealthConfigUpdateRequest(BaseModel):
 class ProductAxisTarget(BaseModel):
     provider_key: str
     provider_type: Literal["oauth_account", "openai_compatible", "local"]
-    product_axis: Literal["oauth_account_providers", "openai_compatible_providers", "local_providers", "openai_compatible_clients"]
+    product_axis: Literal[
+        "oauth_account_providers",
+        "openai_compatible_providers",
+        "local_providers",
+        "openai_compatible_clients",
+    ]
     auth_model: str
     runtime_path: str
-    contract_classification: Literal["runtime-ready", "partial-runtime", "bridge-only", "onboarding-only", "unsupported"]
+    contract_classification: Literal[
+        "runtime-ready",
+        "partial-runtime",
+        "bridge-only",
+        "onboarding-only",
+        "unsupported",
+    ]
     classification_reason: str
     technical_requirements: list[str] = Field(default_factory=list)
     operator_surface: str
@@ -176,7 +186,13 @@ class OAuthAccountTargetStatus(BaseModel):
     runtime_bridge_enabled: bool
     probe_enabled: bool
     harness_profile_enabled: bool
-    contract_classification: Literal["runtime-ready", "partial-runtime", "bridge-only", "onboarding-only", "unsupported"]
+    contract_classification: Literal[
+        "runtime-ready",
+        "partial-runtime",
+        "bridge-only",
+        "onboarding-only",
+        "unsupported",
+    ]
     queue_lane: Literal["sync_interactive", "queued_background", "bridge_probe_only", "not_applicable"]
     parallelism_mode: Literal["not_enforced", "single_flight", "provider_managed", "not_applicable"]
     parallelism_limit: int | None = None

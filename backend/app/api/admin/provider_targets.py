@@ -1,5 +1,7 @@
 """Admin provider-target register endpoints."""
 
+from typing import Any
+
 from fastapi import APIRouter, Depends, status
 from fastapi.responses import JSONResponse
 
@@ -18,7 +20,7 @@ def list_provider_targets(
     _admin: AuthenticatedAdmin = Depends(require_admin_instance_permission("provider_targets.read")),
     instance: InstanceRecord = Depends(resolve_admin_instance_scope),
     service: ControlPlaneService = Depends(get_control_plane_service),
-) -> dict[str, object]:
+) -> Any:
     targets = service.provider_target_snapshot()
     return {
         "status": "ok",
@@ -38,11 +40,9 @@ def list_provider_targets(
 def update_provider_target(
     target_key: str,
     payload: ProviderTargetUpdateRequest,
-    _admin: AuthenticatedAdmin = Depends(
-        require_admin_instance_permission("provider_targets.write", allow_impersonation=False)
-    ),
+    _admin: AuthenticatedAdmin = Depends(require_admin_instance_permission("provider_targets.write", allow_impersonation=False)),
     service: ControlPlaneService = Depends(get_control_plane_service),
-) -> dict[str, object]:
+) -> Any:
     try:
         target = service.update_provider_target(target_key, payload)
     except ValueError as exc:

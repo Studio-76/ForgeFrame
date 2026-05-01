@@ -8,11 +8,27 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Protocol
 
-from sqlalchemy import Boolean, CheckConstraint, DateTime, ForeignKey, Index, Integer, JSON, String, Text, create_engine, select
+from sqlalchemy import (
+    JSON,
+    Boolean,
+    CheckConstraint,
+    DateTime,
+    ForeignKey,
+    Index,
+    Integer,
+    String,
+    Text,
+    create_engine,
+    select,
+)
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, Session, mapped_column, sessionmaker
 
-from app.plugins.models import InstancePluginBindingRecord, PluginManifestRecord, PluginRegistryStateRecord
+from app.plugins.models import (
+    InstancePluginBindingRecord,
+    PluginManifestRecord,
+    PluginRegistryStateRecord,
+)
 from app.settings.config import Settings
 from app.storage.harness_repository import Base
 
@@ -21,9 +37,7 @@ _PLUGIN_STATE_SCHEMA_VERSION = 1
 
 class PluginManifestORM(Base):
     __tablename__ = "plugin_manifests"
-    __table_args__ = (
-        CheckConstraint("status IN ('active', 'disabled')", name="plugin_manifests_status_ck"),
-    )
+    __table_args__ = (CheckConstraint("status IN ('active', 'disabled')", name="plugin_manifests_status_ck"),)
 
     plugin_id: Mapped[str] = mapped_column(String(191), primary_key=True)
     display_name: Mapped[str] = mapped_column(String(191), nullable=False)
@@ -86,12 +100,21 @@ class PluginManifestORM(Base):
 class InstancePluginBindingORM(Base):
     __tablename__ = "instance_plugin_bindings"
     __table_args__ = (
-        Index("instance_plugin_bindings_instance_plugin_uq", "instance_id", "plugin_id", unique=True),
+        Index(
+            "instance_plugin_bindings_instance_plugin_uq",
+            "instance_id",
+            "plugin_id",
+            unique=True,
+        ),
         Index("instance_plugin_bindings_company_plugin_idx", "company_id", "plugin_id"),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    plugin_id: Mapped[str] = mapped_column(ForeignKey("plugin_manifests.plugin_id", ondelete="CASCADE"), nullable=False, index=True)
+    plugin_id: Mapped[str] = mapped_column(
+        ForeignKey("plugin_manifests.plugin_id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
     instance_id: Mapped[str] = mapped_column(String(191), nullable=False, index=True)
     company_id: Mapped[str] = mapped_column(String(191), nullable=False, index=True)
     enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
@@ -177,7 +200,10 @@ class FilePluginRepository:
         path = self._paths.state_path
         path.parent.mkdir(parents=True, exist_ok=True)
         tmp = path.with_suffix(path.suffix + ".tmp")
-        tmp.write_text(json.dumps(normalized.model_dump(mode="json"), indent=2) + "\n", encoding="utf-8")
+        tmp.write_text(
+            json.dumps(normalized.model_dump(mode="json"), indent=2) + "\n",
+            encoding="utf-8",
+        )
         tmp.replace(path)
         return normalized
 
@@ -201,7 +227,7 @@ class PostgresPluginRepository:
             summary=row.summary,
             vendor=row.vendor,
             version=row.version,
-            status=row.status,  # type: ignore[arg-type]
+            status=row.status,
             capabilities=list(row.capabilities_json or []),
             ui_slots=list(row.ui_slots_json or []),
             api_mounts=list(row.api_mounts_json or []),
@@ -233,9 +259,17 @@ class PostgresPluginRepository:
     def load_state(self) -> PluginRegistryStateRecord:
         with self._session() as session:
             manifests = session.execute(select(PluginManifestORM).order_by(PluginManifestORM.created_at.asc())).scalars().all()
-            bindings = session.execute(
-                select(InstancePluginBindingORM).order_by(InstancePluginBindingORM.instance_id.asc(), InstancePluginBindingORM.plugin_id.asc())
-            ).scalars().all()
+            bindings = (
+                session
+                .execute(
+                    select(InstancePluginBindingORM).order_by(
+                        InstancePluginBindingORM.instance_id.asc(),
+                        InstancePluginBindingORM.plugin_id.asc(),
+                    )
+                )
+                .scalars()
+                .all()
+            )
             updated_at = ""
             timestamps = [
                 *[item.updated_at.isoformat() for item in manifests],
@@ -253,14 +287,8 @@ class PostgresPluginRepository:
     def save_state(self, state: PluginRegistryStateRecord) -> PluginRegistryStateRecord:
         normalized = state.model_copy(update={"schema_version": _PLUGIN_STATE_SCHEMA_VERSION})
         with self._session() as session:
-            existing_manifests = {
-                row.plugin_id: row
-                for row in session.execute(select(PluginManifestORM)).scalars().all()
-            }
-            existing_bindings = {
-                (row.instance_id, row.plugin_id): row
-                for row in session.execute(select(InstancePluginBindingORM)).scalars().all()
-            }
+            existing_manifests = {row.plugin_id: row for row in session.execute(select(PluginManifestORM)).scalars().all()}
+            existing_bindings = {(row.instance_id, row.plugin_id): row for row in session.execute(select(InstancePluginBindingORM)).scalars().all()}
 
             incoming_manifest_ids = {item.plugin_id for item in normalized.manifests}
             for stale_id in set(existing_manifests) - incoming_manifest_ids:
@@ -350,11 +378,7 @@ class PostgresPluginRepository:
 
 def get_plugin_repository(settings: Settings) -> PluginRepository:
     if settings.instances_storage_backend == "postgresql":
-        database_url = (
-            settings.instances_postgres_url.strip()
-            or settings.governance_postgres_url.strip()
-            or settings.harness_postgres_url.strip()
-        )
+        database_url = settings.instances_postgres_url.strip() or settings.governance_postgres_url.strip() or settings.harness_postgres_url.strip()
         return PostgresPluginRepository(database_url)
     return FilePluginRepository(paths=PluginStatePaths(state_path=_plugin_state_path(settings)))
 

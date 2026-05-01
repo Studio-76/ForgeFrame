@@ -4,27 +4,37 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import TYPE_CHECKING, Any
 
-from app.control_plane import ControlPlaneBootstrapCheck, ControlPlaneBootstrapReadinessReport
+from app.control_plane import (
+    ControlPlaneBootstrapCheck,
+    ControlPlaneBootstrapReadinessReport,
+)
+from app.ingress.service import build_ingress_tls_status
 from app.public_surface import (
     FRONTEND_MOUNT_PATH,
-    ROOT_SURFACE_KIND,
     NORMATIVE_HTTPS_HOST,
     NORMATIVE_HTTPS_PORT,
+    ROOT_SURFACE_KIND,
     has_configured_public_fqdn,
     has_integrated_tls_automation,
     has_linux_host_installation_artifacts,
     resolve_repo_relative_path,
 )
 from app.tenancy import TenantFilterRequiredError
-from app.ingress.service import build_ingress_tls_status
 
 
 class ControlPlaneBootstrapDomainMixin:
+    if TYPE_CHECKING:
+        _settings: Any
+        _analytics: Any
+        _last_bootstrap_readiness: Any
+
+        def _persist_state(self) -> Any: ...
+
     def _build_bootstrap_readiness_report(self) -> ControlPlaneBootstrapReadinessReport:
         checked_at = datetime.now(tz=UTC).isoformat()
         root_dir = Path(__file__).resolve().parents[4]
-        containerized_runtime = root_dir == Path("/app")
         frontend_dist_path = resolve_repo_relative_path(root_dir, self._settings.frontend_dist_path)
         frontend_index = frontend_dist_path / "index.html"
         host_install_script = root_dir / "scripts" / "install-forgeframe.sh"
@@ -57,11 +67,7 @@ class ControlPlaneBootstrapDomainMixin:
             ),
             ControlPlaneBootstrapCheck(
                 id="systemd_runtime_units",
-                ok=(
-                    (systemd_dir / "forgeframe-api.service").exists()
-                    and (systemd_dir / "forgeframe-retention.service").exists()
-                    and (systemd_dir / "forgeframe-retention.timer").exists()
-                ),
+                ok=((systemd_dir / "forgeframe-api.service").exists() and (systemd_dir / "forgeframe-retention.service").exists() and (systemd_dir / "forgeframe-retention.timer").exists()),
                 details=str(systemd_dir),
             ),
             ControlPlaneBootstrapCheck(
@@ -96,11 +102,7 @@ class ControlPlaneBootstrapDomainMixin:
             ),
             ControlPlaneBootstrapCheck(
                 id="backup_restore_automation",
-                ok=(
-                    (root_dir / "scripts" / "backup-forgeframe.sh").exists()
-                    and (root_dir / "scripts" / "restore-forgeframe.sh").exists()
-                    and host_backup_restore_smoke.exists()
-                ),
+                ok=((root_dir / "scripts" / "backup-forgeframe.sh").exists() and (root_dir / "scripts" / "restore-forgeframe.sh").exists() and host_backup_restore_smoke.exists()),
                 details="scripts/backup-forgeframe.sh + scripts/restore-forgeframe.sh + scripts/host-backup-restore-smoke.sh",
             ),
             ControlPlaneBootstrapCheck(
@@ -115,29 +117,17 @@ class ControlPlaneBootstrapDomainMixin:
             ),
             ControlPlaneBootstrapCheck(
                 id="observability_signal_path",
-                ok=(
-                    not observability_filter_required
-                    and
-                    int(observability_aggregates["event_count"]) > 0
-                    and int(observability_aggregates["health_event_count"]) > 0
-                ),
+                ok=(not observability_filter_required and int(observability_aggregates["event_count"]) > 0 and int(observability_aggregates["health_event_count"]) > 0),
                 details=(
                     "tenant_filter_required"
                     if observability_filter_required
-                    else (
-                        f"runtime_events_24h={observability_aggregates['event_count']} "
-                        f"health_events_24h={observability_aggregates['health_event_count']}"
-                    )
+                    else (f"runtime_events_24h={observability_aggregates['event_count']} health_events_24h={observability_aggregates['health_event_count']}")
                 ),
             ),
             ControlPlaneBootstrapCheck(
                 id="observability_error_path",
                 ok=(not observability_filter_required) and int(observability_aggregates["error_event_count"]) > 0,
-                details=(
-                    "tenant_filter_required"
-                    if observability_filter_required
-                    else f"errors_24h={observability_aggregates['error_event_count']}"
-                ),
+                details=("tenant_filter_required" if observability_filter_required else f"errors_24h={observability_aggregates['error_event_count']}"),
             ),
             ControlPlaneBootstrapCheck(
                 id="app_port",
@@ -171,11 +161,7 @@ class ControlPlaneBootstrapDomainMixin:
             ),
             ControlPlaneBootstrapCheck(
                 id="public_https_listener",
-                ok=(
-                    self._settings.public_https_host == NORMATIVE_HTTPS_HOST
-                    and self._settings.public_https_port == NORMATIVE_HTTPS_PORT
-                    and self._settings.public_tls_mode == "integrated_acme"
-                ),
+                ok=(self._settings.public_https_host == NORMATIVE_HTTPS_HOST and self._settings.public_https_port == NORMATIVE_HTTPS_PORT and self._settings.public_tls_mode == "integrated_acme"),
                 details=f"{self._settings.public_https_host}:{self._settings.public_https_port};mode={self._settings.public_tls_mode}",
             ),
             ControlPlaneBootstrapCheck(
@@ -196,11 +182,7 @@ class ControlPlaneBootstrapDomainMixin:
             ControlPlaneBootstrapCheck(
                 id="tls_certificate_management",
                 ok=has_integrated_tls_automation(root_dir),
-                details=(
-                    "integrated_tls_automation_present"
-                    if has_integrated_tls_automation(root_dir)
-                    else "integrated_tls_automation_missing"
-                ),
+                details=("integrated_tls_automation_present" if has_integrated_tls_automation(root_dir) else "integrated_tls_automation_missing"),
             ),
             ControlPlaneBootstrapCheck(
                 id="public_fqdn_tls_evidence",
@@ -220,11 +202,7 @@ class ControlPlaneBootstrapDomainMixin:
             ControlPlaneBootstrapCheck(
                 id="linux_host_installation",
                 ok=has_linux_host_installation_artifacts(root_dir),
-                details=(
-                    "linux_host_installation_artifacts_present"
-                    if has_linux_host_installation_artifacts(root_dir)
-                    else "missing_install_script_or_systemd_units"
-                ),
+                details=("linux_host_installation_artifacts_present" if has_linux_host_installation_artifacts(root_dir) else "missing_install_script_or_systemd_units"),
             ),
         ]
         ready = all(item.ok for item in checks)
@@ -250,9 +228,7 @@ class ControlPlaneBootstrapDomainMixin:
         self._persist_state()
         return {"status": "ok", **report.model_dump()}
 
-    def get_last_bootstrap_readiness(self) -> ControlPlaneBootstrapReadinessReport | None:
-        return (
-            self._last_bootstrap_readiness.model_copy(deep=True)
-            if self._last_bootstrap_readiness
-            else None
-        )
+    def get_last_bootstrap_readiness(
+        self,
+    ) -> ControlPlaneBootstrapReadinessReport | None:
+        return self._last_bootstrap_readiness.model_copy(deep=True) if self._last_bootstrap_readiness else None

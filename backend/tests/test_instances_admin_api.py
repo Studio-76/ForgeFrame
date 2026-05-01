@@ -1,10 +1,10 @@
-import os
 from uuid import uuid4
 
+from conftest import admin_headers as shared_admin_headers
+from conftest import login_headers_allowing_password_rotation
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 
-from conftest import admin_headers as shared_admin_headers, login_headers_allowing_password_rotation
 from app.execution.dependencies import get_execution_session_factory
 from app.main import app
 from app.storage.agent_repository import AgentORM
@@ -218,9 +218,7 @@ def test_instances_inventory_reports_missing_operator_without_healing_listing_re
 
     session_factory = get_execution_session_factory()
     with session_factory() as session, session.begin():
-        operator_row = session.execute(
-            select(AgentORM).where(AgentORM.id == operator_agent_id)
-        ).scalar_one()
+        operator_row = session.execute(select(AgentORM).where(AgentORM.id == operator_agent_id)).scalar_one()
         session.delete(operator_row)
 
     detail = client.get(f"/admin/instances/{instance_id}", headers=headers)

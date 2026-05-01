@@ -1,8 +1,9 @@
-from fastapi.testclient import TestClient
 from uuid import uuid4
 
-from app.main import app
 from conftest import admin_headers as shared_admin_headers
+from fastapi.testclient import TestClient
+
+from app.main import app
 
 
 def _admin_headers(client: TestClient) -> dict[str, str]:
@@ -106,9 +107,26 @@ def test_assistant_profiles_persist_and_link_shared_core_truth() -> None:
     client = TestClient(app)
     headers = _admin_headers(client)
     assistant_profile_id = f"assistant_profile_primary_{uuid4().hex[:8]}"
-    instance_id = _create_instance(client, headers, instance_id="instance_assistant_alpha", company_id="company_assistant_alpha")
-    mail_source_id = _create_source(client, headers, instance_id=instance_id, source_kind="mail", label="Private mailbox")
-    calendar_source_id = _create_source(client, headers, instance_id=instance_id, source_kind="calendar", label="Primary calendar")
+    instance_id = _create_instance(
+        client,
+        headers,
+        instance_id="instance_assistant_alpha",
+        company_id="company_assistant_alpha",
+    )
+    mail_source_id = _create_source(
+        client,
+        headers,
+        instance_id=instance_id,
+        source_kind="mail",
+        label="Private mailbox",
+    )
+    calendar_source_id = _create_source(
+        client,
+        headers,
+        instance_id=instance_id,
+        source_kind="calendar",
+        label="Primary calendar",
+    )
     preferred_contact_id = _create_contact(
         client,
         headers,
@@ -125,8 +143,20 @@ def test_assistant_profiles_persist_and_link_shared_core_truth() -> None:
         display_name="Morgan Delegate",
         contact_ref="contact://assistant/morgan",
     )
-    primary_channel_id = _create_channel(client, headers, instance_id=instance_id, label="Personal email", target="me@example.com")
-    fallback_channel_id = _create_channel(client, headers, instance_id=instance_id, label="Backup email", target="backup@example.com")
+    primary_channel_id = _create_channel(
+        client,
+        headers,
+        instance_id=instance_id,
+        label="Personal email",
+        target="me@example.com",
+    )
+    fallback_channel_id = _create_channel(
+        client,
+        headers,
+        instance_id=instance_id,
+        label="Backup email",
+        target="backup@example.com",
+    )
 
     created = client.post(
         "/admin/assistant-profiles",
@@ -147,8 +177,18 @@ def test_assistant_profiles_persist_and_link_shared_core_truth() -> None:
             "mail_source_id": mail_source_id,
             "calendar_source_id": calendar_source_id,
             "preferences": {"language": "de", "working_style": "proactive"},
-            "communication_rules": {"tone": "warm", "locale": "de-DE", "signature": "Jordan"},
-            "quiet_hours": {"enabled": True, "timezone": "UTC", "start_minute": 1320, "end_minute": 420, "days": ["mon", "tue", "wed", "thu", "fri"]},
+            "communication_rules": {
+                "tone": "warm",
+                "locale": "de-DE",
+                "signature": "Jordan",
+            },
+            "quiet_hours": {
+                "enabled": True,
+                "timezone": "UTC",
+                "start_minute": 1320,
+                "end_minute": 420,
+                "days": ["mon", "tue", "wed", "thu", "fri"],
+            },
             "delivery_preferences": {
                 "primary_channel_id": primary_channel_id,
                 "fallback_channel_id": fallback_channel_id,
@@ -209,7 +249,12 @@ def test_assistant_action_evaluation_enforces_quiet_hours_preview_and_approval_t
     client = TestClient(app)
     headers = _admin_headers(client)
     assistant_profile_id = f"assistant_profile_eval_{uuid4().hex[:8]}"
-    instance_id = _create_instance(client, headers, instance_id="instance_assistant_eval", company_id="company_assistant_eval")
+    instance_id = _create_instance(
+        client,
+        headers,
+        instance_id="instance_assistant_eval",
+        company_id="company_assistant_eval",
+    )
     mail_source_id = _create_source(client, headers, instance_id=instance_id, source_kind="mail", label="Mailbox")
     preferred_contact_id = _create_contact(
         client,
@@ -219,7 +264,13 @@ def test_assistant_action_evaluation_enforces_quiet_hours_preview_and_approval_t
         display_name="Jordan Contact",
         contact_ref="contact://assistant/eval",
     )
-    primary_channel_id = _create_channel(client, headers, instance_id=instance_id, label="Personal email", target="me@example.com")
+    primary_channel_id = _create_channel(
+        client,
+        headers,
+        instance_id=instance_id,
+        label="Personal email",
+        target="me@example.com",
+    )
 
     created = client.post(
         "/admin/assistant-profiles",
@@ -366,8 +417,18 @@ def test_assistant_profiles_are_hard_scoped_and_enforce_action_mode_rules() -> N
     client = TestClient(app)
     headers = _admin_headers(client)
     assistant_profile_id = f"assistant_profile_rules_{uuid4().hex[:8]}"
-    instance_alpha = _create_instance(client, headers, instance_id="instance_assistant_scope_alpha", company_id="company_assistant_scope_alpha")
-    instance_beta = _create_instance(client, headers, instance_id="instance_assistant_scope_beta", company_id="company_assistant_scope_beta")
+    instance_alpha = _create_instance(
+        client,
+        headers,
+        instance_id="instance_assistant_scope_alpha",
+        company_id="company_assistant_scope_alpha",
+    )
+    instance_beta = _create_instance(
+        client,
+        headers,
+        instance_id="instance_assistant_scope_beta",
+        company_id="company_assistant_scope_beta",
+    )
     mail_source_id = _create_source(client, headers, instance_id=instance_alpha, source_kind="mail", label="Mailbox")
     preferred_contact_id = _create_contact(
         client,
@@ -462,9 +523,20 @@ def test_assistant_profile_updates_can_clear_links_and_change_governance_scope()
     client = TestClient(app)
     headers = _admin_headers(client)
     assistant_profile_id = f"assistant_profile_update_{uuid4().hex[:8]}"
-    instance_id = _create_instance(client, headers, instance_id="instance_assistant_update", company_id="company_assistant_update")
+    instance_id = _create_instance(
+        client,
+        headers,
+        instance_id="instance_assistant_update",
+        company_id="company_assistant_update",
+    )
     mail_source_id = _create_source(client, headers, instance_id=instance_id, source_kind="mail", label="Mailbox")
-    calendar_source_id = _create_source(client, headers, instance_id=instance_id, source_kind="calendar", label="Calendar")
+    calendar_source_id = _create_source(
+        client,
+        headers,
+        instance_id=instance_id,
+        source_kind="calendar",
+        label="Calendar",
+    )
     preferred_contact_id = _create_contact(
         client,
         headers,

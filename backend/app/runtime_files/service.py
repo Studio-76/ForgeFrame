@@ -109,12 +109,7 @@ class RuntimeFilesService:
 
     def list_files(self, *, company_id: str) -> dict[str, object]:
         with self._session_factory() as session:
-            rows = (
-                session.query(RuntimeFileORM)
-                .filter(RuntimeFileORM.company_id == company_id)
-                .order_by(RuntimeFileORM.created_at.desc())
-                .all()
-            )
+            rows = session.query(RuntimeFileORM).filter(RuntimeFileORM.company_id == company_id).order_by(RuntimeFileORM.created_at.desc()).all()
         return {"object": "list", "data": [self._record_payload(row) for row in rows]}
 
     def get_file(self, *, company_id: str, file_id: str) -> dict[str, object]:

@@ -15,15 +15,18 @@ from app.api.admin.security import (
     require_admin_write_session,
 )
 from app.auth.local_auth import role_allows
-from app.governance.errors import GovernanceConflictError, GovernanceEligibilityError, GovernanceNotFoundError
+from app.governance.errors import (
+    GovernanceConflictError,
+    GovernanceEligibilityError,
+    GovernanceNotFoundError,
+)
 from app.governance.models import AuthenticatedAdmin
 from app.governance.service import GovernanceService, get_governance_service
 from app.instances.service import InstanceService, get_instance_service
 
 router = APIRouter(prefix="/security", tags=["admin-security"])
 _SECURITY_IDEMPOTENCY_MESSAGE = (
-    "Idempotency-Key is not supported for admin security mutations until ForgeFrame can persist replay-safe security "
-    "outcomes without storing credentials or minting duplicate privileged sessions."
+    "Idempotency-Key is not supported for admin security mutations until ForgeFrame can persist replay-safe security outcomes without storing credentials or minting duplicate privileged sessions."
 )
 
 
@@ -101,15 +104,13 @@ def security_bootstrap(
     # Operators need pre-submit elevated-access posture, but secret/bootstrap governance
     # details remain limited to full admin sessions.
     if role_allows(admin.role, "admin"):
-        response.update(
-            {
-                "bootstrap": service.bootstrap_status(),
-                "secret_posture": service.provider_secret_posture(),
-                "harness_profiles": service.harness_secret_posture(),
-                "recent_rotations": service.list_secret_rotation_events(limit=20),
-                "secret_storage_controls": service.secret_storage_controls(),
-            }
-        )
+        response.update({
+            "bootstrap": service.bootstrap_status(),
+            "secret_posture": service.provider_secret_posture(),
+            "harness_profiles": service.harness_secret_posture(),
+            "recent_rotations": service.list_secret_rotation_events(limit=20),
+            "secret_storage_controls": service.secret_storage_controls(),
+        })
     return response
 
 
@@ -118,7 +119,10 @@ def list_admin_users(
     _admin: AuthenticatedAdmin = Depends(require_admin_role("admin")),
     service: GovernanceService = Depends(get_governance_service),
 ) -> dict[str, object]:
-    return {"status": "ok", "users": [item.model_dump() for item in service.list_admin_users()]}
+    return {
+        "status": "ok",
+        "users": [item.model_dump() for item in service.list_admin_users()],
+    }
 
 
 @router.post("/users", status_code=status.HTTP_201_CREATED)
@@ -203,7 +207,10 @@ def list_admin_user_memberships(
         memberships = service.list_admin_instance_memberships(user_id)
     except ValueError as exc:
         return _security_error(status.HTTP_404_NOT_FOUND, "admin_user_not_found", str(exc))
-    return {"status": "ok", "memberships": [item.model_dump(mode="json") for item in memberships]}
+    return {
+        "status": "ok",
+        "memberships": [item.model_dump(mode="json") for item in memberships],
+    }
 
 
 @router.put("/users/{user_id}/memberships/{instance_id}")
@@ -275,7 +282,10 @@ def list_admin_sessions(
     _admin: AuthenticatedAdmin = Depends(require_admin_role("admin")),
     service: GovernanceService = Depends(get_governance_service),
 ) -> dict[str, object]:
-    return {"status": "ok", "sessions": service.list_admin_sessions(include_revoked=True)}
+    return {
+        "status": "ok",
+        "sessions": service.list_admin_sessions(include_revoked=True),
+    }
 
 
 @router.post("/sessions/{session_id}/revoke")
@@ -323,7 +333,10 @@ def list_secret_rotations(
     _admin: AuthenticatedAdmin = Depends(require_admin_role("admin")),
     service: GovernanceService = Depends(get_governance_service),
 ) -> dict[str, object]:
-    return {"status": "ok", "rotations": service.list_secret_rotation_events(limit=limit)}
+    return {
+        "status": "ok",
+        "rotations": service.list_secret_rotation_events(limit=limit),
+    }
 
 
 @router.post("/secret-rotations", status_code=status.HTTP_201_CREATED)
@@ -356,7 +369,10 @@ def list_elevated_access_requests(
     admin: AuthenticatedAdmin = Depends(require_admin_role("operator")),
     service: GovernanceService = Depends(get_governance_service),
 ) -> dict[str, object]:
-    return {"status": "ok", "requests": service.list_elevated_access_requests(actor=admin, gate_status=gate_status)}
+    return {
+        "status": "ok",
+        "requests": service.list_elevated_access_requests(actor=admin, gate_status=gate_status),
+    }
 
 
 @router.post("/impersonations", status_code=status.HTTP_202_ACCEPTED)

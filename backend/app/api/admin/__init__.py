@@ -8,23 +8,23 @@ from .security import require_admin_session
 def build_admin_router() -> APIRouter:
     # Import routers lazily so execution/governance dependencies can safely import
     # individual admin submodules without triggering a package-level circular import.
-    from .agents import router as agents_router
     from .accounts import router as accounts_router
-    from .assistant_profiles import router as assistant_profiles_router
-    from .artifacts import router as artifacts_router
+    from .agents import router as agents_router
     from .approvals import router as approvals_router
+    from .artifacts import router as artifacts_router
+    from .assistant_profiles import router as assistant_profiles_router
     from .auth import router as auth_router
     from .automations import router as automations_router
-    from .conversations import router as conversations_router
     from .channels import router as channels_router
     from .contacts import router as contacts_router
+    from .conversations import router as conversations_router
     from .dashboard import router as dashboard_router
     from .execution import router as execution_router
-    from .ingress import router as ingress_router
     from .inbox import router as inbox_router
+    from .ingress import router as ingress_router
     from .instances import router as instances_router
-    from .knowledge_sources import router as knowledge_sources_router
     from .keys import router as keys_router
+    from .knowledge_sources import router as knowledge_sources_router
     from .learning import router as learning_router
     from .logs import router as logs_router
     from .memory import router as memory_router

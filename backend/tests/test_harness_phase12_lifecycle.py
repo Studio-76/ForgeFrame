@@ -1,9 +1,17 @@
 from pathlib import Path
 
-from app.harness.models import HarnessImportRequest, HarnessProviderProfile, HarnessVerificationRequest
+from app.harness.models import (
+    HarnessImportRequest,
+    HarnessProviderProfile,
+    HarnessVerificationRequest,
+)
 from app.harness.service import HarnessService
 from app.harness.store import HarnessStore
-from app.storage.harness_repository import FileHarnessRepository, HarnessRunQuery, HarnessStoragePaths
+from app.storage.harness_repository import (
+    FileHarnessRepository,
+    HarnessRunQuery,
+    HarnessStoragePaths,
+)
 
 
 def _service(tmp_path: Path) -> HarnessService:
@@ -69,7 +77,15 @@ def test_run_query_filters_provider_and_mode(tmp_path: Path) -> None:
         )
     )
     service.sync_profile_inventory("r1")
-    service.verify_profile(HarnessVerificationRequest(provider_key="r1", model="m", include_preview=False, live_probe=False, check_stream=False))
+    service.verify_profile(
+        HarnessVerificationRequest(
+            provider_key="r1",
+            model="m",
+            include_preview=False,
+            live_probe=False,
+            check_stream=False,
+        )
+    )
 
     sync_runs = service._store.list_runs(HarnessRunQuery(provider_key="r1", mode="sync", limit=50))  # noqa: SLF001
     verify_runs = service._store.list_runs(HarnessRunQuery(provider_key="r1", mode="verify", limit=50))  # noqa: SLF001

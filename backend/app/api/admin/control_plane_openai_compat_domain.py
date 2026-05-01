@@ -2,21 +2,20 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from app.control_plane import (
     OpenAICompatibilitySignoffRecord,
     OpenAICompatibilitySummaryRecord,
 )
 from app.execution.dependencies import get_execution_session_factory
+from app.storage.runtime_files_repository import RuntimeFileORM
 from app.storage.runtime_responses_repository import (
     NativeResponseItemORM,
     NativeResponseStreamEventORM,
     NativeResponseToolCallORM,
     RuntimeResponseORM,
 )
-from app.storage.runtime_files_repository import RuntimeFileORM
-
 
 _OPENAI_CORPUS_LABELS: dict[str, str] = {
     "chat_simple": "Chat simple",
@@ -36,6 +35,13 @@ _OPENAI_CORPUS_LABELS: dict[str, str] = {
 
 
 class ControlPlaneOpenAICompatibilityDomainMixin:
+    if TYPE_CHECKING:
+        _analytics: Any
+        _default_tenant_id: Any
+        _effective_truth_projection_tenant_id: Any
+
+        def provider_truth_axes(self, *args: Any, **kwargs: Any) -> list[Any]: ...
+
     @staticmethod
     def _signoff_row(
         corpus_class: str,
@@ -52,9 +58,9 @@ class ControlPlaneOpenAICompatibilityDomainMixin:
         notes: str | None = None,
     ) -> OpenAICompatibilitySignoffRecord:
         return OpenAICompatibilitySignoffRecord(
-            corpus_class=corpus_class,  # type: ignore[arg-type]
+            corpus_class=corpus_class,
             label=_OPENAI_CORPUS_LABELS[corpus_class],
-            status=status,  # type: ignore[arg-type]
+            status=status,
             route=route,
             provider_axis=provider_axis,
             live_evidence_required=live_evidence_required,
@@ -134,11 +140,7 @@ class ControlPlaneOpenAICompatibilityDomainMixin:
                 query = query.filter(RuntimeResponseORM.stream == stream)
             if completed_only:
                 query = query.filter(RuntimeResponseORM.lifecycle_status == "completed")
-            return (
-                query.order_by(RuntimeResponseORM.created_at.desc())
-                .limit(limit)
-                .all()
-            )
+            return query.order_by(RuntimeResponseORM.created_at.desc()).limit(limit).all()
 
     def _latest_response_with_structured_input(
         self,
@@ -157,12 +159,7 @@ class ControlPlaneOpenAICompatibilityDomainMixin:
     ) -> RuntimeResponseORM | None:
         session_factory = get_execution_session_factory()
         with session_factory() as session:
-            rows = (
-                session.query(NativeResponseToolCallORM.response_id)
-                .filter(NativeResponseToolCallORM.company_id == company_id)
-                .order_by(NativeResponseToolCallORM.updated_at.desc())
-                .all()
-            )
+            rows = session.query(NativeResponseToolCallORM.response_id).filter(NativeResponseToolCallORM.company_id == company_id).order_by(NativeResponseToolCallORM.updated_at.desc()).all()
             response_ids = [str(item[0]) for item in rows if item and item[0]]
         recent = {record.id: record for record in self._recent_runtime_responses(company_id=company_id, stream=None)}
         for response_id in response_ids:
@@ -177,17 +174,9 @@ class ControlPlaneOpenAICompatibilityDomainMixin:
     ) -> RuntimeResponseORM | None:
         session_factory = get_execution_session_factory()
         with session_factory() as session:
-            rows = (
-                session.query(NativeResponseStreamEventORM.response_id)
-                .filter(NativeResponseStreamEventORM.company_id == company_id)
-                .order_by(NativeResponseStreamEventORM.created_at.desc())
-                .all()
-            )
+            rows = session.query(NativeResponseStreamEventORM.response_id).filter(NativeResponseStreamEventORM.company_id == company_id).order_by(NativeResponseStreamEventORM.created_at.desc()).all()
             response_ids = [str(item[0]) for item in rows if item and item[0]]
-        recent = {
-            record.id: record
-            for record in self._recent_runtime_responses(company_id=company_id, stream=True)
-        }
+        recent = {record.id: record for record in self._recent_runtime_responses(company_id=company_id, stream=True)}
         for response_id in response_ids:
             if response_id in recent:
                 return recent[response_id]
@@ -201,7 +190,8 @@ class ControlPlaneOpenAICompatibilityDomainMixin:
         session_factory = get_execution_session_factory()
         with session_factory() as session:
             rows = (
-                session.query(NativeResponseItemORM.response_id)
+                session
+                .query(NativeResponseItemORM.response_id)
                 .filter(
                     NativeResponseItemORM.company_id == company_id,
                     NativeResponseItemORM.phase == "input",
@@ -234,15 +224,17 @@ class ControlPlaneOpenAICompatibilityDomainMixin:
     ) -> RuntimeFileORM | None:
         session_factory = get_execution_session_factory()
         with session_factory() as session:
-            return (
-                session.query(RuntimeFileORM)
-                .filter(RuntimeFileORM.company_id == company_id)
-                .order_by(RuntimeFileORM.created_at.desc())
-                .first()
-            )
+            return session.query(RuntimeFileORM).filter(RuntimeFileORM.company_id == company_id).order_by(RuntimeFileORM.created_at.desc()).first()
 
     @staticmethod
-    def _signoff_summary(rows: list[OpenAICompatibilitySignoffRecord]) -> OpenAICompatibilitySummaryRecord:
+    def _iso_attr(obj: object, attr: str) -> str | None:
+        value = getattr(obj, attr, None)
+        return value.isoformat() if value is not None else None
+
+    @staticmethod
+    def _signoff_summary(
+        rows: list[OpenAICompatibilitySignoffRecord],
+    ) -> OpenAICompatibilitySummaryRecord:
         summary = OpenAICompatibilitySummaryRecord(total_checks=len(rows))
         for row in rows:
             if row.status == "supported":
@@ -255,12 +247,7 @@ class ControlPlaneOpenAICompatibilityDomainMixin:
                 summary.skipped += 1
             elif row.status == "blocked-by-live-evidence":
                 summary.blocked_by_live_evidence += 1
-        summary.signoff_claimable = (
-            summary.total_checks > 0
-            and summary.partial == 0
-            and summary.unsupported == 0
-            and summary.blocked_by_live_evidence == 0
-        )
+        summary.signoff_claimable = summary.total_checks > 0 and summary.partial == 0 and summary.unsupported == 0 and summary.blocked_by_live_evidence == 0
         if summary.signoff_claimable:
             summary.overall_status = "supported"
         elif summary.supported > 0 or summary.partial > 0 or summary.blocked_by_live_evidence > 0:
@@ -297,24 +284,17 @@ class ControlPlaneOpenAICompatibilityDomainMixin:
             stream_mode="stream",
         )
         tool_usage = next(
-            (
-                event
-                for event in reversed(usage_events)
-                if int(getattr(event, "tool_call_count", 0) or 0) > 0
-                and str(getattr(event, "route", "") or "") in {"/v1/chat/completions", "/v1/responses"}
-            ),
+            (event for event in reversed(usage_events) if int(getattr(event, "tool_call_count", 0) or 0) > 0 and str(getattr(event, "route", "") or "") in {"/v1/chat/completions", "/v1/responses"}),
             None,
         )
         typed_error = next(
-            (
-                event
-                for event in reversed(error_events)
-                if str(getattr(event, "route", "") or "") in {"/v1/chat/completions", "/v1/responses"}
-                and str(getattr(event, "error_type", "") or "").strip()
-            ),
+            (event for event in reversed(error_events) if str(getattr(event, "route", "") or "") in {"/v1/chat/completions", "/v1/responses"} and str(getattr(event, "error_type", "") or "").strip()),
             None,
         )
-        latest_response = next(iter(self._recent_runtime_responses(company_id=company_id, stream=False)), None)
+        latest_response = next(
+            iter(self._recent_runtime_responses(company_id=company_id, stream=False)),
+            None,
+        )
         structured_response = self._latest_response_with_structured_input(company_id=company_id)
         structured_output_response = self._latest_structured_output_response(company_id=company_id)
         tool_response = self._latest_response_with_tool_calls(company_id=company_id)
@@ -327,10 +307,7 @@ class ControlPlaneOpenAICompatibilityDomainMixin:
             stream_mode="non_stream",
         )
 
-        any_vision_provider = any(
-            bool(axis.runtime.capabilities.get("vision")) or str(axis.runtime.capabilities.get("vision_level", "")) not in {"", "none"}
-            for axis in truth_axes.values()
-        )
+        any_vision_provider = any(bool(axis.runtime.capabilities.get("vision")) or str(axis.runtime.capabilities.get("vision_level", "")) not in {"", "none"} for axis in truth_axes.values())
 
         rows = [
             self._signoff_row(
@@ -339,11 +316,7 @@ class ControlPlaneOpenAICompatibilityDomainMixin:
                 route="/v1/chat/completions",
                 provider_axis="openai_compatible_clients",
                 live_evidence_required=True,
-                deviation_reason=(
-                    None
-                    if chat_non_stream is not None
-                    else "The chat-compatible runtime surface exists, but no recorded non-stream runtime evidence exists for this tenant."
-                ),
+                deviation_reason=(None if chat_non_stream is not None else "The chat-compatible runtime surface exists, but no recorded non-stream runtime evidence exists for this tenant."),
                 evidence_source="runtime_usage" if chat_non_stream is not None else "backend/tests/test_runtime_core.py",
                 last_verified_at=getattr(chat_non_stream, "created_at", None),
                 sample_request_id=getattr(chat_non_stream, "request_id", None),
@@ -361,9 +334,7 @@ class ControlPlaneOpenAICompatibilityDomainMixin:
                     else "No verified multimodal chat surface is wired on the public OpenAI-compatible path."
                 ),
                 evidence_source="backend/tests/test_runtime_core.py" if any_vision_provider else "repo_gap",
-                raw_diff_summary=(
-                    "Multimodal provider capability is present in parts of the repo, but no signed-off public chat-multimodal runtime proof exists."
-                ),
+                raw_diff_summary=("Multimodal provider capability is present in parts of the repo, but no signed-off public chat-multimodal runtime proof exists."),
             ),
             self._signoff_row(
                 "responses_simple",
@@ -377,14 +348,10 @@ class ControlPlaneOpenAICompatibilityDomainMixin:
                     else "No completed /v1/responses runtime evidence is recorded for this tenant."
                 ),
                 evidence_source=(
-                    "runtime_response_projection+backend/tests/test_native_responses_runtime_contract.py"
-                    if latest_response is not None
-                    else "backend/tests/test_native_responses_runtime_contract.py"
+                    "runtime_response_projection+backend/tests/test_native_responses_runtime_contract.py" if latest_response is not None else "backend/tests/test_native_responses_runtime_contract.py"
                 ),
-                last_verified_at=getattr(latest_response, "updated_at", None).isoformat() if latest_response is not None and getattr(latest_response, "updated_at", None) is not None else None,
-                raw_diff_summary=(
-                    "The durable object model is native, but the provider-execution path remains a compatibility translation layer."
-                ),
+                last_verified_at=self._iso_attr(latest_response, "updated_at") if latest_response is not None else None,
+                raw_diff_summary=("The durable object model is native, but the provider-execution path remains a compatibility translation layer."),
             ),
             self._signoff_row(
                 "responses_input_items",
@@ -402,7 +369,7 @@ class ControlPlaneOpenAICompatibilityDomainMixin:
                     if structured_response is not None and native_items_response is not None
                     else "backend/tests/test_native_responses_runtime_contract.py"
                 ),
-                last_verified_at=getattr(structured_response, "updated_at", None).isoformat() if structured_response is not None and getattr(structured_response, "updated_at", None) is not None else None,
+                last_verified_at=self._iso_attr(structured_response, "updated_at") if structured_response is not None else None,
                 raw_diff_summary="Input-items truth is durable, but provider execution remains chat-translated.",
             ),
             self._signoff_row(
@@ -411,11 +378,7 @@ class ControlPlaneOpenAICompatibilityDomainMixin:
                 route="/v1/chat/completions",
                 provider_axis="openai_compatible_clients",
                 live_evidence_required=True,
-                deviation_reason=(
-                    None
-                    if chat_stream is not None
-                    else "The streaming chat surface exists, but no recorded stream runtime evidence exists for this tenant."
-                ),
+                deviation_reason=(None if chat_stream is not None else "The streaming chat surface exists, but no recorded stream runtime evidence exists for this tenant."),
                 evidence_source="runtime_usage" if chat_stream is not None else "backend/tests/test_runtime_core.py",
                 last_verified_at=getattr(chat_stream, "created_at", None),
                 sample_request_id=getattr(chat_stream, "request_id", None),
@@ -433,11 +396,9 @@ class ControlPlaneOpenAICompatibilityDomainMixin:
                     else "No recorded streaming /v1/responses runtime evidence is stored yet."
                 ),
                 evidence_source=(
-                    "runtime_stream_projection+backend/tests/test_native_responses_runtime_contract.py"
-                    if streaming_response is not None
-                    else "backend/tests/test_native_responses_runtime_contract.py"
+                    "runtime_stream_projection+backend/tests/test_native_responses_runtime_contract.py" if streaming_response is not None else "backend/tests/test_native_responses_runtime_contract.py"
                 ),
-                last_verified_at=getattr(streaming_response, "updated_at", None).isoformat() if streaming_response is not None and getattr(streaming_response, "updated_at", None) is not None else None,
+                last_verified_at=self._iso_attr(streaming_response, "updated_at") if streaming_response is not None else None,
                 raw_diff_summary="SSE lifecycle truth is durable, but the upstream adapter contract is still chat-oriented.",
             ),
             self._signoff_row(
@@ -456,14 +417,7 @@ class ControlPlaneOpenAICompatibilityDomainMixin:
                     if tool_response is not None or tool_usage is not None
                     else "backend/tests/test_native_responses_runtime_contract.py"
                 ),
-                last_verified_at=(
-                    getattr(tool_usage, "created_at", None)
-                    or (
-                        getattr(tool_response, "updated_at", None).isoformat()
-                        if tool_response is not None and getattr(tool_response, "updated_at", None) is not None
-                        else None
-                    )
-                ),
+                last_verified_at=(getattr(tool_usage, "created_at", None) or (self._iso_attr(tool_response, "updated_at") if tool_response is not None else None)),
                 sample_request_id=getattr(tool_usage, "request_id", None),
                 raw_diff_summary="Tool roundtrips are durable and typed, but not yet provider-native end to end.",
             ),
@@ -474,44 +428,22 @@ class ControlPlaneOpenAICompatibilityDomainMixin:
                 provider_axis="openai_compatible_clients",
                 live_evidence_required=True,
                 deviation_reason=(
-                    None
-                    if structured_output_response is not None
-                    else "Structured-output controls are wired on `/v1/responses`, but no completed runtime evidence is recorded for this tenant yet."
+                    None if structured_output_response is not None else "Structured-output controls are wired on `/v1/responses`, but no completed runtime evidence is recorded for this tenant yet."
                 ),
-                evidence_source=(
-                    "runtime_response_projection+backend/tests/test_runtime_core.py"
-                    if structured_output_response is not None
-                    else "backend/tests/test_runtime_core.py"
-                ),
-                last_verified_at=getattr(structured_output_response, "updated_at", None).isoformat() if structured_output_response is not None and getattr(structured_output_response, "updated_at", None) is not None else None,
-                raw_diff_summary=(
-                    None
-                    if structured_output_response is not None
-                    else "Structured-output runtime proof is missing for the current tenant."
-                ),
+                evidence_source=("runtime_response_projection+backend/tests/test_runtime_core.py" if structured_output_response is not None else "backend/tests/test_runtime_core.py"),
+                last_verified_at=self._iso_attr(structured_output_response, "updated_at") if structured_output_response is not None else None,
+                raw_diff_summary=(None if structured_output_response is not None else "Structured-output runtime proof is missing for the current tenant."),
             ),
             self._signoff_row(
                 "error_semantics",
                 status="supported" if typed_error is not None else "partial",
                 route="/v1/responses",
                 provider_axis="openai_compatible_clients",
-                deviation_reason=(
-                    None
-                    if typed_error is not None
-                    else "Typed public error mapping exists in code and tests, but no recent runtime error sample is recorded for this tenant."
-                ),
-                evidence_source=(
-                    "runtime_error_event+backend/tests/test_external_openai_path.py"
-                    if typed_error is not None
-                    else "backend/tests/test_external_openai_path.py"
-                ),
+                deviation_reason=(None if typed_error is not None else "Typed public error mapping exists in code and tests, but no recent runtime error sample is recorded for this tenant."),
+                evidence_source=("runtime_error_event+backend/tests/test_external_openai_path.py" if typed_error is not None else "backend/tests/test_external_openai_path.py"),
                 last_verified_at=getattr(typed_error, "created_at", None),
                 sample_request_id=getattr(typed_error, "request_id", None),
-                raw_diff_summary=(
-                    None
-                    if typed_error is not None
-                    else "Contract tests prove sanitized typed errors, but no fresh runtime failure sample is present."
-                ),
+                raw_diff_summary=(None if typed_error is not None else "Contract tests prove sanitized typed errors, but no fresh runtime failure sample is present."),
             ),
             self._signoff_row(
                 "unsupported_partial_fields",
@@ -543,17 +475,9 @@ class ControlPlaneOpenAICompatibilityDomainMixin:
                     if runtime_file is not None
                     else "The public files surface is wired, but no uploaded runtime file evidence is recorded for this tenant yet."
                 ),
-                evidence_source=(
-                    "runtime_files_projection+backend/tests/test_runtime_core.py"
-                    if runtime_file is not None
-                    else "backend/tests/test_runtime_core.py"
-                ),
-                last_verified_at=getattr(runtime_file, "updated_at", None).isoformat() if runtime_file is not None and getattr(runtime_file, "updated_at", None) is not None else None,
-                raw_diff_summary=(
-                    "Core file APIs exist, but broader file-purpose parity remains intentionally partial."
-                    if runtime_file is not None
-                    else "No runtime file evidence is present yet."
-                ),
+                evidence_source=("runtime_files_projection+backend/tests/test_runtime_core.py" if runtime_file is not None else "backend/tests/test_runtime_core.py"),
+                last_verified_at=self._iso_attr(runtime_file, "updated_at") if runtime_file is not None else None,
+                raw_diff_summary=("Core file APIs exist, but broader file-purpose parity remains intentionally partial." if runtime_file is not None else "No runtime file evidence is present yet."),
             ),
             self._signoff_row(
                 "embeddings",
@@ -561,19 +485,11 @@ class ControlPlaneOpenAICompatibilityDomainMixin:
                 route="/v1/embeddings",
                 provider_axis="openai_compatible_clients",
                 live_evidence_required=True,
-                deviation_reason=(
-                    None
-                    if embeddings_usage is not None
-                    else "The public embeddings surface is wired, but no recorded embeddings runtime usage exists for this tenant yet."
-                ),
+                deviation_reason=(None if embeddings_usage is not None else "The public embeddings surface is wired, but no recorded embeddings runtime usage exists for this tenant yet."),
                 evidence_source="runtime_usage" if embeddings_usage is not None else "backend/tests/test_runtime_core.py",
                 last_verified_at=getattr(embeddings_usage, "created_at", None),
                 sample_request_id=getattr(embeddings_usage, "request_id", None),
-                raw_diff_summary=(
-                    None
-                    if embeddings_usage is not None
-                    else "Embeddings runtime proof is missing for the current tenant."
-                ),
+                raw_diff_summary=(None if embeddings_usage is not None else "Embeddings runtime proof is missing for the current tenant."),
             ),
         ]
 

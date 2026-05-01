@@ -8,6 +8,7 @@ import json
 import re
 from collections.abc import Iterator
 from datetime import datetime
+from typing import Any
 from urllib.parse import urlsplit
 
 import httpx
@@ -18,8 +19,8 @@ from app.providers.base import (
     ProviderAuthenticationError,
     ProviderBadRequestError,
     ProviderCapabilities,
-    ProviderConflictError,
     ProviderConfigurationError,
+    ProviderConflictError,
     ProviderModelNotFoundError,
     ProviderPayloadTooLargeError,
     ProviderProtocolError,
@@ -76,7 +77,10 @@ class AnthropicAdapter:
 
     def create_chat_completion(self, request: ChatDispatchRequest) -> ChatDispatchResult:
         if not self.is_ready():
-            raise ProviderConfigurationError(self.provider_name, self.readiness_reason() or "Anthropic is not configured.")
+            raise ProviderConfigurationError(
+                self.provider_name,
+                self.readiness_reason() or "Anthropic is not configured.",
+            )
         payload = self._build_payload(request, stream=False)
         data = self._post(payload, request.request_metadata)
         content, tool_calls = self._extract_content(data.get("content", []))
@@ -96,7 +100,10 @@ class AnthropicAdapter:
 
     def stream_chat_completion(self, request: ChatDispatchRequest) -> Iterator[ProviderStreamEvent]:
         if not self.is_ready():
-            raise ProviderConfigurationError(self.provider_name, self.readiness_reason() or "Anthropic is not configured.")
+            raise ProviderConfigurationError(
+                self.provider_name,
+                self.readiness_reason() or "Anthropic is not configured.",
+            )
         payload = self._build_payload(request, stream=True)
         yield from self._stream(payload, request.messages, request.request_metadata)
 
@@ -139,7 +146,10 @@ class AnthropicAdapter:
         if isinstance(value, list):
             chunks: list[str] = []
             for item in value:
-                if isinstance(item, dict) and item.get("type") in {"text", "input_text"}:
+                if isinstance(item, dict) and item.get("type") in {
+                    "text",
+                    "input_text",
+                }:
                     chunks.append(str(item.get("text", "")))
                 else:
                     chunks.append(json.dumps(item, ensure_ascii=True))
@@ -182,7 +192,10 @@ class AnthropicAdapter:
     def _image_source_from_url(cls, raw_url: object) -> dict[str, str]:
         url = str(raw_url or "").strip()
         if not url:
-            raise ProviderBadRequestError(cls.provider_name, "Anthropic vision translation requires image_url.url.")
+            raise ProviderBadRequestError(
+                cls.provider_name,
+                "Anthropic vision translation requires image_url.url.",
+            )
         data_url_match = _DATA_URL_PATTERN.match(url)
         if data_url_match is not None:
             media_type = data_url_match.group("media_type").strip()
@@ -199,7 +212,10 @@ class AnthropicAdapter:
         if source_type == "url":
             url = str(source.get("url", "") or "").strip()
             if not url:
-                raise ProviderBadRequestError(cls.provider_name, "Anthropic image URL sources require a url field.")
+                raise ProviderBadRequestError(
+                    cls.provider_name,
+                    "Anthropic image URL sources require a url field.",
+                )
             return {"type": "url", "url": url}
         if source_type == "base64":
             media_type = str(source.get("media_type", "") or "").strip()
@@ -214,7 +230,7 @@ class AnthropicAdapter:
         raise ProviderUnsupportedFeatureError(cls.provider_name, f"vision_source:{source_type or 'unknown'}")
 
     @classmethod
-    def _normalize_openai_image_block(cls, block: dict[str, object]) -> dict[str, object]:
+    def _normalize_openai_image_block(cls, block: dict[str, Any]) -> dict[str, Any]:
         if block.get("file_id") is not None:
             raise ProviderUnsupportedFeatureError(cls.provider_name, "vision:file_id")
         image_url = block.get("image_url", block.get("url"))
@@ -225,7 +241,7 @@ class AnthropicAdapter:
         return {"type": "image", "source": cls._image_source_from_url(image_url)}
 
     @classmethod
-    def _content_to_anthropic_blocks(cls, value: object) -> list[dict[str, object]]:
+    def _content_to_anthropic_blocks(cls, value: object) -> list[dict[str, Any]]:
         if value is None:
             return []
         if isinstance(value, dict):
@@ -236,12 +252,17 @@ class AnthropicAdapter:
             if block_type in {"image_url", "input_image"}:
                 return [cls._normalize_openai_image_block(value)]
             if block_type == "image":
-                return [{"type": "image", "source": cls._normalize_image_source(value.get("source"))}]
+                return [
+                    {
+                        "type": "image",
+                        "source": cls._normalize_image_source(value.get("source")),
+                    }
+                ]
             nested_content = value.get("content")
             if isinstance(nested_content, list):
                 return cls._content_to_anthropic_blocks(nested_content)
         if isinstance(value, list):
-            blocks: list[dict[str, object]] = []
+            blocks: list[dict[str, Any]] = []
             for item in value:
                 blocks.extend(cls._content_to_anthropic_blocks(item))
             return blocks
@@ -249,21 +270,33 @@ class AnthropicAdapter:
         return [{"type": "text", "text": text}] if text.strip() else []
 
     @classmethod
-    def _normalize_tool_use_block(cls, tool_call: object) -> dict[str, object]:
+    def _normalize_tool_use_block(cls, tool_call: object) -> dict[str, Any]:
         if not isinstance(tool_call, dict):
-            raise ProviderBadRequestError(cls.provider_name, "Anthropic follow-up translation requires assistant tool_calls to be objects.")
+            raise ProviderBadRequestError(
+                cls.provider_name,
+                "Anthropic follow-up translation requires assistant tool_calls to be objects.",
+            )
 
         tool_call_id = str(tool_call.get("id", "") or "").strip()
         if not tool_call_id:
-            raise ProviderBadRequestError(cls.provider_name, "Anthropic follow-up translation requires assistant tool_calls[].id.")
+            raise ProviderBadRequestError(
+                cls.provider_name,
+                "Anthropic follow-up translation requires assistant tool_calls[].id.",
+            )
 
         function = tool_call.get("function", {})
         if not isinstance(function, dict):
-            raise ProviderBadRequestError(cls.provider_name, "Anthropic follow-up translation requires assistant tool_calls[].function to be an object.")
+            raise ProviderBadRequestError(
+                cls.provider_name,
+                "Anthropic follow-up translation requires assistant tool_calls[].function to be an object.",
+            )
 
         tool_name = str(function.get("name", "") or "").strip()
         if not tool_name:
-            raise ProviderBadRequestError(cls.provider_name, "Anthropic follow-up translation requires assistant tool_calls[].function.name.")
+            raise ProviderBadRequestError(
+                cls.provider_name,
+                "Anthropic follow-up translation requires assistant tool_calls[].function.name.",
+            )
 
         raw_arguments = function.get("arguments", "{}")
         if raw_arguments is None:
@@ -299,13 +332,16 @@ class AnthropicAdapter:
         }
 
     @classmethod
-    def _assistant_content(cls, message: dict[str, object]) -> str | list[dict[str, object]]:
+    def _assistant_content(cls, message: dict[str, Any]) -> str | list[dict[str, Any]]:
         text_blocks = cls._content_to_text_blocks(message.get("content"))
         raw_tool_calls = message.get("tool_calls", [])
         if raw_tool_calls is None:
             raw_tool_calls = []
         if not isinstance(raw_tool_calls, list):
-            raise ProviderBadRequestError(cls.provider_name, "Anthropic follow-up translation requires assistant tool_calls to be a list.")
+            raise ProviderBadRequestError(
+                cls.provider_name,
+                "Anthropic follow-up translation requires assistant tool_calls to be a list.",
+            )
         tool_blocks = [cls._normalize_tool_use_block(tool_call) for tool_call in raw_tool_calls]
         if tool_blocks:
             return [*text_blocks, *tool_blocks]
@@ -316,38 +352,47 @@ class AnthropicAdapter:
         return " "
 
     @classmethod
-    def _normalize_tool_result_content(cls, value: object) -> str | list[dict[str, object]]:
+    def _normalize_tool_result_content(cls, value: object) -> str | list[dict[str, Any]]:
         if isinstance(value, str):
             return value if value.strip() else " "
         text_blocks = cls._content_to_text_blocks(value)
         return text_blocks if text_blocks else " "
 
     @classmethod
-    def _normalize_tool_result_block(cls, message: dict[str, object]) -> dict[str, object]:
+    def _normalize_tool_result_block(cls, message: dict[str, Any]) -> dict[str, Any]:
         tool_call_id = str(message.get("tool_call_id", "") or "").strip()
         if not tool_call_id:
-            raise ProviderBadRequestError(cls.provider_name, "Anthropic follow-up translation requires tool messages to include tool_call_id.")
+            raise ProviderBadRequestError(
+                cls.provider_name,
+                "Anthropic follow-up translation requires tool messages to include tool_call_id.",
+            )
         return {
             "type": "tool_result",
             "tool_use_id": tool_call_id,
             "content": cls._normalize_tool_result_content(message.get("content")),
         }
 
-    def _build_payload(self, request: ChatDispatchRequest, *, stream: bool) -> dict[str, object]:
+    def _build_payload(self, request: ChatDispatchRequest, *, stream: bool) -> dict[str, Any]:
         system_messages: list[str] = []
-        translated_messages: list[dict[str, object]] = []
-        pending_tool_results: list[dict[str, object]] = []
+        translated_messages: list[dict[str, Any]] = []
+        pending_tool_results: list[dict[str, Any]] = []
 
         def _append_user_message(content: object) -> None:
             nonlocal pending_tool_results
             content_blocks = self._content_to_anthropic_blocks(content)
             if pending_tool_results:
                 merged_blocks = [*pending_tool_results, *content_blocks]
-                translated_messages.append({"role": "user", "content": merged_blocks if merged_blocks else " "})
+                translated_messages.append({
+                    "role": "user",
+                    "content": merged_blocks if merged_blocks else " ",
+                })
                 pending_tool_results = []
                 return
             if isinstance(content, str):
-                translated_messages.append({"role": "user", "content": content if content.strip() else " "})
+                translated_messages.append({
+                    "role": "user",
+                    "content": content if content.strip() else " ",
+                })
                 return
             if content_blocks:
                 translated_messages.append({"role": "user", "content": content_blocks})
@@ -361,19 +406,28 @@ class AnthropicAdapter:
                 continue
             if role == "assistant":
                 if pending_tool_results:
-                    translated_messages.append({"role": "user", "content": pending_tool_results})
+                    translated_messages.append({
+                        "role": "user",
+                        "content": pending_tool_results,
+                    })
                     pending_tool_results = []
-                translated_messages.append({"role": "assistant", "content": self._assistant_content(item)})
+                translated_messages.append({
+                    "role": "assistant",
+                    "content": self._assistant_content(item),
+                })
                 continue
             if role == "tool":
                 pending_tool_results.append(self._normalize_tool_result_block(item))
                 continue
             _append_user_message(item.get("content"))
         if pending_tool_results:
-            translated_messages.append({"role": "user", "content": pending_tool_results})
+            translated_messages.append({
+                "role": "user",
+                "content": pending_tool_results,
+            })
         if not translated_messages:
             translated_messages = [{"role": "user", "content": " "}]
-        payload: dict[str, object] = {
+        payload: dict[str, Any] = {
             "model": request.model or self._settings.anthropic_probe_model,
             "messages": translated_messages,
             "max_tokens": 1024,
@@ -395,7 +449,7 @@ class AnthropicAdapter:
         return payload
 
     @staticmethod
-    def _normalize_tool(tool: dict) -> dict[str, object]:
+    def _normalize_tool(tool: dict) -> dict[str, Any]:
         function = tool.get("function", {})
         return {
             "name": str(function.get("name", "")),
@@ -404,7 +458,9 @@ class AnthropicAdapter:
         }
 
     @staticmethod
-    def _normalize_tool_choice(tool_choice: str | dict | None) -> dict[str, object] | None:
+    def _normalize_tool_choice(
+        tool_choice: str | dict | None,
+    ) -> dict[str, Any] | None:
         if tool_choice is None or tool_choice == "none":
             return None
         if isinstance(tool_choice, str):
@@ -419,10 +475,15 @@ class AnthropicAdapter:
             return None
         return {"type": "tool", "name": str(name)}
 
-    def _post(self, payload: dict[str, object], request_metadata: dict[str, str] | None = None) -> dict:
+    def _post(self, payload: dict[str, Any], request_metadata: dict[str, str] | None = None) -> dict:
         endpoint, headers = self._endpoint_and_headers(request_metadata)
         try:
-            response = httpx.post(endpoint, json=payload, headers=headers, timeout=self._settings.anthropic_timeout_seconds)
+            response = httpx.post(
+                endpoint,
+                json=payload,
+                headers=headers,
+                timeout=self._settings.anthropic_timeout_seconds,
+            )
         except httpx.TimeoutException as exc:
             raise ProviderTimeoutError(self.provider_name, f"Anthropic request timed out: {exc}") from exc
         except httpx.RequestError as exc:
@@ -435,7 +496,7 @@ class AnthropicAdapter:
 
     def _stream(
         self,
-        payload: dict[str, object],
+        payload: dict[str, Any],
         messages: list[dict],
         request_metadata: dict[str, str] | None = None,
     ) -> Iterator[ProviderStreamEvent]:
@@ -445,10 +506,16 @@ class AnthropicAdapter:
         finish_reason = "stop"
         saw_done = False
         current_event = ""
-        streamed_tool_calls: dict[int, dict[str, object]] = {}
+        streamed_tool_calls: dict[int, dict[str, Any]] = {}
         streamed_tool_inputs: dict[int, object] = {}
         try:
-            with httpx.stream("POST", endpoint, json=payload, headers=headers, timeout=self._settings.anthropic_timeout_seconds) as response:
+            with httpx.stream(
+                "POST",
+                endpoint,
+                json=payload,
+                headers=headers,
+                timeout=self._settings.anthropic_timeout_seconds,
+            ) as response:
                 self._raise_for_status(response)
                 for raw_line in response.iter_lines():
                     if raw_line is None:
@@ -468,7 +535,10 @@ class AnthropicAdapter:
                     try:
                         payload_item = json.loads(data_text)
                     except json.JSONDecodeError as exc:
-                        raise ProviderStreamInterruptedError(self.provider_name, "Anthropic stream produced invalid JSON chunk.") from exc
+                        raise ProviderStreamInterruptedError(
+                            self.provider_name,
+                            "Anthropic stream produced invalid JSON chunk.",
+                        ) from exc
                     event_type = current_event or str(payload_item.get("type", ""))
                     if event_type == "content_block_start":
                         self._capture_stream_tool_call_start(payload_item, streamed_tool_calls, streamed_tool_inputs)
@@ -476,7 +546,10 @@ class AnthropicAdapter:
                         delta_payload = payload_item.get("delta", {})
                         delta_type = delta_payload.get("type") if isinstance(delta_payload, dict) else None
                         delta = ""
-                        if isinstance(delta_payload, dict) and delta_type in {None, "text_delta"}:
+                        if isinstance(delta_payload, dict) and delta_type in {
+                            None,
+                            "text_delta",
+                        }:
                             delta = str(delta_payload.get("text", ""))
                         if delta:
                             collected += delta
@@ -520,7 +593,7 @@ class AnthropicAdapter:
         return json.dumps(value if value is not None else {}, ensure_ascii=True, separators=(",", ":"))
 
     @staticmethod
-    def _stream_block_index(raw_index: object, *, default: int) -> int:
+    def _stream_block_index(raw_index: Any, *, default: int) -> int:
         try:
             return int(raw_index)
         except (TypeError, ValueError):
@@ -529,8 +602,8 @@ class AnthropicAdapter:
     @classmethod
     def _capture_stream_tool_call_start(
         cls,
-        payload_item: dict[str, object],
-        streamed_tool_calls: dict[int, dict[str, object]],
+        payload_item: dict[str, Any],
+        streamed_tool_calls: dict[int, dict[str, Any]],
         streamed_tool_inputs: dict[int, object],
     ) -> None:
         content_block = payload_item.get("content_block", {})
@@ -559,9 +632,9 @@ class AnthropicAdapter:
     @classmethod
     def _append_stream_tool_call_delta(
         cls,
-        payload_item: dict[str, object],
-        delta_payload: dict[str, object],
-        streamed_tool_calls: dict[int, dict[str, object]],
+        payload_item: dict[str, Any],
+        delta_payload: dict[str, Any],
+        streamed_tool_calls: dict[int, dict[str, Any]],
     ) -> None:
         partial_json = delta_payload.get("partial_json")
         if partial_json is None:
@@ -584,10 +657,10 @@ class AnthropicAdapter:
     @classmethod
     def _finalize_stream_tool_calls(
         cls,
-        streamed_tool_calls: dict[int, dict[str, object]],
+        streamed_tool_calls: dict[int, dict[str, Any]],
         streamed_tool_inputs: dict[int, object],
-    ) -> list[dict[str, object]]:
-        finalized: list[dict[str, object]] = []
+    ) -> list[dict[str, Any]]:
+        finalized: list[dict[str, Any]] = []
         for index in sorted(streamed_tool_calls):
             call = streamed_tool_calls[index]
             function_payload = call.get("function", {})
@@ -603,16 +676,14 @@ class AnthropicAdapter:
                     arguments = raw_arguments
             else:
                 arguments = cls._tool_arguments_json(streamed_tool_inputs.get(index))
-            finalized.append(
-                {
-                    "id": str(call.get("id", "")),
-                    "type": str(call.get("type", "function") or "function"),
-                    "function": {
-                        "name": tool_name,
-                        "arguments": arguments,
-                    },
-                }
-            )
+            finalized.append({
+                "id": str(call.get("id", "")),
+                "type": str(call.get("type", "function") or "function"),
+                "function": {
+                    "name": tool_name,
+                    "arguments": arguments,
+                },
+            })
         return finalized
 
     @staticmethod
@@ -628,16 +699,14 @@ class AnthropicAdapter:
             if block_type == "text":
                 text_parts.append(str(block.get("text", "")))
             elif block_type == "tool_use":
-                tool_calls.append(
-                    {
-                        "id": str(block.get("id", "")),
-                        "type": "function",
-                        "function": {
-                            "name": str(block.get("name", "")),
-                            "arguments": AnthropicAdapter._tool_arguments_json(block.get("input", {})),
-                        },
-                    }
-                )
+                tool_calls.append({
+                    "id": str(block.get("id", "")),
+                    "type": "function",
+                    "function": {
+                        "name": str(block.get("name", "")),
+                        "arguments": AnthropicAdapter._tool_arguments_json(block.get("input", {})),
+                    },
+                })
         return "".join(text_parts).strip(), tool_calls
 
     def _usage_from_payload(
@@ -652,35 +721,76 @@ class AnthropicAdapter:
             input_tokens = int(usage_payload.get("input_tokens", default.input_tokens if default else 0))
             output_tokens = int(usage_payload.get("output_tokens", default.output_tokens if default else 0))
             total_tokens = int(usage_payload.get("total_tokens", input_tokens + output_tokens))
-            return TokenUsage(input_tokens=input_tokens, output_tokens=output_tokens, total_tokens=total_tokens)
+            return TokenUsage(
+                input_tokens=input_tokens,
+                output_tokens=output_tokens,
+                total_tokens=total_tokens,
+            )
         return default or self._usage.usage_from_prompt_completion(messages, content)
 
     def _raise_for_status(self, response: httpx.Response) -> None:
         if response.status_code in {401, 403}:
-            raise ProviderAuthenticationError(self.provider_name, f"Anthropic authentication failed ({response.status_code}).")
+            raise ProviderAuthenticationError(
+                self.provider_name,
+                f"Anthropic authentication failed ({response.status_code}).",
+            )
         if response.status_code == 408:
-            raise ProviderRequestTimeoutError(self.provider_name, f"Anthropic request timeout ({response.status_code}): {response.text[:500]}")
+            raise ProviderRequestTimeoutError(
+                self.provider_name,
+                f"Anthropic request timeout ({response.status_code}): {response.text[:500]}",
+            )
         if response.status_code == 404:
-            raise ProviderModelNotFoundError(self.provider_name, message=f"Anthropic model/resource not found ({response.status_code}): {response.text[:500]}")
+            raise ProviderModelNotFoundError(
+                self.provider_name,
+                message=f"Anthropic model/resource not found ({response.status_code}): {response.text[:500]}",
+            )
         if response.status_code in {400, 422}:
-            raise ProviderBadRequestError(self.provider_name, f"Anthropic rejected request ({response.status_code}): {response.text[:500]}")
+            raise ProviderBadRequestError(
+                self.provider_name,
+                f"Anthropic rejected request ({response.status_code}): {response.text[:500]}",
+            )
         if response.status_code == 410:
-            raise ProviderResourceGoneError(self.provider_name, f"Anthropic resource gone ({response.status_code}): {response.text[:500]}")
+            raise ProviderResourceGoneError(
+                self.provider_name,
+                f"Anthropic resource gone ({response.status_code}): {response.text[:500]}",
+            )
         if response.status_code == 413:
-            raise ProviderPayloadTooLargeError(self.provider_name, f"Anthropic payload too large ({response.status_code}): {response.text[:500]}")
+            raise ProviderPayloadTooLargeError(
+                self.provider_name,
+                f"Anthropic payload too large ({response.status_code}): {response.text[:500]}",
+            )
         if response.status_code == 415:
-            raise ProviderUnsupportedMediaTypeError(self.provider_name, f"Anthropic unsupported media type ({response.status_code}): {response.text[:500]}")
+            raise ProviderUnsupportedMediaTypeError(
+                self.provider_name,
+                f"Anthropic unsupported media type ({response.status_code}): {response.text[:500]}",
+            )
         if response.status_code == 409:
-            raise ProviderConflictError(self.provider_name, f"Anthropic conflict ({response.status_code}): {response.text[:500]}")
+            raise ProviderConflictError(
+                self.provider_name,
+                f"Anthropic conflict ({response.status_code}): {response.text[:500]}",
+            )
         if response.status_code == 429:
             retry_after = self._parse_retry_after_seconds(response.headers.get("retry-after"))
-            raise ProviderRateLimitError(self.provider_name, f"Anthropic rate limit reached ({response.status_code}): {response.text[:500]}", retry_after_seconds=retry_after)
+            raise ProviderRateLimitError(
+                self.provider_name,
+                f"Anthropic rate limit reached ({response.status_code}): {response.text[:500]}",
+                retry_after_seconds=retry_after,
+            )
         if response.status_code >= 500:
             if response.status_code == 503:
-                raise ProviderUnavailableError(self.provider_name, f"Anthropic unavailable ({response.status_code}): {response.text[:500]}")
-            raise ProviderUpstreamError(self.provider_name, f"Anthropic upstream error ({response.status_code}): {response.text[:500]}")
+                raise ProviderUnavailableError(
+                    self.provider_name,
+                    f"Anthropic unavailable ({response.status_code}): {response.text[:500]}",
+                )
+            raise ProviderUpstreamError(
+                self.provider_name,
+                f"Anthropic upstream error ({response.status_code}): {response.text[:500]}",
+            )
         if response.status_code >= 300:
-            raise ProviderUpstreamError(self.provider_name, f"Unexpected Anthropic response ({response.status_code}): {response.text[:500]}")
+            raise ProviderUpstreamError(
+                self.provider_name,
+                f"Unexpected Anthropic response ({response.status_code}): {response.text[:500]}",
+            )
 
     @staticmethod
     def _parse_retry_after_seconds(value: str | None) -> int | None:

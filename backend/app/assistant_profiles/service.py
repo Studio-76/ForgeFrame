@@ -100,7 +100,9 @@ class AssistantProfileAdminService:
         return "personal"
 
     @staticmethod
-    def _last_evaluation(metadata: dict[str, object] | None) -> AssistantActionEvaluation | None:
+    def _last_evaluation(
+        metadata: dict[str, object] | None,
+    ) -> AssistantActionEvaluation | None:
         if not isinstance(metadata, dict):
             return None
         raw = metadata.get("last_evaluation")
@@ -147,11 +149,7 @@ class AssistantProfileAdminService:
         day_summary = ",".join(settings.days) if settings.days else "no-days"
         start_hour, start_minute = divmod(settings.start_minute, 60)
         end_hour, end_minute = divmod(settings.end_minute, 60)
-        return (
-            f"{settings.timezone} "
-            f"{start_hour:02d}:{start_minute:02d}-{end_hour:02d}:{end_minute:02d} "
-            f"({day_summary})"
-        )
+        return f"{settings.timezone} {start_hour:02d}:{start_minute:02d}-{end_hour:02d}:{end_minute:02d} ({day_summary})"
 
     @staticmethod
     def _direct_action_policy_label(policy: str) -> str:
@@ -188,7 +186,7 @@ class AssistantProfileAdminService:
         if not reasons:
             return None
         return AssistantProfileRiskWarning(
-            level=level,  # type: ignore[arg-type]
+            level=level,
             title="Direct external action rights",
             reasons=reasons,
         )
@@ -220,7 +218,12 @@ class AssistantProfileAdminService:
             if channel_id in seen:
                 continue
             seen.add(channel_id)
-            channel = self._load_channel_by_scope(session, company_id=company_id, instance_id=instance_id, channel_id=channel_id)
+            channel = self._load_channel_by_scope(
+                session,
+                company_id=company_id,
+                instance_id=instance_id,
+                channel_id=channel_id,
+            )
             links.append(self._record_link(channel.id, channel.label, channel.status))
         return links
 
@@ -229,7 +232,12 @@ class AssistantProfileAdminService:
         return _PRIORITY_RANK.get(priority, 0) >= _PRIORITY_RANK.get(minimum, 0)
 
     def _load_contact(self, session: Session, *, instance: InstanceRecord, contact_id: str) -> ContactORM:
-        return self._load_contact_by_scope(session, company_id=instance.company_id, instance_id=instance.instance_id, contact_id=contact_id)
+        return self._load_contact_by_scope(
+            session,
+            company_id=instance.company_id,
+            instance_id=instance.instance_id,
+            contact_id=contact_id,
+        )
 
     @staticmethod
     def _load_contact_by_scope(session: Session, *, company_id: str, instance_id: str, contact_id: str) -> ContactORM:
@@ -239,7 +247,12 @@ class AssistantProfileAdminService:
         return row
 
     def _load_channel(self, session: Session, *, instance: InstanceRecord, channel_id: str) -> DeliveryChannelORM:
-        return self._load_channel_by_scope(session, company_id=instance.company_id, instance_id=instance.instance_id, channel_id=channel_id)
+        return self._load_channel_by_scope(
+            session,
+            company_id=instance.company_id,
+            instance_id=instance.instance_id,
+            channel_id=channel_id,
+        )
 
     @staticmethod
     def _load_channel_by_scope(session: Session, *, company_id: str, instance_id: str, channel_id: str) -> DeliveryChannelORM:
@@ -301,23 +314,45 @@ class AssistantProfileAdminService:
         if preferred_contact_id:
             self._load_contact(session, instance=instance, contact_id=preferred_contact_id)
         if delegation_rules.delegate_contact_id:
-            self._load_contact(session, instance=instance, contact_id=delegation_rules.delegate_contact_id)
+            self._load_contact(
+                session,
+                instance=instance,
+                contact_id=delegation_rules.delegate_contact_id,
+            )
         if delegation_rules.escalation_contact_id:
-            self._load_contact(session, instance=instance, contact_id=delegation_rules.escalation_contact_id)
+            self._load_contact(
+                session,
+                instance=instance,
+                contact_id=delegation_rules.escalation_contact_id,
+            )
         if mail_source_id:
-            self._load_source(session, instance=instance, source_id=mail_source_id, expected_kind="mail")
+            self._load_source(
+                session,
+                instance=instance,
+                source_id=mail_source_id,
+                expected_kind="mail",
+            )
         if calendar_source_id:
-            self._load_source(session, instance=instance, source_id=calendar_source_id, expected_kind="calendar")
+            self._load_source(
+                session,
+                instance=instance,
+                source_id=calendar_source_id,
+                expected_kind="calendar",
+            )
 
         if delivery_preferences.primary_channel_id:
-            self._load_channel(session, instance=instance, channel_id=delivery_preferences.primary_channel_id)
+            self._load_channel(
+                session,
+                instance=instance,
+                channel_id=delivery_preferences.primary_channel_id,
+            )
         if delivery_preferences.fallback_channel_id:
-            self._load_channel(session, instance=instance, channel_id=delivery_preferences.fallback_channel_id)
-        if (
-            delivery_preferences.primary_channel_id
-            and delivery_preferences.fallback_channel_id
-            and delivery_preferences.primary_channel_id == delivery_preferences.fallback_channel_id
-        ):
+            self._load_channel(
+                session,
+                instance=instance,
+                channel_id=delivery_preferences.fallback_channel_id,
+            )
+        if delivery_preferences.primary_channel_id and delivery_preferences.fallback_channel_id and delivery_preferences.primary_channel_id == delivery_preferences.fallback_channel_id:
             raise ValueError("Primary and fallback channel must not be identical.")
 
         for channel_id in delivery_preferences.allowed_channel_ids:
@@ -325,34 +360,36 @@ class AssistantProfileAdminService:
         for channel_id in action_policies.direct_channel_ids:
             self._load_channel(session, instance=instance, channel_id=channel_id)
 
-        if (
-            delivery_preferences.allowed_channel_ids
-            and delivery_preferences.primary_channel_id
-            and delivery_preferences.primary_channel_id not in delivery_preferences.allowed_channel_ids
-        ):
+        if delivery_preferences.allowed_channel_ids and delivery_preferences.primary_channel_id and delivery_preferences.primary_channel_id not in delivery_preferences.allowed_channel_ids:
             raise ValueError("Primary channel must be part of allowed channel ids when allow-listing is enabled.")
-        if (
-            delivery_preferences.allowed_channel_ids
-            and delivery_preferences.fallback_channel_id
-            and delivery_preferences.fallback_channel_id not in delivery_preferences.allowed_channel_ids
-        ):
+        if delivery_preferences.allowed_channel_ids and delivery_preferences.fallback_channel_id and delivery_preferences.fallback_channel_id not in delivery_preferences.allowed_channel_ids:
             raise ValueError("Fallback channel must be part of allowed channel ids when allow-listing is enabled.")
 
-    def _clear_existing_default(self, session: Session, *, instance: InstanceRecord, current_profile_id: str | None = None) -> None:
-        for existing in session.execute(
-            select(AssistantProfileORM).where(
-                AssistantProfileORM.company_id == instance.company_id,
-                AssistantProfileORM.instance_id == instance.instance_id,
-                AssistantProfileORM.is_default.is_(True),
+    def _clear_existing_default(
+        self,
+        session: Session,
+        *,
+        instance: InstanceRecord,
+        current_profile_id: str | None = None,
+    ) -> None:
+        for existing in (
+            session
+            .execute(
+                select(AssistantProfileORM).where(
+                    AssistantProfileORM.company_id == instance.company_id,
+                    AssistantProfileORM.instance_id == instance.instance_id,
+                    AssistantProfileORM.is_default.is_(True),
+                )
             )
-        ).scalars().all():
+            .scalars()
+            .all()
+        ):
             if current_profile_id is not None and existing.id == current_profile_id:
                 continue
             existing.is_default = False
             existing.updated_at = self._now()
 
     def _summary(self, row: AssistantProfileORM) -> AssistantProfileSummary:
-        communication_rules = self._communication_rules(row.communication_rules_json)
         quiet_hours = self._quiet_hours(row.quiet_hours_json)
         delivery_preferences = self._delivery_preferences(row.delivery_preferences_json)
         action_policies = self._action_policies(row.action_policies_json)
@@ -371,22 +408,22 @@ class AssistantProfileAdminService:
             company_id=row.company_id,
             display_name=row.display_name,
             summary=row.summary,
-            status=row.status,  # type: ignore[arg-type]
+            status=row.status,
             assistant_mode_enabled=row.assistant_mode_enabled,
             is_default=row.is_default,
             timezone=row.timezone,
             locale=row.locale,
-            tone=row.tone,  # type: ignore[arg-type]
+            tone=row.tone,
             preferred_contact_id=row.preferred_contact_id,
             primary_channel_id=delivery_preferences.primary_channel_id,
             fallback_channel_id=delivery_preferences.fallback_channel_id,
             mail_source_id=row.mail_source_id,
             calendar_source_id=row.calendar_source_id,
-            profile_scope=profile_scope,  # type: ignore[arg-type]
+            profile_scope=profile_scope,
             profile_scope_label=self._profile_scope_label(profile_scope),
-            memory_scope=memory_scope,  # type: ignore[arg-type]
+            memory_scope=memory_scope,
             memory_scope_label=self._memory_scope_label(memory_scope),
-            operating_mode=operating_mode,  # type: ignore[arg-type]
+            operating_mode=operating_mode,
             operating_mode_label=operating_mode_label,
             quiet_hours_summary=self._quiet_hours_summary(quiet_hours),
             direct_action_policy=action_policies.direct_action_policy,
@@ -409,37 +446,72 @@ class AssistantProfileAdminService:
 
         preferred_contact = None
         if row.preferred_contact_id:
-            contact = self._load_contact_by_scope(session, company_id=row.company_id, instance_id=row.instance_id, contact_id=row.preferred_contact_id)
+            contact = self._load_contact_by_scope(
+                session,
+                company_id=row.company_id,
+                instance_id=row.instance_id,
+                contact_id=row.preferred_contact_id,
+            )
             preferred_contact = self._record_link(contact.id, contact.display_name, contact.status)
 
         delegate_contact = None
         if delegation_rules.delegate_contact_id:
-            contact = self._load_contact_by_scope(session, company_id=row.company_id, instance_id=row.instance_id, contact_id=delegation_rules.delegate_contact_id)
+            contact = self._load_contact_by_scope(
+                session,
+                company_id=row.company_id,
+                instance_id=row.instance_id,
+                contact_id=delegation_rules.delegate_contact_id,
+            )
             delegate_contact = self._record_link(contact.id, contact.display_name, contact.status)
 
         escalation_contact = None
         if delegation_rules.escalation_contact_id:
-            contact = self._load_contact_by_scope(session, company_id=row.company_id, instance_id=row.instance_id, contact_id=delegation_rules.escalation_contact_id)
+            contact = self._load_contact_by_scope(
+                session,
+                company_id=row.company_id,
+                instance_id=row.instance_id,
+                contact_id=delegation_rules.escalation_contact_id,
+            )
             escalation_contact = self._record_link(contact.id, contact.display_name, contact.status)
 
         primary_channel = None
         if delivery_preferences.primary_channel_id:
-            channel = self._load_channel_by_scope(session, company_id=row.company_id, instance_id=row.instance_id, channel_id=delivery_preferences.primary_channel_id)
+            channel = self._load_channel_by_scope(
+                session,
+                company_id=row.company_id,
+                instance_id=row.instance_id,
+                channel_id=delivery_preferences.primary_channel_id,
+            )
             primary_channel = self._record_link(channel.id, channel.label, channel.status)
 
         fallback_channel = None
         if delivery_preferences.fallback_channel_id:
-            channel = self._load_channel_by_scope(session, company_id=row.company_id, instance_id=row.instance_id, channel_id=delivery_preferences.fallback_channel_id)
+            channel = self._load_channel_by_scope(
+                session,
+                company_id=row.company_id,
+                instance_id=row.instance_id,
+                channel_id=delivery_preferences.fallback_channel_id,
+            )
             fallback_channel = self._record_link(channel.id, channel.label, channel.status)
 
         mail_source = None
         if row.mail_source_id:
-            source = self._load_source_by_scope(session, company_id=row.company_id, instance_id=row.instance_id, source_id=row.mail_source_id)
+            source = self._load_source_by_scope(
+                session,
+                company_id=row.company_id,
+                instance_id=row.instance_id,
+                source_id=row.mail_source_id,
+            )
             mail_source = self._record_link(source.id, source.label, source.status)
 
         calendar_source = None
         if row.calendar_source_id:
-            source = self._load_source_by_scope(session, company_id=row.company_id, instance_id=row.instance_id, source_id=row.calendar_source_id)
+            source = self._load_source_by_scope(
+                session,
+                company_id=row.company_id,
+                instance_id=row.instance_id,
+                source_id=row.calendar_source_id,
+            )
             calendar_source = self._record_link(source.id, source.label, source.status)
 
         allowed_channels = self._channel_links(
@@ -470,8 +542,8 @@ class AssistantProfileAdminService:
             delivery_preferences=delivery_preferences,
             action_policies=action_policies,
             delegation_rules=delegation_rules,
-            allowed_action_kinds=allowed_action_kinds,  # type: ignore[arg-type]
-            blocked_action_kinds=blocked_action_kinds,  # type: ignore[arg-type]
+            allowed_action_kinds=allowed_action_kinds,
+            blocked_action_kinds=blocked_action_kinds,
             allowed_channels=allowed_channels,
             direct_channels=direct_channels,
         )
@@ -484,9 +556,17 @@ class AssistantProfileAdminService:
             )
             if status is not None:
                 stmt = stmt.where(AssistantProfileORM.status == status)
-            rows = session.execute(
-                stmt.order_by(AssistantProfileORM.is_default.desc(), AssistantProfileORM.updated_at.desc()).limit(max(1, min(limit, 200)))
-            ).scalars().all()
+            rows = (
+                session
+                .execute(
+                    stmt.order_by(
+                        AssistantProfileORM.is_default.desc(),
+                        AssistantProfileORM.updated_at.desc(),
+                    ).limit(max(1, min(limit, 200)))
+                )
+                .scalars()
+                .all()
+            )
             return [self._summary(row) for row in rows]
 
     def get_profile(self, *, instance: InstanceRecord, assistant_profile_id: str) -> AssistantProfileDetail:
@@ -550,7 +630,13 @@ class AssistantProfileAdminService:
             session.add(row)
         return self.get_profile(instance=instance, assistant_profile_id=assistant_profile_id)
 
-    def update_profile(self, *, instance: InstanceRecord, assistant_profile_id: str, payload: UpdateAssistantProfile) -> AssistantProfileDetail:
+    def update_profile(
+        self,
+        *,
+        instance: InstanceRecord,
+        assistant_profile_id: str,
+        payload: UpdateAssistantProfile,
+    ) -> AssistantProfileDetail:
         with self._session_factory() as session, session.begin():
             row = self._load_profile(session, instance=instance, assistant_profile_id=assistant_profile_id)
             delivery_preferences = payload.delivery_preferences or self._delivery_preferences(row.delivery_preferences_json)
@@ -605,7 +691,7 @@ class AssistantProfileAdminService:
         try:
             zone = ZoneInfo(settings.timezone)
         except ZoneInfoNotFoundError:
-            zone = UTC
+            zone = ZoneInfo("UTC")
         localized = at.astimezone(zone)
         weekday = _WEEKDAY_NAMES[localized.weekday()]
         minute_of_day = localized.hour * 60 + localized.minute
@@ -617,10 +703,7 @@ class AssistantProfileAdminService:
             return weekday in settings.days and settings.start_minute <= minute_of_day < settings.end_minute
 
         previous_weekday = _WEEKDAY_NAMES[(localized.weekday() - 1) % 7]
-        return (
-            (weekday in settings.days and minute_of_day >= settings.start_minute)
-            or (previous_weekday in settings.days and minute_of_day < settings.end_minute)
-        )
+        return (weekday in settings.days and minute_of_day >= settings.start_minute) or (previous_weekday in settings.days and minute_of_day < settings.end_minute)
 
     def evaluate_action(
         self,
@@ -671,10 +754,7 @@ class AssistantProfileAdminService:
                 reasons.append("direct_channel_not_allowed")
 
             quiet_hours_active = self._quiet_hours_active(quiet_hours, at=evaluated_at)
-            quiet_hours_override = (
-                quiet_hours.allow_priority_override
-                and self._priority_at_least(payload.priority, quiet_hours.override_min_priority)
-            )
+            quiet_hours_override = quiet_hours.allow_priority_override and self._priority_at_least(payload.priority, quiet_hours.override_min_priority)
             if quiet_hours_active and payload.requires_external_delivery and delivery_preferences.mute_during_quiet_hours and not quiet_hours_override:
                 reasons.append("quiet_hours_active")
             if quiet_hours_active and quiet_hours_override:
@@ -720,7 +800,7 @@ class AssistantProfileAdminService:
 
             evaluation = AssistantActionEvaluation(
                 assistant_profile_id=row.id,
-                decision=decision,  # type: ignore[arg-type]
+                decision=decision,
                 action_mode=payload.action_mode,
                 action_kind=payload.action_kind,
                 priority=payload.priority,

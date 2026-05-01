@@ -17,7 +17,10 @@ router = APIRouter(prefix="/tasks", tags=["admin-tasks"])
 
 
 def _error(status_code: int, error_type: str, message: str) -> JSONResponse:
-    return JSONResponse(status_code=status_code, content={"error": {"type": error_type, "message": message}})
+    return JSONResponse(
+        status_code=status_code,
+        content={"error": {"type": error_type, "message": message}},
+    )
 
 
 @router.get("")
@@ -29,7 +32,11 @@ def list_tasks(
     service: TaskAutomationAdminService = Depends(get_task_automation_admin_service),
 ) -> dict[str, object]:
     tasks = service.list_tasks(instance=instance, status=status_filter, limit=limit)
-    return {"status": "ok", "instance": instance.model_dump(mode="json"), "tasks": [item.model_dump(mode="json") for item in tasks]}
+    return {
+        "status": "ok",
+        "instance": instance.model_dump(mode="json"),
+        "tasks": [item.model_dump(mode="json") for item in tasks],
+    }
 
 
 @router.get("/{task_id}")

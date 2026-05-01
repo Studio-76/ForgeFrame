@@ -50,12 +50,17 @@ def provider_technical_capabilities(provider: str) -> dict[str, object]:
             "reasoning_band": "local",
         },
     }
-    return dict(defaults.get(provider, {
-        "streaming": False,
-        "tool_calling": False,
-        "vision": False,
-        "reasoning_band": "unknown",
-    }))
+    return dict(
+        defaults.get(
+            provider,
+            {
+                "streaming": False,
+                "tool_calling": False,
+                "vision": False,
+                "reasoning_band": "unknown",
+            },
+        )
+    )
 
 
 def provider_execution_traits(provider: str) -> dict[str, object]:
@@ -103,12 +108,17 @@ def provider_execution_traits(provider: str) -> dict[str, object]:
             "dispatch_mode": "local_runtime",
         },
     }
-    return dict(defaults.get(provider, {
-        "queue_eligible": False,
-        "default_execution_lane": "sync_interactive",
-        "task_complexity_floor": "unknown",
-        "dispatch_mode": "unknown",
-    }))
+    return dict(
+        defaults.get(
+            provider,
+            {
+                "queue_eligible": False,
+                "default_execution_lane": "sync_interactive",
+                "task_complexity_floor": "unknown",
+                "dispatch_mode": "unknown",
+            },
+        )
+    )
 
 
 def provider_policy_flags(provider: str) -> dict[str, object]:
@@ -156,12 +166,17 @@ def provider_policy_flags(provider: str) -> dict[str, object]:
             "premium_policy_gate": "never",
         },
     }
-    return dict(defaults.get(provider, {
-        "local_preferred": False,
-        "fallback_allowed": True,
-        "escalation_allowed": True,
-        "premium_policy_gate": "operator_budget",
-    }))
+    return dict(
+        defaults.get(
+            provider,
+            {
+                "local_preferred": False,
+                "fallback_allowed": True,
+                "escalation_allowed": True,
+                "premium_policy_gate": "operator_budget",
+            },
+        )
+    )
 
 
 def provider_economic_profile(provider: str) -> dict[str, object]:
@@ -202,11 +217,16 @@ def provider_economic_profile(provider: str) -> dict[str, object]:
             "quality_tier": "local",
         },
     }
-    return dict(defaults.get(provider, {
-        "cost_class": "medium",
-        "latency_class": "medium",
-        "quality_tier": "unknown",
-    }))
+    return dict(
+        defaults.get(
+            provider,
+            {
+                "cost_class": "medium",
+                "latency_class": "medium",
+                "quality_tier": "unknown",
+            },
+        )
+    )
 
 
 def build_legacy_capability_profile(

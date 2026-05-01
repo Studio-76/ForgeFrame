@@ -37,9 +37,21 @@ def _safe_ident(value: str) -> str:
 
 def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--database-url", help="Optional PostgreSQL URL override. Defaults to the configured storage targets.")
-    parser.add_argument("--policy", action="append", default=[], help="Retention policy key to run. May be passed multiple times.")
-    parser.add_argument("--apply", action="store_true", help="Apply archive moves. Default is dry-run only.")
+    parser.add_argument(
+        "--database-url",
+        help="Optional PostgreSQL URL override. Defaults to the configured storage targets.",
+    )
+    parser.add_argument(
+        "--policy",
+        action="append",
+        default=[],
+        help="Retention policy key to run. May be passed multiple times.",
+    )
+    parser.add_argument(
+        "--apply",
+        action="store_true",
+        help="Apply archive moves. Default is dry-run only.",
+    )
     parser.add_argument(
         "--purge-archive",
         action="store_true",
@@ -75,15 +87,19 @@ def _targets(args: argparse.Namespace) -> list[str]:
 def _target_database_identity(database_url: str) -> dict[str, str]:
     engine = build_postgres_engine(database_url)
     with engine.connect() as connection:
-        row = connection.execute(
-            text(
-                """
+        row = (
+            connection.execute(
+                text(
+                    """
                 SELECT
                   current_database() AS database,
                   (SELECT system_identifier::text FROM pg_control_system()) AS cluster_system_identifier
                 """
+                )
             )
-        ).mappings().one()
+            .mappings()
+            .one()
+        )
     return {
         "database": str(row["database"]),
         "cluster_system_identifier": str(row["cluster_system_identifier"]),
@@ -106,7 +122,9 @@ def _eligibility_sql(policy: RetentionPolicy, *, cutoff_param: str = ":cutoff") 
     return " AND ".join(clauses)
 
 
-def _eligible_stats(connection, *, table_name: str, policy: RetentionPolicy, cutoff: datetime) -> dict[str, Any]:
+def _eligible_stats(
+    connection, *, table_name: str, policy: RetentionPolicy, cutoff: datetime
+) -> dict[str, Any]:
     row = (
         connection.execute(
             text(
@@ -126,8 +144,12 @@ def _eligible_stats(connection, *, table_name: str, policy: RetentionPolicy, cut
     )
     return {
         "eligible_rows": int(row["eligible_rows"]),
-        "oldest_eligible_at": row["oldest_eligible_at"].isoformat() if row["oldest_eligible_at"] is not None else None,
-        "newest_eligible_at": row["newest_eligible_at"].isoformat() if row["newest_eligible_at"] is not None else None,
+        "oldest_eligible_at": row["oldest_eligible_at"].isoformat()
+        if row["oldest_eligible_at"] is not None
+        else None,
+        "newest_eligible_at": row["newest_eligible_at"].isoformat()
+        if row["newest_eligible_at"] is not None
+        else None,
     }
 
 
@@ -142,7 +164,9 @@ def _ensure_archive_table(connection, policy: RetentionPolicy) -> None:
     )
 
 
-def _archive_batches(connection, *, policy: RetentionPolicy, cutoff: datetime, batch_size: int) -> int:
+def _archive_batches(
+    connection, *, policy: RetentionPolicy, cutoff: datetime, batch_size: int
+) -> int:
     moved_total = 0
     while True:
         moved = connection.execute(
@@ -177,7 +201,14 @@ def _archive_batches(connection, *, policy: RetentionPolicy, cutoff: datetime, b
     return moved_total
 
 
-def _purge_batches(connection, *, table_name: str, policy: RetentionPolicy, cutoff: datetime, batch_size: int) -> int:
+def _purge_batches(
+    connection,
+    *,
+    table_name: str,
+    policy: RetentionPolicy,
+    cutoff: datetime,
+    batch_size: int,
+) -> int:
     purged_total = 0
     while True:
         purged = connection.execute(
@@ -227,7 +258,9 @@ def _run_policy(
         "hot_retention_days": policy.hot_retention_days,
         "archive_retention_days": policy.archive_retention_days,
         "hot_cutoff": policy.hot_cutoff(now).isoformat(),
-        "archive_cutoff": policy.archive_cutoff(now).isoformat() if policy.archive_cutoff(now) is not None else None,
+        "archive_cutoff": policy.archive_cutoff(now).isoformat()
+        if policy.archive_cutoff(now) is not None
+        else None,
         "archived_rows": 0,
         "purged_archive_rows": 0,
     }
@@ -357,7 +390,9 @@ def main() -> int:
     guard: dict[str, Any] | None = None
     target_database_identities: list[dict[str, str]] | None = None
     if args.purge_archive:
-        target_database_identities = [_target_database_identity(target) for target in targets]
+        target_database_identities = [
+            _target_database_identity(target) for target in targets
+        ]
         guard = _load_guard(
             args.backup_restore_report,
             expected_database_identities=target_database_identities,

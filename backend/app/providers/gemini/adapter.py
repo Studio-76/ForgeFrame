@@ -18,11 +18,11 @@ from app.providers.base import (
     ProviderCapabilities,
     ProviderConfigurationError,
     ProviderConflictError,
+    ProviderModelNotFoundError,
     ProviderPayloadTooLargeError,
     ProviderProtocolError,
     ProviderRateLimitError,
     ProviderRequestTimeoutError,
-    ProviderModelNotFoundError,
     ProviderResourceGoneError,
     ProviderStreamEvent,
     ProviderStreamInterruptedError,
@@ -83,7 +83,11 @@ class GeminiAdapter:
         if reason:
             raise ProviderConfigurationError(self.provider_name, reason)
 
-        payload = {"model": request.model, "messages": request.messages, "stream": False}
+        payload = {
+            "model": request.model,
+            "messages": request.messages,
+            "stream": False,
+        }
         payload.update(openai_compatible_response_controls(request.response_controls))
         tools = getattr(request, "tools", [])
         if tools:
@@ -97,7 +101,11 @@ class GeminiAdapter:
         content = str(message.get("content", ""))
         tool_calls = message.get("tool_calls", [])
         usage = self._usage_from_payload(data.get("usage", {}), request.messages, content)
-        cost = self._usage.costs_for_provider(provider=self.provider_name, usage=usage, oauth_mode=(self._settings.gemini_auth_mode == "oauth"))
+        cost = self._usage.costs_for_provider(
+            provider=self.provider_name,
+            usage=usage,
+            oauth_mode=(self._settings.gemini_auth_mode == "oauth"),
+        )
         return ChatDispatchResult(
             model=str(data.get("model", request.model)),
             provider=self.provider_name,
@@ -114,7 +122,12 @@ class GeminiAdapter:
         reason = self.readiness_reason()
         if reason:
             raise ProviderConfigurationError(self.provider_name, reason)
-        payload = {"model": request.model, "messages": request.messages, "stream": True, "stream_options": {"include_usage": True}}
+        payload = {
+            "model": request.model,
+            "messages": request.messages,
+            "stream": True,
+            "stream_options": {"include_usage": True},
+        }
         payload.update(openai_compatible_response_controls(request.response_controls))
         tools = getattr(request, "tools", [])
         if tools:
@@ -133,7 +146,10 @@ class GeminiAdapter:
             )
         endpoint = f"{base_url}/chat/completions"
         token = self._settings.gemini_oauth_access_token.strip() if self._settings.gemini_auth_mode == "oauth" else self._settings.gemini_api_key.strip()
-        headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
+        headers = {
+            "Authorization": f"Bearer {token}",
+            "Content-Type": "application/json",
+        }
         headers.update(forgeframe_request_metadata_headers(request_metadata))
         return endpoint, headers
 
@@ -148,7 +164,12 @@ class GeminiAdapter:
     def _post(self, payload: dict, request_metadata: dict[str, str] | None = None) -> dict:
         endpoint, headers = self._endpoint_headers(request_metadata)
         try:
-            response = httpx.post(endpoint, json=payload, headers=headers, timeout=self._settings.gemini_timeout_seconds)
+            response = httpx.post(
+                endpoint,
+                json=payload,
+                headers=headers,
+                timeout=self._settings.gemini_timeout_seconds,
+            )
         except httpx.TimeoutException as exc:
             raise ProviderTimeoutError(self.provider_name, f"Gemini request timed out: {exc}") from exc
         except httpx.RequestError as exc:
@@ -157,7 +178,10 @@ class GeminiAdapter:
         headers = getattr(response, "headers", {}) or {}
         content_type = str(headers.get("content-type", ""))
         if content_type and "json" not in content_type.lower():
-            raise ProviderProtocolError(self.provider_name, f"Gemini returned unexpected content-type '{content_type}'.")
+            raise ProviderProtocolError(
+                self.provider_name,
+                f"Gemini returned unexpected content-type '{content_type}'.",
+            )
         try:
             return response.json()
         except ValueError as exc:
@@ -176,12 +200,21 @@ class GeminiAdapter:
         saw_done = False
         tool_call_chunks: dict[int, dict[str, object]] = {}
         try:
-            with httpx.stream("POST", endpoint, json=payload, headers=headers, timeout=self._settings.gemini_timeout_seconds) as response:
+            with httpx.stream(
+                "POST",
+                endpoint,
+                json=payload,
+                headers=headers,
+                timeout=self._settings.gemini_timeout_seconds,
+            ) as response:
                 self._raise_for_status(response)
                 headers = getattr(response, "headers", {}) or {}
                 content_type = str(headers.get("content-type", ""))
                 if content_type and "text/event-stream" not in content_type.lower():
-                    raise ProviderStreamInterruptedError(self.provider_name, f"Gemini stream returned unexpected content-type '{content_type}'.")
+                    raise ProviderStreamInterruptedError(
+                        self.provider_name,
+                        f"Gemini stream returned unexpected content-type '{content_type}'.",
+                    )
                 for raw in response.iter_lines():
                     if not raw or not raw.startswith("data:"):
                         continue
@@ -192,7 +225,10 @@ class GeminiAdapter:
                     try:
                         item = json.loads(line)
                     except json.JSONDecodeError as exc:
-                        raise ProviderStreamInterruptedError(self.provider_name, "Gemini stream produced invalid JSON chunk.") from exc
+                        raise ProviderStreamInterruptedError(
+                            self.provider_name,
+                            "Gemini stream produced invalid JSON chunk.",
+                        ) from exc
                     choice = item.get("choices", [{}])[0]
                     delta_payload = choice.get("delta", {})
                     delta = delta_payload.get("content", "")
@@ -212,7 +248,11 @@ class GeminiAdapter:
         if not saw_done:
             raise ProviderStreamInterruptedError(self.provider_name, "Gemini stream ended without done marker.")
         final_usage = usage or self._usage.usage_from_prompt_completion(messages, "".join(chunks))
-        final_cost = self._usage.costs_for_provider(provider=self.provider_name, usage=final_usage, oauth_mode=(self._settings.gemini_auth_mode == "oauth"))
+        final_cost = self._usage.costs_for_provider(
+            provider=self.provider_name,
+            usage=final_usage,
+            oauth_mode=(self._settings.gemini_auth_mode == "oauth"),
+        )
         yield ProviderStreamEvent(
             event="done",
             finish_reason=finish_reason,
@@ -228,35 +268,76 @@ class GeminiAdapter:
             input_tokens = int(usage_payload.get("prompt_tokens", usage_payload.get("input_tokens", 0)))
             output_tokens = int(usage_payload.get("completion_tokens", usage_payload.get("output_tokens", 0)))
             total_tokens = int(usage_payload.get("total_tokens", input_tokens + output_tokens))
-            return TokenUsage(input_tokens=input_tokens, output_tokens=output_tokens, total_tokens=total_tokens)
+            return TokenUsage(
+                input_tokens=input_tokens,
+                output_tokens=output_tokens,
+                total_tokens=total_tokens,
+            )
         return self._usage.usage_from_prompt_completion(messages, content)
 
     def _raise_for_status(self, response: httpx.Response) -> None:
         if response.status_code in {401, 403}:
-            raise ProviderAuthenticationError(self.provider_name, f"Gemini authentication failed ({response.status_code}).")
+            raise ProviderAuthenticationError(
+                self.provider_name,
+                f"Gemini authentication failed ({response.status_code}).",
+            )
         if response.status_code == 408:
-            raise ProviderRequestTimeoutError(self.provider_name, f"Gemini request timeout ({response.status_code}): {response.text[:500]}")
+            raise ProviderRequestTimeoutError(
+                self.provider_name,
+                f"Gemini request timeout ({response.status_code}): {response.text[:500]}",
+            )
         if response.status_code == 404:
-            raise ProviderModelNotFoundError(self.provider_name, message=f"Gemini model/resource not found ({response.status_code}): {response.text[:500]}")
+            raise ProviderModelNotFoundError(
+                self.provider_name,
+                message=f"Gemini model/resource not found ({response.status_code}): {response.text[:500]}",
+            )
         if response.status_code in {400, 422}:
-            raise ProviderBadRequestError(self.provider_name, f"Gemini rejected request ({response.status_code}): {response.text[:500]}")
+            raise ProviderBadRequestError(
+                self.provider_name,
+                f"Gemini rejected request ({response.status_code}): {response.text[:500]}",
+            )
         if response.status_code == 410:
-            raise ProviderResourceGoneError(self.provider_name, f"Gemini resource gone ({response.status_code}): {response.text[:500]}")
+            raise ProviderResourceGoneError(
+                self.provider_name,
+                f"Gemini resource gone ({response.status_code}): {response.text[:500]}",
+            )
         if response.status_code == 413:
-            raise ProviderPayloadTooLargeError(self.provider_name, f"Gemini payload too large ({response.status_code}): {response.text[:500]}")
+            raise ProviderPayloadTooLargeError(
+                self.provider_name,
+                f"Gemini payload too large ({response.status_code}): {response.text[:500]}",
+            )
         if response.status_code == 415:
-            raise ProviderUnsupportedMediaTypeError(self.provider_name, f"Gemini unsupported media type ({response.status_code}): {response.text[:500]}")
+            raise ProviderUnsupportedMediaTypeError(
+                self.provider_name,
+                f"Gemini unsupported media type ({response.status_code}): {response.text[:500]}",
+            )
         if response.status_code == 409:
-            raise ProviderConflictError(self.provider_name, f"Gemini conflict ({response.status_code}): {response.text[:500]}")
+            raise ProviderConflictError(
+                self.provider_name,
+                f"Gemini conflict ({response.status_code}): {response.text[:500]}",
+            )
         if response.status_code == 429:
             retry_after = self._parse_retry_after_seconds(response.headers.get("retry-after"))
-            raise ProviderRateLimitError(self.provider_name, f"Gemini rate limit reached ({response.status_code}): {response.text[:500]}", retry_after_seconds=retry_after)
+            raise ProviderRateLimitError(
+                self.provider_name,
+                f"Gemini rate limit reached ({response.status_code}): {response.text[:500]}",
+                retry_after_seconds=retry_after,
+            )
         if response.status_code >= 500:
             if response.status_code == 503:
-                raise ProviderUnavailableError(self.provider_name, f"Gemini unavailable ({response.status_code}): {response.text[:500]}")
-            raise ProviderUpstreamError(self.provider_name, f"Gemini upstream error ({response.status_code}): {response.text[:500]}")
+                raise ProviderUnavailableError(
+                    self.provider_name,
+                    f"Gemini unavailable ({response.status_code}): {response.text[:500]}",
+                )
+            raise ProviderUpstreamError(
+                self.provider_name,
+                f"Gemini upstream error ({response.status_code}): {response.text[:500]}",
+            )
         if response.status_code >= 300:
-            raise ProviderUpstreamError(self.provider_name, f"Unexpected Gemini response ({response.status_code}): {response.text[:500]}")
+            raise ProviderUpstreamError(
+                self.provider_name,
+                f"Unexpected Gemini response ({response.status_code}): {response.text[:500]}",
+            )
 
     @staticmethod
     def _parse_retry_after_seconds(value: str | None) -> int | None:

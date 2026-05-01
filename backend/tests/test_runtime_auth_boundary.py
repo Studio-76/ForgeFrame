@@ -1,9 +1,9 @@
-import os
+from typing import Any
 
-from fastapi.testclient import TestClient
 import pytest
-
 from conftest import admin_headers as shared_admin_headers
+from fastapi.testclient import TestClient
+
 from app.api.runtime.dependencies import clear_runtime_dependency_caches
 from app.authz.evaluator import PolicyEvaluator
 from app.governance.service import get_governance_service
@@ -14,7 +14,7 @@ def _admin_headers(client: TestClient) -> dict[str, str]:
     return shared_admin_headers(client)
 
 
-def _issue_unbound_runtime_key(client: TestClient, *, scopes: list[str]) -> dict[str, object]:
+def _issue_unbound_runtime_key(client: TestClient, *, scopes: list[str]) -> dict[str, Any]:
     response = client.post(
         "/admin/keys/",
         headers=_admin_headers(client),
@@ -49,7 +49,7 @@ def _issue_stale_account_runtime_key(
     client: TestClient,
     *,
     scopes: list[str],
-) -> tuple[str, dict[str, object]]:
+) -> tuple[str, dict[str, Any]]:
     headers = _admin_headers(client)
     account_response = client.post(
         "/admin/accounts/",
@@ -71,12 +71,8 @@ def _issue_stale_account_runtime_key(
     assert key_response.status_code == 201
 
     governance = get_governance_service()
-    governance._state.gateway_accounts = [  # type: ignore[attr-defined]
-        account
-        for account in governance._state.gateway_accounts  # type: ignore[attr-defined]
-        if account.account_id != account_id
-    ]
-    governance._persist()  # type: ignore[attr-defined]
+    governance._state.gateway_accounts = [account for account in governance._state.gateway_accounts if account.account_id != account_id]
+    governance._persist()
     return account_id, key_response.json()["issued"]
 
 
@@ -99,7 +95,7 @@ def test_unbound_runtime_keys_are_rejected_before_policy_evaluation(
     monkeypatch: pytest.MonkeyPatch,
     method: str,
     path: str,
-    payload: dict[str, object] | None,
+    payload: dict[str, Any] | None,
     scopes: list[str],
 ) -> None:
     monkeypatch.setenv("FORGEGATE_RUNTIME_AUTH_REQUIRED", "true")
@@ -109,7 +105,7 @@ def test_unbound_runtime_keys_are_rejected_before_policy_evaluation(
     client = TestClient(app)
     issued = _issue_unbound_runtime_key(client, scopes=scopes)
 
-    def _fail_authorize(self, *, actor, policy, target):  # type: ignore[no-untyped-def]
+    def _fail_authorize(self, *, actor, policy, target):
         raise AssertionError("Policy evaluation must not run for an unbound runtime key.")
 
     monkeypatch.setattr(PolicyEvaluator, "authorize", _fail_authorize)
@@ -130,11 +126,7 @@ def test_unbound_runtime_keys_are_rejected_before_policy_evaluation(
     assert response.headers["X-ForgeFrame-Correlation-Id"] == error["request_id"]
 
     governance = get_governance_service()
-    denial = next(
-        item
-        for item in reversed(governance.list_audit_events(limit=50))
-        if item.action == "runtime_key_binding_denied" and item.actor_id == issued["key_id"]
-    )
+    denial = next(item for item in reversed(governance.list_audit_events(limit=50)) if item.action == "runtime_key_binding_denied" and item.actor_id == issued["key_id"])
     assert denial.target_id == issued["key_id"]
     assert denial.metadata["runtime_key_id"] == issued["key_id"]
     assert denial.metadata["binding_state"] == "missing_account_id"
@@ -153,14 +145,19 @@ def test_unbound_runtime_keys_are_rejected_before_policy_evaluation(
             {"messages": [{"role": "user", "content": "stale boundary check"}]},
             ["chat:write"],
         ),
-        ("POST", "/v1/responses", {"input": "stale boundary check"}, ["responses:write"]),
+        (
+            "POST",
+            "/v1/responses",
+            {"input": "stale boundary check"},
+            ["responses:write"],
+        ),
     ],
 )
 def test_stale_account_runtime_keys_are_rejected_before_policy_evaluation(
     monkeypatch: pytest.MonkeyPatch,
     method: str,
     path: str,
-    payload: dict[str, object] | None,
+    payload: dict[str, Any] | None,
     scopes: list[str],
 ) -> None:
     monkeypatch.setenv("FORGEGATE_RUNTIME_AUTH_REQUIRED", "true")
@@ -170,7 +167,7 @@ def test_stale_account_runtime_keys_are_rejected_before_policy_evaluation(
     client = TestClient(app)
     account_id, issued = _issue_stale_account_runtime_key(client, scopes=scopes)
 
-    def _fail_authorize(self, *, actor, policy, target):  # type: ignore[no-untyped-def]
+    def _fail_authorize(self, *, actor, policy, target):
         raise AssertionError("Policy evaluation must not run for a stale-account runtime key.")
 
     monkeypatch.setattr(PolicyEvaluator, "authorize", _fail_authorize)
@@ -191,11 +188,7 @@ def test_stale_account_runtime_keys_are_rejected_before_policy_evaluation(
     assert response.headers["X-ForgeFrame-Correlation-Id"] == error["request_id"]
 
     governance = get_governance_service()
-    denial = next(
-        item
-        for item in reversed(governance.list_audit_events(limit=50))
-        if item.action == "runtime_key_binding_denied" and item.actor_id == issued["key_id"]
-    )
+    denial = next(item for item in reversed(governance.list_audit_events(limit=50)) if item.action == "runtime_key_binding_denied" and item.actor_id == issued["key_id"])
     assert denial.target_id == issued["key_id"]
     assert denial.metadata["runtime_key_id"] == issued["key_id"]
     assert denial.metadata["binding_state"] == "account_not_found"

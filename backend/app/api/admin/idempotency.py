@@ -9,7 +9,10 @@ from app.idempotency import get_request_envelope
 
 
 def admin_error(status_code: int, error_type: str, message: str) -> JSONResponse:
-    return JSONResponse(status_code=status_code, content={"error": {"type": error_type, "message": message}})
+    return JSONResponse(
+        status_code=status_code,
+        content={"error": {"type": error_type, "message": message}},
+    )
 
 
 def unsupported_idempotency_response(request: Request, *, message: str) -> JSONResponse | None:

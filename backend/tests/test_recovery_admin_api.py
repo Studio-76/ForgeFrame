@@ -5,9 +5,9 @@ from pathlib import Path
 from uuid import uuid4
 
 import pytest
+from conftest import admin_headers as shared_admin_headers
 from fastapi.testclient import TestClient
 
-from conftest import admin_headers as shared_admin_headers
 from app.main import app
 
 
@@ -27,7 +27,10 @@ def _target_config(target_class: str, tmp_path: Path) -> dict[str, object]:
     if target_class == "second_host":
         return {"host": "localhost", "path": "/srv/forgeframe"}
     if target_class == "offsite_copy":
-        return {"host": "localhost", "destination_uri": "ssh://localhost/srv/forgeframe-offsite"}
+        return {
+            "host": "localhost",
+            "destination_uri": "ssh://localhost/srv/forgeframe-offsite",
+        }
     if target_class == "object_storage":
         return {"provider": "s3", "bucket": "forgeframe-prod", "prefix": "nightly"}
     raise AssertionError(f"Unsupported target class {target_class}")
@@ -110,7 +113,10 @@ def test_recovery_admin_api_supports_backup_and_restore_evidence_for_every_targe
                 "deployment_slug": "forgeframe-prod",
                 "public_fqdn": "forgeframe.example.com",
                 "validated_source_databases": [
-                    {"database": "forgeframe", "cluster_system_identifier": "cluster-123"},
+                    {
+                        "database": "forgeframe",
+                        "cluster_system_identifier": "cluster-123",
+                    },
                 ],
                 "tables_compared": 12,
                 "checked_at": datetime.now(tz=UTC).isoformat(),
@@ -148,7 +154,11 @@ def test_recovery_admin_api_detects_stale_reports_coverage_gaps_and_source_ident
             "label": "Stale backup policy",
             "target_class": "local_secondary_disk",
             "target_config": {"path": str(tmp_path)},
-            "protected_data_classes": ["database", "artifact_metadata", "blob_contents"],
+            "protected_data_classes": [
+                "database",
+                "artifact_metadata",
+                "blob_contents",
+            ],
             "expected_source_identity": {
                 "source_database": "forgeframe",
                 "cluster_system_identifier": "cluster-123",
@@ -187,7 +197,10 @@ def test_recovery_admin_api_detects_stale_reports_coverage_gaps_and_source_ident
                 "source_database": "wrong-db",
                 "source_cluster_system_identifier": "wrong-cluster",
                 "validated_source_databases": [
-                    {"database": "wrong-db", "cluster_system_identifier": "wrong-cluster"},
+                    {
+                        "database": "wrong-db",
+                        "cluster_system_identifier": "wrong-cluster",
+                    },
                 ],
                 "checked_at": old_timestamp,
                 "tables_compared": 3,
@@ -372,7 +385,10 @@ def test_recovery_admin_api_treats_paused_policies_as_non_effective_protection(
                 "source_database": "forgeframe",
                 "source_cluster_system_identifier": "cluster-123",
                 "validated_source_databases": [
-                    {"database": "forgeframe", "cluster_system_identifier": "cluster-123"},
+                    {
+                        "database": "forgeframe",
+                        "cluster_system_identifier": "cluster-123",
+                    },
                 ],
                 "checked_at": datetime.now(tz=UTC).isoformat(),
                 "tables_compared": 12,

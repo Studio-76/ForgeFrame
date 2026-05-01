@@ -16,9 +16,10 @@ from app.providers.base import ChatDispatchResult
 from app.responses.models import NormalizedResponsesRequest
 from app.responses.service import ResponsesService
 from app.settings.config import Settings
-from app.storage.execution_repository import ExecutionWorkerORM, RunAttemptORM, RunCommandORM, RunORM, RunOutboxORM
+from app.storage.execution_repository import (
+    RunORM,
+)
 from app.storage.harness_repository import Base
-from app.storage.runtime_responses_repository import RuntimeResponseORM
 
 
 class _StubInstanceService:
@@ -39,7 +40,13 @@ class _StubInstanceService:
             updated_at=datetime(2026, 4, 23, 8, 0, tzinfo=UTC).isoformat(),
         )
 
-    def resolve_instance(self, *, company_id: str | None = None, instance_id: str | None = None, **_: object) -> InstanceRecord:
+    def resolve_instance(
+        self,
+        *,
+        company_id: str | None = None,
+        instance_id: str | None = None,
+        **_: object,
+    ) -> InstanceRecord:
         assert company_id in {None, self._instance.company_id}
         assert instance_id in {None, self._instance.instance_id}
         return self._instance
@@ -75,20 +82,28 @@ class _FakeAnalyticsStore:
         self.runtime_errors: list[dict[str, object]] = []
 
     def record_non_stream_result(self, result, client=None, *, context=None, request_metadata=None) -> None:
-        self.non_stream_results.append(
-            {
-                "result": result,
-                "client": client,
-                "context": context,
-                "request_metadata": request_metadata,
-            }
-        )
+        self.non_stream_results.append({
+            "result": result,
+            "client": client,
+            "context": context,
+            "request_metadata": request_metadata,
+        })
 
     def record_runtime_error(self, **kwargs: object) -> None:
         self.runtime_errors.append(kwargs)
 
 
-def _services(tmp_path: Path) -> tuple[ExecutionTransitionService, ResponsesService, ExecutionWorkerService, ExecutionAdminService, sessionmaker[Session], _FakeDispatchService, _FakeAnalyticsStore]:
+def _services(
+    tmp_path: Path,
+) -> tuple[
+    ExecutionTransitionService,
+    ResponsesService,
+    ExecutionWorkerService,
+    ExecutionAdminService,
+    sessionmaker[Session],
+    _FakeDispatchService,
+    _FakeAnalyticsStore,
+]:
     engine = create_engine(f"sqlite+pysqlite:///{tmp_path / 'execution-worker.sqlite'}")
     Base.metadata.create_all(engine)
     session_factory = sessionmaker(engine, autoflush=False, expire_on_commit=False)
@@ -114,7 +129,15 @@ def _services(tmp_path: Path) -> tuple[ExecutionTransitionService, ResponsesServ
         analytics_store=fake_analytics,
     )
     admin = ExecutionAdminService(session_factory)
-    return transitions, responses, worker, admin, session_factory, fake_dispatch, fake_analytics
+    return (
+        transitions,
+        responses,
+        worker,
+        admin,
+        session_factory,
+        fake_dispatch,
+        fake_analytics,
+    )
 
 
 def _instance(company_id: str = "company_alpha") -> InstanceRecord:
@@ -136,12 +159,30 @@ def _instance(company_id: str = "company_alpha") -> InstanceRecord:
     )
 
 
-def test_background_worker_processes_response_queue_and_updates_worker_registry(tmp_path: Path) -> None:
-    _transitions, responses, worker, admin, session_factory, fake_dispatch, fake_analytics = _services(tmp_path)
+def test_background_worker_processes_response_queue_and_updates_worker_registry(
+    tmp_path: Path,
+) -> None:
+    (
+        _transitions,
+        responses,
+        worker,
+        admin,
+        session_factory,
+        fake_dispatch,
+        fake_analytics,
+    ) = _services(tmp_path)
     request = NormalizedResponsesRequest(
         model="gpt-4.1-mini",
         instructions="Answer tersely.",
-        input_items=[{"id": "msg_1", "type": "message", "role": "user", "status": "completed", "content": [{"type": "input_text", "text": "hello"}]}],
+        input_items=[
+            {
+                "id": "msg_1",
+                "type": "message",
+                "role": "user",
+                "status": "completed",
+                "content": [{"type": "input_text", "text": "hello"}],
+            }
+        ],
         background=True,
         metadata={"request": "background"},
         max_output_tokens=256,
@@ -200,7 +241,9 @@ def test_background_worker_processes_response_queue_and_updates_worker_registry(
             {"response_id": response.id},
         ).one()
         worker_row = session.execute(
-            text("SELECT worker_state, active_attempts, current_run_id, current_attempt_id, last_completed_at, last_error_code FROM execution_workers WHERE company_id = :company_id AND worker_key = :worker_key"),
+            text(
+                "SELECT worker_state, active_attempts, current_run_id, current_attempt_id, last_completed_at, last_error_code FROM execution_workers WHERE company_id = :company_id AND worker_key = :worker_key"
+            ),
             {"company_id": "company_alpha", "worker_key": "worker_alpha"},
         ).one()
     detail = admin.get_run_detail(instance=_instance(), run_id=run_id)
@@ -213,7 +256,12 @@ def test_background_worker_processes_response_queue_and_updates_worker_registry(
     assert run.result_summary["routing"]["selected_target_key"] == "openai_api::gpt-4.1-mini"
     assert run.result_summary["dispatch"]["stage"] == "completed"
     assert run.result_summary["wake_gate"]["claim_allowed"] is True
-    assert tuple(response_row[:4]) == ("completed", "instance_alpha", "gpt-4.1-mini", "openai_api")
+    assert tuple(response_row[:4]) == (
+        "completed",
+        "instance_alpha",
+        "gpt-4.1-mini",
+        "openai_api",
+    )
     native_mapping = json.loads(response_row[4]) if isinstance(response_row[4], str) else response_row[4]
     assert native_mapping["primary_native_object_kind"] == "run"
     assert native_mapping["route_context"]["resolved_model"] == "gpt-4.1-mini"
@@ -230,8 +278,18 @@ def test_background_worker_processes_response_queue_and_updates_worker_registry(
     assert detail.native_mapping.objects[0].kind == "run"
 
 
-def test_dispatch_snapshot_surfaces_registered_idle_workers_without_lease_inference(tmp_path: Path) -> None:
-    _transitions, _responses, worker, admin, _session_factory, _fake_dispatch, _fake_analytics = _services(tmp_path)
+def test_dispatch_snapshot_surfaces_registered_idle_workers_without_lease_inference(
+    tmp_path: Path,
+) -> None:
+    (
+        _transitions,
+        _responses,
+        worker,
+        admin,
+        _session_factory,
+        _fake_dispatch,
+        _fake_analytics,
+    ) = _services(tmp_path)
     worker.start_worker(
         company_id="company_alpha",
         worker_key="worker_alpha",

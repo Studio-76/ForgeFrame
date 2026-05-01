@@ -1,5 +1,7 @@
 """Admin model register endpoints."""
 
+from typing import Any
+
 from fastapi import APIRouter, Depends
 
 from app.api.admin.control_plane import ControlPlaneService, get_control_plane_service
@@ -13,7 +15,7 @@ router = APIRouter(prefix="/models", tags=["admin-models"])
 def list_model_register(
     instance: InstanceRecord = Depends(resolve_admin_instance_scope),
     service: ControlPlaneService = Depends(get_control_plane_service),
-) -> dict[str, object]:
+) -> dict[str, Any]:
     models = service.model_register_snapshot()
     return {
         "status": "ok",

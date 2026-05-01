@@ -1,6 +1,8 @@
 """Provider adapter registry for ForgeFrame runtime."""
 
+from collections.abc import ValuesView
 from inspect import Parameter, signature
+from typing import Any, cast
 
 from app.harness.service import HarnessService, get_harness_service
 from app.providers.anthropic.adapter import AnthropicAdapter
@@ -28,11 +30,7 @@ class ProviderRegistry:
             "generic_harness": GenericHarnessAdapter(settings, harness),
             "ollama": OllamaAdapter(settings),
         }
-        self._adapters = {
-            name: adapter
-            for name, adapter in candidate_adapters.items()
-            if settings.is_provider_enabled(name)
-        }
+        self._adapters = {name: adapter for name, adapter in candidate_adapters.items() if settings.is_provider_enabled(name)}
 
     def get(self, provider_name: str) -> ProviderAdapter:
         try:
@@ -42,14 +40,14 @@ class ProviderRegistry:
 
     @staticmethod
     def _call_with_optional_instance_scope(
-        method: object,
+        method: Any,
         *args: object,
         instance_id: str | None = None,
-    ) -> object:
+    ) -> Any:
         try:
-            parameters = signature(method).parameters.values()
+            parameters: ValuesView[Parameter] = signature(method).parameters.values()
         except (TypeError, ValueError):
-            parameters = ()
+            parameters = cast("ValuesView[Parameter]", ())
         supports_var_kwargs = any(parameter.kind is Parameter.VAR_KEYWORD for parameter in parameters)
         supported_names = {parameter.name for parameter in parameters}
         if supports_var_kwargs or "instance_id" in supported_names:
@@ -60,7 +58,7 @@ class ProviderRegistry:
         adapter = self.get(provider_name)
         return bool(self._call_with_optional_instance_scope(adapter.is_ready, instance_id=instance_id))
 
-    def get_provider_status(self, provider_name: str, *, instance_id: str | None = None) -> dict[str, object]:
+    def get_provider_status(self, provider_name: str, *, instance_id: str | None = None) -> dict[str, Any]:
         adapter = self.get(provider_name)
         status_capabilities = getattr(adapter, "status_capabilities", None)
         if callable(status_capabilities):
@@ -86,7 +84,7 @@ class ProviderRegistry:
             "oauth_required": capabilities.get("oauth_required", False),
         }
 
-    def list_provider_statuses(self, *, instance_id: str | None = None) -> list[dict[str, object]]:
+    def list_provider_statuses(self, *, instance_id: str | None = None) -> list[dict[str, Any]]:
         return [
             {
                 "provider": provider_name,

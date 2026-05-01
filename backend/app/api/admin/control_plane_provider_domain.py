@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from typing import cast
+from typing import TYPE_CHECKING, Any, cast
 
 from app.api.admin.control_plane_models import (
     ProviderClassDescriptor,
@@ -12,11 +12,38 @@ from app.api.admin.control_plane_models import (
     ProviderUpdateRequest,
 )
 from app.api.runtime.dependencies import clear_runtime_dependency_caches
-from app.control_plane import ControlPlaneStateRecord, HealthConfig, HealthStatusRecord, ManagedModelRecord, ManagedProviderRecord
+from app.control_plane import (
+    ControlPlaneStateRecord,
+    HealthStatusRecord,
+    ManagedModelRecord,
+    ManagedProviderRecord,
+)
 from app.control_plane.target_defaults import ensure_model_registry_metadata
 
 
 class ControlPlaneProviderDomainMixin:
+    if TYPE_CHECKING:
+        _registry: Any
+        _instance: Any
+        _settings: Any
+        _harness: Any
+        _analytics: Any
+        _health_config: Any
+        _health_records: Any
+        _last_bootstrap_readiness: Any
+        _state_repository: Any
+        _providers_state: dict[str, ManagedProviderRecord]
+        _routing_policies_state: Any
+        _routing_budget_state: Any
+        _routing_circuits_state: Any
+        _routing_decisions_state: Any
+        _provider_targets_state: Any
+        _provider_catalog_state: Any
+
+        def list_provider_targets(self) -> list[Any]: ...
+        def list_provider_catalog(self) -> list[Any]: ...
+        def _refresh_provider_targets(self) -> list[Any]: ...
+
     _SUPPORTED_PROVIDER_CLASSES: tuple[ProviderClassDescriptor, ...] = (
         ProviderClassDescriptor(
             key="openai_compatible",
@@ -66,7 +93,11 @@ class ControlPlaneProviderDomainMixin:
     def _managed_model_runtime_status(model: ManagedModelRecord) -> str:
         if not model.active:
             return "unavailable"
-        if model.discovery_status in {"stale", "removed", "removed_from_profile_models"}:
+        if model.discovery_status in {
+            "stale",
+            "removed",
+            "removed_from_profile_models",
+        }:
             return "stale"
         if model.discovery_status in {"warning", "failed"}:
             return "failed"
@@ -78,7 +109,11 @@ class ControlPlaneProviderDomainMixin:
     def _managed_model_availability(model: ManagedModelRecord) -> str:
         if not model.active:
             return "unavailable"
-        if model.discovery_status in {"stale", "removed", "removed_from_profile_models"}:
+        if model.discovery_status in {
+            "stale",
+            "removed",
+            "removed_from_profile_models",
+        }:
             return "stale"
         if model.discovery_status in {"warning", "failed"}:
             return "degraded"
@@ -147,10 +182,7 @@ class ControlPlaneProviderDomainMixin:
         self,
         stored_providers: list[ManagedProviderRecord] | None,
     ) -> dict[str, ManagedProviderRecord]:
-        provider_map = {
-            key: value.model_copy(deep=True)
-            for key, value in self._bootstrap_provider_state().items()
-        }
+        provider_map = {key: value.model_copy(deep=True) for key, value in self._bootstrap_provider_state().items()}
         if not stored_providers:
             return provider_map
 
@@ -175,10 +207,7 @@ class ControlPlaneProviderDomainMixin:
             existing.last_sync_status = stored.last_sync_status
             existing.last_sync_error = stored.last_sync_error
 
-            model_map = {
-                model.id: model.model_copy(deep=True)
-                for model in existing.managed_models
-            }
+            model_map = {model.id: model.model_copy(deep=True) for model in existing.managed_models}
             for stored_model in stored.managed_models:
                 ensure_model_registry_metadata(
                     stored_model,
@@ -194,9 +223,9 @@ class ControlPlaneProviderDomainMixin:
                     existing.provider,
                 )
                 if not model.runtime_status:
-                    model.runtime_status = self._managed_model_runtime_status(model)  # type: ignore[assignment]
+                    model.runtime_status = self._managed_model_runtime_status(model)
                 if not model.availability_status:
-                    model.availability_status = self._managed_model_availability(model)  # type: ignore[assignment]
+                    model.availability_status = self._managed_model_availability(model)
 
         return provider_map
 
@@ -206,23 +235,14 @@ class ControlPlaneProviderDomainMixin:
             providers=[item.model_copy(deep=True) for item in self.list_providers()],
             provider_targets=[item.model_copy(deep=True) for item in self.list_provider_targets()],
             provider_catalog=[item.model_copy(deep=True) for item in self.list_provider_catalog()],
-            routing_policies=[
-                item.model_copy(deep=True)
-                for item in getattr(self, "_routing_policies_state", {}).values()
-            ],
+            routing_policies=[item.model_copy(deep=True) for item in getattr(self, "_routing_policies_state", {}).values()],
             routing_budget_state=getattr(
                 self,
                 "_routing_budget_state",
                 ControlPlaneStateRecord().routing_budget_state,
             ).model_copy(deep=True),
-            routing_circuits=[
-                item.model_copy(deep=True)
-                for item in getattr(self, "_routing_circuits_state", {}).values()
-            ],
-            routing_decisions=[
-                item.model_copy(deep=True)
-                for item in getattr(self, "_routing_decisions_state", [])
-            ],
+            routing_circuits=[item.model_copy(deep=True) for item in getattr(self, "_routing_circuits_state", {}).values()],
+            routing_decisions=[item.model_copy(deep=True) for item in getattr(self, "_routing_decisions_state", [])],
             health_config=self._health_config.model_copy(deep=True),
             health_records=[
                 item.model_copy(deep=True)
@@ -231,11 +251,7 @@ class ControlPlaneProviderDomainMixin:
                     key=lambda record: (record.provider, record.model),
                 )
             ],
-            last_bootstrap_readiness=(
-                self._last_bootstrap_readiness.model_copy(deep=True)
-                if self._last_bootstrap_readiness
-                else None
-            ),
+            last_bootstrap_readiness=(self._last_bootstrap_readiness.model_copy(deep=True) if self._last_bootstrap_readiness else None),
         )
         return self._state_repository.save_state(state)
 
@@ -267,7 +283,12 @@ class ControlPlaneProviderDomainMixin:
     ) -> ProviderClassKey:
         normalized_config = config or {}
         configured_class = normalized_config.get("provider_class")
-        if configured_class in {"openai_compatible", "local_ollama", "oauth_account", "custom"}:
+        if configured_class in {
+            "openai_compatible",
+            "local_ollama",
+            "oauth_account",
+            "custom",
+        }:
             return cast(ProviderClassKey, configured_class)
 
         normalized_integration = (integration_class or "").strip().lower()
@@ -289,7 +310,12 @@ class ControlPlaneProviderDomainMixin:
             return "oauth_account"
         if auth_scheme == "oauth_account" or "oauth" in normalized_integration:
             return "oauth_account"
-        if normalized_provider in {"openai_api", "generic_harness", "forgeframe_baseline", "localai"}:
+        if normalized_provider in {
+            "openai_api",
+            "generic_harness",
+            "forgeframe_baseline",
+            "localai",
+        }:
             return "openai_compatible"
         if normalized_integration in {"openai_compatible", "harness_generic"} or normalized_template == "openai_compatible":
             return "openai_compatible"
@@ -313,23 +339,18 @@ class ControlPlaneProviderDomainMixin:
             config=config,
         )
         descriptor = self._provider_class_descriptor(resolved_class)
-        normalized_config = {
-            key: value
-            for key, value in descriptor.default_config.items()
-            if value is not None and str(value).strip()
-        }
+        normalized_config = {key: value for key, value in descriptor.default_config.items() if value is not None and str(value).strip()}
         if config:
-            normalized_config.update(
-                {
-                    key: value
-                    for key, value in config.items()
-                    if value is not None and value.strip()
-                }
-            )
+            normalized_config.update({key: value for key, value in config.items() if value is not None and value.strip()})
         normalized_config["provider_class"] = resolved_class
         normalized_integration = (integration_class or descriptor.integration_class).strip() or descriptor.integration_class
         normalized_template = template_id if template_id is not None else descriptor.template_id
-        return resolved_class, normalized_integration, normalized_template, normalized_config
+        return (
+            resolved_class,
+            normalized_integration,
+            normalized_template,
+            normalized_config,
+        )
 
     def create_provider(self, payload: ProviderCreateRequest) -> ManagedProviderRecord:
         if payload.provider in self._providers_state:
@@ -474,9 +495,7 @@ class ControlPlaneProviderDomainMixin:
                     for model_id in [
                         model.id
                         for model in provider.managed_models
-                        if model.source in {"manual", "templated", "discovered", "static"}
-                        and model.id not in profile_model_ids
-                        and model.id != "no_models_configured"
+                        if model.source in {"manual", "templated", "discovered", "static"} and model.id not in profile_model_ids and model.id != "no_models_configured"
                     ]:
                         existing_map = {model.id: model for model in provider.managed_models}
                         if model_id in existing_map:
@@ -527,9 +546,9 @@ class ControlPlaneProviderDomainMixin:
                     provider.provider,
                 )
                 if not model.runtime_status or model.runtime_status == "planned":
-                    model.runtime_status = self._managed_model_runtime_status(model)  # type: ignore[assignment]
+                    model.runtime_status = self._managed_model_runtime_status(model)
                 if not model.availability_status or model.availability_status == "unknown":
-                    model.availability_status = self._managed_model_availability(model)  # type: ignore[assignment]
+                    model.availability_status = self._managed_model_availability(model)
             provider.managed_models = sorted(provider.managed_models, key=lambda item: item.id)
         self._refresh_provider_targets()
         self._persist_state()

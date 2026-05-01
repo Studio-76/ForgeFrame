@@ -49,5 +49,7 @@ def merge_openai_tool_call_chunks(
             current[key] = value
 
 
-def finalize_openai_tool_calls(merged: dict[int, dict[str, object]]) -> list[dict[str, object]]:
+def finalize_openai_tool_calls(
+    merged: dict[int, dict[str, object]],
+) -> list[dict[str, object]]:
     return [merged[index] for index in sorted(merged)]
