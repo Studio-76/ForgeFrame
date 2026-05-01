@@ -2317,6 +2317,6 @@ details summary {
 
   /* Add content padding so the bottom tab bar doesn't obscure content */
   .ff-main {
-    padding-bottom: calc(1rem + 72px);
+    padding-bottom: calc(1rem + 64px + env(safe-area-inset-bottom, 0px));
   }
 }

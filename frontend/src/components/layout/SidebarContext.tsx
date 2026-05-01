@@ -47,6 +47,17 @@ function getViewportTier(width: number): ViewportTier {
   return "desktop";
 }
 
+/**
+ * Read initial viewport tier for the first render.
+ * @returns Initial tier derived from window width when available.
+ */
+function getInitialViewportTier(): ViewportTier {
+  if (typeof window === "undefined") {
+    return "desktop";
+  }
+  return getViewportTier(window.innerWidth);
+}
+
 export type SidebarContextValue = {
   /** Whether the sidebar is in expanded (full) mode on tablet/desktop. */
   isExpanded: boolean;
@@ -74,11 +85,28 @@ export function SidebarProvider({ children }: { children: ReactNode }) {
   const [storedExpanded, setStoredExpanded] = useState(readStoredSidebarExpanded);
   const [isMobileOpen, setIsMobileOpen] = useState(false);
   const [openSections, setOpenSections] = useState<Record<string, boolean>>(readStoredSectionState);
-  const [viewportTier, setViewportTier] = useState<ViewportTier>("desktop");
+  const [viewportTier, setViewportTier] = useState<ViewportTier>(getInitialViewportTier);
 
   /* Track viewport changes for responsive breakpoints. */
   useEffect(() => {
+    let frameRequestId = 0;
+
     const updateViewport = () => {
+      if (frameRequestId !== 0) {
+        window.cancelAnimationFrame(frameRequestId);
+      }
+
+      frameRequestId = window.requestAnimationFrame(() => {
+        frameRequestId = 0;
+        const tier = getViewportTier(window.innerWidth);
+        setViewportTier(tier);
+        if (tier !== "mobile") {
+          setIsMobileOpen(false);
+        }
+      });
+    };
+
+    const syncViewportImmediately = () => {
       const tier = getViewportTier(window.innerWidth);
       setViewportTier(tier);
       if (tier !== "mobile") {
@@ -86,9 +114,14 @@ export function SidebarProvider({ children }: { children: ReactNode }) {
       }
     };
 
-    updateViewport();
+    syncViewportImmediately();
     window.addEventListener("resize", updateViewport);
-    return () => window.removeEventListener("resize", updateViewport);
+    return () => {
+      if (frameRequestId !== 0) {
+        window.cancelAnimationFrame(frameRequestId);
+      }
+      window.removeEventListener("resize", updateViewport);
+    };
   }, []);
 
   /* Persist sidebar expanded state to localStorage. */

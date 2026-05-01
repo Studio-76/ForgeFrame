@@ -30,6 +30,19 @@ type BottomTabBarProps = {
 };
 
 /**
+ * Determine whether the current pathname belongs to a tab route.
+ * @param pathname - Current location pathname.
+ * @param tabPath - Tab root path.
+ * @returns True when the tab should be highlighted as active.
+ */
+function isTabRouteActive(pathname: string, tabPath: string): boolean {
+  if (tabPath === CONTROL_PLANE_ROUTES.dashboard && pathname === "/") {
+    return true;
+  }
+  return pathname === tabPath || pathname.startsWith(`${tabPath}/`);
+}
+
+/**
  * Bottom tab bar for mobile navigation.
  * Provides quick access to the five most common control-plane surfaces.
  * Touches the sidebar context to close mobile sidebar when a tab is activated.
@@ -42,8 +55,7 @@ export function BottomTabBar({ instanceId }: BottomTabBarProps) {
     <nav className="ff-bottom-tab-bar" aria-label="Primary navigation">
       {BOTTOM_TABS.map((tab) => {
         const scopedTo = withQueryParams(tab.to, { instanceId });
-        const isActive = location.pathname === tab.to
-          || (tab.to === CONTROL_PLANE_ROUTES.dashboard && location.pathname === "/");
+        const isActive = isTabRouteActive(location.pathname, tab.to);
 
         return (
           <Link

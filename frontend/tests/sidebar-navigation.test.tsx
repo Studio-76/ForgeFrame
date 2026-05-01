@@ -8,7 +8,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { AdminSessionUser } from "../src/api/admin";
 import { getControlPlaneNavigation } from "../src/app/navigation";
 import { AppSidebar } from "../src/components/layout/AppSidebar";
-import { SidebarProvider } from "../src/components/layout/SidebarContext";
+import { SidebarProvider, useSidebar } from "../src/components/layout/SidebarContext";
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -31,12 +31,23 @@ const viewerSession: AdminSessionUser = {
 let container: HTMLDivElement;
 let root: Root | null = null;
 
+function MobileSidebarToggleHarness() {
+  const { toggleMobileSidebar } = useSidebar();
+
+  return (
+    <button type="button" onClick={toggleMobileSidebar} aria-label="Toggle mobile sidebar test harness">
+      Toggle Mobile Sidebar
+    </button>
+  );
+}
+
 async function renderSidebar(path: string, session: AdminSessionUser = adminSession) {
   root = createRoot(container);
   await act(async () => {
     root?.render(
       <MemoryRouter initialEntries={[path]}>
         <SidebarProvider>
+          <MobileSidebarToggleHarness />
           <AppSidebar navigationSections={getControlPlaneNavigation(session)} instanceId={null} />
         </SidebarProvider>
       </MemoryRouter>,
@@ -47,6 +58,22 @@ async function renderSidebar(path: string, session: AdminSessionUser = adminSess
 async function flushEffects() {
   await act(async () => {
     await Promise.resolve();
+  });
+}
+
+async function flushAnimationFrame() {
+  await act(async () => {
+    await new Promise<void>((resolve) => {
+      window.requestAnimationFrame(() => resolve());
+    });
+  });
+}
+
+function setViewportWidth(width: number) {
+  Object.defineProperty(window, "innerWidth", {
+    configurable: true,
+    value: width,
+    writable: true,
   });
 }
 
@@ -156,5 +183,24 @@ describe("sidebar navigation shell", () => {
     expect(visibleDisabledLink).not.toBeNull();
     expect(visibleDisabledLink?.className).toContain("is-current");
     expect(visibleDisabledLink?.textContent).toContain("Operator or admin");
+  });
+
+  it("opens a mobile overlay sidebar and renders the backdrop", async () => {
+    setViewportWidth(375);
+    await renderSidebar("/dashboard");
+    await flushAnimationFrame();
+
+    const toggleButton = container.querySelector<HTMLButtonElement>('button[aria-label="Toggle mobile sidebar test harness"]');
+    expect(toggleButton).not.toBeNull();
+
+    await act(async () => {
+      toggleButton?.click();
+    });
+
+    const sidebar = container.querySelector<HTMLElement>("#ff-sidebar");
+    const backdrop = container.querySelector<HTMLButtonElement>(".ff-backdrop");
+
+    expect(sidebar?.className).toContain("is-mobile-open");
+    expect(backdrop).not.toBeNull();
   });
 });
