@@ -3,6 +3,8 @@
 
 from __future__ import annotations
 
+# ruff: noqa: E402
+
 import argparse
 import json
 import sys
@@ -376,7 +378,7 @@ def main() -> int:
     policies = select_policies(default_retention_policies(), args.policy)
     targets = _targets(args)
     if not targets:
-        payload = {
+        payload: dict[str, Any] = {
             "status": "skipped",
             "reason": "no_postgresql_storage_targets",
             "generated_at": datetime.now(tz=UTC).isoformat(),
