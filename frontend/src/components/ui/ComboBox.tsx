@@ -1,7 +1,7 @@
 import { useRef, type ReactNode } from "react";
 import { useComboBox, useFilter, useButton, useOption } from "react-aria";
 import { useComboBoxState, Item } from "react-stately";
-import type { Key } from "react-stately";
+import type { Key, ComboBoxStateOptions } from "react-stately";
 
 /**
  * Describes a single combobox option item.
@@ -77,16 +77,18 @@ export function ComboBox<T extends ComboBoxItem>({
   const listBoxRef = useRef<HTMLUListElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
 
-  // Spread entire props to useComboBoxState for correct collection types
-  const state = useComboBoxState({
+  // Cast children to satisfy CollectionChildren<T> — at runtime the
+  // Item-based render function produces valid collection elements.
+  const stateOptions: ComboBoxStateOptions<T> = {
     items,
-    children,
+    children: children as never,
     defaultFilter: contains,
     inputValue,
     defaultInputValue,
     onInputChange,
     onSelectionChange,
-  } as never);
+  };
+  const state = useComboBoxState(stateOptions);
 
   const { inputProps, listBoxProps, labelProps } = useComboBox(
     {

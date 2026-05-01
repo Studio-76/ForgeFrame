@@ -2074,7 +2074,7 @@ details summary {
 .ff-focus-visible {
   outline: none;
   border-color: var(--fg-color-focus-ring);
-  box-shadow: 0 0 0 3px rgba(83, 177, 253, 0.2);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--fg-color-focus-ring) 25%, transparent);
 }
 
 /* ──────────────────────────────────────────────

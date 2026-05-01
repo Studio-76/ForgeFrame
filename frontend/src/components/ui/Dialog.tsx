@@ -74,9 +74,11 @@ function DialogContent({ state, title, children }: InnerDialogProps) {
  *
  * @example
  * ```tsx
+ * import { Button } from "./Button";
+ *
  * <DialogOverlay isOpen={open} onClose={() => setOpen(false)} title="Confirm">
  *   <p>Are you sure?</p>
- *   <button onClick={handleConfirm}>Yes</button>
+ *   <Button onPress={handleConfirm}>Yes</Button>
  * </DialogOverlay>
  * ```
  */
