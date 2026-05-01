@@ -3,20 +3,20 @@
 import os
 
 _EARLY_TEST_BOOTSTRAP_ADMIN_PASSWORD = "ForgeFrame-Test-Admin-Secret-123"
-os.environ.setdefault("FORGEGATE_BOOTSTRAP_ADMIN_PASSWORD", _EARLY_TEST_BOOTSTRAP_ADMIN_PASSWORD)
-os.environ.setdefault("FORGEFRAME_BOOTSTRAP_ADMIN_PASSWORD", _EARLY_TEST_BOOTSTRAP_ADMIN_PASSWORD)
-os.environ.setdefault("FORGEGATE_HARNESS_STORAGE_BACKEND", "file")
-os.environ.setdefault("FORGEFRAME_HARNESS_STORAGE_BACKEND", "file")
-os.environ.setdefault("FORGEGATE_CONTROL_PLANE_STORAGE_BACKEND", "file")
-os.environ.setdefault("FORGEFRAME_CONTROL_PLANE_STORAGE_BACKEND", "file")
-os.environ.setdefault("FORGEGATE_GOVERNANCE_STORAGE_BACKEND", "file")
-os.environ.setdefault("FORGEFRAME_GOVERNANCE_STORAGE_BACKEND", "file")
-os.environ.setdefault("FORGEGATE_OBSERVABILITY_STORAGE_BACKEND", "file")
-os.environ.setdefault("FORGEFRAME_OBSERVABILITY_STORAGE_BACKEND", "file")
-os.environ.setdefault("FORGEGATE_INSTANCES_STORAGE_BACKEND", "file")
-os.environ.setdefault("FORGEFRAME_INSTANCES_STORAGE_BACKEND", "file")
-os.environ.setdefault("FORGEGATE_RUNTIME_AUTH_REQUIRED", "false")
-os.environ.setdefault("FORGEFRAME_RUNTIME_AUTH_REQUIRED", "false")
+
+
+def _set_brand_env_default(suffix: str, value: str) -> None:
+    os.environ.setdefault(f"FORGEFRAME_{suffix}", value)
+    os.environ.setdefault(f"FORGEGATE_{suffix}", value)
+
+
+_set_brand_env_default("BOOTSTRAP_ADMIN_PASSWORD", _EARLY_TEST_BOOTSTRAP_ADMIN_PASSWORD)
+_set_brand_env_default("HARNESS_STORAGE_BACKEND", "file")
+_set_brand_env_default("CONTROL_PLANE_STORAGE_BACKEND", "file")
+_set_brand_env_default("GOVERNANCE_STORAGE_BACKEND", "file")
+_set_brand_env_default("OBSERVABILITY_STORAGE_BACKEND", "file")
+_set_brand_env_default("INSTANCES_STORAGE_BACKEND", "file")
+_set_brand_env_default("RUNTIME_AUTH_REQUIRED", "false")
 
 import pytest
 from fastapi.testclient import TestClient
@@ -116,40 +116,26 @@ def admin_headers(client: TestClient) -> dict[str, str]:
 
 @pytest.fixture(autouse=True)
 def _reset_runtime_caches(tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
+    def set_brand_env(suffix: str, value: str) -> None:
+        monkeypatch.setenv(f"FORGEFRAME_{suffix}", value)
+        monkeypatch.setenv(f"FORGEGATE_{suffix}", value)
+
     events_path = tmp_path / "events.jsonl"
-    monkeypatch.setenv("FORGEGATE_OBSERVABILITY_EVENTS_PATH", str(events_path))
-    monkeypatch.setenv("FORGEFRAME_OBSERVABILITY_EVENTS_PATH", str(events_path))
-    monkeypatch.setenv("FORGEGATE_OBSERVABILITY_STORAGE_BACKEND", "file")
-    monkeypatch.setenv("FORGEFRAME_OBSERVABILITY_STORAGE_BACKEND", "file")
-    monkeypatch.setenv("FORGEGATE_OAUTH_OPERATIONS_PATH", str(tmp_path / "oauth_operations.jsonl"))
-    monkeypatch.setenv("FORGEFRAME_OAUTH_OPERATIONS_PATH", str(tmp_path / "oauth_operations.jsonl"))
-    monkeypatch.setenv("FORGEGATE_HARNESS_STORAGE_BACKEND", "file")
-    monkeypatch.setenv("FORGEFRAME_HARNESS_STORAGE_BACKEND", "file")
-    monkeypatch.setenv("FORGEGATE_HARNESS_PROFILES_PATH", str(tmp_path / "harness_profiles.json"))
-    monkeypatch.setenv("FORGEFRAME_HARNESS_PROFILES_PATH", str(tmp_path / "harness_profiles.json"))
-    monkeypatch.setenv("FORGEGATE_HARNESS_RUNS_PATH", str(tmp_path / "harness_runs.json"))
-    monkeypatch.setenv("FORGEFRAME_HARNESS_RUNS_PATH", str(tmp_path / "harness_runs.json"))
-    monkeypatch.setenv("FORGEGATE_CONTROL_PLANE_STORAGE_BACKEND", "file")
-    monkeypatch.setenv("FORGEFRAME_CONTROL_PLANE_STORAGE_BACKEND", "file")
-    monkeypatch.setenv("FORGEGATE_CONTROL_PLANE_STATE_PATH", str(tmp_path / "control_plane_state.json"))
-    monkeypatch.setenv(
-        "FORGEFRAME_CONTROL_PLANE_STATE_PATH",
-        str(tmp_path / "control_plane_state.json"),
-    )
-    monkeypatch.setenv("FORGEGATE_INSTANCES_STORAGE_BACKEND", "file")
-    monkeypatch.setenv("FORGEFRAME_INSTANCES_STORAGE_BACKEND", "file")
-    monkeypatch.setenv("FORGEGATE_INSTANCES_STATE_PATH", str(tmp_path / "instances_state.json"))
-    monkeypatch.setenv("FORGEFRAME_INSTANCES_STATE_PATH", str(tmp_path / "instances_state.json"))
-    monkeypatch.setenv("FORGEGATE_GOVERNANCE_STORAGE_BACKEND", "file")
-    monkeypatch.setenv("FORGEFRAME_GOVERNANCE_STORAGE_BACKEND", "file")
-    monkeypatch.setenv("FORGEGATE_GOVERNANCE_STATE_PATH", str(tmp_path / "governance_state.json"))
-    monkeypatch.setenv("FORGEFRAME_GOVERNANCE_STATE_PATH", str(tmp_path / "governance_state.json"))
-    monkeypatch.setenv("FORGEGATE_EXECUTION_SQLITE_PATH", str(tmp_path / "execution.sqlite"))
-    monkeypatch.setenv("FORGEFRAME_EXECUTION_SQLITE_PATH", str(tmp_path / "execution.sqlite"))
-    monkeypatch.setenv("FORGEGATE_BOOTSTRAP_ADMIN_PASSWORD", TEST_BOOTSTRAP_ADMIN_PASSWORD)
-    monkeypatch.setenv("FORGEFRAME_BOOTSTRAP_ADMIN_PASSWORD", TEST_BOOTSTRAP_ADMIN_PASSWORD)
-    monkeypatch.setenv("FORGEGATE_RUNTIME_AUTH_REQUIRED", "false")
-    monkeypatch.setenv("FORGEFRAME_RUNTIME_AUTH_REQUIRED", "false")
+    set_brand_env("OBSERVABILITY_EVENTS_PATH", str(events_path))
+    set_brand_env("OBSERVABILITY_STORAGE_BACKEND", "file")
+    set_brand_env("OAUTH_OPERATIONS_PATH", str(tmp_path / "oauth_operations.jsonl"))
+    set_brand_env("HARNESS_STORAGE_BACKEND", "file")
+    set_brand_env("HARNESS_PROFILES_PATH", str(tmp_path / "harness_profiles.json"))
+    set_brand_env("HARNESS_RUNS_PATH", str(tmp_path / "harness_runs.json"))
+    set_brand_env("CONTROL_PLANE_STORAGE_BACKEND", "file")
+    set_brand_env("CONTROL_PLANE_STATE_PATH", str(tmp_path / "control_plane_state.json"))
+    set_brand_env("INSTANCES_STORAGE_BACKEND", "file")
+    set_brand_env("INSTANCES_STATE_PATH", str(tmp_path / "instances_state.json"))
+    set_brand_env("GOVERNANCE_STORAGE_BACKEND", "file")
+    set_brand_env("GOVERNANCE_STATE_PATH", str(tmp_path / "governance_state.json"))
+    set_brand_env("EXECUTION_SQLITE_PATH", str(tmp_path / "execution.sqlite"))
+    set_brand_env("BOOTSTRAP_ADMIN_PASSWORD", TEST_BOOTSTRAP_ADMIN_PASSWORD)
+    set_brand_env("RUNTIME_AUTH_REQUIRED", "false")
     get_settings.cache_clear()
     clear_runtime_dependency_caches()
     clear_execution_dependency_caches()

@@ -78,13 +78,13 @@ _PROVIDER_ID_CLASS_OVERRIDES = {
 }
 
 _BASE_URL_ENV_OVERRIDES = {
-    "openai": "FORGEGATE_OPENAI_API_BASE_URL",
-    "openai_codex": "FORGEGATE_OPENAI_CODEX_BASE_URL",
-    "gemini_native": "FORGEGATE_GEMINI_PROBE_BASE_URL",
-    "google_gemini_oauth": "FORGEGATE_GEMINI_PROBE_BASE_URL",
-    "anthropic": "FORGEGATE_ANTHROPIC_BASE_URL",
+    "openai": "FORGEFRAME_OPENAI_API_BASE_URL",
+    "openai_codex": "FORGEFRAME_OPENAI_CODEX_BASE_URL",
+    "gemini_native": "FORGEFRAME_GEMINI_PROBE_BASE_URL",
+    "google_gemini_oauth": "FORGEFRAME_GEMINI_PROBE_BASE_URL",
+    "anthropic": "FORGEFRAME_ANTHROPIC_BASE_URL",
     "bedrock": "FORGEFRAME_BEDROCK_BASE_URL",
-    "ollama": "FORGEGATE_OLLAMA_BASE_URL",
+    "ollama": "FORGEFRAME_OLLAMA_BASE_URL",
 }
 
 _REFERENCE_HINTS = {
