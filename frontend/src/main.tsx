@@ -6,6 +6,7 @@ import { App } from "./app/App";
 import { loginRouteLoader, protectedRouteLoader } from "./app/authRouting";
 import { PublicShell } from "./app/PublicShell";
 import { QueryProvider } from "./app/QueryProvider";
+import { RouteErrorBoundaryView } from "./app/RouteErrorBoundary";
 import "./theme/index.css";
 import { ThemeProvider } from "./theme/ThemeProvider";
 import { LoginPage } from "./pages/LoginPage";
@@ -54,6 +55,10 @@ const CostsPage = lazy(async () => import("./pages/CostsPage").then((module) => 
 const ErrorsPage = lazy(async () => import("./pages/ErrorsPage").then((module) => ({ default: module.ErrorsPage })));
 const LogsPage = lazy(async () => import("./pages/LogsPage").then((module) => ({ default: module.LogsPage })));
 
+/**
+ * Suspense fallback while route modules are loading.
+ * @returns Loading shell for lazy route chunks.
+ */
 function RouteModuleFallback() {
   return (
     <section className="fg-page">
@@ -65,8 +70,17 @@ function RouteModuleFallback() {
   );
 }
 
+/**
+ * Wrap route content with lazy loading and runtime recovery boundaries.
+ * @param element - Route element to render.
+ * @returns Route shell with suspense and error containment.
+ */
 function lazyRoute(element: React.ReactNode) {
-  return <Suspense fallback={<RouteModuleFallback />}>{element}</Suspense>;
+  return (
+    <RouteErrorBoundaryView>
+      <Suspense fallback={<RouteModuleFallback />}>{element}</Suspense>
+    </RouteErrorBoundaryView>
+  );
 }
 
 const router = createBrowserRouter([
@@ -74,7 +88,7 @@ const router = createBrowserRouter([
     path: "/login",
     loader: loginRouteLoader,
     element: <PublicShell />,
-    children: [{ index: true, element: <LoginPage /> }],
+    children: [{ index: true, element: lazyRoute(<LoginPage />) }],
   },
   {
     path: "/",
