@@ -61,31 +61,31 @@ const OUTBOX_GROUPS: Array<{
   {
     key: "pending_preview",
     label: "Pending approval / preview",
-    description: "Draft and preview-only notifications that are not yet allowed to deliver outward.",
+    description: "Draft and preview-only notifications.",
     statuses: ["draft", "preview"],
   },
   {
     key: "queued",
     label: "Queued",
-    description: "Notifications already in the live queue, actively delivering, or moved to a fallback lane.",
+    description: "Notifications queued, delivering, or in fallback.",
     statuses: ["confirmed", "queued", "delivering", "fallback_queued"],
   },
   {
     key: "sent",
     label: "Sent",
-    description: "Notifications with persisted delivery completion evidence.",
+    description: "Notifications with recorded delivery success.",
     statuses: ["delivered"],
   },
   {
     key: "failed",
     label: "Failed",
-    description: "Notifications that exhausted delivery or were cancelled before a healthy send.",
+    description: "Notifications failed or cancelled before delivery.",
     statuses: ["failed", "cancelled"],
   },
   {
     key: "rejected",
     label: "Rejected",
-    description: "Notifications explicitly blocked in preview or approval review.",
+    description: "Notifications explicitly rejected.",
     statuses: ["rejected"],
   },
 ];
@@ -569,14 +569,14 @@ export function NotificationsPage() {
         <PageIntro
           eyebrow="Work Interaction"
           title="Notifications"
-          description="ForgeFrame is restoring delivery scope before exposing outbox truth."
-          question="Which notification queue should open once the active session is restored?"
+          description="Restoring notification scope."
+          question="Open outbox when session access resolves."
           links={[
             { label: "Channels", to: CONTROL_PLANE_ROUTES.channels, description: "Inspect delivery targets once session scope returns." },
             { label: "Command Center", to: CONTROL_PLANE_ROUTES.dashboard, description: "Return to the dashboard while scope resolves." },
           ]}
           badges={[{ label: "Checking access", tone: "neutral" }]}
-          note="Notifications stay instance-scoped and must expose preview, retry, reject, and fallback truth."
+          note="Notifications are instance-scoped with preview, retry, reject, and fallback state."
         />
       </section>
     );
@@ -588,14 +588,14 @@ export function NotificationsPage() {
         <PageIntro
           eyebrow="Work Interaction"
           title="Notifications"
-          description="This route is reserved for operators and admins who can inspect real delivery and outbox truth."
-          question="Which adjacent surface should remain open while notification access is outside the current permission envelope?"
+          description="Notification data is available to operators and admins."
+          question="Use Channels or Approvals until notification access is available."
           links={[
             { label: "Channels", to: CONTROL_PLANE_ROUTES.channels, description: "Inspect delivery targets without opening notification history." },
             { label: "Approvals", to: CONTROL_PLANE_ROUTES.approvals, description: "Review approval state while notification truth is unavailable." },
           ]}
           badges={[{ label: "Operator or admin required", tone: "warning" }]}
-          note="ForgeFrame does not render a cosmetic outbox shell when the session cannot inspect real notification state."
+          note="No placeholder outbox shell is rendered without scoped access."
         />
       </section>
     );
@@ -606,8 +606,8 @@ export function NotificationsPage() {
       <PageIntro
         eyebrow="Work Interaction"
         title="Notifications"
-        description="Outbox control surface for preview, queue, retry, rejection, fallback routing, and persisted delivery evidence."
-        question="Is this notification still only a preview, or has it genuinely entered an externally visible delivery path?"
+        description="Control notification preview, queue, retry, rejection, and fallback routing."
+        question="Select a notification to check delivery state and next action."
         links={[
           { label: "Notifications", to: CONTROL_PLANE_ROUTES.notifications, description: "Stay on the outbox and delivery control surface." },
           { label: "Channels", to: CONTROL_PLANE_ROUTES.channels, description: "Inspect the active and fallback delivery targets." },
@@ -618,7 +618,7 @@ export function NotificationsPage() {
           { label: `${notifications.length} notification${notifications.length === 1 ? "" : "s"}`, tone: notifications.length > 0 ? "success" : "warning" },
           { label: canMutate ? "Admin mutation enabled" : "Read only", tone: canMutate ? "success" : "neutral" },
         ]}
-        note="Preview-only items are explicitly separated from live delivery. Confirm, reject, and retry mutate real persisted outbox state instead of cosmetic UI flags."
+        note="Preview and live delivery are separated. Confirm, reject, and retry change persisted outbox state."
       />
 
       {error ? <p className="fg-danger">{error}</p> : null}
@@ -694,7 +694,7 @@ export function NotificationsPage() {
           <div className="fg-panel-heading">
             <div>
               <h3>Outbox table</h3>
-              <p className="fg-muted">Notifications are grouped by actual delivery posture so preview-only items never masquerade as sent work.</p>
+              <p className="fg-muted">Grouped by delivery state so preview items stay separate from sent work.</p>
             </div>
             <div className="fg-actions">
               <span className="fg-pill" data-tone={listState === "success" ? "success" : listState === "error" ? "danger" : "neutral"}>{listState}</span>
@@ -710,7 +710,7 @@ export function NotificationsPage() {
           </div>
 
           {listState === "loading" ? <p className="fg-muted">Loading outbox inventory.</p> : null}
-          {listState === "success" && notifications.length === 0 ? <p className="fg-muted">No notifications matched the selected backend filters.</p> : null}
+          {listState === "success" && notifications.length === 0 ? <p className="fg-muted">No notifications match these filters.</p> : null}
 
           {groupedNotifications.map((group) => (
             <section key={group.key} className="fg-stack">

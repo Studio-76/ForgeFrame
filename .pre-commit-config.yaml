@@ -18,3 +18,18 @@ repos:
         additional_dependencies:
           - pydantic>=2.0
         types_or: [python, pyi]
+
+  - repo: local
+    hooks:
+      - id: frontend-typecheck
+        name: frontend typecheck
+        entry: npm --prefix frontend run typecheck
+        language: system
+        pass_filenames: false
+        files: ^frontend/.*\.(ts|tsx)$
+      - id: frontend-test
+        name: frontend tests
+        entry: npm --prefix frontend run test
+        language: system
+        pass_filenames: false
+        files: ^frontend/(src|tests)/

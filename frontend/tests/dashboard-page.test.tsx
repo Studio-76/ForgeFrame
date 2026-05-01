@@ -21,7 +21,7 @@ vi.mock("../src/api/admin", async () => {
 
 import type { AdminSessionUser, DashboardResponse, InstanceRecord } from "../src/api/admin";
 import { DashboardPage } from "../src/pages/DashboardPage";
-import { withAppContext } from "./testContext";
+import { createTestQueryClient, withAppContext } from "./testContext";
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -228,6 +228,7 @@ function createDashboardResponse(overrides: Partial<DashboardResponse> = {}): Da
 
 let container: HTMLDivElement;
 let root: Root | null = null;
+let testQueryClient: ReturnType<typeof createTestQueryClient>;
 
 async function renderIntoDom(element: ReactNode) {
   root = createRoot(container);
@@ -236,25 +237,27 @@ async function renderIntoDom(element: ReactNode) {
   });
 }
 
-async function flushEffects() {
-  await act(async () => {
-    await Promise.resolve();
-  });
-  await act(async () => {
-    await Promise.resolve();
-  });
-  await act(async () => {
-    await Promise.resolve();
-  });
-}
-
+/**
+ * Render the dashboard and wait for TanStack Query to settle.
+ */
 async function renderDashboardPage(session: AdminSessionUser, path = "/dashboard") {
   await renderIntoDom(withAppContext({
     path,
     element: <DashboardPage />,
     session,
+    queryClient: testQueryClient,
   }));
-  await flushEffects();
+
+  /* Flush micro-tasks so TanStack Query's async resolution
+   * and React's re-render settle. */
+  await vi.waitFor(async () => {
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(container.textContent).not.toContain("Loading command-center truth");
+  }, { timeout: 2000, interval: 10 });
 }
 
 async function renderDashboardPageWithoutFlush(session: AdminSessionUser, path = "/dashboard") {
@@ -262,6 +265,7 @@ async function renderDashboardPageWithoutFlush(session: AdminSessionUser, path =
     path,
     element: <DashboardPage />,
     session,
+    queryClient: testQueryClient,
   }));
 }
 
@@ -272,6 +276,9 @@ beforeEach(() => {
     instances: [createInstance()],
   });
   fetchDashboardMock.mockResolvedValue(createDashboardResponse());
+
+  testQueryClient = createTestQueryClient();
+
   container = document.createElement("div");
   document.body.innerHTML = "";
   document.body.appendChild(container);

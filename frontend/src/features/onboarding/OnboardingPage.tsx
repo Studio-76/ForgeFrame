@@ -299,7 +299,6 @@ export function OnboardingPage() {
       : persistedRoutingChoice;
     setInterview(nextInterview);
     setSaveError("");
-    setSaveMessage("");
     setRoutingChoice(nextRoutingChoice ?? "simple");
     setRoutingChoiceDirty(false);
   }, [selectedInstance?.instance_id, selectedInstance?.updated_at]);

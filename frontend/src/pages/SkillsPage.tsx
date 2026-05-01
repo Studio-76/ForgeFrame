@@ -623,11 +623,11 @@ export function SkillsPage() {
   };
 
   if (!sessionReady) {
-    return <section className="fg-page"><PageIntro eyebrow="Work Interaction" title="Skills" description="ForgeFrame is restoring the skills registry." question="Which skill surface should open once scope resolves?" links={[{ label: "Command Center", to: CONTROL_PLANE_ROUTES.dashboard, description: "Return to the dashboard while session scope resolves." }]} badges={[{ label: "Checking access", tone: "neutral" }]} note="Skills stay versioned, activatable, and scoped." /></section>;
+    return <section className="fg-page"><PageIntro eyebrow="Work Interaction" title="Skills" description="Restoring skill registry scope." question="Open skill inventory when session access resolves." links={[{ label: "Command Center", to: CONTROL_PLANE_ROUTES.dashboard, description: "Return to dashboard while access resolves." }]} badges={[{ label: "Checking access", tone: "neutral" }]} note="Skills remain versioned and scoped." /></section>;
   }
 
   if (!canRead) {
-    return <section className="fg-page"><PageIntro eyebrow="Work Interaction" title="Skills" description="This route is reserved for operators and admins who can inspect real skill truth." question="Which adjacent surface should remain open while skill access is outside the current permission envelope?" links={[{ label: "Learning", to: CONTROL_PLANE_ROUTES.learning, description: "Review learning suggestions without opening the skills registry." }]} badges={[{ label: "Operator or admin required", tone: "warning" }]} note="ForgeFrame does not render cosmetic skill state without scoped access." /></section>;
+    return <section className="fg-page"><PageIntro eyebrow="Work Interaction" title="Skills" description="Skill data is available to operators and admins." question="Use Learning until skill access is available." links={[{ label: "Learning", to: CONTROL_PLANE_ROUTES.learning, description: "Review learning suggestions." }]} badges={[{ label: "Operator or admin required", tone: "warning" }]} note="No placeholder skill state is rendered without scoped access." /></section>;
   }
 
   return (
@@ -635,8 +635,8 @@ export function SkillsPage() {
       <PageIntro
         eyebrow="Work Interaction"
         title="Skills"
-        description="Skill registry for versioned procedural building blocks with scope, provenance, approval posture, activation state, and usage telemetry."
-        question="Are skills governed product objects with versions and audit trails, or are they still being confused with plugins, harness jobs, or provider targets?"
+        description="Manage versioned skills with scope, provenance, activation, and usage telemetry."
+        question="Select a skill to review version, activation, and recent outcomes."
         links={[
           { label: "Learning", to: buildInventoryPath(CONTROL_PLANE_ROUTES.learning, instanceId), description: "Review learning events that can promote draft skills." },
           { label: "Agents", to: buildInventoryPath(CONTROL_PLANE_ROUTES.agents, instanceId), description: "Inspect agent inventory for agent-scoped skill activations." },
@@ -646,7 +646,7 @@ export function SkillsPage() {
           { label: `${skills.length} skill${skills.length === 1 ? "" : "s"}`, tone: skills.length > 0 ? "success" : "warning" },
           { label: canMutate ? "Admin mutation enabled" : "Read only", tone: canMutate ? "success" : "neutral" },
         ]}
-        note="A skill is a registry object with versions, approval posture, activations, and telemetry. It is not a plugin, harness run, or target configuration."
+        note="Skills are registry records, not plugins or provider targets."
       />
 
       {error ? <p className="fg-danger">{error}</p> : null}
@@ -683,13 +683,13 @@ export function SkillsPage() {
           <div className="fg-section-heading">
             <div>
               <h3>Skill registry</h3>
-              <p className="fg-muted">Version, approval posture, scope, live activation surface, last usage, and latest outcome stay visible in the inventory.</p>
+              <p className="fg-muted">Version, approval, scope, activation, and recent outcomes.</p>
             </div>
             <span className="fg-pill" data-tone={listState === "success" ? "success" : listState === "error" ? "danger" : "neutral"}>{listState}</span>
           </div>
 
           {skills.length === 0 ? (
-            <p className="fg-muted">No skills matched the selected instance scope and filters.</p>
+            <p className="fg-muted">No skills match this scope and filter.</p>
           ) : (
             <div className="fg-table-wrap">
               <table className="fg-table" aria-label="Skill registry">

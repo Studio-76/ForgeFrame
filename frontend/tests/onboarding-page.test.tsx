@@ -243,12 +243,11 @@ async function renderIntoDom(element: ReactNode) {
 }
 
 async function flushEffects() {
-  await act(async () => {
-    await Promise.resolve();
-  });
-  await act(async () => {
-    await Promise.resolve();
-  });
+  for (let i = 0; i < 20; i++) {
+    await act(async () => {
+      await Promise.resolve();
+    });
+  }
 }
 
 async function renderOnboardingPage(session: AdminSessionUser, path = "/onboarding") {
@@ -559,6 +558,12 @@ describe("Onboarding wizard", () => {
       tenant_id: "customer-prod",
       company_id: "customer-prod",
     }));
+
+    for (let i = 0; i < 10; i++) {
+      await act(async () => {
+        await Promise.resolve();
+      });
+    }
     expect(container.textContent).toContain("First instance Customer Production created and onboarding state saved.");
   });
 

@@ -1,3 +1,4 @@
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { renderToStaticMarkup } from "react-dom/server";
 import { createMemoryRouter, type Router, RouterProvider } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -88,10 +89,15 @@ async function waitForRouter(router: Router) {
 async function renderRoute(initialEntries: string[]) {
   const router = createMemoryRouter(routes, { initialEntries });
   await waitForRouter(router);
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
   const markup = renderToStaticMarkup(
-    <ThemeProvider>
-      <RouterProvider router={router} />
-    </ThemeProvider>,
+    <QueryClientProvider client={queryClient}>
+      <ThemeProvider>
+        <RouterProvider router={router} />
+      </ThemeProvider>
+    </QueryClientProvider>,
   );
 
   return { router, markup };

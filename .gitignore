@@ -144,3 +144,4 @@ pytest.xml
 # uploads/
 # exports/
 # data/
+opencode.json

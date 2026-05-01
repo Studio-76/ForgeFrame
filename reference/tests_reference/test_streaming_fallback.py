@@ -224,7 +224,7 @@ class TestStreamWithFallback:
 
         request = _make_request()
         analysis = {"tier": "simple"}
-        events = await _collect_events(
+        await _collect_events(
             _stream_with_fallback("model-a", request, "openai", analysis, "req-6")
         )
 

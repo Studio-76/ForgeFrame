@@ -34,7 +34,7 @@ export function ProvidersPage() {
   const note = !access.canRead
     ? access.summaryDetail
     : access.canMutate
-    ? "Providers stays dedicated to runtime inventory, add/edit, lifecycle changes, compatibility short status, and health. OAuth targets and harness proof stay on their own routes."
+    ? "This page focuses on provider inventory, lifecycle, compatibility, and health."
     : `${access.summaryDetail} Provider truth and health stay visible here without surfacing mutations that the backend will block.`;
 
   const onInstanceChange = (nextInstanceId: string | null) => {
@@ -52,7 +52,7 @@ export function ProvidersPage() {
       <PageIntro
         eyebrow="Setup"
         title="Providers"
-        description="Manage live providers here: inventory, add/edit, enable/disable, sync, compatibility short status, and health. OAuth targets and harness proof are kept on dedicated routes."
+        description="Manage live providers: inventory, lifecycle, compatibility, and health."
         question="Which provider are you configuring, syncing, validating, or recovering right now?"
         badges={[
           { label: access.badgeLabel, tone: access.badgeTone },
@@ -70,8 +70,8 @@ export function ProvidersPage() {
         onInstanceChange={onInstanceChange}
       />
       <ActionBar
-        title="Adjacent provider surfaces"
-        description="Open another route only when the current task leaves runtime inventory management."
+        title="Related provider surfaces"
+        description="Use these routes when the task moves beyond provider inventory."
       >
         <div className="fg-actions">
           <Link className="fg-nav-link" to={withInstanceScope(CONTROL_PLANE_ROUTES.providers, instanceId)}>Providers</Link>

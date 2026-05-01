@@ -451,14 +451,14 @@ export function TasksPage() {
         <PageIntro
           eyebrow="Work Interaction"
           title="Tasks"
-          description="ForgeFrame is restoring scoped task truth before opening follow-ups and reminder linkage."
-          question="Which task inventory should open first once the active session is restored?"
+          description="Restoring task scope."
+          question="Open task inventory when session access resolves."
           links={[
             { label: "Command Center", to: CONTROL_PLANE_ROUTES.dashboard, description: "Return to the dashboard while session scope resolves." },
             { label: "Inbox", to: CONTROL_PLANE_ROUTES.inbox, description: "Open triage once session scope is ready." },
           ]}
           badges={[{ label: "Checking access", tone: "neutral" }]}
-          note="Tasks stay instance-scoped and linkable back to conversations, inbox items, reminders, notifications, and workspaces."
+          note="Tasks are instance-scoped and link back to conversation, inbox, reminder, notification, and workspace records."
         />
       </section>
     );
@@ -470,14 +470,14 @@ export function TasksPage() {
         <PageIntro
           eyebrow="Work Interaction"
           title="Tasks"
-          description="This route is reserved for operators and admins who can inspect real work-interaction truth."
-          question="Which adjacent surface should remain open while task access is outside the current permission envelope?"
+          description="Task data is available to operators and admins."
+          question="Use another surface until task access is available."
           links={[
             { label: "Execution Review", to: CONTROL_PLANE_ROUTES.execution, description: "Inspect runtime truth without opening the task surface." },
             { label: "Approvals", to: CONTROL_PLANE_ROUTES.approvals, description: "Review approvals while task truth stays closed." },
           ]}
           badges={[{ label: "Operator or admin required", tone: "warning" }]}
-          note="ForgeFrame does not render a cosmetic task shell when the session cannot inspect real task state."
+          note="No placeholder task shell is rendered without scoped access."
         />
       </section>
     );
@@ -488,8 +488,8 @@ export function TasksPage() {
       <PageIntro
         eyebrow="Work Interaction"
         title="Tasks"
-        description="Task control plane with explicit owner, due state, linked reminders and notifications, and direct paths back into conversation, inbox, and workspace truth."
-        question="Is each task a real work object with ownership and checkpoints, or is work still leaking back into inbox notes and disconnected operator memory?"
+        description="Track real tasks with owner, due date, status, and linked reminders and notifications."
+        question="Select a task, then act from its current state."
         links={[
           { label: "Tasks", to: CONTROL_PLANE_ROUTES.tasks, description: "Stay on the task inventory and detail surface." },
           { label: "Reminders", to: CONTROL_PLANE_ROUTES.reminders, description: "Inspect reminder truth linked from the selected task." },
@@ -500,7 +500,7 @@ export function TasksPage() {
           { label: `${tasks.length} task${tasks.length === 1 ? "" : "s"}`, tone: tasks.length > 0 ? "success" : "warning" },
           { label: canMutate ? "Admin mutation enabled" : "Read only", tone: canMutate ? "success" : "neutral" },
         ]}
-        note="The current backend persists actual task states as `open`, `in_progress`, `blocked`, `done`, and `cancelled`. ForgeFrame exposes that state map directly instead of inventing fake queue semantics."
+        note="Status values map directly to backend state: `open`, `in_progress`, `blocked`, `done`, `cancelled`."
       />
 
       {error ? <p className="fg-danger">{error}</p> : null}
@@ -510,7 +510,7 @@ export function TasksPage() {
         <div className="fg-panel-heading">
           <div>
             <h3>Scope and filter</h3>
-            <p className="fg-muted">Choose the instance boundary, then filter on the real backend task state map. `blocked` covers blocker and waiting posture because the current task model does not persist a separate waiting state.</p>
+              <p className="fg-muted">Pick an instance, then filter by backend task status. `blocked` includes waiting cases.</p>
           </div>
           <span className="fg-pill" data-tone={instancesState === "success" ? "success" : instancesState === "error" ? "danger" : "neutral"}>
             {instancesState}
@@ -560,7 +560,7 @@ export function TasksPage() {
           <div className="fg-panel-heading">
             <div>
               <h3>Task inventory</h3>
-              <p className="fg-muted">Tasks are rendered as an explicit work table with state, owner, due, priority, and linked object context.</p>
+              <p className="fg-muted">State, owner, due date, priority, and linked context.</p>
             </div>
             <div className="fg-actions">
               <span className="fg-pill" data-tone={listState === "success" ? "success" : listState === "error" ? "danger" : "neutral"}>{listState}</span>
@@ -569,7 +569,7 @@ export function TasksPage() {
           </div>
 
           {listState === "loading" ? <p className="fg-muted">Loading task inventory.</p> : null}
-          {listState === "success" && tasks.length === 0 ? <p className="fg-muted">No tasks matched the selected backend state filter.</p> : null}
+          {listState === "success" && tasks.length === 0 ? <p className="fg-muted">No tasks match this filter.</p> : null}
 
           {tasks.length > 0 ? (
             <div className="fg-table-wrap">
