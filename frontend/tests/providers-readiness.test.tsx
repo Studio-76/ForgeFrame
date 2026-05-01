@@ -137,28 +137,28 @@ function createOauthTarget(overrides: Partial<ProvidersPageData["oauthTargets"][
     actions: [
       {
         action_key: "manual_token",
-        label: "Manuell Token hinterlegen",
+        label: "Add token manually",
         mode: "manual",
         supported: true,
         detail: "Bridge-only providers still rely on externally supplied portal tokens.",
       },
       {
         action_key: "bridge_sync",
-        label: "Bridge-Profil synchronisieren",
+        label: "Sync bridge profile",
         mode: "api",
         supported: true,
         detail: "Upserts or refreshes the saved harness bridge profile for this provider.",
       },
       {
         action_key: "probe",
-        label: "Verbindung testen",
+        label: "Test connection",
         mode: "api",
         supported: true,
         detail: "Runs the real probe path for this target.",
       },
       {
         action_key: "disconnect",
-        label: "Trennen",
+        label: "Disconnect",
         mode: "manual",
         supported: true,
         detail: "Remove or replace the relevant env token outside ForgeFrame and reload the runtime.",
@@ -644,6 +644,6 @@ describe("Provider readiness axes", () => {
     expect(markup).toContain("Create provider");
     expect(markup).toContain("Save label");
     expect(markup).toContain("Sync OAuth bridge profiles");
-    expect(markup).toContain("Verbindung testen");
+    expect(markup).toContain("Test connection");
   });
 });

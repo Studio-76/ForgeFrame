@@ -6,7 +6,7 @@ export const CONTROL_PLANE_ROUTES = {
   login: "/login",
   passwordRotation: "/rotate-password",
   dashboard: "/dashboard",
-  onboarding: "/onboarding",
+  onboarding: "/dashboard",
   instances: "/instances",
   harness: "/harness",
   providers: "/providers",

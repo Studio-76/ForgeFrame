@@ -153,7 +153,7 @@ export function OAuthTargetsSection({ data, actions }: SectionProps) {
                             <>
                               {" "}
                               <button type="button" onClick={() => void actions.probeOauthTarget(target.provider_key)}>
-                                Verbindung testen
+                                Test connection
                               </button>
                             </>
                           ) : null}
@@ -161,7 +161,7 @@ export function OAuthTargetsSection({ data, actions }: SectionProps) {
                             <>
                               {" "}
                               <button type="button" onClick={() => void actions.syncOauthBridgeProfiles()}>
-                                Bridge-Profil synchronisieren
+                                Sync bridge profile
                               </button>
                             </>
                           ) : null}

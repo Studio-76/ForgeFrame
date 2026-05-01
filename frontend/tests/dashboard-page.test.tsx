@@ -95,7 +95,7 @@ function createDashboardResponse(overrides: Partial<DashboardResponse> = {}): Da
       title: "Fix go-live blockers",
       description: "2 bootstrap checks and 1 runtime critical check are blocking go-live.",
       status: "blocked",
-      to: "/onboarding",
+      to: "/dashboard",
       action_label: "Fix go-live blockers",
     },
     attention: [
@@ -105,7 +105,7 @@ function createDashboardResponse(overrides: Partial<DashboardResponse> = {}): Da
         title: "Go-live blockers need resolution",
         cause: "2 bootstrap checks and 1 runtime critical check are blocking go-live.",
         axis: "Readiness",
-        to: "/onboarding",
+        to: "/dashboard",
         action_label: "Fix go-live blockers",
         status: "blocked",
       },
@@ -126,7 +126,7 @@ function createDashboardResponse(overrides: Partial<DashboardResponse> = {}): Da
         title: "Readiness",
         status: "blocked",
         reason: "2 bootstrap checks and 1 runtime critical check are blocking go-live.",
-        to: "/onboarding",
+        to: "/dashboard",
         action_label: "Fix go-live blockers",
         details: [
           "2 bootstrap checks are still failing.",
@@ -319,7 +319,7 @@ describe("setup page", () => {
     expect(fetchDashboardMock).toHaveBeenCalledWith("instance_alpha");
     expect(container.textContent).toContain("System setup");
     expect(container.textContent).toContain("Setup and status");
-    expect(container.textContent).toContain("Fix go-live blockers");
+    expect(container.textContent).toContain("Open routing");
 
     /* Verify setup step card titles are rendered */
     expect(container.textContent).toContain("Configure instance and scope");
@@ -330,6 +330,16 @@ describe("setup page", () => {
     expect(container.textContent).toContain("Run readiness probe");
     expect(container.textContent).toContain("Go-live readiness");
 
+    const providerStepCard = Array.from(container.querySelectorAll(".ff-setup-step-card")).find(
+      (card) => card.textContent?.includes("Connect provider"),
+    );
+    expect(providerStepCard?.textContent).toContain("complete");
+
+    const primaryLink = Array.from(container.querySelectorAll("a")).find(
+      (link) => link.textContent?.includes("Open routing"),
+    );
+    expect(primaryLink?.getAttribute("href")).toBe("/routing?instanceId=instance_alpha");
+
     /* Verify progress bar renders */
     expect(container.textContent).toContain("Step");
     expect(container.textContent).toContain("of");
@@ -337,12 +347,26 @@ describe("setup page", () => {
 
   it("shows setup steps when the scope is not fully configured", async () => {
     fetchDashboardMock.mockResolvedValue(createDashboardResponse({
+      kpis: {
+        providers: 3,
+        configured_providers: 0,
+        ready_providers: 0,
+        active_models: 0,
+        runtime_requests_24h: 0,
+        errors_24h: 0,
+        needs_attention_count: 1,
+        runtime_keys: 0,
+        accounts: 0,
+        waiting_on_approval_runs: 0,
+        stalled_attempts: 0,
+        open_circuits: 0,
+      },
       primary_action: {
         kind: "provider_configuration",
         title: "Configure providers",
         description: "No configured provider, runtime key, account, or runtime traffic is active in this scope yet.",
         status: "onboarding-only",
-        to: "/onboarding",
+        to: "/dashboard",
         action_label: "Configure providers",
       },
       attention: [
@@ -352,7 +376,7 @@ describe("setup page", () => {
           title: "This scope is still in onboarding",
           cause: "No configured provider, runtime key, account, or runtime traffic is active in this scope yet.",
           axis: "Readiness",
-          to: "/onboarding",
+          to: "/dashboard",
           action_label: "Configure providers",
           status: "onboarding-only",
         },
@@ -362,7 +386,7 @@ describe("setup page", () => {
         title: "Command center is not configured yet",
         description: "No configured provider, runtime key, account, or runtime traffic is active in this scope yet.",
         action_label: "Configure providers",
-        to: "/onboarding",
+        to: "/dashboard",
       },
     }));
 
@@ -371,6 +395,13 @@ describe("setup page", () => {
     /* Setup steps should be visible even when the dashboard returns empty_state */
     expect(container.textContent).toContain("System setup");
     expect(container.textContent).toContain("Configure instance and scope");
+    expect(container.textContent).toContain("Open providers");
+
+    const providerLink = Array.from(container.querySelectorAll("a")).find(
+      (link) => link.textContent?.includes("Open providers"),
+    );
+    expect(providerLink?.getAttribute("href")).toBe("/providers?instanceId=instance_alpha");
+    expect(container.innerHTML).not.toContain("/onboarding?instanceId=instance_alpha");
   });
 
   it("keeps the primary action aligned with the backend choice", async () => {

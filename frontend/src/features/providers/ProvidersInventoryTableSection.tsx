@@ -186,6 +186,7 @@ export function ProvidersInventoryTableSection({ data, actions, instanceId }: Pr
       description="Manage provider records. Sync updates inventory; live endpoint probes run from Harness."
       actions={
         <>
+          <Link className="fg-nav-link" to={withInstanceScope(CONTROL_PLANE_ROUTES.dashboard, instanceId)}>Setup progress</Link>
           <button type="button" disabled={isLoading} onClick={() => void actions.load()}>{isLoading ? "Refreshing…" : "Refresh"}</button>
           {data.access.canMutate ? (
             <button type="button" disabled={isPending("sync-all-providers")} onClick={() => void actions.syncAllProviders()}>

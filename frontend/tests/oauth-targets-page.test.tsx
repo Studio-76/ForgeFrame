@@ -113,28 +113,28 @@ function createOauthTarget(overrides: Partial<ProvidersPageData["oauthTargets"][
     actions: [
       {
         action_key: "manual_token",
-        label: "Manuell Token hinterlegen",
+        label: "Add token manually",
         mode: "manual",
         supported: true,
         detail: "Use an externally supplied token.",
       },
       {
         action_key: "connect",
-        label: "Verbinden",
+        label: "Connect",
         mode: "unsupported",
         supported: false,
         detail: "ForgeFrame does not ship an in-product Codex OAuth connect flow.",
       },
       {
         action_key: "probe",
-        label: "Verbindung testen",
+        label: "Test connection",
         mode: "api",
         supported: true,
         detail: "Runs the real probe path.",
       },
       {
         action_key: "disconnect",
-        label: "Trennen",
+        label: "Disconnect",
         mode: "manual",
         supported: true,
         detail: "Remove the token outside ForgeFrame.",
@@ -267,8 +267,8 @@ describe("OAuth targets page", () => {
     expect(markup).toContain(">OAuth Targets<");
     expect(markup).toContain(">OAuth Provider Connections</h3>");
     expect(markup).toContain("OpenAI Codex");
-    expect(markup).toContain("Manuell Token hinterlegen");
-    expect(markup).toContain("Verbindung testen");
+    expect(markup).toContain("Add token manually");
+    expect(markup).toContain("Test connection");
     expect(markup).toContain("Advanced Diagnostics");
   });
 
@@ -296,7 +296,7 @@ describe("OAuth targets page", () => {
     expect(markup).toContain('href="/oauth-targets?instanceId=instance_alpha"');
     expect(markup).toContain('href="/providers?instanceId=instance_alpha"');
     expect(markup).toContain('href="/harness?instanceId=instance_alpha"');
-    expect(markup).toContain('href="/onboarding?instanceId=instance_alpha"');
+    expect(markup).toContain('href="/dashboard?instanceId=instance_alpha"');
     expect(markup).toContain('href="/usage?instanceId=instance_alpha"');
   });
 

@@ -648,8 +648,9 @@ export function RoutingPage() {
             <button type="button" onClick={() => void load()} disabled={!canReadRouting}>
               Refresh
             </button>
+            <Link className="fg-nav-link" to={withInstanceScope(CONTROL_PLANE_ROUTES.dashboard, instanceId)}>Setup progress</Link>
             <Link className="fg-nav-link" to={primaryActionRoute}>
-              {canMutate ? "Policy bearbeiten" : "Simulation starten"}
+              {canMutate ? "Edit policy" : "Run simulation"}
             </Link>
             <Link className="fg-nav-link" to={withInstanceScope(CONTROL_PLANE_ROUTES.providerTargets, instanceId)}>Provider Targets</Link>
             <Link className="fg-nav-link" to={withInstanceScope(CONTROL_PLANE_ROUTES.models, instanceId)}>Models</Link>

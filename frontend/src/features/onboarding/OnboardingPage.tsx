@@ -441,9 +441,9 @@ export function OnboardingPage() {
     persistedRoutingChoice === "simple" ? routingSimpleApplied : routingNonSimpleApplied
   );
   const routingSummary = routingChoiceDirty
-    ? `${effectiveRoutingChoice === "simple" ? "simple billig/lokal" : "non-simple Premium/OAuth"} selected (unsaved)`
+    ? `${effectiveRoutingChoice === "simple" ? "simple local/low-cost" : "non-simple premium/OAuth"} selected (unsaved)`
     : persistedRoutingChoice
-      ? `${effectiveRoutingChoice === "simple" ? "simple billig/lokal" : "non-simple Premium/OAuth"} selected`
+      ? `${effectiveRoutingChoice === "simple" ? "simple local/low-cost" : "non-simple premium/OAuth"} selected`
       : "No routing default persisted yet";
   const routingDetail = !persistedRoutingChoice
     ? "Persist a routing decision from this wizard step before go-live validation can trust backend routing truth."
@@ -574,7 +574,7 @@ export function OnboardingPage() {
       if (nextRoutingChoice === "simple") {
         await updateRoutingPolicy("simple", SIMPLE_POLICY_TUPLE, instanceId);
         await updateRoutingPolicy("non_simple", SIMPLE_MODE_NON_SIMPLE_POLICY_TUPLE, instanceId);
-        setRoutingMessage("Routing defaults saved as simple (cheap/local first).");
+        setRoutingMessage("Routing defaults saved as simple (local/low-cost first).");
       } else {
         await updateRoutingPolicy("simple", SIMPLE_POLICY_TUPLE, instanceId);
         await updateRoutingPolicy("non_simple", NON_SIMPLE_MODE_NON_SIMPLE_POLICY_TUPLE, instanceId);
@@ -673,7 +673,7 @@ export function OnboardingPage() {
   const steps = deriveWizardSteps([
     {
       id: "operating-model",
-      title: "Betriebsart und Scope",
+      title: "Operating model and scope",
       done: persistedOnboardingReady,
       blocked: Boolean(selectedInstance) ? !persistedOnboardingReady : !access.canPersistOnboarding,
       summary: selectedInstance ? persistedInterviewEvaluation.summary : operatingModelDescriptor.label,
@@ -681,11 +681,11 @@ export function OnboardingPage() {
         ? persistedInterviewEvaluation.detail
         : `Internal mode ${operatingModelDescriptor.internalMode}; tenant requirement ${operatingModelDescriptor.tenantRequirement}.`,
       blockers: selectedInstance ? persistedOnboardingBlockers : interviewEvaluation.blockers.map((item) => `${item.code}: ${item.message}`),
-      links: [{ label: "Open Onboarding", to: CONTROL_PLANE_ROUTES.onboarding }],
+      links: [{ label: "Open setup progress", to: CONTROL_PLANE_ROUTES.dashboard }],
     },
     {
       id: "instance-operator",
-      title: "Erste Instanz und Operator-Agent",
+      title: "First instance and Operator agent",
       done: Boolean(selectedInstance) && Boolean(operatorAgent),
       blocked: Boolean(selectedInstance) && signals.loaded.agents && !operatorAgent,
       summary: selectedInstance ? `Instance ${selectedInstance.display_name}` : "No instance selected",
@@ -700,7 +700,7 @@ export function OnboardingPage() {
     },
     {
       id: "provider-targets",
-      title: "Provider/Target verbinden",
+      title: "Connect provider target",
       done: providerReady,
       blocked: !Boolean(selectedInstance),
       summary: providerReady ? "Connected provider target present" : "No connected local/API-key provider target yet",
@@ -723,7 +723,7 @@ export function OnboardingPage() {
     },
     {
       id: "runtime-key",
-      title: "Runtime-Key ausgeben",
+      title: "Issue runtime key",
       done: activeKeys.length > 0,
       blocked: !access.canIssueRuntimeAccess && activeKeys.length === 0,
       summary: `${activeKeys.length} active runtime key(s)`,
@@ -757,7 +757,7 @@ export function OnboardingPage() {
     },
     {
       id: "go-live",
-      title: "Go-Live Zusammenfassung",
+      title: "Go-live summary",
       done: goLiveReady,
       blocked: !goLiveReady,
       summary: goLiveReady ? "Ready for go-live" : "Not ready for go-live",
@@ -776,7 +776,7 @@ export function OnboardingPage() {
     <section className="fg-page">
       <PageIntro
         eyebrow="Setup"
-        title="Guided Onboarding Wizard"
+        title="Guided setup checklist"
         description="Wizard-driven first go-live flow: operating model, first instance, operator agent, provider target, routing defaults, runtime key issuance, TLS evidence, and first success."
         question="What blocks first live runtime traffic right now?"
         badges={[
@@ -801,7 +801,7 @@ export function OnboardingPage() {
         description="Use adjacent surfaces only when the wizard needs external evidence or a final release check."
       >
         <div className="fg-actions">
-          <Link className="fg-nav-link" to={CONTROL_PLANE_ROUTES.onboarding}>Onboarding</Link>
+          <Link className="fg-nav-link" to={CONTROL_PLANE_ROUTES.dashboard}>Setup progress</Link>
           <Link className="fg-nav-link" to={CONTROL_PLANE_ROUTES.providers}>Providers</Link>
           <Link className="fg-nav-link" to={CONTROL_PLANE_ROUTES.dashboard}>
             {goLiveReady ? "Dashboard (Go live)" : "Dashboard"}

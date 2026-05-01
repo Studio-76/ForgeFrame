@@ -309,7 +309,7 @@ export function HealthPage() {
     checkedAt: runtimeHealth?.readiness.checked_at ?? providers?.bootstrap_readiness?.checked_at ?? null,
     fallbackSummary: "The shipped operator UI is not fully delivered from the expected same-origin path.",
     successSummary: "Frontend delivery is aligned with the root SPA contract.",
-    nextRoute: { label: "Open Onboarding", to: onboardingRoute },
+    nextRoute: { label: "Open setup progress", to: onboardingRoute },
   });
 
   const providersGroup = {

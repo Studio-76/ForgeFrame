@@ -527,7 +527,7 @@ export function InstancesPage() {
                 </div>
                 <div className="fg-actions">
                   {canOpenTargets ? <Link className="fg-nav-link" to={withInstanceScope(CONTROL_PLANE_ROUTES.providerTargets, selectedInstance.instance_id)}>Targets konfigurieren</Link> : null}
-                  {canOpenRouting ? <Link className="fg-nav-link" to={withInstanceScope(CONTROL_PLANE_ROUTES.routing, selectedInstance.instance_id)}>Routing bearbeiten</Link> : null}
+                  {canOpenRouting ? <Link className="fg-nav-link" to={withInstanceScope(CONTROL_PLANE_ROUTES.routing, selectedInstance.instance_id)}>Edit routing</Link> : null}
                   {canOpenConversations ? <Link className="fg-nav-link" to={selectedConversationRoute}>Conversation öffnen</Link> : null}
                   {canOpenApiKeys ? <Link className="fg-nav-link" to={withInstanceScope(CONTROL_PLANE_ROUTES.apiKeys, selectedInstance.instance_id)}>API-Key ausstellen</Link> : null}
                   <Link className="fg-nav-link" to={withInstanceScope(CONTROL_PLANE_ROUTES.releaseValidation, selectedInstance.instance_id)}>Readiness prüfen</Link>

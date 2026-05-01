@@ -238,6 +238,16 @@ class ControlPlaneOAuthTargetsDomainMixin:
         provider_key: str,
         status: OAuthAccountTargetStatus,
     ) -> OAuthTargetSetupGuide:
+        """
+        Build the operator-facing setup guide for an OAuth account target.
+
+        :param provider_key: Provider identifier for the OAuth/account axis.
+        :type provider_key: str
+        :param status: Current hydrated OAuth target status.
+        :type status: OAuthAccountTargetStatus
+        :return: Setup guide with required env vars, missing inputs, and steps.
+        :rtype: OAuthTargetSetupGuide
+        """
         env_contract = oauth_target_env_contract(provider_key, auth_mode=status.auth_kind)
         required_env_vars = list(env_contract["required"])
         optional_env_vars = list(env_contract["optional"])
@@ -275,7 +285,7 @@ class ControlPlaneOAuthTargetsDomainMixin:
         if provider_key in _BRIDGE_OAUTH_TARGET_KEYS:
             steps.append("Use bridge profile sync only after the base URL, token, and probe model reflect the real upstream runtime lane.")
         if status.configured:
-            steps.append("Use 'Verbindung testen' after setup changes so the page records a fresh probe result.")
+            steps.append("Use 'Test connection' after setup changes so the page records a fresh probe result.")
         return OAuthTargetSetupGuide(
             summary=summary,
             required_env_vars=required_env_vars,
@@ -289,13 +299,23 @@ class ControlPlaneOAuthTargetsDomainMixin:
         provider_key: str,
         status: OAuthAccountTargetStatus,
     ) -> list[OAuthTargetActionSpec]:
+        """
+        Return the supported and documented actions for an OAuth account target.
+
+        :param provider_key: Provider identifier for the OAuth/account axis.
+        :type provider_key: str
+        :param status: Current hydrated OAuth target status.
+        :type status: OAuthAccountTargetStatus
+        :return: Ordered action specifications for the operator surface.
+        :rtype: list[OAuthTargetActionSpec]
+        """
         actions: list[OAuthTargetActionSpec] = []
         if provider_key == "openai_codex":
             if status.auth_kind == "oauth_account":
                 actions.append(
                     OAuthTargetActionSpec(
                         action_key="manual_token",
-                        label="Manuell Token hinterlegen",
+                        label="Add token manually",
                         mode="manual",
                         supported=True,
                         detail="ForgeFrame expects a pre-issued Codex OAuth token in the runtime env and does not acquire it itself.",
@@ -305,7 +325,7 @@ class ControlPlaneOAuthTargetsDomainMixin:
                     actions.append(
                         OAuthTargetActionSpec(
                             action_key="device_code",
-                            label="Device-Code starten",
+                            label="Start device code",
                             mode="unsupported",
                             supported=False,
                             detail="Codex device/hosted-code is documented only. ForgeFrame does not start or complete that flow yet.",
@@ -315,7 +335,7 @@ class ControlPlaneOAuthTargetsDomainMixin:
                     actions.append(
                         OAuthTargetActionSpec(
                             action_key="connect",
-                            label="Verbinden",
+                            label="Connect",
                             mode="unsupported",
                             supported=False,
                             detail="ForgeFrame does not ship an in-product Codex OAuth connect flow. Use the manual token path instead.",
@@ -325,7 +345,7 @@ class ControlPlaneOAuthTargetsDomainMixin:
                 actions.append(
                     OAuthTargetActionSpec(
                         action_key="manual_token",
-                        label="Auf OAuth umstellen",
+                        label="Switch to OAuth",
                         mode="manual",
                         supported=True,
                         detail="Switch FORGEFRAME_OPENAI_CODEX_AUTH_MODE=oauth and supply FORGEFRAME_OPENAI_CODEX_OAUTH_ACCESS_TOKEN outside ForgeFrame.",
@@ -335,7 +355,7 @@ class ControlPlaneOAuthTargetsDomainMixin:
             actions.append(
                 OAuthTargetActionSpec(
                     action_key="manual_token",
-                    label="Manuell Token hinterlegen",
+                    label="Add token manually",
                     mode="manual",
                     supported=True,
                     detail=(
@@ -349,7 +369,7 @@ class ControlPlaneOAuthTargetsDomainMixin:
             actions.append(
                 OAuthTargetActionSpec(
                     action_key="manual_token",
-                    label="Manuell Token hinterlegen",
+                    label="Add token manually",
                     mode="manual",
                     supported=True,
                     detail="Bridge-only providers still rely on externally supplied portal tokens; ForgeFrame does not mint or refresh them.",
@@ -358,7 +378,7 @@ class ControlPlaneOAuthTargetsDomainMixin:
             actions.append(
                 OAuthTargetActionSpec(
                     action_key="bridge_sync",
-                    label="Bridge-Profil synchronisieren",
+                    label="Sync bridge profile",
                     mode="api",
                     supported=True,
                     detail="Upserts or refreshes the saved harness bridge profile for this provider.",
@@ -367,7 +387,7 @@ class ControlPlaneOAuthTargetsDomainMixin:
         actions.append(
             OAuthTargetActionSpec(
                 action_key="probe",
-                label="Verbindung testen",
+                label="Test connection",
                 mode="api",
                 supported=True,
                 detail="Runs the real probe path for this target. This is a test, not a connect or login action.",
@@ -376,7 +396,7 @@ class ControlPlaneOAuthTargetsDomainMixin:
         actions.append(
             OAuthTargetActionSpec(
                 action_key="disconnect",
-                label="Trennen",
+                label="Disconnect",
                 mode="manual",
                 supported=True,
                 detail="Remove or replace the relevant env token outside ForgeFrame and reload the runtime; no in-product disconnect API exists.",

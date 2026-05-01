@@ -119,7 +119,7 @@ export function SetupPage() {
           description={
             state.overallStatus === "blocked"
               ? "The next step is blocked. Review the details below and resolve the blocker."
-              : "This is the next required action."
+              : "This is the next required action. Return here after the detail page is done."
           }
           instanceId={instanceId}
         />

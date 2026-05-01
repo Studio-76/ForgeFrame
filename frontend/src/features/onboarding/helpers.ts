@@ -133,7 +133,7 @@ export type OnboardingInterviewEvaluation = {
 export const OPERATING_MODEL_DESCRIPTORS: OperatingModelDescriptor[] = [
   {
     key: "solo",
-    label: "Nur ich",
+    label: "Solo operator",
     internalMode: "single_operator",
     tenantRequirement: "optional",
     roleModel: "owner/admin/operator on one personal scope",
@@ -141,7 +141,7 @@ export const OPERATING_MODEL_DESCRIPTORS: OperatingModelDescriptor[] = [
   },
   {
     key: "team_company",
-    label: "Mein Team / meine Firma",
+    label: "My team / company",
     internalMode: "single_tenant_team",
     tenantRequirement: "required_single_tenant",
     roleModel: "owner/admin/operator/viewer in one tenant",
@@ -149,7 +149,7 @@ export const OPERATING_MODEL_DESCRIPTORS: OperatingModelDescriptor[] = [
   },
   {
     key: "multi_customer",
-    label: "Mehrere Kunden / Organisationen",
+    label: "Multiple customers / organizations",
     internalMode: "multi_tenant_control_plane",
     tenantRequirement: "required_multi_tenant",
     roleModel: "owner/admin across tenants with tenant-scoped operators",

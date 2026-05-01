@@ -39,7 +39,7 @@ _ROUTES = {
     "health": "/health-status",
     "logs": "/logs",
     "oauth_targets": "/oauth-targets",
-    "onboarding": "/onboarding",
+    "onboarding": "/dashboard",
     "providers": "/providers",
     "provider_health": "/providers#provider-health-runs",
     "queues": "/queues",

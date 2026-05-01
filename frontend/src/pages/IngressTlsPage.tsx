@@ -119,7 +119,7 @@ function blockerRoute(
       return {
         detail: "Bind the public HTTPS listener to 0.0.0.0:443 on the normative same-origin surface.",
         linkTo: onboardingLink,
-        linkLabel: "Open Onboarding",
+        linkLabel: "Open setup progress",
         tone: "danger",
         statusKey: "blocked",
       };
@@ -127,7 +127,7 @@ function blockerRoute(
       return {
         detail: "Expose the HTTP helper on port 80 so ACME challenge traffic can reach ForgeFrame.",
         linkTo: onboardingLink,
-        linkLabel: "Open Onboarding",
+        linkLabel: "Open setup progress",
         tone: "warning",
         statusKey: "partial",
       };
@@ -152,7 +152,7 @@ function blockerRoute(
       return {
         detail: "Restore the shipped ACME renewal artifacts and timer before relying on automated certificate management.",
         linkTo: onboardingLink,
-        linkLabel: "Open Onboarding",
+        linkLabel: "Open setup progress",
         tone: "danger",
         statusKey: "blocked",
       };
@@ -179,7 +179,7 @@ function blockerRoute(
       return {
         detail: "Inspect onboarding and health to reconcile the public ingress contract.",
         linkTo: onboardingLink,
-        linkLabel: "Open Onboarding",
+        linkLabel: "Open setup progress",
         tone: "warning",
         statusKey: "partial",
       };
@@ -399,7 +399,7 @@ export function IngressTlsPage() {
         ? "Keep the helper restricted to ACME or minimal redirect traffic."
         : "Expose the helper listener on port 80 for ACME challenge handling.",
       linkTo: onboardingLink,
-      linkLabel: "Open Onboarding",
+      linkLabel: "Open setup progress",
       tone: status.public_http_helper_port === 80 ? "success" : "warning",
       statusKey: status.public_http_helper_port === 80 ? "ready" : "partial",
     },
@@ -412,7 +412,7 @@ export function IngressTlsPage() {
         ? "Continue validating the same-origin root path and live certificate truth."
         : "Bind the public HTTPS surface to 0.0.0.0:443.",
       linkTo: onboardingLink,
-      linkLabel: "Open Onboarding",
+      linkLabel: "Open setup progress",
       tone: status.public_https_host === "0.0.0.0" && status.public_https_port === 443 ? "success" : "danger",
       statusKey: status.public_https_host === "0.0.0.0" && status.public_https_port === 443 ? "ready" : "blocked",
     },
@@ -561,7 +561,7 @@ export function IngressTlsPage() {
               {renewing ? "Renewing certificates" : "Renew certificates"}
             </button>
             <Link className="fg-nav-link" to={CONTROL_PLANE_ROUTES.settings}>Settings</Link>
-            <Link className="fg-nav-link" to={onboardingLink}>Onboarding</Link>
+            <Link className="fg-nav-link" to={onboardingLink}>Setup progress</Link>
             <Link className="fg-nav-link" to={healthLink}>Health</Link>
           </div>
         )}
