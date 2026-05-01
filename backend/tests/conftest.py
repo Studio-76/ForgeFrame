@@ -1,6 +1,7 @@
 """Test setup for ForgeFrame backend tests."""
 
 import os
+from collections.abc import Iterator
 
 _EARLY_TEST_BOOTSTRAP_ADMIN_PASSWORD = "ForgeFrame-Test-Admin-Secret-123"
 
@@ -114,8 +115,16 @@ def admin_headers(client: TestClient) -> dict[str, str]:
     )
 
 
+@pytest.fixture(autouse=True, scope="module")
+def _reset_runtime_caches() -> Iterator[None]:
+    """Module-level hook retained for cache lifecycle coordination."""
+    yield
+
+
 @pytest.fixture(autouse=True)
-def _reset_runtime_caches(tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
+def _reset_runtime_storage_paths(tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Configure per-test storage paths to preserve test isolation."""
+
     def set_brand_env(suffix: str, value: str) -> None:
         monkeypatch.setenv(f"FORGEFRAME_{suffix}", value)
         monkeypatch.setenv(f"FORGEGATE_{suffix}", value)

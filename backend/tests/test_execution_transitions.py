@@ -847,7 +847,9 @@ def test_approval_resume_and_reject_transitions_are_durable(tmp_path: Path) -> N
 def test_resume_does_not_force_spurious_wakeup_before_retry_window(
     tmp_path: Path,
 ) -> None:
+    """Resuming during retry backoff must not wake work early."""
     service, session_factory = _service(tmp_path)
+    claimed_at = datetime(2026, 4, 23, 12, 0, tzinfo=UTC)
     admitted = service.admit_create(
         company_id="cmp_789",
         actor_type="agent",
@@ -855,8 +857,8 @@ def test_resume_does_not_force_spurious_wakeup_before_retry_window(
         idempotency_key="idem_create_retry_resume",
         request_fingerprint_hash="fp_create_retry_resume",
         run_kind="provider_dispatch",
+        now=claimed_at,
     )
-    claimed_at = datetime(2026, 4, 23, 12, 0, tzinfo=UTC)
     claim = service.claim_next_attempt(
         company_id="cmp_789",
         worker_key="worker_alpha",
@@ -925,8 +927,9 @@ def test_resume_does_not_force_spurious_wakeup_before_retry_window(
         assert run.status_reason == "retry_scheduled"
         assert attempt.operator_state == "retry_scheduled"
         assert run.next_wakeup_at is not None
-        assert run.next_wakeup_at > claimed_at + timedelta(seconds=10)
+        wakeup_at = run.next_wakeup_at if run.next_wakeup_at.tzinfo is not None else run.next_wakeup_at.replace(tzinfo=UTC)
+        assert wakeup_at > claimed_at + timedelta(seconds=10)
         assert run.result_summary is not None
         assert run.result_summary["wake_gate"]["spurious_wake_blocked"] is True
-        assert run.result_summary["wake_gate"]["next_wakeup_at"] == run.next_wakeup_at.isoformat()
+        assert run.result_summary["wake_gate"]["next_wakeup_at"] == wakeup_at.isoformat()
         assert run.result_summary["dispatch"]["stage"] == "resume_blocked_until_wakeup"

@@ -173,6 +173,15 @@ class ExecutionTransitionService:
         return now.astimezone(UTC)
 
     @staticmethod
+    def _coerce_utc(value: datetime | None) -> datetime | None:
+        """Normalize persisted datetimes to timezone-aware UTC values."""
+        if value is None:
+            return None
+        if value.tzinfo is None:
+            return value.replace(tzinfo=UTC)
+        return value.astimezone(UTC)
+
+    @staticmethod
     def _new_id(prefix: str) -> str:
         return f"{prefix}_{uuid4().hex}"
 
@@ -1746,14 +1755,15 @@ class ExecutionTransitionService:
             run.operator_state = "paused"
             run.status_reason = pause_reason
             run.latest_command_id = command.id
+            next_wakeup_at = self._coerce_utc(run.next_wakeup_at)
             run.result_summary = self._merge_result_summary(
                 run.result_summary,
                 wake_gate=self._detail_payload(
                     claim_allowed=False,
                     paused_at=current_time,
                     pause_reason=pause_reason,
-                    spurious_wake_blocked=bool(run.next_wakeup_at and run.next_wakeup_at > current_time),
-                    next_wakeup_at=run.next_wakeup_at,
+                    spurious_wake_blocked=bool(next_wakeup_at and next_wakeup_at > current_time),
+                    next_wakeup_at=next_wakeup_at,
                 ),
                 dispatch=self._detail_payload(
                     stage="paused",
@@ -1816,7 +1826,8 @@ class ExecutionTransitionService:
                 raise RunTransitionConflictError("Runs waiting on approval cannot be resumed outside the approval flow.")
 
             attempt = self._current_attempt(session, run)
-            spurious_wake_blocked = bool(run.state == "retry_backoff" and run.next_wakeup_at is not None and run.next_wakeup_at > current_time)
+            next_wakeup_at = self._coerce_utc(run.next_wakeup_at)
+            spurious_wake_blocked = bool(run.state == "retry_backoff" and next_wakeup_at is not None and next_wakeup_at > current_time)
             operator_state = "retry_scheduled" if spurious_wake_blocked else self._operator_state_for_resume(run.state)
 
             command = RunCommandORM(
@@ -1846,7 +1857,7 @@ class ExecutionTransitionService:
                 wake_gate=self._detail_payload(
                     claim_allowed=not spurious_wake_blocked,
                     spurious_wake_blocked=spurious_wake_blocked,
-                    next_wakeup_at=run.next_wakeup_at,
+                    next_wakeup_at=next_wakeup_at,
                     resumed_at=current_time,
                     resume_reason=resume_reason or None,
                 ),
