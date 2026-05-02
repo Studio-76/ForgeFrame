@@ -947,23 +947,30 @@ describe("knowledge and memory pages", () => {
     const memoryLink = Array.from(container.querySelectorAll("a")).find((link) => link.textContent === "Open durable memory");
     expect(memoryLink?.getAttribute("href")).toBe("/memory?instanceId=instance_alpha");
 
+    // Click the hero "Create knowledge source" button to show the create form
+    const heroCreateButton = getButtonByText(container, "Create knowledge source");
+    expect(heroCreateButton).toBeTruthy();
+    await act(async () => {
+      heroCreateButton!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    await flushEffects();
+
     const createForm = getFormByText("Create knowledge source");
-    const editForm = getFormByText("Save knowledge source");
     const createButton = getButtonByText(createForm!, "Create knowledge source");
 
     await act(async () => {
-      setControlValue(getControlByLabel(createForm!, "Source ID"), "source_drive_shared");
-      setControlValue(getControlByLabel(createForm!, "Source kind"), "drive");
+      setControlValue(getControlByLabel(createForm!, "Source ID (optional)"), "source_drive_shared");
+      setControlValue(getControlByLabel(createForm!, "Source type"), "drive");
       setControlValue(getControlByLabel(createForm!, "Status"), "active");
       setControlValue(getControlByLabel(createForm!, "Label"), "Shared drive");
       setControlValue(getControlByLabel(createForm!, "Visibility scope"), "team");
       setControlValue(getControlByLabel(createForm!, "Library target"), "https://drive.example.com/shared");
       setControlValue(getControlByLabel(createForm!, "Drive account"), "drive-sync@example.com");
       setControlValue(getControlByLabel(createForm!, "Root folder"), "/pricing");
-      setControlValue(getControlByLabel(createForm!, "Index mode"), "metadata-only");
-      setControlValue(getControlByLabel(createForm!, "Recall class"), "reference recall");
+      setControlValue(getControlByLabel(createForm!, "What should be indexed"), "metadata-only");
+      setControlValue(getControlByLabel(createForm!, "How this source is used in recall"), "reference recall");
       setControlValue(getControlByLabel(createForm!, "Scope note"), "Tenant-shared pricing documents");
-      setControlValue(getControlByLabel(createForm!, "Error next step"), "Refresh drive token and re-run bridge sync");
+      setControlValue(getControlByLabel(createForm!, "Suggested repair action"), "Refresh drive token and re-run bridge sync");
       setControlValue(getControlByLabel(createForm!, "Description"), "Shared working files");
       setControlValue(getControlByLabel(createForm!, "Last synced at"), "2026-04-23T11:00:00Z");
       setControlValue(getControlByLabel(createForm!, "Last error"), "Optional issue");
@@ -999,19 +1006,28 @@ describe("knowledge and memory pages", () => {
       },
     }));
 
+    // Click "Edit source" to show the edit form
+    const editSourceButton = getButtonByText(container, "Edit source");
+    expect(editSourceButton).toBeTruthy();
+    await act(async () => {
+      editSourceButton!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    await flushEffects();
+
+    const editForm = getFormByText("Save knowledge source");
     const editButton = getButtonByText(editForm!, "Save knowledge source");
 
     await act(async () => {
       setControlValue(getControlByLabel(editForm!, "Label"), "Primary mail connector updated");
       setControlValue(getControlByLabel(editForm!, "Status"), "paused");
       setControlValue(getControlByLabel(editForm!, "Visibility scope"), "restricted");
-      setControlValue(getControlByLabel(editForm!, "Mailbox target"), "imap://mail.example.com/archive");
+      setControlValue(getControlByLabel(editForm!, "Mailbox or inbox path"), "imap://mail.example.com/archive");
       setControlValue(getControlByLabel(editForm!, "Mailbox account"), "mail-ops@example.com");
       setControlValue(getControlByLabel(editForm!, "Folder / label"), "Archive/Customers");
-      setControlValue(getControlByLabel(editForm!, "Index mode"), "headers-only");
-      setControlValue(getControlByLabel(editForm!, "Recall class"), "operator recall");
+      setControlValue(getControlByLabel(editForm!, "What should be indexed"), "headers-only");
+      setControlValue(getControlByLabel(editForm!, "How this source is used in recall"), "operator recall");
       setControlValue(getControlByLabel(editForm!, "Scope note"), "Restricted executive mailbox");
-      setControlValue(getControlByLabel(editForm!, "Error next step"), "Repair mailbox bridge health before resuming sync");
+      setControlValue(getControlByLabel(editForm!, "Suggested repair action"), "Repair mailbox bridge health before resuming sync");
       setControlValue(getControlByLabel(editForm!, "Description"), "Inbound email context updated");
       setControlValue(getControlByLabel(editForm!, "Last synced at"), "2026-04-23T12:00:00Z");
       setControlValue(getControlByLabel(editForm!, "Last error"), "Probe degraded");
