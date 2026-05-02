@@ -1,5 +1,15 @@
 import type { MutableSettingEntry } from "../../api/admin";
-import { formatSettingValue, formatTimestamp, riskTone, sourceDescription, sourceTone } from "./utils";
+import {
+  booleanStatusSentence,
+  formatBooleanLabel,
+  formatSettingValue,
+  formatTimestamp,
+  riskTone,
+  showRiskBadge,
+  sourceDescription,
+  sourceTone,
+  statusKey,
+} from "./utils";
 
 /**
  * Props for the SettingDetail component.
@@ -30,11 +40,11 @@ export interface SettingDetailProps {
 /**
  * Detail panel for a selected setting.
  *
- * Shows a human-readable description of the setting, its current
- * effective value, override/default state, source, risk level, and
- * recommended caution text. Edit/reset controls are hidden behind
- * an explicit edit mode toggle. Audit history and technical metadata
- * are in collapsible sections.
+ * Leads with the setting's purpose and current state in plain language.
+ * Shows effective value, source, impact of changing, and recommended caution.
+ * Edit mode is deliberate — toggle to reveal value controls, with the
+ * current value, draft override, and default all visible for comparison.
+ * Provider-grouped settings include context linking to provider setup.
  */
 export function SettingDetail({
   setting,
@@ -53,16 +63,31 @@ export function SettingDetail({
       <div className="ff-detail-panel">
         <div className="ff-detail-panel-body">
           <h4>Setting detail</h4>
-          <p className="fg-muted">Select a setting from the inventory to inspect its value, defaults, and configuration posture.</p>
+          <p className="fg-muted">
+            Select a setting from the inventory to inspect its value, defaults, and configuration posture.
+          </p>
         </div>
       </div>
     );
   }
 
-  const overrideState = sourceDescription(setting.source, setting.overridden);
-  const overrideActive = setting.source === "override" && setting.overridden;
+  const sk = statusKey(setting.source, setting.overridden);
+  const showRisk = showRiskBadge(setting.risk_level);
   const draftValue = drafts[setting.key] ?? formatSettingValue(setting.effective_value);
   const hasChanged = draftValue !== formatSettingValue(setting.effective_value);
+
+  /** Human-readable current value sentence. */
+  const currentValueSentence = setting.value_type === "bool"
+    ? booleanStatusSentence(setting)
+    : formatSettingValue(setting.effective_value);
+
+  /** Human-readable default value. */
+  const defaultValueReadable = setting.value_type === "bool"
+    ? formatBooleanLabel(setting.default_value)
+    : formatSettingValue(setting.default_value);
+
+  /** Whether this is a provider-enablement setting. */
+  const isProviderSetting = setting.group === "providers";
 
   const renderValueControl = () => {
     const commonProps = {
@@ -96,106 +121,124 @@ export function SettingDetail({
 
   return (
     <div className="ff-detail-panel">
+      {/* ── Title row ── */}
       <div className="ff-detail-panel-title-row">
         <div className="ff-detail-panel-copy">
           <h4>{setting.label}</h4>
-          <p className="fg-muted fg-code">{setting.key}</p>
+          {showRisk ? (
+            <span className="ff-settings-detail-risk" data-tone={riskTone(setting.risk_level)}>
+              {setting.risk_label}
+            </span>
+          ) : null}
         </div>
-        <span className="ff-status-badge" data-tone={riskTone(setting.risk_level)}>
-          {setting.risk_label}
-        </span>
       </div>
 
       <div className="ff-detail-panel-body">
-        {/* Description section */}
+        {/* ── What this controls ── */}
         <div className="ff-settings-desc-block">
           <span className="ff-settings-desc-label">What this controls</span>
           <p>{setting.description}</p>
+          {isProviderSetting ? (
+            <p className="fg-muted ff-settings-provider-context">
+              This controls whether the provider is available for routing. Provider credentials
+              and endpoint configuration may also be required — check the{" "}
+              <strong>Provider enablement</strong> category or visit the Providers page.
+            </p>
+          ) : null}
         </div>
 
-        {/* Current value and state */}
-        <div className="ff-settings-value-block">
-          <div className="ff-settings-value-row">
-            <span className="ff-settings-value-label">Current value</span>
-            <span className="ff-settings-value-current">{formatSettingValue(setting.effective_value)}</span>
+        {/* ── Current state panel ── */}
+        <div className="ff-settings-current-block">
+          <div className="ff-settings-current-row">
+            <span className="ff-settings-current-label">Current state</span>
+            <span className="ff-settings-current-value">
+              {currentValueSentence}
+            </span>
             <span
-              className={`ff-settings-state-pill${overrideActive ? " is-override" : ""}`}
+              className={`ff-settings-state-pill ff-settings-state-pill--${sk}`}
             >
-              {overrideState}
+              {sourceDescription(setting.source, setting.overridden)}
             </span>
           </div>
-          {overrideActive ? (
-            <p className="ff-settings-value-note">
-              This setting has a persisted override. Resetting will restore the environment default.
-            </p>
-          ) : (
-            <p className="ff-settings-value-note">
-              This setting is using its environment default. No override is active.
-            </p>
-          )}
         </div>
 
-        {/* Source and risk info */}
-        <dl className="ff-settings-meta-list">
-          <div>
-            <dt>Default value</dt>
-            <dd>{formatSettingValue(setting.default_value)}</dd>
+        {/* ── Impact / caution ── */}
+        {setting.risk_note ? (
+          <div
+            className="ff-settings-impact-block"
+            data-tone={riskTone(setting.risk_level)}
+          >
+            <span className="ff-settings-desc-label">
+              {showRisk ? "Impact of changing" : "Note"}
+            </span>
+            <p>{setting.risk_note}</p>
+            {isProviderSetting && setting.value_type === "bool" && setting.effective_value === false ? (
+              <p className="fg-muted ff-settings-provider-context">
+                Enabling this provider here also requires valid credentials and endpoint configuration
+                on the Providers page. Without those, routes targeting this provider will fail.
+              </p>
+            ) : null}
+            {isProviderSetting && setting.value_type === "bool" && setting.effective_value === true ? (
+              <p className="fg-muted ff-settings-provider-context">
+                Disabling this provider will prevent routes from targeting it. Existing in-flight
+                requests may complete, but no new routing will occur.
+              </p>
+            ) : null}
           </div>
-          <div>
-            <dt>Source</dt>
-            <dd>
-              <span className="fg-pill" data-tone={sourceTone(setting.source)}>
-                {setting.source_label}
-              </span>
-            </dd>
-          </div>
-          {setting.risk_note ? (
-            <div className="ff-settings-risk-note" data-tone={riskTone(setting.risk_level)}>
-              <dt>Caution</dt>
-              <dd>{setting.risk_note}</dd>
-            </div>
-          ) : null}
-        </dl>
+        ) : null}
 
-        {/* Edit mode toggle and controls */}
+        {/* ── Edit section ── */}
         {canMutate ? (
           <div className="ff-settings-edit-section">
             <div className="ff-settings-edit-bar">
-              <span className={editMode ? "ff-settings-edit-active" : "ff-settings-edit-inactive"}>
-                {editMode ? "Edit mode active" : "Read-only view"}
-              </span>
               <button
                 type="button"
-                className="ff-settings-edit-toggle"
+                className="ff-primary-action"
                 onClick={onToggleEditMode}
                 aria-pressed={editMode}
               >
-                {editMode ? "Cancel editing" : "Edit setting"}
+                {editMode ? "Cancel" : "Edit setting"}
               </button>
+              {editMode ? (
+                <span className="ff-settings-edit-active">Edit mode active</span>
+              ) : (
+                <span className="ff-settings-edit-inactive">Read-only</span>
+              )}
             </div>
 
             {editMode ? (
               <div className="ff-settings-edit-form">
-                <label>
-                  New effective value
-                  {renderValueControl()}
-                </label>
+                {/* Current value (read-only reference) */}
+                <div className="ff-settings-edit-comparison">
+                  <div className="ff-settings-edit-compare-item">
+                    <span className="ff-settings-desc-label">Current value</span>
+                    <span className="ff-settings-edit-current-display">
+                      {setting.value_type === "bool"
+                        ? formatBooleanLabel(setting.effective_value)
+                        : formatSettingValue(setting.effective_value)}
+                    </span>
+                  </div>
+                  <label className="ff-settings-edit-compare-item">
+                    <span className="ff-settings-desc-label">New effective value</span>
+                    {renderValueControl()}
+                  </label>
+                  <div className="ff-settings-edit-compare-item">
+                    <span className="ff-settings-desc-label">Default</span>
+                    <span className="ff-settings-edit-default-display">
+                      {defaultValueReadable}
+                    </span>
+                  </div>
+                </div>
 
                 {setting.confirmation_required ? (
                   <div className="ff-settings-warning-block">
                     <strong>High-risk setting</strong>
                     <p>
                       {setting.risk_note || "Changing this setting may have significant impact on system behavior."}
-                      {" "}Saving will require explicit confirmation.
                     </p>
+                    <p>Saving will require explicit confirmation describing the operational impact.</p>
                   </div>
                 ) : null}
-
-                <p className="fg-muted ff-settings-save-note">
-                  {hasChanged
-                    ? "Saving creates a persisted override for this setting. Reset restores the environment default."
-                    : "Change the value above before saving."}
-                </p>
 
                 <div className="ff-action-controls">
                   <button
@@ -222,19 +265,26 @@ export function SettingDetail({
               This session can review setting values and defaults, but editing is
               restricted to admin sessions with write access.
             </p>
-            {setting.overridden ? (
-              <p className="fg-muted">
-                An override is currently active. An admin can review and manage it.
-              </p>
-            ) : (
-              <p className="fg-muted">
-                This setting is using its environment default.
-              </p>
-            )}
           </div>
         )}
 
-        {/* Collapsible: Audit history */}
+        {/* ── Meta info ── */}
+        <dl className="ff-settings-meta-list">
+          <div>
+            <dt>Source</dt>
+            <dd>
+              <span className="fg-pill" data-tone={sourceTone(setting.source)}>
+                {setting.source_label}
+              </span>
+            </dd>
+          </div>
+          <div>
+            <dt>Default value</dt>
+            <dd>{defaultValueReadable}</dd>
+          </div>
+        </dl>
+
+        {/* ── Collapsible: Audit history ── */}
         <details className="ff-collapse-section">
           <summary>
             <div className="ff-collapse-summary-text">
@@ -260,7 +310,7 @@ export function SettingDetail({
           </div>
         </details>
 
-        {/* Collapsible: Technical details */}
+        {/* ── Collapsible: Technical details ── */}
         <details className="ff-collapse-section">
           <summary>
             <div className="ff-collapse-summary-text">
@@ -273,6 +323,10 @@ export function SettingDetail({
               <div>
                 <dt>Key</dt>
                 <dd className="fg-code">{setting.key}</dd>
+              </div>
+              <div>
+                <dt>Effective value (raw)</dt>
+                <dd className="fg-code">{formatSettingValue(setting.effective_value)}</dd>
               </div>
               <div>
                 <dt>Value type</dt>

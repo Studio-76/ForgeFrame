@@ -5897,6 +5897,57 @@ details summary {
   margin: 0;
 }
 
+/* ─── Summary stats bar ─── */
+
+.ff-settings-summary {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(80px, 1fr));
+  gap: 1px;
+  background: var(--fg-color-border-default);
+  border-bottom: 1px solid var(--fg-color-border-default);
+}
+
+.ff-settings-summary-stat {
+  display: grid;
+  gap: 0.15rem;
+  padding: var(--fg-space-2) var(--fg-space-3);
+  background: var(--fg-color-surface-default);
+  text-align: center;
+}
+
+.ff-settings-summary-stat[data-tone="changed"] {
+  background: var(--fg-color-status-success-soft);
+}
+
+.ff-settings-summary-stat[data-tone="danger"] {
+  background: var(--fg-color-status-warning-soft);
+}
+
+.ff-settings-summary-stat-value {
+  font-size: 1.15rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.2;
+  color: var(--fg-color-text-primary);
+}
+
+.ff-settings-summary-stat[data-tone="changed"] .ff-settings-summary-stat-value {
+  color: var(--fg-color-status-success);
+}
+
+.ff-settings-summary-stat[data-tone="danger"] .ff-settings-summary-stat-value {
+  color: var(--fg-color-status-danger);
+}
+
+.ff-settings-summary-stat-label {
+  font-size: 0.65rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--fg-color-text-secondary);
+  line-height: 1.2;
+}
+
 /* ─── Toolbar: search + filter + toggle ─── */
 
 .ff-settings-toolbar {
@@ -6101,49 +6152,76 @@ details summary {
   vertical-align: middle;
 }
 
-.ff-settings-item-source {
-  font-size: 0.7rem;
+.ff-settings-item-status {
+  font-size: 0.65rem;
   font-weight: 600;
   text-transform: uppercase;
-  letter-spacing: 0.02em;
-  color: var(--fg-color-text-secondary);
-  border: 1px solid var(--fg-color-border-default);
-  border-radius: var(--fg-radius-pill);
-  padding: 0.06rem 0.45rem;
+  letter-spacing: 0.03em;
+  padding: 0.06rem 0.4rem;
+  border-radius: 2px;
   white-space: nowrap;
+  border: 1px solid var(--fg-color-border-default);
+  color: var(--fg-color-text-secondary);
 }
 
-.ff-settings-item-source.is-override {
+.ff-settings-item-status--overridden {
   border-color: var(--fg-color-status-success-border);
   color: var(--fg-color-status-success);
   background: var(--fg-color-status-success-soft);
 }
 
-.ff-settings-item-risk {
-  font-size: 0.7rem;
-  font-weight: 600;
-  white-space: nowrap;
-  border: 1px solid var(--fg-color-border-default);
-  border-radius: var(--fg-radius-pill);
-  padding: 0.06rem 0.45rem;
+.ff-settings-item-status--default {
+  border-color: var(--fg-color-border-default);
+  color: var(--fg-color-text-muted);
 }
 
-.ff-settings-item-risk[data-tone="danger"] {
-  border-color: var(--fg-color-status-danger-border);
+.ff-settings-item-badge {
+  font-size: 0.6rem;
+  font-weight: 700;
+  white-space: nowrap;
+  letter-spacing: 0.04em;
+  border-radius: 2px;
+  padding: 0.05rem 0.35rem;
+  flex-shrink: 0;
+}
+
+.ff-settings-item-badge[data-tone="danger"] {
   color: var(--fg-color-status-danger);
   background: var(--fg-color-status-danger-soft);
+  border: 1px solid var(--fg-color-status-danger-border);
 }
 
-.ff-settings-item-risk[data-tone="warning"] {
-  border-color: var(--fg-color-status-warning-border);
+.ff-settings-item-badge[data-tone="warning"] {
   color: var(--fg-color-status-warning);
   background: var(--fg-color-status-warning-soft);
+  border: 1px solid var(--fg-color-status-warning-border);
 }
 
-.ff-settings-item-risk[data-tone="success"] {
-  border-color: var(--fg-color-status-success-border);
-  color: var(--fg-color-status-success);
-  background: var(--fg-color-status-success-soft);
+.ff-settings-item-context {
+  font-size: 0.6rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--fg-color-text-muted);
+  border: 1px solid var(--fg-color-border-default);
+  border-radius: 2px;
+  padding: 0.04rem 0.3rem;
+  white-space: nowrap;
+}
+
+.ff-settings-empty-action {
+  font-size: var(--fg-type-size-meta);
+  padding: 0.35rem 0.75rem;
+  background: var(--fg-color-surface-field);
+  border: 1px solid var(--fg-color-border-default);
+  border-radius: var(--fg-radius-md);
+  cursor: pointer;
+  color: var(--fg-color-text-primary);
+  margin-top: var(--fg-space-1);
+}
+
+.ff-settings-empty-action:hover {
+  background: var(--fg-color-surface-strong);
 }
 
 /* ─── Detail panel (right panel) ─── */
@@ -6167,30 +6245,30 @@ details summary {
   color: var(--fg-color-text-secondary);
 }
 
-/* Value display block */
-.ff-settings-value-block {
+/* Current state display block */
+.ff-settings-current-block {
   display: grid;
   gap: var(--fg-space-2);
   padding: var(--fg-space-3) 0;
+  border-bottom: 1px solid var(--fg-color-border-default);
 }
 
-.ff-settings-value-row {
+.ff-settings-current-row {
   display: flex;
   align-items: center;
   gap: var(--fg-space-2);
   flex-wrap: wrap;
 }
 
-.ff-settings-value-label {
+.ff-settings-current-label {
   font-size: var(--fg-type-size-meta);
   color: var(--fg-color-text-secondary);
   font-weight: 500;
 }
 
-.ff-settings-value-current {
-  font-family: var(--fg-font-mono);
+.ff-settings-current-value {
   font-weight: 600;
-  font-size: 1.05rem;
+  font-size: 1rem;
 }
 
 .ff-settings-state-pill {
@@ -6204,16 +6282,16 @@ details summary {
   color: var(--fg-color-text-secondary);
 }
 
-.ff-settings-state-pill.is-override {
+.ff-settings-state-pill.is-override,
+.ff-settings-state-pill--overridden {
   border-color: var(--fg-color-status-success-border);
   color: var(--fg-color-status-success);
   background: var(--fg-color-status-success-soft);
 }
 
-.ff-settings-value-note {
-  margin: 0;
-  font-size: var(--fg-type-size-meta);
-  color: var(--fg-color-text-secondary);
+.ff-settings-state-pill--default {
+  border-color: var(--fg-color-border-default);
+  color: var(--fg-color-text-muted);
 }
 
 /* Meta/attribute list */
@@ -6242,20 +6320,28 @@ details summary {
   word-break: break-word;
 }
 
-.ff-settings-risk-note {
-  padding: var(--fg-space-2);
+.ff-settings-impact-block {
+  padding: var(--fg-space-3);
   border-radius: var(--fg-radius-md);
-  border: 1px solid var(--fg-color-status-warning-border);
-  background: var(--fg-color-status-warning-soft);
+  border: 1px solid var(--fg-color-border-default);
+  background: var(--fg-color-surface-subtle);
+  display: grid;
+  gap: var(--fg-space-1);
 }
 
-.ff-settings-risk-note[data-tone="danger"] {
+.ff-settings-impact-block p {
+  margin: 0;
+  font-size: var(--fg-type-size-meta);
+}
+
+.ff-settings-impact-block[data-tone="danger"] {
   border-color: var(--fg-color-status-danger-border);
   background: var(--fg-color-status-danger-soft);
 }
 
-.ff-settings-risk-note dt {
-  color: var(--fg-color-status-danger);
+.ff-settings-impact-block[data-tone="warning"] {
+  border-color: var(--fg-color-status-warning-border);
+  background: var(--fg-color-status-warning-soft);
 }
 
 /* Edit mode section */
@@ -6289,22 +6375,6 @@ details summary {
   color: var(--fg-color-text-secondary);
 }
 
-.ff-settings-edit-toggle {
-  font-size: var(--fg-type-size-meta);
-  padding: 0.4rem 0.85rem;
-  background: var(--fg-color-surface-field);
-  border: 1px solid var(--fg-color-border-default);
-  color: var(--fg-color-text-primary);
-  border-radius: var(--fg-radius-md);
-  cursor: pointer;
-  white-space: nowrap;
-}
-
-.ff-settings-edit-toggle[aria-pressed="true"] {
-  border-color: var(--fg-color-action-primary);
-  background: var(--fg-color-action-primary-soft);
-}
-
 .ff-settings-edit-form {
   display: grid;
   gap: var(--fg-space-3);
@@ -6313,6 +6383,70 @@ details summary {
 .ff-settings-edit-form label {
   display: grid;
   gap: var(--fg-space-1);
+}
+
+/* Edit mode comparison layout: current / new / default side-by-side */
+.ff-settings-edit-comparison {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 1px;
+  border: 1px solid var(--fg-color-border-default);
+  border-radius: var(--fg-radius-md);
+  overflow: hidden;
+  background: var(--fg-color-border-default);
+}
+
+.ff-settings-edit-compare-item {
+  display: grid;
+  gap: var(--fg-space-1);
+  padding: var(--fg-space-2) var(--fg-space-3);
+  background: var(--fg-color-surface-default);
+}
+
+.ff-settings-edit-compare-item .ff-settings-desc-label {
+  font-size: 0.65rem;
+}
+
+.ff-settings-edit-current-display {
+  font-weight: 600;
+  font-size: 0.9rem;
+  padding: 0.25rem 0;
+}
+
+.ff-settings-edit-default-display {
+  font-size: 0.9rem;
+  color: var(--fg-color-text-secondary);
+  padding: 0.25rem 0;
+}
+
+/* Provider context note */
+.ff-settings-provider-context {
+  margin-top: var(--fg-space-1);
+  font-size: var(--fg-type-size-meta);
+  line-height: 1.5;
+}
+
+/* Detail risk label */
+.ff-settings-detail-risk {
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  padding: 0.1rem 0.5rem;
+  border-radius: 2px;
+  white-space: nowrap;
+}
+
+.ff-settings-detail-risk[data-tone="danger"] {
+  color: var(--fg-color-status-danger);
+  border: 1px solid var(--fg-color-status-danger-border);
+  background: var(--fg-color-status-danger-soft);
+}
+
+.ff-settings-detail-risk[data-tone="warning"] {
+  color: var(--fg-color-status-warning);
+  border: 1px solid var(--fg-color-status-warning-border);
+  background: var(--fg-color-status-warning-soft);
 }
 
 .ff-settings-warning-block {
@@ -6335,11 +6469,6 @@ details summary {
   font-size: var(--fg-type-size-meta);
 }
 
-.ff-settings-save-note {
-  font-size: var(--fg-type-size-meta);
-  margin: 0;
-}
-
 /* Read-only review block */
 .ff-settings-readonly-block {
   display: grid;
@@ -6357,6 +6486,10 @@ details summary {
 .ff-settings-confirm-body {
   display: grid;
   gap: var(--fg-space-3);
+}
+
+.ff-settings-confirm-value {
+  font-weight: 600;
 }
 
 .ff-settings-confirm-check {
@@ -6409,6 +6542,14 @@ details summary {
 @media (max-width: 639px) {
   .ff-settings-item-meta {
     flex-wrap: wrap;
+  }
+
+  .ff-settings-edit-comparison {
+    grid-template-columns: 1fr;
+  }
+
+  .ff-settings-summary {
+    grid-template-columns: repeat(2, 1fr);
   }
 }
 

@@ -10,6 +10,7 @@ import {
 } from "../../api/admin";
 import { formatSettingValue, getCategory, normalizeDraft } from "./utils";
 import {
+  CATEGORY_LABELS,
   CATEGORY_ORDER,
   DEFAULT_CONFIRM_DIALOG,
   type CategoryFilter,
@@ -206,7 +207,7 @@ export function useSettings(): UseSettingsReturn {
       .filter((cat) => categoryMap.has(cat))
       .map((cat) => {
         const items = categoryMap.get(cat)!;
-        const label = cat.charAt(0).toUpperCase() + cat.slice(1);
+        const label = CATEGORY_LABELS[cat] ?? cat.charAt(0).toUpperCase() + cat.slice(1);
         return { category: cat, label, items };
       });
   }, [filteredSettings]);
