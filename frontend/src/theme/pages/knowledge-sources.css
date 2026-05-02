@@ -125,7 +125,22 @@
 
 /* ─── Summary Hero ─── */
 .ff-sources-hero {
+  position: relative;
+  overflow: hidden;
   margin-bottom: 1rem;
+  /* subtle blue overlay on top of the tron-frame accent gradient */
+  background:
+    radial-gradient(
+      ellipse 70% 60% at 15% 40%,
+      color-mix(in srgb, var(--fg-color-status-info) 10%, transparent),
+      transparent 60%
+    ),
+    linear-gradient(
+      135deg,
+      color-mix(in srgb, var(--fg-color-accent) 8%, transparent),
+      transparent 28%
+    ),
+    var(--fg-color-surface-default);
 }
 
 .ff-sources-hero-header {
