@@ -360,3 +360,17 @@
     text-align: center;
   }
 }
+
+@media (max-width: 639px) {
+  /* Stack setup action bar on mobile */
+  .ff-setup-primary-action-content {
+    flex-direction: column;
+    align-items: stretch;
+    gap: var(--fg-space-2);
+  }
+
+  .ff-setup-primary-action-button {
+    justify-content: center;
+    text-align: center;
+  }
+}

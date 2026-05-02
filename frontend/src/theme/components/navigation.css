@@ -847,3 +847,68 @@
   text-overflow: ellipsis;
   max-width: 100%;
 }
+
+/* Mobile (≤ 639px): sidebar overlay, backdrop, and bottom tab bar */
+@media (max-width: 639px) {
+  .ff-app.is-sidebar-open .ff-app-content,
+  .ff-app.is-sidebar-collapsed .ff-app-content {
+    margin-left: 0;
+  }
+
+  .ff-sidebar,
+  .ff-sidebar.is-collapsed {
+    transform: translateX(-100%);
+    width: var(--fg-layout-sidebar-width);
+  }
+
+  .ff-sidebar.is-mobile-open {
+    transform: translateX(0);
+  }
+
+  .ff-sidebar.is-collapsed .ff-brand-copy,
+  .ff-sidebar.is-collapsed .ff-sidebar-link-label,
+  .ff-sidebar.is-collapsed .ff-mini-badge {
+    display: none;
+  }
+
+  .ff-sidebar.is-mobile-open .ff-brand-copy {
+    display: grid;
+  }
+
+  .ff-sidebar.is-mobile-open .ff-sidebar-section-leading span,
+  .ff-sidebar.is-mobile-open .ff-sidebar-section-meta,
+  .ff-sidebar.is-mobile-open .ff-sidebar-link-label,
+  .ff-sidebar.is-mobile-open .ff-mini-badge {
+    display: initial;
+  }
+
+  .ff-sidebar.is-mobile-open .ff-sidebar-section-meta {
+    display: flex;
+  }
+
+  .ff-icon-button.ff-mobile-toggle {
+    display: inline-flex;
+  }
+
+  .ff-icon-button.ff-desktop-toggle,
+  .ff-topbar-title,
+  .ff-user-copy,
+  .ff-user-button > svg {
+    display: none;
+  }
+
+  .ff-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 35;
+    border: 0;
+    border-radius: 0;
+    padding: 0;
+    background: rgba(2, 6, 23, 0.58);
+  }
+
+  /* Show bottom tab bar on mobile */
+  .ff-bottom-tab-bar {
+    display: flex;
+  }
+}

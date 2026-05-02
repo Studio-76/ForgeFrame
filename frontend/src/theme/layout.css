@@ -22,3 +22,10 @@
   padding: 1.5rem;
   scroll-padding-top: calc(72px + var(--fg-space-4));
 }
+
+@media (max-width: 639px) {
+  /* Add content padding so the bottom tab bar doesn't obscure content */
+  .ff-main {
+    padding-bottom: calc(1rem + 64px + env(safe-area-inset-bottom, 0px));
+  }
+}
