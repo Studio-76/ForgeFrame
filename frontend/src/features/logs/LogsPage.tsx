@@ -1,1014 +1,350 @@
-import { type FormEvent, useEffect, useMemo, useRef, useState } from "react";
+/**
+ * Logs page — Errors, Activity, and Audit History.
+ *
+ * Redesigned as a tabbed review surface with four clear modes:
+ * - **Errors** — incident axes sorted by severity, blocked routing failures, error breakdown
+ * - **Activity** — recent governance events and active alerts
+ * - **Audit** — paginated audit history with filter presets, row selection, and contextual detail
+ * - **Diagnostics** — signal-path health, metrics, logging, and tracing (raw data hidden by default)
+ *
+ * Tab state is driven by URL hash for deep linking and testability:
+ *   /logs#errors      (default)
+ *   /logs#activity
+ *   /logs#audit
+ *   /logs#diagnostics
+ *
+ * A persistent operational summary hero at the top shows active errors,
+ * open incidents, recent warnings, audit event count, last critical event,
+ * and the next recommended action — so an operator can tell within seconds
+ * whether anything needs attention.
+ *
+ * Audit export is a separate, explicit workflow accessible from the Audit tab.
+ *
+ * @packageDocumentation
+ */
+
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 
-import {
-  AdminApiError,
-  fetchAuditHistory,
-  fetchAuditHistoryDetail,
-  fetchLogs,
-  generateAuditExport,
-  type AuditExportFormat,
-  type AuditExportResult,
-  type AuditExportWindow,
-  type AuditHistoryDetailResponse,
-  type AuditHistoryResponse,
-  type AuditHistoryStatus,
-  type AuditHistoryWindow,
-  type LogsResponse,
-} from "../../api/domain";
 import { sessionHasAnyInstancePermission } from "../../app/adminAccess";
 import { CONTROL_PLANE_ROUTES } from "../../app/navigation";
 import { useAppSession } from "../../app/session";
-import { getInstanceIdFromSearchParams, withInstanceScope, withQueryParams } from "../../app/tenantScope";
+import { withInstanceScope } from "../../app/tenantScope";
+import { getInstanceIdFromSearchParams } from "../../app/tenantScope";
 import { useInstanceCatalog } from "../../app/useInstanceCatalog";
 import { InstanceScopeCard } from "../../components/InstanceScopeCard";
 import { PageIntro } from "../../components/PageIntro";
-import { ActionBar } from "../../components/ui/ActionBar";
-import { AdvancedDiagnostics } from "../../components/ui/AdvancedDiagnostics";
-import { DetailPanel } from "../../components/ui/DetailPanel";
-import { EntityTable } from "../../components/ui/EntityTable";
-import { ErrorState, LoadingState, PermissionState } from "../../components/ui/StateBlocks";
-import { SummaryStrip } from "../../components/ui/SummaryStrip";
+import { ErrorState, LoadingState } from "../../components/ui/StateBlocks";
+import { AuditExportForm } from "./AuditExportForm";
+import { AuditHistoryPanel } from "./AuditHistoryPanel";
+import { DiagnosticsPanel } from "./DiagnosticsPanel";
+import { ErrorReviewPanel } from "./ErrorReviewPanel";
+import { ActivityPanel } from "./ActivityPanel";
+import { FilterPresets } from "./FilterPresets";
+import { LogsSummaryHero } from "./LogsSummaryHero";
+import type {
+  AuditHistoryResponse,
+  FilterPreset,
+  LogTab,
+} from "./types";
+import { presetToParams } from "./utils";
+import { useLogs } from "./useLogs";
 
-type LoadState = "idle" | "loading" | "success" | "error";
+/** Map of tab labels and hash keys. */
+const TABS: Array<{ key: LogTab; label: string; hash: string }> = [
+  { key: "errors", label: "Errors", hash: "#errors" },
+  { key: "activity", label: "Activity", hash: "#activity" },
+  { key: "audit", label: "Audit", hash: "#audit" },
+  { key: "diagnostics", label: "Diagnostics", hash: "#diagnostics" },
+];
 
-const HISTORY_LIMIT = 25;
-const EXPORT_DEFAULT_LIMIT = 250;
-const HISTORY_WINDOWS: AuditHistoryWindow[] = ["24h", "7d", "30d", "all"];
-const EXPORT_FORMATS: AuditExportFormat[] = ["json", "csv"];
-const STATUS_OPTIONS: AuditHistoryStatus[] = ["ok", "warning", "failed"];
-const AUDIT_HISTORY_HASH = "#audit-history";
-const AUDIT_EXPORT_HASH = "#audit-export";
+/** Map from tab key to hash. */
+const TAB_TO_HASH: Record<LogTab, string> = {
+  errors: "#errors",
+  activity: "#activity",
+  audit: "#audit",
+  diagnostics: "#diagnostics",
+};
 
-function stringifyValue(value: unknown): string {
-  if (value === null || value === undefined || value === "") {
-    return "n/a";
-  }
-  if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
-    return String(value);
-  }
-  return JSON.stringify(value);
+/** Map from hash to tab key. */
+const HASH_TO_TAB: Record<string, LogTab> = {
+  "#errors": "errors",
+  "#activity": "activity",
+  "#audit": "audit",
+  "#audit-export": "audit",
+  "#diagnostics": "diagnostics",
+};
+
+/** Default tab when no hash matches. */
+const DEFAULT_TAB: LogTab = "errors";
+
+/**
+ * Parse the active tab from the URL hash.
+ * @param hash - Location hash from router.
+ * @returns Active tab key.
+ */
+function tabFromHash(hash: string): LogTab {
+  return HASH_TO_TAB[hash] ?? DEFAULT_TAB;
 }
 
-function normalizedParam(searchParams: URLSearchParams, key: string): string | null {
-  const value = searchParams.get(key)?.trim();
-  return value ? value : null;
-}
-
-function getAuditWindow(searchParams: URLSearchParams): AuditHistoryWindow {
-  const value = searchParams.get("auditWindow");
-  return value === "24h" || value === "30d" || value === "all" ? value : "7d";
-}
-
-function getAuditStatus(searchParams: URLSearchParams): AuditHistoryStatus | null {
-  const value = searchParams.get("auditStatus");
-  return value === "ok" || value === "warning" || value === "failed" ? value : null;
-}
-
-function scopedHistoryQuery({
-  instanceId,
-  companyId,
-  window,
-  action,
-  actor,
-  targetType,
-  targetId,
-  status,
-  limit,
-}: {
-  instanceId: string | null;
-  companyId: string | null;
-  window: AuditHistoryWindow;
-  action: string | null;
-  actor: string | null;
-  targetType: string | null;
-  targetId: string | null;
-  status: AuditHistoryStatus | null;
-  limit: number;
-}) {
-  return {
-    instanceId,
-    ...(companyId ? { companyId } : {}),
-    window,
-    action,
-    actor,
-    targetType,
-    targetId,
-    status,
-    limit,
-  };
-}
-
-function buildAuditHashPath(
-  hash: "audit-history" | "audit-export",
-  {
-    instanceId,
-    companyId,
-    window,
-    action,
-    actor,
-    status,
-    eventId,
-    targetType,
-    targetId,
-  }: {
-    instanceId: string | null;
-    companyId: string | null;
-    window: AuditHistoryWindow;
-    action?: string | null;
-    actor?: string | null;
-    status?: AuditHistoryStatus | null;
-    eventId?: string | null;
-    targetType?: string | null;
-    targetId?: string | null;
-  },
-) {
-  return withQueryParams(`/logs#${hash}`, {
-    instanceId,
-    companyId,
-    auditWindow: window,
-    auditAction: action,
-    auditActor: actor,
-    auditStatus: status,
-    auditEvent: eventId,
-    auditTargetType: targetType,
-    auditTargetId: targetId,
-  });
-}
-
-function optionLabel(value: string, options: Array<{ value: string; label: string }>) {
-  return options.find((option) => option.value === value)?.label ?? value;
-}
-
-function exportPackageLabel({
-  instanceName,
-  window,
-  action,
-  actor,
-  status,
-  includeRawDetails,
-  limit,
-}: {
-  instanceName: string | null;
-  window: AuditExportWindow;
-  action: string;
-  actor: string;
-  status: AuditHistoryStatus | "";
-  includeRawDetails: boolean;
-  limit: number;
-}) {
-  return [
-    instanceName ? `Instance: ${instanceName}` : "Instance: default scope",
-    `Window: ${window}`,
-    action.trim() ? `Action: ${action.trim()}` : null,
-    actor.trim() ? `Actor: ${actor.trim()}` : null,
-    status ? `Outcome: ${status}` : null,
-    includeRawDetails ? "Raw details included" : "Raw details excluded",
-    `Limit: ${limit}`,
-  ].filter(Boolean).join(" · ");
-}
-
-function formatBytes(sizeBytes: number): string {
-  if (sizeBytes < 1024) {
-    return `${sizeBytes} B`;
-  }
-  if (sizeBytes < 1024 * 1024) {
-    return `${(sizeBytes / 1024).toFixed(1)} KB`;
-  }
-  return `${(sizeBytes / (1024 * 1024)).toFixed(1)} MB`;
-}
-
-function exportFailureGuidance(error: unknown): { cause: string; correction: string } {
-  if (error instanceof AdminApiError) {
-    switch (error.code) {
-      case "tenant_filter_required":
-        return {
-          cause: error.message,
-          correction: "Pick an explicit instance or company scope before generating the evidence package.",
-        };
-      case "operator_role_required":
-        return {
-          cause: error.message,
-          correction: "Open a standard operator or admin session. Viewer and impersonation sessions cannot generate exports.",
-        };
-      case "password_rotation_required":
-        return {
-          cause: error.message,
-          correction: "Rotate the current password first, then restart the export from this page.",
-        };
-      default:
-        return {
-          cause: error.message,
-          correction: "Review the selected scope and filters, then retry the export.",
-        };
-    }
-  }
-  return {
-    cause: error instanceof Error ? error.message : "Audit export failed.",
-    correction: "Review the selected scope and export contents, then retry. If the failure persists, inspect the linked audit event and backend logs.",
-  };
-}
-
+/**
+ * Main Logs page component.
+ *
+ * @returns The Logs page.
+ */
 export function LogsPage() {
   const location = useLocation();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const { session, sessionReady } = useAppSession();
   const instanceId = getInstanceIdFromSearchParams(searchParams);
-  const companyId = normalizedParam(searchParams, "companyId");
-  const auditWindow = getAuditWindow(searchParams);
-  const auditAction = normalizedParam(searchParams, "auditAction");
-  const auditActor = normalizedParam(searchParams, "auditActor");
-  const auditTargetType = normalizedParam(searchParams, "auditTargetType");
-  const auditTargetId = normalizedParam(searchParams, "auditTargetId");
-  const auditStatus = getAuditStatus(searchParams);
-  const auditEventId = normalizedParam(searchParams, "auditEvent");
-  const { instances, loadState, error: instancesError, selectedInstance } = useInstanceCatalog(instanceId);
-  const [logsState, setLogsState] = useState<LoadState>("idle");
-  const [logsError, setLogsError] = useState<string | null>(null);
-  const [logs, setLogs] = useState<LogsResponse | null>(null);
-  const [historyState, setHistoryState] = useState<LoadState>("idle");
-  const [historyError, setHistoryError] = useState<string | null>(null);
-  const [history, setHistory] = useState<AuditHistoryResponse | null>(null);
-  const [detailState, setDetailState] = useState<LoadState>("idle");
-  const [detailError, setDetailError] = useState<string | null>(null);
-  const [detail, setDetail] = useState<AuditHistoryDetailResponse | null>(null);
-  const [exportWindow, setExportWindow] = useState<AuditExportWindow>(auditWindow);
-  const [exportAction, setExportAction] = useState(auditAction ?? "");
-  const [exportActor, setExportActor] = useState(auditActor ?? "");
-  const [exportStatus, setExportStatus] = useState<AuditHistoryStatus | "">(auditStatus ?? "");
-  const [exportFormat, setExportFormat] = useState<AuditExportFormat>("json");
-  const [includeRawDetails, setIncludeRawDetails] = useState(true);
-  const [exportLimit, setExportLimit] = useState(String(EXPORT_DEFAULT_LIMIT));
-  const [exportState, setExportState] = useState<LoadState>("idle");
-  const [exportError, setExportError] = useState<string | null>(null);
-  const [exportCorrection, setExportCorrection] = useState<string | null>(null);
-  const [exportResult, setExportResult] = useState<AuditExportResult | null>(null);
-  const [lastExportSummary, setLastExportSummary] = useState<{
-    window: AuditExportWindow;
-    action: string;
-    actor: string;
-    status: AuditHistoryStatus | "";
-    includeRawDetails: boolean;
-    limit: number;
-  } | null>(null);
-  const auditHistoryRef = useRef<HTMLElement | null>(null);
-  const auditExportRef = useRef<HTMLElement | null>(null);
+  const {
+    logsLoadState,
+    logsError,
+    logs,
+    historyLoadState,
+    historyError,
+    history,
+    detailLoadState,
+    detailError: _detailError,
+    detail,
+    summaryCounts,
+    auditWindow,
+    auditAction,
+    auditActor,
+    auditStatus,
+    companyId,
+  } = useLogs(searchParams);
+
+  const { instances, loadState: instancesLoadState, error: instancesError, selectedInstance } = useInstanceCatalog(instanceId);
+
   const canReadAudit = sessionReady && sessionHasAnyInstancePermission(session, "audit.read");
   const canGenerateExport = canReadAudit && session?.read_only !== true;
 
-  const updateRouteSearch = (nextSearchParams: URLSearchParams) => {
-    const search = nextSearchParams.toString();
+  // Derive active tab from URL hash
+  const activeTab = useMemo(() => tabFromHash(location.hash), [location.hash]);
+
+  const [activePreset, setActivePreset] = useState<FilterPreset | null>(null);
+
+  // Sync export hash to audit tab
+  const showExport = location.hash === "#audit-export";
+
+  /** Handle tab change — update URL hash. */
+  const onTabChange = useCallback((tab: LogTab) => {
+    navigate({ ...location, hash: TAB_TO_HASH[tab] }, { replace: true });
+  }, [navigate, location]);
+
+  /** Handle filter preset selection. */
+  const onPresetChange = useCallback((preset: FilterPreset | null) => {
+    setActivePreset(preset);
+    const nextSearchParams = new URLSearchParams(searchParams);
+    ["auditStatus", "auditAction", "auditWindow"].forEach((key) => nextSearchParams.delete(key));
+    if (preset) {
+      const params = presetToParams(preset);
+      Object.entries(params).forEach(([key, value]) => {
+        if (value !== null) {
+          nextSearchParams.set(key, value);
+        }
+      });
+    }
     navigate({
       pathname: location.pathname,
-      search: search ? `?${search}` : "",
-      hash: location.hash,
-    });
-  };
+      search: `?${nextSearchParams.toString()}`,
+      hash: "#audit",
+    }, { replace: true });
+  }, [searchParams, location.pathname, navigate]);
 
-  const onInstanceChange = (nextInstanceId: string | null) => {
+  /** Handle event selection for detail. */
+  const onSelectEvent = useCallback((eventId: string) => {
+    const nextSearchParams = new URLSearchParams(searchParams);
+    nextSearchParams.set("auditEvent", eventId);
+    navigate({
+      pathname: location.pathname,
+      search: `?${nextSearchParams.toString()}`,
+      hash: "#audit",
+    }, { replace: true });
+  }, [searchParams, location.pathname, navigate]);
+
+  /** Close detail panel. */
+  const onCloseDetail = useCallback(() => {
+    const nextSearchParams = new URLSearchParams(searchParams);
+    nextSearchParams.delete("auditEvent");
+    navigate({
+      pathname: location.pathname,
+      search: `?${nextSearchParams.toString()}`,
+      hash: "#audit",
+    }, { replace: true });
+  }, [searchParams, location.pathname, navigate]);
+
+  const onLoadMore = useCallback(() => {
+    // Future: cursor-based pagination
+  }, []);
+
+  const onInstanceChange = useCallback((nextInstanceId: string | null) => {
     const nextSearchParams = new URLSearchParams(searchParams);
     if (nextInstanceId) {
       nextSearchParams.set("instanceId", nextInstanceId);
     } else {
       nextSearchParams.delete("instanceId");
     }
-    updateRouteSearch(nextSearchParams);
-  };
+    navigate({
+      pathname: location.pathname,
+      search: `?${nextSearchParams.toString()}`,
+      hash: location.hash,
+    }, { replace: true });
+  }, [searchParams, location.pathname, navigate]);
 
-  const updateAuditParam = (key: string, value: string | null) => {
-    const nextSearchParams = new URLSearchParams(searchParams);
-    if (value) {
-      nextSearchParams.set(key, value);
-    } else {
-      nextSearchParams.delete(key);
-    }
-    if (key !== "auditEvent") {
-      nextSearchParams.delete("auditEvent");
-    }
-    updateRouteSearch(nextSearchParams);
-  };
-
-  useEffect(() => {
-    const target = location.hash === AUDIT_HISTORY_HASH
-      ? auditHistoryRef.current
-      : location.hash === AUDIT_EXPORT_HASH
-        ? auditExportRef.current
-        : null;
-    if (!target) {
-      return;
-    }
-    if (typeof target.scrollIntoView === "function") {
-      target.scrollIntoView({ block: "start" });
-    }
-    target.focus();
-  }, [location.hash]);
-
-  useEffect(() => {
-    if (location.hash !== AUDIT_EXPORT_HASH) {
-      return;
-    }
-    setExportWindow(auditWindow);
-    setExportAction(auditAction ?? "");
-    setExportActor(auditActor ?? "");
-    setExportStatus(auditStatus ?? "");
-  }, [auditAction, auditActor, auditStatus, auditWindow, location.hash]);
-
-  useEffect(() => {
-    let mounted = true;
-    const load = async () => {
-      setLogsState("loading");
-      setLogsError(null);
-      try {
-        const payload = await fetchLogs(instanceId, undefined, companyId);
-        if (!mounted) {
-          return;
-        }
-        setLogs(payload);
-        setLogsState("success");
-      } catch (loadError) {
-        if (!mounted) {
-          return;
-        }
-        setLogs(null);
-        setLogsState("error");
-        setLogsError(loadError instanceof Error ? loadError.message : "Logs surface loading failed.");
-      }
-    };
-
-    void load();
-    return () => {
-      mounted = false;
-    };
-  }, [companyId, instanceId]);
-
-  useEffect(() => {
-    let mounted = true;
-
-    if (!canReadAudit) {
-      setHistory(null);
-      setHistoryError(null);
-      setHistoryState("idle");
-      return () => {
-        mounted = false;
-      };
-    }
-
-    const load = async () => {
-      setHistoryState("loading");
-      setHistoryError(null);
-      try {
-        const payload = await fetchAuditHistory(scopedHistoryQuery({
-          instanceId,
-          companyId,
-          window: auditWindow,
-          action: auditAction,
-          actor: auditActor,
-          targetType: auditTargetType,
-          targetId: auditTargetId,
-          status: auditStatus,
-          limit: HISTORY_LIMIT,
-        }));
-        if (!mounted) {
-          return;
-        }
-        setHistory(payload);
-        setHistoryState("success");
-      } catch (loadError) {
-        if (!mounted) {
-          return;
-        }
-        setHistory(null);
-        setHistoryState("error");
-        setHistoryError(loadError instanceof Error ? loadError.message : "Audit history loading failed.");
-      }
-    };
-
-    void load();
-    return () => {
-      mounted = false;
-    };
-  }, [auditAction, auditActor, auditStatus, auditTargetId, auditTargetType, auditWindow, canReadAudit, companyId, instanceId]);
-
-  useEffect(() => {
-    let mounted = true;
-
-    if (!canReadAudit || !auditEventId) {
-      setDetail(null);
-      setDetailState("idle");
-      setDetailError(null);
-      return () => {
-        mounted = false;
-      };
-    }
-
-    setDetailState("loading");
-    setDetailError(null);
-    void fetchAuditHistoryDetail(auditEventId, instanceId, undefined, companyId)
-      .then((payload) => {
-        if (!mounted) {
-          return;
-        }
-        setDetail(payload);
-        setDetailState("success");
-      })
-      .catch((loadError) => {
-        if (!mounted) {
-          return;
-        }
-        setDetail(null);
-        setDetailState("error");
-        setDetailError(loadError instanceof Error ? loadError.message : "Audit detail loading failed.");
-      });
-
-    return () => {
-      mounted = false;
-    };
-  }, [auditEventId, canReadAudit, companyId, instanceId]);
-
-  const exportLimitNumber = useMemo(() => {
-    const parsed = Number(exportLimit);
-    return Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : EXPORT_DEFAULT_LIMIT;
-  }, [exportLimit]);
-
-  const exportPath = buildAuditHashPath("audit-export", {
-    instanceId,
-    companyId,
-    window: auditWindow,
-    action: auditAction,
-    actor: auditActor,
-    status: auditStatus,
-    targetType: auditTargetType,
-    targetId: auditTargetId,
-  });
-  const historyPath = buildAuditHashPath("audit-history", {
-    instanceId,
-    companyId,
-    window: auditWindow,
-    action: auditAction,
-    actor: auditActor,
-    status: auditStatus,
-    targetType: auditTargetType,
-    targetId: auditTargetId,
-  });
-
-  const handleExport = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    if (!canGenerateExport) {
-      return;
-    }
-    setExportState("loading");
-    setExportError(null);
-    setExportCorrection(null);
-    try {
-      const payload = await generateAuditExport({
-        format: exportFormat,
-        window: exportWindow,
-        action: exportAction.trim() ? exportAction.trim() : null,
-        actor: exportActor.trim() ? exportActor.trim() : null,
-        status: exportStatus || null,
-        includeRawDetails,
-        limit: exportLimitNumber,
-      }, instanceId, undefined, companyId);
-      setExportResult(payload);
-      setLastExportSummary({
-        window: exportWindow,
-        action: exportAction,
-        actor: exportActor,
-        status: exportStatus,
-        includeRawDetails,
-        limit: exportLimitNumber,
-      });
-      setExportState("success");
-    } catch (loadError) {
-      const guidance = exportFailureGuidance(loadError);
-      setExportState("error");
-      setExportError(guidance.cause);
-      setExportCorrection(guidance.correction);
-    }
-  };
-
-  const downloadLatestExport = () => {
-    if (!exportResult?.blob || typeof window === "undefined" || typeof URL.createObjectURL !== "function") {
-      setExportState("error");
-      setExportError("Latest export download is unsupported in this browser context.");
-      return;
-    }
-
-    const objectUrl = URL.createObjectURL(exportResult.blob);
-    const anchor = document.createElement("a");
-    anchor.href = objectUrl;
-    anchor.download = exportResult.filename;
-    anchor.click();
-    window.setTimeout(() => URL.revokeObjectURL(objectUrl), 0);
-  };
-
-  const openDetail = (eventId: string) => {
-    updateAuditParam("auditEvent", eventId);
-  };
-
-  const exportEventPath = exportResult
-    ? buildAuditHashPath("audit-history", {
-        instanceId,
-        companyId,
-        window: "all",
-        action: "audit_export_generated",
-        actor: auditActor,
-        targetType: "audit_export",
-        targetId: exportResult.exportId,
-      })
-    : "";
+  const hasMorePages = history?.page.hasMore ?? false;
 
   return (
     <section className="fg-page">
       <PageIntro
         eyebrow="Operations"
         title="Errors, Activity, and Audit History"
-        description="Operational signal, audit preview, retention posture, and observability checks for the active instance scope."
-        question="What evidence is available for this scope, and is the logging path healthy?"
+        description="Operational signal, error review, governance events, and observability checks for the active instance scope."
+        question="Is there an active issue, and what needs attention right now?"
         badges={[
           { label: selectedInstance ? `Instance scope: ${selectedInstance.display_name}` : "Default instance path", tone: selectedInstance ? "success" : "neutral" },
           { label: logs?.operability.ready ? "Logging ready" : "Logging not ready", tone: logs?.operability.ready ? "success" : "warning" },
           ...(canReadAudit ? [] : [{ label: "Viewer read-only", tone: "warning" as const }]),
         ]}
-        note="This page uses the admin logs endpoint directly and keeps audit export linked from the same evidence workflow."
+        note="Errors, activity, audit, and diagnostics are separated into clear tabs. Raw payloads are hidden by default."
       />
 
       <InstanceScopeCard
         instanceId={instanceId}
         selectedInstance={selectedInstance}
         instances={instances}
-        loadState={loadState}
+        loadState={instancesLoadState}
         error={instancesError}
         surfaceLabel="logs and audit evidence"
         onInstanceChange={onInstanceChange}
       />
-      <ActionBar
-        title="Evidence handoffs"
-        description="Export stays on this route with a separate audit export workflow."
-      >
-        <div className="fg-actions">
-          <Link className="fg-nav-link" to={withInstanceScope(CONTROL_PLANE_ROUTES.errors, instanceId)}>Errors</Link>
-          <Link className="fg-nav-link" to={withInstanceScope(CONTROL_PLANE_ROUTES.health, instanceId)}>Health</Link>
-          <Link className="fg-nav-link" to={historyPath}>Audit History</Link>
-          <Link className="fg-nav-link" to={exportPath}>Audit export</Link>
-        </div>
-      </ActionBar>
 
-      {logsState === "loading" ? (
-        <LoadingState
-          title="Loading logs evidence."
-          description="ForgeFrame is restoring runtime signals, audit preview, and operability posture."
-        />
-      ) : null}
-      {logsError ? (
-        <ErrorState
-          title="Logs surface loading failed"
-          description={logsError}
-        />
-      ) : null}
+      {/* Action links */}
+      <div className="fg-actions fg-mb-md">
+        <Link className="fg-nav-link" to={withInstanceScope(CONTROL_PLANE_ROUTES.errors, instanceId)}>
+          Incident Review
+        </Link>
+        <Link className="fg-nav-link" to={withInstanceScope(CONTROL_PLANE_ROUTES.health, instanceId)}>
+          Health
+        </Link>
+      </div>
 
-      {logs ? (
-        <>
-          <SummaryStrip
-            items={[
-              {
-                key: "audit-preview",
-                label: "Audit preview",
-                value: logs.audit_preview.length,
-                meta: "Latest governance events available for the selected scope.",
-              },
-              {
-                key: "retention-limit",
-                label: "Retention limit",
-                value: String(logs.audit_retention.eventLimit),
-                meta: logs.audit_retention.retentionLimited ? "Retention limited" : "Full retention window available",
-                status: logs.audit_retention.retentionLimited ? "partial" : "ready",
-              },
-              {
-                key: "operability",
-                label: "Operability",
-                value: logs.operability.ready ? "ready" : "review",
-                meta: "Logging and tracing signal-path checks.",
-                status: logs.operability.ready ? "ready" : "degraded",
-              },
-              {
-                key: "alerts",
-                label: "Alerts",
-                value: logs.alerts.length,
-                meta: logs.alerts.length > 0 ? "Current alert pressure detected." : "No active alerts.",
-                status: logs.alerts.length > 0 ? "degraded" : "ready",
-              },
-            ]}
-          />
+      {/* Operational summary hero — always visible */}
+      <LogsSummaryHero
+        counts={summaryCounts}
+        loading={logsLoadState === "loading"}
+      />
 
-          <div className="fg-grid">
-            <EntityTable
-              title="Audit Preview"
-              description="Latest governance events available for the selected scope."
-              actions={<Link className="fg-nav-link" to={historyPath}>Open Audit History</Link>}
-              tableLabel="Audit preview"
-              columns={[
-                { key: "createdAt", header: "Created", render: (item) => item.createdAt },
-                { key: "actionLabel", header: "Action", render: (item) => item.actionLabel },
-                { key: "statusLabel", header: "Status", render: (item) => item.statusLabel },
-                { key: "summary", header: "Summary", render: (item) => item.summary },
-              ]}
-              rows={logs.audit_preview.slice(0, 8)}
-              rowKey={(item) => item.eventId}
-              emptyTitle="No audit events available."
-              emptyDescription="The logs endpoint is not returning previewable governance events for this scope."
-            />
-
-          <article className="fg-card">
-            <div className="fg-panel-heading">
-              <div>
-                <h3>Retention</h3>
-                <p className="fg-muted">Audit availability and retention guardrails.</p>
-              </div>
-            </div>
-            <ul className="fg-list">
-              <li>Event limit: {String(logs.audit_retention.eventLimit)}</li>
-              <li>Retention limited: {String(logs.audit_retention.retentionLimited)}</li>
-              <li>Oldest available: {stringifyValue(logs.audit_retention.oldestAvailableAt)}</li>
-              <li>Latest event: {stringifyValue(logs.audit_retention.latestEventAt)}</li>
-            </ul>
-            <Link className="fg-nav-link" to={exportPath}>
-              Open Audit Export
-            </Link>
-          </article>
-
-          <article className="fg-card">
-            <div className="fg-panel-heading">
-              <div>
-                <h3>Operability Checks</h3>
-                <p className="fg-muted">Logging and tracing signal-path checks.</p>
-              </div>
-              <span className="fg-pill" data-tone={logs.operability.ready ? "success" : "warning"}>
-                {logs.operability.ready ? "ready" : "review"}
-              </span>
-            </div>
-            <ul className="fg-list">
-              {logs.operability.checks.map((check, index) => (
-                <li key={`${stringifyValue(check.id)}-${index}`}>
-                  {stringifyValue(check.id)} - ok={stringifyValue(check.ok)} - {stringifyValue(check.details)}
-                </li>
-              ))}
-            </ul>
-          </article>
-
-          <article className="fg-card">
-            <div className="fg-panel-heading">
-              <div>
-                <h3>Alerts & Metrics</h3>
-                <p className="fg-muted">Current alert and observability summary from the logs endpoint.</p>
-              </div>
-            </div>
-            <ul className="fg-list">
-              {logs.alerts.length === 0 ? <li>No active alerts.</li> : null}
-              {logs.alerts.map((alert, index) => (
-                <li key={`${stringifyValue(alert.type)}-${index}`}>
-                  {stringifyValue(alert.severity)} - {stringifyValue(alert.type)} - {stringifyValue(alert.message)}
-                </li>
-              ))}
-            </ul>
-            <pre>{JSON.stringify({ metrics: logs.operability.metrics, logging: logs.operability.logging, tracing: logs.operability.tracing }, null, 2)}</pre>
-          </article>
-          </div>
-        </>
-      ) : null}
-
-      <article
-        id="audit-export"
-        ref={auditExportRef}
-        tabIndex={-1}
-        className={`fg-card${location.hash === AUDIT_EXPORT_HASH ? " is-anchor-target" : ""}`}
-      >
-        <div className="fg-panel-heading">
-          <div>
-            <h3>Audit export</h3>
-            <p className="fg-muted">Build a downloadable evidence package. History review stays separate and does not silently become an export.</p>
-          </div>
-          <Link className="fg-nav-link" to={historyPath}>Open Audit History</Link>
-        </div>
-        {!canReadAudit ? (
-          <p className="fg-muted">Viewer sessions cannot open audit history or generate exports. Open a standard operator or admin session.</p>
-        ) : null}
-        <form className="fg-inline-form" onSubmit={(event) => void handleExport(event)}>
-          <label>
-            Instance
-            <input value={selectedInstance?.display_name ?? "Default instance path"} readOnly disabled />
-          </label>
-          <label>
-            Window
-            <select value={exportWindow} onChange={(event) => setExportWindow(event.target.value as AuditExportWindow)}>
-              {HISTORY_WINDOWS.map((window) => <option key={window} value={window}>{window}</option>)}
-            </select>
-          </label>
-          <label>
-            Actor
-            <input
-              value={exportActor}
-              onChange={(event) => setExportActor(event.target.value)}
-              onInput={(event) => setExportActor(event.currentTarget.value)}
-              placeholder="Optional actor filter"
-            />
-          </label>
-          <label>
-            Action
-            <select value={exportAction} onChange={(event) => setExportAction(event.target.value)}>
-              <option value="">Any action</option>
-              {(history?.filters.available.actions ?? []).map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
-            </select>
-          </label>
-          <label>
-            Outcome
-            <select value={exportStatus} onChange={(event) => setExportStatus(event.target.value as AuditHistoryStatus | "")}>
-              <option value="">Any outcome</option>
-              {STATUS_OPTIONS.map((status) => <option key={status} value={status}>{optionLabel(status, history?.filters.available.statuses ?? [])}</option>)}
-            </select>
-          </label>
-          <label>
-            Format
-            <select value={exportFormat} onChange={(event) => setExportFormat(event.target.value as AuditExportFormat)}>
-              {EXPORT_FORMATS.map((format) => <option key={format} value={format}>{format.toUpperCase()}</option>)}
-            </select>
-          </label>
-          <label>
-            Include raw details
-            <select value={includeRawDetails ? "include" : "exclude"} onChange={(event) => setIncludeRawDetails(event.target.value === "include")}>
-              <option value="exclude">Exclude raw metadata</option>
-              <option value="include">Include redacted raw metadata</option>
-            </select>
-          </label>
-          <label>
-            Limit
-            <input
-              type="number"
-              min="1"
-              value={exportLimit}
-              onChange={(event) => setExportLimit(event.target.value)}
-              onInput={(event) => setExportLimit(event.currentTarget.value)}
-            />
-          </label>
-          <button type="submit" disabled={!canGenerateExport || exportState === "loading"}>
-            {exportState === "loading" ? "Generating export" : `Generate ${exportFormat.toUpperCase()} export`}
+      {/* Tab navigation */}
+      <nav className="ff-logs-tabs" role="tablist" aria-label="Logs review sections">
+        {TABS.map((tab) => (
+          <button
+            key={tab.key}
+            role="tab"
+            type="button"
+            className="ff-logs-tab"
+            aria-selected={activeTab === tab.key}
+            onClick={() => onTabChange(tab.key)}
+          >
+            {tab.label}
           </button>
-        </form>
-        <p className="fg-muted fg-mt-sm">
-          Package scope: {exportPackageLabel({
-            instanceName: selectedInstance?.display_name ?? null,
-            window: exportWindow,
-            action: exportAction,
-            actor: exportActor,
-            status: exportStatus,
-            includeRawDetails,
-            limit: exportLimitNumber,
-          })}
-        </p>
-        {exportState === "error" ? (
-          <article className="fg-subcard fg-mt-md">
-            <h4 className="fg-danger">Export could not be generated</h4>
-            <p><strong>Cause:</strong> {exportError}</p>
-            <p><strong>How to fix:</strong> {exportCorrection}</p>
-          </article>
-        ) : null}
-        {exportResult ? (
-          <article className="fg-subcard fg-mt-md">
-            <h4>Latest exported package</h4>
-            <ul className="fg-list">
-              <li>Filename: {exportResult.filename}</li>
-              <li>Artifact ID: {exportResult.exportId}</li>
-              <li>Rows exported: {exportResult.rowCount}</li>
-              <li>Package size: {formatBytes(exportResult.sizeBytes)}</li>
-              <li>Generated at: {stringifyValue(exportResult.generatedAt)}</li>
-              {lastExportSummary ? <li>Window: {lastExportSummary.window}</li> : null}
-              {lastExportSummary?.action.trim() ? <li>Action filter: {lastExportSummary.action.trim()}</li> : null}
-              {lastExportSummary?.actor.trim() ? <li>Actor filter: {lastExportSummary.actor.trim()}</li> : null}
-              {lastExportSummary?.status ? <li>Outcome filter: {lastExportSummary.status}</li> : null}
-              {lastExportSummary ? <li>{lastExportSummary.includeRawDetails ? "Redacted raw metadata included" : "Raw metadata excluded"}</li> : null}
-            </ul>
-            <div className="fg-actions fg-mt-sm">
-              <Link className="fg-nav-link" to={exportEventPath}>Open export audit event</Link>
-              <button className="fg-nav-link" type="button" onClick={downloadLatestExport}>
-                Download latest export again
-              </button>
-            </div>
-          </article>
-        ) : null}
-      </article>
+        ))}
+      </nav>
 
-      <article
-        id="audit-history"
-        ref={auditHistoryRef}
-        tabIndex={-1}
-        className={`fg-card${location.hash === AUDIT_HISTORY_HASH ? " is-anchor-target" : ""}`}
-      >
-        <div className="fg-panel-heading">
-          <div>
-            <h3>Audit history</h3>
-            <p className="fg-muted">Use this as a focused evidence search surface. Filters stay URL-backed, detail stays separate, and raw payloads remain collapsible.</p>
-          </div>
-          <Link className="fg-nav-link" to={exportPath}>Open Audit Export</Link>
-        </div>
+      {/* Active tab content */}
+      <div role="tabpanel" className="fg-mt-md">
+        {logsLoadState === "loading" && activeTab !== "audit" ? (
+          <LoadingState title="Loading logs data." description="ForgeFrame is restoring operational signals." />
+        ) : null}
 
-        {!canReadAudit ? (
-          <PermissionState
-            title="Audit history is permission-limited"
-            description="Audit history and detail require a standard operator or admin session. Viewer sessions stay on the logs overview only."
+        {logsError && activeTab !== "audit" ? (
+          <ErrorState title="Logs loading failed" description={logsError} />
+        ) : null}
+
+        {activeTab === "errors" ? (
+          <ErrorReviewPanel
+            logs={logs}
+            loading={logsLoadState === "loading"}
+            error={logsError}
+            instanceId={instanceId}
+            companyId={companyId}
+            canReadAudit={canReadAudit}
           />
-        ) : (
+        ) : null}
+
+        {activeTab === "activity" ? (
+          <ActivityPanel
+            logs={logs}
+            loading={logsLoadState === "loading"}
+            error={logsError}
+            detail={detail}
+            detailLoading={detailLoadState === "loading"}
+            onSelectEvent={onSelectEvent}
+            instanceId={instanceId}
+            companyId={companyId}
+            canReadAudit={canReadAudit}
+          />
+        ) : null}
+
+        {activeTab === "audit" ? (
           <>
-            <div className="fg-inline-form">
-              <label>
-                Window
-                <select value={auditWindow} onChange={(event) => updateAuditParam("auditWindow", event.target.value)}>
-                  {HISTORY_WINDOWS.map((window) => <option key={window} value={window}>{window}</option>)}
-                </select>
-              </label>
-              <label>
-                Action
-                <select value={auditAction ?? ""} onChange={(event) => updateAuditParam("auditAction", event.target.value || null)}>
-                  <option value="">Any action</option>
-                  {(history?.filters.available.actions ?? []).map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
-                </select>
-              </label>
-              <label>
-                Target type
-                <select value={auditTargetType ?? ""} onChange={(event) => updateAuditParam("auditTargetType", event.target.value || null)}>
-                  <option value="">Any target</option>
-                  {(history?.filters.available.targetTypes ?? []).map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
-                </select>
-              </label>
-              <label>
-                Outcome
-                <select value={auditStatus ?? ""} onChange={(event) => updateAuditParam("auditStatus", event.target.value || null)}>
-                  <option value="">Any outcome</option>
-                  {STATUS_OPTIONS.map((status) => <option key={status} value={status}>{optionLabel(status, history?.filters.available.statuses ?? [])}</option>)}
-                </select>
-              </label>
-              <label>
-                Actor
-                <input value={auditActor ?? ""} placeholder="Search actor" onChange={(event) => updateAuditParam("auditActor", event.target.value || null)} />
-              </label>
-              <label>
-                Target
-                <input
-                  value={auditTargetId ?? ""}
-                  placeholder="Search target or correlation"
-                  onChange={(event) => updateAuditParam("auditTargetId", event.target.value || null)}
-                />
-              </label>
-            </div>
-
-            {historyState === "loading" ? <p className="fg-muted">Loading audit history.</p> : null}
-            {historyError ? <p className="fg-danger">{historyError}</p> : null}
-
-            {history ? (
-              <>
-                <p className="fg-muted fg-mt-sm">
-                  Showing {history.items.length} event{history.items.length === 1 ? "" : "s"} from {history.summary.totalMatchingFilters} matching result
-                  {history.summary.totalMatchingFilters === 1 ? "" : "s"} in {history.summary.totalInScope} in-scope event
-                  {history.summary.totalInScope === 1 ? "" : "s"}.
-                </p>
-                {history.items.length === 0 && history.summary.totalInScope === 0 ? (
-                  <article className="fg-subcard fg-mt-md">
-                    <h4>No audit evidence yet</h4>
-                    <p className="fg-muted">No audit evidence was recorded in the selected window.</p>
-                  </article>
-                ) : null}
-                {history.items.length === 0 && history.summary.totalInScope > 0 ? (
-                  <article className="fg-subcard fg-mt-md">
-                    <h4>No results for the current filters.</h4>
-                    <p className="fg-muted">The current scope contains audit evidence, but the selected filters exclude it.</p>
-                  </article>
-                ) : null}
-                {history.items.length > 0 ? (
-                  <div className="fg-table-wrap fg-mt-md">
-                    <table className="fg-table">
-                      <thead>
-                        <tr>
-                          <th>Actor</th>
-                          <th>Action</th>
-                          <th>Target</th>
-                          <th>Outcome</th>
-                          <th>Correlation</th>
-                          <th>Timestamp</th>
-                          <th>Detail</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {history.items.map((item) => (
-                          <tr key={item.eventId}>
-                            <td>
-                              {item.actor.label}
-                              {item.actor.secondary ? <div className="fg-muted">{item.actor.secondary}</div> : null}
-                            </td>
-                            <td>
-                              {item.actionLabel}
-                              <div className="fg-muted">{item.actionKey}</div>
-                            </td>
-                            <td>
-                              {item.target.label}
-                              <div className="fg-muted">{item.target.typeLabel}{item.target.secondary ? ` · ${item.target.secondary}` : ""}</div>
-                            </td>
-                            <td><span className="fg-pill" data-tone={item.status === "ok" ? "success" : item.status === "warning" ? "warning" : "danger"}>{item.statusLabel}</span></td>
-                            <td>
-                              {item.correlation ? (
-                                <>
-                                  {item.correlation.value}
-                                  <div className="fg-muted">{item.correlation.label}</div>
-                                </>
-                              ) : (
-                                <span className="fg-muted">n/a</span>
-                              )}
-                            </td>
-                            <td>{item.createdAt}</td>
-                            <td>
-                              <button className="fg-table-trigger" type="button" onClick={() => openDetail(item.eventId)} disabled={!item.detailAvailable}>
-                                Open detail
-                              </button>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                ) : null}
-              </>
-            ) : null}
+            {showExport ? (
+              <AuditExportForm
+                instanceId={instanceId}
+                companyId={companyId}
+                instanceName={selectedInstance?.display_name ?? null}
+                canGenerateExport={canGenerateExport}
+                history={history}
+                defaultWindow={auditWindow}
+                defaultAction={auditAction}
+                defaultActor={auditActor}
+                defaultStatus={auditStatus}
+              />
+            ) : (
+              <AuditHistoryPanel
+                history={history}
+                loading={historyLoadState === "loading"}
+                error={historyError}
+                detail={detail}
+                detailLoading={detailLoadState === "loading"}
+                activePreset={activePreset}
+                onPresetChange={onPresetChange}
+                onSelectEvent={onSelectEvent}
+                onCloseDetail={onCloseDetail}
+                hasMore={hasMorePages}
+                onLoadMore={onLoadMore}
+                instanceId={instanceId}
+                companyId={companyId}
+                canReadAudit={canReadAudit}
+              />
+            )}
           </>
-        )}
-      </article>
+        ) : null}
 
-      {detailState === "loading" ? (
-        <LoadingState
-          title="Loading audit detail."
-          description="ForgeFrame is restoring the selected audit event context."
-        />
-      ) : null}
-      {detailError ? (
-        <ErrorState
-          title="Audit detail loading failed"
-          description={detailError}
-        />
-      ) : null}
-      {detail ? (
-        <>
-          <DetailPanel
-            title={detail.event.actionLabel}
-            description={detail.summary}
-            status={detail.outcome}
-            statusKey={detail.event.status === "ok" ? "ready" : detail.event.status === "warning" ? "degraded" : "blocked"}
-            sticky
+        {activeTab === "diagnostics" ? (
+          <DiagnosticsPanel
+            logs={logs}
+            loading={logsLoadState === "loading"}
+            error={logsError}
+            instanceId={instanceId}
+            companyId={companyId}
+            canReadAudit={canReadAudit}
+          />
+        ) : null}
+      </div>
+
+      {/* Anchor for audit-export deep link on audit tab */}
+      {activeTab === "audit" && !showExport ? (
+        <div className="fg-actions fg-mt-md">
+          <Link
+            className="fg-nav-link"
+            to={{ ...location, hash: "#audit-export" }}
           >
-            <h4>Short interpretation</h4>
-            <p>{detail.summary}</p>
-            <dl>
-              <div>
-                <dt>Actor</dt>
-                <dd>{detail.actor.label}{detail.actor.secondary ? ` · ${detail.actor.secondary}` : ""}</dd>
-              </div>
-              <div>
-                <dt>Target</dt>
-                <dd>{detail.target.label}{detail.target.secondary ? ` · ${detail.target.secondary}` : ""}</dd>
-              </div>
-              <div>
-                <dt>Outcome</dt>
-                <dd>{detail.outcome}</dd>
-              </div>
-              <div>
-                <dt>Correlation</dt>
-                <dd>{detail.correlation ? `${detail.correlation.label}: ${detail.correlation.value}` : "n/a"}</dd>
-              </div>
-              <div>
-                <dt>Timestamp</dt>
-                <dd>{detail.event.createdAt}</dd>
-              </div>
-            </dl>
-            <h4>Change context</h4>
-            <ul className="fg-list">
-              {detail.changeContext.length === 0 ? <li>{detail.changeContextUnavailable ? "Change context unavailable." : "No change context recorded."}</li> : null}
-              {detail.changeContext.map((item) => <li key={item.label}>{item.label}: {item.value}</li>)}
-            </ul>
-            <h4>Related links</h4>
-            <ul className="fg-list">
-              {detail.relatedLinks.map((link) => (
-                <li key={`${link.label}-${link.href}`}>
-                  <Link to={withInstanceScope(link.href, instanceId)}>{link.label}</Link>
-                </li>
-              ))}
-            </ul>
-          </DetailPanel>
-          <AdvancedDiagnostics
-            title="Raw metadata"
-            description="Underlying audit event payload for troubleshooting and export verification."
-            status={detail.event.status === "ok" ? "ready" : detail.event.status === "warning" ? "degraded" : "blocked"}
-            statusKey={detail.event.status === "ok" ? "ready" : detail.event.status === "warning" ? "degraded" : "blocked"}
-          >
-            <pre>{JSON.stringify(detail.rawMetadata, null, 2)}</pre>
-          </AdvancedDiagnostics>
-        </>
+            Open Audit Export
+          </Link>
+        </div>
       ) : null}
     </section>
   );

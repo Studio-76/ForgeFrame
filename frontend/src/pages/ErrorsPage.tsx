@@ -1,3 +1,14 @@
+/**
+ * Errors & Incident Review page.
+ *
+ * Triage surface for incident axes sorted by severity, blocked routing
+ * failures, alerts, and signal-path evidence. Raw payloads are hidden
+ * behind expandable sections. An operational summary hero at the top
+ * gives operators immediate visibility into active risk.
+ *
+ * @packageDocumentation
+ */
+
 import { useEffect, useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 
@@ -219,7 +230,7 @@ export function ErrorsPage() {
   const instanceId = getInstanceIdFromSearchParams(searchParams);
   const { instances, loadState, error: instancesError, selectedInstance } = useInstanceCatalog(instanceId);
   const [state, setState] = useState<LoadState>("idle");
-  const [error, setError] = useState<string | null>(null);
+  const [fetchError, setFetchError] = useState<string | null>(null);
   const [overview, setOverview] = useState<LogsResponse | null>(null);
   const [selection, setSelection] = useState<DetailSelection | null>(null);
 
@@ -237,7 +248,7 @@ export function ErrorsPage() {
     let mounted = true;
     const load = async () => {
       setState("loading");
-      setError(null);
+      setFetchError(null);
       try {
         const payload = await fetchLogs(instanceId);
         if (!mounted) {
@@ -251,7 +262,7 @@ export function ErrorsPage() {
         }
         setOverview(null);
         setState("error");
-        setError(loadError instanceof Error ? loadError.message : "Error surface loading failed.");
+        setFetchError(loadError instanceof Error ? loadError.message : "Error surface loading failed.");
       }
     };
 
@@ -447,7 +458,7 @@ export function ErrorsPage() {
       {state === "error" ? (
         <ErrorState
           title="Error surface loading failed"
-          description={error ?? "Incident review could not be loaded."}
+          description={fetchError ?? "Incident review could not be loaded."}
         />
       ) : null}
 
@@ -596,7 +607,7 @@ export function ErrorsPage() {
                       {activeAlerts.length === 0 ? <li>No active alert is visible.</li> : null}
                       {activeAlerts.map((alert, index) => (
                         <li key={`${stringifyValue(alert.type)}-${index}`}>
-                          {stringifyValue(alert.severity)} · {stringifyValue(alert.type)} · {stringifyValue(alert.message)}
+                          {stringifyValue(alert.severity)} &middot; {stringifyValue(alert.type)} &middot; {stringifyValue(alert.message)}
                         </li>
                       ))}
                     </ul>
@@ -607,7 +618,7 @@ export function ErrorsPage() {
                     <ul className="fg-list">
                       {(overview.operability.checks ?? []).map((check, index) => (
                         <li key={`${stringifyValue(check.id)}-${index}`}>
-                          {stringifyValue(check.id)} · ok={stringifyValue(check.ok)} · {stringifyValue(check.details)}
+                          {stringifyValue(check.id)} &middot; ok={stringifyValue(check.ok)} &middot; {stringifyValue(check.details)}
                         </li>
                       ))}
                     </ul>

@@ -1,0 +1,268 @@
+/* ── Logs page (Errors, Activity, Audit, Diagnostics) ──
+ *
+ * GridCN-inspired style: thin borders, compact labels, corner brackets,
+ * status-driven tones, without introducing neon or black backgrounds.
+ * Builds on the existing ForgeFrame design tokens.
+ */
+
+/* ── Summary hero ── */
+
+.ff-logs-hero {
+  margin-bottom: var(--fg-space-4);
+}
+
+.ff-logs-hero-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: var(--fg-space-3);
+}
+
+.ff-logs-hero-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: var(--fg-space-1);
+  padding: var(--fg-space-3);
+  background: var(--fg-color-surface-default);
+  border: 1px solid var(--fg-color-border-default);
+  border-radius: var(--fg-radius-md);
+  overflow: hidden;
+  transition: border-color var(--fg-motion-fast) var(--fg-ease-standard);
+}
+
+.ff-logs-hero-card:hover {
+  border-color: var(--fg-color-action-primary);
+}
+
+.ff-logs-hero-card[data-tone="danger"] {
+  border-color: var(--fg-color-status-danger-border);
+}
+
+.ff-logs-hero-card[data-tone="warning"] {
+  border-color: var(--fg-color-status-warning-border);
+}
+
+.ff-logs-hero-card[data-tone="success"] {
+  border-color: var(--fg-color-status-success-border);
+}
+
+.ff-logs-hero-label {
+  font-size: var(--fg-type-size-meta);
+  color: var(--fg-color-text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-weight: 500;
+}
+
+.ff-logs-hero-value {
+  font-size: var(--fg-type-size-kpi);
+  font-weight: 700;
+  color: var(--fg-color-text-primary);
+  line-height: var(--fg-type-line-tight);
+}
+
+.ff-logs-hero-card[data-tone="danger"] .ff-logs-hero-value {
+  color: var(--fg-color-status-danger);
+}
+
+.ff-logs-hero-card[data-tone="warning"] .ff-logs-hero-value {
+  color: var(--fg-color-status-warning);
+}
+
+.ff-logs-hero-card[data-tone="success"] .ff-logs-hero-value {
+  color: var(--fg-color-status-success);
+}
+
+.ff-logs-hero-meta {
+  font-size: var(--fg-type-size-meta);
+  color: var(--fg-color-text-secondary);
+  line-height: var(--fg-type-line-body);
+}
+
+/* Corner brackets (GridCN-inspired) */
+.ff-logs-hero-corner {
+  position: absolute;
+  width: 8px;
+  height: 8px;
+  opacity: 0.4;
+  transition: opacity var(--fg-motion-fast) var(--fg-ease-standard);
+}
+
+.ff-logs-hero-card:hover .ff-logs-hero-corner {
+  opacity: 0.7;
+}
+
+.ff-logs-hero-corner.tl {
+  top: 0;
+  left: 0;
+  border-top: 1.5px solid var(--fg-color-action-primary);
+  border-left: 1.5px solid var(--fg-color-action-primary);
+}
+
+.ff-logs-hero-corner.tr {
+  top: 0;
+  right: 0;
+  border-top: 1.5px solid var(--fg-color-action-primary);
+  border-right: 1.5px solid var(--fg-color-action-primary);
+}
+
+.ff-logs-hero-corner.bl {
+  bottom: 0;
+  left: 0;
+  border-bottom: 1.5px solid var(--fg-color-action-primary);
+  border-left: 1.5px solid var(--fg-color-action-primary);
+}
+
+.ff-logs-hero-corner.br {
+  bottom: 0;
+  right: 0;
+  border-bottom: 1.5px solid var(--fg-color-action-primary);
+  border-right: 1.5px solid var(--fg-color-action-primary);
+}
+
+/* Bottom accent line */
+.ff-logs-hero-accent {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 1.5px;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    var(--fg-color-action-primary) 20%,
+    var(--fg-color-action-primary) 80%,
+    transparent
+  );
+  opacity: 0;
+  transition: opacity var(--fg-motion-fast) var(--fg-ease-standard);
+}
+
+.ff-logs-hero-card:hover .ff-logs-hero-accent {
+  opacity: 0.5;
+}
+
+/* ── Tab navigation ── */
+
+.ff-logs-tabs {
+  display: flex;
+  gap: 0;
+  border-bottom: 1.5px solid var(--fg-color-border-default);
+  margin-bottom: var(--fg-space-4);
+}
+
+.ff-logs-tab {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  padding: var(--fg-space-3) var(--fg-space-4);
+  font-size: var(--fg-type-size-meta);
+  font-weight: 500;
+  color: var(--fg-color-text-secondary);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  transition: color var(--fg-motion-fast) var(--fg-ease-standard);
+  font-family: var(--fg-font-sans);
+}
+
+.ff-logs-tab:hover {
+  color: var(--fg-color-text-primary);
+}
+
+.ff-logs-tab[aria-selected="true"] {
+  color: var(--fg-color-action-primary);
+}
+
+.ff-logs-tab[aria-selected="true"]::after {
+  content: "";
+  position: absolute;
+  bottom: -1.5px;
+  left: var(--fg-space-4);
+  right: var(--fg-space-4);
+  height: 2px;
+  background: var(--fg-color-action-primary);
+  border-radius: 1px 1px 0 0;
+}
+
+/* ── Filter presets ── */
+
+.ff-filter-presets {
+  display: flex;
+  align-items: center;
+  gap: var(--fg-space-3);
+  margin-bottom: var(--fg-space-3);
+  flex-wrap: wrap;
+}
+
+.ff-filter-presets-label {
+  font-size: var(--fg-type-size-meta);
+  color: var(--fg-color-text-secondary);
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.ff-filter-presets-list {
+  display: flex;
+  gap: var(--fg-space-2);
+  flex-wrap: wrap;
+}
+
+.ff-filter-preset {
+  display: inline-flex;
+  align-items: center;
+  padding: var(--fg-space-1) var(--fg-space-3);
+  font-size: var(--fg-type-size-meta);
+  color: var(--fg-color-text-secondary);
+  background: var(--fg-color-surface-default);
+  border: 1px solid var(--fg-color-border-default);
+  border-radius: var(--fg-radius-pill);
+  cursor: pointer;
+  transition: all var(--fg-motion-fast) var(--fg-ease-standard);
+  font-family: var(--fg-font-sans);
+  white-space: nowrap;
+}
+
+.ff-filter-preset:hover {
+  border-color: var(--fg-color-action-primary);
+  color: var(--fg-color-text-primary);
+}
+
+.ff-filter-preset[data-active="true"] {
+  border-color: var(--fg-color-action-primary);
+  background: var(--fg-color-action-primary-soft);
+  color: var(--fg-color-action-primary);
+}
+
+/* ── Error grid (breakdown) ── */
+
+.ff-logs-error-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: var(--fg-space-3);
+}
+
+.ff-logs-error-total {
+  font-size: var(--fg-type-size-kpi);
+  font-weight: 700;
+  color: var(--fg-color-status-danger);
+}
+
+/* ── Detail layout ── */
+
+.ff-logs-detail-layout {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--fg-space-4);
+  padding: var(--fg-space-4);
+}
+
+@media (max-width: 768px) {
+  .ff-logs-detail-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .ff-logs-hero-grid {
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  }
+}
