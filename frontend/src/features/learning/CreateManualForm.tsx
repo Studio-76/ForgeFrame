@@ -5,9 +5,27 @@
  */
 
 import { useState, type FormEvent } from "react";
-import { TRIGGER_OPTIONS, DECISION_OPTIONS, DECISION_LABELS, MEMORY_KIND_OPTIONS, MEMORY_VISIBILITY_OPTIONS, MEMORY_SENSITIVITY_OPTIONS, MEMORY_TRUST_OPTIONS, SKILL_SCOPE_OPTIONS, DEFAULT_CREATE_FORM } from "./types";
+import {
+  TRIGGER_OPTIONS,
+  DECISION_OPTIONS,
+  DECISION_LABELS,
+  MEMORY_KIND_OPTIONS,
+  MEMORY_VISIBILITY_OPTIONS,
+  MEMORY_SENSITIVITY_OPTIONS,
+  MEMORY_TRUST_OPTIONS,
+  SKILL_SCOPE_OPTIONS,
+  DEFAULT_CREATE_FORM,
+} from "./types";
 import { isMemoryDecision, isSkillDecision } from "./utils";
 import type { UseLearningPageReturn } from "./hooks";
+
+const STEP_LABELS = [
+  "Source",
+  "Summary",
+  "Explanation",
+  "Evidence",
+  "Outcome",
+] as const;
 
 /** Props for CreateManualForm. */
 export interface CreateManualFormProps {
@@ -57,42 +75,58 @@ export function CreateManualForm({
   };
 
   return (
-    <article className="fg-card ff-learning-manual-form">
-      <div className="fg-section-heading">
+    <article className="fg-card ff-learning-manual-form ff-learning-tron-frame">
+      <div className="fg-section-heading ff-learning-manual-header">
         <div>
+          <p className="ff-learning-kicker">Manual learning intake</p>
           <h3>Create manual review item</h3>
           <p className="fg-muted">
-            Use this when operators need to persist a review item that does not
-            already exist from runtime evidence. The main path remains pattern
-            scan and explicit decision review.
+            Capture an operator-supplied learning candidate when runtime
+            evidence did not create one. It still enters the same review queue
+            before memory or skill state changes.
           </p>
         </div>
-        <button type="button" onClick={onClose} aria-label="Close form">
-          Cancel
-        </button>
+        <div className="ff-learning-manual-header-actions">
+          <span className="ff-learning-status-led" data-state="warning">
+            Draft intake
+          </span>
+          <button
+            type="button"
+            className="ff-learning-secondary-action"
+            onClick={onClose}
+            aria-label="Close manual review form"
+          >
+            Cancel
+          </button>
+        </div>
       </div>
 
       {/* Step indicator */}
-      <div className="ff-learning-steps">
-        {["Source", "Summary", "Explanation", "Evidence", "Outcome"].map(
-          (label, index) => (
+      <div className="ff-learning-steps" aria-label="Manual review item steps">
+        {STEP_LABELS.map((label, index) => {
+          const stepNumber = index + 1;
+          const isActive = currentStep === stepNumber;
+          const isDone = stepNumber < currentStep;
+
+          return (
             <div
               key={label}
-              className={`ff-learning-step${currentStep === index + 1 ? " ff-learning-step-active" : ""}${index + 1 < currentStep ? " ff-learning-step-done" : ""}`}
+              className={`ff-learning-step${isActive ? " ff-learning-step-active" : ""}${isDone ? " ff-learning-step-done" : ""}`}
+              aria-current={isActive ? "step" : undefined}
             >
-              <span className="ff-learning-step-num">{index + 1}</span>
+              <span className="ff-learning-step-num">{stepNumber}</span>
               <span className="ff-learning-step-label">{label}</span>
             </div>
-          ),
-        )}
+          );
+        })}
       </div>
 
-      <form className="fg-stack" onSubmit={handleFormSubmit}>
+      <form className="fg-stack ff-learning-manual-stack" onSubmit={handleFormSubmit}>
         {/* Step 1: Source */}
         {currentStep === 1 && (
           <div className="ff-learning-step-content">
             <h4>Step 1: Source</h4>
-            <div className="fg-grid fg-grid-compact">
+            <div className="fg-grid fg-grid-compact ff-learning-form-grid">
               <label>
                 Trigger
                 <select
@@ -146,7 +180,7 @@ export function CreateManualForm({
             {/* Backend identifiers (collapsible advanced) */}
             <details className="ff-learning-advanced">
               <summary>Backend identifiers (optional)</summary>
-              <div className="fg-grid fg-grid-compact">
+              <div className="fg-grid fg-grid-compact ff-learning-form-grid">
                 <label>
                   Agent ID
                   <input
@@ -234,7 +268,7 @@ export function CreateManualForm({
             {isMemoryDecision(createForm.suggestedDecision) && (
               <section className="fg-subcard">
                 <h4>Memory proposal</h4>
-                <div className="fg-grid fg-grid-compact">
+                <div className="fg-grid fg-grid-compact ff-learning-form-grid">
                   <label>
                     Memory kind
                     <select
@@ -290,7 +324,7 @@ export function CreateManualForm({
                     </select>
                   </label>
                 </div>
-                <div className="fg-grid fg-grid-compact">
+                <div className="fg-grid fg-grid-compact ff-learning-form-grid">
                   <label>
                     Source trust
                     <select
@@ -329,7 +363,7 @@ export function CreateManualForm({
                     />
                   </label>
                 </div>
-                <div className="fg-grid fg-grid-compact">
+                <div className="fg-grid fg-grid-compact ff-learning-form-grid">
                   <label>
                     Review date
                     <input
@@ -357,7 +391,7 @@ export function CreateManualForm({
             {isSkillDecision(createForm.suggestedDecision) && (
               <section className="fg-subcard">
                 <h4>Skill draft proposal</h4>
-                <div className="fg-grid fg-grid-compact">
+                <div className="fg-grid fg-grid-compact ff-learning-form-grid">
                   <label>
                     Skill display name
                     <input
@@ -425,7 +459,7 @@ export function CreateManualForm({
           <div className="ff-learning-step-content">
             <h4>Step 5: Review and submit</h4>
             <div className="fg-subcard">
-              <div className="fg-grid fg-grid-compact">
+              <div className="fg-grid fg-grid-compact ff-learning-form-grid">
                 <div>
                   <strong>Trigger</strong>
                   <p>{createForm.triggerKind}</p>
@@ -458,7 +492,7 @@ export function CreateManualForm({
         )}
 
         {/* Navigation buttons */}
-        <div className="fg-actions">
+        <div className="fg-actions ff-learning-manual-footer">
           {currentStep > 1 && (
             <button
               type="button"
