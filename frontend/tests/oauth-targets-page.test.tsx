@@ -262,14 +262,12 @@ describe("OAuth targets page", () => {
       }),
     );
 
-    expect(markup).toContain("OAuth Targets &amp; Operations");
-    expect(markup).toContain("Which OAuth/account target are you classifying, probing, or de-risking right now?");
-    expect(markup).toContain(">OAuth Targets<");
-    expect(markup).toContain(">OAuth Provider Connections</h3>");
+    expect(markup).toContain("OAuth Targets");
+    expect(markup).toContain("Which OAuth target needs credential setup, probing, or review?");
+    expect(markup).toContain(">OAuth Provider Targets</h3>");
     expect(markup).toContain("OpenAI Codex");
-    expect(markup).toContain("Add token manually");
-    expect(markup).toContain("Test connection");
-    expect(markup).toContain("Advanced Diagnostics");
+    expect(markup).toContain("Test");
+    expect(markup).toContain("Route Diagnostics");
   });
 
   it("forwards instance scope from the route into the shared providers hook", () => {
@@ -284,7 +282,7 @@ describe("OAuth targets page", () => {
     expect(mockedUseProvidersControlPlane).toHaveBeenCalledWith(expect.any(Object), "instance_alpha");
   });
 
-  it("preserves instance scope in the dedicated OAuth route links", () => {
+  it("preserves instance scope in the adjacent route links", () => {
     const markup = renderToStaticMarkup(
       withAppContext({
         path: "/oauth-targets?instanceId=instance_alpha",
@@ -293,7 +291,6 @@ describe("OAuth targets page", () => {
       }),
     );
 
-    expect(markup).toContain('href="/oauth-targets?instanceId=instance_alpha"');
     expect(markup).toContain('href="/providers?instanceId=instance_alpha"');
     expect(markup).toContain('href="/harness?instanceId=instance_alpha"');
     expect(markup).toContain('href="/dashboard?instanceId=instance_alpha"');
@@ -317,11 +314,11 @@ describe("OAuth targets page", () => {
     );
 
     expect(alphaMarkup).toContain("Operator mutations enabled");
-    expect(alphaMarkup).toContain("Probe all OAuth targets");
-    expect(alphaMarkup).toContain("Sync OAuth bridge profiles");
+    expect(alphaMarkup).toContain("Probe all targets");
+    expect(alphaMarkup).toContain("Sync bridge profiles");
     expect(betaMarkup).not.toContain("Operator mutations enabled");
-    expect(betaMarkup).toContain("Probe all OAuth targets");
-    expect(betaMarkup).not.toContain("Sync OAuth bridge profiles");
+    expect(betaMarkup).toContain("Probe all targets");
+    expect(betaMarkup).not.toContain("Sync bridge profiles");
     expect(betaMarkup).toContain("Operate only");
   });
 
@@ -336,7 +333,7 @@ describe("OAuth targets page", () => {
 
     expect(markup).toContain("Read access required");
     expect(markup).toContain("the backend will return 403 until providers.read is granted here");
-    expect(markup).not.toContain(">OAuth Provider Connections</h3>");
-    expect(markup).not.toContain("Probe all OAuth targets");
+    expect(markup).not.toContain(">OAuth Provider Targets</h3>");
+    expect(markup).not.toContain("Probe all targets");
   });
 });

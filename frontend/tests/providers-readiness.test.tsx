@@ -569,10 +569,10 @@ describe("Provider readiness axes", () => {
     const markup = renderToStaticMarkup(<ExpansionTargetsSection data={data} actions={createActions()} />);
 
     expect(markup).toContain("GitHub Copilot");
-    expect(markup).toContain("bridge-only");
-    expect(markup).toContain("Next step:");
-    expect(markup).toContain("Advanced Diagnostics");
-    expect(markup).toContain("Probe evidence:");
+    expect(markup).toContain("External token only");
+    expect(markup).toContain("Next step");
+    expect(markup).toContain("Route Diagnostics");
+    expect(markup).toContain("Product Axis Contracts");
   });
 
   it("shows the blocked provider state for viewer sessions without scoped read access", () => {
@@ -596,7 +596,7 @@ describe("Provider readiness axes", () => {
     expect(markup).not.toContain("Create provider");
     expect(markup).not.toContain("Save label");
     expect(markup).not.toContain("Run health checks");
-    expect(markup).not.toContain("Sync OAuth bridge profiles");
+    expect(markup).not.toContain("Sync bridge profiles");
     expect(markup).not.toContain("Probe OAuth target");
   });
 
@@ -643,7 +643,7 @@ describe("Provider readiness axes", () => {
     expect(markup).toContain("Dry-run import");
     expect(markup).toContain("Create provider");
     expect(markup).toContain("Save label");
-    expect(markup).toContain("Sync OAuth bridge profiles");
-    expect(markup).toContain("Test connection");
+    expect(markup).toContain("Sync bridge profiles");
+    expect(markup).toContain("Test");
   });
 });

@@ -1,10 +1,10 @@
+import { useState, useMemo, type ReactNode } from "react";
+
 import { AdvancedDiagnostics } from "../../components/ui/AdvancedDiagnostics";
 import type { ProvidersPageActions, ProvidersPageData } from "./providersShared";
 import { formatMetric, formatTimestamp, toStringValue } from "./providersShared";
 import {
   contractStatusFromOauthConnectionStatus,
-  formatContractClassification,
-  formatOauthActionMode,
   formatOauthConnectionStatus,
   formatOauthProviderName,
   MetricTile,
@@ -21,256 +21,501 @@ type SectionProps = {
   actions: ProvidersPageActions;
 };
 
+type ReadinessState = "configured" | "missing-credentials" | "external-only" | "unsupported" | "planned";
+
+type FilterKey = "all" | "needs-attention" | "configured" | "external-only" | "unsupported-planned";
+
+const FILTER_OPTIONS: Array<{ key: FilterKey; label: string }> = [
+  { key: "all", label: "All" },
+  { key: "needs-attention", label: "Needs attention" },
+  { key: "configured", label: "Configured" },
+  { key: "external-only", label: "External-only" },
+  { key: "unsupported-planned", label: "Unsupported/Planned" },
+];
+
 /**
- * OAuth targets section displaying provider connections with runtime-ready,
- * bridge-only, and attention statuses. Includes per-target actions like
- * probe and bridge sync, plus route diagnostics and operations history.
+ * Derive a simplified readiness state from the raw connection status,
+ * contract classification, and missing credentials.
+ */
+function deriveReadinessState(target: ProvidersPageData["oauthTargets"][number]): ReadinessState {
+  const status = target.connection_status;
+  const missingCount = target.setup.missing_env_vars.length;
+  const classification = target.contract_classification;
+
+  if (status === "runtime-ready") {
+    return "configured";
+  }
+  if (status === "oauth unsupported") {
+    return "unsupported";
+  }
+  if (status === "bridge-only") {
+    return "external-only";
+  }
+  if (status === "token present") {
+    if (missingCount > 0) {
+      return "missing-credentials";
+    }
+    return "external-only";
+  }
+  if (status === "not configured") {
+    if (classification === "onboarding-only") {
+      return "planned";
+    }
+    return "missing-credentials";
+  }
+  // probe failed, expired, needs refresh
+  if (missingCount > 0 || status === "probe failed" || status === "expired" || status === "needs refresh") {
+    return "missing-credentials";
+  }
+  return "planned";
+}
+
+function toneFromReadiness(state: ReadinessState): "success" | "warning" | "danger" | "neutral" {
+  switch (state) {
+    case "configured":
+      return "success";
+    case "missing-credentials":
+      return "danger";
+    case "external-only":
+      return "warning";
+    case "unsupported":
+      return "neutral";
+    case "planned":
+      return "neutral";
+  }
+}
+
+function labelForReadiness(state: ReadinessState): string {
+  switch (state) {
+    case "configured":
+      return "Configured";
+    case "missing-credentials":
+      return "Missing credentials";
+    case "external-only":
+      return "External token only";
+    case "unsupported":
+      return "Unsupported";
+    case "planned":
+      return "Planned";
+  }
+}
+
+function matchesFilter(target: ProvidersPageData["oauthTargets"][number], filter: FilterKey, search: string): boolean {
+  const name = formatOauthProviderName(target).toLowerCase();
+  const key = target.provider_key.toLowerCase();
+
+  if (search.trim() && !name.includes(search.toLowerCase()) && !key.includes(search.toLowerCase())) {
+    return false;
+  }
+
+  if (filter === "all") {
+    return true;
+  }
+
+  const state = deriveReadinessState(target);
+
+  switch (filter) {
+    case "needs-attention":
+      return state === "missing-credentials";
+    case "configured":
+      return state === "configured";
+    case "external-only":
+      return state === "external-only";
+    case "unsupported-planned":
+      return state === "unsupported" || state === "planned";
+    default:
+      return true;
+  }
+}
+
+function formatLastProbeResult(target: ProvidersPageData["oauthTargets"][number]): string {
+  if (!target.last_probe) {
+    return "Not probed";
+  }
+  return `${target.last_probe.status} · ${target.last_probe.details.slice(0, 40)}`;
+}
+
+function formatMissingEnvCount(target: ProvidersPageData["oauthTargets"][number]): string {
+  const count = target.setup.missing_env_vars.length;
+  if (count === 0) {
+    return "-";
+  }
+  return `${count} missing`;
+}
+
+function formatCredentialSource(target: ProvidersPageData["oauthTargets"][number]): string {
+  if (target.oauth_flow_support === "external_token_only") {
+    return "External token";
+  }
+  if (target.connection_status === "bridge-only") {
+    return "Bridge";
+  }
+  if (target.connection_status === "runtime-ready") {
+    return "Runtime";
+  }
+  return target.connection_method.slice(0, 24);
+}
+
+/**
+ * OAuth targets section with compact provider comparison grid and
+ * expanded detail panel for the selected provider. Includes
+ * filtering, search, and page-level guidance.
  */
 export function OAuthTargetsSection({ data, actions }: SectionProps) {
+  const [filter, setFilter] = useState<FilterKey>("all");
+  const [search, setSearch] = useState("");
+  const [selectedKey, setSelectedKey] = useState<string | null>(null);
+
+  const sortedTargets = useMemo(() => {
+    return [...data.oauthTargets].sort((left, right) => {
+      const leftOrder = OAUTH_TARGET_PRIORITY[left.provider_key] ?? 99;
+      const rightOrder = OAUTH_TARGET_PRIORITY[right.provider_key] ?? 99;
+      if (leftOrder !== rightOrder) {
+        return leftOrder - rightOrder;
+      }
+      return formatOauthProviderName(left).localeCompare(formatOauthProviderName(right));
+    });
+  }, [data.oauthTargets]);
+
+  const filteredTargets = useMemo(() => {
+    return sortedTargets.filter((target) => matchesFilter(target, filter, search));
+  }, [sortedTargets, filter, search]);
+
+  const runtimeReadyCount = sortedTargets.filter((t) => t.connection_status === "runtime-ready").length;
+  const bridgeOnlyCount = sortedTargets.filter((t) => t.connection_status === "bridge-only").length;
+  const missingSetupCount = sortedTargets.filter((t) => t.setup.missing_env_vars.length > 0).length;
+  const attentionCount = sortedTargets.filter(
+    (t) => t.connection_status === "probe failed" || t.connection_status === "expired" || t.connection_status === "needs refresh",
+  ).length;
+
+  const selectedTarget = selectedKey ? data.oauthTargets.find((t) => t.provider_key === selectedKey) ?? null : null;
+
+  const handleRowClick = (providerKey: string) => {
+    setSelectedKey((prev) => (prev === providerKey ? null : providerKey));
+  };
+
+  const handleFilterChange = (nextFilter: FilterKey) => {
+    setFilter(nextFilter);
+    setSelectedKey(null);
+  };
+
   const integrationErrorSummary = Object.entries(data.integrationErrors)
     .map(([key, value]) => `${key}=${value}`)
     .join(" | ");
-  const sortedTargets = [...data.oauthTargets].sort((left, right) => {
-    const leftOrder = OAUTH_TARGET_PRIORITY[left.provider_key] ?? 99;
-    const rightOrder = OAUTH_TARGET_PRIORITY[right.provider_key] ?? 99;
-    if (leftOrder !== rightOrder) {
-      return leftOrder - rightOrder;
-    }
-    return formatOauthProviderName(left).localeCompare(formatOauthProviderName(right));
-  });
-  const runtimeReadyCount = sortedTargets.filter((target) => target.connection_status === "runtime-ready").length;
-  const bridgeOnlyCount = sortedTargets.filter((target) => target.connection_status === "bridge-only").length;
-  const missingSetupCount = sortedTargets.filter((target) => target.setup.missing_env_vars.length > 0).length;
-  const attentionCount = sortedTargets.filter((target) =>
-    target.connection_status === "probe failed" || target.connection_status === "expired" || target.connection_status === "needs refresh").length;
 
   return (
     <>
       <SectionCard
-        title="OAuth Provider Connections"
-        description="Each provider card says exactly what ForgeFrame can do today: whether the token path is externally supplied, whether probe/runtime proof exists, and which actions are real versus manual."
+        title="OAuth Provider Targets"
+        description="Account-backed provider connections, credential status, and probe actions in a single compact view."
         actions={
           <>
             {data.access.canOperate ? (
               <button type="button" onClick={() => void actions.probeAllOauthTargets()}>
-                Probe all OAuth targets
+                Probe all targets
               </button>
             ) : null}
             {data.access.canMutate ? (
               <button type="button" onClick={() => void actions.syncOauthBridgeProfiles()}>
-                Sync OAuth bridge profiles
+                Sync bridge profiles
               </button>
             ) : null}
           </>
         }
       >
+        {/* Summary metrics */}
         <div className="fg-grid fg-grid-compact fg-mb-md">
-          <MetricTile label="Runtime ready" value={formatMetric(runtimeReadyCount)} note={`${formatMetric(sortedTargets.length)} tracked targets`} />
-          <MetricTile label="Bridge only" value={formatMetric(bridgeOnlyCount)} note="probe truth does not equal native runtime" />
-          <MetricTile label="Manual setup pending" value={formatMetric(missingSetupCount)} note="missing env or bridge toggles" />
+          <MetricTile label="Runtime ready" value={formatMetric(runtimeReadyCount)} note={`${formatMetric(sortedTargets.length)} total`} />
+          <MetricTile label="Bridge only" value={formatMetric(bridgeOnlyCount)} note="external token path" />
+          <MetricTile label="Credential issues" value={formatMetric(missingSetupCount)} note="missing env or bridge toggles" />
           <MetricTile label="Needs attention" value={formatMetric(attentionCount)} note={`${formatMetric(data.oauthTotalOps)} persisted ops`} />
         </div>
 
-        {!data.access.canOperate ? (
-          <p className="fg-note fg-mb-md">
-            {data.access.summaryDetail} This session can inspect the contract, but probe buttons stay blocked until a non-read-only operator session is active.
+        {/* Page-level guidance banner — shown once, not repeated per card */}
+        <div className="fg-oauth-banner">
+          <p>
+            <strong>OAuth token model:</strong> ForgeFrame does not mint or refresh upstream OAuth tokens.
+            All access tokens are supplied externally and managed outside the control plane.
+            Provider credential status reflects whether the required environment variables are present.
           </p>
-        ) : null}
-        {data.access.canOperate && !data.access.canMutate ? (
-          <p className="fg-note fg-mb-md">
-            Probe actions are available on this route, but bridge-profile sync remains hidden because the backend reserves that path for write-capable sessions.
-          </p>
-        ) : null}
-
-        <div className="fg-card-grid">
-          {sortedTargets.map((target) => {
-            const setup = target.setup ?? {
-              summary: "",
-              required_env_vars: [],
-              optional_env_vars: [],
-              missing_env_vars: [],
-              steps: [],
-            };
-            const actionList = Array.isArray(target.actions) ? target.actions : [];
-            const manualAction = actionList.find((item) => item.action_key === "manual_token");
-            const connectAction = actionList.find((item) => item.action_key === "connect");
-            const deviceAction = actionList.find((item) => item.action_key === "device_code");
-            const bridgeSyncAction = actionList.find((item) => item.action_key === "bridge_sync");
-            const probeAction = actionList.find((item) => item.action_key === "probe");
-            const disconnectAction = actionList.find((item) => item.action_key === "disconnect");
-
-            return (
-              <article key={target.provider_key} className="fg-subcard">
-                <div className="fg-panel-heading">
-                  <div>
-                    <h4>{formatOauthProviderName(target)}</h4>
-                    <p className="fg-muted">
-                      {target.provider_key} · {target.connection_method}
-                    </p>
-                  </div>
-                  <div className="fg-actions">
-                    <TonePill label={formatOauthConnectionStatus(target.connection_status)} tone={toneFromOauthConnectionStatus(target.connection_status)} />
-                    <TonePill
-                      label={`contract ${formatContractClassification(target.contract_classification)}`}
-                      tone={toneFromContractClassification(target.contract_classification)}
-                    />
-                    <TonePill label={`readiness ${target.readiness}`} tone={toneFromReadinessAxis(target.readiness)} />
-                  </div>
-                </div>
-
-                <div className="fg-detail-grid">
-                  <p>{target.connection_status_reason}</p>
-                  <p>Next step: {target.next_step}</p>
-                  <p>{setup.summary}</p>
-                  {setup.missing_env_vars.length > 0 ? (
-                    <p>
-                      Missing env:{" "}
-                      {setup.missing_env_vars.map((item) => (
-                        <span key={item} className="fg-code">
-                          {item}{" "}
-                        </span>
-                      ))}
-                    </p>
-                  ) : null}
-                  {manualAction ? <p>Manual setup: {manualAction.detail}</p> : null}
-                  {connectAction ? <p>Connect path: {connectAction.detail}</p> : null}
-                  {deviceAction ? <p>Device-code path: {deviceAction.detail}</p> : null}
-                </div>
-
-                <div className="fg-mt-sm">
-                  <h5>Actions</h5>
-                  <ul className="fg-list">
-                    {actionList.map((item) => {
-                      const requiresOperate = item.action_key === "probe";
-                      const requiresMutate = item.action_key === "bridge_sync";
-                      const canInvoke = item.mode === "api"
-                        && item.supported
-                        && ((requiresOperate && data.access.canOperate) || (requiresMutate && data.access.canMutate));
-                      return (
-                        <li key={item.action_key}>
-                          <strong>{item.label}</strong> · {item.detail} · {formatOauthActionMode(item.mode)}
-                          {canInvoke && item.action_key === "probe" ? (
-                            <>
-                              {" "}
-                              <button type="button" onClick={() => void actions.probeOauthTarget(target.provider_key)}>
-                                Test connection
-                              </button>
-                            </>
-                          ) : null}
-                          {canInvoke && item.action_key === "bridge_sync" ? (
-                            <>
-                              {" "}
-                              <button type="button" onClick={() => void actions.syncOauthBridgeProfiles()}>
-                                Sync bridge profile
-                              </button>
-                            </>
-                          ) : null}
-                        </li>
-                      );
-                    })}
-                  </ul>
-                  {bridgeSyncAction && !data.access.canMutate ? (
-                    <p className="fg-muted fg-mt-sm">
-                      Bridge sync is modeled per provider card, but the current backend endpoint applies the sync globally for all bridge profiles and stays write-gated.
-                    </p>
-                  ) : null}
-                  {probeAction && !data.access.canOperate ? (
-                    <p className="fg-muted fg-mt-sm">Probe actions are real backend tests, so they stay blocked for read-only sessions.</p>
-                  ) : null}
-                  {disconnectAction ? <p className="fg-muted fg-mt-sm">Disconnect stays external-only: {disconnectAction.detail}</p> : null}
-                </div>
-
-                <div className="fg-mt-sm">
-                  <h5>Manual setup</h5>
-                  <ol>
-                    {setup.steps.map((step) => (
-                      <li key={step}>{step}</li>
-                    ))}
-                  </ol>
-                  {setup.required_env_vars.length > 0 ? (
-                    <p>
-                      Required env:{" "}
-                      {setup.required_env_vars.map((item) => (
-                        <span key={item} className="fg-code">
-                          {item}{" "}
-                        </span>
-                      ))}
-                    </p>
-                  ) : null}
-                  {setup.optional_env_vars.length > 0 ? (
-                    <p>
-                      Optional env:{" "}
-                      {setup.optional_env_vars.map((item) => (
-                        <span key={item} className="fg-code">
-                          {item}{" "}
-                        </span>
-                      ))}
-                    </p>
-                  ) : null}
-                </div>
-
-                <AdvancedDiagnostics
-                  title={`Advanced Diagnostics — ${formatOauthProviderName(target)}`}
-                  description="Session truth, runtime proof, streaming/tool evidence, and raw operator posture stay here instead of crowding the primary connection card."
-                  status={formatOauthConnectionStatus(target.connection_status)}
-                  statusTone={toneFromOauthConnectionStatus(target.connection_status) === "danger" ? "danger" : toneFromOauthConnectionStatus(target.connection_status) === "success" ? "success" : "warning"}
-                  statusKey={contractStatusFromOauthConnectionStatus(target.connection_status)}
-                >
-                  <div className="fg-detail-grid">
-                    <p>Auth kind: {target.auth_kind} · oauth mode={target.oauth_mode ?? "-"} · flow support={target.oauth_flow_support ?? "-"}</p>
-                    <p>Queue lane: {target.queue_lane} · parallelism={target.parallelism_mode} · cost posture={target.cost_posture}</p>
-                    <p>Session reuse: {target.session_reuse_strategy}</p>
-                    <p>Operator truth: {target.operator_truth}</p>
-                    <p>Escalation: {target.escalation_support}</p>
-                    <p>
-                      Probe evidence: {target.evidence.live_probe.status} ({target.evidence.live_probe.details})
-                    </p>
-                    <p>
-                      Runtime evidence: {target.evidence.runtime.status} ({target.evidence.runtime.details})
-                    </p>
-                    <p>
-                      Streaming evidence: {target.evidence.streaming.status} ({target.evidence.streaming.details})
-                    </p>
-                    <p>
-                      Tool evidence: {target.evidence.tool_calling.status} ({target.evidence.tool_calling.details})
-                    </p>
-                    {target.last_probe ? (
-                      <p>
-                        Last probe: {formatTimestamp(target.last_probe.executed_at)} · {target.last_probe.status} · {target.last_probe.details}
-                      </p>
-                    ) : null}
-                    {target.last_bridge_sync ? (
-                      <p>
-                        Last bridge sync: {formatTimestamp(target.last_bridge_sync.executed_at)} · {target.last_bridge_sync.status} · {target.last_bridge_sync.details}
-                      </p>
-                    ) : null}
-                    {target.last_failed_operation ? (
-                      <p>
-                        Last failure: {formatTimestamp(target.last_failed_operation.executed_at)} · {target.last_failed_operation.status} · {target.last_failed_operation.details}
-                      </p>
-                    ) : null}
-                  </div>
-                </AdvancedDiagnostics>
-              </article>
-            );
-          })}
+          {data.access.canOperate && !data.access.canMutate ? (
+            <p>Probe actions are available. Bridge-profile sync requires write capability.</p>
+          ) : null}
+          {!data.access.canOperate ? (
+            <p>{data.access.summaryDetail} Probe actions blocked for read-only sessions.</p>
+          ) : null}
         </div>
+
+        {/* Toolbar: filters + search */}
+        <div className="fg-oauth-toolbar">
+          <div className="fg-oauth-filters">
+            {FILTER_OPTIONS.map((option) => (
+              <button
+                key={option.key}
+                type="button"
+                className={`fg-oauth-filter-btn${filter === option.key ? " is-active" : ""}`}
+                onClick={() => handleFilterChange(option.key)}
+              >
+                {option.label}
+              </button>
+            ))}
+          </div>
+          <input
+            type="search"
+            className="fg-oauth-search"
+            placeholder="Search provider name or key..."
+            value={search}
+            onChange={(e) => {
+              setSearch(e.target.value);
+              setSelectedKey(null);
+            }}
+            aria-label="Search OAuth providers"
+          />
+        </div>
+
+        {/* Compact comparison grid */}
+        {filteredTargets.length === 0 ? (
+          <p className="fg-muted">No OAuth targets match the current filter or search.</p>
+        ) : (
+          <div className="fg-oauth-compact-grid">
+            {/* Header row */}
+            <div className="fg-oauth-row-header">
+              <span>Provider</span>
+              <span>Status</span>
+              <span>Credentials</span>
+              <span>Missing</span>
+              <span>Actions</span>
+              <span>Last probe</span>
+              <span>Next step</span>
+            </div>
+
+            {filteredTargets.map((target) => {
+              const state = deriveReadinessState(target);
+              const isSelected = selectedKey === target.provider_key;
+
+              return (
+                <div key={target.provider_key}>
+                  {/* Data row — clickable to select */}
+                  <div
+                    className={`fg-oauth-row${isSelected ? " is-selected" : ""}`}
+                    onClick={() => handleRowClick(target.provider_key)}
+                    role="button"
+                    tabIndex={0}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        handleRowClick(target.provider_key);
+                      }
+                    }}
+                    aria-expanded={isSelected}
+                    aria-label={`${formatOauthProviderName(target)} — ${labelForReadiness(state)}`}
+                  >
+                    <div className="fg-oauth-cell fg-oauth-cell-provider">
+                      <span className="fg-oauth-provider-name">{formatOauthProviderName(target)}</span>
+                      <span className="fg-oauth-provider-key">{target.provider_key}</span>
+                    </div>
+                    <div className="fg-oauth-cell">
+                      <TonePill label={labelForReadiness(state)} tone={toneFromReadiness(state)} />
+                    </div>
+                    <div className="fg-oauth-cell">{formatCredentialSource(target)}</div>
+                    <div className="fg-oauth-cell">{formatMissingEnvCount(target)}</div>
+                    <div className="fg-oauth-cell fg-oauth-cell-actions">
+                      {renderRowActions(target, data, actions)}
+                    </div>
+                    <div className="fg-oauth-cell">{formatLastProbeResult(target)}</div>
+                    <div className="fg-oauth-cell" title={target.next_step}>
+                      {target.next_step.slice(0, 24)}
+                      {target.next_step.length > 24 ? "..." : ""}
+                    </div>
+                  </div>
+
+                  {/* Detail panel — shown for selected provider */}
+                  {isSelected && selectedTarget ? (
+                    <div className="fg-oauth-detail-panel">
+                      {/* Detail header */}
+                      <div className="fg-oauth-detail-header">
+                        <div>
+                          <h4>{formatOauthProviderName(selectedTarget)}</h4>
+                          <p className="fg-muted">
+                            {selectedTarget.provider_key} · {selectedTarget.connection_method}
+                          </p>
+                        </div>
+                        <div className="fg-actions">
+                          <TonePill
+                            label={labelForReadiness(state)}
+                            tone={toneFromReadiness(state)}
+                          />
+                          <TonePill
+                            label={`contract ${selectedTarget.contract_classification.replaceAll("-", " ")}`}
+                            tone={toneFromContractClassification(selectedTarget.contract_classification)}
+                          />
+                          <TonePill
+                            label={`readiness ${selectedTarget.readiness}`}
+                            tone={toneFromReadinessAxis(selectedTarget.readiness)}
+                          />
+                        </div>
+                      </div>
+
+                      {/* Detail body */}
+                      <div className="fg-oauth-detail-body">
+                        {/* Status + next step */}
+                        <div className="fg-oauth-detail-section">
+                          <p>
+                            <strong>Status:</strong> {selectedTarget.connection_status_reason}
+                          </p>
+                          <p>
+                            <strong>Next step:</strong> {selectedTarget.next_step}
+                          </p>
+                          <p>
+                            <strong>Operator truth:</strong> {selectedTarget.operator_truth}
+                          </p>
+                        </div>
+
+                        {/* Setup instructions — collapsible */}
+                        {selectedTarget.setup.steps.length > 0 && (
+                          <details className="ff-collapse-section">
+                            <summary>
+                              <span className="ff-collapse-summary-text">
+                                <h4>Setup instructions</h4>
+                                <p>Manual configuration steps for this provider</p>
+                              </span>
+                            </summary>
+                            <div className="ff-collapse-section-body">
+                              <ol>
+                                {selectedTarget.setup.steps.map((step) => (
+                                  <li key={step}>{step}</li>
+                                ))}
+                              </ol>
+                            </div>
+                          </details>
+                        )}
+
+                        {/* Technical details — collapsible */}
+                        <details className="ff-collapse-section">
+                          <summary>
+                            <span className="ff-collapse-summary-text">
+                              <h4>Technical details</h4>
+                              <p>
+                                {selectedTarget.setup.missing_env_vars.length > 0
+                                  ? `${selectedTarget.setup.missing_env_vars.length} env vars missing`
+                                  : "Environment variables and configuration"}
+                              </p>
+                            </span>
+                          </summary>
+                          <div className="ff-collapse-section-body">
+                            {selectedTarget.setup.required_env_vars.length > 0 && (
+                              <p>
+                                <strong>Required env vars:</strong>{" "}
+                                {selectedTarget.setup.required_env_vars.map((item) => (
+                                  <span key={item} className="fg-code">
+                                    {item}{" "}
+                                  </span>
+                                ))}
+                              </p>
+                            )}
+                            {selectedTarget.setup.optional_env_vars.length > 0 && (
+                              <p>
+                                <strong>Optional env vars:</strong>{" "}
+                                {selectedTarget.setup.optional_env_vars.map((item) => (
+                                  <span key={item} className="fg-code">
+                                    {item}{" "}
+                                  </span>
+                                ))}
+                              </p>
+                            )}
+                            {selectedTarget.setup.missing_env_vars.length > 0 && (
+                              <p>
+                                <strong>Missing env vars:</strong>{" "}
+                                {selectedTarget.setup.missing_env_vars.map((item) => (
+                                  <span key={item} className="fg-code">
+                                    {item}{" "}
+                                  </span>
+                                ))}
+                              </p>
+                            )}
+                            <div className="fg-detail-grid fg-mt-sm">
+                              <p>Auth kind: {selectedTarget.auth_kind} · OAuth mode: {selectedTarget.oauth_mode ?? "-"}</p>
+                              <p>
+                                Flow support: {selectedTarget.oauth_flow_support ?? "-"} · Session reuse:{" "}
+                                {selectedTarget.session_reuse_strategy}
+                              </p>
+                              <p>
+                                Queue: {selectedTarget.queue_lane} · Parallelism: {selectedTarget.parallelism_mode} · Cost:{" "}
+                                {selectedTarget.cost_posture}
+                              </p>
+                              <p>Escalation: {selectedTarget.escalation_support}</p>
+                            </div>
+                          </div>
+                        </details>
+
+                        {/* Evidence summary */}
+                        <details className="ff-collapse-section">
+                          <summary>
+                            <span className="ff-collapse-summary-text">
+                              <h4>Proof &amp; evidence</h4>
+                              <p>Runtime, streaming, tool-calling, and probe proof status</p>
+                            </span>
+                          </summary>
+                          <div className="ff-collapse-section-body">
+                            <div className="fg-oauth-detail-evidence">
+                              <EvidenceItem label="Runtime" evidence={selectedTarget.evidence.runtime} />
+                              <EvidenceItem label="Streaming" evidence={selectedTarget.evidence.streaming} />
+                              <EvidenceItem label="Tool calling" evidence={selectedTarget.evidence.tool_calling} />
+                              <EvidenceItem label="Live probe" evidence={selectedTarget.evidence.live_probe} />
+                            </div>
+                            {selectedTarget.last_probe ? (
+                              <div className="fg-oauth-detail-section fg-mt-sm">
+                                <p>
+                                  <strong>Last probe:</strong> {formatTimestamp(selectedTarget.last_probe.executed_at)} ·{" "}
+                                  {selectedTarget.last_probe.status} · {selectedTarget.last_probe.details}
+                                </p>
+                              </div>
+                            ) : null}
+                            {selectedTarget.last_bridge_sync ? (
+                              <p>
+                                <strong>Last bridge sync:</strong> {formatTimestamp(selectedTarget.last_bridge_sync.executed_at)} ·{" "}
+                                {selectedTarget.last_bridge_sync.status} · {selectedTarget.last_bridge_sync.details}
+                              </p>
+                            ) : null}
+                            {selectedTarget.last_failed_operation ? (
+                              <p>
+                                <strong>Last failure:</strong>{" "}
+                                {formatTimestamp(selectedTarget.last_failed_operation.executed_at)} ·{" "}
+                                {selectedTarget.last_failed_operation.status} · {selectedTarget.last_failed_operation.details}
+                              </p>
+                            ) : null}
+                          </div>
+                        </details>
+
+                        {/* Action buttons */}
+                        <div className="fg-oauth-detail-actions">
+                          {renderDetailActions(selectedTarget, data, actions)}
+                        </div>
+                      </div>
+                    </div>
+                  ) : null}
+                </div>
+              );
+            })}
+          </div>
+        )}
       </SectionCard>
 
+      {/* Route Diagnostics — collapsed by default */}
       <SectionCard
         title="Route Diagnostics"
-        description="The remaining contract corpus, onboarding depth, and raw operation history stay available, but they no longer replace the actual provider connection surface."
+        description="Contract corpus, onboarding depth, and operation history."
       >
         <AdvancedDiagnostics
           title="Product Axis Contracts"
-          description="Axis-level contract records remain visible for audit and rollout work."
+          description="Axis-level contract records for audit and rollout."
           defaultOpen={false}
         >
           <ul className="fg-list">
             {data.productAxisTargets.map((target) => (
               <li key={target.provider_key}>
-                {target.provider_key} · contract={formatContractClassification(target.contract_classification)} · runtime={target.runtime_path} · auth=
-                {target.auth_model} · status={target.status_summary}
+                {target.provider_key} · contract={target.contract_classification.replaceAll("-", " ")} · runtime={target.runtime_path} ·
+                auth={target.auth_model} · status={target.status_summary}
               </li>
             ))}
           </ul>
@@ -278,7 +523,7 @@ export function OAuthTargetsSection({ data, actions }: SectionProps) {
 
         <AdvancedDiagnostics
           title="OAuth Onboarding Guide"
-          description="Per-target next steps derived from the backend truth model."
+          description="Per-target next steps from backend truth model."
           defaultOpen={false}
         >
           <ul className="fg-list">
@@ -297,16 +542,17 @@ export function OAuthTargetsSection({ data, actions }: SectionProps) {
 
         <AdvancedDiagnostics
           title="Operations History"
-          description="Persisted provider-operation counters and the recent raw log."
+          description="Persisted provider-operation counters and recent raw log."
           defaultOpen={false}
         >
           <p>Persisted operations: {formatMetric(data.oauthTotalOps)}</p>
           <ul className="fg-list">
             {data.oauthOperations.map((item) => (
               <li key={toStringValue(item.provider_key)}>
-                {toStringValue(item.provider_key)} · failures={formatMetric(item.failures)} · failures_24h={formatMetric(item.failures_24h)} ·
-                probes={formatMetric(item.probe_count)} · bridge syncs={formatMetric(item.bridge_sync_count)} · failure rate=
-                {formatMetric(item.failure_rate, 2)} · needs attention={toStringValue(item.needs_attention)}
+                {toStringValue(item.provider_key)} · failures={formatMetric(item.failures)} · failures_24h=
+                {formatMetric(item.failures_24h)} · probes={formatMetric(item.probe_count)} · bridge syncs=
+                {formatMetric(item.bridge_sync_count)} · failure rate={formatMetric(item.failure_rate, 2)} · needs attention=
+                {toStringValue(item.needs_attention)}
               </li>
             ))}
           </ul>
@@ -324,7 +570,7 @@ export function OAuthTargetsSection({ data, actions }: SectionProps) {
 
         <AdvancedDiagnostics
           title="Host / Public Bootstrap Readiness"
-          description="Backend bootstrap checks that still affect the public product path."
+          description="Backend bootstrap checks affecting the public product path."
           defaultOpen={false}
         >
           {data.bootstrapReadiness ? (
@@ -358,6 +604,104 @@ export function OAuthTargetsSection({ data, actions }: SectionProps) {
         </AdvancedDiagnostics>
       </SectionCard>
     </>
+  );
+}
+
+/**
+ * Render inline action buttons for the compact grid row.
+ * Shows only the most relevant action per row.
+ */
+function renderRowActions(
+  target: ProvidersPageData["oauthTargets"][number],
+  data: ProvidersPageData,
+  actions: ProvidersPageActions,
+): ReactNode {
+  const actionList = Array.isArray(target.actions) ? target.actions : [];
+  const probeAction = actionList.find((a) => a.action_key === "probe");
+  const bridgeSyncAction = actionList.find((a) => a.action_key === "bridge_sync");
+
+  return (
+    <>
+      {probeAction && probeAction.supported && probeAction.mode === "api" && data.access.canOperate ? (
+        <button type="button" onClick={() => void actions.probeOauthTarget(target.provider_key)}>
+          Test
+        </button>
+      ) : null}
+      {bridgeSyncAction && bridgeSyncAction.supported && bridgeSyncAction.mode === "api" && data.access.canMutate ? (
+        <button type="button" onClick={() => void actions.syncOauthBridgeProfiles()}>
+          Sync
+        </button>
+      ) : null}
+    </>
+  );
+}
+
+/**
+ * Render action buttons for the detail panel — more contextual and complete.
+ */
+function renderDetailActions(
+  target: ProvidersPageData["oauthTargets"][number],
+  data: ProvidersPageData,
+  actions: ProvidersPageActions,
+): ReactNode {
+  const actionList = Array.isArray(target.actions) ? target.actions : [];
+
+  const manualTokenAction = actionList.find((a) => a.action_key === "manual_token");
+  const probeAction = actionList.find((a) => a.action_key === "probe");
+  const bridgeSyncAction = actionList.find((a) => a.action_key === "bridge_sync");
+  const connectAction = actionList.find((a) => a.action_key === "connect");
+  const deviceAction = actionList.find((a) => a.action_key === "device_code");
+
+  return (
+    <>
+      {manualTokenAction && manualTokenAction.supported ? (
+        <span className="fg-muted" style={{ fontSize: "var(--fg-type-size-meta)", padding: "0.4rem 0" }}>
+          {manualTokenAction.detail}
+        </span>
+      ) : null}
+      {probeAction && probeAction.supported && probeAction.mode === "api" && data.access.canOperate ? (
+        <button type="button" onClick={() => void actions.probeOauthTarget(target.provider_key)}>
+          Test connection
+        </button>
+      ) : null}
+      {bridgeSyncAction && bridgeSyncAction.supported && bridgeSyncAction.mode === "api" && data.access.canMutate ? (
+        <button type="button" onClick={() => void actions.syncOauthBridgeProfiles()}>
+          Sync bridge profile
+        </button>
+      ) : null}
+      {connectAction && connectAction.mode === "unsupported" ? (
+        <span className="fg-muted" style={{ fontSize: "var(--fg-type-size-meta)" }}>
+          Connect: {connectAction.detail}
+        </span>
+      ) : null}
+      {deviceAction && deviceAction.mode === "unsupported" ? (
+        <span className="fg-muted" style={{ fontSize: "var(--fg-type-size-meta)" }}>
+          Device flow: {deviceAction.detail}
+        </span>
+      ) : null}
+    </>
+  );
+}
+
+/**
+ * Compact evidence status item for the detail panel.
+ */
+function EvidenceItem({
+  label,
+  evidence,
+}: {
+  label: string;
+  evidence: ProvidersPageData["oauthTargets"][number]["evidence"]["runtime"];
+}) {
+  return (
+    <div className="fg-oauth-evidence-item">
+      <strong>{label}</strong>
+      <span>
+        {evidence.status} · {evidence.source.replaceAll("_", " ")}
+      </span>
+      <br />
+      <span className="fg-muted">{evidence.details.slice(0, 60)}</span>
+    </div>
   );
 }
 
