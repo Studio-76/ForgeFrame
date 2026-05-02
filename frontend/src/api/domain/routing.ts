@@ -3,6 +3,7 @@
  */
 export {
   fetchRoutingControlPlane,
+  simulateRouting,
   updateRoutingBudget,
   updateRoutingCircuit,
   updateRoutingPolicy,

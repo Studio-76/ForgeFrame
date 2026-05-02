@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 
-import { fetchProviderTargets, updateProviderTarget, type ProviderTargetRecord } from "../api/admin";
+import { fetchProviderTargets, updateProviderTarget, type ProviderTargetRecord } from "../api/domain/providers";
 import {
   getScopedAdminInstanceId,
   sessionCanMutateScopedOrAnyInstance,

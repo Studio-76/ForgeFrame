@@ -23,7 +23,7 @@ import {
   type RoutingDecisionCandidateRecord,
   type RoutingDecisionRecord,
   type RoutingPolicyRecord,
-} from "../api/admin";
+} from "../api/domain/routing";
 import { InstanceScopeCard } from "../components/InstanceScopeCard";
 import { PageIntro } from "../components/PageIntro";
 import { AdvancedDiagnostics } from "../components/ui/AdvancedDiagnostics";

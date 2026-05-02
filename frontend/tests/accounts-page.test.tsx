@@ -18,15 +18,28 @@ const {
   fetchAuditHistoryMock: vi.fn(),
 }));
 
-vi.mock("../src/api/admin", async () => {
-  const actual = await vi.importActual<typeof import("../src/api/admin")>("../src/api/admin");
-
+vi.mock("../src/api/admin/accounts", async () => {
+  const actual = await vi.importActual<typeof import("../src/api/admin/accounts")>("../src/api/admin/accounts");
   return {
     ...actual,
     fetchAccounts: fetchAccountsMock,
     createAccount: createAccountMock,
     updateAccount: updateAccountMock,
+  };
+});
+
+vi.mock("../src/api/admin/instances", async () => {
+  const actual = await vi.importActual<typeof import("../src/api/admin/instances")>("../src/api/admin/instances");
+  return {
+    ...actual,
     fetchInstances: fetchInstancesMock,
+  };
+});
+
+vi.mock("../src/api/admin", async () => {
+  const actual = await vi.importActual<typeof import("../src/api/admin")>("../src/api/admin");
+  return {
+    ...actual,
     fetchAuditHistory: fetchAuditHistoryMock,
   };
 });

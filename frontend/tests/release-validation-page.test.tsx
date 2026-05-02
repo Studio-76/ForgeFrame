@@ -22,19 +22,39 @@ const {
   fetchRoutingControlPlaneMock: vi.fn(),
 }));
 
-vi.mock("../src/api/admin", async () => {
-  const actual = await vi.importActual<typeof import("../src/api/admin")>("../src/api/admin");
+vi.mock("../src/api/admin/bootstrap", async () => {
+  const actual = await vi.importActual<typeof import("../src/api/admin/bootstrap")>("../src/api/admin/bootstrap");
+  return { ...actual, fetchBootstrapReadiness: fetchBootstrapReadinessMock };
+});
 
-  return {
-    ...actual,
-    fetchInstances: fetchInstancesMock,
-    fetchBootstrapReadiness: fetchBootstrapReadinessMock,
-    fetchIngressTlsStatus: fetchIngressTlsStatusMock,
-    fetchRecoveryOverview: fetchRecoveryOverviewMock,
-    fetchRuntimeHealth: fetchRuntimeHealthMock,
-    fetchProviderControlPlane: fetchProviderControlPlaneMock,
-    fetchRoutingControlPlane: fetchRoutingControlPlaneMock,
-  };
+vi.mock("../src/api/admin/ingress-tls", async () => {
+  const actual = await vi.importActual<typeof import("../src/api/admin/ingress-tls")>("../src/api/admin/ingress-tls");
+  return { ...actual, fetchIngressTlsStatus: fetchIngressTlsStatusMock };
+});
+
+vi.mock("../src/api/admin/providers", async () => {
+  const actual = await vi.importActual<typeof import("../src/api/admin/providers")>("../src/api/admin/providers");
+  return { ...actual, fetchProviderControlPlane: fetchProviderControlPlaneMock };
+});
+
+vi.mock("../src/api/admin/recovery", async () => {
+  const actual = await vi.importActual<typeof import("../src/api/admin/recovery")>("../src/api/admin/recovery");
+  return { ...actual, fetchRecoveryOverview: fetchRecoveryOverviewMock };
+});
+
+vi.mock("../src/api/admin/routing", async () => {
+  const actual = await vi.importActual<typeof import("../src/api/admin/routing")>("../src/api/admin/routing");
+  return { ...actual, fetchRoutingControlPlane: fetchRoutingControlPlaneMock };
+});
+
+vi.mock("../src/api/admin/health", async () => {
+  const actual = await vi.importActual<typeof import("../src/api/admin/health")>("../src/api/admin/health");
+  return { ...actual, fetchRuntimeHealth: fetchRuntimeHealthMock };
+});
+
+vi.mock("../src/api/admin/instances", async () => {
+  const actual = await vi.importActual<typeof import("../src/api/admin/instances")>("../src/api/admin/instances");
+  return { ...actual, fetchInstances: fetchInstancesMock };
 });
 
 import type { AdminSessionUser } from "../src/api/admin";

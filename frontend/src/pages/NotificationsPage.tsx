@@ -4,7 +4,6 @@ import { Link, useSearchParams } from "react-router-dom";
 import {
   confirmNotification,
   createNotification,
-  fetchInstances,
   fetchNotificationDetail,
   fetchNotifications,
   rejectNotification,
@@ -16,7 +15,8 @@ import {
   type NotificationDetail,
   type NotificationSummary,
   type WorkItemPriority,
-} from "../api/admin";
+} from "../api/domain/notifications";
+import { fetchInstances } from "../api/domain/instances";
 import { CONTROL_PLANE_ROUTES } from "../app/navigation";
 import {
   buildAutomationPath,

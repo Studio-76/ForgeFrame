@@ -1,18 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 
-import {
-  fetchDashboard,
-  fetchLogs,
-  fetchProviderControlPlane,
-  fetchRuntimeHealth,
-  fetchUsageSummary,
-  type DashboardResponse,
-  type LogsResponse,
-  type ProviderControlPlaneResponse,
-  type RuntimeHealthResponse,
-  type UsageSummaryResponse,
-} from "../api/admin";
+import { fetchDashboard, type DashboardResponse } from "../api/domain/dashboard";
+import { fetchLogs, type LogsResponse } from "../api/domain/logs";
+import { fetchProviderControlPlane, type ProviderControlPlaneResponse } from "../api/domain/providers";
+import { fetchRuntimeHealth, type RuntimeHealthResponse } from "../api/domain/health";
+import { fetchUsageSummary, type UsageSummaryResponse } from "../api/domain/usage";
 import { CONTROL_PLANE_ROUTES } from "../app/navigation";
 import { getInstanceIdFromSearchParams, withInstanceScope } from "../app/tenantScope";
 import { useInstanceCatalog } from "../app/useInstanceCatalog";

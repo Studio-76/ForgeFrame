@@ -1,16 +1,16 @@
 import { startTransition, useEffect, useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 
+import { AdminApiError } from "../api/admin";
 import {
-  AdminApiError,
   fetchExecutionDispatch,
-  fetchInstances,
   reconcileExecutionLeases,
   type ExecutionDispatchAttemptView,
   type ExecutionDispatchSnapshot,
   type ExecutionDispatchWorkerView,
   type ExecutionLeaseReconcileResult,
-} from "../api/admin";
+} from "../api/domain/execution";
+import { fetchInstances } from "../api/domain/instances";
 import {
   sessionCanMutateScopedOrAnyInstance,
   sessionHasScopedOrAnyInstancePermission,

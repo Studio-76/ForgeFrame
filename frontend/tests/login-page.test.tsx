@@ -22,7 +22,7 @@ const {
   clearAdminTokenMock: vi.fn(),
 }));
 
-vi.mock("../src/api/admin", () => ({
+vi.mock("../src/api/admin/auth", () => ({
   clearAdminToken: clearAdminTokenMock,
   fetchAdminSession: fetchAdminSessionMock,
   getAdminToken: getAdminTokenMock,

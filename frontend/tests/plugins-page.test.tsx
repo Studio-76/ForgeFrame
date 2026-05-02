@@ -20,17 +20,23 @@ const {
   upsertPluginBindingMock: vi.fn(),
 }));
 
-vi.mock("../src/api/admin", async () => {
-  const actual = await vi.importActual<typeof import("../src/api/admin")>("../src/api/admin");
-
+vi.mock("../src/api/admin/plugins", async () => {
+  const actual = await vi.importActual<typeof import("../src/api/admin/plugins")>("../src/api/admin/plugins");
   return {
     ...actual,
-    fetchInstances: fetchInstancesMock,
     fetchPlugins: fetchPluginsMock,
     fetchPluginDetail: fetchPluginDetailMock,
     createPlugin: createPluginMock,
     updatePlugin: updatePluginMock,
     upsertPluginBinding: upsertPluginBindingMock,
+  };
+});
+
+vi.mock("../src/api/admin/instances", async () => {
+  const actual = await vi.importActual<typeof import("../src/api/admin/instances")>("../src/api/admin/instances");
+  return {
+    ...actual,
+    fetchInstances: fetchInstancesMock,
   };
 });
 

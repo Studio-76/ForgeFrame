@@ -58,24 +58,63 @@ const {
   triggerAutomationMock: vi.fn(),
 }));
 
-vi.mock("../src/api/admin", async () => {
-  const actual = await vi.importActual<typeof import("../src/api/admin")>("../src/api/admin");
-
+vi.mock("../src/api/admin/channels", async () => {
+  const actual = await vi.importActual<typeof import("../src/api/admin/channels")>("../src/api/admin/channels");
   return {
     ...actual,
-    fetchInstances: fetchInstancesMock,
-    fetchTasks: fetchTasksMock,
-    fetchTaskDetail: fetchTaskDetailMock,
-    createTask: createTaskMock,
-    updateTask: updateTaskMock,
-    fetchReminders: fetchRemindersMock,
-    fetchReminderDetail: fetchReminderDetailMock,
-    createReminder: createReminderMock,
-    updateReminder: updateReminderMock,
     fetchChannels: fetchChannelsMock,
     fetchChannelDetail: fetchChannelDetailMock,
     createChannel: createChannelMock,
     updateChannel: updateChannelMock,
+  };
+});
+
+vi.mock("../src/api/admin/automations", async () => {
+  const actual = await vi.importActual<typeof import("../src/api/admin/automations")>("../src/api/admin/automations");
+  return {
+    ...actual,
+    fetchAutomations: fetchAutomationsMock,
+    fetchAutomationDetail: fetchAutomationDetailMock,
+    createAutomation: createAutomationMock,
+    updateAutomation: updateAutomationMock,
+    triggerAutomation: triggerAutomationMock,
+  };
+});
+
+vi.mock("../src/api/admin/instances", async () => {
+  const actual = await vi.importActual<typeof import("../src/api/admin/instances")>("../src/api/admin/instances");
+  return {
+    ...actual,
+    fetchInstances: fetchInstancesMock,
+  };
+});
+
+vi.mock("../src/api/admin/tasks", async () => {
+  const actual = await vi.importActual<typeof import("../src/api/admin/tasks")>("../src/api/admin/tasks");
+  return {
+    ...actual,
+    fetchTasks: fetchTasksMock,
+    fetchTaskDetail: fetchTaskDetailMock,
+    createTask: createTaskMock,
+    updateTask: updateTaskMock,
+  };
+});
+
+vi.mock("../src/api/admin/reminders", async () => {
+  const actual = await vi.importActual<typeof import("../src/api/admin/reminders")>("../src/api/admin/reminders");
+  return {
+    ...actual,
+    fetchReminders: fetchRemindersMock,
+    fetchReminderDetail: fetchReminderDetailMock,
+    createReminder: createReminderMock,
+    updateReminder: updateReminderMock,
+  };
+});
+
+vi.mock("../src/api/admin/notifications", async () => {
+  const actual = await vi.importActual<typeof import("../src/api/admin/notifications")>("../src/api/admin/notifications");
+  return {
+    ...actual,
     fetchNotifications: fetchNotificationsMock,
     fetchNotificationDetail: fetchNotificationDetailMock,
     createNotification: createNotificationMock,
@@ -83,11 +122,6 @@ vi.mock("../src/api/admin", async () => {
     confirmNotification: confirmNotificationMock,
     rejectNotification: rejectNotificationMock,
     retryNotification: retryNotificationMock,
-    fetchAutomations: fetchAutomationsMock,
-    fetchAutomationDetail: fetchAutomationDetailMock,
-    createAutomation: createAutomationMock,
-    updateAutomation: updateAutomationMock,
-    triggerAutomation: triggerAutomationMock,
   };
 });
 

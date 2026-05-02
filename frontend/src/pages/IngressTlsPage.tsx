@@ -2,12 +2,12 @@ import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 
 import {
-  fetchBootstrapReadiness,
   fetchIngressTlsStatus,
   renewIngressTls,
   type IngressTlsRenewalResult,
   type IngressTlsStatusResponse,
-} from "../api/admin";
+} from "../api/domain/ingress-tls";
+import { fetchBootstrapReadiness } from "../api/domain/bootstrap";
 import { getInstanceIdFromSearchParams } from "../app/tenantScope";
 import { useInstanceCatalog } from "../app/useInstanceCatalog";
 import { InstanceScopeCard } from "../components/InstanceScopeCard";

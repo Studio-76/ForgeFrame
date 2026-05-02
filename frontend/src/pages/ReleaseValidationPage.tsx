@@ -1,19 +1,27 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 
+import { fetchBootstrapReadiness } from "../api/domain/bootstrap";
 import {
-  fetchBootstrapReadiness,
   fetchIngressTlsStatus,
-  fetchProviderControlPlane,
-  fetchRecoveryOverview,
-  fetchRoutingControlPlane,
-  fetchRuntimeHealth,
   type IngressTlsStatusResponse,
+} from "../api/domain/ingress-tls";
+import {
+  fetchProviderControlPlane,
   type ProviderControlPlaneResponse,
+} from "../api/domain/providers";
+import {
+  fetchRecoveryOverview,
   type RecoveryOverviewResponse,
+} from "../api/domain/recovery";
+import {
+  fetchRoutingControlPlane,
   type RoutingControlPlaneResponse,
+} from "../api/domain/routing";
+import {
+  fetchRuntimeHealth,
   type RuntimeHealthResponse,
-} from "../api/admin";
+} from "../api/domain/health";
 import { CONTROL_PLANE_ROUTES } from "../app/navigation";
 import { getInstanceIdFromSearchParams, withInstanceScope } from "../app/tenantScope";
 import { useInstanceCatalog } from "../app/useInstanceCatalog";

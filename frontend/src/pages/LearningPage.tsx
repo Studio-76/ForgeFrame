@@ -4,7 +4,6 @@ import { Link, useSearchParams } from "react-router-dom";
 import {
   createLearningEvent,
   decideLearningEvent,
-  fetchInstances,
   fetchLearningEventDetail,
   fetchLearningEvents,
   scanLearningPatterns,
@@ -16,12 +15,15 @@ import {
   type LearningRiskLevel,
   type LearningStatus,
   type LearningTriggerKind,
+} from "../api/domain/learning";
+import { fetchInstances } from "../api/domain/instances";
+import {
   type MemoryKind,
   type MemorySensitivity,
   type MemorySourceTrustClass,
-  type SkillScope,
-  type VisibilityScope,
-} from "../api/admin";
+} from "../api/domain/memory";
+import { type SkillScope } from "../api/domain/skills";
+import { type VisibilityScope } from "../api/domain/contacts";
 import { buildExecutionReviewPath } from "../app/executionReview";
 import { CONTROL_PLANE_ROUTES } from "../app/navigation";
 import { useAppSession } from "../app/session";

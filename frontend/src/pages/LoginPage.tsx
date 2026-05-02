@@ -2,7 +2,7 @@ import type { FormEvent } from "react";
 import { useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 
-import { loginAdmin, setAdminToken } from "../api/admin";
+import { loginAdmin, setAdminToken } from "../api/domain/auth";
 import { getPostLoginDestination } from "../app/authRouting";
 
 function formatLoginError(error: unknown): string {

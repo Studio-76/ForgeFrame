@@ -26,20 +26,33 @@ const {
   updateArtifactMock: vi.fn(),
 }));
 
-vi.mock("../src/api/admin", async () => {
-  const actual = await vi.importActual<typeof import("../src/api/admin")>("../src/api/admin");
-
+vi.mock("../src/api/admin/artifacts", async () => {
+  const actual = await vi.importActual<typeof import("../src/api/admin/artifacts")>("../src/api/admin/artifacts");
   return {
     ...actual,
-    fetchInstances: fetchInstancesMock,
-    fetchWorkspaces: fetchWorkspacesMock,
-    fetchWorkspaceDetail: fetchWorkspaceDetailMock,
-    createWorkspace: createWorkspaceMock,
-    updateWorkspace: updateWorkspaceMock,
     fetchArtifacts: fetchArtifactsMock,
     fetchArtifactDetail: fetchArtifactDetailMock,
     createArtifact: createArtifactMock,
     updateArtifact: updateArtifactMock,
+  };
+});
+
+vi.mock("../src/api/admin/instances", async () => {
+  const actual = await vi.importActual<typeof import("../src/api/admin/instances")>("../src/api/admin/instances");
+  return {
+    ...actual,
+    fetchInstances: fetchInstancesMock,
+  };
+});
+
+vi.mock("../src/api/admin/workspaces", async () => {
+  const actual = await vi.importActual<typeof import("../src/api/admin/workspaces")>("../src/api/admin/workspaces");
+  return {
+    ...actual,
+    fetchWorkspaces: fetchWorkspacesMock,
+    fetchWorkspaceDetail: fetchWorkspaceDetailMock,
+    createWorkspace: createWorkspaceMock,
+    updateWorkspace: updateWorkspaceMock,
   };
 });
 

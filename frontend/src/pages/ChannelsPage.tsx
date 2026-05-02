@@ -5,13 +5,13 @@ import {
   createChannel,
   fetchChannelDetail,
   fetchChannels,
-  fetchInstances,
   updateChannel,
   type ChannelDetail,
   type DeliveryChannelKind,
   type DeliveryChannelStatus,
   type DeliveryChannelSummary,
-} from "../api/admin";
+} from "../api/domain/channels";
+import { fetchInstances } from "../api/domain/instances";
 import { CONTROL_PLANE_ROUTES } from "../app/navigation";
 import { buildChannelPath, buildNotificationPath } from "../app/workInteractionRoutes";
 import { useAppSession } from "../app/session";

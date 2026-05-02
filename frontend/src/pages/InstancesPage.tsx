@@ -9,7 +9,7 @@ import {
   type InstanceReadinessSummary,
   type InstanceRecord,
   type InstanceSetupStatus,
-} from "../api/admin";
+} from "../api/domain/instances";
 import {
   sessionCanMutateInstance,
   sessionCanMutateScopedOrAnyInstance,

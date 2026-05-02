@@ -224,13 +224,22 @@ export type RecoveryOverviewResponse = {
   summary: {
     total_policies: number;
     active_policies: number;
-    paused_policies: number;
-    ok_policies: number;
+    healthy_policies: number;
     warning_policies: number;
     blocked_policies: number;
+    fresh_backup_policies: number;
+    fresh_restore_policies: number;
+    source_identity_verified_policies: number;
+    target_classes_present: RecoveryBackupTargetClass[];
+    missing_target_classes: RecoveryBackupTargetClass[];
+    protected_data_classes_present: RecoveryProtectedDataClass[];
+    missing_protected_data_classes: RecoveryProtectedDataClass[];
+    runtime_status: "ok" | "warning" | "blocked";
+    checked_at: string;
   };
-  policies: RecoveryPolicySummary[];
   upgrade_posture: RecoveryUpgradePosture;
+  recent_upgrades: RecoveryUpgradeReportRecord[];
+  policies: RecoveryPolicySummary[];
 };
 
 // ---------------------------------------------------------------------------

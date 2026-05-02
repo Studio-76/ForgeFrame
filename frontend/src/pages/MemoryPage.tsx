@@ -5,7 +5,6 @@ import {
   correctMemoryEntry,
   createMemoryEntry,
   deleteMemoryEntry,
-  fetchInstances,
   fetchMemoryDetail,
   fetchMemoryEntries,
   revokeMemoryEntry,
@@ -18,7 +17,8 @@ import {
   type MemoryStatus,
   type MemorySummary,
   type VisibilityScope,
-} from "../api/admin";
+} from "../api/domain/memory";
+import { fetchInstances } from "../api/domain/instances";
 import { buildExecutionReviewPath } from "../app/executionReview";
 import { CONTROL_PLANE_ROUTES } from "../app/navigation";
 import {

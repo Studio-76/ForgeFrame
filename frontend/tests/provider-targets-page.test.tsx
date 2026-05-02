@@ -10,13 +10,27 @@ const { fetchProviderTargetsMock, updateProviderTargetMock, fetchInstancesMock }
   fetchInstancesMock: vi.fn(),
 }));
 
-vi.mock("../src/api/admin", async () => {
-  const actual = await vi.importActual<typeof import("../src/api/admin")>("../src/api/admin");
-
+vi.mock("../src/api/admin/providers", async () => {
+  const actual = await vi.importActual<typeof import("../src/api/admin/providers")>("../src/api/admin/providers");
   return {
     ...actual,
     fetchProviderTargets: fetchProviderTargetsMock,
     updateProviderTarget: updateProviderTargetMock,
+  };
+});
+
+vi.mock("../src/api/admin/instances", async () => {
+  const actual = await vi.importActual<typeof import("../src/api/admin/instances")>("../src/api/admin/instances");
+  return {
+    ...actual,
+    fetchInstances: fetchInstancesMock,
+  };
+});
+
+vi.mock("../src/api/admin", async () => {
+  const actual = await vi.importActual<typeof import("../src/api/admin")>("../src/api/admin");
+  return {
+    ...actual,
     fetchInstances: fetchInstancesMock,
   };
 });

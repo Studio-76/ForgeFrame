@@ -16,15 +16,28 @@ const {
   renewIngressTlsMock: vi.fn(),
 }));
 
-vi.mock("../src/api/admin", async () => {
-  const actual = await vi.importActual<typeof import("../src/api/admin")>("../src/api/admin");
+vi.mock("../src/api/admin/ingress-tls", async () => {
+  const actual = await vi.importActual<typeof import("../src/api/admin/ingress-tls")>("../src/api/admin/ingress-tls");
+  return {
+    ...actual,
+    fetchIngressTlsStatus: fetchIngressTlsStatusMock,
+    renewIngressTls: renewIngressTlsMock,
+  };
+});
 
+vi.mock("../src/api/admin/bootstrap", async () => {
+  const actual = await vi.importActual<typeof import("../src/api/admin/bootstrap")>("../src/api/admin/bootstrap");
+  return {
+    ...actual,
+    fetchBootstrapReadiness: fetchBootstrapReadinessMock,
+  };
+});
+
+vi.mock("../src/api/admin/instances", async () => {
+  const actual = await vi.importActual<typeof import("../src/api/admin/instances")>("../src/api/admin/instances");
   return {
     ...actual,
     fetchInstances: fetchInstancesMock,
-    fetchBootstrapReadiness: fetchBootstrapReadinessMock,
-    fetchIngressTlsStatus: fetchIngressTlsStatusMock,
-    renewIngressTls: renewIngressTlsMock,
   };
 });
 

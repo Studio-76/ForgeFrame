@@ -6,14 +6,14 @@ import {
   createAgent,
   fetchAgentDetail,
   fetchAgents,
-  fetchInstances,
   updateAgent,
   type AgentDetail,
   type AgentParticipationMode,
   type AgentRoleKind,
   type AgentStatus,
   type AgentSummary,
-} from "../api/admin";
+} from "../api/domain/agents";
+import { fetchInstances } from "../api/domain/instances";
 import { CONTROL_PLANE_ROUTES } from "../app/navigation";
 import {
   buildAssistantProfilePath,

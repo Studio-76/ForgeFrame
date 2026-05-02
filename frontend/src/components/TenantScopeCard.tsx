@@ -1,6 +1,6 @@
 import { Link } from "react-router-dom";
 
-import type { GatewayAccount } from "../api/admin";
+import type { GatewayAccount } from "../api/domain/accounts";
 import { CONTROL_PLANE_ROUTES } from "../app/navigation";
 import { withTenantScope } from "../app/tenantScope";
 import { Button } from "./ui/Button";

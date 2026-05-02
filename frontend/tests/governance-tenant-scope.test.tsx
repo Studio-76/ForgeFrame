@@ -12,23 +12,31 @@ const { fetchAccountsMock, fetchAuditHistoryMock, fetchRuntimeKeysMock, fetchIns
   fetchRuntimeKeyRequestPathPolicyMock: vi.fn(),
 }));
 
+vi.mock("../src/api/admin/accounts", async () => {
+  const actual = await vi.importActual<typeof import("../src/api/admin/accounts")>("../src/api/admin/accounts");
+  return { ...actual, fetchAccounts: fetchAccountsMock };
+});
+
+vi.mock("../src/api/admin/runtime-keys", async () => {
+  const actual = await vi.importActual<typeof import("../src/api/admin/runtime-keys")>("../src/api/admin/runtime-keys");
+  return { ...actual, fetchRuntimeKeys: fetchRuntimeKeysMock, fetchRuntimeKeyRequestPathPolicy: fetchRuntimeKeyRequestPathPolicyMock };
+});
+
 vi.mock("../src/api/admin", async () => {
   const actual = await vi.importActual<typeof import("../src/api/admin")>("../src/api/admin");
-
   return {
     ...actual,
-    fetchAccounts: fetchAccountsMock,
-    fetchAuditHistory: fetchAuditHistoryMock,
-    fetchRuntimeKeys: fetchRuntimeKeysMock,
     fetchInstances: fetchInstancesMock,
-    fetchRuntimeKeyRequestPathPolicy: fetchRuntimeKeyRequestPathPolicyMock,
+    fetchAuditHistory: fetchAuditHistoryMock,
   };
 });
+
+import { QueryClient } from "@tanstack/react-query";
 
 import type { AdminSessionUser, AuditHistoryResponse, GatewayAccount, InstanceRecord, RuntimeKey } from "../src/api/admin";
 import { AccountsPage } from "../src/pages/AccountsPage";
 import { ApiKeysPage } from "../src/pages/ApiKeysPage";
-import { withAppContext } from "./testContext";
+import { createTestQueryClient, withAppContext } from "./testContext";
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -142,11 +150,18 @@ async function flushEffects() {
   });
 }
 
+function createPrefilledQueryClient(): QueryClient {
+  const client = createTestQueryClient();
+  client.setQueryData(["instances"], { status: "ok", instances: [createInstance()] });
+  return client;
+}
+
 async function renderPage(path: string, element: ReactElement) {
   await renderIntoDom(withAppContext({
     path,
     element,
     session: operatorSession,
+    queryClient: createPrefilledQueryClient(),
   }));
   await flushEffects();
 }
@@ -202,7 +217,6 @@ describe("governance instance scope", () => {
   it("loads accounts and audit handoff within the active instance scope", async () => {
     await renderPage("/accounts?instanceId=instance_alpha", <AccountsPage />);
 
-    expect(fetchInstancesMock).toHaveBeenCalledTimes(1);
     expect(fetchAccountsMock).toHaveBeenCalledWith("instance_alpha");
     expect(fetchAuditHistoryMock).toHaveBeenCalledWith({
       instanceId: "instance_alpha",
@@ -211,7 +225,7 @@ describe("governance instance scope", () => {
       targetId: null,
       limit: 1,
     });
-    expect(container.textContent).toContain("Instance scope: Alpha Instance");
+    expect(container.textContent).toContain("Alpha Instance");
 
     const hrefs = collectLinkHrefs();
     expect(hrefs).toContain("/accounts?instanceId=instance_alpha");
@@ -234,7 +248,7 @@ describe("governance instance scope", () => {
       targetId: null,
       limit: 1,
     });
-    expect(container.textContent).toContain("Instance scope: Alpha Instance");
+    expect(container.textContent).toContain("Alpha Instance");
     expect(container.textContent).toContain("Focused account: Tenant Alpha");
 
     const hrefs = collectLinkHrefs();

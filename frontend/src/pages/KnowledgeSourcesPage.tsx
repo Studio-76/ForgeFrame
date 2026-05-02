@@ -3,7 +3,6 @@ import { Link, useSearchParams } from "react-router-dom";
 
 import {
   createKnowledgeSource,
-  fetchInstances,
   fetchKnowledgeSourceDetail,
   fetchKnowledgeSources,
   updateKnowledgeSource,
@@ -12,7 +11,8 @@ import {
   type KnowledgeSourceStatus,
   type KnowledgeSourceSummary,
   type VisibilityScope,
-} from "../api/admin";
+} from "../api/domain/knowledge-sources";
+import { fetchInstances } from "../api/domain/instances";
 import { CONTROL_PLANE_ROUTES } from "../app/navigation";
 import { buildContactPath, buildConversationPath, buildMemoryPath } from "../app/workInteractionRoutes";
 import { useAppSession } from "../app/session";

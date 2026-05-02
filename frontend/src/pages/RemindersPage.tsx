@@ -3,14 +3,14 @@ import { Link, useSearchParams } from "react-router-dom";
 
 import {
   createReminder,
-  fetchInstances,
   fetchReminderDetail,
   fetchReminders,
   updateReminder,
   type ReminderDetail,
   type ReminderStatus,
   type ReminderSummary,
-} from "../api/admin";
+} from "../api/domain/reminders";
+import { fetchInstances } from "../api/domain/instances";
 import { CONTROL_PLANE_ROUTES } from "../app/navigation";
 import {
   buildAutomationPath,

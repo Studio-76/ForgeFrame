@@ -20,9 +20,8 @@ const {
   importRecoveryUpgradeReportMock: vi.fn(),
 }));
 
-vi.mock("../src/api/admin", async () => {
-  const actual = await vi.importActual<typeof import("../src/api/admin")>("../src/api/admin");
-
+vi.mock("../src/api/admin/recovery", async () => {
+  const actual = await vi.importActual<typeof import("../src/api/admin/recovery")>("../src/api/admin/recovery");
   return {
     ...actual,
     fetchRecoveryOverview: fetchRecoveryOverviewMock,
