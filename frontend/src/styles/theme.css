@@ -2481,10 +2481,10 @@ details summary {
   display: grid;
   gap: var(--fg-space-3);
   border: 1px solid var(--fg-color-border-default);
-  border-radius: var(--fg-radius-lg);
+  border-radius: var(--fg-radius-md);
   background: var(--fg-color-surface-default);
-  box-shadow: var(--fg-shadow-panel);
   padding: var(--fg-space-4);
+  position: relative;
   transition:
     border-color var(--fg-motion-base) var(--fg-ease-standard),
     opacity var(--fg-motion-base) var(--fg-ease-standard);
@@ -2492,9 +2492,7 @@ details summary {
 
 .ff-setup-step-current {
   border-color: var(--fg-color-action-primary);
-  box-shadow:
-    0 0 0 1px var(--fg-color-action-primary),
-    var(--fg-shadow-panel);
+  border-left: 3px solid var(--fg-color-action-primary);
 }
 
 .ff-setup-step-complete {
@@ -2503,6 +2501,7 @@ details summary {
 
 .ff-setup-step-blocked {
   border-color: var(--fg-color-status-danger-border);
+  border-left: 3px solid var(--fg-color-status-danger-border);
 }
 
 .ff-setup-step-upcoming {
@@ -2517,21 +2516,24 @@ details summary {
 }
 
 .ff-setup-step-number {
-  flex: 0 0 2.25rem;
-  width: 2.25rem;
-  height: 2.25rem;
+  flex: 0 0 2rem;
+  width: 2rem;
+  height: 2rem;
   display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: var(--fg-radius-pill);
-  background: var(--fg-color-surface-strong);
+  border-radius: var(--fg-radius-sm);
+  border: 1px solid var(--fg-color-border-default);
+  background: var(--fg-color-surface-subtle);
   color: var(--fg-color-text-secondary);
-  font-size: var(--fg-type-size-card);
+  font-size: var(--fg-type-size-meta);
   font-weight: 700;
+  font-family: var(--fg-font-mono, monospace);
 }
 
 .ff-setup-step-number-done {
   background: var(--fg-color-status-success-soft);
+  border-color: var(--fg-color-status-success-border);
   color: var(--fg-color-status-success);
 }
 
@@ -2613,25 +2615,31 @@ details summary {
   font-size: var(--fg-type-size-meta);
   font-weight: 600;
   color: var(--fg-color-text-primary);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
 }
 
 .ff-setup-status-label {
   font-size: var(--fg-type-size-meta);
   color: var(--fg-color-text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
 }
 
 .ff-setup-progress {
   display: flex;
-  height: 0.5rem;
-  border-radius: var(--fg-radius-pill);
+  height: 0.375rem;
+  border-radius: var(--fg-radius-sm);
   overflow: hidden;
   background: var(--fg-color-surface-subtle);
+  border: 1px solid var(--fg-color-border-default);
 }
 
 .ff-setup-progress-fill {
   background: var(--fg-color-action-primary);
   transition: width 0.3s ease;
-  border-radius: var(--fg-radius-pill);
+  border-radius: var(--fg-radius-sm);
+  box-shadow: 0 0 6px color-mix(in srgb, var(--fg-color-action-primary) 40%, transparent);
 }
 
 /* Primary action bar */
@@ -2641,9 +2649,10 @@ details summary {
   gap: var(--fg-space-3);
   align-items: center;
   padding: var(--fg-space-4);
-  border-radius: var(--fg-radius-lg);
+  border-radius: var(--fg-radius-md);
   background: var(--fg-color-action-primary-soft);
   border: 1px solid var(--fg-color-action-primary);
+  border-left: 3px solid var(--fg-color-action-primary);
 }
 
 .ff-setup-primary-action-content {
@@ -2663,14 +2672,15 @@ details summary {
 .ff-setup-primary-action-button {
   display: inline-flex;
   align-items: center;
-  padding: 0.6rem 1.25rem;
-  border-radius: var(--fg-radius-md);
+  padding: 0.5rem 1.25rem;
+  border-radius: var(--fg-radius-sm);
   background: var(--fg-color-action-primary);
   color: #ffffff;
   font-size: var(--fg-type-size-body);
   font-weight: 700;
   text-decoration: none;
   white-space: nowrap;
+  letter-spacing: 0.02em;
   transition:
     background var(--fg-motion-base) var(--fg-ease-standard),
     box-shadow var(--fg-motion-base) var(--fg-ease-standard);
@@ -2678,7 +2688,7 @@ details summary {
 
 .ff-setup-primary-action-button:hover {
   background: color-mix(in srgb, var(--fg-color-action-primary) 85%, #000000);
-  box-shadow: 0 2px 8px color-mix(in srgb, var(--fg-color-action-primary) 30%, transparent);
+  box-shadow: 0 0 10px color-mix(in srgb, var(--fg-color-action-primary) 35%, transparent);
 }
 
 .ff-setup-primary-action-button:disabled {
@@ -2797,6 +2807,18 @@ details summary {
 
   .fg-audit-detail-panel {
     position: static;
+  }
+
+  /* Stack setup action bar on tablet */
+  .ff-setup-primary-action-content {
+    flex-direction: column;
+    align-items: stretch;
+    gap: var(--fg-space-2);
+  }
+
+  .ff-setup-primary-action-button {
+    justify-content: center;
+    text-align: center;
   }
 }
 
@@ -3087,5 +3109,17 @@ details summary {
   /* Add content padding so the bottom tab bar doesn't obscure content */
   .ff-main {
     padding-bottom: calc(1rem + 64px + env(safe-area-inset-bottom, 0px));
+  }
+
+  /* Stack setup action bar on mobile */
+  .ff-setup-primary-action-content {
+    flex-direction: column;
+    align-items: stretch;
+    gap: var(--fg-space-2);
+  }
+
+  .ff-setup-primary-action-button {
+    justify-content: center;
+    text-align: center;
   }
 }

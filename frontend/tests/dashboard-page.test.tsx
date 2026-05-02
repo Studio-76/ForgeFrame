@@ -319,8 +319,6 @@ describe("setup page", () => {
     expect(fetchDashboardMock).toHaveBeenCalledWith("instance_alpha");
     expect(container.textContent).toContain("System setup");
     expect(container.textContent).toContain("Setup and status");
-    expect(container.textContent).toContain("Open routing");
-
     /* Verify setup step card titles are rendered */
     expect(container.textContent).toContain("Configure instance and scope");
     expect(container.textContent).toContain("Connect provider");
@@ -330,13 +328,16 @@ describe("setup page", () => {
     expect(container.textContent).toContain("Run readiness probe");
     expect(container.textContent).toContain("Go-live readiness");
 
+    /* Current step shows a primary action label */
+    expect(container.textContent).toContain("Configure routing");
+
     const providerStepCard = Array.from(container.querySelectorAll(".ff-setup-step-card")).find(
       (card) => card.textContent?.includes("Connect provider"),
     );
     expect(providerStepCard?.textContent).toContain("complete");
 
     const primaryLink = Array.from(container.querySelectorAll("a")).find(
-      (link) => link.textContent?.includes("Open routing"),
+      (link) => link.textContent?.includes("Configure routing"),
     );
     expect(primaryLink?.getAttribute("href")).toBe("/routing?instanceId=instance_alpha");
 
@@ -395,10 +396,10 @@ describe("setup page", () => {
     /* Setup steps should be visible even when the dashboard returns empty_state */
     expect(container.textContent).toContain("System setup");
     expect(container.textContent).toContain("Configure instance and scope");
-    expect(container.textContent).toContain("Open providers");
+    expect(container.textContent).toContain("Configure providers");
 
     const providerLink = Array.from(container.querySelectorAll("a")).find(
-      (link) => link.textContent?.includes("Open providers"),
+      (link) => link.textContent?.includes("Configure providers"),
     );
     expect(providerLink?.getAttribute("href")).toBe("/providers?instanceId=instance_alpha");
     expect(container.innerHTML).not.toContain("/onboarding?instanceId=instance_alpha");

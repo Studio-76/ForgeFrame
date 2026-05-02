@@ -121,7 +121,7 @@ export function SetupStepCard({ step, instanceId }: SetupStepCardProps) {
             className="fg-nav-link"
             to={withInstanceScope(step.actionTo, instanceId)}
           >
-            {isCurrent ? step.actionLabel : `Open ${step.actionLabel}`}
+            {isComplete && step.reviewLabel ? step.reviewLabel : step.actionLabel}
           </Link>
         </div>
       ) : null}

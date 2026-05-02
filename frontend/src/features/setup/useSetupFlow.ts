@@ -120,6 +120,7 @@ function deriveSteps(
         blockers: [],
         actionLabel: "Rotate password",
         actionTo: "/rotate-password",
+        reviewLabel: null,
       },
     ];
   }
@@ -137,6 +138,7 @@ function deriveSteps(
     blockers: string[],
     actionLabel: string | null,
     actionTo: string | null,
+    reviewLabel: string | null = null,
   ): void {
     let status: SetupStepStatus;
     if (isDone) {
@@ -157,6 +159,7 @@ function deriveSteps(
       blockers,
       actionLabel,
       actionTo,
+      reviewLabel,
     });
   }
 
@@ -173,8 +176,9 @@ function deriveSteps(
     !needsInstance,
     instanceAttention?.severity === "critical",
     needsInstance ? ["No instance is configured yet. Create the first instance to proceed."] : [],
-    needsInstance ? "Open instances" : null,
+    needsInstance ? "Create instance" : null,
     needsInstance ? "/instances" : null,
+    null,
   );
 
   /* Step 3: Connect provider */
@@ -204,8 +208,9 @@ function deriveSteps(
     providerDone,
     providerBlocked,
     providerBlockers,
-    "Open providers",
+    "Configure providers",
     CONTROL_PLANE_ROUTES.providers,
+    "Review providers",
   );
 
   /* Step 4: Configure routing */
@@ -223,8 +228,9 @@ function deriveSteps(
     routingDone,
     routingStatus === "blocked" || routingAttention?.severity === "critical",
     routingDone ? [] : [routingAttention?.cause ?? "Routing policy, budget, circuits, and queue posture must be ready."],
-    "Open routing",
+    "Configure routing",
     CONTROL_PLANE_ROUTES.routing,
+    "Review routing",
   );
 
   /* Step 5: Issue runtime key */
@@ -242,8 +248,9 @@ function deriveSteps(
     runtimeKeyDone,
     keyAttention?.severity === "critical",
     runtimeKeyDone ? [] : [keyAttention?.cause ?? "Create one active runtime key before running first-success traffic."],
-    "Open API keys",
+    "Manage API keys",
     CONTROL_PLANE_ROUTES.apiKeys,
+    "Review API keys",
   );
 
   /* Step 6: Verify FQDN/TLS */
@@ -253,16 +260,18 @@ function deriveSteps(
   );
   const readinessStatus = dashboardSectionStatus(dashboard, "readiness");
   const tlsDone = readinessStatus === "ready";
+  const tlsBlocked = readinessStatus === "blocked" || tlsAttention?.severity === "critical";
   addStep(
     "verify-tls",
     6,
     "Verify FQDN and TLS",
     "Confirm the public FQDN resolves, the HTTPS listener is active, and a valid certificate is installed.",
     tlsDone,
-    readinessStatus === "blocked" || tlsAttention?.severity === "critical",
+    tlsBlocked,
     tlsDone ? [] : [tlsAttention?.cause ?? "FQDN, DNS, HTTPS listener, and certificate evidence must be ready."],
-    "Open ingress/TLS",
+    tlsBlocked ? "Fix ingress/TLS" : "Configure ingress/TLS",
     CONTROL_PLANE_ROUTES.ingressTls,
+    "Review ingress/TLS",
   );
 
   /* Step 7: Run readiness probe */
@@ -280,8 +289,9 @@ function deriveSteps(
     readinessProbeDone,
     runtimeAttention?.severity === "critical",
     readinessProbeDone ? [] : [runtimeAttention?.cause ?? "Run release validation or first-success traffic so runtime proof is recorded."],
-    "Open release validation",
+    "Run release validation",
     CONTROL_PLANE_ROUTES.releaseValidation,
+    "Review validation",
   );
 
   /* Step 8: Go-live summary */
@@ -299,6 +309,7 @@ function deriveSteps(
     goLiveBlocked
       ? detailRouteOrFallback(allAttentionItems[0]?.to, CONTROL_PLANE_ROUTES.releaseValidation)
       : CONTROL_PLANE_ROUTES.dashboard,
+    null,
   );
 
   return steps;

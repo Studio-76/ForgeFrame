@@ -39,6 +39,12 @@ export type SetupStep = {
   actionLabel: string | null;
   /** Route for the primary action button, or null. */
   actionTo: string | null;
+  /**
+   * Label shown for completed steps.
+   * Uses "Review" prefix to indicate the step is done but still accessible.
+   * When null, completed steps show no action link.
+   */
+  reviewLabel: string | null;
 };
 
 /** Complete state for the setup page. */
