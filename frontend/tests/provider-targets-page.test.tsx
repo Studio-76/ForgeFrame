@@ -243,11 +243,11 @@ describe("Provider targets page", () => {
     expect(container.textContent).toContain("Provider Targets");
     expect(container.textContent).toContain("Instance-bound target table");
     expect(container.textContent).toContain("OpenAI · gpt-4.1-mini");
+    expect(container.textContent).toContain("Routing Dry Run");
+    expect(container.textContent).toContain("Provider Health");
     expect(container.textContent).toContain("Capabilities");
     expect(container.textContent).toContain("Policy flags");
     expect(container.textContent).toContain("Cost / quality profile");
-    expect(container.textContent).toContain("Routing Dry Run");
-    expect(container.textContent).toContain("Provider Health");
 
     const providerFilter = container.querySelector<HTMLSelectElement>('select[aria-label="Provider filter"]');
     expect(providerFilter?.value).toBe("all");
@@ -289,7 +289,7 @@ describe("Provider targets page", () => {
     });
 
     expect(container.textContent).toContain("Anthropic OAuth · Claude 3.5 Sonnet");
-    expect(container.textContent).toContain("Partial");
+    expect(container.textContent).toContain("Disabled");
 
     const enableCheckbox = container.querySelector<HTMLInputElement>('input[aria-label="Enable target"]');
     const saveButton = Array.from(container.querySelectorAll("button")).find((button) => button.textContent?.includes("Save target changes"));
