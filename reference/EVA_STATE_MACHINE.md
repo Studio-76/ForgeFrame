@@ -374,24 +374,7 @@ class RunStateMachine:
 
 A state machine diagram can be auto-generated and embedded in CI documentation:
 
-```mermaid
-stateDiagram-v2
-    [*] --> queued
-    queued --> dispatching : admit
-    dispatching --> executing : dispatch
-    executing --> waiting_on_approval : pause
-    waiting_on_approval --> executing : resume
-    executing --> succeeded : complete
-    dispatching --> failed : fail
-    executing --> failed : fail
-    failed --> retry_backoff : retry [has_retry_budget]
-    retry_backoff --> queued : retry_ready
-    failed --> dead_lettered : dead_letter [no_retry_budget]
-    failed --> compensating : compensate
-    compensating --> compensated : compensated_done
-    [*] --> cancel_requested : cancel [is_cancellable]
-    cancel_requested --> cancelled : confirm_cancel
-```
+![state machine diagram](EVA_STATE_MACHINE_MM.png)
 
 ---
 
