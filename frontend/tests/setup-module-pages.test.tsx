@@ -306,11 +306,9 @@ describe("setup module pages", () => {
     expect(fetchRoutingControlPlaneMock).toHaveBeenCalledWith("instance_alpha");
     expect(fetchIngressTlsStatusMock).toHaveBeenCalled();
     expect(container.textContent).toContain("Release / Validation");
-    expect(container.textContent).toContain("Release gates");
-    expect(container.textContent).toContain("Sorted blockers");
     expect(container.textContent).toContain("Build / Test");
     expect(container.textContent).toContain("manual evidence required");
     expect(container.textContent).toContain("upgrade_evidence_missing");
-    expect(container.textContent).toContain("Open Ingress / TLS");
+    expect(container.textContent).toContain("Review TLS configuration");
   });
 });

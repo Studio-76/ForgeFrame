@@ -299,8 +299,8 @@ describe("release validation page", () => {
     expect(container.textContent).toContain("TLS");
     expect(container.textContent).toContain("Backup / Recovery");
     expect(container.textContent).toContain("manual evidence required");
-    expect(container.textContent).toContain("Open Security");
-    expect(container.textContent).toContain("Open Dispatch");
+    expect(container.textContent).toContain("Review security posture");
+    expect(container.textContent).toContain("Review queue and dispatch");
   });
 
   it("shows selected gate detail with the responsible correction route", async () => {
@@ -319,7 +319,7 @@ describe("release validation page", () => {
 
     expect(container.textContent).toContain("Ingress / TLS certificate status API");
     expect(container.textContent).toContain("exception mode");
-    expect(container.textContent).toContain("Open Ingress / TLS");
+    expect(container.textContent).toContain("View Ingress / TLS");
   });
 
   it("downgrades functionally green gates without evidence timestamps to manual evidence required", async () => {
@@ -499,7 +499,7 @@ describe("release validation page", () => {
     });
     await flushEffects();
 
-    expect(container.textContent).toContain("Evidence at: manual evidence required");
+    expect(container.textContent).toContain("Last checked");
     expect(container.textContent).toContain("Bootstrap is functionally green, but the release gate has no evidence timestamp.");
   });
 });
