@@ -1,0 +1,568 @@
+/* ──────────────────────────────────────────────
+ * Learning review — redesigned UX
+ * Summary hero, compact tabs, event list + detail,
+ * confirmation-gated promotion, guided manual flow.
+ * ────────────────────────────────────────────── */
+
+/* ─── Instance selector bar ─── */
+.ff-learning-instance-bar {
+  border: 1px solid var(--fg-color-border-default);
+  border-radius: var(--fg-radius-lg);
+  background: var(--fg-color-surface-default);
+  padding: var(--fg-space-3) var(--fg-space-4);
+  margin-bottom: var(--fg-space-4);
+}
+
+/* ─── Summary hero ─── */
+.ff-learning-summary {
+  border: 1px solid var(--fg-color-border-default);
+  border-radius: var(--fg-radius-lg);
+  background: var(--fg-color-surface-default);
+  padding: var(--fg-space-4);
+  margin-bottom: var(--fg-space-4);
+}
+
+.ff-learning-summary-strip {
+  display: flex;
+  gap: var(--fg-space-5);
+  flex-wrap: wrap;
+  margin-bottom: var(--fg-space-3);
+}
+
+.ff-learning-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+  min-width: 80px;
+}
+
+.ff-learning-stat-value {
+  font-size: 1.5rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.1;
+  color: var(--fg-color-text-primary);
+}
+
+.ff-learning-stat-value.ff-learning-stat-warning {
+  color: var(--fg-color-status-warning);
+}
+
+.ff-learning-stat-value.ff-learning-stat-success {
+  color: var(--fg-color-status-success);
+}
+
+.ff-learning-stat-value.ff-learning-stat-muted {
+  color: var(--fg-color-text-secondary);
+}
+
+.ff-learning-stat-label {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--fg-color-text-secondary);
+}
+
+.ff-learning-scan-status {
+  font-size: 0.8125rem;
+  color: var(--fg-color-text-secondary);
+  margin: 0 0 var(--fg-space-2);
+}
+
+.ff-learning-hero-actions {
+  display: flex;
+  flex-direction: column;
+  gap: var(--fg-space-3);
+}
+
+.ff-learning-next-action {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--fg-color-status-warning);
+  margin: 0;
+}
+
+.ff-learning-hero-buttons {
+  display: flex;
+  gap: var(--fg-space-2);
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.ff-learning-primary-action {
+  padding: var(--fg-space-2) var(--fg-space-4);
+  background: var(--fg-color-action-primary);
+  color: white;
+  border: none;
+  border-radius: var(--fg-radius-md);
+  font-size: 0.875rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity 0.15s;
+}
+
+.ff-learning-primary-action:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.ff-learning-secondary-action {
+  padding: var(--fg-space-2) var(--fg-space-4);
+  background: transparent;
+  color: var(--fg-color-text-primary);
+  border: 1px solid var(--fg-color-border-default);
+  border-radius: var(--fg-radius-md);
+  font-size: 0.875rem;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.ff-learning-secondary-action:hover:not(:disabled) {
+  background: var(--fg-color-surface-subtle);
+}
+
+.ff-learning-secondary-action:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.ff-learning-info-toggle {
+  padding: var(--fg-space-1) var(--fg-space-3);
+  background: transparent;
+  color: var(--fg-color-text-secondary);
+  border: 1px solid var(--fg-color-border-default);
+  border-radius: var(--fg-radius-md);
+  font-size: 0.75rem;
+  cursor: pointer;
+}
+
+.ff-learning-scan-info {
+  border: 1px solid var(--fg-color-status-info-border);
+  border-radius: var(--fg-radius-md);
+  padding: var(--fg-space-3);
+  background: var(--fg-color-status-info-soft);
+  font-size: 0.8125rem;
+  color: var(--fg-color-text-secondary);
+  line-height: 1.5;
+}
+
+.ff-learning-scan-info p {
+  margin: 0;
+}
+
+/* ─── Empty state ─── */
+.ff-learning-empty {
+  border: 1px solid var(--fg-color-border-default);
+  border-radius: var(--fg-radius-lg);
+  padding: var(--fg-space-6) var(--fg-space-4);
+  text-align: center;
+  margin-bottom: var(--fg-space-4);
+}
+
+.ff-learning-empty-content {
+  max-width: 480px;
+  margin: 0 auto;
+}
+
+.ff-learning-empty-content h3 {
+  margin: 0 0 var(--fg-space-2);
+  font-size: 1.125rem;
+}
+
+.ff-learning-empty-desc {
+  color: var(--fg-color-text-secondary);
+  font-size: 0.875rem;
+  margin: 0 0 var(--fg-space-4);
+  line-height: 1.5;
+}
+
+.ff-learning-empty-actions {
+  display: flex;
+  gap: var(--fg-space-2);
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+/* ─── Main content grid ─── */
+.ff-learning-main-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--fg-space-4);
+  align-items: start;
+  margin-bottom: var(--fg-space-4);
+}
+
+@media (max-width: 960px) {
+  .ff-learning-main-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ─── Tab bar ─── */
+.ff-learning-tabs {
+  display: flex;
+  gap: 0;
+  border-bottom: 1px solid var(--fg-color-border-default);
+  margin-bottom: var(--fg-space-3);
+  overflow-x: auto;
+}
+
+.ff-learning-tab {
+  padding: var(--fg-space-2) var(--fg-space-4);
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--fg-color-text-secondary);
+  font-size: 0.8125rem;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: color 0.15s, border-color 0.15s;
+  font-family: inherit;
+}
+
+.ff-learning-tab:hover {
+  color: var(--fg-color-text-primary);
+}
+
+.ff-learning-tab-active {
+  color: var(--fg-color-text-primary);
+  border-bottom-color: var(--fg-color-action-primary);
+  font-weight: 600;
+}
+
+.ff-learning-tab[data-tone="success"].ff-learning-tab-active {
+  border-bottom-color: var(--fg-color-status-success);
+}
+
+.ff-learning-tab[data-tone="warning"].ff-learning-tab-active {
+  border-bottom-color: var(--fg-color-status-warning);
+}
+
+.ff-learning-tab[data-tone="danger"].ff-learning-tab-active {
+  border-bottom-color: var(--fg-color-status-danger);
+}
+
+.ff-learning-empty-list {
+  padding: var(--fg-space-3);
+  text-align: center;
+}
+
+/* ─── Event list ─── */
+.ff-learning-event-list {
+  border: 1px solid var(--fg-color-border-default);
+  border-radius: var(--fg-radius-lg);
+  background: var(--fg-color-surface-default);
+  overflow: hidden;
+}
+
+.ff-learning-row-selected {
+  background: var(--fg-color-surface-subtle);
+  outline: 2px solid var(--fg-color-focus-ring);
+  outline-offset: -2px;
+}
+
+/* ─── Detail panel ─── */
+.ff-learning-detail {
+  border: 1px solid var(--fg-color-border-default);
+  border-radius: var(--fg-radius-lg);
+  background: var(--fg-color-surface-default);
+  padding: var(--fg-space-4);
+}
+
+.ff-learning-detail-empty {
+  opacity: 0.6;
+}
+
+.ff-learning-detail-badges {
+  display: flex;
+  gap: var(--fg-space-2);
+  flex-wrap: wrap;
+  margin-bottom: var(--fg-space-4);
+}
+
+/* ─── Advanced details ─── */
+.ff-learning-advanced {
+  border: 1px solid var(--fg-color-border-default);
+  border-radius: var(--fg-radius-md);
+  padding: var(--fg-space-3);
+  margin-bottom: var(--fg-space-3);
+  font-size: 0.8125rem;
+}
+
+.ff-learning-advanced[open] {
+  padding-bottom: var(--fg-space-3);
+}
+
+.ff-learning-advanced summary {
+  cursor: pointer;
+  font-weight: 600;
+  color: var(--fg-color-text-secondary);
+}
+
+.ff-learning-advanced .fg-grid-compact {
+  margin-top: var(--fg-space-3);
+}
+
+/* ─── Decision action buttons ─── */
+.ff-learning-decision-actions {
+  display: flex;
+  gap: var(--fg-space-2);
+  flex-wrap: wrap;
+  margin-bottom: var(--fg-space-3);
+}
+
+.ff-learning-decision-actions button {
+  padding: var(--fg-space-1) var(--fg-space-3);
+  font-size: 0.8125rem;
+  border: 1px solid var(--fg-color-border-default);
+  border-radius: var(--fg-radius-md);
+  background: var(--fg-color-surface-default);
+  color: var(--fg-color-text-primary);
+  cursor: pointer;
+  transition: background 0.15s;
+  font-family: inherit;
+}
+
+.ff-learning-decision-actions button:hover:not(:disabled) {
+  background: var(--fg-color-surface-subtle);
+}
+
+.ff-learning-decision-actions button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* ─── Confirmation dialog ─── */
+.ff-learning-confirm {
+  border: 1px solid var(--fg-color-status-warning-border);
+  border-radius: var(--fg-radius-md);
+  padding: var(--fg-space-3);
+  background: var(--fg-color-status-warning-soft);
+  margin-bottom: var(--fg-space-3);
+}
+
+.ff-learning-confirm-text {
+  margin: 0 0 var(--fg-space-2);
+  font-size: 0.875rem;
+  color: var(--fg-color-text-primary);
+}
+
+.ff-learning-confirm-actions {
+  display: flex;
+  gap: var(--fg-space-2);
+}
+
+.ff-learning-confirm-yes {
+  padding: var(--fg-space-1) var(--fg-space-3);
+  background: var(--fg-color-status-danger);
+  color: white;
+  border: none;
+  border-radius: var(--fg-radius-md);
+  font-size: 0.8125rem;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.ff-learning-confirm-yes:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.ff-learning-confirm-no {
+  padding: var(--fg-space-1) var(--fg-space-3);
+  background: transparent;
+  color: var(--fg-color-text-primary);
+  border: 1px solid var(--fg-color-border-default);
+  border-radius: var(--fg-radius-md);
+  font-size: 0.8125rem;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+/* ─── Lifecycle diagram ─── */
+.ff-learning-lifecycle {
+  border: 1px solid var(--fg-color-border-default);
+  border-radius: var(--fg-radius-lg);
+  padding: var(--fg-space-3) var(--fg-space-4);
+  margin-bottom: var(--fg-space-4);
+  font-size: 0.875rem;
+}
+
+.ff-learning-lifecycle summary {
+  cursor: pointer;
+  font-weight: 600;
+  color: var(--fg-color-text-primary);
+}
+
+.ff-learning-lifecycle-flow {
+  display: flex;
+  align-items: center;
+  gap: var(--fg-space-2);
+  flex-wrap: wrap;
+  margin-top: var(--fg-space-3);
+  margin-bottom: var(--fg-space-3);
+}
+
+.ff-learning-lifecycle-step {
+  display: flex;
+  align-items: center;
+  gap: var(--fg-space-2);
+}
+
+.ff-learning-lifecycle-step div {
+  display: flex;
+  flex-direction: column;
+}
+
+.ff-learning-lifecycle-step strong {
+  font-size: 0.875rem;
+}
+
+.ff-learning-lifecycle-step span {
+  font-size: 0.75rem;
+  color: var(--fg-color-text-secondary);
+}
+
+.ff-learning-lifecycle-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--fg-color-action-primary-soft);
+  color: var(--fg-color-action-primary);
+  font-size: 0.75rem;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.ff-learning-lifecycle-split {
+  background: var(--fg-color-status-warning-soft);
+  color: var(--fg-color-status-warning);
+}
+
+.ff-learning-lifecycle-arrow {
+  color: var(--fg-color-text-secondary);
+  font-size: 1.125rem;
+  font-weight: 300;
+}
+
+.ff-learning-lifecycle-outcomes {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: var(--fg-space-2);
+}
+
+.ff-learning-lifecycle-outcome {
+  border: 1px solid var(--fg-color-border-default);
+  border-radius: var(--fg-radius-md);
+  padding: var(--fg-space-2) var(--fg-space-3);
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+}
+
+.ff-learning-lifecycle-outcome strong {
+  font-size: 0.8125rem;
+}
+
+.ff-learning-lifecycle-outcome span {
+  font-size: 0.75rem;
+  color: var(--fg-color-text-secondary);
+}
+
+.ff-learning-outcome-memory {
+  border-color: var(--fg-color-status-success-border);
+  background: var(--fg-color-status-success-soft);
+}
+
+.ff-learning-outcome-skill {
+  border-color: var(--fg-color-status-info-border);
+  background: var(--fg-color-status-info-soft);
+}
+
+.ff-learning-outcome-history {
+  border-color: var(--fg-color-border-default);
+}
+
+.ff-learning-outcome-reject {
+  border-color: var(--fg-color-status-danger-border);
+  background: var(--fg-color-status-danger-soft);
+}
+
+/* ─── Manual creation form ─── */
+.ff-learning-manual-form {
+  border: 1px solid var(--fg-color-border-default);
+  border-radius: var(--fg-radius-lg);
+  background: var(--fg-color-surface-default);
+  padding: var(--fg-space-4);
+}
+
+/* ─── Step indicator ─── */
+.ff-learning-steps {
+  display: flex;
+  gap: 0;
+  margin-bottom: var(--fg-space-4);
+  border: 1px solid var(--fg-color-border-default);
+  border-radius: var(--fg-radius-md);
+  overflow: hidden;
+}
+
+.ff-learning-step {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: var(--fg-space-2);
+  padding: var(--fg-space-2) var(--fg-space-3);
+  background: var(--fg-color-surface-default);
+  border-right: 1px solid var(--fg-color-border-default);
+  font-size: 0.75rem;
+  color: var(--fg-color-text-secondary);
+}
+
+.ff-learning-step:last-child {
+  border-right: none;
+}
+
+.ff-learning-step-active {
+  background: var(--fg-color-action-primary-soft);
+  color: var(--fg-color-action-primary);
+  font-weight: 600;
+}
+
+.ff-learning-step-done {
+  color: var(--fg-color-status-success);
+}
+
+.ff-learning-step-num {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--fg-color-surface-subtle);
+  font-size: 0.6875rem;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.ff-learning-step-active .ff-learning-step-num {
+  background: var(--fg-color-action-primary);
+  color: white;
+}
+
+.ff-learning-step-done .ff-learning-step-num {
+  background: var(--fg-color-status-success);
+  color: white;
+}
+
+.ff-learning-step-content {
+  margin-bottom: var(--fg-space-4);
+}
+
+.ff-learning-step-content h4 {
+  margin: 0 0 var(--fg-space-3);
+  font-size: 1rem;
+}
