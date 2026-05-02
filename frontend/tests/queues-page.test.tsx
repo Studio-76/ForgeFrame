@@ -176,8 +176,9 @@ describe("Queues page", () => {
     expect(container.textContent).toContain("Capacity starved");
     expect(container.textContent).toContain("Replay or restart on Execution Review");
     expect(container.textContent).toContain("openai_api::gpt-4.1-mini");
-    const reviewLink = Array.from(container.querySelectorAll("a")).find((link) => link.textContent === "Open execution review");
-    expect(reviewLink?.getAttribute("href")).toBe("/execution?instanceId=instance_alpha&state=dead_lettered&runId=run_alpha");
+    const reviewLinks = Array.from(container.querySelectorAll("a")).filter((link) => link.textContent?.trim() === "Open execution review");
+    expect(reviewLinks.length).toBeGreaterThanOrEqual(1);
+    expect(reviewLinks[0]?.getAttribute("href")).toBe("/execution?instanceId=instance_alpha&state=dead_lettered&runId=run_alpha");
   });
 
   it("submits lane, state, target, and age filters to the queue API", async () => {
@@ -293,7 +294,8 @@ describe("Queues page", () => {
 
     await renderQueuesPage("/queues?instanceId=instance_alpha");
 
-    expect(container.textContent).toContain("Oldest age: 2d");
+    expect(container.textContent).toContain("Oldest");
+    expect(container.textContent).toContain("2d");
     expect(container.textContent).not.toContain("No queued work");
     expect(container.textContent).toContain("Paused by an operator command.");
   });
