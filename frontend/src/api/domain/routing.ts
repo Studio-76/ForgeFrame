@@ -16,4 +16,4 @@ export {
   type RoutingDecisionCandidateRecord,
   type RoutingDecisionRecord,
   type RoutingPolicyRecord,
-} from "../admin";
+} from "../admin/routing";

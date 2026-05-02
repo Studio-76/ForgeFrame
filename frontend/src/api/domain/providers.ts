@@ -15,7 +15,6 @@ export {
   fetchOauthOnboarding,
   fetchProviderControlPlane,
   fetchProviderDrilldown,
-  fetchProviderSecretPosture,
   fetchProviderTargets,
   fetchProductAxisTargets,
   runHealthChecks,
@@ -37,4 +36,4 @@ export {
   type ProviderControlPlaneResponse,
   type ProviderTargetRecord,
   type ProviderTargetRegisterResponse,
-} from "../admin";
+} from "../admin/providers";

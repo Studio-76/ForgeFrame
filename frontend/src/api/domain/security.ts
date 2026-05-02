@@ -5,6 +5,7 @@ export {
   createAdminUser,
   deleteAdminUserMembership,
   fetchAdminUsers,
+  fetchProviderSecretPosture,
   fetchSecurityBootstrap,
   updateAdminUser,
   type SecurityBlocker,
@@ -13,4 +14,4 @@ export {
   type SecurityCredentialPolicy,
   type SecurityRotationEvent,
   type SecuritySecretPosture,
-} from "../admin";
+} from "../admin/security";
