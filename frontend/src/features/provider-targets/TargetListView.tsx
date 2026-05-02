@@ -7,7 +7,6 @@ import {
   nextActionForTarget,
   reasonForTargetStatus,
   statusLabelForTarget,
-  titleCase,
   toneForTargetStatus,
 } from "./utils";
 
@@ -20,8 +19,11 @@ type TargetListViewProps = {
 };
 
 /**
- * Provider targets table with streamlined columns.
- * Shows target name (no raw key), primary status, reason, next action, and health.
+ * Provider targets table with streamlined, scannable columns.
+ *
+ * Each row shows one primary status, a clear reason, one next action,
+ * and last probe timestamp. The goal: an operator knows which target
+ * needs attention and what to do about it within 5 seconds.
  */
 export function TargetListView({
   targets,
@@ -84,14 +86,19 @@ export function TargetListView({
       },
     },
     {
-      key: "health",
-      header: "Health",
-      render: (target) => (
-        <div>
-          <div>{titleCase(target.health_status)} · {titleCase(target.availability_status)}</div>
-          <div className="fg-muted">Probe {formatTimestamp(target.last_probe_at)}</div>
-        </div>
-      ),
+      key: "probe",
+      header: "Last probe",
+      render: (target) => {
+        if (!target.last_probe_at) {
+          return <span className="fg-muted">No live probe recorded</span>;
+        }
+        return (
+          <div>
+            <div>{target.health_status === "healthy" ? "Healthy" : target.health_status}</div>
+            <div className="fg-muted">{formatTimestamp(target.last_probe_at)}</div>
+          </div>
+        );
+      },
     },
     {
       key: "priority",
@@ -103,7 +110,7 @@ export function TargetListView({
   return (
     <EntityTable
       title="Instance-bound target table"
-      description="Each row shows the primary target state and a recommended next action. Raw identifiers and capability metadata stay in the detail panel."
+      description="Each row shows one primary target state and a recommended next action. Select a row for detailed readiness checks and policy editing."
       columns={columns}
       rows={filteredTargets}
       rowKey={(target) => target.target_key}
