@@ -589,10 +589,12 @@ describe("Provider readiness axes", () => {
     expect(markup).toContain("Refresh");
     expect(markup).toContain("Read access required");
     expect(markup).not.toContain("Sync all providers");
+    expect(markup).not.toContain("Sync all providers");
     expect(markup).not.toContain("Export redacted");
     expect(markup).not.toContain("Export full snapshot");
-    expect(markup).not.toContain("Save profile");
-    expect(markup).not.toContain(">Verify<");
+    expect(markup).not.toContain("Edit profile");
+    expect(markup).not.toContain("Create draft from preset");
+    expect(markup).not.toContain("Verify profile");
     expect(markup).not.toContain("Create provider");
     expect(markup).not.toContain("Save label");
     expect(markup).not.toContain("Run health checks");
@@ -610,14 +612,14 @@ describe("Provider readiness axes", () => {
       </>,
     );
 
-    expect(markup).toContain("Read-only provider view");
     expect(markup).toContain("Export (redacted)");
     expect(markup).not.toContain("Export (full)");
-    expect(markup).not.toContain(">Verify<");
+    expect(markup).not.toContain("Edit profile");
+    expect(markup).not.toContain("Create draft from preset");
+    expect(markup).not.toContain("Verify profile");
     expect(markup).not.toContain("Dry-run import");
     expect(markup).not.toContain("Apply import");
     expect(markup).not.toContain("Create provider");
-    expect(markup).not.toContain("Save current config");
     expect(markup).not.toContain("Probe all OAuth targets");
   });
 
@@ -634,15 +636,15 @@ describe("Provider readiness axes", () => {
     );
 
     expect(markup).toContain("Sync all providers");
-    expect(markup).toContain("Save profile");
-    expect(markup).toContain(">Preview<");
-    expect(markup).toContain(">Verify<");
-    expect(markup).toContain(">Dry-run<");
+    expect(markup).toContain("Edit profile");
+    expect(markup).toContain("Create draft from preset");
+    expect(markup).toContain("Preview request");
+    expect(markup).toContain("Verify profile");
+    expect(markup).toContain("Run dry-run request");
     expect(markup).toContain("Export (redacted)");
     expect(markup).toContain("Export (full)");
     expect(markup).toContain("Dry-run import");
     expect(markup).toContain("Create provider");
-    expect(markup).toContain("Save label");
     expect(markup).toContain("Sync bridge profiles");
     expect(markup).toContain("Test");
   });

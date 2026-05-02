@@ -280,14 +280,13 @@ describe("Harness page separation", () => {
     );
 
     expect(markup).toContain(">Harness<");
-    expect(markup).toContain("Provider Presets");
+    expect(markup).toContain("Profiles");
     expect(markup).toContain("OpenAI Primary");
     expect(markup).toContain("Run History");
     expect(markup).toContain("Advanced Diagnostics");
-    expect(markup).toContain("Save profile");
-    expect(markup).toContain(">Preview<");
-    expect(markup).toContain(">Verify<");
-    expect(markup).toContain(">Dry-run<");
+    expect(markup).toContain("Verify profile");
+    expect(markup).toContain("Preview request");
+    expect(markup).toContain("Run dry-run request");
     expect(markup).not.toContain("Control-Plane Summary");
   });
 
@@ -302,10 +301,9 @@ describe("Harness page separation", () => {
 
     expect(markup).toContain("Read access required");
     expect(markup).toContain("the backend will return 403 until providers.read is granted here");
-    expect(markup).not.toContain("Profiles &amp; Templates");
-    expect(markup).not.toContain("Selected Profile");
-    expect(markup).not.toContain("Save profile");
-    expect(markup).not.toContain(">Verify<");
+    expect(markup).not.toContain("Profiles");
+    expect(markup).not.toContain("OpenAI Primary");
+    expect(markup).not.toContain("Verify profile");
     expect(markup).not.toContain("Export redacted");
   });
 
@@ -352,9 +350,11 @@ describe("Harness page separation", () => {
     );
 
     expect(alphaMarkup).toContain("Operator mutations enabled");
-    expect(alphaMarkup).toContain("Save profile");
+    expect(alphaMarkup).toContain("Edit profile");
+    expect(alphaMarkup).toContain("Create draft from preset");
     expect(betaMarkup).not.toContain("Operator mutations enabled");
-    expect(betaMarkup).not.toContain("Save profile");
+    expect(betaMarkup).not.toContain("Edit profile");
+    expect(betaMarkup).not.toContain("Create draft from preset");
     expect(betaMarkup).toContain("Operate only");
   });
 });
