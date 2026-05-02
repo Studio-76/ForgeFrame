@@ -455,6 +455,33 @@ export type WorkItemPriority = "low" | "normal" | "high" | "critical";
 /** Inbox item status. */
 export type InboxStatus = "open" | "snoozed" | "closed" | "archived";
 
+/** Inbox item summary view. */
+export type InboxSummary = {
+  inbox_id: string;
+  instance_id: string;
+  company_id: string;
+  conversation_id?: string | null;
+  thread_id?: string | null;
+  workspace_id?: string | null;
+  title: string;
+  summary: string;
+  triage_status: TriageStatus;
+  priority: WorkItemPriority;
+  status: InboxStatus;
+  contact_ref?: string | null;
+  run_id?: string | null;
+  artifact_id?: string | null;
+  approval_id?: string | null;
+  decision_id?: string | null;
+  metadata: Record<string, unknown>;
+  latest_message_at?: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+/** Visibility scope for access control. */
+export type VisibilityScope = "instance" | "team" | "personal" | "restricted";
+
 /** Conversation status. */
 export type ConversationStatus = "open" | "paused" | "closed" | "archived";
 
