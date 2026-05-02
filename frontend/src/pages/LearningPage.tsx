@@ -7,12 +7,10 @@
  */
 
 import { useState } from "react";
-import { Link } from "react-router-dom";
 
-import { fetchInstances } from "../api/domain/instances";
 import { CONTROL_PLANE_ROUTES } from "../app/navigation";
 import { useAppSession } from "../app/session";
-import { buildMemoryPath, buildLearningPath } from "../app/workInteractionRoutes";
+import { buildMemoryPath } from "../app/workInteractionRoutes";
 import { PageIntro } from "../components/PageIntro";
 import { getWorkInteractionAccess } from "./workInteractionPageSupport";
 
@@ -43,6 +41,10 @@ export function LearningPage() {
   const reviewRequiredCount = page.groupedEvents.find((g) => g.bucket === "review_required")?.events.length ?? 0;
   const promotedCount = page.groupedEvents.find((g) => g.bucket === "approved_promoted")?.events.length ?? 0;
   const rejectedCount = page.groupedEvents.find((g) => g.bucket === "rejected")?.events.length ?? 0;
+  const showInstanceSelector = page.instances.length > 1;
+  const activeInstance = page.instances.find(
+    (instance) => instance.instance_id === page.instanceId,
+  );
 
   // Not ready
   if (!sessionReady) {
@@ -95,40 +97,33 @@ export function LearningPage() {
       <PageIntro
         eyebrow="Work Interaction"
         title="Learning"
-        description="Review learning events as explicit persistence proposals, inspect explainability, and decide whether the result should stay as history, become memory, or become a draft skill."
-        question="Does automatic learning stay under review control, or is ForgeFrame still promoting memory and skill state without a visible decision trail?"
+        description="Review learning suggestions before they become memory, draft skills, or historical records."
+        question="Scan for candidates when the queue is empty; decide outcomes only from a selected event."
         links={[
           {
-            label: "Memory",
+            label: "View memory",
             to: buildMemoryPath({ instanceId: page.instanceId }),
             description: "Inspect durable or boot memory created from learning decisions.",
           },
           {
-            label: "Skills",
+            label: "View draft skills",
             to: `${CONTROL_PLANE_ROUTES.skills}?instanceId=${encodeURIComponent(page.instanceId)}`,
             description: "Inspect draft skills created from approved learning events.",
           },
         ]}
-        badges={[
-          {
-            label: `${page.events.length} event${page.events.length === 1 ? "" : "s"}`,
-            tone: page.events.length > 0 ? "success" : "warning",
-          },
-          {
-            label: canMutate ? "Admin mutation enabled" : "Read only",
-            tone: canMutate ? "success" : "neutral",
-          },
-        ]}
-        note="Pattern scans, session rotations, operator actions, and runtime signals land here as reviewable objects with visible source, proposal, risk, and outcome truth."
+        badges={[]}
+        note="Memory and Skills are destinations, not filters. Promotion still requires an explicit review decision."
       />
 
       {/* Messages */}
       {page.error ? <p className="fg-danger">{page.error}</p> : null}
-      {page.message ? <p>{page.message}</p> : null}
+      {page.message ? (
+        <p className="ff-learning-inline-message">{page.message}</p>
+      ) : null}
 
       {/* Instance selector */}
-      <article className="fg-card ff-learning-instance-bar">
-        <div className="fg-inline-form">
+      <article className="ff-learning-scope-status" aria-label="Learning scope status">
+        {showInstanceSelector ? (
           <label>
             Instance
             <select
@@ -145,19 +140,15 @@ export function LearningPage() {
               ))}
             </select>
           </label>
-          <span
-            className="fg-pill"
-            data-tone={
-              page.instancesState === "success" && page.listState === "success"
-                ? "success"
-                : page.listState === "error" || page.detailState === "error"
-                  ? "danger"
-                  : "neutral"
-            }
-          >
-            {page.instancesState}/{page.listState}/{page.detailState}
+        ) : (
+          <span>
+            Scope: {(activeInstance?.display_name ?? page.instanceId) || "Resolving"}
           </span>
-        </div>
+        )}
+        <span>{canMutate ? "Admin mutations available" : "Read only"}</span>
+        <span>
+          Load: {page.instancesState}/{page.listState}/{page.detailState}
+        </span>
       </article>
 
       {/* Summary hero */}
@@ -171,25 +162,21 @@ export function LearningPage() {
         hasInstance={!!page.instanceId}
         scanningPatterns={page.scanningPatterns}
         scanResult={page.scanResult}
+        lastScanCompletedAt={page.lastScanCompletedAt}
         listState={page.listState}
-        onScan={() => void page.handlePatternScan()}
-        onCreateManual={() => setShowManualForm(true)}
         showScanInfo={showScanInfo}
         onToggleScanInfo={() => setShowScanInfo((prev) => !prev)}
       />
 
       {/* Main content: empty state or event list + detail */}
       {!hasEvents && page.listState === "success" ? (
-        <>
-          <EmptyState
-            canMutate={canMutate}
-            hasInstance={!!page.instanceId}
-            scanningPatterns={page.scanningPatterns}
-            onScan={() => void page.handlePatternScan()}
-            onCreateManual={() => setShowManualForm(true)}
-          />
-          <LearningLifecycle />
-        </>
+        <EmptyState
+          canMutate={canMutate}
+          hasInstance={!!page.instanceId}
+          scanningPatterns={page.scanningPatterns}
+          onScan={() => void page.handlePatternScan()}
+          onCreateManual={() => setShowManualForm(true)}
+        />
       ) : (
         <div className="fg-grid ff-learning-main-grid">
           <div className="fg-stack">

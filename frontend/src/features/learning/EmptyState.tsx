@@ -29,13 +29,16 @@ export function EmptyState({
   onCreateManual,
 }: EmptyStateProps) {
   return (
-    <article className="fg-card ff-learning-empty">
+    <article className="fg-card ff-learning-empty ff-learning-tron-frame">
       <div className="ff-learning-empty-content">
-        <h3>No learning events found for this scope</h3>
+        <span className="ff-learning-status-led" data-state="success">
+          Queue clear
+        </span>
+        <h3>No learning events need review</h3>
         <p className="ff-learning-empty-desc">
-          Learning events are created automatically from pattern scans, session
-          rotations, and runtime signals. Start with a pattern scan to discover
-          opportunities for memory and skill promotion.
+          ForgeFrame has no pending learning suggestions for this instance.
+          Run one pattern scan to check recent conversations, executions, and
+          session rotations for reviewable memory or skill candidates.
         </p>
         <div className="ff-learning-empty-actions">
           <button
@@ -46,7 +49,7 @@ export function EmptyState({
           >
             {scanningPatterns
               ? "Scanning for learning opportunities…"
-              : "Run pattern scan"}
+              : "Scan for learning opportunities"}
           </button>
           <button
             type="button"

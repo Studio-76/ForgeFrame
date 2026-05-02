@@ -75,6 +75,8 @@ export interface UseLearningPageReturn {
   detail: LearningEventDetail | null;
   /** Last scan result. */
   scanResult: LearningEventSummary[] | null;
+  /** Completion timestamp from the last pattern scan. */
+  lastScanCompletedAt: string | null;
 
   /** Instance loading state. */
   instancesState: LoadState;
@@ -177,6 +179,9 @@ export function useLearningPage(
   const [scanResult, setScanResult] = useState<LearningEventSummary[] | null>(
     null,
   );
+  const [lastScanCompletedAt, setLastScanCompletedAt] = useState<string | null>(
+    null,
+  );
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
   const [refreshNonce, setRefreshNonce] = useState(0);
@@ -238,6 +243,7 @@ export function useLearningPage(
     if (!canRead || !instanceId) {
       setEvents([]);
       setScanResult(null);
+      setLastScanCompletedAt(null);
       return;
     }
     let cancelled = false;
@@ -612,6 +618,7 @@ export function useLearningPage(
     try {
       const payload = await scanLearningPatterns(instanceId);
       setScanResult(payload.events);
+      setLastScanCompletedAt(new Date().toISOString());
       setMessage(
         `Pattern scan created ${payload.events.length} learning event(s).`,
       );
@@ -645,6 +652,7 @@ export function useLearningPage(
     events,
     detail,
     scanResult,
+    lastScanCompletedAt,
     instancesState,
     listState,
     detailState,

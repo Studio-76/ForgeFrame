@@ -4,6 +4,99 @@
  * confirmation-gated promotion, guided manual flow.
  * ────────────────────────────────────────────── */
 
+/* ─── Shared Tron/business frame primitives ─── */
+.ff-learning-tron-frame {
+  position: relative;
+  overflow: hidden;
+  border-color: color-mix(
+    in srgb,
+    var(--fg-color-accent) 34%,
+    var(--fg-color-border-default)
+  );
+  background:
+    linear-gradient(
+      135deg,
+      color-mix(in srgb, var(--fg-color-accent) 8%, transparent),
+      transparent 28%
+    ),
+    var(--fg-color-surface-default);
+}
+
+.ff-learning-tron-frame::before,
+.ff-learning-tron-frame::after {
+  position: absolute;
+  width: 34px;
+  height: 34px;
+  content: "";
+  pointer-events: none;
+}
+
+.ff-learning-tron-frame::before {
+  inset: 0 auto auto 0;
+  border-top: 1px solid var(--fg-color-accent);
+  border-left: 1px solid var(--fg-color-accent);
+}
+
+.ff-learning-tron-frame::after {
+  inset: auto 0 0 auto;
+  border-right: 1px solid var(--fg-color-accent);
+  border-bottom: 1px solid var(--fg-color-accent);
+}
+
+.ff-learning-kicker,
+.ff-learning-stat-label {
+  margin: 0;
+  color: var(--fg-color-text-secondary);
+  font-size: var(--fg-type-size-meta);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.ff-learning-status-led {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  width: fit-content;
+  border: 1px solid var(--fg-color-border-default);
+  border-radius: var(--fg-radius-sm);
+  padding: 0.35rem 0.6rem;
+  background: var(--fg-color-surface-field);
+  color: var(--fg-color-text-secondary);
+  font-size: var(--fg-type-size-meta);
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.ff-learning-status-led::before {
+  width: 0.45rem;
+  height: 0.45rem;
+  border-radius: 999px;
+  background: currentColor;
+  content: "";
+  box-shadow: 0 0 0.65rem currentColor;
+}
+
+.ff-learning-status-led[data-state="success"] {
+  border-color: var(--fg-color-status-success-border);
+  color: var(--fg-color-status-success);
+}
+
+.ff-learning-status-led[data-state="warning"] {
+  border-color: var(--fg-color-status-warning-border);
+  color: var(--fg-color-status-warning);
+}
+
+.ff-learning-inline-message {
+  margin: 0;
+  border-left: 2px solid var(--fg-color-accent);
+  padding: 0.4rem 0.65rem;
+  background: var(--fg-color-status-info-soft);
+  color: var(--fg-color-text-secondary);
+  font-size: var(--fg-type-size-meta);
+}
+
 /* ─── Instance selector bar ─── */
 .ff-learning-instance-bar {
   border: 1px solid var(--fg-color-border-default);
@@ -13,13 +106,54 @@
   margin-bottom: var(--fg-space-4);
 }
 
+.ff-learning-scope-status {
+  display: flex;
+  align-items: center;
+  gap: var(--fg-space-2);
+  flex-wrap: wrap;
+  border: 1px solid var(--fg-color-border-default);
+  border-radius: var(--fg-radius-md);
+  padding: 0.55rem 0.75rem;
+  background: var(--fg-color-surface-field);
+  color: var(--fg-color-text-secondary);
+  font-size: var(--fg-type-size-meta);
+}
+
+.ff-learning-scope-status > * {
+  min-width: 0;
+}
+
+.ff-learning-scope-status label {
+  display: flex;
+  align-items: center;
+  gap: var(--fg-space-2);
+}
+
+.ff-learning-scope-status span + span,
+.ff-learning-scope-status label + span {
+  border-left: 1px solid var(--fg-color-border-default);
+  padding-left: var(--fg-space-2);
+}
+
 /* ─── Summary hero ─── */
 .ff-learning-summary {
   border: 1px solid var(--fg-color-border-default);
-  border-radius: var(--fg-radius-lg);
-  background: var(--fg-color-surface-default);
+  border-radius: var(--fg-radius-md);
   padding: var(--fg-space-4);
   margin-bottom: var(--fg-space-4);
+}
+
+.ff-learning-summary-header {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--fg-space-3);
+  align-items: flex-start;
+  flex-wrap: wrap;
+  margin-bottom: var(--fg-space-3);
+}
+
+.ff-learning-summary-header h3 {
+  margin: 0.2rem 0 0;
 }
 
 .ff-learning-summary-strip {
@@ -56,17 +190,37 @@
   color: var(--fg-color-text-secondary);
 }
 
-.ff-learning-stat-label {
-  font-size: 0.75rem;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  color: var(--fg-color-text-secondary);
-}
-
 .ff-learning-scan-status {
   font-size: 0.8125rem;
   color: var(--fg-color-text-secondary);
   margin: 0 0 var(--fg-space-2);
+}
+
+.ff-learning-scan-compact {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1px;
+  overflow: hidden;
+  border: 1px solid var(--fg-color-border-default);
+  border-radius: var(--fg-radius-sm);
+  background: var(--fg-color-border-default);
+}
+
+.ff-learning-scan-compact > div {
+  display: grid;
+  gap: 0.15rem;
+  min-width: 0;
+  padding: 0.7rem 0.8rem;
+  background: var(--fg-color-surface-field);
+}
+
+.ff-learning-scan-compact strong {
+  overflow: hidden;
+  color: var(--fg-color-text-primary);
+  font-family: var(--fg-font-mono);
+  font-size: 0.82rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .ff-learning-hero-actions {
@@ -87,6 +241,11 @@
   gap: var(--fg-space-2);
   flex-wrap: wrap;
   align-items: center;
+}
+
+.ff-learning-admin-status {
+  color: var(--fg-color-text-secondary);
+  font-size: var(--fg-type-size-meta);
 }
 
 .ff-learning-primary-action {
@@ -136,6 +295,11 @@
   cursor: pointer;
 }
 
+.ff-learning-info-toggle:hover {
+  border-color: var(--fg-color-accent);
+  color: var(--fg-color-text-primary);
+}
+
 .ff-learning-scan-info {
   border: 1px solid var(--fg-color-status-info-border);
   border-radius: var(--fg-radius-md);
@@ -153,7 +317,7 @@
 /* ─── Empty state ─── */
 .ff-learning-empty {
   border: 1px solid var(--fg-color-border-default);
-  border-radius: var(--fg-radius-lg);
+  border-radius: var(--fg-radius-md);
   padding: var(--fg-space-6) var(--fg-space-4);
   text-align: center;
   margin-bottom: var(--fg-space-4);
@@ -165,7 +329,7 @@
 }
 
 .ff-learning-empty-content h3 {
-  margin: 0 0 var(--fg-space-2);
+  margin: var(--fg-space-3) 0 var(--fg-space-2);
   font-size: 1.125rem;
 }
 
@@ -250,9 +414,17 @@
 /* ─── Event list ─── */
 .ff-learning-event-list {
   border: 1px solid var(--fg-color-border-default);
-  border-radius: var(--fg-radius-lg);
+  border-radius: var(--fg-radius-md);
   background: var(--fg-color-surface-default);
   overflow: hidden;
+}
+
+.ff-learning-review-table table {
+  min-width: 1080px;
+}
+
+.ff-learning-event-trigger {
+  text-align: left;
 }
 
 .ff-learning-row-selected {
@@ -264,7 +436,7 @@
 /* ─── Detail panel ─── */
 .ff-learning-detail {
   border: 1px solid var(--fg-color-border-default);
-  border-radius: var(--fg-radius-lg);
+  border-radius: var(--fg-radius-md);
   background: var(--fg-color-surface-default);
   padding: var(--fg-space-4);
 }
@@ -315,7 +487,7 @@
   padding: var(--fg-space-1) var(--fg-space-3);
   font-size: 0.8125rem;
   border: 1px solid var(--fg-color-border-default);
-  border-radius: var(--fg-radius-md);
+  border-radius: var(--fg-radius-sm);
   background: var(--fg-color-surface-default);
   color: var(--fg-color-text-primary);
   cursor: pointer;
@@ -324,6 +496,7 @@
 }
 
 .ff-learning-decision-actions button:hover:not(:disabled) {
+  border-color: var(--fg-color-accent);
   background: var(--fg-color-surface-subtle);
 }
 
@@ -382,7 +555,7 @@
 /* ─── Lifecycle diagram ─── */
 .ff-learning-lifecycle {
   border: 1px solid var(--fg-color-border-default);
-  border-radius: var(--fg-radius-lg);
+  border-radius: var(--fg-radius-md);
   padding: var(--fg-space-3) var(--fg-space-4);
   margin-bottom: var(--fg-space-4);
   font-size: 0.875rem;
@@ -429,7 +602,7 @@
   justify-content: center;
   width: 28px;
   height: 28px;
-  border-radius: 50%;
+  border-radius: var(--fg-radius-sm);
   background: var(--fg-color-action-primary-soft);
   color: var(--fg-color-action-primary);
   font-size: 0.75rem;
@@ -456,7 +629,7 @@
 
 .ff-learning-lifecycle-outcome {
   border: 1px solid var(--fg-color-border-default);
-  border-radius: var(--fg-radius-md);
+  border-radius: var(--fg-radius-sm);
   padding: var(--fg-space-2) var(--fg-space-3);
   display: flex;
   flex-direction: column;
@@ -494,7 +667,7 @@
 /* ─── Manual creation form ─── */
 .ff-learning-manual-form {
   border: 1px solid var(--fg-color-border-default);
-  border-radius: var(--fg-radius-lg);
+  border-radius: var(--fg-radius-md);
   background: var(--fg-color-surface-default);
   padding: var(--fg-space-4);
 }
@@ -505,7 +678,7 @@
   gap: 0;
   margin-bottom: var(--fg-space-4);
   border: 1px solid var(--fg-color-border-default);
-  border-radius: var(--fg-radius-md);
+  border-radius: var(--fg-radius-sm);
   overflow: hidden;
 }
 
@@ -541,7 +714,7 @@
   justify-content: center;
   width: 20px;
   height: 20px;
-  border-radius: 50%;
+  border-radius: var(--fg-radius-sm);
   background: var(--fg-color-surface-subtle);
   font-size: 0.6875rem;
   font-weight: 700;
@@ -565,4 +738,28 @@
 .ff-learning-step-content h4 {
   margin: 0 0 var(--fg-space-3);
   font-size: 1rem;
+}
+
+@media (max-width: 720px) {
+  .ff-learning-scan-compact {
+    grid-template-columns: 1fr;
+  }
+
+  .ff-learning-scope-status {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .ff-learning-scope-status span + span,
+  .ff-learning-scope-status label + span {
+    border-left: 0;
+    border-top: 1px solid var(--fg-color-border-default);
+    padding-top: var(--fg-space-2);
+    padding-left: 0;
+  }
+
+  .ff-learning-primary-action,
+  .ff-learning-secondary-action {
+    min-height: 44px;
+  }
 }

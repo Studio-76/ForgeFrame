@@ -111,70 +111,90 @@ export function EventList({
             : `No events in "${REVIEW_BUCKET_LABELS[activeBucket as keyof typeof REVIEW_BUCKET_LABELS] ?? activeBucket}".`}
         </p>
       ) : (
-        <div className="fg-table-wrap">
+        <div className="fg-table-wrap ff-learning-review-table">
           <table className="fg-table" aria-label="Learning events">
             <thead>
               <tr>
                 <th>Event</th>
                 <th>Source</th>
-                <th>Path</th>
+                <th>Proposed outcome</th>
                 <th>Risk</th>
-                <th>Outcome</th>
+                <th>Confidence / evidence</th>
+                <th>Recommended decision</th>
+                <th>Review action</th>
               </tr>
             </thead>
             <tbody>
-              {filteredEvents.map((event) => (
-                <tr
-                  key={event.learning_event_id}
-                  className={
-                    selectedEventId === event.learning_event_id
-                      ? "ff-learning-row-selected"
-                      : undefined
-                  }
-                >
-                  <td>
-                    <button
-                      type="button"
-                      className="fg-table-trigger"
-                      onClick={() => onSelectEvent(event.learning_event_id)}
-                    >
-                      {event.summary}
-                    </button>
-                    <div className="fg-muted">
-                      {event.trigger_kind} ·{" "}
-                      {formatTimestamp(event.created_at)}
-                    </div>
-                  </td>
-                  <td>
-                    <div>{event.source.label}</div>
-                    <div className="fg-muted">
-                      {event.source.detail ?? ""}
-                    </div>
-                  </td>
-                  <td>
-                    <span
-                      className="fg-pill"
-                      data-tone={laneTone(event.suggested_lane)}
-                    >
-                      {event.suggested_lane_label}
-                    </span>
-                  </td>
-                  <td>
-                    <span
-                      className="fg-pill"
-                      data-tone={riskTone(event.risk.level)}
-                    >
-                      {event.risk.level}
-                    </span>
-                  </td>
-                  <td>
-                    <div>{describeOutcome(event)}</div>
-                    <div className="fg-muted">
-                      {event.outcome.scope_label ?? ""}
-                    </div>
-                  </td>
-                </tr>
-              ))}
+              {filteredEvents.map((event) => {
+                const evidenceHint =
+                  event.risk.reasons[0] ??
+                  Object.keys(event.evidence)[0] ??
+                  "Evidence not recorded";
+                const confidenceLabel =
+                  event.proposal.trust_label ?? event.suggested_lane_label;
+                const isSelected = selectedEventId === event.learning_event_id;
+
+                return (
+                  <tr
+                    key={event.learning_event_id}
+                    className={isSelected ? "ff-learning-row-selected" : undefined}
+                  >
+                    <td>
+                      <button
+                        type="button"
+                        className="fg-table-trigger ff-learning-event-trigger"
+                        onClick={() => onSelectEvent(event.learning_event_id)}
+                      >
+                        {event.summary}
+                      </button>
+                      <div className="fg-muted">
+                        {event.trigger_kind} · {formatTimestamp(event.created_at)}
+                      </div>
+                    </td>
+                    <td>
+                      <div>{event.source.label}</div>
+                      <div className="fg-muted">
+                        {event.source.detail ?? "No source detail recorded."}
+                      </div>
+                    </td>
+                    <td>
+                      <div>{event.proposal.target_label}</div>
+                      <div className="fg-muted">{event.proposal.content_summary}</div>
+                    </td>
+                    <td>
+                      <span
+                        className="fg-pill"
+                        data-tone={riskTone(event.risk.level)}
+                      >
+                        {event.risk.level} risk
+                      </span>
+                    </td>
+                    <td>
+                      <div>{confidenceLabel}</div>
+                      <div className="fg-muted">{evidenceHint}</div>
+                    </td>
+                    <td>
+                      <span
+                        className="fg-pill"
+                        data-tone={laneTone(event.suggested_lane)}
+                      >
+                        {event.suggested_lane_label}
+                      </span>
+                      <div className="fg-muted">{describeOutcome(event)}</div>
+                    </td>
+                    <td>
+                      <button
+                        type="button"
+                        className="ff-learning-secondary-action"
+                        aria-current={isSelected ? "true" : undefined}
+                        onClick={() => onSelectEvent(event.learning_event_id)}
+                      >
+                        {isSelected ? "Reviewing" : "Review event"}
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>

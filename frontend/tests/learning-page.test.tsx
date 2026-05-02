@@ -173,6 +173,12 @@ function getButtonByText(scope: ParentNode, text: string) {
   return Array.from(scope.querySelectorAll("button")).find((button) => button.textContent?.includes(text));
 }
 
+function getButtonsByText(scope: ParentNode, text: string) {
+  return Array.from(scope.querySelectorAll("button")).filter((button) =>
+    button.textContent?.includes(text),
+  );
+}
+
 function getFormByText(text: string) {
   return Array.from(container.querySelectorAll("form")).find((form) => form.textContent?.includes(text));
 }
@@ -387,6 +393,9 @@ describe("learning page", () => {
     expect(fetchLearningEventsMock).toHaveBeenCalledWith("instance_alpha", { status: "all", triggerKind: "all", limit: 100 });
     expect(fetchLearningEventDetailMock).toHaveBeenCalledWith("learning_suggested", "instance_alpha");
 
+    expect(container.textContent).toContain("View memory");
+    expect(container.textContent).toContain("View draft skills");
+
     // Summary hero stats
     expect(container.textContent).toContain("Total events");
     expect(container.textContent).toContain("4");
@@ -399,6 +408,10 @@ describe("learning page", () => {
 
     // Event summary visible in the list
     expect(container.textContent).toContain("Session rotation summary candidate");
+    expect(container.textContent).toContain("Proposed outcome");
+    expect(container.textContent).toContain("Confidence / evidence");
+    expect(container.textContent).toContain("Recommended decision");
+    expect(container.textContent).toContain("Review action");
 
     // Detail panel with selected event
     expect(container.textContent).toContain("Learning event learning_suggested");
@@ -412,13 +425,24 @@ describe("learning page", () => {
     expect(runLink?.getAttribute("href")).toBe("/execution?instanceId=instance_alpha&runId=run_alpha");
   });
 
-  it("runs pattern scans, creates manual review items, and decides durable memory promotion with structured payloads", async () => {
+  it("shows one empty-state scan action and creates manual review items", async () => {
+    fetchLearningEventsMock.mockResolvedValue({
+      status: "ok",
+      instance: null,
+      events: [],
+    });
+
     await renderIntoDom(withAppContext({
-      path: "/learning?instanceId=instance_alpha&eventId=learning_suggested",
+      path: "/learning?instanceId=instance_alpha",
       element: <LearningPage />,
       session: adminSession,
     }));
     await flushEffects();
+
+    expect(container.textContent).toContain("No learning events need review");
+    expect(container.textContent).not.toContain("Total events");
+    expect(getButtonsByText(container, "Scan for learning opportunities")).toHaveLength(1);
+    expect(getButtonsByText(container, "Create manual review item")).toHaveLength(1);
 
     // --- Pattern scan ---
     const scanButton = getButtonByText(container, "Scan for learning opportunities");
@@ -428,7 +452,7 @@ describe("learning page", () => {
     await flushEffects();
 
     expect(scanLearningPatternsMock).toHaveBeenCalledWith("instance_alpha");
-    expect(container.textContent).toContain("Found 1 event(s)");
+    expect(container.textContent).toContain("1 event found");
 
     // --- Open manual creation form ---
     const createManualButton = getButtonByText(container, "Create manual review item");
@@ -550,6 +574,15 @@ describe("learning page", () => {
       }),
       proposed_skill: {},
     }));
+  });
+
+  it("decides durable memory promotion with structured payloads", async () => {
+    await renderIntoDom(withAppContext({
+      path: "/learning?instanceId=instance_alpha&eventId=learning_suggested",
+      element: <LearningPage />,
+      session: adminSession,
+    }));
+    await flushEffects();
 
     // --- Decision form ---
     // The detail panel should be visible with the "Operator action" select

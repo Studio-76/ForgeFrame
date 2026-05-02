@@ -73,11 +73,6 @@ export function DecisionForm({
     );
   };
 
-  const confirmAndSubmit = (event: FormEvent<HTMLFormElement>) => {
-    setConfirmAction(null);
-    void handleDecide(event);
-  };
-
   const cancelConfirmation = () => {
     setConfirmAction(null);
   };
@@ -88,13 +83,16 @@ export function DecisionForm({
         <h4>Decision</h4>
 
         {/* Quick action buttons */}
-        <div className="fg-actions ff-learning-decision-actions">
+        <div
+          className="fg-actions ff-learning-decision-actions"
+          aria-label="Review outcome choices"
+        >
           <button
             type="button"
             onClick={() => handleQuickAction("history_only")}
             disabled={!canMutate}
           >
-            Approve
+            Keep as history
           </button>
           <button
             type="button"
@@ -108,14 +106,7 @@ export function DecisionForm({
             onClick={() => handleQuickAction("durable_memory")}
             disabled={!canMutate}
           >
-            Promote to durable memory
-          </button>
-          <button
-            type="button"
-            onClick={() => handleQuickAction("boot_memory")}
-            disabled={!canMutate}
-          >
-            Promote to boot memory
+            Promote to memory
           </button>
           <button
             type="button"
@@ -129,7 +120,7 @@ export function DecisionForm({
             onClick={() => handleQuickAction("review_required")}
             disabled={!canMutate}
           >
-            Require review
+            Mark needs review
           </button>
         </div>
 
@@ -147,10 +138,6 @@ export function DecisionForm({
                 type="submit"
                 className="ff-learning-confirm-yes"
                 disabled={!canMutate || savingDecide}
-                onClick={(e) => {
-                  // The form submission will be handled by the form's onSubmit
-                  // We set a flag to bypass the confirmation in the quick action
-                }}
               >
                 {savingDecide ? "Applying…" : "Yes, proceed"}
               </button>

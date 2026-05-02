@@ -28,12 +28,10 @@ export interface LearningSummaryHeroProps {
   scanningPatterns: boolean;
   /** Result from the last pattern scan. */
   scanResult: LearningEventSummary[] | null;
+  /** Completion timestamp from the last pattern scan. */
+  lastScanCompletedAt: string | null;
   /** Load state for the events list. */
   listState: LoadState;
-  /** Handler to run a pattern scan. */
-  onScan: () => void;
-  /** Handler to create a manual review item. */
-  onCreateManual: () => void;
   /** Whether to show the scan explanation. */
   showScanInfo: boolean;
   /** Toggle scan info display. */
@@ -53,56 +51,91 @@ export function LearningSummaryHero({
   hasInstance,
   scanningPatterns,
   scanResult,
+  lastScanCompletedAt,
   listState,
-  onScan,
-  onCreateManual,
   showScanInfo,
   onToggleScanInfo,
 }: LearningSummaryHeroProps) {
   const hasEvents = totalEvents > 0;
   const isLoading = listState === "loading";
+  const allCountsZero =
+    !isLoading &&
+    totalEvents === 0 &&
+    suggestedCount === 0 &&
+    reviewRequiredCount === 0 &&
+    promotedCount === 0 &&
+    rejectedCount === 0;
+  const lastScanSummary = scanResult
+    ? scanResult.length === 0
+      ? "No events found"
+      : `${scanResult.length} event${scanResult.length === 1 ? "" : "s"} found`
+    : "Not run this session";
+  const scanStateLabel = scanningPatterns ? "Running" : lastScanSummary;
 
   return (
-    <article className="fg-card ff-learning-summary">
-      <div className="ff-learning-summary-strip">
-        <div className="ff-learning-stat">
-          <span className="ff-learning-stat-value">{isLoading ? "—" : totalEvents}</span>
-          <span className="ff-learning-stat-label">Total events</span>
+    <article className="fg-card ff-learning-summary ff-learning-tron-frame">
+      <div className="ff-learning-summary-header">
+        <div>
+          <p className="ff-learning-kicker">Learning review queue</p>
+          <h3>{hasEvents ? "Review queue active" : "No learning review required"}</h3>
         </div>
-        <div className="ff-learning-stat">
-          <span className="ff-learning-stat-value">
-            {isLoading ? "—" : suggestedCount}
-          </span>
-          <span className="ff-learning-stat-label">Suggested</span>
-        </div>
-        <div className="ff-learning-stat">
-          <span className="ff-learning-stat-value ff-learning-stat-warning">
-            {isLoading ? "—" : reviewRequiredCount}
-          </span>
-          <span className="ff-learning-stat-label">Needs review</span>
-        </div>
-        <div className="ff-learning-stat">
-          <span className="ff-learning-stat-value ff-learning-stat-success">
-            {isLoading ? "—" : promotedCount}
-          </span>
-          <span className="ff-learning-stat-label">Promoted</span>
-        </div>
-        <div className="ff-learning-stat">
-          <span className="ff-learning-stat-value ff-learning-stat-muted">
-            {isLoading ? "—" : rejectedCount}
-          </span>
-          <span className="ff-learning-stat-label">Rejected</span>
-        </div>
+        <span
+          className="ff-learning-status-led"
+          data-state={reviewRequiredCount > 0 ? "warning" : "success"}
+        >
+          {reviewRequiredCount > 0 ? "Operator review needed" : "Queue clear"}
+        </span>
       </div>
 
-      {scanResult !== null && (
-        <p className="ff-learning-scan-status">
-          Last pattern scan:{" "}
-          {scanResult.length === 0
-            ? "No new events found."
-            : `Found ${scanResult.length} event(s).`}
-        </p>
+      {!allCountsZero && (
+        <div className="ff-learning-summary-strip" aria-label="Learning review counts">
+          <div className="ff-learning-stat">
+            <span className="ff-learning-stat-value">
+              {isLoading ? "—" : totalEvents}
+            </span>
+            <span className="ff-learning-stat-label">Total events</span>
+          </div>
+          <div className="ff-learning-stat">
+            <span className="ff-learning-stat-value">
+              {isLoading ? "—" : suggestedCount}
+            </span>
+            <span className="ff-learning-stat-label">Suggested</span>
+          </div>
+          <div className="ff-learning-stat">
+            <span className="ff-learning-stat-value ff-learning-stat-warning">
+              {isLoading ? "—" : reviewRequiredCount}
+            </span>
+            <span className="ff-learning-stat-label">Needs review</span>
+          </div>
+          <div className="ff-learning-stat">
+            <span className="ff-learning-stat-value ff-learning-stat-success">
+              {isLoading ? "—" : promotedCount}
+            </span>
+            <span className="ff-learning-stat-label">Promoted</span>
+          </div>
+          <div className="ff-learning-stat">
+            <span className="ff-learning-stat-value ff-learning-stat-muted">
+              {isLoading ? "—" : rejectedCount}
+            </span>
+            <span className="ff-learning-stat-label">Rejected</span>
+          </div>
+        </div>
       )}
+
+      <div className="ff-learning-scan-compact" aria-label="Last pattern scan status">
+        <div>
+          <span className="ff-learning-stat-label">Last scan result</span>
+          <strong>{scanStateLabel}</strong>
+        </div>
+        <div>
+          <span className="ff-learning-stat-label">Last scan time</span>
+          <strong>{lastScanCompletedAt ?? "Not recorded"}</strong>
+        </div>
+        <div>
+          <span className="ff-learning-stat-label">Events found</span>
+          <strong>{scanResult ? scanResult.length : "—"}</strong>
+        </div>
+      </div>
 
       <div className="ff-learning-hero-actions">
         {hasEvents && reviewRequiredCount > 0 && (
@@ -112,24 +145,12 @@ export function LearningSummaryHero({
         )}
 
         <div className="ff-learning-hero-buttons">
-          <button
-            type="button"
-            className="ff-learning-primary-action"
-            disabled={!canMutate || scanningPatterns || !hasInstance}
-            onClick={onScan}
-          >
-            {scanningPatterns
-              ? "Scanning for learning opportunities…"
-              : "Scan for learning opportunities"}
-          </button>
-          <button
-            type="button"
-            className="ff-learning-secondary-action"
-            disabled={!canMutate || !hasInstance}
-            onClick={onCreateManual}
-          >
-            Create manual review item
-          </button>
+          <span className="ff-learning-admin-status">
+            {canMutate ? "Admin mutations available" : "Read-only access"}
+          </span>
+          {!hasInstance ? (
+            <span className="ff-learning-admin-status">Select an instance</span>
+          ) : null}
           <button
             type="button"
             className="ff-learning-info-toggle"
