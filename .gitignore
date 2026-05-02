@@ -52,7 +52,7 @@ htmlcov/
 *.egg-info/
 pip-wheel-metadata/
 
-.venv/
+/.venv/
 venv/
 ENV/
 /env/
