@@ -89,7 +89,7 @@ import {
   type InstanceRecord,
   type DashboardResponse,
   type UsageSummaryFilters,
-} from "./admin";
+} from "./domain";
 
 /* ───── Query key factories ───── */
 

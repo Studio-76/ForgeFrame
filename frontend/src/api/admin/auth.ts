@@ -19,7 +19,8 @@ import {
 // Re-export shared types
 // ---------------------------------------------------------------------------
 
-export type { AdminRole, AdminPermissionKey, AdminSessionUser, AdminApiError };
+export type { AdminRole, AdminPermissionKey, AdminSessionUser };
+export { AdminApiError };
 
 // ---------------------------------------------------------------------------
 // Token management

@@ -26,7 +26,19 @@ vi.mock("../src/api/admin", async () => {
   return {
     ...actual,
     fetchInstances: fetchInstancesMock,
-    fetchAccounts: fetchAccountsMock,
+    fetchAuditHistory: fetchAuditHistoryMock,
+    fetchAuditHistoryDetail: fetchAuditHistoryDetailMock,
+    fetchLogs: fetchLogsMock,
+    generateAuditExport: generateAuditExportMock,
+  };
+});
+
+vi.mock("../src/api/domain", async () => {
+  const actual = await vi.importActual<typeof import("../src/api/domain")>("../src/api/domain");
+
+  return {
+    ...actual,
+    fetchInstances: fetchInstancesMock,
     fetchAuditHistory: fetchAuditHistoryMock,
     fetchAuditHistoryDetail: fetchAuditHistoryDetailMock,
     fetchLogs: fetchLogsMock,
