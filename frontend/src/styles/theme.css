@@ -3425,6 +3425,180 @@ details summary {
   background: var(--fg-color-surface-default);
 }
 
+/* ──────────────────────────────────────────────
+ * Instance Feature — GridCN-inspired remediation checklist & diagnostics
+ * Thin accents, numbered steps, compact rows, command-center energy
+ * ────────────────────────────────────────────── */
+
+/* Checklist card */
+.ff-instance-checklist {
+  border-left: 2px solid var(--fg-color-action-primary);
+}
+
+/* Remediation checklist — numbered ordered list */
+.ff-instance-checklist-steps {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: var(--fg-space-3);
+}
+
+.ff-instance-checklist-step {
+  display: flex;
+  gap: var(--fg-space-3);
+  padding: var(--fg-space-3);
+  border: 1px solid var(--fg-color-border-default);
+  border-radius: var(--fg-radius-md);
+  background: var(--fg-color-surface-strong);
+}
+
+/* Step number marker */
+.ff-instance-checklist-marker {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  border-radius: var(--fg-radius-sm);
+  background: var(--fg-color-action-primary-soft);
+  border: 1px solid var(--fg-color-action-primary);
+}
+
+.ff-instance-checklist-marker[data-status="blocked"] {
+  background: var(--fg-color-status-danger-soft);
+  border-color: var(--fg-color-status-danger-border);
+}
+
+.ff-instance-checklist-number {
+  font-size: var(--fg-type-size-meta);
+  font-weight: 700;
+  color: var(--fg-color-text-primary);
+  line-height: 1;
+}
+
+/* Step content */
+.ff-instance-checklist-body {
+  flex: 1;
+  min-width: 0;
+  display: grid;
+  gap: var(--fg-space-1);
+}
+
+.ff-instance-checklist-title {
+  margin: 0;
+  font-size: var(--fg-type-size-card);
+  font-weight: 600;
+}
+
+.ff-instance-checklist-what,
+.ff-instance-checklist-why,
+.ff-instance-checklist-how {
+  margin: 0;
+  font-size: var(--fg-type-size-meta);
+  color: var(--fg-color-text-secondary);
+  line-height: var(--fg-type-line-body);
+}
+
+.ff-instance-checklist-what strong,
+.ff-instance-checklist-why strong,
+.ff-instance-checklist-how strong {
+  color: var(--fg-color-text-primary);
+  font-weight: 600;
+}
+
+.ff-checklist-action {
+  margin-top: var(--fg-space-1);
+  font-weight: 600;
+}
+
+/* Passed checks — compact row layout */
+.ff-instance-passed-rows {
+  display: grid;
+  gap: var(--fg-space-1);
+}
+
+.ff-instance-passed-row {
+  display: flex;
+  align-items: center;
+  gap: var(--fg-space-2);
+  padding: var(--fg-space-1) var(--fg-space-2);
+  border-radius: var(--fg-radius-sm);
+}
+
+.ff-instance-passed-row:hover {
+  background: var(--fg-color-surface-subtle);
+}
+
+/* Green dot badge for passed checks */
+.ff-instance-passed-badge {
+  flex: 0 0 auto;
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 50%;
+  background: var(--fg-color-status-success);
+}
+
+.ff-instance-passed-label {
+  font-size: var(--fg-type-size-meta);
+  font-weight: 500;
+  color: var(--fg-color-text-primary);
+}
+
+.ff-instance-passed-detail {
+  font-size: var(--fg-type-size-meta);
+  flex: 1;
+  text-align: right;
+}
+
+/* Nav link group labels */
+.ff-nav-group-label {
+  font-size: var(--fg-type-size-meta);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--fg-color-text-secondary);
+  padding-right: var(--fg-space-1);
+  border-right: 1px solid var(--fg-color-border-default);
+  margin-right: var(--fg-space-1);
+}
+
+/* Primary nav action links — cyan accent */
+.ff-primary-action-link {
+  border-color: var(--fg-color-action-primary) !important;
+  background: var(--fg-color-action-primary-soft) !important;
+  color: var(--fg-color-action-primary) !important;
+  font-weight: 600 !important;
+}
+
+.ff-primary-action-link:hover {
+  background: var(--fg-color-action-primary) !important;
+  color: #fff !important;
+}
+
+/* Next step impact text */
+.ff-next-step-content {
+  flex: 1;
+  display: grid;
+  gap: var(--fg-space-1);
+}
+
+.ff-next-step-impact {
+  font-weight: 400;
+  opacity: 0.85;
+}
+
+/* Compact hero stat strip */
+.ff-instance-hero-stats span[data-tone="danger"] {
+  color: var(--fg-color-status-danger);
+}
+
+/* Diagnostics section */
+.ff-instance-diagnostics summary p {
+  font-size: var(--fg-type-size-meta);
+}
+
 /* Summary stat blocks for the summary grid */
 .fg-stat-block {
   display: grid;

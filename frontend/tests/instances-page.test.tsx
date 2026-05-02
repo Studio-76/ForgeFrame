@@ -241,19 +241,19 @@ describe("Instances page", () => {
     expect(container.textContent).toContain("Instance Inventory");
     expect(container.textContent).toContain("Alpha Instance");
 
-    // New UX shows "Create Instance" button in the inventory toolbar
+    // New UX shows "Create Instance" button below the inventory
     expect(container.textContent).toContain("Create Instance");
 
     // The status hero replaces the old "Selected Instance" card
     expect(container.textContent).toContain("onboarding-only");
     expect(container.textContent).toContain("Next: No runtime key has been issued");
 
-    // Blocker checklist is shown
-    expect(container.textContent).toContain("Readiness Blockers");
+    // Remediation checklist is shown
+    expect(container.textContent).toContain("Remediation checklist");
     expect(container.textContent).toContain("Runtime access");
 
     // Passed checks section is present but collapsed
-    expect(container.textContent).toContain("Passed checks (4)");
+    expect(container.textContent).toContain("checks passing");
 
     // Controls section replaces old "Quick Actions"
     expect(container.textContent).toContain("Instance controls");
@@ -410,7 +410,7 @@ describe("Instances page", () => {
     expect(container.textContent).toContain("Alpha Instance");
     expect(container.querySelector('[data-testid="location-search"]')?.textContent).toBe("?instanceId=instance_alpha");
 
-    const openAgentsLink = Array.from(container.querySelectorAll("a")).find((link) => link.textContent === "Open Agents");
-    expect(openAgentsLink?.getAttribute("href")).toBe("/agents?instanceId=instance_alpha");
+    const agentsLink = Array.from(container.querySelectorAll("a")).find((link) => link.textContent?.trim() === "Agents");
+    expect(agentsLink?.getAttribute("href")).toBe("/agents?instanceId=instance_alpha");
   });
 });
