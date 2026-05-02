@@ -241,11 +241,26 @@ describe("Instances page", () => {
     expect(fetchInstancesMock).toHaveBeenCalledTimes(1);
     expect(container.textContent).toContain("Instance Inventory");
     expect(container.textContent).toContain("Alpha Instance");
+
+    // New UX shows "Create Instance" button in the inventory toolbar
     expect(container.textContent).toContain("Create Instance");
-    expect(container.textContent).toContain("Selected Instance");
-    expect(container.textContent).toContain("Edit Instance");
-    expect(container.textContent).toContain("Tenant / Organization scope");
-    expect(container.textContent).toContain("Quick Actions");
+
+    // The status hero replaces the old "Selected Instance" card
+    expect(container.textContent).toContain("onboarding-only");
+    expect(container.textContent).toContain("Next: No runtime key has been issued");
+
+    // Blocker checklist is shown
+    expect(container.textContent).toContain("Readiness Blockers");
+    expect(container.textContent).toContain("Runtime access");
+
+    // Passed checks section is present but collapsed
+    expect(container.textContent).toContain("Passed checks (4)");
+
+    // Controls section replaces old "Quick Actions"
+    expect(container.textContent).toContain("Instance controls");
+
+    // Edit form is NOT visible until toggled
+    expect(container.textContent).not.toContain("Display name");
   });
 
   it("creates a new instance and refreshes the inventory around the new selection", async () => {
@@ -271,8 +286,18 @@ describe("Instances page", () => {
 
     await renderInstancesPage();
 
+    // Click "Create Instance" button to reveal the form
+    const createBtn = Array.from(container.querySelectorAll("button")).find(
+      (btn) => btn.textContent === "Create Instance",
+    );
+    expect(createBtn).not.toBeUndefined();
+    await act(async () => {
+      createBtn!.click();
+    });
+    await flushEffects();
+
     const forms = Array.from(container.querySelectorAll("form"));
-    const createForm = forms[1] as HTMLFormElement;
+    const createForm = forms[0] as HTMLFormElement;
     const inputs = Array.from(createForm.querySelectorAll("input"));
     const textareas = Array.from(createForm.querySelectorAll("textarea"));
     const selects = Array.from(createForm.querySelectorAll("select"));
@@ -306,6 +331,16 @@ describe("Instances page", () => {
 
   it("updates the selected instance through the edit form", async () => {
     await renderInstancesPage();
+
+    // Click "Edit instance" button to reveal the edit form
+    const editBtn = Array.from(container.querySelectorAll("button")).find(
+      (btn) => btn.textContent === "Edit instance",
+    );
+    expect(editBtn).not.toBeUndefined();
+    await act(async () => {
+      editBtn!.click();
+    });
+    await flushEffects();
 
     const forms = Array.from(container.querySelectorAll("form"));
     const editForm = forms[0] as HTMLFormElement;
