@@ -3599,6 +3599,164 @@ details summary {
   font-size: var(--fg-type-size-meta);
 }
 
+/* ──────────────────────────────────────────────
+ * Execution Feature — GridCN-inspired tab nav, compact summary, filters, confirm dialog
+ * ────────────────────────────────────────────── */
+
+/* Tab navigation */
+.ff-execution-tabs {
+  display: flex;
+  gap: var(--fg-space-1);
+  border-bottom: 1px solid var(--fg-color-border-default);
+  padding-bottom: 0;
+  overflow-x: auto;
+}
+
+.ff-execution-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--fg-space-2);
+  padding: var(--fg-space-2) var(--fg-space-3);
+  font-size: var(--fg-type-size-meta);
+  font-weight: 500;
+  border: 1px solid transparent;
+  border-bottom: none;
+  border-radius: var(--fg-radius-md) var(--fg-radius-md) 0 0;
+  background: transparent;
+  color: var(--fg-color-text-secondary);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: color var(--fg-motion-fast) var(--fg-ease-standard),
+              background var(--fg-motion-fast) var(--fg-ease-standard),
+              border-color var(--fg-motion-fast) var(--fg-ease-standard);
+}
+
+.ff-execution-tab:hover {
+  color: var(--fg-color-text-primary);
+  background: var(--fg-color-surface-subtle);
+}
+
+.ff-execution-tab.is-active {
+  color: var(--fg-color-action-primary);
+  background: var(--fg-color-surface-default);
+  border-color: var(--fg-color-border-default);
+  border-bottom-color: var(--fg-color-surface-default);
+  font-weight: 600;
+}
+
+.ff-execution-tab-badge {
+  font-size: 0.7rem;
+  padding: 0.15rem 0.45rem;
+}
+
+/* Compact status summary strip */
+.ff-execution-summary-strip {
+  display: flex;
+  gap: var(--fg-space-3);
+  align-items: center;
+  flex-wrap: wrap;
+  padding: var(--fg-space-2) 0;
+}
+
+.ff-execution-summary-stat {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.1rem;
+  padding: var(--fg-space-1) var(--fg-space-3);
+  border: 1px solid var(--fg-color-border-default);
+  border-radius: var(--fg-radius-md);
+  background: var(--fg-color-surface-strong);
+  min-width: 4.5rem;
+}
+
+.ff-execution-summary-stat[data-tone="danger"] {
+  border-color: var(--fg-color-status-danger-border);
+  background: var(--fg-color-status-danger-soft);
+}
+
+.ff-execution-summary-stat[data-tone="warning"] {
+  border-color: var(--fg-color-status-warning-border);
+  background: var(--fg-color-status-warning-soft);
+}
+
+.ff-execution-summary-stat[data-tone="success"] {
+  border-color: var(--fg-color-status-success-border);
+  background: var(--fg-color-status-success-soft);
+}
+
+.ff-execution-summary-value {
+  font-size: var(--fg-type-size-section);
+  font-weight: 700;
+  line-height: 1;
+  color: var(--fg-color-text-primary);
+}
+
+.ff-execution-summary-label {
+  font-size: 0.65rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--fg-color-text-secondary);
+}
+
+.ff-execution-summary-action {
+  margin-left: auto;
+}
+
+/* Advanced filters toggle */
+.ff-execution-advanced-toggle {
+  cursor: pointer;
+  font-size: var(--fg-type-size-meta);
+  font-weight: 500;
+  padding: var(--fg-space-1) 0;
+  user-select: none;
+}
+
+.ff-execution-advanced-toggle:hover {
+  color: var(--fg-color-action-primary);
+}
+
+/* Empty state */
+.ff-execution-empty {
+  border-left: 2px solid var(--fg-color-action-primary);
+}
+
+/* Confirmation dialog overlay */
+.ff-execution-confirm-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(2, 6, 23, 0.65);
+}
+
+.ff-execution-confirm-dialog {
+  max-width: 520px;
+  width: 90vw;
+  border: 1px solid var(--fg-color-border-default);
+  border-radius: var(--fg-radius-lg);
+  background: var(--fg-color-surface-default);
+  padding: var(--fg-space-5);
+  display: grid;
+  gap: var(--fg-space-4);
+  box-shadow: 0 18px 50px rgba(2, 6, 23, 0.5);
+}
+
+.ff-execution-confirm-btn {
+  border-color: var(--fg-color-action-primary);
+  background: var(--fg-color-action-primary-soft);
+  color: var(--fg-color-action-primary);
+  font-weight: 600;
+}
+
+.ff-execution-confirm-btn:hover {
+  background: var(--fg-color-action-primary);
+  color: #fff;
+}
+
 /* Summary stat blocks for the summary grid */
 .fg-stat-block {
   display: grid;

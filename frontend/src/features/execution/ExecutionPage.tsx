@@ -36,6 +36,7 @@ import {
   type ExecutionApprovalWaitFilter,
   type ExecutionErrorFilter,
   type ExecutionScopeOption,
+  type ExecutionTab,
   type ExecutionWindowFilter,
   type LoadState,
   type ReplayState,
@@ -95,6 +96,7 @@ export function ExecutionPage() {
   const [operatorActionState, setOperatorActionState] = useState<OperatorActionState>("idle");
   const [operatorActionError, setOperatorActionError] = useState("");
   const [operatorActionResult, setOperatorActionResult] = useState<ExecutionOperatorActionResult | null>(null);
+  const [activeTab, setActiveTab] = useState<ExecutionTab>("runs");
   const [refreshNonce, setRefreshNonce] = useState(0);
 
   useEffect(() => {
@@ -636,10 +638,15 @@ export function ExecutionPage() {
           operatorActionState={operatorActionState}
           operatorActionError={operatorActionError}
           operatorActionResult={operatorActionResult}
+          activeTab={activeTab}
+          onTabChange={setActiveTab}
+          onScopeClear={handleScopeClear}
           onRunSelection={handleRunSelection}
           onReplayReasonChange={setReplayReason}
           onIdempotencyKeyChange={setIdempotencyKey}
           onReplaySubmit={handleReplaySubmit}
+          onReplayConfirm={() => {}}
+          onReplayCancel={() => {}}
           onOperatorReasonChange={setOperatorReason}
           onOperatorLaneChange={setOperatorLane}
           onOperatorAction={handleOperatorAction}

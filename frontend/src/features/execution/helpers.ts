@@ -505,6 +505,140 @@ export function getOperatorActionAvailability(
   return { enabled: true, reason: "Escalation moves the run onto a different execution lane." };
 }
 
+/**
+ * Tab keys for the execution review navigation.
+ */
+export type ExecutionTab = "runs" | "approvals" | "errors" | "health";
+
+/**
+ * Tab configuration with label and badge.
+ */
+export type ExecutionTabConfig = {
+  key: ExecutionTab;
+  label: string;
+  badge: string | null;
+  badgeTone: BadgeTone;
+};
+
+/**
+ * Build tab configurations from the current run state.
+ */
+export function buildExecutionTabs(
+  runs: ExecutionRunSummary[],
+): ExecutionTabConfig[] {
+  const attentionCount = countAttentionRuns(runs);
+  const approvalCount = countApprovalWaitRuns(runs);
+  const errorCount = countErrorRuns(runs);
+  const replayableCount = countReplayableRuns(runs);
+
+  return [
+    {
+      key: "runs",
+      label: "Run review",
+      badge: attentionCount > 0 ? `${attentionCount} need attention` : null,
+      badgeTone: attentionCount > 0 ? "danger" : "success",
+    },
+    {
+      key: "approvals",
+      label: "Approval waits",
+      badge: approvalCount > 0 ? `${approvalCount} waiting` : null,
+      badgeTone: approvalCount > 0 ? "warning" : "neutral",
+    },
+    {
+      key: "errors",
+      label: "Errors & activity",
+      badge: errorCount > 0 ? `${errorCount} with errors` : null,
+      badgeTone: errorCount > 0 ? "danger" : "neutral",
+    },
+    {
+      key: "health",
+      label: "Provider health",
+      badge: null,
+      badgeTone: "neutral",
+    },
+  ];
+}
+
+/**
+ * Build a compact status summary for the execution review header.
+ */
+export type ExecutionStatusSummaryData = {
+  totalRuns: number;
+  attentionCount: number;
+  deadLetteredCount: number;
+  approvalWaitCount: number;
+  replayableCount: number;
+  errorCount: number;
+  primaryNextAction: string;
+  primaryNextActionTone: BadgeTone;
+};
+
+/**
+ * Build a status summary from a list of runs.
+ */
+export function buildExecutionStatusSummary(
+  runs: ExecutionRunSummary[],
+): ExecutionStatusSummaryData {
+  const attentionCount = countAttentionRuns(runs);
+  const deadLetteredCount = runs.filter(
+    (r) => r.state === "dead_lettered" || r.operator_state === "quarantined",
+  ).length;
+  const approvalWaitCount = countApprovalWaitRuns(runs);
+  const replayableCount = countReplayableRuns(runs);
+  const errorCount = countErrorRuns(runs);
+
+  let primaryNextAction = "No runs to review";
+  let primaryNextActionTone: BadgeTone = "neutral";
+
+  if (attentionCount > 0) {
+    if (deadLetteredCount > 0) {
+      primaryNextAction = "Review dead-lettered runs";
+      primaryNextActionTone = "danger";
+    } else if (approvalWaitCount > 0) {
+      primaryNextAction = "Review approval waits";
+      primaryNextActionTone = "warning";
+    } else {
+      primaryNextAction = `Review ${attentionCount} run${attentionCount > 1 ? "s" : ""} needing attention`;
+      primaryNextActionTone = "warning";
+    }
+  } else if (runs.length > 0) {
+    primaryNextAction = "All runs accounted for";
+    primaryNextActionTone = "success";
+  }
+
+  return {
+    totalRuns: runs.length,
+    attentionCount,
+    deadLetteredCount,
+    approvalWaitCount,
+    replayableCount,
+    errorCount,
+    primaryNextAction,
+    primaryNextActionTone,
+  };
+}
+
+/**
+ * Build the "why replay" explanation for the confirmation flow.
+ */
+export function buildReplayConfirmation(
+  run: ExecutionRunDetail,
+  instanceId: string,
+): string {
+  return [
+    `Re-run ${run.run_id} on lane ${run.execution_lane}.`,
+    run.current_approval_id
+      ? "Approval may be required before execution continues."
+      : null,
+    "This will create a new attempt on the same instance scope.",
+    run.result_summary
+      ? "The previous failure will be retried."
+      : null,
+  ]
+    .filter(Boolean)
+    .join(" ");
+}
+
 export function describeReplayError(error: unknown): string {
   if (error instanceof AdminApiError) {
     if (error.code === "run_transition_conflict") {

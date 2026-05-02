@@ -1,4 +1,4 @@
-import type { FormEvent } from "react";
+import { useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
 
 import type {
@@ -11,6 +11,9 @@ import type {
 import { buildArtifactsPath, buildWorkspacePath } from "../../app/workInteractionRoutes";
 import {
   APPROVAL_WAIT_OPTIONS,
+  buildExecutionStatusSummary,
+  buildExecutionTabs,
+  buildReplayConfirmation,
   countApprovalWaitRuns,
   countAttentionRuns,
   countErrorRuns,
@@ -35,11 +38,16 @@ import {
   type ExecutionErrorFilter,
   type ExecutionOperatorActionKey,
   type ExecutionScopeOption,
+  type ExecutionTab,
   type ExecutionWindowFilter,
   type LoadState,
   type OperatorActionState,
   type ReplayState,
 } from "./helpers";
+
+// ---------------------------------------------------------------------------
+// ScopeFilterCard — compact filter bar (replaces the old large ScopeFilterCard)
+// ---------------------------------------------------------------------------
 
 type ScopeFilterCardProps = {
   instanceId: string;
@@ -66,44 +74,317 @@ type ScopeFilterCardProps = {
   onScopeChoice: (instanceId: string) => void;
 };
 
-type ExecutionRunsSectionProps = {
+// ---------------------------------------------------------------------------
+// ExecutionTabs — secondary navigation
+// ---------------------------------------------------------------------------
+
+type ExecutionTabsProps = {
+  activeTab: ExecutionTab;
+  runs: ExecutionRunSummary[];
+  onTabChange: (tab: ExecutionTab) => void;
+};
+
+function ExecutionTabs({ activeTab, runs, onTabChange }: ExecutionTabsProps) {
+  const tabs = buildExecutionTabs(runs);
+
+  return (
+    <nav className="ff-execution-tabs" role="tablist">
+      {tabs.map((tab) => {
+        const isActive = tab.key === activeTab;
+        return (
+          <button
+            key={tab.key}
+            role="tab"
+            type="button"
+            className={`ff-execution-tab${isActive ? " is-active" : ""}`}
+            aria-selected={isActive}
+            onClick={() => onTabChange(tab.key)}
+          >
+            <span className="ff-execution-tab-label">{tab.label}</span>
+            {tab.badge ? (
+              <span className="fg-pill ff-execution-tab-badge" data-tone={tab.badgeTone}>
+                {tab.badge}
+              </span>
+            ) : null}
+          </button>
+        );
+      })}
+    </nav>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// ExecutionRunStatusSummary — compact stat strip replacing KPI cards
+// ---------------------------------------------------------------------------
+
+type ExecutionRunStatusSummaryProps = {
+  runs: ExecutionRunSummary[];
+};
+
+function ExecutionRunStatusSummary({ runs }: ExecutionRunStatusSummaryProps) {
+  const summary = buildExecutionStatusSummary(runs);
+
+  if (runs.length === 0) {
+    return null;
+  }
+
+  return (
+    <section className="ff-execution-summary-strip" aria-label="Run status summary">
+      <div className="ff-execution-summary-stat">
+        <span className="ff-execution-summary-value">{summary.totalRuns}</span>
+        <span className="ff-execution-summary-label">Total runs</span>
+      </div>
+      {summary.deadLetteredCount > 0 ? (
+        <div className="ff-execution-summary-stat" data-tone="danger">
+          <span className="ff-execution-summary-value">{summary.deadLetteredCount}</span>
+          <span className="ff-execution-summary-label">Dead-lettered</span>
+        </div>
+      ) : null}
+      {summary.approvalWaitCount > 0 ? (
+        <div className="ff-execution-summary-stat" data-tone="warning">
+          <span className="ff-execution-summary-value">{summary.approvalWaitCount}</span>
+          <span className="ff-execution-summary-label">Approval waits</span>
+        </div>
+      ) : null}
+      {summary.errorCount > 0 ? (
+        <div className="ff-execution-summary-stat" data-tone="danger">
+          <span className="ff-execution-summary-value">{summary.errorCount}</span>
+          <span className="ff-execution-summary-label">With errors</span>
+        </div>
+      ) : null}
+      {summary.replayableCount > 0 ? (
+        <div className="ff-execution-summary-stat" data-tone="success">
+          <span className="ff-execution-summary-value">{summary.replayableCount}</span>
+          <span className="ff-execution-summary-label">Replayable</span>
+        </div>
+      ) : null}
+      <div className="ff-execution-summary-action">
+        <span className="fg-pill" data-tone={summary.primaryNextActionTone}>
+          {summary.primaryNextAction}
+        </span>
+      </div>
+    </section>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// EmptyRunState — actionable empty state
+// ---------------------------------------------------------------------------
+
+type EmptyRunStateProps = {
+  hasFilters: boolean;
+  onClearFilters: () => void;
+  onTabChange: (tab: ExecutionTab) => void;
+};
+
+function EmptyRunState({ hasFilters, onClearFilters, onTabChange }: EmptyRunStateProps) {
+  return (
+    <article className="fg-card ff-execution-empty">
+      <div className="fg-panel-heading">
+        <div>
+          <h3>No runs match the current view</h3>
+        </div>
+      </div>
+      <div className="fg-stack">
+        {hasFilters ? (
+          <>
+            <p className="fg-muted">The active filters and tab selection returned no results. Try one of the following:</p>
+            <div className="ff-action-controls">
+              <button type="button" onClick={onClearFilters}>
+                Clear filters
+              </button>
+              <button type="button" onClick={() => onTabChange("runs")}>
+                View all runs
+              </button>
+              <button type="button" onClick={() => onTabChange("errors")}>
+                Check Errors &amp; Activity
+              </button>
+            </div>
+          </>
+        ) : (
+          <>
+            <p className="fg-muted">No execution runs were found for this instance. Runs appear here after the first provider dispatch is created.</p>
+            <div className="ff-action-controls">
+              <button type="button" onClick={() => onTabChange("errors")}>
+                Check Errors &amp; Activity
+              </button>
+              <button type="button" onClick={() => onTabChange("health")}>
+                Review Provider Health
+              </button>
+            </div>
+          </>
+        )}
+      </div>
+    </article>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// ReplayConfirmationDialog — confirmation flow before replay
+// ---------------------------------------------------------------------------
+
+type ReplayConfirmationDialogProps = {
+  detail: ExecutionRunDetail;
   instanceId: string;
-  companyId: string;
+  onConfirm: () => void;
+  onCancel: () => void;
+};
+
+function ReplayConfirmationDialog({
+  detail,
+  instanceId,
+  onConfirm,
+  onCancel,
+}: ReplayConfirmationDialogProps) {
+  const explanation = buildReplayConfirmation(detail, instanceId);
+
+  return (
+    <div className="ff-execution-confirm-overlay">
+      <div className="ff-execution-confirm-dialog">
+        <div className="fg-panel-heading">
+          <h3>Confirm replay</h3>
+        </div>
+        <div className="fg-stack">
+          <p>{explanation}</p>
+          <ul className="fg-list">
+            <li>Run: <span className="fg-code">{detail.run_id}</span></li>
+            <li>Instance: <span className="fg-code">{instanceId}</span></li>
+            <li>Lane: {detail.execution_lane}</li>
+            <li>Previous state: {detail.state}</li>
+            {detail.current_approval_id ? (
+              <li>Approval required: Yes (gate open)</li>
+            ) : null}
+            <li>Side effects: A new attempt will be created and dispatched</li>
+          </ul>
+          <div className="ff-action-controls">
+            <button type="button" className="ff-execution-confirm-btn" onClick={onConfirm}>
+              Confirm replay
+            </button>
+            <button type="button" onClick={onCancel}>
+              Cancel
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// ScopeFilterPills — active filter display
+// ---------------------------------------------------------------------------
+
+function ScopeFilterPills({
+  stateFilter,
+  laneFilter,
+  approvalWaitFilter,
+  errorFilter,
+  windowFilter,
+  targetFilter,
+}: {
   stateFilter: string;
   laneFilter: string;
-  targetFilter: string;
   approvalWaitFilter: ExecutionApprovalWaitFilter;
   errorFilter: ExecutionErrorFilter;
   windowFilter: ExecutionWindowFilter;
-  runsState: LoadState;
+  targetFilter: string;
+}) {
+  return (
+    <div className="fg-actions">
+      <span className="fg-pill" data-tone="neutral">State: {stateFilter === "all" ? "all" : stateFilter}</span>
+      <span className="fg-pill" data-tone="neutral">Lane: {laneFilter || "all"}</span>
+      <span className="fg-pill" data-tone="neutral">Approvals: {approvalWaitFilter === "waiting_only" ? "waiting only" : "all"}</span>
+      <span className="fg-pill" data-tone="neutral">Errors: {errorFilter === "with_error" ? "with errors" : "all"}</span>
+      <span className="fg-pill" data-tone="neutral">Window: {windowFilter}</span>
+      {targetFilter ? <span className="fg-pill" data-tone="neutral">Target: {targetFilter}</span> : null}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// RunTable — the run results table
+// ---------------------------------------------------------------------------
+
+function RunTable({
+  runs,
+  selectedRunId,
+  onRunSelection,
+  instanceId,
+}: {
   runs: ExecutionRunSummary[];
-  runsError: string;
   selectedRunId: string;
-  selectedSummary: ExecutionRunSummary | null;
-  detailState: LoadState;
-  detail: ExecutionRunDetail | null;
-  detailError: string;
-  access: ExecutionAccessState;
-  showReplayForm: boolean;
-  replayReason: string;
-  idempotencyKey: string;
-  replayState: ReplayState;
-  replayError: string;
-  replayResult: ExecutionReplayResult | null;
-  replayAuditHistoryPath: string | null;
-  operatorReason: string;
-  operatorLane: string;
-  operatorActionState: OperatorActionState;
-  operatorActionError: string;
-  operatorActionResult: ExecutionOperatorActionResult | null;
   onRunSelection: (runId: string) => void;
-  onReplayReasonChange: (value: string) => void;
-  onIdempotencyKeyChange: (value: string) => void;
-  onReplaySubmit: (event: FormEvent<HTMLFormElement>) => void;
-  onOperatorReasonChange: (value: string) => void;
-  onOperatorLaneChange: (value: string) => void;
-  onOperatorAction: (action: ExecutionOperatorActionKey) => void;
-};
+  instanceId: string;
+}) {
+  return (
+    <div className="fg-table-wrap">
+      <table className="fg-table">
+        <thead>
+          <tr>
+            <th>Run ID</th>
+            <th>Title / purpose</th>
+            <th>State</th>
+            <th>Lane</th>
+            <th>Target</th>
+            <th>Attempts</th>
+            <th>Error</th>
+            <th>Started</th>
+            <th>Next action</th>
+          </tr>
+        </thead>
+        <tbody>
+          {runs.map((run) => {
+            const lifecycle = describeExecutionLifecycle(run);
+            const nextAction = describeNextExecutionAction(run);
+            const title = run.issue_id ? `Issue ${run.issue_id}` : run.workspace_id ? `Workspace ${run.workspace_id}` : run.run_kind;
+            const purpose = run.issue_id
+              ? `${run.run_kind} for ${run.issue_id}`
+              : run.workspace_id
+                ? `${run.run_kind} linked to ${run.workspace_id}`
+                : run.status_reason ?? "No explicit business context was attached.";
+            return (
+              <tr key={run.run_id} className={run.run_id === selectedRunId ? "is-selected" : undefined}>
+                <td>
+                  <button className="fg-table-trigger" type="button" onClick={() => onRunSelection(run.run_id)}>
+                    {run.run_id}
+                  </button>
+                </td>
+                <td>
+                  <strong>{title}</strong>
+                  <div className="fg-muted">{purpose}</div>
+                </td>
+                <td>
+                  <span className="fg-pill" data-tone={getStateTone(run.state)}>{run.state}</span>
+                  <div className="fg-muted">{lifecycle.label}</div>
+                </td>
+                <td>{run.execution_lane}</td>
+                <td>{describeExecutionRunTarget(run)}</td>
+                <td>{run.active_attempt_no}</td>
+                <td>
+                  <span className="fg-muted">{describeExecutionError(run)}</span>
+                </td>
+                <td>{formatTimestamp(getStartedAt(run))}</td>
+                <td>
+                  <strong>{nextAction.label}</strong>
+                  <div className="fg-muted">{nextAction.detail}</div>
+                  {run.current_approval_id ? (
+                    <Link className="fg-nav-link" to={buildApprovalRoute(instanceId, run.current_approval_id)}>
+                      Open approval
+                    </Link>
+                  ) : null}
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Timeline sub-component
+// ---------------------------------------------------------------------------
 
 type TimelineItem = {
   id: string;
@@ -200,7 +481,7 @@ function buildTimeline(detail: ExecutionRunDetail, instanceId: string): Timeline
     items.push({
       id: `approval-opened:${approval.id}`,
       at: approval.opened_at,
-      label: `Approval opened`,
+      label: "Approval opened",
       detail: `${approval.approval_id} opened on gate ${approval.gate_key} with ${approval.resume_disposition} disposition.`,
       tone: approval.gate_status === "open" ? "warning" : "neutral",
       linkTo: buildApprovalRoute(instanceId, approval.approval_id),
@@ -247,7 +528,7 @@ function buildTimeline(detail: ExecutionRunDetail, instanceId: string): Timeline
         id: `outbox-published:${entry.id}`,
         at: entry.published_at,
         label: `${entry.event_type} published`,
-        detail: `The outbox event was published successfully.`,
+        detail: "The outbox event was published successfully.",
         tone: "success",
         raw: entry,
       });
@@ -265,100 +546,6 @@ function buildTimeline(detail: ExecutionRunDetail, instanceId: string): Timeline
   }
 
   return items.sort((left, right) => right.at.localeCompare(left.at));
-}
-
-function ScopeFilterPills({
-  stateFilter,
-  laneFilter,
-  approvalWaitFilter,
-  errorFilter,
-  windowFilter,
-  targetFilter,
-}: {
-  stateFilter: string;
-  laneFilter: string;
-  approvalWaitFilter: ExecutionApprovalWaitFilter;
-  errorFilter: ExecutionErrorFilter;
-  windowFilter: ExecutionWindowFilter;
-  targetFilter: string;
-}) {
-  return (
-    <div className="fg-actions">
-      <span className="fg-pill" data-tone="neutral">State: {stateFilter === "all" ? "all" : stateFilter}</span>
-      <span className="fg-pill" data-tone="neutral">Lane: {laneFilter || "all"}</span>
-      <span className="fg-pill" data-tone="neutral">Approvals: {approvalWaitFilter === "waiting_only" ? "waiting only" : "all"}</span>
-      <span className="fg-pill" data-tone="neutral">Errors: {errorFilter === "with_error" ? "with errors" : "all"}</span>
-      <span className="fg-pill" data-tone="neutral">Window: {windowFilter}</span>
-      {targetFilter ? <span className="fg-pill" data-tone="neutral">Target: {targetFilter}</span> : null}
-    </div>
-  );
-}
-
-function RunTable({ runs, selectedRunId, onRunSelection, instanceId }: { runs: ExecutionRunSummary[]; selectedRunId: string; onRunSelection: (runId: string) => void; instanceId: string }) {
-  return (
-    <div className="fg-table-wrap">
-      <table className="fg-table">
-        <thead>
-          <tr>
-            <th>ID</th>
-            <th>Title / purpose</th>
-            <th>State</th>
-            <th>Lane</th>
-            <th>Target</th>
-            <th>Attempts</th>
-            <th>Cost class</th>
-            <th>Started</th>
-            <th>Updated</th>
-            <th>Next action</th>
-          </tr>
-        </thead>
-        <tbody>
-          {runs.map((run) => {
-            const lifecycle = describeExecutionLifecycle(run);
-            const nextAction = describeNextExecutionAction(run);
-            const title = run.issue_id ? `Issue ${run.issue_id}` : run.workspace_id ? `Workspace ${run.workspace_id}` : run.run_kind;
-            const purpose = run.issue_id
-              ? `${run.run_kind} for ${run.issue_id}`
-              : run.workspace_id
-                ? `${run.run_kind} linked to ${run.workspace_id}`
-                : run.status_reason ?? "No explicit business context was attached.";
-            return (
-              <tr key={run.run_id} className={run.run_id === selectedRunId ? "is-selected" : undefined}>
-                <td>
-                  <button className="fg-table-trigger" type="button" onClick={() => onRunSelection(run.run_id)}>
-                    {run.run_id}
-                  </button>
-                </td>
-                <td>
-                  <strong>{title}</strong>
-                  <div className="fg-muted">{purpose}</div>
-                </td>
-                <td>
-                  <span className="fg-pill" data-tone={getStateTone(run.state)}>{run.state}</span>
-                  <div className="fg-muted">{lifecycle.label}</div>
-                </td>
-                <td>{run.execution_lane}</td>
-                <td>{describeExecutionRunTarget(run)}</td>
-                <td>{run.active_attempt_no}</td>
-                <td>{describeExecutionRunCostClass(run)}</td>
-                <td>{formatTimestamp(getStartedAt(run))}</td>
-                <td>{formatTimestamp(run.updated_at)}</td>
-                <td>
-                  <strong>{nextAction.label}</strong>
-                  <div className="fg-muted">{nextAction.detail}</div>
-                  {run.current_approval_id ? (
-                    <Link className="fg-nav-link" to={buildApprovalRoute(instanceId, run.current_approval_id)}>
-                      Open approval
-                    </Link>
-                  ) : null}
-                </td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
-    </div>
-  );
 }
 
 function RunTimeline({ detail, instanceId }: { detail: ExecutionRunDetail; instanceId: string }) {
@@ -709,6 +896,7 @@ function OperatorControls({
 
 function ReplayAdmission({
   detail,
+  instanceId,
   access,
   showReplayForm,
   replayReason,
@@ -720,8 +908,11 @@ function ReplayAdmission({
   onReplayReasonChange,
   onIdempotencyKeyChange,
   onReplaySubmit,
+  onReplayConfirm,
+  onReplayCancel,
 }: {
   detail: ExecutionRunDetail;
+  instanceId: string;
   access: ExecutionAccessState;
   showReplayForm: boolean;
   replayReason: string;
@@ -733,7 +924,23 @@ function ReplayAdmission({
   onReplayReasonChange: (value: string) => void;
   onIdempotencyKeyChange: (value: string) => void;
   onReplaySubmit: (event: FormEvent<HTMLFormElement>) => void;
+  onReplayConfirm: () => void;
+  onReplayCancel: () => void;
 }) {
+  const [showConfirm, setShowConfirm] = useState(false);
+
+  const handleFormSubmit = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setShowConfirm(true);
+  };
+
+  const handleConfirm = () => {
+    setShowConfirm(false);
+    // Create a synthetic submit event for the parent handler
+    const syntheticEvent = { preventDefault: () => {} } as FormEvent<HTMLFormElement>;
+    onReplaySubmit(syntheticEvent);
+  };
+
   return (
     <article className="fg-subcard">
       <div className="fg-panel-heading">
@@ -746,7 +953,7 @@ function ReplayAdmission({
         </span>
       </div>
       {showReplayForm ? (
-        <form className="fg-stack" onSubmit={onReplaySubmit}>
+        <form className="fg-stack" onSubmit={handleFormSubmit}>
           <label>
             Replay reason
             <textarea
@@ -768,7 +975,7 @@ function ReplayAdmission({
           </label>
           <div className="fg-actions">
             <button type="submit" disabled={replayState === "submitting"}>
-              {replayState === "submitting" ? "Submitting replay" : "Replay run"}
+              {replayState === "submitting" ? "Submitting replay" : "Review and replay"}
             </button>
           </div>
         </form>
@@ -798,6 +1005,18 @@ function ReplayAdmission({
           {replayAuditHistoryPath ? <Link className="fg-nav-link" to={replayAuditHistoryPath}>Open Audit History</Link> : null}
         </div>
       ) : null}
+
+      {showConfirm ? (
+        <ReplayConfirmationDialog
+          detail={detail}
+          instanceId={instanceId}
+          onConfirm={handleConfirm}
+          onCancel={() => {
+            setShowConfirm(false);
+            onReplayCancel();
+          }}
+        />
+      ) : null}
     </article>
   );
 }
@@ -807,8 +1026,8 @@ function RawDetails({ detail }: { detail: ExecutionRunDetail }) {
     <article className="fg-subcard">
       <div className="fg-panel-heading">
         <div>
-          <h4>Raw details</h4>
-          <p className="fg-muted">The raw payload stays available, but collapsed behind the operational summary instead of dominating the page.</p>
+          <h4>Advanced details</h4>
+          <p className="fg-muted">Raw payloads, deep-link parameters, and internal state — collapsed by default.</p>
         </div>
         <span className="fg-pill" data-tone="neutral">Diagnostics</span>
       </div>
@@ -821,12 +1040,192 @@ function RawDetails({ detail }: { detail: ExecutionRunDetail }) {
         <pre>{formatJson(detail.native_mapping)}</pre>
       </details>
       <details>
+        <summary>Deep-link and URL parameters</summary>
+        <p className="fg-muted">
+          The route preserves <span className="fg-code">instanceId</span>, <span className="fg-code">state</span>, <span className="fg-code">lane</span>, <span className="fg-code">target</span>, <span className="fg-code">approvalWait</span>, <span className="fg-code">error</span>, <span className="fg-code">window</span>, and <span className="fg-code">runId</span> query parameters for scoped deep linking.
+        </p>
+      </details>
+      <details>
         <summary>Full run detail payload</summary>
         <pre>{formatJson(detail)}</pre>
       </details>
     </article>
   );
 }
+
+// ---------------------------------------------------------------------------
+// RunDetailPanel — detail sections for a selected run
+// ---------------------------------------------------------------------------
+
+type RunDetailPanelProps = {
+  detail: ExecutionRunDetail;
+  instanceId: string;
+  companyId: string;
+  access: ExecutionAccessState;
+  showReplayForm: boolean;
+  replayReason: string;
+  idempotencyKey: string;
+  replayState: ReplayState;
+  replayError: string;
+  replayResult: ExecutionReplayResult | null;
+  replayAuditHistoryPath: string | null;
+  operatorReason: string;
+  operatorLane: string;
+  operatorActionState: OperatorActionState;
+  operatorActionError: string;
+  operatorActionResult: ExecutionOperatorActionResult | null;
+  onReplayReasonChange: (value: string) => void;
+  onIdempotencyKeyChange: (value: string) => void;
+  onReplaySubmit: (event: FormEvent<HTMLFormElement>) => void;
+  onReplayConfirm: () => void;
+  onReplayCancel: () => void;
+  onOperatorReasonChange: (value: string) => void;
+  onOperatorLaneChange: (value: string) => void;
+  onOperatorAction: (action: ExecutionOperatorActionKey) => void;
+};
+
+function RunDetailPanel({
+  detail,
+  instanceId,
+  access,
+  showReplayForm,
+  replayReason,
+  idempotencyKey,
+  replayState,
+  replayError,
+  replayResult,
+  replayAuditHistoryPath,
+  operatorReason,
+  operatorLane,
+  operatorActionState,
+  operatorActionError,
+  operatorActionResult,
+  onReplayReasonChange,
+  onIdempotencyKeyChange,
+  onReplaySubmit,
+  onReplayConfirm,
+  onReplayCancel,
+  onOperatorReasonChange,
+  onOperatorLaneChange,
+  onOperatorAction,
+}: RunDetailPanelProps) {
+  const lifecycle = describeExecutionLifecycle(detail);
+  const nextAction = describeNextExecutionAction(detail);
+
+  return (
+    <article className="fg-card">
+      <div className="fg-panel-heading">
+        <div>
+          <h3>Run detail</h3>
+          <p className="fg-muted">Detail for <span className="fg-code">{detail.run_id}</span> — lifecycle, approvals, dispatch jobs, and evidence.</p>
+        </div>
+        <span className="fg-pill" data-tone={getStateTone(detail.state)}>{detail.state}</span>
+      </div>
+      <div className="fg-stack">
+        <div className="fg-card-grid">
+          <article className="fg-subcard">
+            <div className="fg-panel-heading">
+              <div>
+                <h4>{lifecycle.label}</h4>
+              </div>
+              <span className="fg-pill" data-tone={lifecycle.tone}>{lifecycle.label}</span>
+            </div>
+            <p className="fg-muted">{lifecycle.detail}</p>
+            <ul className="fg-list">
+              <li>Run ID: <span className="fg-code">{detail.run_id}</span></li>
+              <li>Run kind: {detail.run_kind}</li>
+              <li>Lane: {detail.execution_lane}</li>
+              <li>State: {detail.state}</li>
+              <li>Operator state: {detail.operator_state}</li>
+              <li>Status reason: {detail.status_reason ?? "Not provided"}</li>
+              <li>Failure class: {detail.failure_class ?? "None"}</li>
+            </ul>
+          </article>
+
+          <article className="fg-subcard">
+            <h4>Failure reason</h4>
+            <p className="fg-muted">{describeExecutionError(detail)}</p>
+            <ul className="fg-list">
+              <li>Error posture: {describeExecutionError(detail)}</li>
+              <li>Target: {describeExecutionRunTarget(detail)}</li>
+              <li>Cost class: {describeExecutionRunCostClass(detail)}</li>
+              {(() => {
+                const rs = asRecord(detail.result_summary);
+                const lf = rs ? asRecord(rs.last_failure) : null;
+                if (!lf) return null;
+                return (
+                  <>
+                    <li>Retryable: {String(lf.retryable ?? "unknown")}</li>
+                    <li>Attempt: {String(lf.attempt_no ?? "?")}/{String(lf.max_attempts ?? "?")}</li>
+                    <li>Retries used: {String(lf.retry_count ?? 0)}</li>
+                  </>
+                );
+              })()}
+            </ul>
+          </article>
+
+          <article className="fg-subcard">
+            <h4>Recommended action</h4>
+            <p>
+              <strong>{nextAction.label}</strong>
+            </p>
+            <p className="fg-muted">{nextAction.detail}</p>
+            {detail.current_approval_id ? (
+              <Link className="fg-nav-link" to={buildApprovalRoute(instanceId, detail.current_approval_id)}>
+                Open approval
+              </Link>
+            ) : null}
+            {detail.workspace?.workspace_id ? (
+              <Link className="fg-nav-link" to={buildWorkspacePath({ instanceId, workspaceId: detail.workspace.workspace_id })}>
+                Open workspace
+              </Link>
+            ) : null}
+          </article>
+        </div>
+
+        <RunTimeline detail={detail} instanceId={instanceId} />
+        <DispatchJobs detail={detail} />
+        <RunDecisions detail={detail} instanceId={instanceId} />
+        <ArtifactsPanel detail={detail} instanceId={instanceId} />
+
+        <OperatorControls
+          detail={detail}
+          access={access}
+          operatorReason={operatorReason}
+          operatorLane={operatorLane}
+          operatorActionState={operatorActionState}
+          operatorActionError={operatorActionError}
+          operatorActionResult={operatorActionResult}
+          onOperatorReasonChange={onOperatorReasonChange}
+          onOperatorLaneChange={onOperatorLaneChange}
+          onOperatorAction={onOperatorAction}
+        />
+        <ReplayAdmission
+          detail={detail}
+          instanceId={instanceId}
+          access={access}
+          showReplayForm={showReplayForm}
+          replayReason={replayReason}
+          idempotencyKey={idempotencyKey}
+          replayState={replayState}
+          replayError={replayError}
+          replayResult={replayResult}
+          replayAuditHistoryPath={replayAuditHistoryPath}
+          onReplayReasonChange={onReplayReasonChange}
+          onIdempotencyKeyChange={onIdempotencyKeyChange}
+          onReplaySubmit={onReplaySubmit}
+          onReplayConfirm={onReplayConfirm}
+          onReplayCancel={onReplayCancel}
+        />
+        <RawDetails detail={detail} />
+      </div>
+    </article>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Exported components
+// ---------------------------------------------------------------------------
 
 export function ScopeFilterCard({
   instanceId,
@@ -852,12 +1251,14 @@ export function ScopeFilterCard({
   onScopeClear,
   onScopeChoice,
 }: ScopeFilterCardProps) {
+  const [showAdvanced, setShowAdvanced] = useState(false);
+
   return (
     <article className="fg-card">
       <div className="fg-panel-heading">
         <div>
-          <h3>Scope and filters</h3>
-          <p className="fg-muted">Execution review now filters real run data by instance, state, lane, target, approval waits, error posture, and time window.</p>
+          <h3>Run search</h3>
+          <p className="fg-muted">Filter execution runs by instance, state, lane, target, and time window.</p>
         </div>
         <span className="fg-pill" data-tone={instanceId ? "success" : "warning"}>
           {instanceId ? `Instance: ${instanceId}` : "Instance scope required"}
@@ -869,7 +1270,7 @@ export function ScopeFilterCard({
             <div className="fg-panel-heading">
               <div>
                 <h4>Quick scope choices</h4>
-                <p className="fg-muted">These instances come from the real instance registry, not from incidental execution history.</p>
+                <p className="fg-muted">Choose an instance to start reviewing runs.</p>
               </div>
               <span className="fg-pill" data-tone="neutral">Instance registry</span>
             </div>
@@ -910,17 +1311,7 @@ export function ScopeFilterCard({
       <form className="fg-stack" onSubmit={onScopeSubmit}>
         <div className="fg-inline-form">
           <label>
-            Exact instance ID
-            <input
-              aria-label="Execution instance ID"
-              name="instanceId"
-              placeholder="default"
-              value={instanceDraft}
-              onChange={(event) => onInstanceDraftChange(event.target.value)}
-            />
-          </label>
-          <label>
-            Run state
+            Run status
             <select aria-label="Execution run state filter" value={stateDraft} onChange={(event) => onStateDraftChange(event.target.value)}>
               {STATE_OPTIONS.map((option) => (
                 <option key={option.value} value={option.value}>
@@ -938,17 +1329,6 @@ export function ScopeFilterCard({
                 </option>
               ))}
             </select>
-          </label>
-        </div>
-        <div className="fg-inline-form">
-          <label>
-            Target or issue
-            <input
-              aria-label="Execution target filter"
-              placeholder="openai_api::gpt-4.1-mini"
-              value={targetDraft}
-              onChange={(event) => onTargetDraftChange(event.target.value)}
-            />
           </label>
           <label>
             Approval wait
@@ -981,12 +1361,37 @@ export function ScopeFilterCard({
             </select>
           </label>
         </div>
+
+        <details open={showAdvanced} onToggle={(e) => setShowAdvanced((e.target as HTMLDetailsElement).open)}>
+          <summary className="fg-muted ff-execution-advanced-toggle">Advanced filters</summary>
+          <div className="fg-inline-form fg-mt-sm">
+            <label>
+              Instance ID
+              <input
+                aria-label="Execution instance ID"
+                name="instanceId"
+                placeholder="instance-id"
+                value={instanceDraft}
+                onChange={(event) => onInstanceDraftChange(event.target.value)}
+              />
+            </label>
+            <label>
+              Target or issue
+              <input
+                aria-label="Execution target filter"
+                placeholder="openai_api::gpt-4.1-mini"
+                value={targetDraft}
+                onChange={(event) => onTargetDraftChange(event.target.value)}
+              />
+            </label>
+          </div>
+        </details>
+
         <div className="fg-actions fg-actions-end">
-          <button type="submit">Load execution runs</button>
+          <button type="submit">Search runs</button>
           <button type="button" onClick={onScopeClear}>Clear filters</button>
         </div>
       </form>
-      <p className="fg-note">Deep links keep `instanceId`, `state`, `lane`, `target`, `approvalWait`, `error`, `window`, and `runId` when another route already knows the run you need.</p>
       {companyId ? <p className="fg-note">Resolved execution scope: <span className="fg-code">{companyId}</span></p> : null}
     </article>
   );
@@ -1042,14 +1447,61 @@ export function ExecutionRunsSection({
   operatorActionState,
   operatorActionError,
   operatorActionResult,
+  activeTab,
+  onTabChange,
+  onScopeClear,
   onRunSelection,
   onReplayReasonChange,
   onIdempotencyKeyChange,
   onReplaySubmit,
+  onReplayConfirm,
+  onReplayCancel,
   onOperatorReasonChange,
   onOperatorLaneChange,
   onOperatorAction,
-}: ExecutionRunsSectionProps) {
+}: {
+  instanceId: string;
+  companyId: string;
+  stateFilter: string;
+  laneFilter: string;
+  targetFilter: string;
+  approvalWaitFilter: ExecutionApprovalWaitFilter;
+  errorFilter: ExecutionErrorFilter;
+  windowFilter: ExecutionWindowFilter;
+  runsState: LoadState;
+  runs: ExecutionRunSummary[];
+  runsError: string;
+  selectedRunId: string;
+  selectedSummary: ExecutionRunSummary | null;
+  detailState: LoadState;
+  detail: ExecutionRunDetail | null;
+  detailError: string;
+  access: ExecutionAccessState;
+  showReplayForm: boolean;
+  replayReason: string;
+  idempotencyKey: string;
+  replayState: ReplayState;
+  replayError: string;
+  replayResult: ExecutionReplayResult | null;
+  replayAuditHistoryPath: string | null;
+  operatorReason: string;
+  operatorLane: string;
+  operatorActionState: OperatorActionState;
+  operatorActionError: string;
+  operatorActionResult: ExecutionOperatorActionResult | null;
+  activeTab: ExecutionTab;
+  onTabChange: (tab: ExecutionTab) => void;
+  onScopeClear: () => void;
+  onRunSelection: (runId: string) => void;
+  onReplayReasonChange: (value: string) => void;
+  onIdempotencyKeyChange: (value: string) => void;
+  onReplaySubmit: (event: FormEvent<HTMLFormElement>) => void;
+  onReplayConfirm: () => void;
+  onReplayCancel: () => void;
+  onOperatorReasonChange: (value: string) => void;
+  onOperatorLaneChange: (value: string) => void;
+  onOperatorAction: (action: ExecutionOperatorActionKey) => void;
+}) {
   if (runsState === "loading") {
     return (
       <article className="fg-card">
@@ -1072,162 +1524,139 @@ export function ExecutionRunsSection({
     return null;
   }
 
-  const lifecycle = detail ? describeExecutionLifecycle(detail) : null;
-  const nextAction = detail ? describeNextExecutionAction(detail) : null;
+  const hasFilters =
+    stateFilter !== "all" ||
+    laneFilter !== "" ||
+    targetFilter !== "" ||
+    approvalWaitFilter !== "all" ||
+    errorFilter !== "all" ||
+    windowFilter !== "all";
+
+  const filteredRuns =
+    activeTab === "approvals"
+      ? runs.filter((r) => r.state === "waiting_on_approval" || r.operator_state === "waiting_on_approval" || Boolean(r.current_approval_id))
+      : activeTab === "errors"
+        ? runs.filter((r) => {
+            const err = describeExecutionError(r);
+            return err !== "No error recorded";
+          })
+        : activeTab === "health"
+          ? []
+          : runs;
 
   return (
     <>
-      <div className="fg-grid fg-grid-compact">
-        <article className="fg-kpi">
-          <span className="fg-muted">Runs loaded</span>
-          <strong className="fg-kpi-value">{runs.length}</strong>
-        </article>
-        <article className="fg-kpi">
-          <span className="fg-muted">Approval waits</span>
-          <strong className="fg-kpi-value">{countApprovalWaitRuns(runs)}</strong>
-        </article>
-        <article className="fg-kpi">
-          <span className="fg-muted">With errors</span>
-          <strong className="fg-kpi-value">{countErrorRuns(runs)}</strong>
-        </article>
-        <article className="fg-kpi">
-          <span className="fg-muted">Replayable</span>
-          <strong className="fg-kpi-value">{countReplayableRuns(runs)}</strong>
-        </article>
-        <article className="fg-kpi">
-          <span className="fg-muted">Needs attention</span>
-          <strong className="fg-kpi-value">{countAttentionRuns(runs)}</strong>
-        </article>
-      </div>
+      {/* Compact status summary replacing KPI cards */}
+      <ExecutionRunStatusSummary runs={runs} />
 
-      <article className="fg-card">
-        <div className="fg-panel-heading">
-          <div>
-            <h3>Run table</h3>
-            <p className="fg-muted">The table is instance-scoped and filter-bound. No cross-instance fallback or hidden queue is implied.</p>
-          </div>
-          <span className="fg-pill" data-tone="neutral">{companyId ? `Execution scope ${companyId}` : `Instance ${instanceId}`}</span>
-        </div>
-        <ScopeFilterPills
-          stateFilter={stateFilter}
-          laneFilter={laneFilter}
-          approvalWaitFilter={approvalWaitFilter}
-          errorFilter={errorFilter}
-          windowFilter={windowFilter}
-          targetFilter={targetFilter}
-        />
-        {runs.length === 0 ? (
-          <p className="fg-muted">No execution runs matched the current filter. The backend returned an empty filtered result for this instance.</p>
-        ) : (
-          <RunTable runs={runs} selectedRunId={selectedRunId} onRunSelection={onRunSelection} instanceId={instanceId} />
-        )}
-      </article>
+      {/* Tab navigation */}
+      <ExecutionTabs
+        activeTab={activeTab}
+        runs={runs}
+        onTabChange={onTabChange}
+      />
 
-      <article className="fg-card">
-        <div className="fg-panel-heading">
-          <div>
-            <h3>Run detail</h3>
-            <p className="fg-muted">Detail remains URL-addressable through `runId` and explains lifecycle, approvals, dispatch jobs, and evidence for the selected run.</p>
-          </div>
-          {selectedSummary ? <span className="fg-pill" data-tone={getStateTone(selectedSummary.state)}>{selectedSummary.state}</span> : null}
-        </div>
+      {/* Active filter pills */}
+      <ScopeFilterPills
+        stateFilter={stateFilter}
+        laneFilter={laneFilter}
+        approvalWaitFilter={approvalWaitFilter}
+        errorFilter={errorFilter}
+        windowFilter={windowFilter}
+        targetFilter={targetFilter}
+      />
 
-        {detailState === "idle" ? <p className="fg-muted">Select a run from the table to inspect its lifecycle, approval waits, dispatch jobs, and control actions.</p> : null}
-        {detailState === "loading" ? <p className="fg-muted">Loading the selected run detail.</p> : null}
-        {detailState === "error" ? <p className="fg-danger">{detailError}</p> : null}
-
-        {detail ? (
-          <div className="fg-stack">
-            <div className="fg-card-grid">
-              <article className="fg-subcard">
-                <div className="fg-panel-heading">
-                  <div>
-                    <h4>Lifecycle summary</h4>
-                    <p className="fg-muted">Lifecycle is translated into operator guidance instead of staying at raw state names.</p>
-                  </div>
-                  {lifecycle ? <span className="fg-pill" data-tone={lifecycle.tone}>{lifecycle.label}</span> : null}
-                </div>
-                <ul className="fg-list">
-                  <li>Run ID: <span className="fg-code">{detail.run_id}</span></li>
-                  <li>Run kind: {detail.run_kind}</li>
-                  <li>Lane: {detail.execution_lane}</li>
-                  <li>State: {detail.state}</li>
-                  <li>Operator state: {detail.operator_state}</li>
-                  <li>Status reason: {detail.status_reason ?? "Not provided"}</li>
-                  <li>Failure class: {detail.failure_class ?? "None"}</li>
-                  <li>Lifecycle explanation: {lifecycle?.detail ?? "Not recorded"}</li>
-                  <li>Next action: {nextAction ? `${nextAction.label} - ${nextAction.detail}` : "Inspect the sections below."}</li>
-                </ul>
-              </article>
-
-              <article className="fg-subcard">
-                <h4>Run scope and target</h4>
-                <ul className="fg-list">
-                  <li>Instance scope: <span className="fg-code">{instanceId}</span></li>
-                  <li>Execution scope: <span className="fg-code">{companyId || "resolved by instance"}</span></li>
-                  <li>Workspace: {detail.workspace_id ?? "No workspace linked"}</li>
-                  <li>Issue: {detail.issue_id ?? "No issue linked"}</li>
-                  <li>Target: {describeExecutionRunTarget(detail)}</li>
-                  <li>Cost class: {describeExecutionRunCostClass(detail)}</li>
-                  <li>Error posture: {describeExecutionError(detail)}</li>
-                  <li>Started: {formatTimestamp(getStartedAt(detail))}</li>
-                  <li>Updated: {formatTimestamp(detail.updated_at)}</li>
-                </ul>
-              </article>
-
-              <article className="fg-subcard">
-                <h4>Current attempt</h4>
-                {detail.current_attempt ? (
-                  <ul className="fg-list">
-                    <li>Attempt number: {detail.current_attempt.attempt_no}</li>
-                    <li>Attempt state: {detail.current_attempt.attempt_state}</li>
-                    <li>Operator attempt state: {detail.current_attempt.operator_state}</li>
-                    <li>Lease status: {detail.current_attempt.lease_status}</li>
-                    <li>Worker key: {detail.current_attempt.worker_key ?? "No worker attached"}</li>
-                    <li>Scheduled at: {formatTimestamp(detail.current_attempt.scheduled_at)}</li>
-                    <li>Started at: {formatTimestamp(detail.current_attempt.started_at)}</li>
-                    <li>Finished at: {formatTimestamp(detail.current_attempt.finished_at)}</li>
-                  </ul>
-                ) : (
-                  <p className="fg-muted">No active attempt is attached to this run snapshot.</p>
-                )}
-              </article>
+      {/* Run table or empty state */}
+      {activeTab === "health" ? (
+        <article className="fg-card">
+          <div className="fg-panel-heading">
+            <div>
+              <h3>Provider health</h3>
+              <p className="fg-muted">Provider readiness is reviewed per instance on the Provider Health page.</p>
             </div>
-
-            <RunTimeline detail={detail} instanceId={instanceId} />
-            <DispatchJobs detail={detail} />
-            <RunDecisions detail={detail} instanceId={instanceId} />
-            <ArtifactsPanel detail={detail} instanceId={instanceId} />
-            <OperatorControls
-              detail={detail}
-              access={access}
-              operatorReason={operatorReason}
-              operatorLane={operatorLane}
-              operatorActionState={operatorActionState}
-              operatorActionError={operatorActionError}
-              operatorActionResult={operatorActionResult}
-              onOperatorReasonChange={onOperatorReasonChange}
-              onOperatorLaneChange={onOperatorLaneChange}
-              onOperatorAction={onOperatorAction}
-            />
-            <ReplayAdmission
-              detail={detail}
-              access={access}
-              showReplayForm={showReplayForm}
-              replayReason={replayReason}
-              idempotencyKey={idempotencyKey}
-              replayState={replayState}
-              replayError={replayError}
-              replayResult={replayResult}
-              replayAuditHistoryPath={replayAuditHistoryPath}
-              onReplayReasonChange={onReplayReasonChange}
-              onIdempotencyKeyChange={onIdempotencyKeyChange}
-              onReplaySubmit={onReplaySubmit}
-            />
-            <RawDetails detail={detail} />
           </div>
-        ) : null}
-      </article>
+          <div className="ff-action-controls">
+            <Link className="fg-nav-link" to={`/providers?instanceId=${instanceId}`}>
+              Open Provider Health
+            </Link>
+          </div>
+        </article>
+      ) : filteredRuns.length > 0 ? (
+        <article className="fg-card">
+          <div className="fg-panel-heading">
+            <div>
+              <h3>Run results</h3>
+              <p className="fg-muted">{filteredRuns.length} run{filteredRuns.length !== 1 ? "s" : ""} match the current view.</p>
+            </div>
+            <span className="fg-pill" data-tone="neutral">{companyId ? `Execution scope ${companyId}` : `Instance ${instanceId}`}</span>
+          </div>
+          <RunTable
+            runs={filteredRuns}
+            selectedRunId={selectedRunId}
+            onRunSelection={onRunSelection}
+            instanceId={instanceId}
+          />
+        </article>
+      ) : (
+        <EmptyRunState
+          hasFilters={hasFilters}
+          onClearFilters={() => onScopeClear()}
+          onTabChange={onTabChange}
+        />
+      )}
+
+      {/* Run detail — only shown when a run is selected */}
+      {detailState === "loading" ? (
+        <article className="fg-card">
+          <h3>Loading run detail</h3>
+          <p className="fg-muted">Fetching the selected run detail.</p>
+        </article>
+      ) : null}
+
+      {detailState === "error" ? (
+        <article className="fg-card">
+          <h3>Run detail failed</h3>
+          <p className="fg-danger">{detailError}</p>
+        </article>
+      ) : null}
+
+      {detail && selectedRunId ? (
+        <RunDetailPanel
+          detail={detail}
+          instanceId={instanceId}
+          companyId={companyId}
+          access={access}
+          showReplayForm={showReplayForm}
+          replayReason={replayReason}
+          idempotencyKey={idempotencyKey}
+          replayState={replayState}
+          replayError={replayError}
+          replayResult={replayResult}
+          replayAuditHistoryPath={replayAuditHistoryPath}
+          operatorReason={operatorReason}
+          operatorLane={operatorLane}
+          operatorActionState={operatorActionState}
+          operatorActionError={operatorActionError}
+          operatorActionResult={operatorActionResult}
+          onReplayReasonChange={onReplayReasonChange}
+          onIdempotencyKeyChange={onIdempotencyKeyChange}
+          onReplaySubmit={onReplaySubmit}
+          onReplayConfirm={onReplayConfirm}
+          onReplayCancel={onReplayCancel}
+          onOperatorReasonChange={onOperatorReasonChange}
+          onOperatorLaneChange={onOperatorLaneChange}
+          onOperatorAction={onOperatorAction}
+        />
+      ) : runs.length > 0 ? (
+        <article className="fg-card">
+          <div className="fg-panel-heading">
+            <div>
+              <h3>Run detail</h3>
+              <p className="fg-muted">Select a run from the table above to inspect its lifecycle, approval waits, and control actions.</p>
+            </div>
+          </div>
+        </article>
+      ) : null}
     </>
   );
 }
