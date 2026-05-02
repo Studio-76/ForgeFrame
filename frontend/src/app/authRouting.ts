@@ -1,6 +1,6 @@
 import { redirect, type LoaderFunctionArgs } from "react-router-dom";
 
-import { clearAdminToken, fetchAdminSession, getAdminToken, type AdminSessionUser } from "../api/admin";
+import { clearAdminToken, fetchAdminSession, getAdminToken, type AdminSessionUser } from "../api/domain/auth";
 import { CONTROL_PLANE_ROUTES } from "./navigation";
 
 export type SessionShellMode = "signed_out" | "password_rotation" | "control_plane";

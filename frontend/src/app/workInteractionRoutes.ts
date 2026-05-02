@@ -1,4 +1,4 @@
-import type { ArtifactAttachmentTargetKind } from "../api/admin";
+import type { ArtifactAttachmentTargetKind } from "../api/domain/artifacts";
 import { CONTROL_PLANE_ROUTES } from "./navigation";
 
 function buildScopedPath(

@@ -1,6 +1,6 @@
 import { useOutletContext } from "react-router-dom";
 
-import type { AdminSessionUser } from "../api/admin";
+import type { AdminSessionUser } from "../api/domain/auth";
 
 export type AppSessionContext = {
   session: AdminSessionUser | null;
