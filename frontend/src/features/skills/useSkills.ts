@@ -13,11 +13,9 @@ import {
   updateSkill,
   type AgentSummary,
   type SkillDetail,
-  type SkillProvenanceKind,
   type SkillScope,
   type SkillStatus,
   type SkillSummary,
-  type SkillUsageOutcome,
 } from "../../api/domain";
 import { useAppSession } from "../../app/session";
 import {
@@ -249,18 +247,6 @@ export function useSkills(): UseSkillsReturn {
         }
         setSkills(filtered);
         setListState("success");
-        const nextSkillId = filtered.some((item) => item.skill_id === skillId)
-          ? skillId
-          : filtered[0]?.skill_id ?? "";
-        if (nextSkillId !== skillId) {
-          updateRoute((next) => {
-            if (nextSkillId) {
-              next.set("skillId", nextSkillId);
-            } else {
-              next.delete("skillId");
-            }
-          }, true);
-        }
       })
       .catch((loadError: unknown) => {
         if (cancelled) return;
@@ -270,7 +256,24 @@ export function useSkills(): UseSkillsReturn {
     return () => {
       cancelled = true;
     };
-  }, [canRead, instanceId, refreshNonce, scopeFilter, statusFilter, skillId, activeOnly, needsReview]);
+  }, [canRead, instanceId, refreshNonce, scopeFilter, statusFilter, activeOnly, needsReview]);
+
+  // Auto-select skill when skills list changes or selection becomes invalid
+  useEffect(() => {
+    if (!canRead || !instanceId) return;
+    const nextSkillId = skills.some((item) => item.skill_id === skillId)
+      ? skillId
+      : skills[0]?.skill_id ?? "";
+    if (nextSkillId !== skillId) {
+      updateRoute((next) => {
+        if (nextSkillId) {
+          next.set("skillId", nextSkillId);
+        } else {
+          next.delete("skillId");
+        }
+      }, true);
+    }
+  }, [skills, skillId, canRead, instanceId]);
 
   // Fetch skill detail
   useEffect(() => {

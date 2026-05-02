@@ -40,7 +40,6 @@ import {
   getLabeledAgent,
   outcomeLabel,
   outcomeTone,
-  previewLabel,
   provenanceKindLabel,
   provenanceTone,
   statusLabel,
@@ -153,7 +152,7 @@ export function SkillDetailPanel({
         >
           {detail.provenance_summary.label}
         </span>
-        <span className="ff-skills-pill">{detail.scope_label}</span>
+        <span className="ff-skills-pill" data-tone="neutral">{detail.scope_label}</span>
         <span
           className="ff-skills-pill"
           data-tone={outcomeTone(detail.last_outcome)}
@@ -764,24 +763,19 @@ export function SkillDetailPanel({
         <div className="ff-skills-lifecycle-actions">
           <h4>Lifecycle actions</h4>
           <div className="ff-skills-lifecycle-buttons">
-            <form
-              className="ff-skills-lifecycle-form"
-              onSubmit={(event) => {
-                event.preventDefault();
+            <button
+              type="button"
+              className="ff-skills-lifecycle-btn"
+              disabled={!canMutate || isArchived || isActive}
+              onClick={() => {
                 setEditForm((current) => ({ ...current, status: "review" }));
-                // Submit the update form
-                const form = (event.target as HTMLElement).closest("form");
-                if (form) form.requestSubmit();
+                // Programmatically submit the edit form to trigger handleUpdate
+                const editFormElement = document.querySelector<HTMLFormElement>(".ff-skills-detail-form");
+                if (editFormElement) editFormElement.requestSubmit();
               }}
             >
-              <button
-                type="submit"
-                className="ff-skills-lifecycle-btn"
-                disabled={!canMutate || isArchived || isActive}
-              >
-                Submit for review
-              </button>
-            </form>
+              Submit for review
+            </button>
 
             <form className="ff-skills-lifecycle-form" onSubmit={handleActivate}>
               <div className="ff-skills-lifecycle-activate-fields">

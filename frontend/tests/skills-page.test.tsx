@@ -568,6 +568,37 @@ describe("skills page", () => {
     );
   });
 
+  it("submits a skill for review from the lifecycle actions", async () => {
+    await renderIntoDom(
+      withAppContext({
+        path: "/skills?instanceId=instance_alpha&skillId=skill_review_alpha",
+        element: <SkillsPage />,
+        session: adminSession,
+      }),
+    );
+    await flushEffects();
+
+    // The edit form must be in the DOM for requestSubmit to work, but it can stay closed
+    // Click "Submit for review" in lifecycle actions
+    const submitBtn = getButtonByText(container, "Submit for review");
+    expect(submitBtn).toBeTruthy();
+    expect(submitBtn?.getAttribute("disabled")).toBeNull();
+
+    await act(async () => {
+      submitBtn?.click();
+    });
+    await flushEffects();
+
+    // Should trigger updateSkill with status: "review"
+    expect(updateSkillMock).toHaveBeenCalledWith(
+      "instance_alpha",
+      "skill_review_alpha",
+      expect.objectContaining({
+        status: "review",
+      }),
+    );
+  });
+
   it("updates, activates, archives, and records skill usage", async () => {
     await renderIntoDom(
       withAppContext({

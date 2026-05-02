@@ -11,8 +11,6 @@ import { SCOPE_OPTIONS, STATUS_OPTIONS, STATUS_LABELS, SCOPE_LABELS } from "./ty
 
 /** Props for SkillFilters. */
 export interface SkillFiltersProps {
-  /** Currently selected instance ID. */
-  instanceId: string;
   /** Current status filter value. */
   statusFilter: string;
   /** Current scope filter value. */

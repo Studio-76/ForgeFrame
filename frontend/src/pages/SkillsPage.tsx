@@ -2,6 +2,7 @@ import { CONTROL_PLANE_ROUTES } from "../app/navigation";
 import { PageIntro } from "../components/PageIntro";
 import {
   CreateSkillPanel,
+  DEFAULT_CREATE_FORM,
   EmptyState,
   SkillDetailPanel,
   SkillFilters,
@@ -130,7 +131,10 @@ export function SkillsPage() {
           canMutate={skills.canMutate}
           savingCreate={skills.savingCreate}
           handleCreate={skills.handleCreate}
-          onCancel={() => skills.setShowCreateForm(false)}
+          onCancel={() => {
+            skills.setCreateForm(DEFAULT_CREATE_FORM);
+            skills.setShowCreateForm(false);
+          }}
         />
       ) : !hasSkills && skills.listState !== "loading" ? (
         /* ── Empty state ── */
@@ -144,7 +148,6 @@ export function SkillsPage() {
         /* ── Registry browse mode ── */
         <>
           <SkillFilters
-            instanceId={skills.instanceId}
             statusFilter={skills.statusFilter}
             scopeFilter={skills.scopeFilter}
             activeOnly={skills.activeOnly}
