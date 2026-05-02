@@ -572,8 +572,14 @@ describe("Security page security center", () => {
     expect(fetchElevatedAccessRequestsMock).toHaveBeenCalledTimes(1);
     expect(fetchAdminUsersMock).not.toHaveBeenCalled();
     expect(fetchAdminSessionsMock).not.toHaveBeenCalled();
-    expect(container.textContent).toContain("Critical security blockers");
-    expect(container.textContent).toContain("Admin Users (Restricted)");
+    // Posture summary should show attention state with active blockers
+    expect(container.textContent).toContain("Attention required");
+    // Checklist should show active blockers (mapped from API)
+    expect(container.textContent).toContain("Missing provider secrets");
+    expect(container.textContent).toContain("Secret rotation evidence");
+    // Tab labels still shown with restriction indicator
+    expect(container.textContent).toContain("Admin Users");
+    expect(container.textContent).toContain("Restricted");
 
     await clickButton("Elevated Access");
     await flushEffects();

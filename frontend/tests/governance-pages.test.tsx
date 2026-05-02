@@ -47,7 +47,10 @@ describe("governance page role cues", () => {
     );
 
     expect(markup).toContain("Operator exception view");
-    expect(markup).toContain("Critical security blockers");
+    // Posture summary replaces old blocker card grid
+    expect(markup).toContain("Secure");
+    expect(markup).toContain("No action required");
+    // Related pages strip shows admin-only sections as restricted
     expect(markup).toContain("Admin Users (Restricted)");
     expect(markup).toContain("Audit History");
     expect(markup).not.toContain("Audit &amp; Export");

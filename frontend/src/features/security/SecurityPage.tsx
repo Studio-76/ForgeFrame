@@ -64,16 +64,22 @@ import {
   rotationKindForTarget,
 } from "./pageState";
 import {
+  ActiveBlockerDetail,
+  BlockersRemediationChecklist,
+  RelatedPagesStrip,
   SecurityAdminUsersSection,
   SecurityBlockerStrip,
   SecurityCredentialPolicySection,
   SecurityElevatedAccessSection,
   SecurityPostureSection,
+  SecurityPostureSummary,
   SecurityProviderSecretsSection,
   SecuritySessionsSection,
   SecurityTabBar,
   type AdminUserEditDraft,
   type AdminUserScopeDraft,
+  type OverallSecurityState,
+  type RemediationItem,
   type RotationDraft,
   type RotationTargetOption,
   type SecurityTabId,
@@ -133,6 +139,7 @@ export function SecurityPage() {
   const [decisionPendingRequestId, setDecisionPendingRequestId] = useState<string | null>(null);
   const [revokePendingSessionId, setRevokePendingSessionId] = useState<string | null>(null);
   const [rotationPending, setRotationPending] = useState(false);
+  const [selectedBlockerId, setSelectedBlockerId] = useState<string | null>(null);
 
   const canReviewApprovals = sessionReady && sessionHasAnyInstancePermission(session, "approvals.read");
   const canViewSecurity = sessionReady && (
@@ -150,6 +157,123 @@ export function SecurityPage() {
   const impersonationTargets = users.filter(
     (user) => user.status === "active" && user.user_id !== session?.user_id,
   );
+
+  // ── Remediation checklist computation ──
+  const remediationItems: RemediationItem[] = (() => {
+    const items: RemediationItem[] = [];
+
+    // 1. Elevated access recovery — derived from approverPosture (dominant when recovery_required)
+    if (approverPosture?.state === "recovery_required") {
+      items.push({
+        id: "elevated_access_recovery",
+        label: "Elevated access recovery",
+        summary: approverPosture.primary_message,
+        detail: approverPosture.secondary_message,
+        whyMatters: "Elevated access (break-glass and impersonation) is blocked until a second eligible admin approver exists. No exception workflows can proceed during recovery.",
+        requiredFix: approverPosture.eligible_admin_approver_count === 0
+          ? "Add a second admin user who can serve as an eligible approver."
+          : approverPosture.blocked_reason
+            ? `Resolve the blocker: ${approverPosture.blocked_reason}`
+            : "Restore an eligible admin approver to resume elevated-access workflows.",
+        severity: "danger",
+        active: true,
+        actionLabel: "Add second admin approver",
+        actionTab: "admin_users",
+      });
+    }
+
+    // 2. Map API blockers to remediation items (prioritized order)
+    const blockerMap: Record<string, { label: string; whyMatters: string; requiredFix: string; actionLabel: string; actionTab: SecurityTabId }> = {
+      secrets_missing: {
+        label: "Missing provider secrets",
+        whyMatters: "Provider integrations (AI models, external services) cannot authenticate when credentials are missing or unconfigured. This blocks execution until resolved.",
+        requiredFix: "Configure the missing provider credentials through environment variables or harness-backed secret storage.",
+        actionLabel: "Configure provider secrets",
+        actionTab: "provider_secrets",
+      },
+      open_sessions: {
+        label: "Open admin sessions",
+        whyMatters: "Active admin sessions represent live privileged access. Review and revoke sessions that no longer need control-plane access to reduce attack surface.",
+        requiredFix: "Review the active sessions list and revoke any sessions that are no longer needed.",
+        actionLabel: "Review sessions",
+        actionTab: "sessions",
+      },
+      missing_rotation: {
+        label: "Secret rotation evidence",
+        whyMatters: "Credential rotation evidence is required for audit compliance. Controls without recent rotation records fail governance checks.",
+        requiredFix: "Rotate the credential for each control that lacks rotation evidence, then record the rotation event.",
+        actionLabel: "Record rotation",
+        actionTab: "provider_secrets",
+      },
+      default_password: {
+        label: "Bootstrap password state",
+        whyMatters: "The default bootstrap password is a well-known credential. Leaving it active exposes the control plane to unauthorized admin access.",
+        requiredFix: "Rotate the bootstrap password and confirm it is no longer in use.",
+        actionLabel: "Password rotated",
+        actionTab: "posture",
+      },
+      break_glass_active: {
+        label: "Break-glass active",
+        whyMatters: "Active break-glass sessions represent emergency privileged access. These should be temporary and reviewed after the incident is resolved.",
+        requiredFix: "Monitor active break-glass sessions and revoke them once the emergency is resolved.",
+        actionLabel: "Monitor sessions",
+        actionTab: "elevated_access",
+      },
+    };
+
+    for (const blocker of securityBlockers) {
+      const mapping = blockerMap[blocker.blocker_id];
+      if (!mapping) {
+        // Fallback for unknown blockers
+        items.push({
+          id: blocker.blocker_id,
+          label: blocker.label,
+          summary: blocker.summary,
+          detail: blocker.detail,
+          whyMatters: "This security check requires attention before the system is fully secure.",
+          requiredFix: "Resolve the underlying issue described in the check detail.",
+          severity: blocker.tone,
+          active: blocker.active,
+          count: blocker.count,
+          actionLabel: blocker.active ? "Review" : "Clear",
+        });
+        continue;
+      }
+      items.push({
+        id: blocker.blocker_id,
+        label: mapping.label,
+        summary: blocker.summary,
+        detail: blocker.detail,
+        whyMatters: mapping.whyMatters,
+        requiredFix: mapping.requiredFix,
+        severity: blocker.tone,
+        active: blocker.active,
+        count: blocker.count,
+        actionLabel: blocker.active ? mapping.actionLabel : "Clear",
+        actionTab: blocker.active ? mapping.actionTab : undefined,
+      });
+    }
+
+    // Sort: active danger first, then active warning, then passed (collapsed)
+    const severityRank: Record<string, number> = { danger: 0, warning: 1, neutral: 2, success: 3 };
+    items.sort((a, b) => {
+      if (a.active !== b.active) return a.active ? -1 : 1;
+      return (severityRank[a.severity] ?? 99) - (severityRank[b.severity] ?? 99);
+    });
+
+    return items;
+  })();
+
+  const activeRemediationItems = remediationItems.filter((item) => item.active);
+  const overallState: OverallSecurityState = approverPosture?.state === "recovery_required"
+    ? "recovery"
+    : activeRemediationItems.length > 0
+      ? "attention"
+      : "secure";
+  const highestPriorityBlocker = activeRemediationItems[0] ?? null;
+  const nextAction = highestPriorityBlocker
+    ? `Next: ${highestPriorityBlocker.actionLabel}`
+    : "No action required";
 
   const clearFeedback = () => {
     setError("");
@@ -806,6 +930,10 @@ export function SecurityPage() {
     );
   }
 
+  const selectedBlocker = selectedBlockerId
+    ? remediationItems.find((item) => item.id === selectedBlockerId) ?? null
+    : null;
+
   return (
     <section className="fg-page">
       <PageIntro
@@ -860,7 +988,38 @@ export function SecurityPage() {
         </article>
       ) : null}
 
-      <SecurityBlockerStrip blockers={securityBlockers} />
+      {/* Posture summary — overall state visible within 5 seconds */}
+      <SecurityPostureSummary
+        overallState={overallState}
+        activeBlockerCount={activeRemediationItems.length}
+        highestPriorityLabel={highestPriorityBlocker?.label ?? "None"}
+        recoveryLabel={approverPosture?.state === "recovery_required" ? "Recovery required — no eligible second admin approver exists" : null}
+        nextAction={nextAction}
+      />
+
+      {/* Remediation checklist — prioritized active blockers, collapsed passed checks */}
+      <BlockersRemediationChecklist
+        items={remediationItems}
+        selectedId={selectedBlockerId}
+        onSelect={setSelectedBlockerId}
+      />
+
+      {/* Selected blocker detail — shown when a blocker item is expanded */}
+      {selectedBlocker ? (
+        <ActiveBlockerDetail
+          item={selectedBlocker}
+          onDismiss={() => setSelectedBlockerId(null)}
+        />
+      ) : null}
+
+      {/* Related pages strip — replaces old "Security control planes" card */}
+      <RelatedPagesStrip
+        activeTab={activeTab}
+        canViewAdminTabs={canViewAdminTabs}
+        onSelectTab={setActiveTab}
+      />
+
+      {/* Tab navigation */}
       <SecurityTabBar activeTab={activeTab} canViewAdminTabs={canViewAdminTabs} onSelectTab={setActiveTab} />
 
       {activeTab === "posture" ? (
