@@ -5,14 +5,14 @@ import {
   createAutomation,
   fetchAutomationDetail,
   fetchAutomations,
-  fetchInstances,
   triggerAutomation,
   updateAutomation,
   type AutomationActionKind,
   type AutomationDetail,
   type AutomationStatus,
   type AutomationSummary,
-} from "../api/admin";
+} from "../api/domain/automations";
+import { fetchInstances } from "../api/domain/instances";
 import { CONTROL_PLANE_ROUTES } from "../app/navigation";
 import {
   buildChannelPath,

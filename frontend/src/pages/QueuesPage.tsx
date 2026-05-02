@@ -1,7 +1,8 @@
 import { startTransition, useEffect, useState, type FormEvent } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 
-import { fetchExecutionQueues, fetchInstances, type ExecutionQueueLaneSummary, type ExecutionQueueRunView } from "../api/admin";
+import { fetchExecutionQueues, type ExecutionQueueLaneSummary, type ExecutionQueueRunView } from "../api/domain/execution";
+import { fetchInstances } from "../api/domain/instances";
 import { buildExecutionReviewPath, normalizeExecutionCompanyId, normalizeExecutionInstanceId } from "../app/executionReview";
 import { CONTROL_PLANE_ROUTES } from "../app/navigation";
 import { useAppSession } from "../app/session";

@@ -20,16 +20,31 @@ const {
   simulateRoutingMock: vi.fn(),
 }));
 
-vi.mock("../src/api/admin", async () => {
-  const actual = await vi.importActual<typeof import("../src/api/admin")>("../src/api/admin");
+vi.mock("../src/api/admin/routing", async () => {
+  const actual = await vi.importActual<typeof import("../src/api/admin/routing")>("../src/api/admin/routing");
   return {
     ...actual,
-    fetchInstances: fetchInstancesMock,
     fetchRoutingControlPlane: fetchRoutingControlPlaneMock,
     updateRoutingPolicy: updateRoutingPolicyMock,
     updateRoutingBudget: updateRoutingBudgetMock,
     updateRoutingCircuit: updateRoutingCircuitMock,
     simulateRouting: simulateRoutingMock,
+  };
+});
+
+vi.mock("../src/api/admin/instances", async () => {
+  const actual = await vi.importActual<typeof import("../src/api/admin/instances")>("../src/api/admin/instances");
+  return {
+    ...actual,
+    fetchInstances: fetchInstancesMock,
+  };
+});
+
+vi.mock("../src/api/admin", async () => {
+  const actual = await vi.importActual<typeof import("../src/api/admin")>("../src/api/admin");
+  return {
+    ...actual,
+    fetchInstances: fetchInstancesMock,
   };
 });
 

@@ -20,17 +20,23 @@ const {
   scanLearningPatternsMock: vi.fn(),
 }));
 
-vi.mock("../src/api/admin", async () => {
-  const actual = await vi.importActual<typeof import("../src/api/admin")>("../src/api/admin");
-
+vi.mock("../src/api/admin/learning", async () => {
+  const actual = await vi.importActual<typeof import("../src/api/admin/learning")>("../src/api/admin/learning");
   return {
     ...actual,
-    fetchInstances: fetchInstancesMock,
     fetchLearningEvents: fetchLearningEventsMock,
     fetchLearningEventDetail: fetchLearningEventDetailMock,
     createLearningEvent: createLearningEventMock,
     decideLearningEvent: decideLearningEventMock,
     scanLearningPatterns: scanLearningPatternsMock,
+  };
+});
+
+vi.mock("../src/api/admin/instances", async () => {
+  const actual = await vi.importActual<typeof import("../src/api/admin/instances")>("../src/api/admin/instances");
+  return {
+    ...actual,
+    fetchInstances: fetchInstancesMock,
   };
 });
 

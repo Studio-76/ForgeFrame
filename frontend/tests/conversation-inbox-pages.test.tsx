@@ -34,24 +34,82 @@ const {
   updateInboxItemMock: vi.fn(),
 }));
 
+vi.mock("../src/api/admin/conversations", async () => {
+  const actual = await vi.importActual<typeof import("../src/api/admin/conversations")>("../src/api/admin/conversations");
+  return {
+    ...actual,
+    fetchConversations: fetchConversationsMock,
+    fetchConversationDetail: fetchConversationDetailMock,
+    createConversation: createConversationMock,
+    updateConversation: updateConversationMock,
+    appendConversationMessage: appendConversationMessageMock,
+  };
+});
+
+vi.mock("../src/api/admin/inbox", async () => {
+  const actual = await vi.importActual<typeof import("../src/api/admin/inbox")>("../src/api/admin/inbox");
+  return {
+    ...actual,
+    fetchInboxItems: fetchInboxItemsMock,
+    fetchInboxItemDetail: fetchInboxItemDetailMock,
+    createInboxItem: createInboxItemMock,
+    updateInboxItem: updateInboxItemMock,
+  };
+});
+
+vi.mock("../src/api/admin/tasks", async () => {
+  const actual = await vi.importActual<typeof import("../src/api/admin/tasks")>("../src/api/admin/tasks");
+  return {
+    ...actual,
+    fetchTasks: fetchTasksMock,
+    createTask: createTaskMock,
+  };
+});
+
+vi.mock("../src/api/admin/agents", async () => {
+  const actual = await vi.importActual<typeof import("../src/api/admin/agents")>("../src/api/admin/agents");
+  return {
+    ...actual,
+    fetchAgents: fetchAgentsMock,
+  };
+});
+
+vi.mock("../src/api/admin/instances", async () => {
+  const actual = await vi.importActual<typeof import("../src/api/admin/instances")>("../src/api/admin/instances");
+  return {
+    ...actual,
+    fetchInstances: fetchInstancesMock,
+  };
+});
+
 vi.mock("../src/api/admin", async () => {
   const actual = await vi.importActual<typeof import("../src/api/admin")>("../src/api/admin");
+  return {
+    ...actual,
+    fetchInstances: fetchInstancesMock,
+    fetchConversations: fetchConversationsMock,
+    fetchConversationDetail: fetchConversationDetailMock,
+    createConversation: createConversationMock,
+    updateConversation: updateConversationMock,
+    appendConversationMessage: appendConversationMessageMock,
+    fetchAgents: fetchAgentsMock,
+    fetchTasks: fetchTasksMock,
+  };
+});
 
+vi.mock("../src/api/admin", async () => {
+  const actual = await vi.importActual<typeof import("../src/api/admin")>("../src/api/admin");
   return {
     ...actual,
     fetchInstances: fetchInstancesMock,
     fetchAgents: fetchAgentsMock,
     fetchConversations: fetchConversationsMock,
     fetchConversationDetail: fetchConversationDetailMock,
-    fetchTasks: fetchTasksMock,
     createConversation: createConversationMock,
     createTask: createTaskMock,
     updateConversation: updateConversationMock,
     appendConversationMessage: appendConversationMessageMock,
-    fetchInboxItems: fetchInboxItemsMock,
-    fetchInboxItemDetail: fetchInboxItemDetailMock,
-    createInboxItem: createInboxItemMock,
-    updateInboxItem: updateInboxItemMock,
+    fetchTasks: fetchTasksMock,
   };
 });
 

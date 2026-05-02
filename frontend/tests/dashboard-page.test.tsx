@@ -19,6 +19,16 @@ vi.mock("../src/api/admin", async () => {
   };
 });
 
+vi.mock("../src/api/domain", async () => {
+  const actual = await vi.importActual<typeof import("../src/api/domain")>("../src/api/domain");
+
+  return {
+    ...actual,
+    fetchDashboard: fetchDashboardMock,
+    fetchInstances: fetchInstancesMock,
+  };
+});
+
 import type { AdminSessionUser, DashboardResponse, InstanceRecord } from "../src/api/admin";
 import { SetupPage } from "../src/features/setup/SetupPage";
 import { createTestQueryClient, withAppContext } from "./testContext";

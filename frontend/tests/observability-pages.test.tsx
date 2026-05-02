@@ -22,18 +22,39 @@ const {
   fetchUsageSummaryMock: vi.fn(),
 }));
 
-vi.mock("../src/api/admin", async () => {
-  const actual = await vi.importActual<typeof import("../src/api/admin")>("../src/api/admin");
-  return {
-    ...actual,
-    fetchDashboard: fetchDashboardMock,
-    fetchInstances: fetchInstancesMock,
-    fetchLogs: fetchLogsMock,
-    fetchProviderControlPlane: fetchProviderControlPlaneMock,
-    fetchRoutingControlPlane: fetchRoutingControlPlaneMock,
-    fetchRuntimeHealth: fetchRuntimeHealthMock,
-    fetchUsageSummary: fetchUsageSummaryMock,
-  };
+vi.mock("../src/api/admin/dashboard", async () => {
+  const actual = await vi.importActual<typeof import("../src/api/admin/dashboard")>("../src/api/admin/dashboard");
+  return { ...actual, fetchDashboard: fetchDashboardMock };
+});
+
+vi.mock("../src/api/admin/logs", async () => {
+  const actual = await vi.importActual<typeof import("../src/api/admin/logs")>("../src/api/admin/logs");
+  return { ...actual, fetchLogs: fetchLogsMock };
+});
+
+vi.mock("../src/api/admin/providers", async () => {
+  const actual = await vi.importActual<typeof import("../src/api/admin/providers")>("../src/api/admin/providers");
+  return { ...actual, fetchProviderControlPlane: fetchProviderControlPlaneMock };
+});
+
+vi.mock("../src/api/admin/health", async () => {
+  const actual = await vi.importActual<typeof import("../src/api/admin/health")>("../src/api/admin/health");
+  return { ...actual, fetchRuntimeHealth: fetchRuntimeHealthMock };
+});
+
+vi.mock("../src/api/admin/routing", async () => {
+  const actual = await vi.importActual<typeof import("../src/api/admin/routing")>("../src/api/admin/routing");
+  return { ...actual, fetchRoutingControlPlane: fetchRoutingControlPlaneMock };
+});
+
+vi.mock("../src/api/admin/usage", async () => {
+  const actual = await vi.importActual<typeof import("../src/api/admin/usage")>("../src/api/admin/usage");
+  return { ...actual, fetchUsageSummary: fetchUsageSummaryMock };
+});
+
+vi.mock("../src/api/admin/instances", async () => {
+  const actual = await vi.importActual<typeof import("../src/api/admin/instances")>("../src/api/admin/instances");
+  return { ...actual, fetchInstances: fetchInstancesMock };
 });
 
 import type { AdminSessionUser, InstanceRecord } from "../src/api/admin";

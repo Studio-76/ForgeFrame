@@ -1,4 +1,4 @@
-import type { AdminPermissionKey, AdminRole, AdminSessionUser } from "../api/admin";
+import type { AdminPermissionKey, AdminRole, AdminSessionUser } from "../api/domain/auth";
 
 const ROLE_ORDER: Record<AdminRole, number> = {
   viewer: 0,

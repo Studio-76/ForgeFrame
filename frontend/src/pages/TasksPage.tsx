@@ -2,9 +2,7 @@ import { startTransition, useEffect, useState, type FormEvent } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 
 import {
-  createReminder,
   createTask,
-  fetchInstances,
   fetchTaskDetail,
   fetchTasks,
   updateTask,
@@ -13,7 +11,9 @@ import {
   type TaskStatus,
   type TaskSummary,
   type WorkItemPriority,
-} from "../api/admin";
+} from "../api/domain/tasks";
+import { createReminder } from "../api/domain/reminders";
+import { fetchInstances } from "../api/domain/instances";
 import { CONTROL_PLANE_ROUTES } from "../app/navigation";
 import {
   buildArtifactsPath,

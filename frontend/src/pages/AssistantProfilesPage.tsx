@@ -14,7 +14,6 @@ import {
   evaluateAssistantAction,
   fetchAssistantProfileDetail,
   fetchAssistantProfiles,
-  fetchInstances,
   updateAssistantProfile,
   type ActionPolicies,
   type AssistantActionEvaluation,
@@ -34,7 +33,8 @@ import {
   type QuietHoursSettings,
   type RecordLink,
   type WorkItemPriority,
-} from "../api/admin";
+} from "../api/domain/assistant-profiles";
+import { fetchInstances } from "../api/domain/instances";
 import { CONTROL_PLANE_ROUTES } from "../app/navigation";
 import { useAppSession } from "../app/session";
 import { buildChannelPath, buildContactPath, buildKnowledgeSourcePath } from "../app/workInteractionRoutes";

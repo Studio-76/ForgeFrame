@@ -3,16 +3,15 @@ import { Link, useSearchParams } from "react-router-dom";
 
 import {
   createRuntimeKey,
-  fetchAccounts,
   fetchRuntimeKeyRequestPathPolicy,
   fetchRuntimeKeys,
   rotateRuntimeKey,
   setRuntimeKeyStatus,
   updateRuntimeKeyRequestPathPolicy,
-  type GatewayAccount,
   type RuntimeKey,
   type RuntimeKeyRequestPathPolicy,
-} from "../api/admin";
+} from "../api/domain/runtime-keys";
+import { fetchAccounts, type GatewayAccount } from "../api/domain/accounts";
 import { buildAuditHistoryPath, resolveNewestAuditHistoryPathForSession } from "../app/auditHistory";
 import { roleAllows, sessionHasAnyInstancePermission } from "../app/adminAccess";
 import { CONTROL_PLANE_ROUTES } from "../app/navigation";

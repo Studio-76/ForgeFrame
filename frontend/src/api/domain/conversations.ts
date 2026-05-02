@@ -23,4 +23,4 @@ export {
   type ConversationSummary,
   type ConversationThreadStatus,
   type ConversationThreadSummary,
-} from "../admin";
+} from "../admin/conversations";

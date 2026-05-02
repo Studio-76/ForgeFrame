@@ -12,12 +12,19 @@ const {
   fetchLogsMock: vi.fn(),
 }));
 
-vi.mock("../src/api/admin", async () => {
-  const actual = await vi.importActual<typeof import("../src/api/admin")>("../src/api/admin");
+vi.mock("../src/api/admin/logs", async () => {
+  const actual = await vi.importActual<typeof import("../src/api/admin/logs")>("../src/api/admin/logs");
+  return {
+    ...actual,
+    fetchLogs: fetchLogsMock,
+  };
+});
+
+vi.mock("../src/api/admin/instances", async () => {
+  const actual = await vi.importActual<typeof import("../src/api/admin/instances")>("../src/api/admin/instances");
   return {
     ...actual,
     fetchInstances: fetchInstancesMock,
-    fetchLogs: fetchLogsMock,
   };
 });
 

@@ -3,7 +3,6 @@ import { Link, useSearchParams } from "react-router-dom";
 
 import {
   createWorkspace,
-  fetchInstances,
   fetchWorkspaceDetail,
   fetchWorkspaces,
   updateWorkspace,
@@ -13,7 +12,8 @@ import {
   type WorkspaceReviewStatus,
   type WorkspaceStatus,
   type WorkspaceSummary,
-} from "../api/admin";
+} from "../api/domain/workspaces";
+import { fetchInstances } from "../api/domain/instances";
 import { roleAllows, sessionHasAnyInstancePermission } from "../app/adminAccess";
 import { CONTROL_PLANE_ROUTES } from "../app/navigation";
 import { useAppSession } from "../app/session";

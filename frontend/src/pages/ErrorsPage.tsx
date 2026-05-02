@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 
-import { fetchLogs, type LogsResponse } from "../api/admin";
+import { fetchLogs, type LogsResponse } from "../api/domain/logs";
 import { CONTROL_PLANE_ROUTES } from "../app/navigation";
 import { getInstanceIdFromSearchParams, withInstanceScope } from "../app/tenantScope";
 import { useInstanceCatalog } from "../app/useInstanceCatalog";

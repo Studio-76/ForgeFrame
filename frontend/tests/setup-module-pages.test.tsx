@@ -22,18 +22,48 @@ const {
   fetchRoutingControlPlaneMock: vi.fn(),
 }));
 
+vi.mock("../src/api/admin/ingress-tls", async () => {
+  const actual = await vi.importActual<typeof import("../src/api/admin/ingress-tls")>("../src/api/admin/ingress-tls");
+  return { ...actual, fetchIngressTlsStatus: fetchIngressTlsStatusMock };
+});
+
+vi.mock("../src/api/admin/bootstrap", async () => {
+  const actual = await vi.importActual<typeof import("../src/api/admin/bootstrap")>("../src/api/admin/bootstrap");
+  return { ...actual, fetchBootstrapReadiness: fetchBootstrapReadinessMock };
+});
+
+vi.mock("../src/api/admin/providers", async () => {
+  const actual = await vi.importActual<typeof import("../src/api/admin/providers")>("../src/api/admin/providers");
+  return { ...actual, fetchProviderControlPlane: fetchProviderControlPlaneMock };
+});
+
+vi.mock("../src/api/admin/recovery", async () => {
+  const actual = await vi.importActual<typeof import("../src/api/admin/recovery")>("../src/api/admin/recovery");
+  return { ...actual, fetchRecoveryOverview: fetchRecoveryOverviewMock };
+});
+
+vi.mock("../src/api/admin/routing", async () => {
+  const actual = await vi.importActual<typeof import("../src/api/admin/routing")>("../src/api/admin/routing");
+  return { ...actual, fetchRoutingControlPlane: fetchRoutingControlPlaneMock };
+});
+
+vi.mock("../src/api/admin/health", async () => {
+  const actual = await vi.importActual<typeof import("../src/api/admin/health")>("../src/api/admin/health");
+  return { ...actual, fetchRuntimeHealth: fetchRuntimeHealthMock };
+});
+
+vi.mock("../src/api/admin/instances", async () => {
+  const actual = await vi.importActual<typeof import("../src/api/admin/instances")>("../src/api/admin/instances");
+  return { ...actual, fetchInstances: fetchInstancesMock };
+});
+
 vi.mock("../src/api/admin", async () => {
   const actual = await vi.importActual<typeof import("../src/api/admin")>("../src/api/admin");
-
   return {
     ...actual,
     fetchInstances: fetchInstancesMock,
     fetchBootstrapReadiness: fetchBootstrapReadinessMock,
     fetchIngressTlsStatus: fetchIngressTlsStatusMock,
-    fetchRecoveryOverview: fetchRecoveryOverviewMock,
-    fetchRuntimeHealth: fetchRuntimeHealthMock,
-    fetchProviderControlPlane: fetchProviderControlPlaneMock,
-    fetchRoutingControlPlane: fetchRoutingControlPlaneMock,
   };
 });
 
@@ -285,10 +315,10 @@ describe("setup module pages", () => {
     expect(fetchIngressTlsStatusMock).toHaveBeenCalled();
     expect(container.textContent).toContain("Ingress / TLS / Certificates");
     expect(container.textContent).toContain("forgeframe.example.com");
-    expect(container.textContent).toContain("Ingress checklist");
+    expect(container.textContent).toContain("Remediation checklist");
     expect(container.textContent).toContain("tls_mode_disabled");
-    expect(container.textContent).toContain("Current blockers");
-    expect(container.textContent).toContain("Bind the UI to 0.0.0.0:443 under /.");
+    expect(container.textContent).toContain("Configure TLS mode");
+    expect(container.textContent).toContain("Issue or import certificate");
   });
 
   it("renders the dedicated release validation surface", async () => {
@@ -306,11 +336,9 @@ describe("setup module pages", () => {
     expect(fetchRoutingControlPlaneMock).toHaveBeenCalledWith("instance_alpha");
     expect(fetchIngressTlsStatusMock).toHaveBeenCalled();
     expect(container.textContent).toContain("Release / Validation");
-    expect(container.textContent).toContain("Release gates");
-    expect(container.textContent).toContain("Sorted blockers");
     expect(container.textContent).toContain("Build / Test");
     expect(container.textContent).toContain("manual evidence required");
     expect(container.textContent).toContain("upgrade_evidence_missing");
-    expect(container.textContent).toContain("Open Ingress / TLS");
+    expect(container.textContent).toContain("Review TLS configuration");
   });
 });

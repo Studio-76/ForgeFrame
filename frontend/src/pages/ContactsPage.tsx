@@ -5,14 +5,14 @@ import {
   createContact,
   fetchContactDetail,
   fetchContacts,
-  fetchInstances,
   updateContact,
   type ContactDetail,
   type ContactRouteStatus,
   type ContactStatus,
   type ContactSummary,
   type VisibilityScope,
-} from "../api/admin";
+} from "../api/domain/contacts";
+import { fetchInstances } from "../api/domain/instances";
 import { CONTROL_PLANE_ROUTES } from "../app/navigation";
 import {
   buildConversationPath,

@@ -3,7 +3,6 @@ import { Link, useSearchParams } from "react-router-dom";
 
 import {
   fetchRoutingControlPlane,
-  fetchUsageSummary,
   updateRoutingBudget,
   updateRoutingCircuit,
   type RoutingBudgetRecord,
@@ -11,8 +10,8 @@ import {
   type RoutingBudgetScopeUpdateRecord,
   type RoutingCircuitRecord,
   type RoutingControlPlaneResponse,
-  type UsageSummaryResponse,
-} from "../api/admin";
+} from "../api/domain/routing";
+import { fetchUsageSummary, type UsageSummaryResponse } from "../api/domain/usage";
 import {
   getScopedAdminInstanceId,
   sessionCanMutateScopedOrAnyInstance,

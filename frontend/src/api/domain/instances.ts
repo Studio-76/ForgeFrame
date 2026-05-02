@@ -14,4 +14,4 @@ export {
   type InstanceRuntimeAccessSummary,
   type InstanceSetupStatus,
   type InstanceWorkInteractionSummary,
-} from "../admin";
+} from "../admin/instances";

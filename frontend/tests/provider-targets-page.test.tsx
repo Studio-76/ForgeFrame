@@ -10,13 +10,27 @@ const { fetchProviderTargetsMock, updateProviderTargetMock, fetchInstancesMock }
   fetchInstancesMock: vi.fn(),
 }));
 
-vi.mock("../src/api/admin", async () => {
-  const actual = await vi.importActual<typeof import("../src/api/admin")>("../src/api/admin");
-
+vi.mock("../src/api/admin/providers", async () => {
+  const actual = await vi.importActual<typeof import("../src/api/admin/providers")>("../src/api/admin/providers");
   return {
     ...actual,
     fetchProviderTargets: fetchProviderTargetsMock,
     updateProviderTarget: updateProviderTargetMock,
+  };
+});
+
+vi.mock("../src/api/admin/instances", async () => {
+  const actual = await vi.importActual<typeof import("../src/api/admin/instances")>("../src/api/admin/instances");
+  return {
+    ...actual,
+    fetchInstances: fetchInstancesMock,
+  };
+});
+
+vi.mock("../src/api/admin", async () => {
+  const actual = await vi.importActual<typeof import("../src/api/admin")>("../src/api/admin");
+  return {
+    ...actual,
     fetchInstances: fetchInstancesMock,
   };
 });
@@ -229,11 +243,11 @@ describe("Provider targets page", () => {
     expect(container.textContent).toContain("Provider Targets");
     expect(container.textContent).toContain("Instance-bound target table");
     expect(container.textContent).toContain("OpenAI · gpt-4.1-mini");
+    expect(container.textContent).toContain("Routing Dry Run");
+    expect(container.textContent).toContain("Provider Health");
     expect(container.textContent).toContain("Capabilities");
     expect(container.textContent).toContain("Policy flags");
     expect(container.textContent).toContain("Cost / quality profile");
-    expect(container.textContent).toContain("Routing Dry Run");
-    expect(container.textContent).toContain("Provider Health");
 
     const providerFilter = container.querySelector<HTMLSelectElement>('select[aria-label="Provider filter"]');
     expect(providerFilter?.value).toBe("all");
@@ -275,7 +289,7 @@ describe("Provider targets page", () => {
     });
 
     expect(container.textContent).toContain("Anthropic OAuth · Claude 3.5 Sonnet");
-    expect(container.textContent).toContain("Partial");
+    expect(container.textContent).toContain("Disabled");
 
     const enableCheckbox = container.querySelector<HTMLInputElement>('input[aria-label="Enable target"]');
     const saveButton = Array.from(container.querySelectorAll("button")).find((button) => button.textContent?.includes("Save target changes"));

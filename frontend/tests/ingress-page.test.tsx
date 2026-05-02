@@ -16,15 +16,28 @@ const {
   renewIngressTlsMock: vi.fn(),
 }));
 
-vi.mock("../src/api/admin", async () => {
-  const actual = await vi.importActual<typeof import("../src/api/admin")>("../src/api/admin");
+vi.mock("../src/api/admin/ingress-tls", async () => {
+  const actual = await vi.importActual<typeof import("../src/api/admin/ingress-tls")>("../src/api/admin/ingress-tls");
+  return {
+    ...actual,
+    fetchIngressTlsStatus: fetchIngressTlsStatusMock,
+    renewIngressTls: renewIngressTlsMock,
+  };
+});
 
+vi.mock("../src/api/admin/bootstrap", async () => {
+  const actual = await vi.importActual<typeof import("../src/api/admin/bootstrap")>("../src/api/admin/bootstrap");
+  return {
+    ...actual,
+    fetchBootstrapReadiness: fetchBootstrapReadinessMock,
+  };
+});
+
+vi.mock("../src/api/admin/instances", async () => {
+  const actual = await vi.importActual<typeof import("../src/api/admin/instances")>("../src/api/admin/instances");
   return {
     ...actual,
     fetchInstances: fetchInstancesMock,
-    fetchBootstrapReadiness: fetchBootstrapReadinessMock,
-    fetchIngressTlsStatus: fetchIngressTlsStatusMock,
-    renewIngressTls: renewIngressTlsMock,
   };
 });
 
@@ -216,10 +229,10 @@ describe("ingress and tls page", () => {
     expect(fetchBootstrapReadinessMock).toHaveBeenCalled();
     expect(fetchIngressTlsStatusMock).toHaveBeenCalled();
     expect(container.textContent).toContain("Blocked");
-    expect(container.textContent).toContain("Ingress checklist");
+    expect(container.textContent).toContain("Remediation checklist");
     expect(container.textContent).toContain("public_fqdn_dns_unresolved");
-    expect(container.textContent).toContain("Current blockers");
-    expect(container.textContent).toContain("Publish A/AAAA records");
+    expect(container.textContent).toContain("Verify DNS records");
+    expect(container.textContent).toContain("Issue or import certificate");
     expect((getButtonByText(container, "Renew certificates") as HTMLButtonElement | undefined)?.disabled).toBe(true);
   });
 
@@ -256,9 +269,10 @@ describe("ingress and tls page", () => {
     }));
     await flushEffects();
 
-    expect(container.textContent).toContain("Exception mode");
-    expect(container.textContent).toContain("Self-signed certificate");
+    expect(container.textContent).toContain("Blocked");
+    expect(container.textContent).toContain("Self-signed certificate (exception)");
     expect(container.textContent).toContain("tls_mode_not_integrated_acme");
+    expect(container.textContent).toContain("Configure TLS mode");
   });
 
   it("runs renew when the ingress contract allows it and shows the operation result", async () => {
@@ -282,6 +296,6 @@ describe("ingress and tls page", () => {
     expect(renewIngressTlsMock).toHaveBeenCalled();
     expect(container.textContent).toContain("Last renew operation");
     expect(container.textContent).toContain("renewed certificates");
-    expect(container.textContent).toContain("Publicly production-ready");
+    expect(container.textContent).toContain("Production-ready");
   });
 });

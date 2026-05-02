@@ -1,6 +1,6 @@
 import { Link } from "react-router-dom";
 
-import type { InstanceRecord } from "../api/admin";
+import type { InstanceRecord } from "../api/domain/instances";
 import { CONTROL_PLANE_ROUTES } from "../app/navigation";
 import { withInstanceScope } from "../app/tenantScope";
 import type { InstanceCatalogLoadState } from "../app/useInstanceCatalog";

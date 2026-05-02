@@ -1,26 +1,21 @@
 import { startTransition, useEffect, useMemo, useState, type FormEvent } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 
+import { createConversation, fetchConversations, type ConversationSummary } from "../api/domain/conversations";
 import {
-  createConversation,
   createInboxItem,
-  createTask,
-  fetchAgents,
-  fetchConversations,
   fetchInboxItemDetail,
   fetchInboxItems,
-  fetchInstances,
-  fetchTasks,
-  type AgentSummary,
-  type ConversationSummary,
   updateInboxItem,
   type InboxDetail,
   type InboxStatus,
   type InboxSummary,
-  type TaskSummary,
   type TriageStatus,
   type WorkItemPriority,
-} from "../api/admin";
+} from "../api/domain/inbox";
+import { createTask, fetchTasks, type TaskSummary } from "../api/domain/tasks";
+import { fetchAgents, type AgentSummary } from "../api/domain/agents";
+import { fetchInstances } from "../api/domain/instances";
 import { roleAllows, sessionHasAnyInstancePermission } from "../app/adminAccess";
 import { CONTROL_PLANE_ROUTES } from "../app/navigation";
 import { buildArtifactsPath, buildConversationPath, buildInboxPath, buildTaskPath, buildWorkspacePath } from "../app/workInteractionRoutes";

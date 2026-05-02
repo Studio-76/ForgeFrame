@@ -3,6 +3,7 @@
  */
 export {
   fetchRoutingControlPlane,
+  simulateRouting,
   updateRoutingBudget,
   updateRoutingCircuit,
   updateRoutingPolicy,
@@ -16,4 +17,4 @@ export {
   type RoutingDecisionCandidateRecord,
   type RoutingDecisionRecord,
   type RoutingPolicyRecord,
-} from "../admin";
+} from "../admin/routing";

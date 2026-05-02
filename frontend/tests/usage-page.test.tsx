@@ -21,10 +21,22 @@ vi.mock("../src/api/admin", async () => {
 
   return {
     ...actual,
-    fetchClientDrilldown: fetchClientDrilldownMock,
     fetchInstances: fetchInstancesMock,
-    fetchProviderDrilldown: fetchProviderDrilldownMock,
     fetchUsageSummary: fetchUsageSummaryMock,
+    fetchClientDrilldown: fetchClientDrilldownMock,
+    fetchProviderDrilldown: fetchProviderDrilldownMock,
+  };
+});
+
+vi.mock("../src/api/domain", async () => {
+  const actual = await vi.importActual<typeof import("../src/api/domain")>("../src/api/domain");
+
+  return {
+    ...actual,
+    fetchInstances: fetchInstancesMock,
+    fetchUsageSummary: fetchUsageSummaryMock,
+    fetchClientDrilldown: fetchClientDrilldownMock,
+    fetchProviderDrilldown: fetchProviderDrilldownMock,
   };
 });
 

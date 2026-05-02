@@ -1,4 +1,4 @@
-import type { AdminSessionUser } from "../api/admin";
+import type { AdminSessionUser } from "../api/domain/auth";
 import { roleAllows, sessionHasAnyInstancePermission } from "../app/adminAccess";
 
 export type LoadState = "idle" | "loading" | "success" | "error";

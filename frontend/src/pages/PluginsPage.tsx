@@ -3,13 +3,13 @@ import { Link, useSearchParams } from "react-router-dom";
 
 import {
   createPlugin,
-  fetchInstances,
   fetchPluginDetail,
   fetchPlugins,
   updatePlugin,
   upsertPluginBinding,
   type PluginCatalogEntry,
-} from "../api/admin";
+} from "../api/domain/plugins";
+import { fetchInstances } from "../api/domain/instances";
 import { roleAllows, sessionHasAnyInstancePermission } from "../app/adminAccess";
 import { CONTROL_PLANE_ROUTES } from "../app/navigation";
 import { useAppSession } from "../app/session";

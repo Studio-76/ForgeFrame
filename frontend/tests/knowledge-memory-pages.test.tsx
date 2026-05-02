@@ -40,20 +40,40 @@ const {
   revokeMemoryEntryMock: vi.fn(),
 }));
 
-vi.mock("../src/api/admin", async () => {
-  const actual = await vi.importActual<typeof import("../src/api/admin")>("../src/api/admin");
-
+vi.mock("../src/api/admin/contacts", async () => {
+  const actual = await vi.importActual<typeof import("../src/api/admin/contacts")>("../src/api/admin/contacts");
   return {
     ...actual,
-    fetchInstances: fetchInstancesMock,
     fetchContacts: fetchContactsMock,
     fetchContactDetail: fetchContactDetailMock,
     createContact: createContactMock,
     updateContact: updateContactMock,
+  };
+});
+
+vi.mock("../src/api/admin/instances", async () => {
+  const actual = await vi.importActual<typeof import("../src/api/admin/instances")>("../src/api/admin/instances");
+  return {
+    ...actual,
+    fetchInstances: fetchInstancesMock,
+  };
+});
+
+vi.mock("../src/api/admin/knowledge-sources", async () => {
+  const actual = await vi.importActual<typeof import("../src/api/admin/knowledge-sources")>("../src/api/admin/knowledge-sources");
+  return {
+    ...actual,
     fetchKnowledgeSources: fetchKnowledgeSourcesMock,
     fetchKnowledgeSourceDetail: fetchKnowledgeSourceDetailMock,
     createKnowledgeSource: createKnowledgeSourceMock,
     updateKnowledgeSource: updateKnowledgeSourceMock,
+  };
+});
+
+vi.mock("../src/api/admin/memory", async () => {
+  const actual = await vi.importActual<typeof import("../src/api/admin/memory")>("../src/api/admin/memory");
+  return {
+    ...actual,
     fetchMemoryEntries: fetchMemoryEntriesMock,
     fetchMemoryDetail: fetchMemoryDetailMock,
     createMemoryEntry: createMemoryEntryMock,
@@ -61,6 +81,14 @@ vi.mock("../src/api/admin", async () => {
     correctMemoryEntry: correctMemoryEntryMock,
     deleteMemoryEntry: deleteMemoryEntryMock,
     revokeMemoryEntry: revokeMemoryEntryMock,
+  };
+});
+
+vi.mock("../src/api/admin", async () => {
+  const actual = await vi.importActual<typeof import("../src/api/admin")>("../src/api/admin");
+  return {
+    ...actual,
+    fetchInstances: fetchInstancesMock,
   };
 });
 

@@ -5,7 +5,6 @@ import {
   createArtifact,
   fetchArtifactDetail,
   fetchArtifacts,
-  fetchInstances,
   updateArtifact,
   type ArtifactAttachmentRecord,
   type ArtifactAttachmentTargetKind,
@@ -13,7 +12,8 @@ import {
   type ArtifactStatus,
   type ArtifactType,
   type ArtifactWorkspaceRole,
-} from "../api/admin";
+} from "../api/domain/artifacts";
+import { fetchInstances } from "../api/domain/instances";
 import { roleAllows, sessionHasAnyInstancePermission } from "../app/adminAccess";
 import { buildArtifactsPath, buildWorkspacePath } from "../app/workInteractionRoutes";
 import { CONTROL_PLANE_ROUTES } from "../app/navigation";

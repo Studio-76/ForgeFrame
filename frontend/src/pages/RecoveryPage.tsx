@@ -18,7 +18,7 @@ import {
   type RecoveryRestoreImportPayload,
   type RecoveryUpgradeImportPayload,
   type RecoveryUpgradeReportRecord,
-} from "../api/admin";
+} from "../api/domain/recovery";
 import { CONTROL_PLANE_ROUTES } from "../app/navigation";
 import { useAppSession } from "../app/session";
 import { PageIntro } from "../components/PageIntro";

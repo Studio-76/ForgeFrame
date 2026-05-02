@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 
-import { createAccount, fetchAccounts, updateAccount, type GatewayAccount } from "../api/admin";
+import { createAccount, fetchAccounts, updateAccount, type GatewayAccount } from "../api/domain/accounts";
 import { buildAuditHistoryPath, resolveNewestAuditHistoryPathForSession } from "../app/auditHistory";
 import { roleAllows } from "../app/adminAccess";
 import { CONTROL_PLANE_ROUTES } from "../app/navigation";

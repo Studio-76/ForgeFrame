@@ -13,11 +13,18 @@ const {
   fetchInstancesMock: vi.fn(),
 }));
 
-vi.mock("../src/api/admin", async () => {
-  const actual = await vi.importActual<typeof import("../src/api/admin")>("../src/api/admin");
+vi.mock("../src/api/admin/execution", async () => {
+  const actual = await vi.importActual<typeof import("../src/api/admin/execution")>("../src/api/admin/execution");
   return {
     ...actual,
     fetchExecutionQueues: fetchExecutionQueuesMock,
+  };
+});
+
+vi.mock("../src/api/admin/instances", async () => {
+  const actual = await vi.importActual<typeof import("../src/api/admin/instances")>("../src/api/admin/instances");
+  return {
+    ...actual,
     fetchInstances: fetchInstancesMock,
   };
 });
