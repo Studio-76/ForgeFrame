@@ -765,7 +765,7 @@ describe("knowledge and memory pages", () => {
     expect(fetchContactsMock).toHaveBeenCalledWith("instance_alpha", { status: "all", limit: 100 });
     expect(fetchContactDetailMock).toHaveBeenCalledWith("contact_alpha", "instance_alpha");
     expect(container.textContent).toContain("Pat Morgan");
-    expect(container.textContent).toContain("Linked conversations");
+    expect(container.textContent).toContain("Linked work records");
     expect(container.textContent).toContain("Escalation mailbox is missing an address.");
     expect(container.textContent).toContain("Pricing preview");
     expect(container.textContent).toContain("Review outbound pricing");
@@ -775,14 +775,26 @@ describe("knowledge and memory pages", () => {
     const notificationLink = Array.from(container.querySelectorAll("a")).find((link) => link.textContent === "Pricing preview");
     expect(notificationLink?.getAttribute("href")).toBe("/notifications?instanceId=instance_alpha&notificationId=notification_alpha");
 
+    // Make mock return a valid response so the create flow completes cleanly
+    createContactMock.mockResolvedValue({
+      status: "success",
+      contact: { contact_id: "contact_beta", display_name: "Jordan Vega" },
+    });
+
+    // Click the hero "Create contact" button to show the guided creation form
+    const heroCreateButton = getButtonByText(container, "Create contact");
+    await act(async () => {
+      heroCreateButton!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    await flushEffects();
+
     const createForm = getFormByText("Create contact");
-    const editForm = getFormByText("Save contact");
     const createButton = getButtonByText(createForm!, "Create contact");
 
     await act(async () => {
       setControlValue(getControlByLabel(createForm!, "Contact ID"), "contact_beta");
-      setControlValue(getControlByLabel(createForm!, "Contact ref"), "contact://acme/jordan");
-      setControlValue(getControlByLabel(createForm!, "Source ID"), "source_mail_primary");
+      setControlValue(getControlByLabel(createForm!, "Contact path"), "contact://acme/jordan");
+      setControlValue(getControlByLabel(createForm!, "Source"), "source_mail_primary");
       setControlValue(getControlByLabel(createForm!, "Display name"), "Jordan Vega");
       setControlValue(getControlByLabel(createForm!, "Organization"), "Beta GmbH");
       setControlValue(getControlByLabel(createForm!, "Title"), "Director");
@@ -794,13 +806,13 @@ describe("knowledge and memory pages", () => {
       setControlValue(getControlByLabel(createForm!, "Status"), "active");
       setControlValue(getControlByLabel(createForm!, "Visibility scope"), "team");
       setControlValue(getControlByLabel(createForm!, "Consent status"), "explicit_opt_in");
-      setControlValue(getControlByLabel(createForm!, "Consent captured at"), "2026-04-24T11:00:00Z");
+      setControlValue(getControlByLabel(createForm!, "Consent date"), "2026-04-24T11:00:00Z");
       setControlValue(getControlByLabel(createForm!, "Consent note"), "Approved for sales outreach");
       setControlValue(getControlByLabel(createForm!, "Visibility note"), "Shared with revenue operations");
       setControlValue(getControlByLabel(createForm!, "Source provider"), "crm");
-      setControlValue(getControlByLabel(createForm!, "Import reference"), "crm-778");
+      setControlValue(getControlByLabel(createForm!, "Import ID"), "crm-778");
       setControlValue(getControlByLabel(createForm!, "Imported at"), "2026-04-24T10:30:00Z");
-      setControlValue(getControlByLabel(createForm!, "Last verified at"), "2026-04-24T10:45:00Z");
+      setControlValue(getControlByLabel(createForm!, "Last verified"), "2026-04-24T10:45:00Z");
       setControlValue(getControlByLabel(createForm!, "Provenance note"), "Imported from CRM sync");
       createButton!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     });
@@ -841,11 +853,25 @@ describe("knowledge and memory pages", () => {
       },
     }));
 
+    // Click "Edit contact" in the detail panel to reveal the edit form
+    const editContactButton = getButtonByText(container, "Edit contact");
+    await act(async () => {
+      editContactButton!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    await flushEffects();
+
+    const editForm = getFormByText("Save contact");
     const editButton = getButtonByText(editForm!, "Save contact");
 
+    // Make mock return a valid response so the save flow completes cleanly
+    updateContactMock.mockResolvedValue({
+      status: "success",
+      contact: { contact_id: "contact_alpha" },
+    });
+
     await act(async () => {
-      setControlValue(getControlByLabel(editForm!, "Contact ref"), "contact://acme/pat-updated");
-      setControlValue(getControlByLabel(editForm!, "Source ID"), "source_mail_primary");
+      setControlValue(getControlByLabel(editForm!, "Contact path"), "contact://acme/pat-updated");
+      setControlValue(getControlByLabel(editForm!, "Source"), "source_mail_primary");
       setControlValue(getControlByLabel(editForm!, "Display name"), "Pat Morgan Updated");
       setControlValue(getControlByLabel(editForm!, "Organization"), "Acme Holding");
       setControlValue(getControlByLabel(editForm!, "Title"), "VP Operations");
@@ -857,12 +883,12 @@ describe("knowledge and memory pages", () => {
       setControlValue(getControlByLabel(editForm!, "Status"), "snoozed");
       setControlValue(getControlByLabel(editForm!, "Visibility scope"), "restricted");
       setControlValue(getControlByLabel(editForm!, "Consent status"), "opted_out");
-      setControlValue(getControlByLabel(editForm!, "Consent captured at"), "2026-04-25T09:00:00Z");
+      setControlValue(getControlByLabel(editForm!, "Consent date"), "2026-04-25T09:00:00Z");
       setControlValue(getControlByLabel(editForm!, "Consent note"), "Opted out of outbound mail");
       setControlValue(getControlByLabel(editForm!, "Source provider"), "crm");
-      setControlValue(getControlByLabel(editForm!, "Import reference"), "crm-4471-updated");
+      setControlValue(getControlByLabel(editForm!, "Import ID"), "crm-4471-updated");
       setControlValue(getControlByLabel(editForm!, "Imported at"), "2026-04-25T08:45:00Z");
-      setControlValue(getControlByLabel(editForm!, "Last verified at"), "2026-04-25T08:55:00Z");
+      setControlValue(getControlByLabel(editForm!, "Last verified"), "2026-04-25T08:55:00Z");
       setControlValue(getControlByLabel(editForm!, "Provenance note"), "Updated after CRM review");
       setControlValue(getControlByLabel(editForm!, "Visibility note"), "Restricted to senior operators");
       editButton!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
@@ -904,11 +930,15 @@ describe("knowledge and memory pages", () => {
       },
     }));
 
+    // Re-query after re-render from the first save
+    const editForm2 = getFormByText("Save contact");
+    const editButton2 = getButtonByText(editForm2!, "Save contact");
+
     await act(async () => {
-      setControlValue(getControlByLabel(editForm!, "Source ID"), "");
-      setControlValue(getControlByLabel(editForm!, "Primary email"), "");
-      setControlValue(getControlByLabel(editForm!, "Primary phone"), "");
-      editButton!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      setControlValue(getControlByLabel(editForm2!, "Source"), "");
+      setControlValue(getControlByLabel(editForm2!, "Primary email"), "");
+      setControlValue(getControlByLabel(editForm2!, "Primary phone"), "");
+      editButton2!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     });
     await flushEffects();
 
@@ -947,23 +977,30 @@ describe("knowledge and memory pages", () => {
     const memoryLink = Array.from(container.querySelectorAll("a")).find((link) => link.textContent === "Open durable memory");
     expect(memoryLink?.getAttribute("href")).toBe("/memory?instanceId=instance_alpha");
 
+    // Click the hero "Create knowledge source" button to show the create form
+    const heroCreateButton = getButtonByText(container, "Create knowledge source");
+    expect(heroCreateButton).toBeTruthy();
+    await act(async () => {
+      heroCreateButton!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    await flushEffects();
+
     const createForm = getFormByText("Create knowledge source");
-    const editForm = getFormByText("Save knowledge source");
     const createButton = getButtonByText(createForm!, "Create knowledge source");
 
     await act(async () => {
-      setControlValue(getControlByLabel(createForm!, "Source ID"), "source_drive_shared");
-      setControlValue(getControlByLabel(createForm!, "Source kind"), "drive");
+      setControlValue(getControlByLabel(createForm!, "Source ID (optional)"), "source_drive_shared");
+      setControlValue(getControlByLabel(createForm!, "Source type"), "drive");
       setControlValue(getControlByLabel(createForm!, "Status"), "active");
       setControlValue(getControlByLabel(createForm!, "Label"), "Shared drive");
       setControlValue(getControlByLabel(createForm!, "Visibility scope"), "team");
       setControlValue(getControlByLabel(createForm!, "Library target"), "https://drive.example.com/shared");
       setControlValue(getControlByLabel(createForm!, "Drive account"), "drive-sync@example.com");
       setControlValue(getControlByLabel(createForm!, "Root folder"), "/pricing");
-      setControlValue(getControlByLabel(createForm!, "Index mode"), "metadata-only");
-      setControlValue(getControlByLabel(createForm!, "Recall class"), "reference recall");
+      setControlValue(getControlByLabel(createForm!, "What should be indexed"), "metadata-only");
+      setControlValue(getControlByLabel(createForm!, "How this source is used in recall"), "reference recall");
       setControlValue(getControlByLabel(createForm!, "Scope note"), "Tenant-shared pricing documents");
-      setControlValue(getControlByLabel(createForm!, "Error next step"), "Refresh drive token and re-run bridge sync");
+      setControlValue(getControlByLabel(createForm!, "Suggested repair action"), "Refresh drive token and re-run bridge sync");
       setControlValue(getControlByLabel(createForm!, "Description"), "Shared working files");
       setControlValue(getControlByLabel(createForm!, "Last synced at"), "2026-04-23T11:00:00Z");
       setControlValue(getControlByLabel(createForm!, "Last error"), "Optional issue");
@@ -999,19 +1036,28 @@ describe("knowledge and memory pages", () => {
       },
     }));
 
+    // Click "Edit source" to show the edit form
+    const editSourceButton = getButtonByText(container, "Edit source");
+    expect(editSourceButton).toBeTruthy();
+    await act(async () => {
+      editSourceButton!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    await flushEffects();
+
+    const editForm = getFormByText("Save knowledge source");
     const editButton = getButtonByText(editForm!, "Save knowledge source");
 
     await act(async () => {
       setControlValue(getControlByLabel(editForm!, "Label"), "Primary mail connector updated");
       setControlValue(getControlByLabel(editForm!, "Status"), "paused");
       setControlValue(getControlByLabel(editForm!, "Visibility scope"), "restricted");
-      setControlValue(getControlByLabel(editForm!, "Mailbox target"), "imap://mail.example.com/archive");
+      setControlValue(getControlByLabel(editForm!, "Mailbox or inbox path"), "imap://mail.example.com/archive");
       setControlValue(getControlByLabel(editForm!, "Mailbox account"), "mail-ops@example.com");
       setControlValue(getControlByLabel(editForm!, "Folder / label"), "Archive/Customers");
-      setControlValue(getControlByLabel(editForm!, "Index mode"), "headers-only");
-      setControlValue(getControlByLabel(editForm!, "Recall class"), "operator recall");
+      setControlValue(getControlByLabel(editForm!, "What should be indexed"), "headers-only");
+      setControlValue(getControlByLabel(editForm!, "How this source is used in recall"), "operator recall");
       setControlValue(getControlByLabel(editForm!, "Scope note"), "Restricted executive mailbox");
-      setControlValue(getControlByLabel(editForm!, "Error next step"), "Repair mailbox bridge health before resuming sync");
+      setControlValue(getControlByLabel(editForm!, "Suggested repair action"), "Repair mailbox bridge health before resuming sync");
       setControlValue(getControlByLabel(editForm!, "Description"), "Inbound email context updated");
       setControlValue(getControlByLabel(editForm!, "Last synced at"), "2026-04-23T12:00:00Z");
       setControlValue(getControlByLabel(editForm!, "Last error"), "Probe degraded");

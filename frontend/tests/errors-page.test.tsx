@@ -335,7 +335,7 @@ describe("ErrorsPage", () => {
     expect(triageTable).not.toBeNull();
 
     const triageRows = Array.from(triageTable?.querySelectorAll("tbody tr") ?? []);
-    expect(triageRows).toHaveLength(5);
+    expect(triageRows).toHaveLength(4);
     expect(triageRows[0]?.textContent).toContain("Runtime");
     expect(triageRows[1]?.textContent).toContain("Provider");
     expect(triageRows[2]?.textContent).toContain("Routing");

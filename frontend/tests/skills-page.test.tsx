@@ -65,7 +65,7 @@ function createSkillSummary(overrides: Partial<SkillSummary> = {}): SkillSummary
     display_name: "Review Pricing Reply",
     summary: "Review outbound pricing responses before send.",
     scope: "agent",
-    scope_label: "Agent scope · Skill Reviewer",
+    scope_label: "Agent scope \u00b7 Skill Reviewer",
     scope_agent_id: "agent_skill_reviewer",
     current_version_number: 2,
     status: "review",
@@ -108,7 +108,7 @@ function createSkillSummary(overrides: Partial<SkillSummary> = {}): SkillSummary
     },
     last_used_at: "2026-04-23T11:00:00Z",
     active_activation_count: 1,
-    active_scope_labels: ["Agent scope · Skill Reviewer"],
+    active_scope_labels: ["Agent scope \u00b7 Skill Reviewer"],
     last_outcome: "blocked",
     created_at: "2026-04-23T09:00:00Z",
     updated_at: "2026-04-23T10:00:00Z",
@@ -171,7 +171,7 @@ function createSkillDetail(overrides: Partial<SkillDetail> = {}): SkillDetail {
         instance_id: "instance_alpha",
         company_id: "company_alpha",
         scope: "agent",
-        scope_label: "Agent scope · Skill Reviewer",
+        scope_label: "Agent scope \u00b7 Skill Reviewer",
         scope_agent_id: "agent_skill_reviewer",
         status: "active",
         activation_conditions: {
@@ -233,25 +233,36 @@ async function flushEffects() {
   });
 }
 
-function setControlValue(control: HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement, value: string) {
+function setControlValue(
+  control: HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement,
+  value: string,
+) {
   const prototype = Object.getPrototypeOf(control) as HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement;
   const setter = Object.getOwnPropertyDescriptor(prototype, "value")?.set;
   act(() => {
     setter?.call(control, value);
-    control.dispatchEvent(new Event(control.tagName === "SELECT" ? "change" : "input", { bubbles: true }));
+    control.dispatchEvent(
+      new Event(control.tagName === "SELECT" ? "change" : "input", { bubbles: true }),
+    );
   });
 }
 
-function getFormByText(text: string) {
-  return Array.from(container.querySelectorAll("form")).find((form) => form.textContent?.includes(text));
+function getButtonByText(scope: ParentNode, text: string) {
+  return Array.from(scope.querySelectorAll("button")).find((button) =>
+    button.textContent?.includes(text),
+  );
 }
 
-function getButtonByText(scope: ParentNode, text: string) {
-  return Array.from(scope.querySelectorAll("button")).find((button) => button.textContent?.includes(text));
+function getDetailsByText(scope: ParentNode, text: string) {
+  return Array.from(scope.querySelectorAll("details")).find((details) =>
+    details.textContent?.includes(text),
+  );
 }
 
 function getLabeledControl(scope: ParentNode, labelText: string) {
-  const label = Array.from(scope.querySelectorAll("label")).find((candidate) => candidate.textContent?.includes(labelText));
+  const label = Array.from(scope.querySelectorAll("label")).find((candidate) =>
+    candidate.textContent?.includes(labelText),
+  );
   if (!label) {
     throw new Error(`Label not found: ${labelText}`);
   }
@@ -309,9 +320,7 @@ beforeEach(() => {
   fetchSkillsMock.mockResolvedValue({
     status: "ok",
     instance: null,
-    skills: [
-      createSkillSummary(),
-    ],
+    skills: [createSkillSummary()],
   });
 
   fetchSkillDetailMock.mockResolvedValue({
@@ -428,140 +437,324 @@ afterEach(() => {
 });
 
 describe("skills page", () => {
-  it("renders a real skill registry with provenance, approval posture, and telemetry", async () => {
-    await renderIntoDom(withAppContext({
-      path: "/skills?instanceId=instance_alpha&skillId=skill_review_alpha",
-      element: <SkillsPage />,
-      session: adminSession,
-    }));
+  it("renders summary hero, registry table, and skill detail with lifecycle state", async () => {
+    await renderIntoDom(
+      withAppContext({
+        path: "/skills?instanceId=instance_alpha&skillId=skill_review_alpha",
+        element: <SkillsPage />,
+        session: adminSession,
+      }),
+    );
     await flushEffects();
 
-    expect(fetchSkillsMock).toHaveBeenCalledWith("instance_alpha", { status: "all", scope: "all", limit: 100 });
-    expect(fetchSkillDetailMock).toHaveBeenCalledWith("skill_review_alpha", "instance_alpha");
-    expect(container.textContent).toContain("Skill registry");
+    // Verify API calls
+    expect(fetchSkillsMock).toHaveBeenCalledWith("instance_alpha", {
+      status: "all",
+      scope: "all",
+      limit: 100,
+    });
+    expect(fetchSkillDetailMock).toHaveBeenCalledWith(
+      "skill_review_alpha",
+      "instance_alpha",
+    );
+
+    // Verify summary hero shows counts
+    expect(container.textContent).toContain("1 skill registered");
+    expect(container.textContent).toContain("Pending review");
+    expect(container.textContent).toContain("Needs attention");
+    expect(container.textContent).toContain("Attention required");
+
+    // Verify table shows the skill
     expect(container.textContent).toContain("Review Pricing Reply");
     expect(container.textContent).toContain("Promoted from learning");
-    expect(container.textContent).toContain("Review required");
-    expect(container.textContent).toContain("Agent scope · Skill Reviewer");
-    expect(container.textContent).toContain("5 recorded uses");
 
-    const learningLink = Array.from(container.querySelectorAll("a")).find((link) => link.textContent === "Open learning event");
-    expect(learningLink?.getAttribute("href")).toBe("/learning?instanceId=instance_alpha&eventId=learning_alpha");
+    // Verify detail panel shows lifecycle info
+    expect(container.textContent).toContain("Pending review");
+    expect(container.textContent).toContain("Review and approve before activation");
 
-    const agentLink = Array.from(container.querySelectorAll("a")).find((link) => link.textContent === "Open scope agent");
-    expect(agentLink?.getAttribute("href")).toBe("/agents?instanceId=instance_alpha&agentId=agent_skill_reviewer");
+    // Verify navigation links in provenance
+    const learningLink = Array.from(container.querySelectorAll("a")).find(
+      (link) => link.textContent === "Open learning event",
+    );
+    expect(learningLink?.getAttribute("href")).toBe(
+      "/learning?instanceId=instance_alpha&eventId=learning_alpha",
+    );
+
+    const agentLink = Array.from(container.querySelectorAll("a")).find(
+      (link) => link.textContent === "Open scope agent",
+    );
+    expect(agentLink?.getAttribute("href")).toBe(
+      "/agents?instanceId=instance_alpha&agentId=agent_skill_reviewer",
+    );
   });
 
-  it("creates, updates, activates, archives, and records skill usage with structured registry payloads", async () => {
-    await renderIntoDom(withAppContext({
-      path: "/skills?instanceId=instance_alpha&skillId=skill_review_alpha",
-      element: <SkillsPage />,
-      session: adminSession,
-    }));
+  it("creates a new skill through the guided creation flow", async () => {
+    await renderIntoDom(
+      withAppContext({
+        path: "/skills?instanceId=instance_alpha",
+        element: <SkillsPage />,
+        session: adminSession,
+      }),
+    );
     await flushEffects();
 
-    const createForm = getFormByText("Create registry entry");
-    expect(createForm).toBeTruthy();
-    setControlValue(getLabeledControl(createForm!, "Display name"), "Review Escalation Reply");
-    setControlValue(getLabeledControl(createForm!, "Scope"), "agent");
-    setControlValue(getLabeledControl(createForm!, "Scope agent"), "agent_skill_reviewer");
-    setControlValue(getLabeledControl(createForm!, "Instruction core"), "Review escalation replies before sending them.");
-    setControlValue(getLabeledControl(createForm!, "Origin"), "learning");
-    setControlValue(getLabeledControl(createForm!, "Learning event ID"), "learning_beta");
-    setControlValue(getLabeledControl(createForm!, "Preview required"), "yes");
-    setControlValue(getLabeledControl(createForm!, "Channel hint"), "slack");
-
+    // Click "Create skill" button in summary hero
+    const createBtn = getButtonByText(container, "Create skill");
+    expect(createBtn).toBeTruthy();
     await act(async () => {
-      createForm?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+      createBtn?.click();
     });
     await flushEffects();
 
-    expect(createSkillMock).toHaveBeenCalledWith("instance_alpha", expect.objectContaining({
-      display_name: "Review Escalation Reply",
-      scope: "agent",
-      scope_agent_id: "agent_skill_reviewer",
-      instruction_core: "Review escalation replies before sending them.",
-      provenance: expect.objectContaining({
-        learning_event_id: "learning_beta",
-      }),
-      activation_conditions: expect.objectContaining({
-        preview_required: true,
-        channel: "slack",
-      }),
-    }));
+    // Verify the create panel is now visible
+    expect(container.textContent).toContain("New skill");
+    expect(container.textContent).toContain("Save draft");
 
-    const updateForm = getFormByText("Save registry entry");
-    expect(updateForm).toBeTruthy();
-    setControlValue(getLabeledControl(updateForm!, "Display name"), "Review Pricing Reply Updated");
-    setControlValue(getLabeledControl(updateForm!, "Scope"), "instance");
-    setControlValue(getLabeledControl(updateForm!, "Scope agent"), "");
-    setControlValue(getLabeledControl(updateForm!, "Note"), "Updated from operator review.");
+    // Find the create form
+    const createPanel = container.querySelector(".ff-skills-create-form") as HTMLFormElement;
+    expect(createPanel).toBeTruthy();
+
+    // Fill out required fields
+    setControlValue(getLabeledControl(createPanel, "Skill name"), "Review Escalation Reply");
+    setControlValue(getLabeledControl(createPanel, "Scope"), "agent");
+    setControlValue(getLabeledControl(createPanel, "Scope agent"), "agent_skill_reviewer");
+    setControlValue(getLabeledControl(createPanel, "Instruction core"), "Review escalation replies before sending them.");
+
+    // Open provenance section and fill
+    const provenanceDetails = getDetailsByText(createPanel, "Provenance (optional)");
+    if (provenanceDetails) {
+      await act(async () => {
+        provenanceDetails.open = true;
+      });
+    }
+    setControlValue(getLabeledControl(createPanel, "Origin"), "learning");
+    setControlValue(getLabeledControl(createPanel, "Learning event ID"), "learning_beta");
+
+    // Open activation rules and fill
+    const activationDetails = getDetailsByText(createPanel, "Activation rules (optional)");
+    if (activationDetails) {
+      await act(async () => {
+        activationDetails.open = true;
+      });
+    }
+    setControlValue(getLabeledControl(createPanel, "Preview required"), "yes");
+    setControlValue(getLabeledControl(createPanel, "Preferred channel"), "slack");
+
+    // Submit the create form
+    const submitBtn = getButtonByText(createPanel, "Save draft");
+    expect(submitBtn).toBeTruthy();
 
     await act(async () => {
-      updateForm?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+      createPanel.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
     });
     await flushEffects();
 
-    expect(updateSkillMock).toHaveBeenCalledWith("instance_alpha", "skill_review_alpha", expect.objectContaining({
-      display_name: "Review Pricing Reply Updated",
-      scope: "instance",
-      scope_agent_id: null,
-      provenance: expect.objectContaining({
-        learning_event_id: "learning_alpha",
-        note: "Updated from operator review.",
+    // Verify the API was called with correct payload
+    expect(createSkillMock).toHaveBeenCalledWith(
+      "instance_alpha",
+      expect.objectContaining({
+        display_name: "Review Escalation Reply",
+        scope: "agent",
+        scope_agent_id: "agent_skill_reviewer",
+        instruction_core: "Review escalation replies before sending them.",
+        provenance: expect.objectContaining({
+          learning_event_id: "learning_beta",
+        }),
+        activation_conditions: expect.objectContaining({
+          preview_required: true,
+          channel: "slack",
+        }),
       }),
-    }));
+    );
+  });
 
-    const activateForm = getFormByText("Activate skill version");
+  it("submits a skill for review from the lifecycle actions", async () => {
+    await renderIntoDom(
+      withAppContext({
+        path: "/skills?instanceId=instance_alpha&skillId=skill_review_alpha",
+        element: <SkillsPage />,
+        session: adminSession,
+      }),
+    );
+    await flushEffects();
+
+    // The edit form must be in the DOM for requestSubmit to work, but it can stay closed
+    // Click "Submit for review" in lifecycle actions
+    const submitBtn = getButtonByText(container, "Submit for review");
+    expect(submitBtn).toBeTruthy();
+    expect(submitBtn?.getAttribute("disabled")).toBeNull();
+
+    await act(async () => {
+      submitBtn?.click();
+    });
+    await flushEffects();
+
+    // Should trigger updateSkill with status: "review"
+    expect(updateSkillMock).toHaveBeenCalledWith(
+      "instance_alpha",
+      "skill_review_alpha",
+      expect.objectContaining({
+        status: "review",
+      }),
+    );
+  });
+
+  it("updates, activates, archives, and records skill usage", async () => {
+    await renderIntoDom(
+      withAppContext({
+        path: "/skills?instanceId=instance_alpha&skillId=skill_review_alpha",
+        element: <SkillsPage />,
+        session: adminSession,
+      }),
+    );
+    await flushEffects();
+
+    // ── Update ──
+    // Open the "Edit skill" details section in the detail panel
+    const editDetails = getDetailsByText(container, "Edit skill");
+    expect(editDetails).toBeTruthy();
+    await act(async () => {
+      editDetails!.open = true;
+    });
+    await flushEffects();
+
+    setControlValue(getLabeledControl(editDetails!, "Display name"), "Review Pricing Reply Updated");
+    setControlValue(getLabeledControl(editDetails!, "Scope"), "instance");
+    setControlValue(getLabeledControl(editDetails!, "Scope agent"), "None");
+    setControlValue(
+      getLabeledControl(editDetails!, "Note"),
+      "Updated from operator review.",
+    );
+
+    const saveChangesBtn = getButtonByText(editDetails!, "Save changes");
+    expect(saveChangesBtn).toBeTruthy();
+    const editForm = editDetails!.querySelector("form");
+    expect(editForm).toBeTruthy();
+
+    await act(async () => {
+      editForm?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+    });
+    await flushEffects();
+
+    expect(updateSkillMock).toHaveBeenCalledWith(
+      "instance_alpha",
+      "skill_review_alpha",
+      expect.objectContaining({
+        display_name: "Review Pricing Reply Updated",
+        scope: "instance",
+        scope_agent_id: null,
+        provenance: expect.objectContaining({
+          learning_event_id: "learning_alpha",
+          note: "Updated from operator review.",
+        }),
+      }),
+    );
+
+    // ── Activate ──
+    // Find the lifecycle activate section
+    const activateBtn = getButtonByText(container, "Activate skill");
+    expect(activateBtn).toBeTruthy();
+
+    // Set version and scope in the activate fields
+    const lifecycleSection = container.querySelector(".ff-skills-lifecycle-actions");
+    expect(lifecycleSection).toBeTruthy();
+    const versionSelects = lifecycleSection!.querySelectorAll("select");
+    if (versionSelects.length >= 1) {
+      setControlValue(versionSelects[0], "skillver_1");
+    }
+    if (versionSelects.length >= 2) {
+      setControlValue(versionSelects[1], "instance");
+    }
+
+    const activateForm = activateBtn?.closest("form");
     expect(activateForm).toBeTruthy();
-    setControlValue(getLabeledControl(activateForm!, "Version"), "skillver_1");
-    setControlValue(getLabeledControl(activateForm!, "Scope"), "instance");
-    setControlValue(getLabeledControl(activateForm!, "Preview required"), "no");
-    setControlValue(getLabeledControl(activateForm!, "Channel hint"), "email");
 
     await act(async () => {
       activateForm?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
     });
     await flushEffects();
 
-    expect(activateSkillMock).toHaveBeenCalledWith("instance_alpha", "skill_review_alpha", expect.objectContaining({
-      version_id: "skillver_1",
-      scope: "instance",
-      scope_agent_id: null,
-      activation_conditions: expect.objectContaining({
-        channel: "email",
+    expect(activateSkillMock).toHaveBeenCalledWith(
+      "instance_alpha",
+      "skill_review_alpha",
+      expect.objectContaining({
+        version_id: "skillver_1",
+        scope: "instance",
+        scope_agent_id: null,
       }),
-    }));
+    );
 
-    const archiveButton = getButtonByText(container, "Archive skill");
+    // ── Archive ──
+    const archiveBtn = getButtonByText(container, "Archive skill");
+    expect(archiveBtn).toBeTruthy();
+
     await act(async () => {
-      archiveButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      archiveBtn?.click();
     });
     await flushEffects();
 
     expect(archiveSkillMock).toHaveBeenCalledWith("instance_alpha", "skill_review_alpha");
 
-    const usageForm = getFormByText("Record usage");
+    // ── Record usage ──
+    const usageDetails = getDetailsByText(container, "Record usage event");
+    expect(usageDetails).toBeTruthy();
+    await act(async () => {
+      usageDetails!.open = true;
+    });
+    await flushEffects();
+
+    setControlValue(getLabeledControl(usageDetails!, "Run ID"), "run_usage_alpha");
+    setControlValue(getLabeledControl(usageDetails!, "Conversation ID"), "conversation_usage_alpha");
+    setControlValue(getLabeledControl(usageDetails!, "Outcome"), "success");
+    setControlValue(getLabeledControl(usageDetails!, "Decision"), "allow");
+    setControlValue(getLabeledControl(usageDetails!, "Usage note"), "Allowed after manual review.");
+
+    const recordBtn = getButtonByText(usageDetails!, "Record usage");
+    expect(recordBtn).toBeTruthy();
+    const usageForm = usageDetails!.querySelector("form");
     expect(usageForm).toBeTruthy();
-    setControlValue(getLabeledControl(usageForm!, "Run ID"), "run_usage_alpha");
-    setControlValue(getLabeledControl(usageForm!, "Conversation ID"), "conversation_usage_alpha");
-    setControlValue(getLabeledControl(usageForm!, "Outcome"), "success");
-    setControlValue(getLabeledControl(usageForm!, "Decision"), "allow");
-    setControlValue(getLabeledControl(usageForm!, "Usage note"), "Allowed after manual review.");
 
     await act(async () => {
       usageForm?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
     });
     await flushEffects();
 
-    expect(recordSkillUsageMock).toHaveBeenCalledWith("instance_alpha", "skill_review_alpha", expect.objectContaining({
-      run_id: "run_usage_alpha",
-      conversation_id: "conversation_usage_alpha",
-      outcome: "success",
-      details: expect.objectContaining({
-        decision: "allow",
-        note: "Allowed after manual review.",
+    expect(recordSkillUsageMock).toHaveBeenCalledWith(
+      "instance_alpha",
+      "skill_review_alpha",
+      expect.objectContaining({
+        run_id: "run_usage_alpha",
+        conversation_id: "conversation_usage_alpha",
+        outcome: "success",
+        details: expect.objectContaining({
+          decision: "allow",
+          note: "Allowed after manual review.",
+        }),
       }),
-    }));
+    );
+  });
+
+  it("shows empty state when no skills exist", async () => {
+    fetchSkillsMock.mockResolvedValue({
+      status: "ok",
+      instance: null,
+      skills: [],
+    });
+
+    await renderIntoDom(
+      withAppContext({
+        path: "/skills?instanceId=instance_alpha",
+        element: <SkillsPage />,
+        session: adminSession,
+      }),
+    );
+    await flushEffects();
+
+    // Verify empty state is shown
+    expect(container.textContent).toContain("No skills are registered for this scope");
+    expect(container.textContent).toContain("Create skill");
+
+    // Verify summary shows zero state
+    expect(container.textContent).toContain("No skills registered");
   });
 });

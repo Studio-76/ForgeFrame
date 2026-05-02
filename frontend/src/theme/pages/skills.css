@@ -1,0 +1,822 @@
+/* ──────────────────────────────────────────────
+ * Skills page — redesigned lifecycle management UX
+ *
+ * GridCN-inspired styling with thin borders, compact
+ * stat strips, status LEDs, and clear lifecycle framing.
+ * ────────────────────────────────────────────── */
+
+/* ─── Tron frame — shared by hero, empty, detail ─── */
+.ff-skills-tron-frame {
+  position: relative;
+  overflow: hidden;
+  border-color: color-mix(
+    in srgb,
+    var(--fg-color-accent) 34%,
+    var(--fg-color-border-default)
+  );
+  background:
+    linear-gradient(
+      135deg,
+      color-mix(in srgb, var(--fg-color-accent) 8%, transparent),
+      transparent 28%
+    ),
+    var(--fg-color-surface-default);
+}
+
+.ff-skills-tron-frame::before,
+.ff-skills-tron-frame::after {
+  position: absolute;
+  width: 34px;
+  height: 34px;
+  content: "";
+  pointer-events: none;
+}
+
+.ff-skills-tron-frame::before {
+  inset: 0 auto auto 0;
+  border-top: 1px solid var(--fg-color-accent);
+  border-left: 1px solid var(--fg-color-accent);
+}
+
+.ff-skills-tron-frame::after {
+  inset: auto 0 0 auto;
+  border-right: 1px solid var(--fg-color-accent);
+  border-bottom: 1px solid var(--fg-color-accent);
+}
+
+/* ─── Kicker / stat label ─── */
+.ff-skills-kicker,
+.ff-skills-stat-label {
+  margin: 0;
+  color: var(--fg-color-text-secondary);
+  font-size: var(--fg-type-size-meta);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+/* ─── Status LED ─── */
+.ff-skills-status-led {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  width: fit-content;
+  border: 1px solid var(--fg-color-border-default);
+  border-radius: var(--fg-radius-sm);
+  padding: 0.35rem 0.6rem;
+  background: var(--fg-color-surface-field);
+  color: var(--fg-color-text-secondary);
+  font-size: var(--fg-type-size-meta);
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.ff-skills-status-led::before {
+  width: 0.45rem;
+  height: 0.45rem;
+  border-radius: 999px;
+  background: currentColor;
+  content: "";
+  box-shadow: 0 0 0.65rem currentColor;
+}
+
+.ff-skills-status-led[data-state="success"] {
+  border-color: var(--fg-color-status-success-border);
+  color: var(--fg-color-status-success);
+}
+
+.ff-skills-status-led[data-state="warning"] {
+  border-color: var(--fg-color-status-warning-border);
+  color: var(--fg-color-status-warning);
+}
+
+.ff-skills-status-led[data-state="idle"] {
+  border-color: var(--fg-color-border-default);
+  color: var(--fg-color-text-secondary);
+}
+
+/* ─── Pill ─── */
+.ff-skills-pill {
+  display: inline-block;
+  border: 1px solid var(--fg-color-border-default);
+  border-radius: var(--fg-radius-sm);
+  padding: 0.15rem 0.45rem;
+  font-size: var(--fg-type-size-meta);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.ff-skills-pill[data-tone="success"] {
+  border-color: var(--fg-color-status-success-border);
+  color: var(--fg-color-status-success);
+}
+
+.ff-skills-pill[data-tone="warning"] {
+  border-color: var(--fg-color-status-warning-border);
+  color: var(--fg-color-status-warning);
+}
+
+.ff-skills-pill[data-tone="danger"] {
+  border-color: var(--fg-color-status-danger-border);
+  color: var(--fg-color-status-danger);
+}
+
+.ff-skills-pill[data-tone="neutral"] {
+  border-color: var(--fg-color-border-default);
+  color: var(--fg-color-text-secondary);
+}
+
+.ff-skills-pill-id {
+  font-family: var(--fg-type-font-mono);
+  font-size: var(--fg-type-size-micro);
+}
+
+/* ─── Summary Hero ─── */
+.ff-skills-hero {
+  margin-bottom: 1rem;
+}
+
+.ff-skills-hero-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 0.75rem;
+}
+
+.ff-skills-hero-header h3 {
+  margin: 0.25rem 0 0;
+  font-size: var(--fg-type-size-xl);
+  font-weight: 700;
+}
+
+/* ─── Stat strip ─── */
+.ff-skills-hero-strip {
+  display: flex;
+  gap: 1.5rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.75rem;
+  padding: 0.5rem 0;
+  border-top: 1px solid var(--fg-color-border-subtle);
+  border-bottom: 1px solid var(--fg-color-border-subtle);
+}
+
+.ff-skills-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+}
+
+.ff-skills-stat-value {
+  font-size: var(--fg-type-size-lg);
+  font-weight: 700;
+  line-height: 1;
+  color: var(--fg-color-text-primary);
+}
+
+.ff-skills-stat-success {
+  color: var(--fg-color-status-success);
+}
+
+.ff-skills-stat-warning {
+  color: var(--fg-color-status-warning);
+}
+
+.ff-skills-stat-danger {
+  color: var(--fg-color-status-danger);
+}
+
+.ff-skills-stat-muted {
+  color: var(--fg-color-text-secondary);
+}
+
+/* ─── Hero footer ─── */
+.ff-skills-hero-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.ff-skills-next-action {
+  margin: 0;
+  font-size: var(--fg-type-size-meta);
+  color: var(--fg-color-accent);
+  font-weight: 600;
+}
+
+.ff-skills-hero-buttons {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.ff-skills-admin-status {
+  font-size: var(--fg-type-size-micro);
+  color: var(--fg-color-text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+/* ─── Primary action button ─── */
+.ff-skills-primary-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  border: 1px solid var(--fg-color-accent);
+  border-radius: var(--fg-radius-sm);
+  padding: 0.4rem 0.85rem;
+  background: color-mix(in srgb, var(--fg-color-accent) 14%, transparent);
+  color: var(--fg-color-accent);
+  font-size: var(--fg-type-size-meta);
+  font-weight: 700;
+  cursor: pointer;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  transition: background 0.15s, color 0.15s;
+}
+
+.ff-skills-primary-action:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--fg-color-accent) 28%, transparent);
+}
+
+.ff-skills-primary-action:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* ─── Secondary action button / link ─── */
+.ff-skills-secondary-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  border: 1px solid var(--fg-color-border-default);
+  border-radius: var(--fg-radius-sm);
+  padding: 0.4rem 0.85rem;
+  background: transparent;
+  color: var(--fg-color-text-secondary);
+  font-size: var(--fg-type-size-meta);
+  font-weight: 600;
+  cursor: pointer;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  text-decoration: none;
+  transition: border-color 0.15s, color 0.15s;
+}
+
+.ff-skills-secondary-action:hover:not(:disabled) {
+  border-color: var(--fg-color-accent);
+  color: var(--fg-color-accent);
+}
+
+.ff-skills-secondary-action:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* ─── Danger button ─── */
+.ff-skills-lifecycle-btn-danger {
+  border-color: var(--fg-color-status-danger-border) !important;
+  color: var(--fg-color-status-danger) !important;
+}
+
+.ff-skills-lifecycle-btn-danger:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--fg-color-status-danger) 10%, transparent) !important;
+}
+
+/* ─── Empty state ─── */
+.ff-skills-empty {
+  margin-bottom: 1rem;
+}
+
+.ff-skills-empty-content {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.75rem;
+}
+
+.ff-skills-empty-content h3 {
+  margin: 0;
+  font-size: var(--fg-type-size-lg);
+  font-weight: 700;
+}
+
+.ff-skills-empty-desc {
+  margin: 0;
+  max-width: 42rem;
+  color: var(--fg-color-text-secondary);
+  font-size: var(--fg-type-size-base);
+  line-height: 1.5;
+}
+
+.ff-skills-empty-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+/* ─── Filter bar ─── */
+.ff-skills-filters {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.75rem;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--fg-color-border-subtle);
+  border-radius: var(--fg-radius-sm);
+  background: var(--fg-color-surface-field);
+}
+
+.ff-skills-filter-label {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  font-size: var(--fg-type-size-meta);
+  font-weight: 600;
+  color: var(--fg-color-text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.ff-skills-filter-select {
+  border: 1px solid var(--fg-color-border-default);
+  border-radius: var(--fg-radius-sm);
+  padding: 0.2rem 0.4rem;
+  background: var(--fg-color-surface-default);
+  color: var(--fg-color-text-primary);
+  font-size: var(--fg-type-size-meta);
+}
+
+.ff-skills-filter-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: var(--fg-type-size-meta);
+  color: var(--fg-color-text-secondary);
+  cursor: pointer;
+  user-select: none;
+}
+
+.ff-skills-filter-toggle input[type="checkbox"] {
+  width: 0.9rem;
+  height: 0.9rem;
+  accent-color: var(--fg-color-accent);
+}
+
+/* ─── Browse layout ─── */
+.ff-skills-browse-layout {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+}
+
+@media (max-width: 1023px) {
+  .ff-skills-browse-layout {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ─── Table ─── */
+.ff-skills-table-container {
+  overflow-x: auto;
+}
+
+.ff-skills-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--fg-type-size-base);
+}
+
+.ff-skills-table th {
+  padding: 0.4rem 0.5rem;
+  border-bottom: 1px solid var(--fg-color-border-subtle);
+  text-align: left;
+  font-size: var(--fg-type-size-meta);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--fg-color-text-secondary);
+  white-space: nowrap;
+}
+
+.ff-skills-table td {
+  padding: 0.4rem 0.5rem;
+  border-bottom: 1px solid var(--fg-color-border-subtle);
+  vertical-align: top;
+}
+
+.ff-skills-table tbody tr {
+  cursor: pointer;
+  transition: background 0.1s;
+}
+
+.ff-skills-table tbody tr:hover {
+  background: color-mix(in srgb, var(--fg-color-accent) 6%, transparent);
+}
+
+.ff-skills-table-row-selected {
+  background: color-mix(in srgb, var(--fg-color-accent) 10%, transparent) !important;
+  outline: 1px solid var(--fg-color-accent);
+  outline-offset: -1px;
+}
+
+.ff-skills-table-trigger {
+  border: none;
+  padding: 0;
+  background: none;
+  color: var(--fg-color-accent);
+  font-size: var(--fg-type-size-base);
+  font-weight: 600;
+  cursor: pointer;
+  text-align: left;
+}
+
+.ff-skills-table-trigger:hover {
+  text-decoration: underline;
+}
+
+.ff-skills-table-meta {
+  font-size: var(--fg-type-size-micro);
+  color: var(--fg-color-text-tertiary);
+  line-height: 1.4;
+}
+
+.ff-skills-table-empty {
+  color: var(--fg-color-text-tertiary);
+  font-style: italic;
+  text-align: center;
+  padding: 1.5rem !important;
+}
+
+.ff-skills-table-status {
+  padding: 1rem 0.5rem;
+  color: var(--fg-color-text-secondary);
+  font-size: var(--fg-type-size-meta);
+}
+
+.ff-skills-table-status-error {
+  color: var(--fg-color-status-danger);
+}
+
+/* ─── Create panel ─── */
+.ff-skills-create-panel {
+  margin-bottom: 1rem;
+}
+
+.ff-skills-create-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 0.5rem;
+}
+
+.ff-skills-create-header h3 {
+  margin: 0.25rem 0 0;
+  font-size: var(--fg-type-size-xl);
+  font-weight: 700;
+}
+
+.ff-skills-create-note {
+  margin: 0 0 1rem;
+  color: var(--fg-color-text-secondary);
+  font-size: var(--fg-type-size-meta);
+  line-height: 1.5;
+}
+
+.ff-skills-create-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.ff-skills-create-section {
+  border: 1px solid var(--fg-color-border-subtle);
+  border-radius: var(--fg-radius-sm);
+  padding: 0.75rem;
+}
+
+.ff-skills-create-section h4 {
+  margin: 0 0 0.5rem;
+  font-size: var(--fg-type-size-base);
+  font-weight: 700;
+}
+
+.ff-skills-create-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.5rem;
+}
+
+@media (max-width: 640px) {
+  .ff-skills-create-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.ff-skills-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  font-size: var(--fg-type-size-meta);
+  font-weight: 600;
+  color: var(--fg-color-text-secondary);
+}
+
+.ff-skills-field-required::after {
+  content: " *";
+  color: var(--fg-color-status-danger);
+}
+
+.ff-skills-field input,
+.ff-skills-field select,
+.ff-skills-field textarea {
+  border: 1px solid var(--fg-color-border-default);
+  border-radius: var(--fg-radius-sm);
+  padding: 0.35rem 0.5rem;
+  background: var(--fg-color-surface-field);
+  color: var(--fg-color-text-primary);
+  font-size: var(--fg-type-size-base);
+  font-family: inherit;
+}
+
+.ff-skills-field input:focus,
+.ff-skills-field select:focus,
+.ff-skills-field textarea:focus {
+  outline: none;
+  border-color: var(--fg-color-accent);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--fg-color-accent) 40%, transparent);
+}
+
+.ff-skills-json-field {
+  width: 100%;
+  box-sizing: border-box;
+  border: 1px solid var(--fg-color-border-default);
+  border-radius: var(--fg-radius-sm);
+  padding: 0.5rem;
+  background: var(--fg-color-surface-field);
+  color: var(--fg-color-text-primary);
+  font-family: var(--fg-type-font-mono);
+  font-size: var(--fg-type-size-micro);
+  resize: vertical;
+}
+
+.ff-skills-create-details {
+  border: 1px solid var(--fg-color-border-subtle);
+  border-radius: var(--fg-radius-sm);
+  padding: 0.5rem 0.75rem;
+}
+
+.ff-skills-create-details summary {
+  cursor: pointer;
+  font-weight: 700;
+  font-size: var(--fg-type-size-base);
+  color: var(--fg-color-text-primary);
+}
+
+.ff-skills-create-details[open] summary {
+  margin-bottom: 0.5rem;
+}
+
+.ff-skills-create-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding-top: 0.5rem;
+}
+
+/* ─── Detail panel ─── */
+.ff-skills-detail-panel {
+  min-height: 12rem;
+}
+
+.ff-skills-detail-placeholder {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.ff-skills-detail-placeholder-text {
+  margin: 0;
+  color: var(--fg-color-text-secondary);
+  font-size: var(--fg-type-size-meta);
+}
+
+.ff-skills-detail-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 0.5rem;
+}
+
+.ff-skills-detail-header h3 {
+  margin: 0.25rem 0 0;
+  font-size: var(--fg-type-size-lg);
+  font-weight: 700;
+}
+
+.ff-skills-detail-status-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.5rem;
+}
+
+.ff-skills-detail-approval {
+  margin-bottom: 0.5rem;
+}
+
+.ff-skills-detail-summary {
+  margin-bottom: 0.5rem;
+}
+
+.ff-skills-detail-summary p {
+  margin: 0;
+  color: var(--fg-color-text-secondary);
+  font-size: var(--fg-type-size-base);
+  line-height: 1.5;
+}
+
+.ff-skills-detail-next-action {
+  margin-bottom: 1rem;
+  padding: 0.35rem 0.6rem;
+  border-left: 2px solid var(--fg-color-accent);
+  background: color-mix(in srgb, var(--fg-color-accent) 8%, transparent);
+  color: var(--fg-color-accent);
+  font-size: var(--fg-type-size-meta);
+  font-weight: 600;
+}
+
+.ff-skills-detail-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.ff-skills-detail-details {
+  border: 1px solid var(--fg-color-border-subtle);
+  border-radius: var(--fg-radius-sm);
+  padding: 0.5rem 0.75rem;
+}
+
+.ff-skills-detail-details summary {
+  cursor: pointer;
+  font-weight: 700;
+  font-size: var(--fg-type-size-base);
+  color: var(--fg-color-text-primary);
+}
+
+.ff-skills-detail-details[open] summary {
+  margin-bottom: 0.5rem;
+}
+
+.ff-skills-detail-instruction {
+  margin: 0;
+  padding: 0.5rem;
+  background: var(--fg-color-surface-field);
+  border: 1px solid var(--fg-color-border-subtle);
+  border-radius: var(--fg-radius-sm);
+  font-family: var(--fg-type-font-mono);
+  font-size: var(--fg-type-size-micro);
+  white-space: pre-wrap;
+  line-height: 1.5;
+}
+
+.ff-skills-detail-provenance {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.ff-skills-detail-provenance p {
+  margin: 0;
+  font-size: var(--fg-type-size-base);
+}
+
+.ff-skills-detail-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.25rem;
+}
+
+.ff-skills-detail-telemetry-strip {
+  display: flex;
+  gap: 1.5rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.5rem;
+}
+
+.ff-skills-detail-telemetry-strip > div {
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+}
+
+.ff-skills-detail-telemetry-strip strong {
+  font-size: var(--fg-type-size-lg);
+  font-weight: 700;
+  line-height: 1;
+}
+
+.ff-skills-detail-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+/* ─── Lifecycle actions ─── */
+.ff-skills-lifecycle-actions {
+  border: 1px solid var(--fg-color-border-default);
+  border-radius: var(--fg-radius-sm);
+  padding: 0.75rem;
+}
+
+.ff-skills-lifecycle-actions h4 {
+  margin: 0 0 0.5rem;
+  font-size: var(--fg-type-size-base);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.ff-skills-lifecycle-buttons {
+  display: flex;
+  align-items: flex-end;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.ff-skills-lifecycle-form {
+  display: flex;
+  align-items: flex-end;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.ff-skills-lifecycle-activate-fields {
+  display: flex;
+  gap: 0.375rem;
+}
+
+.ff-skills-lifecycle-activate-fields select {
+  border: 1px solid var(--fg-color-border-default);
+  border-radius: var(--fg-radius-sm);
+  padding: 0.3rem 0.4rem;
+  background: var(--fg-color-surface-field);
+  color: var(--fg-color-text-primary);
+  font-size: var(--fg-type-size-micro);
+}
+
+.ff-skills-lifecycle-btn {
+  border: 1px solid var(--fg-color-border-default);
+  border-radius: var(--fg-radius-sm);
+  padding: 0.4rem 0.75rem;
+  background: transparent;
+  color: var(--fg-color-text-secondary);
+  font-size: var(--fg-type-size-meta);
+  font-weight: 600;
+  cursor: pointer;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  transition: border-color 0.15s, color 0.15s;
+  white-space: nowrap;
+}
+
+.ff-skills-lifecycle-btn:hover:not(:disabled) {
+  border-color: var(--fg-color-accent);
+  color: var(--fg-color-accent);
+}
+
+.ff-skills-lifecycle-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.ff-skills-lifecycle-btn-primary {
+  border-color: var(--fg-color-accent);
+  background: color-mix(in srgb, var(--fg-color-accent) 14%, transparent);
+  color: var(--fg-color-accent);
+}
+
+.ff-skills-lifecycle-btn-primary:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--fg-color-accent) 28%, transparent);
+}
+
+/* ─── Navigation link ─── */
+.ff-skills-nav-link {
+  color: var(--fg-color-accent);
+  font-size: var(--fg-type-size-meta);
+  text-decoration: none;
+  font-weight: 600;
+}
+
+.ff-skills-nav-link:hover {
+  text-decoration: underline;
+}

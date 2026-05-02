@@ -6,54 +6,33 @@ import type {
 } from "../../api/domain";
 
 /**
- * Filter controls for the skills list view.
- */
-export interface SkillFilters {
-  statusFilter: SkillStatus | "all";
-  scopeFilter: SkillScope | "all";
-}
-
-/**
- * Provenance form values for skill creation and editing.
- */
-export interface ProvenanceForm {
-  originKind: SkillProvenanceKind;
-  learningEventId: string;
-  memoryId: string;
-  sourceId: string;
-  pluginName: string;
-  note: string;
-  extraJson: string;
-}
-
-/**
- * Activation settings form values for skill activation conditions.
- */
-export interface ActivationSettingsForm {
-  previewRequired: boolean;
-  channelHint: string;
-  note: string;
-  extraJson: string;
-}
-
-/**
- * Create skill form values.
+ * Create skill form values — simplified for a guided creation flow.
  */
 export interface CreateSkillForm {
+  /** Unique skill identifier (e.g. "skill_pricing_review"). */
   skillId: string;
+  /** Human-readable display name. */
   displayName: string;
+  /** One-line summary of what the skill does. */
   summary: string;
+  /** Scope the skill applies to. */
   scope: SkillScope;
+  /** Agent ID when scope is "agent". */
   scopeAgentId: string;
+  /** Initial status (draft or review). */
   status: SkillStatus;
+  /** The core instruction the skill executes. */
   instructionCore: string;
+  /** Provenance information (collapsed by default). */
   provenance: ProvenanceForm;
+  /** Activation policy settings (collapsed by default). */
   activationSettings: ActivationSettingsForm;
+  /** Raw metadata JSON (advanced, collapsed by default). */
   metadataJson: string;
 }
 
 /**
- * Edit skill form values.
+ * Edit skill form values (mirrors create form without skillId).
  */
 export interface EditSkillForm {
   displayName: string;
@@ -68,7 +47,30 @@ export interface EditSkillForm {
 }
 
 /**
- * Activation form values for activating a skill version.
+ * Provenance origin form values.
+ */
+export interface ProvenanceForm {
+  originKind: SkillProvenanceKind;
+  learningEventId: string;
+  memoryId: string;
+  sourceId: string;
+  pluginName: string;
+  note: string;
+  extraJson: string;
+}
+
+/**
+ * Activation policy form values.
+ */
+export interface ActivationSettingsForm {
+  previewRequired: boolean;
+  channelHint: string;
+  note: string;
+  extraJson: string;
+}
+
+/**
+ * Activation form values for the explicit activate action.
  */
 export interface ActivationForm {
   versionId: string;
@@ -79,7 +81,7 @@ export interface ActivationForm {
 }
 
 /**
- * Usage form values for recording skill usage telemetry.
+ * Usage event form for recording telemetry.
  */
 export interface UsageForm {
   versionId: string;
@@ -92,6 +94,8 @@ export interface UsageForm {
   note: string;
   detailsJson: string;
 }
+
+// ─── Constants ───────────────────────────────────────────────────────────────
 
 /** Status filter options including "all". */
 export const STATUS_OPTIONS: readonly (SkillStatus | "all")[] = [
@@ -122,6 +126,55 @@ export const USAGE_OUTCOME_OPTIONS: readonly SkillUsageOutcome[] = [
 export const PROVENANCE_KIND_OPTIONS: readonly SkillProvenanceKind[] = [
   "operator", "learning", "memory", "knowledge_source", "plugin", "unknown",
 ] as const;
+
+/** Human-readable labels for skill status values. */
+export const STATUS_LABELS: Record<SkillStatus | "all", string> = {
+  all: "All statuses",
+  draft: "Draft",
+  review: "Pending review",
+  active: "Active",
+  archived: "Archived",
+};
+
+/** Human-readable labels for skill scope values. */
+export const SCOPE_LABELS: Record<SkillScope | "all", string> = {
+  all: "All scopes",
+  instance: "Instance scope",
+  agent: "Agent scope",
+};
+
+/** Human-readable labels for provenance kind values. */
+export const PROVENANCE_LABELS: Record<SkillProvenanceKind, string> = {
+  operator: "Created by operator",
+  learning: "Promoted from learning",
+  memory: "Derived from memory",
+  knowledge_source: "Referenced from knowledge source",
+  plugin: "Plugin-managed",
+  unknown: "Unknown origin",
+};
+
+/** Human-readable labels for usage outcomes. */
+export const OUTCOME_LABELS: Record<SkillUsageOutcome, string> = {
+  success: "Success",
+  blocked: "Blocked",
+  error: "Error",
+};
+
+/** Human-readable labels for activation preview requirement. */
+export const PREVIEW_LABELS: Record<string, string> = {
+  true: "Preview required",
+  false: "Preview not required",
+};
+
+/** Human-readable labels for approval posture. */
+export const APPROVAL_LABELS: Record<string, string> = {
+  draft: "Draft — not yet submitted for review",
+  review_required: "Review required before activation",
+  approved: "Approved and ready for activation",
+  archived: "Archived — no longer in use",
+};
+
+// ─── Default form values ──────────────────────────────────────────────────────
 
 /** Default empty provenance form. */
 export const DEFAULT_PROVENANCE_FORM: ProvenanceForm = {
