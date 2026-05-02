@@ -192,7 +192,7 @@ export function TargetDetailPanel({
               <section className="fg-subcard">
                 <button
                   type="button"
-                  className="ff-primary-action"
+                  className="ff-policy-open-button"
                   onClick={() => setEditingPolicy(true)}
                 >
                   Edit target policy

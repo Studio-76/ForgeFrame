@@ -3276,8 +3276,8 @@ details summary {
   gap: var(--fg-space-2);
 }
 
-/* Primary action button */
-.ff-primary-action {
+/* Policy open button — full-width primary action to enter edit mode */
+.ff-policy-open-button {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -3294,10 +3294,55 @@ details summary {
   transition: opacity var(--fg-motion-fast) var(--fg-ease-standard);
 }
 
-.ff-primary-action:hover {
+.ff-policy-open-button:hover {
   opacity: 0.85;
 }
 
+/* Operator actions grid — used in simplified action bar */
+.ff-operator-actions-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--fg-space-3);
+  align-items: flex-start;
+}
+
+.ff-operator-actions-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--fg-space-2);
+  align-items: center;
+}
+
+.ff-operator-actions-label {
+  font-size: var(--fg-type-size-meta);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--fg-color-text-secondary);
+  flex-shrink: 0;
+}
+
+.ff-operator-actions-group-secondary {
+  opacity: 0.85;
+}
+
+/* Checklist pass/fail indicators */
+.ff-check-ok {
+  color: var(--fg-color-status-success-text);
+}
+
+.ff-check-fail {
+  color: var(--fg-color-status-danger-text);
+}
+
+/* Urgent summary card variant */
+.ff-summary-card-urgent {
+  border-color: var(--fg-color-status-warning-border) !important;
+  background: linear-gradient(
+    180deg,
+    var(--fg-color-status-warning-soft),
+    var(--fg-color-surface-strong)
+  );
+}
 
 
 .ff-skeleton-stack {

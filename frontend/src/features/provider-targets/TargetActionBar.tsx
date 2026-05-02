@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 
 import { CONTROL_PLANE_ROUTES } from "../../app/navigation";
 import { withInstanceScope } from "../../app/tenantScope";
-import type { CapabilityFilter, ProviderTargetRecord, TargetStatusFilter } from "./types";
+import type { CapabilityFilter, TargetStatusFilter } from "./types";
 import { titleCase } from "./utils";
 
 type TargetActionBarProps = {

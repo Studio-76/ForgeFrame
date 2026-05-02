@@ -15,7 +15,7 @@ export function contractStatusForTarget(target: ProviderTargetRecord): PrimaryTa
     return "blocked";
   }
 
-  const readiness = target.readiness_status.trim().toLowerCase();
+  const readiness = (target.readiness_status ?? "").trim().toLowerCase();
   const noProbeRecorded = !target.last_probe_at;
   const healthUnknown = target.health_status === "unknown" || target.health_status === "not_recorded" || !target.health_status;
 
@@ -51,10 +51,8 @@ export function contractStatusForTarget(target: ProviderTargetRecord): PrimaryTa
     if (!target.runtime_ready) {
       return "partial";
     }
-    if (target.health_status !== "healthy" || target.availability_status !== "healthy") {
-      return "degraded";
-    }
-    return "ready";
+    /* Runtime-ready with failing health/availability = degraded */
+    return "degraded";
   }
 
   return target.runtime_ready ? "partial" : "blocked";
