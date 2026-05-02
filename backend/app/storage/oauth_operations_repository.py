@@ -15,9 +15,10 @@ from sqlalchemy import (
     Integer,
     String,
     Text,
+    and_,
     create_engine,
+    func,
     select,
-    text,
 )
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, Session, mapped_column, sessionmaker
@@ -97,43 +98,29 @@ class PostgresOAuthOperationsRepository:
         return datetime.fromisoformat(value)
 
     @staticmethod
-    def _scope_clause(
+    def _scope_filters(
         *,
         tenant_id: str | None,
         instance_id: str | None,
-        tenant_column: str = "tenant_id",
-    ) -> tuple[str, dict[str, Any]]:
-        clauses: list[str] = []
-        params: dict[str, Any] = {}
+    ) -> list[Any]:
+        filters: list[Any] = []
         if tenant_id is not None:
-            clauses.append(f"{tenant_column} = :tenant_id")
-            params["tenant_id"] = tenant_id
+            filters.append(OAuthOperationORM.tenant_id == tenant_id)
         normalized_instance_id = (instance_id or "").strip() or None
         if normalized_instance_id is not None:
-            clauses.append("COALESCE(NULLIF(payload->>'instance_id', ''), NULLIF(payload->>'tenant_id', ''), :default_instance_id) = :instance_id")
-            params["instance_id"] = normalized_instance_id
-            params["default_instance_id"] = DEFAULT_BOOTSTRAP_TENANT_ID
-        if not clauses:
-            return "", {}
-        return " AND " + " AND ".join(clauses), params
-
-    def _mapped_rows(self, query: str, params: dict[str, Any]) -> list[dict[str, Any]]:
-        with self._session() as session:
-            return [dict(row) for row in session.execute(text(query), params).mappings().all()]
+            resolved_instance = func.coalesce(
+                func.nullif(OAuthOperationORM.payload["instance_id"].as_string(), ""),
+                func.nullif(OAuthOperationORM.payload["tenant_id"].as_string(), ""),
+                DEFAULT_BOOTSTRAP_TENANT_ID,
+            )
+            filters.append(resolved_instance == normalized_instance_id)
+        return filters
 
     def effective_tenant_id(self, requested_tenant_id: str | None) -> str | None:
-        rows = self._mapped_rows(
-            """
-            SELECT tenant_id
-            FROM oauth_operations
-            GROUP BY tenant_id
-            ORDER BY tenant_id ASC
-            LIMIT 2
-            """,
-            {},
-        )
+        with self._session() as session:
+            rows = session.execute(select(OAuthOperationORM.tenant_id).group_by(OAuthOperationORM.tenant_id).order_by(OAuthOperationORM.tenant_id.asc()).limit(2)).all()
         return effective_tenant_filter(
-            [str(row["tenant_id"]) for row in rows if row.get("tenant_id") is not None],
+            [str(row[0]) for row in rows if row[0] is not None],
             requested_tenant_id,
         )
 
@@ -144,19 +131,10 @@ class PostgresOAuthOperationsRepository:
         instance_id: str | None = None,
         limit: int = 50,
     ) -> list[OAuthOperationRecord]:
-        scope_clause, scope_params = self._scope_clause(tenant_id=tenant_id, instance_id=instance_id)
-        rows = self._mapped_rows(
-            f"""
-            SELECT payload
-            FROM oauth_operations
-            WHERE 1 = 1
-              {scope_clause}
-            ORDER BY executed_at DESC
-            LIMIT :limit
-            """,
-            {**scope_params, "limit": int(limit)},
-        )
-        operations = [OAuthOperationRecord(**row["payload"]) for row in rows]
+        filters = self._scope_filters(tenant_id=tenant_id, instance_id=instance_id)
+        with self._session() as session:
+            rows = session.execute(select(OAuthOperationORM.payload).where(and_(*filters) if filters else True).order_by(OAuthOperationORM.executed_at.desc()).limit(int(limit))).all()
+        operations = [OAuthOperationRecord(**row[0]) for row in rows]
         operations.reverse()
         return operations
 
@@ -168,22 +146,16 @@ class PostgresOAuthOperationsRepository:
         tenant_id: str | None = None,
         instance_id: str | None = None,
     ) -> OAuthOperationRecord | None:
-        scope_clause, scope_params = self._scope_clause(tenant_id=tenant_id, instance_id=instance_id)
-        rows = self._mapped_rows(
-            f"""
-            SELECT payload
-            FROM oauth_operations
-            WHERE provider_key = :provider_key
-              AND action = :action
-              {scope_clause}
-            ORDER BY executed_at DESC
-            LIMIT 1
-            """,
-            {"provider_key": provider_key, "action": action, **scope_params},
-        )
-        if not rows:
+        filters = self._scope_filters(tenant_id=tenant_id, instance_id=instance_id)
+        filters.extend([
+            OAuthOperationORM.provider_key == provider_key,
+            OAuthOperationORM.action == action,
+        ])
+        with self._session() as session:
+            payload = session.execute(select(OAuthOperationORM.payload).where(and_(*filters)).order_by(OAuthOperationORM.executed_at.desc()).limit(1)).scalar_one_or_none()
+        if payload is None:
             return None
-        return OAuthOperationRecord(**rows[0]["payload"])
+        return OAuthOperationRecord(**payload)
 
     def provider_operation_summary(
         self,
@@ -191,88 +163,15 @@ class PostgresOAuthOperationsRepository:
         tenant_id: str | None,
         instance_id: str | None = None,
     ) -> dict[str, dict[str, Any]]:
-        scope_clause, scope_params = self._scope_clause(tenant_id=tenant_id, instance_id=instance_id)
-        counts = self._mapped_rows(
-            f"""
-            SELECT
-              provider_key,
-              count(*)::bigint AS operation_count,
-              COALESCE(sum(CASE WHEN status = 'failed' THEN 1 ELSE 0 END), 0)::bigint AS failures,
-              COALESCE(
-                sum(
-                  CASE
-                    WHEN status = 'failed'
-                     AND executed_at >= NOW() - INTERVAL '24 hours'
-                    THEN 1
-                    ELSE 0
-                  END
-                ),
-                0
-              )::bigint AS failures_24h,
-              COALESCE(sum(CASE WHEN action = 'probe' THEN 1 ELSE 0 END), 0)::bigint AS probe_count,
-              COALESCE(sum(CASE WHEN action = 'bridge_sync' THEN 1 ELSE 0 END), 0)::bigint AS bridge_sync_count
-            FROM oauth_operations
-            WHERE 1 = 1
-              {scope_clause}
-            GROUP BY provider_key
-            """,
-            scope_params,
-        )
-        latest_probe = self._mapped_rows(
-            f"""
-            SELECT DISTINCT ON (provider_key)
-              provider_key,
-              payload
-            FROM oauth_operations
-            WHERE action = 'probe'
-              {scope_clause}
-            ORDER BY provider_key ASC, executed_at DESC
-            """,
-            scope_params,
-        )
-        latest_bridge = self._mapped_rows(
-            f"""
-            SELECT DISTINCT ON (provider_key)
-              provider_key,
-              payload
-            FROM oauth_operations
-            WHERE action = 'bridge_sync'
-              {scope_clause}
-            ORDER BY provider_key ASC, executed_at DESC
-            """,
-            scope_params,
-        )
-        latest_failed = self._mapped_rows(
-            f"""
-            SELECT DISTINCT ON (provider_key)
-              provider_key,
-              payload
-            FROM oauth_operations
-            WHERE status = 'failed'
-              {scope_clause}
-            ORDER BY provider_key ASC, executed_at DESC
-            """,
-            scope_params,
-        )
+        filters = self._scope_filters(tenant_id=tenant_id, instance_id=instance_id)
+        with self._session() as session:
+            rows = session.scalars(select(OAuthOperationORM).where(and_(*filters) if filters else True).order_by(OAuthOperationORM.executed_at.asc())).all()
 
         summary: dict[str, dict[str, Any]] = {}
-        for row in counts:
-            provider_key = str(row["provider_key"])
-            total = int(row.get("operation_count", 0) or 0)
-            summary[provider_key] = {
-                "failures": int(row.get("failures", 0) or 0),
-                "failures_24h": int(row.get("failures_24h", 0) or 0),
-                "probe_count": int(row.get("probe_count", 0) or 0),
-                "bridge_sync_count": int(row.get("bridge_sync_count", 0) or 0),
-                "operation_count": total,
-                "failure_rate": (int(row.get("failures", 0) or 0) / max(1, total)),
-                "last_probe": None,
-                "last_bridge_sync": None,
-                "last_failed_operation": None,
-            }
-        for row in latest_probe:
-            provider_key = str(row["provider_key"])
-            summary.setdefault(
+        now = datetime.now().astimezone()
+        for row in rows:
+            provider_key = row.provider_key
+            current = summary.setdefault(
                 provider_key,
                 {
                     "failures": 0,
@@ -285,39 +184,24 @@ class PostgresOAuthOperationsRepository:
                     "last_bridge_sync": None,
                     "last_failed_operation": None,
                 },
-            )["last_probe"] = OAuthOperationRecord(**row["payload"]).model_dump()
-        for row in latest_bridge:
-            provider_key = str(row["provider_key"])
-            summary.setdefault(
-                provider_key,
-                {
-                    "failures": 0,
-                    "failures_24h": 0,
-                    "probe_count": 0,
-                    "bridge_sync_count": 0,
-                    "operation_count": 0,
-                    "failure_rate": 0.0,
-                    "last_probe": None,
-                    "last_bridge_sync": None,
-                    "last_failed_operation": None,
-                },
-            )["last_bridge_sync"] = OAuthOperationRecord(**row["payload"]).model_dump()
-        for row in latest_failed:
-            provider_key = str(row["provider_key"])
-            summary.setdefault(
-                provider_key,
-                {
-                    "failures": 0,
-                    "failures_24h": 0,
-                    "probe_count": 0,
-                    "bridge_sync_count": 0,
-                    "operation_count": 0,
-                    "failure_rate": 0.0,
-                    "last_probe": None,
-                    "last_bridge_sync": None,
-                    "last_failed_operation": None,
-                },
-            )["last_failed_operation"] = OAuthOperationRecord(**row["payload"]).model_dump()
+            )
+            current["operation_count"] += 1
+            payload = OAuthOperationRecord(**row.payload).model_dump()
+            if row.status == "failed":
+                current["failures"] += 1
+                if (now - row.executed_at.astimezone()).total_seconds() <= 24 * 3600:
+                    current["failures_24h"] += 1
+                current["last_failed_operation"] = payload
+            if row.action == "probe":
+                current["probe_count"] += 1
+                current["last_probe"] = payload
+            if row.action == "bridge_sync":
+                current["bridge_sync_count"] += 1
+                current["last_bridge_sync"] = payload
+
+        for provider_key, current in summary.items():
+            total = int(current["operation_count"])
+            current["failure_rate"] = int(current["failures"]) / max(1, total)
         return summary
 
     def load_operations(self) -> list[OAuthOperationRecord]:
