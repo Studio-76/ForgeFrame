@@ -589,12 +589,12 @@ a {
   position: sticky;
   top: 0;
   z-index: 30;
-  min-height: 74px;
+  min-height: 72px;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 1rem;
-  padding: 0.85rem 1.5rem;
+  padding: 0.6rem 1.5rem;
   border-bottom: 1px solid var(--fg-color-border-default);
   background: rgba(11, 16, 27, 0.88);
   backdrop-filter: blur(16px);
@@ -4103,7 +4103,7 @@ details summary {
 @media (max-width: 1023px) {
   .ff-topbar {
     min-height: 64px;
-    padding: 0.75rem 1rem;
+    padding: 0.6rem 1rem;
   }
 
   .ff-topbar::after {
