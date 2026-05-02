@@ -2801,7 +2801,211 @@ details summary {
 }
 
 /* ──────────────────────────────────────────────
- * Mobile only (< 640px): overlay sidebar + bottom tab bar
+ * Status Hero — compact state summary replacing multi-card SummaryStrip
+ * ────────────────────────────────────────────── */
+
+.ff-status-hero {
+  display: grid;
+  gap: var(--fg-space-3);
+  border: 1px solid var(--fg-color-border-default);
+  border-radius: var(--fg-radius-lg);
+  padding: var(--fg-space-4);
+  background: var(--fg-color-surface-default);
+  box-shadow: var(--fg-shadow-panel);
+}
+
+.ff-status-hero-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: var(--fg-space-4);
+  flex-wrap: wrap;
+}
+
+.ff-status-hero-label {
+  font-size: var(--fg-type-size-subtitle);
+  font-weight: 600;
+  margin: 0;
+}
+
+.ff-status-hero-line {
+  color: var(--fg-color-text-secondary);
+  margin: 0;
+  font-size: var(--fg-type-size-meta);
+}
+
+.ff-status-hero-stats {
+  display: flex;
+  gap: var(--fg-space-2);
+  flex-wrap: wrap;
+  align-items: center;
+  color: var(--fg-color-text-secondary);
+  font-size: var(--fg-type-size-meta);
+}
+
+.ff-status-hero-stats > * + * {
+  border-left: 1px solid var(--fg-color-border-default);
+  padding-left: var(--fg-space-2);
+}
+
+/* ──────────────────────────────────────────────
+ * Next Step — actionable recommendation bar
+ * ────────────────────────────────────────────── */
+
+.ff-next-step {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--fg-space-2);
+  padding: 0.7rem var(--fg-space-3);
+  border: 1px solid var(--fg-color-status-warning-border);
+  border-radius: var(--fg-radius-md);
+  background: var(--fg-color-status-warning-soft);
+  color: var(--fg-color-status-warning);
+  font-weight: 500;
+  font-size: var(--fg-type-size-meta);
+}
+
+.ff-next-step[data-tone="danger"] {
+  border-color: var(--fg-color-status-danger-border);
+  background: var(--fg-color-status-danger-soft);
+  color: var(--fg-color-status-danger);
+}
+
+.ff-next-step[data-tone="success"] {
+  border-color: var(--fg-color-status-success-border);
+  background: var(--fg-color-status-success-soft);
+  color: var(--fg-color-status-success);
+}
+
+.ff-next-step[data-tone="neutral"] {
+  border-color: var(--fg-color-border-default);
+  background: var(--fg-color-surface-subtle);
+  color: var(--fg-color-text-secondary);
+}
+
+.ff-next-step-label {
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+/* ──────────────────────────────────────────────
+ * Action Controls — in-page action buttons group
+ * ────────────────────────────────────────────── */
+
+.ff-action-controls {
+  display: flex;
+  gap: var(--fg-space-2);
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.ff-action-controls button {
+  font-size: var(--fg-type-size-meta);
+  padding: 0.5rem 0.85rem;
+}
+
+/* ──────────────────────────────────────────────
+ * Navigation Links Group — visually distinct from actions
+ * ────────────────────────────────────────────── */
+
+.ff-nav-links {
+  display: flex;
+  gap: var(--fg-space-1);
+  align-items: center;
+  flex-wrap: wrap;
+  padding-top: var(--fg-space-2);
+  border-top: 1px solid var(--fg-color-border-default);
+}
+
+.ff-nav-links .fg-nav-link {
+  font-size: var(--fg-type-size-meta);
+  padding: 0.35rem 0.65rem;
+  background: transparent;
+  border: 1px solid var(--fg-color-border-default);
+  color: var(--fg-color-text-secondary);
+}
+
+.ff-nav-links .fg-nav-link:hover {
+  background: var(--fg-color-surface-subtle);
+  color: var(--fg-color-text-primary);
+}
+
+/* ──────────────────────────────────────────────
+ * Collapsible Section — details/summary for progressive disclosure
+ * ────────────────────────────────────────────── */
+
+.ff-collapse-section {
+  border: 1px solid var(--fg-color-border-default);
+  border-radius: var(--fg-radius-lg);
+  overflow: hidden;
+  background: var(--fg-color-surface-default);
+  box-shadow: var(--fg-shadow-panel);
+}
+
+.ff-collapse-section summary {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: var(--fg-space-3);
+  padding: var(--fg-space-3) var(--fg-space-4);
+  cursor: pointer;
+  list-style: none;
+  user-select: none;
+}
+
+.ff-collapse-section summary::-webkit-details-marker {
+  display: none;
+}
+
+.ff-collapse-section summary:hover {
+  background: var(--fg-color-surface-subtle);
+}
+
+.ff-collapse-section summary:focus-visible {
+  outline: 2px solid var(--fg-color-focus-ring);
+  outline-offset: -2px;
+}
+
+.ff-collapse-section-body {
+  padding: 0 var(--fg-space-4) var(--fg-space-4);
+}
+
+.ff-collapse-summary-text {
+  display: grid;
+  gap: var(--fg-space-1);
+}
+
+.ff-collapse-summary-text h3 {
+  margin: 0;
+  font-size: var(--fg-type-size-card);
+}
+
+.ff-collapse-summary-text p {
+  margin: 0;
+  font-size: var(--fg-type-size-meta);
+}
+
+.ff-collapse-section summary::after {
+  content: "▶";
+  display: inline-flex;
+  align-items: center;
+  font-size: 0.7rem;
+  color: var(--fg-color-text-secondary);
+  transition: transform var(--fg-motion-fast) var(--fg-ease-standard);
+  flex-shrink: 0;
+  margin-top: 0.3em;
+}
+
+.ff-collapse-section[open] summary::after {
+  transform: rotate(90deg);
+}
+
+.ff-collapse-section[open] summary {
+  border-bottom: 1px solid var(--fg-color-border-default);
+}
+
+/* ──────────────────────────────────────────────
+ * Tablet and below (≤ 1023px): stack operator layout and detail panel
  * ────────────────────────────────────────────── */
 
 @media (max-width: 639px) {
