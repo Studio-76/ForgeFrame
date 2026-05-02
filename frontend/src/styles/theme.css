@@ -147,8 +147,6 @@ a {
 }
 
 .ff-sidebar.is-collapsed .ff-brand-copy,
-.ff-sidebar.is-collapsed .ff-sidebar-section-trigger span,
-.ff-sidebar.is-collapsed .ff-sidebar-section-meta,
 .ff-sidebar.is-collapsed .ff-sidebar-link-label,
 .ff-sidebar.is-collapsed .ff-mini-badge {
   display: none;
@@ -224,33 +222,90 @@ a {
   transform: rotate(180deg);
 }
 
-.ff-sidebar.is-collapsed .ff-sidebar-section-trigger {
-  justify-content: center;
-  padding-inline: 0;
+/* ──────────────────────────────────────────────
+ * Collapsed (icon rail) styles
+ * ────────────────────────────────────────────── */
+
+.ff-sidebar.is-collapsed .ff-sidebar-nav {
+  padding: 0.75rem 0;
 }
 
-.ff-sidebar.is-collapsed .ff-sidebar-section-trigger::after {
+.ff-sidebar.is-collapsed .ff-sidebar-section {
+  margin-bottom: 0.25rem;
+}
+
+.ff-sidebar.is-collapsed .ff-sidebar-brand {
+  justify-content: center;
+  padding: 0.75rem 0;
+  min-height: 56px;
+}
+
+.ff-sidebar.is-collapsed .ff-sidebar-links {
+  display: none;
+}
+
+/* Rail link — icon-only button in collapsed sidebar */
+.ff-sidebar-rail-link {
+  position: relative;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 2.75rem;
+  border: 1px solid transparent;
+  border-radius: 0;
+  padding: 0.5rem 0;
+  background: transparent;
+  color: var(--fg-color-text-secondary);
+  text-align: center;
+  cursor: pointer;
+  border-left: 2px solid transparent;
+  transition:
+    color var(--fg-motion-base) var(--fg-ease-standard),
+    background var(--fg-motion-base) var(--fg-ease-standard),
+    border-color var(--fg-motion-base) var(--fg-ease-standard);
+}
+
+.ff-sidebar-rail-link:hover {
+  color: var(--fg-color-text-primary);
+  background: rgba(148, 163, 184, 0.06);
+}
+
+.ff-sidebar-rail-link.is-current {
+  color: var(--fg-color-action-primary);
+  border-left-color: var(--fg-color-action-primary);
+  background: rgba(70, 95, 255, 0.08);
+}
+
+.ff-sidebar-rail-link svg {
+  width: 1.2rem;
+  height: 1.2rem;
+}
+
+/* Rail link tooltip (CSS-only) */
+.ff-sidebar-rail-link::after {
   content: attr(data-tooltip);
   position: absolute;
-  left: calc(100% + 0.75rem);
+  left: calc(100% + 0.5rem);
   top: 50%;
   transform: translateY(-50%);
   opacity: 0;
   pointer-events: none;
   border: 1px solid var(--fg-color-border-default);
   border-radius: var(--fg-radius-md);
-  padding: 0.35rem 0.55rem;
-  background: var(--fg-color-surface-default);
+  padding: 0.3rem 0.5rem;
+  background: var(--fg-color-surface-strong);
   box-shadow: var(--fg-shadow-panel);
   color: var(--fg-color-text-primary);
   font-size: var(--fg-type-size-meta);
   font-weight: 500;
   white-space: nowrap;
+  z-index: 50;
   transition: opacity var(--fg-motion-base) var(--fg-ease-standard);
 }
 
-.ff-sidebar.is-collapsed .ff-sidebar-section-trigger:hover::after,
-.ff-sidebar.is-collapsed .ff-sidebar-section-trigger:focus-visible::after {
+.ff-sidebar-rail-link:hover::after,
+.ff-sidebar-rail-link:focus-visible::after {
   opacity: 1;
 }
 
@@ -322,6 +377,7 @@ a {
 
 .ff-sidebar-link:focus-visible,
 .ff-sidebar-section-trigger:focus-visible,
+.ff-sidebar-rail-link:focus-visible,
 .ff-icon-button:focus-visible,
 .ff-user-button:focus-visible,
 .ff-command-menu button:focus-visible,
@@ -358,13 +414,21 @@ a {
   gap: 0.75rem;
 }
 
-.ff-icon-button.ff-mobile-toggle,
-.ff-sidebar-close {
+.ff-icon-button.ff-mobile-toggle {
   display: none;
 }
 
 .ff-icon-button.ff-desktop-toggle {
   display: inline-flex;
+}
+
+/* X close button in sidebar: visible only when sidebar is open */
+.ff-sidebar.is-open .ff-sidebar-close {
+  display: inline-flex;
+}
+
+.ff-sidebar.is-collapsed .ff-sidebar-close {
+  display: none;
 }
 
 .ff-icon-button {
@@ -5513,8 +5577,6 @@ details summary {
   }
 
   .ff-sidebar.is-collapsed .ff-brand-copy,
-  .ff-sidebar.is-collapsed .ff-sidebar-section-trigger span,
-  .ff-sidebar.is-collapsed .ff-sidebar-section-meta,
   .ff-sidebar.is-collapsed .ff-sidebar-link-label,
   .ff-sidebar.is-collapsed .ff-mini-badge {
     display: none;
@@ -5535,17 +5597,6 @@ details summary {
     display: flex;
   }
 
-  .ff-sidebar.is-collapsed .ff-sidebar-section-trigger,
-  .ff-sidebar.is-collapsed .ff-sidebar-link {
-    justify-content: flex-start;
-    padding-inline: 0.65rem;
-  }
-
-  .ff-sidebar.is-collapsed .ff-sidebar-section-trigger::after {
-    display: none;
-  }
-
-  .ff-sidebar-close,
   .ff-icon-button.ff-mobile-toggle {
     display: inline-flex;
   }

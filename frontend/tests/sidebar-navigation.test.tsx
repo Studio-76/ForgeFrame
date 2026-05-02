@@ -41,6 +41,16 @@ function MobileSidebarToggleHarness() {
   );
 }
 
+function SidebarToggleHarness() {
+  const { toggleSidebar, isExpanded } = useSidebar();
+
+  return (
+    <button type="button" onClick={toggleSidebar} aria-label="Toggle sidebar expand">
+      {isExpanded ? "Collapse" : "Expand"}
+    </button>
+  );
+}
+
 async function renderSidebar(path: string, session: AdminSessionUser = adminSession) {
   root = createRoot(container);
   await act(async () => {
@@ -48,6 +58,7 @@ async function renderSidebar(path: string, session: AdminSessionUser = adminSess
       <MemoryRouter initialEntries={[path]}>
         <SidebarProvider>
           <MobileSidebarToggleHarness />
+          <SidebarToggleHarness />
           <AppSidebar navigationSections={getControlPlaneNavigation(session)} instanceId={null} />
         </SidebarProvider>
       </MemoryRouter>,
@@ -101,28 +112,40 @@ afterEach(() => {
 });
 
 describe("sidebar navigation shell", () => {
-  it("starts collapsed on desktop and expands a section on demand", async () => {
+  it("starts expanded and toggles a section open/closed on trigger click", async () => {
     await renderSidebar("/dashboard");
     await flushEffects();
 
     const aside = container.querySelector<HTMLElement>("#ff-sidebar");
     const setupTrigger = Array.from(container.querySelectorAll<HTMLButtonElement>("button")).find(
-      (button) => button.getAttribute("aria-label") === "Open Setup section",
+      (button) => button.getAttribute("aria-label") === "Setup section",
     );
     const setupLinks = container.querySelector<HTMLElement>("#ff-sidebar-section-setup");
 
-    expect(aside?.className).toContain("is-collapsed");
+    // Sidebar starts expanded by default
+    expect(aside?.className).toContain("is-open");
+    // Section starts collapsed
     expect(setupTrigger?.getAttribute("aria-expanded")).toBe("false");
     expect(setupLinks?.hidden).toBe(true);
 
+    // Click trigger to expand the section
     await act(async () => {
       setupTrigger?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     });
+    await flushEffects();
 
-    expect(aside?.className).toContain("is-collapsed");
+    expect(setupTrigger?.getAttribute("aria-expanded")).toBe("true");
+    expect(setupLinks?.hidden).toBe(false);
+    expect(aside?.className).toContain("is-open");
+    expect(window.localStorage.getItem("forgeframe.sidebar.sections")).toContain('"setup":true');
+
+    // Click trigger again to collapse the section
+    await act(async () => {
+      setupTrigger?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    await flushEffects();
+
     expect(setupTrigger?.getAttribute("aria-expanded")).toBe("false");
-    expect(window.localStorage.getItem("forgeframe.sidebar.expanded")).toBe("false");
-    expect(window.localStorage.getItem("forgeframe.sidebar.sections")).toContain("\"setup\":true");
     expect(setupLinks?.hidden).toBe(true);
   });
 
@@ -147,49 +170,26 @@ describe("sidebar navigation shell", () => {
     expect(currentLink?.textContent).toContain("Usage");
   });
 
-  it("keeps a permission-limited current route visible inside its open group while the desktop shell stays collapsed", async () => {
+  it("keeps a permission-limited current route visible inside its open group", async () => {
     await renderSidebar("/approvals", viewerSession);
     await flushEffects();
 
     const aside = container.querySelector<HTMLElement>("#ff-sidebar");
     const governanceTrigger = Array.from(container.querySelectorAll<HTMLButtonElement>("button")).find(
-      (button) => button.getAttribute("aria-label") === "Open Governance section",
+      (button) => button.getAttribute("aria-label") === "Governance section",
     );
     const governanceLinks = container.querySelector<HTMLElement>("#ff-sidebar-section-governance");
     const currentDisabledLink = Array.from(container.querySelectorAll<HTMLElement>('[role="link"][aria-disabled="true"]')).find(
       (element) => element.textContent?.includes("Approvals"),
     );
 
-    expect(aside?.className).toContain("is-collapsed");
-    expect(governanceTrigger?.getAttribute("aria-expanded")).toBe("false");
-    expect(governanceLinks?.hidden).toBe(true);
-    expect(currentDisabledLink?.closest<HTMLElement>("#ff-sidebar-section-governance")?.hidden).toBe(true);
-
-    act(() => {
-      root?.unmount();
-    });
-    root = null;
-
-    window.localStorage.setItem("forgeframe.sidebar.expanded", "true");
-    await renderSidebar("/approvals", viewerSession);
-    await flushEffects();
-    // Second flush: the persisted section state is consumed on mount,
-    // but the auto-open useEffect also fires — ensure both settle.
-    await flushEffects();
-
-    const openGovernanceTrigger = Array.from(container.querySelectorAll<HTMLButtonElement>("button")).find(
-      (button) => button.getAttribute("aria-label") === "Governance section",
-    );
-    const openGovernanceLinks = container.querySelector<HTMLElement>("#ff-sidebar-section-governance");
-    const visibleDisabledLink = Array.from(container.querySelectorAll<HTMLElement>('[role="link"][aria-disabled="true"]')).find(
-      (element) => element.textContent?.includes("Approvals"),
-    );
-
-    expect(openGovernanceTrigger?.getAttribute("aria-expanded")).toBe("true");
-    expect(openGovernanceLinks?.hidden).toBe(false);
-    expect(visibleDisabledLink).not.toBeNull();
-    expect(visibleDisabledLink?.className).toContain("is-current");
-    expect(visibleDisabledLink?.textContent).toContain("Operator or admin");
+    // Sidebar starts expanded
+    expect(aside?.className).toContain("is-open");
+    // Governance section should be open (auto-opened due to active match)
+    expect(governanceTrigger?.getAttribute("aria-expanded")).toBe("true");
+    expect(governanceLinks?.hidden).toBe(false);
+    expect(currentDisabledLink).not.toBeNull();
+    expect(currentDisabledLink?.textContent).toContain("Operator or admin");
   });
 
   it("opens a mobile overlay sidebar and renders the backdrop", async () => {
@@ -209,5 +209,94 @@ describe("sidebar navigation shell", () => {
 
     expect(sidebar?.className).toContain("is-mobile-open");
     expect(backdrop).not.toBeNull();
+  });
+
+  it("shows rail links when sidebar is collapsed on desktop", async () => {
+    await renderSidebar("/dashboard");
+    await flushEffects();
+
+    // Sidebar starts expanded; collapse it
+    const collapseButton = Array.from(container.querySelectorAll<HTMLButtonElement>("button")).find(
+      (button) => button.getAttribute("aria-label") === "Toggle sidebar expand",
+    );
+    expect(collapseButton).not.toBeNull();
+
+    await act(async () => {
+      collapseButton?.click();
+    });
+    await flushEffects();
+
+    const aside = container.querySelector<HTMLElement>("#ff-sidebar");
+    expect(aside?.className).toContain("is-collapsed");
+
+    // Rail link buttons should exist for each section
+    const railLinks = container.querySelectorAll<HTMLButtonElement>(".ff-sidebar-rail-link");
+    expect(railLinks.length).toBeGreaterThanOrEqual(8); // All 8 sections have icons
+
+    // The active section's rail link should have the is-current class
+    const currentRailLink = container.querySelector<HTMLButtonElement>(".ff-sidebar-rail-link.is-current");
+    expect(currentRailLink).not.toBeNull();
+
+    // Rail links should have aria-labels (tooltips)
+    const firstRailLink = railLinks[0];
+    expect(firstRailLink?.getAttribute("aria-label")).toBeTruthy();
+    expect(firstRailLink?.getAttribute("data-tooltip")).toBeTruthy();
+  });
+
+  it("expands sidebar and opens section when clicking rail link in collapsed mode", async () => {
+    await renderSidebar("/dashboard");
+    await flushEffects();
+
+    // Collapse sidebar first
+    const collapseButton = Array.from(container.querySelectorAll<HTMLButtonElement>("button")).find(
+      (button) => button.getAttribute("aria-label") === "Toggle sidebar expand",
+    );
+    await act(async () => {
+      collapseButton?.click();
+    });
+    await flushEffects();
+
+    const aside = container.querySelector<HTMLElement>("#ff-sidebar");
+    expect(aside?.className).toContain("is-collapsed");
+
+    // Find the Setup rail link
+    const setupRailLink = Array.from(container.querySelectorAll<HTMLButtonElement>(".ff-sidebar-rail-link")).find(
+      (button) => button.getAttribute("aria-label")?.startsWith("Setup"),
+    );
+    expect(setupRailLink).not.toBeNull();
+
+    // Click the rail link — should expand sidebar + open Setup section
+    await act(async () => {
+      setupRailLink?.click();
+    });
+    await flushEffects();
+
+    expect(aside?.className).toContain("is-open");
+    const setupTrigger = Array.from(container.querySelectorAll<HTMLButtonElement>("button")).find(
+      (button) => button.getAttribute("aria-label") === "Setup section",
+    );
+    expect(setupTrigger?.getAttribute("aria-expanded")).toBe("true");
+  });
+
+  it("X close button collapses sidebar on desktop", async () => {
+    await renderSidebar("/dashboard");
+    await flushEffects();
+
+    // Sidebar starts expanded
+    const aside = container.querySelector<HTMLElement>("#ff-sidebar");
+    expect(aside?.className).toContain("is-open");
+
+    // Find the X close button
+    const closeButton = container.querySelector<HTMLButtonElement>(".ff-sidebar-close");
+    expect(closeButton).not.toBeNull();
+
+    // Click to collapse
+    await act(async () => {
+      closeButton?.click();
+    });
+    await flushEffects();
+
+    expect(aside?.className).toContain("is-collapsed");
+    expect(window.localStorage.getItem("forgeframe.sidebar.expanded")).toBe("false");
   });
 });

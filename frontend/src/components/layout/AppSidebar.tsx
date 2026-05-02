@@ -20,12 +20,27 @@ function getSectionCountLabel(section: NavigationSection) {
   return enabledLinks === totalLinks ? String(totalLinks) : `${enabledLinks}/${totalLinks}`;
 }
 
+/**
+ * Find the first non-disabled link for a section, used as navigation target
+ * when clicking a collapsed rail icon.
+ */
+function getFirstActiveLink(section: NavigationSection): string | null {
+  for (const link of section.links) {
+    if (!link.disabled) {
+      return link.to;
+    }
+  }
+  return null;
+}
+
 export function AppSidebar({ navigationSections, instanceId }: AppSidebarProps) {
   const location = useLocation();
   const {
     isExpanded,
+    isMobile,
     isMobileOpen,
     closeMobileSidebar,
+    setSidebarExpanded,
     isSectionOpen,
     toggleSection,
     openSection,
@@ -45,6 +60,33 @@ export function AppSidebar({ navigationSections, instanceId }: AppSidebarProps) 
     }
   }, [activeSectionId, openSection]);
 
+  /**
+   * Handle section trigger press.
+   * In expanded mode: toggle section open/closed.
+   * In collapsed (rail) mode: expand sidebar and open the section.
+   */
+  const handleSectionPress = (sectionId: string) => {
+    if (!isSidebarOpen) {
+      setSidebarExpanded(true);
+      openSection(sectionId);
+    } else {
+      toggleSection(sectionId);
+    }
+  };
+
+  /**
+   * Handle close/collapse button press.
+   * On mobile: close the overlay.
+   * On desktop: collapse sidebar to icon rail.
+   */
+  const handleClosePress = () => {
+    if (isMobile) {
+      closeMobileSidebar();
+    } else if (isSidebarOpen) {
+      setSidebarExpanded(false);
+    }
+  };
+
   return (
     <>
       <aside
@@ -61,9 +103,15 @@ export function AppSidebar({ navigationSections, instanceId }: AppSidebarProps) 
               <span>Control Plane</span>
             </span>
           </Link>
-          <Button className="ff-icon-button ff-sidebar-close" aria-label="Close navigation" onPress={closeMobileSidebar}>
-            <CloseIcon />
-          </Button>
+          {isSidebarOpen ? (
+            <Button
+              className="ff-icon-button ff-sidebar-close"
+              aria-label={isMobile ? "Close navigation" : "Collapse sidebar"}
+              onPress={handleClosePress}
+            >
+              <CloseIcon />
+            </Button>
+          ) : null}
         </div>
 
         <nav className="ff-sidebar-nav" aria-label="Control-plane navigation">
@@ -74,26 +122,39 @@ export function AppSidebar({ navigationSections, instanceId }: AppSidebarProps) 
             const isSectionVisible = isSidebarOpen && isExpandedSection;
             const countLabel = getSectionCountLabel(section);
             const collapsedTooltip = `${section.label} (${countLabel})`;
+            const firstActiveLink = getFirstActiveLink(section);
 
             return (
-              <section key={section.id} className="ff-sidebar-section">
-                <Button
-                  className={`ff-sidebar-section-trigger${isSectionVisible ? " is-open" : ""}${isCurrentSection ? " is-current" : ""}`}
-                  aria-expanded={isSectionVisible}
-                  aria-controls={linksId}
-                  aria-label={isSidebarOpen ? `${section.label} section` : `Open ${section.label} section`}
-                  data-tooltip={isSidebarOpen ? undefined : collapsedTooltip}
-                  onPress={() => toggleSection(section.id)}
-                >
-                  <span className="ff-sidebar-section-leading">
+              <section key={section.id} className={`ff-sidebar-section${isCurrentSection ? " is-current" : ""}`}>
+                {isSidebarOpen ? (
+                  /* Expanded mode: section trigger toggles sub-links */
+                  <Button
+                    className={`ff-sidebar-section-trigger${isExpandedSection ? " is-open" : ""}${isCurrentSection ? " is-current" : ""}`}
+                    aria-expanded={isExpandedSection}
+                    aria-controls={linksId}
+                    aria-label={`${section.label} section`}
+                    onPress={() => handleSectionPress(section.id)}
+                  >
+                    <span className="ff-sidebar-section-leading">
+                      <NavIcon name={section.icon} />
+                      <span>{section.label}</span>
+                    </span>
+                    <span className="ff-sidebar-section-meta">
+                      <span className="ff-mini-badge">{countLabel}</span>
+                      <ChevronDownIcon />
+                    </span>
+                  </Button>
+                ) : (
+                  /* Collapsed (rail) mode: icon-only button, navigates or expands */
+                  <Button
+                    className={`ff-sidebar-rail-link${isCurrentSection ? " is-current" : ""}`}
+                    aria-label={collapsedTooltip}
+                    data-tooltip={collapsedTooltip}
+                    onPress={() => handleSectionPress(section.id)}
+                  >
                     <NavIcon name={section.icon} />
-                    <span>{section.label}</span>
-                  </span>
-                  <span className="ff-sidebar-section-meta">
-                    <span className="ff-mini-badge">{countLabel}</span>
-                    <ChevronDownIcon />
-                  </span>
-                </Button>
+                  </Button>
+                )}
 
                 <div id={linksId} className="ff-sidebar-links" hidden={!isSectionVisible}>
                   {section.links.map((link) => {
