@@ -37,11 +37,13 @@ export interface ModelListProps {
 }
 
 /**
- * A clean, scannable model list.
+ * A scannable model inventory table.
  *
- * Each row shows: model name, provider, primary usability state, routing
- * coverage, verification state, last-verified timestamp, and next action.
- * Placeholder and stale models are visually de-emphasized.
+ * Each row shows: model name, primary usability state, routing coverage,
+ * verification trust state, last-verified timestamp, and next action.
+ * Placeholder and stale models are visually de-emphasized. The primary
+ * status makes it clear whether a model is ready, needs attention, or is
+ * inactive.
  */
 export function ModelList({
   models,
@@ -54,12 +56,12 @@ export function ModelList({
 }: ModelListProps) {
   const columns = useMemo(
     () => [
-      { key: "model", label: "Model", width: "24%" },
-      { key: "status", label: "Status", width: "16%" },
+      { key: "model", label: "Model", width: "22%" },
+      { key: "status", label: "Status", width: "14%" },
       { key: "routing", label: "Routing", width: "14%" },
-      { key: "verification", label: "Verification", width: "16%" },
+      { key: "verification", label: "Trust", width: "16%" },
       { key: "lastVerified", label: "Last verified", width: "14%" },
-      { key: "action", label: "Next action", width: "16%" },
+      { key: "action", label: "Next action", width: "20%" },
     ],
     [],
   );
@@ -133,16 +135,20 @@ export function ModelList({
                   <tr
                     key={key}
                     onClick={() => onSelectModel(key)}
-                    className={isSelected ? "is-selected" : undefined}
-                    style={{
-                      cursor: "pointer",
-                      opacity: isPlaceholder || isStale ? 0.55 : 1,
-                    }}
+                    className={
+                      [
+                        isSelected ? "is-selected" : "",
+                        isPlaceholder || isStale ? "ff-table-row-muted" : "",
+                      ]
+                        .filter(Boolean)
+                        .join(" ") || undefined
+                    }
+                    style={{ cursor: "pointer" }}
                     title={
                       isPlaceholder
-                        ? "Placeholder model — replace with a real provider model"
+                        ? "Placeholder model \u2014 replace with a real provider model"
                         : isStale
-                          ? "Stale model — last sync was some time ago"
+                          ? "Stale model \u2014 last sync was some time ago"
                           : `Select ${model.display_name}`
                     }
                   >
@@ -170,17 +176,31 @@ export function ModelList({
                       <StatusBadge tone={toneForUsability(usability)} status={usability}>
                         {titleCase(usability)}
                       </StatusBadge>
+                      {isPlaceholder ? (
+                        <span
+                          className="fg-muted"
+                          style={{
+                            display: "block",
+                            fontSize: "0.75em",
+                            marginTop: "0.15rem",
+                          }}
+                        >
+                          Not production-ready
+                        </span>
+                      ) : null}
                     </td>
 
                     {/* Routing coverage */}
                     <td>
                       <StatusBadge
                         tone={
-                          model.routing_target_count === model.target_count && model.target_count > 0
-                            ? "success"
-                            : model.routing_target_count > 0
-                              ? "warning"
-                              : "danger"
+                          model.target_count === 0
+                            ? "neutral"
+                            : model.routing_target_count === model.target_count
+                              ? "success"
+                              : model.routing_target_count > 0
+                                ? "warning"
+                                : "danger"
                         }
                         status={
                           model.target_count === 0
@@ -194,7 +214,7 @@ export function ModelList({
                       </StatusBadge>
                     </td>
 
-                    {/* Verification state */}
+                    {/* Verification trust state */}
                     <td>
                       <StatusBadge
                         tone={
@@ -208,7 +228,11 @@ export function ModelList({
                         }
                         status={model.trust_status}
                       >
-                        {titleCase(model.trust_status)}
+                        {model.trust_status === "tested"
+                          ? "Verified"
+                          : model.trust_status === "declared_only"
+                            ? "Not verified"
+                            : titleCase(model.trust_status)}
                       </StatusBadge>
                     </td>
 
@@ -223,19 +247,45 @@ export function ModelList({
                     <td>
                       {(() => {
                         const action = deriveNextAction(model);
-                        return action !== "none" ? (
-                          <span
-                            style={{
-                              fontSize: "0.85em",
-                              fontWeight: 500,
-                              color: "var(--fg-color-status-warning)",
-                            }}
-                          >
-                            {NEXT_ACTION_LABELS[action]}
-                          </span>
-                        ) : (
+                        if (action !== "none") {
+                          return (
+                            <span
+                              style={{
+                                fontSize: "0.85em",
+                                fontWeight: 500,
+                                color: "var(--fg-color-status-warning)",
+                              }}
+                            >
+                              {NEXT_ACTION_LABELS[action]}
+                            </span>
+                          );
+                        }
+                        if (usability === "ready") {
+                          return (
+                            <span
+                              style={{
+                                fontSize: "0.85em",
+                                color: "var(--fg-color-status-success)",
+                                fontWeight: 500,
+                              }}
+                            >
+                              In service
+                            </span>
+                          );
+                        }
+                        if (isPlaceholder) {
+                          return (
+                            <span
+                              className="fg-muted"
+                              style={{ fontSize: "0.85em" }}
+                            >
+                              Replace placeholder
+                            </span>
+                          );
+                        }
+                        return (
                           <span className="fg-muted" style={{ fontSize: "0.85em" }}>
-                            {usability === "ready" ? "In service" : "—"}
+                            {"\u2014"}
                           </span>
                         );
                       })()}
@@ -251,9 +301,7 @@ export function ModelList({
       {models.length > 0 ? (
         <div className="ff-table-card-footer">
           <p className="fg-muted">
-            {models.length > 0
-              ? `Click a row to inspect details and remediation options.`
-              : null}
+            Click a row to inspect details and remediation options.
           </p>
         </div>
       ) : null}

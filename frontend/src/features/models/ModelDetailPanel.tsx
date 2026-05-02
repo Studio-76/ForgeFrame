@@ -76,10 +76,11 @@ function EvidenceBadge({ label, status }: EvidenceBadgeProps) {
 /**
  * Detail panel for the selected model.
  *
- * Shows the current usability state, why the model is in that state,
- * what's blocking it, and what the operator should do next. Advanced
- * technical details (routing keys, sync metadata, provider identifiers)
- * are hidden behind a collapsible section.
+ * Leads with the current model state, why it matters, what is blocking it,
+ * and what the operator should do next. Provider/targets/routing links are
+ * collapsed under "Related pages". Advanced metadata is hidden behind a
+ * details element. The primary action ("Run verification" etc.) is
+ * rendered as a prominent call-to-action when actionable.
  */
 export function ModelDetailPanel({
   model,
@@ -137,14 +138,14 @@ export function ModelDetailPanel({
       ok: model.provider_enabled,
       explanation: model.provider_enabled
         ? "Provider is active"
-        : "Provider is disabled — enable it in the provider settings.",
+        : "Provider is disabled \u2014 enable it in the provider settings.",
     },
     {
       label: "Model active",
       ok: model.active,
       explanation: model.active
         ? "Model is marked active"
-        : "Model is inactive — check provider configuration.",
+        : "Model is inactive \u2014 check provider configuration.",
     },
     {
       label: "Has targets",
@@ -178,7 +179,7 @@ export function ModelDetailPanel({
 
   return (
     <aside className="ff-detail-panel is-sticky">
-      {/* Header */}
+      {/* Header: model name + state */}
       <div className="ff-detail-panel-header">
         <div className="ff-detail-panel-copy">
           <div className="ff-detail-panel-title-row">
@@ -189,24 +190,35 @@ export function ModelDetailPanel({
           </div>
           <p>{model.provider_label}</p>
         </div>
-        <div className="ff-detail-panel-actions">
-          <Link to={providerRoute}>Provider</Link>
-          <Link to={providerTargetsRoute}>Targets</Link>
-          <Link to={routingRoute}>Routing</Link>
-        </div>
       </div>
 
       <div className="ff-detail-panel-body">
-        {/* Next-step recommendation */}
+        {/* Next-step recommendation — leads with actionable guidance */}
         {nextAction !== "none" || usability !== "ready" ? (
-          <div className="ff-next-step" data-tone={nextStepTone(usability)}>
-            <span className="ff-next-step-label">
-              {nextAction !== "none"
-                ? NEXT_ACTION_LABELS[nextAction]
-                : USABILITY_LABELS[usability]}
-            </span>
-            <span>{USABILITY_EXPLANATIONS[usability]}</span>
-          </div>
+          <>
+            <div className="ff-next-step" data-tone={nextStepTone(usability)}>
+              <span className="ff-next-step-label">
+                {nextAction !== "none"
+                  ? NEXT_ACTION_LABELS[nextAction]
+                  : USABILITY_LABELS[usability]}
+              </span>
+              <span>{USABILITY_EXPLANATIONS[usability]}</span>
+            </div>
+
+            {/* Primary action button for "Run verification" */}
+            {nextAction === "run_verification" ? (
+              <div style={{ marginTop: "var(--fg-space-2)" }}>
+                <button
+                  type="button"
+                  className="ff-primary-action"
+                  disabled={syncState === "submitting" || !canMutateProviderDiscovery}
+                  onClick={onSync}
+                >
+                  {syncState === "submitting" ? "Running..." : "Run verification"}
+                </button>
+              </div>
+            ) : null}
+          </>
         ) : null}
 
         {isPlaceholder ? (
@@ -225,9 +237,9 @@ export function ModelDetailPanel({
           </p>
         ) : null}
 
-        {/* Blocking checks */}
-        {usability !== "ready" ? (
-          <section style={{ marginTop: "var(--fg-space-4)" }}>
+        {/* Blocking checks — shown when model is not ready */}
+        {usability !== "ready" && !isPlaceholder ? (
+          <section style={{ marginTop: "var(--fg-space-3)" }}>
             <h4
               style={{
                 fontSize: "var(--fg-type-size-subtitle)",
@@ -268,8 +280,8 @@ export function ModelDetailPanel({
           </section>
         ) : null}
 
-        {/* Quick facts section */}
-        <section style={{ marginTop: "var(--fg-space-4)" }}>
+        {/* Quick facts: routing coverage, verification, capabilities */}
+        <section style={{ marginTop: "var(--fg-space-3)" }}>
           <h4
             style={{
               fontSize: "var(--fg-type-size-subtitle)",
@@ -279,7 +291,13 @@ export function ModelDetailPanel({
           >
             Details
           </h4>
-            <dl style={{ display: "grid", gap: "var(--fg-space-2)", fontSize: "var(--fg-type-size-meta)" }}>
+          <dl
+            style={{
+              display: "grid",
+              gap: "var(--fg-space-2)",
+              fontSize: "var(--fg-type-size-meta)",
+            }}
+          >
             <div>
               <dt>Routing coverage</dt>
               <dd>
@@ -307,7 +325,11 @@ export function ModelDetailPanel({
                   }
                   status={model.trust_status}
                 >
-                  {titleCase(model.trust_status)}
+                  {model.trust_status === "tested"
+                    ? "Verified"
+                    : model.trust_status === "declared_only"
+                      ? "Not verified"
+                      : titleCase(model.trust_status)}
                 </StatusBadge>
                 {model.trust_reason ? (
                   <span className="fg-muted" style={{ display: "block", fontSize: "0.85em" }}>
@@ -329,7 +351,7 @@ export function ModelDetailPanel({
 
         {/* Evidence summary */}
         {hasAnyEvidence ? (
-          <section style={{ marginTop: "var(--fg-space-4)" }}>
+          <section style={{ marginTop: "var(--fg-space-3)" }}>
             <h4
               style={{
                 fontSize: "var(--fg-type-size-subtitle)",
@@ -357,9 +379,9 @@ export function ModelDetailPanel({
           </section>
         ) : null}
 
-        {/* Linked targets */}
+        {/* Linked targets (summary) */}
         {model.linked_targets.length > 0 ? (
-          <section style={{ marginTop: "var(--fg-space-4)" }}>
+          <section style={{ marginTop: "var(--fg-space-3)" }}>
             <h4
               style={{
                 fontSize: "var(--fg-type-size-subtitle)",
@@ -417,8 +439,8 @@ export function ModelDetailPanel({
         ) : null}
 
         {/* Sync action */}
-        {needsSync && canMutateProviderDiscovery ? (
-          <section style={{ marginTop: "var(--fg-space-4)" }}>
+        {needsSync && canMutateProviderDiscovery && nextAction !== "run_verification" ? (
+          <section style={{ marginTop: "var(--fg-space-3)" }}>
             <h4
               style={{
                 fontSize: "var(--fg-type-size-subtitle)",
@@ -459,14 +481,49 @@ export function ModelDetailPanel({
           </p>
         ) : null}
 
-        {/* Advanced technical details — collapsed by default */}
+        {/* Related pages — collapsed by default */}
+        <details
+          className="ff-collapse-section ff-nav-section"
+          style={{ marginTop: "var(--fg-space-3)" }}
+        >
+          <summary className="ff-nav-section-summary">
+            Related pages
+          </summary>
+          <div
+            className="ff-collapse-section-body"
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              gap: "var(--fg-space-1)",
+              marginTop: "var(--fg-space-2)",
+            }}
+          >
+            <Link to={providerRoute} style={{ fontSize: "var(--fg-type-size-meta)" }}>
+              Provider configuration
+            </Link>
+            <Link to={providerTargetsRoute} style={{ fontSize: "var(--fg-type-size-meta)" }}>
+              Provider targets
+            </Link>
+            <Link to={routingRoute} style={{ fontSize: "var(--fg-type-size-meta)" }}>
+              Routing policies
+            </Link>
+          </div>
+        </details>
+
+        {/* Advanced technical details */}
         <details
           className="ff-collapse-section"
-          style={{ marginTop: "var(--fg-space-4)" }}
+          style={{ marginTop: "var(--fg-space-3)" }}
         >
           <summary>Advanced technical details</summary>
           <div className="ff-collapse-section-body">
-          <dl style={{ display: "grid", gap: "var(--fg-space-2)", fontSize: "var(--fg-type-size-meta)" }}>
+            <dl
+              style={{
+                display: "grid",
+                gap: "var(--fg-space-2)",
+                fontSize: "var(--fg-type-size-meta)",
+              }}
+            >
               <div>
                 <dt>Model ID</dt>
                 <dd>
@@ -528,7 +585,7 @@ export function ModelDetailPanel({
                   {Object.entries(model.execution_traits).length > 0
                     ? Object.entries(model.execution_traits)
                         .map(([k, v]) => `${k}=${String(v)}`)
-                        .join(" · ")
+                        .join(" \u00b7 ")
                     : "None"}
                 </dd>
               </div>
@@ -538,7 +595,7 @@ export function ModelDetailPanel({
                   {Object.entries(model.policy_flags).length > 0
                     ? Object.entries(model.policy_flags)
                         .map(([k, v]) => `${k}=${String(v)}`)
-                        .join(" · ")
+                        .join(" \u00b7 ")
                     : "None"}
                 </dd>
               </div>
@@ -548,7 +605,7 @@ export function ModelDetailPanel({
                   {Object.entries(model.economic_profile).length > 0
                     ? Object.entries(model.economic_profile)
                         .map(([k, v]) => `${k}=${String(v)}`)
-                        .join(" · ")
+                        .join(" \u00b7 ")
                     : "None"}
                 </dd>
               </div>
@@ -566,7 +623,7 @@ export function ModelDetailPanel({
                       <strong>{target.label}</strong>
                       <span className="fg-muted">
                         {" "}
-                        ({target.target_key}) — priority {target.priority}
+                        ({target.target_key}) \u2014 priority {target.priority}
                       </span>
                       <div className="fg-actions">
                         <StatusBadge

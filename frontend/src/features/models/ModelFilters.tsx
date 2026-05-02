@@ -30,10 +30,10 @@ export interface ModelFiltersProps {
 }
 
 /**
- * Filter controls for the model list.
+ * Compact filter controls for the model list.
  *
- * Provides quick-filter pills, a search input, and a provider dropdown.
- * Each filter pill shows the count of matching models.
+ * Quick-filter pills, a search input, and a provider dropdown — all in a
+ * minimal single-card layout. Each pill shows the count of matching models.
  */
 export function ModelFilters({
   models,
@@ -74,30 +74,19 @@ export function ModelFilters({
   }, [models]);
 
   return (
-    <article className="fg-card">
-      <div className="fg-panel-heading">
-        <h3>Filter models</h3>
-        <div className="fg-actions">
-          <button
-            type="button"
-            onClick={() => onFilterKeyChange("all")}
-            style={{
-              fontSize: "var(--fg-type-size-meta)",
-              padding: "0.3rem 0.7rem",
-              opacity: filterKey !== "all" ? 0.6 : 1,
-            }}
-          >
-            Clear filters
-          </button>
-        </div>
-      </div>
-
+    <div
+      className="fg-card"
+      style={{
+        padding: "var(--fg-space-3) var(--fg-space-4)",
+      }}
+    >
+      {/* Filter chips row */}
       <div
         style={{
           display: "flex",
           flexWrap: "wrap",
-          gap: "var(--fg-space-2)",
-          marginBottom: "var(--fg-space-3)",
+          gap: "var(--fg-space-1)",
+          marginBottom: "var(--fg-space-2)",
         }}
         role="group"
         aria-label="Quick filter tabs"
@@ -114,26 +103,27 @@ export function ModelFilters({
               aria-pressed={isActive}
               style={{
                 fontSize: "var(--fg-type-size-meta)",
-                padding: "0.35rem 0.85rem",
+                padding: "0.25rem 0.65rem",
                 fontWeight: isActive ? 600 : 400,
                 border: isActive
-                  ? "1px solid var(--fg-color-border-focus)"
+                  ? "1px solid var(--fg-color-border-focus, var(--fg-color-action-primary))"
                   : "1px solid var(--fg-color-border-default)",
                 background: isActive
-                  ? "var(--fg-color-surface-active)"
-                  : "var(--fg-color-surface-field)",
+                  ? "var(--fg-color-surface-active, var(--fg-color-action-primary-soft))"
+                  : "transparent",
                 color: isActive
                   ? "var(--fg-color-text-primary)"
                   : "var(--fg-color-text-secondary)",
                 borderRadius: "var(--fg-radius-md)",
                 cursor: "pointer",
+                transition: "border-color var(--fg-motion-fast) var(--fg-ease-standard), background var(--fg-motion-fast) var(--fg-ease-standard)",
               }}
             >
               {option.label}
               <span
                 style={{
-                  marginLeft: "0.4rem",
-                  opacity: 0.6,
+                  marginLeft: "0.3rem",
+                  opacity: 0.55,
                   fontSize: "0.85em",
                 }}
               >
@@ -144,26 +134,33 @@ export function ModelFilters({
         })}
       </div>
 
+      {/* Inline search + provider filter */}
       <div
         className="fg-inline-form"
         aria-label="Model search and provider filter"
+        style={{
+          display: "flex",
+          gap: "var(--fg-space-2)",
+          flexWrap: "wrap",
+          alignItems: "center",
+        }}
       >
-        <label>
-          Search models
+        <label style={{ flex: "1 1 180px", minWidth: 0 }}>
           <input
             aria-label="Search models"
             type="search"
             value={searchValue}
             onChange={(event) => onSearchChange(event.target.value)}
             placeholder="Search by name, provider, or routing key..."
+            style={{ fontSize: "var(--fg-type-size-meta)" }}
           />
         </label>
-        <label>
-          Filter by provider
+        <label style={{ flex: "0 0 auto", minWidth: 140 }}>
           <select
             aria-label="Filter by provider"
             value={providerFilter}
             onChange={(event) => onProviderFilterChange(event.target.value)}
+            style={{ fontSize: "var(--fg-type-size-meta)" }}
           >
             {providerOptions.map((item) => (
               <option key={item} value={item}>
@@ -173,6 +170,6 @@ export function ModelFilters({
           </select>
         </label>
       </div>
-    </article>
+    </div>
   );
 }
