@@ -1,12 +1,14 @@
 import { useEffect, useRef } from "react";
 import { Link, useLocation } from "react-router-dom";
 
+import sidebarRailLogoUrl from "../../assets/ff_logo_small.png";
+import sidebarBrandLogoUrl from "../../assets/ff_logo_small-2-tp.png";
 import type { NavigationSection } from "../../app/navigation";
 import { findNavigationMatch, isHrefCurrent } from "../../app/navigation";
 import { withQueryParams } from "../../app/tenantScope";
 import { Button } from "../ui/Button";
 import { useSidebar } from "./SidebarContext";
-import { ChevronDownIcon, CloseIcon, NavIcon } from "./icons";
+import { ChevronDownIcon, NavIcon } from "./icons";
 
 type AppSidebarProps = {
   navigationSections: NavigationSection[];
@@ -46,6 +48,12 @@ export function AppSidebar({ navigationSections, instanceId }: AppSidebarProps) 
   const isSidebarOpen = isDesktopOpen || isMobileOpen;
   const activeMatch = findNavigationMatch(navigationSections, location.pathname, location.hash, instanceId);
   const activeSectionId = activeMatch?.section.id ?? null;
+  const brandActionLabel = isMobile
+    ? "Close navigation"
+    : isSidebarOpen
+      ? "Collapse sidebar"
+      : "Expand sidebar";
+  const brandLogoUrl = isSidebarOpen ? sidebarBrandLogoUrl : sidebarRailLogoUrl;
 
   // Auto-open the currently active section when navigation changes to it.
   // Only fires on section change so the user can still manually collapse it.
@@ -72,15 +80,14 @@ export function AppSidebar({ navigationSections, instanceId }: AppSidebarProps) 
   };
 
   /**
-   * Handle close/collapse button press.
-   * On mobile: close the overlay.
-   * On desktop: collapse sidebar to icon rail.
+   * Handle brand press as the sidebar expand/collapse control.
+   * On mobile it closes the overlay; on desktop it toggles the icon rail.
    */
-  const handleClosePress = () => {
+  const handleBrandPress = () => {
     if (isMobile) {
       closeMobileSidebar();
-    } else if (isSidebarOpen) {
-      setSidebarExpanded(false);
+    } else {
+      setSidebarExpanded(!isSidebarOpen);
     }
   };
 
@@ -91,24 +98,28 @@ export function AppSidebar({ navigationSections, instanceId }: AppSidebarProps) 
         className={`ff-sidebar${isSidebarOpen ? " is-open" : " is-collapsed"}${isMobileOpen ? " is-mobile-open" : ""}`}
       >
         <div className="ff-sidebar-brand">
-          <Link to="/dashboard" className="ff-brand-mark" onClick={closeMobileSidebar}>
+          <Button
+            className="ff-brand-mark"
+            aria-expanded={isSidebarOpen}
+            aria-label={brandActionLabel}
+            title={brandActionLabel}
+            data-tooltip={brandActionLabel}
+            onPress={handleBrandPress}
+          >
             <span className="ff-brand-symbol" aria-hidden="true">
-              FF
+              <img
+                className="ff-brand-logo"
+                src={brandLogoUrl}
+                alt=""
+                width={isSidebarOpen ? 134 : 75}
+                height={75}
+              />
             </span>
             <span className="ff-brand-copy">
               <strong>ForgeFrame</strong>
               <span>Control Plane</span>
             </span>
-          </Link>
-          {isSidebarOpen ? (
-            <Button
-              className="ff-icon-button ff-sidebar-close"
-              aria-label={isMobile ? "Close navigation" : "Collapse sidebar"}
-              onPress={handleClosePress}
-            >
-              <CloseIcon />
-            </Button>
-          ) : null}
+          </Button>
         </div>
 
         <nav className="ff-sidebar-nav" aria-label="Control-plane navigation">

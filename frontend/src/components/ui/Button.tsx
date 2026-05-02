@@ -16,8 +16,9 @@ type ButtonProps = AriaButtonProps & {
  *
  * Accepts a className prop to apply existing project CSS classes
  * (e.g. "ff-icon-button", "fg-button") for drop-in migration.
- * Unknown props pass through to the underlying `<button>` DOM element
- * via mergeProps.
+ * Whitelisted DOM props pass through to the underlying `<button>`.
+ * @param props - React Aria button props and project styling hooks.
+ * @returns Accessible button element with project focus styling.
  */
 export function Button(props: ButtonProps) {
   const ref = useRef<HTMLButtonElement>(null);
@@ -28,6 +29,7 @@ export function Button(props: ButtonProps) {
     <button
       {...mergeProps(buttonProps, focusProps)}
       ref={ref}
+      title={props.title}
       className={`${props.className ?? ""}${isFocusVisible ? " ff-focus-visible" : ""}`}
     >
       {props.children}

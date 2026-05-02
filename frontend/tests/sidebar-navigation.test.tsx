@@ -117,6 +117,8 @@ describe("sidebar navigation shell", () => {
     await flushEffects();
 
     const aside = container.querySelector<HTMLElement>("#ff-sidebar");
+    const brandButton = container.querySelector<HTMLButtonElement>(".ff-brand-mark");
+    const brandLogo = container.querySelector<HTMLImageElement>(".ff-brand-logo");
     const setupTrigger = Array.from(container.querySelectorAll<HTMLButtonElement>("button")).find(
       (button) => button.getAttribute("aria-label") === "Setup section",
     );
@@ -124,6 +126,11 @@ describe("sidebar navigation shell", () => {
 
     // Sidebar starts expanded by default
     expect(aside?.className).toContain("is-open");
+    expect(brandButton?.getAttribute("aria-label")).toBe("Collapse sidebar");
+    expect(brandButton?.textContent).toContain("ForgeFrame");
+    expect(brandButton?.textContent).toContain("Control Plane");
+    expect(brandLogo?.getAttribute("src")).toContain("ff_logo_small-2-tp");
+    expect(container.querySelector(".ff-sidebar-close")).toBeNull();
     // Section starts collapsed
     expect(setupTrigger?.getAttribute("aria-expanded")).toBe("false");
     expect(setupLinks?.hidden).toBe(true);
@@ -264,6 +271,11 @@ describe("sidebar navigation shell", () => {
 
     const aside = container.querySelector<HTMLElement>("#ff-sidebar");
     expect(aside?.className).toContain("is-collapsed");
+    const brandButton = container.querySelector<HTMLButtonElement>(".ff-brand-mark");
+    const brandLogo = container.querySelector<HTMLImageElement>(".ff-brand-logo");
+    expect(brandButton?.getAttribute("aria-label")).toBe("Expand sidebar");
+    expect(brandLogo?.getAttribute("src")).toContain("ff_logo_small.png");
+    expect(container.querySelector(".ff-brand-symbol")?.textContent?.trim()).toBe("");
 
     // Rail link buttons should exist for each section
     const railLinks = container.querySelectorAll<HTMLButtonElement>(".ff-sidebar-rail-link");
@@ -314,7 +326,7 @@ describe("sidebar navigation shell", () => {
     expect(setupTrigger?.getAttribute("aria-expanded")).toBe("true");
   });
 
-  it("X close button collapses sidebar on desktop", async () => {
+  it("brand block collapses sidebar on desktop", async () => {
     await renderSidebar("/dashboard");
     await flushEffects();
 
@@ -322,17 +334,44 @@ describe("sidebar navigation shell", () => {
     const aside = container.querySelector<HTMLElement>("#ff-sidebar");
     expect(aside?.className).toContain("is-open");
 
-    // Find the X close button
-    const closeButton = container.querySelector<HTMLButtonElement>(".ff-sidebar-close");
-    expect(closeButton).not.toBeNull();
+    // Find the brand collapse control
+    const brandButton = container.querySelector<HTMLButtonElement>(".ff-brand-mark");
+    expect(brandButton).not.toBeNull();
+    expect(brandButton?.getAttribute("title")).toBe("Collapse sidebar");
 
     // Click to collapse
     await act(async () => {
-      closeButton?.click();
+      brandButton?.click();
     });
     await flushEffects();
 
     expect(aside?.className).toContain("is-collapsed");
     expect(window.localStorage.getItem("forgeframe.sidebar.expanded")).toBe("false");
+  });
+
+  it("brand logo expands sidebar from collapsed rail", async () => {
+    await renderSidebar("/dashboard");
+    await flushEffects();
+
+    const collapseButton = Array.from(container.querySelectorAll<HTMLButtonElement>("button")).find(
+      (button) => button.getAttribute("aria-label") === "Toggle sidebar expand",
+    );
+    await act(async () => {
+      collapseButton?.click();
+    });
+    await flushEffects();
+
+    const aside = container.querySelector<HTMLElement>("#ff-sidebar");
+    const brandButton = container.querySelector<HTMLButtonElement>(".ff-brand-mark");
+    expect(aside?.className).toContain("is-collapsed");
+    expect(brandButton?.getAttribute("aria-label")).toBe("Expand sidebar");
+
+    await act(async () => {
+      brandButton?.click();
+    });
+    await flushEffects();
+
+    expect(aside?.className).toContain("is-open");
+    expect(brandButton?.getAttribute("aria-label")).toBe("Collapse sidebar");
   });
 });

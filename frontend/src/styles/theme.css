@@ -114,13 +114,23 @@ a {
 .ff-sidebar-brand {
   position: relative;
   z-index: 1;
-  min-height: 72px;
+  min-height: 76px;
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 0.75rem;
-  padding: 1rem 1.25rem;
+  padding: 0.75rem 0.85rem;
   border-bottom: 1px solid var(--fg-color-border-default);
+  background:
+    linear-gradient(90deg, rgba(83, 177, 253, 0.08), transparent 62%),
+    rgba(2, 6, 23, 0.22);
+}
+
+.ff-sidebar-brand::after {
+  content: "";
+  position: absolute;
+  inset: auto 0.85rem -1px;
+  height: 1px;
+  background: linear-gradient(90deg, rgba(83, 177, 253, 0.7), transparent 76%);
+  opacity: 0.72;
 }
 
 .ff-brand-mark {
@@ -130,6 +140,34 @@ a {
   gap: 0.75rem;
   color: var(--fg-color-text-primary);
   text-decoration: none;
+}
+
+.ff-sidebar .ff-brand-mark {
+  position: relative;
+  width: 100%;
+  min-height: 3.5rem;
+  border: 1px solid rgba(83, 177, 253, 0.18);
+  border-radius: var(--fg-radius-md);
+  padding: 0.42rem 0.55rem;
+  background:
+    linear-gradient(90deg, rgba(8, 47, 73, 0.32), rgba(15, 23, 42, 0.12)),
+    rgba(2, 6, 23, 0.16);
+  color: var(--fg-color-text-primary);
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+  transition:
+    border-color var(--fg-motion-base) var(--fg-ease-standard),
+    background var(--fg-motion-base) var(--fg-ease-standard),
+    box-shadow var(--fg-motion-base) var(--fg-ease-standard);
+}
+
+.ff-sidebar .ff-brand-mark:hover {
+  border-color: rgba(83, 177, 253, 0.38);
+  background:
+    linear-gradient(90deg, rgba(14, 116, 144, 0.26), rgba(15, 23, 42, 0.16)),
+    rgba(2, 6, 23, 0.24);
+  box-shadow: inset 0 0 0 1px rgba(83, 177, 253, 0.08);
 }
 
 .ff-brand-symbol,
@@ -154,6 +192,27 @@ a {
   box-shadow: 0 0 22px rgba(83, 177, 253, 0.22);
   font-family: var(--fg-font-mono);
   letter-spacing: 0.02em;
+}
+
+.ff-sidebar .ff-brand-symbol {
+  width: 4rem;
+  height: 2.35rem;
+  border-radius: var(--fg-radius-sm);
+  padding: 0.14rem;
+  overflow: hidden;
+  background:
+    radial-gradient(circle at 24% 22%, rgba(125, 211, 252, 0.28), transparent 42%),
+    rgba(2, 6, 23, 0.58);
+  box-shadow:
+    inset 0 0 0 1px rgba(15, 23, 42, 0.72),
+    0 0 18px rgba(83, 177, 253, 0.16);
+}
+
+.ff-brand-logo {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
 }
 
 .ff-brand-copy,
@@ -298,8 +357,52 @@ a {
 
 .ff-sidebar.is-collapsed .ff-sidebar-brand {
   justify-content: center;
-  padding: 0.75rem 0;
+  padding: 0.65rem 0;
   min-height: 56px;
+}
+
+.ff-sidebar.is-collapsed .ff-sidebar-brand::after {
+  inset-inline: 0.8rem;
+  background: rgba(83, 177, 253, 0.38);
+}
+
+.ff-sidebar.is-collapsed .ff-brand-mark {
+  width: 2.9rem;
+  min-height: 2.9rem;
+  justify-content: center;
+  padding: 0.16rem;
+}
+
+.ff-sidebar.is-collapsed .ff-brand-symbol {
+  width: 2.38rem;
+  height: 2.38rem;
+  padding: 0.12rem;
+}
+
+.ff-sidebar.is-collapsed .ff-brand-mark::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  left: calc(100% + 0.5rem);
+  top: 50%;
+  z-index: 50;
+  transform: translateY(-50%);
+  opacity: 0;
+  pointer-events: none;
+  border: 1px solid var(--fg-color-border-default);
+  border-radius: var(--fg-radius-md);
+  padding: 0.3rem 0.5rem;
+  background: var(--fg-color-surface-strong);
+  box-shadow: var(--fg-shadow-panel);
+  color: var(--fg-color-text-primary);
+  font-size: var(--fg-type-size-meta);
+  font-weight: 500;
+  white-space: nowrap;
+  transition: opacity var(--fg-motion-base) var(--fg-ease-standard);
+}
+
+.ff-sidebar.is-collapsed .ff-brand-mark:hover::after,
+.ff-sidebar.is-collapsed .ff-brand-mark:focus-visible::after {
+  opacity: 1;
 }
 
 .ff-sidebar.is-collapsed .ff-sidebar-links {
@@ -475,6 +578,7 @@ a {
 .ff-sidebar-link:focus-visible,
 .ff-sidebar-section-trigger:focus-visible,
 .ff-sidebar-rail-link:focus-visible,
+.ff-brand-mark:focus-visible,
 .ff-icon-button:focus-visible,
 .ff-user-button:focus-visible,
 .ff-command-menu button:focus-visible,
@@ -517,15 +621,6 @@ a {
 
 .ff-icon-button.ff-desktop-toggle {
   display: inline-flex;
-}
-
-/* X close button in sidebar: visible only when sidebar is open */
-.ff-sidebar.is-open .ff-sidebar-close {
-  display: inline-flex;
-}
-
-.ff-sidebar.is-collapsed .ff-sidebar-close {
-  display: none;
 }
 
 .ff-icon-button {
