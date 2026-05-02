@@ -46,10 +46,18 @@ class RouteErrorBoundary extends Component<
    * @param errorInfo - React component stack metadata.
    */
   componentDidCatch(error: Error, errorInfo: ErrorInfo): void {
+    const isDevelopment =
+      typeof import.meta !== "undefined"
+      && Boolean(import.meta.env?.DEV);
+
     console.error("Route module crashed", {
       message: error.message,
-      stack: error.stack,
-      componentStack: errorInfo.componentStack,
+      ...(isDevelopment
+        ? {
+            stack: error.stack,
+            componentStack: errorInfo.componentStack,
+          }
+        : {}),
     });
   }
 

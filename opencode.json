@@ -3,7 +3,7 @@
   "mcp": {
      "task-manager": {
         "type": "remote",
-        "url": "http://127.0.0.1:9005/mcp",
+        "url": "http://192.168.3.101:9005/mcp",
         "headers": { "PYMCP-PROJECT": "ForgeFrame" },
         "enabled": true
       }
