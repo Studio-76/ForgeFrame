@@ -9,9 +9,20 @@ import type {
 import { buildExecutionReviewPath } from "../../app/executionReview";
 import { CONTROL_PLANE_ROUTES } from "../../app/navigation";
 import { normalizeOptional, parseJsonObject } from "../../pages/workInteractionPageSupport";
+import {
+  APPROVAL_LABELS,
+  OUTCOME_LABELS,
+  PREVIEW_LABELS,
+  PROVENANCE_LABELS,
+  SCOPE_LABELS,
+  STATUS_LABELS,
+} from "./types";
 
 /**
  * Format a timestamp string for display, with a fallback value when null/missing.
+ * @param value - The timestamp string.
+ * @param fallback - Fallback text when value is missing.
+ * @returns Formatted timestamp or fallback.
  */
 export function formatTimestamp(value: string | null | undefined, fallback = "Not recorded"): string {
   return value && value.trim() ? value : fallback;
@@ -19,6 +30,8 @@ export function formatTimestamp(value: string | null | undefined, fallback = "No
 
 /**
  * Normalize a text value by trimming whitespace.
+ * @param value - The text to normalize.
+ * @returns Trimmed text.
  */
 export function normalizeText(value: string): string {
   return value.trim();
@@ -26,6 +39,9 @@ export function normalizeText(value: string): string {
 
 /**
  * Build an inventory page path with an instanceId query parameter.
+ * @param path - Base page path.
+ * @param instanceId - Instance ID to include.
+ * @returns Full URL path.
  */
 export function buildInventoryPath(path: string, instanceId: string): string {
   if (!instanceId.trim()) {
@@ -36,6 +52,9 @@ export function buildInventoryPath(path: string, instanceId: string): string {
 
 /**
  * Build a skill detail path with instanceId and skillId query parameters.
+ * @param instanceId - The instance ID.
+ * @param skillId - The skill ID.
+ * @returns Full URL path for the skill.
  */
 export function buildSkillPath(instanceId: string, skillId: string): string {
   const search = new URLSearchParams();
@@ -48,59 +67,117 @@ export function buildSkillPath(instanceId: string, skillId: string): string {
 
 /**
  * Build an execution review path for a run within an instance.
+ * @param instanceId - The instance ID.
+ * @param runId - The run ID.
+ * @returns Full execution review URL path.
  */
 export function buildRunPath(instanceId: string, runId: string): string {
   return buildExecutionReviewPath({ instanceId, runId });
 }
 
+// ─── Human-readable label functions ───────────────────────────────────────
+
+/**
+ * Return a human-readable label for a skill status value.
+ * @param status - Raw status value.
+ * @returns Human-readable label.
+ */
+export function statusLabel(status: SkillStatus | "all"): string {
+  return STATUS_LABELS[status] ?? status;
+}
+
+/**
+ * Return a human-readable label for a skill scope value.
+ * @param scope - Raw scope value.
+ * @returns Human-readable label.
+ */
+export function scopeLabel(scope: SkillScope | "all"): string {
+  return SCOPE_LABELS[scope] ?? scope;
+}
+
+/**
+ * Return a human-readable label for a provenance kind.
+ * @param kind - Raw provenance kind value.
+ * @returns Human-readable label.
+ */
+export function provenanceKindLabel(kind: SkillProvenanceKind): string {
+  return PROVENANCE_LABELS[kind] ?? kind;
+}
+
+/**
+ * Return a human-readable label for a usage outcome.
+ * @param outcome - Raw outcome value.
+ * @returns Human-readable label.
+ */
+export function outcomeLabel(outcome: SkillUsageOutcome | null | undefined): string {
+  if (!outcome) return "None";
+  return OUTCOME_LABELS[outcome] ?? outcome;
+}
+
+/**
+ * Return a human-readable label for the preview required setting.
+ * @param previewRequired - Whether preview is required.
+ * @returns Human-readable label.
+ */
+export function previewLabel(previewRequired: boolean): string {
+  return PREVIEW_LABELS[String(previewRequired)] ?? "Unknown";
+}
+
+/**
+ * Return a human-readable label for an approval posture.
+ * @param posture - The approval posture value.
+ * @returns Human-readable label.
+ */
+export function approvalLabel(posture: string): string {
+  return APPROVAL_LABELS[posture] ?? posture;
+}
+
+// ─── Tone color functions ─────────────────────────────────────────────────
+
 /**
  * Determine the tone color for a skill status pill.
+ * @param status - The skill status.
+ * @returns Tone color name.
  */
 export function statusTone(status: SkillStatus): "success" | "warning" | "danger" {
-  if (status === "active") {
-    return "success";
-  }
-  if (status === "archived") {
-    return "danger";
-  }
+  if (status === "active") return "success";
+  if (status === "archived") return "danger";
   return "warning";
 }
 
 /**
  * Determine the tone color for a usage outcome pill.
+ * @param outcome - The usage outcome.
+ * @returns Tone color name.
  */
 export function outcomeTone(
   outcome: SkillUsageOutcome | null | undefined,
 ): "success" | "warning" | "danger" | "neutral" {
-  if (outcome === "success") {
-    return "success";
-  }
-  if (outcome === "blocked") {
-    return "warning";
-  }
-  if (outcome === "error") {
-    return "danger";
-  }
+  if (outcome === "success") return "success";
+  if (outcome === "blocked") return "warning";
+  if (outcome === "error") return "danger";
   return "neutral";
 }
 
 /**
  * Determine the tone color for a provenance kind pill.
+ * @param kind - The provenance kind.
+ * @returns Tone color name.
  */
-export function provenanceTone(
-  kind: SkillProvenanceKind,
-): "success" | "warning" | "danger" | "neutral" {
+export function provenanceTone(kind: SkillProvenanceKind): "success" | "warning" | "danger" | "neutral" {
   if (kind === "operator" || kind === "learning" || kind === "memory" || kind === "knowledge_source") {
     return "success";
   }
-  if (kind === "plugin") {
-    return "warning";
-  }
+  if (kind === "plugin") return "warning";
   return "neutral";
 }
 
+// ─── Agent / scope helpers ────────────────────────────────────────────────
+
 /**
  * Whether an agent-scoped skill requires a scope agent ID.
+ * @param scope - The skill scope.
+ * @returns True if scope is "agent".
  */
 export function scopeNeedsAgent(scope: SkillScope): boolean {
   return scope === "agent";
@@ -108,6 +185,9 @@ export function scopeNeedsAgent(scope: SkillScope): boolean {
 
 /**
  * Look up an agent's display name by ID from the agents list.
+ * @param agents - List of available agents.
+ * @param agentId - The agent ID to look up.
+ * @returns Display name or null.
  */
 export function getLabeledAgent(
   agents: AgentSummary[],
@@ -119,20 +199,20 @@ export function getLabeledAgent(
 
 /**
  * Render a label for a skill activation record in a select option.
+ * @param activation - The activation record.
+ * @returns Label string.
  */
 export function activationLabel(activation: SkillActivationRecord): string {
-  return `${activation.scope_label} · ${activation.status}`;
+  return `${activation.scope_label} \u00b7 ${activation.status}`;
 }
 
-/**
- * Render a label for a usage outcome.
- */
-export function outcomeLabel(outcome: SkillUsageOutcome | null | undefined): string {
-  return outcome ?? "none";
-}
+// ─── JSON / form helpers ──────────────────────────────────────────────────
 
 /**
  * Split a record into handled keys and extra (remaining) keys.
+ * @param value - The source record.
+ * @param handledKeys - Keys already handled.
+ * @returns Record with remaining keys only.
  */
 export function splitObject(
   value: Record<string, unknown>,
@@ -147,6 +227,8 @@ export function splitObject(
 
 /**
  * Split raw provenance data into a form-compatible provenance object.
+ * @param provenance - Raw provenance record.
+ * @returns Provenance form values.
  */
 export function splitProvenanceForm(provenance: Record<string, unknown>) {
   const learningEventId = typeof provenance.learning_event_id === "string" ? provenance.learning_event_id : "";
@@ -198,6 +280,8 @@ export function splitProvenanceForm(provenance: Record<string, unknown>) {
 
 /**
  * Build a provenance payload from a provenance form for API submission.
+ * @param form - Provenance form values.
+ * @returns Payload record for the API.
  */
 export function buildProvenancePayload(
   form: {
@@ -236,6 +320,8 @@ export function buildProvenancePayload(
 
 /**
  * Split raw activation conditions into a form-compatible activation settings object.
+ * @param conditions - Raw activation conditions record.
+ * @returns Activation settings form values.
  */
 export function splitActivationSettings(conditions: Record<string, unknown>) {
   return {
@@ -252,6 +338,8 @@ export function splitActivationSettings(conditions: Record<string, unknown>) {
 
 /**
  * Build activation conditions from a settings form for API submission.
+ * @param settings - Activation settings form values.
+ * @returns Payload record for the API.
  */
 export function buildActivationConditions(
   settings: {
@@ -277,6 +365,8 @@ export function buildActivationConditions(
 
 /**
  * Build usage details from a usage form for API submission.
+ * @param form - Usage form values.
+ * @returns Payload record for the API.
  */
 export function buildUsageDetails(
   form: {
@@ -298,7 +388,9 @@ export function buildUsageDetails(
 
 /**
  * Validate that agent-scoped skills have a scope agent selected.
- * Returns an error message or null.
+ * @param scope - The skill scope.
+ * @param scopeAgentId - The selected scope agent ID.
+ * @returns Error message or null if valid.
  */
 export function validateScopedAgent(scope: SkillScope, scopeAgentId: string): string | null {
   if (scopeNeedsAgent(scope) && !normalizeText(scopeAgentId)) {

@@ -49,8 +49,25 @@ import {
 } from "./utils";
 
 /**
+ * Summary counts derived from the skills list.
+ */
+export interface SkillSummaryCounts {
+  /** Total number of skills. */
+  total: number;
+  /** Number of draft skills. */
+  draft: number;
+  /** Number of skills pending review. */
+  review: number;
+  /** Number of active skills. */
+  active: number;
+  /** Number of archived skills. */
+  archived: number;
+  /** Number of skills needing attention (review-required posture). */
+  attention: number;
+}
+
+/**
  * Return value of the `useSkills()` hook.
- * Provides all state, handlers, and form setters for the Skills page.
  */
 export interface UseSkillsReturn {
   session: ReturnType<typeof useAppSession>["session"];
@@ -61,10 +78,14 @@ export interface UseSkillsReturn {
   skillId: string;
   statusFilter: string;
   scopeFilter: string;
+  activeOnly: boolean;
+  needsReview: boolean;
   instances: Array<{ instance_id: string; display_name: string }>;
   agents: AgentSummary[];
   skills: SkillSummary[];
   detail: SkillDetail | null;
+  summaryCounts: SkillSummaryCounts;
+  showCreateForm: boolean;
   instancesState: LoadState;
   listState: LoadState;
   detailState: LoadState;
@@ -89,13 +110,43 @@ export interface UseSkillsReturn {
   setEditForm: React.Dispatch<React.SetStateAction<EditSkillForm>>;
   setActivationForm: React.Dispatch<React.SetStateAction<ActivationForm>>;
   setUsageForm: React.Dispatch<React.SetStateAction<UsageForm>>;
+  setShowCreateForm: React.Dispatch<React.SetStateAction<boolean>>;
+}
+
+/**
+ * Compute summary counts from the skills list.
+ */
+function computeSummaryCounts(skills: SkillSummary[]): SkillSummaryCounts {
+  let draft = 0;
+  let review = 0;
+  let active = 0;
+  let archived = 0;
+  let attention = 0;
+
+  for (const skill of skills) {
+    if (skill.status === "draft") draft++;
+    else if (skill.status === "review") review++;
+    else if (skill.status === "active") active++;
+    else if (skill.status === "archived") archived++;
+
+    if (skill.approval.posture === "review_required") attention++;
+  }
+
+  return {
+    total: skills.length,
+    draft,
+    review,
+    active,
+    archived,
+    attention,
+  };
 }
 
 /**
  * Master hook for the Skills page.
  *
- * Manages session access, URL state, data fetching, form state, and
- * all CRUD handlers (create, update, activate, archive, record usage).
+ * Manages session access, URL state, data fetching, form state,
+ * all CRUD handlers, and the create-form visibility toggle.
  */
 export function useSkills(): UseSkillsReturn {
   const { session, sessionReady } = useAppSession();
@@ -106,6 +157,8 @@ export function useSkills(): UseSkillsReturn {
   const skillId = searchParams.get("skillId")?.trim() ?? "";
   const statusFilter = (searchParams.get("status")?.trim() as SkillStatus | "all" | "") || "all";
   const scopeFilter = (searchParams.get("scope")?.trim() as SkillScope | "all" | "") || "all";
+  const activeOnly = searchParams.get("activeOnly") === "1";
+  const needsReview = searchParams.get("needsReview") === "1";
 
   const [instances, setInstances] = useState<Array<{ instance_id: string; display_name: string }>>([]);
   const [agents, setAgents] = useState<AgentSummary[]>([]);
@@ -114,6 +167,7 @@ export function useSkills(): UseSkillsReturn {
   const [instancesState, setInstancesState] = useState<LoadState>("idle");
   const [listState, setListState] = useState<LoadState>("idle");
   const [detailState, setDetailState] = useState<LoadState>("idle");
+  const [showCreateForm, setShowCreateForm] = useState(false);
   const [createForm, setCreateForm] = useState<CreateSkillForm>(DEFAULT_CREATE_FORM);
   const [editForm, setEditForm] = useState<EditSkillForm>(DEFAULT_EDIT_FORM);
   const [activationForm, setActivationForm] = useState<ActivationForm>(DEFAULT_ACTIVATION_FORM);
@@ -179,12 +233,25 @@ export function useSkills(): UseSkillsReturn {
     }
     let cancelled = false;
     setListState("loading");
-    void fetchSkills(instanceId, { status: statusFilter as SkillStatus | "all", scope: scopeFilter as SkillScope | "all", limit: 100 })
+    void fetchSkills(instanceId, {
+      status: statusFilter as SkillStatus | "all",
+      scope: scopeFilter as SkillScope | "all",
+      limit: 100,
+    })
       .then((payload) => {
         if (cancelled) return;
-        setSkills(payload.skills);
+        let filtered = payload.skills;
+        if (activeOnly) {
+          filtered = filtered.filter((s) => s.status === "active");
+        }
+        if (needsReview) {
+          filtered = filtered.filter((s) => s.approval.posture === "review_required");
+        }
+        setSkills(filtered);
         setListState("success");
-        const nextSkillId = payload.skills.some((item) => item.skill_id === skillId) ? skillId : payload.skills[0]?.skill_id ?? "";
+        const nextSkillId = filtered.some((item) => item.skill_id === skillId)
+          ? skillId
+          : filtered[0]?.skill_id ?? "";
         if (nextSkillId !== skillId) {
           updateRoute((next) => {
             if (nextSkillId) {
@@ -203,7 +270,7 @@ export function useSkills(): UseSkillsReturn {
     return () => {
       cancelled = true;
     };
-  }, [canRead, instanceId, refreshNonce, scopeFilter, skillId, statusFilter]);
+  }, [canRead, instanceId, refreshNonce, scopeFilter, statusFilter, skillId, activeOnly, needsReview]);
 
   // Fetch skill detail
   useEffect(() => {
@@ -299,7 +366,8 @@ export function useSkills(): UseSkillsReturn {
         metadata: parseJsonObject(createForm.metadataJson, "Skill metadata"),
       });
       setCreateForm(DEFAULT_CREATE_FORM);
-      setMessage(`Skill ${payload.skill.skill_id} created as a registry entry.`);
+      setShowCreateForm(false);
+      setMessage(`Skill "${payload.skill.display_name}" created as a draft.`);
       updateRoute((next) => next.set("skillId", payload.skill.skill_id));
       setRefreshNonce((current) => current + 1);
     } catch (saveError) {
@@ -332,7 +400,7 @@ export function useSkills(): UseSkillsReturn {
         activation_conditions: buildActivationConditions(editForm.activationSettings),
         metadata: parseJsonObject(editForm.metadataJson, "Skill metadata"),
       });
-      setMessage(`Skill ${payload.skill.skill_id} updated.`);
+      setMessage(`Skill "${payload.skill.display_name}" updated.`);
       setRefreshNonce((current) => current + 1);
     } catch (saveError) {
       setError(saveError instanceof Error ? saveError.message : "Skill update failed.");
@@ -360,7 +428,7 @@ export function useSkills(): UseSkillsReturn {
         activation_conditions: buildActivationConditions(activationForm.settings),
         metadata: parseJsonObject(activationForm.metadataJson, "Activation metadata"),
       });
-      setMessage(`Skill ${payload.skill.skill_id} activated with ${activationForm.scope === "agent" ? "agent" : "instance"} scope.`);
+      setMessage(`Skill activated with ${activationForm.scope === "agent" ? "agent" : "instance"} scope.`);
       setRefreshNonce((current) => current + 1);
     } catch (saveError) {
       setError(saveError instanceof Error ? saveError.message : "Skill activation failed.");
@@ -376,7 +444,7 @@ export function useSkills(): UseSkillsReturn {
     setMessage("");
     try {
       const payload = await archiveSkill(instanceId, detail.skill_id);
-      setMessage(`Skill ${payload.skill.skill_id} archived. Versions and telemetry were retained.`);
+      setMessage(`Skill "${payload.skill.display_name}" archived. Versions and telemetry retained.`);
       setRefreshNonce((current) => current + 1);
     } catch (saveError) {
       setError(saveError instanceof Error ? saveError.message : "Skill archive failed.");
@@ -401,7 +469,7 @@ export function useSkills(): UseSkillsReturn {
         outcome: usageForm.outcome,
         details: buildUsageDetails(usageForm),
       });
-      setMessage(`Usage recorded for skill ${payload.skill.skill_id} with outcome ${usageForm.outcome}.`);
+      setMessage(`Usage recorded with outcome ${usageForm.outcome}.`);
       setRefreshNonce((current) => current + 1);
     } catch (saveError) {
       setError(saveError instanceof Error ? saveError.message : "Skill usage recording failed.");
@@ -409,6 +477,8 @@ export function useSkills(): UseSkillsReturn {
       setSavingUsage(false);
     }
   };
+
+  const summaryCounts = computeSummaryCounts(skills);
 
   return {
     session,
@@ -419,10 +489,14 @@ export function useSkills(): UseSkillsReturn {
     skillId,
     statusFilter,
     scopeFilter,
+    activeOnly,
+    needsReview,
     instances,
     agents,
     skills,
     detail,
+    summaryCounts,
+    showCreateForm,
     instancesState,
     listState,
     detailState,
@@ -447,5 +521,6 @@ export function useSkills(): UseSkillsReturn {
     setEditForm,
     setActivationForm,
     setUsageForm,
+    setShowCreateForm,
   };
 }

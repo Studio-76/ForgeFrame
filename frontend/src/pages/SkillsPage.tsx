@@ -1,15 +1,22 @@
 import { CONTROL_PLANE_ROUTES } from "../app/navigation";
 import { PageIntro } from "../components/PageIntro";
-import { SkillDetail, SkillForm, SkillList, useSkills } from "../features/skills";
+import {
+  CreateSkillPanel,
+  EmptyState,
+  SkillDetailPanel,
+  SkillFilters,
+  SkillsSummaryHero,
+  SkillTable,
+  useSkills,
+} from "../features/skills";
 import { buildInventoryPath } from "../features/skills/utils";
 
 /**
- * Skills page — versioned skill registry with scope, provenance, activation,
- * usage telemetry, and full CRUD for registry entries.
+ * Skills page — redesigned skill lifecycle management surface.
  *
- * Uses the `useSkills()` hook for all state and handlers, delegating the UI
- * to `SkillList` (filter bar + registry table), `SkillDetail` (inspect/update/
- * activate/record), and `SkillForm` (create new entry).
+ * Shows a top-level summary hero with KPIs, then either an empty state
+ * or the skill registry table + detail panel. The create form is hidden
+ * until the operator clicks "Create skill".
  */
 export function SkillsPage() {
   const skills = useSkills();
@@ -58,13 +65,18 @@ export function SkillsPage() {
     );
   }
 
+  const summaryCounts = skills.summaryCounts;
+  const hasSkills = summaryCounts.total > 0;
+  const showCreate = skills.showCreateForm;
+  const selectedSkillId = skills.skillId;
+
   return (
     <section className="fg-page">
       <PageIntro
         eyebrow="Work Interaction"
         title="Skills"
         description="Manage versioned skills with scope, provenance, activation, and usage telemetry."
-        question="Select a skill to review version, activation, and recent outcomes."
+        question="Select a skill to review its lifecycle state and take action."
         links={[
           {
             label: "Learning",
@@ -84,10 +96,6 @@ export function SkillsPage() {
         ]}
         badges={[
           {
-            label: `${skills.skills.length} skill${skills.skills.length === 1 ? "" : "s"}`,
-            tone: skills.skills.length > 0 ? "success" : "warning",
-          },
-          {
             label: skills.canMutate ? "Admin mutation enabled" : "Read only",
             tone: skills.canMutate ? "success" : "neutral",
           },
@@ -95,55 +103,84 @@ export function SkillsPage() {
         note="Skills are registry records, not plugins or provider targets."
       />
 
+      {/* ── Summary hero ── */}
+      <SkillsSummaryHero
+        totalSkills={summaryCounts.total}
+        draftCount={summaryCounts.draft}
+        activeCount={summaryCounts.active}
+        reviewCount={summaryCounts.review}
+        attentionCount={summaryCounts.attention}
+        archivedCount={summaryCounts.archived}
+        canMutate={skills.canMutate}
+        hasInstance={Boolean(skills.instanceId)}
+        loading={skills.listState === "loading"}
+        onCreateSkill={() => skills.setShowCreateForm(true)}
+      />
+
+      {/* ── Error / Message display ── */}
       {skills.error ? <p className="fg-danger">{skills.error}</p> : null}
       {skills.message ? <p>{skills.message}</p> : null}
 
-      <div className="fg-grid">
-        <SkillList
-          instances={skills.instances}
-          instanceId={skills.instanceId}
-          skills={skills.skills}
+      {/* ── Create form mode ── */}
+      {showCreate ? (
+        <CreateSkillPanel
+          createForm={skills.createForm}
+          setCreateForm={skills.setCreateForm}
           agents={skills.agents}
-          statusFilter={skills.statusFilter}
-          scopeFilter={skills.scopeFilter}
-          listState={skills.listState}
-          instancesState={skills.instancesState}
-          detailState={skills.detailState}
           canMutate={skills.canMutate}
-          updateRoute={skills.updateRoute}
+          savingCreate={skills.savingCreate}
+          handleCreate={skills.handleCreate}
+          onCancel={() => skills.setShowCreateForm(false)}
         />
-
-        <SkillDetail
-          detail={skills.detail}
-          agents={skills.agents}
+      ) : !hasSkills && skills.listState !== "loading" ? (
+        /* ── Empty state ── */
+        <EmptyState
+          canMutate={skills.canMutate}
+          hasInstance={Boolean(skills.instanceId)}
           instanceId={skills.instanceId}
-          canMutate={skills.canMutate}
-          editForm={skills.editForm}
-          setEditForm={skills.setEditForm}
-          activationForm={skills.activationForm}
-          setActivationForm={skills.setActivationForm}
-          usageForm={skills.usageForm}
-          setUsageForm={skills.setUsageForm}
-          savingUpdate={skills.savingUpdate}
-          savingActivate={skills.savingActivate}
-          savingArchive={skills.savingArchive}
-          savingUsage={skills.savingUsage}
-          handleUpdate={skills.handleUpdate}
-          handleActivate={skills.handleActivate}
-          handleArchive={skills.handleArchive}
-          handleUsage={skills.handleUsage}
+          onCreateSkill={() => skills.setShowCreateForm(true)}
         />
-      </div>
-
-      <SkillForm
-        createForm={skills.createForm}
-        setCreateForm={skills.setCreateForm}
-        agents={skills.agents}
-        instanceId={skills.instanceId}
-        canMutate={skills.canMutate}
-        savingCreate={skills.savingCreate}
-        handleCreate={skills.handleCreate}
-      />
+      ) : (
+        /* ── Registry browse mode ── */
+        <>
+          <SkillFilters
+            instanceId={skills.instanceId}
+            statusFilter={skills.statusFilter}
+            scopeFilter={skills.scopeFilter}
+            activeOnly={skills.activeOnly}
+            needsReview={skills.needsReview}
+            updateRoute={skills.updateRoute}
+          />
+          <div className="fg-grid ff-skills-browse-layout">
+            <SkillTable
+              skills={skills.skills}
+              selectedSkillId={selectedSkillId}
+              listState={skills.listState}
+              updateRoute={skills.updateRoute}
+            />
+            <SkillDetailPanel
+              detail={skills.detail}
+              agents={skills.agents}
+              instanceId={skills.instanceId}
+              canMutate={skills.canMutate}
+              editForm={skills.editForm}
+              setEditForm={skills.setEditForm}
+              activationForm={skills.activationForm}
+              setActivationForm={skills.setActivationForm}
+              usageForm={skills.usageForm}
+              setUsageForm={skills.setUsageForm}
+              savingUpdate={skills.savingUpdate}
+              savingActivate={skills.savingActivate}
+              savingArchive={skills.savingArchive}
+              savingUsage={skills.savingUsage}
+              handleUpdate={skills.handleUpdate}
+              handleActivate={skills.handleActivate}
+              handleArchive={skills.handleArchive}
+              handleUsage={skills.handleUsage}
+            />
+          </div>
+        </>
+      )}
     </section>
   );
 }

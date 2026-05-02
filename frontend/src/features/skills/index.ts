@@ -1,21 +1,38 @@
-export { SkillList } from "./SkillList";
-export type { SkillListProps } from "./SkillList";
+/**
+ * Skills feature module — redesigned skill lifecycle management.
+ *
+ * Provides a summary hero, empty state, compact filter bar, registry table,
+ * guided creation flow, and a detail panel with lifecycle actions.
+ *
+ * @packageDocumentation
+ */
 
-export { SkillDetail } from "./SkillDetail";
-export type { SkillDetailProps } from "./SkillDetail";
+export { SkillsSummaryHero } from "./SkillsSummaryHero";
+export type { SkillsSummaryHeroProps } from "./SkillsSummaryHero";
 
-export { SkillForm } from "./SkillForm";
-export type { SkillFormProps } from "./SkillForm";
+export { EmptyState } from "./EmptyState";
+export type { EmptyStateProps } from "./EmptyState";
+
+export { SkillFilters } from "./SkillFilters";
+export type { SkillFiltersProps } from "./SkillFilters";
+
+export { SkillTable } from "./SkillTable";
+export type { SkillTableProps } from "./SkillTable";
+
+export { CreateSkillPanel } from "./CreateSkillPanel";
+export type { CreateSkillPanelProps } from "./CreateSkillPanel";
+
+export { SkillDetailPanel } from "./SkillDetailPanel";
+export type { SkillDetailPanelProps } from "./SkillDetailPanel";
 
 export { useSkills } from "./useSkills";
-export type { UseSkillsReturn } from "./useSkills";
+export type { UseSkillsReturn, SkillSummaryCounts } from "./useSkills";
 
 export type {
-  SkillFilters,
-  ProvenanceForm,
-  ActivationSettingsForm,
   CreateSkillForm,
   EditSkillForm,
+  ProvenanceForm,
+  ActivationSettingsForm,
   ActivationForm,
   UsageForm,
 } from "./types";
@@ -27,6 +44,11 @@ export {
   SCOPE_OPTIONS,
   USAGE_OUTCOME_OPTIONS,
   PROVENANCE_KIND_OPTIONS,
+  STATUS_LABELS,
+  SCOPE_LABELS,
+  PROVENANCE_LABELS,
+  OUTCOME_LABELS,
+  APPROVAL_LABELS,
   DEFAULT_PROVENANCE_FORM,
   DEFAULT_ACTIVATION_SETTINGS,
   DEFAULT_CREATE_FORM,
@@ -41,13 +63,18 @@ export {
   buildInventoryPath,
   buildSkillPath,
   buildRunPath,
+  statusLabel,
+  scopeLabel,
+  provenanceKindLabel,
+  outcomeLabel,
+  previewLabel,
+  approvalLabel,
   statusTone,
   outcomeTone,
   provenanceTone,
   scopeNeedsAgent,
   getLabeledAgent,
   activationLabel,
-  outcomeLabel,
   splitObject,
   splitProvenanceForm,
   buildProvenancePayload,
