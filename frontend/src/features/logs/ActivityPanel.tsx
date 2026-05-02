@@ -1,15 +1,13 @@
 /**
- * Activity panel — Activity tab content.
+ * Activity panel — grouped activity timeline.
  *
- * Shows audit preview events in a compact table with clear summaries
- * (what happened, severity, actor, time). Row selection opens a contextual
- * detail panel. Raw payloads are hidden by default — only visible when
- * explicitly expanded.
+ * Replaces a raw event table with investigation filters, grouped repeated
+ * events, relative timestamps, and a single contextual detail panel.
  *
  * @packageDocumentation
  */
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 
 import type {
@@ -17,8 +15,16 @@ import type {
   LogsResponse,
 } from "../../api/domain";
 import { withInstanceScope } from "../../app/tenantScope";
-import type { TabPanelProps } from "./types";
-import { stringifyValue } from "./utils";
+import { StatusBadge } from "../../components/ui/StatusBadge";
+import type { AuditHistoryRow, TabPanelProps } from "./types";
+import {
+  auditStatusTone,
+  formatExactTime,
+  formatRelativeTime,
+  groupEventRows,
+  isRoutineSessionEvent,
+  stringifyValue,
+} from "./utils";
 
 /** Props for ActivityPanel. */
 export interface ActivityPanelProps extends TabPanelProps {
@@ -36,11 +42,75 @@ export interface ActivityPanelProps extends TabPanelProps {
   onSelectEvent: (eventId: string) => void;
 }
 
+type ActivityFilter = "all" | "attention" | "admin" | "runtime" | "failed" | "24h" | "7d";
+
+const FILTERS: Array<{ key: ActivityFilter; label: string }> = [
+  { key: "all", label: "All visible" },
+  { key: "attention", label: "Needs attention" },
+  { key: "admin", label: "Admin activity" },
+  { key: "runtime", label: "Runtime activity" },
+  { key: "failed", label: "Failed events" },
+  { key: "24h", label: "Last 24 hours" },
+  { key: "7d", label: "Last 7 days" },
+];
+
+/**
+ * Check whether an event is within a relative day window.
+ * @param row - Audit row.
+ * @param days - Day window.
+ * @returns True when the row timestamp is inside the window.
+ */
+function isWithinDays(row: AuditHistoryRow, days: number): boolean {
+  const timestamp = Date.parse(row.createdAt);
+  if (!Number.isFinite(timestamp)) {
+    return true;
+  }
+  return Date.now() - timestamp <= days * 24 * 60 * 60 * 1000;
+}
+
+/**
+ * Apply the selected activity investigation filter.
+ * @param rows - Audit preview rows.
+ * @param filter - Selected filter.
+ * @returns Filtered rows.
+ */
+function filterActivityRows(rows: AuditHistoryRow[], filter: ActivityFilter): AuditHistoryRow[] {
+  if (filter === "attention") {
+    return rows.filter((row) => row.status !== "ok");
+  }
+  if (filter === "admin") {
+    return rows.filter((row) => row.actor.type.includes("admin") || row.actionKey.includes("admin"));
+  }
+  if (filter === "runtime") {
+    return rows.filter((row) => row.actionKey.includes("runtime") || row.target.type.includes("runtime"));
+  }
+  if (filter === "failed") {
+    return rows.filter((row) => row.status === "failed");
+  }
+  if (filter === "24h") {
+    return rows.filter((row) => isWithinDays(row, 1));
+  }
+  if (filter === "7d") {
+    return rows.filter((row) => isWithinDays(row, 7));
+  }
+  return rows;
+}
+
+/**
+ * Find the most common action label.
+ * @param rows - Audit rows.
+ * @returns Most common action label.
+ */
+function mostCommonAction(rows: AuditHistoryRow[]): string {
+  const counts = new Map<string, number>();
+  rows.forEach((row) => counts.set(row.actionLabel, (counts.get(row.actionLabel) ?? 0) + 1));
+  return Array.from(counts.entries()).sort((left, right) => right[1] - left[1])[0]?.[0] ?? "n/a";
+}
+
 /**
  * Activity panel — Activity tab.
- *
  * @param props - Component props.
- * @returns The activity panel.
+ * @returns Activity panel.
  */
 export function ActivityPanel({
   logs,
@@ -52,7 +122,19 @@ export function ActivityPanel({
   instanceId,
   canReadAudit,
 }: ActivityPanelProps) {
-  const [expandedRaw, setExpandedRaw] = useState(false);
+  const [filter, setFilter] = useState<ActivityFilter>("all");
+
+  const previewEvents = useMemo(() => logs?.audit_preview ?? [], [logs]);
+  const visibleRows = useMemo(
+    () => filterActivityRows(previewEvents, filter),
+    [filter, previewEvents],
+  );
+  const attentionRows = visibleRows.filter((row) => row.status !== "ok");
+  const routineRows = visibleRows.filter(isRoutineSessionEvent);
+  const investigationRows = visibleRows.filter((row) => !isRoutineSessionEvent(row));
+  const eventGroups = groupEventRows(investigationRows);
+  const routineGroups = groupEventRows(routineRows);
+  const alerts = logs?.alerts ?? [];
 
   if (loading) {
     return <p className="fg-muted">Loading activity data.</p>;
@@ -66,177 +148,178 @@ export function ActivityPanel({
     return <p className="fg-muted">No activity data available.</p>;
   }
 
-  const previewEvents = logs.audit_preview ?? [];
-  const alerts = logs.alerts ?? [];
-
   return (
-    <section aria-label="Activity">
-      {/* Alerts section */}
+    <section aria-label="Activity" className="fg-stack">
+      <article className="fg-card">
+        <div className="fg-panel-heading">
+          <div>
+            <h3>Activity summary</h3>
+            <p className="fg-muted">
+              Routine successful sessions are grouped below so investigation
+              starts with events that changed state or need review.
+            </p>
+          </div>
+          <StatusBadge tone={attentionRows.length > 0 ? "warning" : "success"}>
+            {attentionRows.length > 0 ? "attention" : "routine"}
+          </StatusBadge>
+        </div>
+        <div className="ff-logs-status-strip">
+          <article className="ff-logs-hero-card" data-tone="neutral">
+            <span className="ff-logs-hero-label">Total recent events</span>
+            <span className="ff-logs-hero-value">{String(visibleRows.length)}</span>
+            <span className="ff-logs-hero-meta">Visible after the current filter.</span>
+          </article>
+          <article className="ff-logs-hero-card" data-tone="neutral">
+            <span className="ff-logs-hero-label">Most common event type</span>
+            <span className="ff-logs-hero-value ff-logs-hero-value-small">{mostCommonAction(visibleRows)}</span>
+            <span className="ff-logs-hero-meta">Grouped by action label.</span>
+          </article>
+          <article className="ff-logs-hero-card" data-tone="neutral">
+            <span className="ff-logs-hero-label">Last event</span>
+            <span className="ff-logs-hero-value ff-logs-hero-value-small" title={formatExactTime(visibleRows[0]?.createdAt)}>
+              {formatRelativeTime(visibleRows[0]?.createdAt)}
+            </span>
+            <span className="ff-logs-hero-meta">Exact time is available on hover.</span>
+          </article>
+          <article className="ff-logs-hero-card" data-tone={attentionRows.length > 0 ? "warning" : "success"}>
+            <span className="ff-logs-hero-label">Requires attention</span>
+            <span className="ff-logs-hero-value">{String(attentionRows.length)}</span>
+            <span className="ff-logs-hero-meta">Warnings and failures in view.</span>
+          </article>
+        </div>
+      </article>
+
+      <div className="ff-filter-presets" role="group" aria-label="Activity filters">
+        <span className="ff-filter-presets-label">Investigation filters:</span>
+        <div className="ff-filter-presets-list">
+          {FILTERS.map((item) => (
+            <button
+              key={item.key}
+              type="button"
+              className="ff-filter-preset"
+              data-active={filter === item.key ? "true" : undefined}
+              onClick={() => setFilter(item.key)}
+            >
+              {item.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
       {alerts.length > 0 ? (
         <article className="fg-card">
           <div className="fg-panel-heading">
             <div>
               <h3>Active alerts</h3>
-              <p className="fg-muted">Current alert pressure from the logs endpoint.</p>
+              <p className="fg-muted">Alerts are current activity signals that may explain incident pressure.</p>
             </div>
           </div>
           <ul className="fg-list">
             {alerts.map((alert, index) => (
               <li key={`alert-${index}`}>
-                <span className="fg-pill" data-tone="warning">{String(alert.severity ?? "info")}</span>
-                {" "}
-                {String(alert.type ?? "")}
-                {" \u2014 "}
-                {String(alert.message ?? "")}
+                <span className="fg-pill" data-tone="warning">{stringifyValue(alert.severity)}</span>
+                {" "}{stringifyValue(alert.type)} — {stringifyValue(alert.message)}
               </li>
             ))}
           </ul>
         </article>
       ) : null}
 
-      {/* Recent events */}
-      <article className="fg-card fg-mt-md">
+      <article className="fg-card">
         <div className="fg-panel-heading">
           <div>
-            <h3>Recent events</h3>
-            <p className="fg-muted">
-              Latest governance events from the current scope. Select a row to inspect details.
-            </p>
+            <h3>Grouped activity timeline</h3>
+            <p className="fg-muted">Select an event group to open the contextual details panel.</p>
           </div>
         </div>
 
-        {previewEvents.length === 0 ? (
-          <p className="fg-muted">No audit events available.</p>
+        {eventGroups.length === 0 ? (
+          <article className="fg-subcard">
+            <h4>No visible activity needs review</h4>
+            <p className="fg-muted">All visible activity is routine, successful, or excluded by the current filter.</p>
+          </article>
         ) : (
-          <div className="fg-table-wrap">
-            <table className="fg-table" aria-label="Recent events">
-              <thead>
-                <tr>
-                  <th>What happened</th>
-                  <th>Severity</th>
-                  <th>Actor</th>
-                  <th>Target</th>
-                  <th>Time</th>
-                  <th />
-                </tr>
-              </thead>
-              <tbody>
-                {previewEvents.map((event) => (
-                  <tr key={event.eventId}>
-                    <td>
-                      <strong>{event.actionLabel}</strong>
-                      <div className="fg-muted">{event.summary}</div>
-                    </td>
-                    <td>
-                      <span
-                        className="fg-pill"
-                        data-tone={event.status === "ok" ? "success" : event.status === "warning" ? "warning" : "danger"}
-                      >
-                        {event.statusLabel}
-                      </span>
-                    </td>
-                    <td>{event.actor.label}</td>
-                    <td>
-                      {event.target.label}
-                      <div className="fg-muted">{event.target.typeLabel}</div>
-                    </td>
-                    <td>{event.createdAt}</td>
-                    <td>
-                      <button
-                        type="button"
-                        className="fg-nav-link"
-                        disabled={!event.detailAvailable || !canReadAudit}
-                        onClick={() => onSelectEvent(event.eventId)}
-                      >
-                        Detail
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          <div className="ff-event-timeline" role="list">
+            {eventGroups.map((group) => (
+              <button
+                key={group.key}
+                type="button"
+                className="ff-event-group"
+                disabled={!group.representative.detailAvailable || !canReadAudit}
+                onClick={() => onSelectEvent(group.representative.eventId)}
+              >
+                <span className="ff-logs-status-dot" data-tone={auditStatusTone(group.representative.status)} aria-hidden="true" />
+                <span>
+                  <strong>{group.representative.actionLabel}</strong>
+                  <small>{group.representative.summary}</small>
+                </span>
+                <span>{group.representative.actor.label}</span>
+                <span title={formatExactTime(group.latestAt)}>{formatRelativeTime(group.latestAt)}</span>
+                <StatusBadge tone={auditStatusTone(group.representative.status)}>
+                  {group.rows.length > 1 ? `${group.rows.length} grouped` : group.representative.statusLabel}
+                </StatusBadge>
+              </button>
+            ))}
           </div>
         )}
+
+        {routineGroups.length > 0 ? (
+          <details className="ff-logs-healthy-systems">
+            <summary>Routine successful activity ({routineRows.length})</summary>
+            <ul className="fg-list">
+              {routineGroups.map((group) => (
+                <li key={group.key}>
+                  {group.representative.actionLabel} by {group.representative.actor.label} — {group.rows.length} event{group.rows.length === 1 ? "" : "s"}
+                </li>
+              ))}
+            </ul>
+          </details>
+        ) : null}
       </article>
 
-      {/* Detail panel (when an event is selected) */}
-      {detailLoading ? (
-        <p className="fg-muted fg-mt-md">Loading event detail.</p>
-      ) : null}
+      {detailLoading ? <p className="fg-muted">Loading event detail.</p> : null}
 
       {detail ? (
-        <article className="fg-card fg-mt-md">
+        <article className="fg-card">
           <div className="fg-panel-heading">
             <div>
               <h3>{detail.event.actionLabel}</h3>
               <p className="fg-muted">{detail.summary}</p>
             </div>
-            <span
-              className="fg-pill"
-              data-tone={detail.event.status === "ok" ? "success" : detail.event.status === "warning" ? "warning" : "danger"}
-            >
+            <StatusBadge tone={auditStatusTone(detail.event.status)}>
               {detail.event.statusLabel}
-            </span>
+            </StatusBadge>
           </div>
 
           <div className="ff-logs-detail-layout">
-            <div>
-              <h4>Impact</h4>
+            <div className="fg-subcard">
+              <h4>Outcome</h4>
               <p>{detail.outcome}</p>
               <dl className="fg-list">
-                <div>
-                  <dt>Actor</dt>
-                  <dd>{detail.actor.label}{detail.actor.secondary ? ` \u00B7 ${detail.actor.secondary}` : ""}</dd>
-                </div>
-                <div>
-                  <dt>Target</dt>
-                  <dd>{detail.target.label}{detail.target.secondary ? ` \u00B7 ${detail.target.secondary}` : ""}</dd>
-                </div>
-                <div>
-                  <dt>Time</dt>
-                  <dd>{detail.event.createdAt}</dd>
-                </div>
+                <div><dt>Actor</dt><dd>{detail.actor.label}</dd></div>
+                <div><dt>Target</dt><dd>{detail.target.label}</dd></div>
+                <div><dt>Time</dt><dd title={formatExactTime(detail.event.createdAt)}>{formatRelativeTime(detail.event.createdAt)}</dd></div>
               </dl>
-
-              {detail.changeContext.length > 0 ? (
-                <>
-                  <h4>Change context</h4>
-                  <ul className="fg-list">
-                    {detail.changeContext.map((ctx) => (
-                      <li key={ctx.label}>{ctx.label}: {ctx.value}</li>
-                    ))}
-                  </ul>
-                </>
-              ) : null}
-
-              {detail.relatedLinks.length > 0 ? (
-                <>
-                  <h4>Related</h4>
-                  <div className="fg-actions">
-                    {detail.relatedLinks.map((link) => (
-                      <Link
-                        key={link.label}
-                        className="fg-nav-link"
-                        to={withInstanceScope(link.href, instanceId)}
-                      >
-                        {link.label}
-                      </Link>
-                    ))}
-                  </div>
-                </>
-              ) : null}
             </div>
-
-            <div>
-              <button
-                type="button"
-                className="fg-nav-link"
-                onClick={() => setExpandedRaw((prev) => !prev)}
-              >
-                {expandedRaw ? "Hide raw payload" : "Show raw payload"}
-              </button>
-              {expandedRaw ? (
-                <pre className="fg-code fg-mt-sm">{JSON.stringify(detail.rawMetadata, null, 2)}</pre>
+            <div className="fg-subcard">
+              <h4>Context</h4>
+              {detail.changeContext.length === 0 ? (
+                <p className="fg-muted">No change context was recorded.</p>
+              ) : (
+                <ul className="fg-list">
+                  {detail.changeContext.map((ctx) => (
+                    <li key={ctx.label}>{ctx.label}: {ctx.value}</li>
+                  ))}
+                </ul>
+              )}
+              {detail.relatedLinks.length > 0 ? (
+                <div className="fg-actions fg-mt-sm">
+                  {detail.relatedLinks.map((link) => (
+                    <Link key={link.label} className="fg-nav-link" to={withInstanceScope(link.href, instanceId)}>
+                      {link.label}
+                    </Link>
+                  ))}
+                </div>
               ) : null}
             </div>
           </div>

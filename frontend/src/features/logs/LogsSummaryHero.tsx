@@ -1,14 +1,18 @@
 /**
  * Operational summary hero for the Logs surface.
  *
- * Displays key metrics — active errors, open incidents, blocked routing,
- * alert pressure, audit events, and signal health — using a GridCN-inspired
- * data-card layout adapted to the ForgeFrame design tokens.
+ * Displays the active incident summary and a compact status strip. The layout
+ * adapts GridCN data-card and status-dot references to ForgeFrame tokens so the
+ * surface stays business-oriented instead of neon-heavy.
  *
  * @packageDocumentation
  */
 
+import { Link } from "react-router-dom";
+
+import { withInstanceScope } from "../../app/tenantScope";
 import type { LogsSummaryCounts } from "./types";
+import { formatExactTime, formatRelativeTime } from "./utils";
 
 /** Props for LogsSummaryHero. */
 export interface LogsSummaryHeroProps {
@@ -16,6 +20,8 @@ export interface LogsSummaryHeroProps {
   counts: LogsSummaryCounts;
   /** Whether data is still loading. */
   loading: boolean;
+  /** Selected instance ID. */
+  instanceId: string | null;
 }
 
 /** Status tone for a hero card. */
@@ -37,7 +43,7 @@ interface HeroCard {
  */
 function buildHeroCards(counts: LogsSummaryCounts, loading: boolean): HeroCard[] {
   if (loading) {
-    return Array.from({ length: 6 }, (_, i) => ({
+    return Array.from({ length: 5 }, (_, i) => ({
       key: `skeleton-${i}`,
       label: "\u00A0".repeat(8),
       value: "\u00A0".repeat(3),
@@ -92,15 +98,6 @@ function buildHeroCards(counts: LogsSummaryCounts, loading: boolean): HeroCard[]
         : "No critical event recorded.",
       tone: counts.lastCriticalEvent ? "danger" : "success",
     },
-    {
-      key: "next-action",
-      label: "Next action",
-      value: counts.nextAction.length > 30
-        ? `${counts.nextAction.slice(0, 30)}\u2026`
-        : counts.nextAction,
-      meta: counts.nextAction,
-      tone: counts.activeErrors > 0 || counts.openIncidents > 0 ? "warning" : "success",
-    },
   ];
 }
 
@@ -115,12 +112,70 @@ function buildHeroCards(counts: LogsSummaryCounts, loading: boolean): HeroCard[]
  * @param props - Component props.
  * @returns The summary hero section.
  */
-export function LogsSummaryHero({ counts, loading }: LogsSummaryHeroProps) {
+export function LogsSummaryHero({ counts, loading, instanceId }: LogsSummaryHeroProps) {
   const cards = buildHeroCards(counts, loading);
+  const healthTone = counts.activeErrors > 0
+    ? "danger"
+    : counts.openIncidents > 0 || counts.recentWarnings > 0
+      ? "warning"
+      : "success";
+  const healthLabel = counts.activeErrors > 0
+    ? "Action required"
+    : counts.openIncidents > 0 || counts.recentWarnings > 0
+      ? "Review needed"
+      : "No active incident";
 
   return (
     <section className="ff-logs-hero" aria-label="Operational summary">
-      <div className="ff-logs-hero-grid">
+      <article className="ff-logs-incident-hero" data-tone={healthTone}>
+        <div className="ff-logs-status-line">
+          <span className="ff-logs-status-dot" data-tone={healthTone} aria-hidden="true" />
+          <span className="ff-logs-hero-label">Current health state</span>
+          <strong>{healthLabel}</strong>
+        </div>
+        <div className="ff-logs-incident-copy">
+          <h2>
+            {counts.activeErrors > 0
+              ? `${counts.activeErrors} active error${counts.activeErrors === 1 ? "" : "s"} require operator action.`
+              : "No active errors require operator action."}
+          </h2>
+          <p>{counts.impact}</p>
+        </div>
+        <dl className="ff-logs-incident-fields">
+          <div>
+            <dt>Top affected subsystem</dt>
+            <dd>{counts.topSubsystem}</dd>
+          </div>
+          <div>
+            <dt>Last critical event</dt>
+            <dd title={formatExactTime(counts.lastCriticalEvent)}>
+              {formatRelativeTime(counts.lastCriticalEvent)}
+            </dd>
+          </div>
+          <div>
+            <dt>Primary recommendation</dt>
+            <dd>{counts.nextAction}</dd>
+          </div>
+        </dl>
+        <div className="ff-logs-remediation-callout">
+          <div>
+            <strong>Recommended action</strong>
+            <p>{counts.nextAction}</p>
+          </div>
+          {counts.primaryActionHref ? (
+            <Link
+              className="ff-primary-action"
+              to={withInstanceScope(counts.primaryActionHref, instanceId)}
+            >
+              {counts.primaryActionLabel}
+            </Link>
+          ) : (
+            <span className="fg-muted">No remediation route needed.</span>
+          )}
+        </div>
+      </article>
+
+      <div className="ff-logs-status-strip">
         {cards.map((card) => (
           <article
             key={card.key}

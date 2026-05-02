@@ -19,10 +19,12 @@ import { useInstanceCatalog } from "../app/useInstanceCatalog";
 import { InstanceScopeCard } from "../components/InstanceScopeCard";
 import { PageIntro } from "../components/PageIntro";
 import { ActionBar } from "../components/ui/ActionBar";
+import { AdvancedDiagnostics } from "../components/ui/AdvancedDiagnostics";
 import { DetailPanel } from "../components/ui/DetailPanel";
 import { ErrorState, LoadingState } from "../components/ui/StateBlocks";
 import { StatusBadge, type StatusTone } from "../components/ui/StatusBadge";
 import { SummaryStrip, type SummaryStripItem } from "../components/ui/SummaryStrip";
+import { remediationLabel } from "../features/logs/utils";
 
 type LoadState = "idle" | "loading" | "success" | "error";
 type IncidentReview = NonNullable<LogsResponse["incident_review"]>;
@@ -215,14 +217,36 @@ function fallbackIncidentReview(logs: LogsResponse): IncidentReview {
   };
 }
 
+/**
+ * Map backend incident links to scoped operator action links.
+ * @param links - Backend route links.
+ * @param instanceId - Selected instance ID.
+ * @returns Scoped links with remediation labels.
+ */
 function routeLinkItems(
   links: Array<{ label: string; href: string }>,
   instanceId: string | null,
 ) {
   return links.map((link) => ({
     ...link,
+    label: remediationLabel(link.label),
     to: withInstanceScope(link.href, instanceId),
   }));
+}
+
+/**
+ * Determine whether an incident axis needs primary triage visibility.
+ * @param axis - Incident axis row.
+ * @returns True when the axis should be shown in the active table.
+ */
+function isActiveIncidentAxis(axis: IncidentAxisRow): boolean {
+  if (axis.severity === "critical") {
+    return true;
+  }
+  if (axis.severity === "warning") {
+    return axis.count > 0;
+  }
+  return axis.count > 0 && axis.severity !== "clear";
 }
 
 export function ErrorsPage() {
@@ -287,6 +311,14 @@ export function ErrorsPage() {
     )),
     [incidentReview],
   );
+  const activeIncidentAxes = useMemo(
+    () => incidentAxes.filter(isActiveIncidentAxis),
+    [incidentAxes],
+  );
+  const healthyIncidentAxes = useMemo(
+    () => incidentAxes.filter((axis) => !isActiveIncidentAxis(axis)),
+    [incidentAxes],
+  );
   const blockedRoutingFailures = useMemo(
     () => (incidentReview?.blocked_routing_failures ?? []).slice().sort((left, right) => (
       right.created_at.localeCompare(left.created_at)
@@ -303,15 +335,15 @@ export function ErrorsPage() {
       setSelection(null);
       return;
     }
-    if (selection?.kind === "axis" && incidentAxes.some((item) => item.incident_id === selection.id)) {
+    if (selection?.kind === "axis" && activeIncidentAxes.some((item) => item.incident_id === selection.id)) {
       return;
     }
     if (selection?.kind === "routing" && blockedRoutingFailures.some((item) => item.decision_id === selection.id)) {
       return;
     }
-    const defaultAxis = incidentAxes.find((item) => item.severity === "critical")
-      ?? incidentAxes.find((item) => item.severity === "warning")
-      ?? incidentAxes[0];
+    const defaultAxis = activeIncidentAxes.find((item) => item.severity === "critical")
+      ?? activeIncidentAxes.find((item) => item.severity === "warning")
+      ?? activeIncidentAxes[0];
     if (defaultAxis) {
       setSelection({ kind: "axis", id: defaultAxis.incident_id });
       return;
@@ -322,10 +354,10 @@ export function ErrorsPage() {
       return;
     }
     setSelection(null);
-  }, [blockedRoutingFailures, incidentAxes, incidentReview, selection]);
+  }, [activeIncidentAxes, blockedRoutingFailures, incidentReview, selection]);
 
   const selectedAxis = selection?.kind === "axis"
-    ? incidentAxes.find((item) => item.incident_id === selection.id) ?? null
+    ? activeIncidentAxes.find((item) => item.incident_id === selection.id) ?? null
     : null;
   const selectedRoutingFailure = selection?.kind === "routing"
     ? blockedRoutingFailures.find((item) => item.decision_id === selection.id) ?? null
@@ -435,11 +467,11 @@ export function ErrorsPage() {
         description="Use this route to prioritize incident axes first, then branch into the specialist route that can actually change runtime, routing, or target posture."
         actions={(
           <div className="fg-actions">
-            <Link className="fg-nav-link" to={withInstanceScope(CONTROL_PLANE_ROUTES.logs, instanceId)}>Logs</Link>
-            <Link className="fg-nav-link" to={withInstanceScope(CONTROL_PLANE_ROUTES.health, instanceId)}>Health</Link>
-            <Link className="fg-nav-link" to={withInstanceScope(CONTROL_PLANE_ROUTES.routing, instanceId)}>Routing</Link>
-            <Link className="fg-nav-link" to={withInstanceScope(CONTROL_PLANE_ROUTES.providerTargets, instanceId)}>Provider Targets</Link>
-            <Link className="fg-nav-link" to={withInstanceScope(CONTROL_PLANE_ROUTES.execution, instanceId)}>Execution Review</Link>
+            <Link className="fg-nav-link" to={withInstanceScope(CONTROL_PLANE_ROUTES.logs, instanceId)}>Review logs evidence</Link>
+            <Link className="fg-nav-link" to={withInstanceScope(CONTROL_PLANE_ROUTES.health, instanceId)}>Review runtime health</Link>
+            <Link className="fg-nav-link" to={withInstanceScope(CONTROL_PLANE_ROUTES.routing, instanceId)}>Review routing policy</Link>
+            <Link className="fg-nav-link" to={withInstanceScope(CONTROL_PLANE_ROUTES.providerTargets, instanceId)}>Review provider targets</Link>
+            <Link className="fg-nav-link" to={withInstanceScope(CONTROL_PLANE_ROUTES.execution, instanceId)}>Inspect execution failures</Link>
           </div>
         )}
       >
@@ -492,7 +524,7 @@ export function ErrorsPage() {
                       </tr>
                     </thead>
                     <tbody>
-                      {incidentAxes.map((incident) => (
+                      {activeIncidentAxes.map((incident) => (
                         <tr key={incident.incident_id}>
                           <td>
                             <div className="fg-stack">
@@ -529,6 +561,16 @@ export function ErrorsPage() {
                     </tbody>
                   </table>
                 </div>
+                {healthyIncidentAxes.length > 0 ? (
+                  <details className="ff-logs-healthy-systems">
+                    <summary>No current issues ({healthyIncidentAxes.length})</summary>
+                    <ul className="fg-list">
+                      {healthyIncidentAxes.map((incident) => (
+                        <li key={incident.incident_id}>{incident.axis_label}: {incident.summary}</li>
+                      ))}
+                    </ul>
+                  </details>
+                ) : null}
               </article>
 
               <article className="fg-card">
@@ -662,10 +704,14 @@ export function ErrorsPage() {
                   <p>{detailNextStep}</p>
                 </section>
 
-                <section className="fg-subcard">
-                  <h4>Raw evidence</h4>
+                <AdvancedDiagnostics
+                  title="View diagnostics"
+                  description="Raw evidence remains available without competing with the next action."
+                  status="advanced"
+                  statusTone="neutral"
+                >
                   <pre>{JSON.stringify(detailRawEvidence, null, 2)}</pre>
-                </section>
+                </AdvancedDiagnostics>
               </div>
             </DetailPanel>
           </div>

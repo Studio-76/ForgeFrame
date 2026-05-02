@@ -1,38 +1,33 @@
 /**
- * Error review panel — Errors tab content.
+ * Incident review panel — Incidents tab content.
  *
- * Shows error axes sorted by severity (critical first), blocked routing
- * failures, and error-by-type breakdown. Raw evidence is hidden behind
- * expandable sections. Each item carries a clear next action.
+ * Shows active operational issues first, collapses healthy systems, gives each
+ * issue one primary remediation action, and keeps raw evidence in advanced
+ * diagnostics instead of row-level noise.
  *
  * @packageDocumentation
  */
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 
 import type { LogsResponse } from "../../api/domain";
-import { CONTROL_PLANE_ROUTES } from "../../app/navigation";
 import { withInstanceScope } from "../../app/tenantScope";
+import { AdvancedDiagnostics } from "../../components/ui/AdvancedDiagnostics";
+import { StatusBadge, type StatusTone } from "../../components/ui/StatusBadge";
 import type { TabPanelProps } from "./types";
-import { stringifyValue } from "./utils";
+import {
+  countActiveErrors,
+  formatExactTime,
+  formatRelativeTime,
+  getPrimaryRemediationLink,
+  remediationLabel,
+  stringifyValue,
+} from "./utils";
 
-/** Severity tone mapping. */
-const SEVERITY_TONES: Record<string, "danger" | "warning" | "success" | "neutral"> = {
-  critical: "danger",
-  warning: "warning",
-  clear: "success",
-  unsupported: "neutral",
-};
-
-/** Severity sort rank (lower = higher priority). */
-function severityRank(severity: string): number {
-  return severity === "critical" ? 0
-    : severity === "warning" ? 1
-    : severity === "info" ? 2
-    : severity === "clear" ? 3
-    : 4;
-}
+type IncidentReview = NonNullable<LogsResponse["incident_review"]>;
+type IncidentAxis = IncidentReview["axes"][number];
+type BlockedRoutingFailure = IncidentReview["blocked_routing_failures"][number];
 
 /** Props for ErrorReviewPanel. */
 export interface ErrorReviewPanelProps extends TabPanelProps {
@@ -44,55 +39,133 @@ export interface ErrorReviewPanelProps extends TabPanelProps {
   error: string | null;
 }
 
-/** Expanded raw state for axis IDs. */
-type ExpandedRaw = Record<string, boolean>;
+/** Incident detail selection. */
+type IncidentSelection =
+  | { kind: "axis"; id: string }
+  | { kind: "routing"; id: string };
 
 /**
- * Error review panel — Errors tab.
- *
+ * Resolve severity tone for status badges.
+ * @param severity - Incident severity.
+ * @returns ForgeFrame tone.
+ */
+function severityTone(severity: IncidentAxis["severity"]): StatusTone {
+  if (severity === "critical") {
+    return "danger";
+  }
+  if (severity === "warning") {
+    return "warning";
+  }
+  if (severity === "clear") {
+    return "success";
+  }
+  if (severity === "unsupported") {
+    return "info";
+  }
+  return "neutral";
+}
+
+/**
+ * Resolve severity sort rank.
+ * @param severity - Incident severity.
+ * @returns Sort rank where lower means more urgent.
+ */
+function severityRank(severity: IncidentAxis["severity"]): number {
+  if (severity === "critical") {
+    return 0;
+  }
+  if (severity === "warning") {
+    return 1;
+  }
+  if (severity === "info") {
+    return 2;
+  }
+  if (severity === "clear") {
+    return 3;
+  }
+  return 4;
+}
+
+/**
+ * Determine whether an axis belongs in the active issue list.
+ * @param axis - Incident axis.
+ * @returns True when the axis needs operator review.
+ */
+function isActiveAxis(axis: IncidentAxis): boolean {
+  if (axis.severity === "critical") {
+    return true;
+  }
+  if (axis.severity === "warning") {
+    return axis.count > 0;
+  }
+  return axis.count > 0 && axis.severity !== "clear";
+}
+
+/**
+ * Sort incident axes by active severity, count, and stable label.
+ * @param axes - Incident axes.
+ * @returns Sorted axes.
+ */
+function sortIncidentAxes(axes: IncidentAxis[]): IncidentAxis[] {
+  return [...axes].sort((left, right) => (
+    severityRank(left.severity) - severityRank(right.severity)
+    || right.count - left.count
+    || left.axis_label.localeCompare(right.axis_label)
+  ));
+}
+
+/**
+ * Build a primary action link for a routing failure.
+ * @param failure - Routing failure.
+ * @returns Primary remediation link or null.
+ */
+function getRoutingAction(failure: BlockedRoutingFailure) {
+  return getPrimaryRemediationLink(failure.links);
+}
+
+/**
+ * Incident review panel — Incidents tab.
  * @param props - Component props.
- * @returns The error review panel.
+ * @returns Incident review panel.
  */
 export function ErrorReviewPanel({ logs, loading, error, instanceId }: ErrorReviewPanelProps) {
-  const [expandedRaw, setExpandedRaw] = useState<ExpandedRaw>({});
+  const [selection, setSelection] = useState<IncidentSelection | null>(null);
 
-  const incidentAxes = useMemo(() => {
-    if (!logs?.incident_review) {
-      return [];
-    }
-    return [...logs.incident_review.axes].sort(
-      (a, b) => severityRank(a.severity) - severityRank(b.severity)
-        || b.count - a.count,
-    );
+  const activeAxes = useMemo(() => {
+    const axes = logs?.incident_review?.axes ?? [];
+    return sortIncidentAxes(axes.filter(isActiveAxis));
+  }, [logs]);
+
+  const healthyAxes = useMemo(() => {
+    const axes = logs?.incident_review?.axes ?? [];
+    return sortIncidentAxes(axes.filter((axis) => !isActiveAxis(axis)));
   }, [logs]);
 
   const routingFailures = useMemo(() => {
-    if (!logs?.incident_review) {
-      return [];
-    }
-    return [...logs.incident_review.blocked_routing_failures].sort(
-      (a, b) => String(b.created_at).localeCompare(String(a.created_at)),
-    );
+    const failures = logs?.incident_review?.blocked_routing_failures ?? [];
+    return [...failures].sort((left, right) => (
+      String(right.created_at).localeCompare(String(left.created_at))
+    ));
   }, [logs]);
 
-  const errorBreakdown = useMemo(() => {
-    const errSummary = logs?.error_summary;
-    if (!errSummary) {
-      return null;
+  useEffect(() => {
+    const firstAxis = activeAxes[0];
+    if (selection?.kind === "axis" && activeAxes.some((axis) => axis.incident_id === selection.id)) {
+      return;
     }
-    return {
-      errors24h: String(errSummary.errors_24h ?? "n/a"),
-      byProvider: Array.isArray(errSummary.errors_by_provider)
-        ? (errSummary.errors_by_provider as Array<{ provider: string; errors: number }>)
-        : [],
-      byType: Array.isArray(errSummary.errors_by_type)
-        ? (errSummary.errors_by_type as Array<{ error_key: string; errors: number }>)
-        : [],
-    };
-  }, [logs]);
+    if (selection?.kind === "routing" && routingFailures.some((failure) => failure.decision_id === selection.id)) {
+      return;
+    }
+    if (firstAxis) {
+      setSelection({ kind: "axis", id: firstAxis.incident_id });
+      return;
+    }
+    const firstRouting = routingFailures[0];
+    setSelection(firstRouting ? { kind: "routing", id: firstRouting.decision_id } : null);
+  }, [activeAxes, routingFailures, selection]);
 
   if (loading) {
-    return <p className="fg-muted">Loading error review data.</p>;
+    return <p className="fg-muted">Loading incident data.</p>;
   }
 
   if (error) {
@@ -100,205 +173,229 @@ export function ErrorReviewPanel({ logs, loading, error, instanceId }: ErrorRevi
   }
 
   if (!logs) {
-    return <p className="fg-muted">No error data available.</p>;
+    return <p className="fg-muted">No incident data available.</p>;
   }
 
-  const toggleRaw = (id: string) => {
-    setExpandedRaw((prev) => ({ ...prev, [id]: !prev[id] }));
-  };
+  const selectedAxis = selection?.kind === "axis"
+    ? activeAxes.find((axis) => axis.incident_id === selection.id) ?? null
+    : null;
+  const selectedRoutingFailure = selection?.kind === "routing"
+    ? routingFailures.find((failure) => failure.decision_id === selection.id) ?? null
+    : null;
+  const selectedTitle = selectedAxis?.title ?? selectedRoutingFailure?.error_type ?? "Incident detail";
+  const selectedSummary = selectedAxis?.summary ?? selectedRoutingFailure?.summary ?? "Select an active issue to inspect diagnostics.";
+  const selectedEffect = selectedAxis?.current_effect ?? selectedRoutingFailure?.current_effect ?? "No active issue selected.";
+  const selectedNextStep = selectedAxis?.next_step ?? selectedRoutingFailure?.next_step ?? "No action required.";
+  const selectedRaw = selectedAxis?.raw_evidence ?? selectedRoutingFailure?.raw_evidence ?? {};
+  const activeErrorCount = countActiveErrors(logs);
+  const topIssue = activeAxes[0];
 
   return (
-    <section aria-label="Error review">
-      {/* Axes table */}
+    <section aria-label="Incidents" className="fg-stack">
+      <article className="fg-card ff-logs-remediation-panel">
+        <div className="fg-panel-heading">
+          <div>
+            <h3>
+              {activeErrorCount > 0
+                ? `${activeErrorCount} active error${activeErrorCount === 1 ? "" : "s"} require operator action.`
+                : "No active errors require operator action."}
+            </h3>
+            <p className="fg-muted">
+              Critical issues with nonzero counts appear before warnings. Healthy
+              systems are collapsed below the active list.
+            </p>
+          </div>
+          {topIssue ? (
+            <StatusBadge tone={severityTone(topIssue.severity)} status={topIssue.severity}>
+              {topIssue.axis_label}
+            </StatusBadge>
+          ) : null}
+        </div>
+
+        {topIssue ? (
+          <div className="ff-logs-remediation-callout">
+            <div>
+              <strong>Start here: {topIssue.axis_label}</strong>
+              <p>{topIssue.next_step}</p>
+            </div>
+            {getPrimaryRemediationLink(topIssue.links) ? (
+              <Link
+                className="ff-primary-action"
+                to={withInstanceScope(getPrimaryRemediationLink(topIssue.links)?.href ?? "", instanceId)}
+              >
+                {getPrimaryRemediationLink(topIssue.links)?.label}
+              </Link>
+            ) : null}
+          </div>
+        ) : (
+          <p className="fg-muted">All incident axes are currently clear or informational.</p>
+        )}
+      </article>
+
       <article className="fg-card">
         <div className="fg-panel-heading">
           <div>
-            <h3>Incident triage by axis</h3>
+            <h3>Prioritized issue list</h3>
             <p className="fg-muted">
-              Sorted by severity. Critical and warning items include a recommended next step.
+              One primary action per issue. Use View diagnostics only when raw
+              evidence is needed for investigation.
             </p>
           </div>
         </div>
 
-        {incidentAxes.length === 0 ? (
-          <p className="fg-muted">No incident axes available.</p>
+        {activeAxes.length === 0 ? (
+          <p className="fg-muted">No active incident axes need attention.</p>
         ) : (
-          <div className="fg-table-wrap">
-            <table className="fg-table" aria-label="Incident axes">
-              <thead>
-                <tr>
-                  <th>Axis</th>
-                  <th>Severity</th>
-                  <th>Count</th>
-                  <th>Current effect</th>
-                  <th>Next step</th>
-                </tr>
-              </thead>
-              <tbody>
-                {incidentAxes.map((axis) => (
-                  <tr key={axis.incident_id}>
-                    <td>
+          <div className="ff-issue-list" role="list">
+            {activeAxes.map((axis) => {
+              const primaryLink = getPrimaryRemediationLink(axis.links);
+              const selected = selection?.kind === "axis" && selection.id === axis.incident_id;
+              return (
+                <article
+                  key={axis.incident_id}
+                  className="ff-issue-card"
+                  data-selected={selected ? "true" : undefined}
+                  role="listitem"
+                >
+                  <div className="ff-issue-card-main">
+                    <div className="ff-logs-status-line">
+                      <span className="ff-logs-status-dot" data-tone={severityTone(axis.severity)} aria-hidden="true" />
                       <strong>{axis.axis_label}</strong>
-                      <div className="fg-muted">{axis.title}</div>
-                    </td>
-                    <td>
-                      <span
-                        className="fg-pill"
-                        data-tone={SEVERITY_TONES[axis.severity] ?? "neutral"}
-                      >
+                      <StatusBadge tone={severityTone(axis.severity)} status={axis.severity}>
                         {axis.severity}
-                      </span>
-                    </td>
-                    <td>{String(axis.count)}</td>
-                    <td>{axis.current_effect}</td>
-                    <td>
-                      <div className="fg-stack">
-                        <span>{axis.next_step}</span>
-                        <div className="fg-actions">
-                          {axis.links.map((link) => (
-                            <Link
-                              key={link.label}
-                              className="fg-nav-link"
-                              to={withInstanceScope(link.href, instanceId)}
-                            >
-                              {link.label}
-                            </Link>
-                          ))}
-                          <button
-                            type="button"
-                            className="fg-nav-link"
-                            onClick={() => toggleRaw(axis.incident_id)}
-                          >
-                            {expandedRaw[axis.incident_id] ? "Hide raw" : "Raw evidence"}
-                          </button>
-                        </div>
-                        {expandedRaw[axis.incident_id] ? (
-                          <pre className="fg-code fg-mt-sm">{JSON.stringify(axis.raw_evidence, null, 2)}</pre>
-                        ) : null}
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+                      </StatusBadge>
+                    </div>
+                    <p>{axis.current_effect}</p>
+                    <dl className="ff-issue-meta">
+                      <div><dt>Count</dt><dd>{String(axis.count)}</dd></div>
+                      <div><dt>Last seen</dt><dd title={formatExactTime(axis.last_seen_at)}>{formatRelativeTime(axis.last_seen_at)}</dd></div>
+                      <div><dt>Recommended action</dt><dd>{axis.next_step}</dd></div>
+                    </dl>
+                  </div>
+                  <div className="ff-issue-actions">
+                    {primaryLink ? (
+                      <Link className="ff-primary-action" to={withInstanceScope(primaryLink.href, instanceId)}>
+                        {primaryLink.label}
+                      </Link>
+                    ) : null}
+                    <button
+                      type="button"
+                      className="fg-nav-link"
+                      onClick={() => setSelection({ kind: "axis", id: axis.incident_id })}
+                    >
+                      View diagnostics
+                    </button>
+                  </div>
+                </article>
+              );
+            })}
           </div>
         )}
+
+        {healthyAxes.length > 0 ? (
+          <details className="ff-logs-healthy-systems">
+            <summary>No current issues ({healthyAxes.length})</summary>
+            <ul className="fg-list">
+              {healthyAxes.map((axis) => (
+                <li key={axis.incident_id}>
+                  <strong>{axis.axis_label}</strong> — {axis.summary}
+                </li>
+              ))}
+            </ul>
+          </details>
+        ) : null}
       </article>
 
-      {/* Blocked routing failures */}
-      <article className="fg-card fg-mt-md">
-        <div className="fg-panel-heading">
-          <div>
-            <h3>Blocked routing failures</h3>
-            <p className="fg-muted">
-              Policy, budget, circuit, and capability blockers.
-            </p>
-          </div>
-        </div>
-
-        {routingFailures.length === 0 ? (
-          <p className="fg-muted">No blocked routing failures.</p>
-        ) : (
-          <div className="fg-table-wrap">
-            <table className="fg-table" aria-label="Blocked routing failures">
-              <thead>
-                <tr>
-                  <th>Error</th>
-                  <th>Reason</th>
-                  <th>Policy stage</th>
-                  <th>Seen</th>
-                  <th>Current effect</th>
-                  <th>Next step</th>
-                </tr>
-              </thead>
-              <tbody>
-                {routingFailures.map((failure) => (
-                  <tr key={failure.decision_id}>
-                    <td>
-                      <strong>{failure.error_type}</strong>
-                      <div className="fg-muted">{failure.summary}</div>
-                    </td>
-                    <td>{failure.reason_category}</td>
-                    <td>{failure.policy_stage ?? "n/a"}</td>
-                    <td>{stringifyValue(failure.created_at)}</td>
-                    <td>{failure.current_effect}</td>
-                    <td>
-                      <div className="fg-stack">
-                        <span>{failure.next_step}</span>
-                        <div className="fg-actions">
-                          {failure.links.map((link) => (
-                            <Link
-                              key={link.label}
-                              className="fg-nav-link"
-                              to={withInstanceScope(link.href, instanceId)}
-                            >
-                              {link.label}
-                            </Link>
-                          ))}
-                          <button
-                            type="button"
-                            className="fg-nav-link"
-                            onClick={() => toggleRaw(failure.decision_id)}
-                          >
-                            {expandedRaw[failure.decision_id] ? "Hide raw" : "Raw evidence"}
-                          </button>
-                        </div>
-                        {expandedRaw[failure.decision_id] ? (
-                          <pre className="fg-code fg-mt-sm">{JSON.stringify(failure.raw_evidence, null, 2)}</pre>
-                        ) : null}
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </article>
-
-      {/* Error breakdown */}
-      {errorBreakdown ? (
-        <article className="fg-card fg-mt-md">
+      {routingFailures.length > 0 ? (
+        <article className="fg-card">
           <div className="fg-panel-heading">
             <div>
-              <h3>Error breakdown</h3>
+              <h3>Blocked routing failures</h3>
               <p className="fg-muted">
-                Errors in the last 24 hours grouped by provider and type.
+                Routing blockers stay compact because policy, budget, circuit,
+                and capability failures need specific follow-up.
               </p>
             </div>
           </div>
-          <div className="ff-logs-error-grid">
-            <div className="fg-subcard">
-              <h4>24h total</h4>
-              <span className="ff-logs-error-total">{errorBreakdown.errors24h}</span>
-            </div>
-            <div className="fg-subcard">
-              <h4>By provider</h4>
-              {errorBreakdown.byProvider.length === 0 ? (
-                <p className="fg-muted">No provider errors.</p>
-              ) : (
-                <ul className="fg-list">
-                  {errorBreakdown.byProvider.map((p) => (
-                    <li key={p.provider}>{p.provider}: {String(p.errors)}</li>
-                  ))}
-                </ul>
-              )}
-            </div>
-            <div className="fg-subcard">
-              <h4>By type</h4>
-              {errorBreakdown.byType.length === 0 ? (
-                <p className="fg-muted">No type breakdown.</p>
-              ) : (
-                <ul className="fg-list">
-                  {errorBreakdown.byType.map((t) => (
-                    <li key={t.error_key}>{t.error_key}: {String(t.errors)}</li>
-                  ))}
-                </ul>
-              )}
-            </div>
+          <div className="ff-issue-list" role="list">
+            {routingFailures.map((failure) => {
+              const primaryLink = getRoutingAction(failure);
+              return (
+                <article key={failure.decision_id} className="ff-issue-card" role="listitem">
+                  <div className="ff-issue-card-main">
+                    <div className="ff-logs-status-line">
+                      <span className="ff-logs-status-dot" data-tone="danger" aria-hidden="true" />
+                      <strong>{failure.error_type}</strong>
+                      <StatusBadge tone="danger" status="blocked">blocked</StatusBadge>
+                    </div>
+                    <p>{failure.current_effect}</p>
+                    <dl className="ff-issue-meta">
+                      <div><dt>Reason</dt><dd>{failure.reason_category}</dd></div>
+                      <div><dt>Policy stage</dt><dd>{failure.policy_stage ?? "n/a"}</dd></div>
+                      <div><dt>Seen</dt><dd title={formatExactTime(failure.created_at)}>{formatRelativeTime(failure.created_at)}</dd></div>
+                    </dl>
+                  </div>
+                  <div className="ff-issue-actions">
+                    {primaryLink ? (
+                      <Link className="ff-primary-action" to={withInstanceScope(primaryLink.href, instanceId)}>
+                        {primaryLink.label}
+                      </Link>
+                    ) : null}
+                    <button
+                      type="button"
+                      className="fg-nav-link"
+                      onClick={() => setSelection({ kind: "routing", id: failure.decision_id })}
+                    >
+                      View diagnostics
+                    </button>
+                  </div>
+                </article>
+              );
+            })}
           </div>
         </article>
       ) : null}
+
+      <article className="fg-card">
+        <div className="fg-panel-heading">
+          <div>
+            <h3>Selected issue breakdown</h3>
+            <p className="fg-muted">
+              Error breakdown follows the selected incident instead of living as
+              a detached card.
+            </p>
+          </div>
+        </div>
+        <div className="ff-logs-detail-layout">
+          <div className="fg-subcard">
+            <h4>{selectedTitle}</h4>
+            <p>{selectedSummary}</p>
+            <p className="fg-muted">{selectedEffect}</p>
+          </div>
+          <div className="fg-subcard">
+            <h4>Recommended action</h4>
+            <p>{selectedNextStep}</p>
+          </div>
+        </div>
+      </article>
+
+      <AdvancedDiagnostics
+        title="Advanced diagnostics for selected issue"
+        description="Raw evidence and low-level payloads remain available without competing with the remediation path."
+        status="advanced"
+        statusTone="neutral"
+      >
+        <pre className="fg-code">{JSON.stringify({
+          selected_issue: selectedTitle,
+          raw_evidence: selectedRaw,
+          error_summary: logs.error_summary,
+          alerts: logs.alerts.map((alert) => ({
+            severity: stringifyValue(alert.severity),
+            type: stringifyValue(alert.type),
+            message: stringifyValue(alert.message),
+          })),
+        }, null, 2)}</pre>
+      </AdvancedDiagnostics>
     </section>
   );
 }

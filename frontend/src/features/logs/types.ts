@@ -1,5 +1,5 @@
 /**
- * Types for the Logs feature module (Errors, Activity, and Audit History).
+ * Types for the Logs feature module (Incidents, Logs, Activity, Audit History).
  *
  * @packageDocumentation
  */
@@ -15,7 +15,7 @@ import type {
 } from "../../api/domain";
 
 /** Active log tab. */
-export type LogTab = "errors" | "activity" | "audit" | "diagnostics";
+export type LogTab = "incidents" | "logs" | "activity" | "audit" | "diagnostics";
 
 /** Summary counts derived from logs + audit data. */
 export interface LogsSummaryCounts {
@@ -31,6 +31,14 @@ export interface LogsSummaryCounts {
   lastCriticalEvent: string | null;
   /** Prescribed next action string. */
   nextAction: string;
+  /** Human-readable top affected subsystem. */
+  topSubsystem: string;
+  /** Current impact of the top issue. */
+  impact: string;
+  /** Primary remediation action label. */
+  primaryActionLabel: string;
+  /** Primary remediation action href. */
+  primaryActionHref: string | null;
 }
 
 /** Filter preset identifier. */

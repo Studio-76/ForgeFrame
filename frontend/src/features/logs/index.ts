@@ -1,8 +1,8 @@
 /**
  * Logs feature module — redesigned Errors, Activity, and Audit History UX.
  *
- * Provides a tabbed review surface with four modes (Errors, Activity, Audit,
- * Diagnostics), an operational summary hero, filter presets, row-selection
+ * Provides a tabbed review surface with five modes (Incidents, Logs, Activity,
+ * Audit History, Diagnostics), an operational summary hero, filter presets, row-selection
  * detail panels, and raw data hidden by default.
  *
  * Audit export is a separate, explicit workflow within the Audit tab.
@@ -17,6 +17,9 @@ export type { LogsSummaryHeroProps } from "./LogsSummaryHero";
 
 export { ErrorReviewPanel } from "./ErrorReviewPanel";
 export type { ErrorReviewPanelProps } from "./ErrorReviewPanel";
+
+export { LogsEvidencePanel } from "./LogsEvidencePanel";
+export type { LogsEvidencePanelProps } from "./LogsEvidencePanel";
 
 export { ActivityPanel } from "./ActivityPanel";
 export type { ActivityPanelProps } from "./ActivityPanel";

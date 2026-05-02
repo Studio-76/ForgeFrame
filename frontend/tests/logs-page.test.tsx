@@ -370,8 +370,8 @@ describe("Logs page audit history workflow", () => {
       status: "warning",
       limit: 25,
     });
-    expect(container.textContent).toContain("Errors, Activity, and Audit History");
-    expect(container.textContent).toContain("Audit");
+    expect(container.textContent).toContain("Incidents and Observability");
+    expect(container.textContent).toContain("Audit history");
     expect(container.textContent).toContain("Presets:");
     expect(container.textContent).toContain("Open Audit Export");
   });
@@ -392,7 +392,7 @@ describe("Logs page audit history workflow", () => {
     });
     // Verify the detail renders: event detail is passed via auditEvent param
     expect(container.textContent).toContain("Execution replay admitted");
-    expect(container.textContent).toContain("Show raw payload");
+    expect(container.textContent).toContain("Technical details");
   });
 
   it("preserves instance scope on the in-page audit export CTA", async () => {
@@ -573,7 +573,7 @@ describe("Logs page audit history workflow", () => {
     // Render with a specific event to trigger the detail view
     await renderLogsPage("/logs?instanceId=instance_alpha&auditEvent=audit_evt_1#audit");
 
-    expect(container.textContent).toContain("Show raw payload");
+    expect(container.textContent).toContain("Technical details");
     expect(container.textContent).toContain("Execution replay admitted");
     expect(container.textContent).toContain("req-42");
     expect(container.textContent).toContain("Close detail");

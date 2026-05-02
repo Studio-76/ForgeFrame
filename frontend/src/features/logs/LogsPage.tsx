@@ -1,14 +1,16 @@
 /**
- * Logs page — Errors, Activity, and Audit History.
+ * Logs page — Incidents, Logs, Activity, Audit History, and Diagnostics.
  *
- * Redesigned as a tabbed review surface with four clear modes:
- * - **Errors** — incident axes sorted by severity, blocked routing failures, error breakdown
+ * Redesigned as a tabbed review surface with five clear modes:
+ * - **Incidents** — active issue list, remediation callout, selected evidence
+ * - **Logs** — historical error breakdown and raw evidence handoff
  * - **Activity** — recent governance events and active alerts
  * - **Audit** — paginated audit history with filter presets, row selection, and contextual detail
  * - **Diagnostics** — signal-path health, metrics, logging, and tracing (raw data hidden by default)
  *
  * Tab state is driven by URL hash for deep linking and testability:
- *   /logs#errors      (default)
+ *   /logs#incidents   (default)
+ *   /logs#logs
  *   /logs#activity
  *   /logs#audit
  *   /logs#diagnostics
@@ -39,8 +41,8 @@ import { AuditExportForm } from "./AuditExportForm";
 import { AuditHistoryPanel } from "./AuditHistoryPanel";
 import { DiagnosticsPanel } from "./DiagnosticsPanel";
 import { ErrorReviewPanel } from "./ErrorReviewPanel";
+import { LogsEvidencePanel } from "./LogsEvidencePanel";
 import { ActivityPanel } from "./ActivityPanel";
-import { FilterPresets } from "./FilterPresets";
 import { LogsSummaryHero } from "./LogsSummaryHero";
 import type {
   AuditHistoryResponse,
@@ -52,31 +54,36 @@ import { useLogs } from "./useLogs";
 
 /** Map of tab labels and hash keys. */
 const TABS: Array<{ key: LogTab; label: string; hash: string }> = [
-  { key: "errors", label: "Errors", hash: "#errors" },
+  { key: "incidents", label: "Incidents", hash: "#incidents" },
+  { key: "logs", label: "Logs", hash: "#logs" },
   { key: "activity", label: "Activity", hash: "#activity" },
-  { key: "audit", label: "Audit", hash: "#audit" },
+  { key: "audit", label: "Audit history", hash: "#audit-history" },
   { key: "diagnostics", label: "Diagnostics", hash: "#diagnostics" },
 ];
 
 /** Map from tab key to hash. */
 const TAB_TO_HASH: Record<LogTab, string> = {
-  errors: "#errors",
+  incidents: "#incidents",
+  logs: "#logs",
   activity: "#activity",
-  audit: "#audit",
+  audit: "#audit-history",
   diagnostics: "#diagnostics",
 };
 
 /** Map from hash to tab key. */
 const HASH_TO_TAB: Record<string, LogTab> = {
-  "#errors": "errors",
+  "#incidents": "incidents",
+  "#errors": "incidents",
+  "#logs": "logs",
   "#activity": "activity",
+  "#audit-history": "audit",
   "#audit": "audit",
   "#audit-export": "audit",
   "#diagnostics": "diagnostics",
 };
 
 /** Default tab when no hash matches. */
-const DEFAULT_TAB: LogTab = "errors";
+const DEFAULT_TAB: LogTab = "incidents";
 
 /**
  * Parse the active tab from the URL hash.
@@ -150,7 +157,7 @@ export function LogsPage() {
     navigate({
       pathname: location.pathname,
       search: `?${nextSearchParams.toString()}`,
-      hash: "#audit",
+      hash: "#audit-history",
     }, { replace: true });
   }, [searchParams, location.pathname, navigate]);
 
@@ -161,7 +168,7 @@ export function LogsPage() {
     navigate({
       pathname: location.pathname,
       search: `?${nextSearchParams.toString()}`,
-      hash: "#audit",
+      hash: "#audit-history",
     }, { replace: true });
   }, [searchParams, location.pathname, navigate]);
 
@@ -172,7 +179,7 @@ export function LogsPage() {
     navigate({
       pathname: location.pathname,
       search: `?${nextSearchParams.toString()}`,
-      hash: "#audit",
+      hash: "#audit-history",
     }, { replace: true });
   }, [searchParams, location.pathname, navigate]);
 
@@ -200,15 +207,15 @@ export function LogsPage() {
     <section className="fg-page">
       <PageIntro
         eyebrow="Operations"
-        title="Errors, Activity, and Audit History"
-        description="Operational signal, error review, governance events, and observability checks for the active instance scope."
-        question="Is there an active issue, and what needs attention right now?"
+        title="Incidents and Observability"
+        description="Incident response, logs, activity, audit history, and diagnostics separated into clear operator modes."
+        question="What is broken right now, what is only historical evidence, and what is the first action?"
         badges={[
           { label: selectedInstance ? `Instance scope: ${selectedInstance.display_name}` : "Default instance path", tone: selectedInstance ? "success" : "neutral" },
           { label: logs?.operability.ready ? "Logging ready" : "Logging not ready", tone: logs?.operability.ready ? "success" : "warning" },
           ...(canReadAudit ? [] : [{ label: "Viewer read-only", tone: "warning" as const }]),
         ]}
-        note="Errors, activity, audit, and diagnostics are separated into clear tabs. Raw payloads are hidden by default."
+        note="Incidents default first. Historical logs, audit data, and raw payloads stay secondary until investigation needs them."
       />
 
       <InstanceScopeCard
@@ -224,10 +231,10 @@ export function LogsPage() {
       {/* Action links */}
       <div className="fg-actions fg-mb-md">
         <Link className="fg-nav-link" to={withInstanceScope(CONTROL_PLANE_ROUTES.errors, instanceId)}>
-          Incident Review
+          Review incidents
         </Link>
         <Link className="fg-nav-link" to={withInstanceScope(CONTROL_PLANE_ROUTES.health, instanceId)}>
-          Health
+          Review runtime health
         </Link>
       </div>
 
@@ -235,6 +242,7 @@ export function LogsPage() {
       <LogsSummaryHero
         counts={summaryCounts}
         loading={logsLoadState === "loading"}
+        instanceId={instanceId}
       />
 
       {/* Tab navigation */}
@@ -263,8 +271,19 @@ export function LogsPage() {
           <ErrorState title="Logs loading failed" description={logsError} />
         ) : null}
 
-        {activeTab === "errors" ? (
+        {activeTab === "incidents" ? (
           <ErrorReviewPanel
+            logs={logs}
+            loading={logsLoadState === "loading"}
+            error={logsError}
+            instanceId={instanceId}
+            companyId={companyId}
+            canReadAudit={canReadAudit}
+          />
+        ) : null}
+
+        {activeTab === "logs" ? (
+          <LogsEvidencePanel
             logs={logs}
             loading={logsLoadState === "loading"}
             error={logsError}

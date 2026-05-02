@@ -28,7 +28,7 @@ import type {
   LoadState,
   LogsSummaryCounts,
 } from "./types";
-import { getNextAction } from "./utils";
+import { countActiveErrors, getNextAction, getPrimaryRemediationLink } from "./utils";
 
 /** Combined return type for useLogsData. */
 export interface UseLogsReturn {
@@ -136,13 +136,30 @@ export function useLogs(searchParams: URLSearchParams, canReadAudit = true): Use
 
   const summaryCounts = useMemo<LogsSummaryCounts>(() => {
     const axes = logsQuery.data?.incident_review?.axes ?? [];
+    const activeAxes = axes.filter((axis) => axis.severity === "critical"
+      || (axis.severity === "warning" && axis.count > 0)
+      || (axis.severity === "info" && axis.count > 0));
+    const topIssue = [...activeAxes].sort((left, right) => {
+      const severityRank = (severity: string) => severity === "critical" ? 0
+        : severity === "warning" ? 1
+        : severity === "info" ? 2
+        : severity === "clear" ? 3
+        : 4;
+      return severityRank(left.severity) - severityRank(right.severity)
+        || right.count - left.count;
+    })[0] ?? null;
+    const primaryAction = topIssue ? getPrimaryRemediationLink(topIssue.links) : null;
     return {
-      activeErrors: axes.filter((a) => a.severity === "critical").length,
+      activeErrors: countActiveErrors(logsQuery.data ?? null),
       openIncidents: axes.filter((a) => a.severity === "warning").length,
       recentWarnings: logsQuery.data?.alerts.filter((a) => String(a.severity) === "warning").length ?? 0,
       auditEventCount: historyQuery.data?.summary.totalInScope ?? logsQuery.data?.audit_preview.length ?? 0,
-      lastCriticalEvent: axes.find((a) => a.severity === "critical")?.last_seen_at ?? null,
+      lastCriticalEvent: topIssue?.severity === "critical" ? topIssue.last_seen_at ?? null : null,
       nextAction: getNextAction(logsQuery.data ?? null),
+      topSubsystem: topIssue?.axis_label ?? "All systems",
+      impact: topIssue?.current_effect ?? "No active incident is visible in the current scope.",
+      primaryActionLabel: primaryAction?.label ?? "Monitor incidents",
+      primaryActionHref: primaryAction?.href ?? null,
     };
   }, [logsQuery.data, historyQuery.data]);
 
