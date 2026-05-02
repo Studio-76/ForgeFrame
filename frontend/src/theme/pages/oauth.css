@@ -1,0 +1,244 @@
+/* ──────────────────────────────────────────────
+ * OAuth Targets — compact management table
+ * ────────────────────────────────────────────── */
+
+.fg-oauth-banner {
+  display: grid;
+  gap: var(--fg-space-2);
+  padding: var(--fg-space-3) var(--fg-space-4);
+  border: 1px solid var(--fg-color-border-default);
+  border-radius: var(--fg-radius-lg);
+  background: var(--fg-color-surface-default);
+  margin-bottom: var(--fg-space-3);
+}
+
+.fg-oauth-banner p {
+  margin: 0;
+  font-size: var(--fg-type-size-meta);
+  color: var(--fg-color-text-secondary);
+}
+
+.fg-oauth-banner strong {
+  color: var(--fg-color-text-primary);
+}
+
+.fg-oauth-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--fg-space-2);
+  align-items: center;
+  margin-bottom: var(--fg-space-3);
+}
+
+.fg-oauth-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--fg-space-1);
+  align-items: center;
+}
+
+.fg-oauth-filter-btn {
+  font-size: var(--fg-type-size-meta);
+  padding: 0.3rem 0.65rem;
+  border: 1px solid var(--fg-color-border-default);
+  border-radius: var(--fg-radius-md);
+  background: transparent;
+  color: var(--fg-color-text-secondary);
+  cursor: pointer;
+  transition: background var(--fg-motion-fast) var(--fg-ease-standard),
+              color var(--fg-motion-fast) var(--fg-ease-standard),
+              border-color var(--fg-motion-fast) var(--fg-ease-standard);
+}
+
+.fg-oauth-filter-btn:hover {
+  background: var(--fg-color-surface-subtle);
+  color: var(--fg-color-text-primary);
+}
+
+.fg-oauth-filter-btn.is-active {
+  background: var(--fg-color-action-primary-soft);
+  border-color: var(--fg-color-action-primary);
+  color: var(--fg-color-action-primary);
+}
+
+.fg-oauth-search {
+  flex: 1 1 200px;
+  min-width: 0;
+  padding: 0.4rem 0.7rem;
+  border: 1px solid var(--fg-color-border-default);
+  border-radius: var(--fg-radius-md);
+  background: var(--fg-color-surface-field);
+  color: var(--fg-color-text-primary);
+  font-size: var(--fg-type-size-meta);
+  outline: none;
+}
+
+.fg-oauth-search::placeholder {
+  color: var(--fg-color-text-tertiary);
+}
+
+.fg-oauth-search:focus {
+  border-color: var(--fg-color-action-primary);
+  box-shadow: 0 0 0 1px var(--fg-color-action-primary);
+}
+
+/* Compact provider comparison grid — table-like rows */
+.fg-oauth-compact-grid {
+  display: grid;
+  gap: 1px;
+  border: 1px solid var(--fg-color-border-default);
+  border-radius: var(--fg-radius-lg);
+  overflow: hidden;
+  background: var(--fg-color-border-default);
+}
+
+.fg-oauth-row-header,
+.fg-oauth-row {
+  display: grid;
+  grid-template-columns: 1.2fr 1fr 0.9fr 0.6fr 0.9fr 1fr 0.7fr;
+  gap: 0;
+  align-items: center;
+  padding: 0.5rem 0.85rem;
+  background: var(--fg-color-surface-default);
+}
+
+.fg-oauth-row-header {
+  font-size: var(--fg-type-size-meta);
+  color: var(--fg-color-text-secondary);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  background: var(--fg-color-surface-strong);
+  border-bottom: 1px solid var(--fg-color-border-default);
+}
+
+.fg-oauth-row {
+  cursor: pointer;
+  font-size: var(--fg-type-size-meta);
+  transition: background var(--fg-motion-fast) var(--fg-ease-standard);
+}
+
+.fg-oauth-row:hover {
+  background: rgba(148, 163, 184, 0.06);
+}
+
+.fg-oauth-row.is-selected {
+  background: var(--fg-color-action-primary-soft);
+}
+
+.fg-oauth-cell {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fg-oauth-cell-provider {
+  display: grid;
+  gap: 0.1rem;
+}
+
+.fg-oauth-provider-name {
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.fg-oauth-provider-key {
+  font-size: 0.8rem;
+  color: var(--fg-color-text-tertiary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.fg-oauth-cell-actions {
+  display: flex;
+  gap: var(--fg-space-1);
+  flex-wrap: wrap;
+}
+
+.fg-oauth-cell-actions button {
+  font-size: 0.75rem;
+  padding: 0.2rem 0.5rem;
+}
+
+/* Detail panel — shown for the selected provider */
+.fg-oauth-detail-panel {
+  border: 1px solid var(--fg-color-action-primary);
+  border-radius: var(--fg-radius-lg);
+  background: var(--fg-color-surface-default);
+  overflow: hidden;
+  margin-top: var(--fg-space-1);
+}
+
+.fg-oauth-detail-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: var(--fg-space-3);
+  padding: var(--fg-space-3) var(--fg-space-4);
+  border-bottom: 1px solid var(--fg-color-border-default);
+  background: var(--fg-color-surface-strong);
+}
+
+.fg-oauth-detail-header h4 {
+  margin: 0;
+}
+
+.fg-oauth-detail-header .fg-muted {
+  margin: 0.15rem 0 0;
+  font-size: var(--fg-type-size-meta);
+  color: var(--fg-color-text-secondary);
+}
+
+.fg-oauth-detail-body {
+  display: grid;
+  gap: var(--fg-space-3);
+  padding: var(--fg-space-3) var(--fg-space-4);
+}
+
+.fg-oauth-detail-section {
+  display: grid;
+  gap: var(--fg-space-1);
+}
+
+.fg-oauth-detail-section p {
+  margin: 0;
+  font-size: var(--fg-type-size-meta);
+}
+
+.fg-oauth-detail-evidence {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--fg-space-2);
+}
+
+.fg-oauth-evidence-item {
+  padding: 0.5rem;
+  border: 1px solid var(--fg-color-border-default);
+  border-radius: var(--fg-radius-md);
+  background: var(--fg-color-surface-subtle);
+  font-size: 0.75rem;
+}
+
+.fg-oauth-evidence-item strong {
+  display: block;
+  font-size: var(--fg-type-size-meta);
+  margin-bottom: 0.15rem;
+}
+
+.fg-oauth-detail-actions {
+  display: flex;
+  gap: var(--fg-space-2);
+  flex-wrap: wrap;
+  padding-top: var(--fg-space-2);
+  border-top: 1px solid var(--fg-color-border-default);
+}
+
+.fg-oauth-detail-actions button {
+  font-size: var(--fg-type-size-meta);
+  padding: 0.4rem 0.75rem;
+}
+

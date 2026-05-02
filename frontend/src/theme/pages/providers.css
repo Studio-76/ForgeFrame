@@ -1,0 +1,475 @@
+/* ──────────────────────────────────────────────
+ * Provider Compact Grid — command-center rows for provider registry
+ * ────────────────────────────────────────────── */
+
+.fg-provider-grid {
+  display: grid;
+  gap: 1px;
+  border: 1px solid var(--fg-color-border-default);
+  border-radius: var(--fg-radius-lg);
+  overflow: hidden;
+  background: var(--fg-color-border-default);
+}
+
+.fg-provider-row-header,
+.fg-provider-row-clickable {
+  display: grid;
+  grid-template-columns: 1.4fr 1fr 0.8fr 1fr 0.8fr 1.1fr;
+  gap: 0;
+  align-items: center;
+  padding: 0.5rem 0.85rem;
+  background: var(--fg-color-surface-default);
+}
+
+.fg-provider-row-header {
+  font-size: var(--fg-type-size-meta);
+  color: var(--fg-color-text-secondary);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  background: var(--fg-color-surface-strong);
+  border-bottom: 1px solid var(--fg-color-border-default);
+}
+
+.fg-provider-row-clickable {
+  cursor: pointer;
+  font-size: var(--fg-type-size-meta);
+  transition: background var(--fg-motion-fast) var(--fg-ease-standard);
+}
+
+.fg-provider-row-clickable:hover {
+  background: rgba(148, 163, 184, 0.06);
+}
+
+.fg-provider-row-clickable.is-selected {
+  background: var(--fg-color-action-primary-soft);
+}
+
+.fg-provider-cell {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fg-provider-cell-name {
+  display: grid;
+  gap: 0.1rem;
+}
+
+.fg-provider-name-label {
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.fg-provider-name-key {
+  font-size: 0.8rem;
+  color: var(--fg-color-text-tertiary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.fg-provider-cell-status {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.fg-provider-next-action {
+  font-size: 0.75rem;
+  padding: 0.15rem 0.5rem;
+}
+
+/* Detail panel for selected provider */
+.fg-provider-detail-panel {
+  border: 1px solid var(--fg-color-action-primary);
+  border-top: 0;
+  border-radius: 0 0 var(--fg-radius-lg) var(--fg-radius-lg);
+  background: var(--fg-color-surface-default);
+  overflow: hidden;
+}
+
+.fg-provider-detail-body {
+  padding: var(--fg-space-3) var(--fg-space-4);
+}
+
+.fg-provider-detail-section {
+  display: grid;
+  gap: var(--fg-space-1);
+}
+
+.fg-provider-detail-section + .fg-provider-detail-section {
+  margin-top: var(--fg-space-3);
+}
+
+.fg-provider-detail-label {
+  font-size: var(--fg-type-size-meta);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  color: var(--fg-color-text-secondary);
+}
+
+.fg-provider-detail-value {
+  color: var(--fg-color-text-primary);
+  font-size: var(--fg-type-size-body);
+  margin: 0;
+}
+
+.fg-provider-detail-meta {
+  color: var(--fg-color-text-secondary);
+  font-size: var(--fg-type-size-meta);
+  margin: 0;
+}
+
+.fg-provider-detail-actions {
+  display: flex;
+  gap: var(--fg-space-2);
+  align-items: center;
+  flex-wrap: wrap;
+  padding-top: var(--fg-space-2);
+  border-top: 1px solid var(--fg-color-border-default);
+  margin-top: var(--fg-space-3);
+}
+
+.fg-provider-detail-nav {
+  display: flex;
+  gap: var(--fg-space-1);
+  align-items: center;
+  flex-wrap: wrap;
+  padding-top: var(--fg-space-2);
+  margin-top: var(--fg-space-2);
+  border-top: 1px solid var(--fg-color-border-default);
+}
+
+/* Mode toggle — view/edit indicator */
+.fg-provider-mode-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: var(--fg-type-size-meta);
+  color: var(--fg-color-text-secondary);
+  padding: 0.2rem 0.6rem;
+  border: 1px solid var(--fg-color-border-default);
+  border-radius: var(--fg-radius-md);
+  background: var(--fg-color-surface-subtle);
+}
+
+.fg-provider-empty {
+  padding: var(--fg-space-4);
+  text-align: center;
+  color: var(--fg-color-text-secondary);
+  font-size: var(--fg-type-size-meta);
+}
+
+/* Responsive: stack grid on mobile */
+@media (max-width: 639px) {
+  .fg-provider-row-header {
+    display: none;
+  }
+
+  .fg-provider-row-clickable {
+    grid-template-columns: 1fr;
+    gap: var(--fg-space-1);
+    padding: var(--fg-space-2);
+  }
+
+  .fg-provider-detail-body {
+    padding: var(--fg-space-2);
+  }
+}
+
+.fg-provider-action-plan {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr)) auto;
+  gap: var(--fg-space-2);
+  align-items: start;
+  padding: var(--fg-space-2) var(--fg-space-3);
+  border: 1px solid var(--fg-color-action-primary);
+  border-radius: var(--fg-radius-md);
+  background: var(--fg-color-action-primary-soft);
+}
+
+.fg-provider-action-plan strong {
+  font-size: var(--fg-type-size-meta);
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+.fg-provider-action-plan p {
+  margin: 0.15rem 0 0;
+  color: var(--fg-color-text-secondary);
+}
+/* ──────────────────────────────────────────────
+ * Provider Targets — remediation callout
+ * ────────────────────────────────────────────── */
+
+.ff-remediation-callout {
+  display: grid;
+  gap: var(--fg-space-3);
+  border: 1px solid var(--fg-color-status-warning-border);
+  border-radius: var(--fg-radius-lg);
+  padding: var(--fg-space-4);
+  background: linear-gradient(
+    180deg,
+    var(--fg-color-status-warning-soft),
+    var(--fg-color-surface-default)
+  );
+}
+
+.ff-remediation-callout-ok {
+  border-color: var(--fg-color-status-success-border);
+  background: linear-gradient(
+    180deg,
+    var(--fg-color-status-success-soft),
+    var(--fg-color-surface-default)
+  );
+}
+
+.ff-remediation-callout-header {
+  display: flex;
+  gap: var(--fg-space-3);
+  align-items: flex-start;
+}
+
+.ff-remediation-callout-icon {
+  font-size: 1.3rem;
+  line-height: 1.4;
+  flex-shrink: 0;
+}
+
+.ff-remediation-callout-copy {
+  display: grid;
+  gap: var(--fg-space-1);
+  min-width: 0;
+}
+
+.ff-remediation-callout-copy strong {
+  font-size: var(--fg-type-size-card);
+}
+
+.ff-remediation-callout-copy p {
+  margin: 0;
+  color: var(--fg-color-text-secondary);
+}
+
+.ff-remediation-callout-action {
+  display: flex;
+  gap: var(--fg-space-2);
+  align-items: baseline;
+  flex-wrap: wrap;
+  padding: var(--fg-space-2) var(--fg-space-3);
+  background: var(--fg-color-surface-field);
+  border: 1px solid var(--fg-color-border-default);
+  border-radius: var(--fg-radius-md);
+}
+
+.ff-remediation-callout-action strong {
+  flex-shrink: 0;
+}
+
+.ff-remediation-callout-action em {
+  font-style: normal;
+  font-weight: 600;
+}
+
+/* Next action chip */
+.ff-next-action-chip {
+  display: inline-block;
+  font-size: var(--fg-type-size-meta);
+  font-weight: 600;
+  padding: 0.25rem 0.5rem;
+  border: 1px solid var(--fg-color-action-primary);
+  border-radius: var(--fg-radius-sm);
+  color: var(--fg-color-action-primary);
+  white-space: nowrap;
+}
+
+/* ──────────────────────────────────────────────
+ * Provider Targets — collapsible filter toggle
+ * ────────────────────────────────────────────── */
+
+.ff-filter-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--fg-space-2);
+  padding: 0.5rem 1rem;
+  border: 1px solid var(--fg-color-border-default);
+  border-radius: var(--fg-radius-md);
+  background: var(--fg-color-surface-field);
+  color: inherit;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  transition: border-color var(--fg-motion-fast) var(--fg-ease-standard);
+}
+
+.ff-filter-toggle:hover {
+  border-color: var(--fg-color-action-primary);
+}
+
+.ff-filter-toggle[aria-expanded="true"] {
+  border-color: var(--fg-color-action-primary);
+  background: var(--fg-color-action-primary-soft);
+}
+
+.ff-filter-toggle-badge {
+  font-weight: 400;
+  font-size: var(--fg-type-size-meta);
+  color: var(--fg-color-text-secondary);
+  max-width: 12rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ──────────────────────────────────────────────
+ * Provider Targets — policy editor styles
+ * ────────────────────────────────────────────── */
+
+.ff-policy-editor {
+  border-color: var(--fg-color-status-warning-border) !important;
+}
+
+.ff-policy-editor-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--fg-space-2);
+}
+
+.ff-policy-editor-header h4 {
+  margin: 0;
+}
+
+.ff-policy-editor-close {
+  background: none;
+  border: 1px solid var(--fg-color-border-default);
+  border-radius: var(--fg-radius-sm);
+  padding: 0.25rem 0.5rem;
+  cursor: pointer;
+  font-size: 1rem;
+  line-height: 1;
+  color: var(--fg-color-text-secondary);
+}
+
+.ff-policy-editor-close:hover {
+  border-color: var(--fg-color-status-danger-border);
+  color: var(--fg-color-status-danger-text);
+}
+
+.ff-policy-warning {
+  display: grid;
+  gap: var(--fg-space-1);
+  padding: var(--fg-space-3);
+  border: 1px solid var(--fg-color-status-warning-border);
+  border-radius: var(--fg-radius-md);
+  background: var(--fg-color-status-warning-soft);
+}
+
+.ff-policy-warning strong {
+  font-size: var(--fg-type-size-meta);
+}
+
+.ff-policy-warning p {
+  margin: 0;
+  color: var(--fg-color-text-secondary);
+  font-size: var(--fg-type-size-meta);
+}
+
+/* Advanced toggle within policy editor */
+.ff-advanced-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--fg-space-2);
+  padding: 0.4rem 0.75rem;
+  border: 1px solid var(--fg-color-border-default);
+  border-radius: var(--fg-radius-sm);
+  background: var(--fg-color-surface-subtle);
+  color: var(--fg-color-text-secondary);
+  font: inherit;
+  font-size: var(--fg-type-size-meta);
+  font-weight: 600;
+  cursor: pointer;
+  transition: border-color var(--fg-motion-fast) var(--fg-ease-standard);
+}
+
+.ff-advanced-toggle:hover {
+  border-color: var(--fg-color-action-primary);
+}
+
+.ff-advanced-toggle[aria-expanded="true"] {
+  color: var(--fg-color-action-primary);
+  border-color: var(--fg-color-action-primary);
+}
+
+/* Raw target keys display */
+.ff-raw-keys {
+  font-size: var(--fg-type-size-meta);
+}
+
+.ff-raw-keys code {
+  display: inline-block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  vertical-align: bottom;
+}
+
+/* Detail panel state row */
+.ff-detail-state-row {
+  display: grid;
+  gap: var(--fg-space-2);
+}
+
+/* Policy open button — full-width primary action to enter edit mode */
+.ff-policy-open-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--fg-space-2);
+  width: 100%;
+  padding: 0.6rem 1rem;
+  border: 1px solid var(--fg-color-action-primary);
+  border-radius: var(--fg-radius-md);
+  background: var(--fg-color-action-primary);
+  color: var(--fg-color-action-primary-text);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity var(--fg-motion-fast) var(--fg-ease-standard);
+}
+
+.ff-policy-open-button:hover {
+  opacity: 0.85;
+}
+
+/* Operator actions grid — used in simplified action bar */
+.ff-operator-actions-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--fg-space-3);
+  align-items: flex-start;
+}
+
+.ff-operator-actions-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--fg-space-2);
+  align-items: center;
+}
+
+.ff-operator-actions-label {
+  font-size: var(--fg-type-size-meta);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--fg-color-text-secondary);
+  flex-shrink: 0;
+}
+
+.ff-operator-actions-group-secondary {
+  opacity: 0.85;
+}

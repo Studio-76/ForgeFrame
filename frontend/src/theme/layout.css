@@ -1,0 +1,24 @@
+.ff-app {
+  min-height: 100vh;
+  background: var(--fg-color-canvas);
+}
+
+.ff-app-content {
+  min-height: 100vh;
+  transition: margin-left var(--fg-motion-base) var(--fg-ease-standard);
+}
+
+.ff-app.is-sidebar-open .ff-app-content {
+  margin-left: var(--fg-layout-sidebar-width);
+}
+
+.ff-app.is-sidebar-collapsed .ff-app-content {
+  margin-left: var(--fg-layout-sidebar-collapsed-width);
+}
+
+.ff-main {
+  width: min(100%, var(--fg-layout-main-width));
+  margin: 0 auto;
+  padding: 1.5rem;
+  scroll-padding-top: calc(72px + var(--fg-space-4));
+}

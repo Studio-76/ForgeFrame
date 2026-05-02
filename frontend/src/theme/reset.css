@@ -1,0 +1,43 @@
+body {
+  margin: 0;
+  background: var(--fg-color-canvas);
+  color: var(--fg-color-text-primary);
+  background-image: linear-gradient(
+    180deg,
+    var(--fg-color-shell-haze),
+    transparent 22rem
+  );
+  font-family: var(--fg-font-sans);
+  font-size: var(--fg-type-size-body);
+  line-height: var(--fg-type-line-body);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+h1,
+h2,
+h3,
+h4 {
+  line-height: var(--fg-type-line-heading);
+  font-weight: 600;
+}
+
+h1 {
+  font-size: var(--fg-type-size-title);
+}
+
+h2 {
+  font-size: var(--fg-type-size-section);
+}
+
+h3,
+h4 {
+  font-size: var(--fg-type-size-card);
+}
+
+a {
+  color: var(--fg-color-action-primary);
+}
+
