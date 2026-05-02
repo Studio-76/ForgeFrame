@@ -3027,6 +3027,155 @@ details summary {
 }
 
 /* ──────────────────────────────────────────────
+ * Harness — 3-column guided setup layout
+ * ────────────────────────────────────────────── */
+
+.ff-harness-layout {
+  display: grid;
+  gap: var(--fg-space-4);
+  grid-template-columns: minmax(220px, 1.2fr) minmax(280px, 1.6fr) minmax(220px, 1.2fr);
+  align-items: start;
+}
+
+/* Preset selection list */
+.ff-harness-presets {
+  display: grid;
+  gap: 1px;
+  border: 1px solid var(--fg-color-border-default);
+  border-radius: var(--fg-radius-md);
+  overflow: hidden;
+  background: var(--fg-color-border-default);
+}
+
+.ff-harness-preset {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: var(--fg-space-2);
+  padding: 0.65rem 0.85rem;
+  background: var(--fg-color-surface-field);
+  cursor: pointer;
+  text-align: left;
+  border: 0;
+  font: inherit;
+  color: inherit;
+  align-items: center;
+  transition: background var(--fg-motion-fast) var(--fg-ease-standard);
+}
+
+.ff-harness-preset:hover {
+  background: var(--fg-color-surface-subtle);
+}
+
+.ff-harness-preset.is-selected {
+  background: var(--fg-color-action-primary-soft);
+  border-left: 2px solid var(--fg-color-action-primary);
+}
+
+.ff-harness-preset-meta {
+  display: grid;
+  gap: 0.1rem;
+}
+
+.ff-harness-preset-name {
+  font-weight: 600;
+  font-size: var(--fg-type-size-card);
+}
+
+.ff-harness-preset-detail {
+  font-size: var(--fg-type-size-meta);
+  color: var(--fg-color-text-secondary);
+}
+
+.ff-harness-preset-action button {
+  font-size: var(--fg-type-size-meta);
+  padding: 0.3rem 0.7rem;
+  white-space: nowrap;
+}
+
+/* Run history grouped by type */
+.ff-harness-run-group {
+  border: 1px solid var(--fg-color-border-default);
+  border-radius: var(--fg-radius-md);
+  overflow: hidden;
+}
+
+.ff-harness-run-group + .ff-harness-run-group {
+  margin-top: var(--fg-space-2);
+}
+
+.ff-harness-run-group-header {
+  padding: 0.5rem 0.85rem;
+  background: var(--fg-color-surface-subtle);
+  border-bottom: 1px solid var(--fg-color-border-default);
+  font-weight: 600;
+  font-size: var(--fg-type-size-meta);
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  color: var(--fg-color-text-secondary);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.ff-harness-run-group-body {
+  display: grid;
+  gap: 0;
+}
+
+.ff-harness-run-item {
+  padding: 0.5rem 0.85rem;
+  border-top: 1px solid var(--fg-color-border-default);
+  display: grid;
+  gap: 0.15rem;
+  font-size: var(--fg-type-size-meta);
+}
+
+.ff-harness-run-item:first-child {
+  border-top: 0;
+}
+
+/* Compact harness detail row */
+.ff-harness-detail-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--fg-space-2);
+  align-items: center;
+  font-size: var(--fg-type-size-meta);
+  color: var(--fg-color-text-secondary);
+}
+
+.ff-harness-detail-row > * + * {
+  border-left: 1px solid var(--fg-color-border-default);
+  padding-left: var(--fg-space-2);
+}
+
+/* Harness empty-state guidance */
+.ff-harness-empty {
+  display: grid;
+  gap: var(--fg-space-2);
+  padding: var(--fg-space-5) var(--fg-space-4);
+  text-align: center;
+  justify-items: center;
+}
+
+.ff-harness-empty strong {
+  font-size: var(--fg-type-size-card);
+}
+
+.ff-harness-empty p {
+  color: var(--fg-color-text-secondary);
+  font-size: var(--fg-type-size-meta);
+  max-width: 32ch;
+}
+
+/* Responsive: stack harness columns on tablet/mobile */
+@media (max-width: 1023px) {
+  .ff-harness-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* ──────────────────────────────────────────────
  * Tablet and below (≤ 1023px): stack operator layout and detail panel
  * ────────────────────────────────────────────── */
 

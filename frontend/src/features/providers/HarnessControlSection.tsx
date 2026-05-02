@@ -36,15 +36,97 @@ type HarnessControlSectionProps = SectionProps & {
 };
 
 /**
- * Harness workspace section for operating generic integration profiles:
- * selecting templates and saved profiles, inspecting the live config contract,
- * running preview/verify/dry-run/probe actions, and managing imports/exports/rollback.
+ * Group runs by mode type for scannable grouping.
+ */
+function groupRunsByMode(
+  runs: ProvidersPageData["runs"],
+): Record<string, ProvidersPageData["runs"]> {
+  const groups: Record<string, ProvidersPageData["runs"]> = {};
+  for (const run of runs) {
+    const key = run.mode || "unknown";
+    if (!groups[key]) {
+      groups[key] = [];
+    }
+    groups[key].push(run);
+  }
+  return groups;
+}
+
+/**
+ * Determine harness overall status and next recommended step.
+ */
+function deriveHarnessStatus(data: ProvidersPageData): {
+  statusTone: "success" | "warning" | "danger" | "neutral";
+  statusLabel: string;
+  nextStep: string;
+  nextStepTone: "success" | "warning" | "danger" | "neutral";
+  activeProfile: string | null;
+  lastVerify: string;
+} {
+  const activeProfiles = data.profiles.filter((p) => p.enabled);
+  const attentionProfiles = data.profiles.filter((p) => p.needs_attention);
+  const lastRun = data.runs[0] ?? null;
+
+  if (data.profiles.length === 0) {
+    return {
+      statusTone: "neutral",
+      statusLabel: "Not configured",
+      nextStep: "Select a provider preset or template to create your first harness profile.",
+      nextStepTone: "neutral",
+      activeProfile: null,
+      lastVerify: "never",
+    };
+  }
+
+  if (attentionProfiles.length > 0) {
+    return {
+      statusTone: "warning",
+      statusLabel: `${attentionProfiles.length} profile${attentionProfiles.length > 1 ? "s" : ""} need attention`,
+      nextStep: `Review ${attentionProfiles[0]?.label ?? "the first attention profile"} and resolve issues.`,
+      nextStepTone: "warning",
+      activeProfile: activeProfiles[0]?.label ?? null,
+      lastVerify: lastRun?.status ?? "unknown",
+    };
+  }
+
+  if (activeProfiles.length === 0) {
+    return {
+      statusTone: "neutral",
+      statusLabel: "No active profile",
+      nextStep: "Activate a configured profile to enable harness operations.",
+      nextStepTone: "neutral",
+      activeProfile: null,
+      lastVerify: lastRun?.status ?? "never",
+    };
+  }
+
+  return {
+    statusTone: "success",
+    statusLabel: `${activeProfiles.length} active profile${activeProfiles.length > 1 ? "s" : ""}`,
+    nextStep: lastRun
+      ? "Review the latest run result or run a new verification."
+      : "Run a verification to confirm harness configuration.",
+    nextStepTone: "success",
+    activeProfile: activeProfiles[0]?.label ?? null,
+    lastVerify: lastRun?.status ?? "never",
+  };
+}
+
+/**
+ * Harness workspace section — guided operator workflow for integration profiles.
+ *
+ * Layout:
+ *  1. Status hero + next-step recommendation
+ *  2. 3-column workspace: Presets | Config Preview | Actions
+ *  3. Run history (collapsible)
+ *  4. Diagnostics (collapsible)
  */
 export function HarnessControlSection({ data, actions, instanceId }: HarnessControlSectionProps) {
   const [selectedProfileKey, setSelectedProfileKey] = useState<string>(data.profiles[0]?.provider_key ?? "");
   const [actionModel, setActionModel] = useState<string>(data.profiles[0]?.models[0] ?? "model-1");
   const [actionMessage, setActionMessage] = useState<string>("Hello from ForgeFrame harness");
   const [rollbackRevision, setRollbackRevision] = useState<number | null>(null);
+  const [showRunDetails, setShowRunDetails] = useState(false);
 
   useEffect(() => {
     if (!data.profiles.length) {
@@ -103,256 +185,217 @@ export function HarnessControlSection({ data, actions, instanceId }: HarnessCont
   );
   const lastFailedRun = asRecord(data.runOps.last_failed_run);
 
+  const harnessStatus = deriveHarnessStatus(data);
+  const groupedRuns = useMemo(() => groupRunsByMode(selectedProfileRuns), [selectedProfileRuns]);
+
   return (
     <>
-      <SectionCard
-        title="Harness Workspace"
-        description="Select templates and saved profiles, inspect config contracts, run harness actions, and manage imports, exports, and rollback."
-        actions={
-          <button type="button" onClick={() => void actions.load()}>
-            Refresh workspace
-          </button>
-        }
-      >
-        <div className="fg-grid fg-grid-compact">
-          <MetricTile label="Profiles" value={formatMetric(data.profiles.length)} note={`${formatMetric(data.runOps.profiles_needing_attention)} need attention`} />
-          <MetricTile label="Templates" value={formatMetric(data.templates.length)} note={`${formatMetric(proofProviders.length)} proof carriers`} />
-          <MetricTile
-            label="Runs"
-            value={formatMetric(data.runSummary.total)}
-            note={`${formatMetric(data.runSummary.failed)} failed · ${formatMetric(data.runSummary.preview)} preview`}
-          />
-          <MetricTile
-            label="Preview / Verify / Probe"
-            value={`${formatMetric(data.runSummary.preview)} / ${formatMetric(data.runSummary.verify)} / ${formatMetric(data.runSummary.probe)}`}
-            note={`dry-run ${formatMetric(data.runSummary.dry_run)}`}
-          />
+      {/* ─── Status Hero ─── */}
+      <div className="ff-status-hero">
+        <div className="ff-status-hero-top">
+          <div>
+            <h2 className="ff-status-hero-label">Harness Status</h2>
+            <p className="ff-status-hero-line">
+              {harnessStatus.activeProfile
+                ? `Active: ${harnessStatus.activeProfile} · Last verify: ${harnessStatus.lastVerify}`
+                : "No harness profiles configured yet"}
+            </p>
+          </div>
+          <div className="ff-status-hero-stats">
+            <span>{formatMetric(data.profiles.length)} profile{data.profiles.length !== 1 ? "s" : ""}</span>
+            <span>{formatMetric(data.runSummary.total)} run{data.runSummary.total !== 1 ? "s" : ""}</span>
+            <span>{formatMetric(data.templates.length)} template{data.templates.length !== 1 ? "s" : ""}</span>
+          </div>
         </div>
-      </SectionCard>
+        <div className="ff-next-step" data-tone={harnessStatus.nextStepTone}>
+          <span className="ff-next-step-label">Next step:</span>
+          <span>{harnessStatus.nextStep}</span>
+        </div>
+      </div>
 
-      <div className="fg-grid">
+      {/* ─── 3-Column Workspace ─── */}
+      <div className="ff-harness-layout">
+        {/* ── Left Column: Provider Presets ── */}
         <div className="fg-stack">
-          <SectionCard
-            title="Profiles & Templates"
-            description="Operator queue: select a saved profile or load a template into the editable draft."
-          >
-            <div className="fg-stack">
-              <div className="fg-subcard">
-                <div className="fg-panel-heading">
-                  <div>
-                    <h4>Saved profiles</h4>
-                    <p className="fg-muted">Status, proof, and last-run history visible at a glance.</p>
-                  </div>
-                </div>
-                {data.profiles.length === 0 ? <p className="fg-muted">No saved harness profiles yet.</p> : null}
-                <div className="fg-stack">
-                  {data.profiles.map((profile) => {
-                    const profileRun = latestRunForProfile(profile.provider_key, data.runs, data.runOps);
-                    const proof = profileProofState(profile, data.providers);
-                    const isSelected = profile.provider_key === selectedProfile?.provider_key;
-                    return (
-                      <button
-                        key={profile.provider_key}
-                        type="button"
-                        className={`fg-section-link${isSelected ? " is-current" : ""}`}
-                        onClick={() => setSelectedProfileKey(profile.provider_key)}
-                      >
-                        <span className="fg-section-link-copy">
-                          <span className="fg-wayfinding-label">
-                            <span className="fg-section-link-label">{profile.label}</span>
-                            <span className="fg-actions">
-                              <TonePill label={profile.enabled ? "active" : "inactive"} tone={profile.enabled ? "success" : "neutral"} />
-                              <TonePill label={`proof ${proof.status}`} tone={toneFromProofStatus(proof.status)} />
-                            </span>
-                          </span>
-                          <span className="fg-muted">
-                            {profile.provider_key} · v{formatMetric(profile.config_revision ?? 1)} · {profile.lifecycle_status ?? "draft"}
-                          </span>
-                          <span className="fg-muted">
-                            last run {profileRun ? `${formatHarnessMode(profileRun.mode)} / ${profileRun.status}` : "not recorded"} · scope={formatHarnessScope(profile)}
-                          </span>
+          <SectionCard title="Provider Presets" description="Select a saved profile to inspect and operate. Choose a template to create a new one.">
+            {data.profiles.length === 0 ? (
+              <p className="fg-muted">No saved harness profiles yet. Use a template below to create one.</p>
+            ) : (
+              <div className="ff-harness-presets" role="listbox" aria-label="Harness profiles">
+                {data.profiles.map((profile) => {
+                  const profileRun = latestRunForProfile(profile.provider_key, data.runs, data.runOps);
+                  const proof = profileProofState(profile, data.providers);
+                  const isSelected = profile.provider_key === selectedProfile?.provider_key;
+                  return (
+                    <button
+                      key={profile.provider_key}
+                      type="button"
+                      className={`ff-harness-preset${isSelected ? " is-selected" : ""}`}
+                      role="option"
+                      aria-selected={isSelected}
+                      onClick={() => setSelectedProfileKey(profile.provider_key)}
+                    >
+                      <div className="ff-harness-preset-meta">
+                        <span className="ff-harness-preset-name">{profile.label}</span>
+                        <span className="ff-harness-preset-detail">
+                          {profile.provider_key} · {profile.integration_class}
+                          {profile.lifecycle_status ? ` · ${profile.lifecycle_status}` : ""}
                         </span>
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-
-              <div className="fg-subcard">
-                <div className="fg-panel-heading">
-                  <div>
-                    <h4>Templates</h4>
-                    <p className="fg-muted">Load a template into the editable draft to populate provider defaults.</p>
-                  </div>
-                </div>
-                <div className="fg-template-grid">
-                  {data.templates.map((template) => (
-                    <div key={template.id} className="fg-subcard fg-template-card">
-                      <div className="fg-template-card-header">
-                        <strong className="fg-section-link-label">{template.label}</strong>
-                        <span className="fg-template-id">{template.id}</span>
+                        <span className="ff-harness-preset-detail">
+                          Models: {joinList(profile.models.slice(0, 3))}
+                          {profile.models.length > 3 ? ` +${profile.models.length - 3}` : ""}
+                        </span>
                       </div>
-                      <div className="fg-template-meta">
-                        <span className="fg-muted">class={template.integration_class}</span>
-                        {template.profile_defaults?.models?.length ? (
-                          <span className="fg-muted">models={template.profile_defaults.models.join(", ")}</span>
+                      <div className="ff-harness-preset-action">
+                        <TonePill label={profile.enabled ? "active" : "inactive"} tone={profile.enabled ? "success" : "neutral"} />
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+
+            {data.templates.length > 0 ? (
+              <details className="ff-collapse-section fg-mt-sm" style={{ borderRadius: "var(--fg-radius-md)" }}>
+                <summary>
+                  <div className="ff-collapse-summary-text">
+                    <h3>Templates ({data.templates.length})</h3>
+                    <p>Load a template into the draft to populate provider defaults.</p>
+                  </div>
+                </summary>
+                <div className="ff-collapse-section-body">
+                  <div className="fg-stack fg-mt-sm">
+                    {data.templates.map((template) => (
+                      <div key={template.id} className="fg-subcard">
+                        <div className="fg-template-card-header">
+                          <strong className="fg-section-link-label">{template.label}</strong>
+                          <span className="fg-template-id">{template.id}</span>
+                        </div>
+                        <div className="ff-harness-detail-row">
+                          <span>class={template.integration_class}</span>
+                          {template.profile_defaults?.models?.length ? (
+                            <span>models={joinList(template.profile_defaults.models)}</span>
+                          ) : null}
+                        </div>
+                        {template.description ? <p className="fg-muted fg-template-desc">{template.description}</p> : null}
+                        {data.access.canMutate ? (
+                          <div className="ff-harness-preset-action fg-mt-sm">
+                            <button
+                              type="button"
+                              onClick={() => actions.setNewHarness((current) => buildDraftFromTemplate(template, current))}
+                            >
+                              Use template
+                            </button>
+                          </div>
                         ) : null}
                       </div>
-                      {template.description ? (
-                        <p className="fg-muted fg-template-desc">{template.description}</p>
-                      ) : null}
-                      {data.access.canMutate ? (
-                        <div className="fg-template-action">
-                          <button
-                            type="button"
-                            onClick={() => actions.setNewHarness((current) => buildDraftFromTemplate(template, current))}
-                          >
-                            Load into draft
-                          </button>
-                        </div>
-                      ) : null}
-                    </div>
-                  ))}
+                    ))}
+                  </div>
                 </div>
-              </div>
-            </div>
+              </details>
+            ) : null}
           </SectionCard>
         </div>
 
+        {/* ── Center Column: Config Preview / Draft ── */}
         <div className="fg-stack">
           <SectionCard
-            title="Selected Profile"
-            description="Status, version, scope, last run, and the persisted config contract for the selected profile."
-            actions={
-              selectedProfile && data.access.canMutate ? (
-                <button type="button" onClick={() => actions.setNewHarness(buildDraftFromProfile(selectedProfile))}>
-                  Load profile into draft
-                </button>
-              ) : undefined
+            title={selectedProfile ? selectedProfile.label : "Configuration Preview"}
+            description={
+              selectedProfile
+                ? `Contract details for ${selectedProfile.provider_key} — click "Use this preset" below actions to load into editable draft.`
+                : "Select a profile from the left panel to inspect its configuration here."
             }
           >
             {selectedProfile ? (
               <div className="fg-stack">
-                <div className="fg-subcard">
-                  <div className="fg-panel-heading">
-                    <div>
-                      <h4>{selectedProfile.label}</h4>
-                      <p className="fg-muted">
-                        {selectedProfile.provider_key} · {selectedProfile.integration_class}
-                        {selectedProfile.template_id ? ` · template=${selectedProfile.template_id}` : " · custom contract"}
-                      </p>
-                    </div>
-                    <div className="fg-actions">
-                      <TonePill label={selectedProfile.enabled ? "active" : "inactive"} tone={selectedProfile.enabled ? "success" : "neutral"} />
-                      <TonePill
-                        label={selectedProfile.lifecycle_status ?? "draft"}
-                        tone={toneFromStatus(selectedProfile.lifecycle_status ?? "draft")}
-                      />
-                      {selectedProfile.needs_attention ? <TonePill label="needs attention" tone="warning" /> : null}
-                      {selectedProfileProof ? (
-                        <TonePill
-                          label={`proof ${selectedProfileProof.status}`}
-                          tone={toneFromProofStatus(selectedProfileProof.status)}
-                        />
-                      ) : null}
-                    </div>
-                  </div>
-
-                  <div className="fg-detail-grid fg-detail-grid-compact">
-                    <span className="fg-detail-label">Status &amp; Identity</span>
-                    <div className="fg-detail-rows">
-                      <p><span className="fg-detail-key">status</span> {selectedProfile.lifecycle_status ?? "draft"}</p>
-                      <p><span className="fg-detail-key">version</span> v{formatMetric(selectedProfile.config_revision ?? 1)}</p>
-                      <p><span className="fg-detail-key">scope</span> {formatHarnessScope(selectedProfile)}</p>
-                      <p><span className="fg-detail-key">provider</span> {selectedProfile.provider_key} · {selectedProfile.integration_class}</p>
-                      <p><span className="fg-detail-key">template</span> {toStringValue(selectedProfile.template_id, "custom contract")}</p>
-                    </div>
-                  </div>
-                  <div className="fg-detail-grid fg-detail-grid-compact">
-                    <span className="fg-detail-label">Last Activity</span>
-                    <div className="fg-detail-rows">
-                      <p>
-                        <span className="fg-detail-key">last run</span>
-                        {selectedProfileLastRun
-                          ? `${formatTimestamp(selectedProfileLastRun.executed_at)} · ${formatHarnessMode(selectedProfileLastRun.mode)} · ${selectedProfileLastRun.status}`
-                          : "not recorded"}
-                      </p>
-                      <p><span className="fg-detail-key">last error</span> {toStringValue(selectedProfile.last_error, "none recorded")}</p>
-                      <p>
-                        <span className="fg-detail-key">proof</span> {selectedProfileProof?.status ?? "none"}
-                        <span className="fg-muted"> · {selectedProfileProof?.note ?? "no note recorded"}</span>
-                      </p>
-                      <p>
-                        <span className="fg-detail-key">verify</span> {toStringValue(selectedProfile.last_verify_status, "never")} ·
-                        <span className="fg-detail-key">probe</span> {toStringValue(selectedProfile.last_probe_status, "never")} ·
-                        <span className="fg-detail-key">sync</span> {toStringValue(selectedProfile.last_sync_status, "never")}
-                      </p>
-                      <p>
-                        <span className="fg-detail-key">last used</span> {formatTimestamp(selectedProfile.last_used_at)}
-                        <span className="fg-muted"> · model={toStringValue(selectedProfile.last_used_model, "-")}</span>
-                        <span className="fg-muted"> · requests={formatMetric(selectedProfile.request_count)}</span>
-                        <span className="fg-muted"> · stream={formatMetric(selectedProfile.stream_request_count)}</span>
-                      </p>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="fg-subcard">
-                  <h4>Config contract</h4>
-                  <div className="fg-detail-grid fg-detail-grid-compact fg-mb-sm">
-                    <span className="fg-detail-label">Connection</span>
-                    <div className="fg-detail-rows">
-                      <p><span className="fg-detail-key">endpoint</span> {selectedProfile.endpoint_base_url}</p>
-                      <p><span className="fg-detail-key">auth</span> {selectedProfile.auth_scheme} · header={selectedProfile.auth_header}</p>
-                      <p><span className="fg-detail-key">discovery</span> {selectedProfile.discovery_enabled ? "enabled" : "disabled"}</p>
-                    </div>
-                  </div>
-                  <div className="fg-detail-grid fg-detail-grid-compact fg-mb-sm">
-                    <span className="fg-detail-label">Capabilities</span>
-                    <div className="fg-detail-rows">
-                      <p><span className="fg-detail-key">models</span> {joinList(selectedProfile.models)}</p>
-                      <p><span className="fg-detail-key">streaming</span> {selectedProfile.stream_mapping?.enabled ? "enabled" : "disabled"} · <span className="fg-detail-key">tool calling</span> {selectedProfile.capabilities?.tool_calling ? "enabled" : "disabled"}</p>
-                      <p><span className="fg-detail-key">responses</span> {selectedProfile.capabilities?.responses ? "enabled" : "disabled"} · <span className="fg-detail-key">embeddings</span> {selectedProfile.capabilities?.embeddings ? "enabled" : "disabled"}</p>
-                    </div>
-                  </div>
-                  <div className="fg-detail-grid fg-detail-grid-compact fg-mb-sm">
-                    <span className="fg-detail-label">Mapping</span>
-                    <div className="fg-detail-rows">
-                      <p><span className="fg-detail-key">request path</span> {toStringValue(selectedProfile.request_mapping?.path)} · <span className="fg-detail-key">method</span> {toStringValue(selectedProfile.request_mapping?.method, "POST")}</p>
-                      <p><span className="fg-detail-key">response text path</span> {toStringValue(selectedProfile.response_mapping?.text_path)} · <span className="fg-detail-key">error path</span> {toStringValue(selectedProfile.error_mapping?.message_path)}</p>
-                    </div>
-                  </div>
-                  {selectedProfile.capabilities?.unsupported_features?.length ? (
-                    <p className="fg-note">Unsupported features: {selectedProfile.capabilities.unsupported_features.join(", ")}</p>
+                {/* Status badges row */}
+                <div className="ff-harness-detail-row">
+                  <TonePill label={selectedProfile.enabled ? "active" : "inactive"} tone={selectedProfile.enabled ? "success" : "neutral"} />
+                  <TonePill
+                    label={selectedProfile.lifecycle_status ?? "draft"}
+                    tone={toneFromStatus(selectedProfile.lifecycle_status ?? "draft")}
+                  />
+                  {selectedProfile.needs_attention ? <TonePill label="needs attention" tone="warning" /> : null}
+                  {selectedProfileProof ? (
+                    <TonePill label={`proof ${selectedProfileProof.status}`} tone={toneFromProofStatus(selectedProfileProof.status)} />
                   ) : null}
+                  <span>v{formatMetric(selectedProfile.config_revision ?? 1)}</span>
+                  <span>scope={formatHarnessScope(selectedProfile)}</span>
                 </div>
 
+                {/* Compact detail grid */}
+                <div className="fg-detail-grid fg-detail-grid-compact">
+                  <div className="fg-detail-rows">
+                    <p><span className="fg-detail-key">endpoint</span> {selectedProfile.endpoint_base_url}</p>
+                    <p><span className="fg-detail-key">auth</span> {selectedProfile.auth_scheme} · header={selectedProfile.auth_header}</p>
+                    <p><span className="fg-detail-key">models</span> {joinList(selectedProfile.models)}</p>
+                    <p>
+                      <span className="fg-detail-key">capabilities</span>
+                      {" "}streaming={selectedProfile.stream_mapping?.enabled ? "yes" : "no"}
+                      {" · "}tools={selectedProfile.capabilities?.tool_calling ? "yes" : "no"}
+                      {" · "}responses={selectedProfile.capabilities?.responses ? "yes" : "no"}
+                    </p>
+                  </div>
+                </div>
+
+                {/* Last activity row */}
+                <div className="ff-harness-detail-row">
+                  <span>last run: {selectedProfileLastRun ? `${formatHarnessMode(selectedProfileLastRun.mode)} · ${selectedProfileLastRun.status}` : "not recorded"}</span>
+                  <span>verify: {toStringValue(selectedProfile.last_verify_status, "never")}</span>
+                  <span>probe: {toStringValue(selectedProfile.last_probe_status, "never")}</span>
+                  <span>sync: {toStringValue(selectedProfile.last_sync_status, "never")}</span>
+                </div>
+
+                {selectedProfile.last_error ? <p className="fg-note">Last error: {selectedProfile.last_error}</p> : null}
+
+                {/* Model inventory (collapsible) */}
                 {selectedProfile.model_inventory?.length ? (
-                  <div className="fg-subcard">
-                    <h4>Model inventory</h4>
-                    <div className="fg-stack">
+                  <details className="fg-mt-sm">
+                    <summary style={{ fontSize: "var(--fg-type-size-meta)", cursor: "pointer" }}>
+                      Model inventory ({selectedProfile.model_inventory.length})
+                    </summary>
+                    <div className="fg-stack fg-mt-sm">
                       {selectedProfile.model_inventory.map((item, index) => (
                         <div key={`${toStringValue(item.model, "model")}-${index}`} className="fg-detail-rows fg-model-inv-row">
                           <strong>{item.model}</strong>
                           <span className="fg-muted">source={item.source} · status={item.status}</span>
-                          <span className="fg-muted">synced={formatTimestamp(item.synced_at)} · reason={toStringValue(item.readiness_reason, "-")}</span>
                         </div>
                       ))}
                     </div>
-                  </div>
+                  </details>
+                ) : null}
+
+                {/* Mapping details (collapsible) */}
+                {selectedProfile.request_mapping?.path ? (
+                  <details className="fg-mt-sm">
+                    <summary style={{ fontSize: "var(--fg-type-size-meta)", cursor: "pointer" }}>Mapping details</summary>
+                    <div className="fg-detail-rows fg-mt-sm">
+                      <p><span className="fg-detail-key">request</span> {selectedProfile.request_mapping.method ?? "POST"} {selectedProfile.request_mapping.path}</p>
+                      <p><span className="fg-detail-key">response</span> path={toStringValue(selectedProfile.response_mapping?.text_path)}</p>
+                      <p><span className="fg-detail-key">error</span> path={toStringValue(selectedProfile.error_mapping?.message_path)}</p>
+                    </div>
+                  </details>
                 ) : null}
               </div>
             ) : (
-              <p className="fg-muted">Select a saved profile from the left rail to inspect its contract and history.</p>
+              <div className="ff-harness-empty">
+                <strong>No profile selected</strong>
+                <p>Choose a provider preset from the left panel to inspect its configuration, run actions, and manage its lifecycle.</p>
+                {data.templates.length > 0 ? (
+                  <p>Or use a template to create a new profile from scratch.</p>
+                ) : null}
+              </div>
             )}
           </SectionCard>
 
+          {/* Editable Draft */}
           <SectionCard
             title="Editable Draft"
             description={
               data.access.canMutate
-                ? "Save a new profile or update the selected one by editing the draft below."
-                : "The saved draft contract stays visible, but saving or importing profiles requires a write-capable operator session."
+                ? 'Edit the draft below then click "Save profile". Using a preset or template fills in defaults without saving.'
+                : "Viewing the current draft — editing requires write access."
             }
             actions={data.access.canMutate ? <button type="button" onClick={() => void actions.upsertHarness()}>Save profile</button> : undefined}
           >
@@ -467,7 +510,6 @@ export function HarnessControlSection({ data, actions, instanceId }: HarnessCont
                 </div>
 
                 <label>
-                  <span>Streaming</span>
                   <span className="fg-row">
                     <input
                       type="checkbox"
@@ -475,7 +517,7 @@ export function HarnessControlSection({ data, actions, instanceId }: HarnessCont
                       onChange={(event) => actions.setNewHarness((current) => ({ ...current, stream_enabled: event.target.checked }))}
                       className="fg-control-auto"
                     />
-                    <span>{data.newHarness.stream_enabled ? "stream enabled" : "stream disabled"}</span>
+                    <span>{data.newHarness.stream_enabled ? "Streaming enabled" : "Streaming disabled"}</span>
                   </span>
                 </label>
 
@@ -495,10 +537,11 @@ export function HarnessControlSection({ data, actions, instanceId }: HarnessCont
           </SectionCard>
         </div>
 
+        {/* ── Right Column: Actions ── */}
         <div className="fg-stack">
           <SectionCard
             title="Actions"
-            description="Test harness APIs against the selected profile. Preview is read-safe; verify, dry-run, and probe require operator access."
+            description="Preview is read-safe. Verify, dry-run, and probe require operator access."
           >
             {selectedProfile ? (
               <div className="fg-stack">
@@ -515,7 +558,7 @@ export function HarnessControlSection({ data, actions, instanceId }: HarnessCont
                   </label>
                   <label>
                     Message
-                    <input value={actionMessage} onChange={(event) => setActionMessage(event.target.value)} placeholder="Hello from ForgeFrame harness" />
+                    <input value={actionMessage} onChange={(event) => setActionMessage(event.target.value)} placeholder="Test message" />
                   </label>
                   <label>
                     Rollback revision
@@ -534,132 +577,135 @@ export function HarnessControlSection({ data, actions, instanceId }: HarnessCont
                   </label>
                 </div>
 
-                <div className="fg-action-group">
-                  <span className="fg-detail-label">Test Actions</span>
-                  <div className="fg-actions">
-                    <button type="button" onClick={() => void actions.previewHarnessProfile(selectedProfile.provider_key, actionModel, actionMessage)}>
-                      Preview
-                    </button>
-                    {data.access.canOperate ? (
-                      <>
-                        <button type="button" onClick={() => void actions.verifyHarnessProfile(selectedProfile.provider_key, actionModel, actionMessage)}>
-                          Verify
-                        </button>
-                        <button type="button" onClick={() => void actions.dryRunHarnessProfile(selectedProfile.provider_key, actionModel, actionMessage)}>
-                          Dry-run
-                        </button>
-                        <button type="button" onClick={() => void actions.probeHarnessProfile(selectedProfile.provider_key, actionModel)}>
-                          Probe
-                        </button>
-                      </>
-                    ) : (
-                      <span className="fg-muted">verify, dry-run, and probe require operator access</span>
-                    )}
-                  </div>
+                <div className="ff-action-controls">
+                  <span className="fg-detail-label">Test</span>
+                  <button type="button" onClick={() => void actions.previewHarnessProfile(selectedProfile.provider_key, actionModel, actionMessage)}>
+                    Preview
+                  </button>
+                  {data.access.canOperate ? (
+                    <>
+                      <button type="button" onClick={() => void actions.verifyHarnessProfile(selectedProfile.provider_key, actionModel, actionMessage)}>
+                        Verify
+                      </button>
+                      <button type="button" onClick={() => void actions.dryRunHarnessProfile(selectedProfile.provider_key, actionModel, actionMessage)}>
+                        Dry-run
+                      </button>
+                      <button type="button" onClick={() => void actions.probeHarnessProfile(selectedProfile.provider_key, actionModel)}>
+                        Probe
+                      </button>
+                    </>
+                  ) : (
+                    <span className="fg-muted">verify, dry-run, probe require operator access</span>
+                  )}
                 </div>
 
-                <div className="fg-action-group">
-                  <span className="fg-detail-label">Management</span>
-                  <div className="fg-actions">
-                    {data.access.canMutate ? (
-                      <>
-                        <button type="button" onClick={() => void actions.toggleHarnessProfile(selectedProfile.provider_key, selectedProfile.enabled)}>
-                          {selectedProfile.enabled ? "Deactivate" : "Activate"}
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => rollbackRevision !== null && void actions.rollbackHarnessProfile(selectedProfile.provider_key, rollbackRevision)}
-                          disabled={rollbackRevision === null}
-                        >
-                          Rollback
-                        </button>
-                      </>
-                    ) : (
-                      <span className="fg-muted">activation, rollback, and import require providers.write</span>
-                    )}
-                    {data.access.canExportRedacted ? (
-                      <button type="button" onClick={() => void actions.exportHarness(true)}>
-                        Export redacted
+                <div className="ff-action-controls">
+                  <span className="fg-detail-label">Manage</span>
+                  {data.access.canMutate ? (
+                    <>
+                      <button type="button" onClick={() => void actions.toggleHarnessProfile(selectedProfile.provider_key, selectedProfile.enabled)}>
+                        {selectedProfile.enabled ? "Deactivate" : "Activate"}
                       </button>
-                    ) : null}
-                    {data.access.canExportFull ? (
-                      <button type="button" onClick={() => void actions.exportHarness(false)}>
-                        Export full snapshot
+                      <button
+                        type="button"
+                        onClick={() => rollbackRevision !== null && void actions.rollbackHarnessProfile(selectedProfile.provider_key, rollbackRevision)}
+                        disabled={rollbackRevision === null}
+                      >
+                        Rollback
                       </button>
-                    ) : null}
-                    {data.access.canMutate ? (
-                      <>
-                        <button type="button" onClick={() => void actions.importHarness(true)}>
-                          Dry-run import
-                        </button>
-                        <button type="button" onClick={() => void actions.importHarness(false)}>
-                          Apply import
-                        </button>
-                      </>
-                    ) : null}
-                  </div>
+                    </>
+                  ) : (
+                    <span className="fg-muted">activation, rollback require providers.write</span>
+                  )}
                 </div>
+
+                <div className="ff-action-controls">
+                  <span className="fg-detail-label">Profile</span>
+                  {data.access.canMutate ? (
+                    <button type="button" onClick={() => actions.setNewHarness(buildDraftFromProfile(selectedProfile))}>
+                      Use this preset
+                    </button>
+                  ) : null}
+                  {data.access.canExportRedacted ? (
+                    <button type="button" onClick={() => void actions.exportHarness(true)}>
+                      Export (redacted)
+                    </button>
+                  ) : null}
+                  {data.access.canExportFull ? (
+                    <button type="button" onClick={() => void actions.exportHarness(false)}>
+                      Export (full)
+                    </button>
+                  ) : null}
+                </div>
+
+                {data.access.canMutate ? (
+                  <div className="ff-nav-links">
+                    <button type="button" onClick={() => void actions.importHarness(true)}>
+                      Dry-run import
+                    </button>
+                    <button type="button" onClick={() => void actions.importHarness(false)}>
+                      Apply import
+                    </button>
+                  </div>
+                ) : null}
               </div>
             ) : (
-              <p className="fg-muted">Select a profile before running harness actions.</p>
+              <div className="ff-harness-empty">
+                <strong>Select a profile first</strong>
+                <p>Choose a profile from the presets panel to run harness actions, view results, and manage lifecycle.</p>
+              </div>
             )}
           </SectionCard>
 
-          <SectionCard
-            title="Last Action Result"
-            description="Summary of the most recent harness action with operator-facing status."
-          >
+          {/* Last Action Result */}
+          <SectionCard title="Last Result" description="Outcome of the most recent harness action.">
             {data.lastHarnessAction ? (
               <div className="fg-stack">
-                <div className="fg-panel-heading">
-                  <div>
-                    <h4>{data.lastHarnessAction.title}</h4>
-                    <p className="fg-muted">{data.lastHarnessAction.summary}</p>
-                  </div>
+                <div className="ff-harness-detail-row">
+                  <strong>{data.lastHarnessAction.title}</strong>
                   <TonePill label={data.lastHarnessAction.status} tone={toneFromStatus(data.lastHarnessAction.status)} />
                 </div>
-                <div className="fg-detail-grid">
-                  <p>
-                    provider={toStringValue(data.lastHarnessAction.providerKey)} · model={toStringValue(data.lastHarnessAction.model)}
-                  </p>
-                  <p>
-                    captured={formatTimestamp(data.lastHarnessAction.capturedAt)} · run=
-                    {data.lastHarnessAction.run?.run_id ? `${data.lastHarnessAction.run.run_id}` : "not attached"}
-                  </p>
-                  <p>
-                    run status=
-                    {data.lastHarnessAction.run
-                      ? `${data.lastHarnessAction.run.status} at ${formatTimestamp(data.lastHarnessAction.run.executed_at)}`
-                      : "not-ready"}
-                  </p>
-                  <p>error={toStringValue(data.lastHarnessAction.error, "none recorded")}</p>
+                <p className="fg-muted" style={{ fontSize: "var(--fg-type-size-meta)", margin: 0 }}>
+                  {data.lastHarnessAction.summary}
+                </p>
+                <div className="ff-harness-detail-row">
+                  <span>provider={toStringValue(data.lastHarnessAction.providerKey)}</span>
+                  <span>model={toStringValue(data.lastHarnessAction.model)}</span>
+                  {data.lastHarnessAction.run?.status ? <span>status={data.lastHarnessAction.run.status}</span> : null}
                 </div>
-                <div className="fg-actions">
+                {data.lastHarnessAction.error ? <p className="fg-note">Error: {data.lastHarnessAction.error}</p> : null}
+                <div className="ff-nav-links">
                   <Link className="fg-nav-link" to={logSurfaceLink}>
-                    Open logs
+                    View logs
                   </Link>
                   <a className="fg-nav-link" href="#harness-advanced-diagnostics">
-                    Open diagnostics payload
+                    Diagnostics
                   </a>
                 </div>
-                <p className="fg-note">Log handoff is bridge-only — deep-linking to a single run is not yet available.</p>
               </div>
             ) : (
-              <p className="fg-muted">No harness action has been run from this session yet.</p>
+              <p className="fg-muted">No action has been run from this session yet.</p>
             )}
           </SectionCard>
+        </div>
+      </div>
 
-          <SectionCard
-            title="Run History"
-            description="Recent runs by time, mode, status, and error with log handoff links."
-          >
-            <div className="fg-grid fg-grid-compact fg-mb-sm">
-              <MetricTile label="Preview / Dry-run" value={`${formatMetric(data.runSummary.preview)} / ${formatMetric(data.runSummary.dry_run)}`} note="request contract actions" />
-              <MetricTile label="Verify / Probe" value={`${formatMetric(data.runSummary.verify)} / ${formatMetric(data.runSummary.probe)}`} note={`${formatMetric(data.runSummary.failed)} failed`} />
-              <MetricTile label="Runtime" value={`${formatMetric(data.runSummary.runtime_non_stream)} / ${formatMetric(data.runSummary.runtime_stream)}`} note="non-stream / stream" />
-            </div>
-
-            <div className="fg-grid fg-grid-compact fg-mb-sm">
+      {/* ─── Run History (Collapsible) ─── */}
+      <details className="ff-collapse-section" open={selectedProfileRuns.length > 0 && showRunDetails}>
+        <summary onClick={() => setShowRunDetails(!showRunDetails)}>
+          <div className="ff-collapse-summary-text">
+            <h3>Run History</h3>
+            <p>
+              {selectedProfileRuns.length} run{selectedProfileRuns.length !== 1 ? "s" : ""}
+              {selectedProfile ? ` for ${selectedProfile.label}` : ""}
+              {" · "}Filter by mode, status, or client below.
+            </p>
+          </div>
+        </summary>
+        <div className="ff-collapse-section-body">
+          <div className="fg-stack">
+            {/* Filters */}
+            <div className="fg-grid fg-grid-compact">
               {renderRunFilterSelect("Mode", data.runFilters.mode, (value) => actions.setRunFilter("mode", value), [
                 { value: "all", label: "all" },
                 { value: "preview", label: "preview" },
@@ -685,58 +731,89 @@ export function HarnessControlSection({ data, actions, instanceId }: HarnessCont
 
             {lastFailedRun ? (
               <p className="fg-note">
-                Last failed run: {formatTimestamp(lastFailedRun.executed_at)} · {toStringValue(lastFailedRun.provider_key)} · {toStringValue(lastFailedRun.mode)} ·
-                status={toStringValue(lastFailedRun.status)}
+                Last failed: {formatTimestamp(lastFailedRun.executed_at)} · {toStringValue(lastFailedRun.provider_key)} · {toStringValue(lastFailedRun.mode)} · status={toStringValue(lastFailedRun.status)}
               </p>
             ) : null}
 
             {selectedProfileRuns.length === 0 ? (
-              <p className="fg-muted">No runs matched the selected profile and filters.</p>
+              <p className="fg-muted">No runs matched the current profile and filters.</p>
             ) : (
-              <ul className="fg-list">
-                {selectedProfileRuns.map((run, index) => (
-                  <li key={`${toStringValue(run.run_id, toStringValue(run.provider_key, "run"))}-${index}`}>
-                    <div className="fg-panel-heading">
-                      <div>
-                        <strong>{formatHarnessMode(run.mode)}</strong>
-                        <div className="fg-muted">
-                          {formatTimestamp(run.executed_at)} · status={run.status} · model={toStringValue(run.model)}
+              <div className="fg-stack">
+                {Object.entries(groupedRuns).map(([mode, runs]) => (
+                  <div key={mode} className="ff-harness-run-group">
+                    <div className="ff-harness-run-group-header">
+                      <span>{formatHarnessMode(mode)}</span>
+                      <span>{runs.length} run{runs.length !== 1 ? "s" : ""}</span>
+                    </div>
+                    <div className="ff-harness-run-group-body">
+                      {runs.slice(0, 3).map((run, index) => (
+                        <div key={`${toStringValue(run.run_id, "run")}-${index}`} className="ff-harness-run-item">
+                          <div className="ff-harness-detail-row">
+                            <TonePill label={run.status} tone={toneFromStatus(run.status)} />
+                            <span>{formatTimestamp(run.executed_at)}</span>
+                            <span>model={toStringValue(run.model)}</span>
+                          </div>
+                          <div className="ff-nav-links" style={{ border: 0, padding: 0 }}>
+                            <Link className="fg-nav-link" to={logSurfaceLink}>
+                              View logs
+                            </Link>
+                            {run.run_id ? <span className="fg-muted">id: {run.run_id.slice(0, 12)}...</span> : null}
+                          </div>
+                          {run.error ? <span className="fg-note">Error: {run.error}</span> : null}
                         </div>
-                      </div>
-                      <div className="fg-actions">
-                        <TonePill label={run.status} tone={toneFromStatus(run.status)} />
-                        <Link className="fg-nav-link" to={logSurfaceLink}>
-                          Logs
-                        </Link>
-                      </div>
+                      ))}
+                      {runs.length > 3 ? (
+                        <details className="ff-harness-run-item">
+                          <summary style={{ cursor: "pointer", fontSize: "var(--fg-type-size-meta)", color: "var(--fg-color-text-secondary)" }}>
+                            Show {runs.length - 3} more
+                          </summary>
+                          <div className="fg-stack fg-mt-sm">
+                            {runs.slice(3).map((run, index) => (
+                              <div key={`${toStringValue(run.run_id, "run")}-${index + 3}`} className="ff-harness-run-item" style={{ border: 0, paddingLeft: 0 }}>
+                                <div className="ff-harness-detail-row">
+                                  <TonePill label={run.status} tone={toneFromStatus(run.status)} />
+                                  <span>{formatTimestamp(run.executed_at)}</span>
+                                  <span>model={toStringValue(run.model)}</span>
+                                </div>
+                                <div className="ff-nav-links" style={{ border: 0, padding: 0 }}>
+                                  <Link className="fg-nav-link" to={logSurfaceLink}>
+                                    View logs
+                                  </Link>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </details>
+                      ) : null}
                     </div>
-                    <div className="fg-detail-grid">
-                      <p>run id={toStringValue(run.run_id, "pending")} · client={toStringValue(run.client_id)} · integration={toStringValue(run.integration)}</p>
-                      <p>error={toStringValue(run.error, "none recorded")}</p>
-                    </div>
-                  </li>
+                  </div>
                 ))}
-              </ul>
+              </div>
             )}
-          </SectionCard>
+          </div>
         </div>
-      </div>
+      </details>
 
-      <div id="harness-advanced-diagnostics">
-        <AdvancedDiagnostics
-          title="Advanced Diagnostics"
-          description="Raw snapshots, import/export payloads, and proof carriers."
-          status={`${proofProviders.length} proof carrier${proofProviders.length === 1 ? "" : "s"}`}
-          statusTone={proofProviders.length > 0 ? "success" : "neutral"}
-        >
-          <div className="fg-stack">
+      {/* ─── Diagnostics (Collapsible) ─── */}
+      <details className="ff-collapse-section" id="harness-advanced-diagnostics">
+        <summary>
+          <div className="ff-collapse-summary-text">
+            <h3>Advanced Diagnostics</h3>
+            <p>
+              Raw snapshots, import/export payloads, and proof carriers.
+              {proofProviders.length > 0 ? ` ${proofProviders.length} proof carrier${proofProviders.length > 1 ? "s" : ""}.` : ""}
+            </p>
+          </div>
+        </summary>
+        <div className="ff-collapse-section-body">
+          <div className="fg-stack fg-mt-sm">
             <div className="fg-subcard">
               <h4>Diagnostics buffer</h4>
               <p className="fg-muted">Export writes the current snapshot here. Import dry-run and apply read from the same buffer.</p>
               <textarea
                 value={data.importPayload}
                 onChange={(event) => actions.setImportPayload(event.target.value)}
-                rows={14}
+                rows={10}
                 placeholder={
                   data.access.canMutate
                     ? "Harness snapshot JSON for dry-run or import"
@@ -774,8 +851,8 @@ export function HarnessControlSection({ data, actions, instanceId }: HarnessCont
               </div>
             ) : null}
           </div>
-        </AdvancedDiagnostics>
-      </div>
+        </div>
+      </details>
     </>
   );
 }

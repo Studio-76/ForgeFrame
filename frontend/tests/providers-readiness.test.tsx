@@ -611,8 +611,8 @@ describe("Provider readiness axes", () => {
     );
 
     expect(markup).toContain("Read-only provider view");
-    expect(markup).toContain("Export redacted");
-    expect(markup).not.toContain("Export full snapshot");
+    expect(markup).toContain("Export (redacted)");
+    expect(markup).not.toContain("Export (full)");
     expect(markup).not.toContain(">Verify<");
     expect(markup).not.toContain("Dry-run import");
     expect(markup).not.toContain("Apply import");
@@ -638,8 +638,8 @@ describe("Provider readiness axes", () => {
     expect(markup).toContain(">Preview<");
     expect(markup).toContain(">Verify<");
     expect(markup).toContain(">Dry-run<");
-    expect(markup).toContain("Export redacted");
-    expect(markup).toContain("Export full snapshot");
+    expect(markup).toContain("Export (redacted)");
+    expect(markup).toContain("Export (full)");
     expect(markup).toContain("Dry-run import");
     expect(markup).toContain("Create provider");
     expect(markup).toContain("Save label");

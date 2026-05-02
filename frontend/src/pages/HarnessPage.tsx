@@ -37,11 +37,10 @@ export function HarnessPage() {
     setSearchParams(nextSearchParams);
   };
 
-  const attentionProfiles = data.profiles.filter((profile) => profile.needs_attention).length;
   const note = !access.canRead
     ? access.summaryDetail
     : access.canMutate
-    ? "Harness is the standalone operator surface for saved profiles, templates, contract verification, dry-runs, probes, imports, exports, activation, and rollback."
+    ? "Harness is the guided workspace for integration profiles: select a preset, inspect the config, run verification actions, and manage lifecycle — all from one place."
     : access.canOperate
     ? "This route stays readable and operational for preview, verify, dry-run, and probe work even when write actions remain hidden."
     : `${access.summaryDetail} Preview and diagnostics stay visible here, while verify, dry-run, probe, and profile mutations remain hidden when the backend would reject them.`;
@@ -49,16 +48,14 @@ export function HarnessPage() {
   return (
     <section className="fg-page">
       <PageIntro
-        eyebrow="Setup"
+        eyebrow="Configure"
         title="Harness"
-        description="Operate generic integration profiles from a dedicated harness workspace: saved profiles and templates on the left, the selected config contract in the center, and real actions plus run history on the right."
-        question="Which profile contract are you validating, previewing, probing, importing, exporting, or rolling back right now?"
+        description="Guided workspace for integration profiles: choose a preset or template, inspect the configuration, run verification actions, and manage lifecycle."
+        question="Which provider preset are you configuring or verifying today?"
         badges={[
           { label: access.badgeLabel, tone: access.badgeTone },
           ...(selectedInstance ? [{ label: `Instance scope: ${selectedInstance.display_name}`, tone: "success" as const }] : []),
           { label: `${data.profiles.length} profile${data.profiles.length === 1 ? "" : "s"}`, tone: data.profiles.length > 0 ? "success" : "warning" },
-          { label: `${attentionProfiles} attention`, tone: attentionProfiles > 0 ? "warning" : "neutral" },
-          { label: `${data.runs.length} recent run${data.runs.length === 1 ? "" : "s"}`, tone: data.runs.length > 0 ? "success" : "neutral" },
         ]}
         note={note}
       />

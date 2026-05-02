@@ -280,8 +280,8 @@ describe("Harness page separation", () => {
     );
 
     expect(markup).toContain(">Harness<");
-    expect(markup).toContain("Profiles &amp; Templates");
-    expect(markup).toContain("Selected Profile");
+    expect(markup).toContain("Provider Presets");
+    expect(markup).toContain("OpenAI Primary");
     expect(markup).toContain("Run History");
     expect(markup).toContain("Advanced Diagnostics");
     expect(markup).toContain("Save profile");
