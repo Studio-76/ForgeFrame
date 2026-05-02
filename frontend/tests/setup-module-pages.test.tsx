@@ -285,10 +285,10 @@ describe("setup module pages", () => {
     expect(fetchIngressTlsStatusMock).toHaveBeenCalled();
     expect(container.textContent).toContain("Ingress / TLS / Certificates");
     expect(container.textContent).toContain("forgeframe.example.com");
-    expect(container.textContent).toContain("Ingress checklist");
+    expect(container.textContent).toContain("Remediation checklist");
     expect(container.textContent).toContain("tls_mode_disabled");
-    expect(container.textContent).toContain("Current blockers");
-    expect(container.textContent).toContain("Bind the UI to 0.0.0.0:443 under /.");
+    expect(container.textContent).toContain("Configure TLS mode");
+    expect(container.textContent).toContain("Issue or import certificate");
   });
 
   it("renders the dedicated release validation surface", async () => {
