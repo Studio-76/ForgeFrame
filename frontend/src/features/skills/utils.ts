@@ -5,7 +5,7 @@ import type {
   SkillScope,
   SkillStatus,
   SkillUsageOutcome,
-} from "../../api/admin";
+} from "../../api/domain";
 import { buildExecutionReviewPath } from "../../app/executionReview";
 import { CONTROL_PLANE_ROUTES } from "../../app/navigation";
 import { normalizeOptional, parseJsonObject } from "../../pages/workInteractionPageSupport";

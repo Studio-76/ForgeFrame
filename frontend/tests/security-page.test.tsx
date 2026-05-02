@@ -38,8 +38,8 @@ const {
   updateAdminUserMock: vi.fn(),
 }));
 
-vi.mock("../src/api/admin", async () => {
-  const actual = await vi.importActual<typeof import("../src/api/admin")>("../src/api/admin");
+vi.mock("../src/api/domain", async () => {
+  const actual = await vi.importActual<typeof import("../src/api/domain")>("../src/api/domain");
   return {
     ...actual,
     approveElevatedAccessRequest: approveElevatedAccessRequestMock,
@@ -68,7 +68,7 @@ import type {
   ElevatedAccessRequest,
   InstanceRecord,
   SecurityBootstrapResponse,
-} from "../src/api/admin";
+} from "../src/api/domain";
 import { SecurityPage } from "../src/pages/SecurityPage";
 import { withAppContext } from "./testContext";
 

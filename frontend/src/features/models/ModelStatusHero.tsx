@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 
 import { deriveUsabilityState } from "./utils";
-import type { AdminModelRegisterRecord } from "../../api/admin";
+import type { AdminModelRegisterRecord } from "../../api/domain";
 
 /**
  * Props for the {@link ModelStatusHero} component.

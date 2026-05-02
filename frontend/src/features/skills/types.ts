@@ -3,7 +3,7 @@ import type {
   SkillScope,
   SkillStatus,
   SkillUsageOutcome,
-} from "../../api/admin";
+} from "../../api/domain";
 
 /**
  * Filter controls for the skills list view.

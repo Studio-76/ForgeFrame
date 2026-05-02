@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 
-import type { AdminModelRegisterRecord } from "../../api/admin";
+import type { AdminModelRegisterRecord } from "../../api/domain";
 import { StatusBadge } from "../../components/ui/StatusBadge";
 import { EmptyState, LoadingState } from "../../components/ui/StateBlocks";
 import {

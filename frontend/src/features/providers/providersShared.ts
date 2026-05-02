@@ -1,6 +1,6 @@
 import type { Dispatch, SetStateAction } from "react";
 
-import type { AdminSessionUser } from "../../api/admin";
+import type { AdminSessionUser } from "../../api/domain";
 import {
   roleAllows,
   sessionCanMutateScopedOrAnyInstance,
@@ -21,7 +21,7 @@ import type {
   ProviderCatalogSummary,
   ProviderControlItem,
   ProductAxisTarget,
-} from "../../api/admin";
+} from "../../api/domain";
 
 export type LoadState = "idle" | "loading" | "success" | "error";
 

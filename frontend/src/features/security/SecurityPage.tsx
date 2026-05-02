@@ -42,7 +42,7 @@ import {
   type SecurityCredentialPolicy,
   type SecurityRotationEvent,
   type SecuritySecretPosture,
-} from "../../api/admin";
+} from "../../api/domain";
 import { PageIntro } from "../../components/PageIntro";
 import {
   buildAdminPasswordResetPayload,

@@ -18,8 +18,8 @@ const {
   rejectApprovalMock: vi.fn(),
 }));
 
-vi.mock("../src/api/admin", async () => {
-  const actual = await vi.importActual<typeof import("../src/api/admin")>("../src/api/admin");
+vi.mock("../src/api/domain", async () => {
+  const actual = await vi.importActual<typeof import("../src/api/domain")>("../src/api/domain");
 
   return {
     ...actual,
@@ -31,7 +31,7 @@ vi.mock("../src/api/admin", async () => {
   };
 });
 
-import type { AdminSessionUser, ApprovalDetail, ApprovalSummary } from "../src/api/admin";
+import type { AdminSessionUser, ApprovalDetail, ApprovalSummary } from "../src/api/domain";
 import { ApprovalsPage } from "../src/pages/ApprovalsPage";
 import { withAppContext } from "./testContext";
 

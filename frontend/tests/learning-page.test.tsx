@@ -40,7 +40,7 @@ vi.mock("../src/api/admin/instances", async () => {
   };
 });
 
-import type { AdminSessionUser, LearningEventDetail, LearningEventSummary } from "../src/api/admin";
+import type { AdminSessionUser, LearningEventDetail, LearningEventSummary } from "../src/api/domain";
 import { LearningPage } from "../src/pages/LearningPage";
 import { withAppContext } from "./testContext";
 

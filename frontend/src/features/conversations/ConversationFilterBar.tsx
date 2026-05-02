@@ -1,4 +1,4 @@
-import type { AgentSummary } from "../../api/admin";
+import type { AgentSummary } from "../../api/domain";
 import {
   LINK_LENS_OPTIONS,
   STATUS_OPTIONS,

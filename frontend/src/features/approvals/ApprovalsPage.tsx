@@ -9,7 +9,7 @@ import {
   type ApprovalDetail,
   type ApprovalStatus,
   type ApprovalSummary,
-} from "../../api/admin";
+} from "../../api/domain";
 import { buildAuditHistoryPath, resolveNewestAuditHistoryPath } from "../../app/auditHistory";
 import {
   sessionCanMutateScopedOrAnyInstance,

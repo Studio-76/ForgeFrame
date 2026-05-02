@@ -4,8 +4,8 @@ import type {
   ElevatedAccessRequest,
   HarnessSecretPosture,
   SecuritySecretPosture,
-} from "../../api/admin";
-import { AdminApiError } from "../../api/admin";
+} from "../../api/domain";
+import { AdminApiError } from "../../api/domain";
 import { buildAuditHistoryPath } from "../../app/auditHistory";
 import { CONTROL_PLANE_ROUTES } from "../../app/navigation";
 import { formatTimestamp } from "../approvals/presentation";

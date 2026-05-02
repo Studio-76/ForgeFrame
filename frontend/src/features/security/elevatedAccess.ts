@@ -1,4 +1,4 @@
-import type { ElevatedAccessRequestType } from "../../api/admin";
+import type { ElevatedAccessRequestType } from "../../api/domain";
 
 export type ElevatedAccessRequestDraft = {
   request_type: ElevatedAccessRequestType;

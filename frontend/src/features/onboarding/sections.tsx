@@ -1,7 +1,7 @@
 import type { FormEvent } from "react";
 import { Link } from "react-router-dom";
 
-import type { RuntimeKeyFirstSuccessProbeResponse } from "../../api/admin";
+import type { RuntimeKeyFirstSuccessProbeResponse } from "../../api/domain";
 import { withInstanceScope } from "../../app/tenantScope";
 import type {
   ChecklistLink,

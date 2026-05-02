@@ -9,7 +9,7 @@ import {
   fetchProviderControlPlane,
   fetchTasks,
   setAdminToken,
-} from "../src/api/admin";
+} from "../src/api/domain";
 import {
   adminSessionFixture,
   instancesFixture,

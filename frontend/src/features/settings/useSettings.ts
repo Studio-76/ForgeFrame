@@ -7,7 +7,7 @@ import {
   patchMutableSettings,
   resetMutableSetting,
   type MutableSettingEntry,
-} from "../../api/admin";
+} from "../../api/domain";
 import { formatSettingValue, getCategory, normalizeDraft } from "./utils";
 import {
   CATEGORY_LABELS,

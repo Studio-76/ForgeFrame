@@ -2,7 +2,7 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { clearAdminToken, fetchAgents, setAdminToken } from "../src/api/admin";
+import { clearAdminToken, fetchAgents, setAdminToken } from "../src/api/domain";
 
 describe("agent admin API helpers", () => {
   const fetchMock = vi.fn();

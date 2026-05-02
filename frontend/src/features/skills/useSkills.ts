@@ -18,7 +18,7 @@ import {
   type SkillStatus,
   type SkillSummary,
   type SkillUsageOutcome,
-} from "../../api/admin";
+} from "../../api/domain";
 import { useAppSession } from "../../app/session";
 import {
   getWorkInteractionAccess,

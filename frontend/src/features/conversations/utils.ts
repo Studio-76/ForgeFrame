@@ -1,4 +1,4 @@
-import type { AgentSummary, ConversationSummary } from "../../api/admin";
+import type { AgentSummary, ConversationSummary } from "../../api/domain";
 import { CONTROL_PLANE_ROUTES } from "../../app/navigation";
 import type { ConversationLinkLens } from "./types";
 

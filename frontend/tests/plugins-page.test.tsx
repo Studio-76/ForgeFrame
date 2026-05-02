@@ -40,7 +40,7 @@ vi.mock("../src/api/admin/instances", async () => {
   };
 });
 
-import type { AdminSessionUser, PluginCatalogEntry } from "../src/api/admin";
+import type { AdminSessionUser, PluginCatalogEntry } from "../src/api/domain";
 import { PluginsPage } from "../src/pages/PluginsPage";
 import { withAppContext } from "./testContext";
 

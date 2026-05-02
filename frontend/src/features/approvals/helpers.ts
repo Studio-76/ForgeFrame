@@ -7,7 +7,7 @@ import type {
   ApprovalSummary,
   ApprovalType,
   AuditHistoryQuery,
-} from "../../api/admin";
+} from "../../api/domain";
 
 import {
   formatApprovalActor,

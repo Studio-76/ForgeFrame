@@ -7,7 +7,7 @@ import type {
   ExecutionRunApprovalLinkView,
   ExecutionRunDetail,
   ExecutionRunSummary,
-} from "../../api/admin";
+} from "../../api/domain";
 import { buildArtifactsPath, buildWorkspacePath } from "../../app/workInteractionRoutes";
 import {
   APPROVAL_WAIT_OPTIONS,

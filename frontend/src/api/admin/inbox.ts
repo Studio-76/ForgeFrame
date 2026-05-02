@@ -15,7 +15,7 @@ import {
   fetchJson,
 } from "./_internal";
 
-import type { ConversationSummary } from "../admin";
+import type { ConversationSummary } from "./conversations";
 
 // ---------------------------------------------------------------------------
 // Re-export shared types

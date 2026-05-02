@@ -1,6 +1,6 @@
 import { Link } from "react-router-dom";
 
-import type { UsageSummaryResponse } from "../../api/admin";
+import type { UsageSummaryResponse } from "../../api/domain";
 import { CONTROL_PLANE_ROUTES } from "../../app/navigation";
 import { withInstanceScope, withQueryParams } from "../../app/tenantScope";
 import { ActionBar } from "../../components/ui/ActionBar";

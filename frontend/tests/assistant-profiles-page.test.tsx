@@ -40,7 +40,7 @@ vi.mock("../src/api/admin/instances", async () => {
   };
 });
 
-import type { AdminSessionUser, AssistantActionEvaluation, AssistantProfileDetail, AssistantProfileSummary } from "../src/api/admin";
+import type { AdminSessionUser, AssistantActionEvaluation, AssistantProfileDetail, AssistantProfileSummary } from "../src/api/domain";
 import { AssistantProfilesPage } from "../src/pages/AssistantProfilesPage";
 import { withAppContext } from "./testContext";
 

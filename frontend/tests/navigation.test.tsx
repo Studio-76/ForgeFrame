@@ -3,7 +3,7 @@
 import { describe, expect, it } from "vitest";
 
 import { CONTROL_PLANE_ROUTES, getControlPlaneNavigation, isHrefCurrent } from "../src/app/navigation";
-import type { AdminSessionUser } from "../src/api/admin";
+import type { AdminSessionUser } from "../src/api/domain";
 
 const adminSession: AdminSessionUser = {
   session_id: "session-1",

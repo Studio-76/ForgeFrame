@@ -1,7 +1,7 @@
 import type {
   ConversationDetail,
   ConversationSummary,
-} from "../../api/admin";
+} from "../../api/domain";
 import type { EditConversationForm, LoadState } from "./types";
 
 /** Props for the {@link ConversationList} component. */

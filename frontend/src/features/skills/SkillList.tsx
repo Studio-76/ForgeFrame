@@ -1,6 +1,6 @@
 import type { FormEvent } from "react";
 
-import type { AgentSummary, SkillSummary } from "../../api/admin";
+import type { AgentSummary, SkillSummary } from "../../api/domain";
 import type { LoadState } from "../../pages/workInteractionPageSupport";
 import { SCOPE_OPTIONS, STATUS_OPTIONS } from "./types";
 import {

@@ -84,8 +84,8 @@ vi.mock("../src/api/admin/memory", async () => {
   };
 });
 
-vi.mock("../src/api/admin", async () => {
-  const actual = await vi.importActual<typeof import("../src/api/admin")>("../src/api/admin");
+vi.mock("../src/api/domain", async () => {
+  const actual = await vi.importActual<typeof import("../src/api/domain")>("../src/api/domain");
   return {
     ...actual,
     fetchInstances: fetchInstancesMock,
@@ -100,7 +100,7 @@ import type {
   KnowledgeSourceSummary,
   MemoryDetail,
   MemorySummary,
-} from "../src/api/admin";
+} from "../src/api/domain";
 import { ContactsPage } from "../src/pages/ContactsPage";
 import { KnowledgeSourcesPage } from "../src/pages/KnowledgeSourcesPage";
 import { MemoryPage } from "../src/pages/MemoryPage";

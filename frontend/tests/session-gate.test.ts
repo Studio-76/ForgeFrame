@@ -2,7 +2,7 @@
 
 import { describe, expect, it } from "vitest";
 
-import type { AdminSessionUser } from "../src/api/admin";
+import type { AdminSessionUser } from "../src/api/domain";
 import { getSessionRouteState } from "../src/app/authRouting";
 import { CONTROL_PLANE_ROUTES } from "../src/app/navigation";
 

@@ -7,7 +7,7 @@
 import type {
   HarnessProfile,
   HarnessRun,
-} from "../../api/admin";
+} from "../../api/domain";
 import type {
   HarnessActionResult,
   ProvidersPageActions,

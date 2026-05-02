@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import { Link } from "react-router-dom";
 
-import type { AdminModelRegisterRecord } from "../../api/admin";
+import type { AdminModelRegisterRecord } from "../../api/domain";
 import { StatusBadge, type StatusTone } from "../../components/ui/StatusBadge";
 import {
   buildNextStep,

@@ -7,7 +7,7 @@ import {
   fetchUsageSummary,
   type UsageSummaryFilters,
   type UsageSummaryResponse,
-} from "../../api/admin";
+} from "../../api/domain";
 import { useAppSession } from "../../app/session";
 import { getInstanceIdFromSearchParams } from "../../app/tenantScope";
 import { useInstanceCatalog } from "../../app/useInstanceCatalog";

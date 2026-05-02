@@ -1,4 +1,4 @@
-import type { MutableSettingEntry } from "../../api/admin";
+import type { MutableSettingEntry } from "../../api/domain";
 import { GROUP_TO_CATEGORY, CATEGORY_LABELS } from "./types";
 
 /**

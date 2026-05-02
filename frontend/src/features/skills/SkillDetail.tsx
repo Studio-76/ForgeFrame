@@ -8,7 +8,7 @@ import type {
   SkillScope,
   SkillStatus,
   SkillUsageOutcome,
-} from "../../api/admin";
+} from "../../api/domain";
 import {
   buildAgentsPath,
   buildConversationPath,

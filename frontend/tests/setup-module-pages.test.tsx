@@ -57,8 +57,8 @@ vi.mock("../src/api/admin/instances", async () => {
   return { ...actual, fetchInstances: fetchInstancesMock };
 });
 
-vi.mock("../src/api/admin", async () => {
-  const actual = await vi.importActual<typeof import("../src/api/admin")>("../src/api/admin");
+vi.mock("../src/api/domain", async () => {
+  const actual = await vi.importActual<typeof import("../src/api/domain")>("../src/api/domain");
   return {
     ...actual,
     fetchInstances: fetchInstancesMock,
@@ -67,7 +67,7 @@ vi.mock("../src/api/admin", async () => {
   };
 });
 
-import type { AdminSessionUser, InstanceRecord } from "../src/api/admin";
+import type { AdminSessionUser, InstanceRecord } from "../src/api/domain";
 import { IngressTlsPage } from "../src/pages/IngressTlsPage";
 import { ReleaseValidationPage } from "../src/pages/ReleaseValidationPage";
 import { withAppContext } from "./testContext";

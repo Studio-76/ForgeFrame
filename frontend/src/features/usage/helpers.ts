@@ -1,4 +1,4 @@
-import type { AdminSessionUser, UsageSummaryResponse } from "../../api/admin";
+import type { AdminSessionUser, UsageSummaryResponse } from "../../api/domain";
 import { sessionHasAnyInstancePermission } from "../../app/adminAccess";
 import { CONTROL_PLANE_ROUTES } from "../../app/navigation";
 

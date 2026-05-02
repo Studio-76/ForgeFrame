@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 
-import type { HealthConfig } from "../../api/admin";
+import type { HealthConfig } from "../../api/domain";
 import { CONTROL_PLANE_ROUTES } from "../../app/navigation";
 import { withInstanceScope } from "../../app/tenantScope";
 import type { ProvidersPageActions, ProvidersPageData } from "./providersShared";

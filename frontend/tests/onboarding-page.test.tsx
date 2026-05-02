@@ -34,8 +34,8 @@ const {
   runRuntimeKeyFirstSuccessProbeMock: vi.fn(),
 }));
 
-vi.mock("../src/api/admin", async () => {
-  const actual = await vi.importActual<typeof import("../src/api/admin")>("../src/api/admin");
+vi.mock("../src/api/domain", async () => {
+  const actual = await vi.importActual<typeof import("../src/api/domain")>("../src/api/domain");
   return {
     ...actual,
     fetchInstances: fetchInstancesMock,
@@ -62,7 +62,7 @@ vi.mock("../src/api/domain/instances", async () => {
   };
 });
 
-import type { AdminSessionUser, InstanceRecord } from "../src/api/admin";
+import type { AdminSessionUser, InstanceRecord } from "../src/api/domain";
 import { OnboardingPage } from "../src/pages/OnboardingPage";
 import { withAppContext } from "./testContext";
 

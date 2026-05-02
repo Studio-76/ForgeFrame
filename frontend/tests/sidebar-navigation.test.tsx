@@ -5,7 +5,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
-import type { AdminSessionUser } from "../src/api/admin";
+import type { AdminSessionUser } from "../src/api/domain";
 import { getControlPlaneNavigation } from "../src/app/navigation";
 import { AppSidebar } from "../src/components/layout/AppSidebar";
 import { SidebarProvider, useSidebar } from "../src/components/layout/SidebarContext";

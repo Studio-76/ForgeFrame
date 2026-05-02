@@ -2,7 +2,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ReactElement } from "react";
 import { MemoryRouter, Outlet, Route, Routes } from "react-router-dom";
 
-import type { AdminSessionUser } from "../src/api/admin";
+import type { AdminSessionUser } from "../src/api/domain";
 
 /**
  * Create a fresh QueryClient for use in a single test case.

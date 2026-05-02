@@ -13,8 +13,8 @@ const {
   rotateOwnPasswordMock: vi.fn(),
 }));
 
-vi.mock("../src/api/admin", async () => {
-  const actual = await vi.importActual<typeof import("../src/api/admin")>("../src/api/admin");
+vi.mock("../src/api/domain", async () => {
+  const actual = await vi.importActual<typeof import("../src/api/domain")>("../src/api/domain");
   return {
     ...actual,
     fetchAdminSession: fetchAdminSessionMock,
@@ -22,7 +22,7 @@ vi.mock("../src/api/admin", async () => {
   };
 });
 
-import type { AdminSessionUser } from "../src/api/admin";
+import type { AdminSessionUser } from "../src/api/domain";
 import { useAppSession } from "../src/app/session";
 import { PasswordRotationPage } from "../src/pages/PasswordRotationPage";
 

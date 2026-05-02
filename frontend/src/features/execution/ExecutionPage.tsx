@@ -16,7 +16,7 @@ import {
   type ExecutionReplayResult,
   type ExecutionRunDetail,
   type ExecutionRunSummary,
-} from "../../api/admin";
+} from "../../api/domain";
 import { buildAuditHistoryPath } from "../../app/auditHistory";
 import { normalizeExecutionCompanyId, normalizeExecutionInstanceId, normalizeExecutionState } from "../../app/executionReview";
 import { CONTROL_PLANE_ROUTES } from "../../app/navigation";

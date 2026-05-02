@@ -27,7 +27,7 @@ vi.mock("../src/api/admin/instances", async () => {
   };
 });
 
-import type { AdminSessionUser, InstanceRecord } from "../src/api/admin";
+import type { AdminSessionUser, InstanceRecord } from "../src/api/domain";
 import { AgentsPage } from "../src/pages/AgentsPage";
 import { withAppContext } from "./testContext";
 

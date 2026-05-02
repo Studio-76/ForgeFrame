@@ -33,7 +33,7 @@ vi.mock("../src/api/admin/recovery", async () => {
   };
 });
 
-import type { AdminSessionUser, RecoveryOverviewResponse, RecoveryPolicySummary } from "../src/api/admin";
+import type { AdminSessionUser, RecoveryOverviewResponse, RecoveryPolicySummary } from "../src/api/domain";
 import { RecoveryPage } from "../src/pages/RecoveryPage";
 import { withAppContext } from "./testContext";
 

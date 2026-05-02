@@ -20,8 +20,8 @@ const {
   generateAuditExportMock: vi.fn(),
 }));
 
-vi.mock("../src/api/admin", async () => {
-  const actual = await vi.importActual<typeof import("../src/api/admin")>("../src/api/admin");
+vi.mock("../src/api/domain", async () => {
+  const actual = await vi.importActual<typeof import("../src/api/domain")>("../src/api/domain");
 
   return {
     ...actual,
@@ -53,7 +53,7 @@ import type {
   AuditHistoryResponse,
   InstanceRecord,
   LogsResponse,
-} from "../src/api/admin";
+} from "../src/api/domain";
 import { withAppContext } from "./testContext";
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;

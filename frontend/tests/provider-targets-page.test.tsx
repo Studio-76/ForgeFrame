@@ -27,15 +27,15 @@ vi.mock("../src/api/admin/instances", async () => {
   };
 });
 
-vi.mock("../src/api/admin", async () => {
-  const actual = await vi.importActual<typeof import("../src/api/admin")>("../src/api/admin");
+vi.mock("../src/api/domain", async () => {
+  const actual = await vi.importActual<typeof import("../src/api/domain")>("../src/api/domain");
   return {
     ...actual,
     fetchInstances: fetchInstancesMock,
   };
 });
 
-import type { AdminSessionUser, InstanceRecord, ProviderTargetRecord } from "../src/api/admin";
+import type { AdminSessionUser, InstanceRecord, ProviderTargetRecord } from "../src/api/domain";
 import { ProviderTargetsPage } from "../src/pages/ProviderTargetsPage";
 import { withAppContext } from "./testContext";
 

@@ -1,4 +1,4 @@
-import type { MutableSettingEntry } from "../../api/admin";
+import type { MutableSettingEntry } from "../../api/domain";
 import { CATEGORY_LABELS, type CategoryFilter } from "./types";
 import {
   formatBooleanLabel,

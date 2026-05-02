@@ -1,7 +1,7 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 
-import type { AdminSessionUser } from "../src/api/admin";
+import type { AdminSessionUser } from "../src/api/domain";
 import { AccountsPage } from "../src/pages/AccountsPage";
 import { SecurityPage } from "../src/pages/SecurityPage";
 import { withAppContext } from "./testContext";

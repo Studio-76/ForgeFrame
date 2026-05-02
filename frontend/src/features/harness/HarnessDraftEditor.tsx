@@ -5,7 +5,7 @@
  * "Create draft from preset". Secret/auth fields are clearly marked as
  * draft-only and require explicit save.
  */
-import type { HarnessProfile } from "../../api/admin";
+import type { HarnessProfile } from "../../api/domain";
 import type { ProvidersPageData } from "../providers/providersShared";
 import {
   PermissionCallout,

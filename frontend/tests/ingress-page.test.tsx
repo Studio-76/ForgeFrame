@@ -41,7 +41,7 @@ vi.mock("../src/api/admin/instances", async () => {
   };
 });
 
-import type { AdminSessionUser, IngressTlsStatusResponse } from "../src/api/admin";
+import type { AdminSessionUser, IngressTlsStatusResponse } from "../src/api/domain";
 import { IngressTlsPage } from "../src/pages/IngressTlsPage";
 import { withAppContext } from "./testContext";
 

@@ -4,7 +4,7 @@ import type {
   AgentSummary,
   ConversationDetail,
   TaskSummary,
-} from "../../api/admin";
+} from "../../api/domain";
 import {
   buildAgentsPath,
   buildArtifactsPath,

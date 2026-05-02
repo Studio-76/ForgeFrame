@@ -5,7 +5,7 @@ import {
   fetchModelRegister,
   syncProviders,
   type AdminModelRegisterRecord,
-} from "../../api/admin";
+} from "../../api/domain";
 import {
   getScopedAdminInstanceId,
   sessionCanMutateScopedOrAnyInstance,

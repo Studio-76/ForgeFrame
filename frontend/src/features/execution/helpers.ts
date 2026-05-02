@@ -4,7 +4,7 @@ import {
   type InstanceRecord,
   type ExecutionRunDetail,
   type ExecutionRunSummary,
-} from "../../api/admin";
+} from "../../api/domain";
 import {
   sessionCanMutateScopedOrAnyInstance,
   sessionHasScopedOrAnyInstancePermission,

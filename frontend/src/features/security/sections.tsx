@@ -14,7 +14,7 @@ import type {
   SecurityCredentialPolicy,
   SecurityRotationEvent,
   SecuritySecretPosture,
-} from "../../api/admin";
+} from "../../api/domain";
 import {
   formatApprovalStatus,
   formatApprovalType,
