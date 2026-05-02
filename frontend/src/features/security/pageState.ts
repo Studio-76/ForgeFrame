@@ -1,4 +1,4 @@
-import type { HarnessSecretPosture, SecuritySecretPosture } from "../../api/admin";
+import type { HarnessSecretPosture, SecuritySecretPosture } from "../../api/domain";
 import type {
   AdminUserEditDraft,
   AdminUserScopeDraft,

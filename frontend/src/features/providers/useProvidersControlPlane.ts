@@ -39,7 +39,7 @@ import {
   updateProvider,
   upsertHarnessProfile,
   verifyHarnessProfile as verifyHarnessProfileRequest,
-} from "../../api/admin";
+} from "../../api/domain";
 import type {
   HarnessDraft,
   HarnessActionKind,

@@ -15,7 +15,7 @@ import {
   type AuditHistoryStatus,
   type AuditHistoryWindow,
   type LogsResponse,
-} from "../../api/admin";
+} from "../../api/domain";
 import { sessionHasAnyInstancePermission } from "../../app/adminAccess";
 import { CONTROL_PLANE_ROUTES } from "../../app/navigation";
 import { useAppSession } from "../../app/session";

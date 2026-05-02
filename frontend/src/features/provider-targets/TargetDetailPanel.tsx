@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { Link } from "react-router-dom";
 
 import { StatusBadge } from "../../components/ui/StatusBadge";
@@ -38,8 +39,10 @@ type TargetDetailPanelProps = {
 
 /**
  * Actionable detail panel for the selected provider target.
- * Leads with readiness, blocking checks, and next action —
- * advanced technical details are collapsed by default.
+ *
+ * Leads with readiness, why it matters, blocking checks, and the
+ * primary next action. Policy editing is hidden behind an explicit
+ * button to keep the default view focused on remediation.
  */
 export function TargetDetailPanel({
   target,
@@ -56,6 +59,9 @@ export function TargetDetailPanel({
   onSave,
   onDismissError,
 }: TargetDetailPanelProps) {
+  const [editingPolicy, setEditingPolicy] = useState(false);
+  const [advancedPolicyOpen, setAdvancedPolicyOpen] = useState(false);
+
   if (!target || !draft) {
     return (
       <EmptyState
@@ -70,6 +76,17 @@ export function TargetDetailPanel({
   const reason = reasonForTargetStatus(target);
   const capabilities = capabilityList(target);
   const isRuntimeReady = status === "runtime-ready";
+
+  /* Contextual primary action link based on the target's blocker */
+  const primaryActionLink = (() => {
+    if (action.kind === "health-check") {
+      return withInstanceScope(CONTROL_PLANE_ROUTES.providerHealthRuns, instanceId);
+    }
+    if (action.kind === "routing-policy" || action.kind === "enable-target" || action.kind === "enable-runtime") {
+      return withInstanceScope(CONTROL_PLANE_ROUTES.routing, instanceId);
+    }
+    return null;
+  })();
 
   return (
     <DetailPanel
@@ -91,25 +108,15 @@ export function TargetDetailPanel({
           </p>
         ) : null}
 
-        {/* Readiness & next action */}
+        {/* Target state & why it matters */}
         <section className="fg-subcard">
-          <h4>Readiness</h4>
-          <p>{reason}</p>
-          {!isRuntimeReady ? (
-            <div className="ff-blocking-check">
-              <StatusBadge tone="warning" status="blocked">
-                Needs attention
-              </StatusBadge>
-              <span>Next action: <strong>{action.label}</strong></span>
-            </div>
-          ) : (
-            <div className="ff-blocking-check">
-              <StatusBadge tone="success" status="ready">
-                Ready
-              </StatusBadge>
-              <span>Target is dispatchable</span>
-            </div>
-          )}
+          <h4>Target state</h4>
+          <div className="ff-detail-state-row">
+            <StatusBadge tone={toneForTargetStatus(status)} status={status}>
+              {statusLabelForTarget(target)}
+            </StatusBadge>
+            <span className="fg-muted">{reason}</span>
+          </div>
         </section>
 
         {/* Blocking checks */}
@@ -139,7 +146,33 @@ export function TargetDetailPanel({
           </section>
         ) : null}
 
-        {/* Routing eligibility */}
+        {/* Primary next action */}
+        {!isRuntimeReady ? (
+          <section className="fg-subcard">
+            <h4>Primary next action</h4>
+            <p><strong>{action.label}</strong></p>
+            {primaryActionLink ? (
+              <div className="fg-actions">
+                <Link className="fg-nav-link" to={primaryActionLink}>
+                  {action.label}
+                </Link>
+              </div>
+            ) : null}
+          </section>
+        ) : null}
+
+        {/* Last health / probe result */}
+        <section className="fg-subcard">
+          <h4>Health evidence</h4>
+          <p>
+            Health: <strong>{titleCase(target.health_status)}</strong> · Availability: <strong>{titleCase(target.availability_status)}</strong>
+          </p>
+          <p className="fg-muted">
+            Last probe: {formatTimestamp(target.last_probe_at)}
+          </p>
+        </section>
+
+        {/* Routing eligibility (compact) */}
         <section className="fg-subcard">
           <h4>Routing eligibility</h4>
           <p>
@@ -147,28 +180,199 @@ export function TargetDetailPanel({
             {target.fallback_allowed ? " · Fallback allowed" : ""}
             {target.escalation_allowed ? " · Escalation allowed" : ""}
           </p>
-          <div className="fg-actions">
-            <Link
-              className="fg-nav-link"
-              to={withInstanceScope(`${CONTROL_PLANE_ROUTES.routing}#routing-dry-run`, instanceId)}
-            >
-              Routing Dry Run
-            </Link>
-            <Link
-              className="fg-nav-link"
-              to={withInstanceScope(CONTROL_PLANE_ROUTES.providerHealthRuns, instanceId)}
-            >
-              Provider Health
-            </Link>
+          <div className="fg-muted">
+            {capabilities.length > 0 ? capabilities.join(" · ") : "No capabilities reported"}
           </div>
         </section>
 
-        {/* Advanced technical details */}
+        {/* Edit target policy — hidden behind explicit button */}
+        {canMutate ? (
+          <>
+            {!editingPolicy ? (
+              <section className="fg-subcard">
+                <button
+                  type="button"
+                  className="ff-policy-open-button"
+                  onClick={() => setEditingPolicy(true)}
+                >
+                  Edit target policy
+                </button>
+                <p className="fg-muted" style={{ marginTop: "0.5rem" }}>
+                  Changing target policy can affect routing, fallback, and escalation behavior.
+                  Review the current policy before making changes.
+                </p>
+              </section>
+            ) : (
+              <section className="fg-subcard ff-policy-editor">
+                <div className="ff-policy-editor-header">
+                  <h4>Edit target policy</h4>
+                  <button
+                    type="button"
+                    className="ff-policy-editor-close"
+                    onClick={() => {
+                      setEditingPolicy(false);
+                      setAdvancedPolicyOpen(false);
+                    }}
+                    aria-label="Close policy editor"
+                  >
+                    ×
+                  </button>
+                </div>
+
+                {/* Warning when opening policy editing */}
+                <div className="ff-policy-warning">
+                  <strong>Changing target policy can affect routing, fallback, and escalation behavior.</strong>
+                  <p>Review the current configuration carefully before saving changes.</p>
+                </div>
+
+                <div className="fg-inline-form">
+                  <label>
+                    Priority
+                    <input
+                      aria-label="Priority"
+                      type="number"
+                      min="0"
+                      value={draft.priority}
+                      onChange={(e) => onUpdateDraft(target.target_key, (c) => ({ ...c, priority: e.target.value, acknowledgeDefaultRisk: false }))}
+                    />
+                  </label>
+                  <label>
+                    <input
+                      aria-label="Enable target"
+                      type="checkbox"
+                      checked={draft.enabled}
+                      onChange={(e) => onUpdateDraft(target.target_key, (c) => ({ ...c, enabled: e.target.checked, acknowledgeDefaultRisk: false }))}
+                    />
+                    <span>Enable target</span>
+                  </label>
+                  <label>
+                    <input
+                      aria-label="Queue eligible"
+                      type="checkbox"
+                      checked={draft.queueEligible}
+                      onChange={(e) => onUpdateDraft(target.target_key, (c) => ({ ...c, queueEligible: e.target.checked }))}
+                    />
+                    <span>Queue eligible</span>
+                  </label>
+                </div>
+
+                {/* Advanced policy controls — hidden behind toggle */}
+                <button
+                  type="button"
+                  className="ff-advanced-toggle"
+                  onClick={() => setAdvancedPolicyOpen((prev) => !prev)}
+                  aria-expanded={advancedPolicyOpen}
+                >
+                  {advancedPolicyOpen ? "Hide advanced routing controls" : "Show advanced routing controls"}
+                </button>
+
+                {advancedPolicyOpen ? (
+                  <div className="fg-stack">
+                    <div className="fg-inline-form">
+                      <label>
+                        <input
+                          aria-label="Fallback allowed"
+                          type="checkbox"
+                          checked={draft.fallbackAllowed}
+                          onChange={(e) => onUpdateDraft(target.target_key, (c) => ({ ...c, fallbackAllowed: e.target.checked }))}
+                        />
+                        <span>Fallback allowed</span>
+                      </label>
+                      <label>
+                        <input
+                          aria-label="Escalation allowed"
+                          type="checkbox"
+                          checked={draft.escalationAllowed}
+                          onChange={(e) => onUpdateDraft(target.target_key, (c) => ({ ...c, escalationAllowed: e.target.checked }))}
+                        />
+                        <span>Escalation allowed</span>
+                      </label>
+                    </div>
+
+                    {otherTargets.length > 0 ? (
+                      <>
+                        <div className="fg-stack">
+                          <strong>Fallback targets</strong>
+                          <div className="fg-inline-form">
+                            {otherTargets.map((other) => (
+                              <label key={`fallback-${other.target_key}`}>
+                                <input
+                                  type="checkbox"
+                                  checked={draft.fallbackTargetKeys.includes(other.target_key)}
+                                  onChange={() => onToggleReference(target.target_key, "fallbackTargetKeys", other.target_key)}
+                                />
+                                <span>{other.label}</span>
+                              </label>
+                            ))}
+                          </div>
+                        </div>
+
+                        <div className="fg-stack">
+                          <strong>Escalation targets</strong>
+                          <div className="fg-inline-form">
+                            {otherTargets.map((other) => (
+                              <label key={`escalation-${other.target_key}`}>
+                                <input
+                                  type="checkbox"
+                                  checked={draft.escalationTargetKeys.includes(other.target_key)}
+                                  onChange={() => onToggleReference(target.target_key, "escalationTargetKeys", other.target_key)}
+                                />
+                                <span>{other.label}</span>
+                              </label>
+                            ))}
+                          </div>
+                        </div>
+                      </>
+                    ) : null}
+
+                    {/* Raw target keys for fallback/escalation — displayed as technical details */}
+                    {draft.fallbackTargetKeys.length > 0 || draft.escalationTargetKeys.length > 0 ? (
+                      <div className="fg-muted ff-raw-keys">
+                        {draft.fallbackTargetKeys.length > 0 ? (
+                          <p>Fallback keys: <code>{draft.fallbackTargetKeys.join(", ")}</code></p>
+                        ) : null}
+                        {draft.escalationTargetKeys.length > 0 ? (
+                          <p>Escalation keys: <code>{draft.escalationTargetKeys.join(", ")}</code></p>
+                        ) : null}
+                      </div>
+                    ) : null}
+                  </div>
+                ) : null}
+
+                {becomesRiskyDefault ? (
+                  <div className="ff-state-block" data-state="blocked">
+                    <strong>Premium or OAuth target becomes the default active path</strong>
+                    <p>
+                      This change would promote a premium-cost or OAuth-backed target into the first active routing slot. Confirm the risk before saving.
+                    </p>
+                    <label>
+                      <input
+                        aria-label="Confirm premium or OAuth default warning"
+                        type="checkbox"
+                        checked={draft.acknowledgeDefaultRisk}
+                        onChange={(e) => onUpdateDraft(target.target_key, (c) => ({ ...c, acknowledgeDefaultRisk: e.target.checked }))}
+                      />
+                      <span>I understand and want this target to become a default active path.</span>
+                    </label>
+                  </div>
+                ) : null}
+
+                <div className="fg-actions">
+                  <button type="button" onClick={onSave} disabled={!draftHasChanges}>
+                    Save target changes
+                  </button>
+                </div>
+              </section>
+            )}
+          </>
+        ) : null}
+
+        {/* Advanced technical details (collapsed by default) */}
         <details className="ff-advanced-diagnostics">
           <summary>
             <strong>Advanced technical details</strong>
           </summary>
-          <div className="fg-stack">
+          <div className="ff-advanced-diagnostics-body fg-stack">
             <section className="fg-subcard">
               <h4>Identity</h4>
               <p>Target key: <code>{target.target_key}</code></p>
@@ -214,121 +418,6 @@ export function TargetDetailPanel({
             ) : null}
           </div>
         </details>
-
-        {/* Edit target policy */}
-        {canMutate ? (
-          <section className="fg-subcard">
-            <h4>Edit target policy</h4>
-            <div className="fg-inline-form">
-              <label>
-                Priority
-                <input
-                  aria-label="Priority"
-                  type="number"
-                  min="0"
-                  value={draft.priority}
-                  onChange={(e) => onUpdateDraft(target.target_key, (c) => ({ ...c, priority: e.target.value, acknowledgeDefaultRisk: false }))}
-                />
-              </label>
-              <label>
-                <input
-                  aria-label="Enable target"
-                  type="checkbox"
-                  checked={draft.enabled}
-                  onChange={(e) => onUpdateDraft(target.target_key, (c) => ({ ...c, enabled: e.target.checked, acknowledgeDefaultRisk: false }))}
-                />
-                <span>Enable target</span>
-              </label>
-              <label>
-                <input
-                  aria-label="Queue eligible"
-                  type="checkbox"
-                  checked={draft.queueEligible}
-                  onChange={(e) => onUpdateDraft(target.target_key, (c) => ({ ...c, queueEligible: e.target.checked }))}
-                />
-                <span>Queue eligible</span>
-              </label>
-              <label>
-                <input
-                  aria-label="Fallback allowed"
-                  type="checkbox"
-                  checked={draft.fallbackAllowed}
-                  onChange={(e) => onUpdateDraft(target.target_key, (c) => ({ ...c, fallbackAllowed: e.target.checked }))}
-                />
-                <span>Fallback allowed</span>
-              </label>
-              <label>
-                <input
-                  aria-label="Escalation allowed"
-                  type="checkbox"
-                  checked={draft.escalationAllowed}
-                  onChange={(e) => onUpdateDraft(target.target_key, (c) => ({ ...c, escalationAllowed: e.target.checked }))}
-                />
-                <span>Escalation allowed</span>
-              </label>
-            </div>
-
-            {otherTargets.length > 0 ? (
-              <>
-                <div className="fg-stack">
-                  <strong>Fallback targets</strong>
-                  <div className="fg-inline-form">
-                    {otherTargets.map((other) => (
-                      <label key={`fallback-${other.target_key}`}>
-                        <input
-                          type="checkbox"
-                          checked={draft.fallbackTargetKeys.includes(other.target_key)}
-                          onChange={() => onToggleReference(target.target_key, "fallbackTargetKeys", other.target_key)}
-                        />
-                        <span>{other.label}</span>
-                      </label>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="fg-stack">
-                  <strong>Escalation targets</strong>
-                  <div className="fg-inline-form">
-                    {otherTargets.map((other) => (
-                      <label key={`escalation-${other.target_key}`}>
-                        <input
-                          type="checkbox"
-                          checked={draft.escalationTargetKeys.includes(other.target_key)}
-                          onChange={() => onToggleReference(target.target_key, "escalationTargetKeys", other.target_key)}
-                        />
-                        <span>{other.label}</span>
-                      </label>
-                    ))}
-                  </div>
-                </div>
-              </>
-            ) : null}
-
-            {becomesRiskyDefault ? (
-              <div className="ff-state-block" data-state="blocked">
-                <strong>Premium or OAuth target becomes the default active path</strong>
-                <p>
-                  This change would promote a premium-cost or OAuth-backed target into the first active routing slot. Confirm the risk before saving.
-                </p>
-                <label>
-                  <input
-                    aria-label="Confirm premium or OAuth default warning"
-                    type="checkbox"
-                    checked={draft.acknowledgeDefaultRisk}
-                    onChange={(e) => onUpdateDraft(target.target_key, (c) => ({ ...c, acknowledgeDefaultRisk: e.target.checked }))}
-                  />
-                  <span>I understand and want this target to become a default active path.</span>
-                </label>
-              </div>
-            ) : null}
-
-            <div className="fg-actions">
-              <button type="button" onClick={onSave} disabled={!draftHasChanges}>
-                Save target changes
-              </button>
-            </div>
-          </section>
-        ) : null}
       </div>
     </DetailPanel>
   );

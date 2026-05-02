@@ -37,6 +37,16 @@ def list_accounts(
     instance: InstanceRecord = Depends(resolve_admin_instance_scope),
     service: GovernanceService = Depends(get_governance_service),
 ) -> Any:
+    """
+    List all accounts for the current instance, including runtime key counts.
+
+    :param instance: Resolved instance scope
+    :type instance: InstanceRecord
+    :param service: Governance service for account management
+    :type service: GovernanceService
+    :return: Dictionary with status and list of accounts with key counts
+    :rtype: Any
+    """
     keys = service.list_runtime_keys(instance_id=instance.instance_id)
     key_counts: dict[str, int] = {}
     for item in keys:
@@ -62,6 +72,22 @@ def create_account(
     instance: InstanceRecord = Depends(resolve_admin_instance_scope),
     service: GovernanceService = Depends(get_governance_service),
 ) -> Any:
+    """
+    Create a new account within the current instance.
+
+    :param payload: Account creation request data
+    :type payload: AccountCreateRequest
+    :param request: Incoming HTTP request
+    :type request: Request
+    :param admin: Injected authentication/admin dependency
+    :type admin: AuthenticatedAdmin
+    :param instance: Resolved instance scope
+    :type instance: InstanceRecord
+    :param service: Governance service for account management
+    :type service: GovernanceService
+    :return: Dictionary with status and created account data
+    :rtype: Any
+    """
     unsupported = unsupported_idempotency_response(request, message=_ACCOUNT_IDEMPOTENCY_MESSAGE)
     if unsupported is not None:
         return unsupported
@@ -85,6 +111,25 @@ def update_account(
     instance: InstanceRecord = Depends(resolve_admin_instance_scope),
     service: GovernanceService = Depends(get_governance_service),
 ) -> Any:
+    """
+    Update an existing account identified by its ID.
+
+    :param account_id: Unique identifier of the account to update
+    :type account_id: str
+    :param payload: Account update request data
+    :type payload: AccountUpdateRequest
+    :param request: Incoming HTTP request
+    :type request: Request
+    :param admin: Injected authentication/admin dependency
+    :type admin: AuthenticatedAdmin
+    :param instance: Resolved instance scope
+    :type instance: InstanceRecord
+    :param service: Governance service for account management
+    :type service: GovernanceService
+    :return: Dictionary with status and updated account data
+    :rtype: Any
+    :raises ValueError: If the account is not found (returns 404 error response)
+    """
     unsupported = unsupported_idempotency_response(request, message=_ACCOUNT_IDEMPOTENCY_MESSAGE)
     if unsupported is not None:
         return unsupported

@@ -14,8 +14,8 @@ const {
   resetMutableSettingMock: vi.fn(),
 }));
 
-vi.mock("../src/api/admin", async () => {
-  const actual = await vi.importActual<typeof import("../src/api/admin")>("../src/api/admin");
+vi.mock("../src/api/domain", async () => {
+  const actual = await vi.importActual<typeof import("../src/api/domain")>("../src/api/domain");
 
   return {
     ...actual,
@@ -25,7 +25,7 @@ vi.mock("../src/api/admin", async () => {
   };
 });
 
-import type { AdminSessionUser, MutableSettingEntry } from "../src/api/admin";
+import type { AdminSessionUser, MutableSettingEntry } from "../src/api/domain";
 import { SettingsPage } from "../src/pages/SettingsPage";
 import { withAppContext } from "./testContext";
 
@@ -248,8 +248,8 @@ describe("Settings page role-aware controls", () => {
     expect(fetchMutableSettingsMock).toHaveBeenCalledTimes(1);
     expect(container.textContent).toContain("Read-Only Review");
     expect(container.textContent).toContain("Authenticated non-admin sessions can review grouped system defaults here");
-    expect(container.textContent).toContain("Routing");
-    expect(container.textContent).toContain("Advanced");
+    expect(container.textContent).toContain("Routing defaults");
+    expect(container.textContent).toContain("TLS / Public access");
 
     // Operators should not see edit controls
     expect(getButtonByText(container, "Save override")).toBeUndefined();
@@ -264,8 +264,8 @@ describe("Settings page role-aware controls", () => {
     expect(fetchMutableSettingsMock).toHaveBeenCalledTimes(1);
     expect(container.textContent).toContain("Admin mutations enabled");
     expect(container.textContent).toContain("General");
-    expect(container.textContent).toContain("Routing");
-    expect(container.textContent).toContain("Advanced");
+    expect(container.textContent).toContain("Routing defaults");
+    expect(container.textContent).toContain("TLS / Public access");
 
     // High-risk settings are hidden by default; enable them
     expect(container.textContent).toContain("Show 1 high-risk setting");
@@ -326,7 +326,7 @@ describe("Settings page role-aware controls", () => {
     await flushEffects();
 
     // Confirmation dialog should be visible for high-risk setting
-    expect(getLabeledControl(container, "I understand the risk and want to proceed")).toBeTruthy();
+    expect(getLabeledControl(container, "I understand the operational impact and want to proceed")).toBeTruthy();
 
     // Check the acknowledgment by clicking the checkbox inside the dialog
     const confirmCheckbox = container.querySelector(".ff-dialog-panel input[type='checkbox']") as HTMLInputElement;

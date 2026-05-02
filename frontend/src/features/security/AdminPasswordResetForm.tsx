@@ -1,4 +1,4 @@
-import type { AdminPasswordRotationPayload, AdminUser } from "../../api/admin";
+import type { AdminPasswordRotationPayload, AdminUser } from "../../api/domain";
 
 export type AdminPasswordResetDraft = {
   new_password: string;

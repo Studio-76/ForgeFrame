@@ -33,6 +33,26 @@ def list_inbox(
     instance: InstanceRecord = Depends(resolve_admin_instance_scope),
     service: ConversationInboxAdminService = Depends(get_conversation_inbox_admin_service),
 ) -> dict[str, object]:
+    """
+    List all inbox items for the current instance, with optional filtering.
+
+    :param triage_status: Filter by triage status
+    :type triage_status: str | None
+    :param status_filter: Filter by item status
+    :type status_filter: str | None
+    :param priority: Filter by priority level
+    :type priority: str | None
+    :param limit: Maximum number of items to return
+    :type limit: int
+    :param _admin: Injected authentication/admin dependency
+    :type _admin: AuthenticatedAdmin
+    :param instance: The resolved instance record
+    :type instance: InstanceRecord
+    :param service: Injected conversation inbox admin service
+    :type service: ConversationInboxAdminService
+    :return: Status, instance data, and list of inbox items
+    :rtype: dict[str, object]
+    """
     items = service.list_inbox(
         instance=instance,
         triage_status=triage_status,
@@ -54,6 +74,21 @@ def get_inbox_item(
     instance: InstanceRecord = Depends(resolve_admin_instance_scope),
     service: ConversationInboxAdminService = Depends(get_conversation_inbox_admin_service),
 ) -> object:
+    """
+    Retrieve a single inbox item by its ID.
+
+    :param inbox_id: Unique identifier of the inbox item
+    :type inbox_id: str
+    :param _admin: Injected authentication/admin dependency
+    :type _admin: AuthenticatedAdmin
+    :param instance: The resolved instance record
+    :type instance: InstanceRecord
+    :param service: Injected conversation inbox admin service
+    :type service: ConversationInboxAdminService
+    :return: Status and inbox item data
+    :rtype: object
+    :raises ValueError: If the inbox item is not found, returns a 404 error response
+    """
     try:
         item = service.get_inbox_item(instance=instance, inbox_id=inbox_id)
     except ValueError as exc:
@@ -68,6 +103,21 @@ def create_inbox_item(
     instance: InstanceRecord = Depends(resolve_admin_instance_scope),
     service: ConversationInboxAdminService = Depends(get_conversation_inbox_admin_service),
 ) -> object:
+    """
+    Create a new inbox item.
+
+    :param payload: Inbox item creation payload
+    :type payload: CreateInboxItem
+    :param _admin: Injected authentication/admin dependency
+    :type _admin: AuthenticatedAdmin
+    :param instance: The resolved instance record
+    :type instance: InstanceRecord
+    :param service: Injected conversation inbox admin service
+    :type service: ConversationInboxAdminService
+    :return: Status and created inbox item data
+    :rtype: object
+    :raises ValueError: If the item already exists or is invalid
+    """
     try:
         item = service.create_inbox_item(instance=instance, payload=payload)
     except ValueError as exc:
@@ -85,6 +135,23 @@ def update_inbox_item(
     instance: InstanceRecord = Depends(resolve_admin_instance_scope),
     service: ConversationInboxAdminService = Depends(get_conversation_inbox_admin_service),
 ) -> object:
+    """
+    Update an existing inbox item.
+
+    :param inbox_id: Unique identifier of the inbox item to update
+    :type inbox_id: str
+    :param payload: Inbox item update payload
+    :type payload: UpdateInboxItem
+    :param _admin: Injected authentication/admin dependency
+    :type _admin: AuthenticatedAdmin
+    :param instance: The resolved instance record
+    :type instance: InstanceRecord
+    :param service: Injected conversation inbox admin service
+    :type service: ConversationInboxAdminService
+    :return: Status and updated inbox item data
+    :rtype: object
+    :raises ValueError: If the item is not found or the update is invalid
+    """
     try:
         item = service.update_inbox_item(instance=instance, inbox_id=inbox_id, payload=payload)
     except ValueError as exc:

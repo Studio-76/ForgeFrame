@@ -82,8 +82,8 @@ vi.mock("../src/api/admin/instances", async () => {
   };
 });
 
-vi.mock("../src/api/admin", async () => {
-  const actual = await vi.importActual<typeof import("../src/api/admin")>("../src/api/admin");
+vi.mock("../src/api/domain", async () => {
+  const actual = await vi.importActual<typeof import("../src/api/domain")>("../src/api/domain");
   return {
     ...actual,
     fetchInstances: fetchInstancesMock,
@@ -97,8 +97,8 @@ vi.mock("../src/api/admin", async () => {
   };
 });
 
-vi.mock("../src/api/admin", async () => {
-  const actual = await vi.importActual<typeof import("../src/api/admin")>("../src/api/admin");
+vi.mock("../src/api/domain", async () => {
+  const actual = await vi.importActual<typeof import("../src/api/domain")>("../src/api/domain");
   return {
     ...actual,
     fetchInstances: fetchInstancesMock,
@@ -121,7 +121,7 @@ import type {
   InboxDetail,
   InboxSummary,
   TaskSummary,
-} from "../src/api/admin";
+} from "../src/api/domain";
 import { ConversationsPage } from "../src/pages/ConversationsPage";
 import { InboxPage } from "../src/pages/InboxPage";
 import { withAppContext } from "./testContext";

@@ -10,8 +10,8 @@ const { fetchModelRegisterMock, fetchInstancesMock, syncProvidersMock } = vi.hoi
   syncProvidersMock: vi.fn(),
 }));
 
-vi.mock("../src/api/admin", async () => {
-  const actual = await vi.importActual<typeof import("../src/api/admin")>("../src/api/admin");
+vi.mock("../src/api/domain", async () => {
+  const actual = await vi.importActual<typeof import("../src/api/domain")>("../src/api/domain");
 
   return {
     ...actual,
@@ -32,7 +32,7 @@ vi.mock("../src/api/domain", async () => {
   };
 });
 
-import type { AdminSessionUser, InstanceRecord } from "../src/api/admin";
+import type { AdminSessionUser, InstanceRecord } from "../src/api/domain";
 import { ModelsPage } from "../src/pages/ModelsPage";
 import { withAppContext } from "./testContext";
 

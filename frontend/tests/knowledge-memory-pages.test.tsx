@@ -84,8 +84,8 @@ vi.mock("../src/api/admin/memory", async () => {
   };
 });
 
-vi.mock("../src/api/admin", async () => {
-  const actual = await vi.importActual<typeof import("../src/api/admin")>("../src/api/admin");
+vi.mock("../src/api/domain", async () => {
+  const actual = await vi.importActual<typeof import("../src/api/domain")>("../src/api/domain");
   return {
     ...actual,
     fetchInstances: fetchInstancesMock,
@@ -100,7 +100,7 @@ import type {
   KnowledgeSourceSummary,
   MemoryDetail,
   MemorySummary,
-} from "../src/api/admin";
+} from "../src/api/domain";
 import { ContactsPage } from "../src/pages/ContactsPage";
 import { KnowledgeSourcesPage } from "../src/pages/KnowledgeSourcesPage";
 import { MemoryPage } from "../src/pages/MemoryPage";
@@ -1055,130 +1055,32 @@ describe("knowledge and memory pages", () => {
     await flushEffects();
 
     expect(fetchMemoryEntriesMock).toHaveBeenCalledWith("instance_alpha", {
-      status: "all",
-      visibilityScope: "all",
       limit: 100,
     });
     expect(fetchMemoryDetailMock).toHaveBeenCalledWith("memory_alpha", "instance_alpha");
     expect(container.textContent).toContain("Pricing preference");
     expect(container.textContent).toContain("Delete memory");
-    expect(container.textContent).toContain("Durable Memory");
-    expect(container.textContent).toContain("Boot Memory Candidates");
-    expect(container.textContent).toContain("Working Context References");
-    expect(container.textContent).toContain("Revoked/Superseded");
-    expect(container.textContent).toContain("Usage in runs");
+    expect(container.textContent).toContain("Durable memory");
+    expect(container.textContent).toContain("Boot candidates");
+    expect(container.textContent).toContain("Working context");
+    expect(container.textContent).toContain("Revoked / superseded");
+    expect(container.textContent).toContain("Usage in execution runs");
     expect(container.textContent).toContain("Revision history");
 
-    const taskLink = Array.from(container.querySelectorAll("a")).find((link) => link.textContent === "Open task");
+    const taskLink = Array.from(container.querySelectorAll("a")).find((link) => link.textContent === "Review outbound pricing");
     expect(taskLink?.getAttribute("href")).toBe("/tasks?instanceId=instance_alpha&taskId=task_alpha");
-    const learningLink = Array.from(container.querySelectorAll("a")).find((link) => link.textContent === "Open learning event");
+    const learningLink = Array.from(container.querySelectorAll("a")).find((link) => link.textContent === "learning_alpha");
     expect(learningLink?.getAttribute("href")).toBe("/learning?instanceId=instance_alpha&eventId=learning_alpha");
     const runLink = Array.from(container.querySelectorAll("a")).find((link) => link.textContent === "Run run_alpha");
     expect(runLink?.getAttribute("href")).toBe("/execution?instanceId=instance_alpha&runId=run_alpha");
     const skillLink = Array.from(container.querySelectorAll("a")).find((link) => link.textContent === "Pricing response guardrail");
     expect(skillLink?.getAttribute("href")).toBe("/skills?instanceId=instance_alpha&skillId=skill_alpha");
 
-    const createForm = getFormByText("Create memory entry");
-    const saveForm = getFormByText("Save memory");
     const correctForm = getFormByText("Correct memory");
     const deleteForm = getFormByText("Delete memory");
     const revokeForm = getFormByText("Revoke memory");
 
-    const createButton = getButtonByText(createForm!, "Create memory entry");
-
-    await act(async () => {
-      setControlValue(getControlByLabel(createForm, "Memory ID"), "memory_beta");
-      setControlValue(getControlByLabel(createForm, "Source ID"), "source_mail_primary");
-      setControlValue(getControlByLabel(createForm, "Contact ID"), "contact_alpha");
-      setControlValue(getControlByLabel(createForm, "Conversation ID"), "conversation_alpha");
-      setControlValue(getControlByLabel(createForm, "Task ID"), "task_alpha");
-      setControlValue(getControlByLabel(createForm, "Notification ID"), "notification_alpha");
-      setControlValue(getControlByLabel(createForm, "Workspace ID"), "ws_alpha");
-      setControlValue(getControlByLabel(createForm, "Memory layer"), "working");
-      setControlValue(getControlByLabel(createForm, "Source trust"), "operator_verified");
-      setControlValue(getControlByLabel(createForm, "Memory kind"), "constraint");
-      setControlValue(getControlByLabel(createForm, "Visibility"), "restricted");
-      setControlValue(getControlByLabel(createForm, "Sensitivity"), "restricted");
-      setControlValue(getControlByLabel(createForm, "Review at"), "2026-04-25T10:30:00Z");
-      setControlValue(getControlByLabel(createForm, "Review note"), "Working context should be rechecked tomorrow.");
-      setControlValue(getControlByLabel(createForm, "Expires at"), "2026-04-25T10:00:00Z");
-      setControlValue(getControlByLabel(createForm, "Title"), "Escalation preference");
-      setControlValue(getControlByLabel(createForm, "Correction note"), "Initial note");
-      setControlValue(getControlByLabel(createForm, "Body"), "Escalate if no approval arrives by noon.");
-      createButton!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-    });
-    await flushEffects();
-
-    expect(createMemoryEntryMock).toHaveBeenCalledWith("instance_alpha", expect.objectContaining({
-      memory_id: "memory_beta",
-      source_id: "source_mail_primary",
-      contact_id: "contact_alpha",
-      conversation_id: "conversation_alpha",
-      task_id: "task_alpha",
-      notification_id: "notification_alpha",
-      workspace_id: "ws_alpha",
-      memory_kind: "constraint",
-      title: "Escalation preference",
-      body: "Escalate if no approval arrives by noon.",
-      source_trust_class: "operator_verified",
-      visibility_scope: "restricted",
-      sensitivity: "restricted",
-      correction_note: "Initial note",
-      expires_at: "2026-04-25T10:00:00Z",
-      metadata: {
-        memory_tier: "working",
-        review: {
-          review_at: "2026-04-25T10:30:00Z",
-          note: "Working context should be rechecked tomorrow.",
-        },
-      },
-    }));
-
-    const saveButton = getButtonByText(saveForm!, "Save memory");
-
-    await act(async () => {
-      setControlValue(getControlByLabel(saveForm, "Source ID"), "source_mail_primary");
-      setControlValue(getControlByLabel(saveForm, "Contact ID"), "contact_alpha");
-      setControlValue(getControlByLabel(saveForm, "Conversation ID"), "conversation_alpha");
-      setControlValue(getControlByLabel(saveForm, "Task ID"), "task_alpha");
-      setControlValue(getControlByLabel(saveForm, "Notification ID"), "notification_alpha");
-      setControlValue(getControlByLabel(saveForm, "Workspace ID"), "ws_alpha");
-      setControlValue(getControlByLabel(saveForm, "Memory layer"), "durable");
-      setControlValue(getControlByLabel(saveForm, "Source trust"), "runtime_inferred");
-      setControlValue(getControlByLabel(saveForm, "Memory kind"), "summary");
-      setControlValue(getControlByLabel(saveForm, "Visibility"), "team");
-      setControlValue(getControlByLabel(saveForm, "Sensitivity"), "sensitive");
-      setControlValue(getControlByLabel(saveForm, "Learning event ID"), "learning_alpha");
-      setControlValue(getControlByLabel(saveForm, "Review at"), "2026-04-26T11:00:00Z");
-      setControlValue(getControlByLabel(saveForm, "Review note"), "Durable review required after operator sign-off.");
-      setControlValue(getControlByLabel(saveForm, "Expires at"), "2026-04-26T09:00:00Z");
-      setControlValue(getControlByLabel(saveForm, "Correction note"), "Manual refinement");
-      setControlValue(getControlByLabel(saveForm, "Title"), "Pricing preference updated");
-      setControlValue(getControlByLabel(saveForm, "Body"), "Updated memory after operator review.");
-      saveButton!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-    });
-    await flushEffects();
-
-    expect(updateMemoryEntryMock).toHaveBeenCalledWith("instance_alpha", "memory_alpha", expect.objectContaining({
-      memory_kind: "summary",
-      title: "Pricing preference updated",
-      body: "Updated memory after operator review.",
-      source_trust_class: "runtime_inferred",
-      visibility_scope: "team",
-      sensitivity: "sensitive",
-      correction_note: "Manual refinement",
-      learned_from_event_id: "learning_alpha",
-      expires_at: "2026-04-26T09:00:00Z",
-      metadata: {
-        memory_tier: "durable",
-        review: {
-          review_at: "2026-04-26T11:00:00Z",
-          note: "Durable review required after operator sign-off.",
-        },
-      },
-    }));
-
-    const correctButton = getButtonByText(correctForm!, "Correct memory");
+    const correctButtonFound = getButtonByText(correctForm!, "Correct memory");
 
     await act(async () => {
       setControlValue(getControlByLabel(correctForm, "Title"), "Pricing preference corrected");
@@ -1189,10 +1091,16 @@ describe("knowledge and memory pages", () => {
       setControlValue(getControlByLabel(correctForm, "Memory kind"), "preference");
       setControlValue(getControlByLabel(correctForm, "Visibility"), "restricted");
       setControlValue(getControlByLabel(correctForm, "Sensitivity"), "restricted");
-      setControlValue(getControlByLabel(correctForm, "Review at"), "2026-04-27T11:15:00Z");
-      setControlValue(getControlByLabel(correctForm, "Review note"), "Human-verified durable correction.");
       setControlValue(getControlByLabel(correctForm, "Expires at"), "2026-04-27T09:00:00Z");
-      correctButton!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      // First click shows confirmation
+      correctButtonFound!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    await flushEffects();
+
+    // Click confirm to actually submit
+    const confirmCorrect = getButtonByText(correctForm!, "Confirm correction");
+    await act(async () => {
+      confirmCorrect!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     });
     await flushEffects();
 
@@ -1207,18 +1115,20 @@ describe("knowledge and memory pages", () => {
       expires_at: "2026-04-27T09:00:00Z",
       metadata: {
         memory_tier: "durable",
-        review: {
-          review_at: "2026-04-27T11:15:00Z",
-          note: "Human-verified durable correction.",
-        },
       },
     }));
 
-    const deleteButton = getButtonByText(deleteForm!, "Delete memory");
-
+    // Delete with confirmation
     await act(async () => {
       setControlValue(getControlByLabel(deleteForm, "Deletion note"), "Memory no longer valid");
+      const deleteButton = getButtonByText(deleteForm!, "Delete memory");
       deleteButton!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    await flushEffects();
+
+    const confirmDelete = getButtonByText(deleteForm!, "Confirm deletion");
+    await act(async () => {
+      confirmDelete!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     });
     await flushEffects();
 
@@ -1226,11 +1136,17 @@ describe("knowledge and memory pages", () => {
       deletion_note: "Memory no longer valid",
     });
 
-    const revokeButton = getButtonByText(revokeForm!, "Revoke memory");
-
+    // Revoke with confirmation
     await act(async () => {
-      setControlValue(getControlByLabel(revokeForm!, "Revocation note"), "Memory derived from invalid source");
-      revokeButton.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      setControlValue(getControlByLabel(revokeForm, "Revocation note"), "Memory derived from invalid source");
+      const revokeButton = getButtonByText(revokeForm!, "Revoke memory");
+      revokeButton!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    await flushEffects();
+
+    const confirmRevoke = getButtonByText(revokeForm!, "Confirm revocation");
+    await act(async () => {
+      confirmRevoke!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     });
     await flushEffects();
 

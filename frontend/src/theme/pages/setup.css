@@ -1,0 +1,376 @@
+/* ──────────────────────────────────────────────
+ * Setup flow: guided checklist and progress
+ * ────────────────────────────────────────────── */
+
+.ff-setup-steps {
+  display: grid;
+  gap: var(--fg-space-4);
+}
+
+.ff-setup-step-card {
+  display: grid;
+  gap: var(--fg-space-3);
+  border: 1px solid var(--fg-color-border-default);
+  border-radius: var(--fg-radius-md);
+  background: var(--fg-color-surface-default);
+  padding: var(--fg-space-4);
+  position: relative;
+  transition:
+    border-color var(--fg-motion-base) var(--fg-ease-standard),
+    opacity var(--fg-motion-base) var(--fg-ease-standard);
+}
+
+.ff-setup-step-current {
+  border-color: var(--fg-color-action-primary);
+  border-left: 3px solid var(--fg-color-action-primary);
+}
+
+.ff-setup-step-complete {
+  opacity: 0.75;
+}
+
+.ff-setup-step-blocked {
+  border-color: var(--fg-color-status-danger-border);
+  border-left: 3px solid var(--fg-color-status-danger-border);
+}
+
+.ff-setup-step-upcoming {
+  opacity: 0.5;
+  pointer-events: none;
+}
+
+.ff-setup-step-header {
+  display: flex;
+  gap: var(--fg-space-3);
+  align-items: flex-start;
+}
+
+.ff-setup-step-number {
+  flex: 0 0 2rem;
+  width: 2rem;
+  height: 2rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--fg-radius-sm);
+  border: 1px solid var(--fg-color-border-default);
+  background: var(--fg-color-surface-subtle);
+  color: var(--fg-color-text-secondary);
+  font-size: var(--fg-type-size-meta);
+  font-weight: 700;
+  font-family: var(--fg-font-mono, monospace);
+}
+
+.ff-setup-step-number-done {
+  background: var(--fg-color-status-success-soft);
+  border-color: var(--fg-color-status-success-border);
+  color: var(--fg-color-status-success);
+}
+
+.ff-setup-step-info {
+  display: grid;
+  gap: var(--fg-space-1);
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.ff-setup-step-title {
+  margin: 0;
+  font-size: var(--fg-type-size-card);
+  font-weight: 600;
+}
+
+.ff-setup-step-description {
+  margin: 0;
+  color: var(--fg-color-text-secondary);
+}
+
+.ff-setup-step-blockers {
+  padding: var(--fg-space-3);
+  border-radius: var(--fg-radius-md);
+  background: var(--fg-color-status-danger-soft);
+  border: 1px solid var(--fg-color-status-danger-border);
+}
+
+.ff-setup-step-blocker-title {
+  display: block;
+  margin-bottom: var(--fg-space-2);
+  color: var(--fg-color-status-danger);
+  font-size: var(--fg-type-size-meta);
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.ff-setup-step-blocker-list {
+  margin: 0;
+  color: var(--fg-color-text-primary);
+}
+
+.ff-setup-step-action {
+  padding-top: var(--fg-space-2);
+  border-top: 1px solid var(--fg-color-border-default);
+}
+
+/* Progress bar */
+
+.ff-setup-status-bar {
+  display: flex;
+  flex-direction: column;
+  gap: var(--fg-space-2);
+  padding: var(--fg-space-3);
+  border-radius: var(--fg-radius-md);
+  background: var(--fg-color-surface-strong);
+  border: 1px solid var(--fg-color-border-default);
+}
+
+.ff-setup-status-bar[data-tone="danger"] {
+  border-color: var(--fg-color-status-danger-border);
+}
+
+.ff-setup-status-bar[data-tone="warning"] {
+  border-color: var(--fg-color-status-warning-border);
+}
+
+.ff-setup-status-bar[data-tone="success"] {
+  border-color: var(--fg-color-status-success-border);
+}
+
+.ff-setup-status-bar-info {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.ff-setup-step-indicator {
+  font-size: var(--fg-type-size-meta);
+  font-weight: 600;
+  color: var(--fg-color-text-primary);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.ff-setup-status-label {
+  font-size: var(--fg-type-size-meta);
+  color: var(--fg-color-text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.ff-setup-progress {
+  display: flex;
+  height: 0.375rem;
+  border-radius: var(--fg-radius-sm);
+  overflow: hidden;
+  background: var(--fg-color-surface-subtle);
+  border: 1px solid var(--fg-color-border-default);
+}
+
+.ff-setup-progress-fill {
+  background: var(--fg-color-action-primary);
+  transition: width 0.3s ease;
+  border-radius: var(--fg-radius-sm);
+  box-shadow: 0 0 6px color-mix(in srgb, var(--fg-color-action-primary) 40%, transparent);
+}
+
+/* Primary action bar */
+
+.ff-setup-primary-action-bar {
+  display: flex;
+  gap: var(--fg-space-3);
+  align-items: center;
+  padding: var(--fg-space-4);
+  border-radius: var(--fg-radius-md);
+  background: var(--fg-color-action-primary-soft);
+  border: 1px solid var(--fg-color-action-primary);
+  border-left: 3px solid var(--fg-color-action-primary);
+}
+
+.ff-setup-primary-action-content {
+  display: flex;
+  flex: 1 1 auto;
+  align-items: center;
+  gap: var(--fg-space-3);
+}
+
+.ff-setup-primary-action-description {
+  margin: 0;
+  color: var(--fg-color-text-primary);
+  font-size: var(--fg-type-size-body);
+  flex: 1 1 auto;
+}
+
+.ff-setup-primary-action-button {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.5rem 1.25rem;
+  border-radius: var(--fg-radius-sm);
+  background: var(--fg-color-action-primary);
+  color: #ffffff;
+  font-size: var(--fg-type-size-body);
+  font-weight: 700;
+  text-decoration: none;
+  white-space: nowrap;
+  letter-spacing: 0.02em;
+  transition:
+    background var(--fg-motion-base) var(--fg-ease-standard),
+    box-shadow var(--fg-motion-base) var(--fg-ease-standard);
+}
+
+.ff-setup-primary-action-button:hover {
+  background: color-mix(in srgb, var(--fg-color-action-primary) 85%, #000000);
+  box-shadow: 0 0 10px color-mix(in srgb, var(--fg-color-action-primary) 35%, transparent);
+}
+
+.ff-setup-primary-action-button:disabled {
+  opacity: 0.5;
+  pointer-events: none;
+}
+
+/* Password rotation inline form */
+
+.ff-setup-password-requirements {
+  padding: var(--fg-space-3);
+  border-radius: var(--fg-radius-md);
+  background: var(--fg-color-surface-strong);
+}
+
+.ff-setup-password-requirements h4 {
+  margin: 0 0 var(--fg-space-2);
+  font-size: var(--fg-type-size-meta);
+  text-transform: uppercase;
+  color: var(--fg-color-text-secondary);
+}
+
+.ff-setup-password-form {
+  display: grid;
+  gap: var(--fg-space-3);
+}
+
+/* ──────────────────────────────────────────────
+ * Tablet + mobile: shared responsive adjustments
+ * Applies at viewports narrower than 1024px.
+ * ────────────────────────────────────────────── */
+
+@media (max-width: 1023px) {
+  .ff-topbar {
+    min-height: 64px;
+    padding: 0.6rem 1rem;
+  }
+
+  .ff-topbar::after {
+    inset: auto 1rem -1px;
+  }
+
+  .ff-command-wrap {
+    flex: 1 1 auto;
+    min-width: 0;
+    width: auto;
+  }
+
+  .ff-command-wrap kbd {
+    display: none;
+  }
+
+  .ff-main {
+    padding: 1rem;
+  }
+
+  .fg-table-wrap {
+    overflow-x: auto;
+  }
+
+  .fg-table {
+    min-width: 760px;
+    table-layout: auto;
+  }
+
+  .ff-table-card-header {
+    flex-direction: column;
+  }
+
+  .ff-page-header-main,
+  .ff-action-bar-header,
+  .ff-detail-panel-header,
+  .ff-advanced-diagnostics summary,
+  .ff-dashboard-section-header {
+    flex-direction: column;
+  }
+
+  .ff-dashboard-layout,
+  .ff-operator-layout,
+  .ff-release-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .ff-release-sidebar {
+    position: static;
+  }
+
+  .ff-detail-panel.is-sticky {
+    position: static;
+  }
+
+  .ff-property-list div {
+    grid-template-columns: 1fr;
+    gap: 0.2rem;
+  }
+
+  .ff-public-main {
+    grid-template-columns: 1fr;
+    align-items: start;
+  }
+
+  .ff-public-copy h1 {
+    font-size: 2rem;
+  }
+
+  .fg-shell {
+    padding: var(--fg-space-4);
+  }
+
+  .fg-panel-heading {
+    flex-direction: column;
+  }
+
+  .fg-approval-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .fg-audit-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .fg-provider-action-plan {
+    grid-template-columns: 1fr;
+  }
+
+  .fg-audit-detail-panel {
+    position: static;
+  }
+
+  /* Stack setup action bar on tablet */
+  .ff-setup-primary-action-content {
+    flex-direction: column;
+    align-items: stretch;
+    gap: var(--fg-space-2);
+  }
+
+  .ff-setup-primary-action-button {
+    justify-content: center;
+    text-align: center;
+  }
+}
+
+@media (max-width: 639px) {
+  /* Stack setup action bar on mobile */
+  .ff-setup-primary-action-content {
+    flex-direction: column;
+    align-items: stretch;
+    gap: var(--fg-space-2);
+  }
+
+  .ff-setup-primary-action-button {
+    justify-content: center;
+    text-align: center;
+  }
+}

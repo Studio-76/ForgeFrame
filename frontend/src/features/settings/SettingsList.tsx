@@ -1,6 +1,13 @@
-import type { MutableSettingEntry } from "../../api/admin";
+import type { MutableSettingEntry } from "../../api/domain";
 import { CATEGORY_LABELS, type CategoryFilter } from "./types";
-import { formatSettingValue, riskTone, sourceDescription, sourceTone } from "./utils";
+import {
+  formatBooleanLabel,
+  formatSettingValue,
+  riskTone,
+  showRiskBadge,
+  sourceDescription,
+  statusKey,
+} from "./utils";
 
 /**
  * Props for the SettingsList component.
@@ -22,6 +29,10 @@ export interface SettingsListProps {
   loadState: "idle" | "loading" | "success" | "error";
   /** Total settings count (before filtering). */
   totalCount: number;
+  /** Total overridden settings count (before filtering). */
+  overriddenCount: number;
+  /** Total high-risk settings count (before filtering). */
+  highRiskCount: number;
   /** Filtered and grouped settings organized by category. */
   groupedSettings: Array<{
     category: string;
@@ -37,9 +48,12 @@ export interface SettingsListProps {
 }
 
 /**
- * Settings list panel with search, category filter, high-risk toggle,
- * and grouped settings display. Each setting shows human-readable label,
- * effective value (truncated), override/default status, and risk level.
+ * Settings inventory panel with summary stats, search, category filter,
+ * and a clean grouped settings list.
+ *
+ * Shows human-readable values, concise source/danger indicators, and
+ * hides raw keys behind secondary text. Low-risk settings do not display
+ * a risk badge. Booleans are shown as Enabled/Disabled.
  */
 export function SettingsList({
   searchText,
@@ -50,15 +64,43 @@ export function SettingsList({
   onHighRiskToggle,
   loadState,
   totalCount,
+  overriddenCount,
+  highRiskCount,
   groupedSettings,
   selectedKey,
   onSelect,
   hiddenHighRiskCount,
 }: SettingsListProps) {
   const totalFiltered = groupedSettings.reduce((sum, g) => sum + g.items.length, 0);
+  const defaultCount = totalCount - overriddenCount;
 
   return (
     <div className="ff-settings-inventory">
+      {/* ── Summary stats bar ── */}
+      <div className="ff-settings-summary">
+        <div className="ff-settings-summary-stat">
+          <span className="ff-settings-summary-stat-value">{totalCount}</span>
+          <span className="ff-settings-summary-stat-label">Total</span>
+        </div>
+        {overriddenCount > 0 ? (
+          <div className="ff-settings-summary-stat" data-tone="changed">
+            <span className="ff-settings-summary-stat-value">{overriddenCount}</span>
+            <span className="ff-settings-summary-stat-label">Overridden</span>
+          </div>
+        ) : null}
+        <div className="ff-settings-summary-stat">
+          <span className="ff-settings-summary-stat-value">{defaultCount}</span>
+          <span className="ff-settings-summary-stat-label">Default</span>
+        </div>
+        {!showHighRisk && highRiskCount > 0 ? (
+          <div className="ff-settings-summary-stat" data-tone="danger">
+            <span className="ff-settings-summary-stat-value">{highRiskCount}</span>
+            <span className="ff-settings-summary-stat-label">High-risk hidden</span>
+          </div>
+        ) : null}
+      </div>
+
+      {/* ── Header ── */}
       <div className="ff-settings-inventory-header">
         <div className="ff-settings-inventory-header-copy">
           <h3>Settings</h3>
@@ -66,6 +108,7 @@ export function SettingsList({
         </div>
       </div>
 
+      {/* ── Toolbar ── */}
       <div className="ff-settings-toolbar">
         <label className="ff-settings-search">
           <span className="ff-settings-search-label">Search settings</span>
@@ -106,23 +149,70 @@ export function SettingsList({
         ) : null}
       </div>
 
+      {/* ── Loading state ── */}
       {loadState === "loading" ? (
         <div className="ff-settings-loading">
           <p className="fg-muted">Loading settings…</p>
         </div>
       ) : null}
 
+      {/* ── Empty state ── */}
       {loadState === "success" && totalFiltered === 0 ? (
         <div className="ff-settings-empty">
-          <strong>No settings match your filters</strong>
-          <p className="fg-muted">
-            {searchText
-              ? "Try a different search term or clear the search."
-              : "Try selecting a different category or enabling high-risk settings."}
-          </p>
+          {searchText ? (
+            <>
+              <strong>No matching settings</strong>
+              <p className="fg-muted">
+                No settings match "<strong>{searchText}</strong>". Try a different search term or clear the filter.
+              </p>
+              <button
+                type="button"
+                className="ff-settings-empty-action"
+                onClick={() => onSearchChange("")}
+              >
+                Clear search
+              </button>
+            </>
+          ) : categoryFilter !== "all" ? (
+            <>
+              <strong>No settings in this category</strong>
+              <p className="fg-muted">
+                Try selecting a different category or expanding to all settings.
+              </p>
+              <button
+                type="button"
+                className="ff-settings-empty-action"
+                onClick={() => onCategoryChange("all")}
+              >
+                Show all categories
+              </button>
+            </>
+          ) : !showHighRisk && highRiskCount > 0 ? (
+            <>
+              <strong>High-risk settings are hidden</strong>
+              <p className="fg-muted">
+                Some settings are filtered out because they are marked as high risk.
+              </p>
+              <button
+                type="button"
+                className="ff-settings-empty-action"
+                onClick={() => onHighRiskToggle(true)}
+              >
+                Show high-risk settings
+              </button>
+            </>
+          ) : (
+            <>
+              <strong>No settings found</strong>
+              <p className="fg-muted">
+                No settings match the current filters and search criteria.
+              </p>
+            </>
+          )}
         </div>
       ) : null}
 
+      {/* ── Error state ── */}
       {loadState === "error" ? (
         <div className="ff-settings-empty" data-tone="error">
           <strong>Failed to load settings</strong>
@@ -130,6 +220,7 @@ export function SettingsList({
         </div>
       ) : null}
 
+      {/* ── Grouped settings list ── */}
       <div className="ff-settings-groups">
         {groupedSettings.map((group) => (
           <div key={group.category} className="ff-settings-group">
@@ -140,8 +231,11 @@ export function SettingsList({
             <div className="ff-settings-list">
               {group.items.map((item) => {
                 const isSelected = item.key === selectedKey;
-                const overrideState = sourceDescription(item.source, item.overridden);
-                const overrideActive = item.source === "override" && item.overridden;
+                const sk = statusKey(item.source, item.overridden);
+                const showRisk = showRiskBadge(item.risk_level);
+                const displayValue = item.value_type === "bool"
+                  ? formatBooleanLabel(item.effective_value)
+                  : formatSettingValue(item.effective_value);
 
                 return (
                   <button
@@ -153,26 +247,34 @@ export function SettingsList({
                   >
                     <div className="ff-settings-item-main">
                       <span className="ff-settings-item-label">{item.label}</span>
-                      <span className="ff-settings-item-key">{item.key}</span>
+                      {showRisk ? (
+                        <span
+                          className="ff-settings-item-badge"
+                          data-tone={riskTone(item.risk_level)}
+                          title={item.risk_label}
+                        >
+                          {item.risk_level === "high" ? "HIGH" : "MOD"}
+                        </span>
+                      ) : null}
                     </div>
                     <div className="ff-settings-item-meta">
-                      <span className="ff-settings-item-value" title={formatSettingValue(item.effective_value)}>
-                        {formatSettingValue(item.effective_value)}
+                      <span
+                        className="ff-settings-item-value"
+                        title={formatSettingValue(item.effective_value)}
+                      >
+                        {displayValue}
                       </span>
                       <span
-                        className={`ff-settings-item-source${overrideActive ? " is-override" : ""}`}
+                        className={`ff-settings-item-status ff-settings-item-status--${sk}`}
                         title={item.source_label}
                       >
-                        {overrideState}
+                        {sourceDescription(item.source, item.overridden)}
                       </span>
-                      <span
-                        className="ff-settings-item-risk"
-                        data-tone={riskTone(item.risk_level)}
-                        title={item.risk_label}
-                      >
-                        {item.risk_label}
-                      </span>
+                      {item.group === "providers" ? (
+                        <span className="ff-settings-item-context">Provider</span>
+                      ) : null}
                     </div>
+                    <span className="ff-settings-item-key">{item.key}</span>
                   </button>
                 );
               })}

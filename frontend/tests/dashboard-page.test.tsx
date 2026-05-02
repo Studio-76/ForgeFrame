@@ -9,8 +9,8 @@ const { fetchDashboardMock, fetchInstancesMock } = vi.hoisted(() => ({
   fetchInstancesMock: vi.fn(),
 }));
 
-vi.mock("../src/api/admin", async () => {
-  const actual = await vi.importActual<typeof import("../src/api/admin")>("../src/api/admin");
+vi.mock("../src/api/domain", async () => {
+  const actual = await vi.importActual<typeof import("../src/api/domain")>("../src/api/domain");
 
   return {
     ...actual,
@@ -29,7 +29,7 @@ vi.mock("../src/api/domain", async () => {
   };
 });
 
-import type { AdminSessionUser, DashboardResponse, InstanceRecord } from "../src/api/admin";
+import type { AdminSessionUser, DashboardResponse, InstanceRecord } from "../src/api/domain";
 import { SetupPage } from "../src/features/setup/SetupPage";
 import { createTestQueryClient, withAppContext } from "./testContext";
 

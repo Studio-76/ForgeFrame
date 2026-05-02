@@ -32,6 +32,24 @@ def list_sources(
     instance: InstanceRecord = Depends(resolve_admin_instance_scope),
     service: KnowledgeContextAdminService = Depends(get_knowledge_context_admin_service),
 ) -> dict[str, object]:
+    """
+    List all knowledge sources for the current instance, with optional filtering.
+
+    :param source_kind: Filter by source kind/type
+    :type source_kind: str | None
+    :param status_filter: Filter by source status
+    :type status_filter: str | None
+    :param limit: Maximum number of sources to return
+    :type limit: int
+    :param admin: Authenticated admin performing the request
+    :type admin: AuthenticatedAdmin
+    :param instance: The resolved instance record
+    :type instance: InstanceRecord
+    :param service: Injected knowledge context admin service
+    :type service: KnowledgeContextAdminService
+    :return: Status, instance data, and list of knowledge sources
+    :rtype: dict[str, object]
+    """
     sources = service.list_sources(
         instance=instance,
         actor=admin,
@@ -53,6 +71,21 @@ def get_source(
     instance: InstanceRecord = Depends(resolve_admin_instance_scope),
     service: KnowledgeContextAdminService = Depends(get_knowledge_context_admin_service),
 ) -> object:
+    """
+    Retrieve a single knowledge source by its ID.
+
+    :param source_id: Unique identifier of the knowledge source
+    :type source_id: str
+    :param admin: Authenticated admin performing the request
+    :type admin: AuthenticatedAdmin
+    :param instance: The resolved instance record
+    :type instance: InstanceRecord
+    :param service: Injected knowledge context admin service
+    :type service: KnowledgeContextAdminService
+    :return: Status and knowledge source data
+    :rtype: object
+    :raises ValueError: If the source is not found, returns a 404 error response
+    """
     try:
         source = service.get_source(instance=instance, actor=admin, source_id=source_id)
     except ValueError as exc:
@@ -67,6 +100,21 @@ def create_source(
     instance: InstanceRecord = Depends(resolve_admin_instance_scope),
     service: KnowledgeContextAdminService = Depends(get_knowledge_context_admin_service),
 ) -> object:
+    """
+    Create a new knowledge source.
+
+    :param payload: Knowledge source creation payload
+    :type payload: CreateKnowledgeSource
+    :param _admin: Injected authentication/admin dependency
+    :type _admin: AuthenticatedAdmin
+    :param instance: The resolved instance record
+    :type instance: InstanceRecord
+    :param service: Injected knowledge context admin service
+    :type service: KnowledgeContextAdminService
+    :return: Status and created knowledge source data
+    :rtype: object
+    :raises ValueError: If the source already exists or is invalid
+    """
     try:
         source = service.create_source(instance=instance, payload=payload)
     except ValueError as exc:
@@ -84,6 +132,23 @@ def update_source(
     instance: InstanceRecord = Depends(resolve_admin_instance_scope),
     service: KnowledgeContextAdminService = Depends(get_knowledge_context_admin_service),
 ) -> object:
+    """
+    Update an existing knowledge source.
+
+    :param source_id: Unique identifier of the knowledge source to update
+    :type source_id: str
+    :param payload: Knowledge source update payload
+    :type payload: UpdateKnowledgeSource
+    :param _admin: Injected authentication/admin dependency
+    :type _admin: AuthenticatedAdmin
+    :param instance: The resolved instance record
+    :type instance: InstanceRecord
+    :param service: Injected knowledge context admin service
+    :type service: KnowledgeContextAdminService
+    :return: Status and updated knowledge source data
+    :rtype: object
+    :raises ValueError: If the source is not found or the update is invalid
+    """
     try:
         source = service.update_source(instance=instance, source_id=source_id, payload=payload)
     except ValueError as exc:

@@ -47,6 +47,23 @@ async def create_file(
     gateway_identity: RuntimeGatewayIdentity | None = Depends(get_runtime_gateway_identity),
     _runtime_actor: RequestActor | None = Depends(require_runtime_permission("runtime.responses.write")),
 ) -> object:
+    """
+    Upload a file via multipart form, JSON base64, or raw body.
+
+    :param request: Incoming HTTP request with file data
+    :type request: Request
+    :param service: Runtime files service for file storage
+    :type service: RuntimeFilesService
+    :param settings: Application settings
+    :type settings: Settings
+    :param gateway_identity: Optional runtime gateway identity
+    :type gateway_identity: RuntimeGatewayIdentity | None
+    :param _runtime_actor: Injected runtime permission dependency
+    :type _runtime_actor: RequestActor | None
+    :return: JSONResponse with created file metadata
+    :rtype: object
+    :raises RuntimeFileResolutionError: If file creation fails due to resolution error
+    """
     company_id = _runtime_company_id(gateway_identity=gateway_identity, settings=settings)
     instance_id = _runtime_instance_id(gateway_identity=gateway_identity, settings=settings)
     account_id = _runtime_account_id(gateway_identity)
@@ -153,6 +170,20 @@ def list_files(
     gateway_identity: RuntimeGatewayIdentity | None = Depends(get_runtime_gateway_identity),
     _runtime_actor: RequestActor | None = Depends(require_runtime_permission("runtime.responses.read")),
 ) -> object:
+    """
+    List all files for the current company scope.
+
+    :param service: Runtime files service for file listing
+    :type service: RuntimeFilesService
+    :param settings: Application settings
+    :type settings: Settings
+    :param gateway_identity: Optional runtime gateway identity
+    :type gateway_identity: RuntimeGatewayIdentity | None
+    :param _runtime_actor: Injected runtime permission dependency
+    :type _runtime_actor: RequestActor | None
+    :return: JSONResponse with list of files
+    :rtype: object
+    """
     company_id = _runtime_company_id(gateway_identity=gateway_identity, settings=settings)
     return JSONResponse(content=service.list_files(company_id=company_id))
 
@@ -165,6 +196,23 @@ def get_file(
     gateway_identity: RuntimeGatewayIdentity | None = Depends(get_runtime_gateway_identity),
     _runtime_actor: RequestActor | None = Depends(require_runtime_permission("runtime.responses.read")),
 ) -> object:
+    """
+    Retrieve metadata for a specific file by its ID.
+
+    :param file_id: Unique identifier of the file
+    :type file_id: str
+    :param service: Runtime files service for file retrieval
+    :type service: RuntimeFilesService
+    :param settings: Application settings
+    :type settings: Settings
+    :param gateway_identity: Optional runtime gateway identity
+    :type gateway_identity: RuntimeGatewayIdentity | None
+    :param _runtime_actor: Injected runtime permission dependency
+    :type _runtime_actor: RequestActor | None
+    :return: JSONResponse with file metadata
+    :rtype: object
+    :raises RuntimeFileNotFoundError: If the file does not exist
+    """
     company_id = _runtime_company_id(gateway_identity=gateway_identity, settings=settings)
     try:
         payload = service.get_file(company_id=company_id, file_id=file_id)
@@ -181,6 +229,23 @@ def get_file_content(
     gateway_identity: RuntimeGatewayIdentity | None = Depends(get_runtime_gateway_identity),
     _runtime_actor: RequestActor | None = Depends(require_runtime_permission("runtime.responses.read")),
 ) -> object:
+    """
+    Retrieve the raw content (bytes) of a specific file by its ID.
+
+    :param file_id: Unique identifier of the file
+    :type file_id: str
+    :param service: Runtime files service for file content retrieval
+    :type service: RuntimeFilesService
+    :param settings: Application settings
+    :type settings: Settings
+    :param gateway_identity: Optional runtime gateway identity
+    :type gateway_identity: RuntimeGatewayIdentity | None
+    :param _runtime_actor: Injected runtime permission dependency
+    :type _runtime_actor: RequestActor | None
+    :return: Response with file bytes, content type, and attachment disposition
+    :rtype: object
+    :raises RuntimeFileNotFoundError: If the file does not exist
+    """
     company_id = _runtime_company_id(gateway_identity=gateway_identity, settings=settings)
     try:
         content_bytes, content_type, filename = service.get_file_bytes(company_id=company_id, file_id=file_id)
@@ -201,6 +266,23 @@ def delete_file(
     gateway_identity: RuntimeGatewayIdentity | None = Depends(get_runtime_gateway_identity),
     _runtime_actor: RequestActor | None = Depends(require_runtime_permission("runtime.responses.write")),
 ) -> object:
+    """
+    Delete a specific file by its ID.
+
+    :param file_id: Unique identifier of the file to delete
+    :type file_id: str
+    :param service: Runtime files service for file deletion
+    :type service: RuntimeFilesService
+    :param settings: Application settings
+    :type settings: Settings
+    :param gateway_identity: Optional runtime gateway identity
+    :type gateway_identity: RuntimeGatewayIdentity | None
+    :param _runtime_actor: Injected runtime permission dependency
+    :type _runtime_actor: RequestActor | None
+    :return: JSONResponse with deletion result
+    :rtype: object
+    :raises RuntimeFileNotFoundError: If the file does not exist
+    """
     company_id = _runtime_company_id(gateway_identity=gateway_identity, settings=settings)
     try:
         payload = service.delete_file(company_id=company_id, file_id=file_id)

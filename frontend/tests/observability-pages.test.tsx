@@ -57,7 +57,7 @@ vi.mock("../src/api/admin/instances", async () => {
   return { ...actual, fetchInstances: fetchInstancesMock };
 });
 
-import type { AdminSessionUser, InstanceRecord } from "../src/api/admin";
+import type { AdminSessionUser, InstanceRecord } from "../src/api/domain";
 import { CostsPage } from "../src/pages/CostsPage";
 import { ErrorsPage } from "../src/pages/ErrorsPage";
 import { HealthPage } from "../src/pages/HealthPage";

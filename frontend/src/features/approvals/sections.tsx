@@ -7,7 +7,7 @@ import type {
   ApprovalRiskLevel,
   ApprovalStatus,
   ApprovalSummary,
-} from "../../api/admin";
+} from "../../api/domain";
 import { CONTROL_PLANE_ROUTES } from "../../app/navigation";
 import type { ApprovalBanner, ApprovalDecisionConfirmation } from "./presentation";
 import {

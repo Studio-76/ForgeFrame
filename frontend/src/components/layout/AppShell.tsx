@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 
-import type { AdminSessionUser } from "../../api/admin";
+import type { AdminSessionUser } from "../../api/domain";
 import type { NavigationSection } from "../../app/navigation";
 import { BottomTabBar } from "./BottomTabBar";
 import { SidebarProvider, useSidebar } from "./SidebarContext";

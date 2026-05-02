@@ -5,7 +5,7 @@ import type {
   SkillProvenanceKind,
   SkillScope,
   SkillStatus,
-} from "../../api/admin";
+} from "../../api/domain";
 import {
   CREATE_STATUS_OPTIONS,
   PROVENANCE_KIND_OPTIONS,

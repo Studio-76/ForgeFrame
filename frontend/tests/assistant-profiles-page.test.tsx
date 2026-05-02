@@ -40,7 +40,7 @@ vi.mock("../src/api/admin/instances", async () => {
   };
 });
 
-import type { AdminSessionUser, AssistantActionEvaluation, AssistantProfileDetail, AssistantProfileSummary } from "../src/api/admin";
+import type { AdminSessionUser, AssistantActionEvaluation, AssistantProfileDetail, AssistantProfileSummary } from "../src/api/domain";
 import { AssistantProfilesPage } from "../src/pages/AssistantProfilesPage";
 import { withAppContext } from "./testContext";
 
@@ -339,15 +339,18 @@ describe("assistant profiles page", () => {
 
     expect(fetchAssistantProfilesMock).toHaveBeenCalledWith("instance_alpha", { status: "all", limit: 100 });
     expect(fetchAssistantProfileDetailMock).toHaveBeenCalledWith("assistant_profile_primary", "instance_alpha");
+
+    // Browse mode shows inventory table
     expect(container.textContent).toContain("Assistant-profile inventory");
+    // Detail panel shows scope, mode, and risk
     expect(container.textContent).toContain("Team profile");
     expect(container.textContent).toContain("Direct automation");
     expect(container.textContent).toContain("Direct external action rights");
     expect(container.textContent).toContain("High-risk outward execution is enabled on this profile.");
-    expect(container.textContent).toContain("Allowed actions");
+    expect(container.textContent).toContain("Allowed action kinds");
 
-    const primaryChannelLink = Array.from(container.querySelectorAll("a")).find((link) => link.textContent === "Personal email");
-    expect(primaryChannelLink?.getAttribute("href")).toBe("/channels?instanceId=instance_alpha&channelId=channel_primary");
+    const personalEmailLink = Array.from(container.querySelectorAll("a")).find((link) => link.textContent === "Personal email");
+    expect(personalEmailLink?.getAttribute("href")).toBe("/channels?instanceId=instance_alpha&channelId=channel_primary");
   });
 
   it("creates, updates, and evaluates assistant profiles against the selected instance scope", async () => {
@@ -358,9 +361,17 @@ describe("assistant profiles page", () => {
     }));
     await flushEffects();
 
+    // -----------------------------------------------------------------------
+    // Step 1: Create — click "Create assistant profile" in summary bar
+    // -----------------------------------------------------------------------
+    const createButton = getButtonByText(container, "Create assistant profile");
+    expect(createButton).toBeTruthy();
+    await act(async () => { createButton!.click(); });
+    await flushEffects();
+
+    // View switches to create mode — the sectioned editor appears
     const createForm = getFormByText("Create assistant profile");
-    const editForm = getFormByText("Save assistant profile");
-    const evaluateForm = getFormByText("Evaluate assistant action");
+    expect(createForm).toBeTruthy();
 
     await act(async () => {
       setControlValue(getLabeledControl(createForm!, "Assistant profile ID"), "assistant_profile_beta");
@@ -368,7 +379,7 @@ describe("assistant profiles page", () => {
       setControlValue(getLabeledControl(createForm!, "Profile scope"), "team");
       setControlValue(getLabeledControl(createForm!, "Memory scope"), "team");
       setControlValue(getLabeledControl(createForm!, "Summary"), "Backup team assistant profile.");
-      setControlValue(getLabeledControl(createForm!, "Tone"), "direct");
+      setControlValue(getLabeledControl(createForm!, "Communication tone"), "direct");
       setControlValue(getLabeledControl(createForm!, "Timezone"), "Europe/Berlin");
       setControlValue(getLabeledControl(createForm!, "Locale"), "de-DE");
       setControlValue(getLabeledControl(createForm!, "Signature"), "Jordan");
@@ -381,11 +392,14 @@ describe("assistant profiles page", () => {
       setControlValue(getLabeledControl(createForm!, "Fallback channel ID"), "channel_backup");
       setControlValue(getLabeledControl(createForm!, "Allowed channel IDs"), "channel_primary, channel_backup");
       setControlValue(getLabeledControl(createForm!, "Direct channel IDs"), "channel_primary");
-      setControlValue(getLabeledControl(createForm!, "Quiet hours enabled"), "yes");
-      setControlValue(getLabeledControl(createForm!, "Quiet start"), "00:00");
-      setControlValue(getLabeledControl(createForm!, "Quiet end"), "06:00");
+      setControlValue(getLabeledControl(createForm!, "Quiet hours"), "yes");
+      setControlValue(getLabeledControl(createForm!, "Start time"), "00:00");
+      setControlValue(getLabeledControl(createForm!, "End time"), "06:00");
       setControlValue(getLabeledControl(createForm!, "Direct-action policy"), "preview_required");
-      setControlValue(getLabeledControl(createForm!, "Allow external delegation"), "yes");
+      setControlValue(getLabeledControl(createForm!, "External delegation"), "yes");
+      // Open advanced section and fill JSON fields
+      const advancedSummary = Array.from(createForm!.querySelectorAll("summary")).find((s) => s.textContent?.includes("Advanced JSON"));
+      if (advancedSummary) { advancedSummary.click(); }
       setControlValue(getLabeledControl(createForm!, "Preferences JSON"), "{\"language\":\"de\"}");
       setControlValue(getLabeledControl(createForm!, "Metadata JSON"), "{\"mode\":\"team\"}");
       setControlValue(getLabeledControl(createForm!, "Policy overrides JSON"), "{\"action_policies\":{\"allow_calendar_actions\":true}}");
@@ -439,17 +453,32 @@ describe("assistant profiles page", () => {
       metadata: { mode: "team" },
     }));
 
+    // After create, view switches to browse — profile re-fetches
+    // Wait for the re-fetch triggered by refreshNonce
+    await flushEffects();
+
+    // -----------------------------------------------------------------------
+    // Step 2: Edit — click "Edit profile" in the detail panel
+    // -----------------------------------------------------------------------
+    const editButton = getButtonByText(container, "Edit profile");
+    expect(editButton).toBeTruthy();
+    await act(async () => { editButton!.click(); });
+    await flushEffects();
+
+    const editForm = getFormByText("Save assistant profile");
+    expect(editForm).toBeTruthy();
+
     await act(async () => {
       setControlValue(getLabeledControl(editForm!, "Display name"), "Primary assistant profile updated");
       setControlValue(getLabeledControl(editForm!, "Status"), "paused");
       setControlValue(getLabeledControl(editForm!, "Profile scope"), "personal");
       setControlValue(getLabeledControl(editForm!, "Memory scope"), "disabled");
-      setControlValue(getLabeledControl(editForm!, "Tone"), "formal");
+      setControlValue(getLabeledControl(editForm!, "Communication tone"), "formal");
       setControlValue(getLabeledControl(editForm!, "Summary"), "Updated summary after audit.");
       setControlValue(getLabeledControl(editForm!, "Mail source ID"), "");
       setControlValue(getLabeledControl(editForm!, "Calendar source ID"), "");
       setControlValue(getLabeledControl(editForm!, "Direct-action policy"), "approval_required");
-      setControlValue(getLabeledControl(editForm!, "Allow external delegation"), "no");
+      setControlValue(getLabeledControl(editForm!, "External delegation"), "no");
       setControlValue(getLabeledControl(editForm!, "Policy overrides JSON"), "");
       getButtonByText(editForm!, "Save assistant profile")!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     });
@@ -471,6 +500,21 @@ describe("assistant profiles page", () => {
         allow_external_delegation: false,
       }),
     }));
+
+    // After edit, view switches back to browse
+    await flushEffects();
+
+    // -----------------------------------------------------------------------
+    // Step 3: Evaluate — click "Evaluate action" in the detail panel
+    // -----------------------------------------------------------------------
+    const evaluateButton = getButtonByText(container, "Evaluate action");
+    expect(evaluateButton).toBeTruthy();
+    await act(async () => { evaluateButton!.click(); });
+    await flushEffects();
+
+    // Evaluation modal should now be open
+    const evaluateForm = getFormByText("Evaluate assistant action");
+    expect(evaluateForm).toBeTruthy();
 
     await act(async () => {
       setControlValue(getLabeledControl(evaluateForm!, "Action mode"), "direct");

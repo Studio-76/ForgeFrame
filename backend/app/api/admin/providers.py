@@ -174,6 +174,22 @@ def list_provider_control_plane(
     instance: InstanceRecord = Depends(resolve_admin_instance_scope),
     service: ControlPlaneService = Depends(get_control_plane_service),
 ) -> Any:
+    """
+    List the full provider control-plane state.
+
+    Returns providers, truth axes, supported classes, provider catalog,
+    OpenAI compatibility signoff, health config, and bootstrap readiness.
+
+    :param _admin: Injected authentication/admin dependency (providers.read)
+    :type _admin: AuthenticatedAdmin
+    :param instance: Resolved instance record
+    :type instance: InstanceRecord
+    :param service: Control-plane service
+    :type service: ControlPlaneService
+    :return: Provider control-plane payload
+    :rtype: Any
+    :raises TenantFilterRequiredError: If tenant scope is missing
+    """
     bootstrap_readiness = service.get_last_bootstrap_readiness()
     try:
         truth_axes = service.provider_truth_axes(
@@ -229,6 +245,19 @@ def openai_compatibility_signoff(
     instance: InstanceRecord = Depends(resolve_admin_instance_scope),
     service: ControlPlaneService = Depends(get_control_plane_service),
 ) -> Any:
+    """
+    Return the OpenAI compatibility signoff status for the current instance.
+
+    :param _admin: Injected authentication/admin dependency (providers.read)
+    :type _admin: AuthenticatedAdmin
+    :param instance: Resolved instance record
+    :type instance: InstanceRecord
+    :param service: Control-plane service
+    :type service: ControlPlaneService
+    :return: OpenAI compatibility signoff payload
+    :rtype: Any
+    :raises TenantFilterRequiredError: If tenant scope is missing
+    """
     try:
         payload = service.openai_compatibility_signoff(
             tenant_id=instance.tenant_id,
@@ -249,6 +278,19 @@ def create_provider(
     _admin: AuthenticatedAdmin = Depends(_require_provider_write),
     service: ControlPlaneService = Depends(get_control_plane_service),
 ) -> object:
+    """
+    Create a new provider definition.
+
+    :param payload: Provider creation request
+    :type payload: ProviderCreateRequest
+    :param _admin: Injected authentication/admin dependency (providers.write)
+    :type _admin: AuthenticatedAdmin
+    :param service: Control-plane service
+    :type service: ControlPlaneService
+    :return: Created provider
+    :rtype: object
+    :raises ValueError: If a provider with that name already exists
+    """
     try:
         provider = service.create_provider(payload)
     except ValueError as exc:
@@ -263,6 +305,21 @@ def update_provider(
     _admin: AuthenticatedAdmin = Depends(_require_provider_write),
     service: ControlPlaneService = Depends(get_control_plane_service),
 ) -> object:
+    """
+    Update an existing provider's configuration.
+
+    :param provider_name: Provider key to update
+    :type provider_name: str
+    :param payload: Provider update request
+    :type payload: ProviderUpdateRequest
+    :param _admin: Injected authentication/admin dependency (providers.write)
+    :type _admin: AuthenticatedAdmin
+    :param service: Control-plane service
+    :type service: ControlPlaneService
+    :return: Updated provider
+    :rtype: object
+    :raises ValueError: If the provider is not found
+    """
     try:
         provider = service.update_provider(provider_name, payload)
     except ValueError as exc:
@@ -276,6 +333,19 @@ def activate_provider(
     _admin: AuthenticatedAdmin = Depends(_require_provider_write),
     service: ControlPlaneService = Depends(get_control_plane_service),
 ) -> object:
+    """
+    Activate (enable) a provider.
+
+    :param provider_name: Provider key to activate
+    :type provider_name: str
+    :param _admin: Injected authentication/admin dependency (providers.write)
+    :type _admin: AuthenticatedAdmin
+    :param service: Control-plane service
+    :type service: ControlPlaneService
+    :return: Activated provider
+    :rtype: object
+    :raises ValueError: If the provider is not found
+    """
     try:
         provider = service.set_provider_enabled(provider_name, True)
     except ValueError as exc:
@@ -289,6 +359,19 @@ def deactivate_provider(
     _admin: AuthenticatedAdmin = Depends(_require_provider_write),
     service: ControlPlaneService = Depends(get_control_plane_service),
 ) -> object:
+    """
+    Deactivate (disable) a provider.
+
+    :param provider_name: Provider key to deactivate
+    :type provider_name: str
+    :param _admin: Injected authentication/admin dependency (providers.write)
+    :type _admin: AuthenticatedAdmin
+    :param service: Control-plane service
+    :type service: ControlPlaneService
+    :return: Deactivated provider
+    :rtype: object
+    :raises ValueError: If the provider is not found
+    """
     try:
         provider = service.set_provider_enabled(provider_name, False)
     except ValueError as exc:
@@ -303,6 +386,22 @@ def sync_provider_models(
     _admin: AuthenticatedAdmin = Depends(_require_provider_write),
     service: ControlPlaneService = Depends(get_control_plane_service),
 ) -> object:
+    """
+    Trigger a model sync for a specific provider or all providers.
+
+    Supports idempotent execution.
+
+    :param payload: Provider sync request (provider name or "all")
+    :type payload: ProviderSyncRequest
+    :param request: Incoming HTTP request
+    :type request: Request
+    :param _admin: Injected authentication/admin dependency (providers.write)
+    :type _admin: AuthenticatedAdmin
+    :param service: Control-plane service
+    :type service: ControlPlaneService
+    :return: Sync result
+    :rtype: object
+    """
     return _execute_idempotent_admin_json(
         request=request,
         scope_key="admin.providers.sync",
@@ -319,6 +418,16 @@ def get_health_config(
     _admin: AuthenticatedAdmin = Depends(_require_provider_read),
     service: ControlPlaneService = Depends(get_control_plane_service),
 ) -> Any:
+    """
+    Return the current health check configuration.
+
+    :param _admin: Injected authentication/admin dependency (providers.read)
+    :type _admin: AuthenticatedAdmin
+    :param service: Control-plane service
+    :type service: ControlPlaneService
+    :return: Health configuration
+    :rtype: Any
+    """
     return {"status": "ok", "config": service.get_health_config().model_dump()}
 
 
@@ -328,6 +437,18 @@ def patch_health_config(
     _admin: AuthenticatedAdmin = Depends(_require_provider_write),
     service: ControlPlaneService = Depends(get_control_plane_service),
 ) -> Any:
+    """
+    Update the health check configuration.
+
+    :param payload: Health config update request
+    :type payload: HealthConfigUpdateRequest
+    :param _admin: Injected authentication/admin dependency (providers.write)
+    :type _admin: AuthenticatedAdmin
+    :param service: Control-plane service
+    :type service: ControlPlaneService
+    :return: Updated health configuration
+    :rtype: Any
+    """
     return {
         "status": "ok",
         "config": service.update_health_config(payload).model_dump(),
@@ -340,6 +461,18 @@ def run_health_checks(
     _admin: AuthenticatedAdmin = Depends(_require_provider_operate),
     service: ControlPlaneService = Depends(get_control_plane_service),
 ) -> Any:
+    """
+    Execute health checks for all providers. Supports idempotency.
+
+    :param request: Incoming HTTP request
+    :type request: Request
+    :param _admin: Injected authentication/admin dependency (providers.operate)
+    :type _admin: AuthenticatedAdmin
+    :param service: Control-plane service
+    :type service: ControlPlaneService
+    :return: Health check results
+    :rtype: Any
+    """
     telemetry_context = telemetry_context_from_request(
         request,
         route=request.url.path or "/admin/providers/health/run",
@@ -363,6 +496,19 @@ def list_product_axis_targets(
     instance: InstanceRecord = Depends(resolve_admin_instance_scope),
     service: ControlPlaneService = Depends(get_control_plane_service),
 ) -> object:
+    """
+    List product-axis targets (OAuth account providers, OpenAI compatible, etc.).
+
+    :param _admin: Injected authentication/admin dependency (providers.read)
+    :type _admin: AuthenticatedAdmin
+    :param instance: Resolved instance record
+    :type instance: InstanceRecord
+    :param service: Control-plane service
+    :type service: ControlPlaneService
+    :return: Product-axis targets
+    :rtype: object
+    :raises TenantFilterRequiredError: If tenant scope is missing
+    """
     try:
         return {
             "status": "ok",
@@ -381,6 +527,22 @@ def probe_oauth_account_provider(
     instance: InstanceRecord = Depends(resolve_admin_instance_scope),
     service: ControlPlaneService = Depends(get_control_plane_service),
 ) -> object:
+    """
+    Probe a specific OAuth account provider. Supports idempotency.
+
+    :param provider_key: OAuth provider key to probe
+    :type provider_key: str
+    :param request: Incoming HTTP request
+    :type request: Request
+    :param _admin: Injected authentication/admin dependency (providers.operate)
+    :type _admin: AuthenticatedAdmin
+    :param instance: Resolved instance record
+    :type instance: InstanceRecord
+    :param service: Control-plane service
+    :type service: ControlPlaneService
+    :return: Probe result
+    :rtype: object
+    """
     return _execute_idempotent_admin_json(
         request=request,
         scope_key=f"admin.providers.oauth_account.probe:{instance.instance_id}:{provider_key}",
@@ -401,6 +563,19 @@ def list_oauth_account_targets(
     instance: InstanceRecord = Depends(resolve_admin_instance_scope),
     service: ControlPlaneService = Depends(get_control_plane_service),
 ) -> object:
+    """
+    List OAuth account target statuses for the current instance scope.
+
+    :param _admin: Injected authentication/admin dependency (providers.read)
+    :type _admin: AuthenticatedAdmin
+    :param instance: Resolved instance record
+    :type instance: InstanceRecord
+    :param service: Control-plane service
+    :type service: ControlPlaneService
+    :return: OAuth account targets with statuses
+    :rtype: object
+    :raises TenantFilterRequiredError: If tenant scope is missing
+    """
     try:
         return {
             "status": "ok",
@@ -420,6 +595,19 @@ def oauth_account_onboarding(
     instance: InstanceRecord = Depends(resolve_admin_instance_scope),
     service: ControlPlaneService = Depends(get_control_plane_service),
 ) -> object:
+    """
+    Return OAuth account onboarding summary for the current instance scope.
+
+    :param _admin: Injected authentication/admin dependency (providers.read)
+    :type _admin: AuthenticatedAdmin
+    :param instance: Resolved instance record
+    :type instance: InstanceRecord
+    :param service: Control-plane service
+    :type service: ControlPlaneService
+    :return: OAuth account onboarding summary
+    :rtype: object
+    :raises TenantFilterRequiredError: If tenant scope is missing
+    """
     try:
         response = service.oauth_account_onboarding_summary(
             tenant_id=instance.tenant_id,
@@ -438,6 +626,19 @@ def oauth_account_operations(
     instance: InstanceRecord = Depends(resolve_admin_instance_scope),
     service: ControlPlaneService = Depends(get_control_plane_service),
 ) -> object:
+    """
+    Return OAuth account operations summary for the current instance scope.
+
+    :param _admin: Injected authentication/admin dependency (providers.read)
+    :type _admin: AuthenticatedAdmin
+    :param instance: Resolved instance record
+    :type instance: InstanceRecord
+    :param service: Control-plane service
+    :type service: ControlPlaneService
+    :return: OAuth account operations summary
+    :rtype: object
+    :raises TenantFilterRequiredError: If tenant scope is missing
+    """
     try:
         response = service.oauth_account_operations_summary(
             tenant_id=instance.tenant_id,
@@ -456,6 +657,22 @@ def compatibility_matrix(
     instance: InstanceRecord = Depends(resolve_admin_instance_scope),
     service: ControlPlaneService = Depends(get_control_plane_service),
 ) -> object:
+    """
+    Build and return the provider compatibility matrix.
+
+    Each entry includes compatibility depth, streaming/vision readiness,
+    proof status, and runtime evidence.
+
+    :param _admin: Injected authentication/admin dependency (providers.read)
+    :type _admin: AuthenticatedAdmin
+    :param instance: Resolved instance record
+    :type instance: InstanceRecord
+    :param service: Control-plane service
+    :type service: ControlPlaneService
+    :return: Compatibility matrix
+    :rtype: object
+    :raises TenantFilterRequiredError: If tenant scope is missing
+    """
     try:
         truth_axes = service.provider_truth_axes(
             tenant_id=instance.tenant_id,
@@ -541,6 +758,20 @@ def probe_all_oauth_account_targets(
     instance: InstanceRecord = Depends(resolve_admin_instance_scope),
     service: ControlPlaneService = Depends(get_control_plane_service),
 ) -> object:
+    """
+    Probe all known OAuth account providers.
+
+    Runs a probe against each known OAuth provider key and returns results.
+
+    :param _admin: Injected authentication/admin dependency (providers.operate)
+    :type _admin: AuthenticatedAdmin
+    :param instance: Resolved instance record
+    :type instance: InstanceRecord
+    :param service: Control-plane service
+    :type service: ControlPlaneService
+    :return: Probe results for all OAuth targets
+    :rtype: object
+    """
     results = []
     for provider_key in [
         "openai_codex",
@@ -569,6 +800,20 @@ def sync_oauth_account_bridge_profiles(
     instance: InstanceRecord = Depends(resolve_admin_instance_scope),
     service: ControlPlaneService = Depends(get_control_plane_service),
 ) -> object:
+    """
+    Sync OAuth account bridge profiles. Supports idempotency.
+
+    :param request: Incoming HTTP request
+    :type request: Request
+    :param _admin: Injected authentication/admin dependency (providers.write)
+    :type _admin: AuthenticatedAdmin
+    :param instance: Resolved instance record
+    :type instance: InstanceRecord
+    :param service: Control-plane service
+    :type service: ControlPlaneService
+    :return: Sync result
+    :rtype: object
+    """
     return _execute_idempotent_admin_json(
         request=request,
         scope_key=f"admin.providers.oauth_account.bridge_profiles.sync:{instance.instance_id}",
@@ -584,6 +829,16 @@ def bootstrap_readiness(
     _admin: AuthenticatedAdmin = Depends(_require_provider_read),
     service: ControlPlaneService = Depends(get_control_plane_service),
 ) -> object:
+    """
+    Return the bootstrap readiness report.
+
+    :param _admin: Injected authentication/admin dependency (providers.read)
+    :type _admin: AuthenticatedAdmin
+    :param service: Control-plane service
+    :type service: ControlPlaneService
+    :return: Bootstrap readiness report
+    :rtype: object
+    """
     return service.bootstrap_readiness_report()
 
 
@@ -592,6 +847,16 @@ def list_harness_templates(
     _admin: AuthenticatedAdmin = Depends(_require_provider_read),
     service: ControlPlaneService = Depends(get_control_plane_service),
 ) -> Any:
+    """
+    List available harness templates.
+
+    :param _admin: Injected authentication/admin dependency (providers.read)
+    :type _admin: AuthenticatedAdmin
+    :param service: Control-plane service
+    :type service: ControlPlaneService
+    :return: Harness templates
+    :rtype: Any
+    """
     return {"status": "ok", "templates": service.list_harness_templates()}
 
 
@@ -601,6 +866,20 @@ def list_harness_profiles(
     instance: InstanceRecord = Depends(resolve_admin_instance_scope),
     service: ControlPlaneService = Depends(get_control_plane_service),
 ) -> Any:
+    """
+    List harness profiles for the current instance.
+
+    Sensitive payload fields are redacted.
+
+    :param _admin: Injected authentication/admin dependency (providers.read)
+    :type _admin: AuthenticatedAdmin
+    :param instance: Resolved instance record
+    :type instance: InstanceRecord
+    :param service: Control-plane service
+    :type service: ControlPlaneService
+    :return: List of redacted harness profiles
+    :rtype: Any
+    """
     return {
         "status": "ok",
         "instance": instance.model_dump(mode="json"),
@@ -617,6 +896,26 @@ def upsert_harness_profile(
     instance: InstanceRecord = Depends(resolve_admin_instance_scope),
     service: ControlPlaneService = Depends(get_control_plane_service),
 ) -> object:
+    """
+    Create or update a harness profile for a provider. Supports idempotency.
+
+    Validates that the path provider_key matches the payload provider_key.
+
+    :param provider_key: Provider key for the harness profile
+    :type provider_key: str
+    :param payload: Harness provider profile payload
+    :type payload: HarnessProviderProfile
+    :param request: Incoming HTTP request
+    :type request: Request
+    :param _admin: Injected authentication/admin dependency (providers.write)
+    :type _admin: AuthenticatedAdmin
+    :param instance: Resolved instance record
+    :type instance: InstanceRecord
+    :param service: Control-plane service
+    :type service: ControlPlaneService
+    :return: Upserted harness profile (redacted)
+    :rtype: object
+    """
     if payload.provider_key != provider_key:
         return _admin_error(
             status.HTTP_400_BAD_REQUEST,
@@ -648,6 +947,22 @@ def delete_harness_profile(
     instance: InstanceRecord = Depends(resolve_admin_instance_scope),
     service: ControlPlaneService = Depends(get_control_plane_service),
 ) -> object:
+    """
+    Delete a harness profile for a provider. Supports idempotency.
+
+    :param provider_key: Provider key whose harness profile to delete
+    :type provider_key: str
+    :param request: Incoming HTTP request
+    :type request: Request
+    :param _admin: Injected authentication/admin dependency (providers.write)
+    :type _admin: AuthenticatedAdmin
+    :param instance: Resolved instance record
+    :type instance: InstanceRecord
+    :param service: Control-plane service
+    :type service: ControlPlaneService
+    :return: Deletion confirmation
+    :rtype: object
+    """
     return _execute_idempotent_admin_json(
         request=request,
         scope_key=f"admin.providers.harness.profile.delete:{instance.instance_id}:{provider_key}",
@@ -667,6 +982,22 @@ def activate_harness_profile(
     instance: InstanceRecord = Depends(resolve_admin_instance_scope),
     service: ControlPlaneService = Depends(get_control_plane_service),
 ) -> object:
+    """
+    Activate a harness profile. Supports idempotency.
+
+    :param provider_key: Provider key whose harness profile to activate
+    :type provider_key: str
+    :param request: Incoming HTTP request
+    :type request: Request
+    :param _admin: Injected authentication/admin dependency (providers.write)
+    :type _admin: AuthenticatedAdmin
+    :param instance: Resolved instance record
+    :type instance: InstanceRecord
+    :param service: Control-plane service
+    :type service: ControlPlaneService
+    :return: Activated harness profile (redacted)
+    :rtype: object
+    """
     return _execute_idempotent_admin_json(
         request=request,
         scope_key=f"admin.providers.harness.profile.activate:{instance.instance_id}:{provider_key}",
@@ -689,6 +1020,22 @@ def deactivate_harness_profile(
     instance: InstanceRecord = Depends(resolve_admin_instance_scope),
     service: ControlPlaneService = Depends(get_control_plane_service),
 ) -> object:
+    """
+    Deactivate a harness profile. Supports idempotency.
+
+    :param provider_key: Provider key whose harness profile to deactivate
+    :type provider_key: str
+    :param request: Incoming HTTP request
+    :type request: Request
+    :param _admin: Injected authentication/admin dependency (providers.write)
+    :type _admin: AuthenticatedAdmin
+    :param instance: Resolved instance record
+    :type instance: InstanceRecord
+    :param service: Control-plane service
+    :type service: ControlPlaneService
+    :return: Deactivated harness profile (redacted)
+    :rtype: object
+    """
     return _execute_idempotent_admin_json(
         request=request,
         scope_key=f"admin.providers.harness.profile.deactivate:{instance.instance_id}:{provider_key}",
@@ -711,6 +1058,24 @@ def harness_preview(
     instance: InstanceRecord = Depends(resolve_admin_instance_scope),
     service: ControlPlaneService = Depends(get_control_plane_service),
 ) -> object:
+    """
+    Preview a harness configuration. Supports idempotency.
+
+    Returns redacted sensitive payload fields.
+
+    :param payload: Harness preview request
+    :type payload: HarnessPreviewRequest
+    :param request: Incoming HTTP request
+    :type request: Request
+    :param _admin: Injected authentication/admin dependency (providers.read)
+    :type _admin: AuthenticatedAdmin
+    :param instance: Resolved instance record
+    :type instance: InstanceRecord
+    :param service: Control-plane service
+    :type service: ControlPlaneService
+    :return: Harness preview result
+    :rtype: object
+    """
     return _execute_idempotent_admin_json(
         request=request,
         scope_key=f"admin.providers.harness.preview:{instance.instance_id}",
@@ -733,6 +1098,24 @@ def harness_dry_run(
     instance: InstanceRecord = Depends(resolve_admin_instance_scope),
     service: ControlPlaneService = Depends(get_control_plane_service),
 ) -> object:
+    """
+    Execute a harness dry run (preview with actual provider call). Supports idempotency.
+
+    Returns redacted sensitive payload fields.
+
+    :param payload: Harness preview request (used for dry run)
+    :type payload: HarnessPreviewRequest
+    :param request: Incoming HTTP request
+    :type request: Request
+    :param _admin: Injected authentication/admin dependency (providers.operate)
+    :type _admin: AuthenticatedAdmin
+    :param instance: Resolved instance record
+    :type instance: InstanceRecord
+    :param service: Control-plane service
+    :type service: ControlPlaneService
+    :return: Harness dry-run result
+    :rtype: object
+    """
     return _execute_idempotent_admin_json(
         request=request,
         scope_key=f"admin.providers.harness.dry_run:{instance.instance_id}",
@@ -755,6 +1138,26 @@ def harness_probe(
     instance: InstanceRecord = Depends(resolve_admin_instance_scope),
     service: ControlPlaneService = Depends(get_control_plane_service),
 ) -> object:
+    """
+    Execute a live harness probe against a provider.
+
+    Does NOT support idempotency-key. Returns redacted sensitive payload.
+
+    :param payload: Harness preview request (used for probe)
+    :type payload: HarnessPreviewRequest
+    :param request: Incoming HTTP request
+    :type request: Request
+    :param _admin: Injected authentication/admin dependency (providers.operate)
+    :type _admin: AuthenticatedAdmin
+    :param instance: Resolved instance record
+    :type instance: InstanceRecord
+    :param service: Control-plane service
+    :type service: ControlPlaneService
+    :return: Harness probe result
+    :rtype: object
+    :raises ValueError: If the harness profile is not found
+    :raises RuntimeError: If the probe operation fails
+    """
     unsupported = _unsupported_idempotency_response(
         request,
         message="Idempotency-Key is not supported for harness probe responses.",
@@ -781,6 +1184,22 @@ def verify_harness_profile(
     instance: InstanceRecord = Depends(resolve_admin_instance_scope),
     service: ControlPlaneService = Depends(get_control_plane_service),
 ) -> object:
+    """
+    Verify a harness profile's compatibility. Supports idempotency.
+
+    :param payload: Harness verification request
+    :type payload: HarnessVerificationRequest
+    :param request: Incoming HTTP request
+    :type request: Request
+    :param _admin: Injected authentication/admin dependency (providers.operate)
+    :type _admin: AuthenticatedAdmin
+    :param instance: Resolved instance record
+    :type instance: InstanceRecord
+    :param service: Control-plane service
+    :type service: ControlPlaneService
+    :return: Verification result
+    :rtype: object
+    """
     return _execute_idempotent_admin_json(
         request=request,
         scope_key=f"admin.providers.harness.verify:{instance.instance_id}",
@@ -811,6 +1230,18 @@ def harness_snapshot(
     instance: InstanceRecord = Depends(resolve_admin_instance_scope),
     service: ControlPlaneService = Depends(get_control_plane_service),
 ) -> object:
+    """
+    Return a snapshot of all harness profiles for the current instance.
+
+    :param _admin: Injected authentication/admin dependency (providers.read)
+    :type _admin: AuthenticatedAdmin
+    :param instance: Resolved instance record
+    :type instance: InstanceRecord
+    :param service: Control-plane service
+    :type service: ControlPlaneService
+    :return: Harness snapshot
+    :rtype: object
+    """
     return service.harness_snapshot(instance.instance_id)
 
 
@@ -821,6 +1252,23 @@ def export_harness_config(
     instance: InstanceRecord = Depends(resolve_admin_instance_scope),
     service: ControlPlaneService = Depends(get_control_plane_service),
 ) -> object:
+    """
+    Export the harness configuration for the current instance.
+
+    Secrets are redacted by default. Admin role required for full export.
+
+    :param redact_secrets: Whether to redact secret values in the export
+    :type redact_secrets: bool
+    :param admin: Authenticated admin (access check performed for full export)
+    :type admin: AuthenticatedAdmin
+    :param instance: Resolved instance record
+    :type instance: InstanceRecord
+    :param service: Control-plane service
+    :type service: ControlPlaneService
+    :return: Harness configuration export
+    :rtype: object
+    :raises HTTPException: If export access is denied (read-only or non-admin)
+    """
     _ensure_harness_export_access(admin, redact_secrets=redact_secrets)
     return service.export_harness_config(redact_secrets=redact_secrets, instance_id=instance.instance_id)
 
@@ -833,6 +1281,22 @@ def import_harness_config(
     instance: InstanceRecord = Depends(resolve_admin_instance_scope),
     service: ControlPlaneService = Depends(get_control_plane_service),
 ) -> object:
+    """
+    Import a harness configuration. Supports idempotency.
+
+    :param payload: Harness import request
+    :type payload: HarnessImportRequest
+    :param request: Incoming HTTP request
+    :type request: Request
+    :param _admin: Injected authentication/admin dependency (providers.write)
+    :type _admin: AuthenticatedAdmin
+    :param instance: Resolved instance record
+    :type instance: InstanceRecord
+    :param service: Control-plane service
+    :type service: ControlPlaneService
+    :return: Import result
+    :rtype: object
+    """
     return _execute_idempotent_admin_json(
         request=request,
         scope_key=f"admin.providers.harness.import:{instance.instance_id}",
@@ -856,6 +1320,24 @@ def rollback_harness_profile(
     instance: InstanceRecord = Depends(resolve_admin_instance_scope),
     service: ControlPlaneService = Depends(get_control_plane_service),
 ) -> object:
+    """
+    Roll back a harness profile to a previous revision. Supports idempotency.
+
+    :param provider_key: Provider key whose harness profile to roll back
+    :type provider_key: str
+    :param revision: Target revision number to roll back to
+    :type revision: int
+    :param request: Incoming HTTP request
+    :type request: Request
+    :param _admin: Injected authentication/admin dependency (providers.write)
+    :type _admin: AuthenticatedAdmin
+    :param instance: Resolved instance record
+    :type instance: InstanceRecord
+    :param service: Control-plane service
+    :type service: ControlPlaneService
+    :return: Rolled-back harness profile (redacted)
+    :rtype: object
+    """
     return _execute_idempotent_admin_json(
         request=request,
         scope_key=f"admin.providers.harness.profile.rollback:{instance.instance_id}:{provider_key}",
@@ -881,6 +1363,30 @@ def harness_runs(
     instance: InstanceRecord = Depends(resolve_admin_instance_scope),
     service: ControlPlaneService = Depends(get_control_plane_service),
 ) -> object:
+    """
+    List harness run history with optional filters.
+
+    Sensitive payload fields are redacted.
+
+    :param provider_key: Optional provider key filter
+    :type provider_key: str | None
+    :param mode: Optional mode filter (e.g. preview, dry_run, probe)
+    :type mode: str | None
+    :param status: Optional status filter
+    :type status: str | None
+    :param client_id: Optional client ID filter
+    :type client_id: str | None
+    :param limit: Maximum number of runs to return
+    :type limit: int
+    :param _admin: Injected authentication/admin dependency (providers.read)
+    :type _admin: AuthenticatedAdmin
+    :param instance: Resolved instance record
+    :type instance: InstanceRecord
+    :param service: Control-plane service
+    :type service: ControlPlaneService
+    :return: List of harness runs (redacted)
+    :rtype: object
+    """
     return _redact_sensitive_payload(service.harness_runs(provider_key, mode, status, client_id, limit, instance.instance_id))
 
 

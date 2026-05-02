@@ -3,7 +3,7 @@ import { type FormEvent } from "react";
 import type {
   AgentSummary,
   ConversationDetail,
-} from "../../api/admin";
+} from "../../api/domain";
 import {
   MESSAGE_ROLE_OPTIONS,
   SESSION_KIND_OPTIONS,
@@ -88,13 +88,13 @@ export function AppendMessageForm({
       <div className="fg-grid fg-grid-compact">
         <label>
           Session kind
-          <select value={appendForm.sessionKind} onChange={(event) => setAppendForm((current) => ({ ...current, sessionKind: event.target.value as import("../../api/admin").ConversationSessionKind }))}>
+          <select value={appendForm.sessionKind} onChange={(event) => setAppendForm((current) => ({ ...current, sessionKind: event.target.value as import("../../api/domain").ConversationSessionKind }))}>
             {SESSION_KIND_OPTIONS.map((option) => <option key={option} value={option}>{option}</option>)}
           </select>
         </label>
         <label>
           Message role
-          <select value={appendForm.messageRole} onChange={(event) => setAppendForm((current) => ({ ...current, messageRole: event.target.value as import("../../api/admin").ConversationMessageRole }))}>
+          <select value={appendForm.messageRole} onChange={(event) => setAppendForm((current) => ({ ...current, messageRole: event.target.value as import("../../api/domain").ConversationMessageRole }))}>
             {MESSAGE_ROLE_OPTIONS.map((option) => <option key={option} value={option}>{option}</option>)}
           </select>
         </label>

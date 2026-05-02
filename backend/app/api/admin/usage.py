@@ -553,6 +553,31 @@ def usage_summary(
     registry: ModelRegistry = Depends(get_admin_model_registry),
     analytics: UsageAnalyticsStore = Depends(get_usage_analytics_store),
 ) -> Any:
+    """
+    Return a usage summary with aggregations, cost truths, and alerts.
+
+    Supports filtering by window, provider, client_id, and model.
+
+    :param window: Time window (1h, 24h, 7d, all)
+    :type window: str
+    :param provider: Optional provider filter
+    :type provider: str | None
+    :param client_id: Optional client ID filter
+    :type client_id: str | None
+    :param model: Optional model filter
+    :type model: str | None
+    :param instance: Resolved instance record
+    :type instance: InstanceRecord
+    :param settings: Application settings
+    :type settings: Settings
+    :param registry: Model registry for active model listing
+    :type registry: ModelRegistry
+    :param analytics: Usage analytics store
+    :type analytics: UsageAnalyticsStore
+    :return: Usage summary with metrics, aggregations, cost axes, and alerts
+    :rtype: Any
+    :raises TenantFilterRequiredError: If tenant scope resolution fails
+    """
     window_map: dict[str, int | None] = {
         "1h": 3600,
         "24h": 24 * 3600,
@@ -603,6 +628,21 @@ def provider_drilldown(
     instance: InstanceRecord = Depends(resolve_admin_instance_scope),
     analytics: UsageAnalyticsStore = Depends(get_usage_analytics_store),
 ) -> Any:
+    """
+    Return a drill-down view of usage and errors for a specific provider.
+
+    :param provider_name: Provider key to drill into
+    :type provider_name: str
+    :param window: Time window (1h, 24h, 7d, all)
+    :type window: str
+    :param instance: Resolved instance record
+    :type instance: InstanceRecord
+    :param analytics: Usage analytics store
+    :type analytics: UsageAnalyticsStore
+    :return: Provider drill-down data
+    :rtype: Any
+    :raises TenantFilterRequiredError: If tenant scope resolution fails
+    """
     window_map: dict[str, int | None] = {
         "1h": 3600,
         "24h": 24 * 3600,
@@ -627,6 +667,21 @@ def client_drilldown(
     instance: InstanceRecord = Depends(resolve_admin_instance_scope),
     analytics: UsageAnalyticsStore = Depends(get_usage_analytics_store),
 ) -> Any:
+    """
+    Return a drill-down view of usage and errors for a specific client.
+
+    :param client_id: Client ID to drill into
+    :type client_id: str
+    :param window: Time window (1h, 24h, 7d, all)
+    :type window: str
+    :param instance: Resolved instance record
+    :type instance: InstanceRecord
+    :param analytics: Usage analytics store
+    :type analytics: UsageAnalyticsStore
+    :return: Client drill-down data
+    :rtype: Any
+    :raises TenantFilterRequiredError: If tenant scope resolution fails
+    """
     window_map: dict[str, int | None] = {
         "1h": 3600,
         "24h": 24 * 3600,

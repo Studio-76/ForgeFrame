@@ -8,12 +8,21 @@ const SIDEBAR_SECTION_STATE_STORAGE_KEY = "forgeframe.sidebar.sections";
 /** Viewport size tier for responsive layout switching. */
 export type ViewportTier = "mobile" | "tablet" | "desktop";
 
+/**
+ * Read sidebar expanded preference from localStorage.
+ * Defaults to expanded (true) so the sidebar is functional on first visit.
+ * @returns Whether the sidebar should start in expanded mode.
+ */
 function readStoredSidebarExpanded(): boolean {
   if (typeof window === "undefined") {
-    return false;
+    return true;
   }
 
-  return window.localStorage.getItem(SIDEBAR_EXPANDED_STORAGE_KEY) === "true";
+  const storedValue = window.localStorage.getItem(SIDEBAR_EXPANDED_STORAGE_KEY);
+  if (storedValue === null) {
+    return true;
+  }
+  return storedValue === "true";
 }
 
 function readStoredSectionState(): Record<string, boolean> {
@@ -71,11 +80,19 @@ export type SidebarContextValue = {
   isTablet: boolean;
   /** True when viewport is desktop (>= 1024px). */
   isDesktop: boolean;
+  /** Toggle sidebar expanded/collapsed state. */
   toggleSidebar: () => void;
+  /** Toggle mobile sidebar overlay state. */
   toggleMobileSidebar: () => void;
+  /** Close the mobile sidebar overlay. */
   closeMobileSidebar: () => void;
+  /** Directly set sidebar expanded state (e.g. for X button, or programmatic collapse). */
+  setSidebarExpanded: (expanded: boolean) => void;
+  /** Check if a section is currently expanded. */
   isSectionOpen: (sectionId: string) => boolean;
+  /** Toggle a section's expanded state. */
   toggleSection: (sectionId: string) => void;
+  /** Ensure a section is open (no-op if already open). */
   openSection: (sectionId: string) => void;
 };
 
@@ -153,6 +170,10 @@ export function SidebarProvider({ children }: { children: ReactNode }) {
     setStoredExpanded((current) => !current);
   }, []);
 
+  const setSidebarExpanded = useCallback((expanded: boolean) => {
+    setStoredExpanded(expanded);
+  }, []);
+
   const toggleMobileSidebar = useCallback(() => {
     setIsMobileOpen((current) => !current);
   }, []);
@@ -193,6 +214,7 @@ export function SidebarProvider({ children }: { children: ReactNode }) {
     isTablet,
     isDesktop,
     toggleSidebar,
+    setSidebarExpanded,
     toggleMobileSidebar,
     closeMobileSidebar,
     isSectionOpen,
@@ -206,6 +228,7 @@ export function SidebarProvider({ children }: { children: ReactNode }) {
     isTablet,
     isDesktop,
     toggleSidebar,
+    setSidebarExpanded,
     toggleMobileSidebar,
     closeMobileSidebar,
     isSectionOpen,

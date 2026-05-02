@@ -1,7 +1,7 @@
 import { startTransition, useEffect, useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 
-import { AdminApiError } from "../api/admin";
+import { AdminApiError } from "../api/domain";
 import {
   fetchExecutionDispatch,
   reconcileExecutionLeases,

@@ -26,8 +26,8 @@ const {
   recordSkillUsageMock: vi.fn(),
 }));
 
-vi.mock("../src/api/admin", async () => {
-  const actual = await vi.importActual<typeof import("../src/api/admin")>("../src/api/admin");
+vi.mock("../src/api/domain", async () => {
+  const actual = await vi.importActual<typeof import("../src/api/domain")>("../src/api/domain");
 
   return {
     ...actual,
@@ -43,7 +43,7 @@ vi.mock("../src/api/admin", async () => {
   };
 });
 
-import type { AdminSessionUser, SkillDetail, SkillSummary } from "../src/api/admin";
+import type { AdminSessionUser, SkillDetail, SkillSummary } from "../src/api/domain";
 import { SkillsPage } from "../src/pages/SkillsPage";
 import { withAppContext } from "./testContext";
 

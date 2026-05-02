@@ -17,7 +17,7 @@ import {
   type ConversationSummary,
   type TaskSummary,
   type TriageStatus,
-} from "../../api/admin";
+} from "../../api/domain";
 import { roleAllows, sessionHasAnyInstancePermission } from "../../app/adminAccess";
 import { useAppSession } from "../../app/session";
 import { parseJsonObject } from "./utils";

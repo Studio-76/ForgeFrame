@@ -1,7 +1,7 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { AdminSessionUser } from "../src/api/admin";
+import type { AdminSessionUser } from "../src/api/domain";
 import { ProvidersPage } from "../src/pages/ProvidersPage";
 import type { ProvidersAccessState, ProvidersPageActions, ProvidersPageData } from "../src/features/providers/providersShared";
 import { withAppContext } from "./testContext";
@@ -279,7 +279,7 @@ describe("Providers page hierarchy", () => {
     }));
   });
 
-  it("renders the route-level page header before the first summary card", () => {
+  it("renders the route-level page header before the provider readiness hero", () => {
     const markup = renderToStaticMarkup(
       withAppContext({
         path: "/providers",
@@ -291,16 +291,27 @@ describe("Providers page hierarchy", () => {
     expect(markup).toContain("<section class=\"fg-page\">");
     expect(markup).toContain("1 provider registered for this instance.");
     expect(markup).toContain("id=\"provider-health-runs\"");
-    expect(markup).toContain(">Providers</h3>");
-    expect(markup).toContain("Manage provider records. Sync updates inventory; live endpoint probes run from Harness.");
-    expect(markup).toContain("Enable after endpoint settings are saved and at least one target is ready.");
-    expect(markup).toContain("Open Harness live probe");
-    expect(markup).toContain("These buttons do not send chat/completions requests. Use Harness when you want to see LM Studio receive a real request.");
-    expect(markup).toContain("Admin mutations enabled");
-    expect(markup).toContain("Sync all");
+    // Readiness hero with provider stats
+    expect(markup).toContain("Provider Readiness");
+    expect(markup).toContain("1 total");
+    expect(markup).toContain("0 enabled");
+    expect(markup).toContain("0 runtime-ready");
+    // Action groups
+    expect(markup).toContain("Sync all providers");
     expect(markup).toContain("Add provider");
+    // Provider grid
+    expect(markup).toContain("Local Runtime");
+    expect(markup).toContain("local_runtime");
+    expect(markup).toContain("local / ollama");
+    expect(markup).toContain("Disabled");
     expect(markup).toContain("Activate");
-    expect(markup).toContain("Providers");
+    // Access
+    expect(markup).toContain("Admin mutations enabled");
+    // Related pages
+    expect(markup).toContain("Setup progress");
+    expect(markup).toContain("Provider Targets");
+    expect(markup).toContain("Harness");
+    // No legacy sections
     expect(markup).not.toContain(">Provider Runtime Inventory</h3>");
     expect(markup).not.toContain(">Provider Health &amp; Runs</h3>");
     expect(markup).not.toContain("Show probe");
@@ -334,9 +345,17 @@ describe("Providers page hierarchy", () => {
       }),
     );
 
-    expect(markup).toContain("Sync updates inventory only. Live endpoint probes run in Harness.");
+    // Status hero now shows 1 enabled provider needing attention
+    expect(markup).toContain("1 enabled");
+    expect(markup).toContain("1 needs attention");
+    // Provider is now "Needs attention" not "Disabled"
+    expect(markup).not.toContain("Disabled");
+    expect(markup).toContain("Needs attention");
+    // Sync action
     expect(markup).toContain("Sync inventory");
-    expect(markup).toContain("Open Harness live probe");
+    expect(markup).toContain("Sync all providers");
+    // Diagnostic actions
+    expect(markup).toContain("Run provider probe");
   });
 
   it("shows an honest blocked state when the session lacks scoped providers.read", () => {
@@ -395,9 +414,9 @@ describe("Providers page hierarchy", () => {
     );
 
     expect(alphaMarkup).toContain("Operator mutations enabled");
-    expect(alphaMarkup).toContain("Sync all");
+    expect(alphaMarkup).toContain("Sync all providers");
     expect(betaMarkup).not.toContain("Operator mutations enabled");
-    expect(betaMarkup).not.toContain("Sync all");
+    expect(betaMarkup).not.toContain("Sync all providers");
     expect(betaMarkup).toContain("Operate only");
   });
 

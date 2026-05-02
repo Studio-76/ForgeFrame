@@ -5,7 +5,7 @@ import type {
   ConversationStatus,
   TriageStatus,
   WorkItemPriority,
-} from "../../api/admin";
+} from "../../api/domain";
 import {
   PRIORITY_OPTIONS,
   STATUS_OPTIONS,

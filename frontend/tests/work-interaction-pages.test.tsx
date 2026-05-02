@@ -56,7 +56,7 @@ vi.mock("../src/api/admin/workspaces", async () => {
   };
 });
 
-import type { AdminSessionUser, ArtifactRecord, WorkspaceDetail, WorkspaceSummary } from "../src/api/admin";
+import type { AdminSessionUser, ArtifactRecord, WorkspaceDetail, WorkspaceSummary } from "../src/api/domain";
 import { ArtifactsPage } from "../src/pages/ArtifactsPage";
 import { WorkspacesPage } from "../src/pages/WorkspacesPage";
 import { withAppContext } from "./testContext";

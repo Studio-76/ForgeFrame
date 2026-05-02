@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo } from "react";
-import { Navigate, Outlet, useLocation } from "react-router-dom";
+import { Navigate, Outlet, useLocation, useNavigate } from "react-router-dom";
 
-import { clearAdminToken, fetchAdminSession, getAdminToken, logoutAdmin, type AdminSessionUser } from "../api/admin";
+import { clearAdminToken, fetchAdminSession, getAdminToken, logoutAdmin, type AdminSessionUser } from "../api/domain";
 import { adminKeys } from "../api/adminQueries";
 import { AppShell } from "../components/layout/AppShell";
 import { LoadingState } from "../components/ui/StateBlocks";
@@ -13,6 +13,7 @@ import { useQuery } from "@tanstack/react-query";
 
 export function App() {
   const location = useLocation();
+  const navigate = useNavigate();
   const hasToken = Boolean(getAdminToken());
 
   const sessionQuery = useQuery({
@@ -53,7 +54,8 @@ export function App() {
     }
     clearAdminToken();
     queryClient.setQueryData(adminKeys.session, undefined);
-  }, []);
+    navigate(CONTROL_PLANE_ROUTES.login, { replace: true });
+  }, [navigate]);
 
   const markPasswordRotationComplete = useCallback(() => {
     queryClient.setQueryData(adminKeys.session, (old: { status: string; user: AdminSessionUser } | undefined) => {

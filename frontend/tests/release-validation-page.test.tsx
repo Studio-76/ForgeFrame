@@ -57,7 +57,7 @@ vi.mock("../src/api/admin/instances", async () => {
   return { ...actual, fetchInstances: fetchInstancesMock };
 });
 
-import type { AdminSessionUser } from "../src/api/admin";
+import type { AdminSessionUser } from "../src/api/domain";
 import { ReleaseValidationPage } from "../src/pages/ReleaseValidationPage";
 import { withAppContext } from "./testContext";
 

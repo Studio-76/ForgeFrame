@@ -1,4 +1,4 @@
-import type { AdminSessionUser } from "../api/admin";
+import type { AdminSessionUser } from "../api/domain";
 import { withQueryParams } from "./tenantScope";
 import { sessionCanMutateScopedOrAnyInstance, sessionHasAnyInstancePermission } from "./adminAccess";
 

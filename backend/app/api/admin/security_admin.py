@@ -95,6 +95,17 @@ def security_bootstrap(
     admin: AuthenticatedAdmin = Depends(require_admin_role("operator")),
     service: GovernanceService = Depends(get_governance_service),
 ) -> dict[str, object]:
+    """
+    Return the security bootstrap status including credential policy, elevated
+    access posture, and (for full admin sessions) secret posture and bootstrap details.
+
+    :param admin: Authenticated admin (operator role required)
+    :type admin: AuthenticatedAdmin
+    :param service: Governance service
+    :type service: GovernanceService
+    :return: Security bootstrap status
+    :rtype: dict[str, object]
+    """
     response: dict[str, object] = {
         "status": "ok",
         "credential_policy": service.credential_lifecycle_policy(actor=admin),
@@ -119,6 +130,16 @@ def list_admin_users(
     _admin: AuthenticatedAdmin = Depends(require_admin_role("admin")),
     service: GovernanceService = Depends(get_governance_service),
 ) -> dict[str, object]:
+    """
+    List all admin users. Requires admin role.
+
+    :param _admin: Injected admin permission dependency (admin role required)
+    :type _admin: AuthenticatedAdmin
+    :param service: Governance service
+    :type service: GovernanceService
+    :return: List of admin users
+    :rtype: dict[str, object]
+    """
     return {
         "status": "ok",
         "users": [item.model_dump() for item in service.list_admin_users()],
@@ -132,6 +153,23 @@ def create_admin_user(
     admin: AuthenticatedAdmin = Depends(require_admin_mutation_role("admin")),
     service: GovernanceService = Depends(get_governance_service),
 ) -> object:
+    """
+    Create a new admin user.
+
+    Idempotency is not supported for security mutations.
+
+    :param payload: Admin user creation request
+    :type payload: AdminUserCreateRequest
+    :param request: Incoming HTTP request
+    :type request: Request
+    :param admin: Authenticated admin with mutation role
+    :type admin: AuthenticatedAdmin
+    :param service: Governance service
+    :type service: GovernanceService
+    :return: Created admin user
+    :rtype: object
+    :raises ValueError: If the username already exists
+    """
     unsupported = unsupported_idempotency_response(request, message=_SECURITY_IDEMPOTENCY_MESSAGE)
     if unsupported is not None:
         return unsupported
@@ -156,6 +194,25 @@ def update_admin_user(
     admin: AuthenticatedAdmin = Depends(require_admin_mutation_role("admin")),
     service: GovernanceService = Depends(get_governance_service),
 ) -> object:
+    """
+    Update an existing admin user's display name, role, status, or password rotation flag.
+
+    Idempotency is not supported for security mutations.
+
+    :param user_id: Admin user identifier
+    :type user_id: str
+    :param payload: Admin user update request
+    :type payload: AdminUserUpdateRequest
+    :param request: Incoming HTTP request
+    :type request: Request
+    :param admin: Authenticated admin with mutation role
+    :type admin: AuthenticatedAdmin
+    :param service: Governance service
+    :type service: GovernanceService
+    :return: Updated admin user
+    :rtype: object
+    :raises ValueError: If the user is not found or update is invalid
+    """
     unsupported = unsupported_idempotency_response(request, message=_SECURITY_IDEMPOTENCY_MESSAGE)
     if unsupported is not None:
         return unsupported
@@ -181,6 +238,25 @@ def rotate_admin_password(
     admin: AuthenticatedAdmin = Depends(require_admin_mutation_role("admin")),
     service: GovernanceService = Depends(get_governance_service),
 ) -> object:
+    """
+    Rotate an admin user's password.
+
+    Idempotency is not supported for security mutations.
+
+    :param user_id: Admin user identifier
+    :type user_id: str
+    :param payload: Password rotation request with new password
+    :type payload: AdminPasswordRotateRequest
+    :param request: Incoming HTTP request
+    :type request: Request
+    :param admin: Authenticated admin with mutation role
+    :type admin: AuthenticatedAdmin
+    :param service: Governance service
+    :type service: GovernanceService
+    :return: Updated admin user
+    :rtype: object
+    :raises ValueError: If user not found or password rotation fails
+    """
     unsupported = unsupported_idempotency_response(request, message=_SECURITY_IDEMPOTENCY_MESSAGE)
     if unsupported is not None:
         return unsupported
@@ -203,6 +279,19 @@ def list_admin_user_memberships(
     _admin: AuthenticatedAdmin = Depends(require_admin_role("admin")),
     service: GovernanceService = Depends(get_governance_service),
 ) -> object:
+    """
+    List all instance memberships for an admin user.
+
+    :param user_id: Admin user identifier
+    :type user_id: str
+    :param _admin: Injected admin permission dependency (admin role required)
+    :type _admin: AuthenticatedAdmin
+    :param service: Governance service
+    :type service: GovernanceService
+    :return: List of instance memberships
+    :rtype: object
+    :raises ValueError: If the user is not found
+    """
     try:
         memberships = service.list_admin_instance_memberships(user_id)
     except ValueError as exc:
@@ -223,6 +312,29 @@ def upsert_admin_user_membership(
     service: GovernanceService = Depends(get_governance_service),
     instances: InstanceService = Depends(get_instance_service),
 ) -> object:
+    """
+    Create or update an admin user's membership for a specific instance.
+
+    Idempotency is not supported for security mutations.
+
+    :param user_id: Admin user identifier
+    :type user_id: str
+    :param instance_id: Instance identifier
+    :type instance_id: str
+    :param payload: Membership role and status
+    :type payload: AdminInstanceMembershipRequest
+    :param request: Incoming HTTP request
+    :type request: Request
+    :param admin: Authenticated admin with mutation role
+    :type admin: AuthenticatedAdmin
+    :param service: Governance service
+    :type service: GovernanceService
+    :param instances: Instance service for instance resolution
+    :type instances: InstanceService
+    :return: Updated membership record
+    :rtype: object
+    :raises ValueError: If user or instance is not found
+    """
     unsupported = unsupported_idempotency_response(request, message=_SECURITY_IDEMPOTENCY_MESSAGE)
     if unsupported is not None:
         return unsupported
@@ -254,6 +366,27 @@ def delete_admin_user_membership(
     service: GovernanceService = Depends(get_governance_service),
     instances: InstanceService = Depends(get_instance_service),
 ) -> object:
+    """
+    Remove an admin user's membership from a specific instance.
+
+    Idempotency is not supported for security mutations.
+
+    :param user_id: Admin user identifier
+    :type user_id: str
+    :param instance_id: Instance identifier
+    :type instance_id: str
+    :param request: Incoming HTTP request
+    :type request: Request
+    :param admin: Authenticated admin with mutation role
+    :type admin: AuthenticatedAdmin
+    :param service: Governance service
+    :type service: GovernanceService
+    :param instances: Instance service for instance resolution
+    :type instances: InstanceService
+    :return: Deletion confirmation
+    :rtype: object
+    :raises ValueError: If user, instance, or membership is not found
+    """
     unsupported = unsupported_idempotency_response(request, message=_SECURITY_IDEMPOTENCY_MESSAGE)
     if unsupported is not None:
         return unsupported
@@ -282,6 +415,16 @@ def list_admin_sessions(
     _admin: AuthenticatedAdmin = Depends(require_admin_role("admin")),
     service: GovernanceService = Depends(get_governance_service),
 ) -> dict[str, object]:
+    """
+    List all admin sessions, including revoked ones. Requires admin role.
+
+    :param _admin: Injected admin permission dependency (admin role required)
+    :type _admin: AuthenticatedAdmin
+    :param service: Governance service
+    :type service: GovernanceService
+    :return: List of admin sessions
+    :rtype: dict[str, object]
+    """
     return {
         "status": "ok",
         "sessions": service.list_admin_sessions(include_revoked=True),
@@ -295,6 +438,23 @@ def revoke_admin_session_by_id(
     admin: AuthenticatedAdmin = Depends(require_admin_mutation_role("admin")),
     service: GovernanceService = Depends(get_governance_service),
 ) -> object:
+    """
+    Revoke a specific admin session by ID.
+
+    Idempotency is not supported for security mutations.
+
+    :param session_id: Admin session identifier
+    :type session_id: str
+    :param request: Incoming HTTP request
+    :type request: Request
+    :param admin: Authenticated admin with mutation role
+    :type admin: AuthenticatedAdmin
+    :param service: Governance service
+    :type service: GovernanceService
+    :return: Revoked session record
+    :rtype: object
+    :raises ValueError: If the session is not found
+    """
     unsupported = unsupported_idempotency_response(request, message=_SECURITY_IDEMPOTENCY_MESSAGE)
     if unsupported is not None:
         return unsupported
@@ -310,6 +470,17 @@ def secret_posture(
     _admin: AuthenticatedAdmin = Depends(require_admin_role("admin")),
     service: GovernanceService = Depends(get_governance_service),
 ) -> dict[str, object]:
+    """
+    Return the current secret posture for providers, harness profiles,
+    recent rotations, and storage controls. Requires admin role.
+
+    :param _admin: Injected admin permission dependency (admin role required)
+    :type _admin: AuthenticatedAdmin
+    :param service: Governance service
+    :type service: GovernanceService
+    :return: Secret posture overview
+    :rtype: dict[str, object]
+    """
     return {
         "status": "ok",
         "providers": service.provider_secret_posture(),
@@ -324,6 +495,16 @@ def credential_policy(
     admin: AuthenticatedAdmin = Depends(require_admin_role("operator")),
     service: GovernanceService = Depends(get_governance_service),
 ) -> dict[str, object]:
+    """
+    Return the credential lifecycle policy. Requires operator role.
+
+    :param admin: Authenticated admin (operator role required)
+    :type admin: AuthenticatedAdmin
+    :param service: Governance service
+    :type service: GovernanceService
+    :return: Credential policy
+    :rtype: dict[str, object]
+    """
     return {"status": "ok", "policy": service.credential_lifecycle_policy(actor=admin)}
 
 
@@ -333,6 +514,18 @@ def list_secret_rotations(
     _admin: AuthenticatedAdmin = Depends(require_admin_role("admin")),
     service: GovernanceService = Depends(get_governance_service),
 ) -> dict[str, object]:
+    """
+    List recent secret rotation events. Requires admin role.
+
+    :param limit: Maximum number of rotation events to return
+    :type limit: int
+    :param _admin: Injected admin permission dependency (admin role required)
+    :type _admin: AuthenticatedAdmin
+    :param service: Governance service
+    :type service: GovernanceService
+    :return: List of secret rotation events
+    :rtype: dict[str, object]
+    """
     return {
         "status": "ok",
         "rotations": service.list_secret_rotation_events(limit=limit),
@@ -346,6 +539,21 @@ def record_secret_rotation(
     admin: AuthenticatedAdmin = Depends(require_admin_mutation_role("admin")),
     service: GovernanceService = Depends(get_governance_service),
 ) -> object:
+    """
+    Record a secret rotation event. Idempotency is not supported.
+
+    :param payload: Secret rotation record request
+    :type payload: SecretRotationRecordRequest
+    :param request: Incoming HTTP request
+    :type request: Request
+    :param admin: Authenticated admin with mutation role (admin required)
+    :type admin: AuthenticatedAdmin
+    :param service: Governance service
+    :type service: GovernanceService
+    :return: Recorded rotation event
+    :rtype: object
+    :raises ValueError: If the rotation record is invalid
+    """
     unsupported = unsupported_idempotency_response(request, message=_SECURITY_IDEMPOTENCY_MESSAGE)
     if unsupported is not None:
         return unsupported
@@ -369,6 +577,18 @@ def list_elevated_access_requests(
     admin: AuthenticatedAdmin = Depends(require_admin_role("operator")),
     service: GovernanceService = Depends(get_governance_service),
 ) -> dict[str, object]:
+    """
+    List elevated access requests with optional gate status filter.
+
+    :param gate_status: Optional gate status filter
+    :type gate_status: str | None
+    :param admin: Authenticated admin (operator role required)
+    :type admin: AuthenticatedAdmin
+    :param service: Governance service
+    :type service: GovernanceService
+    :return: List of elevated access requests
+    :rtype: dict[str, object]
+    """
     return {
         "status": "ok",
         "requests": service.list_elevated_access_requests(actor=admin, gate_status=gate_status),
@@ -382,6 +602,25 @@ def create_impersonation_request(
     admin: AuthenticatedAdmin = Depends(require_admin_mutation_role("admin")),
     service: GovernanceService = Depends(get_governance_service),
 ) -> object:
+    """
+    Create an impersonation session request for elevated access.
+
+    Idempotency is not supported for security mutations.
+
+    :param payload: Impersonation request with target user and justification
+    :type payload: ImpersonationRequest
+    :param request: Incoming HTTP request
+    :type request: Request
+    :param admin: Authenticated admin with mutation role
+    :type admin: AuthenticatedAdmin
+    :param service: Governance service
+    :type service: GovernanceService
+    :return: Created impersonation access request
+    :rtype: object
+    :raises GovernanceConflictError: If an active request already exists
+    :raises GovernanceEligibilityError: If recovery is required first
+    :raises PermissionError: If impersonation is forbidden
+    """
     unsupported = unsupported_idempotency_response(request, message=_SECURITY_IDEMPOTENCY_MESSAGE)
     if unsupported is not None:
         return unsupported
@@ -417,6 +656,25 @@ def create_break_glass_request(
     admin: AuthenticatedAdmin = Depends(require_admin_write_session),
     service: GovernanceService = Depends(get_governance_service),
 ) -> object:
+    """
+    Create a break-glass session request for emergency elevated access.
+
+    Idempotency is not supported for security mutations.
+
+    :param payload: Elevated session request with justification
+    :type payload: ElevatedSessionRequest
+    :param request: Incoming HTTP request
+    :type request: Request
+    :param admin: Authenticated admin with write session
+    :type admin: AuthenticatedAdmin
+    :param service: Governance service
+    :type service: GovernanceService
+    :return: Created break-glass access request
+    :rtype: object
+    :raises GovernanceConflictError: If an active request already exists
+    :raises GovernanceEligibilityError: If recovery is required first
+    :raises PermissionError: If break-glass is forbidden
+    """
     unsupported = unsupported_idempotency_response(request, message=_SECURITY_IDEMPOTENCY_MESSAGE)
     if unsupported is not None:
         return unsupported
@@ -452,6 +710,25 @@ def approve_elevated_access_request(
     admin: AuthenticatedAdmin = Depends(require_admin_mutation_role("admin")),
     service: GovernanceService = Depends(get_governance_service),
 ) -> object:
+    """
+    Approve an elevated access request. Idempotency is not supported.
+
+    :param request_id: Elevation request identifier
+    :type request_id: str
+    :param payload: Decision note
+    :type payload: ElevatedAccessDecisionRequest
+    :param request: Incoming HTTP request
+    :type request: Request
+    :param admin: Authenticated admin with mutation role
+    :type admin: AuthenticatedAdmin
+    :param service: Governance service
+    :type service: GovernanceService
+    :return: Approved access request
+    :rtype: object
+    :raises GovernanceNotFoundError: If the request is not found
+    :raises GovernanceConflictError: If the request is not actionable
+    :raises PermissionError: If not authorized to approve
+    """
     unsupported = unsupported_idempotency_response(request, message=_SECURITY_IDEMPOTENCY_MESSAGE)
     if unsupported is not None:
         return unsupported
@@ -478,6 +755,25 @@ def reject_elevated_access_request(
     admin: AuthenticatedAdmin = Depends(require_admin_mutation_role("admin")),
     service: GovernanceService = Depends(get_governance_service),
 ) -> object:
+    """
+    Reject an elevated access request. Idempotency is not supported.
+
+    :param request_id: Elevation request identifier
+    :type request_id: str
+    :param payload: Decision note
+    :type payload: ElevatedAccessDecisionRequest
+    :param request: Incoming HTTP request
+    :type request: Request
+    :param admin: Authenticated admin with mutation role
+    :type admin: AuthenticatedAdmin
+    :param service: Governance service
+    :type service: GovernanceService
+    :return: Rejected access request
+    :rtype: object
+    :raises GovernanceNotFoundError: If the request is not found
+    :raises GovernanceConflictError: If the request is not actionable
+    :raises PermissionError: If not authorized to reject
+    """
     unsupported = unsupported_idempotency_response(request, message=_SECURITY_IDEMPOTENCY_MESSAGE)
     if unsupported is not None:
         return unsupported
@@ -503,6 +799,25 @@ def cancel_elevated_access_request(
     admin: AuthenticatedAdmin = Depends(require_admin_mutation_role("operator")),
     service: GovernanceService = Depends(get_governance_service),
 ) -> object:
+    """
+    Cancel an elevated access request. Only the requester (operator) can cancel.
+
+    Idempotency is not supported.
+
+    :param request_id: Elevation request identifier
+    :type request_id: str
+    :param request: Incoming HTTP request
+    :type request: Request
+    :param admin: Authenticated admin with mutation role
+    :type admin: AuthenticatedAdmin
+    :param service: Governance service
+    :type service: GovernanceService
+    :return: Cancelled access request
+    :rtype: object
+    :raises GovernanceNotFoundError: If the request is not found
+    :raises GovernanceConflictError: If the request is not cancellable
+    :raises PermissionError: If not authorized to cancel
+    """
     unsupported = unsupported_idempotency_response(request, message=_SECURITY_IDEMPOTENCY_MESSAGE)
     if unsupported is not None:
         return unsupported
@@ -527,6 +842,25 @@ def issue_elevated_access_session(
     admin: AuthenticatedAdmin = Depends(require_admin_write_session),
     service: GovernanceService = Depends(get_governance_service),
 ) -> object:
+    """
+    Issue an elevated access session for an approved request.
+
+    Idempotency is not supported for security mutations.
+
+    :param request_id: Elevation request identifier
+    :type request_id: str
+    :param request: Incoming HTTP request
+    :type request: Request
+    :param admin: Authenticated admin with write session
+    :type admin: AuthenticatedAdmin
+    :param service: Governance service
+    :type service: GovernanceService
+    :return: Issued elevated access session
+    :rtype: object
+    :raises GovernanceNotFoundError: If the request is not found
+    :raises GovernanceConflictError: If the request is not issuable
+    :raises PermissionError: If not authorized to issue
+    """
     unsupported = unsupported_idempotency_response(request, message=_SECURITY_IDEMPOTENCY_MESSAGE)
     if unsupported is not None:
         return unsupported

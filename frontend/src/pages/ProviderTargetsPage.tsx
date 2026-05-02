@@ -16,7 +16,8 @@ import {
 /**
  * Provider targets page — operational target management for the selected instance.
  *
- * Displays a readiness summary, filterable target table, and actionable detail panel.
+ * Displays a readiness summary + remediation callout, then a simplified action bar
+ * with collapsible filters, a target table, and an actionable detail panel.
  * Focused on answering: which targets are dispatchable and what to fix if not.
  */
 export function ProviderTargetsPage() {
@@ -118,8 +119,9 @@ export function ProviderTargetsPage() {
         />
       ) : null}
 
+      {/* Readiness summary + remediation callout */}
       {canReadTargets && state !== "error" ? (
-        <TargetReadinessSummary summary={readinessSummary} />
+        <TargetReadinessSummary summary={readinessSummary} targets={targets} />
       ) : null}
 
       {canReadTargets && state === "success" && targets.length === 0 ? (
@@ -129,6 +131,7 @@ export function ProviderTargetsPage() {
         />
       ) : null}
 
+      {/* Action bar below summary — controls + collapsible filters */}
       {canReadTargets && state !== "error" && targets.length > 0 ? (
         <TargetActionBar
           instanceId={instanceId}
@@ -153,6 +156,7 @@ export function ProviderTargetsPage() {
         />
       ) : null}
 
+      {/* Target table + detail panel */}
       {canReadTargets && targets.length > 0 ? (
         <div className="ff-operator-layout">
           <div className="ff-operator-main">

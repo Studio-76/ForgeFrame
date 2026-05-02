@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from "react";
 
-import { fetchAdminSession, rotateOwnPassword, type AdminSessionUser } from "../../api/admin";
+import { fetchAdminSession, rotateOwnPassword, type AdminSessionUser } from "../../api/domain";
 
 export type PasswordRotationDraft = {
   current_password: string;

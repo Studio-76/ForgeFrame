@@ -28,7 +28,7 @@ vi.mock("../src/api/admin/instances", async () => {
   };
 });
 
-import type { AdminSessionUser, InstanceRecord, LogsResponse } from "../src/api/admin";
+import type { AdminSessionUser, InstanceRecord, LogsResponse } from "../src/api/domain";
 import { ErrorsPage } from "../src/pages/ErrorsPage";
 import { withAppContext } from "./testContext";
 

@@ -1,5 +1,5 @@
 import type { StatusTone } from "../../components/ui/StatusBadge";
-import type { IngressTlsStatusResponse } from "../../api/admin";
+import type { IngressTlsStatusResponse } from "../../api/domain";
 import { CONTROL_PLANE_ROUTES } from "../../app/navigation";
 import { withInstanceScope } from "../../app/tenantScope";
 import type { RemediationItem, TlsSummary, BootstrapCheck } from "./types";

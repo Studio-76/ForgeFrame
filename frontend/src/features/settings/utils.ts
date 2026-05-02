@@ -1,13 +1,44 @@
-import type { MutableSettingEntry } from "../../api/admin";
-import { GROUP_TO_CATEGORY } from "./types";
+import type { MutableSettingEntry } from "../../api/domain";
+import { GROUP_TO_CATEGORY, CATEGORY_LABELS } from "./types";
 
 /**
- * Format a setting value for display.
+ * Format a setting value for display (raw string form).
  * @param value - The raw setting value.
  * @returns A string representation suitable for UI display.
  */
 export function formatSettingValue(value: string | number | boolean): string {
-  return typeof value === "boolean" ? String(value) : String(value);
+  return String(value);
+}
+
+/**
+ * Return a human-readable label for a boolean setting value.
+ *
+ * @param value - The raw boolean value (string, number, or boolean).
+ * @returns "Enabled" for truthy boolean, "Disabled" for falsy.
+ */
+export function formatBooleanLabel(value: string | number | boolean): string {
+  if (value === true || value === "true") {
+    return "Enabled";
+  }
+  if (value === false || value === "false") {
+    return "Disabled";
+  }
+  return String(value);
+}
+
+/**
+ * Build a plain-language sentence describing the current effective state
+ * of a boolean setting (e.g. "Gemini provider is disabled").
+ *
+ * @param item - The setting entry.
+ * @returns A human-readable sentence describing the setting state.
+ */
+export function booleanStatusSentence(item: MutableSettingEntry): string {
+  if (item.value_type === "bool") {
+    const state = formatBooleanLabel(item.effective_value).toLowerCase();
+    return `${item.label} is ${state}`;
+  }
+  return formatSettingValue(item.effective_value);
 }
 
 /**
@@ -55,7 +86,17 @@ export function sourceTone(source: MutableSettingEntry["source"]): "success" | "
 }
 
 /**
- * Map a setting's group to its simplified display category.
+ * Determine whether a risk badge should be shown in the compact list row.
+ * Low-risk settings do not display a badge — only moderate/high risks are shown.
+ * @param riskLevel - The setting's risk level.
+ * @returns True if a risk indicator should appear in the list.
+ */
+export function showRiskBadge(riskLevel: MutableSettingEntry["risk_level"]): boolean {
+  return riskLevel === "high" || riskLevel === "medium";
+}
+
+/**
+ * Map a setting's group to its operator-oriented display category.
  * @param item - The setting entry.
  * @returns The category key.
  */
@@ -69,8 +110,8 @@ export function getCategory(item: MutableSettingEntry): string {
  * @returns The human-readable category label.
  */
 export function getCategoryLabel(item: MutableSettingEntry): string {
-  const categoryKey = getCategory(item);
-  return categoryKey.charAt(0).toUpperCase() + categoryKey.slice(1);
+  const categoryKey = getCategory(item) as keyof typeof CATEGORY_LABELS;
+  return CATEGORY_LABELS[categoryKey] ?? categoryKey;
 }
 
 /**
@@ -83,7 +124,20 @@ export function sourceDescription(source: MutableSettingEntry["source"], overrid
   if (source === "override" && overridden) {
     return "Overridden";
   }
-  return "Using default";
+  return "Default";
+}
+
+/**
+ * Return a short status key for a setting based on its source and override state.
+ * @param source - The setting's source.
+ * @param overridden - Whether the setting has an active override.
+ * @returns One of "default", "overridden".
+ */
+export function statusKey(source: MutableSettingEntry["source"], overridden: boolean): "default" | "overridden" {
+  if (source === "override" && overridden) {
+    return "overridden";
+  }
+  return "default";
 }
 
 /**

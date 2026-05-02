@@ -40,7 +40,7 @@ vi.mock("../src/api/admin/instances", async () => {
   };
 });
 
-import type { AdminSessionUser, LearningEventDetail, LearningEventSummary } from "../src/api/admin";
+import type { AdminSessionUser, LearningEventDetail, LearningEventSummary } from "../src/api/domain";
 import { LearningPage } from "../src/pages/LearningPage";
 import { withAppContext } from "./testContext";
 
@@ -171,6 +171,12 @@ function setControlValue(control: HTMLInputElement | HTMLTextAreaElement | HTMLS
 
 function getButtonByText(scope: ParentNode, text: string) {
   return Array.from(scope.querySelectorAll("button")).find((button) => button.textContent?.includes(text));
+}
+
+function getButtonsByText(scope: ParentNode, text: string) {
+  return Array.from(scope.querySelectorAll("button")).filter((button) =>
+    button.textContent?.includes(text),
+  );
 }
 
 function getFormByText(text: string) {
@@ -376,7 +382,7 @@ afterEach(() => {
 });
 
 describe("learning page", () => {
-  it("groups learning events into review buckets and renders real detail links", async () => {
+  it("shows summary stats, compact bucket tabs, and renders real detail links", async () => {
     await renderIntoDom(withAppContext({
       path: "/learning?instanceId=instance_alpha&eventId=learning_suggested",
       element: <LearningPage />,
@@ -387,14 +393,31 @@ describe("learning page", () => {
     expect(fetchLearningEventsMock).toHaveBeenCalledWith("instance_alpha", { status: "all", triggerKind: "all", limit: 100 });
     expect(fetchLearningEventDetailMock).toHaveBeenCalledWith("learning_suggested", "instance_alpha");
 
+    expect(container.textContent).toContain("View memory");
+    expect(container.textContent).toContain("View draft skills");
+
+    // Summary hero stats
+    expect(container.textContent).toContain("Total events");
+    expect(container.textContent).toContain("4");
+
+    // Compact tab labels (note: "Approved / promoted" is now "Promoted")
     expect(container.textContent).toContain("Suggested");
-    expect(container.textContent).toContain("Review required");
-    expect(container.textContent).toContain("Approved / promoted");
+    expect(container.textContent).toContain("Needs review");
+    expect(container.textContent).toContain("Promoted");
     expect(container.textContent).toContain("Rejected");
-    expect(container.textContent).toContain("Session boundary summary");
-    expect(container.textContent).toContain("Promote to boot memory");
+
+    // Event summary visible in the list
+    expect(container.textContent).toContain("Session rotation summary candidate");
+    expect(container.textContent).toContain("Proposed outcome");
+    expect(container.textContent).toContain("Confidence / evidence");
+    expect(container.textContent).toContain("Recommended decision");
+    expect(container.textContent).toContain("Review action");
+
+    // Detail panel with selected event
+    expect(container.textContent).toContain("Learning event learning_suggested");
     expect(container.textContent).toContain("medium risk");
 
+    // Navigation links
     const conversationLink = Array.from(container.querySelectorAll("a")).find((link) => link.textContent === "Open conversation");
     expect(conversationLink?.getAttribute("href")).toBe("/conversations?instanceId=instance_alpha&conversationId=conversation_alpha");
 
@@ -402,37 +425,133 @@ describe("learning page", () => {
     expect(runLink?.getAttribute("href")).toBe("/execution?instanceId=instance_alpha&runId=run_alpha");
   });
 
-  it("runs pattern scans, creates manual review items, and decides durable memory promotion with structured payloads", async () => {
+  it("shows one empty-state scan action and creates manual review items", async () => {
+    fetchLearningEventsMock.mockResolvedValue({
+      status: "ok",
+      instance: null,
+      events: [],
+    });
+
     await renderIntoDom(withAppContext({
-      path: "/learning?instanceId=instance_alpha&eventId=learning_suggested",
+      path: "/learning?instanceId=instance_alpha",
       element: <LearningPage />,
       session: adminSession,
     }));
     await flushEffects();
 
-    const scanButton = getButtonByText(container, "Run pattern scan");
+    expect(container.textContent).toContain("No learning events need review");
+    expect(container.textContent).not.toContain("Total events");
+    expect(getButtonsByText(container, "Scan for learning opportunities")).toHaveLength(1);
+    expect(getButtonsByText(container, "Create manual review item")).toHaveLength(1);
+
+    // --- Pattern scan ---
+    const scanButton = getButtonByText(container, "Scan for learning opportunities");
     await act(async () => {
       scanButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     });
     await flushEffects();
 
     expect(scanLearningPatternsMock).toHaveBeenCalledWith("instance_alpha");
-    expect(container.textContent).toContain("Last pattern scan result");
-    expect(container.textContent).toContain("Repeated correction pattern: Escalation mailbox");
+    expect(container.textContent).toContain("1 event found");
 
-    const createForm = getFormByText("Create learning review item");
-    expect(createForm).toBeTruthy();
-    setControlValue(getLabeledControl(createForm!, "Suggested path"), "durable_memory");
-    setControlValue(getLabeledControl(createForm!, "Summary"), "Manual billing exception review");
-    setControlValue(getLabeledControl(createForm!, "Explanation"), "Operators want a durable billing exception memory.");
-    setControlValue(getLabeledControl(createForm!, "Memory title"), "Billing exception policy");
-    setControlValue(getLabeledControl(createForm!, "Memory body"), "Persist the billing exception rule after operator confirmation.");
-    setControlValue(getLabeledControl(createForm!, "Review date"), "2026-05-30T09:00:00Z");
-    setControlValue(getLabeledControl(createForm!, "Review note"), "Review inferred durable billing truth before final retention.");
-    setControlValue(getLabeledControl(createForm!, "Source note"), "handoff-42");
+    // --- Open manual creation form ---
+    const createManualButton = getButtonByText(container, "Create manual review item");
+    await act(async () => {
+      createManualButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    await flushEffects();
+
+    // Find the manual form element for scoped label lookups
+    function getManualFormScope(): HTMLElement | null {
+      return container.querySelector("article.ff-learning-manual-form");
+    }
+
+    let manualScope = getManualFormScope();
+    expect(manualScope, "Manual form article should be in DOM").toBeTruthy();
+    expect(manualScope?.classList.contains("ff-learning-tron-frame")).toBe(true);
+    expect(container.textContent).toContain("Manual learning intake");
+    expect(container.textContent).toContain("Draft intake");
+    expect(container.querySelector(".ff-learning-manual-header")).toBeTruthy();
+    expect(container.querySelector(".ff-learning-form-grid")).toBeTruthy();
+
+    // First step: Source
+    expect(container.textContent).toContain("Step 1: Source");
+    // Set the suggested decision to durable_memory (enum value, not label)
+    setControlValue(getLabeledControl(manualScope!, "Suggested path"), "durable_memory");
+    setControlValue(getLabeledControl(manualScope!, "Source note"), "handoff-42");
+
+    // Navigate to Step 2: Summary
+    const nextButton = getButtonByText(manualScope!, "Next");
+    await act(async () => {
+      nextButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    await flushEffects();
+    manualScope = getManualFormScope();
+
+    // Step 2: Summary
+    expect(container.textContent).toContain("Step 2: Summary");
+    setControlValue(getLabeledControl(manualScope!, "Summary"), "Manual billing exception review");
+
+    // Navigate to Step 3: Explanation
+    const nextButton2 = getButtonByText(manualScope!, "Next");
+    await act(async () => {
+      nextButton2?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    await flushEffects();
+    manualScope = getManualFormScope();
+
+    // Step 3: Explanation
+    expect(container.textContent).toContain("Step 3: Explanation");
+    setControlValue(getLabeledControl(manualScope!, "Explanation"), "Operators want a durable billing exception memory.");
+
+    // Navigate to Step 4: Evidence
+    const nextButton3 = getButtonByText(manualScope!, "Next");
+    await act(async () => {
+      nextButton3?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    await flushEffects();
+    manualScope = getManualFormScope();
+
+    // Step 4: Evidence — memory fields should be visible since decision is durable_memory
+    expect(container.textContent).toContain("Step 4: Evidence");
+    setControlValue(getLabeledControl(manualScope!, "Memory title"), "Billing exception policy");
+    setControlValue(getLabeledControl(manualScope!, "Memory body"), "Persist the billing exception rule after operator confirmation.");
+    setControlValue(getLabeledControl(manualScope!, "Review date"), "2026-05-30T09:00:00Z");
+    setControlValue(getLabeledControl(manualScope!, "Review note"), "Review inferred durable billing truth before final retention.");
+
+    // Navigate to Step 5: Outcome
+    const nextButton4 = getButtonByText(manualScope!, "Next");
+    await act(async () => {
+      nextButton4?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    await flushEffects();
+    manualScope = getManualFormScope();
+
+    // Step 5: Review and submit
+    expect(container.textContent).toContain("Step 5: Review and submit");
+    expect(container.textContent).toContain("Manual billing exception review");
+
+    // Helper to find the submit button in the manual form
+    function findManualSubmitBtn(): HTMLButtonElement | null {
+      for (const form of Array.from(container.querySelectorAll("form"))) {
+        const btn = Array.from(form.querySelectorAll("button")).find(
+          (b) => b.textContent?.trim() === "Create learning review item"
+        );
+        if (btn) return btn as HTMLButtonElement;
+      }
+      return null;
+    }
+
+    const submitBtn = findManualSubmitBtn();
+    expect(submitBtn).toBeTruthy();
+    expect(submitBtn!.disabled).toBe(false);
+
+    // Dispatch submit on the manual form
+    const manualFormForm = submitBtn!.closest("form");
+    expect(manualFormForm).toBeTruthy();
 
     await act(async () => {
-      createForm?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+      manualFormForm!.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
     });
     await flushEffects();
 
@@ -460,16 +579,30 @@ describe("learning page", () => {
       }),
       proposed_skill: {},
     }));
+  });
 
-    const decisionForm = getFormByText("Decision path");
+  it("decides durable memory promotion with structured payloads", async () => {
+    await renderIntoDom(withAppContext({
+      path: "/learning?instanceId=instance_alpha&eventId=learning_suggested",
+      element: <LearningPage />,
+      session: adminSession,
+    }));
+    await flushEffects();
+
+    // --- Decision form ---
+    // The detail panel should be visible with the "Operator action" select
+    const decisionForm = getFormByText("Operator action");
     expect(decisionForm).toBeTruthy();
-    setControlValue(getLabeledControl(decisionForm!, "Decision path"), "durable_memory");
+
+    // Set decision to durable memory via the select (enum value)
+    setControlValue(getLabeledControl(decisionForm!, "Operator action"), "durable_memory");
     setControlValue(getLabeledControl(decisionForm!, "Decision note"), "Promote after human review.");
     setControlValue(getLabeledControl(decisionForm!, "Visibility"), "restricted");
     setControlValue(getLabeledControl(decisionForm!, "Sensitivity"), "restricted");
     setControlValue(getLabeledControl(decisionForm!, "Memory title"), "Session boundary summary corrected");
     setControlValue(getLabeledControl(decisionForm!, "Memory body"), "Promote this session boundary into durable memory.");
 
+    // Submit without review date — should show validation error
     await act(async () => {
       decisionForm?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
     });
@@ -478,6 +611,7 @@ describe("learning page", () => {
     expect(decideLearningEventMock).not.toHaveBeenCalled();
     expect(container.textContent).toContain("Durable memory promoted from runtime-inferred or external-unverified trust requires a review date.");
 
+    // Fill review date and resubmit
     setControlValue(getLabeledControl(decisionForm!, "Review date"), "2026-05-31T09:00:00Z");
     setControlValue(getLabeledControl(decisionForm!, "Review note"), "Verify durable promotion after human review.");
 

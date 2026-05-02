@@ -4,7 +4,7 @@ import { useSearchParams } from "react-router-dom";
 import {
   type DashboardAttentionItem,
   type DashboardResponse,
-} from "../../api/admin";
+} from "../../api/domain";
 import { useDashboardQuery } from "../../api/adminQueries";
 import { CONTROL_PLANE_ROUTES } from "../../app/navigation";
 import { useAppSession } from "../../app/session";

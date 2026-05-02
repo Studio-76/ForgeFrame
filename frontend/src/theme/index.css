@@ -1,2 +1,46 @@
+/* ── ForgeFrame Design System ──
+ * Import order is intentional:
+ *   1. Design tokens (CSS custom properties)
+ *   2. Global reset and base typography
+ *   3. App shell layout
+ *   4. Utility classes (spacing, animations, etc.)
+ *   5. Reusable component styles
+ *   6. Page-specific styles
+ *
+ * Add new CSS files to the appropriate category below.
+ * Preserve the relative import order — later files can override earlier ones.
+ */
+
+/* Tokens — must be first so all files can use CSS custom properties */
 @import "./tokens.css";
-@import "../styles/theme.css";
+
+/* Core — global base, resets, and layout */
+@import "./reset.css";
+@import "./layout.css";
+@import "./utilities.css";
+
+/* Components — reusable UI patterns */
+@import "./components/navigation.css";
+@import "./components/cards.css";
+@import "./components/forms.css";
+@import "./components/tables.css";
+@import "./components/overlay.css";
+
+/* Pages — feature-specific styles (order: general → specific) */
+@import "./pages/login.css";
+@import "./pages/dashboard.css";
+@import "./pages/oauth.css";
+@import "./pages/queues.css";
+@import "./pages/providers.css";
+@import "./pages/approvals.css";
+@import "./pages/setup.css";
+@import "./pages/runtime.css";
+@import "./pages/instances.css";
+@import "./pages/execution.css";
+@import "./pages/release.css";
+@import "./pages/governance.css";
+@import "./pages/harness.css";
+@import "./pages/settings.css";
+@import "./pages/security.css";
+@import "./pages/learning.css";
+@import "./pages/memory.css";

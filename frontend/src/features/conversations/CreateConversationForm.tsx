@@ -6,7 +6,7 @@ import type {
   ConversationMessageRole,
   TriageStatus,
   WorkItemPriority,
-} from "../../api/admin";
+} from "../../api/domain";
 import {
   MESSAGE_ROLE_OPTIONS,
   PRIORITY_OPTIONS,

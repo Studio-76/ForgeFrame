@@ -44,7 +44,7 @@ vi.mock("../src/api/admin/instances", async () => {
   };
 });
 
-import type { AdminSessionUser, InstanceRecord, RoutingControlPlaneResponse, UsageSummaryResponse } from "../src/api/admin";
+import type { AdminSessionUser, InstanceRecord, RoutingControlPlaneResponse, UsageSummaryResponse } from "../src/api/domain";
 import { CostsPage } from "../src/pages/CostsPage";
 import { withAppContext } from "./testContext";
 

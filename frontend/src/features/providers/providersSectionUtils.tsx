@@ -8,7 +8,7 @@ import type {
   ProviderClassKey,
   ProviderCatalogEntry,
   ProviderCapabilityEvidenceRecord,
-} from "../../api/admin";
+} from "../../api/domain";
 import type { HarnessDraft, ProvidersActionFeedback, ProvidersPageData } from "./providersShared";
 import { asRecord, formatTimestamp, formatMetric, joinList, toStringValue } from "./providersShared";
 

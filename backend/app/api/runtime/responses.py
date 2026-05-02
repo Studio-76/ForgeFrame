@@ -289,6 +289,43 @@ def create_response(
     governance: GovernanceService = Depends(get_governance_service),
     _runtime_actor: RequestActor | None = Depends(require_runtime_permission("runtime.responses.write")),
 ) -> object:
+    """
+    Create a response via the /v1/responses endpoint.
+
+    Validates and normalizes the request, authorizes model access, resolves
+    runtime files, and dispatches to the appropriate provider. Supports both
+    streaming (SSE) and non-streaming modes, as well as background queuing.
+
+    :param payload: Responses request payload
+    :type payload: ResponsesRequest
+    :param request: Incoming HTTP request
+    :type request: Request
+    :param registry: Model registry
+    :type registry: ModelRegistry
+    :param dispatch: Dispatch service for provider routing
+    :type dispatch: DispatchService
+    :param routing: Routing service
+    :type routing: RoutingService
+    :param responses: Responses service for normalization and persistence
+    :type responses: ResponsesService
+    :param runtime_files: Runtime files service for input file resolution
+    :type runtime_files: RuntimeFilesService
+    :param settings: Application settings
+    :type settings: Settings
+    :param gateway_identity: Authenticated gateway identity, if any
+    :type gateway_identity: RuntimeGatewayIdentity | None
+    :param request_path_decision: Request-path routing decision, if any
+    :type request_path_decision: RuntimeRequestPathDecision | None
+    :param governance: Governance service for authorization
+    :type governance: GovernanceService
+    :param _runtime_actor: Injected runtime permission dependency
+    :type _runtime_actor: RequestActor | None
+    :return: Response object or streaming SSE response
+    :rtype: object
+    :raises ResponsesRequestValidationError: If request validation fails
+    :raises RuntimeAuthorizationError: If model access is denied
+    :raises RuntimeFileResolutionError: If file resolution fails
+    """
     try:
         normalized_request = responses.normalize_request(payload)
     except ResponsesRequestValidationError as exc:
@@ -1115,6 +1152,23 @@ def get_response(
     gateway_identity: RuntimeGatewayIdentity | None = Depends(get_runtime_gateway_identity),
     _runtime_actor: RequestActor | None = Depends(require_runtime_permission("runtime.responses.read")),
 ) -> object:
+    """
+    Retrieve a previously created response by ID.
+
+    :param response_id: Response identifier
+    :type response_id: str
+    :param settings: Application settings
+    :type settings: Settings
+    :param responses: Responses service
+    :type responses: ResponsesService
+    :param gateway_identity: Authenticated gateway identity, if any
+    :type gateway_identity: RuntimeGatewayIdentity | None
+    :param _runtime_actor: Injected runtime permission dependency
+    :type _runtime_actor: RequestActor | None
+    :return: Response object
+    :rtype: object
+    :raises ResponseNotFoundError: If response ID does not exist
+    """
     company_id = _runtime_company_id(
         gateway_identity=gateway_identity,
         settings=settings,
@@ -1134,6 +1188,23 @@ def get_response_input_items(
     gateway_identity: RuntimeGatewayIdentity | None = Depends(get_runtime_gateway_identity),
     _runtime_actor: RequestActor | None = Depends(require_runtime_permission("runtime.responses.read")),
 ) -> object:
+    """
+    Retrieve the input items associated with a previously created response.
+
+    :param response_id: Response identifier
+    :type response_id: str
+    :param settings: Application settings
+    :type settings: Settings
+    :param responses: Responses service
+    :type responses: ResponsesService
+    :param gateway_identity: Authenticated gateway identity, if any
+    :type gateway_identity: RuntimeGatewayIdentity | None
+    :param _runtime_actor: Injected runtime permission dependency
+    :type _runtime_actor: RequestActor | None
+    :return: Response input items
+    :rtype: object
+    :raises ResponseNotFoundError: If response ID does not exist
+    """
     company_id = _runtime_company_id(
         gateway_identity=gateway_identity,
         settings=settings,
@@ -1153,6 +1224,23 @@ def get_response_native_projection(
     gateway_identity: RuntimeGatewayIdentity | None = Depends(get_runtime_gateway_identity),
     _runtime_actor: RequestActor | None = Depends(require_runtime_permission("runtime.responses.read")),
 ) -> object:
+    """
+    Retrieve the native provider projection for a previously created response.
+
+    :param response_id: Response identifier
+    :type response_id: str
+    :param settings: Application settings
+    :type settings: Settings
+    :param responses: Responses service
+    :type responses: ResponsesService
+    :param gateway_identity: Authenticated gateway identity, if any
+    :type gateway_identity: RuntimeGatewayIdentity | None
+    :param _runtime_actor: Injected runtime permission dependency
+    :type _runtime_actor: RequestActor | None
+    :return: Native provider projection
+    :rtype: object
+    :raises ResponseNotFoundError: If response ID does not exist
+    """
     company_id = _runtime_company_id(
         gateway_identity=gateway_identity,
         settings=settings,

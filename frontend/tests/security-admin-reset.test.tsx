@@ -6,7 +6,7 @@ import {
   buildAdminPasswordResetPayload,
   createEmptyAdminPasswordResetDraft,
 } from "../src/features/security/AdminPasswordResetForm";
-import type { AdminPasswordRotationPayload, AdminUser } from "../src/api/admin";
+import type { AdminPasswordRotationPayload, AdminUser } from "../src/api/domain";
 
 function createUser(): AdminUser {
   return {

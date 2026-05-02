@@ -21,6 +21,18 @@ def list_provider_targets(
     instance: InstanceRecord = Depends(resolve_admin_instance_scope),
     service: ControlPlaneService = Depends(get_control_plane_service),
 ) -> Any:
+    """
+    List all provider targets with summary statistics for the current instance.
+
+    :param _admin: Injected authentication/admin permission dependency
+    :type _admin: AuthenticatedAdmin
+    :param instance: Resolved instance scope
+    :type instance: InstanceRecord
+    :param service: Control plane service
+    :type service: ControlPlaneService
+    :return: Dictionary with status, instance data, targets, and summary statistics
+    :rtype: Any
+    """
     targets = service.provider_target_snapshot()
     return {
         "status": "ok",
@@ -43,6 +55,21 @@ def update_provider_target(
     _admin: AuthenticatedAdmin = Depends(require_admin_instance_permission("provider_targets.write", allow_impersonation=False)),
     service: ControlPlaneService = Depends(get_control_plane_service),
 ) -> Any:
+    """
+    Update a provider target identified by its key.
+
+    :param target_key: Provider target key (path parameter)
+    :type target_key: str
+    :param payload: Provider target update request data
+    :type payload: ProviderTargetUpdateRequest
+    :param _admin: Injected authentication/admin permission dependency
+    :type _admin: AuthenticatedAdmin
+    :param service: Control plane service
+    :type service: ControlPlaneService
+    :return: Dictionary with status and updated target data
+    :rtype: Any
+    :raises ValueError: If the target is not managed or the update is invalid
+    """
     try:
         target = service.update_provider_target(target_key, payload)
     except ValueError as exc:

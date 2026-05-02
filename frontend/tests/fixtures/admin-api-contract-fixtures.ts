@@ -1,4 +1,4 @@
-import type { AdminSessionUser } from "../../src/api/admin";
+import type { AdminSessionUser } from "../../src/api/domain";
 
 /**
  * Canonical admin session fixture aligned with backend /admin/auth/me payload.

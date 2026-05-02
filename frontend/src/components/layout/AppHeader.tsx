@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 
-import type { AdminSessionUser } from "../../api/admin";
+import type { AdminSessionUser } from "../../api/domain";
 import type { NavigationSection } from "../../app/navigation";
 import { CONTROL_PLANE_ROUTES, findNavigationMatch } from "../../app/navigation";
 import { withQueryParams } from "../../app/tenantScope";

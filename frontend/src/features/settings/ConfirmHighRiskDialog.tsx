@@ -1,7 +1,7 @@
 import { useState } from "react";
 
-import type { MutableSettingEntry } from "../../api/admin";
-import { formatSettingValue, formatTimestamp, riskTone } from "./utils";
+import type { MutableSettingEntry } from "../../api/domain";
+import { formatBooleanLabel, formatSettingValue, formatTimestamp, riskTone, showRiskBadge } from "./utils";
 
 /**
  * Props for the ConfirmHighRiskDialog component.
@@ -22,9 +22,9 @@ export interface ConfirmHighRiskDialogProps {
 /**
  * Confirmation dialog for high-risk setting changes.
  *
- * Shows the setting name, current and new values, risk level,
- * and a caution message. Requires the user to acknowledge the
- * risk before the confirm button becomes active.
+ * Shows the setting name, current and target values, risk level,
+ * and operational impact in clear terms. Requires explicit acknowledgment
+ * before the confirm button becomes active.
  */
 export function ConfirmHighRiskDialog({
   visible,
@@ -42,6 +42,21 @@ export function ConfirmHighRiskDialog({
   const isSave = action === "save";
   const title = isSave ? "Confirm override" : "Confirm reset";
   const actionLabel = isSave ? "Apply override" : "Reset to default";
+
+  /** Human-readable current value. */
+  const currentValueReadable = item.value_type === "bool"
+    ? formatBooleanLabel(item.effective_value)
+    : formatSettingValue(item.effective_value);
+
+  /** Human-readable default value. */
+  const defaultValueReadable = item.value_type === "bool"
+    ? formatBooleanLabel(item.default_value)
+    : formatSettingValue(item.default_value);
+
+  /** Draft value (for save actions). */
+  const draftValueReadable = item.value_type === "bool"
+    ? formatBooleanLabel(item.effective_value)
+    : "";
 
   return (
     <div className="ff-dialog-underlay" onClick={onCancel} role="presentation">
@@ -64,8 +79,19 @@ export function ConfirmHighRiskDialog({
           <dl className="ff-settings-meta-list">
             <div>
               <dt>Current value</dt>
-              <dd>{formatSettingValue(item.effective_value)}</dd>
+              <dd className="ff-settings-confirm-value">{currentValueReadable}</dd>
             </div>
+            {isSave ? (
+              <div>
+                <dt>New value</dt>
+                <dd className="ff-settings-confirm-value">{draftValueReadable || "Changed"}</dd>
+              </div>
+            ) : (
+              <div>
+                <dt>Will reset to</dt>
+                <dd className="ff-settings-confirm-value">{defaultValueReadable}</dd>
+              </div>
+            )}
             <div>
               <dt>Source</dt>
               <dd>{item.source_label}</dd>
@@ -77,14 +103,21 @@ export function ConfirmHighRiskDialog({
           </dl>
 
           <div className="ff-settings-warning-block" data-tone="danger">
-            <strong>Risk: {item.risk_label}</strong>
+            <strong>Operational impact: {item.risk_label}</strong>
             <p>
               {item.risk_note || "This is a high-risk setting. Changing it may affect system behavior, security posture, or operational stability."}
             </p>
             {isSave ? (
-              <p>Saving will create a persisted override for this setting.</p>
+              <p>
+                Saving will create a persisted override. The new value will take effect
+                according to the setting's lifecycle — some changes apply immediately,
+                others may require a restart.
+              </p>
             ) : (
-              <p>Resetting will remove the override and restore the environment default.</p>
+              <p>
+                Resetting will remove the active override and restore the environment default.
+                The previous override value will be lost.
+              </p>
             )}
           </div>
 
@@ -95,7 +128,7 @@ export function ConfirmHighRiskDialog({
               onChange={(event) => setAcknowledged(event.target.checked)}
               aria-label="I understand the risk of changing this setting"
             />
-            <span>I understand the risk and want to proceed</span>
+            <span>I understand the operational impact and want to proceed</span>
           </label>
         </div>
 

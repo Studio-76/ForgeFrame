@@ -38,8 +38,8 @@ const {
   updateAdminUserMock: vi.fn(),
 }));
 
-vi.mock("../src/api/admin", async () => {
-  const actual = await vi.importActual<typeof import("../src/api/admin")>("../src/api/admin");
+vi.mock("../src/api/domain", async () => {
+  const actual = await vi.importActual<typeof import("../src/api/domain")>("../src/api/domain");
   return {
     ...actual,
     approveElevatedAccessRequest: approveElevatedAccessRequestMock,
@@ -68,7 +68,7 @@ import type {
   ElevatedAccessRequest,
   InstanceRecord,
   SecurityBootstrapResponse,
-} from "../src/api/admin";
+} from "../src/api/domain";
 import { SecurityPage } from "../src/pages/SecurityPage";
 import { withAppContext } from "./testContext";
 
@@ -572,8 +572,14 @@ describe("Security page security center", () => {
     expect(fetchElevatedAccessRequestsMock).toHaveBeenCalledTimes(1);
     expect(fetchAdminUsersMock).not.toHaveBeenCalled();
     expect(fetchAdminSessionsMock).not.toHaveBeenCalled();
-    expect(container.textContent).toContain("Critical security blockers");
-    expect(container.textContent).toContain("Admin Users (Restricted)");
+    // Posture summary should show attention state with active blockers
+    expect(container.textContent).toContain("Attention required");
+    // Checklist should show active blockers (mapped from API)
+    expect(container.textContent).toContain("Missing provider secrets");
+    expect(container.textContent).toContain("Secret rotation evidence");
+    // Tab labels still shown with restriction indicator
+    expect(container.textContent).toContain("Admin Users");
+    expect(container.textContent).toContain("Restricted");
 
     await clickButton("Elevated Access");
     await flushEffects();

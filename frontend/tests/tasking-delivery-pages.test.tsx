@@ -137,7 +137,7 @@ import type {
   ReminderSummary,
   TaskDetail,
   TaskSummary,
-} from "../src/api/admin";
+} from "../src/api/domain";
 import { AutomationsPage } from "../src/pages/AutomationsPage";
 import { ChannelsPage } from "../src/pages/ChannelsPage";
 import { NotificationsPage } from "../src/pages/NotificationsPage";

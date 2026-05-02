@@ -127,12 +127,27 @@ def _mount_frontend(app: FastAPI, dist_path: Path) -> None:
 
     @app.get("/", include_in_schema=False, response_model=None)
     def frontend_root() -> Response:  # pragma: no cover - simple static route
+        """
+        Serve the frontend SPA at the root path.
+
+        :return: The frontend index.html as a FileResponse or fallback HTML
+        :rtype: Response
+        """
         return render_frontend()
 
     @app.get("/{full_path:path}", include_in_schema=False, response_model=None)
     def frontend_app(
         full_path: str,
     ) -> Response:  # pragma: no cover - simple static route
+        """
+        Serve the frontend SPA for all non-API paths (catch-all route).
+
+        :param full_path: The requested URL path
+        :type full_path: str
+        :return: The frontend index.html as a FileResponse or fallback HTML
+        :rtype: Response
+        :raises HTTPException: If the path matches an API or known backend route (returns 404)
+        """
         if full_path == "health" or full_path.startswith("v1/") or full_path.startswith("admin/") or full_path.startswith(".well-known/"):
             raise HTTPException(status_code=404, detail="not_found")
         return render_frontend()

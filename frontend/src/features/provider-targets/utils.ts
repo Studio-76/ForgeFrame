@@ -3,6 +3,9 @@ import type { CapabilityFilter, PrimaryTargetStatus, ProviderTargetRecord, Readi
 
 /**
  * Derive the primary status for a provider target.
+ *
+ * Priority order: disabled → blocked (provider/model) → needs-health-check
+ * → runtime-ready → degraded → bridge-only → unsupported → partial → blocked (readiness)
  */
 export function contractStatusForTarget(target: ProviderTargetRecord): PrimaryTargetStatus {
   if (!target.enabled) {
@@ -12,7 +15,17 @@ export function contractStatusForTarget(target: ProviderTargetRecord): PrimaryTa
     return "blocked";
   }
 
-  const readiness = target.readiness_status.trim().toLowerCase();
+  const readiness = (target.readiness_status ?? "").trim().toLowerCase();
+  const noProbeRecorded = !target.last_probe_at;
+  const healthUnknown = target.health_status === "unknown" || target.health_status === "not_recorded" || !target.health_status;
+
+  /* Needs health check: enabled, provider/model active, but no live probe data.
+     This is the typical "ForgeFrame baseline" state — the target exists but has
+     never been probed or its health is unknown. */
+  if (noProbeRecorded || healthUnknown) {
+    return "needs-health-check";
+  }
+
   if (readiness === "runtime-ready") {
     return "runtime-ready";
   }
@@ -38,10 +51,8 @@ export function contractStatusForTarget(target: ProviderTargetRecord): PrimaryTa
     if (!target.runtime_ready) {
       return "partial";
     }
-    if (target.health_status !== "healthy" || target.availability_status !== "healthy") {
-      return "degraded";
-    }
-    return "ready";
+    /* Runtime-ready with failing health/availability = degraded */
+    return "degraded";
   }
 
   return target.runtime_ready ? "partial" : "blocked";
@@ -52,10 +63,26 @@ export function contractStatusForTarget(target: ProviderTargetRecord): PrimaryTa
  */
 export function statusLabelForTarget(target: ProviderTargetRecord): string {
   const status = contractStatusForTarget(target);
-  if (status === "runtime-ready") {
-    return "Runtime ready";
+  switch (status) {
+    case "runtime-ready":
+      return "Ready";
+    case "needs-health-check":
+      return "Needs health check";
+    case "disabled":
+      return "Disabled";
+    case "blocked":
+      return "Blocked";
+    case "partial":
+      return "Partial";
+    case "degraded":
+      return "Degraded";
+    case "bridge-only":
+      return "Bridge only";
+    case "unsupported":
+      return "Unsupported";
+    default:
+      return titleCase(status);
   }
-  return titleCase(status);
 }
 
 /**
@@ -66,6 +93,7 @@ export function toneForTargetStatus(status: PrimaryTargetStatus): StatusTone {
     case "runtime-ready":
     case "ready":
       return "success";
+    case "needs-health-check":
     case "partial":
     case "degraded":
     case "bridge-only":
@@ -89,6 +117,9 @@ export function nextActionForTarget(target: ProviderTargetRecord): TargetNextAct
     case "runtime-ready":
     case "ready":
       return { label: "No action needed", kind: "none" };
+
+    case "needs-health-check":
+      return { label: "Run provider health check", kind: "health-check" };
 
     case "disabled":
       if (!target.provider_enabled) {
@@ -143,6 +174,14 @@ export function reasonForTargetStatus(target: ProviderTargetRecord): string {
   if (status === "ready") {
     return "Target is enabled and healthy but lacks runtime proof.";
   }
+  if (status === "needs-health-check") {
+    if (!target.last_probe_at) {
+      return "No live probe recorded — provider health status unknown.";
+    }
+    return target.health_status === "unknown"
+      ? "Provider health status has not been reported."
+      : "Target is configured but has no recent health evidence.";
+  }
 
   if (target.status_reason) {
     return target.status_reason;
@@ -155,8 +194,17 @@ export function reasonForTargetStatus(target: ProviderTargetRecord): string {
     case "disabled":
       return "Target is disabled and cannot receive traffic.";
     case "blocked":
+      if (!target.provider_enabled) {
+        return "Provider is not enabled — activate it in the provider control plane.";
+      }
+      if (!target.model_active) {
+        return "Associated model is not active — activate it in the model register.";
+      }
       return "Target is blocked by provider or model state.";
     case "partial":
+      if (!target.runtime_ready) {
+        return "Runtime readiness is not confirmed — enable runtime paths for this model.";
+      }
       return "Target is missing some requirements for full runtime readiness.";
     case "degraded":
       return "Target is operational but degraded.";
@@ -349,11 +397,15 @@ export function computeReadinessSummary(targets: ProviderTargetRecord[]): Readin
     primaryBlocker = "No targets are enabled";
     nextAction = "Enable at least one target";
   } else if (runtimeReadyCount === 0) {
+    const needsHealthCheck = targets.filter((t) => contractStatusForTarget(t) === "needs-health-check");
     const blocked = targets.filter((t) => contractStatusForTarget(t) === "blocked");
     const partial = targets.filter((t) => contractStatusForTarget(t) === "partial");
     const degraded = targets.filter((t) => contractStatusForTarget(t) === "degraded");
 
-    if (blocked.length > 0) {
+    if (needsHealthCheck.length > 0) {
+      primaryBlocker = `${needsHealthCheck.length} target(s) need health checks`;
+      nextAction = `Run provider health check for ${needsHealthCheck[0]?.label ?? "first unprobed target"}`;
+    } else if (blocked.length > 0) {
       primaryBlocker = `${blocked.length} target(s) blocked`;
       nextAction = "Run provider health check or enable provider/model";
     } else if (partial.length > 0) {

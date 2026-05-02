@@ -31,7 +31,7 @@ vi.mock("../src/api/admin/instances", async () => {
   };
 });
 
-import type { AdminSessionUser } from "../src/api/admin";
+import type { AdminSessionUser } from "../src/api/domain";
 import { DispatchPage } from "../src/pages/DispatchPage";
 import { withAppContext } from "./testContext";
 

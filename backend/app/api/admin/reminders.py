@@ -31,6 +31,22 @@ def list_reminders(
     instance: InstanceRecord = Depends(resolve_admin_instance_scope),
     service: TaskAutomationAdminService = Depends(get_task_automation_admin_service),
 ) -> dict[str, object]:
+    """
+    List reminders for the current instance, optionally filtered by status.
+
+    :param status_filter: Optional status value to filter reminders by
+    :type status_filter: str | None
+    :param limit: Maximum number of reminders to return (default 100)
+    :type limit: int
+    :param _admin: Injected authentication/admin dependency
+    :type _admin: AuthenticatedAdmin
+    :param instance: Resolved instance scope
+    :type instance: InstanceRecord
+    :param service: Task automation admin service
+    :type service: TaskAutomationAdminService
+    :return: Dictionary with status, instance data, and list of reminders
+    :rtype: dict[str, object]
+    """
     reminders = service.list_reminders(instance=instance, status=status_filter, limit=limit)
     return {
         "status": "ok",
@@ -46,6 +62,21 @@ def get_reminder(
     instance: InstanceRecord = Depends(resolve_admin_instance_scope),
     service: TaskAutomationAdminService = Depends(get_task_automation_admin_service),
 ) -> object:
+    """
+    Retrieve a single reminder by its ID.
+
+    :param reminder_id: Unique identifier of the reminder
+    :type reminder_id: str
+    :param _admin: Injected authentication/admin dependency
+    :type _admin: AuthenticatedAdmin
+    :param instance: Resolved instance scope
+    :type instance: InstanceRecord
+    :param service: Task automation admin service
+    :type service: TaskAutomationAdminService
+    :return: Dictionary with status and reminder data
+    :rtype: object
+    :raises ValueError: If the reminder is not found (returns 404 error response)
+    """
     try:
         reminder = service.get_reminder(instance=instance, reminder_id=reminder_id)
     except ValueError as exc:
@@ -60,6 +91,21 @@ def create_reminder(
     instance: InstanceRecord = Depends(resolve_admin_instance_scope),
     service: TaskAutomationAdminService = Depends(get_task_automation_admin_service),
 ) -> object:
+    """
+    Create a new reminder within the current instance scope.
+
+    :param payload: Reminder creation request data
+    :type payload: CreateReminder
+    :param _admin: Injected authentication/admin dependency
+    :type _admin: AuthenticatedAdmin
+    :param instance: Resolved instance scope
+    :type instance: InstanceRecord
+    :param service: Task automation admin service
+    :type service: TaskAutomationAdminService
+    :return: Dictionary with status and created reminder data
+    :rtype: object
+    :raises ValueError: If the reminder conflicts with an existing one or is invalid
+    """
     try:
         reminder = service.create_reminder(instance=instance, payload=payload)
     except ValueError as exc:
@@ -77,6 +123,23 @@ def update_reminder(
     instance: InstanceRecord = Depends(resolve_admin_instance_scope),
     service: TaskAutomationAdminService = Depends(get_task_automation_admin_service),
 ) -> object:
+    """
+    Update an existing reminder identified by its ID.
+
+    :param reminder_id: Unique identifier of the reminder to update
+    :type reminder_id: str
+    :param payload: Reminder update request data
+    :type payload: UpdateReminder
+    :param _admin: Injected authentication/admin dependency
+    :type _admin: AuthenticatedAdmin
+    :param instance: Resolved instance scope
+    :type instance: InstanceRecord
+    :param service: Task automation admin service
+    :type service: TaskAutomationAdminService
+    :return: Dictionary with status and updated reminder data
+    :rtype: object
+    :raises ValueError: If the reminder is not found or the update is invalid
+    """
     try:
         reminder = service.update_reminder(instance=instance, reminder_id=reminder_id, payload=payload)
     except ValueError as exc:

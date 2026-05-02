@@ -20,7 +20,7 @@ import {
   type RoutingPolicyRecord,
   type RuntimeKey,
   type RuntimeKeyFirstSuccessProbeRecord,
-} from "../../api/admin";
+} from "../../api/domain";
 import { CONTROL_PLANE_ROUTES } from "../../app/navigation";
 import { useAppSession } from "../../app/session";
 import { getInstanceIdFromSearchParams } from "../../app/tenantScope";

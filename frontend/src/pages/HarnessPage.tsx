@@ -8,7 +8,7 @@ import { InstanceScopeCard } from "../components/InstanceScopeCard";
 import { PageIntro } from "../components/PageIntro";
 import { ActionBar } from "../components/ui/ActionBar";
 import { BlockedState } from "../components/ui/StateBlocks";
-import { HarnessControlSection } from "../features/providers/ProvidersSections";
+import { HarnessControlSection } from "../features/harness";
 import { getProvidersAccess } from "../features/providers/providersShared";
 import { useProvidersControlPlane } from "../features/providers/useProvidersControlPlane";
 

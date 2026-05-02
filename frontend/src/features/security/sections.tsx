@@ -14,7 +14,7 @@ import type {
   SecurityCredentialPolicy,
   SecurityRotationEvent,
   SecuritySecretPosture,
-} from "../../api/admin";
+} from "../../api/domain";
 import {
   formatApprovalStatus,
   formatApprovalType,
@@ -74,6 +74,25 @@ export type AdminUserScopeDraft = {
   status: "active" | "disabled";
 };
 
+/**
+ * A single item in the prioritized remediation checklist.
+ */
+export type RemediationItem = {
+  id: string;
+  label: string;
+  summary: string;
+  detail: string;
+  whyMatters: string;
+  requiredFix: string;
+  severity: "danger" | "warning" | "success" | "neutral";
+  active: boolean;
+  count?: number;
+  actionLabel: string;
+  actionTab?: SecurityTabId;
+};
+
+export type OverallSecurityState = "secure" | "attention" | "recovery";
+
 export const SECURITY_TABS: Array<{
   id: SecurityTabId;
   label: string;
@@ -115,6 +134,213 @@ function KeyValueList({ items }: { items: Array<{ label: string; value: string }
           <span className="fg-section-label">{item.label}</span>
           <p>{item.value}</p>
         </article>
+      ))}
+    </div>
+  );
+}
+
+/**
+ * Top-level security posture summary — makes the overall state obvious in 5 seconds.
+ */
+export function SecurityPostureSummary({
+  overallState,
+  activeBlockerCount,
+  highestPriorityLabel,
+  recoveryLabel,
+  nextAction,
+}: {
+  overallState: OverallSecurityState;
+  activeBlockerCount: number;
+  highestPriorityLabel: string;
+  recoveryLabel: string | null;
+  nextAction: string;
+}) {
+  const stateMap: Record<OverallSecurityState, { label: string; tone: "success" | "warning" | "danger" }> = {
+    secure: { label: "Secure", tone: "success" },
+    attention: { label: "Attention required", tone: "warning" },
+    recovery: { label: "Recovery required", tone: "danger" },
+  };
+  const state = stateMap[overallState];
+  return (
+    <div className="ff-sec-hero" data-state={overallState}>
+      <div className="ff-sec-hero-left">
+        <span className="ff-sec-hero-status" data-tone={state.tone}>{state.label}</span>
+        {activeBlockerCount > 0 ? (
+          <>
+            <span className="ff-sec-hero-sep" />
+            <p className="ff-sec-hero-detail">
+              {activeBlockerCount} active blocker{activeBlockerCount !== 1 ? "s" : ""} &mdash; {highestPriorityLabel}
+            </p>
+          </>
+        ) : recoveryLabel ? (
+          <>
+            <span className="ff-sec-hero-sep" />
+            <p className="ff-sec-hero-detail">{recoveryLabel}</p>
+          </>
+        ) : (
+          <>
+            <span className="ff-sec-hero-sep" />
+            <p className="ff-sec-hero-detail">All checks passed</p>
+          </>
+        )}
+      </div>
+      <div className="ff-sec-hero-actions">
+        <span className="ff-status-hero-actions-hint">{nextAction}</span>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Prioritized remediation checklist — replaces the old blocker card grid.
+ */
+export function BlockersRemediationChecklist({
+  items,
+  selectedId,
+  onSelect,
+}: {
+  items: RemediationItem[];
+  selectedId: string | null;
+  onSelect: (id: string | null) => void;
+}) {
+  const activeItems = items.filter((item) => item.active);
+  const passedItems = items.filter((item) => !item.active);
+
+  return (
+    <div className="ff-sec-checklist">
+      {activeItems.map((item) => (
+        <div
+          key={item.id}
+          className={"ff-sec-checklist-item" + (selectedId === item.id ? " is-selected" : "")}
+          data-passed="false"
+          onClick={() => onSelect(selectedId === item.id ? null : item.id)}
+          onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onSelect(selectedId === item.id ? null : item.id); } }}
+          role="button"
+          tabIndex={0}
+          aria-expanded={selectedId === item.id}
+        >
+          <div className="ff-sec-checklist-left">
+            <span className="ff-sec-checklist-label">
+              {item.count !== undefined && item.count > 0 ? (
+                <span className="ff-sec-count" data-tone={item.severity}>{item.count}</span>
+              ) : null}
+              {item.label}
+            </span>
+            <span className="ff-sec-checklist-summary">{item.summary}</span>
+          </div>
+          <div className="ff-sec-checklist-badges">
+            <span className="fg-pill" data-tone={item.severity}>
+              {item.severity === "danger" ? "Critical" : item.severity === "warning" ? "Warning" : "Info"}
+            </span>
+          </div>
+          <div className="ff-sec-checklist-action">
+            <span className="fg-pill" data-tone="neutral">{item.actionLabel}</span>
+          </div>
+        </div>
+      ))}
+      {passedItems.length > 0 ? (
+        <details className="ff-sec-checklist-item" data-passed="true" style={{ display: "grid", gridTemplateColumns: "1fr" }}>
+          <summary className="ff-sec-checklist-label" style={{ cursor: "pointer", padding: "var(--fg-space-2) 0", fontWeight: 600, fontSize: "var(--fg-type-size-meta)", color: "var(--fg-color-text-secondary)" }}>
+            {passedItems.length} passed check{passedItems.length !== 1 ? "s" : ""}
+          </summary>
+          <div style={{ display: "grid", gap: "1px" }}>
+            {passedItems.map((item) => (
+              <div key={item.id} className="ff-sec-checklist-item" data-passed="true"
+                onClick={() => onSelect(selectedId === item.id ? null : item.id)}
+                onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onSelect(selectedId === item.id ? null : item.id); } }}
+                role="button"
+                tabIndex={0}
+                aria-expanded={selectedId === item.id}
+                style={{ borderTop: "1px solid var(--fg-color-border-default)" }}
+              >
+                <div className="ff-sec-checklist-left">
+                  <span className="ff-sec-checklist-label">{item.label}</span>
+                  <span className="ff-sec-checklist-summary">{item.summary}</span>
+                </div>
+                <div className="ff-sec-checklist-badges">
+                  <span className="fg-pill" data-tone="success">Clear</span>
+                </div>
+                <div className="ff-sec-checklist-action">
+                  <span className="fg-pill" data-tone="neutral">{item.actionLabel}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </details>
+      ) : null}
+    </div>
+  );
+}
+
+/**
+ * Detail panel shown when a blocker item is selected for deeper review.
+ */
+export function ActiveBlockerDetail({
+  item,
+  onDismiss,
+}: {
+  item: RemediationItem;
+  onDismiss: () => void;
+}) {
+  return (
+    <article className="ff-sec-detail">
+      <div className="ff-sec-detail-header">
+        <div>
+          <div className="ff-sec-detail-label">{item.label}</div>
+        </div>
+        <button className="fg-nav-link" onClick={onDismiss} type="button" aria-label="Dismiss detail">
+          Dismiss
+        </button>
+      </div>
+      <div className="ff-sec-detail-body">
+        <div className="ff-sec-detail-field">
+          <span className="ff-sec-detail-field-label">What is wrong</span>
+          <span className="ff-sec-detail-field-value">{item.detail}</span>
+        </div>
+        <div className="ff-sec-detail-field">
+          <span className="ff-sec-detail-field-label">Why it matters</span>
+          <span className="ff-sec-detail-field-value">{item.whyMatters}</span>
+        </div>
+        <div className="ff-sec-detail-field">
+          <span className="ff-sec-detail-field-label">Required fix</span>
+          <span className="ff-sec-detail-field-value">{item.requiredFix}</span>
+        </div>
+        <div className="ff-sec-detail-field">
+          <span className="ff-sec-detail-field-label">Next action</span>
+          <span className="ff-sec-detail-field-value">{item.actionLabel}</span>
+        </div>
+      </div>
+    </article>
+  );
+}
+
+/**
+ * Compact related-pages strip — replaces the old "Security control planes" heading.
+ */
+export function RelatedPagesStrip({
+  activeTab,
+  canViewAdminTabs,
+  onSelectTab,
+}: {
+  activeTab: SecurityTabId;
+  canViewAdminTabs: boolean;
+  onSelectTab: (tab: SecurityTabId) => void;
+}) {
+  return (
+    <div className="ff-sec-related">
+      <span className="ff-sec-related-label">Sections</span>
+      {SECURITY_TABS.map((tab) => (
+        <button
+          key={tab.id}
+          className={"ff-sec-related-link" + (activeTab === tab.id ? " is-active" : "")}
+          aria-selected={activeTab === tab.id}
+          role="tab"
+          onClick={() => onSelectTab(tab.id)}
+          type="button"
+        >
+          {tab.label}
+          {tab.adminOnly && !canViewAdminTabs ? " (Restricted)" : ""}
+        </button>
       ))}
     </div>
   );
@@ -169,32 +395,19 @@ export function SecurityTabBar({
   onSelectTab: (tab: SecurityTabId) => void;
 }) {
   return (
-    <article className="fg-card">
-      <div className="fg-panel-heading">
-        <div>
-          <h3>Security control planes</h3>
-          <p className="fg-muted">
-            Split privileged identity, session, exception, secret, and policy work into separate operator surfaces.
-          </p>
-        </div>
-        <span className="fg-pill" data-tone={canViewAdminTabs ? "success" : "warning"}>
-          {canViewAdminTabs ? "Admin detail available" : "Operator view"}
-        </span>
-      </div>
-      <div className="fg-actions" aria-label="Security tabs" role="tablist">
-        {SECURITY_TABS.map((tab) => (
-          <Button
-            key={tab.id}
-            aria-selected={activeTab === tab.id}
-            role="tab"
-            onPress={() => onSelectTab(tab.id)}
-          >
-            {tab.label}
-            {tab.adminOnly && !canViewAdminTabs ? " (Restricted)" : ""}
-          </Button>
-        ))}
-      </div>
-    </article>
+    <div className="fg-actions" aria-label="Security tabs" role="tablist">
+      {SECURITY_TABS.map((tab) => (
+        <Button
+          key={tab.id}
+          aria-selected={activeTab === tab.id}
+          role="tab"
+          onPress={() => onSelectTab(tab.id)}
+        >
+          {tab.label}
+          {tab.adminOnly && !canViewAdminTabs ? " (Restricted)" : ""}
+        </Button>
+      ))}
+    </div>
   );
 }
 
@@ -219,144 +432,172 @@ export function SecurityPostureSection({
   const readyRequests = requests.filter((item) => item.ready_to_issue).length;
   const activeElevated = requests.filter((item) => item.session_status === "active").length;
   const forcedRotationUsers = users.filter((item) => item.must_rotate_password).length;
+  const activeSessions = sessions.filter((item) => item.active).length;
+  const breakGlassSessions = sessions.filter((item) => item.active && item.session_type === "break_glass").length;
+  const hasAbnormalPressure = forcedRotationUsers > 0 || breakGlassSessions > 0;
 
   return (
     <div className="fg-stack">
       <article className="fg-card">
         <div className="fg-panel-heading">
           <div>
-            <h3>30-second security readout</h3>
+            <h3>Security overview</h3>
             <p className="fg-muted">
-              Start with exception pressure, approver availability, and whether the bootstrap account or provider credentials still need remediation.
+              Exception pressure, approver availability, and credential remediation status.
             </p>
           </div>
-          {approverPosture ? (
-            <span className="fg-pill" data-tone={approverPosture.state === "recovery_required" ? "danger" : "success"}>
-              {approverPosture.label}
+          <span className="ff-sec-strip">
+            <span className="ff-sec-strip-item">
+              Open approvals: <span className="ff-sec-strip-value">{openRequests}</span>
             </span>
-          ) : null}
-        </div>
-        <div className="fg-card-grid">
-          <article className="fg-kpi">
-            <span className="fg-muted">Open approvals</span>
-            <strong className="fg-kpi-value">{openRequests}</strong>
-          </article>
-          <article className="fg-kpi">
-            <span className="fg-muted">Ready to start</span>
-            <strong className="fg-kpi-value">{readyRequests}</strong>
-          </article>
-          <article className="fg-kpi">
-            <span className="fg-muted">Active elevated sessions</span>
-            <strong className="fg-kpi-value">{activeElevated}</strong>
-          </article>
-          <article className="fg-kpi">
-            <span className="fg-muted">Forced password rotations</span>
-            <strong className="fg-kpi-value">{canViewAdminTabs ? forcedRotationUsers : "Restricted"}</strong>
-          </article>
+            <span className="ff-sec-strip-sep" />
+            <span className="ff-sec-strip-item">
+              Ready to start: <span className="ff-sec-strip-value">{readyRequests}</span>
+            </span>
+            <span className="ff-sec-strip-sep" />
+            <span className="ff-sec-strip-item">
+              Active elevated: <span className="ff-sec-strip-value">{activeElevated}</span>
+            </span>
+            {canViewAdminTabs ? (
+              <>
+                <span className="ff-sec-strip-sep" />
+                <span className="ff-sec-strip-item">
+                  Forced rotations: <span className="ff-sec-strip-value">{forcedRotationUsers}</span>
+                </span>
+              </>
+            ) : null}
+          </span>
         </div>
       </article>
 
-      <article className="fg-card">
-        <div className="fg-panel-heading">
-          <div>
-            <h3>Elevated-access posture</h3>
-            <p className="fg-muted">
-              Break-glass and impersonation are time-bounded exceptions. Approval and session start remain separate actions.
-            </p>
+      {approverPosture ? (
+        <article className="fg-card">
+          <div className="fg-panel-heading">
+            <div>
+              <h3>Elevated-access posture</h3>
+              <p className="fg-muted">
+                Break-glass and impersonation are time-bounded exceptions. Approval and session start remain separate actions.
+              </p>
+            </div>
+            <span className="fg-pill" data-tone={approverPosture.state === "recovery_required" ? "danger" : "success"}>
+              {approverPosture.eligible_admin_approver_count} eligibile approver{approverPosture.eligible_admin_approver_count !== 1 ? "s" : ""}
+            </span>
           </div>
-          <span className="fg-pill" data-tone={approverPosture?.state === "recovery_required" ? "danger" : "success"}>
-            {approverPosture?.eligible_admin_approver_count ?? 0} approvers
-          </span>
-        </div>
-        {approverPosture ? (
           <div className="fg-approval-banner" data-tone={approverPosture.state === "recovery_required" ? "danger" : "success"}>
             <strong>{approverPosture.primary_message}</strong>
             <p>{approverPosture.secondary_message}</p>
           </div>
-        ) : (
-          <p className="fg-muted">Approval posture is loading.</p>
-        )}
-        <KeyValueList
-          items={[
-            {
-              label: "Approval TTL",
-              value: credentialPolicy?.elevated_access_requests
-                ? `${credentialPolicy.elevated_access_requests.approval_ttl_minutes} minutes`
-                : "Not recorded",
-            },
-            {
-              label: "Break-glass max TTL",
-              value: credentialPolicy?.break_glass_sessions
-                ? `${credentialPolicy.break_glass_sessions.max_ttl_minutes} minutes`
-                : "Not recorded",
-            },
-            {
-              label: "Impersonation max TTL",
-              value: credentialPolicy?.impersonation_sessions
-                ? `${credentialPolicy.impersonation_sessions.max_ttl_minutes} minutes`
-                : "Not recorded",
-            },
-            {
-              label: "Impersonation write posture",
-              value: credentialPolicy?.impersonation_sessions
-                ? credentialPolicy.impersonation_sessions.read_only
-                  ? "Read-only"
-                  : "Writable"
-                : "Not recorded",
-            },
-          ]}
-        />
-      </article>
-
-      {bootstrap ? (
-        <article className="fg-card">
-          <div className="fg-panel-heading">
-            <div>
-              <h3>Bootstrap security baseline</h3>
-              <p className="fg-muted">
-                Bootstrap posture confirms whether the original admin secret and active control-plane sessions have been cleaned up.
-              </p>
-            </div>
-            <span className="fg-pill" data-tone={bootstrap.default_password_in_use ? "danger" : "success"}>
-              {bootstrap.default_password_in_use ? "Default password active" : "Bootstrap rotated"}
-            </span>
-          </div>
-          <KeyValueList
-            items={[
-              { label: "Bootstrap account", value: bootstrap.bootstrap_username },
-              { label: "Default password", value: bootstrap.default_password_in_use ? "Still in use" : "Rotated" },
-              { label: "Must rotate", value: bootstrap.must_rotate_password ? "Yes" : "No" },
-              { label: "Admin users", value: String(bootstrap.admin_user_count) },
-              { label: "Active sessions", value: String(bootstrap.active_session_count) },
-              { label: "Governance storage", value: bootstrap.governance_storage_backend },
-            ]}
-          />
         </article>
       ) : (
         <AccessBlockedCard
-          title="Bootstrap security baseline"
-          description="Bootstrap account, admin population, and global session posture stay reserved for admin sessions."
+          title="Elevated-access posture"
+          description="Approval posture is loading."
         />
       )}
 
-      {canViewAdminTabs ? (
-        <article className="fg-card">
-          <div className="fg-panel-heading">
-            <div>
-              <h3>Privileged identity pressure</h3>
-              <p className="fg-muted">
-                Admin user count, active sessions, and forced rotations show whether privileged access is bounded or drifting.
-              </p>
+      {bootstrap ? (
+        <article className="ff-sec-collapse">
+          <details>
+            <summary className="ff-sec-collapse-trigger">
+              <span>
+                Bootstrap baseline
+                <span className="fg-pill" style={{ marginLeft: "0.5rem" }} data-tone={bootstrap.default_password_in_use ? "danger" : "success"}>
+                  {bootstrap.default_password_in_use ? "Default password active" : "Bootstrap rotated"}
+                </span>
+              </span>
+            </summary>
+            <div className="ff-sec-collapse-body">
+              <KeyValueList
+                items={[
+                  { label: "Bootstrap account", value: bootstrap.bootstrap_username },
+                  { label: "Default password", value: bootstrap.default_password_in_use ? "Still in use" : "Rotated" },
+                  { label: "Must rotate", value: bootstrap.must_rotate_password ? "Yes" : "No" },
+                  { label: "Admin users", value: String(bootstrap.admin_user_count) },
+                  { label: "Active sessions", value: String(bootstrap.active_session_count) },
+                  { label: "Governance storage", value: bootstrap.governance_storage_backend },
+                ]}
+              />
             </div>
-          </div>
-          <KeyValueList
-            items={[
-              { label: "Admin users", value: String(users.length) },
-              { label: "Active sessions", value: String(sessions.filter((item) => item.active).length) },
-              { label: "Break-glass sessions", value: String(sessions.filter((item) => item.active && item.session_type === "break_glass").length) },
-              { label: "Password reset pressure", value: `${forcedRotationUsers} users must rotate` },
-            ]}
-          />
+          </details>
+        </article>
+      ) : null}
+
+      {canViewAdminTabs && (hasAbnormalPressure || users.length > 0) ? (
+        <article className="ff-sec-collapse">
+          <details>
+            <summary className="ff-sec-collapse-trigger">
+              <span>
+                Privileged identity pressure
+                {forcedRotationUsers > 0 ? (
+                  <span className="fg-pill" style={{ marginLeft: "0.5rem" }} data-tone="warning">{forcedRotationUsers} forced rotations</span>
+                ) : null}
+              </span>
+            </summary>
+            <div className="ff-sec-collapse-body">
+              <KeyValueList
+                items={[
+                  { label: "Admin users", value: String(users.length) },
+                  { label: "Active sessions", value: String(activeSessions) },
+                  { label: "Break-glass sessions", value: String(breakGlassSessions) },
+                  { label: "Password reset pressure", value: `${forcedRotationUsers} users must rotate` },
+                ]}
+              />
+            </div>
+          </details>
+        </article>
+      ) : null}
+
+      {credentialPolicy ? (
+        <article className="ff-sec-collapse">
+          <details>
+            <summary className="ff-sec-collapse-trigger">
+              Credential policy details &mdash; TTLs, impersonation limits, service account key rules
+            </summary>
+            <div className="ff-sec-collapse-body">
+              <article className="fg-card" style={{ border: "none", padding: 0, background: "transparent" }}>
+                <h4>Human sessions</h4>
+                <KeyValueList
+                  items={[
+                    { label: "TTL", value: `${credentialPolicy.human_sessions?.ttl_hours ?? "Not recorded"} hours` },
+                    { label: "Rotation trigger", value: String(credentialPolicy.human_sessions?.rotation_trigger ?? "Not recorded") },
+                  ]}
+                />
+              </article>
+              <article className="fg-card" style={{ border: "none", padding: 0, background: "transparent", marginTop: "var(--fg-space-3)" }}>
+                <h4>Exception session policies</h4>
+                <KeyValueList
+                  items={[
+                    {
+                      label: "Approval TTL",
+                      value: credentialPolicy.elevated_access_requests
+                        ? `${credentialPolicy.elevated_access_requests.approval_ttl_minutes} minutes`
+                        : "Not recorded",
+                    },
+                    {
+                      label: "Break-glass max TTL",
+                      value: credentialPolicy.break_glass_sessions
+                        ? `${credentialPolicy.break_glass_sessions.max_ttl_minutes} minutes`
+                        : "Not recorded",
+                    },
+                    {
+                      label: "Impersonation max TTL",
+                      value: credentialPolicy.impersonation_sessions
+                        ? `${credentialPolicy.impersonation_sessions.max_ttl_minutes} minutes`
+                        : "Not recorded",
+                    },
+                    {
+                      label: "Impersonation write posture",
+                      value: credentialPolicy.impersonation_sessions
+                        ? credentialPolicy.impersonation_sessions.read_only
+                          ? "Read-only"
+                          : "Writable"
+                        : "Not recorded",
+                    },
+                  ]}
+                />
+              </article>
+            </div>
+          </details>
         </article>
       ) : null}
     </div>

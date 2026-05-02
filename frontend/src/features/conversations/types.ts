@@ -4,7 +4,7 @@ import type {
   ConversationStatus,
   TriageStatus,
   WorkItemPriority,
-} from "../../api/admin";
+} from "../../api/domain";
 
 /** Load state for async operations. */
 export type LoadState = "idle" | "loading" | "success" | "error";
@@ -42,15 +42,15 @@ export type TimelineItem =
     kind: "message";
     sortAt: string;
     threadId: string;
-    message: import("../../api/admin").ConversationMessageRecord;
-    mentions: import("../../api/admin").ConversationDetail["mentions"];
-    events: import("../../api/admin").ConversationEventRecord[];
+    message: import("../../api/domain").ConversationMessageRecord;
+    mentions: import("../../api/domain").ConversationDetail["mentions"];
+    events: import("../../api/domain").ConversationEventRecord[];
   }
   | {
     kind: "event";
     sortAt: string;
     threadId: string;
-    event: import("../../api/admin").ConversationEventRecord;
+    event: import("../../api/domain").ConversationEventRecord;
   };
 
 /** Form state for creating a new conversation. */

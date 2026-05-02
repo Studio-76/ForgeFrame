@@ -55,15 +55,15 @@ vi.mock("../src/api/admin/instances", async () => {
   };
 });
 
-vi.mock("../src/api/admin", async () => {
-  const actual = await vi.importActual<typeof import("../src/api/admin")>("../src/api/admin");
+vi.mock("../src/api/domain", async () => {
+  const actual = await vi.importActual<typeof import("../src/api/domain")>("../src/api/domain");
   return {
     ...actual,
     fetchAuditHistory: fetchAuditHistoryMock,
   };
 });
 
-import type { AdminSessionUser, GatewayAccount, InstanceRecord, RuntimeKey } from "../src/api/admin";
+import type { AdminSessionUser, GatewayAccount, InstanceRecord, RuntimeKey } from "../src/api/domain";
 import { ApiKeysPage } from "../src/pages/ApiKeysPage";
 import { withAppContext } from "./testContext";
 

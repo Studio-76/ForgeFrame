@@ -1,7 +1,7 @@
 import { StatusBadge } from "../../components/ui/StatusBadge";
 import { AdvancedDiagnostics } from "../../components/ui/AdvancedDiagnostics";
 import { DetailPanel } from "../../components/ui/DetailPanel";
-import type { IngressTlsStatusResponse, IngressTlsRenewalResult } from "../../api/admin";
+import type { IngressTlsStatusResponse, IngressTlsRenewalResult } from "../../api/domain";
 import { formatTimestamp } from "./utils";
 import type { TlsSummary } from "./types";
 

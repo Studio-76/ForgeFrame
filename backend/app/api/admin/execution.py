@@ -91,6 +91,32 @@ def list_execution_runs(
     instance: InstanceRecord = Depends(require_admin_instance_scope),
     service: ExecutionAdminService = Depends(get_execution_admin_service),
 ) -> dict[str, object]:
+    """
+    List execution runs with optional filtering by state, lane, target, and other criteria.
+
+    :param state: Filter by run state
+    :type state: str | None
+    :param execution_lane: Filter by execution lane
+    :type execution_lane: str | None
+    :param target: Filter by target
+    :type target: str | None
+    :param approval_wait: Filter by approval-wait status
+    :type approval_wait: bool | None
+    :param has_error: Filter by error presence
+    :type has_error: bool | None
+    :param window: Time window filter
+    :type window: str | None
+    :param limit: Maximum number of runs to return
+    :type limit: int
+    :param _admin: Injected admin permission dependency
+    :type _admin: AuthenticatedAdmin
+    :param instance: Resolved instance record
+    :type instance: InstanceRecord
+    :param service: Execution admin service
+    :type service: ExecutionAdminService
+    :return: List of execution run records
+    :rtype: dict[str, object]
+    """
     runs = service.list_runs(
         instance=instance,
         state=state,
@@ -115,6 +141,28 @@ def list_execution_queues(
     instance: InstanceRecord = Depends(require_admin_instance_scope),
     service: ExecutionAdminService = Depends(get_execution_admin_service),
 ) -> dict[str, object]:
+    """
+    List execution queue lanes and their runs.
+
+    :param execution_lane: Filter by execution lane
+    :type execution_lane: str | None
+    :param state: Filter by run state
+    :type state: str | None
+    :param target: Filter by target
+    :type target: str | None
+    :param age: Filter by age
+    :type age: str | None
+    :param limit: Maximum number of runs to return
+    :type limit: int
+    :param _admin: Injected admin permission dependency
+    :type _admin: AuthenticatedAdmin
+    :param instance: Resolved instance record
+    :type instance: InstanceRecord
+    :param service: Execution admin service
+    :type service: ExecutionAdminService
+    :return: Queue lanes and runs
+    :rtype: dict[str, object]
+    """
     lanes, runs = service.list_queue_view(
         instance=instance,
         execution_lane=execution_lane,
@@ -136,6 +184,19 @@ def get_execution_dispatch(
     instance: InstanceRecord = Depends(require_admin_instance_scope),
     service: ExecutionAdminService = Depends(get_execution_admin_service),
 ) -> dict[str, object]:
+    """
+    Return a snapshot of the current dispatch state including stalled attempts,
+    leased attempts, and quarantined runs.
+
+    :param _admin: Injected admin permission dependency
+    :type _admin: AuthenticatedAdmin
+    :param instance: Resolved instance record
+    :type instance: InstanceRecord
+    :param service: Execution admin service
+    :type service: ExecutionAdminService
+    :return: Dispatch snapshot
+    :rtype: dict[str, object]
+    """
     snapshot = service.get_dispatch_snapshot(instance=instance)
     return {"status": "ok", "dispatch": snapshot.model_dump(mode="json")}
 
@@ -147,6 +208,21 @@ def execution_run_detail(
     instance: InstanceRecord = Depends(require_admin_instance_scope),
     service: ExecutionAdminService = Depends(get_execution_admin_service),
 ) -> object:
+    """
+    Get full detail for a single execution run.
+
+    :param run_id: Execution run identifier
+    :type run_id: str
+    :param _admin: Injected admin permission dependency
+    :type _admin: AuthenticatedAdmin
+    :param instance: Resolved instance record
+    :type instance: InstanceRecord
+    :param service: Execution admin service
+    :type service: ExecutionAdminService
+    :return: Full execution run detail
+    :rtype: object
+    :raises ValueError: If run is not found
+    """
     try:
         detail = service.get_run_detail(instance=instance, run_id=run_id)
     except ValueError as exc:
@@ -164,6 +240,32 @@ def replay_execution_run(
     execution: ExecutionAdminService = Depends(get_execution_admin_service),
     governance: GovernanceService = Depends(get_governance_service),
 ) -> object:
+    """
+    Replay an execution run with idempotency support.
+
+    Validates the request against the idempotency service, replays the run,
+    and records an audit event for the operation.
+
+    :param run_id: Execution run identifier to replay
+    :type run_id: str
+    :param payload: Replay request payload with reason
+    :type payload: RunReplayRequest
+    :param request: Incoming HTTP request
+    :type request: Request
+    :param admin: Authenticated admin with operate permission
+    :type admin: AuthenticatedAdmin
+    :param instance: Resolved instance record
+    :type instance: InstanceRecord
+    :param execution: Execution admin service
+    :type execution: ExecutionAdminService
+    :param governance: Governance service for audit recording
+    :type governance: GovernanceService
+    :return: Replay result with audit reference
+    :rtype: object
+    :raises RunNotFoundError: If run is not found
+    :raises RunTransitionConflictError: If run cannot be replayed due to state
+    :raises RunCommandIdempotencyConflictError: If idempotency key conflicts
+    """
     idempotency = RequestIdempotencyService(get_execution_session_factory())
     envelope = get_request_envelope(request)
     reservation = None
@@ -317,6 +419,24 @@ def pause_execution_run(
     execution: ExecutionAdminService = Depends(get_execution_admin_service),
     governance: GovernanceService = Depends(get_governance_service),
 ) -> object:
+    """
+    Pause an execution run. Delegates to the shared operator action flow.
+
+    :param run_id: Execution run identifier
+    :type run_id: str
+    :param payload: Operator action request with reason
+    :type payload: RunOperatorActionRequest
+    :param admin: Authenticated admin with operate permission
+    :type admin: AuthenticatedAdmin
+    :param instance: Resolved instance record
+    :type instance: InstanceRecord
+    :param execution: Execution admin service
+    :type execution: ExecutionAdminService
+    :param governance: Governance service for audit recording
+    :type governance: GovernanceService
+    :return: Operator action result
+    :rtype: object
+    """
     return _run_operator_action(
         run_id=run_id,
         payload=payload,
@@ -337,6 +457,24 @@ def resume_execution_run(
     execution: ExecutionAdminService = Depends(get_execution_admin_service),
     governance: GovernanceService = Depends(get_governance_service),
 ) -> object:
+    """
+    Resume a paused execution run. Delegates to the shared operator action flow.
+
+    :param run_id: Execution run identifier
+    :type run_id: str
+    :param payload: Operator action request with reason
+    :type payload: RunOperatorActionRequest
+    :param admin: Authenticated admin with operate permission
+    :type admin: AuthenticatedAdmin
+    :param instance: Resolved instance record
+    :type instance: InstanceRecord
+    :param execution: Execution admin service
+    :type execution: ExecutionAdminService
+    :param governance: Governance service for audit recording
+    :type governance: GovernanceService
+    :return: Operator action result
+    :rtype: object
+    """
     return _run_operator_action(
         run_id=run_id,
         payload=payload,
@@ -357,6 +495,24 @@ def interrupt_execution_run(
     execution: ExecutionAdminService = Depends(get_execution_admin_service),
     governance: GovernanceService = Depends(get_governance_service),
 ) -> object:
+    """
+    Interrupt an execution run. Delegates to the shared operator action flow.
+
+    :param run_id: Execution run identifier
+    :type run_id: str
+    :param payload: Operator action request with reason
+    :type payload: RunOperatorActionRequest
+    :param admin: Authenticated admin with operate permission
+    :type admin: AuthenticatedAdmin
+    :param instance: Resolved instance record
+    :type instance: InstanceRecord
+    :param execution: Execution admin service
+    :type execution: ExecutionAdminService
+    :param governance: Governance service for audit recording
+    :type governance: GovernanceService
+    :return: Operator action result
+    :rtype: object
+    """
     return _run_operator_action(
         run_id=run_id,
         payload=payload,
@@ -377,6 +533,24 @@ def quarantine_execution_run(
     execution: ExecutionAdminService = Depends(get_execution_admin_service),
     governance: GovernanceService = Depends(get_governance_service),
 ) -> object:
+    """
+    Quarantine an execution run. Delegates to the shared operator action flow.
+
+    :param run_id: Execution run identifier
+    :type run_id: str
+    :param payload: Operator action request with reason
+    :type payload: RunOperatorActionRequest
+    :param admin: Authenticated admin with operate permission
+    :type admin: AuthenticatedAdmin
+    :param instance: Resolved instance record
+    :type instance: InstanceRecord
+    :param execution: Execution admin service
+    :type execution: ExecutionAdminService
+    :param governance: Governance service for audit recording
+    :type governance: GovernanceService
+    :return: Operator action result
+    :rtype: object
+    """
     return _run_operator_action(
         run_id=run_id,
         payload=payload,
@@ -397,6 +571,24 @@ def restart_execution_run(
     execution: ExecutionAdminService = Depends(get_execution_admin_service),
     governance: GovernanceService = Depends(get_governance_service),
 ) -> object:
+    """
+    Restart an execution run. Delegates to the shared operator action flow.
+
+    :param run_id: Execution run identifier
+    :type run_id: str
+    :param payload: Operator action request with reason
+    :type payload: RunOperatorActionRequest
+    :param admin: Authenticated admin with operate permission
+    :type admin: AuthenticatedAdmin
+    :param instance: Resolved instance record
+    :type instance: InstanceRecord
+    :param execution: Execution admin service
+    :type execution: ExecutionAdminService
+    :param governance: Governance service for audit recording
+    :type governance: GovernanceService
+    :return: Operator action result
+    :rtype: object
+    """
     return _run_operator_action(
         run_id=run_id,
         payload=payload,
@@ -417,6 +609,24 @@ def escalate_execution_run(
     execution: ExecutionAdminService = Depends(get_execution_admin_service),
     governance: GovernanceService = Depends(get_governance_service),
 ) -> object:
+    """
+    Escalate an execution run. Delegates to the shared operator action flow.
+
+    :param run_id: Execution run identifier
+    :type run_id: str
+    :param payload: Operator action request with reason
+    :type payload: RunOperatorActionRequest
+    :param admin: Authenticated admin with operate permission
+    :type admin: AuthenticatedAdmin
+    :param instance: Resolved instance record
+    :type instance: InstanceRecord
+    :param execution: Execution admin service
+    :type execution: ExecutionAdminService
+    :param governance: Governance service for audit recording
+    :type governance: GovernanceService
+    :return: Operator action result
+    :rtype: object
+    """
     return _run_operator_action(
         run_id=run_id,
         payload=payload,
@@ -435,6 +645,22 @@ def reconcile_execution_leases(
     execution: ExecutionAdminService = Depends(get_execution_admin_service),
     governance: GovernanceService = Depends(get_governance_service),
 ) -> dict[str, object]:
+    """
+    Reconcile expired execution leases.
+
+    Finds and reconciles stale dispatch leases, recording an audit event.
+
+    :param admin: Authenticated admin with operate permission
+    :type admin: AuthenticatedAdmin
+    :param instance: Resolved instance record
+    :type instance: InstanceRecord
+    :param execution: Execution admin service
+    :type execution: ExecutionAdminService
+    :param governance: Governance service for audit recording
+    :type governance: GovernanceService
+    :return: List of reconciled runs
+    :rtype: dict[str, object]
+    """
     results = execution.reconcile_expired_leases(instance=instance)
     _record_operator_audit(
         governance=governance,

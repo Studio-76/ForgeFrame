@@ -12,6 +12,7 @@ export type PrimaryTargetStatus =
   | "degraded"
   | "partial"
   | "blocked"
+  | "needs-health-check"
   | "disabled"
   | "bridge-only"
   | "unsupported";

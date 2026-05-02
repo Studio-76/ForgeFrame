@@ -29,8 +29,8 @@ const {
   resumeExecutionRunMock: vi.fn(),
 }));
 
-vi.mock("../src/api/admin", async () => {
-  const actual = await vi.importActual<typeof import("../src/api/admin")>("../src/api/admin");
+vi.mock("../src/api/domain", async () => {
+  const actual = await vi.importActual<typeof import("../src/api/domain")>("../src/api/domain");
 
   return {
     ...actual,
@@ -47,7 +47,7 @@ vi.mock("../src/api/admin", async () => {
   };
 });
 
-import { AdminApiError, type AdminSessionUser, type ExecutionRunDetail, type ExecutionRunSummary } from "../src/api/admin";
+import { AdminApiError, type AdminSessionUser, type ExecutionRunDetail, type ExecutionRunSummary } from "../src/api/domain";
 import { ExecutionPage } from "../src/pages/ExecutionPage";
 import { withAppContext } from "./testContext";
 
@@ -803,7 +803,7 @@ describe("Execution page operator workflow", () => {
     expect(container.textContent).toContain("run_alpha");
     expect(container.textContent).toContain("Replay ready");
     expect(container.textContent).toContain("provider_authentication_error");
-    expect(container.textContent).toContain("Run table");
+    expect(container.textContent).toContain("Run results");
     expect(container.textContent).toContain("Timeline");
     expect(container.textContent).toContain("Dispatch jobs");
     expect(container.textContent).toContain("Routing and lifecycle decisions");
@@ -811,7 +811,7 @@ describe("Execution page operator workflow", () => {
     expect(container.textContent).toContain("Preview package");
     expect(container.textContent).toContain("Blocked after premium provider authentication failure.");
     expect(container.textContent).toContain("Run is quarantined or terminal");
-    expect(container.textContent).toContain("Raw details");
+    expect(container.textContent).toContain("Advanced details");
 
     const workspaceLink = Array.from(container.querySelectorAll("a")).find((link) => link.textContent === "ws_alpha");
     expect(workspaceLink?.getAttribute("href")).toBe("/workspaces?instanceId=instance_alpha&workspaceId=ws_alpha");
@@ -874,8 +874,19 @@ describe("Execution page operator workflow", () => {
       setInputValue(reason!, "Replay after provider credentials were rotated and verified.");
     });
 
+    // Submit triggers a confirmation dialog
     await act(async () => {
       form!.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+    });
+    await flushEffects();
+
+    // Click "Confirm replay" in the confirmation dialog
+    const confirmBtn = Array.from(container.querySelectorAll("button")).find(
+      (btn) => btn.textContent === "Confirm replay",
+    );
+    expect(confirmBtn).not.toBeUndefined();
+    await act(async () => {
+      confirmBtn!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     });
     await flushEffects();
 
@@ -901,8 +912,19 @@ describe("Execution page operator workflow", () => {
       setInputValue(reason!, "Replay after provider credentials were rotated and verified.");
     });
 
+    // Submit triggers a confirmation dialog
     await act(async () => {
       form!.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+    });
+    await flushEffects();
+
+    // Click "Confirm replay" in the confirmation dialog
+    const confirmBtn = Array.from(container.querySelectorAll("button")).find(
+      (btn) => btn.textContent === "Confirm replay",
+    );
+    expect(confirmBtn).not.toBeUndefined();
+    await act(async () => {
+      confirmBtn!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     });
     await flushEffects();
 

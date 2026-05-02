@@ -5,7 +5,7 @@ import type {
   ProviderControlItem,
   RuntimeKeyFirstSuccessProbeRecord,
   RuntimeKey,
-} from "../../api/admin";
+} from "../../api/domain";
 import {
   roleAllows,
   sessionCanMutateScopedOrAnyInstance,

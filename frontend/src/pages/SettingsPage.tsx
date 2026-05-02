@@ -64,6 +64,14 @@ export function SettingsPage() {
     (item) => item.risk_level === "high" && !showHighRisk,
   ).length;
 
+  const overriddenCount = settings.filter(
+    (item) => item.source === "override" && item.overridden,
+  ).length;
+
+  const highRiskCount = settings.filter(
+    (item) => item.risk_level === "high",
+  ).length;
+
   const readOnlyDescription = !sessionReady
     ? "The page is checking the current session role before exposing any mutable system configuration controls."
     : session?.role === "admin" && session?.read_only === true
@@ -140,6 +148,8 @@ export function SettingsPage() {
           onHighRiskToggle={setShowHighRisk}
           loadState={loadState}
           totalCount={settings.length}
+          overriddenCount={overriddenCount}
+          highRiskCount={highRiskCount}
           groupedSettings={groupedSettings}
           selectedKey={selectedKey}
           onSelect={setSelectedKey}

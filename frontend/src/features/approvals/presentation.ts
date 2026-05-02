@@ -10,7 +10,7 @@ import type {
   ApprovalStatus,
   ApprovalSummary,
   ApprovalType,
-} from "../../api/admin";
+} from "../../api/domain";
 
 type BannerTone = "success" | "warning" | "danger" | "neutral";
 type ExecutionResumeDisposition = "resume" | "fail" | "compensate" | "cancel";

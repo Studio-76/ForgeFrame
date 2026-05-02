@@ -16,7 +16,7 @@ vi.mock("../src/app/useInstanceCatalog", () => ({
   useInstanceCatalog: (instanceId: string | null) => mockedUseInstanceCatalog(instanceId),
 }));
 
-import type { AdminSessionUser } from "../src/api/admin";
+import type { AdminSessionUser } from "../src/api/domain";
 import { ProvidersPage } from "../src/pages/ProvidersPage";
 import type { ProvidersAccessState, ProvidersPageActions, ProvidersPageData } from "../src/features/providers/providersShared";
 import { withAppContext } from "./testContext";
@@ -339,6 +339,6 @@ describe("Provider health runs anchor", () => {
     expect(anchor?.className).toContain("is-anchor-target");
     expect(document.activeElement).toBe(anchor);
     expect(scrollIntoViewMock).toHaveBeenCalled();
-    expect(container.textContent).toContain("Manage provider records");
+    expect(container.textContent).toContain("Provider Readiness");
   });
 });

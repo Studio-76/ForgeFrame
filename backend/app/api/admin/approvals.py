@@ -106,6 +106,41 @@ def list_approvals(
     service: ApprovalAdminService = Depends(_get_approval_admin_service),
     instances: InstanceService = Depends(get_instance_service),
 ) -> object:
+    """
+    List approvals with optional filtering.
+
+    Supports filtering by status, approval type, risk level, due state,
+    approval class, and instance scope.
+
+    :param status_filter: Filter by approval status
+    :type status_filter: str | None
+    :param approval_type_filter: Filter by approval type
+    :type approval_type_filter: str | None
+    :param risk_filter: Filter by risk level
+    :type risk_filter: str | None
+    :param due_filter: Filter by due state
+    :type due_filter: str | None
+    :param approval_class_filter: Filter by approval class
+    :type approval_class_filter: str | None
+    :param instance_id: Optional instance ID for scope resolution
+    :type instance_id: str | None
+    :param tenant_id: Optional tenant ID (not supported for approvals)
+    :type tenant_id: str | None
+    :param company_id: Optional company ID (not supported for approvals)
+    :type company_id: str | None
+    :param limit: Maximum number of approvals to return
+    :type limit: int
+    :param admin: Authenticated admin session
+    :type admin: AuthenticatedAdmin
+    :param service: Approval admin service
+    :type service: ApprovalAdminService
+    :param instances: Instance service for scope resolution
+    :type instances: InstanceService
+    :return: List of approval records
+    :rtype: object
+    :raises ValueError: If an invalid filter is provided
+    :raises PermissionError: If admin lacks approval read access
+    """
     instance, scope_error = _resolve_shared_approval_instance_scope(
         instance_id=instance_id,
         tenant_id=tenant_id,
@@ -145,6 +180,29 @@ def approval_detail(
     service: ApprovalAdminService = Depends(_get_approval_admin_service),
     instances: InstanceService = Depends(get_instance_service),
 ) -> object:
+    """
+    Get a single approval's full detail.
+
+    :param approval_id: Approval identifier
+    :type approval_id: str
+    :param instance_id: Optional instance ID for scope resolution
+    :type instance_id: str | None
+    :param tenant_id: Optional tenant ID (not supported for approvals)
+    :type tenant_id: str | None
+    :param company_id: Optional company ID (not supported for approvals)
+    :type company_id: str | None
+    :param admin: Authenticated admin session
+    :type admin: AuthenticatedAdmin
+    :param service: Approval admin service
+    :type service: ApprovalAdminService
+    :param instances: Instance service for scope resolution
+    :type instances: InstanceService
+    :return: Approval detail record
+    :rtype: object
+    :raises LookupError: If approval is not found
+    :raises GovernanceNotFoundError: If approval governance record is not found
+    :raises PermissionError: If admin lacks approval read access
+    """
     instance, scope_error = _resolve_shared_approval_instance_scope(
         instance_id=instance_id,
         tenant_id=tenant_id,
@@ -241,6 +299,33 @@ def approve_approval(
     service: ApprovalAdminService = Depends(_get_approval_admin_service),
     instances: InstanceService = Depends(get_instance_service),
 ) -> object:
+    """
+    Approve a pending approval.
+
+    Requires a write session. Delegates to the shared approval decision
+    flow with approved=True.
+
+    :param approval_id: Approval identifier
+    :type approval_id: str
+    :param payload: Decision note payload
+    :type payload: ApprovalDecisionRequest
+    :param request: Incoming HTTP request
+    :type request: Request
+    :param instance_id: Optional instance ID for scope resolution
+    :type instance_id: str | None
+    :param tenant_id: Optional tenant ID (not supported for approvals)
+    :type tenant_id: str | None
+    :param company_id: Optional company ID (not supported for approvals)
+    :type company_id: str | None
+    :param admin: Authenticated admin with write session
+    :type admin: AuthenticatedAdmin
+    :param service: Approval admin service
+    :type service: ApprovalAdminService
+    :param instances: Instance service for scope resolution
+    :type instances: InstanceService
+    :return: Updated approval detail
+    :rtype: object
+    """
     instance, scope_error = _resolve_shared_approval_instance_scope(
         instance_id=instance_id,
         tenant_id=tenant_id,
@@ -272,6 +357,33 @@ def reject_approval(
     service: ApprovalAdminService = Depends(_get_approval_admin_service),
     instances: InstanceService = Depends(get_instance_service),
 ) -> object:
+    """
+    Reject a pending approval.
+
+    Requires a write session. Delegates to the shared approval decision
+    flow with approved=False.
+
+    :param approval_id: Approval identifier
+    :type approval_id: str
+    :param payload: Decision note payload
+    :type payload: ApprovalDecisionRequest
+    :param request: Incoming HTTP request
+    :type request: Request
+    :param instance_id: Optional instance ID for scope resolution
+    :type instance_id: str | None
+    :param tenant_id: Optional tenant ID (not supported for approvals)
+    :type tenant_id: str | None
+    :param company_id: Optional company ID (not supported for approvals)
+    :type company_id: str | None
+    :param admin: Authenticated admin with write session
+    :type admin: AuthenticatedAdmin
+    :param service: Approval admin service
+    :type service: ApprovalAdminService
+    :param instances: Instance service for scope resolution
+    :type instances: InstanceService
+    :return: Updated approval detail
+    :rtype: object
+    """
     instance, scope_error = _resolve_shared_approval_instance_scope(
         instance_id=instance_id,
         tenant_id=tenant_id,

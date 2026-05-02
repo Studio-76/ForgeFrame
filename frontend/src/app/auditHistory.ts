@@ -4,7 +4,7 @@ import {
   type AuditHistoryQuery,
   type AuditHistoryStatus,
   type AuditHistoryWindow,
-} from "../api/admin";
+} from "../api/domain";
 import { sessionHasAnyInstancePermission } from "./adminAccess";
 
 type AuditHistoryPathOptions = {

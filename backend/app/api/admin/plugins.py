@@ -35,6 +35,18 @@ def list_plugins(
     instance: InstanceRecord = Depends(resolve_admin_instance_scope),
     service: PluginCatalogService = Depends(get_plugin_catalog_service),
 ) -> dict[str, object]:
+    """
+    List all plugins available to the current instance.
+
+    :param _admin: Injected authentication/admin dependency
+    :type _admin: AuthenticatedAdmin
+    :param instance: The resolved instance record
+    :type instance: InstanceRecord
+    :param service: Injected plugin catalog service
+    :type service: PluginCatalogService
+    :return: Status, instance data, summary, and list of plugins
+    :rtype: dict[str, object]
+    """
     plugins, summary = service.list_plugins(instance=instance)
     return {
         "status": "ok",
@@ -51,6 +63,21 @@ def get_plugin(
     instance: InstanceRecord = Depends(resolve_admin_instance_scope),
     service: PluginCatalogService = Depends(get_plugin_catalog_service),
 ) -> object:
+    """
+    Retrieve a single plugin by its ID.
+
+    :param plugin_id: Unique identifier of the plugin
+    :type plugin_id: str
+    :param _admin: Injected authentication/admin dependency
+    :type _admin: AuthenticatedAdmin
+    :param instance: The resolved instance record
+    :type instance: InstanceRecord
+    :param service: Injected plugin catalog service
+    :type service: PluginCatalogService
+    :return: Status, instance data, and plugin data
+    :rtype: object
+    :raises ValueError: If the plugin is not found, returns a 404 error response
+    """
     try:
         plugin = service.get_plugin(instance=instance, plugin_id=plugin_id)
     except ValueError as exc:
@@ -68,6 +95,19 @@ def create_plugin(
     _admin: AuthenticatedAdmin = Depends(require_admin_mutation_role("admin")),
     service: PluginCatalogService = Depends(get_plugin_catalog_service),
 ) -> object:
+    """
+    Register a new plugin manifest in the catalog.
+
+    :param payload: Plugin manifest creation payload
+    :type payload: CreatePluginManifest
+    :param _admin: Injected authentication/admin dependency
+    :type _admin: AuthenticatedAdmin
+    :param service: Injected plugin catalog service
+    :type service: PluginCatalogService
+    :return: Status and created plugin data
+    :rtype: object
+    :raises ValueError: If the plugin already exists or the manifest is invalid
+    """
     try:
         plugin = service.create_plugin(payload)
     except ValueError as exc:
@@ -84,6 +124,21 @@ def update_plugin(
     _admin: AuthenticatedAdmin = Depends(require_admin_mutation_role("admin")),
     service: PluginCatalogService = Depends(get_plugin_catalog_service),
 ) -> object:
+    """
+    Update an existing plugin manifest.
+
+    :param plugin_id: Unique identifier of the plugin to update
+    :type plugin_id: str
+    :param payload: Plugin manifest update payload
+    :type payload: UpdatePluginManifest
+    :param _admin: Injected authentication/admin dependency
+    :type _admin: AuthenticatedAdmin
+    :param service: Injected plugin catalog service
+    :type service: PluginCatalogService
+    :return: Status and updated plugin data
+    :rtype: object
+    :raises ValueError: If the plugin is not found or the update is invalid
+    """
     try:
         plugin = service.update_plugin(plugin_id, payload)
     except ValueError as exc:
@@ -101,6 +156,23 @@ def upsert_plugin_binding(
     instance: InstanceRecord = Depends(resolve_admin_instance_scope),
     service: PluginCatalogService = Depends(get_plugin_catalog_service),
 ) -> object:
+    """
+    Create or update the plugin binding for the current instance.
+
+    :param plugin_id: Unique identifier of the plugin
+    :type plugin_id: str
+    :param payload: Plugin binding payload
+    :type payload: UpsertPluginBinding
+    :param _admin: Injected authentication/admin dependency
+    :type _admin: AuthenticatedAdmin
+    :param instance: The resolved instance record
+    :type instance: InstanceRecord
+    :param service: Injected plugin catalog service
+    :type service: PluginCatalogService
+    :return: Status, instance data, and plugin data with binding
+    :rtype: object
+    :raises ValueError: If the plugin is not found or the binding is invalid
+    """
     try:
         plugin = service.upsert_binding(instance=instance, plugin_id=plugin_id, payload=payload)
     except ValueError as exc:

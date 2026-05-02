@@ -27,15 +27,15 @@ vi.mock("../src/api/admin/instances", async () => {
   };
 });
 
-vi.mock("../src/api/admin", async () => {
-  const actual = await vi.importActual<typeof import("../src/api/admin")>("../src/api/admin");
+vi.mock("../src/api/domain", async () => {
+  const actual = await vi.importActual<typeof import("../src/api/domain")>("../src/api/domain");
   return {
     ...actual,
     fetchInstances: fetchInstancesMock,
   };
 });
 
-import type { AdminSessionUser, InstanceRecord, ProviderTargetRecord } from "../src/api/admin";
+import type { AdminSessionUser, InstanceRecord, ProviderTargetRecord } from "../src/api/domain";
 import { ProviderTargetsPage } from "../src/pages/ProviderTargetsPage";
 import { withAppContext } from "./testContext";
 
@@ -115,6 +115,7 @@ function createTarget(overrides: Partial<ProviderTargetRecord> = {}): ProviderTa
     runtime_readiness_reason: "Live runtime evidence is recorded for this provider.",
     provider_enabled: true,
     model_active: true,
+    last_probe_at: "2026-04-22T08:00:00Z",
     ...overrides,
   };
 }
@@ -246,8 +247,16 @@ describe("Provider targets page", () => {
     expect(container.textContent).toContain("Routing Dry Run");
     expect(container.textContent).toContain("Provider Health");
     expect(container.textContent).toContain("Capabilities");
-    expect(container.textContent).toContain("Policy flags");
     expect(container.textContent).toContain("Cost / quality profile");
+
+    // Filters are collapsed by default — expand them
+    const filterToggle = Array.from(container.querySelectorAll("button")).find(
+      (button) => button.textContent?.includes("Filter targets"),
+    );
+    expect(filterToggle).toBeTruthy();
+    await act(async () => {
+      filterToggle?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
 
     const providerFilter = container.querySelector<HTMLSelectElement>('select[aria-label="Provider filter"]');
     expect(providerFilter?.value).toBe("all");
@@ -257,6 +266,16 @@ describe("Provider targets page", () => {
     });
 
     expect(container.textContent).toContain("Showing 1 of 2 instance-bound provider targets.");
+
+    // Open policy editor to access priority and save controls
+    const editPolicyButton = Array.from(container.querySelectorAll("button")).find(
+      (button) => button.textContent?.includes("Edit target policy"),
+    );
+    expect(editPolicyButton).toBeTruthy();
+
+    await act(async () => {
+      editPolicyButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
 
     const priorityInput = container.querySelector<HTMLInputElement>('input[aria-label="Priority"]');
     const saveButton = Array.from(container.querySelectorAll("button")).find((button) => button.textContent?.includes("Save target changes"));
@@ -288,11 +307,21 @@ describe("Provider targets page", () => {
       oauthRowButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     });
 
-    expect(container.textContent).toContain("Anthropic OAuth · Claude 3.5 Sonnet");
     expect(container.textContent).toContain("Disabled");
+    expect(container.textContent).toContain("Anthropic OAuth · Claude 3.5 Sonnet");
+
+    // Open policy editor to access enable checkbox and save
+    const editPolicyButton = Array.from(container.querySelectorAll("button")).find(
+      (button) => button.textContent?.includes("Edit target policy"),
+    );
+    expect(editPolicyButton).toBeTruthy();
+
+    await act(async () => {
+      editPolicyButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
 
     const enableCheckbox = container.querySelector<HTMLInputElement>('input[aria-label="Enable target"]');
-    const saveButton = Array.from(container.querySelectorAll("button")).find((button) => button.textContent?.includes("Save target changes"));
+    let saveButton = Array.from(container.querySelectorAll("button")).find((button) => button.textContent?.includes("Save target changes"));
 
     await act(async () => {
       enableCheckbox?.dispatchEvent(new MouseEvent("click", { bubbles: true }));

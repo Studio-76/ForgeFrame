@@ -32,6 +32,24 @@ def list_agents(
     instance: InstanceRecord = Depends(resolve_admin_instance_scope),
     service: AgentAdminService = Depends(get_agent_admin_service),
 ) -> dict[str, object]:
+    """
+    List all agents for the current instance, with optional filtering.
+
+    :param status_filter: Filter by agent status
+    :type status_filter: str | None
+    :param ensure_default_operator: Whether to ensure a default operator agent exists
+    :type ensure_default_operator: bool
+    :param limit: Maximum number of agents to return
+    :type limit: int
+    :param _admin: Injected authentication/admin dependency
+    :type _admin: AuthenticatedAdmin
+    :param instance: The resolved instance record
+    :type instance: InstanceRecord
+    :param service: Injected agent admin service
+    :type service: AgentAdminService
+    :return: Status, instance data, and list of agents
+    :rtype: dict[str, object]
+    """
     agents = service.list_agents(
         instance=instance,
         status=status_filter,
@@ -52,6 +70,21 @@ def get_agent(
     instance: InstanceRecord = Depends(resolve_admin_instance_scope),
     service: AgentAdminService = Depends(get_agent_admin_service),
 ) -> object:
+    """
+    Retrieve a single agent by its ID.
+
+    :param agent_id: Unique identifier of the agent
+    :type agent_id: str
+    :param _admin: Injected authentication/admin dependency
+    :type _admin: AuthenticatedAdmin
+    :param instance: The resolved instance record
+    :type instance: InstanceRecord
+    :param service: Injected agent admin service
+    :type service: AgentAdminService
+    :return: Status and agent data
+    :rtype: object
+    :raises ValueError: If the agent is not found, returns a 404 error response
+    """
     try:
         agent = service.get_agent(instance=instance, agent_id=agent_id)
     except ValueError as exc:
@@ -66,6 +99,21 @@ def create_agent(
     instance: InstanceRecord = Depends(resolve_admin_instance_scope),
     service: AgentAdminService = Depends(get_agent_admin_service),
 ) -> object:
+    """
+    Create a new agent.
+
+    :param payload: Agent creation payload
+    :type payload: CreateAgent
+    :param _admin: Injected authentication/admin dependency
+    :type _admin: AuthenticatedAdmin
+    :param instance: The resolved instance record
+    :type instance: InstanceRecord
+    :param service: Injected agent admin service
+    :type service: AgentAdminService
+    :return: Status and created agent data
+    :rtype: object
+    :raises ValueError: If the agent already exists or is invalid
+    """
     try:
         agent = service.create_agent(instance=instance, payload=payload)
     except ValueError as exc:
@@ -83,6 +131,23 @@ def update_agent(
     instance: InstanceRecord = Depends(resolve_admin_instance_scope),
     service: AgentAdminService = Depends(get_agent_admin_service),
 ) -> object:
+    """
+    Update an existing agent.
+
+    :param agent_id: Unique identifier of the agent to update
+    :type agent_id: str
+    :param payload: Agent update payload
+    :type payload: UpdateAgent
+    :param _admin: Injected authentication/admin dependency
+    :type _admin: AuthenticatedAdmin
+    :param instance: The resolved instance record
+    :type instance: InstanceRecord
+    :param service: Injected agent admin service
+    :type service: AgentAdminService
+    :return: Status and updated agent data
+    :rtype: object
+    :raises ValueError: If the agent is not found or the update is invalid
+    """
     try:
         agent = service.update_agent(instance=instance, agent_id=agent_id, payload=payload)
     except ValueError as exc:
@@ -100,6 +165,23 @@ def archive_agent(
     instance: InstanceRecord = Depends(resolve_admin_instance_scope),
     service: AgentAdminService = Depends(get_agent_admin_service),
 ) -> object:
+    """
+    Archive an agent, optionally replacing it with another agent.
+
+    :param agent_id: Unique identifier of the agent to archive
+    :type agent_id: str
+    :param payload: Archive payload with optional replacement agent and reason
+    :type payload: ArchiveAgent
+    :param _admin: Injected authentication/admin dependency
+    :type _admin: AuthenticatedAdmin
+    :param instance: The resolved instance record
+    :type instance: InstanceRecord
+    :param service: Injected agent admin service
+    :type service: AgentAdminService
+    :return: Status and archived agent data
+    :rtype: object
+    :raises ValueError: If the agent is not found or archiving is invalid
+    """
     try:
         agent = service.archive_agent(
             instance=instance,

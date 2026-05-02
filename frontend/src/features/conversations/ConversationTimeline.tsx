@@ -1,6 +1,6 @@
 import { Link } from "react-router-dom";
 
-import type { ConversationDetail } from "../../api/admin";
+import type { ConversationDetail } from "../../api/domain";
 import { buildAgentsPath } from "../../app/workInteractionRoutes";
 import type {
   LoadState,

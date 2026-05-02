@@ -1,4 +1,4 @@
-import type { AdminModelRegisterRecord } from "../../api/admin";
+import type { AdminModelRegisterRecord } from "../../api/domain";
 import type { StatusTone } from "../../components/ui/StatusBadge";
 import {
   type ModelNextAction,

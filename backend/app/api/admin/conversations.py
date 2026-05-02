@@ -37,6 +37,26 @@ def list_conversations(
     instance: InstanceRecord = Depends(resolve_admin_instance_scope),
     service: ConversationInboxAdminService = Depends(get_conversation_inbox_admin_service),
 ) -> dict[str, object]:
+    """
+    List all conversations for the current instance, with optional filtering.
+
+    :param status_filter: Filter by conversation status
+    :type status_filter: str | None
+    :param triage_status: Filter by triage status
+    :type triage_status: str | None
+    :param agent_id: Filter by agent ID
+    :type agent_id: str | None
+    :param limit: Maximum number of conversations to return
+    :type limit: int
+    :param _admin: Injected authentication/admin dependency
+    :type _admin: AuthenticatedAdmin
+    :param instance: The resolved instance record
+    :type instance: InstanceRecord
+    :param service: Injected conversation inbox admin service
+    :type service: ConversationInboxAdminService
+    :return: Status, instance data, and list of conversations
+    :rtype: dict[str, object]
+    """
     conversations = service.list_conversations(
         instance=instance,
         status=status_filter,
@@ -58,6 +78,21 @@ def get_conversation(
     instance: InstanceRecord = Depends(resolve_admin_instance_scope),
     service: ConversationInboxAdminService = Depends(get_conversation_inbox_admin_service),
 ) -> object:
+    """
+    Retrieve a single conversation by its ID.
+
+    :param conversation_id: Unique identifier of the conversation
+    :type conversation_id: str
+    :param _admin: Injected authentication/admin dependency
+    :type _admin: AuthenticatedAdmin
+    :param instance: The resolved instance record
+    :type instance: InstanceRecord
+    :param service: Injected conversation inbox admin service
+    :type service: ConversationInboxAdminService
+    :return: Status and conversation data
+    :rtype: object
+    :raises ValueError: If the conversation is not found, returns a 404 error response
+    """
     try:
         conversation = service.get_conversation(instance=instance, conversation_id=conversation_id)
     except ValueError as exc:
@@ -72,6 +107,21 @@ def create_conversation(
     instance: InstanceRecord = Depends(resolve_admin_instance_scope),
     service: ConversationInboxAdminService = Depends(get_conversation_inbox_admin_service),
 ) -> object:
+    """
+    Create a new conversation.
+
+    :param payload: Conversation creation payload
+    :type payload: CreateConversation
+    :param admin: Authenticated admin performing the creation
+    :type admin: AuthenticatedAdmin
+    :param instance: The resolved instance record
+    :type instance: InstanceRecord
+    :param service: Injected conversation inbox admin service
+    :type service: ConversationInboxAdminService
+    :return: Status and created conversation data
+    :rtype: object
+    :raises ValueError: If the conversation already exists or is invalid
+    """
     try:
         conversation = service.create_conversation(
             instance=instance,
@@ -94,6 +144,23 @@ def update_conversation(
     instance: InstanceRecord = Depends(resolve_admin_instance_scope),
     service: ConversationInboxAdminService = Depends(get_conversation_inbox_admin_service),
 ) -> object:
+    """
+    Update an existing conversation.
+
+    :param conversation_id: Unique identifier of the conversation to update
+    :type conversation_id: str
+    :param payload: Conversation update payload
+    :type payload: UpdateConversation
+    :param _admin: Injected authentication/admin dependency
+    :type _admin: AuthenticatedAdmin
+    :param instance: The resolved instance record
+    :type instance: InstanceRecord
+    :param service: Injected conversation inbox admin service
+    :type service: ConversationInboxAdminService
+    :return: Status and updated conversation data
+    :rtype: object
+    :raises ValueError: If the conversation is not found or the update is invalid
+    """
     try:
         conversation = service.update_conversation(instance=instance, conversation_id=conversation_id, payload=payload)
     except ValueError as exc:
@@ -111,6 +178,23 @@ def append_conversation_message(
     instance: InstanceRecord = Depends(resolve_admin_instance_scope),
     service: ConversationInboxAdminService = Depends(get_conversation_inbox_admin_service),
 ) -> object:
+    """
+    Append a message to an existing conversation.
+
+    :param conversation_id: Unique identifier of the conversation
+    :type conversation_id: str
+    :param payload: Message payload to append
+    :type payload: AppendConversationMessage
+    :param admin: Authenticated admin performing the append
+    :type admin: AuthenticatedAdmin
+    :param instance: The resolved instance record
+    :type instance: InstanceRecord
+    :param service: Injected conversation inbox admin service
+    :type service: ConversationInboxAdminService
+    :return: Status and updated conversation data with new message
+    :rtype: object
+    :raises ValueError: If the conversation is not found or the message is invalid
+    """
     try:
         conversation = service.append_message(
             instance=instance,
