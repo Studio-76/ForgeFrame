@@ -57,6 +57,16 @@ vi.mock("../src/api/admin/instances", async () => {
   return { ...actual, fetchInstances: fetchInstancesMock };
 });
 
+vi.mock("../src/api/admin", async () => {
+  const actual = await vi.importActual<typeof import("../src/api/admin")>("../src/api/admin");
+  return {
+    ...actual,
+    fetchInstances: fetchInstancesMock,
+    fetchBootstrapReadiness: fetchBootstrapReadinessMock,
+    fetchIngressTlsStatus: fetchIngressTlsStatusMock,
+  };
+});
+
 import type { AdminSessionUser, InstanceRecord } from "../src/api/admin";
 import { IngressTlsPage } from "../src/pages/IngressTlsPage";
 import { ReleaseValidationPage } from "../src/pages/ReleaseValidationPage";
