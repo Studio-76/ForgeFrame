@@ -38,6 +38,24 @@ def list_memory(
     instance: InstanceRecord = Depends(resolve_admin_instance_scope),
     service: KnowledgeContextAdminService = Depends(get_knowledge_context_admin_service),
 ) -> dict[str, object]:
+    """
+    List all memory entries for the current instance, with optional filtering.
+
+    :param status_filter: Filter by memory entry status
+    :type status_filter: str | None
+    :param visibility_scope: Filter by visibility scope
+    :type visibility_scope: str | None
+    :param limit: Maximum number of entries to return
+    :type limit: int
+    :param admin: Authenticated admin performing the request
+    :type admin: AuthenticatedAdmin
+    :param instance: The resolved instance record
+    :type instance: InstanceRecord
+    :param service: Injected knowledge context admin service
+    :type service: KnowledgeContextAdminService
+    :return: Status, instance data, and list of memory entries
+    :rtype: dict[str, object]
+    """
     entries = service.list_memory(
         instance=instance,
         actor=admin,
@@ -59,6 +77,21 @@ def get_memory(
     instance: InstanceRecord = Depends(resolve_admin_instance_scope),
     service: KnowledgeContextAdminService = Depends(get_knowledge_context_admin_service),
 ) -> object:
+    """
+    Retrieve a single memory entry by its ID.
+
+    :param memory_id: Unique identifier of the memory entry
+    :type memory_id: str
+    :param admin: Authenticated admin performing the request
+    :type admin: AuthenticatedAdmin
+    :param instance: The resolved instance record
+    :type instance: InstanceRecord
+    :param service: Injected knowledge context admin service
+    :type service: KnowledgeContextAdminService
+    :return: Status and memory entry data
+    :rtype: object
+    :raises ValueError: If the memory entry is not found, returns a 404 error response
+    """
     try:
         memory = service.get_memory(instance=instance, actor=admin, memory_id=memory_id)
     except ValueError as exc:
@@ -73,6 +106,21 @@ def create_memory(
     instance: InstanceRecord = Depends(resolve_admin_instance_scope),
     service: KnowledgeContextAdminService = Depends(get_knowledge_context_admin_service),
 ) -> object:
+    """
+    Create a new memory entry.
+
+    :param payload: Memory creation payload
+    :type payload: CreateMemory
+    :param _admin: Injected authentication/admin dependency
+    :type _admin: AuthenticatedAdmin
+    :param instance: The resolved instance record
+    :type instance: InstanceRecord
+    :param service: Injected knowledge context admin service
+    :type service: KnowledgeContextAdminService
+    :return: Status and created memory entry data
+    :rtype: object
+    :raises ValueError: If the memory already exists or is invalid
+    """
     try:
         memory = service.create_memory(instance=instance, payload=payload)
     except ValueError as exc:
@@ -90,6 +138,23 @@ def update_memory(
     instance: InstanceRecord = Depends(resolve_admin_instance_scope),
     service: KnowledgeContextAdminService = Depends(get_knowledge_context_admin_service),
 ) -> object:
+    """
+    Update an existing memory entry.
+
+    :param memory_id: Unique identifier of the memory entry to update
+    :type memory_id: str
+    :param payload: Memory update payload
+    :type payload: UpdateMemory
+    :param _admin: Injected authentication/admin dependency
+    :type _admin: AuthenticatedAdmin
+    :param instance: The resolved instance record
+    :type instance: InstanceRecord
+    :param service: Injected knowledge context admin service
+    :type service: KnowledgeContextAdminService
+    :return: Status and updated memory entry data
+    :rtype: object
+    :raises ValueError: If the memory is not found or the update is invalid
+    """
     try:
         memory = service.update_memory(instance=instance, memory_id=memory_id, payload=payload)
     except ValueError as exc:
@@ -107,6 +172,23 @@ def correct_memory(
     instance: InstanceRecord = Depends(resolve_admin_instance_scope),
     service: KnowledgeContextAdminService = Depends(get_knowledge_context_admin_service),
 ) -> object:
+    """
+    Submit a correction for a memory entry.
+
+    :param memory_id: Unique identifier of the memory entry to correct
+    :type memory_id: str
+    :param payload: Correction payload with updated information
+    :type payload: CorrectMemory
+    :param _admin: Injected authentication/admin dependency
+    :type _admin: AuthenticatedAdmin
+    :param instance: The resolved instance record
+    :type instance: InstanceRecord
+    :param service: Injected knowledge context admin service
+    :type service: KnowledgeContextAdminService
+    :return: Status, action taken, and corrected memory data
+    :rtype: object
+    :raises ValueError: If the memory is not found or the correction is invalid
+    """
     try:
         result = service.correct_memory(instance=instance, memory_id=memory_id, payload=payload)
     except ValueError as exc:
@@ -128,6 +210,23 @@ def delete_memory(
     instance: InstanceRecord = Depends(resolve_admin_instance_scope),
     service: KnowledgeContextAdminService = Depends(get_knowledge_context_admin_service),
 ) -> object:
+    """
+    Mark a memory entry for deletion.
+
+    :param memory_id: Unique identifier of the memory entry to delete
+    :type memory_id: str
+    :param payload: Deletion payload with reason
+    :type payload: DeleteMemory
+    :param _admin: Injected authentication/admin dependency
+    :type _admin: AuthenticatedAdmin
+    :param instance: The resolved instance record
+    :type instance: InstanceRecord
+    :param service: Injected knowledge context admin service
+    :type service: KnowledgeContextAdminService
+    :return: Status, action taken, and affected memory data
+    :rtype: object
+    :raises ValueError: If the memory is not found or deletion is invalid
+    """
     try:
         result = service.delete_memory(instance=instance, memory_id=memory_id, payload=payload)
     except ValueError as exc:
@@ -149,6 +248,23 @@ def revoke_memory(
     instance: InstanceRecord = Depends(resolve_admin_instance_scope),
     service: KnowledgeContextAdminService = Depends(get_knowledge_context_admin_service),
 ) -> object:
+    """
+    Revoke a memory entry, invalidating its trust.
+
+    :param memory_id: Unique identifier of the memory entry to revoke
+    :type memory_id: str
+    :param payload: Revocation payload with reason
+    :type payload: RevokeMemory
+    :param _admin: Injected authentication/admin dependency
+    :type _admin: AuthenticatedAdmin
+    :param instance: The resolved instance record
+    :type instance: InstanceRecord
+    :param service: Injected knowledge context admin service
+    :type service: KnowledgeContextAdminService
+    :return: Status, action taken, and affected memory data
+    :rtype: object
+    :raises ValueError: If the memory is not found or revocation is invalid
+    """
     try:
         result = service.revoke_memory(instance=instance, memory_id=memory_id, payload=payload)
     except ValueError as exc:

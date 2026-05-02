@@ -49,6 +49,14 @@ def _settings_payload(service: GovernanceService, *, operation: dict[str, object
 def list_settings(
     service: GovernanceService = Depends(get_governance_service),
 ) -> Any:
+    """
+    List all mutable settings with their current effective values and overrides.
+
+    :param service: Injected governance service
+    :type service: GovernanceService
+    :return: Status and serialized settings data
+    :rtype: Any
+    """
     return _settings_payload(service)
 
 
@@ -59,6 +67,23 @@ def patch_settings(
     admin: AuthenticatedAdmin = Depends(require_admin_mutation_role("admin")),
     service: GovernanceService = Depends(get_governance_service),
 ) -> Any:
+    """
+    Apply partial updates to mutable settings.
+
+    Validates each setting key and coerces values before persisting overrides.
+    Clears relevant caches after a successful update.
+
+    :param payload: Settings patch request containing key-value updates
+    :type payload: SettingsPatchRequest
+    :param request: The incoming HTTP request (used for idempotency check)
+    :type request: Request
+    :param admin: Authenticated admin performing the update
+    :type admin: AuthenticatedAdmin
+    :param service: Injected governance service
+    :type service: GovernanceService
+    :return: Status, updated settings data, and operation metadata
+    :rtype: Any
+    """
     unsupported = unsupported_idempotency_response(request, message=_SETTINGS_IDEMPOTENCY_MESSAGE)
     if unsupported is not None:
         return unsupported
@@ -115,6 +140,22 @@ def reset_setting(
     admin: AuthenticatedAdmin = Depends(require_admin_mutation_role("admin")),
     service: GovernanceService = Depends(get_governance_service),
 ) -> Any:
+    """
+    Reset a mutable setting override, reverting to its environment default.
+
+    Clears relevant caches after a successful reset.
+
+    :param key: The setting key to reset
+    :type key: str
+    :param request: The incoming HTTP request (used for idempotency check)
+    :type request: Request
+    :param admin: Authenticated admin performing the reset
+    :type admin: AuthenticatedAdmin
+    :param service: Injected governance service
+    :type service: GovernanceService
+    :return: Status, updated settings data, and reset operation metadata
+    :rtype: Any
+    """
     unsupported = unsupported_idempotency_response(request, message=_SETTINGS_IDEMPOTENCY_MESSAGE)
     if unsupported is not None:
         return unsupported

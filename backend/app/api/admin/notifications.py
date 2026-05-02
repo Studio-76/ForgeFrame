@@ -32,6 +32,24 @@ def list_notifications(
     instance: InstanceRecord = Depends(resolve_admin_instance_scope),
     service: TaskAutomationAdminService = Depends(get_task_automation_admin_service),
 ) -> dict[str, object]:
+    """
+    List all notifications for the current instance, with optional filtering.
+
+    :param delivery_status: Filter by delivery status
+    :type delivery_status: str | None
+    :param priority: Filter by priority level
+    :type priority: str | None
+    :param limit: Maximum number of notifications to return
+    :type limit: int
+    :param _admin: Injected authentication/admin dependency
+    :type _admin: AuthenticatedAdmin
+    :param instance: The resolved instance record
+    :type instance: InstanceRecord
+    :param service: Injected task automation admin service
+    :type service: TaskAutomationAdminService
+    :return: Status, instance data, and list of notifications
+    :rtype: dict[str, object]
+    """
     notifications = service.list_notifications(
         instance=instance,
         delivery_status=delivery_status,
@@ -52,6 +70,21 @@ def get_notification(
     instance: InstanceRecord = Depends(resolve_admin_instance_scope),
     service: TaskAutomationAdminService = Depends(get_task_automation_admin_service),
 ) -> object:
+    """
+    Retrieve a single notification by its ID.
+
+    :param notification_id: Unique identifier of the notification
+    :type notification_id: str
+    :param _admin: Injected authentication/admin dependency
+    :type _admin: AuthenticatedAdmin
+    :param instance: The resolved instance record
+    :type instance: InstanceRecord
+    :param service: Injected task automation admin service
+    :type service: TaskAutomationAdminService
+    :return: Status and notification data
+    :rtype: object
+    :raises ValueError: If the notification is not found, returns a 404 error response
+    """
     try:
         notification = service.get_notification(instance=instance, notification_id=notification_id)
     except ValueError as exc:
@@ -66,6 +99,21 @@ def create_notification(
     instance: InstanceRecord = Depends(resolve_admin_instance_scope),
     service: TaskAutomationAdminService = Depends(get_task_automation_admin_service),
 ) -> object:
+    """
+    Create a new notification.
+
+    :param payload: Notification creation payload
+    :type payload: CreateNotification
+    :param _admin: Injected authentication/admin dependency
+    :type _admin: AuthenticatedAdmin
+    :param instance: The resolved instance record
+    :type instance: InstanceRecord
+    :param service: Injected task automation admin service
+    :type service: TaskAutomationAdminService
+    :return: Status and created notification data
+    :rtype: object
+    :raises ValueError: If the notification already exists or is invalid
+    """
     try:
         notification = service.create_notification(instance=instance, payload=payload)
     except ValueError as exc:
@@ -83,6 +131,23 @@ def update_notification(
     instance: InstanceRecord = Depends(resolve_admin_instance_scope),
     service: TaskAutomationAdminService = Depends(get_task_automation_admin_service),
 ) -> object:
+    """
+    Update an existing notification.
+
+    :param notification_id: Unique identifier of the notification to update
+    :type notification_id: str
+    :param payload: Notification update payload
+    :type payload: UpdateNotification
+    :param _admin: Injected authentication/admin dependency
+    :type _admin: AuthenticatedAdmin
+    :param instance: The resolved instance record
+    :type instance: InstanceRecord
+    :param service: Injected task automation admin service
+    :type service: TaskAutomationAdminService
+    :return: Status and updated notification data
+    :rtype: object
+    :raises ValueError: If the notification is not found or the update is invalid
+    """
     try:
         notification = service.update_notification(instance=instance, notification_id=notification_id, payload=payload)
     except ValueError as exc:
@@ -99,6 +164,21 @@ def confirm_notification(
     instance: InstanceRecord = Depends(resolve_admin_instance_scope),
     service: TaskAutomationAdminService = Depends(get_task_automation_admin_service),
 ) -> object:
+    """
+    Confirm a notification, marking it as acknowledged.
+
+    :param notification_id: Unique identifier of the notification to confirm
+    :type notification_id: str
+    :param _admin: Injected authentication/admin dependency
+    :type _admin: AuthenticatedAdmin
+    :param instance: The resolved instance record
+    :type instance: InstanceRecord
+    :param service: Injected task automation admin service
+    :type service: TaskAutomationAdminService
+    :return: Status, action taken, and confirmed notification data
+    :rtype: object
+    :raises ValueError: If the notification is not found or confirmation is invalid
+    """
     try:
         result = service.confirm_notification(instance=instance, notification_id=notification_id)
     except ValueError as exc:
@@ -119,6 +199,21 @@ def reject_notification(
     instance: InstanceRecord = Depends(resolve_admin_instance_scope),
     service: TaskAutomationAdminService = Depends(get_task_automation_admin_service),
 ) -> object:
+    """
+    Reject a notification, marking it as declined.
+
+    :param notification_id: Unique identifier of the notification to reject
+    :type notification_id: str
+    :param _admin: Injected authentication/admin dependency
+    :type _admin: AuthenticatedAdmin
+    :param instance: The resolved instance record
+    :type instance: InstanceRecord
+    :param service: Injected task automation admin service
+    :type service: TaskAutomationAdminService
+    :return: Status, action taken, and rejected notification data
+    :rtype: object
+    :raises ValueError: If the notification is not found or rejection is invalid
+    """
     try:
         result = service.reject_notification(instance=instance, notification_id=notification_id)
     except ValueError as exc:
@@ -139,6 +234,21 @@ def retry_notification(
     instance: InstanceRecord = Depends(resolve_admin_instance_scope),
     service: TaskAutomationAdminService = Depends(get_task_automation_admin_service),
 ) -> object:
+    """
+    Retry delivery of a failed notification.
+
+    :param notification_id: Unique identifier of the notification to retry
+    :type notification_id: str
+    :param _admin: Injected authentication/admin dependency
+    :type _admin: AuthenticatedAdmin
+    :param instance: The resolved instance record
+    :type instance: InstanceRecord
+    :param service: Injected task automation admin service
+    :type service: TaskAutomationAdminService
+    :return: Status, action taken, and retried notification data
+    :rtype: object
+    :raises ValueError: If the notification is not found or retry is invalid
+    """
     try:
         result = service.retry_notification(instance=instance, notification_id=notification_id)
     except ValueError as exc:

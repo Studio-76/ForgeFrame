@@ -25,6 +25,20 @@ def list_models(
     request_path_decision: RuntimeRequestPathDecision | None = Depends(get_runtime_request_path_decision),
     _runtime_actor: RequestActor | None = Depends(require_runtime_permission("runtime.models.read")),
 ) -> RuntimeModelsResponse:
+    """
+    List all publicly available runtime models for the current identity scope.
+
+    :param routing: Routing service for model availability lookups
+    :type routing: RoutingService
+    :param gateway_identity: Optional runtime gateway identity
+    :type gateway_identity: RuntimeGatewayIdentity | None
+    :param request_path_decision: Optional runtime request path decision
+    :type request_path_decision: RuntimeRequestPathDecision | None
+    :param _runtime_actor: Injected runtime permission dependency
+    :type _runtime_actor: RequestActor | None
+    :return: RuntimeModelsResponse containing the list of available models
+    :rtype: RuntimeModelsResponse
+    """
     models = list_public_runtime_models(
         routing=routing,
         identity=gateway_identity,

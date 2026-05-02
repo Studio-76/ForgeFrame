@@ -79,6 +79,33 @@ def create_embeddings(
     governance: GovernanceService = Depends(get_governance_service),
     _runtime_actor: RequestActor | None = Depends(require_runtime_permission("runtime.chat.write")),
 ) -> object:
+    """
+    Create embeddings for the given input using the requested model.
+
+    :param payload: Embeddings request data (model, input, encoding_format, dimensions)
+    :type payload: EmbeddingsRequest
+    :param request: Incoming HTTP request
+    :type request: Request
+    :param registry: Model registry for model lookup and access checks
+    :type registry: ModelRegistry
+    :param dispatch: Dispatch service for routing embeddings to providers
+    :type dispatch: DispatchService
+    :param routing: Routing service for provider selection
+    :type routing: RoutingService
+    :param settings: Application settings
+    :type settings: Settings
+    :param gateway_identity: Optional runtime gateway identity
+    :type gateway_identity: RuntimeGatewayIdentity | None
+    :param request_path_decision: Optional runtime request path decision
+    :type request_path_decision: RuntimeRequestPathDecision | None
+    :param governance: Governance service for authorization
+    :type governance: GovernanceService
+    :param _runtime_actor: Injected runtime permission dependency
+    :type _runtime_actor: RequestActor | None
+    :return: JSONResponse with embeddings data and routing headers
+    :rtype: object
+    :raises RuntimeAuthorizationError: If the requested model is not accessible
+    """
     analytics = get_usage_analytics_store()
     runtime_route = request.url.path or "/v1/embeddings"
     started_at = monotonic()

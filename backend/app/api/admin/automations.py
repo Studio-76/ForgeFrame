@@ -31,6 +31,22 @@ def list_automations(
     instance: InstanceRecord = Depends(resolve_admin_instance_scope),
     service: TaskAutomationAdminService = Depends(get_task_automation_admin_service),
 ) -> dict[str, object]:
+    """
+    List all automations for the current instance, with optional filtering.
+
+    :param status_filter: Filter by automation status
+    :type status_filter: str | None
+    :param limit: Maximum number of automations to return
+    :type limit: int
+    :param _admin: Injected authentication/admin dependency
+    :type _admin: AuthenticatedAdmin
+    :param instance: The resolved instance record
+    :type instance: InstanceRecord
+    :param service: Injected task automation admin service
+    :type service: TaskAutomationAdminService
+    :return: Status, instance data, and list of automations
+    :rtype: dict[str, object]
+    """
     automations = service.list_automations(instance=instance, status=status_filter, limit=limit)
     return {
         "status": "ok",
@@ -46,6 +62,21 @@ def get_automation(
     instance: InstanceRecord = Depends(resolve_admin_instance_scope),
     service: TaskAutomationAdminService = Depends(get_task_automation_admin_service),
 ) -> object:
+    """
+    Retrieve a single automation by its ID.
+
+    :param automation_id: Unique identifier of the automation
+    :type automation_id: str
+    :param _admin: Injected authentication/admin dependency
+    :type _admin: AuthenticatedAdmin
+    :param instance: The resolved instance record
+    :type instance: InstanceRecord
+    :param service: Injected task automation admin service
+    :type service: TaskAutomationAdminService
+    :return: Status and automation data
+    :rtype: object
+    :raises ValueError: If the automation is not found, returns a 404 error response
+    """
     try:
         automation = service.get_automation(instance=instance, automation_id=automation_id)
     except ValueError as exc:
@@ -60,6 +91,21 @@ def create_automation(
     instance: InstanceRecord = Depends(resolve_admin_instance_scope),
     service: TaskAutomationAdminService = Depends(get_task_automation_admin_service),
 ) -> object:
+    """
+    Create a new automation.
+
+    :param payload: Automation creation payload
+    :type payload: CreateAutomation
+    :param _admin: Injected authentication/admin dependency
+    :type _admin: AuthenticatedAdmin
+    :param instance: The resolved instance record
+    :type instance: InstanceRecord
+    :param service: Injected task automation admin service
+    :type service: TaskAutomationAdminService
+    :return: Status and created automation data
+    :rtype: object
+    :raises ValueError: If the automation already exists or is invalid
+    """
     try:
         automation = service.create_automation(instance=instance, payload=payload)
     except ValueError as exc:
@@ -77,6 +123,23 @@ def update_automation(
     instance: InstanceRecord = Depends(resolve_admin_instance_scope),
     service: TaskAutomationAdminService = Depends(get_task_automation_admin_service),
 ) -> object:
+    """
+    Update an existing automation.
+
+    :param automation_id: Unique identifier of the automation to update
+    :type automation_id: str
+    :param payload: Automation update payload
+    :type payload: UpdateAutomation
+    :param _admin: Injected authentication/admin dependency
+    :type _admin: AuthenticatedAdmin
+    :param instance: The resolved instance record
+    :type instance: InstanceRecord
+    :param service: Injected task automation admin service
+    :type service: TaskAutomationAdminService
+    :return: Status and updated automation data
+    :rtype: object
+    :raises ValueError: If the automation is not found or the update is invalid
+    """
     try:
         automation = service.update_automation(instance=instance, automation_id=automation_id, payload=payload)
     except ValueError as exc:
@@ -93,6 +156,21 @@ def trigger_automation(
     instance: InstanceRecord = Depends(resolve_admin_instance_scope),
     service: TaskAutomationAdminService = Depends(get_task_automation_admin_service),
 ) -> object:
+    """
+    Trigger an automation to run immediately.
+
+    :param automation_id: Unique identifier of the automation to trigger
+    :type automation_id: str
+    :param _admin: Injected authentication/admin dependency
+    :type _admin: AuthenticatedAdmin
+    :param instance: The resolved instance record
+    :type instance: InstanceRecord
+    :param service: Injected task automation admin service
+    :type service: TaskAutomationAdminService
+    :return: Status and triggered automation data
+    :rtype: object
+    :raises ValueError: If the automation is not found or triggering is invalid
+    """
     try:
         automation = service.trigger_automation(instance=instance, automation_id=automation_id)
     except ValueError as exc:

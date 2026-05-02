@@ -1427,6 +1427,43 @@ def list_audit_history(
     cursor: str | None = Query(default=None),
     limit: int = Query(default=25, ge=1, le=100),
 ) -> Any:
+    """
+    List audit history events with filtering, cursor-based pagination, and retention info.
+
+    Supports filtering by window, action, actor, target type/ID, and status.
+
+    :param _admin: Injected admin dependency (operator role required)
+    :type _admin: AuthenticatedAdmin
+    :param governance: Governance service for audit event queries
+    :type governance: GovernanceService
+    :param settings: Application settings for retention limit
+    :type settings: Settings
+    :param instance: Resolved instance record
+    :type instance: InstanceRecord
+    :param tenant_id: Optional tenant ID filter
+    :type tenant_id: str | None
+    :param company_id: Optional company ID filter
+    :type company_id: str | None
+    :param window: Time window for filtering (24h, 7d, 30d, all)
+    :type window: Literal["24h", "7d", "30d", "all"]
+    :param action: Filter by action key
+    :type action: str | None
+    :param actor: Filter by actor label/ID
+    :type actor: str | None
+    :param target_type: Filter by target type
+    :type target_type: str | None
+    :param target_id: Filter by target ID/label
+    :type target_id: str | None
+    :param status_filter: Filter by event status
+    :type status_filter: Literal["ok", "warning", "failed"] | None
+    :param cursor: Cursor for cursor-based pagination
+    :type cursor: str | None
+    :param limit: Maximum number of events per page
+    :type limit: int
+    :return: Paginated audit history with filters and retention summary
+    :rtype: Any
+    :raises TenantFilterRequiredError: If tenant scope is required but missing
+    """
     resolved_tenant_id, resolved_company_id = _resolve_scope_from_instance(
         instance=instance,
         tenant_id=tenant_id,
@@ -1529,6 +1566,25 @@ def get_audit_history_event(
     tenant_id: str | None = Query(default=None, alias="tenantId"),
     company_id: str | None = Query(default=None, alias="companyId"),
 ) -> Any:
+    """
+    Get a single audit event's full detail with actor/target resolution.
+
+    :param event_id: Audit event identifier
+    :type event_id: str
+    :param _admin: Injected admin dependency (operator role required)
+    :type _admin: AuthenticatedAdmin
+    :param governance: Governance service for audit event lookup
+    :type governance: GovernanceService
+    :param instance: Resolved instance record
+    :type instance: InstanceRecord
+    :param tenant_id: Optional tenant ID filter
+    :type tenant_id: str | None
+    :param company_id: Optional company ID filter
+    :type company_id: str | None
+    :return: Full audit event detail with change context and related links
+    :rtype: Any
+    :raises TenantFilterRequiredError: If tenant scope is required but missing
+    """
     resolved_tenant_id, resolved_company_id = _resolve_scope_from_instance(
         instance=instance,
         tenant_id=tenant_id,
@@ -1571,6 +1627,28 @@ def logs_view(
     tenant_id: str | None = Query(default=None, alias="tenantId"),
     company_id: str | None = Query(default=None, alias="companyId"),
 ) -> Any:
+    """
+    Return the logs overview page with audit preview, alerts, error summary,
+    incident review, and operability checks.
+
+    :param _admin: Injected admin session dependency
+    :type _admin: AuthenticatedAdmin
+    :param governance: Governance service for audit and settings data
+    :type governance: GovernanceService
+    :param analytics: Usage analytics store for metrics and events
+    :type analytics: UsageAnalyticsStore
+    :param settings: Application settings
+    :type settings: Settings
+    :param instance: Resolved instance record
+    :type instance: InstanceRecord
+    :param tenant_id: Optional tenant ID filter
+    :type tenant_id: str | None
+    :param company_id: Optional company ID filter
+    :type company_id: str | None
+    :return: Logs overview payload
+    :rtype: Any
+    :raises TenantFilterRequiredError: If tenant scope is required but missing
+    """
     resolved_tenant_id, resolved_company_id = _resolve_scope_from_instance(
         instance=instance,
         tenant_id=tenant_id,
@@ -1701,6 +1779,30 @@ def export_audit_events(
     tenant_id: str | None = Query(default=None, alias="tenantId"),
     company_id: str | None = Query(default=None, alias="companyId"),
 ) -> Response:
+    """
+    Export audit events as CSV or JSON with filtering.
+
+    Generates a downloadable audit export file and records an audit event
+    for the export operation.
+
+    :param payload: Export configuration (format, window, filters)
+    :type payload: AuditExportRequest
+    :param admin: Authenticated admin with mutation role
+    :type admin: AuthenticatedAdmin
+    :param governance: Governance service for audit queries
+    :type governance: GovernanceService
+    :param settings: Application settings for retention limit
+    :type settings: Settings
+    :param instance: Resolved instance record
+    :type instance: InstanceRecord
+    :param tenant_id: Optional tenant ID filter
+    :type tenant_id: str | None
+    :param company_id: Optional company ID filter
+    :type company_id: str | None
+    :return: Downloadable audit export response
+    :rtype: Response
+    :raises TenantFilterRequiredError: If tenant scope is required but missing
+    """
     resolved_tenant_id, resolved_company_id = _resolve_scope_from_instance(
         instance=instance,
         tenant_id=tenant_id,

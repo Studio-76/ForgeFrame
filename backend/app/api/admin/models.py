@@ -16,6 +16,16 @@ def list_model_register(
     instance: InstanceRecord = Depends(resolve_admin_instance_scope),
     service: ControlPlaneService = Depends(get_control_plane_service),
 ) -> dict[str, Any]:
+    """
+    List the model register with summary statistics for the current instance.
+
+    :param instance: Resolved instance scope
+    :type instance: InstanceRecord
+    :param service: Control plane service
+    :type service: ControlPlaneService
+    :return: Dictionary with status, instance data, model list, and summary statistics
+    :rtype: dict[str, Any]
+    """
     models = service.model_register_snapshot()
     return {
         "status": "ok",

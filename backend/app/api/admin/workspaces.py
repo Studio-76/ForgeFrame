@@ -31,6 +31,22 @@ def list_workspaces(
     instance: InstanceRecord = Depends(resolve_admin_instance_scope),
     service: WorkInteractionAdminService = Depends(get_work_interaction_admin_service),
 ) -> dict[str, object]:
+    """
+    List all workspaces for the current instance, with optional filtering.
+
+    :param status_filter: Filter by workspace status
+    :type status_filter: str | None
+    :param limit: Maximum number of workspaces to return
+    :type limit: int
+    :param _admin: Injected authentication/admin dependency
+    :type _admin: AuthenticatedAdmin
+    :param instance: The resolved instance record
+    :type instance: InstanceRecord
+    :param service: Injected work interaction admin service
+    :type service: WorkInteractionAdminService
+    :return: Status, instance data, and list of workspaces
+    :rtype: dict[str, object]
+    """
     workspaces = service.list_workspaces(instance=instance, status=status_filter, limit=limit)
     return {
         "status": "ok",
@@ -46,6 +62,21 @@ def get_workspace(
     instance: InstanceRecord = Depends(resolve_admin_instance_scope),
     service: WorkInteractionAdminService = Depends(get_work_interaction_admin_service),
 ) -> object:
+    """
+    Retrieve a single workspace by its ID.
+
+    :param workspace_id: Unique identifier of the workspace
+    :type workspace_id: str
+    :param _admin: Injected authentication/admin dependency
+    :type _admin: AuthenticatedAdmin
+    :param instance: The resolved instance record
+    :type instance: InstanceRecord
+    :param service: Injected work interaction admin service
+    :type service: WorkInteractionAdminService
+    :return: Status and workspace data
+    :rtype: object
+    :raises ValueError: If the workspace is not found, returns a 404 error response
+    """
     try:
         workspace = service.get_workspace(instance=instance, workspace_id=workspace_id)
     except ValueError as exc:
@@ -60,6 +91,21 @@ def create_workspace(
     instance: InstanceRecord = Depends(resolve_admin_instance_scope),
     service: WorkInteractionAdminService = Depends(get_work_interaction_admin_service),
 ) -> object:
+    """
+    Create a new workspace.
+
+    :param payload: Workspace creation payload
+    :type payload: CreateWorkspace
+    :param admin: Authenticated admin performing the creation
+    :type admin: AuthenticatedAdmin
+    :param instance: The resolved instance record
+    :type instance: InstanceRecord
+    :param service: Injected work interaction admin service
+    :type service: WorkInteractionAdminService
+    :return: Status and created workspace data
+    :rtype: object
+    :raises ValueError: If the workspace conflicts with an existing one
+    """
     try:
         workspace = service.create_workspace(
             instance=instance,
@@ -80,6 +126,23 @@ def update_workspace(
     instance: InstanceRecord = Depends(resolve_admin_instance_scope),
     service: WorkInteractionAdminService = Depends(get_work_interaction_admin_service),
 ) -> object:
+    """
+    Update an existing workspace.
+
+    :param workspace_id: Unique identifier of the workspace to update
+    :type workspace_id: str
+    :param payload: Workspace update payload
+    :type payload: UpdateWorkspace
+    :param admin: Authenticated admin performing the update
+    :type admin: AuthenticatedAdmin
+    :param instance: The resolved instance record
+    :type instance: InstanceRecord
+    :param service: Injected work interaction admin service
+    :type service: WorkInteractionAdminService
+    :return: Status and updated workspace data
+    :rtype: object
+    :raises ValueError: If the workspace is not found or the update is invalid
+    """
     try:
         workspace = service.update_workspace(
             instance=instance,

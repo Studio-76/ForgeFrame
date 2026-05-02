@@ -24,6 +24,22 @@ def health(
     harness: HarnessService = Depends(get_harness_service),
     analytics: UsageAnalyticsStore = Depends(get_usage_analytics_store),
 ) -> JSONResponse:
+    """
+    Get the runtime health status, including startup validation and readiness.
+
+    :param request: Incoming HTTP request
+    :type request: Request
+    :param settings: Application settings
+    :type settings: Settings
+    :param governance: Governance service
+    :type governance: GovernanceService
+    :param harness: Harness service
+    :type harness: HarnessService
+    :param analytics: Usage analytics store
+    :type analytics: UsageAnalyticsStore
+    :return: JSONResponse with health payload (200 if accepting traffic, 503 otherwise)
+    :rtype: JSONResponse
+    """
     startup_checks = ensure_runtime_startup_validated(request.app)
     readiness = build_runtime_readiness_report(
         settings=settings,

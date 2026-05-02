@@ -37,6 +37,24 @@ def list_skills(
     instance: InstanceRecord = Depends(resolve_admin_instance_scope),
     service: SkillAdminService = Depends(get_skill_admin_service),
 ) -> dict[str, object]:
+    """
+    List all skills for the current instance, with optional filtering.
+
+    :param status_filter: Filter by skill status
+    :type status_filter: str | None
+    :param scope: Filter by skill scope
+    :type scope: str | None
+    :param limit: Maximum number of skills to return
+    :type limit: int
+    :param _admin: Injected authentication/admin dependency
+    :type _admin: AuthenticatedAdmin
+    :param instance: The resolved instance record
+    :type instance: InstanceRecord
+    :param service: Injected skill admin service
+    :type service: SkillAdminService
+    :return: Status, instance data, and list of skills
+    :rtype: dict[str, object]
+    """
     skills = service.list_skills(instance=instance, status=status_filter, scope=scope, limit=limit)
     return {
         "status": "ok",
@@ -52,6 +70,21 @@ def get_skill(
     instance: InstanceRecord = Depends(resolve_admin_instance_scope),
     service: SkillAdminService = Depends(get_skill_admin_service),
 ) -> object:
+    """
+    Retrieve a single skill by its ID.
+
+    :param skill_id: Unique identifier of the skill
+    :type skill_id: str
+    :param _admin: Injected authentication/admin dependency
+    :type _admin: AuthenticatedAdmin
+    :param instance: The resolved instance record
+    :type instance: InstanceRecord
+    :param service: Injected skill admin service
+    :type service: SkillAdminService
+    :return: Status and skill data
+    :rtype: object
+    :raises ValueError: If the skill is not found, returns a 404 error response
+    """
     try:
         skill = service.get_skill(instance=instance, skill_id=skill_id)
     except ValueError as exc:
@@ -66,6 +99,21 @@ def create_skill(
     instance: InstanceRecord = Depends(resolve_admin_instance_scope),
     service: SkillAdminService = Depends(get_skill_admin_service),
 ) -> object:
+    """
+    Create a new skill.
+
+    :param payload: Skill creation payload
+    :type payload: CreateSkill
+    :param _admin: Injected authentication/admin dependency
+    :type _admin: AuthenticatedAdmin
+    :param instance: The resolved instance record
+    :type instance: InstanceRecord
+    :param service: Injected skill admin service
+    :type service: SkillAdminService
+    :return: Status and created skill data
+    :rtype: object
+    :raises ValueError: If the skill already exists or is invalid, returns an error response
+    """
     try:
         skill = service.create_skill(instance=instance, payload=payload)
     except ValueError as exc:
@@ -83,6 +131,23 @@ def update_skill(
     instance: InstanceRecord = Depends(resolve_admin_instance_scope),
     service: SkillAdminService = Depends(get_skill_admin_service),
 ) -> object:
+    """
+    Update an existing skill.
+
+    :param skill_id: Unique identifier of the skill to update
+    :type skill_id: str
+    :param payload: Skill update payload
+    :type payload: UpdateSkill
+    :param _admin: Injected authentication/admin dependency
+    :type _admin: AuthenticatedAdmin
+    :param instance: The resolved instance record
+    :type instance: InstanceRecord
+    :param service: Injected skill admin service
+    :type service: SkillAdminService
+    :return: Status and updated skill data
+    :rtype: object
+    :raises ValueError: If the skill is not found or the update is invalid
+    """
     try:
         skill = service.update_skill(instance=instance, skill_id=skill_id, payload=payload)
     except ValueError as exc:
@@ -100,6 +165,23 @@ def activate_skill(
     instance: InstanceRecord = Depends(resolve_admin_instance_scope),
     service: SkillAdminService = Depends(get_skill_admin_service),
 ) -> object:
+    """
+    Activate a specific version of a skill.
+
+    :param skill_id: Unique identifier of the skill to activate
+    :type skill_id: str
+    :param payload: Activation payload specifying the version to activate
+    :type payload: ActivateSkillVersion
+    :param admin: Authenticated admin performing the activation
+    :type admin: AuthenticatedAdmin
+    :param instance: The resolved instance record
+    :type instance: InstanceRecord
+    :param service: Injected skill admin service
+    :type service: SkillAdminService
+    :return: Status and skill data with activated version
+    :rtype: object
+    :raises ValueError: If the skill is not found or activation is invalid
+    """
     try:
         skill = service.activate_skill(
             instance=instance,
@@ -122,6 +204,21 @@ def archive_skill(
     instance: InstanceRecord = Depends(resolve_admin_instance_scope),
     service: SkillAdminService = Depends(get_skill_admin_service),
 ) -> object:
+    """
+    Archive a skill, marking it as inactive.
+
+    :param skill_id: Unique identifier of the skill to archive
+    :type skill_id: str
+    :param _admin: Injected authentication/admin dependency
+    :type _admin: AuthenticatedAdmin
+    :param instance: The resolved instance record
+    :type instance: InstanceRecord
+    :param service: Injected skill admin service
+    :type service: SkillAdminService
+    :return: Status and archived skill data
+    :rtype: object
+    :raises ValueError: If the skill is not found or archiving is invalid
+    """
     try:
         skill = service.archive_skill(instance=instance, skill_id=skill_id)
     except ValueError as exc:
@@ -139,6 +236,23 @@ def record_skill_usage(
     instance: InstanceRecord = Depends(resolve_admin_instance_scope),
     service: SkillAdminService = Depends(get_skill_admin_service),
 ) -> object:
+    """
+    Record a usage event for a skill.
+
+    :param skill_id: Unique identifier of the skill
+    :type skill_id: str
+    :param payload: Usage event payload
+    :type payload: RecordSkillUsage
+    :param _admin: Injected authentication/admin dependency
+    :type _admin: AuthenticatedAdmin
+    :param instance: The resolved instance record
+    :type instance: InstanceRecord
+    :param service: Injected skill admin service
+    :type service: SkillAdminService
+    :return: Status and skill data with updated usage info
+    :rtype: object
+    :raises ValueError: If the skill is not found or usage data is invalid
+    """
     try:
         skill = service.record_usage(instance=instance, skill_id=skill_id, payload=payload)
     except ValueError as exc:

@@ -56,6 +56,12 @@ def _password_rotation_failure_message(error_code: str) -> str:
 
 @router.get("/bootstrap")
 def auth_bootstrap_status() -> Any:
+    """
+    Get the current bootstrap status hint for unauthenticated users.
+
+    :return: Dictionary with status and bootstrap hint
+    :rtype: Any
+    """
     return {"status": "ok", "bootstrap": SignedOutBootstrapHint().model_dump()}
 
 
@@ -95,6 +101,19 @@ def login(
     request: Request,
     service: GovernanceService = Depends(get_governance_service),
 ) -> Any:
+    """
+    Authenticate an admin user and create a session.
+
+    :param payload: Login credentials (username and password)
+    :type payload: LoginRequest
+    :param request: Incoming HTTP request
+    :type request: Request
+    :param service: Governance service for authentication
+    :type service: GovernanceService
+    :return: Dictionary with status and session data
+    :rtype: Any
+    :raises ValueError: If login is rate limited or credentials are invalid
+    """
     unsupported = unsupported_idempotency_response(request, message=_AUTH_IDEMPOTENCY_MESSAGE)
     if unsupported is not None:
         return unsupported
@@ -134,6 +153,24 @@ def runtime_readiness(
     harness: HarnessService = Depends(get_harness_service),
     analytics: UsageAnalyticsStore = Depends(get_usage_analytics_store),
 ) -> Any:
+    """
+    Get the current runtime readiness report for an authenticated admin.
+
+    :param request: Incoming HTTP request
+    :type request: Request
+    :param admin: Injected authenticated admin session dependency (allowing password rotation)
+    :type admin: AuthenticatedAdmin
+    :param settings: Application settings
+    :type settings: Settings
+    :param governance: Governance service
+    :type governance: GovernanceService
+    :param harness: Harness service
+    :type harness: HarnessService
+    :param analytics: Usage analytics store
+    :type analytics: UsageAnalyticsStore
+    :return: Dictionary with status and readiness payload
+    :rtype: Any
+    """
     del admin
     return {
         "status": "ok",
@@ -153,6 +190,14 @@ def runtime_readiness(
 def me(
     admin: AuthenticatedAdmin = Depends(require_admin_session_allowing_password_rotation),
 ) -> Any:
+    """
+    Get the current authenticated admin user profile.
+
+    :param admin: Injected authenticated admin session dependency (allowing password rotation)
+    :type admin: AuthenticatedAdmin
+    :return: Dictionary with status and user data
+    :rtype: Any
+    """
     return {"status": "ok", "user": admin.model_dump()}
 
 
@@ -163,6 +208,20 @@ def logout(
     credentials: HTTPAuthorizationCredentials | None = Depends(_bearer),
     service: GovernanceService = Depends(get_governance_service),
 ) -> Any:
+    """
+    Revoke the current admin session and log the user out.
+
+    :param request: Incoming HTTP request
+    :type request: Request
+    :param admin: Injected authenticated admin session dependency (allowing password rotation)
+    :type admin: AuthenticatedAdmin
+    :param credentials: Bearer token credentials from the Authorization header
+    :type credentials: HTTPAuthorizationCredentials | None
+    :param service: Governance service for session management
+    :type service: GovernanceService
+    :return: Dictionary with status and logout confirmation message
+    :rtype: Any
+    """
     unsupported = unsupported_idempotency_response(request, message=_AUTH_IDEMPOTENCY_MESSAGE)
     if unsupported is not None:
         return unsupported
@@ -179,6 +238,21 @@ def rotate_own_password(
     admin: AuthenticatedAdmin = Depends(require_admin_write_session_allowing_password_rotation),
     service: GovernanceService = Depends(get_governance_service),
 ) -> object:
+    """
+    Rotate the current admin user's password.
+
+    :param payload: Current and new password data
+    :type payload: RotateOwnPasswordRequest
+    :param request: Incoming HTTP request
+    :type request: Request
+    :param admin: Injected authenticated admin write session dependency (allowing password rotation)
+    :type admin: AuthenticatedAdmin
+    :param service: Governance service for password management
+    :type service: GovernanceService
+    :return: Dictionary with status and updated user data
+    :rtype: object
+    :raises ValueError: If password rotation fails (invalid current password, etc.)
+    """
     unsupported = unsupported_idempotency_response(request, message=_AUTH_IDEMPOTENCY_MESSAGE)
     if unsupported is not None:
         return unsupported

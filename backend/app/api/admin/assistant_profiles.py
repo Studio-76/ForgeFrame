@@ -35,6 +35,22 @@ def list_assistant_profiles(
     instance: InstanceRecord = Depends(resolve_admin_instance_scope),
     service: AssistantProfileAdminService = Depends(get_assistant_profile_admin_service),
 ) -> dict[str, object]:
+    """
+    List all assistant profiles for the current instance, with optional filtering.
+
+    :param status_filter: Filter by profile status
+    :type status_filter: str | None
+    :param limit: Maximum number of profiles to return
+    :type limit: int
+    :param admin: Injected authentication/admin dependency
+    :type admin: AuthenticatedAdmin
+    :param instance: The resolved instance record
+    :type instance: InstanceRecord
+    :param service: Injected assistant profile admin service
+    :type service: AssistantProfileAdminService
+    :return: Status, instance data, and list of profiles
+    :rtype: dict[str, object]
+    """
     _ = admin
     profiles = service.list_profiles(instance=instance, status=status_filter, limit=limit)
     return {
@@ -51,6 +67,21 @@ def get_assistant_profile(
     instance: InstanceRecord = Depends(resolve_admin_instance_scope),
     service: AssistantProfileAdminService = Depends(get_assistant_profile_admin_service),
 ) -> object:
+    """
+    Retrieve a single assistant profile by its ID.
+
+    :param assistant_profile_id: Unique identifier of the assistant profile
+    :type assistant_profile_id: str
+    :param admin: Injected authentication/admin dependency
+    :type admin: AuthenticatedAdmin
+    :param instance: The resolved instance record
+    :type instance: InstanceRecord
+    :param service: Injected assistant profile admin service
+    :type service: AssistantProfileAdminService
+    :return: Status and assistant profile data
+    :rtype: object
+    :raises ValueError: If the profile is not found, returns a 404 error response
+    """
     _ = admin
     try:
         profile = service.get_profile(instance=instance, assistant_profile_id=assistant_profile_id)
@@ -66,6 +97,21 @@ def create_assistant_profile(
     instance: InstanceRecord = Depends(resolve_admin_instance_scope),
     service: AssistantProfileAdminService = Depends(get_assistant_profile_admin_service),
 ) -> object:
+    """
+    Create a new assistant profile.
+
+    :param payload: Assistant profile creation payload
+    :type payload: CreateAssistantProfile
+    :param _admin: Injected authentication/admin dependency
+    :type _admin: AuthenticatedAdmin
+    :param instance: The resolved instance record
+    :type instance: InstanceRecord
+    :param service: Injected assistant profile admin service
+    :type service: AssistantProfileAdminService
+    :return: Status and created assistant profile data
+    :rtype: object
+    :raises ValueError: If the profile already exists or is invalid
+    """
     try:
         profile = service.create_profile(instance=instance, payload=payload)
     except ValueError as exc:
@@ -83,6 +129,23 @@ def update_assistant_profile(
     instance: InstanceRecord = Depends(resolve_admin_instance_scope),
     service: AssistantProfileAdminService = Depends(get_assistant_profile_admin_service),
 ) -> object:
+    """
+    Update an existing assistant profile.
+
+    :param assistant_profile_id: Unique identifier of the assistant profile to update
+    :type assistant_profile_id: str
+    :param payload: Assistant profile update payload
+    :type payload: UpdateAssistantProfile
+    :param _admin: Injected authentication/admin dependency
+    :type _admin: AuthenticatedAdmin
+    :param instance: The resolved instance record
+    :type instance: InstanceRecord
+    :param service: Injected assistant profile admin service
+    :type service: AssistantProfileAdminService
+    :return: Status and updated assistant profile data
+    :rtype: object
+    :raises ValueError: If the profile is not found or the update is invalid
+    """
     try:
         profile = service.update_profile(
             instance=instance,
@@ -104,6 +167,23 @@ def evaluate_assistant_action(
     instance: InstanceRecord = Depends(resolve_admin_instance_scope),
     service: AssistantProfileAdminService = Depends(get_assistant_profile_admin_service),
 ) -> object:
+    """
+    Evaluate an action against an assistant profile's policy.
+
+    :param assistant_profile_id: Unique identifier of the assistant profile
+    :type assistant_profile_id: str
+    :param payload: Action evaluation payload
+    :type payload: EvaluateAssistantAction
+    :param _admin: Injected authentication/admin dependency
+    :type _admin: AuthenticatedAdmin
+    :param instance: The resolved instance record
+    :type instance: InstanceRecord
+    :param service: Injected assistant profile admin service
+    :type service: AssistantProfileAdminService
+    :return: Status and evaluation result data
+    :rtype: object
+    :raises ValueError: If the profile is not found or the evaluation is invalid
+    """
     try:
         evaluation = service.evaluate_action(
             instance=instance,

@@ -33,6 +33,26 @@ def list_artifacts(
     instance: InstanceRecord = Depends(resolve_admin_instance_scope),
     service: WorkInteractionAdminService = Depends(get_work_interaction_admin_service),
 ) -> dict[str, object]:
+    """
+    List all artifacts for the current instance, with optional filtering.
+
+    :param workspace_id: Filter by workspace ID
+    :type workspace_id: str | None
+    :param target_kind: Filter by target kind
+    :type target_kind: str | None
+    :param target_id: Filter by target ID
+    :type target_id: str | None
+    :param limit: Maximum number of artifacts to return
+    :type limit: int
+    :param _admin: Injected authentication/admin dependency
+    :type _admin: AuthenticatedAdmin
+    :param instance: The resolved instance record
+    :type instance: InstanceRecord
+    :param service: Injected work interaction admin service
+    :type service: WorkInteractionAdminService
+    :return: Status, instance data, and list of artifacts
+    :rtype: dict[str, object]
+    """
     artifacts = service.list_artifacts(
         instance=instance,
         workspace_id=workspace_id,
@@ -54,6 +74,21 @@ def get_artifact(
     instance: InstanceRecord = Depends(resolve_admin_instance_scope),
     service: WorkInteractionAdminService = Depends(get_work_interaction_admin_service),
 ) -> object:
+    """
+    Retrieve a single artifact by its ID.
+
+    :param artifact_id: Unique identifier of the artifact
+    :type artifact_id: str
+    :param _admin: Injected authentication/admin dependency
+    :type _admin: AuthenticatedAdmin
+    :param instance: The resolved instance record
+    :type instance: InstanceRecord
+    :param service: Injected work interaction admin service
+    :type service: WorkInteractionAdminService
+    :return: Status and artifact data
+    :rtype: object
+    :raises ValueError: If the artifact is not found, returns a 404 error response
+    """
     try:
         artifact = service.get_artifact(instance=instance, artifact_id=artifact_id)
     except ValueError as exc:
@@ -68,6 +103,21 @@ def create_artifact(
     instance: InstanceRecord = Depends(resolve_admin_instance_scope),
     service: WorkInteractionAdminService = Depends(get_work_interaction_admin_service),
 ) -> object:
+    """
+    Create a new artifact.
+
+    :param payload: Artifact creation payload
+    :type payload: CreateArtifact
+    :param admin: Authenticated admin performing the creation
+    :type admin: AuthenticatedAdmin
+    :param instance: The resolved instance record
+    :type instance: InstanceRecord
+    :param service: Injected work interaction admin service
+    :type service: WorkInteractionAdminService
+    :return: Status and created artifact data
+    :rtype: object
+    :raises ValueError: If the artifact already exists or is invalid
+    """
     try:
         artifact = service.create_artifact(
             instance=instance,
@@ -90,6 +140,23 @@ def update_artifact(
     instance: InstanceRecord = Depends(resolve_admin_instance_scope),
     service: WorkInteractionAdminService = Depends(get_work_interaction_admin_service),
 ) -> object:
+    """
+    Update an existing artifact.
+
+    :param artifact_id: Unique identifier of the artifact to update
+    :type artifact_id: str
+    :param payload: Artifact update payload
+    :type payload: UpdateArtifact
+    :param _admin: Injected authentication/admin dependency
+    :type _admin: AuthenticatedAdmin
+    :param instance: The resolved instance record
+    :type instance: InstanceRecord
+    :param service: Injected work interaction admin service
+    :type service: WorkInteractionAdminService
+    :return: Status and updated artifact data
+    :rtype: object
+    :raises ValueError: If the artifact is not found, returns a 404 error response
+    """
     try:
         artifact = service.update_artifact(instance=instance, artifact_id=artifact_id, payload=payload)
     except ValueError as exc:

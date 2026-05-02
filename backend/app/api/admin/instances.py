@@ -413,6 +413,25 @@ def list_instances(
     agents: AgentAdminService = Depends(get_agent_admin_service),
     conversations: ConversationInboxAdminService = Depends(get_conversation_inbox_admin_service),
 ) -> dict[str, Any]:
+    """
+    List all instances accessible to the authenticated admin.
+
+    Returns a full inventory record for each instance including operator agent,
+    provider targets, routing, runtime access, and work-interaction summaries.
+
+    :param admin: Authenticated admin session
+    :type admin: AuthenticatedAdmin
+    :param service: Instance service
+    :type service: InstanceService
+    :param governance: Governance service for access control
+    :type governance: GovernanceService
+    :param agents: Agent admin service for operator agent inspection
+    :type agents: AgentAdminService
+    :param conversations: Conversation inbox admin service
+    :type conversations: ConversationInboxAdminService
+    :return: List of instance inventory records
+    :rtype: dict[str, Any]
+    """
     instances = governance.list_accessible_instances(
         actor=admin,
         instances=service.list_instances(),
@@ -442,6 +461,26 @@ def get_instance(
     agents: AgentAdminService = Depends(get_agent_admin_service),
     conversations: ConversationInboxAdminService = Depends(get_conversation_inbox_admin_service),
 ) -> object:
+    """
+    Get a single instance by ID with full inventory details.
+
+    :param instance_id: Instance identifier
+    :type instance_id: str
+    :param admin: Authenticated admin session
+    :type admin: AuthenticatedAdmin
+    :param service: Instance service
+    :type service: InstanceService
+    :param governance: Governance service for access authorization
+    :type governance: GovernanceService
+    :param agents: Agent admin service
+    :type agents: AgentAdminService
+    :param conversations: Conversation inbox admin service
+    :type conversations: ConversationInboxAdminService
+    :return: Instance inventory record
+    :rtype: object
+    :raises ValueError: If instance is not found
+    :raises PermissionError: If admin lacks read permission
+    """
     try:
         instance = service.get_instance(instance_id)
     except ValueError as exc:
@@ -475,6 +514,29 @@ def create_instance(
     agents: AgentAdminService = Depends(get_agent_admin_service),
     conversations: ConversationInboxAdminService = Depends(get_conversation_inbox_admin_service),
 ) -> object:
+    """
+    Create a new ForgeFrame instance.
+
+    Validates write permission on the current instance, creates the instance,
+    assigns the admin as owner/admin, and ensures a default operator agent.
+
+    :param payload: Instance creation request
+    :type payload: InstanceCreateRequest
+    :param admin: Authenticated admin session
+    :type admin: AuthenticatedAdmin
+    :param service: Instance service
+    :type service: InstanceService
+    :param governance: Governance service for access control
+    :type governance: GovernanceService
+    :param agents: Agent admin service for operator agent creation
+    :type agents: AgentAdminService
+    :param conversations: Conversation inbox admin service
+    :type conversations: ConversationInboxAdminService
+    :return: Created instance inventory record
+    :rtype: object
+    :raises PermissionError: If admin lacks instance.write permission
+    :raises ValueError: If instance slug or ID conflicts
+    """
     try:
         active_instance = service.resolve_instance(
             instance_id=admin.active_instance_id,
@@ -524,6 +586,31 @@ def update_instance(
     agents: AgentAdminService = Depends(get_agent_admin_service),
     conversations: ConversationInboxAdminService = Depends(get_conversation_inbox_admin_service),
 ) -> object:
+    """
+    Update an existing ForgeFrame instance.
+
+    Validates write permission, applies the update, and returns the updated
+    inventory record with a refreshed operator agent.
+
+    :param instance_id: Instance identifier to update
+    :type instance_id: str
+    :param payload: Instance update request
+    :type payload: InstanceUpdateRequest
+    :param admin: Authenticated admin session
+    :type admin: AuthenticatedAdmin
+    :param service: Instance service
+    :type service: InstanceService
+    :param governance: Governance service for access authorization
+    :type governance: GovernanceService
+    :param agents: Agent admin service
+    :type agents: AgentAdminService
+    :param conversations: Conversation inbox admin service
+    :type conversations: ConversationInboxAdminService
+    :return: Updated instance inventory record
+    :rtype: object
+    :raises ValueError: If instance not found or update conflicts
+    :raises PermissionError: If admin lacks instance.write permission
+    """
     try:
         current = service.get_instance(instance_id)
     except ValueError as exc:

@@ -32,6 +32,24 @@ def list_channels(
     instance: InstanceRecord = Depends(resolve_admin_instance_scope),
     service: TaskAutomationAdminService = Depends(get_task_automation_admin_service),
 ) -> dict[str, object]:
+    """
+    List all delivery channels for the current instance, with optional filtering.
+
+    :param status_filter: Filter by channel status
+    :type status_filter: str | None
+    :param kind_filter: Filter by channel kind/type
+    :type kind_filter: str | None
+    :param limit: Maximum number of channels to return
+    :type limit: int
+    :param _admin: Injected authentication/admin dependency
+    :type _admin: AuthenticatedAdmin
+    :param instance: The resolved instance record
+    :type instance: InstanceRecord
+    :param service: Injected task automation admin service
+    :type service: TaskAutomationAdminService
+    :return: Status, instance data, and list of channels
+    :rtype: dict[str, object]
+    """
     channels = service.list_channels(instance=instance, status=status_filter, kind=kind_filter, limit=limit)
     return {
         "status": "ok",
@@ -47,6 +65,21 @@ def get_channel(
     instance: InstanceRecord = Depends(resolve_admin_instance_scope),
     service: TaskAutomationAdminService = Depends(get_task_automation_admin_service),
 ) -> object:
+    """
+    Retrieve a single delivery channel by its ID.
+
+    :param channel_id: Unique identifier of the channel
+    :type channel_id: str
+    :param _admin: Injected authentication/admin dependency
+    :type _admin: AuthenticatedAdmin
+    :param instance: The resolved instance record
+    :type instance: InstanceRecord
+    :param service: Injected task automation admin service
+    :type service: TaskAutomationAdminService
+    :return: Status and channel data
+    :rtype: object
+    :raises ValueError: If the channel is not found, returns a 404 error response
+    """
     try:
         channel = service.get_channel(instance=instance, channel_id=channel_id)
     except ValueError as exc:
@@ -61,6 +94,21 @@ def create_channel(
     instance: InstanceRecord = Depends(resolve_admin_instance_scope),
     service: TaskAutomationAdminService = Depends(get_task_automation_admin_service),
 ) -> object:
+    """
+    Create a new delivery channel.
+
+    :param payload: Channel creation payload
+    :type payload: CreateDeliveryChannel
+    :param _admin: Injected authentication/admin dependency
+    :type _admin: AuthenticatedAdmin
+    :param instance: The resolved instance record
+    :type instance: InstanceRecord
+    :param service: Injected task automation admin service
+    :type service: TaskAutomationAdminService
+    :return: Status and created channel data
+    :rtype: object
+    :raises ValueError: If the channel already exists or is invalid
+    """
     try:
         channel = service.create_channel(instance=instance, payload=payload)
     except ValueError as exc:
@@ -78,6 +126,23 @@ def update_channel(
     instance: InstanceRecord = Depends(resolve_admin_instance_scope),
     service: TaskAutomationAdminService = Depends(get_task_automation_admin_service),
 ) -> object:
+    """
+    Update an existing delivery channel.
+
+    :param channel_id: Unique identifier of the channel to update
+    :type channel_id: str
+    :param payload: Channel update payload
+    :type payload: UpdateDeliveryChannel
+    :param _admin: Injected authentication/admin dependency
+    :type _admin: AuthenticatedAdmin
+    :param instance: The resolved instance record
+    :type instance: InstanceRecord
+    :param service: Injected task automation admin service
+    :type service: TaskAutomationAdminService
+    :return: Status and updated channel data
+    :rtype: object
+    :raises ValueError: If the channel is not found or the update is invalid
+    """
     try:
         channel = service.update_channel(instance=instance, channel_id=channel_id, payload=payload)
     except ValueError as exc:

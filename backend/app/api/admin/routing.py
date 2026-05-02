@@ -26,6 +26,18 @@ def get_routing_snapshot(
     instance: InstanceRecord = Depends(resolve_admin_instance_scope),
     service: ControlPlaneService = Depends(get_control_plane_service),
 ) -> Any:
+    """
+    Get the current routing control plane snapshot.
+
+    :param _admin: Injected authentication/admin dependency
+    :type _admin: AuthenticatedAdmin
+    :param instance: The resolved instance record
+    :type instance: InstanceRecord
+    :param service: Injected control plane service
+    :type service: ControlPlaneService
+    :return: Status, object type, instance data, and routing snapshot
+    :rtype: Any
+    """
     snapshot = service.routing_snapshot()
     return {
         "status": "ok",
@@ -42,6 +54,21 @@ def update_routing_policy(
     _admin: AuthenticatedAdmin = Depends(require_admin_instance_permission("routing.write", allow_impersonation=False)),
     service: ControlPlaneService = Depends(get_control_plane_service),
 ) -> Any:
+    """
+    Update a routing policy for a given classification.
+
+    :param classification: The routing classification to update
+    :type classification: str
+    :param payload: Policy update request payload
+    :type payload: RoutingPolicyUpdateRequest
+    :param _admin: Injected authentication/admin dependency
+    :type _admin: AuthenticatedAdmin
+    :param service: Injected control plane service
+    :type service: ControlPlaneService
+    :return: Status and updated policy data
+    :rtype: Any
+    :raises ValueError: If the policy update is invalid, returns a 400 error response
+    """
     try:
         policy = service.update_routing_policy(classification, payload)
     except ValueError as exc:
@@ -58,6 +85,18 @@ def update_routing_budget(
     _admin: AuthenticatedAdmin = Depends(require_admin_instance_permission("routing.write", allow_impersonation=False)),
     service: ControlPlaneService = Depends(get_control_plane_service),
 ) -> Any:
+    """
+    Update the routing budget configuration.
+
+    :param payload: Budget update request payload
+    :type payload: RoutingBudgetUpdateRequest
+    :param _admin: Injected authentication/admin dependency
+    :type _admin: AuthenticatedAdmin
+    :param service: Injected control plane service
+    :type service: ControlPlaneService
+    :return: Status and updated budget data
+    :rtype: Any
+    """
     budget = service.update_routing_budget(payload)
     return {"status": "ok", "budget": budget.model_dump(mode="json")}
 
@@ -69,6 +108,21 @@ def update_routing_circuit(
     _admin: AuthenticatedAdmin = Depends(require_admin_instance_permission("routing.write", allow_impersonation=False)),
     service: ControlPlaneService = Depends(get_control_plane_service),
 ) -> Any:
+    """
+    Update a routing circuit breaker configuration for a target key.
+
+    :param target_key: The target key for the circuit configuration
+    :type target_key: str
+    :param payload: Circuit update request payload
+    :type payload: RoutingCircuitUpdateRequest
+    :param _admin: Injected authentication/admin dependency
+    :type _admin: AuthenticatedAdmin
+    :param service: Injected control plane service
+    :type service: ControlPlaneService
+    :return: Status and updated circuit data
+    :rtype: Any
+    :raises ValueError: If the circuit update is invalid, returns a 400 error response
+    """
     try:
         circuit = service.update_routing_circuit(target_key, payload)
     except ValueError as exc:
@@ -85,6 +139,19 @@ def simulate_routing(
     _admin: AuthenticatedAdmin = Depends(require_admin_instance_permission("routing.read")),
     service: ControlPlaneService = Depends(get_control_plane_service),
 ) -> Any:
+    """
+    Simulate a routing decision based on the provided request.
+
+    :param payload: Routing simulation request payload
+    :type payload: RoutingSimulationRequest
+    :param _admin: Injected authentication/admin dependency
+    :type _admin: AuthenticatedAdmin
+    :param service: Injected control plane service
+    :type service: ControlPlaneService
+    :return: Simulation result from the control plane service
+    :rtype: Any
+    :raises ValueError: If the simulation request is invalid, returns a 400 error response
+    """
     try:
         return service.simulate_routing(payload)
     except ValueError as exc:

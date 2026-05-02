@@ -404,6 +404,34 @@ def dashboard_snapshot(
     execution: ExecutionAdminService = Depends(get_execution_admin_service),
     instance: InstanceRecord = Depends(resolve_admin_instance_scope),
 ) -> Any:
+    """
+    Return a comprehensive dashboard snapshot for the current instance scope.
+
+    Aggregates readiness, security, runtime, routing/queue, and cost signals into
+    a command-center payload with attention items, KPIs, and a primary action.
+
+    :param request: Incoming HTTP request
+    :type request: Request
+    :param admin: Authenticated admin session
+    :type admin: AuthenticatedAdmin
+    :param control_plane: Control-plane service for provider/routing data
+    :type control_plane: ControlPlaneService
+    :param analytics: Usage analytics store
+    :type analytics: UsageAnalyticsStore
+    :param governance: Governance service for audit/security/access data
+    :type governance: GovernanceService
+    :param harness: Harness service for readiness checks
+    :type harness: HarnessService
+    :param settings: Application settings
+    :type settings: Settings
+    :param execution: Execution admin service for dispatch/queue data
+    :type execution: ExecutionAdminService
+    :param instance: Resolved instance record
+    :type instance: InstanceRecord
+    :return: Dashboard snapshot with sections, attention items, KPIs, and summary
+    :rtype: Any
+    :raises TenantFilterRequiredError: If tenant scope resolution fails
+    """
     requested_tenant_id = (request.query_params.get("tenantId") or "").strip()
     try:
         aggregates = analytics.aggregate(window_seconds=24 * 3600, tenant_id=instance.tenant_id)

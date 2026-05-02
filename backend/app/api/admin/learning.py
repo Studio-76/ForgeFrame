@@ -32,6 +32,24 @@ def list_learning_events(
     instance: InstanceRecord = Depends(resolve_admin_instance_scope),
     service: LearningAdminService = Depends(get_learning_admin_service),
 ) -> dict[str, object]:
+    """
+    List all learning events for the current instance, with optional filtering.
+
+    :param status_filter: Filter by event status
+    :type status_filter: str | None
+    :param trigger_kind: Filter by trigger kind
+    :type trigger_kind: str | None
+    :param limit: Maximum number of events to return
+    :type limit: int
+    :param _admin: Injected authentication/admin dependency
+    :type _admin: AuthenticatedAdmin
+    :param instance: The resolved instance record
+    :type instance: InstanceRecord
+    :param service: Injected learning admin service
+    :type service: LearningAdminService
+    :return: Status, instance data, and list of learning events
+    :rtype: dict[str, object]
+    """
     events = service.list_events(instance=instance, status=status_filter, trigger_kind=trigger_kind, limit=limit)
     return {
         "status": "ok",
@@ -47,6 +65,21 @@ def get_learning_event(
     instance: InstanceRecord = Depends(resolve_admin_instance_scope),
     service: LearningAdminService = Depends(get_learning_admin_service),
 ) -> object:
+    """
+    Retrieve a single learning event by its ID.
+
+    :param event_id: Unique identifier of the learning event
+    :type event_id: str
+    :param _admin: Injected authentication/admin dependency
+    :type _admin: AuthenticatedAdmin
+    :param instance: The resolved instance record
+    :type instance: InstanceRecord
+    :param service: Injected learning admin service
+    :type service: LearningAdminService
+    :return: Status and learning event data
+    :rtype: object
+    :raises ValueError: If the event is not found, returns a 404 error response
+    """
     try:
         event = service.get_event(instance=instance, event_id=event_id)
     except ValueError as exc:
@@ -61,6 +94,21 @@ def create_learning_event(
     instance: InstanceRecord = Depends(resolve_admin_instance_scope),
     service: LearningAdminService = Depends(get_learning_admin_service),
 ) -> object:
+    """
+    Create a new learning event.
+
+    :param payload: Learning event creation payload
+    :type payload: CreateLearningEvent
+    :param _admin: Injected authentication/admin dependency
+    :type _admin: AuthenticatedAdmin
+    :param instance: The resolved instance record
+    :type instance: InstanceRecord
+    :param service: Injected learning admin service
+    :type service: LearningAdminService
+    :return: Status and created learning event data
+    :rtype: object
+    :raises ValueError: If the event is invalid, returns a 409 error response
+    """
     try:
         event = service.create_event(instance=instance, payload=payload)
     except ValueError as exc:
@@ -74,6 +122,20 @@ def scan_learning_patterns(
     instance: InstanceRecord = Depends(resolve_admin_instance_scope),
     service: LearningAdminService = Depends(get_learning_admin_service),
 ) -> dict[str, object]:
+    """
+    Scan for learning patterns in the instance data.
+
+    Triggers pattern detection across existing learning events.
+
+    :param _admin: Injected authentication/admin dependency
+    :type _admin: AuthenticatedAdmin
+    :param instance: The resolved instance record
+    :type instance: InstanceRecord
+    :param service: Injected learning admin service
+    :type service: LearningAdminService
+    :return: Status and list of detected pattern events
+    :rtype: dict[str, object]
+    """
     events = service.scan_patterns(instance=instance)
     return {"status": "ok", "events": [item.model_dump(mode="json") for item in events]}
 
@@ -86,6 +148,23 @@ def decide_learning_event(
     instance: InstanceRecord = Depends(resolve_admin_instance_scope),
     service: LearningAdminService = Depends(get_learning_admin_service),
 ) -> object:
+    """
+    Make a decision on a learning event (accept or reject).
+
+    :param event_id: Unique identifier of the learning event
+    :type event_id: str
+    :param payload: Decision payload with outcome
+    :type payload: DecideLearningEvent
+    :param _admin: Injected authentication/admin dependency
+    :type _admin: AuthenticatedAdmin
+    :param instance: The resolved instance record
+    :type instance: InstanceRecord
+    :param service: Injected learning admin service
+    :type service: LearningAdminService
+    :return: Status and updated learning event data
+    :rtype: object
+    :raises ValueError: If the event is not found or the decision is invalid
+    """
     try:
         event = service.decide_event(instance=instance, event_id=event_id, payload=payload)
     except ValueError as exc:

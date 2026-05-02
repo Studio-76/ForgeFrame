@@ -338,6 +338,36 @@ def create_chat_completion(
     routing: RoutingService = Depends(get_routing_service),
     _runtime_actor: RequestActor | None = Depends(require_runtime_permission("runtime.chat.write")),
 ) -> object:
+    """
+    Create a chat completion via the /v1/chat/completions endpoint.
+
+    Validates the request, authorizes model access, dispatches to the
+    appropriate provider, and returns a streaming or non-streaming response.
+
+    :param request: Incoming HTTP request
+    :type request: Request
+    :param body: Raw JSON request body
+    :type body: dict[str, Any]
+    :param registry: Model registry for model resolution
+    :type registry: ModelRegistry
+    :param dispatch: Dispatch service for provider routing
+    :type dispatch: DispatchService
+    :param settings: Application settings
+    :type settings: Settings
+    :param gateway_identity: Authenticated gateway identity, if any
+    :type gateway_identity: RuntimeGatewayIdentity | None
+    :param request_path_decision: Request-path routing decision, if any
+    :type request_path_decision: RuntimeRequestPathDecision | None
+    :param governance: Governance service for authorization
+    :type governance: GovernanceService
+    :param routing: Routing service for model availability
+    :type routing: RoutingService
+    :param _runtime_actor: Injected runtime permission dependency
+    :type _runtime_actor: RequestActor | None
+    :return: Chat completion payload or streaming SSE response
+    :rtype: object
+    :raises ValidationError: If request body validation fails
+    """
     try:
         payload = ChatCompletionsRequest.model_validate(body)
     except ValidationError as exc:

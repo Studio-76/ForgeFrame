@@ -60,6 +60,16 @@ def list_runtime_keys(
     instance: InstanceRecord = Depends(resolve_admin_instance_scope),
     service: GovernanceService = Depends(get_governance_service),
 ) -> Any:
+    """
+    List all runtime keys for the current instance.
+
+    :param instance: The resolved instance record
+    :type instance: InstanceRecord
+    :param service: Injected governance service
+    :type service: GovernanceService
+    :return: Status and list of runtime keys (excluding secret hashes)
+    :rtype: Any
+    """
     return {
         "status": "ok",
         "keys": [_runtime_key_response(item) for item in service.list_runtime_keys(instance_id=instance.instance_id)],
@@ -74,6 +84,22 @@ def create_runtime_key(
     instance: InstanceRecord = Depends(resolve_admin_instance_scope),
     service: GovernanceService = Depends(get_governance_service),
 ) -> Any:
+    """
+    Issue a new runtime key for the current instance.
+
+    :param payload: Runtime key creation request payload
+    :type payload: RuntimeKeyCreateRequest
+    :param request: The incoming HTTP request (used for idempotency check)
+    :type request: Request
+    :param admin: Authenticated admin performing the creation
+    :type admin: AuthenticatedAdmin
+    :param instance: The resolved instance record
+    :type instance: InstanceRecord
+    :param service: Injected governance service
+    :type service: GovernanceService
+    :return: Status and issued runtime key data
+    :rtype: Any
+    """
     unsupported = unsupported_idempotency_response(request, message=_RUNTIME_KEY_IDEMPOTENCY_MESSAGE)
     if unsupported is not None:
         return unsupported
@@ -101,6 +127,23 @@ def rotate_runtime_key(
     instance: InstanceRecord = Depends(resolve_admin_instance_scope),
     service: GovernanceService = Depends(get_governance_service),
 ) -> Any:
+    """
+    Rotate a runtime key, issuing a new secret.
+
+    :param key_id: Unique identifier of the runtime key to rotate
+    :type key_id: str
+    :param request: The incoming HTTP request (used for idempotency check)
+    :type request: Request
+    :param admin: Authenticated admin performing the rotation
+    :type admin: AuthenticatedAdmin
+    :param instance: The resolved instance record
+    :type instance: InstanceRecord
+    :param service: Injected governance service
+    :type service: GovernanceService
+    :return: Status and rotated runtime key data
+    :rtype: Any
+    :raises ValueError: If the runtime key is not found, returns a 404 error response
+    """
     unsupported = unsupported_idempotency_response(request, message=_RUNTIME_KEY_IDEMPOTENCY_MESSAGE)
     if unsupported is not None:
         return unsupported
@@ -122,6 +165,23 @@ def disable_runtime_key(
     instance: InstanceRecord = Depends(resolve_admin_instance_scope),
     service: GovernanceService = Depends(get_governance_service),
 ) -> Any:
+    """
+    Disable a runtime key, preventing further use.
+
+    :param key_id: Unique identifier of the runtime key to disable
+    :type key_id: str
+    :param request: The incoming HTTP request (used for idempotency check)
+    :type request: Request
+    :param admin: Authenticated admin performing the disable
+    :type admin: AuthenticatedAdmin
+    :param instance: The resolved instance record
+    :type instance: InstanceRecord
+    :param service: Injected governance service
+    :type service: GovernanceService
+    :return: Status and disabled runtime key data
+    :rtype: Any
+    :raises ValueError: If the runtime key is not found, returns a 404 error response
+    """
     unsupported = unsupported_idempotency_response(request, message=_RUNTIME_KEY_IDEMPOTENCY_MESSAGE)
     if unsupported is not None:
         return unsupported
@@ -143,6 +203,23 @@ def activate_runtime_key(
     instance: InstanceRecord = Depends(resolve_admin_instance_scope),
     service: GovernanceService = Depends(get_governance_service),
 ) -> Any:
+    """
+    Activate a previously disabled runtime key.
+
+    :param key_id: Unique identifier of the runtime key to activate
+    :type key_id: str
+    :param request: The incoming HTTP request (used for idempotency check)
+    :type request: Request
+    :param admin: Authenticated admin performing the activation
+    :type admin: AuthenticatedAdmin
+    :param instance: The resolved instance record
+    :type instance: InstanceRecord
+    :param service: Injected governance service
+    :type service: GovernanceService
+    :return: Status and activated runtime key data
+    :rtype: Any
+    :raises ValueError: If the runtime key is not found, returns a 404 error response
+    """
     unsupported = unsupported_idempotency_response(request, message=_RUNTIME_KEY_IDEMPOTENCY_MESSAGE)
     if unsupported is not None:
         return unsupported
@@ -164,6 +241,23 @@ def revoke_runtime_key(
     instance: InstanceRecord = Depends(resolve_admin_instance_scope),
     service: GovernanceService = Depends(get_governance_service),
 ) -> Any:
+    """
+    Revoke a runtime key, permanently disabling it.
+
+    :param key_id: Unique identifier of the runtime key to revoke
+    :type key_id: str
+    :param request: The incoming HTTP request (used for idempotency check)
+    :type request: Request
+    :param admin: Authenticated admin performing the revocation
+    :type admin: AuthenticatedAdmin
+    :param instance: The resolved instance record
+    :type instance: InstanceRecord
+    :param service: Injected governance service
+    :type service: GovernanceService
+    :return: Status and revoked runtime key data
+    :rtype: Any
+    :raises ValueError: If the runtime key is not found, returns a 404 error response
+    """
     unsupported = unsupported_idempotency_response(request, message=_RUNTIME_KEY_IDEMPOTENCY_MESSAGE)
     if unsupported is not None:
         return unsupported
@@ -183,6 +277,19 @@ def get_runtime_key_request_path_policy(
     instance: InstanceRecord = Depends(resolve_admin_instance_scope),
     service: GovernanceService = Depends(get_governance_service),
 ) -> Any:
+    """
+    Get the request path policy for a runtime key.
+
+    :param key_id: Unique identifier of the runtime key
+    :type key_id: str
+    :param instance: The resolved instance record
+    :type instance: InstanceRecord
+    :param service: Injected governance service
+    :type service: GovernanceService
+    :return: Status and request path policy details
+    :rtype: Any
+    :raises ValueError: If the runtime key is not found, returns a 404 error response
+    """
     key = next(
         (item for item in service.list_runtime_keys(instance_id=instance.instance_id) if item.key_id == key_id),
         None,
@@ -217,6 +324,23 @@ def update_runtime_key_request_path_policy(
     instance: InstanceRecord = Depends(resolve_admin_instance_scope),
     service: GovernanceService = Depends(get_governance_service),
 ) -> Any:
+    """
+    Update the request path policy for a runtime key.
+
+    :param key_id: Unique identifier of the runtime key
+    :type key_id: str
+    :param payload: Request path policy update payload
+    :type payload: RuntimeKeyRequestPathPolicyRequest
+    :param admin: Authenticated admin performing the update
+    :type admin: AuthenticatedAdmin
+    :param instance: The resolved instance record
+    :type instance: InstanceRecord
+    :param service: Injected governance service
+    :type service: GovernanceService
+    :return: Status and updated runtime key data
+    :rtype: Any
+    :raises ValueError: If the key is not found or the request is invalid
+    """
     try:
         key = service.update_runtime_key_request_path_policy(
             key_id,
@@ -246,6 +370,26 @@ async def run_runtime_key_first_success_probe(
     service: GovernanceService = Depends(get_governance_service),
     instance_service: InstanceService = Depends(get_instance_service),
 ) -> Any:
+    """
+    Run a first-success connectivity probe against a runtime key.
+
+    Tests the runtime key by calling the models endpoint and optionally a chat completion
+    endpoint, storing the probe result in the instance metadata.
+
+    :param payload: Probe request containing the runtime key and probe options
+    :type payload: RuntimeKeyFirstSuccessProbeRequest
+    :param request: The incoming HTTP request (used for ASGI transport)
+    :type request: Request
+    :param instance: The resolved instance record
+    :type instance: InstanceRecord
+    :param service: Injected governance service
+    :type service: GovernanceService
+    :param instance_service: Injected instance service for persisting probe results
+    :type instance_service: InstanceService
+    :return: Status and probe result details
+    :rtype: Any
+    :raises ValueError: If the runtime key is invalid or instance-scope mismatch
+    """
     runtime_key = payload.runtime_key.strip()
     identity = service.authenticate_runtime_key(runtime_key)
     executed_at = datetime.now(tz=UTC).isoformat()

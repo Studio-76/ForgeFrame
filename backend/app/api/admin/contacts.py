@@ -31,6 +31,22 @@ def list_contacts(
     instance: InstanceRecord = Depends(resolve_admin_instance_scope),
     service: KnowledgeContextAdminService = Depends(get_knowledge_context_admin_service),
 ) -> dict[str, object]:
+    """
+    List all contacts for the current instance, with optional filtering.
+
+    :param status_filter: Filter by contact status
+    :type status_filter: str | None
+    :param limit: Maximum number of contacts to return
+    :type limit: int
+    :param admin: Authenticated admin performing the request
+    :type admin: AuthenticatedAdmin
+    :param instance: The resolved instance record
+    :type instance: InstanceRecord
+    :param service: Injected knowledge context admin service
+    :type service: KnowledgeContextAdminService
+    :return: Status, instance data, and list of contacts
+    :rtype: dict[str, object]
+    """
     contacts = service.list_contacts(instance=instance, actor=admin, status=status_filter, limit=limit)
     return {
         "status": "ok",
@@ -46,6 +62,21 @@ def get_contact(
     instance: InstanceRecord = Depends(resolve_admin_instance_scope),
     service: KnowledgeContextAdminService = Depends(get_knowledge_context_admin_service),
 ) -> object:
+    """
+    Retrieve a single contact by its ID.
+
+    :param contact_id: Unique identifier of the contact
+    :type contact_id: str
+    :param admin: Authenticated admin performing the request
+    :type admin: AuthenticatedAdmin
+    :param instance: The resolved instance record
+    :type instance: InstanceRecord
+    :param service: Injected knowledge context admin service
+    :type service: KnowledgeContextAdminService
+    :return: Status and contact data
+    :rtype: object
+    :raises ValueError: If the contact is not found, returns a 404 error response
+    """
     try:
         contact = service.get_contact(instance=instance, actor=admin, contact_id=contact_id)
     except ValueError as exc:
@@ -60,6 +91,21 @@ def create_contact(
     instance: InstanceRecord = Depends(resolve_admin_instance_scope),
     service: KnowledgeContextAdminService = Depends(get_knowledge_context_admin_service),
 ) -> object:
+    """
+    Create a new contact.
+
+    :param payload: Contact creation payload
+    :type payload: CreateContact
+    :param _admin: Injected authentication/admin dependency
+    :type _admin: AuthenticatedAdmin
+    :param instance: The resolved instance record
+    :type instance: InstanceRecord
+    :param service: Injected knowledge context admin service
+    :type service: KnowledgeContextAdminService
+    :return: Status and created contact data
+    :rtype: object
+    :raises ValueError: If the contact already exists or is invalid
+    """
     try:
         contact = service.create_contact(instance=instance, payload=payload)
     except ValueError as exc:
@@ -77,6 +123,23 @@ def update_contact(
     instance: InstanceRecord = Depends(resolve_admin_instance_scope),
     service: KnowledgeContextAdminService = Depends(get_knowledge_context_admin_service),
 ) -> object:
+    """
+    Update an existing contact.
+
+    :param contact_id: Unique identifier of the contact to update
+    :type contact_id: str
+    :param payload: Contact update payload
+    :type payload: UpdateContact
+    :param _admin: Injected authentication/admin dependency
+    :type _admin: AuthenticatedAdmin
+    :param instance: The resolved instance record
+    :type instance: InstanceRecord
+    :param service: Injected knowledge context admin service
+    :type service: KnowledgeContextAdminService
+    :return: Status and updated contact data
+    :rtype: object
+    :raises ValueError: If the contact is not found or the update is invalid
+    """
     try:
         contact = service.update_contact(instance=instance, contact_id=contact_id, payload=payload)
     except ValueError as exc:

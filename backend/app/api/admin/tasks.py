@@ -31,6 +31,22 @@ def list_tasks(
     instance: InstanceRecord = Depends(resolve_admin_instance_scope),
     service: TaskAutomationAdminService = Depends(get_task_automation_admin_service),
 ) -> dict[str, object]:
+    """
+    List tasks for the current instance, optionally filtered by status.
+
+    :param status_filter: Optional status value to filter tasks by
+    :type status_filter: str | None
+    :param limit: Maximum number of tasks to return (default 100)
+    :type limit: int
+    :param _admin: Injected authentication/admin dependency
+    :type _admin: AuthenticatedAdmin
+    :param instance: Resolved instance scope
+    :type instance: InstanceRecord
+    :param service: Task automation admin service
+    :type service: TaskAutomationAdminService
+    :return: Dictionary with status, instance data, and list of tasks
+    :rtype: dict[str, object]
+    """
     tasks = service.list_tasks(instance=instance, status=status_filter, limit=limit)
     return {
         "status": "ok",
@@ -46,6 +62,21 @@ def get_task(
     instance: InstanceRecord = Depends(resolve_admin_instance_scope),
     service: TaskAutomationAdminService = Depends(get_task_automation_admin_service),
 ) -> object:
+    """
+    Retrieve a single task by its ID.
+
+    :param task_id: Unique identifier of the task
+    :type task_id: str
+    :param _admin: Injected authentication/admin dependency
+    :type _admin: AuthenticatedAdmin
+    :param instance: Resolved instance scope
+    :type instance: InstanceRecord
+    :param service: Task automation admin service
+    :type service: TaskAutomationAdminService
+    :return: Dictionary with status and task data
+    :rtype: object
+    :raises ValueError: If the task is not found (returns 404 error response)
+    """
     try:
         task = service.get_task(instance=instance, task_id=task_id)
     except ValueError as exc:
@@ -60,6 +91,21 @@ def create_task(
     instance: InstanceRecord = Depends(resolve_admin_instance_scope),
     service: TaskAutomationAdminService = Depends(get_task_automation_admin_service),
 ) -> object:
+    """
+    Create a new task within the current instance scope.
+
+    :param payload: Task creation request data
+    :type payload: CreateTask
+    :param _admin: Injected authentication/admin dependency
+    :type _admin: AuthenticatedAdmin
+    :param instance: Resolved instance scope
+    :type instance: InstanceRecord
+    :param service: Task automation admin service
+    :type service: TaskAutomationAdminService
+    :return: Dictionary with status and created task data
+    :rtype: object
+    :raises ValueError: If the task conflicts with an existing one or is invalid
+    """
     try:
         task = service.create_task(instance=instance, payload=payload)
     except ValueError as exc:
@@ -77,6 +123,23 @@ def update_task(
     instance: InstanceRecord = Depends(resolve_admin_instance_scope),
     service: TaskAutomationAdminService = Depends(get_task_automation_admin_service),
 ) -> object:
+    """
+    Update an existing task identified by its ID.
+
+    :param task_id: Unique identifier of the task to update
+    :type task_id: str
+    :param payload: Task update request data
+    :type payload: UpdateTask
+    :param _admin: Injected authentication/admin dependency
+    :type _admin: AuthenticatedAdmin
+    :param instance: Resolved instance scope
+    :type instance: InstanceRecord
+    :param service: Task automation admin service
+    :type service: TaskAutomationAdminService
+    :return: Dictionary with status and updated task data
+    :rtype: object
+    :raises ValueError: If the task is not found or the update is invalid
+    """
     try:
         task = service.update_task(instance=instance, task_id=task_id, payload=payload)
     except ValueError as exc:
