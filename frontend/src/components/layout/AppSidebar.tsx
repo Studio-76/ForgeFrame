@@ -115,10 +115,6 @@ export function AppSidebar({ navigationSections, instanceId }: AppSidebarProps) 
                 height={75}
               />
             </span>
-            <span className="ff-brand-copy">
-              <strong>ForgeFrame</strong>
-              <span>Control Plane</span>
-            </span>
           </Button>
         </div>
 

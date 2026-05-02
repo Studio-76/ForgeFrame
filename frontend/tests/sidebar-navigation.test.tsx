@@ -127,9 +127,12 @@ describe("sidebar navigation shell", () => {
     // Sidebar starts expanded by default
     expect(aside?.className).toContain("is-open");
     expect(brandButton?.getAttribute("aria-label")).toBe("Collapse sidebar");
-    expect(brandButton?.textContent).toContain("ForgeFrame");
-    expect(brandButton?.textContent).toContain("Control Plane");
+    expect(brandButton?.textContent?.trim()).toBe("");
+    expect(aside?.textContent).not.toContain("ForgeFrame");
+    expect(aside?.textContent).not.toContain("Control Plane");
     expect(brandLogo?.getAttribute("src")).toContain("ff_logo_small-2-tp");
+    expect(brandLogo?.getAttribute("width")).toBe("134");
+    expect(brandLogo?.getAttribute("height")).toBe("75");
     expect(container.querySelector(".ff-sidebar-close")).toBeNull();
     // Section starts collapsed
     expect(setupTrigger?.getAttribute("aria-expanded")).toBe("false");
@@ -274,7 +277,10 @@ describe("sidebar navigation shell", () => {
     const brandButton = container.querySelector<HTMLButtonElement>(".ff-brand-mark");
     const brandLogo = container.querySelector<HTMLImageElement>(".ff-brand-logo");
     expect(brandButton?.getAttribute("aria-label")).toBe("Expand sidebar");
+    expect(brandButton?.textContent?.trim()).toBe("");
     expect(brandLogo?.getAttribute("src")).toContain("ff_logo_small.png");
+    expect(brandLogo?.getAttribute("width")).toBe("75");
+    expect(brandLogo?.getAttribute("height")).toBe("75");
     expect(container.querySelector(".ff-brand-symbol")?.textContent?.trim()).toBe("");
 
     // Rail link buttons should exist for each section

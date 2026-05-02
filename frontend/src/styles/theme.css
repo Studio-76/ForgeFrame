@@ -114,10 +114,10 @@ a {
 .ff-sidebar-brand {
   position: relative;
   z-index: 1;
-  min-height: 76px;
+  min-height: 74px;
   display: flex;
   align-items: center;
-  padding: 0.75rem 0.85rem;
+  padding: 0.18rem 0.5rem;
   border-bottom: 1px solid var(--fg-color-border-default);
   background:
     linear-gradient(90deg, rgba(83, 177, 253, 0.08), transparent 62%),
@@ -127,7 +127,7 @@ a {
 .ff-sidebar-brand::after {
   content: "";
   position: absolute;
-  inset: auto 0.85rem -1px;
+  inset: auto 0.5rem -1px;
   height: 1px;
   background: linear-gradient(90deg, rgba(83, 177, 253, 0.7), transparent 76%);
   opacity: 0.72;
@@ -137,7 +137,6 @@ a {
   min-width: 0;
   display: flex;
   align-items: center;
-  gap: 0.75rem;
   color: var(--fg-color-text-primary);
   text-decoration: none;
 }
@@ -145,10 +144,11 @@ a {
 .ff-sidebar .ff-brand-mark {
   position: relative;
   width: 100%;
-  min-height: 3.5rem;
+  min-height: 4.25rem;
+  justify-content: center;
   border: 1px solid rgba(83, 177, 253, 0.18);
   border-radius: var(--fg-radius-md);
-  padding: 0.42rem 0.55rem;
+  padding: 0.08rem 0.55rem;
   background:
     linear-gradient(90deg, rgba(8, 47, 73, 0.32), rgba(15, 23, 42, 0.12)),
     rgba(2, 6, 23, 0.16);
@@ -195,17 +195,14 @@ a {
 }
 
 .ff-sidebar .ff-brand-symbol {
-  width: 4rem;
-  height: 2.35rem;
-  border-radius: var(--fg-radius-sm);
-  padding: 0.14rem;
+  width: min(11.25rem, 100%);
+  height: 4.05rem;
+  border: 0;
+  border-radius: 0;
+  padding: 0;
   overflow: hidden;
-  background:
-    radial-gradient(circle at 24% 22%, rgba(125, 211, 252, 0.28), transparent 42%),
-    rgba(2, 6, 23, 0.58);
-  box-shadow:
-    inset 0 0 0 1px rgba(15, 23, 42, 0.72),
-    0 0 18px rgba(83, 177, 253, 0.16);
+  background: transparent;
+  box-shadow: none;
 }
 
 .ff-brand-logo {
@@ -357,8 +354,8 @@ a {
 
 .ff-sidebar.is-collapsed .ff-sidebar-brand {
   justify-content: center;
-  padding: 0.65rem 0;
-  min-height: 56px;
+  padding: 0.38rem 0;
+  min-height: 58px;
 }
 
 .ff-sidebar.is-collapsed .ff-sidebar-brand::after {
@@ -367,16 +364,15 @@ a {
 }
 
 .ff-sidebar.is-collapsed .ff-brand-mark {
-  width: 2.9rem;
-  min-height: 2.9rem;
+  width: 100%;
+  min-height: 3rem;
   justify-content: center;
-  padding: 0.16rem;
+  padding: 0.12rem 0.28rem;
 }
 
 .ff-sidebar.is-collapsed .ff-brand-symbol {
-  width: 2.38rem;
-  height: 2.38rem;
-  padding: 0.12rem;
+  width: 100%;
+  height: 2.55rem;
 }
 
 .ff-sidebar.is-collapsed .ff-brand-mark::after {
