@@ -589,7 +589,7 @@ a {
   position: sticky;
   top: 0;
   z-index: 30;
-  min-height: 72px;
+  min-height: 74px;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -598,6 +598,16 @@ a {
   border-bottom: 1px solid var(--fg-color-border-default);
   background: rgba(11, 16, 27, 0.88);
   backdrop-filter: blur(16px);
+}
+
+.ff-topbar::after {
+  content: "";
+  position: absolute;
+  inset: auto 1.5rem -1px;
+  height: 1px;
+  background: linear-gradient(90deg, rgba(83, 177, 253, 0.7), transparent 76%);
+  opacity: 0.72;
+  pointer-events: none;
 }
 
 :root[data-theme="light"] .ff-topbar {
@@ -4094,6 +4104,10 @@ details summary {
   .ff-topbar {
     min-height: 64px;
     padding: 0.75rem 1rem;
+  }
+
+  .ff-topbar::after {
+    inset: auto 1rem -1px;
   }
 
   .ff-command-wrap {
