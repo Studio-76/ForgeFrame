@@ -94,7 +94,7 @@ export function App() {
     >
       {session?.must_rotate_password ? (
         <div className="ff-session-banner" data-tone="warning">
-          Password rotation required before ForgeFrame will open the standard control-plane routes.
+          Password rotation required. The control plane will open after you replace the temporary password.
         </div>
       ) : null}
       {sessionError ? <div className="ff-session-banner" data-tone="danger">{sessionError}</div> : null}

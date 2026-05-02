@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 
@@ -38,7 +39,7 @@ def evaluate_routing_budget_state(
     budget_state: RoutingBudgetStateRecord | None,
     *,
     instance_id: str,
-    route_context: dict[str, str] | None = None,
+    route_context: Mapping[str, str | None] | None = None,
     analytics_store: UsageAnalyticsStore | None = None,
     instance_service: InstanceService | None = None,
     now: datetime | None = None,

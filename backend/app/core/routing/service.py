@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from datetime import UTC, datetime
 from typing import Any
 from uuid import uuid4
@@ -608,7 +609,7 @@ class RoutingService:
         *,
         requested_model: str | None,
         allowed_providers: set[str] | None,
-        route_context: dict[str, str] | None = None,
+        route_context: Mapping[str, str | None] | None = None,
     ) -> list[RuntimeTarget]:
         targets = self._registry.list_active_targets()
         selected_request_path = str((route_context or {}).get("request_path_policy") or "smart_routing").strip().lower()
@@ -708,7 +709,7 @@ class RoutingService:
         tools: list[dict] | None = None,
         require_vision: bool = False,
         allowed_providers: set[str] | None = None,
-        route_context: dict[str, str] | None = None,
+        route_context: dict[str, str | None] | None = None,
     ) -> list[RuntimeModel]:
         state = self._load_state()
         health_index = self._health_index(state)

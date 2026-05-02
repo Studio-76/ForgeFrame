@@ -1,4 +1,5 @@
 import pytest
+from pydantic import ValidationError
 
 from app.core.model_registry import ModelRegistry
 from app.settings.config import Settings, get_settings, oauth_target_env_contract
@@ -130,3 +131,32 @@ def test_postgres_storage_requires_postgresql_url() -> None:
 def test_admin_auth_requires_bootstrap_password() -> None:
     with pytest.raises(ValueError, match="FORGEFRAME_BOOTSTRAP_ADMIN_PASSWORD"):
         Settings(admin_auth_enabled=True, bootstrap_admin_password="   ")
+
+
+def test_settings_reports_all_operational_contract_violations_in_one_error() -> None:
+    with pytest.raises((ValueError, ValidationError)) as exc_info:
+        Settings(
+            admin_auth_enabled=True,
+            bootstrap_admin_username="   ",
+            bootstrap_admin_password="   ",
+            harness_storage_backend="postgresql",
+            harness_postgres_url="   ",
+            control_plane_storage_backend="postgresql",
+            control_plane_postgres_url="sqlite:///tmp/control.db",
+            observability_storage_backend="postgresql",
+            observability_postgres_url="sqlite:///tmp/observability.db",
+            governance_storage_backend="postgresql",
+            governance_postgres_url="sqlite:///tmp/governance.db",
+            instances_storage_backend="postgresql",
+            instances_postgres_url="sqlite:///tmp/instances.db",
+        )
+
+    message = str(exc_info.value)
+    assert "ForgeFrame configuration validation failed" in message
+    assert "FORGEFRAME_BOOTSTRAP_ADMIN_USERNAME" in message
+    assert "FORGEFRAME_BOOTSTRAP_ADMIN_PASSWORD" in message
+    assert "FORGEFRAME_HARNESS_POSTGRES_URL" in message
+    assert "FORGEFRAME_CONTROL_PLANE_POSTGRES_URL" in message
+    assert "FORGEFRAME_OBSERVABILITY_POSTGRES_URL" in message
+    assert "FORGEFRAME_GOVERNANCE_POSTGRES_URL" in message
+    assert "FORGEFRAME_INSTANCES_POSTGRES_URL" in message

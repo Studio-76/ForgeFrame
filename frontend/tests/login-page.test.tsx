@@ -221,6 +221,7 @@ describe("Login page", () => {
     const router = createMemoryRouter([
       {
         path: "/login",
+        HydrateFallback: () => null,
         loader: loginRouteLoader,
         element: (
           <ThemeProvider>

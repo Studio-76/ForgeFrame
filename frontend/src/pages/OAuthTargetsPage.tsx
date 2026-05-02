@@ -28,9 +28,7 @@ export function OAuthTargetsPage() {
   });
   const note = !access.canRead
     ? access.summaryDetail
-    : access.canMutate
-    ? "Account-backed targets get a dedicated operator surface here so bridge posture, session truth, and probe actions do not disappear inside the broader providers page."
-    : `${access.summaryDetail} Contract classification, session truth, and probe evidence stay visible here even when mutation controls remain hidden.`;
+    : "Each provider row shows credential status, available actions, and probe history. Select a row to inspect setup details, env vars, and evidence.";
 
   const onInstanceChange = (nextInstanceId: string | null) => {
     const nextSearchParams = new URLSearchParams(searchParams);
@@ -46,9 +44,9 @@ export function OAuthTargetsPage() {
     <section className="fg-page">
       <PageIntro
         eyebrow="OAuth"
-        title="OAuth Targets & Operations"
-        description="Account-backed provider axes, bridge-only slices, session truth, and probe posture get their own operator surface instead of hiding inside generic provider onboarding."
-        question="Which OAuth/account target are you classifying, probing, or de-risking right now?"
+        title="OAuth Targets"
+        description="Account-backed provider connections, credential status, and probe actions in a single compact view."
+        question="Which OAuth target needs credential setup, probing, or review?"
         badges={[
           { label: access.badgeLabel, tone: access.badgeTone },
           ...(selectedInstance ? [{ label: `Instance scope: ${selectedInstance.display_name}`, tone: "success" as const }] : []),
@@ -65,14 +63,13 @@ export function OAuthTargetsPage() {
         onInstanceChange={onInstanceChange}
       />
       <ActionBar
-        title="Adjacent OAuth surfaces"
-        description="Use these handoffs only when the question moves out of target classification and probe posture."
+        title="Related surfaces"
+        description="Navigate to adjacent provider and runtime views."
       >
         <div className="fg-actions">
-          <Link className="fg-nav-link" to={withInstanceScope(CONTROL_PLANE_ROUTES.oauthTargets, instanceId)}>OAuth Targets</Link>
+          <Link className="fg-nav-link" to={withInstanceScope(CONTROL_PLANE_ROUTES.dashboard, instanceId)}>Setup progress</Link>
           <Link className="fg-nav-link" to={withInstanceScope(CONTROL_PLANE_ROUTES.providers, instanceId)}>Providers</Link>
           <Link className="fg-nav-link" to={withInstanceScope(CONTROL_PLANE_ROUTES.harness, instanceId)}>Harness</Link>
-          <Link className="fg-nav-link" to={withInstanceScope(CONTROL_PLANE_ROUTES.onboarding, instanceId)}>Onboarding</Link>
           <Link className="fg-nav-link" to={withInstanceScope(CONTROL_PLANE_ROUTES.usage, instanceId)}>Usage &amp; Costs</Link>
         </div>
       </ActionBar>

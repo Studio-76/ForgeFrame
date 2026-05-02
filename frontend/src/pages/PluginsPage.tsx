@@ -25,9 +25,9 @@ import { normalizeOptional, parseJsonObject, type LoadState } from "./workIntera
 
 const STATUS_OPTIONS: Array<PluginCatalogEntry["status"]> = ["active", "disabled"];
 const PANEL_OPTIONS = [
-  { key: "catalog", label: "Katalog" },
-  { key: "manifest", label: "Manifest bearbeiten" },
-  { key: "binding", label: "Instanz-Aktivierung" },
+  { key: "catalog", label: "Catalog" },
+  { key: "manifest", label: "Edit manifest" },
+  { key: "binding", label: "Instance activation" },
 ] as const;
 const SECURITY_ROLE_OPTIONS = ["viewer", "operator", "admin", "owner"] as const;
 const CONFIG_SCHEMA_TYPES = ["string", "integer", "number", "boolean", "object", "array"] as const;

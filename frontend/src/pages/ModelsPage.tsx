@@ -399,6 +399,7 @@ export function ModelsPage() {
         description="Open another setup route only when the next question leaves the model register itself."
       >
         <div className="fg-actions">
+          <Link className="fg-nav-link" to={withQueryParams(CONTROL_PLANE_ROUTES.dashboard, { instanceId })}>Setup progress</Link>
           <Link className="fg-nav-link" to={providerRoute}>Providers</Link>
           <Link className="fg-nav-link" to={providerTargetsRoute}>Provider Targets</Link>
           <Link className="fg-nav-link" to={routingRoute}>Routing</Link>

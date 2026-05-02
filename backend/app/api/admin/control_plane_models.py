@@ -252,6 +252,31 @@ class ModelRegisterSyncSupport(BaseModel):
     detail: str = ""
 
 
+class BetaProviderTarget(BaseModel):
+    """Projected beta provider target with readiness, evidence, and release truth."""
+
+    provider_key: str
+    provider_type: str
+    product_axis: str
+    auth_model: str
+    runtime_path: str
+    readiness: str
+    readiness_score: int
+    runtime_readiness: str
+    streaming_readiness: str
+    verify_probe_readiness: str
+    ui_readiness: str
+    evidence: ProviderCapabilityEvidenceRecord = Field(default_factory=ProviderCapabilityEvidenceRecord)
+    beta_tier: str
+    health_semantics: str
+    verify_probe_axis: str
+    observability_axis: str
+    ui_axis: str
+    status_summary: str
+    oauth_account_provider: bool = False
+    notes: str
+
+
 class ModelRegisterRecord(BaseModel):
     provider: str
     provider_label: str
@@ -297,6 +322,7 @@ class ModelRegisterRecord(BaseModel):
 
 
 __all__ = [
+    "BetaProviderTarget",
     "ProductAxisTarget",
     "HealthConfigUpdateRequest",
     "ModelRegisterEvidenceSnapshot",

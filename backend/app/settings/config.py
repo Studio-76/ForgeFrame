@@ -389,32 +389,47 @@ class Settings(BaseSettings):
     )
 
     @staticmethod
-    def _validate_postgres_target(setting_name: str, database_url: str) -> None:
+    def _validate_postgres_target(setting_name: str, database_url: str) -> str | None:
+        """Validate a PostgreSQL URL requirement for one storage target.
+
+        :param setting_name: Environment variable name for the target URL.
+        :type setting_name: str
+        :param database_url: Configured URL value to validate.
+        :type database_url: str
+        :return: Validation failure message when invalid, otherwise None.
+        :rtype: str | None
+        """
         normalized = database_url.strip()
         if not normalized:
-            raise ValueError(f"{setting_name} must be set when PostgreSQL storage is enabled.")
+            return f"{setting_name} must be set when PostgreSQL storage is enabled."
         if not normalized.startswith("postgresql"):
-            raise ValueError(f"{setting_name} must use a postgresql:// or postgresql+ driver URL.")
+            return f"{setting_name} must use a postgresql:// or postgresql+ driver URL."
+        return None
 
-    @model_validator(mode="after")
-    def validate_operational_contract(self) -> "Settings":
-        """Validate settings combinations required for runtime startup.
+    def _collect_operational_contract_errors(self) -> list[str]:
+        """Collect all operational contract violations in one pass.
 
-        :return: The validated settings instance.
-        :rtype: Settings
-        :raises ValueError: If a required operational setting is missing or invalid.
+        :return: Ordered list of validation error messages.
+        :rtype: list[str]
         """
+        errors: list[str] = []
+
         if self.admin_auth_enabled:
             if not self.bootstrap_admin_username.strip():
-                raise ValueError("FORGEFRAME_BOOTSTRAP_ADMIN_USERNAME must be set when admin auth is enabled.")
+                errors.append("FORGEFRAME_BOOTSTRAP_ADMIN_USERNAME must be set when admin auth is enabled.")
             if not self.bootstrap_admin_password.strip():
-                raise ValueError("FORGEFRAME_BOOTSTRAP_ADMIN_PASSWORD must be set when admin auth is enabled.")
+                errors.append("FORGEFRAME_BOOTSTRAP_ADMIN_PASSWORD must be set when admin auth is enabled.")
 
         if not self.is_provider_enabled(self.default_provider):
-            raise ValueError("FORGEFRAME_DEFAULT_PROVIDER must reference an enabled provider.")
+            errors.append("FORGEFRAME_DEFAULT_PROVIDER must reference an enabled provider.")
 
         if self.harness_storage_backend == "postgresql":
-            self._validate_postgres_target("FORGEFRAME_HARNESS_POSTGRES_URL", self.harness_postgres_url)
+            harness_error = self._validate_postgres_target(
+                "FORGEFRAME_HARNESS_POSTGRES_URL",
+                self.harness_postgres_url,
+            )
+            if harness_error:
+                errors.append(harness_error)
 
         for backend_name, storage_backend, database_url in [
             (
@@ -439,7 +454,27 @@ class Settings(BaseSettings):
             ),
         ]:
             if storage_backend == "postgresql":
-                self._validate_postgres_target(backend_name, database_url)
+                backend_error = self._validate_postgres_target(
+                    backend_name,
+                    database_url,
+                )
+                if backend_error:
+                    errors.append(backend_error)
+
+        return errors
+
+    @model_validator(mode="after")
+    def validate_operational_contract(self) -> "Settings":
+        """Validate settings combinations required for runtime startup.
+
+        :return: The validated settings instance.
+        :rtype: Settings
+        :raises ValueError: If a required operational setting is missing or invalid.
+        """
+        errors = self._collect_operational_contract_errors()
+        if errors:
+            formatted = "\n".join(f"  - {error}" for error in errors)
+            raise ValueError(f"ForgeFrame configuration validation failed. Resolve the following issues:\n{formatted}")
 
         return self
 

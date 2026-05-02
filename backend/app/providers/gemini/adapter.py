@@ -13,6 +13,8 @@ from app.auth.oauth.gemini import resolve_gemini_auth_state
 from app.providers.base import (
     ChatDispatchRequest,
     ChatDispatchResult,
+    EmbeddingDispatchRequest,
+    EmbeddingDispatchResult,
     ProviderAuthenticationError,
     ProviderBadRequestError,
     ProviderCapabilities,
@@ -338,6 +340,10 @@ class GeminiAdapter:
                 self.provider_name,
                 f"Unexpected Gemini response ({response.status_code}): {response.text[:500]}",
             )
+
+    def create_embeddings(self, request: EmbeddingDispatchRequest) -> EmbeddingDispatchResult:
+        """Dispatch an embeddings request to an upstream provider."""
+        raise NotImplementedError(f"{type(self).__name__} does not support embeddings")
 
     @staticmethod
     def _parse_retry_after_seconds(value: str | None) -> int | None:

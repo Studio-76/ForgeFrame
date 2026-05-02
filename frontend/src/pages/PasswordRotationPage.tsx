@@ -6,6 +6,15 @@ import { useAppSession } from "../app/session";
 import { PageIntro } from "../components/PageIntro";
 import { PasswordRotationGate } from "../features/auth/PasswordRotationGate";
 
+/**
+ * Standalone password rotation page.
+ *
+ * This page is used by the auth routing redirect when the session
+ * requires password rotation. It shows the rotation form with
+ * context that this is step 1 of the guided setup flow.
+ * After successful rotation, the user is redirected to /dashboard
+ * where the full setup flow becomes visible.
+ */
 export function PasswordRotationPage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -19,22 +28,12 @@ export function PasswordRotationPage() {
   return (
     <section className="fg-page">
       <PageIntro
-        eyebrow="Auth Boundary"
-        title="Complete password rotation"
-        description={`This session for ${session.display_name} is limited to self-service password rotation until the temporary password is replaced.`}
-        question="Can you verify the temporary password, satisfy the policy rules, and reopen the intended control-plane route?"
-        links={[
-          {
-            label: "Rotate password",
-            to: CONTROL_PLANE_ROUTES.passwordRotation,
-            description: "Required first step before standard navigation and control-plane routes re-open.",
-            badge: "Required",
-            disabled: true,
-          },
-        ]}
-        badges={[{ label: "Access restricted", tone: "warning" }]}
+        eyebrow="Setup"
+        title="Rotate password"
+        description="Step 1 of the setup flow. The control plane opens after you replace the temporary password."
+        badges={[{ label: "Step 1 of the setup flow", tone: "warning" }]}
         note={continueTo === CONTROL_PLANE_ROUTES.dashboard
-          ? "ForgeFrame keeps the standard control-plane shell hidden until this password rotation succeeds."
+          ? "The guided setup flow continues on the dashboard after this step."
           : `ForgeFrame will return this session to ${continueTo} after the password rotation succeeds.`}
       />
       <PasswordRotationGate

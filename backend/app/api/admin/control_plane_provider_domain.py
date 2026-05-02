@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, Any, Literal, cast
 
 from app.api.admin.control_plane_models import (
     ProviderClassDescriptor,
@@ -90,7 +90,7 @@ class ControlPlaneProviderDomainMixin:
     )
 
     @staticmethod
-    def _managed_model_runtime_status(model: ManagedModelRecord) -> str:
+    def _managed_model_runtime_status(model: ManagedModelRecord) -> Literal["planned", "partial", "ready", "failed", "stale", "unavailable"]:
         if not model.active:
             return "unavailable"
         if model.discovery_status in {
@@ -106,7 +106,7 @@ class ControlPlaneProviderDomainMixin:
         return "ready"
 
     @staticmethod
-    def _managed_model_availability(model: ManagedModelRecord) -> str:
+    def _managed_model_availability(model: ManagedModelRecord) -> Literal["unknown", "healthy", "degraded", "unavailable", "stale"]:
         if not model.active:
             return "unavailable"
         if model.discovery_status in {

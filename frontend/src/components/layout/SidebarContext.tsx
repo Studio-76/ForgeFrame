@@ -1,8 +1,12 @@
-import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 
+const MOBILE_BREAKPOINT = 640;
 const DESKTOP_BREAKPOINT = 1024;
 const SIDEBAR_EXPANDED_STORAGE_KEY = "forgeframe.sidebar.expanded";
 const SIDEBAR_SECTION_STATE_STORAGE_KEY = "forgeframe.sidebar.sections";
+
+/** Viewport size tier for responsive layout switching. */
+export type ViewportTier = "mobile" | "tablet" | "desktop";
 
 function readStoredSidebarExpanded(): boolean {
   if (typeof window === "undefined") {
@@ -32,9 +36,41 @@ function readStoredSectionState(): Record<string, boolean> {
   }
 }
 
-type SidebarContextValue = {
+/**
+ * Derive the viewport tier from current window width.
+ * @param width - Current window inner width.
+ * @returns The matching viewport tier.
+ */
+function getViewportTier(width: number): ViewportTier {
+  if (width < MOBILE_BREAKPOINT) return "mobile";
+  if (width < DESKTOP_BREAKPOINT) return "tablet";
+  return "desktop";
+}
+
+/**
+ * Read initial viewport tier for the first render.
+ * @returns Initial tier derived from window width when available.
+ */
+function getInitialViewportTier(): ViewportTier {
+  if (typeof window === "undefined") {
+    return "desktop";
+  }
+  return getViewportTier(window.innerWidth);
+}
+
+export type SidebarContextValue = {
+  /** Whether the sidebar is in expanded (full) mode on tablet/desktop. */
   isExpanded: boolean;
+  /** Whether the mobile sidebar overlay is open. */
   isMobileOpen: boolean;
+  /** Current viewport tier. */
+  viewport: ViewportTier;
+  /** True when viewport is mobile (< 640px). */
+  isMobile: boolean;
+  /** True when viewport is tablet (640–1023px). */
+  isTablet: boolean;
+  /** True when viewport is desktop (>= 1024px). */
+  isDesktop: boolean;
   toggleSidebar: () => void;
   toggleMobileSidebar: () => void;
   closeMobileSidebar: () => void;
@@ -46,33 +82,58 @@ type SidebarContextValue = {
 const SidebarContext = createContext<SidebarContextValue | null>(null);
 
 export function SidebarProvider({ children }: { children: ReactNode }) {
-  const [isExpanded, setIsExpanded] = useState(readStoredSidebarExpanded);
+  const [storedExpanded, setStoredExpanded] = useState(readStoredSidebarExpanded);
   const [isMobileOpen, setIsMobileOpen] = useState(false);
   const [openSections, setOpenSections] = useState<Record<string, boolean>>(readStoredSectionState);
-  const [isMobile, setIsMobile] = useState(false);
+  const [viewportTier, setViewportTier] = useState<ViewportTier>(getInitialViewportTier);
 
+  /* Track viewport changes for responsive breakpoints. */
   useEffect(() => {
+    let frameRequestId = 0;
+
     const updateViewport = () => {
-      const mobile = window.innerWidth < DESKTOP_BREAKPOINT;
-      setIsMobile(mobile);
-      if (!mobile) {
+      if (frameRequestId !== 0) {
+        window.cancelAnimationFrame(frameRequestId);
+      }
+
+      frameRequestId = window.requestAnimationFrame(() => {
+        frameRequestId = 0;
+        const tier = getViewportTier(window.innerWidth);
+        setViewportTier(tier);
+        if (tier !== "mobile") {
+          setIsMobileOpen(false);
+        }
+      });
+    };
+
+    const syncViewportImmediately = () => {
+      const tier = getViewportTier(window.innerWidth);
+      setViewportTier(tier);
+      if (tier !== "mobile") {
         setIsMobileOpen(false);
       }
     };
 
-    updateViewport();
+    syncViewportImmediately();
     window.addEventListener("resize", updateViewport);
-    return () => window.removeEventListener("resize", updateViewport);
+    return () => {
+      if (frameRequestId !== 0) {
+        window.cancelAnimationFrame(frameRequestId);
+      }
+      window.removeEventListener("resize", updateViewport);
+    };
   }, []);
 
+  /* Persist sidebar expanded state to localStorage. */
   useEffect(() => {
     if (typeof window === "undefined") {
       return;
     }
 
-    window.localStorage.setItem(SIDEBAR_EXPANDED_STORAGE_KEY, String(isExpanded));
-  }, [isExpanded]);
+    window.localStorage.setItem(SIDEBAR_EXPANDED_STORAGE_KEY, String(storedExpanded));
+  }, [storedExpanded]);
 
+  /* Persist open sections to localStorage. */
   useEffect(() => {
     if (typeof window === "undefined") {
       return;
@@ -81,31 +142,76 @@ export function SidebarProvider({ children }: { children: ReactNode }) {
     window.localStorage.setItem(SIDEBAR_SECTION_STATE_STORAGE_KEY, JSON.stringify(openSections));
   }, [openSections]);
 
-  const value = useMemo<SidebarContextValue>(() => ({
-    isExpanded: isMobile ? false : isExpanded,
-    isMobileOpen,
-    toggleSidebar: () => setIsExpanded((current) => !current),
-    toggleMobileSidebar: () => setIsMobileOpen((current) => !current),
-    closeMobileSidebar: () => setIsMobileOpen(false),
-    isSectionOpen: (sectionId: string) => openSections[sectionId] === true,
-    toggleSection: (sectionId: string) => {
-      setOpenSections((current) => ({
+  const isMobile = viewportTier === "mobile";
+  const isTablet = viewportTier === "tablet";
+  const isDesktop = viewportTier === "desktop";
+
+  /* Force sidebar collapsed on mobile; use stored state on tablet/desktop. */
+  const effectiveExpanded = isMobile ? false : storedExpanded;
+
+  const toggleSidebar = useCallback(() => {
+    setStoredExpanded((current) => !current);
+  }, []);
+
+  const toggleMobileSidebar = useCallback(() => {
+    setIsMobileOpen((current) => !current);
+  }, []);
+
+  const closeMobileSidebar = useCallback(() => {
+    setIsMobileOpen(false);
+  }, []);
+
+  const isSectionOpen = useCallback(
+    (sectionId: string) => openSections[sectionId] === true,
+    [openSections],
+  );
+
+  const toggleSection = useCallback((sectionId: string) => {
+    setOpenSections((current) => ({
+      ...current,
+      [sectionId]: !current[sectionId],
+    }));
+  }, []);
+
+  const openSection = useCallback((sectionId: string) => {
+    setOpenSections((current) => {
+      if (current[sectionId] === true) {
+        return current;
+      }
+      return {
         ...current,
-        [sectionId]: !current[sectionId],
-      }));
-    },
-    openSection: (sectionId: string) => {
-      setOpenSections((current) => {
-        if (current[sectionId] === true) {
-          return current;
-        }
-        return {
-          ...current,
-          [sectionId]: true,
-        };
-      });
-    },
-  }), [isExpanded, isMobile, isMobileOpen, openSections]);
+        [sectionId]: true,
+      };
+    });
+  }, []);
+
+  const value = useMemo<SidebarContextValue>(() => ({
+    isExpanded: effectiveExpanded,
+    isMobileOpen,
+    viewport: viewportTier,
+    isMobile,
+    isTablet,
+    isDesktop,
+    toggleSidebar,
+    toggleMobileSidebar,
+    closeMobileSidebar,
+    isSectionOpen,
+    toggleSection,
+    openSection,
+  }), [
+    effectiveExpanded,
+    isMobileOpen,
+    viewportTier,
+    isMobile,
+    isTablet,
+    isDesktop,
+    toggleSidebar,
+    toggleMobileSidebar,
+    closeMobileSidebar,
+    isSectionOpen,
+    toggleSection,
+    openSection,
+  ]);
 
   return <SidebarContext.Provider value={value}>{children}</SidebarContext.Provider>;
 }

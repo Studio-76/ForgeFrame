@@ -39,8 +39,8 @@ describe("PasswordRotationPage", () => {
       </MemoryRouter>,
     );
 
-    expect(markup).toContain("Complete password rotation");
-    expect(markup).toContain("Access restricted");
+    expect(markup).toContain("Rotate password");
+    expect(markup).toContain("Step 1 of the setup flow");
     expect(markup).toContain("Rotate password");
     expect(markup).toContain("Current temporary password");
     expect(markup).toContain("New password");

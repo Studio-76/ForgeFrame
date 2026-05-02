@@ -577,6 +577,7 @@ export function ProviderTargetsPage() {
             <button type="button" onClick={() => void load()} disabled={!canReadTargets}>
               Refresh
             </button>
+            <Link className="fg-nav-link" to={withInstanceScope(CONTROL_PLANE_ROUTES.dashboard, instanceId)}>Setup progress</Link>
             <Link className="fg-nav-link" to={withInstanceScope(CONTROL_PLANE_ROUTES.models, instanceId)}>Models</Link>
             <Link className="fg-nav-link" to={withInstanceScope(`${CONTROL_PLANE_ROUTES.routing}#routing-dry-run`, instanceId)}>Routing Dry Run</Link>
             <Link className="fg-nav-link" to={withInstanceScope(CONTROL_PLANE_ROUTES.providerHealthRuns, instanceId)}>Provider Health</Link>

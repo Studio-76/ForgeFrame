@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 
 import type { AdminSessionUser } from "../../api/admin";
 import type { NavigationSection } from "../../app/navigation";
+import { BottomTabBar } from "./BottomTabBar";
 import { SidebarProvider, useSidebar } from "./SidebarContext";
 import { AppHeader } from "./AppHeader";
 import { AppSidebar } from "./AppSidebar";
@@ -32,6 +33,7 @@ function AppShellFrame({ navigationSections, instanceId, session, sessionError, 
         />
         <main className="ff-main">{children}</main>
       </div>
+      <BottomTabBar instanceId={instanceId} />
     </div>
   );
 }

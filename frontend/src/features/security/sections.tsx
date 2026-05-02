@@ -37,6 +37,7 @@ import {
   requestStage,
   secretStateTone,
 } from "./helpers";
+import { Button } from "../../components/ui/Button";
 
 export type SecurityTabId =
   | "posture"
@@ -182,16 +183,15 @@ export function SecurityTabBar({
       </div>
       <div className="fg-actions" aria-label="Security tabs" role="tablist">
         {SECURITY_TABS.map((tab) => (
-          <button
+          <Button
             key={tab.id}
             aria-selected={activeTab === tab.id}
             role="tab"
-            type="button"
-            onClick={() => onSelectTab(tab.id)}
+            onPress={() => onSelectTab(tab.id)}
           >
             {tab.label}
             {tab.adminOnly && !canViewAdminTabs ? " (Restricted)" : ""}
-          </button>
+          </Button>
         ))}
       </div>
     </article>
@@ -479,9 +479,9 @@ export function SecurityAdminUsersSection({
                 {users.map((user) => (
                   <tr key={user.user_id} className={selectedUserId === user.user_id ? "is-selected" : undefined}>
                     <td>
-                      <button className="fg-table-trigger" type="button" onClick={() => onSelectUser(user.user_id)}>
+                      <Button className="fg-table-trigger" onPress={() => onSelectUser(user.user_id)}>
                         {user.display_name}
-                      </button>
+                      </Button>
                       <div className="fg-muted">{user.username}</div>
                     </td>
                     <td>{user.role}</td>
@@ -540,7 +540,7 @@ export function SecurityAdminUsersSection({
             </label>
           </div>
           <div className="fg-actions fg-mt-sm">
-            <button disabled={createPending} type="button" onClick={onCreate}>Create user</button>
+            <Button isDisabled={createPending} onPress={onCreate}>Create user</Button>
           </div>
         </article>
       ) : null}
@@ -589,15 +589,15 @@ export function SecurityAdminUsersSection({
                 </label>
               </div>
               <div className="fg-actions fg-mt-sm">
-                <button disabled={updatePending} type="button" onClick={onSaveUser}>Save profile changes</button>
+                <Button isDisabled={updatePending} onPress={onSaveUser}>Save profile changes</Button>
                 {!selectedUser.must_rotate_password ? (
-                  <button disabled={updatePending} type="button" onClick={onFlagUserRotation}>
+                  <Button isDisabled={updatePending} onPress={onFlagUserRotation}>
                     Require password rotation
-                  </button>
+                  </Button>
                 ) : null}
-                <button disabled={resetPending} type="button" onClick={() => onOpenResetForm(selectedUser.user_id)}>
+                <Button isDisabled={resetPending} onPress={() => onOpenResetForm(selectedUser.user_id)}>
                   Prepare password reset
-                </button>
+                </Button>
               </div>
               {activeResetUserId === selectedUser.user_id ? (
                 <AdminPasswordResetForm
@@ -665,13 +665,12 @@ export function SecurityAdminUsersSection({
                         </td>
                         <td>
                           {canMutateAdminPosture ? (
-                            <button
-                              disabled={removingMembershipInstanceId === membership.instance_id}
-                              type="button"
-                              onClick={() => onRemoveScope(membership.instance_id)}
+                            <Button
+                              isDisabled={removingMembershipInstanceId === membership.instance_id}
+                              onPress={() => onRemoveScope(membership.instance_id)}
                             >
                               Remove scope
-                            </button>
+                            </Button>
                           ) : (
                             <span className="fg-muted">No action</span>
                           )}
@@ -715,9 +714,9 @@ export function SecurityAdminUsersSection({
                 </label>
               </div>
               <div className="fg-actions fg-mt-sm">
-                <button disabled={scopePending || instances.length === 0} type="button" onClick={onSaveScope}>
+                <Button isDisabled={scopePending || instances.length === 0} onPress={onSaveScope}>
                   Save scope mapping
-                </button>
+                </Button>
               </div>
             </>
           ) : (
@@ -822,13 +821,12 @@ export function SecuritySessionsSection({
                     <td>{formatTimestamp(adminSession.expires_at)}</td>
                     <td>
                       {canMutateAdminPosture && adminSession.active ? (
-                        <button
-                          disabled={revokePendingSessionId === adminSession.session_id}
-                          type="button"
-                          onClick={() => onRevokeSession(adminSession.session_id)}
+                        <Button
+                          isDisabled={revokePendingSessionId === adminSession.session_id}
+                          onPress={() => onRevokeSession(adminSession.session_id)}
                         >
                           Revoke
-                        </button>
+                        </Button>
                       ) : (
                         <span className="fg-muted">No action</span>
                       )}
@@ -1026,17 +1024,16 @@ export function SecurityElevatedAccessSection({
             </p>
           ) : null}
           <div className="fg-actions fg-mt-sm">
-            <button
-              disabled={
+            <Button
+              isDisabled={
                 accessPending
                 || approverPosture?.state === "recovery_required"
                 || (accessDraft.request_type === "impersonation" && impersonationTargets.length === 0)
               }
-              type="button"
-              onClick={onSubmitElevatedAccessRequest}
+              onPress={onSubmitElevatedAccessRequest}
             >
               {accessDraft.request_type === "impersonation" ? "Request impersonation" : "Request break-glass access"}
-            </button>
+            </Button>
           </div>
         </article>
       ) : (
@@ -1097,20 +1094,18 @@ export function SecurityElevatedAccessSection({
                       />
                     </label>
                     <div className="fg-actions fg-mt-sm">
-                      <button
-                        disabled={!canSelfApprove || note.trim().length < 8 || decisionPendingRequestId === request.request_id}
-                        type="button"
-                        onClick={() => onApproveRequest(request)}
+                      <Button
+                        isDisabled={!canSelfApprove || note.trim().length < 8 || decisionPendingRequestId === request.request_id}
+                        onPress={() => onApproveRequest(request)}
                       >
                         Approve
-                      </button>
-                      <button
-                        disabled={!canSelfApprove || note.trim().length < 8 || decisionPendingRequestId === request.request_id}
-                        type="button"
-                        onClick={() => onRejectRequest(request)}
+                      </Button>
+                      <Button
+                        isDisabled={!canSelfApprove || note.trim().length < 8 || decisionPendingRequestId === request.request_id}
+                        onPress={() => onRejectRequest(request)}
                       >
                         Reject
-                      </button>
+                      </Button>
                       {!canSelfApprove ? <span className="fg-muted">Requesters cannot approve their own exception.</span> : null}
                     </div>
                   </article>
@@ -1188,22 +1183,20 @@ export function SecurityElevatedAccessSection({
                       Open audit history
                     </Link>
                     {canCancelRequest ? (
-                      <button
-                        disabled={cancellingRequestId === request.request_id}
-                        type="button"
-                        onClick={() => onCancelElevatedAccessRequest(request)}
+                      <Button
+                        isDisabled={cancellingRequestId === request.request_id}
+                        onPress={() => onCancelElevatedAccessRequest(request)}
                       >
                         Cancel request
-                      </button>
+                      </Button>
                     ) : null}
                     {canIssueRequest ? (
-                      <button
-                        disabled={issuingRequestId === request.request_id}
-                        type="button"
-                        onClick={() => onIssueElevatedAccess(request)}
+                      <Button
+                        isDisabled={issuingRequestId === request.request_id}
+                        onPress={() => onIssueElevatedAccess(request)}
                       >
                         {request.request_type === "impersonation" ? "Start impersonation session" : "Start break-glass session"}
-                      </button>
+                      </Button>
                     ) : null}
                     {request.ready_to_issue && !isRequester ? <span className="fg-muted">Only the original requester can start this session.</span> : null}
                   </div>
@@ -1413,7 +1406,7 @@ export function SecurityProviderSecretsSection({
                 <textarea rows={3} value={rotationDraft.notes} onChange={(event) => onRotationDraftChange("notes", event.target.value)} />
               </label>
               <div className="fg-actions fg-mt-sm">
-                <button disabled={rotationPending} type="button" onClick={onRecordRotation}>Record rotation evidence</button>
+                <Button isDisabled={rotationPending} onPress={onRecordRotation}>Record rotation evidence</Button>
               </div>
             </>
           )}

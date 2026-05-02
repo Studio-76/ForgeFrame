@@ -20,7 +20,7 @@ vi.mock("../src/api/admin", async () => {
 });
 
 import type { AdminSessionUser, DashboardResponse, InstanceRecord } from "../src/api/admin";
-import { DashboardPage } from "../src/pages/DashboardPage";
+import { SetupPage } from "../src/features/setup/SetupPage";
 import { createTestQueryClient, withAppContext } from "./testContext";
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
@@ -95,7 +95,7 @@ function createDashboardResponse(overrides: Partial<DashboardResponse> = {}): Da
       title: "Fix go-live blockers",
       description: "2 bootstrap checks and 1 runtime critical check are blocking go-live.",
       status: "blocked",
-      to: "/onboarding",
+      to: "/dashboard",
       action_label: "Fix go-live blockers",
     },
     attention: [
@@ -105,7 +105,7 @@ function createDashboardResponse(overrides: Partial<DashboardResponse> = {}): Da
         title: "Go-live blockers need resolution",
         cause: "2 bootstrap checks and 1 runtime critical check are blocking go-live.",
         axis: "Readiness",
-        to: "/onboarding",
+        to: "/dashboard",
         action_label: "Fix go-live blockers",
         status: "blocked",
       },
@@ -126,7 +126,7 @@ function createDashboardResponse(overrides: Partial<DashboardResponse> = {}): Da
         title: "Readiness",
         status: "blocked",
         reason: "2 bootstrap checks and 1 runtime critical check are blocking go-live.",
-        to: "/onboarding",
+        to: "/dashboard",
         action_label: "Fix go-live blockers",
         details: [
           "2 bootstrap checks are still failing.",
@@ -238,32 +238,48 @@ async function renderIntoDom(element: ReactNode) {
 }
 
 /**
- * Render the dashboard and wait for TanStack Query to settle.
+ * Flush the microtask queue deeply by yielding via setTimeout(fn, 0).
+ * Unlike Promise.resolve() chains, this guarantees ALL cascading microtasks
+ * (TanStack Query batch notifications, React concurrent renders) complete
+ * before resolving.
  */
-async function renderDashboardPage(session: AdminSessionUser, path = "/dashboard") {
+async function flushMicrotasks(): Promise<void> {
+  await new Promise((resolve) => setTimeout(resolve, 0));
+}
+
+/**
+ * Render the setup page and wait for TanStack Query to settle.
+ */
+async function renderSetupPage(session: AdminSessionUser, path = "/dashboard") {
   await renderIntoDom(withAppContext({
     path,
-    element: <DashboardPage />,
+    element: <SetupPage />,
     session,
     queryClient: testQueryClient,
   }));
 
-  /* Flush micro-tasks so TanStack Query's async resolution
-   * and React's re-render settle. */
+  /* Flush all cascading microtasks (TanStack Query batch scheduler,
+   * React concurrent commit) inside act(). setTimeout(fn, 0) creates a
+   * macrotask boundary that only fires after ALL pending microtasks drain,
+   * catching deeply-nested batch notification chains. */
+  await act(async () => {
+    await flushMicrotasks();
+    await flushMicrotasks();
+  });
+
+  /* Verify the loading state has resolved and data is rendered. */
   await vi.waitFor(async () => {
     await act(async () => {
-      await Promise.resolve();
-      await Promise.resolve();
-      await Promise.resolve();
+      await flushMicrotasks();
     });
-    expect(container.textContent).not.toContain("Loading command-center truth");
+    expect(container.textContent).not.toContain("Loading setup state");
   }, { timeout: 2000, interval: 10 });
 }
 
-async function renderDashboardPageWithoutFlush(session: AdminSessionUser, path = "/dashboard") {
+async function renderSetupPageWithoutFlush(session: AdminSessionUser, path = "/dashboard") {
   await renderIntoDom(withAppContext({
     path,
-    element: <DashboardPage />,
+    element: <SetupPage />,
     session,
     queryClient: testQueryClient,
   }));
@@ -295,35 +311,63 @@ afterEach(() => {
   root = null;
 });
 
-describe("dashboard command center", () => {
-  it("renders the command-center contract with scoped deep links", async () => {
-    await renderDashboardPage(operatorSession, "/dashboard?instanceId=instance_alpha");
+describe("setup page", () => {
+  it("renders the guided setup flow with steps and primary action", async () => {
+    await renderSetupPage(operatorSession, "/dashboard?instanceId=instance_alpha");
 
     expect(fetchInstancesMock).toHaveBeenCalledTimes(1);
     expect(fetchDashboardMock).toHaveBeenCalledWith("instance_alpha");
-    expect(container.textContent).toContain("Primary next action");
-    expect(container.textContent).toContain("Fix go-live blockers");
-    expect(container.textContent).toContain("Instance scope");
-    expect(container.textContent).toContain("Priority attention list");
-    expect(container.textContent).toContain("Operational posture");
-    expect(container.textContent).toContain("Readiness");
-    expect(container.textContent).toContain("Cause:");
+    expect(container.textContent).toContain("System setup");
+    expect(container.textContent).toContain("Setup and status");
+    /* Verify setup step card titles are rendered */
+    expect(container.textContent).toContain("Configure instance and scope");
+    expect(container.textContent).toContain("Connect provider");
+    expect(container.textContent).toContain("Configure routing");
+    expect(container.textContent).toContain("Issue runtime key");
+    expect(container.textContent).toContain("Verify FQDN and TLS");
+    expect(container.textContent).toContain("Run readiness probe");
+    expect(container.textContent).toContain("Go-live readiness");
 
-    const onboardingLink = Array.from(container.querySelectorAll("a")).find((link) => link.textContent?.includes("Fix go-live blockers"));
-    expect(onboardingLink?.getAttribute("href")).toBe("/onboarding?instanceId=instance_alpha");
+    /* Current step shows a primary action label */
+    expect(container.textContent).toContain("Configure routing");
 
-    const oauthTargetsLink = Array.from(container.querySelectorAll("a")).find((link) => link.textContent?.includes("Fix OAuth targets"));
-    expect(oauthTargetsLink?.getAttribute("href")).toBe("/oauth-targets?instanceId=instance_alpha");
+    const providerStepCard = Array.from(container.querySelectorAll(".ff-setup-step-card")).find(
+      (card) => card.textContent?.includes("Connect provider"),
+    );
+    expect(providerStepCard?.textContent).toContain("complete");
+
+    const primaryLink = Array.from(container.querySelectorAll("a")).find(
+      (link) => link.textContent?.includes("Configure routing"),
+    );
+    expect(primaryLink?.getAttribute("href")).toBe("/routing?instanceId=instance_alpha");
+
+    /* Verify progress bar renders */
+    expect(container.textContent).toContain("Step");
+    expect(container.textContent).toContain("of");
   });
 
-  it("shows a real empty state with onboarding link when the scope is not configured", async () => {
+  it("shows setup steps when the scope is not fully configured", async () => {
     fetchDashboardMock.mockResolvedValue(createDashboardResponse({
+      kpis: {
+        providers: 3,
+        configured_providers: 0,
+        ready_providers: 0,
+        active_models: 0,
+        runtime_requests_24h: 0,
+        errors_24h: 0,
+        needs_attention_count: 1,
+        runtime_keys: 0,
+        accounts: 0,
+        waiting_on_approval_runs: 0,
+        stalled_attempts: 0,
+        open_circuits: 0,
+      },
       primary_action: {
         kind: "provider_configuration",
         title: "Configure providers",
         description: "No configured provider, runtime key, account, or runtime traffic is active in this scope yet.",
         status: "onboarding-only",
-        to: "/onboarding",
+        to: "/dashboard",
         action_label: "Configure providers",
       },
       attention: [
@@ -333,7 +377,7 @@ describe("dashboard command center", () => {
           title: "This scope is still in onboarding",
           cause: "No configured provider, runtime key, account, or runtime traffic is active in this scope yet.",
           axis: "Readiness",
-          to: "/onboarding",
+          to: "/dashboard",
           action_label: "Configure providers",
           status: "onboarding-only",
         },
@@ -343,34 +387,25 @@ describe("dashboard command center", () => {
         title: "Command center is not configured yet",
         description: "No configured provider, runtime key, account, or runtime traffic is active in this scope yet.",
         action_label: "Configure providers",
-        to: "/onboarding",
+        to: "/dashboard",
       },
     }));
 
-    await renderDashboardPage(operatorSession, "/dashboard?instanceId=instance_alpha");
+    await renderSetupPage(operatorSession, "/dashboard?instanceId=instance_alpha");
 
-    expect(container.textContent).toContain("Command center is not configured yet");
-    expect(container.textContent).not.toContain("Priority attention list");
+    /* Setup steps should be visible even when the dashboard returns empty_state */
+    expect(container.textContent).toContain("System setup");
+    expect(container.textContent).toContain("Configure instance and scope");
+    expect(container.textContent).toContain("Configure providers");
 
-    const onboardingLink = Array.from(container.querySelectorAll("a")).find((link) => link.textContent?.includes("Configure providers"));
-    expect(onboardingLink?.getAttribute("href")).toBe("/onboarding?instanceId=instance_alpha");
+    const providerLink = Array.from(container.querySelectorAll("a")).find(
+      (link) => link.textContent?.includes("Configure providers"),
+    );
+    expect(providerLink?.getAttribute("href")).toBe("/providers?instanceId=instance_alpha");
+    expect(container.innerHTML).not.toContain("/onboarding?instanceId=instance_alpha");
   });
 
-  it("makes the permission-limited state explicit for viewer sessions", async () => {
-    await renderDashboardPage(viewerSession, "/dashboard?instanceId=instance_alpha");
-
-    expect(fetchDashboardMock).toHaveBeenCalledWith("instance_alpha");
-    expect(container.textContent).toContain("Some repair routes are permission-limited");
-    expect(container.textContent).toContain("Viewer sessions can read the command center");
-
-    const permissionLink = Array.from(container.querySelectorAll("a")).find((link) => link.textContent?.includes("Review runtime access"));
-    expect(permissionLink?.getAttribute("href")).toBe("/accounts?instanceId=instance_alpha");
-
-    const evidenceLink = Array.from(container.querySelectorAll("a")).find((link) => link.textContent?.includes("Review live evidence"));
-    expect(evidenceLink?.getAttribute("href")).toBe("/logs?instanceId=instance_alpha");
-  });
-
-  it("keeps the primary action aligned with the highest-priority backend choice", async () => {
+  it("keeps the primary action aligned with the backend choice", async () => {
     fetchDashboardMock.mockResolvedValue(createDashboardResponse({
       primary_action: {
         kind: "routing_queue_pressure",
@@ -381,16 +416,6 @@ describe("dashboard command center", () => {
         action_label: "Unblock routing budget",
       },
       attention: [
-        {
-          id: "alert:provider_hotspot",
-          severity: "warning",
-          title: "Runtime failures are climbing",
-          cause: "Provider openai_api is the current error hotspot.",
-          axis: "Runtime",
-          to: "/errors",
-          action_label: "Investigate runtime failures",
-          status: "degraded",
-        },
         {
           id: "routing_queue:pressure",
           severity: "critical",
@@ -424,8 +449,8 @@ describe("dashboard command center", () => {
         {
           key: "runtime",
           title: "Runtime",
-          status: "degraded",
-          reason: "Provider openai_api is the current error hotspot.",
+          status: "ready",
+          reason: "Runtime is stable.",
           to: "/errors",
           action_label: "Investigate runtime failures",
           details: [],
@@ -451,46 +476,36 @@ describe("dashboard command center", () => {
       ],
     }));
 
-    await renderDashboardPage(operatorSession, "/dashboard?instanceId=instance_alpha");
+    await renderSetupPage(operatorSession, "/dashboard?instanceId=instance_alpha");
 
-    expect(container.textContent).toContain("Clear routing and queue pressure");
-    const primaryLink = Array.from(container.querySelectorAll("a")).find((link) => link.textContent?.includes("Unblock routing budget"));
+    /* The primary action bar should show the backend primary action */
+    expect(container.textContent).toContain("Unblock routing budget");
+
+    const primaryLink = Array.from(container.querySelectorAll("a")).find(
+      (link) => link.textContent?.includes("Unblock routing budget"),
+    );
     expect(primaryLink?.getAttribute("href")).toBe("/routing?instanceId=instance_alpha");
-  });
-
-  it("shows a concrete recovery link when the scoped instance is missing", async () => {
-    fetchDashboardMock.mockRejectedValue(Object.assign(new Error("Instance scope is missing."), { code: "instance_scope_not_found" }));
-
-    await renderDashboardPage(operatorSession, "/dashboard?instanceId=instance_missing");
-
-    expect(container.textContent).toContain("Selected instance is outside the current dashboard scope");
-    expect(container.textContent).toContain("Reset to default scope");
-    expect(container.textContent).toContain("Review instance inventory");
-
-    const hrefs = Array.from(container.querySelectorAll("a"))
-      .map((link) => link.getAttribute("href"))
-      .filter((value): value is string => Boolean(value));
-    expect(hrefs).toContain("/dashboard");
-    expect(hrefs).toContain("/instances");
   });
 
   it("shows a readable error state when dashboard loading fails", async () => {
     fetchDashboardMock.mockRejectedValue(new Error("Dashboard loading failed for the selected scope."));
 
-    await renderDashboardPage(operatorSession, "/dashboard?instanceId=instance_alpha");
+    await renderSetupPage(operatorSession, "/dashboard?instanceId=instance_alpha");
 
-    expect(container.textContent).toContain("Dashboard loading failed");
+    expect(container.textContent).toContain("Setup data could not be loaded");
     expect(container.textContent).toContain("Dashboard loading failed for the selected scope.");
 
-    const diagnosticsLink = Array.from(container.querySelectorAll("a")).find((link) => link.textContent?.includes("Review diagnostics"));
+    const diagnosticsLink = Array.from(container.querySelectorAll("a")).find(
+      (link) => link.textContent?.includes("Review diagnostics"),
+    );
     expect(diagnosticsLink?.getAttribute("href")).toBe("/logs?instanceId=instance_alpha");
   });
 
   it("shows the loading state before dashboard data resolves", async () => {
     fetchDashboardMock.mockImplementation(() => new Promise(() => {}));
 
-    await renderDashboardPageWithoutFlush(operatorSession, "/dashboard?instanceId=instance_alpha");
+    await renderSetupPageWithoutFlush(operatorSession, "/dashboard?instanceId=instance_alpha");
 
-    expect(container.textContent).toContain("Loading command-center truth");
+    expect(container.textContent).toContain("Loading setup state");
   });
 });

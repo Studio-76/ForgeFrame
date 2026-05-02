@@ -49,6 +49,8 @@ function createData(access: ProvidersAccessState): ProvidersPageData {
   return {
     state: "success",
     error: null,
+    actionFeedback: null,
+    pendingAction: null,
     access,
     providers: [
       {
@@ -185,7 +187,17 @@ function createData(access: ProvidersAccessState): ProvidersPageData {
       authScheme: "bearer",
       oauthMode: "account_portal",
     },
-    providerDrafts: {},
+    providerDrafts: {
+      local_runtime: {
+        label: "Local Runtime",
+        providerClass: "local_ollama",
+        integrationClass: "local_ollama",
+        templateId: "ollama",
+        endpointBaseUrl: "http://localhost:11434/v1",
+        authScheme: "none",
+        oauthMode: "account_portal",
+      },
+    },
     providerLabelDrafts: {},
     providerErrors: {},
     modelErrors: {},
@@ -277,23 +289,54 @@ describe("Providers page hierarchy", () => {
     );
 
     expect(markup).toContain("<section class=\"fg-page\">");
-    expect(markup).toContain("Which provider are you configuring, syncing, validating, or recovering right now?");
-    expect(markup).toContain(">Harness<");
-    expect(markup).toContain("href=\"/harness\"");
-    expect(markup).toContain(">Provider Targets<");
-    expect(markup).toContain(">Provider Runtime Inventory</h3>");
-    expect(markup).toContain(">Provider Health &amp; Runs</h3>");
+    expect(markup).toContain("1 provider registered for this instance.");
     expect(markup).toContain("id=\"provider-health-runs\"");
-    expect(markup).toContain("Show probe");
-    expect(markup).toContain(">Provider Inventory</h3>");
-    expect(markup).toContain(">Provider hinzufügen</h3>");
-    expect(markup).toContain(">Advanced Diagnostics</strong>");
+    expect(markup).toContain(">Providers</h3>");
+    expect(markup).toContain("Manage provider records. Sync updates inventory; live endpoint probes run from Harness.");
+    expect(markup).toContain("Enable after endpoint settings are saved and at least one target is ready.");
+    expect(markup).toContain("Open Harness live probe");
+    expect(markup).toContain("These buttons do not send chat/completions requests. Use Harness when you want to see LM Studio receive a real request.");
     expect(markup).toContain("Admin mutations enabled");
-    expect(markup).toContain("Sync all providers");
+    expect(markup).toContain("Sync all");
+    expect(markup).toContain("Add provider");
+    expect(markup).toContain("Activate");
     expect(markup).toContain("Providers");
+    expect(markup).not.toContain(">Provider Runtime Inventory</h3>");
+    expect(markup).not.toContain(">Provider Health &amp; Runs</h3>");
+    expect(markup).not.toContain("Show probe");
+    expect(markup).not.toContain(">Advanced Diagnostics</strong>");
     expect(markup).not.toContain("Save profile");
     expect(markup).not.toContain("Preview + Verify");
-    expect(markup.indexOf("Providers")).toBeLessThan(markup.indexOf(">Provider Runtime Inventory</h3>"));
+  });
+
+  it("explains that provider inventory sync is not a live endpoint request", () => {
+    mockedUseProvidersControlPlane.mockImplementation((access: ProvidersAccessState) => {
+      const data = createData(access);
+      return {
+        data: {
+          ...data,
+          providers: data.providers.map((provider) => ({
+            ...provider,
+            enabled: true,
+            next_action: "Sync inventory",
+            next_action_kind: "sync_models" as const,
+          })),
+        },
+        actions: createActions(),
+      };
+    });
+
+    const markup = renderToStaticMarkup(
+      withAppContext({
+        path: "/providers",
+        element: <ProvidersPage />,
+        session: createSession(),
+      }),
+    );
+
+    expect(markup).toContain("Sync updates inventory only. Live endpoint probes run in Harness.");
+    expect(markup).toContain("Sync inventory");
+    expect(markup).toContain("Open Harness live probe");
   });
 
   it("shows an honest blocked state when the session lacks scoped providers.read", () => {
@@ -326,7 +369,7 @@ describe("Providers page hierarchy", () => {
       "instance_alpha",
       expect.objectContaining({
         includeUsageSummary: false,
-        includeHarness: true,
+        includeHarness: false,
         includeOauthTargets: false,
         includeCompatibilityMatrix: false,
         includeBootstrapReadiness: false,
@@ -352,9 +395,9 @@ describe("Providers page hierarchy", () => {
     );
 
     expect(alphaMarkup).toContain("Operator mutations enabled");
-    expect(alphaMarkup).toContain("Sync all providers");
+    expect(alphaMarkup).toContain("Sync all");
     expect(betaMarkup).not.toContain("Operator mutations enabled");
-    expect(betaMarkup).not.toContain("Sync all providers");
+    expect(betaMarkup).not.toContain("Sync all");
     expect(betaMarkup).toContain("Operate only");
   });
 
@@ -377,5 +420,59 @@ describe("Providers page hierarchy", () => {
     expect(markup).not.toContain(">Sync models<");
     expect(markup).not.toContain(">Run health now<");
     expect(markup).toContain("Enable provider in this instance");
+  });
+
+  it("announces provider action feedback and disables the matching action", () => {
+    mockedUseProvidersControlPlane.mockImplementation((access: ProvidersAccessState) => ({
+      data: {
+        ...createData(access),
+        actionFeedback: {
+          tone: "success",
+          message: "local_runtime was enabled.",
+        },
+        pendingAction: "toggle-provider:local_runtime",
+      },
+      actions: createActions(),
+    }));
+
+    const markup = renderToStaticMarkup(
+      withAppContext({
+        path: "/providers",
+        element: <ProvidersPage />,
+        session: createSession(),
+      }),
+    );
+
+    expect(markup).toContain("role=\"status\"");
+    expect(markup).toContain("local_runtime was enabled.");
+    expect(markup).toContain("Activating…");
+    expect(markup).toContain("disabled=\"\"");
+  });
+
+  it("renders provider action errors as accessible alerts", () => {
+    mockedUseProvidersControlPlane.mockImplementation((access: ProvidersAccessState) => ({
+      data: {
+        ...createData(access),
+        error: "Backend rejected the provider update.",
+        actionFeedback: {
+          tone: "error",
+          message: "Provider update failed.",
+          detail: "Backend rejected the provider update.",
+        },
+      },
+      actions: createActions(),
+    }));
+
+    const markup = renderToStaticMarkup(
+      withAppContext({
+        path: "/providers",
+        element: <ProvidersPage />,
+        session: createSession(),
+      }),
+    );
+
+    expect(markup).toContain("role=\"alert\"");
+    expect(markup).toContain("Provider update failed.");
+    expect(markup).toContain("Backend rejected the provider update.");
   });
 });

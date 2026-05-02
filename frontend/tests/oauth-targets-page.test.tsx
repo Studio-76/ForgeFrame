@@ -113,28 +113,28 @@ function createOauthTarget(overrides: Partial<ProvidersPageData["oauthTargets"][
     actions: [
       {
         action_key: "manual_token",
-        label: "Manuell Token hinterlegen",
+        label: "Add token manually",
         mode: "manual",
         supported: true,
         detail: "Use an externally supplied token.",
       },
       {
         action_key: "connect",
-        label: "Verbinden",
+        label: "Connect",
         mode: "unsupported",
         supported: false,
         detail: "ForgeFrame does not ship an in-product Codex OAuth connect flow.",
       },
       {
         action_key: "probe",
-        label: "Verbindung testen",
+        label: "Test connection",
         mode: "api",
         supported: true,
         detail: "Runs the real probe path.",
       },
       {
         action_key: "disconnect",
-        label: "Trennen",
+        label: "Disconnect",
         mode: "manual",
         supported: true,
         detail: "Remove the token outside ForgeFrame.",
@@ -262,14 +262,12 @@ describe("OAuth targets page", () => {
       }),
     );
 
-    expect(markup).toContain("OAuth Targets &amp; Operations");
-    expect(markup).toContain("Which OAuth/account target are you classifying, probing, or de-risking right now?");
-    expect(markup).toContain(">OAuth Targets<");
-    expect(markup).toContain(">OAuth Provider Connections</h3>");
+    expect(markup).toContain("OAuth Targets");
+    expect(markup).toContain("Which OAuth target needs credential setup, probing, or review?");
+    expect(markup).toContain(">OAuth Provider Targets</h3>");
     expect(markup).toContain("OpenAI Codex");
-    expect(markup).toContain("Manuell Token hinterlegen");
-    expect(markup).toContain("Verbindung testen");
-    expect(markup).toContain("Advanced Diagnostics");
+    expect(markup).toContain("Test");
+    expect(markup).toContain("Route Diagnostics");
   });
 
   it("forwards instance scope from the route into the shared providers hook", () => {
@@ -284,7 +282,7 @@ describe("OAuth targets page", () => {
     expect(mockedUseProvidersControlPlane).toHaveBeenCalledWith(expect.any(Object), "instance_alpha");
   });
 
-  it("preserves instance scope in the dedicated OAuth route links", () => {
+  it("preserves instance scope in the adjacent route links", () => {
     const markup = renderToStaticMarkup(
       withAppContext({
         path: "/oauth-targets?instanceId=instance_alpha",
@@ -293,10 +291,9 @@ describe("OAuth targets page", () => {
       }),
     );
 
-    expect(markup).toContain('href="/oauth-targets?instanceId=instance_alpha"');
     expect(markup).toContain('href="/providers?instanceId=instance_alpha"');
     expect(markup).toContain('href="/harness?instanceId=instance_alpha"');
-    expect(markup).toContain('href="/onboarding?instanceId=instance_alpha"');
+    expect(markup).toContain('href="/dashboard?instanceId=instance_alpha"');
     expect(markup).toContain('href="/usage?instanceId=instance_alpha"');
   });
 
@@ -317,11 +314,11 @@ describe("OAuth targets page", () => {
     );
 
     expect(alphaMarkup).toContain("Operator mutations enabled");
-    expect(alphaMarkup).toContain("Probe all OAuth targets");
-    expect(alphaMarkup).toContain("Sync OAuth bridge profiles");
+    expect(alphaMarkup).toContain("Probe all targets");
+    expect(alphaMarkup).toContain("Sync bridge profiles");
     expect(betaMarkup).not.toContain("Operator mutations enabled");
-    expect(betaMarkup).toContain("Probe all OAuth targets");
-    expect(betaMarkup).not.toContain("Sync OAuth bridge profiles");
+    expect(betaMarkup).toContain("Probe all targets");
+    expect(betaMarkup).not.toContain("Sync bridge profiles");
     expect(betaMarkup).toContain("Operate only");
   });
 
@@ -336,7 +333,7 @@ describe("OAuth targets page", () => {
 
     expect(markup).toContain("Read access required");
     expect(markup).toContain("the backend will return 403 until providers.read is granted here");
-    expect(markup).not.toContain(">OAuth Provider Connections</h3>");
-    expect(markup).not.toContain("Probe all OAuth targets");
+    expect(markup).not.toContain(">OAuth Provider Targets</h3>");
+    expect(markup).not.toContain("Probe all targets");
   });
 });

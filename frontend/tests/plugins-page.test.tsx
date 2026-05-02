@@ -302,7 +302,7 @@ describe("plugins page", () => {
     }));
     await flushEffects();
 
-    const manifestPanelButton = getButtonByText(container, "Manifest bearbeiten");
+    const manifestPanelButton = getButtonByText(container, "Edit manifest");
     await act(async () => {
       manifestPanelButton!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     });
@@ -368,7 +368,7 @@ describe("plugins page", () => {
       default_config: { mode: "preview", max_items: 12 },
     }));
 
-    const bindingPanelButton = getButtonByText(container, "Instanz-Aktivierung");
+    const bindingPanelButton = getButtonByText(container, "Instance activation");
     await act(async () => {
       bindingPanelButton!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     });
@@ -406,7 +406,7 @@ describe("plugins page", () => {
     }));
     await flushEffects();
 
-    const manifestPanelButton = getButtonByText(container, "Manifest bearbeiten");
+    const manifestPanelButton = getButtonByText(container, "Edit manifest");
     await act(async () => {
       manifestPanelButton!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     });

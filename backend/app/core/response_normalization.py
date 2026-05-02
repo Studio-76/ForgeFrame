@@ -7,7 +7,7 @@ from typing import Any
 from uuid import uuid4
 
 from app.providers import ChatDispatchResult
-from app.responses.models import build_response_object, build_response_output_items
+from app.responses.models import ResponseStatus, build_response_object, build_response_output_items
 
 
 def new_chat_completion_id() -> str:
@@ -57,7 +57,7 @@ def build_responses_payload(
     result: ChatDispatchResult,
     *,
     response_id: str | None = None,
-    status: str = "completed",
+    status: ResponseStatus = "completed",
 ) -> dict[str, Any]:
     output_items, output_text = build_response_output_items(
         text=result.content,

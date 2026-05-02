@@ -47,6 +47,7 @@ import type {
   LoadState,
   ProviderDraft,
   ProviderEditorDraft,
+  ProvidersActionFeedback,
   ProvidersAccessState,
   ProviderRunFilters,
   ProvidersPageActions,
@@ -152,6 +153,11 @@ const DEFAULT_PROVIDER_CLASS_OPTIONS: ProviderClassDescriptor[] = [
 ];
 
 type ActionRequirement = "read" | "operate" | "mutate";
+
+type ProviderActionContext = {
+  pendingKey: string;
+  successMessage?: string;
+};
 
 function getActionError(error: unknown, fallback: string): string {
   return error instanceof Error ? error.message : fallback;
@@ -274,6 +280,8 @@ export function useProvidersControlPlane(
   const resolvedOptions = { ...DEFAULT_OPTIONS, ...options };
   const [state, setState] = useState<LoadState>("idle");
   const [error, setError] = useState<string | null>(null);
+  const [actionFeedback, setActionFeedback] = useState<ProvidersActionFeedback | null>(null);
+  const [pendingAction, setPendingAction] = useState<string | null>(null);
   const [providers, setProviders] = useState<ProvidersPageData["providers"]>([]);
   const [supportedProviderClasses, setSupportedProviderClasses] = useState<ProviderClassDescriptor[]>(DEFAULT_PROVIDER_CLASS_OPTIONS);
   const [templates, setTemplates] = useState<ProvidersPageData["templates"]>([]);
@@ -358,6 +366,16 @@ export function useProvidersControlPlane(
     return false;
   };
 
+  const getActionBlockedMessage = (requirement: ActionRequirement): string => {
+    if (requirement === "mutate") {
+      return access.mutationBlockedMessage;
+    }
+    if (requirement === "operate") {
+      return access.operateBlockedMessage;
+    }
+    return access.summaryDetail;
+  };
+
   const recordHarnessAction = (
     kind: HarnessActionKind,
     title: string,
@@ -388,6 +406,8 @@ export function useProvidersControlPlane(
 
   const clearScopedData = () => {
     setProviders([]);
+    setActionFeedback(null);
+    setPendingAction(null);
     setSupportedProviderClasses(DEFAULT_PROVIDER_CLASS_OPTIONS);
     setTemplates([]);
     setProfiles([]);
@@ -509,22 +529,42 @@ export function useProvidersControlPlane(
       setHealthConfig(payload.health_config);
       setProviderErrors(
         usage
-          ? Object.fromEntries(usage.aggregations.errors_by_provider.map((item) => [String(item.provider), Number(item.errors)]))
+          ? Object.fromEntries(
+            (usage.aggregations?.errors_by_provider ?? []).map((item) => [
+              String(item.provider),
+              Number(item.errors),
+            ]),
+          )
           : {},
       );
       setModelErrors(
         usage
-          ? Object.fromEntries(usage.aggregations.errors_by_model.map((item) => [String(item.model), Number(item.errors)]))
+          ? Object.fromEntries(
+            (usage.aggregations?.errors_by_model ?? []).map((item) => [
+              String(item.model),
+              Number(item.errors),
+            ]),
+          )
           : {},
       );
       setIntegrationErrors(
         usage
-          ? Object.fromEntries(usage.aggregations.errors_by_integration.map((item) => [String(item.integration_key), Number(item.errors)]))
+          ? Object.fromEntries(
+            (usage.aggregations?.errors_by_integration ?? []).map((item) => [
+              String(item.integration_key),
+              Number(item.errors),
+            ]),
+          )
           : {},
       );
       setProfileErrors(
         usage
-          ? Object.fromEntries(usage.aggregations.errors_by_profile.map((item) => [String(item.profile_key), Number(item.errors)]))
+          ? Object.fromEntries(
+            (usage.aggregations?.errors_by_profile ?? []).map((item) => [
+              String(item.profile_key),
+              Number(item.errors),
+            ]),
+          )
           : {},
       );
       setProviderCatalog(payload.provider_catalog ?? []);
@@ -538,8 +578,14 @@ export function useProvidersControlPlane(
       setProviderLabelDrafts(Object.fromEntries(payload.providers.map((provider) => [provider.provider, provider.label])));
       setState("success");
     } catch (actionError) {
+      const message = getActionError(actionError, "Unknown provider loading error.");
       setState("error");
-      setError(getActionError(actionError, "Unknown provider loading error."));
+      setError(message);
+      setActionFeedback({
+        tone: "error",
+        message: "Provider records could not be loaded.",
+        detail: message,
+      });
     }
   };
 
@@ -565,18 +611,37 @@ export function useProvidersControlPlane(
     fallback: string,
     requirement: ActionRequirement = "read",
     onFailure?: (message: string) => void,
+    context?: ProviderActionContext,
   ): Promise<T | undefined> => {
     if (!ensureActionAllowed(requirement)) {
+      setActionFeedback({
+        tone: "error",
+        message: "This session cannot run that provider action.",
+        detail: getActionBlockedMessage(requirement),
+      });
       return;
     }
 
     setError(null);
+    setActionFeedback(null);
+    if (context) {
+      setPendingAction(context.pendingKey);
+    }
     try {
-      return await task();
+      const result = await task();
+      if (context?.successMessage) {
+        setActionFeedback({ tone: "success", message: context.successMessage });
+      }
+      return result;
     } catch (actionError) {
       const message = getActionError(actionError, fallback);
       setError(message);
+      setActionFeedback({ tone: "error", message: fallback, detail: message });
       onFailure?.(message);
+    } finally {
+      if (context) {
+        setPendingAction((current) => (current === context.pendingKey ? null : current));
+      }
     }
   };
 
@@ -819,11 +884,15 @@ export function useProvidersControlPlane(
     const provider = newProvider.provider.trim();
     const label = newProvider.label.trim();
     if (!provider || !label) {
-      setError("Provider key and label are required.");
+      const message = "Provider key and label are required.";
+      setError(message);
+      setActionFeedback({ tone: "error", message });
       return;
     }
     if (newProvider.providerClass !== "oauth_account" && !newProvider.endpointBaseUrl.trim()) {
-      setError("An endpoint URL is required for OpenAI-compatible, local, and custom providers.");
+      const message = "An endpoint URL is required for OpenAI-compatible, local, and custom providers.";
+      setError(message);
+      setActionFeedback({ tone: "error", message });
       return;
     }
 
@@ -842,7 +911,10 @@ export function useProvidersControlPlane(
       );
       setNewProvider(INITIAL_PROVIDER_DRAFT);
       await load();
-    }, "Provider creation failed.", "mutate");
+    }, "Provider creation failed.", "mutate", undefined, {
+      pendingKey: "create-provider",
+      successMessage: `${label} was added. Enable it, sync models, then check Provider Targets if routing is still blocked.`,
+    });
   };
 
   const toggleProvider = async (provider: string, enabled: boolean) =>
@@ -853,13 +925,19 @@ export function useProvidersControlPlane(
         await activateProvider(provider, instanceId);
       }
       await load();
-    }, "Provider state update failed.", "mutate");
+    }, "Provider state update failed.", "mutate", undefined, {
+      pendingKey: `toggle-provider:${provider}`,
+      successMessage: enabled ? `${provider} was disabled.` : `${provider} was enabled.`,
+    });
 
   const syncProviderModels = async (provider: string) =>
     withAction(async () => {
       await syncProviders(provider, instanceId);
       await load();
-    }, "Provider sync failed.", "mutate");
+    }, "Provider sync failed.", "mutate", undefined, {
+      pendingKey: `sync-provider:${provider}`,
+      successMessage: `${provider} model sync finished. Review ready targets before routing traffic.`,
+    });
 
   const saveProvider = async (provider: string) => {
     if (!ensureMutationAllowed()) {
@@ -868,17 +946,23 @@ export function useProvidersControlPlane(
 
     const draft = providerDrafts[provider];
     if (!draft) {
-      setError("Provider draft is not available.");
+      const message = "Provider draft is not available.";
+      setError(message);
+      setActionFeedback({ tone: "error", message });
       return;
     }
 
     const label = draft.label.trim();
     if (!label) {
-      setError("Provider label is required.");
+      const message = "Provider label is required.";
+      setError(message);
+      setActionFeedback({ tone: "error", message });
       return;
     }
     if (draft.providerClass !== "oauth_account" && !draft.endpointBaseUrl.trim()) {
-      setError("An endpoint URL is required for OpenAI-compatible, local, and custom providers.");
+      const message = "An endpoint URL is required for OpenAI-compatible, local, and custom providers.";
+      setError(message);
+      setActionFeedback({ tone: "error", message });
       return;
     }
 
@@ -896,7 +980,10 @@ export function useProvidersControlPlane(
         instanceId,
       );
       await load();
-    }, "Provider update failed.", "mutate");
+    }, "Provider update failed.", "mutate", undefined, {
+      pendingKey: `save-provider:${provider}`,
+      successMessage: `${label} settings were saved.`,
+    });
   };
 
   const saveProviderLabel = async (provider: string) => {
@@ -912,21 +999,29 @@ export function useProvidersControlPlane(
 
     const label = (providerLabelDrafts[provider] ?? "").trim();
     if (!label) {
-      setError("Provider label is required.");
+      const message = "Provider label is required.";
+      setError(message);
+      setActionFeedback({ tone: "error", message });
       return;
     }
 
     await withAction(async () => {
       await updateProvider(provider, { label }, instanceId);
       await load();
-    }, "Provider label update failed.", "mutate");
+    }, "Provider label update failed.", "mutate", undefined, {
+      pendingKey: `save-provider:${provider}`,
+      successMessage: `${label} label was saved.`,
+    });
   };
 
   const syncAllProviders = async () =>
     withAction(async () => {
       await syncProviders(undefined, instanceId);
       await load();
-    }, "Provider sync failed.", "mutate");
+    }, "Provider sync failed.", "mutate", undefined, {
+      pendingKey: "sync-all-providers",
+      successMessage: "All provider model syncs finished. Check the readiness cards for remaining repair work.",
+    });
 
   const upsertHarness = async () => {
     if (!ensureMutationAllowed()) {
@@ -1010,7 +1105,10 @@ export function useProvidersControlPlane(
     withAction(async () => {
       await runHealthChecks(instanceId);
       await load();
-    }, "Health check run failed.", "mutate");
+    }, "Health check run failed.", "mutate", undefined, {
+      pendingKey: "run-provider-health",
+      successMessage: "Provider health checks finished. Attention badges now reflect the latest probe result.",
+    });
 
   const exportHarness = async (redactSecrets: boolean) =>
     withAction(async () => {
@@ -1071,6 +1169,8 @@ export function useProvidersControlPlane(
   const data: ProvidersPageData = {
     state,
     error,
+    actionFeedback,
+    pendingAction,
     access,
     providers,
     supportedProviderClasses,

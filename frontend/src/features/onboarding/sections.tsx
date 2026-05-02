@@ -122,7 +122,7 @@ function InterviewFields({
   return (
     <>
       <article className="fg-subcard">
-        <h4>Betriebsart</h4>
+        <h4>Operating model</h4>
         <div className="fg-grid fg-grid-compact">
           {OPERATING_MODEL_DESCRIPTORS.map((item) => (
             <label key={item.key}>
@@ -140,14 +140,14 @@ function InterviewFields({
         </div>
         <p className="fg-muted">{operatingModelDescriptor.description}</p>
         <ul className="fg-list">
-          <li>Interner Modus: {operatingModelDescriptor.internalMode}</li>
-          <li>Tenant-Erfordernis: {operatingModelDescriptor.tenantRequirement}</li>
-          <li>Rollenmodell: {operatingModelDescriptor.roleModel}</li>
+          <li>Internal mode: {operatingModelDescriptor.internalMode}</li>
+          <li>Tenant requirement: {operatingModelDescriptor.tenantRequirement}</li>
+          <li>Role model: {operatingModelDescriptor.roleModel}</li>
         </ul>
       </article>
 
       <article className="fg-subcard">
-        <h4>Instanz und Scope</h4>
+        <h4>Instance and scope</h4>
         <div className="fg-grid fg-grid-compact">
           <label>
             Instance ID
@@ -193,7 +193,7 @@ function InterviewFields({
       </article>
 
       <article className="fg-subcard">
-        <h4>Normative HTTPS Pfad</h4>
+        <h4>Public HTTPS path</h4>
         <div className="fg-grid fg-grid-compact">
           <label>
             Operating mode
@@ -395,7 +395,7 @@ export function OnboardingContent({
 
       <article className="fg-card">
         <div className="fg-panel-heading">
-          <h3>Onboarding Wizard</h3>
+          <h3>Setup checklist</h3>
         </div>
         <ol className="fg-checklist">
           {steps.map((step) => (
@@ -433,7 +433,7 @@ export function OnboardingContent({
 
       <article className="fg-card">
         <div className="fg-panel-heading">
-          <h3>1) Betriebsart und erste Instanz</h3>
+          <h3>1) Operating model and first instance</h3>
           <span className="fg-pill" data-tone={stepOneCardEvaluation.tone}>
             {stepOneCardEvaluation.statusLabel}
           </span>
@@ -470,7 +470,7 @@ export function OnboardingContent({
 
       <article className="fg-card">
         <div className="fg-panel-heading">
-          <h3>2) Operator-Agent</h3>
+          <h3>2) Operator agent</h3>
         </div>
         <p className="fg-muted">
           {operatorAgentLabel
@@ -485,7 +485,7 @@ export function OnboardingContent({
 
       <article className="fg-card">
         <div className="fg-panel-heading">
-          <h3>3) Provider / Target-Erstauswahl</h3>
+          <h3>3) Provider target selection</h3>
         </div>
         <p className="fg-muted">Connection status is classified from real control-plane truth: local, API-key, bridge-only, onboarding-only, unsupported.</p>
         <div className="fg-grid fg-grid-compact">
@@ -518,7 +518,7 @@ export function OnboardingContent({
               checked={routingChoice === "simple"}
               onChange={() => onRoutingChoiceChange("simple")}
             />
-            simple billig/lokal
+            Simple local/low-cost
           </label>
           <label>
             <input
@@ -528,7 +528,7 @@ export function OnboardingContent({
               checked={routingChoice === "non_simple"}
               onChange={() => onRoutingChoiceChange("non_simple")}
             />
-            non-simple Premium/OAuth
+            Non-simple premium/OAuth
           </label>
         </div>
         {routingError ? <p className="fg-danger">{routingError}</p> : null}

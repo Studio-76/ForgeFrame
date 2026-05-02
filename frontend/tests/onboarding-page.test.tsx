@@ -512,10 +512,10 @@ describe("Onboarding wizard", () => {
   it("renders wizard-first onboarding with operating-model mapping and operator visibility", async () => {
     await renderOnboardingPage(createSession({ role: "admin" }));
 
-    expect(container.textContent).toContain("Onboarding Wizard");
-    expect(container.textContent).toContain("Nur ich");
-    expect(container.textContent).toContain("Mein Team / meine Firma");
-    expect(container.textContent).toContain("Mehrere Kunden / Organisationen");
+    expect(container.textContent).toContain("Guided setup checklist");
+    expect(container.textContent).toContain("Solo operator");
+    expect(container.textContent).toContain("My team / company");
+    expect(container.textContent).toContain("Multiple customers / organizations");
     expect(container.textContent).toContain("Default operator product object detected: Operator.");
     expect(container.textContent).toContain("local, API-key, bridge-only, onboarding-only, unsupported");
   });
@@ -692,11 +692,11 @@ describe("Onboarding wizard", () => {
     await renderOnboardingPage(createSession({ role: "admin" }), "/onboarding?instanceId=instance_alpha");
 
     expect(getField<HTMLInputElement>('input[name="routingChoice"][value="non_simple"]').checked).toBe(true);
-    expect(getWizardStepCard("Routing simple/non-simple").textContent).toContain("non-simple Premium/OAuth selected");
+    expect(getWizardStepCard("Routing simple/non-simple").textContent).toContain("non-simple premium/OAuth selected");
     expect(getWizardStepStatus("Routing simple/non-simple")).toBe("blocked");
     expect(getWizardStepCard("Routing simple/non-simple").textContent).toContain("Apply routing defaults from this wizard step.");
-    expect(getWizardStepStatus("Go-Live Zusammenfassung")).toBe("blocked");
-    expect(getWizardStepCard("Go-Live Zusammenfassung").textContent).toContain("Routing defaults are not aligned with the chosen simple/non-simple decision.");
+    expect(getWizardStepStatus("Go-live summary")).toBe("blocked");
+    expect(getWizardStepCard("Go-live summary").textContent).toContain("Routing defaults are not aligned with the chosen simple/non-simple decision.");
 
     currentRoutingControlPlane = createRoutingControlPlanePayload(true, {
       non_simple: {
@@ -707,16 +707,16 @@ describe("Onboarding wizard", () => {
 
     expect(getWizardStepStatus("Routing simple/non-simple")).toBe("blocked");
     expect(getWizardStepCard("Routing simple/non-simple").textContent).toContain("Apply routing defaults from this wizard step.");
-    expect(getWizardStepStatus("Go-Live Zusammenfassung")).toBe("blocked");
-    expect(getWizardStepCard("Go-Live Zusammenfassung").textContent).toContain("Routing defaults are not aligned with the chosen simple/non-simple decision.");
+    expect(getWizardStepStatus("Go-live summary")).toBe("blocked");
+    expect(getWizardStepCard("Go-live summary").textContent).toContain("Routing defaults are not aligned with the chosen simple/non-simple decision.");
 
     currentRoutingControlPlane = createRoutingControlPlanePayload(true);
     await remountOnboardingPage(createSession({ role: "admin" }), "/onboarding?instanceId=instance_alpha");
 
     expect(getField<HTMLInputElement>('input[name="routingChoice"][value="non_simple"]').checked).toBe(true);
-    expect(getWizardStepCard("Routing simple/non-simple").textContent).toContain("non-simple Premium/OAuth selected");
+    expect(getWizardStepCard("Routing simple/non-simple").textContent).toContain("non-simple premium/OAuth selected");
     expect(getWizardStepStatus("Routing simple/non-simple")).toBe("done");
-    expect(getWizardStepStatus("Go-Live Zusammenfassung")).toBe("done");
+    expect(getWizardStepStatus("Go-live summary")).toBe("done");
   });
 
   it("uses persisted normative onboarding truth for step 1 and go-live instead of unsaved draft edits", async () => {
@@ -734,19 +734,19 @@ describe("Onboarding wizard", () => {
 
     await renderOnboardingPage(createSession({ role: "admin" }));
 
-    expect(getWizardStepStatus("Betriebsart und Scope")).toBe("blocked");
+    expect(getWizardStepStatus("Operating model and scope")).toBe("blocked");
     expect(getWizardStepStatus("First Success Probe")).toBe("done");
-    expect(getWizardStepStatus("Go-Live Zusammenfassung")).toBe("blocked");
-    expect(getPageCard("1) Betriebsart und erste Instanz").textContent).toContain("Limited mode recorded");
+    expect(getWizardStepStatus("Go-live summary")).toBe("blocked");
+    expect(getPageCard("1) Operating model and first instance").textContent).toContain("Limited mode recorded");
 
     await changeSelect("operatingMode", "normative_public_https");
 
-    expect(getWizardStepStatus("Betriebsart und Scope")).toBe("blocked");
-    expect(getWizardStepStatus("Go-Live Zusammenfassung")).toBe("blocked");
-    expect(getWizardStepCard("Betriebsart und Scope").textContent).toContain("limited_mode_selected");
-    expect(getWizardStepCard("Go-Live Zusammenfassung").textContent).toContain("limited_mode_selected");
-    expect(getPageCard("1) Betriebsart und erste Instanz").textContent).toContain("Limited mode recorded");
-    expect(getPageCard("1) Betriebsart und erste Instanz").textContent).not.toContain("Normative path recorded");
+    expect(getWizardStepStatus("Operating model and scope")).toBe("blocked");
+    expect(getWizardStepStatus("Go-live summary")).toBe("blocked");
+    expect(getWizardStepCard("Operating model and scope").textContent).toContain("limited_mode_selected");
+    expect(getWizardStepCard("Go-live summary").textContent).toContain("limited_mode_selected");
+    expect(getPageCard("1) Operating model and first instance").textContent).toContain("Limited mode recorded");
+    expect(getPageCard("1) Operating model and first instance").textContent).not.toContain("Normative path recorded");
   });
 
   it("loads persisted first-success proof per instance and clears probe state when scope changes", async () => {

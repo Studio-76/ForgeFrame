@@ -137,28 +137,28 @@ function createOauthTarget(overrides: Partial<ProvidersPageData["oauthTargets"][
     actions: [
       {
         action_key: "manual_token",
-        label: "Manuell Token hinterlegen",
+        label: "Add token manually",
         mode: "manual",
         supported: true,
         detail: "Bridge-only providers still rely on externally supplied portal tokens.",
       },
       {
         action_key: "bridge_sync",
-        label: "Bridge-Profil synchronisieren",
+        label: "Sync bridge profile",
         mode: "api",
         supported: true,
         detail: "Upserts or refreshes the saved harness bridge profile for this provider.",
       },
       {
         action_key: "probe",
-        label: "Verbindung testen",
+        label: "Test connection",
         mode: "api",
         supported: true,
         detail: "Runs the real probe path for this target.",
       },
       {
         action_key: "disconnect",
-        label: "Trennen",
+        label: "Disconnect",
         mode: "manual",
         supported: true,
         detail: "Remove or replace the relevant env token outside ForgeFrame and reload the runtime.",
@@ -569,10 +569,10 @@ describe("Provider readiness axes", () => {
     const markup = renderToStaticMarkup(<ExpansionTargetsSection data={data} actions={createActions()} />);
 
     expect(markup).toContain("GitHub Copilot");
-    expect(markup).toContain("bridge-only");
-    expect(markup).toContain("Next step:");
-    expect(markup).toContain("Advanced Diagnostics");
-    expect(markup).toContain("Probe evidence:");
+    expect(markup).toContain("External token only");
+    expect(markup).toContain("Next step");
+    expect(markup).toContain("Route Diagnostics");
+    expect(markup).toContain("Product Axis Contracts");
   });
 
   it("shows the blocked provider state for viewer sessions without scoped read access", () => {
@@ -596,7 +596,7 @@ describe("Provider readiness axes", () => {
     expect(markup).not.toContain("Create provider");
     expect(markup).not.toContain("Save label");
     expect(markup).not.toContain("Run health checks");
-    expect(markup).not.toContain("Sync OAuth bridge profiles");
+    expect(markup).not.toContain("Sync bridge profiles");
     expect(markup).not.toContain("Probe OAuth target");
   });
 
@@ -611,8 +611,8 @@ describe("Provider readiness axes", () => {
     );
 
     expect(markup).toContain("Read-only provider view");
-    expect(markup).toContain("Export redacted");
-    expect(markup).not.toContain("Export full snapshot");
+    expect(markup).toContain("Export (redacted)");
+    expect(markup).not.toContain("Export (full)");
     expect(markup).not.toContain(">Verify<");
     expect(markup).not.toContain("Dry-run import");
     expect(markup).not.toContain("Apply import");
@@ -638,12 +638,12 @@ describe("Provider readiness axes", () => {
     expect(markup).toContain(">Preview<");
     expect(markup).toContain(">Verify<");
     expect(markup).toContain(">Dry-run<");
-    expect(markup).toContain("Export redacted");
-    expect(markup).toContain("Export full snapshot");
+    expect(markup).toContain("Export (redacted)");
+    expect(markup).toContain("Export (full)");
     expect(markup).toContain("Dry-run import");
     expect(markup).toContain("Create provider");
     expect(markup).toContain("Save label");
-    expect(markup).toContain("Sync OAuth bridge profiles");
-    expect(markup).toContain("Verbindung testen");
+    expect(markup).toContain("Sync bridge profiles");
+    expect(markup).toContain("Test");
   });
 });

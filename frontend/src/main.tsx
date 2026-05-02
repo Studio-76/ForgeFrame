@@ -6,11 +6,11 @@ import { App } from "./app/App";
 import { loginRouteLoader, protectedRouteLoader } from "./app/authRouting";
 import { PublicShell } from "./app/PublicShell";
 import { QueryProvider } from "./app/QueryProvider";
+import { RouteErrorBoundaryView } from "./app/RouteErrorBoundary";
 import "./theme/index.css";
 import { ThemeProvider } from "./theme/ThemeProvider";
 import { LoginPage } from "./pages/LoginPage";
 
-const OnboardingPage = lazy(async () => import("./pages/OnboardingPage").then((module) => ({ default: module.OnboardingPage })));
 const PasswordRotationPage = lazy(async () => import("./pages/PasswordRotationPage").then((module) => ({ default: module.PasswordRotationPage })));
 const DashboardPage = lazy(async () => import("./pages/DashboardPage").then((module) => ({ default: module.DashboardPage })));
 const ProvidersPage = lazy(async () => import("./pages/ProvidersPage").then((module) => ({ default: module.ProvidersPage })));
@@ -54,6 +54,19 @@ const CostsPage = lazy(async () => import("./pages/CostsPage").then((module) => 
 const ErrorsPage = lazy(async () => import("./pages/ErrorsPage").then((module) => ({ default: module.ErrorsPage })));
 const LogsPage = lazy(async () => import("./pages/LogsPage").then((module) => ({ default: module.LogsPage })));
 
+/**
+ * HydrateFallback for data-router hydration (client-only SPA, never rendered).
+ * React Router v7 warns without this for data-router route groups.
+ * @returns Null — hydration completes synchronously for client-only routes.
+ */
+function HydrateFallback() {
+  return null;
+}
+
+/**
+ * Suspense fallback while route modules are loading.
+ * @returns Loading shell for lazy route chunks.
+ */
 function RouteModuleFallback() {
   return (
     <section className="fg-page">
@@ -65,26 +78,37 @@ function RouteModuleFallback() {
   );
 }
 
+/**
+ * Wrap route content with lazy loading and runtime recovery boundaries.
+ * @param element - Route element to render.
+ * @returns Route shell with suspense and error containment.
+ */
 function lazyRoute(element: React.ReactNode) {
-  return <Suspense fallback={<RouteModuleFallback />}>{element}</Suspense>;
+  return (
+    <RouteErrorBoundaryView>
+      <Suspense fallback={<RouteModuleFallback />}>{element}</Suspense>
+    </RouteErrorBoundaryView>
+  );
 }
 
 const router = createBrowserRouter([
   {
     path: "/login",
+    HydrateFallback: HydrateFallback,
     loader: loginRouteLoader,
     element: <PublicShell />,
-    children: [{ index: true, element: <LoginPage /> }],
+    children: [{ index: true, element: lazyRoute(<LoginPage />) }],
   },
   {
     path: "/",
+    HydrateFallback: HydrateFallback,
     loader: protectedRouteLoader,
     element: <App />,
     children: [
       { index: true, element: <Navigate replace to="/dashboard" /> },
       { path: "rotate-password", element: lazyRoute(<PasswordRotationPage />) },
       { path: "dashboard", element: lazyRoute(<DashboardPage />) },
-      { path: "onboarding", element: lazyRoute(<OnboardingPage />) },
+      { path: "onboarding", element: <Navigate replace to="/dashboard" /> },
       { path: "instances", element: lazyRoute(<InstancesPage />) },
       { path: "harness", element: lazyRoute(<HarnessPage />) },
       { path: "providers", element: lazyRoute(<ProvidersPage />) },

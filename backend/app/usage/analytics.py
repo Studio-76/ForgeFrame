@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections import defaultdict
+from collections.abc import Sequence
 from datetime import UTC, datetime, timedelta
 from functools import lru_cache
 from math import ceil
@@ -102,7 +103,7 @@ class UsageAnalyticsStore:
 
     def _effective_query_tenant_id(
         self,
-        *entry_groups: list[BaseModel],
+        *entry_groups: Sequence[BaseModel],
         tenant_id: str | None = None,
     ) -> str | None:
         tenant_ids = [self._tenant_id(getattr(entry, "tenant_id", None)) for group in entry_groups for entry in group]
@@ -658,8 +659,8 @@ class UsageAnalyticsStore:
             grouped_error_profile[error.profile_key or "none"]["errors"] += 1
 
         latest_health: dict[tuple[str, str], HealthEvent] = {}
-        for event in health:
-            latest_health[(event.provider, event.model)] = event
+        for health_event in health:
+            latest_health[(health_event.provider, health_event.model)] = health_event
         runtime_duration_ms = self._runtime_duration_summary(events, errors)
 
         return {

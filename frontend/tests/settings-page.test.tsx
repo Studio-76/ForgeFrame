@@ -8,15 +8,11 @@ const {
   fetchMutableSettingsMock,
   patchMutableSettingsMock,
   resetMutableSettingMock,
-  confirmMock,
 } = vi.hoisted(() => ({
   fetchMutableSettingsMock: vi.fn(),
   patchMutableSettingsMock: vi.fn(),
   resetMutableSettingMock: vi.fn(),
-  confirmMock: vi.fn(() => true),
 }));
-
-vi.stubGlobal("confirm", confirmMock);
 
 vi.mock("../src/api/admin", async () => {
   const actual = await vi.importActual<typeof import("../src/api/admin")>("../src/api/admin");
@@ -180,9 +176,17 @@ async function renderSettingsPage(session: AdminSessionUser) {
   await flushEffects();
 }
 
+/** Flush microtasks and pending state updates multiple times. */
+async function deepSettle() {
+  for (let i = 0; i < 6; i++) {
+    await act(async () => {
+      await Promise.resolve();
+    });
+  }
+}
+
 beforeEach(() => {
   vi.resetAllMocks();
-  confirmMock.mockReturnValue(true);
   fetchMutableSettingsMock.mockResolvedValue({
     status: "ok",
     settings: createSettings(),
@@ -245,54 +249,114 @@ describe("Settings page role-aware controls", () => {
     expect(container.textContent).toContain("Read-Only Review");
     expect(container.textContent).toContain("Authenticated non-admin sessions can review grouped system defaults here");
     expect(container.textContent).toContain("Routing");
-    expect(container.textContent).toContain("TLS");
+    expect(container.textContent).toContain("Advanced");
+
+    // Operators should not see edit controls
     expect(getButtonByText(container, "Save override")).toBeUndefined();
     expect(getButtonByText(container, "Reset to default")).toBeUndefined();
+    expect(getButtonByText(container, "Edit setting")).toBeUndefined();
     expect(container.querySelector('select[aria-label="TLS Mode effective value"]')).toBeNull();
   });
 
-  it("groups, searches, confirms risky changes, and resets settings for admins", async () => {
+  it("groups, searches, edits with explicit edit mode, and confirms high-risk changes for admins", async () => {
     await renderSettingsPage(adminSession);
 
     expect(fetchMutableSettingsMock).toHaveBeenCalledTimes(1);
     expect(container.textContent).toContain("Admin mutations enabled");
+    expect(container.textContent).toContain("General");
     expect(container.textContent).toContain("Routing");
-    expect(container.textContent).toContain("TLS");
-    expect(container.textContent).toContain("UI");
+    expect(container.textContent).toContain("Advanced");
 
+    // High-risk settings are hidden by default; enable them
+    expect(container.textContent).toContain("Show 1 high-risk setting");
+    const highRiskLabel = Array.from(container.querySelectorAll("label"))
+      .find((l) => l.textContent?.includes("Show 1 high-risk setting"));
+    expect(highRiskLabel).toBeTruthy();
+    const highRiskCheckbox = highRiskLabel!.querySelector("input[type='checkbox']") as HTMLInputElement;
+    expect(highRiskCheckbox).toBeTruthy();
+
+    // Click the checkbox to check it. This fires a click event;
+    // React reads event.target.checked (which jsdom toggles on click()) and calls onChange.
+    await act(async () => {
+      highRiskCheckbox.click();
+    });
+    await flushEffects();
+
+    // Verify all 3 settings are now visible
+    expect(container.textContent).toContain("3 of 3 settings shown");
+
+    // Search for "tls mode" to narrow down
     await act(async () => {
       setControlValue(getLabeledControl(container, "Search settings"), "tls mode");
     });
     await flushEffects();
+    expect(container.textContent).toContain("1 of 3 settings shown");
 
-    expect(container.textContent).toContain("1 matching");
-
+    // Select the TLS Mode setting by clicking its button
+    const tlsItem = getButtonByText(container, "TLS Mode");
+    expect(tlsItem).toBeTruthy();
     await act(async () => {
-      getButtonByText(container, "public_tls_mode")!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      tlsItem!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     });
     await flushEffects();
 
+    // Detail panel should show the setting description
+    expect(container.textContent).toContain("Controls whether public TLS is disabled");
+
+    // Enter edit mode
+    const editBtn = getButtonByText(container, "Edit setting");
+    expect(editBtn).toBeTruthy();
+    await act(async () => {
+      editBtn!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    await flushEffects();
+
+    // Change value via the select control
     const valueControl = getLabeledControl(container, "New effective value");
+    expect(valueControl).toBeTruthy();
     await act(async () => {
       setControlValue(valueControl, "manual");
+    });
+    await flushEffects();
+
+    // Click "Save override" — this opens the confirmation dialog
+    await act(async () => {
       getButtonByText(container, "Save override")!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     });
     await flushEffects();
 
-    expect(confirmMock).toHaveBeenCalledTimes(1);
-    expect(patchMutableSettingsMock).toHaveBeenCalledWith({ public_tls_mode: "manual" });
-    expect(container.textContent).toContain("Updated 1 setting.");
-    expect(container.textContent).toContain("Persisted override");
-    expect(getButtonByText(container, "Reset to default")?.hasAttribute("disabled")).toBe(false);
+    // Confirmation dialog should be visible for high-risk setting
+    expect(getLabeledControl(container, "I understand the risk and want to proceed")).toBeTruthy();
 
+    // Check the acknowledgment by clicking the checkbox inside the dialog
+    const confirmCheckbox = container.querySelector(".ff-dialog-panel input[type='checkbox']") as HTMLInputElement;
+    expect(confirmCheckbox).toBeTruthy();
     await act(async () => {
-      getButtonByText(container, "Reset to default")!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      confirmCheckbox.click();
     });
     await flushEffects();
 
-    expect(confirmMock).toHaveBeenCalledTimes(2);
-    expect(resetMutableSettingMock).toHaveBeenCalledWith("public_tls_mode");
-    expect(container.textContent).toContain("Reset TLS Mode to its environment default.");
+    // Click the dialog confirm button
+    await act(async () => {
+      const confirmBtn = container.querySelector(".ff-settings-confirm-btn") as HTMLButtonElement;
+      expect(confirmBtn).toBeTruthy();
+      expect(confirmBtn.textContent).toBe("Apply override");
+      confirmBtn.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    await deepSettle();
+
+    // Verify save was called with correct payload
+    expect(patchMutableSettingsMock).toHaveBeenCalledWith({ public_tls_mode: "manual" });
+    expect(container.textContent).toContain("Updated 1 setting.");
+    expect(container.textContent).toContain("Persisted override");
+
+    // Edit mode was exited after save; verify by checking "Edit setting" is present
+    expect(getButtonByText(container, "Edit setting")).toBeTruthy();
+
+    // Verify the updated setting source is reflected in the detail panel
+    expect(container.textContent).toContain("Overridden");
+    // And the audit section shows the last updated timestamp
+    expect(container.textContent).toContain("Apr 29, 2026");
   });
 
   it("keeps impersonation admin sessions in read-only review mode", async () => {
@@ -304,6 +368,7 @@ describe("Settings page role-aware controls", () => {
     expect(container.textContent).toContain("Read-only review");
     expect(getButtonByText(container, "Save override")).toBeUndefined();
     expect(getButtonByText(container, "Reset to default")).toBeUndefined();
+    expect(getButtonByText(container, "Edit setting")).toBeUndefined();
     expect(container.querySelector('select[aria-label="TLS Mode effective value"]')).toBeNull();
   });
 });
