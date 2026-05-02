@@ -13,6 +13,11 @@ type AppSidebarProps = {
   instanceId: string | null;
 };
 
+/**
+ * Count enabled section links for the compact sidebar section badge.
+ * @param section - Navigation section to count.
+ * @returns Label with enabled and total link counts.
+ */
 function getSectionCountLabel(section: NavigationSection) {
   const totalLinks = section.links.length;
   const enabledLinks = section.links.filter((link) => !link.disabled).length;
@@ -21,18 +26,10 @@ function getSectionCountLabel(section: NavigationSection) {
 }
 
 /**
- * Find the first non-disabled link for a section, used as navigation target
- * when clicking a collapsed rail icon.
+ * Render the ForgeFrame control-plane sidebar navigation.
+ * @param props - Sidebar navigation sections and optional instance scope.
+ * @returns Sidebar navigation shell with expandable route groups.
  */
-function getFirstActiveLink(section: NavigationSection): string | null {
-  for (const link of section.links) {
-    if (!link.disabled) {
-      return link.to;
-    }
-  }
-  return null;
-}
-
 export function AppSidebar({ navigationSections, instanceId }: AppSidebarProps) {
   const location = useLocation();
   const {
@@ -120,9 +117,44 @@ export function AppSidebar({ navigationSections, instanceId }: AppSidebarProps) 
             const isCurrentSection = activeSectionId === section.id;
             const isExpandedSection = isSectionOpen(section.id);
             const isSectionVisible = isSidebarOpen && isExpandedSection;
+            const sectionState = isSectionVisible ? "open" : "closed";
             const countLabel = getSectionCountLabel(section);
             const collapsedTooltip = `${section.label} (${countLabel})`;
-            const firstActiveLink = getFirstActiveLink(section);
+            const sectionLinks = isSectionVisible
+              ? section.links.map((link) => {
+                  const scopedTo = withQueryParams(link.to, { instanceId });
+                  const isCurrent = isHrefCurrent(location.pathname, location.hash, scopedTo);
+                  const className = `ff-sidebar-link${isCurrent ? " is-current" : ""}${link.disabled ? " is-disabled" : ""}`;
+
+                  if (link.disabled) {
+                    return (
+                      <div
+                        key={`${section.id}-${link.to}`}
+                        className={className}
+                        role="link"
+                        aria-disabled="true"
+                        aria-current={isCurrent ? "page" : undefined}
+                      >
+                        <span className="ff-sidebar-link-label">{link.label}</span>
+                        {link.badge ? <span className="ff-mini-badge">{link.badge}</span> : null}
+                      </div>
+                    );
+                  }
+
+                  return (
+                    <Link
+                      key={`${section.id}-${link.to}`}
+                      className={className}
+                      to={scopedTo}
+                      onClick={closeMobileSidebar}
+                      aria-current={isCurrent ? "page" : undefined}
+                    >
+                      <span className="ff-sidebar-link-label">{link.label}</span>
+                      {link.badge ? <span className="ff-mini-badge">{link.badge}</span> : null}
+                    </Link>
+                  );
+                })
+              : null;
 
             return (
               <section key={section.id} className={`ff-sidebar-section${isCurrentSection ? " is-current" : ""}`}>
@@ -138,6 +170,7 @@ export function AppSidebar({ navigationSections, instanceId }: AppSidebarProps) 
                     <span className="ff-sidebar-section-leading">
                       <NavIcon name={section.icon} />
                       <span>{section.label}</span>
+                      {isCurrentSection ? <i className="ff-sidebar-current-indicator" aria-hidden="true" /> : null}
                     </span>
                     <span className="ff-sidebar-section-meta">
                       <span className="ff-mini-badge">{countLabel}</span>
@@ -145,7 +178,7 @@ export function AppSidebar({ navigationSections, instanceId }: AppSidebarProps) 
                     </span>
                   </Button>
                 ) : (
-                  /* Collapsed (rail) mode: icon-only button, navigates or expands */
+                  /* Collapsed (rail) mode: icon-only button expands and opens a section */
                   <Button
                     className={`ff-sidebar-rail-link${isCurrentSection ? " is-current" : ""}`}
                     aria-label={collapsedTooltip}
@@ -156,40 +189,8 @@ export function AppSidebar({ navigationSections, instanceId }: AppSidebarProps) 
                   </Button>
                 )}
 
-                <div id={linksId} className="ff-sidebar-links" hidden={!isSectionVisible}>
-                  {section.links.map((link) => {
-                    const scopedTo = withQueryParams(link.to, { instanceId });
-                    const isCurrent = isHrefCurrent(location.pathname, location.hash, scopedTo);
-                    const className = `ff-sidebar-link${isCurrent ? " is-current" : ""}${link.disabled ? " is-disabled" : ""}`;
-
-                    if (link.disabled) {
-                      return (
-                        <div
-                          key={`${section.id}-${link.to}`}
-                          className={className}
-                          role="link"
-                          aria-disabled="true"
-                          aria-current={isCurrent ? "page" : undefined}
-                        >
-                          <span className="ff-sidebar-link-label">{link.label}</span>
-                          {link.badge ? <span className="ff-mini-badge">{link.badge}</span> : null}
-                        </div>
-                      );
-                    }
-
-                    return (
-                      <Link
-                        key={`${section.id}-${link.to}`}
-                        className={className}
-                        to={scopedTo}
-                        onClick={closeMobileSidebar}
-                        aria-current={isCurrent ? "page" : undefined}
-                      >
-                        <span className="ff-sidebar-link-label">{link.label}</span>
-                        {link.badge ? <span className="ff-mini-badge">{link.badge}</span> : null}
-                      </Link>
-                    );
-                  })}
+                <div id={linksId} className="ff-sidebar-links" data-state={sectionState} hidden={!isSectionVisible}>
+                  {sectionLinks}
                 </div>
               </section>
             );

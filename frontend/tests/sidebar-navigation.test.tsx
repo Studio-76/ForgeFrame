@@ -127,6 +127,8 @@ describe("sidebar navigation shell", () => {
     // Section starts collapsed
     expect(setupTrigger?.getAttribute("aria-expanded")).toBe("false");
     expect(setupLinks?.hidden).toBe(true);
+    expect(setupLinks?.textContent).not.toContain("Setup progress");
+    expect(container.querySelector<HTMLAnchorElement>('#ff-sidebar-section-setup a[href="/instances"]')).toBeNull();
 
     // Click trigger to expand the section
     await act(async () => {
@@ -136,6 +138,8 @@ describe("sidebar navigation shell", () => {
 
     expect(setupTrigger?.getAttribute("aria-expanded")).toBe("true");
     expect(setupLinks?.hidden).toBe(false);
+    expect(setupLinks?.textContent).toContain("Setup progress");
+    expect(container.querySelector<HTMLAnchorElement>('#ff-sidebar-section-setup a[href="/instances"]')).not.toBeNull();
     expect(aside?.className).toContain("is-open");
     expect(window.localStorage.getItem("forgeframe.sidebar.sections")).toContain('"setup":true');
 
@@ -147,6 +151,38 @@ describe("sidebar navigation shell", () => {
 
     expect(setupTrigger?.getAttribute("aria-expanded")).toBe("false");
     expect(setupLinks?.hidden).toBe(true);
+    expect(setupLinks?.textContent).not.toContain("Setup progress");
+    expect(container.querySelector<HTMLAnchorElement>('#ff-sidebar-section-setup a[href="/instances"]')).toBeNull();
+    expect(window.localStorage.getItem("forgeframe.sidebar.sections")).toContain('"setup":false');
+  });
+
+  it("does not reopen the active section after a manual collapse", async () => {
+    await renderSidebar("/instances");
+    await flushEffects();
+    await flushEffects();
+
+    const setupSection = container.querySelector<HTMLElement>(".ff-sidebar-section.is-current");
+    const setupTrigger = Array.from(container.querySelectorAll<HTMLButtonElement>("button")).find(
+      (button) => button.getAttribute("aria-label") === "Setup section",
+    );
+    const setupLinks = container.querySelector<HTMLElement>("#ff-sidebar-section-setup");
+
+    expect(setupTrigger?.getAttribute("aria-expanded")).toBe("true");
+    expect(container.querySelector<HTMLAnchorElement>('#ff-sidebar-section-setup a[aria-current="page"]')?.textContent).toContain(
+      "Instances",
+    );
+
+    await act(async () => {
+      setupTrigger?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    await flushEffects();
+    await flushEffects();
+
+    expect(setupTrigger?.getAttribute("aria-expanded")).toBe("false");
+    expect(setupLinks?.hidden).toBe(true);
+    expect(container.querySelector<HTMLAnchorElement>('#ff-sidebar-section-setup a[aria-current="page"]')).toBeNull();
+    expect(setupSection?.className).toContain("is-current");
+    expect(setupTrigger?.className).toContain("is-current");
   });
 
   it("keeps the active section open even when persisted section state says closed", async () => {
