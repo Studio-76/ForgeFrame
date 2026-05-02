@@ -1,3 +1,4 @@
+import { useEffect, useRef } from "react";
 import { Link, useLocation } from "react-router-dom";
 
 import type { NavigationSection } from "../../app/navigation";
@@ -34,6 +35,16 @@ export function AppSidebar({ navigationSections, instanceId }: AppSidebarProps) 
   const activeMatch = findNavigationMatch(navigationSections, location.pathname, location.hash, instanceId);
   const activeSectionId = activeMatch?.section.id ?? null;
 
+  // Auto-open the currently active section when navigation changes to it.
+  // Only fires on section change so the user can still manually collapse it.
+  const prevSectionRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (activeSectionId && activeSectionId !== prevSectionRef.current) {
+      openSection(activeSectionId);
+      prevSectionRef.current = activeSectionId;
+    }
+  }, [activeSectionId, openSection]);
+
   return (
     <>
       <aside
@@ -59,7 +70,7 @@ export function AppSidebar({ navigationSections, instanceId }: AppSidebarProps) 
           {navigationSections.map((section) => {
             const linksId = `ff-sidebar-section-${section.id}`;
             const isCurrentSection = activeSectionId === section.id;
-            const isExpandedSection = isCurrentSection || isSectionOpen(section.id);
+            const isExpandedSection = isSectionOpen(section.id);
             const isSectionVisible = isSidebarOpen && isExpandedSection;
             const countLabel = getSectionCountLabel(section);
             const collapsedTooltip = `${section.label} (${countLabel})`;
@@ -72,13 +83,7 @@ export function AppSidebar({ navigationSections, instanceId }: AppSidebarProps) 
                   aria-controls={linksId}
                   aria-label={isSidebarOpen ? `${section.label} section` : `Open ${section.label} section`}
                   data-tooltip={isSidebarOpen ? undefined : collapsedTooltip}
-                  onPress={() => {
-                    if (isCurrentSection) {
-                      openSection(section.id);
-                      return;
-                    }
-                    toggleSection(section.id);
-                  }}
+                  onPress={() => toggleSection(section.id)}
                 >
                   <span className="ff-sidebar-section-leading">
                     <NavIcon name={section.icon} />

@@ -132,6 +132,10 @@ describe("sidebar navigation shell", () => {
 
     await renderSidebar("/usage");
     await flushEffects();
+    // Second flush: the auto-open useEffect fires during initial render,
+    // calling openSection() which updates context state. The state
+    // propagation needs an extra render cycle to reach AppSidebar.
+    await flushEffects();
 
     const runtimeTrigger = Array.from(container.querySelectorAll<HTMLButtonElement>("button")).find(
       (button) => button.getAttribute("aria-label") === "Runtime section",
@@ -168,6 +172,9 @@ describe("sidebar navigation shell", () => {
 
     window.localStorage.setItem("forgeframe.sidebar.expanded", "true");
     await renderSidebar("/approvals", viewerSession);
+    await flushEffects();
+    // Second flush: the persisted section state is consumed on mount,
+    // but the auto-open useEffect also fires — ensure both settle.
     await flushEffects();
 
     const openGovernanceTrigger = Array.from(container.querySelectorAll<HTMLButtonElement>("button")).find(
