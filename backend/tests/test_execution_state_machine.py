@@ -348,7 +348,12 @@ def test_validator_can_be_enabled() -> None:
 def test_enabled_validator_returns_validated_result() -> None:
     """When enabled, validate_run_transition must return validated=True."""
     validator = ExecutionStateMachineValidator(enabled=True)
-    ctx = ExecutionTransitionContext(run_state="queued", operator_state="admitted")
+    ctx = ExecutionTransitionContext(
+        run_state="queued",
+        operator_state="admitted",
+        attempt_state="queued",
+        attempt_operator_state="admitted",
+    )
     result = validator.validate_run_transition(
         trigger="claim_attempt",
         context=ctx,
@@ -754,6 +759,21 @@ def _run_transition(
     **ctx_kwargs: object,
 ) -> ExecutionValidationResult:
     """Helper: fire a run-state transition and return the result."""
+    # Set sensible defaults for guard-friendly context fields so callers
+    # do not need to repeat them on every happy-path call.
+    if "attempt_state" not in ctx_kwargs:
+        ctx_kwargs["attempt_state"] = run_state
+    if "attempt_operator_state" not in ctx_kwargs:
+        ctx_kwargs["attempt_operator_state"] = operator_state
+    if "attempt_id" not in ctx_kwargs:
+        ctx_kwargs["attempt_id"] = "test-attempt"
+    if "current_attempt_id" not in ctx_kwargs:
+        ctx_kwargs["current_attempt_id"] = "test-attempt"
+    # Approval-related transitions need an open approval gate.
+    if trigger in ("resume_after_approval", "reject_approval_cancel", "reject_approval_compensate", "reject_approval_fail"):
+        if "approval_gate_status" not in ctx_kwargs:
+            ctx_kwargs["approval_gate_status"] = "open"
+
     ctx = ExecutionTransitionContext(
         run_state=run_state,
         operator_state=operator_state,
@@ -1165,6 +1185,8 @@ def test_guard_results_are_recorded_on_success() -> None:
     ctx = ExecutionTransitionContext(
         run_state="queued",
         operator_state="admitted",
+        attempt_state="queued",
+        attempt_operator_state="admitted",
     )
     result = validator.validate_run_transition(
         trigger="claim_attempt",
@@ -1306,6 +1328,11 @@ def test_decision_includes_replacement_effects() -> None:
         operator_state="leased",
         attempt_state="dispatching",
         attempt_operator_state="leased",
+        attempt_id="test-attempt",
+        current_attempt_id="test-attempt",
+        retryable=True,
+        active_attempt_no=1,
+        max_attempts=3,
     )
     r = validator.validate_run_transition(
         trigger="record_retryable_failure_delayed",
@@ -1328,6 +1355,8 @@ def test_decision_includes_terminal_failure_source_only() -> None:
         operator_state="leased",
         attempt_state="dispatching",
         attempt_operator_state="leased",
+        attempt_id="test-attempt",
+        current_attempt_id="test-attempt",
     )
     r = validator.validate_run_transition(
         trigger="record_terminal_failure",
@@ -1349,6 +1378,8 @@ def test_decision_includes_complete_success_effects() -> None:
         operator_state="executing",
         attempt_state="executing",
         attempt_operator_state="executing",
+        attempt_id="test-attempt",
+        current_attempt_id="test-attempt",
     )
     r = validator.validate_run_transition(trigger="complete_success", context=ctx)
     assert r.valid
@@ -2162,6 +2193,8 @@ def test_retry_budget_exhausted_triggers_terminal_failure() -> None:
         retryable=True,
         active_attempt_no=3,
         max_attempts=3,
+        attempt_id="test-attempt",
+        current_attempt_id="test-attempt",
     )
     r = validator.validate_run_transition(
         trigger="record_terminal_failure",
@@ -2188,6 +2221,8 @@ def test_retry_budget_non_retryable_triggers_terminal_failure() -> None:
         retryable=False,
         active_attempt_no=1,
         max_attempts=3,
+        attempt_id="test-attempt",
+        current_attempt_id="test-attempt",
     )
     r = validator.validate_run_transition(
         trigger="record_terminal_failure",
@@ -2212,6 +2247,8 @@ def test_retryable_failure_delayed_with_budget() -> None:
         retryable=True,
         active_attempt_no=1,
         max_attempts=3,
+        attempt_id="test-attempt",
+        current_attempt_id="test-attempt",
     )
     r = validator.validate_run_transition(
         trigger="record_retryable_failure_delayed",
@@ -2238,6 +2275,8 @@ def test_retryable_failure_immediate_with_budget() -> None:
         retryable=True,
         active_attempt_no=1,
         max_attempts=3,
+        attempt_id="test-attempt",
+        current_attempt_id="test-attempt",
     )
     r = validator.validate_run_transition(
         trigger="record_retryable_failure_immediate",
@@ -2386,6 +2425,8 @@ def test_validator_recovers_after_exception() -> None:
     ctx_good = ExecutionTransitionContext(
         run_state="queued",
         operator_state="admitted",
+        attempt_state="queued",
+        attempt_operator_state="admitted",
     )
     r2 = validator.validate_run_transition(
         trigger="claim_attempt",

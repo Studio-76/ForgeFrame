@@ -175,39 +175,50 @@ Run states from which ``admit_retry`` is valid.
 
 RUN_STATE_TRANSITIONS: tuple[dict[str, Any], ...] = (
     # -- claim_attempt: queued or retry_backoff -> dispatching --
-    # TODO(Phase-1b): add conditions is_claimable_attempt, is_claimable_wakeup_due
-    {"trigger": "claim_attempt", "source": "queued", "dest": "dispatching", "conditions": "is_claimable_run"},
-    {"trigger": "claim_attempt", "source": "retry_backoff", "dest": "dispatching", "conditions": "is_claimable_run"},
+    {"trigger": "claim_attempt", "source": "queued", "dest": "dispatching", "conditions": ["is_claimable_run", "is_claimable_attempt", "is_claimable_wakeup_due"]},
+    {"trigger": "claim_attempt", "source": "retry_backoff", "dest": "dispatching", "conditions": ["is_claimable_run", "is_claimable_attempt", "is_claimable_wakeup_due"]},
     # -- start_execution: dispatching -> executing --
     {"trigger": "start_execution", "source": "dispatching", "dest": "executing", "conditions": ["is_not_paused"]},
     # -- open_approval: executing -> waiting_on_approval --
-    # TODO(Phase-1b): add condition is_executing
-    {"trigger": "open_approval", "source": "executing", "dest": "waiting_on_approval"},
+    {"trigger": "open_approval", "source": "executing", "dest": "waiting_on_approval", "conditions": ["is_executing"]},
     # -- resume_after_approval: waiting_on_approval -> queued --
-    # TODO(Phase-1b): add conditions has_open_approval_gate, is_waiting_on_approval
-    {"trigger": "resume_after_approval", "source": "waiting_on_approval", "dest": "queued"},
+    {"trigger": "resume_after_approval", "source": "waiting_on_approval", "dest": "queued", "conditions": ["has_open_approval_gate", "is_waiting_on_approval"]},
     # -- reject_approval paths: waiting_on_approval -> termination --
-    # TODO(Phase-1b): add conditions has_open_approval_gate, is_waiting_on_approval
-    {"trigger": "reject_approval_cancel", "source": "waiting_on_approval", "dest": "cancel_requested"},
-    {"trigger": "reject_approval_compensate", "source": "waiting_on_approval", "dest": "compensating"},
-    {"trigger": "reject_approval_fail", "source": "waiting_on_approval", "dest": "failed"},
+    {"trigger": "reject_approval_cancel", "source": "waiting_on_approval", "dest": "cancel_requested", "conditions": ["has_open_approval_gate", "is_waiting_on_approval"]},
+    {"trigger": "reject_approval_compensate", "source": "waiting_on_approval", "dest": "compensating", "conditions": ["has_open_approval_gate", "is_waiting_on_approval"]},
+    {"trigger": "reject_approval_fail", "source": "waiting_on_approval", "dest": "failed", "conditions": ["has_open_approval_gate", "is_waiting_on_approval"]},
     # -- complete_success: multiple sources -> succeeded --
-    # TODO(Phase-1b): add conditions is_in_flight_attempt, has_valid_lease_token, is_current_attempt
-    {"trigger": "complete_success", "source": ["dispatching", "executing", "cancel_requested", "compensating"], "dest": "succeeded"},
+    {
+        "trigger": "complete_success",
+        "source": ["dispatching", "executing", "cancel_requested", "compensating"],
+        "dest": "succeeded",
+        "conditions": ["is_in_flight_attempt", "has_valid_lease_token", "is_current_attempt"],
+    },
     # -- record_retryable_failure_delayed: dispatching/executing -> retry_backoff --
-    # TODO(Phase-1b): add conditions is_recordable_failure, has_valid_lease_token, is_retryable_and_has_budget, is_current_attempt
-    {"trigger": "record_retryable_failure_delayed", "source": ["dispatching", "executing"], "dest": "retry_backoff"},
+    {
+        "trigger": "record_retryable_failure_delayed",
+        "source": ["dispatching", "executing"],
+        "dest": "retry_backoff",
+        "conditions": ["is_recordable_failure", "has_valid_lease_token", "is_retryable_and_has_budget", "is_current_attempt"],
+    },
     # -- record_retryable_failure_immediate: dispatching/executing -> queued --
-    # TODO(Phase-1b): add conditions is_recordable_failure, has_valid_lease_token, is_retryable_and_has_budget, is_current_attempt
-    {"trigger": "record_retryable_failure_immediate", "source": ["dispatching", "executing"], "dest": "queued"},
+    {
+        "trigger": "record_retryable_failure_immediate",
+        "source": ["dispatching", "executing"],
+        "dest": "queued",
+        "conditions": ["is_recordable_failure", "has_valid_lease_token", "is_retryable_and_has_budget", "is_current_attempt"],
+    },
     # -- record_terminal_failure: dispatching/executing -> dead_lettered --
-    # TODO(Phase-1b): add conditions is_recordable_failure, has_valid_lease_token, is_terminal_failure_destination, is_current_attempt
-    {"trigger": "record_terminal_failure", "source": ["dispatching", "executing"], "dest": "dead_lettered"},
+    {
+        "trigger": "record_terminal_failure",
+        "source": ["dispatching", "executing"],
+        "dest": "dead_lettered",
+        "conditions": ["is_recordable_failure", "has_valid_lease_token", "is_terminal_failure_destination", "is_current_attempt"],
+    },
     # -- request_cancel: any state with guard condition --
     {"trigger": "request_cancel", "source": "*", "dest": "cancel_requested", "conditions": "is_cancellable"},
     # -- admit_retry: retryable terminal -> queued --
-    # TODO(Phase-1b): add condition is_retryable_run
-    {"trigger": "admit_retry", "source": ["failed", "timed_out", "compensated", "dead_lettered"], "dest": "queued"},
+    {"trigger": "admit_retry", "source": ["failed", "timed_out", "compensated", "dead_lettered"], "dest": "queued", "conditions": ["is_retryable_run"]},
     # -- interrupt: any operator state with guard --
     {"trigger": "interrupt", "source": "*", "dest": "cancel_requested", "conditions": "is_interruptible"},
     # -- quarantine: any operator state excluding quarantined --
@@ -870,7 +881,18 @@ class _ExecutionStateMachineModel:
         :returns: ``True`` when the wake-up is due or no schedule exists
         """
         ctx: ExecutionTransitionContext | None = event.kwargs.get("context")
-        result = ctx is None or ctx.scheduled_at is None or ctx.now is None or ctx.scheduled_at <= ctx.now
+        result: bool
+        if ctx is None or ctx.scheduled_at is None or ctx.now is None:
+            result = True
+        else:
+            scheduled = ctx.scheduled_at
+            now = ctx.now
+            # Normalise timezone-naive vs timezone-aware comparison
+            # (one side may be offset-aware while the other is naive).
+            if (scheduled.tzinfo is None) != (now.tzinfo is None):
+                scheduled = scheduled.replace(tzinfo=None)
+                now = now.replace(tzinfo=None)
+            result = scheduled <= now
         return self._record_guard("is_claimable_wakeup_due", result)
 
     def is_not_paused(self, event: Any) -> bool:
