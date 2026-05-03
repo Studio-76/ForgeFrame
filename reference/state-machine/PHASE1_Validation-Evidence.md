@@ -8,10 +8,7 @@
 
 ## Executive Recommendation
 
-**Recommendation: defer Phase 1c authority transfer.** Phase 1a and Phase 1b implementation evidence is strong enough to accept the advisory validation wiring as complete. The validation-window artifact is now captured (SPEC §9.6 ≤5 ms p95 target met at 0.943 ms). However, authority transfer is not yet recommended because two conditions remain:
-
-1. The guard wiring gap (15 TODO conditions in `RUN_STATE_TRANSITIONS`) means the validator's mismatch detection would be incomplete under authority.
-2. The creation-snapshot contract hardening (stringly `extra` keys) needs to be resolved.
+**Recommendation: defer Phase 1c authority transfer.** Phase 1a and Phase 1b implementation evidence is strong enough to accept the advisory validation wiring as complete. The validation-window artifact is now captured (SPEC §9.6 ≤5 ms p95 target met at 0.943 ms). The creation-snapshot contract has been hardened with a typed `SourceRunInvariants` dataclass. The remaining blocker before Phase 1c authority transfer is the guard wiring gap (15 TODO conditions in `RUN_STATE_TRANSITIONS`).
 
 (SPEC §5 findings #2, #3, and #8 — previously marked ``Decision required`` — and the validation-window overhead gap are both resolved and no longer block Phase 1c.)
 
@@ -46,7 +43,7 @@ The feature flag remains disabled by default, which is the correct rollback post
 | Run-state triggers | `RUN_STATE_TRANSITIONS` covers SPEC §7.1 triggers | Covered |
 | Operator-only triggers | `OPERATOR_STATE_TRANSITIONS` covers `pause` and `resume` | Covered |
 | Attempt effects | `ATTEMPT_EFFECTS_BY_TRIGGER` covers all run/operator triggers | Covered |
-| Creation validators | `validate_creation` covers `admit_create` and `restart_run_from_scratch` | Covered (see Findings: stringly extra contract risk) |
+| Creation validators | `validate_creation` covers `admit_create` and `restart_run_from_scratch` | Covered (typed `SourceRunInvariants` dataclass since a69461f) |
 | Non-state validators | `validate_non_state_operation` covers state-dimension preservation | Covered |
 | Structured mismatch categories | SPEC §9.4 constants exist and are logged by service | Covered |
 | Non-fatal mismatches/exceptions | Service catches validator exceptions and logs structured warnings/errors | Covered |
@@ -110,7 +107,7 @@ Integration tests directly exercise representative service logging for run-state
 
 | Finding | Evidence | Disposition |
 |---|---|---|
-| `validate_creation` handles `admit_create` and `restart_run_from_scratch` in one method. | `validate_creation` branches by operation and uses `before_snapshot.extra` source keys for restart invariants. | **Follow-up recommended.** Current tests cover behavior, but the stringly `extra` contract is hidden coupling. |
+| `validate_creation` handles `admit_create` and `restart_run_from_scratch` in one method. | `validate_creation` branches by operation and uses typed `SourceRunInvariants` (commit a69461f) instead of stringly `extra` keys. | **Resolved.** Typed `source_run_invariants` field on `ExecutionStateSnapshot` replaces the stringly-extra contract. |
 | `_build_decision` has trigger-specific branches. | `start_execution`, `pause`, `resume`, and `claim_attempt` receive special handling. | **Accept for Phase 1b; refactor before expansion.** The branch cost is manageable now but should become table-driven if new context-dependent triggers are added. |
 | `_ExecutionStateMachineModel` is shared across calls on one validator instance. | Validator docstring warns that `self._model` is shared; service builds a fresh validator per validation call. | **Accept for current service usage; guard with tests/docs.** Singleton reuse would be unsafe without synchronization. |
 
@@ -260,11 +257,11 @@ The one `guard_failed` in the benchmark is an artifact of benchmark context (sna
 
 ### Phase 1c Decision
 
-The SPEC §9.6 ≤5 ms p95 target is met with margin (max measured: 0.943 ms). The validation-window gap is closed. The remaining conditions for Phase 1c authority transfer are:
+The SPEC §9.6 ≤5 ms p95 target is met with margin (max measured: 0.943 ms). The validation-window gap is closed. The creation-snapshot contract is hardened (typed `SourceRunInvariants` dataclass). The remaining condition for Phase 1c authority transfer is:
 
 1. ~~Validation-window overhead record~~ — **Resolved** (this document)
-2. Guard wiring gaps (15 TODO conditions in transition table) — still open
-3. Creation-snapshot stringly-typed contract hardening — still open
+2. ~~Creation-snapshot contract hardening~~ — **Resolved** (typed `SourceRunInvariants` in a69461f)
+3. Guard wiring gaps (15 TODO conditions in transition table) — still open
 
 ---
 
@@ -274,7 +271,7 @@ Follow-up tasks referenced below are task-manager records.
 UUIDs may be resolved with `task-manager_get_task_detail`.
 
 1. ~~`ee0c4671-1929-46e6-98cf-ee1fbf090b94` — add targeted SPEC §5 compatibility tests before Phase 1c for stale-run `complete_attempt_success`, stale run/attempt approval decisions, and `LeaseReconcileResult.reconciled_to_state` semantics.~~ **Resolved.** Tests added and passing.
-2. `885cbc11-005c-49ce-94fe-70cbc1d87c19` — harden the creation-validation snapshot contract by replacing stringly `extra` source keys with a typed helper or dedicated restart snapshot contract.
+2. ~~`885cbc11-005c-49ce-94fe-70cbc1d87c19` — harden the creation-validation snapshot contract by replacing stringly `extra` source keys with a typed helper or dedicated restart snapshot contract.~~ **Resolved.** Typed `SourceRunInvariants` dataclass wired in commit a69461f. `validate_creation` uses `before_snapshot.source_run_invariants` directly, no stringly-extra keys remain.
 3. ~~`f82fbb8e-3595-4344-a395-9e53c5dcace9` — capture a real validation-window artifact with validation enabled before any state-machine authority transfer.~~ **Resolved.** Benchmark evidence captured 2026-05-03 (see "Validation-Window Evidence" section above). SPEC §9.6 ≤5 ms p95 target met at 0.943 ms.
 4. Add validator freshness/thread-safety coverage as part of the creation-contract hardening task or a later dedicated task if factory reuse becomes supported.
 
@@ -282,16 +279,16 @@ UUIDs may be resolved with `task-manager_get_task_detail`.
 
 ## Phase 1c Gate
 
-Phase 1c remains **blocked**, but the blocking condition has narrowed. The two previously blocking conditions (SPEC §5 stale-state findings and validation-window artifact) are both **resolved**:
+Phase 1c remains **blocked**, but only one condition remains. Three previously blocking conditions are all **resolved**:
 
 - ~~SPEC §5 findings #2, #3, #8 (``Decision required``)~~ — Covered by targeted tests since initial document creation.
 - ~~Validation-window overhead evidence~~ — Captured 2026-05-03; SPEC §9.6 target met.
+- ~~Creation-snapshot contract hardening~~ — Typed `SourceRunInvariants` dataclass wired in commit a69461f.
 
-Two conditions remain before Phase 1c authority transfer can proceed:
+One condition remains before Phase 1c authority transfer can proceed:
 
 1. **Guard wiring gap**: 15 TODO conditions in `RUN_STATE_TRANSITIONS` must be wired (see "Guard Wiring Gap" section above). Without these, the validator cannot detect guard-level rejection reasons.
-2. **Creation snapshot contract hardening**: `validate_creation` shares one method for `admit_create` and `restart_run_from_scratch` with a stringly `extra` contract. A typed helper or dedicated contract is needed.
 
-**Recommendation: Do not transfer authority yet.** The guard wiring gap in particular means the validator's mismatch detection would be incomplete under authority. Phase 1c should proceed only after (a) guard wiring is completed or a documented waiver is accepted, and (b) creation-snapshot contract hardening is completed or accepted.
+**Recommendation: Do not transfer authority yet.** The guard wiring gap means the validator's mismatch detection would be incomplete under authority. Phase 1c should proceed only after guard wiring is completed or a documented waiver is accepted.
 
 The next implementation should not remove existing guards, weaken compare-and-set behavior, or make stricter machine rules authoritative without those decisions.
