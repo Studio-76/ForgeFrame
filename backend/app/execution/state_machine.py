@@ -1252,7 +1252,19 @@ class ExecutionStateMachineValidator:
             else:
                 target_op = valid_op_states[0]
         else:
-            target_op = self._model.operator_state
+            # Operator-only triggers: pause transitions the model to
+            # "paused", but resume uses dest="=" so the model stays at
+            # "paused" while the service computes the actual target
+            # dynamically from RUN_TO_OPERATOR_RESUME_MAP.
+            if trigger == "resume":
+                target_op = context.service_chosen_operator_state or RUN_TO_OPERATOR_RESUME_MAP.get(
+                    context.run_state,
+                    _RESUME_FALLBACK_OPERATOR_STATE,
+                )
+            elif trigger == "pause":
+                target_op = self._model.operator_state
+            else:
+                target_op = self._model.operator_state
 
         return ExecutionStateDecision(
             target_run_state=self._model.run_state,

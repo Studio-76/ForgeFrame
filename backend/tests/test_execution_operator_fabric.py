@@ -83,6 +83,29 @@ class _ReconcileValidationSpy:
             )
         return ExecutionValidationResult(valid=True, validated=True)
 
+    def validate_operator_transition(
+        self,
+        trigger: str,
+        context: ExecutionTransitionContext,
+    ) -> ExecutionValidationResult:
+        self._calls.append((trigger, context))
+        return ExecutionValidationResult(valid=True, validated=True)
+
+    def validate_creation(
+        self,
+        operation: str,
+        before_snapshot: object,
+        after_snapshot: object,
+    ) -> ExecutionValidationResult:
+        return ExecutionValidationResult(valid=True, validated=True)
+
+    def validate_non_state_operation(
+        self,
+        before_snapshot: object,
+        after_snapshot: object,
+    ) -> ExecutionValidationResult:
+        return ExecutionValidationResult(valid=True, validated=True)
+
 
 def _instance(company_id: str = "company_alpha") -> InstanceRecord:
     now = datetime(2026, 4, 23, 8, 0, tzinfo=UTC).isoformat()
@@ -350,3 +373,143 @@ def test_queue_and_dispatch_views_surface_lane_and_lease_truth(tmp_path: Path) -
     assert runs[0].operator_state == "waiting_external"
     assert dispatch.leased_attempts[0].worker_key == "worker_alpha"
     assert dispatch.workers[0].leased_runs == [created.run_id]
+
+
+# ---------------------------------------------------------------------------
+# Wave 3 — operator fabric validation wiring
+# ---------------------------------------------------------------------------
+
+
+def test_wave3_pause_resume_validation_with_operator_fabric(tmp_path: Path, caplog) -> None:
+    """Pause/resume via operator fabric with validation enabled must be clean."""
+    import logging
+
+    transitions, admin, session_factory = _services(
+        tmp_path,
+        state_machine_validation_enabled=True,
+    )
+    caplog.set_level(logging.WARNING, logger="app.execution.service")
+
+    created = transitions.admit_create(
+        company_id="company_alpha",
+        actor_type="agent",
+        actor_id="agent_backend",
+        idempotency_key="idem_w3f_pause_create",
+        request_fingerprint_hash="fp_w3f_pause_create",
+        run_kind="provider_dispatch",
+    )
+
+    paused = admin.perform_operator_action(
+        instance=_instance(),
+        run_id=created.run_id,
+        actor_id="operator_alpha",
+        action="pause",
+        reason="Pause for review.",
+    )
+    assert paused.operator_state == "paused"
+
+    resumed = admin.perform_operator_action(
+        instance=_instance(),
+        run_id=created.run_id,
+        actor_id="operator_alpha",
+        action="resume",
+        reason="Resume after review.",
+    )
+    assert resumed.operator_state == "admitted"
+
+    with session_factory() as session:
+        run = session.get(RunORM, created.run_id)
+        assert run is not None
+        assert run.state == "queued"  # unchanged
+        assert run.operator_state == "admitted"
+
+    records = _validation_records(caplog)
+    assert records == [], f"Expected no validation records, got {len(records)}"
+
+
+def test_wave3_escalate_validation_with_operator_fabric(tmp_path: Path, caplog) -> None:
+    """Escalate via operator fabric with validation enabled must be clean."""
+    import logging
+
+    transitions, admin, session_factory = _services(
+        tmp_path,
+        state_machine_validation_enabled=True,
+    )
+    caplog.set_level(logging.WARNING, logger="app.execution.service")
+
+    created = transitions.admit_create(
+        company_id="company_alpha",
+        actor_type="agent",
+        actor_id="agent_backend",
+        idempotency_key="idem_w3f_esc_create",
+        request_fingerprint_hash="fp_w3f_esc_create",
+        run_kind="provider_dispatch",
+    )
+
+    escalated = admin.perform_operator_action(
+        instance=_instance(),
+        run_id=created.run_id,
+        actor_id="operator_alpha",
+        action="escalate",
+        reason="Need heavier lane.",
+        execution_lane="interactive_heavy",
+    )
+    assert escalated.execution_lane == "interactive_heavy"
+
+    with session_factory() as session:
+        run = session.get(RunORM, created.run_id)
+        assert run is not None
+        assert run.state == "queued"  # unchanged
+        assert run.execution_lane == "interactive_heavy"
+
+    records = _validation_records(caplog)
+    assert records == [], f"Expected no validation records, got {len(records)}"
+
+
+def test_wave3_renew_lease_validation_with_operator_fabric(tmp_path: Path, caplog) -> None:
+    """Lease renewal with validation enabled must be clean."""
+    import logging
+
+    transitions, admin, session_factory = _services(
+        tmp_path,
+        state_machine_validation_enabled=True,
+    )
+    caplog.set_level(logging.WARNING, logger="app.execution.service")
+
+    created = transitions.admit_create(
+        company_id="company_alpha",
+        actor_type="agent",
+        actor_id="agent_backend",
+        idempotency_key="idem_w3f_lease_create",
+        request_fingerprint_hash="fp_w3f_lease_create",
+        run_kind="provider_dispatch",
+    )
+    claim = transitions.claim_next_attempt(company_id="company_alpha", worker_key="worker_alpha", lease_ttl_seconds=30)
+    assert claim is not None
+    transitions.mark_attempt_executing(
+        company_id="company_alpha",
+        run_id=claim.run_id,
+        attempt_id=claim.attempt_id,
+        lease_token=claim.lease_token,
+        step_key="provider_call",
+    )
+
+    heartbeat = transitions.renew_attempt_lease(
+        company_id="company_alpha",
+        run_id=claim.run_id,
+        attempt_id=claim.attempt_id,
+        lease_token=claim.lease_token,
+        lease_ttl_seconds=45,
+    )
+    assert heartbeat.lease_expires_at > heartbeat.last_heartbeat_at
+
+    with session_factory() as session:
+        run = session.get(RunORM, created.run_id)
+        attempt = session.get(RunAttemptORM, claim.attempt_id)
+        assert run is not None
+        assert attempt is not None
+        assert run.state == "executing"  # unchanged
+        assert attempt.attempt_state == "executing"  # unchanged
+
+    records = _validation_records(caplog)
+    assert records == [], f"Expected no validation records, got {len(records)}"
