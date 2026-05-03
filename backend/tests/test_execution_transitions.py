@@ -1,19 +1,31 @@
 from __future__ import annotations
 
+import logging
 import threading
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from typing import Any, cast
 
 from sqlalchemy import create_engine, func, select
 from sqlalchemy.orm import Session, sessionmaker
 
+from app.execution import dependencies as execution_dependencies
 from app.execution.admin_service import ExecutionAdminService
 from app.execution.service import (
     ExecutionTransitionService,
     RunCommandIdempotencyConflictError,
     StaleWorkerClaimError,
+    StateMachineValidatorFactory,
+)
+from app.execution.state_machine import (
+    MISMATCH_CATEGORY_RUN_STATE_MISMATCH,
+    MISMATCH_CATEGORY_VALIDATOR_EXCEPTION,
+    ExecutionStateDecision,
+    ExecutionTransitionContext,
+    ExecutionValidationResult,
 )
 from app.instances.models import InstanceRecord
+from app.settings.config import Settings
 from app.storage.execution_repository import (
     RunApprovalLinkORM,
     RunAttemptORM,
@@ -26,15 +38,374 @@ from app.storage.models import Base
 
 def _service(
     tmp_path: Path,
+    *,
+    state_machine_validation_enabled: bool = False,
+    state_machine_validator_factory: StateMachineValidatorFactory | None = None,
 ) -> tuple[ExecutionTransitionService, sessionmaker[Session]]:
     engine = create_engine(f"sqlite+pysqlite:///{tmp_path / 'execution.sqlite'}")
     Base.metadata.create_all(engine)
     session_factory = sessionmaker(engine, autoflush=False, expire_on_commit=False)
-    return ExecutionTransitionService(session_factory), session_factory
+    return (
+        ExecutionTransitionService(
+            session_factory,
+            state_machine_validation_enabled=state_machine_validation_enabled,
+            state_machine_validator_factory=state_machine_validator_factory,
+        ),
+        session_factory,
+    )
+
+
+class _ValidationSpy:
+    """Test double that records advisory validation calls."""
+
+    def __init__(
+        self,
+        calls: list[tuple[str, ExecutionTransitionContext]],
+        *,
+        result: ExecutionValidationResult | None = None,
+        exception: Exception | None = None,
+    ) -> None:
+        self._calls = calls
+        self._result = result or ExecutionValidationResult(valid=True, validated=True)
+        self._exception = exception
+
+    def validate_run_transition(
+        self,
+        trigger: str,
+        context: ExecutionTransitionContext,
+    ) -> ExecutionValidationResult:
+        self._calls.append((trigger, context))
+        if self._exception is not None:
+            raise self._exception
+        return self._result
+
+
+def _validation_records(caplog) -> list[logging.LogRecord]:
+    """Return structured state-machine validation log records."""
+
+    return [record for record in caplog.records if hasattr(record, "state_machine_validation")]
+
+
+def _validation_payload(record: logging.LogRecord) -> dict[str, Any]:
+    """Return the structured state-machine payload from a log record."""
+
+    return cast("dict[str, Any]", getattr(record, "state_machine_validation"))
 
 
 def _count(session: Session, orm_type: type[object]) -> int:
     return int(session.scalar(select(func.count()).select_from(orm_type)) or 0)
+
+
+def test_state_machine_validation_disabled_does_not_construct_validator(
+    tmp_path: Path,
+    caplog,
+) -> None:
+    calls: list[tuple[str, ExecutionTransitionContext]] = []
+
+    def validator_factory() -> _ValidationSpy:
+        raise AssertionError("disabled validation must not construct validators")
+
+    service, _session_factory = _service(
+        tmp_path,
+        state_machine_validation_enabled=False,
+        state_machine_validator_factory=validator_factory,
+    )
+    caplog.set_level(logging.WARNING, logger="app.execution.service")
+    service.admit_create(
+        company_id="cmp_123",
+        actor_type="agent",
+        actor_id="agent_backend",
+        idempotency_key="idem_disabled_create",
+        request_fingerprint_hash="fp_disabled_create",
+        run_kind="provider_dispatch",
+    )
+    claim = service.claim_next_attempt(
+        company_id="cmp_123",
+        worker_key="worker_alpha",
+    )
+
+    assert claim is not None
+    assert calls == []
+    assert _validation_records(caplog) == []
+
+
+def test_state_machine_validation_logs_mismatch_without_changing_claim(
+    tmp_path: Path,
+    caplog,
+) -> None:
+    calls: list[tuple[str, ExecutionTransitionContext]] = []
+    mismatch = ExecutionValidationResult(
+        valid=True,
+        validated=True,
+        decision=ExecutionStateDecision(target_run_state="succeeded"),
+    )
+
+    service, _session_factory = _service(
+        tmp_path,
+        state_machine_validation_enabled=True,
+        state_machine_validator_factory=lambda: _ValidationSpy(calls, result=mismatch),
+    )
+    caplog.set_level(logging.WARNING, logger="app.execution.service")
+    created = service.admit_create(
+        company_id="cmp_123",
+        actor_type="agent",
+        actor_id="agent_backend",
+        idempotency_key="idem_mismatch_create",
+        request_fingerprint_hash="fp_mismatch_create",
+        run_kind="provider_dispatch",
+    )
+    claim = service.claim_next_attempt(
+        company_id="cmp_123",
+        worker_key="worker_alpha",
+    )
+
+    assert claim is not None
+    assert claim.run_id == created.run_id
+    assert calls[0][0] == "claim_attempt"
+    records = _validation_records(caplog)
+    assert len(records) == 1
+    payload = _validation_payload(records[0])
+    assert payload["trigger"] == "claim_attempt"
+    assert payload["mismatch_category"] == MISMATCH_CATEGORY_RUN_STATE_MISMATCH
+    assert payload["after"]["run_state"] == "dispatching"
+
+
+def test_state_machine_validator_exception_is_non_fatal(
+    tmp_path: Path,
+    caplog,
+) -> None:
+    calls: list[tuple[str, ExecutionTransitionContext]] = []
+
+    service, _session_factory = _service(
+        tmp_path,
+        state_machine_validation_enabled=True,
+        state_machine_validator_factory=lambda: _ValidationSpy(
+            calls,
+            exception=RuntimeError("validator exploded"),
+        ),
+    )
+    caplog.set_level(logging.ERROR, logger="app.execution.service")
+    service.admit_create(
+        company_id="cmp_123",
+        actor_type="agent",
+        actor_id="agent_backend",
+        idempotency_key="idem_exception_create",
+        request_fingerprint_hash="fp_exception_create",
+        run_kind="provider_dispatch",
+    )
+    claim = service.claim_next_attempt(
+        company_id="cmp_123",
+        worker_key="worker_alpha",
+    )
+
+    assert claim is not None
+    assert calls[0][0] == "claim_attempt"
+    records = _validation_records(caplog)
+    assert len(records) == 1
+    payload = _validation_payload(records[0])
+    assert payload["mismatch_category"] == MISMATCH_CATEGORY_VALIDATOR_EXCEPTION
+    assert payload["exception_class"] == "RuntimeError"
+
+
+def test_state_machine_validation_preserves_successful_worker_hot_path(
+    tmp_path: Path,
+    caplog,
+) -> None:
+    service, session_factory = _service(
+        tmp_path,
+        state_machine_validation_enabled=True,
+    )
+    caplog.set_level(logging.WARNING, logger="app.execution.service")
+    created = service.admit_create(
+        company_id="cmp_123",
+        actor_type="agent",
+        actor_id="agent_backend",
+        idempotency_key="idem_success_create",
+        request_fingerprint_hash="fp_success_create",
+        run_kind="provider_dispatch",
+    )
+    claim = service.claim_next_attempt(
+        company_id="cmp_123",
+        worker_key="worker_alpha",
+    )
+    assert claim is not None
+    service.mark_attempt_executing(
+        company_id="cmp_123",
+        run_id=claim.run_id,
+        attempt_id=claim.attempt_id,
+        lease_token=claim.lease_token,
+        step_key="provider_call",
+    )
+    service.complete_attempt_success(
+        company_id="cmp_123",
+        run_id=claim.run_id,
+        attempt_id=claim.attempt_id,
+        lease_token=claim.lease_token,
+        result_summary={"worker": "ok"},
+    )
+
+    with session_factory() as session:
+        run = session.get(RunORM, created.run_id)
+        attempt = session.get(RunAttemptORM, created.attempt_id)
+
+    assert run is not None
+    assert attempt is not None
+    assert run.state == "succeeded"
+    assert run.operator_state == "completed"
+    assert attempt.attempt_state == "succeeded"
+    assert attempt.operator_state == "completed"
+    assert _validation_records(caplog) == []
+
+
+def test_state_machine_validation_preserves_failure_hot_paths(
+    tmp_path: Path,
+    caplog,
+) -> None:
+    service, _session_factory = _service(
+        tmp_path,
+        state_machine_validation_enabled=True,
+    )
+    caplog.set_level(logging.WARNING, logger="app.execution.service")
+
+    retryable_run = service.admit_create(
+        company_id="cmp_retry",
+        actor_type="agent",
+        actor_id="agent_backend",
+        idempotency_key="idem_retryable_validation_create",
+        request_fingerprint_hash="fp_retryable_validation_create",
+        run_kind="provider_dispatch",
+    )
+    retryable_claim = service.claim_next_attempt(
+        company_id="cmp_retry",
+        worker_key="worker_retry",
+    )
+    assert retryable_claim is not None
+    service.mark_attempt_executing(
+        company_id="cmp_retry",
+        run_id=retryable_claim.run_id,
+        attempt_id=retryable_claim.attempt_id,
+        lease_token=retryable_claim.lease_token,
+        step_key="provider_call",
+    )
+    retryable_failure = service.record_attempt_failure(
+        company_id="cmp_retry",
+        run_id=retryable_claim.run_id,
+        attempt_id=retryable_claim.attempt_id,
+        lease_token=retryable_claim.lease_token,
+        failure_class="provider_transient",
+        error_code="provider_timeout",
+        error_detail="upstream timed out",
+        retryable=True,
+        max_attempts=3,
+        backoff_base_seconds=30,
+        backoff_max_seconds=30,
+        backoff_jitter_ratio=0.0,
+    )
+
+    terminal_run = service.admit_create(
+        company_id="cmp_terminal",
+        actor_type="agent",
+        actor_id="agent_backend",
+        idempotency_key="idem_terminal_validation_create",
+        request_fingerprint_hash="fp_terminal_validation_create",
+        run_kind="provider_dispatch",
+    )
+    terminal_claim = service.claim_next_attempt(
+        company_id="cmp_terminal",
+        worker_key="worker_terminal",
+    )
+    assert terminal_claim is not None
+    service.mark_attempt_executing(
+        company_id="cmp_terminal",
+        run_id=terminal_claim.run_id,
+        attempt_id=terminal_claim.attempt_id,
+        lease_token=terminal_claim.lease_token,
+        step_key="provider_call",
+    )
+    terminal_failure = service.record_attempt_failure(
+        company_id="cmp_terminal",
+        run_id=terminal_claim.run_id,
+        attempt_id=terminal_claim.attempt_id,
+        lease_token=terminal_claim.lease_token,
+        failure_class="provider_terminal",
+        error_code="provider_authentication_error",
+        error_detail="credentials rejected",
+        retryable=False,
+        max_attempts=3,
+    )
+
+    assert retryable_run.run_state == "queued"
+    assert retryable_failure.retry_scheduled is True
+    assert retryable_failure.run_state == "retry_backoff"
+    assert retryable_failure.next_attempt_id is not None
+    assert terminal_run.run_state == "queued"
+    assert terminal_failure.retry_scheduled is False
+    assert terminal_failure.run_state == "dead_lettered"
+    assert _validation_records(caplog) == []
+
+
+def test_state_machine_validation_skips_idempotent_cancel_replay(
+    tmp_path: Path,
+) -> None:
+    calls: list[tuple[str, ExecutionTransitionContext]] = []
+    service, _session_factory = _service(
+        tmp_path,
+        state_machine_validation_enabled=True,
+        state_machine_validator_factory=lambda: _ValidationSpy(calls),
+    )
+    created = service.admit_create(
+        company_id="cmp_123",
+        actor_type="agent",
+        actor_id="agent_backend",
+        idempotency_key="idem_replay_create",
+        request_fingerprint_hash="fp_replay_create",
+        run_kind="provider_dispatch",
+    )
+
+    first = service.request_cancel(
+        company_id="cmp_123",
+        run_id=created.run_id,
+        actor_type="agent",
+        actor_id="agent_backend",
+        idempotency_key="idem_cancel_replay",
+        request_fingerprint_hash="fp_cancel_replay",
+    )
+    second = service.request_cancel(
+        company_id="cmp_123",
+        run_id=created.run_id,
+        actor_type="agent",
+        actor_id="agent_backend",
+        idempotency_key="idem_cancel_replay",
+        request_fingerprint_hash="fp_cancel_replay",
+    )
+
+    assert first.deduplicated is False
+    assert second.deduplicated is True
+    assert second.command_id == first.command_id
+    assert [call[0] for call in calls] == ["request_cancel"]
+
+
+def test_dependency_wires_state_machine_validation_flag(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    settings = Settings(
+        admin_auth_enabled=False,
+        harness_storage_backend="file",
+        control_plane_storage_backend="file",
+        observability_storage_backend="file",
+        governance_storage_backend="file",
+        instances_storage_backend="file",
+        execution_sqlite_path=str(tmp_path / "dependency-execution.sqlite"),
+        execution_state_machine_validation_enabled=True,
+    )
+    monkeypatch.setattr(execution_dependencies, "get_settings", lambda: settings)
+    execution_dependencies.clear_execution_dependency_caches()
+    try:
+        service = execution_dependencies.get_execution_transition_service()
+        assert service._state_machine_validation_enabled is True
+    finally:
+        execution_dependencies.clear_execution_dependency_caches()
 
 
 def test_duplicate_create_command_returns_original_admission_snapshot(
@@ -235,6 +606,7 @@ def test_admin_replay_without_idempotency_key_recovers_from_concurrent_insert_ra
         )
 
         assert [command.command_type for command in commands] == ["retry", "create"]
+        assert commands[0].response_snapshot is not None
         assert commands[0].response_snapshot["replay_reason"] == reason
         assert [attempt.attempt_no for attempt in attempts] == [1, 2]
 

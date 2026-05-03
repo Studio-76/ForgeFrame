@@ -64,7 +64,17 @@ def get_execution_session_factory():
 
 @lru_cache(maxsize=1)
 def get_execution_transition_service() -> ExecutionTransitionService:
-    return ExecutionTransitionService(get_execution_session_factory())
+    """Build the cached execution transition service from runtime settings.
+
+    :return: Transition service with advisory state-machine validation wired
+        from ``Settings.execution_state_machine_validation_enabled``.
+    :rtype: ExecutionTransitionService
+    """
+    settings = get_settings()
+    return ExecutionTransitionService(
+        get_execution_session_factory(),
+        state_machine_validation_enabled=(settings.execution_state_machine_validation_enabled),
+    )
 
 
 @lru_cache(maxsize=1)
