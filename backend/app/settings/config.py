@@ -156,6 +156,17 @@ def _load_env_file_values() -> dict[str, str]:
 
 
 def _legacy_brand_env_fallbacks(*, explicit_values: dict[str, Any]) -> dict[str, Any]:
+    """Return legacy ForgeGate setting values missing from primary inputs.
+
+    OS-level legacy values are treated as explicit operator/test input and
+    may override primary values loaded from ``.env``. Legacy values from the
+    ``.env`` file remain fallback-only when no primary key is defined.
+
+    :param explicit_values: Settings values supplied directly to ``Settings``.
+    :type explicit_values: dict[str, Any]
+    :return: Legacy fallback values keyed by Settings field name.
+    :rtype: dict[str, Any]
+    """
     raw_values = _load_env_file_values()
     raw_values.update(os.environ)
 
@@ -173,13 +184,18 @@ def _legacy_brand_env_fallbacks(*, explicit_values: dict[str, Any]) -> dict[str,
         suffix = field_name.upper()
         primary_key = f"{PRIMARY_ENV_PREFIX}{suffix}"
         legacy_key = f"{LEGACY_ENV_PREFIX}{suffix}"
-        if primary_key in raw_values:
-            continue
-
+        legacy_keys = (legacy_key, *legacy_aliases.get(field_name, ()))
         legacy_value = next(
-            (raw_values[key] for key in (legacy_key, *legacy_aliases.get(field_name, ())) if key in raw_values),
+            (os.environ[key] for key in legacy_keys if key in os.environ),
             None,
         )
+        if legacy_value is None:
+            if primary_key in raw_values:
+                continue
+            legacy_value = next(
+                (raw_values[key] for key in legacy_keys if key in raw_values),
+                None,
+            )
         if legacy_value is not None:
             origin = get_origin(Settings.model_fields[field_name].annotation)
             if origin in {dict, list, tuple}:
