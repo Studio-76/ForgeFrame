@@ -18,6 +18,7 @@ from app.execution.service import (
     StateMachineValidatorFactory,
 )
 from app.execution.state_machine import (
+    MISMATCH_CATEGORY_APPROVAL_LINK_MISMATCH,
     MISMATCH_CATEGORY_RUN_STATE_MISMATCH,
     MISMATCH_CATEGORY_VALIDATOR_EXCEPTION,
     ExecutionStateDecision,
@@ -78,6 +79,31 @@ class _ValidationSpy:
         if self._exception is not None:
             raise self._exception
         return self._result
+
+
+class _TriggerValidationSpy:
+    """Test double that returns a special result for one trigger."""
+
+    def __init__(
+        self,
+        calls: list[tuple[str, ExecutionTransitionContext]],
+        *,
+        target_trigger: str,
+        result: ExecutionValidationResult,
+    ) -> None:
+        self._calls = calls
+        self._target_trigger = target_trigger
+        self._result = result
+
+    def validate_run_transition(
+        self,
+        trigger: str,
+        context: ExecutionTransitionContext,
+    ) -> ExecutionValidationResult:
+        self._calls.append((trigger, context))
+        if trigger == self._target_trigger:
+            return self._result
+        return ExecutionValidationResult(valid=True, validated=True)
 
 
 def _validation_records(caplog) -> list[logging.LogRecord]:
@@ -383,6 +409,206 @@ def test_state_machine_validation_skips_idempotent_cancel_replay(
     assert second.deduplicated is True
     assert second.command_id == first.command_id
     assert [call[0] for call in calls] == ["request_cancel"]
+
+
+def test_state_machine_validation_logs_approval_mismatch_without_changing_open(
+    tmp_path: Path,
+    caplog,
+) -> None:
+    """Approval validation mismatches must be non-fatal."""
+    calls: list[tuple[str, ExecutionTransitionContext]] = []
+    mismatch = ExecutionValidationResult(
+        valid=True,
+        validated=True,
+        decision=ExecutionStateDecision(target_run_state="failed"),
+    )
+    service, session_factory = _service(
+        tmp_path,
+        state_machine_validation_enabled=True,
+        state_machine_validator_factory=lambda: _TriggerValidationSpy(
+            calls,
+            target_trigger="open_approval",
+            result=mismatch,
+        ),
+    )
+    caplog.set_level(logging.WARNING, logger="app.execution.service")
+
+    created = service.admit_create(
+        company_id="cmp_approval_mismatch",
+        actor_type="agent",
+        actor_id="agent_backend",
+        idempotency_key="idem_approval_mismatch_create",
+        request_fingerprint_hash="fp_approval_mismatch_create",
+        run_kind="provider_dispatch",
+    )
+    claim = service.claim_next_attempt(
+        company_id="cmp_approval_mismatch",
+        worker_key="worker_approval_mismatch",
+    )
+    assert claim is not None
+    service.mark_attempt_executing(
+        company_id="cmp_approval_mismatch",
+        run_id=claim.run_id,
+        attempt_id=claim.attempt_id,
+        lease_token=claim.lease_token,
+        step_key="approval_gate",
+    )
+    approval = service.open_approval(
+        company_id="cmp_approval_mismatch",
+        run_id=claim.run_id,
+        attempt_id=claim.attempt_id,
+        approval_id="approval_mismatch_1",
+        gate_key="approval_gate",
+    )
+
+    assert approval.run_id == created.run_id
+    assert [call[0] for call in calls][-1] == "open_approval"
+    records = _validation_records(caplog)
+    assert len(records) == 1
+    payload = _validation_payload(records[0])
+    assert payload["trigger"] == "open_approval"
+    assert payload["mismatch_category"] == MISMATCH_CATEGORY_RUN_STATE_MISMATCH
+    assert payload["after"]["run_state"] == "waiting_on_approval"
+    with session_factory() as session:
+        run = session.get(RunORM, created.run_id)
+        assert run is not None
+        assert run.state == "waiting_on_approval"
+        assert run.current_approval_link_id == approval.approval_link_id
+
+
+def test_state_machine_validation_logs_stale_current_approval_warning(
+    tmp_path: Path,
+    caplog,
+) -> None:
+    """Approval decisions should warn without clearing retained links."""
+    service, session_factory = _service(
+        tmp_path,
+        state_machine_validation_enabled=True,
+    )
+    caplog.set_level(logging.WARNING, logger="app.execution.service")
+
+    created = service.admit_create(
+        company_id="cmp_approval_stale",
+        actor_type="agent",
+        actor_id="agent_backend",
+        idempotency_key="idem_approval_stale_create",
+        request_fingerprint_hash="fp_approval_stale_create",
+        run_kind="provider_dispatch",
+    )
+    claim = service.claim_next_attempt(
+        company_id="cmp_approval_stale",
+        worker_key="worker_approval_stale",
+    )
+    assert claim is not None
+    service.mark_attempt_executing(
+        company_id="cmp_approval_stale",
+        run_id=claim.run_id,
+        attempt_id=claim.attempt_id,
+        lease_token=claim.lease_token,
+        step_key="approval_gate",
+    )
+    approval = service.open_approval(
+        company_id="cmp_approval_stale",
+        run_id=claim.run_id,
+        attempt_id=claim.attempt_id,
+        approval_id="approval_stale_1",
+        gate_key="approval_gate",
+    )
+    assert _validation_records(caplog) == []
+
+    result = service.decide_approval(
+        company_id="cmp_approval_stale",
+        approval_id="approval_stale_1",
+        actor_type="user",
+        actor_id="approver_stale",
+        idempotency_key="idem_approval_stale_decide",
+        request_fingerprint_hash="fp_approval_stale_decide",
+        approved=True,
+    )
+
+    assert result.run_state == "queued"
+    records = _validation_records(caplog)
+    assert len(records) == 1
+    payload = _validation_payload(records[0])
+    assert payload["trigger"] == "resume_after_approval"
+    assert payload["mismatch_category"] == MISMATCH_CATEGORY_APPROVAL_LINK_MISMATCH
+    assert payload["before"]["approval_gate_status"] == "open"
+    assert payload["after"]["approval_gate_status"] == "approved"
+    assert payload["after"]["current_approval_link_id"] == approval.approval_link_id
+    assert payload["command_id"] == result.command_id
+    with session_factory() as session:
+        run = session.get(RunORM, created.run_id)
+        link = session.get(RunApprovalLinkORM, approval.approval_link_id)
+        assert run is not None
+        assert link is not None
+        assert run.current_approval_link_id == approval.approval_link_id
+        assert link.gate_status == "approved"
+
+
+def test_state_machine_validation_logs_open_approval_cancel_warning(
+    tmp_path: Path,
+    caplog,
+) -> None:
+    """Cancelling from an open approval should warn without closing it."""
+    service, session_factory = _service(
+        tmp_path,
+        state_machine_validation_enabled=True,
+    )
+    caplog.set_level(logging.WARNING, logger="app.execution.service")
+
+    created = service.admit_create(
+        company_id="cmp_approval_cancel",
+        actor_type="agent",
+        actor_id="agent_backend",
+        idempotency_key="idem_approval_cancel_create",
+        request_fingerprint_hash="fp_approval_cancel_create",
+        run_kind="provider_dispatch",
+    )
+    claim = service.claim_next_attempt(
+        company_id="cmp_approval_cancel",
+        worker_key="worker_approval_cancel",
+    )
+    assert claim is not None
+    service.mark_attempt_executing(
+        company_id="cmp_approval_cancel",
+        run_id=claim.run_id,
+        attempt_id=claim.attempt_id,
+        lease_token=claim.lease_token,
+        step_key="approval_gate",
+    )
+    approval = service.open_approval(
+        company_id="cmp_approval_cancel",
+        run_id=claim.run_id,
+        attempt_id=claim.attempt_id,
+        approval_id="approval_cancel_1",
+        gate_key="approval_gate",
+    )
+    assert _validation_records(caplog) == []
+
+    result = service.request_cancel(
+        company_id="cmp_approval_cancel",
+        run_id=created.run_id,
+        actor_type="user",
+        actor_id="operator_cancel",
+        idempotency_key="idem_approval_cancel_request",
+        request_fingerprint_hash="fp_approval_cancel_request",
+    )
+
+    assert result.run_state == "cancel_requested"
+    records = _validation_records(caplog)
+    assert len(records) == 1
+    payload = _validation_payload(records[0])
+    assert payload["trigger"] == "request_cancel"
+    assert payload["mismatch_category"] == MISMATCH_CATEGORY_APPROVAL_LINK_MISMATCH
+    assert payload["before"]["approval_gate_status"] == "open"
+    assert payload["after"]["approval_gate_status"] == "open"
+    with session_factory() as session:
+        run = session.get(RunORM, created.run_id)
+        link = session.get(RunApprovalLinkORM, approval.approval_link_id)
+        assert run is not None
+        assert link is not None
+        assert run.current_approval_link_id == approval.approval_link_id
+        assert link.gate_status == "open"
 
 
 def test_dependency_wires_state_machine_validation_flag(

@@ -15,6 +15,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.execution.state_machine import (
+    MISMATCH_CATEGORY_APPROVAL_LINK_MISMATCH,
     MISMATCH_CATEGORY_ATTEMPT_STATE_MISMATCH,
     MISMATCH_CATEGORY_CURRENT_ATTEMPT_MISMATCH,
     MISMATCH_CATEGORY_LEASE_STATUS_MISMATCH,
@@ -313,6 +314,33 @@ class ExecutionTransitionService:
         }.get(raw_state, "admitted")
 
     @staticmethod
+    def _approval_decision_trigger(
+        *,
+        approved: bool,
+        resume_disposition: str,
+    ) -> ExecutionTrigger:
+        """Resolve an approval decision to its state-machine trigger.
+
+        :param approved: Whether the approval was accepted.
+        :type approved: bool
+        :param resume_disposition: Rejection disposition from the approval link.
+        :type resume_disposition: str
+        :return: State-machine trigger representing the decision outcome.
+        :rtype: ExecutionTrigger
+        """
+        if approved:
+            return "resume_after_approval"
+        trigger_by_disposition: dict[str, ExecutionTrigger] = {
+            "cancel": "reject_approval_cancel",
+            "compensate": "reject_approval_compensate",
+            "fail": "reject_approval_fail",
+        }
+        return trigger_by_disposition.get(
+            resume_disposition,
+            "reject_approval_fail",
+        )
+
+    @staticmethod
     def _current_attempt(session: Session, run: RunORM) -> RunAttemptORM:
         if run.current_attempt_id:
             attempt = session.get(RunAttemptORM, run.current_attempt_id)
@@ -334,6 +362,27 @@ class ExecutionTransitionService:
         if attempt is None:
             raise RunTransitionConflictError(f"Run '{run.id}' has no attempts to transition.")
         return attempt
+
+    @staticmethod
+    def _current_approval_link(
+        session: Session,
+        run: RunORM,
+    ) -> RunApprovalLinkORM | None:
+        """Return the run's current approval link when it exists.
+
+        :param session: Active transaction session.
+        :type session: Session
+        :param run: Run whose current approval link should be loaded.
+        :type run: RunORM
+        :return: Current approval link scoped to the run company, if present.
+        :rtype: RunApprovalLinkORM | None
+        """
+        if run.current_approval_link_id is None:
+            return None
+        approval_link = session.get(RunApprovalLinkORM, run.current_approval_link_id)
+        if approval_link is None or approval_link.company_id != run.company_id:
+            return None
+        return approval_link
 
     @staticmethod
     def _find_command(
@@ -628,6 +677,7 @@ class ExecutionTransitionService:
         *,
         run: RunORM | None,
         attempt: RunAttemptORM | None,
+        approval_link: RunApprovalLinkORM | None = None,
         command_id: str | None = None,
         replacement_attempt_id: str | None = None,
         extra: dict[str, Any] | None = None,
@@ -642,6 +692,8 @@ class ExecutionTransitionService:
         :type run: RunORM | None
         :param attempt: Attempt row to snapshot, when available.
         :type attempt: RunAttemptORM | None
+        :param approval_link: Approval-link row to snapshot, when available.
+        :type approval_link: RunApprovalLinkORM | None
         :param command_id: Command ID associated with the transition.
         :type command_id: str | None
         :param replacement_attempt_id: Replacement attempt ID for retry paths.
@@ -651,6 +703,16 @@ class ExecutionTransitionService:
         :return: Immutable validation snapshot.
         :rtype: ExecutionStateSnapshot
         """
+        snapshot_extra = dict(extra or {})
+        if approval_link is not None:
+            snapshot_extra.update({
+                "approval_link_id": approval_link.id,
+                "approval_id": approval_link.approval_id,
+                "approval_resume_disposition": approval_link.resume_disposition,
+                "approval_opened_at": approval_link.opened_at,
+                "approval_decided_at": approval_link.decided_at,
+                "approval_resume_enqueued_at": approval_link.resume_enqueued_at,
+            })
         return ExecutionStateSnapshot(
             run_id=run.id if run is not None else None,
             attempt_id=attempt.id if attempt is not None else None,
@@ -662,9 +724,10 @@ class ExecutionTransitionService:
             lease_status=attempt.lease_status if attempt is not None else None,
             lease_token=attempt.lease_token if attempt is not None else None,
             current_approval_link_id=(run.current_approval_link_id if run is not None else None),
+            approval_gate_status=(approval_link.gate_status if approval_link is not None else None),
             command_id=command_id,
             replacement_attempt_id=replacement_attempt_id,
-            extra=dict(extra or {}),
+            extra=snapshot_extra,
         )
 
     @staticmethod
@@ -731,6 +794,23 @@ class ExecutionTransitionService:
         value = snapshot.extra.get(key)
         return value if isinstance(value, datetime) else None
 
+    @staticmethod
+    def _snapshot_extra_str(
+        snapshot: ExecutionStateSnapshot,
+        key: str,
+    ) -> str | None:
+        """Read a string value from a validation snapshot's extra fields.
+
+        :param snapshot: Snapshot containing extra metadata.
+        :type snapshot: ExecutionStateSnapshot
+        :param key: Extra-field key.
+        :type key: str
+        :return: String value when present and typed, otherwise ``None``.
+        :rtype: str | None
+        """
+        value = snapshot.extra.get(key)
+        return value if isinstance(value, str) else None
+
     @classmethod
     def _state_machine_context(
         cls,
@@ -790,21 +870,53 @@ class ExecutionTransitionService:
             now=now,
             current_approval_link_id=before.current_approval_link_id,
             approval_gate_status=before.approval_gate_status,
+            approval_resume_disposition=cls._snapshot_extra_str(
+                before,
+                "approval_resume_disposition",
+            ),
             has_open_approval=before.approval_gate_status == "open",
             has_in_flight_attempt=before.attempt_state in _IN_FLIGHT_ATTEMPT_STATES,
             service_chosen_operator_state=service_chosen_operator_state,
         )
 
     @staticmethod
+    def _state_machine_approval_link_mismatch(
+        *,
+        before: ExecutionStateSnapshot,
+        after: ExecutionStateSnapshot,
+    ) -> bool:
+        """Detect approval-link lifecycle consistency warnings.
+
+        :param before: Snapshot captured before service mutation.
+        :type before: ExecutionStateSnapshot
+        :param after: Snapshot captured after service mutation.
+        :type after: ExecutionStateSnapshot
+        :return: ``True`` when approval-link lifecycle metadata is stale.
+        :rtype: bool
+        """
+        if after.run_state == "waiting_on_approval":
+            return after.current_approval_link_id is None or after.approval_gate_status != "open"
+        if before.current_approval_link_id is None or before.approval_gate_status != "open":
+            return False
+        if after.current_approval_link_id != before.current_approval_link_id:
+            return False
+        if after.run_state == "cancel_requested" and after.approval_gate_status == "open":
+            return True
+        return after.approval_gate_status not in {None, "open"}
+
+    @staticmethod
     def _state_machine_mismatch_category(
         *,
         result: ExecutionValidationResult,
+        before: ExecutionStateSnapshot,
         after: ExecutionStateSnapshot,
     ) -> str | None:
         """Classify validator or service-outcome mismatches.
 
         :param result: Validator result to compare.
         :type result: ExecutionValidationResult
+        :param before: Snapshot captured before service mutation.
+        :type before: ExecutionStateSnapshot
         :param after: Snapshot captured after service mutation.
         :type after: ExecutionStateSnapshot
         :return: Structured mismatch category, or ``None`` when clean.
@@ -838,6 +950,11 @@ class ExecutionTransitionService:
             return MISMATCH_CATEGORY_REPLACEMENT_ATTEMPT_MISMATCH
         if decision.replacement_attempt_state is not None and after.replacement_attempt_id is not None and after.current_attempt_id != after.replacement_attempt_id:
             return MISMATCH_CATEGORY_CURRENT_ATTEMPT_MISMATCH
+        if ExecutionTransitionService._state_machine_approval_link_mismatch(
+            before=before,
+            after=after,
+        ):
+            return MISMATCH_CATEGORY_APPROVAL_LINK_MISMATCH
         return None
 
     @classmethod
@@ -872,6 +989,13 @@ class ExecutionTransitionService:
             "replacement_attempt_state",
             "replacement_attempt_operator_state",
             "replacement_lease_status",
+            "approval_link_id",
+            "approval_id",
+            "approval_resume_disposition",
+            "approval_opened_at",
+            "approval_decided_at",
+            "approval_resume_enqueued_at",
+            "command_type",
         ):
             if key in snapshot.extra:
                 fields[key] = cls._json_value(snapshot.extra[key])
@@ -1085,6 +1209,7 @@ class ExecutionTransitionService:
                 return
             mismatch_category = self._state_machine_mismatch_category(
                 result=result,
+                before=before,
                 after=after,
             )
             if mismatch_category is not None:
@@ -2017,10 +2142,12 @@ class ExecutionTransitionService:
                 raise RunTransitionConflictError(f"Run '{run_id}' cannot be cancelled from state '{run.state}'.")
 
             attempt = self._current_attempt(session, run)
+            approval_link = self._current_approval_link(session, run) if self._state_machine_validation_enabled else None
             before_snapshot = (
                 self._state_machine_snapshot(
                     run=run,
                     attempt=attempt,
+                    approval_link=approval_link,
                     extra={
                         "attempt_no": attempt.attempt_no,
                         "active_attempt_no": run.active_attempt_no,
@@ -2098,6 +2225,7 @@ class ExecutionTransitionService:
                     after=self._state_machine_snapshot(
                         run=run,
                         attempt=attempt,
+                        approval_link=approval_link,
                         command_id=command.id,
                         extra={
                             "attempt_no": attempt.attempt_no,
@@ -2259,6 +2387,27 @@ class ExecutionTransitionService:
         resume_disposition: str = "resume",
         now: datetime | None = None,
     ) -> ApprovalOpenResult:
+        """Open an approval gate for an executing attempt.
+
+        :param company_id: Company scope for the run.
+        :type company_id: str
+        :param run_id: Run identifier.
+        :type run_id: str
+        :param attempt_id: Attempt identifier.
+        :type attempt_id: str
+        :param approval_id: External/shared approval identifier.
+        :type approval_id: str
+        :param gate_key: Execution step or gate key requesting approval.
+        :type gate_key: str
+        :param resume_disposition: Rejection handling disposition.
+        :type resume_disposition: str
+        :param now: Optional transition timestamp.
+        :type now: datetime | None
+        :return: Approval-link creation result.
+        :rtype: ApprovalOpenResult
+        :raises RunNotFoundError: If the run is missing.
+        :raises RunTransitionConflictError: If the attempt cannot open approval.
+        """
         current_time = self._now(now)
         with self._session_factory() as session, session.begin():
             run = session.get(RunORM, run_id)
@@ -2269,6 +2418,25 @@ class ExecutionTransitionService:
                 raise RunTransitionConflictError(f"Attempt '{attempt_id}' does not belong to run '{run_id}'.")
             if run.state != "executing" or attempt.attempt_state != "executing":
                 raise RunTransitionConflictError("Approvals can only open from the executing state.")
+
+            before_snapshot = (
+                self._state_machine_snapshot(
+                    run=run,
+                    attempt=attempt,
+                    extra={
+                        "attempt_no": attempt.attempt_no,
+                        "active_attempt_no": run.active_attempt_no,
+                        "scheduled_at": attempt.scheduled_at,
+                        "lease_expires_at": attempt.lease_expires_at,
+                        "next_wakeup_at": run.next_wakeup_at,
+                        "approval_id": approval_id,
+                        "approval_resume_disposition": resume_disposition,
+                        "approval_opened_at": current_time,
+                    },
+                )
+                if self._state_machine_validation_enabled
+                else None
+            )
 
             approval_link = RunApprovalLinkORM(
                 id=self._new_id("approval"),
@@ -2324,6 +2492,25 @@ class ExecutionTransitionService:
             run.current_approval_link_id = approval_link.id
             run.current_step_key = gate_key
             run.updated_at = current_time
+            if before_snapshot is not None:
+                self._validate_state_machine_transition(
+                    trigger="open_approval",
+                    before=before_snapshot,
+                    after=self._state_machine_snapshot(
+                        run=run,
+                        attempt=attempt,
+                        approval_link=approval_link,
+                        extra={
+                            "attempt_no": attempt.attempt_no,
+                            "active_attempt_no": run.active_attempt_no,
+                            "scheduled_at": attempt.scheduled_at,
+                            "lease_expires_at": attempt.lease_expires_at,
+                            "next_wakeup_at": run.next_wakeup_at,
+                            "approval_opened_at": current_time,
+                        },
+                    ),
+                    now=current_time,
+                )
 
             return ApprovalOpenResult(
                 approval_link_id=approval_link.id,
@@ -2344,6 +2531,29 @@ class ExecutionTransitionService:
         approved: bool,
         now: datetime | None = None,
     ) -> CommandTransitionResult:
+        """Apply an approval decision and resume, cancel, compensate, or fail.
+
+        :param company_id: Company scope for the approval link.
+        :type company_id: str
+        :param approval_id: External/shared approval identifier.
+        :type approval_id: str
+        :param actor_type: Actor type issuing the decision.
+        :type actor_type: str
+        :param actor_id: Actor identifier issuing the decision.
+        :type actor_id: str
+        :param idempotency_key: Idempotency key for the decision command.
+        :type idempotency_key: str
+        :param request_fingerprint_hash: Request fingerprint hash.
+        :type request_fingerprint_hash: str
+        :param approved: Whether the approval was accepted.
+        :type approved: bool
+        :param now: Optional transition timestamp.
+        :type now: datetime | None
+        :return: Completed approval decision command result.
+        :rtype: CommandTransitionResult
+        :raises RunNotFoundError: If the linked run is missing.
+        :raises RunTransitionConflictError: If the approval cannot be decided.
+        """
         current_time = self._now(now)
         command_type = "approval_resume" if approved else "approval_reject"
         with self._session_factory() as session, session.begin():
@@ -2381,6 +2591,28 @@ class ExecutionTransitionService:
                 raise RunNotFoundError(f"Run '{approval_link.run_id}' not found for company '{company_id}'.")
             if attempt is None or attempt.company_id != company_id:
                 raise RunTransitionConflictError(f"Attempt '{approval_link.attempt_id}' is missing for approval '{approval_id}'.")
+
+            approval_trigger = self._approval_decision_trigger(
+                approved=approved,
+                resume_disposition=approval_link.resume_disposition,
+            )
+            before_snapshot = (
+                self._state_machine_snapshot(
+                    run=run,
+                    attempt=attempt,
+                    approval_link=approval_link,
+                    extra={
+                        "attempt_no": attempt.attempt_no,
+                        "active_attempt_no": run.active_attempt_no,
+                        "scheduled_at": attempt.scheduled_at,
+                        "lease_expires_at": attempt.lease_expires_at,
+                        "next_wakeup_at": run.next_wakeup_at,
+                        "command_type": command_type,
+                    },
+                )
+                if self._state_machine_validation_enabled
+                else None
+            )
 
             command = RunCommandORM(
                 id=self._new_id("cmd"),
@@ -2490,6 +2722,26 @@ class ExecutionTransitionService:
             }
             command.accepted_transition = run_state
             command.response_snapshot = snapshot
+            if before_snapshot is not None:
+                self._validate_state_machine_transition(
+                    trigger=approval_trigger,
+                    before=before_snapshot,
+                    after=self._state_machine_snapshot(
+                        run=run,
+                        attempt=attempt,
+                        approval_link=approval_link,
+                        command_id=command.id,
+                        extra={
+                            "attempt_no": attempt.attempt_no,
+                            "active_attempt_no": run.active_attempt_no,
+                            "scheduled_at": attempt.scheduled_at,
+                            "lease_expires_at": attempt.lease_expires_at,
+                            "next_wakeup_at": run.next_wakeup_at,
+                            "command_type": command_type,
+                        },
+                    ),
+                    now=current_time,
+                )
 
             return self._command_result(command)
 
@@ -2822,6 +3074,29 @@ class ExecutionTransitionService:
         reason: str,
         now: datetime | None = None,
     ) -> CommandTransitionResult:
+        """Interrupt a non-terminal operator run and request cancellation.
+
+        :param company_id: Company scope for the run.
+        :type company_id: str
+        :param run_id: Run identifier.
+        :type run_id: str
+        :param actor_type: Actor type issuing the interrupt.
+        :type actor_type: str
+        :param actor_id: Actor identifier issuing the interrupt.
+        :type actor_id: str
+        :param idempotency_key: Idempotency key for the interrupt command.
+        :type idempotency_key: str
+        :param request_fingerprint_hash: Request fingerprint hash.
+        :type request_fingerprint_hash: str
+        :param reason: Operator-visible interrupt reason.
+        :type reason: str
+        :param now: Optional transition timestamp.
+        :type now: datetime | None
+        :return: Completed interrupt command result.
+        :rtype: CommandTransitionResult
+        :raises RunNotFoundError: If the run is missing.
+        :raises RunTransitionConflictError: If the run cannot be interrupted.
+        """
         current_time = self._now(now)
         interrupt_reason = reason.strip()
         with self._session_factory() as session, session.begin():
@@ -2844,6 +3119,23 @@ class ExecutionTransitionService:
                 raise RunTransitionConflictError(f"Run '{run_id}' cannot be interrupted from operator state '{run.operator_state}'.")
 
             attempt = self._current_attempt(session, run)
+            approval_link = self._current_approval_link(session, run) if self._state_machine_validation_enabled else None
+            before_snapshot = (
+                self._state_machine_snapshot(
+                    run=run,
+                    attempt=attempt,
+                    approval_link=approval_link,
+                    extra={
+                        "attempt_no": attempt.attempt_no,
+                        "active_attempt_no": run.active_attempt_no,
+                        "scheduled_at": attempt.scheduled_at,
+                        "lease_expires_at": attempt.lease_expires_at,
+                        "next_wakeup_at": run.next_wakeup_at,
+                    },
+                )
+                if self._state_machine_validation_enabled
+                else None
+            )
             command = RunCommandORM(
                 id=self._new_id("cmd"),
                 company_id=company_id,
@@ -2907,6 +3199,26 @@ class ExecutionTransitionService:
                 "outbox_event": "run_cancel",
                 "reason": interrupt_reason,
             }
+            if before_snapshot is not None:
+                self._validate_state_machine_transition(
+                    trigger="interrupt",
+                    before=before_snapshot,
+                    after=self._state_machine_snapshot(
+                        run=run,
+                        attempt=attempt,
+                        approval_link=approval_link,
+                        command_id=command.id,
+                        extra={
+                            "attempt_no": attempt.attempt_no,
+                            "active_attempt_no": run.active_attempt_no,
+                            "scheduled_at": attempt.scheduled_at,
+                            "lease_expires_at": attempt.lease_expires_at,
+                            "next_wakeup_at": run.next_wakeup_at,
+                            "command_type": "interrupt",
+                        },
+                    ),
+                    now=current_time,
+                )
             return self._command_result(command)
 
     def quarantine_run(
@@ -2921,6 +3233,29 @@ class ExecutionTransitionService:
         reason: str,
         now: datetime | None = None,
     ) -> CommandTransitionResult:
+        """Quarantine a run using current operator-state authority.
+
+        :param company_id: Company scope for the run.
+        :type company_id: str
+        :param run_id: Run identifier.
+        :type run_id: str
+        :param actor_type: Actor type issuing the quarantine.
+        :type actor_type: str
+        :param actor_id: Actor identifier issuing the quarantine.
+        :type actor_id: str
+        :param idempotency_key: Idempotency key for the quarantine command.
+        :type idempotency_key: str
+        :param request_fingerprint_hash: Request fingerprint hash.
+        :type request_fingerprint_hash: str
+        :param reason: Operator-visible quarantine reason.
+        :type reason: str
+        :param now: Optional transition timestamp.
+        :type now: datetime | None
+        :return: Completed quarantine command result.
+        :rtype: CommandTransitionResult
+        :raises RunNotFoundError: If the run is missing.
+        :raises RunTransitionConflictError: If the run is already quarantined.
+        """
         current_time = self._now(now)
         quarantine_reason = reason.strip() or "operator_quarantine"
         with self._session_factory() as session, session.begin():
@@ -2943,6 +3278,23 @@ class ExecutionTransitionService:
                 raise RunTransitionConflictError(f"Run '{run_id}' is already quarantined.")
 
             attempt = self._current_attempt(session, run)
+            approval_link = self._current_approval_link(session, run) if self._state_machine_validation_enabled else None
+            before_snapshot = (
+                self._state_machine_snapshot(
+                    run=run,
+                    attempt=attempt,
+                    approval_link=approval_link,
+                    extra={
+                        "attempt_no": attempt.attempt_no,
+                        "active_attempt_no": run.active_attempt_no,
+                        "scheduled_at": attempt.scheduled_at,
+                        "lease_expires_at": attempt.lease_expires_at,
+                        "next_wakeup_at": run.next_wakeup_at,
+                    },
+                )
+                if self._state_machine_validation_enabled
+                else None
+            )
             command = RunCommandORM(
                 id=self._new_id("cmd"),
                 company_id=company_id,
@@ -3016,6 +3368,26 @@ class ExecutionTransitionService:
                 "outbox_event": "dead_letter",
                 "reason": quarantine_reason,
             }
+            if before_snapshot is not None:
+                self._validate_state_machine_transition(
+                    trigger="quarantine",
+                    before=before_snapshot,
+                    after=self._state_machine_snapshot(
+                        run=run,
+                        attempt=attempt,
+                        approval_link=approval_link,
+                        command_id=command.id,
+                        extra={
+                            "attempt_no": attempt.attempt_no,
+                            "active_attempt_no": run.active_attempt_no,
+                            "scheduled_at": attempt.scheduled_at,
+                            "lease_expires_at": attempt.lease_expires_at,
+                            "next_wakeup_at": run.next_wakeup_at,
+                            "command_type": "quarantine",
+                        },
+                    ),
+                    now=current_time,
+                )
             return self._command_result(command)
 
     def escalate_run(
@@ -3219,6 +3591,15 @@ class ExecutionTransitionService:
         company_id: str,
         now: datetime | None = None,
     ) -> list[LeaseReconcileResult]:
+        """Reconcile expired in-flight attempt leases for one company.
+
+        :param company_id: Company scope for reconciliation.
+        :type company_id: str
+        :param now: Optional reconciliation timestamp.
+        :type now: datetime | None
+        :return: Reconciliation results for each eligible expired lease.
+        :rtype: list[LeaseReconcileResult]
+        """
         current_time = self._now(now)
         results: list[LeaseReconcileResult] = []
         with self._session_factory() as session, session.begin():
@@ -3248,6 +3629,22 @@ class ExecutionTransitionService:
                     continue
                 if run.operator_state in _TERMINAL_OPERATOR_STATES:
                     continue
+
+                before_snapshot = (
+                    self._state_machine_snapshot(
+                        run=run,
+                        attempt=attempt,
+                        extra={
+                            "attempt_no": attempt.attempt_no,
+                            "active_attempt_no": run.active_attempt_no,
+                            "scheduled_at": attempt.scheduled_at,
+                            "lease_expires_at": attempt.lease_expires_at,
+                            "next_wakeup_at": run.next_wakeup_at,
+                        },
+                    )
+                    if self._state_machine_validation_enabled
+                    else None
+                )
 
                 session.add(
                     RunOutboxORM(
@@ -3310,6 +3707,23 @@ class ExecutionTransitionService:
                 run.terminal_at = current_time
                 run.current_step_key = None
                 run.updated_at = current_time
+                if before_snapshot is not None:
+                    self._validate_state_machine_transition(
+                        trigger="expire_lease",
+                        before=before_snapshot,
+                        after=self._state_machine_snapshot(
+                            run=run,
+                            attempt=attempt,
+                            extra={
+                                "attempt_no": attempt.attempt_no,
+                                "active_attempt_no": run.active_attempt_no,
+                                "scheduled_at": attempt.scheduled_at,
+                                "lease_expires_at": attempt.lease_expires_at,
+                                "next_wakeup_at": run.next_wakeup_at,
+                            },
+                        ),
+                        now=current_time,
+                    )
 
                 results.append(
                     LeaseReconcileResult(
