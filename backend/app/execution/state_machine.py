@@ -1222,9 +1222,21 @@ class ExecutionStateMachineValidator:
             target_ato = "leased"
             target_lease = "leased"
 
+        # Resolve target operator state.
+        # For run-state triggers, use RUN_OPERATOR_TARGETS_BY_TRIGGER
+        # (the first valid operator target). For operator-only triggers
+        # (pause/resume), the model's operator_state was already updated
+        # by the operator machine.
+        op_targets = RUN_OPERATOR_TARGETS_BY_TRIGGER.get(trigger)
+        target_op: str | None
+        if op_targets is not None:
+            target_op = op_targets[1][0]
+        else:
+            target_op = self._model.operator_state
+
         return ExecutionStateDecision(
             target_run_state=self._model.run_state,
-            target_operator_state=self._model.operator_state,
+            target_operator_state=target_op,
             target_attempt_state=base_attempt_state,
             target_attempt_operator_state=target_ato,
             source_attempt_state=base_source_state,
@@ -1484,3 +1496,98 @@ class ExecutionStateMachineValidator:
                 target_operator_state=after_snapshot.operator_state,
             ),
         )
+
+
+# ---------------------------------------------------------------------------
+# Diagram generation — Mermaid stateDiagram-v2 from constants (SPEC §12)
+# ---------------------------------------------------------------------------
+
+
+def build_execution_state_diagram() -> str:
+    """
+    Build a Mermaid ``stateDiagram-v2`` string from transition/effect constants.
+
+    Uses the same :data:`RUN_STATE_TRANSITIONS`,
+    :data:`OPERATOR_STATE_TRANSITIONS`, and state constants that the
+    validator uses — no Graphviz or system packages required.  The
+    output is a documentation artifact, not a runtime dependency.
+
+    .. code-block:: text
+
+        stateDiagram-v2
+            [*] --> queued : admit_create
+            queued --> dispatching : claim_attempt
+            ...
+
+    :returns: A Mermaid ``stateDiagram-v2`` source string
+    """
+    lines: list[str] = ["stateDiagram-v2", ""]
+
+    # -- Initial creation entry point --
+    lines.append("    [*] --> queued : admit_create / restart_run_from_scratch")
+    lines.append("")
+
+    # -- Run-state transitions from explicit sources --
+    # Deduplicate transitions that appear with identical (source, dest, trigger).
+    seen: set[tuple[str, str, str]] = set()
+    for t in RUN_STATE_TRANSITIONS:
+        trigger: str = t["trigger"]
+        sources: Any = t["source"]
+        dest: Any = t.get("dest")
+        if dest is None or dest == "=" or sources == "*":
+            continue
+        source_list: tuple[str, ...] = (sources,) if isinstance(sources, str) else tuple(sources)
+        for src in source_list:
+            key = (src, str(dest), trigger)
+            if key not in seen:
+                seen.add(key)
+                lines.append(f"    {src} --> {dest} : {trigger}")
+
+    # -- Wildcard transitions with conditions (source="*") --
+    wildcard_entries: list[str] = []
+    for t in RUN_STATE_TRANSITIONS:
+        trigger = t["trigger"]
+        sources = t["source"]
+        dest = t.get("dest")
+        conditions = t.get("conditions")
+        if sources == "*" and dest is not None and dest != "=":
+            cond_str = f" [{conditions}]" if conditions else ""
+            wildcard_entries.append(f"    {trigger} --> {dest}{cond_str}")
+
+    if wildcard_entries:
+        lines.append("")
+        lines.append('    %% Guard-conditional transitions (source="*")')
+        lines.extend(wildcard_entries)
+
+    # -- Operator-state transitions --
+    op_seen: set[tuple[str, str, str]] = set()
+    for t in OPERATOR_STATE_TRANSITIONS:
+        trigger = t["trigger"]
+        sources = t["source"]
+        dest = t.get("dest")
+        conditions = t.get("conditions")
+        dest_str = "paused" if trigger == "pause" else "run-operator resume"
+        cond_str = f" [{conditions}]" if conditions else ""
+        key = (str(sources), dest_str, trigger)
+        if key not in op_seen:
+            op_seen.add(key)
+            lines.append("")
+            lines.append(f"    {trigger}{cond_str}")
+            if trigger == "pause":
+                lines.append("    (any pausable) --> paused : pause")
+            elif trigger == "resume":
+                lines.append("    paused --> (resume target) : resume")
+
+    # -- Declared-unreached states annotation --
+    lines.append("")
+    lines.append("    %% Declared-but-unreached states (registered, no production path)")
+    for state in sorted(DECLARED_UNREACHED_RUN_STATES):
+        lines.append(f"    state {state}")
+
+    # -- Terminal states annotation --
+    lines.append("")
+    lines.append("    %% Terminal run states")
+    for state in sorted(TERMINAL_RUN_STATES):
+        lines.append(f"    state {state}")
+
+    return "\n".join(lines) + "\n"
