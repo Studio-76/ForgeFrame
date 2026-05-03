@@ -13,8 +13,9 @@
 Phase 1c should wait until:
 
 1. a real validation window is captured with `FORGEFRAME_EXECUTION_STATE_MACHINE_VALIDATION_ENABLED=true`,
-2. the SPEC §5 compatibility findings marked `Decision required` below are accepted or covered by targeted tests,
-3. the restart creation snapshot contract and validator freshness expectations are hardened or explicitly accepted.
+2. the restart creation snapshot contract and validator freshness expectations are hardened or explicitly accepted.
+
+(SPEC §5 findings #2, #3, and #8 — previously marked ``Decision required`` — are now covered by targeted tests and no longer block Phase 1c.)
 
 The feature flag remains disabled by default, which is the correct rollback posture for the current evidence level.
 
@@ -95,13 +96,13 @@ Integration tests directly exercise representative service logging for run-state
 | # | Compatibility finding | Disposition | Phase 1c impact |
 |---:|---|---|---|
 | 1 | `claim_attempt` is attempt-authoritative; run update lacks a run-state predicate. | **Accept for Phase 1b.** Validator models stricter run sources and logs divergences; existing service remains source of truth. | Phase 1c must decide whether to add run-state authority or preserve attempt-authority. |
-| 2 | `complete_attempt_success` is attempt/lease-authoritative and does not check `run.state` or `run.current_attempt_id`. | **Decision required.** Happy path is covered, but stale-run/current-attempt compatibility evidence is insufficient for authority transfer. | Block Phase 1c until accepted or covered by targeted compatibility tests. |
-| 3 | `decide_approval` is approval-link-authoritative and does not require run/attempt to still be `waiting_on_approval`. | **Decision required.** Approval-link lifecycle warning tests exist, but stale run/attempt decision semantics need explicit acceptance or tests. | Block Phase 1c until accepted or fixed separately. |
+| 2 | `complete_attempt_success` is attempt/lease-authoritative and does not check `run.state` or `run.current_attempt_id`. | **Accepted (covered by targeted test).** `test_spec5_finding2_stale_run_complete_success_flagged_by_validator` proves the service accepts stale-run completion while the validator flags the mismatch. | No longer blocks Phase 1c, but authority transfer must keep the validator active. |
+| 3 | `decide_approval` is approval-link-authoritative and does not require run/attempt to still be `waiting_on_approval`. | **Accepted (covered by targeted test).** `test_spec5_finding3_stale_approval_decision_flagged_by_validator` proves the service accepts stale-state approval decisions while the validator flags the mismatch. | No longer blocks Phase 1c, but authority transfer must keep the validator active. |
 | 4 | `decide_approval` does not clear `run.current_approval_link_id`. | **Accept as known warning for Phase 1b.** `approval_link_mismatch` records retained closed links without changing behavior. | Phase 1c needs a product/engineering decision: retained historical link or clearing fix. |
 | 5 | `request_cancel` can cancel a `waiting_on_approval` run without closing the approval link. | **Accept as known warning for Phase 1b.** `approval_link_mismatch` records open approval after cancel. | Phase 1c needs a decision: allow retained open links or create service bug-fix task. |
 | 6 | Retryable failure mutates source attempt and creates replacement current attempt. | **Accepted.** Attempt effects distinguish source and replacement states. | No blocker if tests remain green. |
 | 7 | Terminal failure leaves source attempt `dead_lettered` / `quarantined`. | **Accepted.** Attempt effects and tests model this current behavior. | No blocker if tests remain green. |
-| 8 | Lease reconciliation sets run `timed_out` / operator `quarantined`; result reports `reconciled_to_state="quarantined"`. | **Decision required.** Persisted state is covered; result-label semantics need explicit acceptance or clarification. | Block Phase 1c until accepted or a result naming/compatibility task exists. |
+| 8 | Lease reconciliation sets run `timed_out` / operator `quarantined`; result reports `reconciled_to_state="quarantined"`. | **Accepted (covered by targeted test).** `test_spec5_finding8_reconciled_to_state_semantics_are_explicit` explicitly documents that `reconciled_to_state` is the **operator** destination (`"quarantined"`), distinct from the run-state destination (`"timed_out"`). | No longer blocks Phase 1c; semantics are explicitly documented and tested. |
 | 9 | `quarantine_run` accepts all operator states except already `quarantined`, including `completed` and `failed`. | **Accepted as compatibility.** Guard is `is_not_quarantined`; tests cover completed/failed compatibility. | No blocker if accepted as intentional. |
 | 10 | `cancelled` and `compensated` are declared but no inspected service path produces them. | **Accepted as declared-only.** They are registered without invented production paths. | No blocker; do not invent paths during Phase 1c. |
 
@@ -165,6 +166,7 @@ Verification results from this task are recorded below after execution.
 | `cd backend && .venv/bin/python -m mypy app` | 0 errors in execution/ state machine code; 2 pre-existing errors in `oauth_operations_repository.py` (unrelated) |
 | `cd backend && .venv/bin/python -m pytest tests/test_execution_state_machine.py -v` | 152 passed in 0.27s |
 | `cd backend && .venv/bin/python -m pytest tests/test_execution_models.py tests/test_execution_transitions.py tests/test_execution_operator_fabric.py tests/test_execution_background_worker.py tests/test_execution_admin_api.py tests/test_execution_queue_dispatch_api.py -v` | 61 passed in 23.36s |
+| `cd backend && .venv/bin/python -m pytest tests/test_execution_transitions.py tests/test_execution_operator_fabric.py tests/test_execution_state_machine.py -v` | 193 passed in 3.74s (includes 3 new SPEC §5 compatibility tests) |
 | `cd backend && .venv/bin/python -m pytest -v` | Not run (full suite takes ~600s; execution suite and lint/typecheck are sufficient per task guidance) |
 
 ---
@@ -193,7 +195,7 @@ Verification results from this task are recorded below after execution.
 Follow-up tasks referenced below are task-manager records.
 UUIDs may be resolved with `task-manager_get_task_detail`.
 
-1. `ee0c4671-1929-46e6-98cf-ee1fbf090b94` — add targeted SPEC §5 compatibility tests before Phase 1c for stale-run `complete_attempt_success`, stale run/attempt approval decisions, and `LeaseReconcileResult.reconciled_to_state` semantics.
+1. ~~`ee0c4671-1929-46e6-98cf-ee1fbf090b94` — add targeted SPEC §5 compatibility tests before Phase 1c for stale-run `complete_attempt_success`, stale run/attempt approval decisions, and `LeaseReconcileResult.reconciled_to_state` semantics.~~ **Resolved.** Tests added and passing.
 2. `885cbc11-005c-49ce-94fe-70cbc1d87c19` — harden the creation-validation snapshot contract by replacing stringly `extra` source keys with a typed helper or dedicated restart snapshot contract.
 3. `f82fbb8e-3595-4344-a395-9e53c5dcace9` — capture a real validation-window artifact with validation enabled before any state-machine authority transfer.
 4. Add validator freshness/thread-safety coverage as part of the creation-contract hardening task or a later dedicated task if factory reuse becomes supported.
@@ -202,4 +204,4 @@ UUIDs may be resolved with `task-manager_get_task_detail`.
 
 ## Phase 1c Gate
 
-Phase 1c is **blocked** until the decision-required SPEC §5 rows above are resolved and runtime validation-window evidence is accepted. The next implementation should not remove existing guards, weaken compare-and-set behavior, or make stricter machine rules authoritative without those decisions.
+Phase 1c is **blocked** until runtime validation-window evidence is accepted. The SPEC §5 compatibility findings marked ``Decision required`` in the previous review have been resolved by targeted tests — all three stale-state/semantics findings are now covered by ``test_spec5_finding2_stale_run_complete_success_flagged_by_validator``, ``test_spec5_finding3_stale_approval_decision_flagged_by_validator``, and ``test_spec5_finding8_reconciled_to_state_semantics_are_explicit``. The remaining blocker before Phase 1c authority transfer is task ``f82fbb8e`` (capture a real validation-window artifact). The next implementation should not remove existing guards, weaken compare-and-set behavior, or make stricter machine rules authoritative without those decisions.

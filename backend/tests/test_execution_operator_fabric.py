@@ -513,3 +513,87 @@ def test_wave3_renew_lease_validation_with_operator_fabric(tmp_path: Path, caplo
 
     records = _validation_records(caplog)
     assert records == [], f"Expected no validation records, got {len(records)}"
+
+
+# ---------------------------------------------------------------------------
+# SPEC §5 compatibility tests — resolve "Decision required" findings
+# before Phase 1c authority transfer
+# ---------------------------------------------------------------------------
+
+
+def test_spec5_finding8_reconciled_to_state_semantics_are_explicit(
+    tmp_path: Path,
+) -> None:
+    """SPEC §5 finding #8: LeaseReconcileResult.reconciled_to_state semantics.
+
+    The ``reconciled_to_state`` field on ``LeaseReconcileResult`` reports
+    the **operator destination** (``"quarantined"``), which is distinct from
+    the run-state destination (``"timed_out"``).
+
+    This test explicitly documents and verifies the label semantics so the
+    finding can be accepted as compatible behaviour before Phase 1c.  The
+    validator models ``expire_lease`` as:
+    - target run state: ``timed_out``
+    - target operator state: ``quarantined``
+    - target attempt: ``timed_out`` / ``interrupted`` / ``expired``
+    """
+    transitions, admin, session_factory = _services(tmp_path)
+
+    created = transitions.admit_create(
+        company_id="company_alpha",
+        actor_type="agent",
+        actor_id="agent_backend",
+        idempotency_key="idem_s5_f8_lease",
+        request_fingerprint_hash="fp_s5_f8_lease",
+        run_kind="provider_dispatch",
+    )
+    claim = transitions.claim_next_attempt(
+        company_id="company_alpha",
+        worker_key="worker_s5_f8",
+        lease_ttl_seconds=30,
+    )
+    assert claim is not None
+    transitions.mark_attempt_executing(
+        company_id="company_alpha",
+        run_id=claim.run_id,
+        attempt_id=claim.attempt_id,
+        lease_token=claim.lease_token,
+        step_key="provider_call",
+    )
+
+    # Force lease expiry via DB manipulation.
+    expired_at = datetime.now(tz=UTC) - timedelta(seconds=60)
+    with session_factory() as session:
+        attempt = session.get(RunAttemptORM, claim.attempt_id)
+        assert attempt is not None
+        attempt.lease_expires_at = expired_at - timedelta(seconds=5)
+        session.commit()
+
+    reconciled = admin.reconcile_expired_leases(
+        instance=_instance("company_alpha"),
+    )
+
+    # Exactly one lease was reconciled.
+    assert len(reconciled) == 1
+    result = reconciled[0]
+    assert result.attempt_id == claim.attempt_id
+    assert result.dead_letter_reason == "lease_expired"
+
+    # --- Explicit reconciled_to_state semantics ---
+    # reconciled_to_state reports the OPERATOR destination ("quarantined"),
+    # not the run-state destination ("timed_out").  This is the current
+    # compatibility behaviour documented in SPEC §5 finding #8.
+    assert result.reconciled_to_state == "quarantined", f"Expected reconciled_to_state='quarantined' (operator destination), got {result.reconciled_to_state!r}"
+
+    # Confirm the actual persisted state dimensions.
+    with session_factory() as session:
+        run = session.get(RunORM, created.run_id)
+        attempt = session.get(RunAttemptORM, claim.attempt_id)
+        assert run is not None
+        assert attempt is not None
+        # Run state is "timed_out" — distinct from reconciled_to_state.
+        assert run.state == "timed_out", f"Expected run.state='timed_out', got {run.state!r}"
+        assert run.operator_state == "quarantined"
+        assert attempt.attempt_state == "timed_out"
+        assert attempt.operator_state == "interrupted"
+        assert attempt.lease_status == "expired"

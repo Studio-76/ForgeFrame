@@ -19,6 +19,7 @@ from app.execution.service import (
 )
 from app.execution.state_machine import (
     MISMATCH_CATEGORY_APPROVAL_LINK_MISMATCH,
+    MISMATCH_CATEGORY_INVALID_TRIGGER,
     MISMATCH_CATEGORY_RUN_STATE_MISMATCH,
     MISMATCH_CATEGORY_VALIDATOR_EXCEPTION,
     ExecutionStateDecision,
@@ -2113,3 +2114,179 @@ def test_wave3_escalate_non_state_validation(
     # No mismatches.
     records = _validation_records(caplog)
     assert records == [], f"Expected no validation records, got {len(records)}"
+
+
+# ---------------------------------------------------------------------------
+# SPEC §5 compatibility tests — resolve "Decision required" findings
+# before Phase 1c authority transfer
+# ---------------------------------------------------------------------------
+
+
+def test_spec5_finding2_stale_run_complete_success_flagged_by_validator(
+    tmp_path: Path,
+    caplog,
+) -> None:
+    """SPEC §5 finding #2: complete_attempt_success accepts stale run state.
+
+    The existing service checks attempt state (in-flight) and lease token but
+    does NOT check ``run.state`` or ``run.current_attempt_id`` before setting
+    the run to ``succeeded``.  The validator detects this divergence because
+    ``complete_success`` is only valid from specific source states.
+
+    This test confirms the compatibility behaviour is preserved (service
+    outcome is unaffected) and the validator flags the mismatch, making the
+    finding explicit before any Phase 1c authority transfer.
+    """
+    service, session_factory = _service(
+        tmp_path,
+        state_machine_validation_enabled=True,
+    )
+    caplog.set_level(logging.WARNING, logger="app.execution.service")
+
+    # Set up a run with an in-flight executing attempt.
+    created = service.admit_create(
+        company_id="cmp_s5_f2",
+        actor_type="agent",
+        actor_id="agent_backend",
+        idempotency_key="idem_s5_f2_create",
+        request_fingerprint_hash="fp_s5_f2_create",
+        run_kind="provider_dispatch",
+    )
+    claim = service.claim_next_attempt(
+        company_id="cmp_s5_f2",
+        worker_key="worker_s5_f2",
+    )
+    assert claim is not None
+    service.mark_attempt_executing(
+        company_id="cmp_s5_f2",
+        run_id=claim.run_id,
+        attempt_id=claim.attempt_id,
+        lease_token=claim.lease_token,
+        step_key="provider_call",
+    )
+    # Clear any pre-existing validation records from admit/claim/execute.
+    caplog.clear()
+
+    # Manipulate the run into a stale state via direct DB access.  The
+    # attempt remains in-flight ("executing") so the service accepts the
+    # completion — the service does NOT check run.state.
+    with session_factory() as session:
+        run = session.get(RunORM, created.run_id)
+        assert run is not None
+        run.state = "dead_lettered"
+        session.commit()
+
+    # Service accepts complete_attempt_success because the attempt is
+    # still in-flight and the lease token matches.
+    service.complete_attempt_success(
+        company_id="cmp_s5_f2",
+        run_id=claim.run_id,
+        attempt_id=claim.attempt_id,
+        lease_token=claim.lease_token,
+        result_summary={"note": "stale run completion"},
+    )
+
+    # Service outcome: run is set to "succeeded" regardless of the stale
+    # "dead_lettered" state — compatibility behaviour preserved.
+    with session_factory() as session:
+        run = session.get(RunORM, created.run_id)
+        assert run is not None
+        assert run.state == "succeeded"
+
+    # Validator detected the mismatch: complete_success cannot fire from
+    # "dead_lettered" (source must be dispatching/executing/…).
+    records = _validation_records(caplog)
+    assert len(records) >= 1, "Expected at least one validation mismatch record"
+    payload = _validation_payload(records[0])
+    assert payload["trigger"] == "complete_success"
+    assert payload["mismatch_category"] in (
+        MISMATCH_CATEGORY_RUN_STATE_MISMATCH,
+        MISMATCH_CATEGORY_INVALID_TRIGGER,
+    ), f"Unexpected mismatch category: {payload['mismatch_category']}"
+
+
+def test_spec5_finding3_stale_approval_decision_flagged_by_validator(
+    tmp_path: Path,
+    caplog,
+) -> None:
+    """SPEC §5 finding #3: decide_approval accepts stale run/attempt state.
+
+    The existing service only checks ``approval_link.gate_status == "open"``
+    and does NOT require the run or attempt to still be in
+    ``waiting_on_approval`` state.  The validator detects this divergence
+    because ``resume_after_approval`` is only valid from source state
+    ``waiting_on_approval``.
+
+    This test confirms the compatibility behaviour is preserved (service
+    outcome is unaffected) and the validator flags the mismatch, making the
+    finding explicit before any Phase 1c authority transfer.
+    """
+    service, session_factory = _service(
+        tmp_path,
+        state_machine_validation_enabled=True,
+    )
+    caplog.set_level(logging.WARNING, logger="app.execution.service")
+
+    # Set up a run waiting on approval.
+    created = service.admit_create(
+        company_id="cmp_s5_f3",
+        actor_type="agent",
+        actor_id="agent_backend",
+        idempotency_key="idem_s5_f3_create",
+        request_fingerprint_hash="fp_s5_f3_create",
+        run_kind="provider_dispatch",
+    )
+    claim = service.claim_next_attempt(
+        company_id="cmp_s5_f3",
+        worker_key="worker_s5_f3",
+    )
+    assert claim is not None
+    service.mark_attempt_executing(
+        company_id="cmp_s5_f3",
+        run_id=claim.run_id,
+        attempt_id=claim.attempt_id,
+        lease_token=claim.lease_token,
+        step_key="approval_gate",
+    )
+    service.open_approval(
+        company_id="cmp_s5_f3",
+        run_id=claim.run_id,
+        attempt_id=claim.attempt_id,
+        approval_id="approval_s5_f3",
+        gate_key="approval_gate",
+    )
+    caplog.clear()
+
+    # Manipulate the run into a stale state via direct DB access.  The
+    # approval link remains open so the service accepts the decision.
+    with session_factory() as session:
+        run = session.get(RunORM, created.run_id)
+        assert run is not None
+        run.state = "queued"
+        session.commit()
+
+    # Service accepts decide_approval with approved=True because the
+    # approval link is still open — it does NOT check run/attempt state.
+    result = service.decide_approval(
+        company_id="cmp_s5_f3",
+        approval_id="approval_s5_f3",
+        actor_type="user",
+        actor_id="approver_s5_f3",
+        idempotency_key="idem_s5_f3_decide",
+        request_fingerprint_hash="fp_s5_f3_decide",
+        approved=True,
+    )
+    assert result.run_state == "queued"
+
+    # Validator detected the mismatch: resume_after_approval cannot fire
+    # from "queued" (source must be "waiting_on_approval").
+    records = _validation_records(caplog)
+    assert len(records) >= 1, "Expected at least one validation mismatch record"
+    payload = _validation_payload(records[0])
+    assert payload["trigger"] == "resume_after_approval"
+    assert payload["mismatch_category"] in (
+        MISMATCH_CATEGORY_RUN_STATE_MISMATCH,
+        MISMATCH_CATEGORY_INVALID_TRIGGER,
+    ), f"Unexpected mismatch category: {payload['mismatch_category']}"
+    assert payload["before"]["run_state"] == "queued"
+    assert payload["after"]["run_state"] == "queued"
