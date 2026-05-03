@@ -46,6 +46,7 @@ from app.execution.state_machine import (
     ExecutionTransitionContext,
     ExecutionTrigger,
     ExecutionValidationResult,
+    SourceRunInvariants,
     _ExecutionStateMachineModel,
     build_execution_state_diagram,
 )
@@ -161,6 +162,26 @@ def test_transition_context_accepts_all_fields() -> None:
 # ---------------------------------------------------------------------------
 
 
+def test_source_run_invariants_defaults_are_safe() -> None:
+    """SourceRunInvariants must have safe default values."""
+    inv = SourceRunInvariants()
+    assert inv.run_state == "queued"
+    assert inv.operator_state == "admitted"
+    assert inv.current_attempt_id is None
+
+
+def test_source_run_invariants_accepts_all_fields() -> None:
+    """SourceRunInvariants must accept every field by keyword."""
+    inv = SourceRunInvariants(
+        run_state="executing",
+        operator_state="executing",
+        current_attempt_id="att_1",
+    )
+    assert inv.run_state == "executing"
+    assert inv.operator_state == "executing"
+    assert inv.current_attempt_id == "att_1"
+
+
 def test_snapshot_defaults_are_safe() -> None:
     """ExecutionStateSnapshot must have safe default values."""
     snap = ExecutionStateSnapshot()
@@ -169,6 +190,7 @@ def test_snapshot_defaults_are_safe() -> None:
     assert snap.run_id is None
     assert snap.attempt_id is None
     assert snap.lease_status is None
+    assert snap.source_run_invariants is None
     assert snap.extra == {}
 
 
@@ -188,12 +210,20 @@ def test_snapshot_accepts_all_fields() -> None:
         approval_gate_status="open",
         command_id="cmd_1",
         replacement_attempt_id="attempt_new",
+        source_run_invariants=SourceRunInvariants(
+            run_state="executing",
+            operator_state="executing",
+            current_attempt_id="att_old",
+        ),
         extra={"foo": "bar"},
     )
     assert snap.run_id == "run_abc"
     assert snap.attempt_state == "dispatching"
     assert snap.command_id == "cmd_1"
     assert snap.replacement_attempt_id == "attempt_new"
+    assert snap.source_run_invariants is not None
+    assert snap.source_run_invariants.run_state == "executing"
+    assert snap.source_run_invariants.current_attempt_id == "att_old"
     assert snap.extra == {"foo": "bar"}
 
 
@@ -1751,16 +1781,16 @@ def test_creation_restart_from_scratch_validates_new_run() -> None:
     """restart_run_from_scratch validates new run initial state and source invariants."""
     validator = ExecutionStateMachineValidator(enabled=True)
     # before_snapshot: source run's state after operation;
-    # extra carries reference values from before the operation.
+    # source_run_invariants carries reference values from before the operation.
     before = ExecutionStateSnapshot(
         run_state="executing",
         operator_state="executing",
         current_attempt_id="att_old",
-        extra={
-            "source_run_state": "executing",
-            "source_operator_state": "executing",
-            "source_current_attempt_id": "att_old",
-        },
+        source_run_invariants=SourceRunInvariants(
+            run_state="executing",
+            operator_state="executing",
+            current_attempt_id="att_old",
+        ),
     )
     after = ExecutionStateSnapshot(
         run_state="queued",
@@ -1785,11 +1815,11 @@ def test_creation_restart_from_scratch_detects_source_run_mutation() -> None:
         run_state="dispatching",  # mutated — was executing before
         operator_state="leased",
         current_attempt_id="att_old",
-        extra={
-            "source_run_state": "executing",  # expected unchanged reference
-            "source_operator_state": "executing",  # expected unchanged reference
-            "source_current_attempt_id": "att_old",
-        },
+        source_run_invariants=SourceRunInvariants(
+            run_state="executing",  # expected unchanged reference
+            operator_state="executing",  # expected unchanged reference
+            current_attempt_id="att_old",
+        ),
     )
     after = ExecutionStateSnapshot(
         run_state="queued",
@@ -1804,6 +1834,152 @@ def test_creation_restart_from_scratch_detects_source_run_mutation() -> None:
     assert result.mismatch_category == MISMATCH_CATEGORY_CREATION_INITIAL_STATE_MISMATCH
     assert result.error_message is not None
     assert "run_state mutated" in result.error_message
+
+
+def test_creation_restart_from_scratch_detects_operator_state_mutation() -> None:
+    """restart_run_from_scratch detects source operator state mutation."""
+    validator = ExecutionStateMachineValidator(enabled=True)
+    before = ExecutionStateSnapshot(
+        run_state="executing",
+        operator_state="waiting_external",  # mutated — was executing before
+        current_attempt_id="att_old",
+        source_run_invariants=SourceRunInvariants(
+            run_state="executing",
+            operator_state="executing",  # expected unchanged reference
+            current_attempt_id="att_old",
+        ),
+    )
+    after = ExecutionStateSnapshot(
+        run_state="queued",
+        operator_state="admitted",
+    )
+    result = validator.validate_creation(
+        operation="restart_run_from_scratch",
+        before_snapshot=before,
+        after_snapshot=after,
+    )
+    assert not result.valid
+    assert result.mismatch_category == MISMATCH_CATEGORY_CREATION_INITIAL_STATE_MISMATCH
+    assert result.error_message is not None
+    assert "operator_state mutated" in result.error_message
+
+
+def test_creation_restart_from_scratch_detects_current_attempt_id_change() -> None:
+    """restart_run_from_scratch detects source current_attempt_id mutation."""
+    validator = ExecutionStateMachineValidator(enabled=True)
+    before = ExecutionStateSnapshot(
+        run_state="executing",
+        operator_state="executing",
+        current_attempt_id="att_new",  # mutated — was att_old before
+        source_run_invariants=SourceRunInvariants(
+            run_state="executing",
+            operator_state="executing",
+            current_attempt_id="att_old",  # expected unchanged reference
+        ),
+    )
+    after = ExecutionStateSnapshot(
+        run_state="queued",
+        operator_state="admitted",
+    )
+    result = validator.validate_creation(
+        operation="restart_run_from_scratch",
+        before_snapshot=before,
+        after_snapshot=after,
+    )
+    assert not result.valid
+    assert result.mismatch_category == MISMATCH_CATEGORY_CREATION_INITIAL_STATE_MISMATCH
+    assert result.error_message is not None
+    assert "current_attempt_id changed" in result.error_message
+
+
+def test_creation_restart_from_scratch_no_invariants_skips_source_check() -> None:
+    """restart_run_from_scratch skips source invariants check when not provided."""
+    validator = ExecutionStateMachineValidator(enabled=True)
+    before = ExecutionStateSnapshot(
+        run_state="executing",
+        operator_state="executing",
+        current_attempt_id="att_old",
+        source_run_invariants=None,  # not provided
+    )
+    after = ExecutionStateSnapshot(
+        run_state="queued",
+        operator_state="admitted",
+    )
+    result = validator.validate_creation(
+        operation="restart_run_from_scratch",
+        before_snapshot=before,
+        after_snapshot=after,
+    )
+    assert result.valid
+    assert result.validated is True
+
+
+def test_creation_admit_create_initialization_defaults() -> None:
+    """admit_create validates all expected initial state defaults."""
+    validator = ExecutionStateMachineValidator(enabled=True)
+    before = ExecutionStateSnapshot()
+    after = ExecutionStateSnapshot(
+        run_state="queued",
+        operator_state="admitted",
+        attempt_state="queued",
+        attempt_operator_state="admitted",
+        lease_status="not_leased",
+    )
+    result = validator.validate_creation(
+        operation="admit_create",
+        before_snapshot=before,
+        after_snapshot=after,
+    )
+    assert result.valid, f"admit_create validation failed: {result.error_message}"
+    assert result.validated is True
+    assert result.decision is not None
+    assert result.decision.target_run_state == "queued"
+    assert result.decision.target_operator_state == "admitted"
+    assert result.decision.target_attempt_state == "queued"
+    assert result.decision.target_attempt_operator_state == "admitted"
+    assert result.decision.target_lease_status == "not_leased"
+
+
+def test_creation_admit_create_rejects_wrong_attempt_state() -> None:
+    """admit_create rejects a created attempt with wrong initial state."""
+    validator = ExecutionStateMachineValidator(enabled=True)
+    before = ExecutionStateSnapshot()
+    after = ExecutionStateSnapshot(
+        run_state="queued",
+        operator_state="admitted",
+        attempt_state="executing",  # wrong initial state
+        attempt_operator_state="admitted",
+        lease_status="not_leased",
+    )
+    result = validator.validate_creation(
+        operation="admit_create",
+        before_snapshot=before,
+        after_snapshot=after,
+    )
+    assert not result.valid
+    assert result.mismatch_category == MISMATCH_CATEGORY_CREATION_INITIAL_STATE_MISMATCH
+
+
+def test_creation_admit_create_rejects_wrong_lease_status() -> None:
+    """admit_create rejects a created run with wrong lease status."""
+    validator = ExecutionStateMachineValidator(enabled=True)
+    before = ExecutionStateSnapshot()
+    after = ExecutionStateSnapshot(
+        run_state="queued",
+        operator_state="admitted",
+        attempt_state="queued",
+        attempt_operator_state="admitted",
+        lease_status="leased",  # wrong initial lease status
+    )
+    result = validator.validate_creation(
+        operation="admit_create",
+        before_snapshot=before,
+        after_snapshot=after,
+    )
+    assert not result.valid
+    assert result.mismatch_category == MISMATCH_CATEGORY_CREATION_INITIAL_STATE_MISMATCH
+    assert result.error_message is not None
+    assert "lease_status" in result.error_message
 
 
 # ---------------------------------------------------------------------------

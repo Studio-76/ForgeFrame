@@ -592,6 +592,26 @@ class ExecutionTransitionContext:
 
 
 @dataclass(frozen=True)
+class SourceRunInvariants:
+    """
+    Source run state dimensions that must not change during a restart operation.
+
+    Captured *before* the service mutates the source run so the validator
+    can confirm the source run's state dimensions remain unchanged after
+    the creation operation completes.
+
+    :param run_state: Source run state value before the operation
+    :param operator_state: Source run operator state before the operation
+    :param current_attempt_id: Source run current attempt ID before the
+        operation (may be ``None``)
+    """
+
+    run_state: str = "queued"
+    operator_state: str = "admitted"
+    current_attempt_id: str | None = None
+
+
+@dataclass(frozen=True)
 class ExecutionStateSnapshot:
     """
     Pre-transition snapshot of persisted run/attempt/lease/approval state.
@@ -612,6 +632,8 @@ class ExecutionStateSnapshot:
     :param approval_gate_status: Approval gate status before mutation
     :param command_id: Command ID for the operation being validated
     :param replacement_attempt_id: New attempt ID (set after creation)
+    :param source_run_invariants: Source run invariants for restart
+        validation, or ``None`` when not applicable
     :param extra: Additional service-provided context as key-value pairs
     """
 
@@ -628,6 +650,7 @@ class ExecutionStateSnapshot:
     approval_gate_status: str | None = None
     command_id: str | None = None
     replacement_attempt_id: str | None = None
+    source_run_invariants: SourceRunInvariants | None = None
     extra: dict[str, Any] = field(default_factory=dict)
 
 
@@ -1359,10 +1382,9 @@ class ExecutionStateMachineValidator:
         - the new run/attempt initial state in *after_snapshot*
         - the source run's state dimensions remain unchanged:
           *before_snapshot* main fields hold the source run's state
-          *after* the operation, and ``before_snapshot.extra`` fields
-          (``source_run_state``, ``source_operator_state``,
-          ``source_current_attempt_id``) hold the source run's state
-          *before* the operation. They must match.
+          *after* the operation, and
+          ``before_snapshot.source_run_invariants`` holds the source
+          run's state *before* the operation. They must match.
 
         When the validator is disabled this is a no-op returning
         ``validated=False``.
@@ -1370,8 +1392,8 @@ class ExecutionStateMachineValidator:
         :param operation: The creation operation to validate
         :param before_snapshot: For ``restart_run_from_scratch``, the
             source run's state after the operation (main fields) with
-            expected pre-operation values in ``extra``. Ignored for
-            ``admit_create``.
+            expected pre-operation values in
+            ``source_run_invariants``. Ignored for ``admit_create``.
         :param after_snapshot: The newly created entity's state
         :returns: Validation result
         """
@@ -1435,16 +1457,14 @@ class ExecutionStateMachineValidator:
                 mismatches.append(f"new lease_status={after_snapshot.lease_status!r} != 'not_leased'")
 
             # Validate source-run invariants: state dimensions unchanged.
-            source_run_state = before_snapshot.extra.get("source_run_state")
-            source_operator_state = before_snapshot.extra.get("source_operator_state")
-            source_current_attempt_id = before_snapshot.extra.get("source_current_attempt_id")
-
-            if source_run_state is not None and source_run_state != before_snapshot.run_state:
-                mismatches.append(f"source run_state mutated: {source_run_state!r} -> {before_snapshot.run_state!r}")
-            if source_operator_state is not None and source_operator_state != before_snapshot.operator_state:
-                mismatches.append(f"source operator_state mutated: {source_operator_state!r} -> {before_snapshot.operator_state!r}")
-            if source_current_attempt_id is not None and source_current_attempt_id != before_snapshot.current_attempt_id:
-                mismatches.append(f"source current_attempt_id changed: {source_current_attempt_id!r} -> {before_snapshot.current_attempt_id!r}")
+            invariants = before_snapshot.source_run_invariants
+            if invariants is not None:
+                if invariants.run_state != before_snapshot.run_state:
+                    mismatches.append(f"source run_state mutated: {invariants.run_state!r} -> {before_snapshot.run_state!r}")
+                if invariants.operator_state != before_snapshot.operator_state:
+                    mismatches.append(f"source operator_state mutated: {invariants.operator_state!r} -> {before_snapshot.operator_state!r}")
+                if invariants.current_attempt_id != before_snapshot.current_attempt_id:
+                    mismatches.append(f"source current_attempt_id changed: {invariants.current_attempt_id!r} -> {before_snapshot.current_attempt_id!r}")
 
             if mismatches:
                 return ExecutionValidationResult(

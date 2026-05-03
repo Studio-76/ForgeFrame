@@ -30,6 +30,7 @@ from app.execution.state_machine import (
     ExecutionTransitionContext,
     ExecutionTrigger,
     ExecutionValidationResult,
+    SourceRunInvariants,
 )
 from app.storage.execution_repository import (
     RunApprovalLinkORM,
@@ -1030,6 +1031,12 @@ class ExecutionTransitionService:
             "approval_gate_status": snapshot.approval_gate_status,
             "replacement_attempt_id": snapshot.replacement_attempt_id,
         }
+        if snapshot.source_run_invariants is not None:
+            fields["source_run_invariants"] = {
+                "run_state": snapshot.source_run_invariants.run_state,
+                "operator_state": snapshot.source_run_invariants.operator_state,
+                "current_attempt_id": snapshot.source_run_invariants.current_attempt_id,
+            }
         for key in (
             "attempt_no",
             "active_attempt_no",
@@ -3973,14 +3980,17 @@ class ExecutionTransitionService:
             if self._state_machine_validation_enabled:
                 self._validate_creation(
                     operation="restart_run_from_scratch",
-                    before_snapshot=self._state_machine_snapshot(
-                        run=source_run,
-                        attempt=None,
-                        extra={
-                            "source_run_state": source_run_state_before,
-                            "source_operator_state": source_operator_state_before,
-                            "source_current_attempt_id": source_current_attempt_id_before,
-                        },
+                    before_snapshot=ExecutionStateSnapshot(
+                        run_id=source_run.id,
+                        run_state=source_run.state,
+                        operator_state=source_run.operator_state,
+                        current_attempt_id=source_run.current_attempt_id,
+                        command_id=command.id,
+                        source_run_invariants=SourceRunInvariants(
+                            run_state=source_run_state_before,
+                            operator_state=source_operator_state_before,
+                            current_attempt_id=source_current_attempt_id_before,
+                        ),
                     ),
                     after_snapshot=ExecutionStateSnapshot(
                         run_state="queued",
