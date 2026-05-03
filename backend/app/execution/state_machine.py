@@ -178,7 +178,7 @@ RUN_STATE_TRANSITIONS: tuple[dict[str, Any], ...] = (
     {"trigger": "claim_attempt", "source": "queued", "dest": "dispatching", "conditions": "is_claimable_run"},
     {"trigger": "claim_attempt", "source": "retry_backoff", "dest": "dispatching", "conditions": "is_claimable_run"},
     # -- start_execution: dispatching -> executing --
-    {"trigger": "start_execution", "source": "dispatching", "dest": "executing"},
+    {"trigger": "start_execution", "source": "dispatching", "dest": "executing", "conditions": ["is_not_paused"]},
     # -- open_approval: executing -> waiting_on_approval --
     {"trigger": "open_approval", "source": "executing", "dest": "waiting_on_approval"},
     # -- resume_after_approval: waiting_on_approval -> queued --
@@ -296,6 +296,150 @@ _RESUME_FALLBACK_OPERATOR_STATE: str = "admitted"
 """
 Fallback operator state for ``resume`` when the current run state is
 not listed in ``RUN_TO_OPERATOR_RESUME_MAP``.
+"""
+
+# ---------------------------------------------------------------------------
+# Attempt effects — SPEC §6.4
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class AttemptEffect:
+    """
+    Expected attempt-state effects for a single trigger.
+
+    Each field represents the expected value of a state dimension after
+    the transition completes. ``None`` means the dimension is not
+    expected to change (or is not applicable to this trigger).
+
+    :param target_attempt_state: Expected attempt state after transition
+    :param target_attempt_operator_state: Expected attempt operator state
+        after transition
+    :param source_attempt_state: Expected state of the source attempt
+        after mutation (for retry paths where the source attempt is
+        mutated while a replacement is created)
+    :param source_attempt_operator_state: Expected operator state of the
+        source attempt after mutation
+    :param replacement_attempt_state: Expected state of a replacement
+        attempt on creation
+    :param replacement_attempt_operator_state: Expected operator state
+        of a replacement attempt on creation
+    :param target_lease_status: Expected lease status after transition
+    :param replaces_current_attempt: ``True`` when this trigger creates a
+        new current attempt (replacing the existing one)
+    """
+
+    target_attempt_state: str | None = None
+    target_attempt_operator_state: str | None = None
+    source_attempt_state: str | None = None
+    source_attempt_operator_state: str | None = None
+    replacement_attempt_state: str | None = None
+    replacement_attempt_operator_state: str | None = None
+    target_lease_status: str | None = None
+    replaces_current_attempt: bool = False
+
+
+# Context-dependent triggers: ``start_execution`` uses
+# ``service_chosen_operator_state`` to determine the attempt operator
+# target; ``resume`` uses ``RUN_TO_OPERATOR_RESUME_MAP``; ``pause``
+# always targets ``paused``; ``claim_attempt`` always targets ``leased``.
+ATTEMPT_EFFECTS_BY_TRIGGER: dict[str, AttemptEffect] = {
+    "claim_attempt": AttemptEffect(
+        target_attempt_state="dispatching",
+        target_attempt_operator_state="leased",
+        target_lease_status="leased",
+    ),
+    "start_execution": AttemptEffect(
+        target_attempt_state="executing",
+        target_attempt_operator_state=None,  # resolved from context
+        target_lease_status="leased",
+    ),
+    "open_approval": AttemptEffect(
+        target_attempt_state="waiting_on_approval",
+        target_attempt_operator_state="waiting_on_approval",
+        target_lease_status="released",
+    ),
+    "resume_after_approval": AttemptEffect(
+        target_attempt_state="queued",
+        target_attempt_operator_state="admitted",
+        target_lease_status="released",
+    ),
+    "reject_approval_cancel": AttemptEffect(
+        target_attempt_state="cancel_requested",
+        target_attempt_operator_state="cancel_requested",
+    ),
+    "reject_approval_compensate": AttemptEffect(
+        target_attempt_state="compensating",
+        target_attempt_operator_state="compensating",
+    ),
+    "reject_approval_fail": AttemptEffect(
+        target_attempt_state="failed",
+        target_attempt_operator_state="failed",
+    ),
+    "complete_success": AttemptEffect(
+        target_attempt_state="succeeded",
+        target_attempt_operator_state="completed",
+        target_lease_status="released",
+    ),
+    "record_retryable_failure_delayed": AttemptEffect(
+        source_attempt_state="failed",
+        source_attempt_operator_state="failed",
+        replacement_attempt_state="retry_backoff",
+        replacement_attempt_operator_state="retry_scheduled",
+        target_lease_status="released",
+        replaces_current_attempt=True,
+    ),
+    "record_retryable_failure_immediate": AttemptEffect(
+        source_attempt_state="failed",
+        source_attempt_operator_state="failed",
+        replacement_attempt_state="queued",
+        replacement_attempt_operator_state="admitted",
+        target_lease_status="released",
+        replaces_current_attempt=True,
+    ),
+    "record_terminal_failure": AttemptEffect(
+        source_attempt_state="dead_lettered",
+        source_attempt_operator_state="quarantined",
+        target_lease_status="released",
+    ),
+    "request_cancel": AttemptEffect(
+        target_attempt_state="cancel_requested",
+        target_attempt_operator_state="cancel_requested",
+    ),
+    "admit_retry": AttemptEffect(
+        replacement_attempt_state="queued",
+        replacement_attempt_operator_state="admitted",
+        replaces_current_attempt=True,
+    ),
+    "interrupt": AttemptEffect(
+        target_attempt_state="cancel_requested",
+        target_attempt_operator_state="interrupted",
+        target_lease_status="released",
+    ),
+    "quarantine": AttemptEffect(
+        target_attempt_state="dead_lettered",
+        target_attempt_operator_state="quarantined",
+        target_lease_status="released",
+    ),
+    "expire_lease": AttemptEffect(
+        target_attempt_state="timed_out",
+        target_attempt_operator_state="interrupted",
+        target_lease_status="expired",
+    ),
+    "pause": AttemptEffect(
+        target_attempt_operator_state="paused",
+    ),
+    "resume": AttemptEffect(
+        target_attempt_operator_state=None,  # resolved from context
+    ),
+}
+"""
+Mandatory attempt effects per SPEC §6.4.
+
+Maps each trigger to the expected attempt-state, attempt-operator-state,
+and lease-status outcomes. Triggers that produce a replacement attempt
+set ``replacement_attempt_state`` and ``replacement_attempt_operator_state``
+and mark ``replaces_current_attempt=True``.
 """
 
 # ---------------------------------------------------------------------------
@@ -673,6 +817,179 @@ class _ExecutionStateMachineModel:
         result = self.operator_state == "paused" and ctx is not None and not ctx.has_open_approval and ctx.current_approval_link_id is None
         return self._record_guard("is_operator_resumable", result)
 
+    # -- Additional guards (SPEC §8.2) -------------------------------------
+
+    def is_claimable_attempt(self, event: Any) -> bool:
+        """
+        Guard: attempt must be in a claimable state.
+
+        :param event: Transition event with context in ``event.kwargs``
+        :returns: ``True`` when the attempt is claimable
+        """
+        ctx: ExecutionTransitionContext | None = event.kwargs.get("context")
+        result = ctx is not None and ctx.attempt_state in ("queued", "retry_backoff") and ctx.attempt_operator_state in ("admitted", "retry_scheduled")
+        return self._record_guard("is_claimable_attempt", result)
+
+    def is_claimable_wakeup_due(self, event: Any) -> bool:
+        """
+        Guard: the scheduled wake-up time must be due or absent.
+
+        :param event: Transition event with context in ``event.kwargs``
+        :returns: ``True`` when the wake-up is due or no schedule exists
+        """
+        ctx: ExecutionTransitionContext | None = event.kwargs.get("context")
+        result = ctx is None or ctx.scheduled_at is None or ctx.now is None or ctx.scheduled_at <= ctx.now
+        return self._record_guard("is_claimable_wakeup_due", result)
+
+    def is_not_paused(self, event: Any) -> bool:
+        """
+        Guard: neither the run operator nor attempt operator is paused.
+
+        :param event: Transition event with context in ``event.kwargs``
+        :returns: ``True`` when neither operator is paused
+        """
+        ctx: ExecutionTransitionContext | None = event.kwargs.get("context")
+        result = self.operator_state != "paused" and (ctx is None or ctx.attempt_operator_state != "paused")
+        return self._record_guard("is_not_paused", result)
+
+    def is_executing(self, event: Any) -> bool:
+        """
+        Guard: run state and attempt state must both be ``executing``.
+
+        :param event: Transition event with context in ``event.kwargs``
+        :returns: ``True`` when both run and attempt are executing
+        """
+        ctx: ExecutionTransitionContext | None = event.kwargs.get("context")
+        result = self.run_state == "executing" and ctx is not None and ctx.attempt_state == "executing"
+        return self._record_guard("is_executing", result)
+
+    def has_open_approval_gate(self, event: Any) -> bool:
+        """
+        Guard: the approval gate must be open.
+
+        :param event: Transition event with context in ``event.kwargs``
+        :returns: ``True`` when the approval gate is open
+        """
+        ctx: ExecutionTransitionContext | None = event.kwargs.get("context")
+        result = ctx is not None and ctx.approval_gate_status == "open"
+        return self._record_guard("has_open_approval_gate", result)
+
+    def is_waiting_on_approval(self, event: Any) -> bool:
+        """
+        Guard: run and attempt must be in the waiting-on-approval state.
+
+        :param event: Transition event with context in ``event.kwargs``
+        :returns: ``True`` when both are waiting on approval
+        """
+        ctx: ExecutionTransitionContext | None = event.kwargs.get("context")
+        result = self.run_state == "waiting_on_approval" and ctx is not None and ctx.attempt_state == "waiting_on_approval"
+        return self._record_guard("is_waiting_on_approval", result)
+
+    def is_current_attempt(self, event: Any) -> bool:
+        """
+        Guard: the attempt ID must match the current attempt ID.
+
+        :param event: Transition event with context in ``event.kwargs``
+        :returns: ``True`` when the attempt is the current attempt
+        """
+        ctx: ExecutionTransitionContext | None = event.kwargs.get("context")
+        result = ctx is not None and ctx.attempt_id is not None and ctx.current_attempt_id is not None and ctx.attempt_id == ctx.current_attempt_id
+        return self._record_guard("is_current_attempt", result)
+
+    def is_in_flight_attempt(self, event: Any) -> bool:
+        """
+        Guard: the attempt must be in an in-flight state.
+
+        :param event: Transition event with context in ``event.kwargs``
+        :returns: ``True`` when the attempt is in-flight
+        """
+        ctx: ExecutionTransitionContext | None = event.kwargs.get("context")
+        result = ctx is not None and ctx.attempt_state is not None and ctx.attempt_state in ("dispatching", "executing", "cancel_requested", "compensating")
+        return self._record_guard("is_in_flight_attempt", result)
+
+    def is_recordable_failure(self, event: Any) -> bool:
+        """
+        Guard: run and attempt must be in a recordable failure state.
+
+        :param event: Transition event with context in ``event.kwargs``
+        :returns: ``True`` when a failure can be recorded
+        """
+        ctx: ExecutionTransitionContext | None = event.kwargs.get("context")
+        result = self.run_state in ("dispatching", "executing") and ctx is not None and ctx.attempt_state in ("dispatching", "executing")
+        return self._record_guard("is_recordable_failure", result)
+
+    def is_retryable_run(self, event: Any) -> bool:
+        """
+        Guard: run must be in a retryable terminal state.
+
+        :param event: Transition event
+        :returns: ``True`` when the run can be retried
+        """
+        return self._record_guard(
+            "is_retryable_run",
+            self.run_state in RETRYABLE_RUN_STATES,
+        )
+
+    def is_retryable_and_has_budget(self, event: Any) -> bool:
+        """
+        Guard: the failure is retryable and budget remains.
+
+        :param event: Transition event with context in ``event.kwargs``
+        :returns: ``True`` when retryable with remaining budget
+        """
+        ctx: ExecutionTransitionContext | None = event.kwargs.get("context")
+        result = ctx is not None and ctx.retryable is True and ctx.active_attempt_no is not None and ctx.max_attempts is not None and ctx.active_attempt_no + 1 <= ctx.max_attempts
+        return self._record_guard("is_retryable_and_has_budget", result)
+
+    def is_terminal_failure_destination(self, event: Any) -> bool:
+        """
+        Guard: the failure is terminal (not retryable or budget exhausted).
+
+        :param event: Transition event with context in ``event.kwargs``
+        :returns: ``True`` when the destination is terminal
+        """
+        ctx: ExecutionTransitionContext | None = event.kwargs.get("context")
+        result = ctx is not None and (ctx.retryable is not True or (ctx.active_attempt_no is not None and ctx.max_attempts is not None and ctx.active_attempt_no + 1 > ctx.max_attempts))
+        return self._record_guard("is_terminal_failure_destination", result)
+
+    def has_valid_lease_token(self, event: Any) -> bool:
+        """
+        Guard: the provided lease token matches the attempt lease token.
+
+        :param event: Transition event with context in ``event.kwargs``
+        :returns: ``True`` when the lease token is valid
+        """
+        ctx: ExecutionTransitionContext | None = event.kwargs.get("context")
+        if ctx is None:
+            return self._record_guard("has_valid_lease_token", False)
+        if ctx.attempt_lease_token is None and ctx.provided_lease_token is None:
+            # Both are None — token not provided, skip validation.
+            return self._record_guard("has_valid_lease_token", True)
+        result = ctx.attempt_lease_token is not None and ctx.provided_lease_token is not None and ctx.attempt_lease_token == ctx.provided_lease_token
+        return self._record_guard("has_valid_lease_token", result)
+
+    def is_valid_service_chosen_operator_state(self, event: Any) -> bool:
+        """
+        Guard: the service-chosen operator state is valid for the trigger.
+
+        Checks that ``service_chosen_operator_state`` belongs to the
+        valid operator target set for the trigger being fired. Returns
+        ``True`` when no operator state was chosen (None) so validation
+        is not blocked in contexts where the service has not yet decided.
+
+        :param event: Transition event with context in ``event.kwargs``
+        :returns: ``True`` when the operator state is valid or not chosen
+        """
+        ctx: ExecutionTransitionContext | None = event.kwargs.get("context")
+        if ctx is None or ctx.service_chosen_operator_state is None:
+            return self._record_guard("is_valid_service_chosen_operator_state", True)
+        trigger: str | None = getattr(event, "name", None)
+        if trigger is not None and trigger in RUN_OPERATOR_TARGETS_BY_TRIGGER:
+            _, valid_operator_states = RUN_OPERATOR_TARGETS_BY_TRIGGER[trigger]
+            result = ctx.service_chosen_operator_state in valid_operator_states
+            return self._record_guard("is_valid_service_chosen_operator_state", result)
+        return self._record_guard("is_valid_service_chosen_operator_state", True)
+
 
 # ---------------------------------------------------------------------------
 # Public validator — side-effect-free wrapper API
@@ -841,15 +1158,80 @@ class ExecutionStateMachineValidator:
                 error_message=(f"Guard(s) blocked: {', '.join(sorted(failed_guards))}"),
             )
 
-        decision = ExecutionStateDecision(
-            target_run_state=self._model.run_state,
-            target_operator_state=self._model.operator_state,
+        decision = self._build_decision(
+            trigger=trigger,
+            context=context,
         )
         return ExecutionValidationResult(
             valid=True,
             validated=True,
             decision=decision,
             guard_results=guard_results,
+        )
+
+    def _build_decision(
+        self,
+        trigger: ExecutionTrigger,
+        context: ExecutionTransitionContext,
+    ) -> ExecutionStateDecision:
+        """
+        Build a full :class:`ExecutionStateDecision` including attempt effects.
+
+        Uses :data:`ATTEMPT_EFFECTS_BY_TRIGGER` to populate attempt-state,
+        attempt-operator-state, replacement-attempt, and lease-status fields.
+        Context-dependent fields (``start_execution`` operator state,
+        ``resume`` operator state, ``pause`` operator state) are resolved
+        from *context* or default lookup tables.
+
+        :param trigger: The trigger that was fired
+        :param context: Pre-transition guard context
+        :returns: Fully populated decision
+        """
+        base = ATTEMPT_EFFECTS_BY_TRIGGER.get(trigger)
+        base_attempt_state: str | None = None
+        base_attempt_op_state: str | None = None
+        base_source_state: str | None = None
+        base_source_op_state: str | None = None
+        base_replacement_state: str | None = None
+        base_replacement_op_state: str | None = None
+        base_lease: str | None = None
+        if base is not None:
+            base_attempt_state = base.target_attempt_state
+            base_attempt_op_state = base.target_attempt_operator_state
+            base_source_state = base.source_attempt_state
+            base_source_op_state = base.source_attempt_operator_state
+            base_replacement_state = base.replacement_attempt_state
+            base_replacement_op_state = base.replacement_attempt_operator_state
+            base_lease = base.target_lease_status
+
+        # Resolve context-dependent attempt operator state targets.
+        target_ato: str | None = base_attempt_op_state
+        target_lease: str | None = base_lease
+
+        if trigger == "start_execution":
+            target_ato = context.service_chosen_operator_state or "executing"
+            target_lease = "leased"
+        elif trigger == "pause":
+            target_ato = "paused"
+        elif trigger == "resume":
+            target_ato = RUN_TO_OPERATOR_RESUME_MAP.get(
+                context.run_state,
+                _RESUME_FALLBACK_OPERATOR_STATE,
+            )
+        elif trigger == "claim_attempt":
+            target_ato = "leased"
+            target_lease = "leased"
+
+        return ExecutionStateDecision(
+            target_run_state=self._model.run_state,
+            target_operator_state=self._model.operator_state,
+            target_attempt_state=base_attempt_state,
+            target_attempt_operator_state=target_ato,
+            source_attempt_state=base_source_state,
+            source_attempt_operator_state=base_source_op_state,
+            replacement_attempt_state=base_replacement_state,
+            replacement_attempt_operator_state=base_replacement_op_state,
+            target_lease_status=target_lease,
         )
 
     # -- Run-state transition validation (§7.1) ---------------------------
@@ -916,51 +1298,189 @@ class ExecutionStateMachineValidator:
     def validate_creation(
         self,
         operation: ExecutionCreationOperation,
-        snapshot: ExecutionStateSnapshot,
+        before_snapshot: ExecutionStateSnapshot,
+        after_snapshot: ExecutionStateSnapshot,
     ) -> ExecutionValidationResult:
         """
         Validate a creation operation's initial state.
 
-        ``admit_create`` and ``restart_run_from_scratch`` create new
-        entities rather than transitioning an existing source run.
+        ``admit_create`` creates a new ``RunORM`` and ``RunAttemptORM``
+        with initial state ``queued`` / ``admitted``. *after_snapshot*
+        holds the new entity state; *before_snapshot* is not used.
+
+        ``restart_run_from_scratch`` creates a new run and attempt with
+        ``queued`` / ``admitted`` while the source run only receives
+        metadata updates. The method validates:
+
+        - the new run/attempt initial state in *after_snapshot*
+        - the source run's state dimensions remain unchanged:
+          *before_snapshot* main fields hold the source run's state
+          *after* the operation, and ``before_snapshot.extra`` fields
+          (``source_run_state``, ``source_operator_state``,
+          ``source_current_attempt_id``) hold the source run's state
+          *before* the operation. They must match.
+
         When the validator is disabled this is a no-op returning
         ``validated=False``.
 
         :param operation: The creation operation to validate
-        :param snapshot: Pre-creation state snapshot
+        :param before_snapshot: For ``restart_run_from_scratch``, the
+            source run's state after the operation (main fields) with
+            expected pre-operation values in ``extra``. Ignored for
+            ``admit_create``.
+        :param after_snapshot: The newly created entity's state
         :returns: Validation result
         """
         if not self._enabled:
             return ExecutionValidationResult(validated=False)
-        # Skeleton: no validation logic yet; pass through.
+
+        # Admit-create: validate the new run/attempt initial state.
+        if operation == "admit_create":
+            mismatches: list[str] = []
+            if after_snapshot.run_state != "queued":
+                mismatches.append(f"run_state={after_snapshot.run_state!r} != 'queued'")
+            if after_snapshot.operator_state != "admitted":
+                mismatches.append(f"operator_state={after_snapshot.operator_state!r} != 'admitted'")
+            if after_snapshot.attempt_state is not None and after_snapshot.attempt_state != "queued":
+                mismatches.append(f"attempt_state={after_snapshot.attempt_state!r} != 'queued'")
+            if after_snapshot.attempt_state is not None and after_snapshot.attempt_operator_state is not None and after_snapshot.attempt_operator_state != "admitted":
+                mismatches.append(f"attempt_operator_state={after_snapshot.attempt_operator_state!r} != 'admitted'")
+            if after_snapshot.lease_status is not None and after_snapshot.lease_status != "not_leased":
+                mismatches.append(f"lease_status={after_snapshot.lease_status!r} != 'not_leased'")
+
+            if mismatches:
+                return ExecutionValidationResult(
+                    valid=False,
+                    validated=True,
+                    mismatch_category=MISMATCH_CATEGORY_CREATION_INITIAL_STATE_MISMATCH,
+                    error_message="; ".join(mismatches),
+                    decision=ExecutionStateDecision(
+                        target_run_state="queued",
+                        target_operator_state="admitted",
+                        target_attempt_state="queued",
+                        target_attempt_operator_state="admitted",
+                        target_lease_status="not_leased",
+                    ),
+                )
+            return ExecutionValidationResult(
+                valid=True,
+                validated=True,
+                decision=ExecutionStateDecision(
+                    target_run_state="queued",
+                    target_operator_state="admitted",
+                    target_attempt_state="queued",
+                    target_attempt_operator_state="admitted",
+                    target_lease_status="not_leased",
+                ),
+            )
+
+        # Restart-from-scratch: validate new-run init + source-run invariants.
+        if operation == "restart_run_from_scratch":
+            mismatches = []
+
+            # Validate the new run/attempt initial state.
+            if after_snapshot.run_state != "queued":
+                mismatches.append(f"new run_state={after_snapshot.run_state!r} != 'queued'")
+            if after_snapshot.operator_state != "admitted":
+                mismatches.append(f"new operator_state={after_snapshot.operator_state!r} != 'admitted'")
+            if after_snapshot.attempt_state is not None and after_snapshot.attempt_state != "queued":
+                mismatches.append(f"new attempt_state={after_snapshot.attempt_state!r} != 'queued'")
+            if after_snapshot.attempt_state is not None and after_snapshot.attempt_operator_state is not None and after_snapshot.attempt_operator_state != "admitted":
+                mismatches.append(f"new attempt_operator_state={after_snapshot.attempt_operator_state!r} != 'admitted'")
+            if after_snapshot.lease_status is not None and after_snapshot.lease_status != "not_leased":
+                mismatches.append(f"new lease_status={after_snapshot.lease_status!r} != 'not_leased'")
+
+            # Validate source-run invariants: state dimensions unchanged.
+            source_run_state = before_snapshot.extra.get("source_run_state")
+            source_operator_state = before_snapshot.extra.get("source_operator_state")
+            source_current_attempt_id = before_snapshot.extra.get("source_current_attempt_id")
+
+            if source_run_state is not None and source_run_state != before_snapshot.run_state:
+                mismatches.append(f"source run_state mutated: {source_run_state!r} -> {before_snapshot.run_state!r}")
+            if source_operator_state is not None and source_operator_state != before_snapshot.operator_state:
+                mismatches.append(f"source operator_state mutated: {source_operator_state!r} -> {before_snapshot.operator_state!r}")
+            if source_current_attempt_id is not None and source_current_attempt_id != before_snapshot.current_attempt_id:
+                mismatches.append(f"source current_attempt_id changed: {source_current_attempt_id!r} -> {before_snapshot.current_attempt_id!r}")
+
+            if mismatches:
+                return ExecutionValidationResult(
+                    valid=False,
+                    validated=True,
+                    mismatch_category=MISMATCH_CATEGORY_CREATION_INITIAL_STATE_MISMATCH,
+                    error_message="; ".join(mismatches),
+                )
+            return ExecutionValidationResult(
+                valid=True,
+                validated=True,
+                decision=ExecutionStateDecision(
+                    target_run_state="queued",
+                    target_operator_state="admitted",
+                    target_attempt_state="queued",
+                    target_attempt_operator_state="admitted",
+                    target_lease_status="not_leased",
+                ),
+            )
+
         return ExecutionValidationResult(
-            valid=True,
+            valid=False,
             validated=True,
-            decision=ExecutionStateDecision(),
+            mismatch_category=MISMATCH_CATEGORY_INVALID_TRIGGER,
+            error_message=f"Unknown creation operation: {operation!r}",
         )
 
     # -- Non-state-operation validation (§7.4) -----------------------------
 
     def validate_non_state_operation(
         self,
-        snapshot: ExecutionStateSnapshot,
+        before_snapshot: ExecutionStateSnapshot,
+        after_snapshot: ExecutionStateSnapshot,
     ) -> ExecutionValidationResult:
         """
         Validate that a non-state operation did not mutate state dimensions.
 
         Operations such as ``renew_attempt_lease`` and ``escalate_run``
         must not change ``run_state``, ``operator_state``, or attempt
-        state dimensions. When the validator is disabled this is a no-op
-        returning ``validated=False``.
+        state dimensions. ``lease_status`` is allowed to change for
+        lease-renewal operations.
 
-        :param snapshot: Pre-operation state snapshot
+        When the validator is disabled this is a no-op returning
+        ``validated=False``.
+
+        :param before_snapshot: Pre-operation state snapshot
+        :param after_snapshot: Post-operation state snapshot
         :returns: Validation result
         """
         if not self._enabled:
             return ExecutionValidationResult(validated=False)
-        # Skeleton: no comparison logic yet; pass through.
+
+        mismatches: list[str] = []
+
+        # Compare state dimensions that must not change.
+        if before_snapshot.run_state != after_snapshot.run_state:
+            mismatches.append(f"run_state changed: {before_snapshot.run_state!r} -> {after_snapshot.run_state!r}")
+        if before_snapshot.operator_state != after_snapshot.operator_state:
+            mismatches.append(f"operator_state changed: {before_snapshot.operator_state!r} -> {after_snapshot.operator_state!r}")
+        if before_snapshot.attempt_state != after_snapshot.attempt_state:
+            mismatches.append(f"attempt_state changed: {before_snapshot.attempt_state!r} -> {after_snapshot.attempt_state!r}")
+        if before_snapshot.attempt_operator_state != after_snapshot.attempt_operator_state:
+            mismatches.append(f"attempt_operator_state changed: {before_snapshot.attempt_operator_state!r} -> {after_snapshot.attempt_operator_state!r}")
+        if before_snapshot.current_attempt_id != after_snapshot.current_attempt_id:
+            mismatches.append(f"current_attempt_id changed: {before_snapshot.current_attempt_id!r} -> {after_snapshot.current_attempt_id!r}")
+        if before_snapshot.current_approval_link_id != after_snapshot.current_approval_link_id:
+            mismatches.append(f"current_approval_link_id changed: {before_snapshot.current_approval_link_id!r} -> {after_snapshot.current_approval_link_id!r}")
+
+        if mismatches:
+            return ExecutionValidationResult(
+                valid=False,
+                validated=True,
+                mismatch_category=MISMATCH_CATEGORY_NON_STATE_OPERATION_MUTATED_STATE,
+                error_message="; ".join(mismatches),
+            )
         return ExecutionValidationResult(
             valid=True,
             validated=True,
-            decision=ExecutionStateDecision(),
+            decision=ExecutionStateDecision(
+                target_run_state=after_snapshot.run_state,
+                target_operator_state=after_snapshot.operator_state,
+            ),
         )

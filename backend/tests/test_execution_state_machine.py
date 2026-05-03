@@ -13,6 +13,7 @@ from datetime import datetime, timedelta, timezone
 from app.execution import models
 from app.execution.state_machine import (
     ALL_EXECUTION_TRIGGERS,
+    ATTEMPT_EFFECTS_BY_TRIGGER,
     CLAIMABLE_RUN_STATES,
     DECLARED_UNREACHED_RUN_STATES,
     MISMATCH_CATEGORY_APPROVAL_LINK_MISMATCH,
@@ -37,6 +38,7 @@ from app.execution.state_machine import (
     RUN_TO_OPERATOR_RESUME_MAP,
     TERMINAL_OPERATOR_STATES,
     TERMINAL_RUN_STATES,
+    AttemptEffect,
     ExecutionStateDecision,
     ExecutionStateMachineValidator,
     ExecutionStateSnapshot,
@@ -350,12 +352,14 @@ def test_disabled_validator_returns_noop_result() -> None:
 
     create_result = validator.validate_creation(
         operation="admit_create",
-        snapshot=snap,
+        before_snapshot=snap,
+        after_snapshot=snap,
     )
     assert create_result.validated is False
 
     non_state_result = validator.validate_non_state_operation(
-        snapshot=snap,
+        before_snapshot=snap,
+        after_snapshot=snap,
     )
     assert non_state_result.validated is False
 
@@ -394,21 +398,27 @@ def test_validator_validate_operator_transition_accepts_pause_resume() -> None:
 def test_validator_validate_creation_accepts_both_operations() -> None:
     """validate_creation must accept admit_create and restart_run_from_scratch."""
     validator = ExecutionStateMachineValidator(enabled=True)
-    snap = ExecutionStateSnapshot()
+    before = ExecutionStateSnapshot()
+    after = ExecutionStateSnapshot()
 
     for operation in ("admit_create", "restart_run_from_scratch"):
         result = validator.validate_creation(
             operation=operation,
-            snapshot=snap,
+            before_snapshot=before,
+            after_snapshot=after,
         )
         assert isinstance(result, ExecutionValidationResult)
 
 
-def test_validator_validate_non_state_operation_accepts_empty_snapshot() -> None:
-    """validate_non_state_operation must accept a default snapshot."""
+def test_validator_validate_non_state_operation_accepts_snapshots() -> None:
+    """validate_non_state_operation must accept before and after snapshots."""
     validator = ExecutionStateMachineValidator(enabled=True)
-    snap = ExecutionStateSnapshot()
-    result = validator.validate_non_state_operation(snapshot=snap)
+    before = ExecutionStateSnapshot()
+    after = ExecutionStateSnapshot()
+    result = validator.validate_non_state_operation(
+        before_snapshot=before,
+        after_snapshot=after,
+    )
     assert isinstance(result, ExecutionValidationResult)
 
 
@@ -1128,6 +1138,758 @@ def test_guard_results_are_recorded_on_success() -> None:
     assert result.guard_results is not None
     assert "is_claimable_run" in result.guard_results
     assert result.guard_results["is_claimable_run"] is True
+
+
+# ---------------------------------------------------------------------------
+# ATTEMPT_EFFECTS_BY_TRIGGER — SPEC §6.4
+# ---------------------------------------------------------------------------
+
+
+def test_attempt_effects_covers_all_run_triggers() -> None:
+    """ATTEMPT_EFFECTS_BY_TRIGGER must cover all run and operator triggers."""
+    expected = set(ALL_EXECUTION_TRIGGERS)
+    assert set(ATTEMPT_EFFECTS_BY_TRIGGER.keys()) == expected, f"Missing triggers: {expected - set(ATTEMPT_EFFECTS_BY_TRIGGER.keys())}"
+
+
+def test_attempt_effects_are_attempt_effect_instances() -> None:
+    """Every value in ATTEMPT_EFFECTS_BY_TRIGGER must be an AttemptEffect."""
+    for trigger, effect in ATTEMPT_EFFECTS_BY_TRIGGER.items():
+        assert isinstance(effect, AttemptEffect), f"Trigger {trigger!r}: not an AttemptEffect"
+
+
+def test_attempt_effects_retryable_delayed_has_source_and_replacement() -> None:
+    """record_retryable_failure_delayed must have source + replacement effects."""
+    effect = ATTEMPT_EFFECTS_BY_TRIGGER["record_retryable_failure_delayed"]
+    assert effect.source_attempt_state == "failed"
+    assert effect.source_attempt_operator_state == "failed"
+    assert effect.replacement_attempt_state == "retry_backoff"
+    assert effect.replacement_attempt_operator_state == "retry_scheduled"
+    assert effect.target_lease_status == "released"
+    assert effect.replaces_current_attempt is True
+
+
+def test_attempt_effects_retryable_immediate_has_source_and_replacement() -> None:
+    """record_retryable_failure_immediate must have source + replacement effects."""
+    effect = ATTEMPT_EFFECTS_BY_TRIGGER["record_retryable_failure_immediate"]
+    assert effect.source_attempt_state == "failed"
+    assert effect.source_attempt_operator_state == "failed"
+    assert effect.replacement_attempt_state == "queued"
+    assert effect.replacement_attempt_operator_state == "admitted"
+    assert effect.target_lease_status == "released"
+    assert effect.replaces_current_attempt is True
+
+
+def test_attempt_effects_terminal_failure_has_source_no_replacement() -> None:
+    """record_terminal_failure must have source effect but no replacement."""
+    effect = ATTEMPT_EFFECTS_BY_TRIGGER["record_terminal_failure"]
+    assert effect.source_attempt_state == "dead_lettered"
+    assert effect.source_attempt_operator_state == "quarantined"
+    assert effect.replacement_attempt_state is None
+    assert effect.replacement_attempt_operator_state is None
+    assert effect.replaces_current_attempt is False
+
+
+def test_attempt_effects_admit_retry_has_replacement_no_source() -> None:
+    """admit_retry must have replacement effect but no source mutation."""
+    effect = ATTEMPT_EFFECTS_BY_TRIGGER["admit_retry"]
+    assert effect.source_attempt_state is None
+    assert effect.source_attempt_operator_state is None
+    assert effect.replacement_attempt_state == "queued"
+    assert effect.replacement_attempt_operator_state == "admitted"
+    assert effect.replaces_current_attempt is True
+
+
+def test_attempt_effects_complete_success_has_lease_released() -> None:
+    """complete_success must release the lease."""
+    effect = ATTEMPT_EFFECTS_BY_TRIGGER["complete_success"]
+    assert effect.target_attempt_state == "succeeded"
+    assert effect.target_attempt_operator_state == "completed"
+    assert effect.target_lease_status == "released"
+
+
+def test_attempt_effects_expire_lease_has_lease_expired() -> None:
+    """expire_lease must set lease status to expired."""
+    effect = ATTEMPT_EFFECTS_BY_TRIGGER["expire_lease"]
+    assert effect.target_attempt_state == "timed_out"
+    assert effect.target_attempt_operator_state == "interrupted"
+    assert effect.target_lease_status == "expired"
+
+
+def test_attempt_effects_pause_keeps_attempt_state() -> None:
+    """pause must keep attempt state unchanged, only operator changes."""
+    effect = ATTEMPT_EFFECTS_BY_TRIGGER["pause"]
+    assert effect.target_attempt_state is None
+    assert effect.target_attempt_operator_state == "paused"
+
+
+def test_attempt_effects_resume_operator_from_context() -> None:
+    """resume attempt operator state must be resolved from context."""
+    effect = ATTEMPT_EFFECTS_BY_TRIGGER["resume"]
+    assert effect.target_attempt_state is None
+    assert effect.target_attempt_operator_state is None  # resolved from context
+
+
+def test_attempt_effects_admit_create_not_in_map() -> None:
+    """admit_create is not a transition trigger and must not be in effects."""
+    assert "admit_create" not in ATTEMPT_EFFECTS_BY_TRIGGER
+
+
+def test_attempt_effects_restart_from_scratch_not_in_map() -> None:
+    """restart_run_from_scratch is not a transition trigger."""
+    assert "restart_run_from_scratch" not in ATTEMPT_EFFECTS_BY_TRIGGER
+
+
+# ---------------------------------------------------------------------------
+# Decision includes attempt effects
+# ---------------------------------------------------------------------------
+
+
+def test_decision_includes_attempt_effects_on_happy_path() -> None:
+    """Decision from claim_attempt must include target attempt effects."""
+    validator = ExecutionStateMachineValidator(enabled=True)
+    ctx = ExecutionTransitionContext(
+        run_state="queued",
+        operator_state="admitted",
+        attempt_state="queued",
+        attempt_operator_state="admitted",
+    )
+    r = validator.validate_run_transition(trigger="claim_attempt", context=ctx)
+    assert r.valid
+    assert r.decision is not None
+    assert r.decision.target_attempt_state == "dispatching"
+    assert r.decision.target_attempt_operator_state == "leased"
+    assert r.decision.target_lease_status == "leased"
+
+
+def test_decision_includes_replacement_effects() -> None:
+    """Decision from record_retryable_failure_delayed must include replacement."""
+    validator = ExecutionStateMachineValidator(enabled=True)
+    ctx = ExecutionTransitionContext(
+        run_state="dispatching",
+        operator_state="leased",
+        attempt_state="dispatching",
+        attempt_operator_state="leased",
+    )
+    r = validator.validate_run_transition(
+        trigger="record_retryable_failure_delayed",
+        context=ctx,
+    )
+    assert r.valid
+    assert r.decision is not None
+    assert r.decision.source_attempt_state == "failed"
+    assert r.decision.source_attempt_operator_state == "failed"
+    assert r.decision.replacement_attempt_state == "retry_backoff"
+    assert r.decision.replacement_attempt_operator_state == "retry_scheduled"
+    assert r.decision.target_lease_status == "released"
+
+
+def test_decision_includes_terminal_failure_source_only() -> None:
+    """Decision from record_terminal_failure must include source, no replacement."""
+    validator = ExecutionStateMachineValidator(enabled=True)
+    ctx = ExecutionTransitionContext(
+        run_state="dispatching",
+        operator_state="leased",
+        attempt_state="dispatching",
+        attempt_operator_state="leased",
+    )
+    r = validator.validate_run_transition(
+        trigger="record_terminal_failure",
+        context=ctx,
+    )
+    assert r.valid
+    assert r.decision is not None
+    assert r.decision.source_attempt_state == "dead_lettered"
+    assert r.decision.source_attempt_operator_state == "quarantined"
+    assert r.decision.replacement_attempt_state is None
+    assert r.decision.target_lease_status == "released"
+
+
+def test_decision_includes_complete_success_effects() -> None:
+    """Decision from complete_success must include attempt target and lease."""
+    validator = ExecutionStateMachineValidator(enabled=True)
+    ctx = ExecutionTransitionContext(
+        run_state="executing",
+        operator_state="executing",
+        attempt_state="executing",
+        attempt_operator_state="executing",
+    )
+    r = validator.validate_run_transition(trigger="complete_success", context=ctx)
+    assert r.valid
+    assert r.decision is not None
+    assert r.decision.target_attempt_state == "succeeded"
+    assert r.decision.target_attempt_operator_state == "completed"
+    assert r.decision.target_lease_status == "released"
+
+
+def test_decision_includes_pause_operator_effect() -> None:
+    """Decision from pause must show attempt operator -> paused."""
+    validator = ExecutionStateMachineValidator(enabled=True)
+    ctx = ExecutionTransitionContext(
+        run_state="executing",
+        operator_state="executing",
+        attempt_state="executing",
+        attempt_operator_state="executing",
+    )
+    r = validator.validate_operator_transition(trigger="pause", context=ctx)
+    assert r.valid
+    assert r.decision is not None
+    assert r.decision.target_attempt_state is None  # unchanged
+    assert r.decision.target_attempt_operator_state == "paused"
+
+
+def test_decision_includes_expire_lease_effects() -> None:
+    """Decision from expire_lease must include leased -> expired."""
+    now = datetime(2026, 5, 3, 12, 0, 0, tzinfo=timezone.utc)
+    past = now - timedelta(minutes=5)
+    validator = ExecutionStateMachineValidator(enabled=True)
+    ctx = ExecutionTransitionContext(
+        run_state="executing",
+        operator_state="executing",
+        attempt_state="executing",
+        attempt_operator_state="executing",
+        lease_status="leased",
+        lease_expires_at=past,
+        now=now,
+    )
+    r = validator.validate_run_transition(trigger="expire_lease", context=ctx)
+    assert r.valid
+    assert r.decision is not None
+    assert r.decision.target_attempt_state == "timed_out"
+    assert r.decision.target_attempt_operator_state == "interrupted"
+    assert r.decision.target_lease_status == "expired"
+
+
+# ---------------------------------------------------------------------------
+# Guard method coverage — SPEC §8.2
+# ---------------------------------------------------------------------------
+
+
+def test_guard_is_claimable_attempt_passes_with_valid_context() -> None:
+    """is_claimable_attempt must pass for queued attempt with admitted operator."""
+    model = _ExecutionStateMachineModel(run_state="queued", operator_state="admitted")
+    ctx = ExecutionTransitionContext(
+        attempt_state="queued",
+        attempt_operator_state="admitted",
+    )
+
+    class _FakeEvent:
+        kwargs = {"context": ctx}
+
+    assert model.is_claimable_attempt(_FakeEvent()) is True
+
+
+def test_guard_is_claimable_attempt_fails_for_executing() -> None:
+    """is_claimable_attempt must fail for executing attempt."""
+    model = _ExecutionStateMachineModel(run_state="executing", operator_state="executing")
+    ctx = ExecutionTransitionContext(
+        attempt_state="executing",
+        attempt_operator_state="executing",
+    )
+
+    class _FakeEvent:
+        kwargs = {"context": ctx}
+
+    assert model.is_claimable_attempt(_FakeEvent()) is False
+
+
+def test_guard_is_not_paused_passes_with_admitted_operator() -> None:
+    """is_not_paused must pass when operator is not paused."""
+    model = _ExecutionStateMachineModel(run_state="queued", operator_state="admitted")
+    ctx = ExecutionTransitionContext(attempt_operator_state="admitted")
+
+    class _FakeEvent:
+        kwargs = {"context": ctx}
+
+    assert model.is_not_paused(_FakeEvent()) is True
+
+
+def test_guard_is_not_paused_fails_when_paused() -> None:
+    """is_not_paused must fail when operator is paused."""
+    model = _ExecutionStateMachineModel(run_state="queued", operator_state="paused")
+    ctx = ExecutionTransitionContext(attempt_operator_state="paused")
+
+    class _FakeEvent:
+        kwargs = {"context": ctx}
+
+    assert model.is_not_paused(_FakeEvent()) is False
+
+
+def test_guard_has_valid_lease_token_passes_with_matching_token() -> None:
+    """has_valid_lease_token must pass with matching non-empty tokens."""
+    model = _ExecutionStateMachineModel()
+    ctx = ExecutionTransitionContext(
+        attempt_lease_token="tok_1",
+        provided_lease_token="tok_1",
+    )
+
+    class _FakeEvent:
+        kwargs = {"context": ctx}
+
+    assert model.has_valid_lease_token(_FakeEvent()) is True
+
+
+def test_guard_has_valid_lease_token_fails_with_mismatch() -> None:
+    """has_valid_lease_token must fail with mismatched tokens."""
+    model = _ExecutionStateMachineModel()
+    ctx = ExecutionTransitionContext(
+        attempt_lease_token="tok_1",
+        provided_lease_token="tok_2",
+    )
+
+    class _FakeEvent:
+        kwargs = {"context": ctx}
+
+    assert model.has_valid_lease_token(_FakeEvent()) is False
+
+
+def test_guard_has_valid_lease_token_skips_when_both_none() -> None:
+    """has_valid_lease_token must pass when both tokens are None."""
+    model = _ExecutionStateMachineModel()
+    ctx = ExecutionTransitionContext(
+        attempt_lease_token=None,
+        provided_lease_token=None,
+    )
+
+    class _FakeEvent:
+        kwargs = {"context": ctx}
+
+    assert model.has_valid_lease_token(_FakeEvent()) is True
+
+
+def test_guard_is_retryable_and_has_budget_passes() -> None:
+    """is_retryable_and_has_budget must pass when budget remains."""
+    model = _ExecutionStateMachineModel()
+    ctx = ExecutionTransitionContext(
+        retryable=True,
+        active_attempt_no=1,
+        max_attempts=3,
+    )
+
+    class _FakeEvent:
+        kwargs = {"context": ctx}
+
+    assert model.is_retryable_and_has_budget(_FakeEvent()) is True
+
+
+def test_guard_is_retryable_and_has_budget_fails_when_exhausted() -> None:
+    """is_retryable_and_has_budget must fail when budget exhausted."""
+    model = _ExecutionStateMachineModel()
+    ctx = ExecutionTransitionContext(
+        retryable=True,
+        active_attempt_no=3,
+        max_attempts=3,
+    )
+
+    class _FakeEvent:
+        kwargs = {"context": ctx}
+
+    assert model.is_retryable_and_has_budget(_FakeEvent()) is False
+
+
+def test_guard_is_terminal_failure_destination_passes_not_retryable() -> None:
+    """is_terminal_failure_destination passes when not retryable."""
+    model = _ExecutionStateMachineModel()
+    ctx = ExecutionTransitionContext(
+        retryable=False,
+        active_attempt_no=1,
+        max_attempts=3,
+    )
+
+    class _FakeEvent:
+        kwargs = {"context": ctx}
+
+    assert model.is_terminal_failure_destination(_FakeEvent()) is True
+
+
+def test_guard_is_terminal_failure_destination_passes_budget_exhausted() -> None:
+    """is_terminal_failure_destination passes when budget exhausted."""
+    model = _ExecutionStateMachineModel()
+    ctx = ExecutionTransitionContext(
+        retryable=True,
+        active_attempt_no=3,
+        max_attempts=3,
+    )
+
+    class _FakeEvent:
+        kwargs = {"context": ctx}
+
+    assert model.is_terminal_failure_destination(_FakeEvent()) is True
+
+
+def test_guard_is_in_flight_attempt_passes() -> None:
+    """is_in_flight_attempt passes for executing attempt."""
+    model = _ExecutionStateMachineModel()
+
+    class _FakeEvent:
+        kwargs = {"context": ExecutionTransitionContext(attempt_state="executing")}
+
+    assert model.is_in_flight_attempt(_FakeEvent()) is True
+
+
+def test_guard_is_in_flight_attempt_fails_for_queued() -> None:
+    """is_in_flight_attempt fails for queued attempt."""
+    model = _ExecutionStateMachineModel()
+
+    class _FakeEvent:
+        kwargs = {"context": ExecutionTransitionContext(attempt_state="queued")}
+
+    assert model.is_in_flight_attempt(_FakeEvent()) is False
+
+
+def test_guard_is_current_attempt_passes_when_matches() -> None:
+    """is_current_attempt passes when attempt_id matches current_attempt_id."""
+    model = _ExecutionStateMachineModel()
+
+    class _FakeEvent:
+        kwargs = {
+            "context": ExecutionTransitionContext(
+                attempt_id="att_1",
+                current_attempt_id="att_1",
+            )
+        }
+
+    assert model.is_current_attempt(_FakeEvent()) is True
+
+
+def test_guard_is_current_attempt_fails_when_different() -> None:
+    """is_current_attempt fails when attempt_id differs."""
+    model = _ExecutionStateMachineModel()
+
+    class _FakeEvent:
+        kwargs = {
+            "context": ExecutionTransitionContext(
+                attempt_id="att_1",
+                current_attempt_id="att_2",
+            )
+        }
+
+    assert model.is_current_attempt(_FakeEvent()) is False
+
+
+def test_guard_is_executing_passes_when_both_executing() -> None:
+    """is_executing passes when run_state and attempt_state are executing."""
+    model = _ExecutionStateMachineModel(run_state="executing")
+
+    class _FakeEvent:
+        kwargs = {"context": ExecutionTransitionContext(attempt_state="executing")}
+
+    assert model.is_executing(_FakeEvent()) is True
+
+
+def test_guard_is_executing_fails_when_not_executing() -> None:
+    """is_executing fails when attempt_state is not executing."""
+    model = _ExecutionStateMachineModel(run_state="executing")
+
+    class _FakeEvent:
+        kwargs = {"context": ExecutionTransitionContext(attempt_state="dispatching")}
+
+    assert model.is_executing(_FakeEvent()) is False
+
+
+def test_guard_is_recordable_failure_passes() -> None:
+    """is_recordable_failure passes when both run and attempt are dispatching."""
+    model = _ExecutionStateMachineModel(run_state="dispatching")
+
+    class _FakeEvent:
+        kwargs = {"context": ExecutionTransitionContext(attempt_state="dispatching")}
+
+    assert model.is_recordable_failure(_FakeEvent()) is True
+
+
+def test_guard_is_recordable_failure_fails_from_queued() -> None:
+    """is_recordable_failure fails when run is queued."""
+    model = _ExecutionStateMachineModel(run_state="queued")
+
+    class _FakeEvent:
+        kwargs = {"context": ExecutionTransitionContext(attempt_state="queued")}
+
+    assert model.is_recordable_failure(_FakeEvent()) is False
+
+
+def test_guard_is_valid_service_chosen_operator_state_passes() -> None:
+    """is_valid_service_chosen_operator_state passes for valid choice."""
+    model = _ExecutionStateMachineModel()
+    ctx = ExecutionTransitionContext(service_chosen_operator_state="waiting_external")
+
+    class _FakeEvent:
+        name = "start_execution"
+        kwargs = {"context": ctx}
+
+    assert model.is_valid_service_chosen_operator_state(_FakeEvent()) is True
+
+
+def test_guard_is_valid_service_chosen_operator_state_fails_invalid() -> None:
+    """is_valid_service_chosen_operator_state fails for invalid choice."""
+    model = _ExecutionStateMachineModel()
+    ctx = ExecutionTransitionContext(service_chosen_operator_state="quarantined")
+
+    class _FakeEvent:
+        name = "start_execution"
+        kwargs = {"context": ctx}
+
+    assert model.is_valid_service_chosen_operator_state(_FakeEvent()) is False
+
+
+def test_guard_is_valid_service_chosen_operator_state_skips_when_none() -> None:
+    """is_valid_service_chosen_operator_state passes when no choice made."""
+    model = _ExecutionStateMachineModel()
+    ctx = ExecutionTransitionContext(service_chosen_operator_state=None)
+
+    class _FakeEvent:
+        name = "start_execution"
+        kwargs = {"context": ctx}
+
+    assert model.is_valid_service_chosen_operator_state(_FakeEvent()) is True
+
+
+def test_guard_has_open_approval_gate_passes() -> None:
+    """has_open_approval_gate passes when gate is open."""
+    model = _ExecutionStateMachineModel()
+
+    class _FakeEvent:
+        kwargs = {"context": ExecutionTransitionContext(approval_gate_status="open")}
+
+    assert model.has_open_approval_gate(_FakeEvent()) is True
+
+
+def test_guard_has_open_approval_gate_fails_when_closed() -> None:
+    """has_open_approval_gate fails when gate is not open."""
+    model = _ExecutionStateMachineModel()
+
+    class _FakeEvent:
+        kwargs = {"context": ExecutionTransitionContext(approval_gate_status="closed")}
+
+    assert model.has_open_approval_gate(_FakeEvent()) is False
+
+
+def test_guard_claimable_wakeup_due_passes_when_no_schedule() -> None:
+    """is_claimable_wakeup_due passes when scheduled_at is None."""
+    model = _ExecutionStateMachineModel()
+
+    class _FakeEvent:
+        kwargs = {"context": ExecutionTransitionContext(scheduled_at=None, now=None)}
+
+    assert model.is_claimable_wakeup_due(_FakeEvent()) is True
+
+
+def test_guard_claimable_wakeup_due_passes_when_due() -> None:
+    """is_claimable_wakeup_due passes when scheduled_at <= now."""
+    now = datetime(2026, 5, 3, 12, 0, 0)
+    past = datetime(2026, 5, 3, 11, 0, 0)
+    model = _ExecutionStateMachineModel()
+
+    class _FakeEvent:
+        kwargs = {"context": ExecutionTransitionContext(scheduled_at=past, now=now)}
+
+    assert model.is_claimable_wakeup_due(_FakeEvent()) is True
+
+
+def test_guard_claimable_wakeup_due_fails_when_not_due() -> None:
+    """is_claimable_wakeup_due fails when scheduled_at > now."""
+    now = datetime(2026, 5, 3, 12, 0, 0)
+    future = datetime(2026, 5, 3, 13, 0, 0)
+    model = _ExecutionStateMachineModel()
+
+    class _FakeEvent:
+        kwargs = {"context": ExecutionTransitionContext(scheduled_at=future, now=now)}
+
+    assert model.is_claimable_wakeup_due(_FakeEvent()) is False
+
+
+# ---------------------------------------------------------------------------
+# Creation validation — SPEC §7.3
+# ---------------------------------------------------------------------------
+
+
+def test_creation_admit_create_validates_initial_state() -> None:
+    """admit_create validates that new run starts with queued/admitted."""
+    validator = ExecutionStateMachineValidator(enabled=True)
+    before = ExecutionStateSnapshot()
+    after = ExecutionStateSnapshot(
+        run_state="queued",
+        operator_state="admitted",
+        attempt_state="queued",
+        attempt_operator_state="admitted",
+        lease_status="not_leased",
+    )
+    result = validator.validate_creation(
+        operation="admit_create",
+        before_snapshot=before,
+        after_snapshot=after,
+    )
+    assert result.valid, f"admit_create validation failed: {result.error_message}"
+    assert result.validated is True
+    assert result.decision is not None
+    assert result.decision.target_run_state == "queued"
+
+
+def test_creation_admit_create_rejects_wrong_run_state() -> None:
+    """admit_create rejects a created run with wrong initial state."""
+    validator = ExecutionStateMachineValidator(enabled=True)
+    before = ExecutionStateSnapshot()
+    after = ExecutionStateSnapshot(
+        run_state="executing",  # wrong initial state
+        operator_state="admitted",
+    )
+    result = validator.validate_creation(
+        operation="admit_create",
+        before_snapshot=before,
+        after_snapshot=after,
+    )
+    assert not result.valid
+    assert result.mismatch_category == MISMATCH_CATEGORY_CREATION_INITIAL_STATE_MISMATCH
+
+
+def test_creation_restart_from_scratch_validates_new_run() -> None:
+    """restart_run_from_scratch validates new run initial state and source invariants."""
+    validator = ExecutionStateMachineValidator(enabled=True)
+    # before_snapshot: source run's state after operation;
+    # extra carries reference values from before the operation.
+    before = ExecutionStateSnapshot(
+        run_state="executing",
+        operator_state="executing",
+        current_attempt_id="att_old",
+        extra={
+            "source_run_state": "executing",
+            "source_operator_state": "executing",
+            "source_current_attempt_id": "att_old",
+        },
+    )
+    after = ExecutionStateSnapshot(
+        run_state="queued",
+        operator_state="admitted",
+        attempt_state="queued",
+        attempt_operator_state="admitted",
+        lease_status="not_leased",
+    )
+    result = validator.validate_creation(
+        operation="restart_run_from_scratch",
+        before_snapshot=before,
+        after_snapshot=after,
+    )
+    assert result.valid, f"restart validation failed: {result.error_message}"
+    assert result.validated is True
+
+
+def test_creation_restart_from_scratch_detects_source_run_mutation() -> None:
+    """restart_run_from_scratch detects source run state mutation."""
+    validator = ExecutionStateMachineValidator(enabled=True)
+    before = ExecutionStateSnapshot(
+        run_state="dispatching",  # mutated — was executing before
+        operator_state="leased",
+        current_attempt_id="att_old",
+        extra={
+            "source_run_state": "executing",  # expected unchanged reference
+            "source_operator_state": "executing",  # expected unchanged reference
+            "source_current_attempt_id": "att_old",
+        },
+    )
+    after = ExecutionStateSnapshot(
+        run_state="queued",
+        operator_state="admitted",
+    )
+    result = validator.validate_creation(
+        operation="restart_run_from_scratch",
+        before_snapshot=before,
+        after_snapshot=after,
+    )
+    assert not result.valid
+    assert result.mismatch_category == MISMATCH_CATEGORY_CREATION_INITIAL_STATE_MISMATCH
+    assert result.error_message is not None
+    assert "run_state mutated" in result.error_message
+
+
+# ---------------------------------------------------------------------------
+# Non-state operation validation — SPEC §7.4
+# ---------------------------------------------------------------------------
+
+
+def test_non_state_operation_passes_when_no_state_change() -> None:
+    """Non-state operation passes when no state dimensions changed."""
+    validator = ExecutionStateMachineValidator(enabled=True)
+    before = ExecutionStateSnapshot(
+        run_state="executing",
+        operator_state="executing",
+        attempt_state="executing",
+        attempt_operator_state="executing",
+        current_attempt_id="att_1",
+        current_approval_link_id=None,
+    )
+    after = ExecutionStateSnapshot(
+        run_state="executing",
+        operator_state="executing",
+        attempt_state="executing",
+        attempt_operator_state="executing",
+        current_attempt_id="att_1",
+        current_approval_link_id=None,
+    )
+    result = validator.validate_non_state_operation(
+        before_snapshot=before,
+        after_snapshot=after,
+    )
+    assert result.valid
+    assert result.validated is True
+
+
+def test_non_state_operation_detects_run_state_change() -> None:
+    """Non-state operation detects a run state change."""
+    validator = ExecutionStateMachineValidator(enabled=True)
+    before = ExecutionStateSnapshot(
+        run_state="dispatching",
+        operator_state="leased",
+    )
+    after = ExecutionStateSnapshot(
+        run_state="executing",  # changed!
+        operator_state="leased",
+    )
+    result = validator.validate_non_state_operation(
+        before_snapshot=before,
+        after_snapshot=after,
+    )
+    assert not result.valid
+    assert result.mismatch_category == MISMATCH_CATEGORY_NON_STATE_OPERATION_MUTATED_STATE
+
+
+def test_non_state_operation_detects_attempt_state_change() -> None:
+    """Non-state operation detects an attempt state change."""
+    validator = ExecutionStateMachineValidator(enabled=True)
+    before = ExecutionStateSnapshot(
+        run_state="executing",
+        operator_state="executing",
+        attempt_state="executing",
+    )
+    after = ExecutionStateSnapshot(
+        run_state="executing",
+        operator_state="executing",
+        attempt_state="succeeded",  # changed!
+    )
+    result = validator.validate_non_state_operation(
+        before_snapshot=before,
+        after_snapshot=after,
+    )
+    assert not result.valid
+    assert result.mismatch_category == MISMATCH_CATEGORY_NON_STATE_OPERATION_MUTATED_STATE
+
+
+def test_non_state_operation_detects_approval_link_change() -> None:
+    """Non-state operation detects an approval link change."""
+    validator = ExecutionStateMachineValidator(enabled=True)
+    before = ExecutionStateSnapshot(
+        run_state="executing",
+        operator_state="executing",
+        current_approval_link_id=None,
+    )
+    after = ExecutionStateSnapshot(
+        run_state="executing",
+        operator_state="executing",
+        current_approval_link_id="link_new",  # changed!
+    )
+    result = validator.validate_non_state_operation(
+        before_snapshot=before,
+        after_snapshot=after,
+    )
+    assert not result.valid
+    assert result.mismatch_category == MISMATCH_CATEGORY_NON_STATE_OPERATION_MUTATED_STATE
 
 
 # ---------------------------------------------------------------------------
