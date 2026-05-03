@@ -175,29 +175,38 @@ Run states from which ``admit_retry`` is valid.
 
 RUN_STATE_TRANSITIONS: tuple[dict[str, Any], ...] = (
     # -- claim_attempt: queued or retry_backoff -> dispatching --
+    # TODO(Phase-1b): add conditions is_claimable_attempt, is_claimable_wakeup_due
     {"trigger": "claim_attempt", "source": "queued", "dest": "dispatching", "conditions": "is_claimable_run"},
     {"trigger": "claim_attempt", "source": "retry_backoff", "dest": "dispatching", "conditions": "is_claimable_run"},
     # -- start_execution: dispatching -> executing --
     {"trigger": "start_execution", "source": "dispatching", "dest": "executing", "conditions": ["is_not_paused"]},
     # -- open_approval: executing -> waiting_on_approval --
+    # TODO(Phase-1b): add condition is_executing
     {"trigger": "open_approval", "source": "executing", "dest": "waiting_on_approval"},
     # -- resume_after_approval: waiting_on_approval -> queued --
+    # TODO(Phase-1b): add conditions has_open_approval_gate, is_waiting_on_approval
     {"trigger": "resume_after_approval", "source": "waiting_on_approval", "dest": "queued"},
     # -- reject_approval paths: waiting_on_approval -> termination --
+    # TODO(Phase-1b): add conditions has_open_approval_gate, is_waiting_on_approval
     {"trigger": "reject_approval_cancel", "source": "waiting_on_approval", "dest": "cancel_requested"},
     {"trigger": "reject_approval_compensate", "source": "waiting_on_approval", "dest": "compensating"},
     {"trigger": "reject_approval_fail", "source": "waiting_on_approval", "dest": "failed"},
     # -- complete_success: multiple sources -> succeeded --
+    # TODO(Phase-1b): add conditions is_in_flight_attempt, has_valid_lease_token, is_current_attempt
     {"trigger": "complete_success", "source": ["dispatching", "executing", "cancel_requested", "compensating"], "dest": "succeeded"},
     # -- record_retryable_failure_delayed: dispatching/executing -> retry_backoff --
+    # TODO(Phase-1b): add conditions is_recordable_failure, has_valid_lease_token, is_retryable_and_has_budget, is_current_attempt
     {"trigger": "record_retryable_failure_delayed", "source": ["dispatching", "executing"], "dest": "retry_backoff"},
     # -- record_retryable_failure_immediate: dispatching/executing -> queued --
+    # TODO(Phase-1b): add conditions is_recordable_failure, has_valid_lease_token, is_retryable_and_has_budget, is_current_attempt
     {"trigger": "record_retryable_failure_immediate", "source": ["dispatching", "executing"], "dest": "queued"},
     # -- record_terminal_failure: dispatching/executing -> dead_lettered --
+    # TODO(Phase-1b): add conditions is_recordable_failure, has_valid_lease_token, is_terminal_failure_destination, is_current_attempt
     {"trigger": "record_terminal_failure", "source": ["dispatching", "executing"], "dest": "dead_lettered"},
     # -- request_cancel: any state with guard condition --
     {"trigger": "request_cancel", "source": "*", "dest": "cancel_requested", "conditions": "is_cancellable"},
     # -- admit_retry: retryable terminal -> queued --
+    # TODO(Phase-1b): add condition is_retryable_run
     {"trigger": "admit_retry", "source": ["failed", "timed_out", "compensated", "dead_lettered"], "dest": "queued"},
     # -- interrupt: any operator state with guard --
     {"trigger": "interrupt", "source": "*", "dest": "cancel_requested", "conditions": "is_interruptible"},
@@ -1025,6 +1034,12 @@ class ExecutionStateMachineValidator:
         machines are constructed on the private adapter model. Machines
         are never built when disabled (SPEC §3.3).
 
+        .. note::
+           ``self._model`` is shared across all ``validate_*`` calls on
+           the same validator instance.  For Phase 1b, either construct a
+           new validator per request or add thread synchronisation (see
+           SPEC §9.6 and PLAN §7 risk register).
+
         :param enabled: Whether validation is active. Defaults to
             ``False`` for safe operation in Phase 1b.
         """
@@ -1223,14 +1238,19 @@ class ExecutionStateMachineValidator:
             target_lease = "leased"
 
         # Resolve target operator state.
-        # For run-state triggers, use RUN_OPERATOR_TARGETS_BY_TRIGGER
-        # (the first valid operator target). For operator-only triggers
-        # (pause/resume), the model's operator_state was already updated
-        # by the operator machine.
+        # For run-state triggers, prefer the service-chosen operator state
+        # when provided and valid; fall back to the first valid target.
+        # For operator-only triggers (pause/resume), the model's
+        # operator_state was already updated by the operator machine.
         op_targets = RUN_OPERATOR_TARGETS_BY_TRIGGER.get(trigger)
         target_op: str | None
         if op_targets is not None:
-            target_op = op_targets[1][0]
+            chosen = context.service_chosen_operator_state
+            valid_op_states = op_targets[1]
+            if chosen is not None and chosen in valid_op_states:
+                target_op = chosen
+            else:
+                target_op = valid_op_states[0]
         else:
             target_op = self._model.operator_state
 
@@ -1578,16 +1598,20 @@ def build_execution_state_diagram() -> str:
             elif trigger == "resume":
                 lines.append("    paused --> (resume target) : resume")
 
-    # -- Declared-unreached states annotation --
+    # -- Terminal/final states annotation --
+    # Declared-unreached states are a subset of terminal states; emit each
+    # state label once with a combined annotation comment.
     lines.append("")
-    lines.append("    %% Declared-but-unreached states (registered, no production path)")
-    for state in sorted(DECLARED_UNREACHED_RUN_STATES):
+    lines.append("    %% Terminal final run states")
+    terminal_only = sorted(TERMINAL_RUN_STATES - DECLARED_UNREACHED_RUN_STATES)
+    for state in terminal_only:
         lines.append(f"    state {state}")
 
-    # -- Terminal states annotation --
-    lines.append("")
-    lines.append("    %% Terminal run states")
-    for state in sorted(TERMINAL_RUN_STATES):
-        lines.append(f"    state {state}")
+    unreached = sorted(DECLARED_UNREACHED_RUN_STATES)
+    if unreached:
+        lines.append("")
+        lines.append("    %% Declared-but-unreached terminal states (registered, no production path)")
+        for state in unreached:
+            lines.append(f"    state {state}")
 
     return "\n".join(lines) + "\n"

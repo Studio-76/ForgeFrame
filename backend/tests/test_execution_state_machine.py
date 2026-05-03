@@ -952,10 +952,14 @@ def test_interrupt_from_non_terminal_operator_states() -> None:
     """interrupt must be valid from non-terminal operator states."""
     validator = ExecutionStateMachineValidator(enabled=True)
     valid_sources = [s for s in models.RUN_OPERATOR_STATES if s not in TERMINAL_OPERATOR_STATES]
+    failures: list[tuple[str, str | None, str | None]] = []
     for op_source in valid_sources:
         r = _run_transition(validator, "interrupt", "executing", op_source)
-        # interrupt goes to cancel_requested
-        assert r.decision is None or r.decision.target_run_state == "cancel_requested"
+        if not r.valid:
+            failures.append((op_source, r.mismatch_category, r.error_message))
+        elif r.decision is not None:
+            assert r.decision.target_run_state == "cancel_requested", f"interrupt from {op_source!r} should target cancel_requested, got {r.decision.target_run_state!r}"
+    assert not failures, f"interrupt failed from some operator states: {failures}"
 
 
 def test_interrupt_from_terminal_operator_is_blocked() -> None:
@@ -971,11 +975,12 @@ def test_quarantine_from_non_quarantined_is_valid() -> None:
     """quarantine must be valid from non-quarantined operator states."""
     validator = ExecutionStateMachineValidator(enabled=True)
     valid_sources = [s for s in models.RUN_OPERATOR_STATES if s != "quarantined"]
+    failures: list[tuple[str, str | None, str | None]] = []
     for source in valid_sources:
         r = _run_transition(validator, "quarantine", "executing", source)
         if not r.valid:
-            # Some states may not work due to other guards
-            assert r.mismatch_category is not None
+            failures.append((source, r.mismatch_category, r.error_message))
+    assert not failures, f"quarantine failed from some operator states: {failures}"
 
 
 def test_quarantine_from_quarantined_is_blocked() -> None:
