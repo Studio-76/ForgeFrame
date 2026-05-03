@@ -1082,7 +1082,7 @@ class ExecutionTransitionService:
     def _state_machine_validation_log_payload(
         cls,
         *,
-        trigger: ExecutionTrigger,
+        trigger: str,
         mismatch_category: str,
         before: ExecutionStateSnapshot,
         after: ExecutionStateSnapshot,
@@ -1091,8 +1091,8 @@ class ExecutionTransitionService:
     ) -> dict[str, Any]:
         """Build structured payload for advisory validation logs.
 
-        :param trigger: State-machine trigger being validated.
-        :type trigger: ExecutionTrigger
+        :param trigger: State-machine trigger or operation label.
+        :type trigger: str
         :param mismatch_category: Structured mismatch category.
         :type mismatch_category: str
         :param before: Pre-transition snapshot.
@@ -1132,7 +1132,7 @@ class ExecutionTransitionService:
     def _log_state_machine_validation_mismatch(
         self,
         *,
-        trigger: ExecutionTrigger,
+        trigger: str,
         mismatch_category: str,
         before: ExecutionStateSnapshot,
         after: ExecutionStateSnapshot,
@@ -1140,8 +1140,8 @@ class ExecutionTransitionService:
     ) -> None:
         """Log a non-fatal advisory state-machine mismatch.
 
-        :param trigger: Trigger being validated.
-        :type trigger: ExecutionTrigger
+        :param trigger: Trigger or operation label being validated.
+        :type trigger: str
         :param mismatch_category: Structured mismatch category.
         :type mismatch_category: str
         :param before: Pre-transition snapshot.
@@ -1170,15 +1170,15 @@ class ExecutionTransitionService:
     def _log_state_machine_validator_exception(
         self,
         *,
-        trigger: ExecutionTrigger,
+        trigger: str,
         before: ExecutionStateSnapshot,
         after: ExecutionStateSnapshot,
         exception: Exception,
     ) -> None:
         """Log and contain an advisory validator exception.
 
-        :param trigger: Trigger being validated.
-        :type trigger: ExecutionTrigger
+        :param trigger: Trigger or operation label being validated.
+        :type trigger: str
         :param before: Pre-transition snapshot.
         :type before: ExecutionStateSnapshot
         :param after: Post-transition snapshot.
@@ -1402,7 +1402,7 @@ class ExecutionTransitionService:
         :type after: ExecutionStateSnapshot
         :param trigger: Trigger label for logging (defaults to
             ``renew_attempt_lease``).
-        :type trigger: ExecutionTrigger
+        :type trigger: str
         """
         if not self._state_machine_validation_enabled:
             return
