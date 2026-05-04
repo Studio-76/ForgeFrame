@@ -174,6 +174,7 @@ export function SettingsPage() {
         visible={confirmDialog.visible}
         item={confirmDialog.item}
         action={confirmDialog.action}
+        draftValue={confirmDialog.draftValue}
         onConfirm={executeConfirmed}
         onCancel={cancelConfirm}
       />

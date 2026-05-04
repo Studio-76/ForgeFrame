@@ -247,7 +247,8 @@ export function useSettings(): UseSettingsReturn {
   const handleSave = useCallback(
     (item: MutableSettingEntry) => {
       if (item.confirmation_required) {
-        setConfirmDialog({ visible: true, item, action: "save" });
+        const draftValue = drafts[item.key] ?? null;
+        setConfirmDialog({ visible: true, item, action: "save", draftValue });
         return;
       }
       // No confirmation needed, save directly
@@ -284,7 +285,7 @@ export function useSettings(): UseSettingsReturn {
   const handleReset = useCallback(
     (item: MutableSettingEntry) => {
       if (item.confirmation_required) {
-        setConfirmDialog({ visible: true, item, action: "reset" });
+        setConfirmDialog({ visible: true, item, action: "reset", draftValue: null });
         return;
       }
       setResettingKey(item.key);
