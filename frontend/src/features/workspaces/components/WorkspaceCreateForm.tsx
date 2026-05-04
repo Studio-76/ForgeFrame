@@ -20,10 +20,10 @@ export type WorkspaceCreateFormProps = {
   createForm: CreateWorkspaceForm;
   /** Edit form state. */
   editForm: EditWorkspaceForm;
-  /** Called to update create form. */
-  onCreateFormChange: (form: CreateWorkspaceForm) => void;
-  /** Called to update edit form. */
-  onEditFormChange: (form: EditWorkspaceForm) => void;
+  /** Called with an updater function to mutate create form. */
+  onCreateFormChange: (updater: (current: CreateWorkspaceForm) => CreateWorkspaceForm) => void;
+  /** Called with an updater function to mutate edit form. */
+  onEditFormChange: (updater: (current: EditWorkspaceForm) => EditWorkspaceForm) => void;
 };
 
 /**
@@ -47,9 +47,9 @@ export function WorkspaceCreateForm({
     value: string,
   ) => {
     if (isCreate) {
-      onCreateFormChange({ ...createForm, [createField]: value });
+      onCreateFormChange((c) => ({ ...c, [createField]: value }));
     } else {
-      onEditFormChange({ ...editForm, [editField]: value });
+      onEditFormChange((c) => ({ ...c, [editField]: value }));
     }
   };
 
@@ -62,7 +62,7 @@ export function WorkspaceCreateForm({
           <input
             className="w-full rounded border border-border bg-surface-field px-3 py-2 text-body text-primary"
             value={createForm.workspaceId}
-            onChange={(event) => onCreateFormChange({ ...createForm, workspaceId: event.target.value })}
+            onChange={(event) => onCreateFormChange((c) => ({ ...c, workspaceId: event.target.value }))}
             placeholder="ws_customer_pricing"
           />
         </label>
@@ -192,7 +192,7 @@ export function WorkspaceCreateForm({
             className="w-full rounded border border-border bg-surface-field px-3 py-2 text-body text-primary"
             rows={3}
             value={editForm.eventNote}
-            onChange={(event) => onEditFormChange({ ...editForm, eventNote: event.target.value })}
+            onChange={(event) => onEditFormChange((c) => ({ ...c, eventNote: event.target.value }))}
           />
         </label>
       ) : null}

@@ -101,7 +101,7 @@ export function toStringValue(value: unknown, fallback = "-"): string {
   return fallback;
 }
 
-function toNumberValue(value: unknown, fallback = 0): number {
+export function toNumberValue(value: unknown, fallback = 0): number {
   if (typeof value === "number" && Number.isFinite(value)) {
     return value;
   }

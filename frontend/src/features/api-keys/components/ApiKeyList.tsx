@@ -143,14 +143,14 @@ export function ApiKeyList({
   ], [accountsById, instanceLabels]);
 
   return (
-    <DataTable
+    <DataTable<RuntimeKey>
       title="Runtime key inventory"
-      data={keys as unknown as Record<string, unknown>[]}
-      columns={columns as DataTableColumn<Record<string, unknown>>[]}
-      rowKey={(row) => (row as unknown as RuntimeKey).key_id}
+      data={keys}
+      columns={columns}
+      rowKey={(row) => row.key_id}
       selectedRowId={selectedKeyId}
       onSelectedRowChange={(id) => onSelectedKeyChange(id)}
-      onRowClick={(row) => onSelectedKeyChange((row as unknown as RuntimeKey).key_id)}
+      onRowClick={(row) => onSelectedKeyChange(row.key_id)}
       loading={loadState === "loading"}
       error={error ?? null}
       onRetry={onRetry}

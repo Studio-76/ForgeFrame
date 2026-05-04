@@ -15,8 +15,8 @@ export type AccountFormDrawerProps = {
   mode: DrawerMode;
   /** Current form state. */
   form: AccountFormState;
-  /** Called when the form state changes. */
-  onFormChange: (form: AccountFormState) => void;
+  /** Called with an updater function to mutate form state. */
+  onFormChange: (updater: (current: AccountFormState) => AccountFormState) => void;
   /** Called when the drawer is closed. */
   onClose: () => void;
   /** Called when the form is submitted (create mode). */
@@ -109,7 +109,7 @@ export function AccountFormDrawer({
               Account label
               <input
                 value={form.label}
-                onChange={(event) => onFormChange({ ...form, label: event.target.value })}
+                onChange={(event) => onFormChange((c) => ({ ...c, label: event.target.value }))}
                 placeholder="Customer Success Runtime"
               />
             </label>
@@ -124,12 +124,12 @@ export function AccountFormDrawer({
           <h4>Provider bindings</h4>
           <label>
             Provider bindings
-            <textarea
-              rows={6}
-              value={form.providerBindingsText}
-              onChange={(event) => onFormChange({ ...form, providerBindingsText: event.target.value })}
-              placeholder="openai_codex&#10;local_ollama"
-            />
+              <textarea
+                rows={6}
+                value={form.providerBindingsText}
+                onChange={(event) => onFormChange((c) => ({ ...c, providerBindingsText: event.target.value }))}
+                placeholder="openai_codex&#10;local_ollama"
+              />
           </label>
           <p className="fg-muted">
             Enter one provider binding per line. Empty bindings stay allowed, but the account will surface as higher
@@ -141,12 +141,12 @@ export function AccountFormDrawer({
           <h4>Operator notes</h4>
           <label>
             Notes
-            <textarea
-              rows={5}
-              value={form.notes}
-              onChange={(event) => onFormChange({ ...form, notes: event.target.value })}
-              placeholder="Why this identity exists, who owns it, and when it should be reviewed."
-            />
+              <textarea
+                rows={5}
+                value={form.notes}
+                onChange={(event) => onFormChange((c) => ({ ...c, notes: event.target.value }))}
+                placeholder="Why this identity exists, who owns it, and when it should be reviewed."
+              />
           </label>
         </section>
       </form>

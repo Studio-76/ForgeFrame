@@ -8,6 +8,7 @@ import { DetailPanel } from "../../components/ui/DetailPanel";
 import { EntityTable } from "../../components/ui/EntityTable";
 import { BlockedState, EmptyState, ErrorState, LoadingState, PermissionState } from "../../components/ui/StateBlocks";
 import { SummaryStrip } from "../../components/ui/SummaryStrip";
+import { toNumberValue } from "./helpers";
 
 type LoadState = "idle" | "loading" | "success" | "error";
 type UsageWindow = "1h" | "24h" | "7d" | "all";
@@ -88,26 +89,13 @@ type UsageContentProps = {
   formatTimestamp: (value: unknown, fallback?: string) => string;
 };
 
-function toNumber(value: unknown): number {
-  if (typeof value === "number" && Number.isFinite(value)) {
-    return value;
-  }
-  if (typeof value === "string") {
-    const parsed = Number(value);
-    if (Number.isFinite(parsed)) {
-      return parsed;
-    }
-  }
-  return 0;
-}
-
 function rate(errors: number, requests: number): number {
   return errors / Math.max(1, requests + errors);
 }
 
 function buildErrorLookup(items: Array<Record<string, string | number>>, keyField: string): Map<string, number> {
   return new Map(
-    items.map((item) => [String(item[keyField] ?? ""), toNumber(item.errors)]),
+    items.map((item) => [String(item[keyField] ?? ""), toNumberValue(item.errors)]),
   );
 }
 
@@ -117,10 +105,10 @@ function buildProviderRows(summary: UsageSummaryResponse): ProviderRow[] {
     const provider = String(item.provider ?? "");
     return {
       provider,
-      requests: toNumber(item.requests),
-      tokens: toNumber(item.tokens),
+      requests: toNumberValue(item.requests),
+      tokens: toNumberValue(item.tokens),
       errors: errorLookup.get(provider) ?? 0,
-      actualCost: toNumber(item.actual_cost),
+      actualCost: toNumberValue(item.actual_cost),
     };
   });
 }
@@ -131,10 +119,10 @@ function buildClientRows(summary: UsageSummaryResponse): ClientRow[] {
     const clientId = String(item.client_id ?? "");
     return {
       clientId,
-      requests: toNumber(item.requests),
-      tokens: toNumber(item.tokens),
+      requests: toNumberValue(item.requests),
+      tokens: toNumberValue(item.tokens),
       errors: errorLookup.get(clientId) ?? 0,
-      actualCost: toNumber(item.actual_cost),
+      actualCost: toNumberValue(item.actual_cost),
     };
   });
 }
@@ -145,8 +133,8 @@ function buildModelRows(summary: UsageSummaryResponse): ModelRow[] {
     const model = String(item.model ?? "");
     return {
       model,
-      requests: toNumber(item.requests),
-      tokens: toNumber(item.tokens),
+      requests: toNumberValue(item.requests),
+      tokens: toNumberValue(item.tokens),
       errors: errorLookup.get(model) ?? 0,
     };
   });
@@ -155,8 +143,8 @@ function buildModelRows(summary: UsageSummaryResponse): ModelRow[] {
 function buildAuthRows(summary: UsageSummaryResponse): AuthRow[] {
   return summary.aggregations.by_auth.map((item) => ({
     authKey: String(item.auth_key ?? ""),
-    requests: toNumber(item.requests),
-    tokens: toNumber(item.tokens),
+    requests: toNumberValue(item.requests),
+    tokens: toNumberValue(item.tokens),
   }));
 }
 
@@ -208,11 +196,11 @@ export function UsageContent({
   const authRows = summary ? buildAuthRows(summary) : [];
   const topProvider = providerRows[0]?.provider ?? "No provider traffic";
   const topClient = clientRows[0]?.clientId ?? "No client traffic";
-  const runtimeRequests = toNumber(summary?.traffic_split.runtime.requests);
-  const totalTokens = toNumber(summary?.traffic_split.runtime.tokens) + toNumber(summary?.traffic_split.health_check.tokens);
-  const recordedErrors = toNumber(summary?.metrics.recorded_error_count);
-  const streamRequests = toNumber(summary?.stream_mode_counts?.stream);
-  const runtimeRequestCount = toNumber(summary?.stream_mode_counts?.runtime_request_count);
+  const runtimeRequests = toNumberValue(summary?.traffic_split.runtime.requests);
+  const totalTokens = toNumberValue(summary?.traffic_split.runtime.tokens) + toNumberValue(summary?.traffic_split.health_check.tokens);
+  const recordedErrors = toNumberValue(summary?.metrics.recorded_error_count);
+  const streamRequests = toNumberValue(summary?.stream_mode_counts?.stream);
+  const runtimeRequestCount = toNumberValue(summary?.stream_mode_counts?.runtime_request_count);
   const filtersActive = Boolean(providerFilter || clientFilter || modelFilter);
   const providerModels = asRecordArray(providerDrilldown?.models);
   const providerClients = asRecordArray(providerDrilldown?.clients);

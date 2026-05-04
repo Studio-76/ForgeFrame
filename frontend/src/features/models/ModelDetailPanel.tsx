@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import { Link } from "react-router-dom";
 
 import type { AdminModelRegisterRecord } from "../../api/domain";
+import { DetailPanel } from "../../components/ui/DetailPanel";
 import { StatusBadge, type StatusTone } from "../../components/ui/StatusBadge";
 import {
   buildNextStep,
@@ -95,27 +96,23 @@ export function ModelDetailPanel({
 }: ModelDetailPanelProps) {
   if (state === "loading") {
     return (
-      <aside className="ff-detail-panel is-sticky">
-        <div className="ff-detail-panel-body" style={{ padding: "var(--fg-space-4)" }}>
-          <div className="ff-state-block" data-state="loading">
-            <div className="ff-skeleton-row" />
-            <strong>Loading model details</strong>
-          </div>
+      <DetailPanel title="Loading model details" sticky>
+        <div className="ff-state-block" data-state="loading">
+          <div className="ff-skeleton-row" />
+          <strong>Loading model details</strong>
         </div>
-      </aside>
+      </DetailPanel>
     );
   }
 
   if (!model) {
     return (
-      <aside className="ff-detail-panel is-sticky">
-        <div className="ff-detail-panel-body" style={{ padding: "var(--fg-space-4)" }}>
-          <div className="ff-state-block" data-state="empty">
-            <strong>No model selected</strong>
-            <p>Click a model row to inspect details and remediation options.</p>
-          </div>
+      <DetailPanel title="No model selected" sticky>
+        <div className="ff-state-block" data-state="empty">
+          <strong>No model selected</strong>
+          <p>Click a model row to inspect details and remediation options.</p>
         </div>
-      </aside>
+      </DetailPanel>
     );
   }
 
@@ -178,21 +175,14 @@ export function ModelDetailPanel({
   ];
 
   return (
-    <aside className="ff-detail-panel is-sticky">
-      {/* Header: model name + state */}
-      <div className="ff-detail-panel-header">
-        <div className="ff-detail-panel-copy">
-          <div className="ff-detail-panel-title-row">
-            <h3>{model.display_name}</h3>
-            <StatusBadge tone={toneForUsability(usability)} status={usability}>
-              {USABILITY_LABELS[usability]}
-            </StatusBadge>
-          </div>
-          <p>{model.provider_label}</p>
-        </div>
-      </div>
-
-      <div className="ff-detail-panel-body">
+    <DetailPanel
+      title={model.display_name}
+      description={model.provider_label}
+      status={USABILITY_LABELS[usability]}
+      statusKey={usability}
+      statusTone={toneForUsability(usability)}
+      sticky
+    >
         {/* Next-step recommendation — leads with actionable guidance */}
         {nextAction !== "none" || usability !== "ready" ? (
           <>
@@ -660,7 +650,6 @@ export function ModelDetailPanel({
             ) : null}
           </div>
         </details>
-      </div>
-    </aside>
+    </DetailPanel>
   );
 }

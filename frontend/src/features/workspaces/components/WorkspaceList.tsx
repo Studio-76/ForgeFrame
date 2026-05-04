@@ -153,14 +153,14 @@ export function WorkspaceList({
   ], [instanceId, navigate]);
 
   return (
-    <DataTable
+    <DataTable<WorkspaceSummary>
       title="Workspace inventory"
-      data={workspaces as unknown as Record<string, unknown>[]}
-      columns={columns as DataTableColumn<Record<string, unknown>>[]}
-      rowKey={(row) => (row as unknown as WorkspaceSummary).workspace_id}
+      data={workspaces}
+      columns={columns}
+      rowKey={(row) => row.workspace_id}
       selectedRowId={selectedWorkspaceId || null}
       onSelectedRowChange={(id) => onSelectWorkspace(id ?? "")}
-      onRowClick={(row) => onSelectWorkspace((row as unknown as WorkspaceSummary).workspace_id)}
+      onRowClick={(row) => onSelectWorkspace(row.workspace_id)}
       loading={listState === "loading"}
       error={error ?? null}
       onRetry={onRetry}

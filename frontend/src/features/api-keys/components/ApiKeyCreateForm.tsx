@@ -14,8 +14,8 @@ import { REQUEST_PATH_OPTIONS, type RuntimeKeyIssueFormState } from "../types";
 export type ApiKeyCreateFormProps = {
   /** Current form state. */
   form: RuntimeKeyIssueFormState;
-  /** Called to update the form state. */
-  onFormChange: (form: RuntimeKeyIssueFormState) => void;
+  /** Called with an updater function to mutate form state. */
+  onFormChange: (updater: (current: RuntimeKeyIssueFormState) => RuntimeKeyIssueFormState) => void;
   /** Available accounts for the account selector. */
   accounts: GatewayAccount[];
   /** Validation errors, if any. */
@@ -55,7 +55,7 @@ export function ApiKeyCreateForm({
             <input
               className="w-full rounded border border-border bg-surface-field px-3 py-2 text-body text-primary"
               value={form.label}
-              onChange={(event) => onFormChange({ ...form, label: event.target.value })}
+              onChange={(event) => onFormChange((c) => ({ ...c, label: event.target.value }))}
               placeholder="Primary runtime key"
             />
           </label>
@@ -64,7 +64,7 @@ export function ApiKeyCreateForm({
             <select
               className="w-full rounded border border-border bg-surface-field px-3 py-2 text-body text-primary"
               value={form.accountId}
-              onChange={(event) => onFormChange({ ...form, accountId: event.target.value })}
+              onChange={(event) => onFormChange((c) => ({ ...c, accountId: event.target.value }))}
             >
               <option value="">No account</option>
               {accounts.map((account) => (
@@ -80,7 +80,7 @@ export function ApiKeyCreateForm({
               className="w-full rounded border border-border bg-surface-field px-3 py-2 text-body text-primary font-mono"
               rows={5}
               value={form.scopes}
-              onChange={(event) => onFormChange({ ...form, scopes: event.target.value })}
+              onChange={(event) => onFormChange((c) => ({ ...c, scopes: event.target.value }))}
               placeholder={"models:read\nchat:write\nresponses:write"}
             />
           </label>
@@ -96,7 +96,7 @@ export function ApiKeyCreateForm({
             className="w-full rounded border border-border bg-surface-field px-3 py-2 text-body text-primary font-mono"
             rows={6}
             value={form.allowed_request_paths}
-            onChange={(event) => onFormChange({ ...form, allowed_request_paths: event.target.value })}
+            onChange={(event) => onFormChange((c) => ({ ...c, allowed_request_paths: event.target.value }))}
             placeholder={"smart_routing\nlocal_only"}
           />
         </label>
@@ -106,10 +106,10 @@ export function ApiKeyCreateForm({
             <select
               className="w-full rounded border border-border bg-surface-field px-3 py-2 text-body text-primary"
               value={form.default_request_path}
-              onChange={(event) => onFormChange({
-                ...form,
+              onChange={(event) => onFormChange((c) => ({
+                ...c,
                 default_request_path: event.target.value as RuntimeKeyRequestPathPolicy["default_request_path"],
-              })}
+              }))}
             >
               {REQUEST_PATH_OPTIONS.map((path) => (
                 <option key={`issue-default-${path}`} value={path}>{path}</option>
@@ -121,7 +121,7 @@ export function ApiKeyCreateForm({
             <input
               className="w-full rounded border border-border bg-surface-field px-3 py-2 text-body text-primary"
               value={form.pinned_target_key}
-              onChange={(event) => onFormChange({ ...form, pinned_target_key: event.target.value })}
+              onChange={(event) => onFormChange((c) => ({ ...c, pinned_target_key: event.target.value }))}
               placeholder="target_primary"
             />
           </label>
@@ -130,10 +130,10 @@ export function ApiKeyCreateForm({
             <select
               className="w-full rounded border border-border bg-surface-field px-3 py-2 text-body text-primary"
               value={form.local_only_policy}
-              onChange={(event) => onFormChange({
-                ...form,
+              onChange={(event) => onFormChange((c) => ({
+                ...c,
                 local_only_policy: event.target.value as RuntimeKeyRequestPathPolicy["local_only_policy"],
-              })}
+              }))}
             >
               <option value="require_local_target">require_local_target</option>
               <option value="prefer_local">prefer_local</option>
@@ -146,7 +146,7 @@ export function ApiKeyCreateForm({
             className="w-full rounded border border-border bg-surface-field px-3 py-2 text-body text-primary font-mono"
             rows={4}
             value={form.review_required_conditions}
-            onChange={(event) => onFormChange({ ...form, review_required_conditions: event.target.value })}
+            onChange={(event) => onFormChange((c) => ({ ...c, review_required_conditions: event.target.value }))}
             placeholder={"budget_exceeded\nmanual_approval"}
           />
         </label>
