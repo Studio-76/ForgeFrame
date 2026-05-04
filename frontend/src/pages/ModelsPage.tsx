@@ -1,16 +1,21 @@
 import { useMemo } from "react";
+import { Link } from "react-router-dom";
 
 import { CONTROL_PLANE_ROUTES } from "../app/navigation";
-import { withQueryParams } from "../app/tenantScope";
+import { withQueryParams, withInstanceScope } from "../app/tenantScope";
 import { useInstanceCatalog } from "../app/useInstanceCatalog";
-import { InstanceScopeCard } from "../components/InstanceScopeCard";
-import { PageIntro } from "../components/PageIntro";
+import { RegistryManagementPage } from "../components/page-templates";
+import type { Action } from "../components/ui/models/action";
+import { AdvancedDiagnostics } from "../components/ui/AdvancedDiagnostics";
+import { DiagnosticSection } from "../components/ui/AdvancedDiagnostics";
+import { RawJson } from "../components/ui/AdvancedDiagnostics";
 import {
   ModelDetailPanel,
   ModelFilters,
   ModelList,
   ModelStatusHero,
   useModels,
+  deriveUsabilityState,
 } from "../features/models";
 
 /**
@@ -46,121 +51,111 @@ export function ModelsPage() {
     handleRefresh,
   } = useModels();
 
-  const { instances, loadState, error: instancesError, selectedInstance } = useInstanceCatalog(instanceId);
+  const { loadState: instancesLoadState, error: instancesError, selectedInstance } = useInstanceCatalog(instanceId);
 
   const providerRoute = withQueryParams(CONTROL_PLANE_ROUTES.providers, { instanceId });
   const providerTargetsRoute = withQueryParams(CONTROL_PLANE_ROUTES.providerTargets, { instanceId });
   const routingRoute = withQueryParams(CONTROL_PLANE_ROUTES.routing, { instanceId });
 
-  // Show compact scope card when only one instance
-  const hasMultipleInstances = instances.length > 1;
-
-  const routeLinks = useMemo(() => [
+  // ── Navigation actions (replacing routeLinks) ────────────────
+  const actions = useMemo<Action[]>(() => [
     {
       label: "Providers",
-      to: CONTROL_PLANE_ROUTES.providers,
+      href: withQueryParams(CONTROL_PLANE_ROUTES.providers, { instanceId }),
       description: "Provider configurations",
+      kind: "navigation",
+      intent: "navigate",
     },
     {
       label: "Provider Targets",
-      to: CONTROL_PLANE_ROUTES.providerTargets,
+      href: withQueryParams(CONTROL_PLANE_ROUTES.providerTargets, { instanceId }),
       description: "Target enablement and priority",
+      kind: "navigation",
+      intent: "navigate",
     },
     {
       label: "Routing",
-      to: CONTROL_PLANE_ROUTES.routing,
+      href: withQueryParams(CONTROL_PLANE_ROUTES.routing, { instanceId }),
       description: "Routing policies and posture",
+      kind: "navigation",
+      intent: "navigate",
     },
-  ], []);
+  ], [instanceId]);
+
+  // ── Summary items from model data ───────────────────────────
+  const summaryItems = useMemo(() => {
+    const total = summary.total_models ?? models.length;
+    if (total === 0) return [];
+
+    let ready = 0;
+    let needsAttention = 0;
+    let inactive = 0;
+
+    for (const model of models) {
+      const usability = deriveUsabilityState(model);
+      switch (usability) {
+        case "ready":
+          ready++;
+          break;
+        case "needs_verification":
+        case "no_routable_target":
+        case "degraded":
+          needsAttention++;
+          break;
+        default:
+          inactive++;
+          break;
+      }
+    }
+
+    return [
+      { key: "total", label: "Total", value: total, tone: "neutral" as const },
+      ...(ready > 0
+        ? [{ key: "ready", label: "Ready", value: ready, tone: "success" as const }]
+        : []),
+      ...(needsAttention > 0
+        ? [{ key: "attention", label: "Needs attention", value: needsAttention, tone: "warning" as const }]
+        : []),
+      ...(inactive > 0
+        ? [{ key: "inactive", label: "Inactive", value: inactive, tone: "neutral" as const }]
+        : []),
+    ];
+  }, [models, summary]);
+
+  // ── Scope config ───────────────────────────────────────────
+  const scope = {
+    label: selectedInstance?.display_name ?? "Default path",
+    ...(instanceId
+      ? {
+          onChange: () => {
+            onInstanceChange(null);
+          },
+        }
+      : {}),
+  };
 
   return (
-    <section className="fg-page">
-      <PageIntro
-        eyebrow="Setup"
-        title="Models"
-        description="Model inventory showing what is routable, what is blocked, and what needs operator attention."
-        badges={
-          selectedInstance
-            ? [{ label: `Instance: ${selectedInstance.display_name}`, tone: "success" as const }]
-            : undefined
-        }
-        links={routeLinks}
-        note="A model without routing-capable targets or verified provider checks is kept visible in the register but not presented as healthy routing inventory."
-      />
-
-      {/* Compact instance scope when single instance, full card otherwise */}
-      {hasMultipleInstances ? (
-        <InstanceScopeCard
-          instanceId={instanceId}
-          selectedInstance={selectedInstance}
-          instances={instances}
-          loadState={loadState}
-          error={instancesError}
-          surfaceLabel="model register"
-          onInstanceChange={onInstanceChange}
+    <RegistryManagementPage
+      eyebrow="Setup"
+      title="Models"
+      description="Model inventory showing what is routable, what is blocked, and what needs operator attention."
+      scope={scope}
+      summaryItems={summaryItems}
+      actions={actions}
+      filterContent={
+        <ModelFilters
+          models={models}
+          filterKey={filterKey}
+          searchValue={searchValue}
+          providerFilter={providerFilter}
+          providerOptions={providerOptions}
+          onFilterKeyChange={setFilterKey}
+          onSearchChange={setSearchValue}
+          onProviderFilterChange={setProviderFilter}
         />
-      ) : (
-        <div
-          className="fg-card ff-instance-scope-compact"
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: "var(--fg-space-2)",
-            padding: "var(--fg-space-2) var(--fg-space-4)",
-          }}
-        >
-          <span
-            style={{
-              fontSize: "var(--fg-type-size-meta)",
-              color: "var(--fg-color-text-secondary)",
-              fontWeight: 600,
-              textTransform: "uppercase",
-              letterSpacing: "0.04em",
-            }}
-          >
-            Instance
-          </span>
-          <span
-            style={{
-              fontSize: "var(--fg-type-size-meta)",
-              color: "var(--fg-color-text-primary)",
-            }}
-          >
-            {selectedInstance?.display_name ?? "Default path"}
-          </span>
-        </div>
-      )}
-
-      <ModelStatusHero models={models} summary={summary} />
-
-      <ModelFilters
-        models={models}
-        filterKey={filterKey}
-        searchValue={searchValue}
-        providerFilter={providerFilter}
-        providerOptions={providerOptions}
-        onFilterKeyChange={setFilterKey}
-        onSearchChange={setSearchValue}
-        onProviderFilterChange={setProviderFilter}
-      />
-
-      <div
-        className="ff-operator-layout"
-        style={{ marginTop: "var(--fg-space-3)" }}
-      >
-        <div className="ff-operator-main">
-          <ModelList
-            models={filteredModels}
-            totalCount={models.length}
-            state={state}
-            error={error}
-            selectedModelKey={selectedModelKey}
-            onSelectModel={selectModel}
-            onRetry={handleRefresh}
-          />
-        </div>
-
-        <div className="ff-operator-sidebar">
+      }
+      selectedItemContent={
+        selectedModel ? (
           <ModelDetailPanel
             model={selectedModel}
             state={state}
@@ -172,8 +167,67 @@ export function ModelsPage() {
             providerTargetsRoute={providerTargetsRoute}
             routingRoute={routingRoute}
           />
+        ) : null
+      }
+      hasSelection={selectedModelKey != null}
+      emptyDetailHint="Select a model from the list to inspect its configuration."
+      diagnostics={
+        <AdvancedDiagnostics title="Model diagnostics">
+          <DiagnosticSection label="Page State">
+            <RawJson
+              data={{
+                state,
+                error: error || undefined,
+                instancesError: instancesError || undefined,
+                instancesLoadState,
+                instanceId,
+                filteredModelCount: filteredModels.length,
+                syncState,
+                syncMessage: syncMessage || undefined,
+              }}
+              label="State snapshot"
+            />
+          </DiagnosticSection>
+          <DiagnosticSection label="Related Pages">
+            <div className="fg-nav-links">
+              <Link
+                className="fg-nav-link"
+                to={withInstanceScope(CONTROL_PLANE_ROUTES.providers, instanceId)}
+              >
+                Providers
+              </Link>
+              <Link
+                className="fg-nav-link"
+                to={withInstanceScope(CONTROL_PLANE_ROUTES.providerTargets, instanceId)}
+              >
+                Provider Targets
+              </Link>
+              <Link
+                className="fg-nav-link"
+                to={withInstanceScope(CONTROL_PLANE_ROUTES.routing, instanceId)}
+              >
+                Routing
+              </Link>
+            </div>
+          </DiagnosticSection>
+        </AdvancedDiagnostics>
+      }
+      diagnosticsTitle="Models diagnostics"
+    >
+      <ModelStatusHero models={models} summary={summary} />
+      <div className="ff-operator-layout">
+        <div className="ff-operator-main">
+          <ModelList
+            models={filteredModels}
+            totalCount={models.length}
+            state={state}
+            error={error}
+            selectedModelKey={selectedModelKey}
+            onSelectModel={selectModel}
+            onRetry={handleRefresh}
+          />
         </div>
       </div>
-    </section>
+    </RegistryManagementPage>
   );
 }

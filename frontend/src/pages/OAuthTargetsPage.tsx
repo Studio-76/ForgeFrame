@@ -4,14 +4,22 @@ import { CONTROL_PLANE_ROUTES } from "../app/navigation";
 import { useAppSession } from "../app/session";
 import { getInstanceIdFromSearchParams, withInstanceScope } from "../app/tenantScope";
 import { useInstanceCatalog } from "../app/useInstanceCatalog";
-import { InstanceScopeCard } from "../components/InstanceScopeCard";
-import { PageIntro } from "../components/PageIntro";
-import { ActionBar } from "../components/ui/ActionBar";
-import { BlockedState } from "../components/ui/StateBlocks";
+import { RegistryManagementPage } from "../components/page-templates";
+import type { AttentionPayload } from "../components/ui/models/attention";
+import { Button } from "../components/ui/Button";
+import type { SummaryStripItem } from "../components/ui/SummaryStrip";
 import { OAuthTargetsSection, OperationResultSection } from "../features/providers/ProvidersSections";
 import { getProvidersAccess } from "../features/providers/providersShared";
 import { useProvidersControlPlane } from "../features/providers/useProvidersControlPlane";
 
+/**
+ * OAuth Targets page — account-backed provider connections, credential status,
+ * and probe actions in a single compact view.
+ *
+ * Conforms to the Registry Management pattern. Wraps the OAuth target sections
+ * in RegistryManagementPage with access-gated empty state, scope indicator,
+ * summary metrics, attention items, and collapsed diagnostics.
+ */
 export function OAuthTargetsPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const { session, sessionReady } = useAppSession();
@@ -26,9 +34,6 @@ export function OAuthTargetsPage() {
     includeBootstrapReadiness: true,
     includeClientView: false,
   });
-  const note = !access.canRead
-    ? access.summaryDetail
-    : "Each provider row shows credential status, available actions, and probe history. Select a row to inspect setup details, env vars, and evidence.";
 
   const onInstanceChange = (nextInstanceId: string | null) => {
     const nextSearchParams = new URLSearchParams(searchParams);
@@ -40,52 +45,116 @@ export function OAuthTargetsPage() {
     setSearchParams(nextSearchParams);
   };
 
-  return (
-    <section className="fg-page">
-      <PageIntro
+  // ── Scope config ───────────────────────────────────────
+  const scopeConfig = selectedInstance
+    ? {
+        label: selectedInstance.display_name,
+        onChange: instanceId
+          ? () => onInstanceChange(null)
+          : undefined,
+      }
+    : undefined;
+
+  // ── Attention items ────────────────────────────────────
+  const attentionItems: AttentionPayload[] = [];
+
+  if (!access.canRead) {
+    attentionItems.push({
+      key: "access-blocked",
+      level: "primary_blocker",
+      title: access.summaryTitle,
+      description: access.summaryDetail,
+    });
+  } else {
+    attentionItems.push({
+      key: "access-note",
+      level: "informational",
+      title:
+        "Each provider row shows credential status, available actions, and probe history. Select a row to inspect setup details, env vars, and evidence.",
+    });
+  }
+
+  // ── Summary items ──────────────────────────────────────
+  const oauthTargetCount = data.oauthTargets?.length ?? 0;
+  const configuredCount = data.oauthTargets?.filter((t) => t.configured).length ?? 0;
+  const readyCount = data.oauthTargets?.filter((t) => t.readiness === "ready").length ?? 0;
+
+  const summaryItems: SummaryStripItem[] = [
+    {
+      key: "targets",
+      label: "OAuth Targets",
+      value: oauthTargetCount,
+      tone: oauthTargetCount > 0 ? "success" : "neutral",
+      status: oauthTargetCount > 0 ? "ready" : "info",
+    },
+    {
+      key: "configured",
+      label: "Configured",
+      value: configuredCount,
+      tone: configuredCount > 0 ? "success" : "neutral",
+      status: configuredCount > 0 ? "ready" : "info",
+    },
+    {
+      key: "ready",
+      label: "Runtime-ready",
+      value: readyCount,
+      tone: readyCount === configuredCount && configuredCount > 0 ? "success" : "warning",
+      status: readyCount === configuredCount && configuredCount > 0 ? "ready" : "partial",
+    },
+  ];
+
+  // ── Access gate ───────────────────────────────────────
+  if (!access.canRead) {
+    return (
+      <RegistryManagementPage
         eyebrow="OAuth"
         title="OAuth Targets"
         description="Account-backed provider connections, credential status, and probe actions in a single compact view."
-        question="Which OAuth target needs credential setup, probing, or review?"
-        badges={[
-          { label: access.badgeLabel, tone: access.badgeTone },
-          ...(selectedInstance ? [{ label: `Instance scope: ${selectedInstance.display_name}`, tone: "success" as const }] : []),
-        ]}
-        note={note}
+        isEmpty
+        emptyTitle={access.summaryTitle}
+        emptyDescription={access.summaryDetail}
+        emptyAction={
+          selectedInstance && instancesError
+            ? undefined
+            : (
+              <Button variant="navigation" onPress={() => onInstanceChange(null)}>
+                Change instance scope
+              </Button>
+            )
+        }
       />
-      <InstanceScopeCard
-        instanceId={instanceId}
-        selectedInstance={selectedInstance}
-        instances={instances}
-        loadState={loadState}
-        error={instancesError}
-        surfaceLabel="OAuth/account operator truth"
-        onInstanceChange={onInstanceChange}
-      />
-      <ActionBar
-        title="Related surfaces"
-        description="Navigate to adjacent provider and runtime views."
-      >
-        <div className="fg-actions">
-          <Link className="fg-nav-link" to={withInstanceScope(CONTROL_PLANE_ROUTES.dashboard, instanceId)}>Setup progress</Link>
-          <Link className="fg-nav-link" to={withInstanceScope(CONTROL_PLANE_ROUTES.providers, instanceId)}>Providers</Link>
-          <Link className="fg-nav-link" to={withInstanceScope(CONTROL_PLANE_ROUTES.harness, instanceId)}>Harness</Link>
-          <Link className="fg-nav-link" to={withInstanceScope(CONTROL_PLANE_ROUTES.usage, instanceId)}>Usage &amp; Costs</Link>
-        </div>
-      </ActionBar>
-      {!access.canRead ? (
-        <BlockedState
-          title={access.summaryTitle}
-          description={access.summaryDetail}
-          badgeLabel={access.badgeLabel}
-          status="blocked"
-        />
-      ) : (
+    );
+  }
+
+  return (
+    <RegistryManagementPage
+      eyebrow="OAuth"
+      title="OAuth Targets"
+      description="Account-backed provider connections, credential status, and probe actions in a single compact view."
+      scope={scopeConfig}
+      attentionItems={attentionItems}
+      summaryItems={summaryItems}
+      diagnostics={
         <div className="fg-stack">
-          <OperationResultSection data={data} actions={actions} />
-          <OAuthTargetsSection data={data} actions={actions} />
+          <p className="text-muted">Access: {access.badgeLabel}</p>
+          <div className="fg-nav-links">
+            <Link className="fg-nav-link" to={withInstanceScope(CONTROL_PLANE_ROUTES.dashboard, instanceId)}>Setup progress</Link>
+            <Link className="fg-nav-link" to={withInstanceScope(CONTROL_PLANE_ROUTES.providers, instanceId)}>Providers</Link>
+            <Link className="fg-nav-link" to={withInstanceScope(CONTROL_PLANE_ROUTES.harness, instanceId)}>Harness</Link>
+            <Link className="fg-nav-link" to={withInstanceScope(CONTROL_PLANE_ROUTES.usage, instanceId)}>Usage &amp; Costs</Link>
+          </div>
         </div>
-      )}
-    </section>
+      }
+      diagnosticsTitle="OAuth diagnostics"
+    >
+      {/* Preserve the original PageIntro question text in the page body */}
+      <p className="text-meta text-muted mb-3">
+        Which OAuth target needs credential setup, probing, or review?
+      </p>
+
+      {data.error ? <p className="fg-danger">{data.error}</p> : null}
+      <OperationResultSection data={data} actions={actions} />
+      <OAuthTargetsSection data={data} actions={actions} />
+    </RegistryManagementPage>
   );
 }

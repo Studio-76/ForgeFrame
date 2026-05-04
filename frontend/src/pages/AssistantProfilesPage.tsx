@@ -9,6 +9,8 @@
  * Create and edit forms are NEVER visible at the same time. The evaluation
  * tool appears as a modal contextual to the selected profile.
  *
+ * Rendered inside RegistryManagementPage template.
+ *
  * @packageDocumentation
  */
 
@@ -36,8 +38,13 @@ import type {
 import { fetchInstances } from "../api/domain/instances";
 import { CONTROL_PLANE_ROUTES } from "../app/navigation";
 import { useAppSession } from "../app/session";
-import { PageIntro } from "../components/PageIntro";
 import { getWorkInteractionAccess, parseJsonObject, normalizeOptional, type LoadState } from "./workInteractionPageSupport";
+
+import { RegistryManagementPage } from "../components/page-templates";
+import type { AttentionPayload } from "../components/ui/models/attention";
+import { AdvancedDiagnostics } from "../components/ui/AdvancedDiagnostics";
+import type { Action } from "../components/ui/models/action";
+import { Button } from "../components/ui/Button";
 
 import {
   ProfileSummary,
@@ -283,7 +290,6 @@ export function AssistantProfilesPage() {
   };
 
   const handleSelectProfile = (profileId: string) => {
-    // Switching profiles while editing would be confusing — force browse
     if (viewMode !== "browse") {
       setViewMode("browse");
     }
@@ -367,140 +373,213 @@ export function AssistantProfilesPage() {
   };
 
   // -----------------------------------------------------------------------
+  // Derived template props
+  // -----------------------------------------------------------------------
+
+  // ── Scope ──
+  const currentInstance = instances.find((i) => i.instance_id === instanceId);
+  const scope = instanceId
+    ? {
+        label: currentInstance
+          ? `${currentInstance.display_name} (${currentInstance.instance_id})`
+          : instanceId,
+      }
+    : undefined;
+
+  // ── Attention items ──
+  const attentionItems: AttentionPayload[] = [];
+  if (error) {
+    attentionItems.push({
+      key: "error",
+      level: "primary_blocker" as const,
+      title: error,
+    });
+  }
+  if (message) {
+    attentionItems.push({
+      key: "message",
+      level: "informational" as const,
+      title: message,
+    });
+  }
+
+  // ── Actions ──
+  const riskCount = profiles.filter((profile) => profile.risk_warning).length;
+
+  const primaryAction: Action | undefined = canMutate && instanceId && viewMode === "browse"
+    ? {
+        label: "Create assistant profile",
+        kind: "primary" as const,
+        intent: "configure" as const,
+        onClick: handleStartCreate,
+      }
+    : undefined;
+
+  const evalAction: Action | undefined = canMutate && detail && viewMode === "browse"
+    ? {
+        label: "Evaluate action",
+        kind: "secondary" as const,
+        intent: "run" as const,
+        onClick: handleOpenEvaluation,
+      }
+    : undefined;
+
+  const editAction: Action | undefined = canMutate && detail && viewMode === "browse"
+    ? {
+        label: "Edit profile",
+        kind: "secondary" as const,
+        intent: "configure" as const,
+        onClick: handleStartEdit,
+      }
+    : undefined;
+
+  const actions: Action[] = [
+    ...(primaryAction ? [primaryAction] : []),
+    ...(editAction ? [editAction] : []),
+    ...(evalAction ? [evalAction] : []),
+  ];
+
+  // ── Filter content (scope + status) ──
+  const filterContent = viewMode === "browse" ? (
+    <div className="fg-inline-form">
+      <label>
+        Instance
+        <select
+          aria-label="Assistant-profile instance"
+          value={instanceId}
+          onChange={(event) => updateRoute((next) => {
+            next.set("instanceId", event.target.value);
+            next.delete("assistantProfileId");
+            setViewMode("browse");
+          })}
+        >
+          {instances.map((instance) => (
+            <option key={instance.instance_id} value={instance.instance_id}>
+              {instance.display_name} ({instance.instance_id})
+            </option>
+          ))}
+        </select>
+      </label>
+      <label>
+        Status
+        <select
+          aria-label="Assistant-profile status filter"
+          value={statusFilter}
+          onChange={(event) => updateRoute((next) => {
+            if (event.target.value === "all") {
+              next.delete("status");
+            } else {
+              next.set("status", event.target.value);
+            }
+            next.delete("assistantProfileId");
+            setViewMode("browse");
+          })}
+        >
+          {STATUS_OPTIONS.map((option) => <option key={option} value={option}>{option}</option>)}
+        </select>
+      </label>
+    </div>
+  ) : null;
+
+  // -----------------------------------------------------------------------
   // Early returns (loading, no access)
   // -----------------------------------------------------------------------
 
   if (!sessionReady) {
     return (
-      <section className="fg-page">
-        <PageIntro
-          eyebrow="Work Interaction"
-          title="Assistant Profiles"
-          description="ForgeFrame is restoring assistant-profile governance before exposing personal or team assistant rules."
-          question="Which governed assistant profile should open once the active session is restored?"
-          links={[
-            { label: "Contacts", to: CONTROL_PLANE_ROUTES.contacts, description: "Inspect contact truth once session scope resolves." },
-            { label: "Dashboard", to: CONTROL_PLANE_ROUTES.dashboard, description: "Return to the dashboard while scope resolves." },
-          ]}
-          badges={[{ label: "Checking access", tone: "neutral" }]}
-          note="Assistant Profiles stay instance-scoped and must surface quiet hours, delivery rules, direct-action controls, and memory scope on shared product truth."
-        />
-      </section>
+      <RegistryManagementPage
+        eyebrow="Work Interaction"
+        title="Assistant Profiles"
+        description="ForgeFrame is restoring assistant-profile governance before exposing personal or team assistant rules."
+      />
     );
   }
 
   if (!canRead) {
     return (
-      <section className="fg-page">
-        <PageIntro
-          eyebrow="Work Interaction"
-          title="Assistant Profiles"
-          description="This route is reserved for operators and admins who can inspect real assistant-governance truth."
-          question="Which adjacent surface should stay open while assistant-profile access is outside the current permission envelope?"
-          links={[
-            { label: "Contacts", to: CONTROL_PLANE_ROUTES.contacts, description: "Inspect contact posture without opening assistant-profile records." },
-            { label: "Approvals", to: CONTROL_PLANE_ROUTES.approvals, description: "Review approvals while assistant-profile truth remains closed." },
-          ]}
-          badges={[{ label: "Operator or admin required", tone: "warning" }]}
-          note="ForgeFrame does not render a cosmetic assistant-profile shell when the session cannot inspect real personal-assistant governance."
-        />
-      </section>
+      <RegistryManagementPage
+        eyebrow="Work Interaction"
+        title="Assistant Profiles"
+        description="This route is reserved for operators and admins who can inspect real assistant-governance truth."
+        isEmpty
+        emptyTitle="Assistant-profile access unavailable"
+        emptyDescription="This session does not hold the required permissions to inspect assistant-profile records."
+      />
     );
   }
 
-  const riskCount = profiles.filter((profile) => profile.risk_warning).length;
+  const isBrowse = viewMode === "browse";
+  const isCreate = viewMode === "create";
+  const isEdit = viewMode === "edit";
 
   return (
-    <section className="fg-page">
-      <PageIntro
+    <>
+      <RegistryManagementPage
         eyebrow="Work Interaction"
         title="Assistant Profiles"
-        description="Governed assistant behavior for personal and team profiles with scope, quiet hours, delivery rules, action permissions, memory scope, and policy evaluation."
-        question="If this profile executed a real outward action right now, would the page show exactly why it is allowed, gated, or blocked?"
-        links={[
-          { label: "Contacts", to: CONTROL_PLANE_ROUTES.contacts, description: "Inspect contacts referenced by profile delivery and delegation rules." },
-          { label: "Channels", to: CONTROL_PLANE_ROUTES.channels, description: "Inspect delivery channels and direct-action boundaries." },
-          { label: "Knowledge Sources", to: CONTROL_PLANE_ROUTES.knowledgeSources, description: "Inspect mail and calendar sources linked to the profile." },
-        ]}
-        badges={[
-          { label: `${profiles.length} profile${profiles.length === 1 ? "" : "s"}`, tone: profiles.length > 0 ? "success" : "warning" },
-          { label: `${riskCount} with external rights`, tone: riskCount > 0 ? "warning" : "neutral" },
-          { label: canMutate ? "Admin mutation enabled" : "Read only", tone: canMutate ? "success" : "neutral" },
-        ]}
-        note="Assistant Profiles are governance objects, not private JSON bags. Every primary action on this page must reflect real persisted policy truth."
-      />
-
-      {error ? <p className="fg-danger">{error}</p> : null}
-      {message ? <p className="fg-muted">{message}</p> : null}
-
-      {/* ----------------------------------------------------------------- */}
-      {/* Health summary bar */}
-      {/* ----------------------------------------------------------------- */}
-      <ProfileSummary
-        profiles={profiles}
-        canMutate={canMutate}
-        onCreateProfile={handleStartCreate}
-      />
-
-      {/* ----------------------------------------------------------------- */}
-      {/* Scope and filter controls */}
-      {/* ----------------------------------------------------------------- */}
-      <article className="fg-card">
-        <div className="fg-panel-heading">
-          <div>
-            <h3>Scope and filter</h3>
-            <p className="fg-muted">Choose the instance boundary, then inspect assistant profiles by lifecycle state.</p>
-          </div>
-          <span className="fg-pill" data-tone={instancesState === "success" ? "success" : instancesState === "error" ? "danger" : "neutral"}>{instancesState}</span>
-        </div>
-        <div className="fg-inline-form">
-          <label>
-            Instance
-            <select
-              aria-label="Assistant-profile instance"
-              value={instanceId}
-              onChange={(event) => updateRoute((next) => {
-                next.set("instanceId", event.target.value);
-                next.delete("assistantProfileId");
-                setViewMode("browse");
-              })}
-            >
-              {instances.map((instance) => (
-                <option key={instance.instance_id} value={instance.instance_id}>
-                  {instance.display_name} ({instance.instance_id})
-                </option>
-              ))}
-            </select>
-          </label>
-          <label>
-            Status
-            <select
-              aria-label="Assistant-profile status filter"
-              value={statusFilter}
-              onChange={(event) => updateRoute((next) => {
-                if (event.target.value === "all") {
-                  next.delete("status");
-                } else {
-                  next.set("status", event.target.value);
-                }
-                next.delete("assistantProfileId");
-                setViewMode("browse");
-              })}
-            >
-              {STATUS_OPTIONS.map((option) => <option key={option} value={option}>{option}</option>)}
-            </select>
-          </label>
-        </div>
-      </article>
-
-      {/* ----------------------------------------------------------------- */}
-      {/* View mode: browse — inventory + detail */}
-      {/* ----------------------------------------------------------------- */}
-      {viewMode === "browse" && (
-        <>
-          {profiles.length === 0 ? (
-            <ProfileEmptyState canMutate={canMutate} onCreateProfile={handleStartCreate} />
-          ) : (
+        description={
+          isBrowse
+            ? "Governed assistant behavior for personal and team profiles with scope, quiet hours, delivery rules, action permissions, memory scope, and policy evaluation."
+            : isCreate
+              ? "Create a governed personal or team assistant profile."
+              : "Update the selected profile through structured controls."
+        }
+        scope={scope}
+        attentionItems={attentionItems}
+        actions={isBrowse ? actions : undefined}
+        search={isBrowse && profiles.length > 0
+          ? { value: "", onChange: () => {}, placeholder: "Filter profiles..." }
+          : undefined}
+        filterContent={filterContent}
+        isEmpty={isBrowse && profiles.length === 0}
+        emptyTitle="No assistant profiles found"
+        emptyDescription={
+          "Assistant profiles govern how your personal or team assistant communicates, schedules, delegates, and executes actions. Create your first profile to define quiet hours, delivery rules, action permissions, and approval policies."
+        }
+        emptyAction={
+          canMutate && instanceId ? (
+            <Button variant="primary" onPress={handleStartCreate}>
+              Create assistant profile
+            </Button>
+          ) : null
+        }
+        selectedItemContent={
+          isBrowse && detailState !== "idle" ? (
+            <ProfileDetailPanel
+              instanceId={instanceId}
+              detail={detail}
+              detailState={detailState}
+              canMutate={canMutate}
+              onEdit={handleStartEdit}
+              onEvaluate={handleOpenEvaluation}
+            />
+          ) : null
+        }
+        hasSelection={isBrowse && detailState !== "idle"}
+        emptyDetailHint="Select an assistant profile from the inventory to inspect its governance settings."
+        diagnostics={
+          <AdvancedDiagnostics title="Assistant-profile diagnostics">
+            <div className="flex flex-col gap-1 text-meta text-muted">
+              <span>List state: {listState}</span>
+              <span>Detail state: {detailState}</span>
+              <span>Instances state: {instancesState}</span>
+              <span>View mode: {viewMode}</span>
+              <span>Profiles: {profiles.length}</span>
+              <span>Risk warnings: {riskCount}</span>
+              <span>Evaluation open: {evaluationOpen ? "yes" : "no"}</span>
+            </div>
+          </AdvancedDiagnostics>
+        }
+        diagnosticsTitle="Assistant-profile diagnostics"
+      >
+        {/* ── Browse mode ── */}
+        {isBrowse && profiles.length > 0 ? (
+          <>
+            <ProfileSummary
+              profiles={profiles}
+              canMutate={canMutate}
+              onCreateProfile={handleStartCreate}
+            />
             <div className="fg-grid">
               <article className="fg-card">
                 <div className="fg-panel-heading">
@@ -518,70 +597,44 @@ export function AssistantProfilesPage() {
                   listState={listState}
                 />
               </article>
-
-              {selectedAssistantProfileId && detailState !== "idle" ? (
-                <article className="fg-card">
-                  <div className="fg-panel-heading">
-                    <div>
-                      <h3>Assistant-profile detail</h3>
-                      <p className="fg-muted">Rules, allowed and blocked actions, channels, contacts, delivery behavior, and memory scope converge here.</p>
-                    </div>
-                    {detail ? <span className="fg-pill">{detail.assistant_profile_id}</span> : null}
-                  </div>
-                  <ProfileDetailPanel
-                    instanceId={instanceId}
-                    detail={detail}
-                    detailState={detailState}
-                    canMutate={canMutate}
-                    onEdit={handleStartEdit}
-                    onEvaluate={handleOpenEvaluation}
-                  />
-                </article>
-              ) : null}
             </div>
-          )}
-        </>
-      )}
+          </>
+        ) : null}
 
-      {/* ----------------------------------------------------------------- */}
-      {/* View mode: create — sectioned editor */}
-      {/* ----------------------------------------------------------------- */}
-      {viewMode === "create" && (
-        <SectionedEditor
-          title="Create assistant profile"
-          description="Create a governed personal or team assistant profile with visible scope, quiet hours, delivery rules, action permissions, and memory posture."
-          showProfileId
-          form={createForm}
-          setForm={setCreateForm}
-          onSubmit={handleCreate}
-          busy={savingCreate}
-          disabled={!canMutate || !instanceId}
-          submitLabel="Create assistant profile"
-          onCancel={handleCancelCreate}
-        />
-      )}
+        {/* ── Create mode ── */}
+        {isCreate ? (
+          <SectionedEditor
+            title="Create assistant profile"
+            description="Create a governed personal or team assistant profile with visible scope, quiet hours, delivery rules, action permissions, and memory posture."
+            showProfileId
+            form={createForm}
+            setForm={setCreateForm}
+            onSubmit={handleCreate}
+            busy={savingCreate}
+            disabled={!canMutate || !instanceId}
+            submitLabel="Create assistant profile"
+            onCancel={handleCancelCreate}
+          />
+        ) : null}
 
-      {/* ----------------------------------------------------------------- */}
-      {/* View mode: edit — sectioned editor */}
-      {/* ----------------------------------------------------------------- */}
-      {viewMode === "edit" && (
-        <SectionedEditor
-          title="Edit assistant profile"
-          description="Update the selected profile through structured controls first; raw policy overrides stay available only in the advanced section."
-          showProfileId={false}
-          form={editForm}
-          setForm={setEditForm}
-          onSubmit={handleUpdate}
-          busy={savingUpdate}
-          disabled={!canMutate || !detail}
-          submitLabel="Save assistant profile"
-          onCancel={handleCancelEdit}
-        />
-      )}
+        {/* ── Edit mode ── */}
+        {isEdit ? (
+          <SectionedEditor
+            title="Edit assistant profile"
+            description="Update the selected profile through structured controls first; raw policy overrides stay available only in the advanced section."
+            showProfileId={false}
+            form={editForm}
+            setForm={setEditForm}
+            onSubmit={handleUpdate}
+            busy={savingUpdate}
+            disabled={!canMutate || !detail}
+            submitLabel="Save assistant profile"
+            onCancel={handleCancelEdit}
+          />
+        ) : null}
+      </RegistryManagementPage>
 
-      {/* ----------------------------------------------------------------- */}
-      {/* Evaluation modal */}
-      {/* ----------------------------------------------------------------- */}
+      {/* ── Evaluation modal ── */}
       <EvaluationModal
         open={evaluationOpen}
         profileName={detail?.display_name ?? ""}
@@ -593,6 +646,6 @@ export function AssistantProfilesPage() {
         evaluation={evaluation}
         onClose={handleCloseEvaluation}
       />
-    </section>
+    </>
   );
 }

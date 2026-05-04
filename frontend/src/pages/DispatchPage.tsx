@@ -1,13 +1,21 @@
+/**
+ * DispatchPage — worker lease monitoring, outbox pressure analysis,
+ * and lease reconciliation surface.
+ *
+ * Migrated to use the IncidentResponsePage template with summary KPIs,
+ * inline attention warnings, and collapsible diagnostics.
+ *
+ * @packageDocumentation
+ */
+
 import { startTransition, useEffect, useMemo, useState } from "react";
-import { Link, useSearchParams } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 
 import { AdminApiError } from "../api/domain";
 import {
   fetchExecutionDispatch,
   reconcileExecutionLeases,
-  type ExecutionDispatchAttemptView,
   type ExecutionDispatchSnapshot,
-  type ExecutionDispatchWorkerView,
   type ExecutionLeaseReconcileResult,
 } from "../api/domain/execution";
 import { fetchInstances } from "../api/domain/instances";
@@ -18,234 +26,27 @@ import {
 import { buildExecutionReviewPath, normalizeExecutionCompanyId, normalizeExecutionInstanceId } from "../app/executionReview";
 import { CONTROL_PLANE_ROUTES } from "../app/navigation";
 import { useAppSession } from "../app/session";
-import { PageIntro } from "../components/PageIntro";
+import { IncidentResponsePage, type IncidentResponsePageProps } from "../components/page-templates";
+import { Button, DiagnosticSection, RawJson } from "../components/ui";
 import {
   buildExecutionScopeOptions,
   describeExecutionScopeOption,
   getExecutionAccess,
-  getStateTone,
-  type ExecutionScopeOption,
-  type LoadState,
 } from "../features/execution/helpers";
+import type { ExecutionScopeOption, LoadState } from "../features/execution/helpers";
+import {
+  DispatchAttemptTable,
+  DispatchWorkerTable,
+  describeOutboxCause,
+  buildScopedRoute,
+  summarizeReconcileResults,
+} from "../features/dispatch";
 
-const UTC_DATE_TIME = new Intl.DateTimeFormat("en-US", {
-  dateStyle: "medium",
-  timeStyle: "short",
-  timeZone: "UTC",
-});
-
-type DispatchRiskTone = "success" | "warning" | "danger" | "neutral";
-type DispatchRisk = {
-  label: string;
-  tone: DispatchRiskTone;
-  detail: string;
-};
-
-function parseUtcTimestamp(value: string | null | undefined): number | null {
-  if (!value) {
-    return null;
-  }
-  const parsed = Date.parse(value);
-  return Number.isFinite(parsed) ? parsed : null;
-}
-
-function formatTimestamp(value: string | null | undefined, fallback = "Not recorded"): string {
-  const parsed = parseUtcTimestamp(value);
-  if (parsed === null) {
-    return fallback;
-  }
-  return UTC_DATE_TIME.format(new Date(parsed));
-}
-
-function formatAgeSeconds(value: number | null | undefined): string {
-  if (value === null || value === undefined) {
-    return "Not available";
-  }
-  const absolute = Math.abs(value);
-  if (absolute < 60) {
-    return `${absolute}s`;
-  }
-  if (absolute < 3600) {
-    return `${Math.floor(absolute / 60)}m`;
-  }
-  if (absolute < 86400) {
-    return `${Math.floor(absolute / 3600)}h`;
-  }
-  return `${Math.floor(absolute / 86400)}d`;
-}
-
-function formatLeaseWindow(
-  target: string | null | undefined,
-  options: { now: number; futureLabel: string; pastLabel: string },
-): string {
-  const parsed = parseUtcTimestamp(target);
-  if (parsed === null) {
-    return "Not recorded";
-  }
-  const deltaSeconds = Math.floor((parsed - options.now) / 1000);
-  if (deltaSeconds >= 0) {
-    return `${options.futureLabel} ${formatAgeSeconds(deltaSeconds)}`;
-  }
-  return `${options.pastLabel} ${formatAgeSeconds(deltaSeconds)} ago`;
-}
-
-function describeDispatchTarget(item: {
-  selected_target_key?: string | null;
-  issue_id?: string | null;
-  workspace_id?: string | null;
-}): string {
-  if (item.selected_target_key?.trim()) {
-    return item.selected_target_key.trim();
-  }
-  if (item.issue_id?.trim()) {
-    return `Issue ${item.issue_id.trim()}`;
-  }
-  if (item.workspace_id?.trim()) {
-    return `Workspace ${item.workspace_id.trim()}`;
-  }
-  return "Target not recorded";
-}
-
-function describeAttemptLeaseRisk(attempt: ExecutionDispatchAttemptView, now: number): DispatchRisk {
-  const leaseExpiresAt = parseUtcTimestamp(attempt.lease_expires_at);
-  const lastHeartbeatAt = parseUtcTimestamp(attempt.last_heartbeat_at);
-  if (leaseExpiresAt !== null && leaseExpiresAt <= now) {
-    return {
-      label: "Expired lease",
-      tone: "danger",
-      detail: "The attempt still reports a lease even though the lease deadline has already passed.",
-    };
-  }
-  if (leaseExpiresAt !== null && leaseExpiresAt - now <= 60_000) {
-    return {
-      label: "Expiring soon",
-      tone: "warning",
-      detail: "This lease is within one minute of expiry and should renew or finish immediately.",
-    };
-  }
-  if (lastHeartbeatAt !== null && now - lastHeartbeatAt >= 120_000) {
-    return {
-      label: "Renewal lag",
-      tone: "warning",
-      detail: "The worker has not renewed this lease for more than two minutes.",
-    };
-  }
-  if (attempt.lease_status !== "leased") {
-    return {
-      label: "Lease mismatch",
-      tone: "warning",
-      detail: "The attempt appears on the dispatch surface without a healthy active lease.",
-    };
-  }
-  return {
-    label: "Healthy lease",
-    tone: "success",
-    detail: "Lease expiry and recent heartbeats are consistent with an active worker.",
-  };
-}
-
-function describeWorkerLeaseRisk(worker: ExecutionDispatchWorkerView, now: number): DispatchRisk {
-  const heartbeatExpiresAt = parseUtcTimestamp(worker.heartbeat_expires_at);
-  const leaseExpiresAt = parseUtcTimestamp(worker.oldest_lease_expires_at);
-  const lastHeartbeatAt = parseUtcTimestamp(worker.last_heartbeat_at);
-  if (worker.worker_state === "stale" || (heartbeatExpiresAt !== null && heartbeatExpiresAt <= now)) {
-    return {
-      label: "Stale worker",
-      tone: "danger",
-      detail: "Worker heartbeats have expired while dispatch still expects this worker to exist.",
-    };
-  }
-  if (leaseExpiresAt !== null && leaseExpiresAt <= now) {
-    return {
-      label: "Expired lease",
-      tone: "danger",
-      detail: "At least one lease on this worker has already expired and now needs reconciliation.",
-    };
-  }
-  if (leaseExpiresAt !== null && leaseExpiresAt - now <= 60_000) {
-    return {
-      label: "Lease expiring soon",
-      tone: "warning",
-      detail: "The oldest active lease on this worker is close to expiry.",
-    };
-  }
-  if (lastHeartbeatAt !== null && now - lastHeartbeatAt >= 120_000) {
-    return {
-      label: "Renewal lag",
-      tone: "warning",
-      detail: "The worker is still registered, but heartbeats have slowed enough to deserve attention.",
-    };
-  }
-  if (worker.worker_state === "lease_only") {
-    return {
-      label: "Registry gap",
-      tone: "danger",
-      detail: "Dispatch sees an active lease but no matching persisted worker heartbeat.",
-    };
-  }
-  return {
-    label: "Healthy worker",
-    tone: "success",
-    detail: "Heartbeat and lease evidence remain aligned for this worker.",
-  };
-}
-
-function describeOutboxCause(state: string): { tone: DispatchRiskTone; detail: string; executionState?: string } {
-  switch (state) {
-    case "dead":
-      return {
-        tone: "danger",
-        detail: "Outbox events have dead-lettered after repeated publish failures and now require operator follow-up.",
-        executionState: "dead_lettered",
-      };
-    case "leased":
-      return {
-        tone: "warning",
-        detail: "A publisher has claimed these events, so pressure may come from a stuck notification or dispatch publisher.",
-        executionState: "dispatching",
-      };
-    case "pending":
-      return {
-        tone: "warning",
-        detail: "Events are queued but not yet published, which usually means worker capacity or downstream publish lag.",
-        executionState: "dispatching",
-      };
-    case "published":
-      return {
-        tone: "success",
-        detail: "These events cleared the outbox and are retained only as recent publish evidence.",
-      };
-    default:
-      return {
-        tone: "neutral",
-        detail: "This outbox state exists in storage, but it is not one of the standard publish lifecycle states.",
-      };
-  }
-}
-
-function buildScopedRoute(basePath: string, options: { instanceId?: string | null; companyId?: string | null }): string {
-  const url = new URL(basePath, "https://forgeframe.local");
-  if (options.instanceId?.trim()) {
-    url.searchParams.set("instanceId", options.instanceId.trim());
-  }
-  if (options.companyId?.trim()) {
-    url.searchParams.set("companyId", options.companyId.trim());
-  }
-  const search = url.searchParams.toString();
-  return `${url.pathname}${search ? `?${search}` : ""}${url.hash}`;
-}
-
-function summarizeReconcileResults(results: ExecutionLeaseReconcileResult[]): {
-  correctedLeases: number;
-  correctedAttempts: number;
-} {
-  return {
-    correctedLeases: results.length,
-    correctedAttempts: new Set(results.map((item) => item.attempt_id)).size,
-  };
-}
-
+/**
+ * Dispatch page — incident response surface for the worker lease layer.
+ */
 export function DispatchPage() {
+  const navigate = useNavigate();
   const { session, sessionReady } = useAppSession();
   const [searchParams, setSearchParams] = useSearchParams();
 
@@ -266,6 +67,11 @@ export function DispatchPage() {
   const [reconcileResults, setReconcileResults] = useState<ExecutionLeaseReconcileResult[]>([]);
   const [reconcileErrors, setReconcileErrors] = useState<string[]>([]);
   const now = Date.now();
+
+  /** Navigate to execution review for a specific run. */
+  const openExecutionReview = (runId: string) => {
+    navigate(buildExecutionReviewPath({ instanceId, companyId, runId }));
+  };
 
   useEffect(() => {
     setInstanceDraft(instanceId);
@@ -358,22 +164,44 @@ export function DispatchPage() {
   );
   const reconcileSummary = summarizeReconcileResults(reconcileResults);
 
-  return (
-    <section className="fg-page">
-      <PageIntro
-        eyebrow="Operations"
-        title="Dispatch"
-        description="Inspect the technical worker and lease layer below runs and queues: active leases, stalled attempts, outbox pressure, and lease reconciliation."
-        question="Is dispatch blocked by a stale worker, an expired lease, or outbox pressure that never reaches the next system?"
-        links={[
-          { label: "Queues", to: CONTROL_PLANE_ROUTES.queues, description: "Return to lane backlog and runnable queue posture." },
-          { label: "Execution Review", to: CONTROL_PLANE_ROUTES.execution, description: "Open a specific run once dispatch has identified the affected attempt." },
-          { label: "Notifications", to: CONTROL_PLANE_ROUTES.notifications, description: "Inspect delivery truth when outbox pressure spills into notification publishing." },
-        ]}
-        badges={[{ label: access.badgeLabel, tone: access.badgeTone }]}
-        note="Dispatch is a technical runtime surface. Queue triage and business-level run decisions stay on Queues and Execution Review."
-      />
+  // ── Template props ──────────────────────────────────────────────────
 
+  const summaryItems: IncidentResponsePageProps["summaryItems"] = snapshot
+    ? [
+        { key: "active-leases", label: "Active leases", value: snapshot.leased_attempts.length, tone: snapshot.leased_attempts.length > 0 ? "warning" : "success" },
+        { key: "stalled", label: "Stalled / expired", value: snapshot.stalled_attempts.length, tone: snapshot.stalled_attempts.length > 0 ? "danger" : "success" },
+        { key: "outbox", label: "Outbox pressure states", value: outboxStates.length, tone: outboxStates.length > 0 ? "warning" : "success" },
+        { key: "workers", label: "Workers observed", value: snapshot.workers.length },
+      ]
+    : [];
+
+  const diagnosticsContent = snapshot ? (
+    <>
+      <DiagnosticSection label="Worker registry payload">
+        <RawJson data={snapshot.workers} />
+      </DiagnosticSection>
+      <DiagnosticSection label="Outbox event counts">
+        <RawJson data={snapshot.event_counts} />
+      </DiagnosticSection>
+      <DiagnosticSection label="Lease reconciliation payload">
+        <RawJson data={{ results: reconcileResults, errors: reconcileErrors }} />
+      </DiagnosticSection>
+      <DiagnosticSection label="Full dispatch snapshot">
+        <RawJson data={snapshot} />
+      </DiagnosticSection>
+    </>
+  ) : undefined;
+
+  return (
+    <IncidentResponsePage
+      eyebrow="Operations"
+      title="Dispatch"
+      description="Inspect the technical worker and lease layer below runs and queues: active leases, stalled attempts, outbox pressure, and lease reconciliation."
+      summaryItems={summaryItems}
+      diagnostics={diagnosticsContent}
+      diagnosticsTitle="Dispatch diagnostics"
+    >
+      {/* ── Scope selection ── */}
       <article className="fg-card">
         <div className="fg-panel-heading">
           <div>
@@ -414,12 +242,13 @@ export function DispatchPage() {
             <input aria-label="Dispatch instance ID" value={instanceDraft} onChange={(event) => setInstanceDraft(event.target.value)} />
           </label>
           <div className="fg-actions fg-actions-end">
-            <button type="submit">Load dispatch</button>
-            <button type="button" onClick={() => updateSearchParams("")}>Clear scope</button>
+            <Button type="submit" variant="secondary">Load dispatch</Button>
+            <Button variant="navigation" onPress={() => updateSearchParams("")}>Clear scope</Button>
           </div>
         </form>
       </article>
 
+      {/* ── Loading state ── */}
       {dispatchState === "loading" ? (
         <article className="fg-card">
           <h3>Loading dispatch truth</h3>
@@ -427,6 +256,7 @@ export function DispatchPage() {
         </article>
       ) : null}
 
+      {/* ── Error state ── */}
       {dispatchState === "error" ? (
         <article className="fg-card">
           <h3>Dispatch load failed</h3>
@@ -434,264 +264,24 @@ export function DispatchPage() {
         </article>
       ) : null}
 
+      {/* ── Main content when snapshot available ── */}
       {snapshot ? (
         <>
-          <div className="fg-grid fg-grid-compact">
-            <article className="fg-kpi">
-              <span className="fg-muted">Active leases</span>
-              <strong className="fg-kpi-value">{snapshot.leased_attempts.length}</strong>
-            </article>
-            <article className="fg-kpi">
-              <span className="fg-muted">Stalled / expired</span>
-              <strong className="fg-kpi-value">{snapshot.stalled_attempts.length}</strong>
-            </article>
-            <article className="fg-kpi">
-              <span className="fg-muted">Outbox pressure states</span>
-              <strong className="fg-kpi-value">{outboxStates.length}</strong>
-            </article>
-            <article className="fg-kpi">
-              <span className="fg-muted">Workers observed</span>
-              <strong className="fg-kpi-value">{snapshot.workers.length}</strong>
-            </article>
-          </div>
+          <DispatchWorkerTable
+            snapshot={snapshot}
+            instanceId={instanceId}
+            companyId={companyId}
+            onNavigateExecutionReview={openExecutionReview}
+          />
 
-          <article className="fg-card">
-            <div className="fg-panel-heading">
-              <div>
-                <h3>Worker Leases</h3>
-                <p className="fg-muted">Every row represents a persisted active lease on an attempt, not a guessed queue position.</p>
-              </div>
-              <span className="fg-pill" data-tone={snapshot.stalled_attempts.length > 0 ? "danger" : "success"}>
-                {snapshot.stalled_attempts.length > 0 ? `${snapshot.stalled_attempts.length} stalled / expired` : "No stalled leases"}
-              </span>
-            </div>
-            {snapshot.stalled_attempts.length > 0 ? (
-              <p className="fg-danger">
-                Expired leases are still present on the dispatch fabric. Review the rows below and reconcile them before queue truth drifts.
-              </p>
-            ) : null}
-            {snapshot.leased_attempts.length === 0 ? (
-              <p className="fg-muted">No active worker leases are currently held for this instance scope.</p>
-            ) : (
-              <div className="fg-table-wrap">
-                <table className="fg-table" aria-label="Worker lease inventory">
-                  <thead>
-                    <tr>
-                      <th>Worker</th>
-                      <th>Instance</th>
-                      <th>Lane</th>
-                      <th>Target</th>
-                      <th>Lease expiry</th>
-                      <th>Last renewal</th>
-                      <th>Stale risk</th>
-                      <th>Action</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {snapshot.leased_attempts.map((attempt) => {
-                      const risk = describeAttemptLeaseRisk(attempt, now);
-                      return (
-                        <tr key={attempt.attempt_id}>
-                          <td>
-                            <strong>{attempt.worker_key ?? "Unassigned worker"}</strong>
-                            <div className="fg-muted">Attempt {attempt.attempt_id}</div>
-                          </td>
-                          <td>{instanceId}</td>
-                          <td>{attempt.execution_lane}</td>
-                          <td>
-                            <strong>{describeDispatchTarget(attempt)}</strong>
-                            <div className="fg-muted">Run {attempt.run_id}</div>
-                          </td>
-                          <td>
-                            <div>{formatTimestamp(attempt.lease_expires_at)}</div>
-                            <div className="fg-muted">{formatLeaseWindow(attempt.lease_expires_at, { now, futureLabel: "expires in", pastLabel: "expired" })}</div>
-                          </td>
-                          <td>
-                            <div>{formatTimestamp(attempt.last_heartbeat_at)}</div>
-                            <div className="fg-muted">{formatLeaseWindow(attempt.last_heartbeat_at, { now, futureLabel: "renews in", pastLabel: "renewed" })}</div>
-                          </td>
-                          <td>
-                            <span className="fg-pill" data-tone={risk.tone}>{risk.label}</span>
-                            <div className="fg-muted">{risk.detail}</div>
-                          </td>
-                          <td>
-                            <Link to={buildExecutionReviewPath({ instanceId, companyId, runId: attempt.run_id })}>Open execution review</Link>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            )}
+          <DispatchAttemptTable
+            snapshot={snapshot}
+            instanceId={instanceId}
+            companyId={companyId}
+            onNavigateExecutionReview={openExecutionReview}
+          />
 
-            <div className="fg-panel-heading fg-mt-md">
-              <div>
-                <h4>Worker registry evidence</h4>
-                <p className="fg-muted">Heartbeat truth from persisted worker rows is shown separately from the active lease rows above.</p>
-              </div>
-            </div>
-            {snapshot.workers.length === 0 ? (
-              <p className="fg-muted">No worker heartbeat rows are registered for the current scope.</p>
-            ) : (
-              <div className="fg-table-wrap">
-                <table className="fg-table" aria-label="Worker heartbeat registry">
-                  <thead>
-                    <tr>
-                      <th>Worker</th>
-                      <th>Lane</th>
-                      <th>State</th>
-                      <th>Current attempt</th>
-                      <th>Heartbeat expiry</th>
-                      <th>Oldest lease</th>
-                      <th>Stale risk</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {snapshot.workers.map((worker) => {
-                      const risk = describeWorkerLeaseRisk(worker, now);
-                      return (
-                        <tr key={worker.worker_key}>
-                          <td>
-                            <strong>{worker.worker_key}</strong>
-                            <div className="fg-muted">{worker.instance_id}</div>
-                          </td>
-                          <td>{worker.execution_lane}</td>
-                          <td>
-                            <span className="fg-pill" data-tone={getStateTone(worker.worker_state)}>{worker.worker_state}</span>
-                            <div className="fg-muted">{worker.active_attempts} active attempt(s)</div>
-                          </td>
-                          <td>{worker.current_attempt_id ?? "None recorded"}</td>
-                          <td>{formatTimestamp(worker.heartbeat_expires_at)}</td>
-                          <td>{formatTimestamp(worker.oldest_lease_expires_at)}</td>
-                          <td>
-                            <span className="fg-pill" data-tone={risk.tone}>{risk.label}</span>
-                            <div className="fg-muted">{risk.detail}</div>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </article>
-
-          <article className="fg-card">
-            <div className="fg-panel-heading">
-              <div>
-                <h3>Leased Attempts</h3>
-                <p className="fg-muted">This section explains which attempts are in flight, which ones are stalled, and why dispatch still considers them active.</p>
-              </div>
-            </div>
-            <div className="fg-grid fg-grid-compact">
-              <article className="fg-kpi">
-                <span className="fg-muted">Paused runs</span>
-                <strong className="fg-kpi-value">{snapshot.paused_runs}</strong>
-              </article>
-              <article className="fg-kpi">
-                <span className="fg-muted">Waiting on approval</span>
-                <strong className="fg-kpi-value">{snapshot.waiting_on_approval_runs}</strong>
-              </article>
-              <article className="fg-kpi">
-                <span className="fg-muted">Quarantined runs</span>
-                <strong className="fg-kpi-value">{snapshot.quarantined_runs}</strong>
-              </article>
-            </div>
-
-            <div className="fg-panel-heading fg-mt-md">
-              <div>
-                <h4>Stalled Attempts</h4>
-                <p className="fg-muted">Stalled means the lease has already expired but the attempt still appears leased.</p>
-              </div>
-            </div>
-            {snapshot.stalled_attempts.length === 0 ? (
-              <p className="fg-muted">No expired leases are currently waiting for reconciliation.</p>
-            ) : (
-              <div className="fg-table-wrap">
-                <table className="fg-table" aria-label="Stalled leased attempts">
-                  <thead>
-                    <tr>
-                      <th>Attempt</th>
-                      <th>Run</th>
-                      <th>State</th>
-                      <th>Status reason</th>
-                      <th>Next wake-up</th>
-                      <th>Review</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {snapshot.stalled_attempts.map((attempt) => (
-                      <tr key={attempt.attempt_id}>
-                        <td>
-                          <strong>{attempt.attempt_id}</strong>
-                          <div className="fg-muted">{attempt.worker_key ?? "No worker key"}</div>
-                        </td>
-                        <td>{attempt.run_id}</td>
-                        <td>
-                          <span className="fg-pill" data-tone="danger">Expired lease</span>
-                          <div className="fg-muted">{attempt.operator_state}</div>
-                        </td>
-                        <td>{attempt.status_reason ?? "No status reason recorded"}</td>
-                        <td>{formatTimestamp(attempt.next_wakeup_at, "No wake-up scheduled")}</td>
-                        <td>
-                          <Link to={buildExecutionReviewPath({ instanceId, companyId, runId: attempt.run_id })}>Open execution review</Link>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-
-            <div className="fg-panel-heading fg-mt-md">
-              <div>
-                <h4>All Leased Attempts</h4>
-                <p className="fg-muted">Use this table for the full attempt and worker picture without confusing dispatch with a queue page.</p>
-              </div>
-            </div>
-            {snapshot.leased_attempts.length === 0 ? (
-              <p className="fg-muted">No leased attempts are active for this scope.</p>
-            ) : (
-              <div className="fg-table-wrap">
-                <table className="fg-table" aria-label="All leased attempts">
-                  <thead>
-                    <tr>
-                      <th>Attempt</th>
-                      <th>Run kind</th>
-                      <th>Dispatch state</th>
-                      <th>Target</th>
-                      <th>Wake-up</th>
-                      <th>Lease status</th>
-                      <th>Review</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {snapshot.leased_attempts.map((attempt) => (
-                      <tr key={attempt.attempt_id}>
-                        <td>
-                          <strong>{attempt.attempt_id}</strong>
-                          <div className="fg-muted">Run {attempt.run_id}</div>
-                        </td>
-                        <td>{attempt.run_kind}</td>
-                        <td>
-                          <span className="fg-pill" data-tone={getStateTone(attempt.operator_state)}>{attempt.operator_state}</span>
-                          <div className="fg-muted">{attempt.status_reason ?? "No status reason recorded"}</div>
-                        </td>
-                        <td>{describeDispatchTarget(attempt)}</td>
-                        <td>{formatTimestamp(attempt.next_wakeup_at, "No wake-up scheduled")}</td>
-                        <td>{attempt.lease_status}</td>
-                        <td>
-                          <Link to={buildExecutionReviewPath({ instanceId, companyId, runId: attempt.run_id })}>Open execution review</Link>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </article>
-
+          {/* ── Outbox Pressure ── */}
           <article className="fg-card">
             <div className="fg-panel-heading">
               <div>
@@ -718,9 +308,13 @@ export function DispatchPage() {
                         {eventMix.length > 0 ? `Current event mix: ${eventMix.map(([eventType, value]) => `${eventType} ${value}`).join(" · ")}` : "No event mix is available."}
                       </p>
                       <p>
-                        <Link to={buildScopedRoute(CONTROL_PLANE_ROUTES.notifications, { instanceId, companyId })}>Open notifications</Link>
+                        <Button variant="navigation" onPress={() => navigate(buildScopedRoute(CONTROL_PLANE_ROUTES.notifications, { instanceId, companyId }))}>
+                          Open notifications
+                        </Button>
                         {" · "}
-                        <Link to={buildExecutionReviewPath({ instanceId, companyId, state: cause.executionState ?? null })}>Open execution review</Link>
+                        <Button variant="navigation" onPress={() => navigate(buildExecutionReviewPath({ instanceId, companyId, state: cause.executionState ?? null }))}>
+                          Open execution review
+                        </Button>
                       </p>
                     </article>
                   );
@@ -729,6 +323,7 @@ export function DispatchPage() {
             )}
           </article>
 
+          {/* ── Reconciliation ── */}
           <article className="fg-card">
             <div className="fg-panel-heading">
               <div>
@@ -761,10 +356,10 @@ export function DispatchPage() {
               </article>
             </div>
             <div className="fg-actions">
-              <button
-                type="button"
-                disabled={!canMutate || reconcileState === "submitting"}
-                onClick={() => {
+              <Button
+                variant="primary"
+                isDisabled={!canMutate || reconcileState === "submitting"}
+                onPress={() => {
                   setReconcileState("submitting");
                   setReconcileResults([]);
                   setReconcileErrors([]);
@@ -789,7 +384,7 @@ export function DispatchPage() {
                 }}
               >
                 {reconcileState === "submitting" ? "Reconciling leases" : "Reconcile expired leases"}
-              </button>
+              </Button>
             </div>
             {reconcileState === "success" ? (
               reconcileResults.length === 0 ? (
@@ -832,33 +427,8 @@ export function DispatchPage() {
               </div>
             ) : null}
           </article>
-
-          <article className="fg-card">
-            <div className="fg-panel-heading">
-              <div>
-                <h3>Advanced Diagnostics</h3>
-                <p className="fg-muted">Raw dispatch evidence stays available, but it is intentionally pushed below the operational surface.</p>
-              </div>
-            </div>
-            <details className="fg-outline-row">
-              <summary>Worker registry payload</summary>
-              <pre>{JSON.stringify(snapshot.workers, null, 2)}</pre>
-            </details>
-            <details className="fg-outline-row">
-              <summary>Outbox event counts</summary>
-              <pre>{JSON.stringify(snapshot.event_counts, null, 2)}</pre>
-            </details>
-            <details className="fg-outline-row">
-              <summary>Lease reconciliation payload</summary>
-              <pre>{JSON.stringify({ results: reconcileResults, errors: reconcileErrors }, null, 2)}</pre>
-            </details>
-            <details className="fg-outline-row">
-              <summary>Full dispatch snapshot</summary>
-              <pre>{JSON.stringify(snapshot, null, 2)}</pre>
-            </details>
-          </article>
         </>
       ) : null}
-    </section>
+    </IncidentResponsePage>
   );
 }

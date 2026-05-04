@@ -510,7 +510,7 @@ describe("release validation page", () => {
     }));
     await flushEffects();
 
-    expect(container.textContent).toContain("release blocked");
+    expect(container.textContent).toContain("manual evidence required");
     expect(container.textContent).not.toContain("Every hard gate is currently backed by real evidence.");
 
     const bootstrapButton = getButtonByText(container, "Bootstrap");

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
-import { Link, useSearchParams } from "react-router-dom";
+import { useSearchParams } from "react-router-dom";
 
 import {
   createRuntimeKey,
@@ -9,243 +9,43 @@ import {
   setRuntimeKeyStatus,
   updateRuntimeKeyRequestPathPolicy,
   type RuntimeKey,
-  type RuntimeKeyRequestPathPolicy,
 } from "../api/domain/runtime-keys";
 import { fetchAccounts, type GatewayAccount } from "../api/domain/accounts";
 import { buildAuditHistoryPath, resolveNewestAuditHistoryPathForSession } from "../app/auditHistory";
-import { roleAllows, sessionHasAnyInstancePermission } from "../app/adminAccess";
-import { CONTROL_PLANE_ROUTES } from "../app/navigation";
+import { roleAllows } from "../app/adminAccess";
 import { useAppSession } from "../app/session";
-import { getInstanceIdFromSearchParams, withInstanceScope } from "../app/tenantScope";
+import { getInstanceIdFromSearchParams } from "../app/tenantScope";
 import { useInstanceCatalog } from "../app/useInstanceCatalog";
 import { InstanceScopeCard } from "../components/InstanceScopeCard";
-import { PageIntro } from "../components/PageIntro";
-import { ActionBar } from "../components/ui/ActionBar";
 import { DetailDrawer } from "../components/ui/DetailDrawer";
-import { DetailPanel } from "../components/ui/DetailPanel";
-import { EntityTable, type EntityTableColumn } from "../components/ui/EntityTable";
-import { EmptyState, ErrorState, LoadingState, PermissionState } from "../components/ui/StateBlocks";
-import { StatusBadge, type StatusTone } from "../components/ui/StatusBadge";
-import { SummaryStrip, type SummaryStripItem } from "../components/ui/SummaryStrip";
-
-type LoadState = "idle" | "loading" | "success" | "error";
-type DrawerMode = "closed" | "issue";
-type StatusFilter = RuntimeKey["status"] | "all";
-type PolicyValidation = {
-  valid: boolean;
-  errors: string[];
-  policy: RuntimeKeyRequestPathPolicy;
-};
-
-type RuntimeKeyPolicyDraft = {
-  allowed_request_paths: string;
-  default_request_path: RuntimeKeyRequestPathPolicy["default_request_path"];
-  pinned_target_key: string;
-  local_only_policy: RuntimeKeyRequestPathPolicy["local_only_policy"];
-  review_required_conditions: string;
-};
-
-type RuntimeKeyIssueFormState = RuntimeKeyPolicyDraft & {
-  label: string;
-  accountId: string;
-  scopes: string;
-};
-
-type IssuedSecretState = {
-  action: "issued" | "rotated";
-  key_id: string;
-  label: string;
-  prefix: string;
-  token: string;
-  account_id: string | null;
-  created_at: string;
-};
-
-const REQUEST_PATH_OPTIONS: RuntimeKeyRequestPathPolicy["allowed_request_paths"] = [
-  "smart_routing",
-  "pinned_target",
-  "local_only",
-  "queue_background",
-  "blocked",
-  "review_required",
-];
-
-const ISSUE_DRAWER_FORM_ID = "runtime-key-issue-form";
-
-function normalizeQueryValue(value: string | null): string | null {
-  const normalized = (value ?? "").trim();
-  return normalized.length > 0 ? normalized : null;
-}
-
-function formatTimestamp(value: string | null | undefined): string {
-  if (!value || !value.trim()) {
-    return "Not recorded";
-  }
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) {
-    return value;
-  }
-  return parsed.toISOString().replace(".000Z", "Z").replace("T", " ");
-}
-
-function normalizeDelimitedList(value: string): string[] {
-  return Array.from(
-    new Set(
-      value
-        .split(/[\n,;]+/g)
-        .map((item) => item.trim())
-        .filter(Boolean),
-    ),
-  );
-}
-
-function keyPolicyDraft(key?: RuntimeKey | null): RuntimeKeyPolicyDraft {
-  return {
-    allowed_request_paths: (key?.allowed_request_paths ?? ["smart_routing"]).join("\n"),
-    default_request_path: key?.default_request_path ?? "smart_routing",
-    pinned_target_key: key?.pinned_target_key ?? "",
-    local_only_policy: key?.local_only_policy ?? "require_local_target",
-    review_required_conditions: (key?.review_required_conditions ?? []).join("\n"),
-  };
-}
-
-function validatePolicyDraft(draft: RuntimeKeyPolicyDraft): PolicyValidation {
-  const errors: string[] = [];
-  const rawAllowed = draft.allowed_request_paths
-    .split(/[\n,;]+/g)
-    .map((item) => item.trim())
-    .filter(Boolean);
-  const allowed = rawAllowed.filter((item): item is RuntimeKeyRequestPathPolicy["allowed_request_paths"][number] => (
-    REQUEST_PATH_OPTIONS.includes(item as RuntimeKeyRequestPathPolicy["allowed_request_paths"][number])
-  ));
-
-  if (rawAllowed.length !== allowed.length) {
-    errors.push("Allowed request paths contain unsupported values.");
-  }
-  if (rawAllowed.length !== normalizeDelimitedList(draft.allowed_request_paths).length) {
-    errors.push("Allowed request paths must be unique.");
-  }
-  if (allowed.length === 0) {
-    errors.push("At least one allowed request path is required.");
-  }
-  if (!REQUEST_PATH_OPTIONS.includes(draft.default_request_path)) {
-    errors.push("Default request path is invalid.");
-  }
-  if (!allowed.includes(draft.default_request_path)) {
-    errors.push("Default request path must also be allowed.");
-  }
-  if (allowed.includes("pinned_target") && !draft.pinned_target_key.trim()) {
-    errors.push("Pinned target key is required when the pinned_target path is allowed.");
-  }
-
-  const reviewConditions = normalizeDelimitedList(draft.review_required_conditions);
-  if (allowed.includes("review_required") && reviewConditions.length === 0) {
-    errors.push("Review-required conditions are required when the review_required path is allowed.");
-  }
-
-  return {
-    valid: errors.length === 0,
-    errors,
-    policy: {
-      allowed_request_paths: allowed.length > 0 ? allowed : ["smart_routing"],
-      default_request_path: REQUEST_PATH_OPTIONS.includes(draft.default_request_path) ? draft.default_request_path : "smart_routing",
-      pinned_target_key: draft.pinned_target_key.trim() || null,
-      local_only_policy: draft.local_only_policy ?? "require_local_target",
-      review_required_conditions: reviewConditions,
-    },
-  };
-}
-
-function validateIssueForm(form: RuntimeKeyIssueFormState): PolicyValidation & { scopes: string[]; errors: string[] } {
-  const policyValidation = validatePolicyDraft(form);
-  const scopes = normalizeDelimitedList(form.scopes);
-  const errors = [...policyValidation.errors];
-
-  if (!form.label.trim()) {
-    errors.push("Key label is required.");
-  }
-  if (scopes.length === 0) {
-    errors.push("At least one runtime scope is required.");
-  }
-
-  return {
-    valid: errors.length === 0,
-    errors,
-    policy: policyValidation.policy,
-    scopes,
-  };
-}
-
-function createIssueFormState(accountId?: string | null): RuntimeKeyIssueFormState {
-  return {
-    label: "",
-    accountId: accountId ?? "",
-    scopes: "models:read\nchat:write\nresponses:write",
-    allowed_request_paths: "smart_routing",
-    default_request_path: "smart_routing",
-    pinned_target_key: "",
-    local_only_policy: "require_local_target",
-    review_required_conditions: "",
-  };
-}
-
-function toneForKeyStatus(status: RuntimeKey["status"]): StatusTone {
-  switch (status) {
-    case "active":
-      return "success";
-    case "disabled":
-      return "warning";
-    case "revoked":
-      return "danger";
-    default:
-      return "neutral";
-  }
-}
-
-function statusLabel(status: RuntimeKey["status"]): string {
-  switch (status) {
-    case "active":
-      return "Active";
-    case "disabled":
-      return "Disabled";
-    case "revoked":
-      return "Revoked";
-    default:
-      return status;
-  }
-}
-
-function rotationLabel(key: RuntimeKey): string {
-  return key.rotated_from ? `Rotated from ${key.rotated_from}` : "Original issue";
-}
-
-function formatAllowedPaths(key: RuntimeKey): string {
-  return (key.allowed_request_paths ?? ["smart_routing"]).join(", ");
-}
-
-function searchMatches(key: RuntimeKey, accountLabel: string, instanceLabel: string, value: string): boolean {
-  const normalized = value.trim().toLowerCase();
-  if (!normalized) {
-    return true;
-  }
-
-  return [
-    key.key_id,
-    key.label,
-    key.prefix,
-    key.account_id ?? "",
-    accountLabel,
-    key.instance_id ?? "",
-    instanceLabel,
-    key.status,
-    key.scopes.join(" "),
-    formatAllowedPaths(key),
-  ].some((item) => item.toLowerCase().includes(normalized));
-}
+import { AdvancedDiagnostics, DiagnosticSection, InternalId } from "../components/ui/AdvancedDiagnostics";
+import { PermissionState } from "../components/ui/StateBlocks";
+import { Button } from "../components/ui/Button";
+import { RegistryManagementPage } from "../components/page-templates";
+import type { Action } from "../components/ui/models/action";
+import {
+  ApiKeyList,
+  ApiKeyDetailPanel,
+  ApiKeyCreateForm,
+  type IssuedSecretState,
+  type LoadState,
+  type DrawerMode,
+  type StatusFilter,
+  type RuntimeKeyPolicyDraft,
+  type RuntimeKeyIssueFormState,
+  normalizeQueryValue,
+  keyPolicyDraft,
+  validatePolicyDraft,
+  validateIssueForm,
+  createIssueFormState,
+  searchMatches,
+  ISSUE_DRAWER_FORM_ID,
+} from "../features/api-keys";
+import type { SummaryStripItem } from "../components/ui/SummaryStrip";
 
 export function ApiKeysPage() {
-  const [searchParams, setSearchParams] = useSearchParams();
   const { session, sessionReady } = useAppSession();
+  const [searchParams, setSearchParams] = useSearchParams();
   const instanceId = getInstanceIdFromSearchParams(searchParams);
   const focusedAccountId = normalizeQueryValue(searchParams.get("accountId"));
   const { instances, loadState: instanceCatalogState, error: instancesError, selectedInstance } = useInstanceCatalog(instanceId);
@@ -271,11 +71,6 @@ export function ApiKeysPage() {
   ));
 
   const canMutate = sessionReady && roleAllows(session?.role, "admin") && session?.read_only !== true;
-  const canOpenSecurity = sessionReady && (
-    sessionHasAnyInstancePermission(session, "security.read")
-    || sessionHasAnyInstancePermission(session, "security.write")
-  );
-  const canManageSecurity = sessionReady && sessionHasAnyInstancePermission(session, "security.write");
   const instanceScopeLabel = selectedInstance?.display_name ?? selectedInstance?.instance_id ?? "Default instance path";
   const issueValidation = useMemo(() => validateIssueForm(issueForm), [issueForm]);
 
@@ -480,82 +275,6 @@ export function ApiKeysPage() {
     ];
   }, [instanceScopeLabel, keys, selectedInstance]);
 
-  const tableColumns = useMemo<EntityTableColumn<RuntimeKey>[]>(() => [
-    {
-      key: "label",
-      header: "Label",
-      render: (key) => (
-        <div>
-          <button
-            type="button"
-            aria-pressed={selectedKey?.key_id === key.key_id}
-            onClick={() => setSelectedKeyId(key.key_id)}
-          >
-            {key.label}
-          </button>
-          <div className="fg-muted">{key.prefix}</div>
-        </div>
-      ),
-    },
-    {
-      key: "account",
-      header: "Account",
-      render: (key) => {
-        const account = key.account_id ? accountsById[key.account_id] : null;
-        return (
-          <div>
-            <div>{account?.label ?? key.account_id ?? "No account"}</div>
-            <div className="fg-muted">{key.account_id ?? "unbound"}</div>
-          </div>
-        );
-      },
-    },
-    {
-      key: "scope",
-      header: "Instance Scope",
-      render: (key) => (
-        <div>
-          <div>{key.instance_id ? (instanceLabels[key.instance_id] ?? key.instance_id) : "Default instance path"}</div>
-          <div className="fg-muted">tenant {key.tenant_id ?? "unknown"}</div>
-        </div>
-      ),
-    },
-    {
-      key: "paths",
-      header: "Erlaubte Pfade",
-      render: (key) => (
-        <div>
-          <div>{formatAllowedPaths(key)}</div>
-          <div className="fg-muted">default {key.default_request_path ?? "smart_routing"}</div>
-        </div>
-      ),
-    },
-    {
-      key: "status",
-      header: "Status",
-      render: (key) => (
-        <StatusBadge tone={toneForKeyStatus(key.status)} status={key.status}>
-          {statusLabel(key.status)}
-        </StatusBadge>
-      ),
-    },
-    {
-      key: "created",
-      header: "Created",
-      render: (key) => formatTimestamp(key.created_at),
-    },
-    {
-      key: "lastUsed",
-      header: "Last Used",
-      render: (key) => formatTimestamp(key.last_used_at),
-    },
-    {
-      key: "rotation",
-      header: "Rotation",
-      render: (key) => rotationLabel(key),
-    },
-  ], [accountsById, instanceLabels, selectedKey]);
-
   const openIssueDrawer = () => {
     setIssueForm(createIssueFormState(focusedAccountId));
     setDrawerMode("issue");
@@ -691,52 +410,29 @@ export function ApiKeysPage() {
     }
   };
 
+  const handlePolicyDraftChange = (draft: RuntimeKeyPolicyDraft) => {
+    if (!selectedKey) return;
+    setPolicyDrafts((current) => ({
+      ...current,
+      [selectedKey.key_id]: draft,
+    }));
+  };
+
+  const pageActions: Action[] = useMemo(() => {
+    if (!canMutate) return [];
+    return [
+      {
+        label: "Issue runtime key",
+        kind: "primary",
+        intent: "configure",
+        onClick: openIssueDrawer,
+      },
+    ];
+  }, [canMutate, openIssueDrawer]);
+
   return (
-    <section className="fg-page">
-      <PageIntro
-        eyebrow="Governance"
-        title="API Keys"
-        description="Secure runtime-key issuance, rotation, status control, and request-path policy truth without reconstructing stored secrets."
-        question="Are you issuing a new key, rotating a live credential, or auditing runtime path scope on an existing key?"
-        links={[
-          {
-            label: "API Keys",
-            to: CONTROL_PLANE_ROUTES.apiKeys,
-            description: "Review runtime key scope, lifecycle, and one-time secret events.",
-          },
-          {
-            label: "Accounts",
-            to: CONTROL_PLANE_ROUTES.accounts,
-            description: "Cross-check the owning runtime identity and provider bindings.",
-          },
-          {
-            label: "Audit History",
-            to: auditHistoryRoute,
-            description: "Confirm key issuance, rotation, and revocation events against the audit trail.",
-          },
-          canOpenSecurity
-            ? {
-                label: "Security & Policies",
-                to: CONTROL_PLANE_ROUTES.security,
-                description: canManageSecurity
-                  ? "Open the broader security surface when the issue exceeds runtime key lifecycle."
-                  : "Request or review elevated access when runtime-key work crosses into security operations.",
-                badge: canManageSecurity ? "Admin posture" : "Request flow",
-              }
-            : {
-                label: "Security & Policies",
-                to: CONTROL_PLANE_ROUTES.security,
-                description: "Security request/start flow and admin posture remain outside the viewer permission envelope.",
-                badge: "Operator or admin",
-                disabled: true,
-              },
-        ]}
-        badges={[
-          { label: selectedInstance ? `Instance scope: ${instanceScopeLabel}` : "Default instance path", tone: selectedInstance ? "success" : "neutral" },
-          { label: canMutate ? "Admin mutations enabled" : "Read-only review", tone: canMutate ? "success" : "warning" },
-        ]}
-        note="ForgeFrame only reveals a full secret immediately after issue or rotation. Existing rows show prefix, scope, and policy truth only."
-      />
+    <>
+      {/* ── Extra page-level elements outside the template ── */}
 
       <InstanceScopeCard
         instanceId={instanceId}
@@ -748,10 +444,8 @@ export function ApiKeysPage() {
         onInstanceChange={onInstanceChange}
       />
 
-      <SummaryStrip items={summaryItems} />
-
       {focusedAccountId ? (
-        <div className="fg-card">
+        <div className="fg-card mb-4">
           <h3>Focused Account Handoff</h3>
           {focusedAccount ? (
             <>
@@ -771,7 +465,7 @@ export function ApiKeysPage() {
       ) : null}
 
       {latestIssuedSecret ? (
-        <div className="fg-card">
+        <div className="fg-card mb-4">
           <h3>{latestIssuedSecret.action === "issued" ? "One-time secret: newly issued key" : "One-time secret: rotated key"}</h3>
           <p>
             Secret for <strong>{latestIssuedSecret.label}</strong> ({latestIssuedSecret.prefix}) is available exactly once from the
@@ -782,244 +476,107 @@ export function ApiKeysPage() {
             <code>{latestIssuedSecret.token}</code>
           </div>
           <div className="fg-actions">
-            <button type="button" onClick={() => void handleCopySecret()}>Copy secret</button>
-            <button type="button" onClick={() => setLatestIssuedSecret(null)}>Dismiss secret</button>
+            <Button variant="secondary" onPress={() => void handleCopySecret()}>Copy secret</Button>
+            <Button variant="tertiary" onPress={() => setLatestIssuedSecret(null)}>Dismiss secret</Button>
           </div>
           {secretCopyMessage ? <p className="fg-note">{secretCopyMessage}</p> : null}
         </div>
       ) : null}
 
       {!canMutate ? (
-        <PermissionState
-          title="Read-only key review"
-          description="This session can inspect key scope, request-path policy, lifecycle truth, and audit links, but it cannot issue, rotate, or change key status."
-        />
+        <div className="mb-4">
+          <PermissionState
+            title="Read-only key review"
+            description="This session can inspect key scope, request-path policy, lifecycle truth, and audit links, but it cannot issue, rotate, or change key status."
+          />
+        </div>
       ) : null}
 
-      {message ? <p className="fg-note">{message}</p> : null}
-      {error ? <p className="fg-danger">{error}</p> : null}
+      {message ? <p className="fg-note mb-4">{message}</p> : null}
+      {error ? <p className="fg-danger mb-4">{error}</p> : null}
 
-      <ActionBar
-        title="Inventory filters"
-        description="Review scope, lifecycle, and request-path exposure before touching rotation or status."
-        actions={canMutate ? <button type="button" onClick={openIssueDrawer}>Issue runtime key</button> : undefined}
-      >
-        <div className="fg-inline-form" aria-label="Runtime key inventory filters">
-          <label>
-            Search
-            <input
-              placeholder="Label, prefix, account, scope"
-              value={searchValue}
-              onChange={(event) => setSearchValue(event.target.value)}
-            />
-          </label>
-          <label>
-            Status
-            <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as StatusFilter)}>
+      {/* ── Registry management template ── */}
+      <RegistryManagementPage
+        eyebrow="Governance"
+        title="API Keys"
+        description="Secure runtime-key issuance, rotation, status control, and request-path policy truth without reconstructing stored secrets."
+        scope={selectedInstance ? {
+          label: instanceScopeLabel,
+        } : undefined}
+        summaryItems={summaryItems}
+        search={{
+          value: searchValue,
+          onChange: setSearchValue,
+          placeholder: "Label, prefix, account, scope",
+        }}
+        filterContent={
+          <label className="flex items-center gap-2 text-meta text-muted">
+            <span>Status</span>
+            <select
+              className="rounded border border-border bg-surface-field px-2 py-1 text-body text-primary"
+              value={statusFilter}
+              onChange={(event) => setStatusFilter(event.target.value as StatusFilter)}
+            >
               <option value="all">all</option>
               <option value="active">active</option>
               <option value="disabled">disabled</option>
               <option value="revoked">revoked</option>
             </select>
+            <Button variant="tertiary" density="compact" onPress={() => void load(selectedKey?.key_id ?? null)}>
+              Refresh
+            </Button>
           </label>
-          <button type="button" onClick={() => void load(selectedKey?.key_id ?? null)}>Refresh inventory</button>
-        </div>
-      </ActionBar>
+        }
+        actions={pageActions}
+        hasSelection={selectedKey != null}
+        selectedItemContent={selectedKey ? (
+          <ApiKeyDetailPanel
+            runtimeKey={selectedKey}
+            instanceId={instanceId}
+            instanceLabel={selectedInstanceLabel}
+            account={selectedAccount}
+            policyDraft={selectedPolicyDraft}
+            policyValidation={selectedPolicyValidation}
+            policyState={policyState}
+            policyError={policyError}
+            auditHistoryRoute={selectedAuditHistoryRoute}
+            canMutate={canMutate}
+            saving={saving}
+            onPolicyDraftChange={handlePolicyDraftChange}
+            onPolicySave={handlePolicySave}
+            onRotate={handleRotate}
+            onStatusChange={handleStatusChange}
+          />
+        ) : undefined}
+        emptyDetailHint="Select a runtime key row to inspect scope, rotation lineage, status controls, and request-path policy."
+        diagnostics={
+          <AdvancedDiagnostics title="API Key diagnostics" defaultOpen={false}>
+            <DiagnosticSection label="Page state">
+              <InternalId id={instanceId ?? "none"} label="Instance ID" />
+              <p className="text-meta text-muted mt-2">
+                Keys: {keys.length} total, {visibleKeys.length} visible &middot;
+                Accounts: {accounts.length} &middot;
+                Selected: {selectedKey?.key_id ?? "none"}
+              </p>
+            </DiagnosticSection>
+          </AdvancedDiagnostics>
+        }
+      >
+        <ApiKeyList
+          keys={visibleKeys}
+          selectedKeyId={selectedKeyId}
+          onSelectedKeyChange={setSelectedKeyId}
+          loadState={loadState}
+          error={loadState === "error" ? error : undefined}
+          onRetry={() => void load(selectedKey?.key_id ?? null)}
+          accountsById={accountsById}
+          instanceLabels={instanceLabels}
+          totalKeys={keys.length}
+          focusedAccountId={focusedAccountId}
+        />
+      </RegistryManagementPage>
 
-      <div className="ff-operator-layout">
-        <div className="ff-operator-main">
-          {loadState === "loading" ? (
-            <LoadingState title="Loading runtime keys" description="Fetching key inventory, account links, and runtime path posture." />
-          ) : null}
-          {loadState === "error" ? (
-            <ErrorState title="Runtime key inventory failed to load" description={error || "The runtime key request failed."} action={<button type="button" onClick={() => void load()}>Retry</button>} />
-          ) : null}
-          {loadState === "success" ? (
-            <EntityTable
-              title="Runtime key inventory"
-              description="Each row keeps label, owning account, instance scope, request-path allowlist, lifecycle status, timestamps, and rotation provenance visible."
-              columns={tableColumns}
-              rows={visibleKeys}
-              rowKey={(key) => key.key_id}
-              tableLabel="Runtime key inventory table"
-              emptyTitle={focusedAccountId ? "No keys match the focused account" : "No keys match the current filters"}
-              emptyDescription={focusedAccountId
-                ? "This account currently has no runtime keys inside the selected instance scope."
-                : "Adjust search or lifecycle filters to bring matching keys back into view."}
-              getRowClassName={(key) => (selectedKey?.key_id === key.key_id ? "is-selected" : undefined)}
-              footer={<p className="fg-muted">Showing {visibleKeys.length} of {keys.length} runtime keys in the current instance scope.</p>}
-            />
-          ) : null}
-        </div>
-
-        <div className="ff-operator-sidebar">
-          {selectedKey ? (
-            <DetailPanel
-              title={selectedKey.label}
-              description={`${selectedKey.prefix} · ${selectedInstanceLabel}`}
-              status={statusLabel(selectedKey.status)}
-              statusTone={toneForKeyStatus(selectedKey.status)}
-              statusKey={selectedKey.status}
-              sticky
-              actions={(
-                <div className="fg-actions">
-                  <Link className="fg-nav-link" to={withInstanceScope(CONTROL_PLANE_ROUTES.accounts, selectedKey.instance_id ?? instanceId)}>Accounts</Link>
-                  <Link className="fg-nav-link" to={selectedAuditHistoryRoute}>Audit History</Link>
-                  <Link className="fg-nav-link" to={withInstanceScope(CONTROL_PLANE_ROUTES.instances, selectedKey.instance_id ?? instanceId)}>Affected Instance</Link>
-                </div>
-              )}
-            >
-              <div className="fg-stack">
-                <section className="fg-subcard">
-                  <h4>Scope and exposure</h4>
-                  <p>Account: {selectedAccount?.label ?? selectedKey.account_id ?? "No bound account"}</p>
-                  <p>Instance: {selectedInstanceLabel}</p>
-                  <p>Tenant: {selectedKey.tenant_id ?? "unknown"}</p>
-                  <p>Scopes: {selectedKey.scopes.join(", ")}</p>
-                  <p>Allowed request paths: {formatAllowedPaths(selectedKey)}</p>
-                  <p>Default request path: {selectedKey.default_request_path ?? "smart_routing"}</p>
-                  <p>Created: {formatTimestamp(selectedKey.created_at)}</p>
-                  <p>Last used: {formatTimestamp(selectedKey.last_used_at)}</p>
-                </section>
-
-                <section className="fg-subcard">
-                  <h4>Rotation</h4>
-                  <p>{rotationLabel(selectedKey)}</p>
-                  <p>The full secret is never derived from stored key rows. Only issue/rotation responses reveal it once.</p>
-                  {canMutate ? (
-                    <div className="fg-actions">
-                      <button type="button" disabled={saving} onClick={() => void handleRotate()}>Rotate key</button>
-                    </div>
-                  ) : (
-                    <p className="fg-muted">Rotation controls are hidden in read-only sessions.</p>
-                  )}
-                </section>
-
-                <section className="fg-subcard">
-                  <h4>Status controls</h4>
-                  <p>Current lifecycle: {statusLabel(selectedKey.status)}</p>
-                  {canMutate ? (
-                    <div className="fg-actions">
-                      {selectedKey.status !== "active" ? <button type="button" disabled={saving} onClick={() => void handleStatusChange("activate")}>Activate key</button> : null}
-                      {selectedKey.status !== "disabled" ? <button type="button" disabled={saving} onClick={() => void handleStatusChange("disable")}>Disable key</button> : null}
-                      {selectedKey.status !== "revoked" ? <button type="button" disabled={saving} onClick={() => void handleStatusChange("revoke")}>Revoke key</button> : null}
-                    </div>
-                  ) : (
-                    <p className="fg-muted">Lifecycle mutations are hidden in read-only sessions so the UI never implies unavailable controls.</p>
-                  )}
-                </section>
-
-                <section className="fg-subcard">
-                  <h4>Request-path policy</h4>
-                  <p>Policy editing is separated from rotation and status so path changes never masquerade as credential lifecycle work.</p>
-                  {policyState === "loading" ? <LoadingState title="Loading request-path policy" description="Fetching the persisted allowlist for the selected key." /> : null}
-                  {policyState === "error" ? <ErrorState title="Request-path policy unavailable" description={policyError} /> : null}
-                  {selectedPolicyDraft && policyState !== "loading" ? (
-                    <div className="fg-stack">
-                      <label>
-                        Allowed request paths
-                        <textarea
-                          rows={6}
-                          value={selectedPolicyDraft.allowed_request_paths}
-                          onChange={(event) => setPolicyDrafts((current) => ({
-                            ...current,
-                            [selectedKey.key_id]: {
-                              ...selectedPolicyDraft,
-                              allowed_request_paths: event.target.value,
-                            },
-                          }))}
-                          disabled={!canMutate}
-                        />
-                      </label>
-                      <label>
-                        Default request path
-                        <select
-                          value={selectedPolicyDraft.default_request_path}
-                          onChange={(event) => setPolicyDrafts((current) => ({
-                            ...current,
-                            [selectedKey.key_id]: {
-                              ...selectedPolicyDraft,
-                              default_request_path: event.target.value as RuntimeKeyRequestPathPolicy["default_request_path"],
-                            },
-                          }))}
-                          disabled={!canMutate}
-                        >
-                          {REQUEST_PATH_OPTIONS.map((path) => <option key={`${selectedKey.key_id}-${path}`} value={path}>{path}</option>)}
-                        </select>
-                      </label>
-                      <label>
-                        Pinned target key
-                        <input
-                          value={selectedPolicyDraft.pinned_target_key}
-                          onChange={(event) => setPolicyDrafts((current) => ({
-                            ...current,
-                            [selectedKey.key_id]: {
-                              ...selectedPolicyDraft,
-                              pinned_target_key: event.target.value,
-                            },
-                          }))}
-                          disabled={!canMutate}
-                        />
-                      </label>
-                      <label>
-                        Local-only policy
-                        <select
-                          value={selectedPolicyDraft.local_only_policy}
-                          onChange={(event) => setPolicyDrafts((current) => ({
-                            ...current,
-                            [selectedKey.key_id]: {
-                              ...selectedPolicyDraft,
-                              local_only_policy: event.target.value as RuntimeKeyRequestPathPolicy["local_only_policy"],
-                            },
-                          }))}
-                          disabled={!canMutate}
-                        >
-                          <option value="require_local_target">require_local_target</option>
-                          <option value="prefer_local">prefer_local</option>
-                        </select>
-                      </label>
-                      <label>
-                        Review-required conditions
-                        <textarea
-                          rows={4}
-                          value={selectedPolicyDraft.review_required_conditions}
-                          onChange={(event) => setPolicyDrafts((current) => ({
-                            ...current,
-                            [selectedKey.key_id]: {
-                              ...selectedPolicyDraft,
-                              review_required_conditions: event.target.value,
-                            },
-                          }))}
-                          disabled={!canMutate}
-                        />
-                      </label>
-                      {selectedPolicyValidation && selectedPolicyValidation.errors.length > 0 ? (
-                        <ul className="fg-list fg-danger">
-                          {selectedPolicyValidation.errors.map((item, index) => <li key={`key-policy-error-${index}`}>{item}</li>)}
-                        </ul>
-                      ) : (
-                        <p className="fg-muted">Request-path policy is valid and ready to save.</p>
-                      )}
-                      {canMutate ? (
-                        <div className="fg-actions">
-                          <button type="button" disabled={saving || !selectedPolicyValidation?.valid} onClick={() => void handlePolicySave()}>Save policy</button>
-                        </div>
-                      ) : (
-                        <p className="fg-muted">Read-only sessions can inspect the persisted request-path policy but cannot change it.</p>
-                      )}
-                    </div>
-                  ) : null}
-                </section>
-              </div>
-            </DetailPanel>
-          ) : loadState === "loading" ? (
-            <LoadingState title="Preparing key detail" description="Waiting for the runtime key inventory before showing lifecycle and policy truth." />
-          ) : (
-            <EmptyState title="No key selected" description="Choose a runtime key row to inspect scope, rotation lineage, status controls, and request-path policy." />
-          )}
-        </div>
-      </div>
-
+      {/* ── Issue key drawer ── */}
       <DetailDrawer
         open={drawerMode === "issue"}
         title="Issue Runtime Key"
@@ -1030,111 +587,26 @@ export function ApiKeysPage() {
           { label: "Scope", value: selectedInstance ? `${instanceScopeLabel} (${selectedInstance.instance_id})` : "Default instance path" },
           { label: "Secret handling", value: "Create/rotate response only" },
         ]}
-        actions={(
+        actions={
           <>
-            <button type="button" onClick={closeDrawer}>Cancel</button>
-            <button type="submit" form={ISSUE_DRAWER_FORM_ID} disabled={saving || !issueValidation.valid}>Issue key</button>
+            <Button variant="secondary" onPress={closeDrawer}>Cancel</Button>
+            <Button variant="primary" type="submit" form={ISSUE_DRAWER_FORM_ID} isDisabled={saving || !issueValidation.valid}>
+              Issue key
+            </Button>
           </>
-        )}
+        }
         onClose={closeDrawer}
       >
-        <form id={ISSUE_DRAWER_FORM_ID} className="fg-stack" onSubmit={handleIssueKey}>
-          {issueValidation.errors.length > 0 ? (
-            <ul className="fg-list fg-danger">
-              {issueValidation.errors.map((item, index) => <li key={`issue-key-error-${index}`}>{item}</li>)}
-            </ul>
-          ) : (
-            <p className="fg-muted">The key-issue form passed validation and is ready to submit.</p>
-          )}
-
-          <section className="fg-subcard">
-            <h4>Identity and scope</h4>
-            <div className="fg-grid fg-grid-compact">
-              <label>
-                Key label
-                <input
-                  value={issueForm.label}
-                  onChange={(event) => setIssueForm((current) => ({ ...current, label: event.target.value }))}
-                  placeholder="Primary runtime key"
-                />
-              </label>
-              <label>
-                Account
-                <select value={issueForm.accountId} onChange={(event) => setIssueForm((current) => ({ ...current, accountId: event.target.value }))}>
-                  <option value="">No account</option>
-                  {accounts.map((account) => <option key={`issue-account-${account.account_id}`} value={account.account_id}>{account.label}</option>)}
-                </select>
-              </label>
-              <label>
-                Runtime scopes
-                <textarea
-                  rows={5}
-                  value={issueForm.scopes}
-                  onChange={(event) => setIssueForm((current) => ({ ...current, scopes: event.target.value }))}
-                  placeholder={"models:read\nchat:write\nresponses:write"}
-                />
-              </label>
-            </div>
-          </section>
-
-          <section className="fg-subcard">
-            <h4>Request-path policy</h4>
-            <label>
-              Allowed request paths
-              <textarea
-                rows={6}
-                value={issueForm.allowed_request_paths}
-                onChange={(event) => setIssueForm((current) => ({ ...current, allowed_request_paths: event.target.value }))}
-                placeholder={"smart_routing\nlocal_only"}
-              />
-            </label>
-            <div className="fg-grid fg-grid-compact">
-              <label>
-                Default request path
-                <select
-                  value={issueForm.default_request_path}
-                  onChange={(event) => setIssueForm((current) => ({
-                    ...current,
-                    default_request_path: event.target.value as RuntimeKeyRequestPathPolicy["default_request_path"],
-                  }))}
-                >
-                  {REQUEST_PATH_OPTIONS.map((path) => <option key={`issue-default-${path}`} value={path}>{path}</option>)}
-                </select>
-              </label>
-              <label>
-                Pinned target key
-                <input
-                  value={issueForm.pinned_target_key}
-                  onChange={(event) => setIssueForm((current) => ({ ...current, pinned_target_key: event.target.value }))}
-                  placeholder="target_primary"
-                />
-              </label>
-              <label>
-                Local-only policy
-                <select
-                  value={issueForm.local_only_policy}
-                  onChange={(event) => setIssueForm((current) => ({
-                    ...current,
-                    local_only_policy: event.target.value as RuntimeKeyRequestPathPolicy["local_only_policy"],
-                  }))}
-                >
-                  <option value="require_local_target">require_local_target</option>
-                  <option value="prefer_local">prefer_local</option>
-                </select>
-              </label>
-            </div>
-            <label>
-              Review-required conditions
-              <textarea
-                rows={4}
-                value={issueForm.review_required_conditions}
-                onChange={(event) => setIssueForm((current) => ({ ...current, review_required_conditions: event.target.value }))}
-                placeholder={"budget_exceeded\nmanual_approval"}
-              />
-            </label>
-          </section>
+        <form id={ISSUE_DRAWER_FORM_ID} className="flex flex-col gap-4" onSubmit={handleIssueKey}>
+          <ApiKeyCreateForm
+            form={issueForm}
+            onFormChange={setIssueForm}
+            accounts={accounts}
+            errors={issueValidation.errors}
+            isValid={issueValidation.valid}
+          />
         </form>
       </DetailDrawer>
-    </section>
+    </>
   );
 }

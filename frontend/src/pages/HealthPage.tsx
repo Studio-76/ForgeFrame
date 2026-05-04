@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
-import { Link, useSearchParams } from "react-router-dom";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { useNavigate, useSearchParams } from "react-router-dom";
 
 import { fetchDashboard, type DashboardResponse } from "../api/domain/dashboard";
 import { fetchLogs, type LogsResponse } from "../api/domain/logs";
@@ -10,171 +10,41 @@ import { CONTROL_PLANE_ROUTES } from "../app/navigation";
 import { getInstanceIdFromSearchParams, withInstanceScope } from "../app/tenantScope";
 import { useInstanceCatalog } from "../app/useInstanceCatalog";
 import { InstanceScopeCard } from "../components/InstanceScopeCard";
-import { PageIntro } from "../components/PageIntro";
-
-type LoadState = "idle" | "loading" | "success" | "error";
-type HealthStatus = "healthy" | "warning" | "failed";
-type CheckRecord = {
-  id: string;
-  ok: boolean;
-  severity?: string;
-  details?: string | null;
-};
-type HealthRoute = {
-  label: string;
-  to: string;
-};
-type HealthGroup = {
-  title: string;
-  status: HealthStatus;
-  summary: string;
-  lastChecked: string;
-  evidence: string[];
-  error: string;
-  nextRoute: HealthRoute;
-};
-type SignalPathRow = {
-  label: string;
-  status: HealthStatus;
-  evidence: string;
-  route: HealthRoute;
-};
-
-function providerNeedsOauthHandoff(provider: ProviderControlPlaneResponse["providers"][number]): boolean {
-  return provider.oauth_connect_required || provider.next_action_kind === "connect_oauth";
-}
-
-function isDefined<T>(value: T | null | undefined): value is T {
-  return value !== null && value !== undefined;
-}
-
-function formatTimestamp(value: string | null | undefined, fallback = "n/a"): string {
-  return value && value.trim() ? value : fallback;
-}
-
-function toneForStatus(status: HealthStatus): "success" | "warning" | "danger" {
-  if (status === "healthy") {
-    return "success";
-  }
-  if (status === "warning") {
-    return "warning";
-  }
-  return "danger";
-}
-
-function labelForStatus(status: HealthStatus): string {
-  if (status === "healthy") {
-    return "Healthy";
-  }
-  if (status === "warning") {
-    return "Needs review";
-  }
-  return "Blocked";
-}
-
-function dashboardStatusToHealth(status: string | null | undefined): HealthStatus {
-  switch ((status ?? "").trim().toLowerCase()) {
-    case "ready":
-      return "healthy";
-    case "degraded":
-      return "warning";
-    default:
-      return "failed";
-  }
-}
-
-function summarizeChecks(checks: CheckRecord[]): HealthStatus {
-  if (checks.some((check) => !check.ok && (check.severity ?? "").toLowerCase() === "critical")) {
-    return "failed";
-  }
-  if (checks.some((check) => !check.ok)) {
-    return "warning";
-  }
-  return "healthy";
-}
-
-function summarizeBootstrapChecks(checks: CheckRecord[]): HealthStatus {
-  return checks.some((check) => !check.ok) ? "failed" : "healthy";
-}
-
-function summarizeSignals(rows: SignalPathRow[]): HealthStatus {
-  if (rows.some((row) => row.status === "failed")) {
-    return "failed";
-  }
-  if (rows.some((row) => row.status === "warning")) {
-    return "warning";
-  }
-  return "healthy";
-}
-
-function buildGroup(params: {
-  title: string;
-  checks: CheckRecord[];
-  mode: "runtime" | "bootstrap";
-  checkedAt: string | null | undefined;
-  fallbackSummary: string;
-  successSummary: string;
-  nextRoute: HealthRoute;
-}): HealthGroup {
-  const status = params.mode === "bootstrap" ? summarizeBootstrapChecks(params.checks) : summarizeChecks(params.checks);
-  const failingChecks = params.checks.filter((check) => !check.ok);
-  const evidence = params.checks.length > 0
-    ? params.checks.map((check) => `${check.id}: ${check.ok ? "ok" : "failed"}${check.details ? ` · ${check.details}` : ""}`)
-    : [params.fallbackSummary];
-  const error = failingChecks.length > 0
-    ? failingChecks.map((check) => `${check.id}${check.details ? ` · ${check.details}` : ""}`).join(" | ")
-    : "No open blockers recorded.";
-  return {
-    title: params.title,
-    status,
-    summary: status === "healthy" ? params.successSummary : params.fallbackSummary,
-    lastChecked: formatTimestamp(params.checkedAt),
-    evidence,
-    error,
-    nextRoute: params.nextRoute,
-  };
-}
-
-function HealthGroupCard({ group }: { group: HealthGroup }) {
-  return (
-    <article className="fg-card">
-      <div className="fg-panel-heading">
-        <div>
-          <h3>{group.title}</h3>
-          <p className="fg-muted">{group.summary}</p>
-        </div>
-        <span className="fg-pill" data-tone={toneForStatus(group.status)}>
-          {labelForStatus(group.status)}
-        </span>
-      </div>
-      <div className="fg-detail-grid">
-        <p>Last check: {group.lastChecked}</p>
-        <p>Error: {group.error}</p>
-      </div>
-      <ul className="fg-list">
-        {group.evidence.map((line) => (
-          <li key={line}>{line}</li>
-        ))}
-      </ul>
-      <Link className="fg-nav-link" to={group.nextRoute.to}>
-        {group.nextRoute.label}
-      </Link>
-    </article>
-  );
-}
+import { Button } from "../components/ui/Button";
+import { IncidentResponsePage } from "../components/page-templates";
+import type { Action } from "../components/ui/models/action";
+import type { AttentionPayload } from "../components/ui/models/attention";
+import {
+  HealthGroupCard,
+  buildGroup,
+  dashboardStatusToHealth,
+  formatTimestamp,
+  isDefined,
+  labelForStatus,
+  providerNeedsOauthHandoff,
+  summarizeSignals,
+  toneForStatus,
+} from "../features/health";
+import type { HealthGroup, SignalPathRow } from "../features/health";
 
 export function HealthPage() {
+  const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const instanceId = getInstanceIdFromSearchParams(searchParams);
   const { instances, loadState, error: instancesError, selectedInstance } = useInstanceCatalog(instanceId);
-  const [state, setState] = useState<LoadState>("idle");
+
+  // ── Page-local state ────────────────────────────────────────
+  const [state, setState] = useState<"idle" | "loading" | "success" | "error">("idle");
   const [error, setError] = useState<string | null>(null);
   const [runtimeHealth, setRuntimeHealth] = useState<RuntimeHealthResponse | null>(null);
   const [providers, setProviders] = useState<ProviderControlPlaneResponse | null>(null);
   const [logs, setLogs] = useState<LogsResponse | null>(null);
   const [usage, setUsage] = useState<UsageSummaryResponse | null>(null);
   const [dashboard, setDashboard] = useState<DashboardResponse | null>(null);
+  const [refreshNonce, setRefreshNonce] = useState(0);
+  const [selectedGroup, setSelectedGroup] = useState<HealthGroup | null>(null);
 
+  // ── Instance scope change handler ──────────────────────────
   const onInstanceChange = (nextInstanceId: string | null) => {
     const nextSearchParams = new URLSearchParams(searchParams);
     if (nextInstanceId) {
@@ -185,6 +55,7 @@ export function HealthPage() {
     setSearchParams(nextSearchParams);
   };
 
+  // ── Data fetching ──────────────────────────────────────────
   useEffect(() => {
     let mounted = true;
     const load = async () => {
@@ -225,8 +96,15 @@ export function HealthPage() {
     return () => {
       mounted = false;
     };
-  }, [instanceId]);
+  }, [instanceId, refreshNonce]);
 
+  // ── Refresh handler ────────────────────────────────────────
+  const handleRefresh = useCallback(() => {
+    setRefreshNonce((current) => current + 1);
+    setSelectedGroup(null);
+  }, []);
+
+  // ── Routes ─────────────────────────────────────────────────
   const providerHealthRoute = withInstanceScope(CONTROL_PLANE_ROUTES.providerHealthRuns, instanceId);
   const oauthTargetsRoute = withInstanceScope(CONTROL_PLANE_ROUTES.oauthTargets, instanceId);
   const dispatchRoute = withInstanceScope(CONTROL_PLANE_ROUTES.dispatch, instanceId);
@@ -237,7 +115,9 @@ export function HealthPage() {
   const onboardingRoute = withInstanceScope(CONTROL_PLANE_ROUTES.onboarding, instanceId);
   const recoveryRoute = withInstanceScope(CONTROL_PLANE_ROUTES.recovery, instanceId);
   const auditHistoryRoute = withInstanceScope(CONTROL_PLANE_ROUTES.auditHistory, instanceId);
+  const errorsRoute = withInstanceScope(CONTROL_PLANE_ROUTES.errors, instanceId);
 
+  // ── Derived data ───────────────────────────────────────────
   const providersNeedingReview = useMemo(() => (providers?.providers ?? []).filter((provider) => {
     if (!provider.ready || providerNeedsOauthHandoff(provider)) {
       return true;
@@ -259,6 +139,7 @@ export function HealthPage() {
   const bootstrapChecksById = new Map(bootstrapChecks.map((check) => [check.id, check]));
   const dashboardQueueSection = dashboard?.sections.find((section) => section.key === "routing_queue") ?? null;
 
+  // ── Build health groups ────────────────────────────────────
   const dbMigrationGroup = buildGroup({
     title: "DB / Migration",
     checks: [
@@ -288,7 +169,7 @@ export function HealthPage() {
     checkedAt: runtimeHealth?.readiness.checked_at ?? null,
     fallbackSummary: `API reachability is not fully proven for api_base ${runtimeHealth?.api_base ?? "unknown"}.`,
     successSummary: `Runtime API base ${runtimeHealth?.api_base ?? "/"} is reachable and aligned with the control-plane origin contract.`,
-    nextRoute: { label: "Open Errors & Incident Review", to: withInstanceScope(CONTROL_PLANE_ROUTES.errors, instanceId) },
+    nextRoute: { label: "Open Errors & Incident Review", to: errorsRoute },
   });
 
   const frontendGroup = buildGroup({
@@ -305,7 +186,7 @@ export function HealthPage() {
     nextRoute: { label: "Open setup progress", to: onboardingRoute },
   });
 
-  const providersGroup = {
+  const providersGroup: HealthGroup = {
     title: "Providers",
     status: providersNeedingReview.length === 0 ? "healthy" as const : providersNeedingReview.some((provider) => providerNeedsOauthHandoff(provider) || !provider.ready) ? "failed" as const : "warning" as const,
     summary: providersNeedingReview.length === 0
@@ -424,38 +305,180 @@ export function HealthPage() {
     { label: "bootstrap", status: providers?.bootstrap_readiness?.ready ? "healthy" : "failed", evidence: "", route: { label: "", to: onboardingRoute } },
   ]);
 
-  return (
-    <section className="fg-page">
-      <PageIntro
-        eyebrow="Operations"
-        title="Health & Readiness"
-        description="Separate technical health from go-live readiness, and tie every failing check to the next operational route."
-        question="Is this instance merely up, or is it actually ready for traffic, public exposure, and signal-path accountability?"
-        links={[
-          {
-            label: "Provider Health & Runs",
-            to: providerHealthRoute,
-            description: "Open the provider-specific probe and run surface when an integration needs review.",
-          },
-          {
-            label: "Dispatch",
-            to: dispatchRoute,
-            description: "Cross-check worker and queue pressure when runtime posture is degraded by stale dispatch fabric.",
-          },
-          {
-            label: "Ingress / TLS",
-            to: ingressRoute,
-            description: "Fix public-origin, TLS, and certificate blockers that keep readiness red.",
-          },
-        ]}
-        badges={[
-          { label: selectedInstance ? `Instance scope: ${selectedInstance.display_name}` : "Default instance path", tone: selectedInstance ? "success" : "neutral" },
-          { label: labelForStatus(technicalHealthStatus), tone: toneForStatus(technicalHealthStatus) },
-          { label: `Readiness: ${labelForStatus(readinessStatus)}`, tone: toneForStatus(readinessStatus) },
-        ]}
-        note="Health answers whether the stack is functioning now. Readiness answers whether the current posture is deployable, supportable, and publicly acceptable."
-      />
+  const dataLoaded = runtimeHealth && providers && logs && usage && dashboard;
 
+  // ── Attention items ────────────────────────────────────────
+  const attentionItems: AttentionPayload[] = useMemo(() => {
+    const items: AttentionPayload[] = [];
+
+    if (!dataLoaded) {
+      return items;
+    }
+
+    const failedGroups = checkGroups.filter((g) => g.status === "failed");
+    const warningGroups = checkGroups.filter((g) => g.status === "warning");
+
+    if (failedGroups.length > 0) {
+      items.push({
+        key: "failed-groups",
+        level: "primary_blocker",
+        title: `${failedGroups.length} health group${failedGroups.length > 1 ? "s" : ""} in failed state`,
+        description: failedGroups.map((g) => `${g.title}: ${g.error}`).join(" | "),
+      });
+    }
+
+    if (warningGroups.length > 0) {
+      items.push({
+        key: "warning-groups",
+        level: "warning",
+        title: `${warningGroups.length} health group${warningGroups.length > 1 ? "s" : ""} need${warningGroups.length === 1 ? "s" : ""} review`,
+        description: warningGroups.map((g) => g.title).join(", "),
+      });
+    }
+
+    if (dashboard && dashboard.attention.length > 0) {
+      items.push({
+        key: "dashboard-risks",
+        level: "needs_action",
+        title: `${dashboard.attention.length} current risk${dashboard.attention.length === 1 ? "" : "s"} from dashboard`,
+        description: dashboard.attention.map((a) => a.title).join(", "),
+      });
+    }
+
+    if (failedGroups.length === 0 && warningGroups.length === 0) {
+      items.push({
+        key: "all-healthy",
+        level: "healthy",
+        title: "All health groups are green",
+        description: "No failed or warning groups detected.",
+      });
+    }
+
+    return items;
+  }, [checkGroups, dashboard, dataLoaded]);
+
+  // ── Summary items ──────────────────────────────────────────
+  const summaryItems = useMemo(() => {
+    if (!dataLoaded) {
+      return undefined;
+    }
+    const healthyCount = checkGroups.filter((g) => g.status === "healthy").length;
+    const warningCount = checkGroups.filter((g) => g.status === "warning").length;
+    const failedCount = checkGroups.filter((g) => g.status === "failed").length;
+
+    return [
+      {
+        key: "healthy" as const,
+        label: "Healthy groups" as const,
+        value: String(healthyCount) as string,
+        tone: "success" as const,
+        status: "ready" as const,
+      },
+      ...(warningCount > 0
+        ? [{
+            key: "warning" as const,
+            label: "Needs review" as const,
+            value: String(warningCount) as string,
+            tone: "warning" as const,
+            status: "partial" as const,
+          }]
+        : []),
+      ...(failedCount > 0
+        ? [{
+            key: "failed" as const,
+            label: "Failed groups" as const,
+            value: String(failedCount) as string,
+            tone: "danger" as const,
+            status: "blocked" as const,
+          }]
+        : []),
+    ];
+  }, [checkGroups, dataLoaded]);
+
+  // ── Page actions ───────────────────────────────────────────
+  const actions: Action[] = useMemo(() => [
+    {
+      label: "Refresh health data",
+      kind: "secondary",
+      intent: "run",
+      onClick: handleRefresh,
+    },
+    {
+      label: "Technical health",
+      kind: "navigation",
+      intent: "navigate",
+      description: `${labelForStatus(technicalHealthStatus)}`,
+      onClick: () => {},
+    },
+    {
+      label: "Readiness",
+      kind: "navigation",
+      intent: "navigate",
+      description: `${labelForStatus(readinessStatus)}`,
+      onClick: () => {},
+    },
+  ], [handleRefresh, technicalHealthStatus, readinessStatus]);
+
+  // ── Selected item detail ───────────────────────────────────
+  const selectedItemContent = selectedGroup ? (
+    <article className="fg-card">
+      <div className="fg-panel-heading">
+        <div>
+          <h3>{selectedGroup.title} — Details</h3>
+          <p className="fg-muted">{selectedGroup.summary}</p>
+        </div>
+        <span className="fg-pill" data-tone={toneForStatus(selectedGroup.status)}>
+          {labelForStatus(selectedGroup.status)}
+        </span>
+      </div>
+      <div className="fg-detail-grid">
+        <p>Last checked: {selectedGroup.lastChecked}</p>
+        <p>Error: {selectedGroup.error}</p>
+      </div>
+      <h4 className="fg-heading-sm mt-3">Evidence</h4>
+      <ul className="fg-list">
+        {selectedGroup.evidence.map((line) => (
+          <li key={line}>{line}</li>
+        ))}
+      </ul>
+      <div className="flex gap-2 mt-3">
+        <Button variant="navigation" onPress={() => navigate(selectedGroup.nextRoute.to)}>
+          {selectedGroup.nextRoute.label}
+        </Button>
+        <Button variant="tertiary" onPress={() => setSelectedGroup(null)}>
+          Close
+        </Button>
+      </div>
+    </article>
+  ) : null;
+
+  // ── Diagnostics content ────────────────────────────────────
+  const diagnosticsContent = (
+    <div className="fg-stack">
+      <p className="text-muted">Runtime health API base: {runtimeHealth?.api_base ?? "unknown"}</p>
+      <p className="text-muted">Readiness state: {runtimeHealth?.readiness.state ?? "unknown"}</p>
+      <p className="text-muted">Accepting traffic: {String(runtimeHealth?.readiness.accepting_traffic ?? false)}</p>
+      <p className="text-muted">Bootstrap ready: {String(providers?.bootstrap_readiness?.ready ?? false)}</p>
+      <p className="text-muted">Technical health: {labelForStatus(technicalHealthStatus)}</p>
+      <p className="text-muted">Readiness posture: {labelForStatus(readinessStatus)}</p>
+      {error ? <p className="fg-danger">{error}</p> : null}
+    </div>
+  );
+
+  return (
+    <IncidentResponsePage
+      eyebrow="Runtime"
+      title="Health Status"
+      description="System health and active incidents for the selected instance"
+      attentionItems={attentionItems}
+      summaryItems={summaryItems}
+      actions={actions}
+      selectedItemContent={selectedItemContent}
+      hasSelection={selectedGroup !== null}
+      diagnostics={diagnosticsContent}
+      diagnosticsTitle="Health diagnostics"
+    >
+      {/* ── Scope selector ── */}
       <InstanceScopeCard
         instanceId={instanceId}
         selectedInstance={selectedInstance}
@@ -466,11 +489,20 @@ export function HealthPage() {
         onInstanceChange={onInstanceChange}
       />
 
-      {state === "loading" ? <article className="fg-card"><p className="fg-muted">Loading health, readiness, and signal-path evidence.</p></article> : null}
-      {error ? <p className="fg-danger">{error}</p> : null}
+      {/* ── Loading state ── */}
+      {state === "loading" ? (
+        <article className="fg-card">
+          <p className="fg-muted">Loading health, readiness, and signal-path evidence.</p>
+        </article>
+      ) : null}
 
-      {runtimeHealth && providers && logs && usage && dashboard ? (
+      {/* ── Error state ── */}
+      {error && !dataLoaded ? <p className="fg-danger">{error}</p> : null}
+
+      {/* ── Data-loaded content ── */}
+      {dataLoaded ? (
         <>
+          {/* ── Summary cards: Technical Health + Readiness ── */}
           <div className="fg-grid fg-grid-compact">
             <article className="fg-card">
               <div className="fg-panel-heading">
@@ -514,10 +546,18 @@ export function HealthPage() {
             </article>
           </div>
 
+          {/* ── Health group cards ── */}
           <div className="fg-grid">
-            {checkGroups.map((group) => <HealthGroupCard key={group.title} group={group} />)}
+            {checkGroups.map((group) => (
+              <HealthGroupCard
+                key={group.title}
+                group={group}
+                onSelect={() => setSelectedGroup(group)}
+              />
+            ))}
           </div>
 
+          {/* ── Providers needing review ── */}
           <article className="fg-card">
             <div className="fg-panel-heading">
               <div>
@@ -533,15 +573,16 @@ export function HealthPage() {
                   <li key={provider.provider}>
                     <strong>{provider.label}</strong> · {provider.readiness_reason ?? provider.next_action} ·
                     {" "}
-                    <Link className="fg-nav-link" to={route}>
+                    <Button variant="navigation" onPress={() => navigate(route)}>
                       {providerNeedsOauthHandoff(provider) ? "Open OAuth Targets" : "Open Provider Health & Runs"}
-                    </Link>
+                    </Button>
                   </li>
                 );
               })}
             </ul>
           </article>
 
+          {/* ── Signal path ── */}
           <article className="fg-card">
             <div className="fg-panel-heading">
               <div>
@@ -557,12 +598,15 @@ export function HealthPage() {
                     <span className="fg-pill" data-tone={toneForStatus(row.status)}>{labelForStatus(row.status)}</span>
                   </div>
                   <p className="fg-muted">{row.evidence}</p>
-                  <Link className="fg-nav-link" to={row.route.to}>{row.route.label}</Link>
+                  <Button variant="navigation" onPress={() => navigate(row.route.to)}>
+                    {row.route.label}
+                  </Button>
                 </article>
               ))}
             </div>
           </article>
 
+          {/* ── Current risks ── */}
           <article className="fg-card">
             <div className="fg-panel-heading">
               <div>
@@ -576,15 +620,15 @@ export function HealthPage() {
                 <li key={item.id}>
                   <strong>{item.title}</strong> · {item.cause} ·
                   {" "}
-                  <Link className="fg-nav-link" to={withInstanceScope(item.to, instanceId)}>
+                  <Button variant="navigation" onPress={() => navigate(withInstanceScope(item.to, instanceId))}>
                     {item.action_label}
-                  </Link>
+                  </Button>
                 </li>
               ))}
             </ul>
           </article>
         </>
       ) : null}
-    </section>
+    </IncidentResponsePage>
   );
 }

@@ -1,5 +1,18 @@
+/**
+ * NotificationsPage — control notification preview, queue, retry,
+ * rejection, and fallback routing.
+ *
+ * Uses the IncidentResponsePage template for consistent layout with
+ * attention items, summary strip, actions, selected-item detail, and
+ * collapsed diagnostics.
+ *
+ * Feature module at {@link features/notifications}.
+ *
+ * @packageDocumentation
+ */
+
 import { startTransition, useEffect, useState, type FormEvent } from "react";
-import { Link, useSearchParams } from "react-router-dom";
+import { useSearchParams } from "react-router-dom";
 
 import {
   confirmNotification,
@@ -9,239 +22,37 @@ import {
   rejectNotification,
   retryNotification,
   updateNotification,
-  type NotificationDeliveryAttempt,
-  type NotificationDeliveryEffect,
   type NotificationDeliveryStatus,
   type NotificationDetail,
   type NotificationSummary,
   type WorkItemPriority,
 } from "../api/domain/notifications";
 import { fetchInstances } from "../api/domain/instances";
-import { CONTROL_PLANE_ROUTES } from "../app/navigation";
-import {
-  buildAutomationPath,
-  buildChannelPath,
-  buildConversationPath,
-  buildInboxPath,
-  buildReminderPath,
-  buildTaskPath,
-  buildWorkspacePath,
-} from "../app/workInteractionRoutes";
 import { useAppSession } from "../app/session";
-import { PageIntro } from "../components/PageIntro";
-import { DetailDrawer } from "../components/ui/DetailDrawer";
-import { getWorkInteractionAccess, normalizeOptional, parseInteger, parseJsonObject, type LoadState } from "./workInteractionPageSupport";
+import { IncidentResponsePage } from "../components/page-templates";
+import type { AttentionPayload } from "../components/ui/models/attention";
+import { DiagnosticSection, RawJson } from "../components/ui";
+import { getWorkInteractionAccess, normalizeOptional, parseInteger, parseJsonObject } from "./workInteractionPageSupport";
 
-type DrawerMode = "closed" | "create" | "edit";
-type NotificationAction = "confirm" | "reject" | "retry";
-type OutboxGroupKey = "pending_preview" | "queued" | "sent" | "failed" | "rejected";
+import {
+  NotificationList,
+  NotificationDetailPanel,
+  NotificationCreateForm,
+  DEFAULT_CREATE_FORM,
+  DEFAULT_EDIT_FORM,
+  actionMessage,
+  notificationStatusTone,
+} from "../features/notifications";
 
-const DRAWER_FORM_ID = "notifications-drawer-form";
+import type { CreateForm, DrawerMode, EditForm, NotificationAction } from "../features/notifications";
 
-const DELIVERY_STATUS_OPTIONS: Array<NotificationDeliveryStatus | "all"> = [
-  "all",
-  "draft",
-  "preview",
-  "confirmed",
-  "queued",
-  "delivering",
-  "delivered",
-  "failed",
-  "fallback_queued",
-  "rejected",
-  "cancelled",
-];
-const PRIORITY_OPTIONS: Array<WorkItemPriority | "all"> = ["all", "low", "normal", "high", "critical"];
-const OUTBOX_GROUPS: Array<{
-  key: OutboxGroupKey;
-  label: string;
-  description: string;
-  statuses: NotificationDeliveryStatus[];
-}> = [
-  {
-    key: "pending_preview",
-    label: "Pending approval / preview",
-    description: "Draft and preview-only notifications.",
-    statuses: ["draft", "preview"],
-  },
-  {
-    key: "queued",
-    label: "Queued",
-    description: "Notifications queued, delivering, or in fallback.",
-    statuses: ["confirmed", "queued", "delivering", "fallback_queued"],
-  },
-  {
-    key: "sent",
-    label: "Sent",
-    description: "Notifications with recorded delivery success.",
-    statuses: ["delivered"],
-  },
-  {
-    key: "failed",
-    label: "Failed",
-    description: "Notifications failed or cancelled before delivery.",
-    statuses: ["failed", "cancelled"],
-  },
-  {
-    key: "rejected",
-    label: "Rejected",
-    description: "Notifications explicitly rejected.",
-    statuses: ["rejected"],
-  },
-];
+type LoadState = "idle" | "loading" | "success" | "error";
 
-const DEFAULT_CREATE_FORM = {
-  notificationId: "",
-  taskId: "",
-  reminderId: "",
-  conversationId: "",
-  inboxId: "",
-  workspaceId: "",
-  channelId: "",
-  fallbackChannelId: "",
-  title: "",
-  body: "",
-  priority: "normal" as WorkItemPriority,
-  previewRequired: "yes" as "yes" | "no",
-  maxRetries: "0",
-  metadataJson: "{}",
-};
-
-const DEFAULT_EDIT_FORM = {
-  channelId: "",
-  fallbackChannelId: "",
-  title: "",
-  body: "",
-  deliveryStatus: "preview" as NotificationDeliveryStatus,
-  priority: "normal" as WorkItemPriority,
-  previewRequired: "yes" as "yes" | "no",
-  maxRetries: "0",
-  lastError: "",
-  metadataJson: "{}",
-};
-
-function formatTimestamp(value: string | null | undefined, fallback = "Not recorded"): string {
-  return value && value.trim() ? value : fallback;
-}
-
-function notificationStatusTone(status: NotificationDeliveryStatus): "success" | "warning" | "danger" | "neutral" {
-  switch (status) {
-    case "delivered":
-      return "success";
-    case "failed":
-    case "rejected":
-    case "cancelled":
-      return "danger";
-    case "draft":
-    case "preview":
-    case "confirmed":
-    case "queued":
-    case "delivering":
-    case "fallback_queued":
-      return "warning";
-    default:
-      return "neutral";
-  }
-}
-
-function effectTone(effect: NotificationDeliveryEffect | undefined): "success" | "warning" | "danger" | "neutral" {
-  switch (effect) {
-    case "sent":
-      return "success";
-    case "failed":
-    case "rejected":
-    case "cancelled":
-      return "danger";
-    case "preview_only":
-    case "queued":
-      return "warning";
-    default:
-      return "neutral";
-  }
-}
-
-function notificationModeLabel(notification: Pick<NotificationSummary, "preview_required" | "delivery_status">): string {
-  if (notification.delivery_status === "draft" || notification.delivery_status === "preview" || notification.delivery_status === "rejected") {
-    return "Preview only";
-  }
-  if (notification.delivery_status === "delivered") {
-    return "Delivered";
-  }
-  if (notification.delivery_status === "failed" || notification.delivery_status === "cancelled") {
-    return "Delivery blocked";
-  }
-  return notification.preview_required ? "Preview approved" : "Live delivery";
-}
-
-function notificationLaneLabel(notification: Pick<NotificationSummary, "channel_id" | "configured_channel_id" | "fallback_channel_id">): string {
-  const configuredChannelId = notification.configured_channel_id ?? notification.channel_id;
-  if (configuredChannelId && notification.fallback_channel_id) {
-    return `${configuredChannelId} -> ${notification.fallback_channel_id}`;
-  }
-  if (configuredChannelId) {
-    return configuredChannelId;
-  }
-  if (notification.fallback_channel_id) {
-    return `fallback ${notification.fallback_channel_id}`;
-  }
-  return "No channel linked";
-}
-
-function linkedContextLabel(notification: Pick<NotificationSummary, "task_id" | "reminder_id" | "conversation_id" | "inbox_id" | "workspace_id">): string {
-  if (notification.task_id) {
-    return `task ${notification.task_id}`;
-  }
-  if (notification.reminder_id) {
-    return `reminder ${notification.reminder_id}`;
-  }
-  if (notification.conversation_id) {
-    return `conversation ${notification.conversation_id}`;
-  }
-  if (notification.inbox_id) {
-    return `inbox ${notification.inbox_id}`;
-  }
-  if (notification.workspace_id) {
-    return `workspace ${notification.workspace_id}`;
-  }
-  return "No linked work object";
-}
-
-function attemptKindLabel(attempt: NotificationDeliveryAttempt): string {
-  switch (attempt.attempt_kind) {
-    case "preview":
-      return "Preview capture";
-    case "approval":
-      return "Approval review";
-    case "retry":
-      return "Retry attempt";
-    case "fallback":
-      return "Fallback handoff";
-    case "manual_override":
-      return "Manual override";
-    case "terminal":
-      return "Terminal state";
-    default:
-      return attempt.attempt_kind;
-  }
-}
-
-function attemptTone(attempt: NotificationDeliveryAttempt): "success" | "warning" | "danger" | "neutral" {
-  return notificationStatusTone(attempt.delivery_status);
-}
-
-function actionMessage(action: NotificationAction): string {
-  switch (action) {
-    case "confirm":
-      return "confirmed and queued";
-    case "reject":
-      return "rejected";
-    case "retry":
-      return "retried";
-    default:
-      return action;
-  }
-}
-
+/**
+ * Notifications page — outbox and delivery control surface exposed through
+ * the IncidentResponsePage template with a scope/filter card, grouped
+ * outbox table, delivery detail panel, create/edit form, and diagnostics.
+ */
 export function NotificationsPage() {
   const { session, sessionReady } = useAppSession();
   const { canRead, canMutate } = getWorkInteractionAccess(session, sessionReady);
@@ -258,8 +69,8 @@ export function NotificationsPage() {
   const [detailState, setDetailState] = useState<LoadState>("idle");
   const [notifications, setNotifications] = useState<NotificationSummary[]>([]);
   const [detail, setDetail] = useState<NotificationDetail | null>(null);
-  const [createForm, setCreateForm] = useState(DEFAULT_CREATE_FORM);
-  const [editForm, setEditForm] = useState(DEFAULT_EDIT_FORM);
+  const [createForm, setCreateForm] = useState<CreateForm>(DEFAULT_CREATE_FORM);
+  const [editForm, setEditForm] = useState<EditForm>(DEFAULT_EDIT_FORM);
   const [drawerMode, setDrawerMode] = useState<DrawerMode>("closed");
   const [savingCreate, setSavingCreate] = useState(false);
   const [savingUpdate, setSavingUpdate] = useState(false);
@@ -276,6 +87,8 @@ export function NotificationsPage() {
       setSearchParams(next, { replace });
     });
   };
+
+  // ── Effects ─────────────────────────────────────────────────────────
 
   useEffect(() => {
     if (!canRead) {
@@ -418,6 +231,8 @@ export function NotificationsPage() {
     });
   }, [detail]);
 
+  // ── Handlers ────────────────────────────────────────────────────────
+
   const closeDrawer = () => {
     setDrawerMode("closed");
     setCreateForm(DEFAULT_CREATE_FORM);
@@ -541,43 +356,115 @@ export function NotificationsPage() {
     }
   };
 
-  const groupedNotifications = OUTBOX_GROUPS
-    .map((group) => ({
-      ...group,
-      items: notifications.filter((notification) => group.statuses.includes(notification.delivery_status)),
-    }))
-    .filter((group) => group.items.length > 0);
+  // ── Inline handlers ─────────────────────────────────────────────────
 
-  const drawerModeLabel = drawerMode === "create" ? "Create notification" : "Edit notification";
-  const drawerStatus = drawerMode === "create" ? "secondary create path" : detail?.notification_id ?? "Select a notification";
-  const drawerStatusTone = drawerMode === "create" ? "neutral" : detail ? notificationStatusTone(detail.delivery_status) : "warning";
+  const handleInstanceChange = (nextInstanceId: string) => {
+    updateRoute((next) => {
+      next.set("instanceId", nextInstanceId);
+      next.delete("notificationId");
+    });
+  };
+
+  const handleFilterChange = (key: string, value: string) => {
+    updateRoute((next) => {
+      if (value === "all") {
+        next.delete(key);
+      } else {
+        next.set(key, value);
+      }
+      next.delete("notificationId");
+    });
+  };
+
+  const handleSelectNotification = (notificationId: string) => {
+    updateRoute((next) => {
+      next.set("notificationId", notificationId);
+    });
+  };
+
+  const handleCreateFormChange = (field: string, value: string) => {
+    setCreateForm((current) => ({ ...current, [field]: value } as CreateForm));
+  };
+
+  const handleEditFormChange = (field: string, value: string) => {
+    setEditForm((current) => ({ ...current, [field]: value } as EditForm));
+  };
+
+  // ── Derived data ────────────────────────────────────────────────────
+
+  const groupedNotifications = [
+    { key: "pending_preview", items: notifications.filter((n) => ["draft", "preview"].includes(n.delivery_status)) },
+    { key: "queued", items: notifications.filter((n) => ["confirmed", "queued", "delivering", "fallback_queued"].includes(n.delivery_status)) },
+    { key: "sent", items: notifications.filter((n) => n.delivery_status === "delivered") },
+    { key: "failed", items: notifications.filter((n) => ["failed", "cancelled"].includes(n.delivery_status)) },
+    { key: "rejected", items: notifications.filter((n) => n.delivery_status === "rejected") },
+  ];
+
   const latestAttempt = detail?.delivery_attempts[detail.delivery_attempts.length - 1] ?? null;
-  const detailEffect = detail?.delivery_evidence?.effect_state;
-  const detailEffectLabel = detailEffect ? detailEffect.replace(/_/g, " ") : "unknown";
-  const outboxMode = detail ? notificationModeLabel(detail) : "No selection";
-  const fallbackChain = detail?.configured_channel && detail.fallback_channel
-    ? `${detail.configured_channel.label} -> ${detail.fallback_channel.label}`
-    : detail?.configured_channel
-      ? `${detail.configured_channel.label} (no fallback configured)`
-      : detail?.fallback_channel
-        ? `Fallback only ${detail.fallback_channel.label}`
-        : "No delivery route linked";
+
+  // ── Template props ──────────────────────────────────────────────────
+
+  const attentionItems: AttentionPayload[] = [];
+  if (error) {
+    attentionItems.push({
+      key: "error",
+      level: "warning",
+      title: error,
+    });
+  }
+  if (message) {
+    attentionItems.push({
+      key: "message",
+      level: "informational",
+      title: message,
+    });
+  }
+
+  const summaryItems = groupedNotifications
+    .filter((g) => g.items.length > 0)
+    .map((group) => ({
+      key: group.key,
+      label: group.key.replace(/_/g, " "),
+      value: group.items.length,
+      tone: group.key === "failed" || group.key === "rejected" ? "danger" as const
+        : group.key === "queued" ? "warning" as const
+          : group.key === "sent" ? "success" as const
+            : "neutral" as const,
+    }));
+
+  const selectedItemContent = detail ? (
+    <NotificationDetailPanel
+      detail={detail}
+      detailState={detailState}
+      instanceId={instanceId}
+      canMutate={canMutate}
+      actionState={actionState}
+      lastActionResult={lastActionResult}
+      onAction={(action) => void handleAction(action)}
+      onEdit={openEditDrawer}
+    />
+  ) : null;
+
+  const diagnosticsContent = (
+    <>
+      <DiagnosticSection label="Filters">
+        <RawJson data={{ deliveryStatusFilter, priorityFilter }} />
+      </DiagnosticSection>
+      <DiagnosticSection label="Load states">
+        <RawJson data={{ instancesState, listState, detailState }} />
+      </DiagnosticSection>
+      <DiagnosticSection label="Raw notification list">
+        <RawJson data={notifications} />
+      </DiagnosticSection>
+    </>
+  );
+
+  // ── Session guards ──────────────────────────────────────────────────
 
   if (!sessionReady) {
     return (
       <section className="fg-page">
-        <PageIntro
-          eyebrow="Work Interaction"
-          title="Notifications"
-          description="Restoring notification scope."
-          question="Open outbox when session access resolves."
-          links={[
-            { label: "Channels", to: CONTROL_PLANE_ROUTES.channels, description: "Inspect delivery targets once session scope returns." },
-            { label: "Command Center", to: CONTROL_PLANE_ROUTES.dashboard, description: "Return to the dashboard while scope resolves." },
-          ]}
-          badges={[{ label: "Checking access", tone: "neutral" }]}
-          note="Notifications are instance-scoped with preview, retry, reject, and fallback state."
-        />
+        <p className="fg-muted">Restoring notification scope.</p>
       </section>
     );
   }
@@ -585,559 +472,55 @@ export function NotificationsPage() {
   if (!canRead) {
     return (
       <section className="fg-page">
-        <PageIntro
-          eyebrow="Work Interaction"
-          title="Notifications"
-          description="Notification data is available to operators and admins."
-          question="Use Channels or Approvals until notification access is available."
-          links={[
-            { label: "Channels", to: CONTROL_PLANE_ROUTES.channels, description: "Inspect delivery targets without opening notification history." },
-            { label: "Approvals", to: CONTROL_PLANE_ROUTES.approvals, description: "Review approval state while notification truth is unavailable." },
-          ]}
-          badges={[{ label: "Operator or admin required", tone: "warning" }]}
-          note="No placeholder outbox shell is rendered without scoped access."
-        />
+        <p className="fg-muted">Operator or admin access is required to inspect notification delivery state.</p>
       </section>
     );
   }
 
   return (
-    <section className="fg-page">
-      <PageIntro
-        eyebrow="Work Interaction"
-        title="Notifications"
-        description="Control notification preview, queue, retry, rejection, and fallback routing."
-        question="Select a notification to check delivery state and next action."
-        links={[
-          { label: "Notifications", to: CONTROL_PLANE_ROUTES.notifications, description: "Stay on the outbox and delivery control surface." },
-          { label: "Channels", to: CONTROL_PLANE_ROUTES.channels, description: "Inspect the active and fallback delivery targets." },
-          { label: "Reminders", to: CONTROL_PLANE_ROUTES.reminders, description: "Review due-state truth that may generate notifications." },
-          { label: "Automations", to: CONTROL_PLANE_ROUTES.automations, description: "Inspect recurring automations that create notification load." },
-        ]}
-        badges={[
-          { label: `${notifications.length} notification${notifications.length === 1 ? "" : "s"}`, tone: notifications.length > 0 ? "success" : "warning" },
-          { label: canMutate ? "Admin mutation enabled" : "Read only", tone: canMutate ? "success" : "neutral" },
-        ]}
-        note="Preview and live delivery are separated. Confirm, reject, and retry change persisted outbox state."
+    <IncidentResponsePage
+      eyebrow="Work Interaction"
+      title="Notifications"
+      description="Control notification preview, queue, retry, rejection, and fallback routing."
+      attentionItems={attentionItems}
+      summaryItems={summaryItems}
+      selectedItemContent={selectedItemContent}
+      hasSelection={Boolean(detail)}
+      diagnostics={diagnosticsContent}
+      diagnosticsTitle="Notification diagnostics"
+    >
+      {/* ── Scope, filters, and outbox table ── */}
+      <NotificationList
+        instances={instances}
+        instanceId={instanceId}
+        instancesState={instancesState}
+        listState={listState}
+        notifications={notifications}
+        selectedNotificationId={selectedNotificationId}
+        deliveryStatusFilter={deliveryStatusFilter}
+        priorityFilter={priorityFilter}
+        onInstanceChange={handleInstanceChange}
+        onFilterChange={handleFilterChange}
+        onSelectNotification={handleSelectNotification}
+        onCreateNew={openCreateDrawer}
+        canMutate={canMutate}
       />
 
-      {error ? <p className="fg-danger">{error}</p> : null}
-      {message ? <p>{message}</p> : null}
-
-      <article className="fg-card">
-        <div className="fg-panel-heading">
-          <div>
-            <h3>Scope and filter</h3>
-            <p className="fg-muted">Choose the instance boundary, then filter the outbox by exact backend status and priority.</p>
-          </div>
-          <span className="fg-pill" data-tone={instancesState === "success" ? "success" : instancesState === "error" ? "danger" : "neutral"}>{instancesState}</span>
-        </div>
-        <div className="fg-inline-form">
-          <label>
-            Instance
-            <select
-              aria-label="Notification instance"
-              value={instanceId}
-              onChange={(event) => updateRoute((next) => {
-                next.set("instanceId", event.target.value);
-                next.delete("notificationId");
-              })}
-            >
-              {instances.map((instance) => (
-                <option key={instance.instance_id} value={instance.instance_id}>
-                  {instance.display_name} ({instance.instance_id})
-                </option>
-              ))}
-            </select>
-          </label>
-          <label>
-            Delivery status
-            <select
-              aria-label="Notification delivery status filter"
-              value={deliveryStatusFilter}
-              onChange={(event) => updateRoute((next) => {
-                const nextValue = event.target.value;
-                if (nextValue === "all") {
-                  next.delete("deliveryStatus");
-                } else {
-                  next.set("deliveryStatus", nextValue);
-                }
-                next.delete("notificationId");
-              })}
-            >
-              {DELIVERY_STATUS_OPTIONS.map((option) => <option key={option} value={option}>{option}</option>)}
-            </select>
-          </label>
-          <label>
-            Priority
-            <select
-              aria-label="Notification priority filter"
-              value={priorityFilter}
-              onChange={(event) => updateRoute((next) => {
-                const nextValue = event.target.value;
-                if (nextValue === "all") {
-                  next.delete("priority");
-                } else {
-                  next.set("priority", nextValue);
-                }
-                next.delete("notificationId");
-              })}
-            >
-              {PRIORITY_OPTIONS.map((option) => <option key={option} value={option}>{option}</option>)}
-            </select>
-          </label>
-        </div>
-      </article>
-
-      <div className="fg-grid">
-        <article className="fg-card">
-          <div className="fg-panel-heading">
-            <div>
-              <h3>Outbox table</h3>
-              <p className="fg-muted">Grouped by delivery state so preview items stay separate from sent work.</p>
-            </div>
-            <div className="fg-actions">
-              <span className="fg-pill" data-tone={listState === "success" ? "success" : listState === "error" ? "danger" : "neutral"}>{listState}</span>
-              <button type="button" disabled={!canMutate} onClick={openCreateDrawer}>New notification</button>
-            </div>
-          </div>
-
-          <div className="fg-actions">
-            {OUTBOX_GROUPS.map((group) => {
-              const count = notifications.filter((notification) => group.statuses.includes(notification.delivery_status)).length;
-              return <span key={group.key} className="fg-pill">{group.label}: {count}</span>;
-            })}
-          </div>
-
-          {listState === "loading" ? <p className="fg-muted">Loading outbox inventory.</p> : null}
-          {listState === "success" && notifications.length === 0 ? <p className="fg-muted">No notifications match these filters.</p> : null}
-
-          {groupedNotifications.map((group) => (
-            <section key={group.key} className="fg-stack">
-              <div className="fg-panel-heading">
-                <div>
-                  <h4>{group.label}</h4>
-                  <p className="fg-muted">{group.description}</p>
-                </div>
-                <span className="fg-pill">{group.items.length}</span>
-              </div>
-              <div className="fg-table-wrap">
-                <table className="fg-table" aria-label={`${group.label} notifications`}>
-                  <thead>
-                    <tr>
-                      <th>Notification</th>
-                      <th>State</th>
-                      <th>Lane</th>
-                      <th>Retries</th>
-                      <th>Linked context</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {group.items.map((notification) => (
-                      <tr key={notification.notification_id} className={notification.notification_id === selectedNotificationId ? "is-selected" : undefined}>
-                        <td>
-                          <button
-                            className="fg-table-trigger"
-                            type="button"
-                            onClick={() => updateRoute((next) => {
-                              next.set("notificationId", notification.notification_id);
-                            })}
-                          >
-                            {notification.title}
-                          </button>
-                          <div className="fg-muted">{notification.notification_id}</div>
-                        </td>
-                        <td>
-                          <span className="fg-pill" data-tone={notificationStatusTone(notification.delivery_status)}>{notification.delivery_status}</span>
-                          <div className="fg-muted">{notificationModeLabel(notification)}</div>
-                        </td>
-                        <td>
-                          <div>{notificationLaneLabel(notification)}</div>
-                          <div className="fg-muted">next {formatTimestamp(notification.next_attempt_at, "No send scheduled")}</div>
-                        </td>
-                        <td>
-                          {notification.retry_count}/{notification.max_retries}
-                          <div className="fg-muted">{formatTimestamp(notification.last_attempt_at, "No attempts yet")}</div>
-                        </td>
-                        <td>{linkedContextLabel(notification)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </section>
-          ))}
-        </article>
-
-        <article className="fg-card">
-          <div className="fg-panel-heading">
-            <div>
-              <h3>Delivery detail</h3>
-              <p className="fg-muted">Preview, routing, fallback chain, attempts, and next step truth stay visible on the selected notification.</p>
-            </div>
-            <div className="fg-actions">
-              {detail ? <span className="fg-pill">{detail.notification_id}</span> : null}
-              <button type="button" disabled={!canMutate || !detail} onClick={openEditDrawer}>Edit selected notification</button>
-            </div>
-          </div>
-
-          {detailState === "idle" ? <p className="fg-muted">Select a notification to inspect outbox truth and delivery evidence.</p> : null}
-          {detailState === "loading" ? <p className="fg-muted">Loading notification detail.</p> : null}
-
-          {detail ? (
-            <div className="fg-stack">
-              <div className="fg-actions">
-                <span className="fg-pill" data-tone={notificationStatusTone(detail.delivery_status)}>status {detail.delivery_status}</span>
-                <span className="fg-pill" data-tone={effectTone(detailEffect)}>{detailEffectLabel}</span>
-                <span className="fg-pill">{outboxMode}</span>
-                <span className="fg-pill">{detail.priority} priority</span>
-              </div>
-
-              <article className="fg-subcard">
-                <h4>Message preview</h4>
-                <div className="fg-stack">
-                  <p><strong>{detail.title}</strong></p>
-                  <p>{detail.body}</p>
-                  <ul className="fg-list">
-                    <li>Preview required: {detail.preview_required ? "yes" : "no"}</li>
-                    <li>Outward effect: {detailEffectLabel}</li>
-                    <li>Evidence note: {detail.delivery_evidence?.evidence_note ?? "No delivery evidence is available."}</li>
-                  </ul>
-                  <p className="fg-muted">There is no fake send button here. Preview approval and live delivery are deliberately separated so operators do not confuse review with an external send.</p>
-                </div>
-                <div className="fg-actions">
-                  <button type="button" disabled={!canMutate || actionState !== "idle"} onClick={() => void handleAction("confirm")}>
-                    {actionState === "confirming" ? "Approving preview" : "Approve preview"}
-                  </button>
-                  <button type="button" disabled={!canMutate || actionState !== "idle"} onClick={() => void handleAction("reject")}>
-                    {actionState === "rejecting" ? "Rejecting preview" : "Reject preview"}
-                  </button>
-                  <button type="button" disabled={!canMutate || actionState !== "idle"} onClick={() => void handleAction("retry")}>
-                    {actionState === "retrying" ? "Retrying delivery" : "Retry delivery"}
-                  </button>
-                </div>
-              </article>
-
-              {lastActionResult ? (
-                <article className="fg-subcard">
-                  <h4>Latest queue mutation</h4>
-                  <ul className="fg-list">
-                    <li>Action: {lastActionResult.action}</li>
-                    <li>New status: {lastActionResult.notification.delivery_status}</li>
-                    <li>Resulting effect: {lastActionResult.notification.delivery_evidence?.effect_state.replace(/_/g, " ") ?? "unknown"}</li>
-                    <li>Next step: {lastActionResult.notification.delivery_evidence?.next_step ?? "No next step recorded."}</li>
-                  </ul>
-                </article>
-              ) : null}
-
-              <div className="fg-card-grid">
-                <article className="fg-subcard">
-                  <h4>Target and fallback chain</h4>
-                  <ul className="fg-list">
-                    <li>Configured primary channel: {detail.configured_channel ? `${detail.configured_channel.label} (${detail.configured_channel.channel_id})` : "Not linked"}</li>
-                    <li>Active delivery channel: {detail.channel ? `${detail.channel.label} (${detail.channel.channel_id})` : "Not linked"}</li>
-                    <li>Target contact: {detail.channel?.target ?? detail.configured_channel?.target ?? "No target configured"}</li>
-                    <li>Fallback chain: {fallbackChain}</li>
-                    <li>Fallback target: {detail.fallback_channel?.target ?? "No fallback target configured"}</li>
-                    <li>Current channel health: {detail.channel?.status ?? "Unknown"}</li>
-                  </ul>
-                  <div className="fg-actions">
-                    {detail.configured_channel ? <Link className="fg-nav-link" to={buildChannelPath({ instanceId, channelId: detail.configured_channel.channel_id })}>Open configured channel</Link> : null}
-                    {detail.channel && detail.channel.channel_id !== detail.configured_channel?.channel_id ? <Link className="fg-nav-link" to={buildChannelPath({ instanceId, channelId: detail.channel.channel_id })}>Open active delivery channel</Link> : null}
-                    {detail.fallback_channel ? <Link className="fg-nav-link" to={buildChannelPath({ instanceId, channelId: detail.fallback_channel.channel_id })}>Open fallback channel</Link> : null}
-                  </div>
-                </article>
-
-                <article className="fg-subcard">
-                  <h4>Failure and next step</h4>
-                  <ul className="fg-list">
-                    <li>Last error: {detail.last_error ?? "No provider error recorded"}</li>
-                    <li>Next attempt: {formatTimestamp(detail.next_attempt_at, "No retry scheduled")}</li>
-                    <li>Delivered at: {formatTimestamp(detail.delivered_at, "Not delivered")}</li>
-                    <li>Rejected at: {formatTimestamp(detail.rejected_at, "Not rejected")}</li>
-                    <li>Next step: {detail.delivery_evidence?.next_step ?? "No next step recorded"}</li>
-                  </ul>
-                </article>
-              </div>
-
-              <article className="fg-subcard">
-                <h4>Delivery attempts</h4>
-                {detail.delivery_attempts.length === 0 ? (
-                  <p className="fg-muted">No delivery evidence or state transitions have been persisted yet.</p>
-                ) : (
-                  <ul className="fg-list">
-                    {detail.delivery_attempts.map((attempt) => (
-                      <li key={attempt.attempt_id}>
-                        <span className="fg-pill" data-tone={attemptTone(attempt)}>{attempt.delivery_status}</span>
-                        {" "}{attemptKindLabel(attempt)}
-                        {" · "}{formatTimestamp(attempt.happened_at)}
-                        {" · "}{attempt.channel_label ?? attempt.channel_id ?? "No channel"}
-                        {" · "}{attempt.detail}
-                        {attempt.next_step ? ` Next: ${attempt.next_step}` : ""}
-                      </li>
-                    ))}
-                  </ul>
-                )}
-                <p className="fg-muted">This ledger is persisted on the notification record so confirm, reject, retry, and manual state changes remain visible after refresh.</p>
-              </article>
-
-              <article className="fg-subcard">
-                <h4>Linked objects</h4>
-                <ul className="fg-list">
-                  <li>Task: {detail.task ? detail.task.title : detail.task_id ?? "Not linked"}</li>
-                  <li>Reminder: {detail.reminder ? detail.reminder.title : detail.reminder_id ?? "Not linked"}</li>
-                  <li>Conversation: {detail.conversation_id ?? "Not linked"}</li>
-                  <li>Inbox item: {detail.inbox_id ?? "Not linked"}</li>
-                  <li>Workspace: {detail.workspace_id ?? "Not linked"}</li>
-                  <li>Automation: {detail.reminder?.automation_id ?? "Bridge-only via linked reminder"}</li>
-                </ul>
-                <div className="fg-actions">
-                  {detail.task ? <Link className="fg-nav-link" to={buildTaskPath({ instanceId, taskId: detail.task.task_id })}>Open task</Link> : null}
-                  {detail.reminder ? <Link className="fg-nav-link" to={buildReminderPath({ instanceId, reminderId: detail.reminder.reminder_id })}>Open reminder</Link> : null}
-                  {detail.reminder?.automation_id ? <Link className="fg-nav-link" to={buildAutomationPath({ instanceId, automationId: detail.reminder.automation_id })}>Open automation</Link> : null}
-                  {detail.conversation_id ? <Link className="fg-nav-link" to={buildConversationPath({ instanceId, conversationId: detail.conversation_id })}>Open conversation</Link> : null}
-                  {detail.inbox_id ? <Link className="fg-nav-link" to={buildInboxPath({ instanceId, inboxId: detail.inbox_id })}>Open inbox item</Link> : null}
-                  {detail.workspace_id ? <Link className="fg-nav-link" to={buildWorkspacePath({ instanceId, workspaceId: detail.workspace_id })}>Open workspace</Link> : null}
-                </div>
-              </article>
-            </div>
-          ) : null}
-        </article>
-      </div>
-
-      <DetailDrawer
-        open={drawerMode !== "closed"}
-        title={drawerModeLabel}
-        description={drawerMode === "create"
-          ? "Create is still available, but it is intentionally secondary to the outbox control loop."
-          : "Edit routing, content, retry budget, or administrative delivery overrides inside a focused drawer."}
-        status={drawerStatus}
-        statusTone={drawerStatusTone}
-        properties={[
-          { label: "Scope", value: instanceId || "No instance selected" },
-          { label: "Primary controls", value: "approve preview / reject preview / retry delivery" },
-          { label: "Persisted truth", value: "delivery attempts are written to the notification record" },
-        ]}
-        actions={(
-          <>
-            <button type="button" onClick={closeDrawer}>Cancel</button>
-            <button
-              type="submit"
-              form={DRAWER_FORM_ID}
-              disabled={!canMutate || (drawerMode === "create" ? savingCreate || !instanceId || !createForm.title.trim() || !createForm.body.trim() : savingUpdate || !detail)}
-            >
-              {drawerMode === "create" ? (savingCreate ? "Creating notification" : "Create notification") : (savingUpdate ? "Saving notification" : "Save notification")}
-            </button>
-          </>
-        )}
+      {/* ── Create/edit form (rendered inline when drawer is open) ── */}
+      <NotificationCreateForm
+        drawerMode={drawerMode}
+        createForm={createForm}
+        editForm={editForm}
+        savingCreate={savingCreate}
+        savingUpdate={savingUpdate}
+        canMutate={canMutate}
+        instanceId={instanceId}
+        detailExists={Boolean(detail)}
+        onCreateFormChange={handleCreateFormChange}
+        onEditFormChange={handleEditFormChange}
+        onSubmit={drawerMode === "create" ? handleCreate : handleUpdate}
         onClose={closeDrawer}
-      >
-        <form id={DRAWER_FORM_ID} className="fg-stack" onSubmit={drawerMode === "create" ? handleCreate : handleUpdate}>
-          <section className="fg-subcard">
-            <h4>Linkage</h4>
-            <div className="fg-grid fg-grid-compact">
-              {drawerMode === "create" ? (
-                <label>
-                  Notification ID
-                  <input value={createForm.notificationId} onChange={(event) => setCreateForm((current) => ({ ...current, notificationId: event.target.value }))} placeholder="notification_customer_pricing" />
-                </label>
-              ) : null}
-              <label>
-                Task ID
-                <input
-                  value={drawerMode === "create" ? createForm.taskId : detail?.task_id ?? ""}
-                  onChange={(event) => {
-                    if (drawerMode === "create") {
-                      setCreateForm((current) => ({ ...current, taskId: event.target.value }));
-                    }
-                  }}
-                  disabled={drawerMode !== "create"}
-                />
-              </label>
-              <label>
-                Reminder ID
-                <input
-                  value={drawerMode === "create" ? createForm.reminderId : detail?.reminder_id ?? ""}
-                  onChange={(event) => {
-                    if (drawerMode === "create") {
-                      setCreateForm((current) => ({ ...current, reminderId: event.target.value }));
-                    }
-                  }}
-                  disabled={drawerMode !== "create"}
-                />
-              </label>
-            </div>
-            {drawerMode === "create" ? (
-              <div className="fg-grid fg-grid-compact">
-                <label>
-                  Conversation ID
-                  <input value={createForm.conversationId} onChange={(event) => setCreateForm((current) => ({ ...current, conversationId: event.target.value }))} />
-                </label>
-                <label>
-                  Inbox ID
-                  <input value={createForm.inboxId} onChange={(event) => setCreateForm((current) => ({ ...current, inboxId: event.target.value }))} />
-                </label>
-                <label>
-                  Workspace ID
-                  <input value={createForm.workspaceId} onChange={(event) => setCreateForm((current) => ({ ...current, workspaceId: event.target.value }))} />
-                </label>
-              </div>
-            ) : (
-              <p className="fg-muted">Task, reminder, conversation, inbox, and workspace linkage on existing notifications remains read-only from this page. Use the owning work object when a relationship must be re-modeled.</p>
-            )}
-          </section>
-
-          <section className="fg-subcard">
-            <h4>Routing and preview</h4>
-            <div className="fg-grid fg-grid-compact">
-              <label>
-                Channel ID
-                <input
-                  value={drawerMode === "create" ? createForm.channelId : editForm.channelId}
-                  onChange={(event) => {
-                    const nextValue = event.target.value;
-                    if (drawerMode === "create") {
-                      setCreateForm((current) => ({ ...current, channelId: nextValue }));
-                      return;
-                    }
-                    setEditForm((current) => ({ ...current, channelId: nextValue }));
-                  }}
-                />
-              </label>
-              <label>
-                Fallback channel ID
-                <input
-                  value={drawerMode === "create" ? createForm.fallbackChannelId : editForm.fallbackChannelId}
-                  onChange={(event) => {
-                    const nextValue = event.target.value;
-                    if (drawerMode === "create") {
-                      setCreateForm((current) => ({ ...current, fallbackChannelId: nextValue }));
-                      return;
-                    }
-                    setEditForm((current) => ({ ...current, fallbackChannelId: nextValue }));
-                  }}
-                />
-              </label>
-              <label>
-                Preview required
-                <select
-                  value={drawerMode === "create" ? createForm.previewRequired : editForm.previewRequired}
-                  onChange={(event) => {
-                    const nextValue = event.target.value as "yes" | "no";
-                    if (drawerMode === "create") {
-                      setCreateForm((current) => ({ ...current, previewRequired: nextValue }));
-                      return;
-                    }
-                    setEditForm((current) => ({ ...current, previewRequired: nextValue }));
-                  }}
-                >
-                  <option value="yes">yes</option>
-                  <option value="no">no</option>
-                </select>
-              </label>
-            </div>
-            <div className="fg-grid fg-grid-compact">
-              <label>
-                Priority
-                <select
-                  value={drawerMode === "create" ? createForm.priority : editForm.priority}
-                  onChange={(event) => {
-                    const nextValue = event.target.value as WorkItemPriority;
-                    if (drawerMode === "create") {
-                      setCreateForm((current) => ({ ...current, priority: nextValue }));
-                      return;
-                    }
-                    setEditForm((current) => ({ ...current, priority: nextValue }));
-                  }}
-                >
-                  {PRIORITY_OPTIONS.filter((option) => option !== "all").map((option) => <option key={option} value={option}>{option}</option>)}
-                </select>
-              </label>
-              <label>
-                Max retries
-                <input
-                  value={drawerMode === "create" ? createForm.maxRetries : editForm.maxRetries}
-                  onChange={(event) => {
-                    const nextValue = event.target.value;
-                    if (drawerMode === "create") {
-                      setCreateForm((current) => ({ ...current, maxRetries: nextValue }));
-                      return;
-                    }
-                    setEditForm((current) => ({ ...current, maxRetries: nextValue }));
-                  }}
-                />
-              </label>
-              {drawerMode === "edit" ? (
-                <label>
-                  Delivery status
-                  <select value={editForm.deliveryStatus} onChange={(event) => setEditForm((current) => ({ ...current, deliveryStatus: event.target.value as NotificationDeliveryStatus }))}>
-                    {DELIVERY_STATUS_OPTIONS.filter((option) => option !== "all").map((option) => <option key={option} value={option}>{option}</option>)}
-                  </select>
-                </label>
-              ) : null}
-            </div>
-          </section>
-
-          <section className="fg-subcard">
-            <h4>Message content</h4>
-            <label>
-              Title
-              <input
-                value={drawerMode === "create" ? createForm.title : editForm.title}
-                onChange={(event) => {
-                  const nextValue = event.target.value;
-                  if (drawerMode === "create") {
-                    setCreateForm((current) => ({ ...current, title: nextValue }));
-                    return;
-                  }
-                  setEditForm((current) => ({ ...current, title: nextValue }));
-                }}
-                placeholder="Preview before send"
-              />
-            </label>
-            <label>
-              Body
-              <textarea
-                rows={6}
-                value={drawerMode === "create" ? createForm.body : editForm.body}
-                onChange={(event) => {
-                  const nextValue = event.target.value;
-                  if (drawerMode === "create") {
-                    setCreateForm((current) => ({ ...current, body: nextValue }));
-                    return;
-                  }
-                  setEditForm((current) => ({ ...current, body: nextValue }));
-                }}
-              />
-            </label>
-          </section>
-
-          <section className="fg-subcard">
-            <h4>Administrative metadata</h4>
-            {drawerMode === "edit" ? (
-              <label>
-                Last error
-                <input value={editForm.lastError} onChange={(event) => setEditForm((current) => ({ ...current, lastError: event.target.value }))} />
-              </label>
-            ) : null}
-            <label>
-              Metadata JSON
-              <textarea
-                rows={6}
-                value={drawerMode === "create" ? createForm.metadataJson : editForm.metadataJson}
-                onChange={(event) => {
-                  const nextValue = event.target.value;
-                  if (drawerMode === "create") {
-                    setCreateForm((current) => ({ ...current, metadataJson: nextValue }));
-                    return;
-                  }
-                  setEditForm((current) => ({ ...current, metadataJson: nextValue }));
-                }}
-              />
-            </label>
-          </section>
-        </form>
-      </DetailDrawer>
-    </section>
+      />
+    </IncidentResponsePage>
   );
 }
