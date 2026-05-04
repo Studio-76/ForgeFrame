@@ -1,4 +1,7 @@
-export type StatusTone = "success" | "warning" | "danger" | "info" | "neutral";
+import type { StatusTone } from "./types";
+
+/** Re-exported for backward compatibility. Prefer importing from `"./types"` or the UI barrel. */
+export type { StatusTone };
 
 const STATUS_TONE_BY_STATE = {
   ready: "success",

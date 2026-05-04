@@ -4,7 +4,7 @@ import { AdvancedDiagnostics } from "../ui/AdvancedDiagnostics";
 import { PrimaryBlockerCallout } from "../ui/PrimaryBlockerCallout";
 import { Button } from "../ui/Button";
 import type { AttentionPayload } from "../ui/models/attention";
-import { groupAttentionItems, toneForLevel } from "../ui/models/attention";
+import { groupAttentionItems, toneForLevel } from "../ui";
 
 /**
  * Render blocker callouts from a grouped attention payload.

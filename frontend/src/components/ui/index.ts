@@ -46,6 +46,9 @@ export type {
   AttentionVisibility,
   AttentionValidation,
   AttentionViolation,
+  SystemStatus,
+  AttentionLevel,
+  AttentionGrouping,
 } from "./models";
 export {
   validateActions,
@@ -64,17 +67,14 @@ export {
   visibleItems,
   collapsedItems,
   advancedItems,
+  groupAttentionItems,
 } from "./models";
 
 // ── Layout primitives ─────────────────────────────────
 export { AppShell } from "../layout/AppShell";
 export { PageHeader } from "./PageHeader";
 export type { PageHeaderBadge } from "./PageHeader";
-export { PageSummary } from "./PageSummary";
-export { PageTabs } from "./PageTabs";
-export type { PageTab } from "./PageTabs";
 export { Section } from "./Section";
-export { SplitPane } from "./SplitPane";
 export { DetailPanel } from "./DetailPanel";
 export { DetailDrawer } from "./DetailDrawer";
 export { EmptyState } from "./EmptyState";
@@ -113,16 +113,12 @@ export type { SummaryStripItem } from "./SummaryStrip";
 // ── Action primitives ─────────────────────────────────
 export { Button } from "./Button";
 export type { ButtonProps, ButtonVariant } from "./Button";
-export { IconButton } from "./IconButton";
-export { ButtonGroup } from "./ButtonGroup";
-export { NavigationAction } from "./NavigationAction";
-export { DestructiveAction } from "./DestructiveAction";
 export { OverflowMenu } from "./OverflowMenu";
 export type { OverflowAction } from "./OverflowMenu";
 
 // ── Status primitives ─────────────────────────────────
 export { StatusBadge } from "./StatusBadge";
-export type { StatusTone as StatusBadgeTone } from "./StatusBadge";
+export type { StatusTone as StatusBadgeTone } from "./types";
 export { resolveStatusTone } from "./StatusBadge";
 export { StatusPill } from "./StatusPill";
 export { HealthState } from "./HealthState";
@@ -133,15 +129,6 @@ export { NextRecommendedAction } from "./NextRecommendedAction";
 // ── Workflow primitives ───────────────────────────────
 export { RemediationChecklist } from "./RemediationChecklist";
 export type { ChecklistStep } from "./RemediationChecklist";
-export { ReadinessChecklist } from "./ReadinessChecklist";
-export { GateChecklist } from "./GateChecklist";
-export { IncidentList } from "./IncidentList";
-export type { Incident } from "./IncidentList";
-export { AuditTimeline } from "./AuditTimeline";
-export type { AuditEvent } from "./AuditTimeline";
-export { ActivityTimeline } from "./ActivityTimeline";
-export { DiagnosticsSummary } from "./DiagnosticsSummary";
-export type { DiagnosticFinding } from "./DiagnosticsSummary";
 
 // ── Form primitives ───────────────────────────────────
 export { TextField } from "./TextField";
@@ -151,13 +138,10 @@ export type { SelectItem } from "./Select";
 export { SearchInput } from "./SearchInput";
 export { FilterBar } from "./FilterBar";
 export { Toggle } from "./Toggle";
-export { ConfirmationDialog } from "./ConfirmationDialog";
 
 // ── Data display ──────────────────────────────────────
 export { EntityTable } from "./EntityTable";
 export type { EntityTableColumn } from "./EntityTable";
-export { DataTable as DataTableLegacy } from "./DataTableLegacy";
-export type { DataTableColumn as DataTableColumnLegacy } from "./DataTableLegacy";
 
 // ── TanStack DataTable ─────────────────────────────────
 export { DataTable } from "./DataTable";
