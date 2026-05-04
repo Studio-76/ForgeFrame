@@ -10,6 +10,11 @@ import { SearchInput } from "../ui/SearchInput";
 import { Button } from "../ui/Button";
 import { ActionBar } from "../ui/ActionBar";
 import type { Density } from "../ui/types";
+import type { Action } from "../ui/models/action";
+import { validateActions, defaultKindForIntent } from "../ui/models/action";
+import type { AttentionPayload } from "../ui/models/attention";
+import { groupAttentionItems, toneForLevel } from "../ui/models/attention";
+import { PrimaryBlockerCallout } from "../ui/PrimaryBlockerCallout";
 
 /**
  * A search configuration for the registry page.
@@ -48,6 +53,14 @@ export type RegistryManagementPageProps = {
   /** When set, shows a compact scope indicator. */
   scope?: ScopeConfig;
 
+  // ── Attention items ──────────────────────────────────────
+  /**
+   * Attention-tagged status items.
+   * primary_blocker → blocker callout, needs_action/warning → visible,
+   * informational/healthy → collapsed, diagnostic → AdvancedDiagnostics.
+   */
+  attentionItems?: AttentionPayload[];
+
   // ── Summary ──────────────────────────────────────────────
   /** Summary strip items showing non-zero counts. */
   summaryItems?: SummaryStripItem[];
@@ -61,7 +74,16 @@ export type RegistryManagementPageProps = {
   // ── Table / registry content ─────────────────────────────
   /** The registry table or content. */
   children?: ReactNode;
-  /** Single primary action (usually "Create" or "Add"). */
+  /**
+   * Shared actions for this page.
+   * At most one primary action is allowed in the page summary.
+   * Diagnostic actions are visually secondary.
+   */
+  actions?: Action[];
+  /**
+   * Legacy single primary action ReactNode.
+   * Use `actions` for new code. When both are set, `actions` takes precedence.
+   */
   primaryAction?: ReactNode;
   /** Title for the ActionBar section. Defaults to the page title. */
   actionBarTitle?: string;
@@ -104,9 +126,10 @@ export type RegistryManagementPageProps = {
 /**
  * RegistryManagementPage — a page template for browse-filter-manage inventory pages.
  *
- * Renders a header, optional scope compact bar, summary strip, search/filter controls,
- * a registry table (or empty state), a detail panel for the selected item, and a
- * collapsed diagnostics section at the bottom.
+ * Renders a header, optional scope compact bar, attention items (blockers/status),
+ * summary strip, search/filter controls, a registry table (or empty state),
+ * a detail panel for the selected item, and a collapsed diagnostics section
+ * at the bottom.
  *
  * @example
  * ```tsx
@@ -114,12 +137,14 @@ export type RegistryManagementPageProps = {
  *   eyebrow="Setup"
  *   title="Provider Targets"
  *   description="Active execution targets for routing"
+ *   actions={[
+ *     { label: "Add target", kind: "primary", intent: "configure", onClick: handleAdd },
+ *   ]}
  *   summaryItems={[
  *     { key: "total", label: "Total", value: 12 },
  *     { key: "active", label: "Active", value: 8, tone: "success" },
  *   ]}
  *   search={{ value: searchTerm, onChange: setSearchTerm }}
- *   primaryAction={<Button variant="primary">Add target</Button>}
  *   selectedItemContent={<TargetDetailPanel />}
  *   hasSelection={selectedId != null}
  *   emptyDetailHint="Select a target from the table to inspect its configuration."
@@ -133,11 +158,13 @@ export function RegistryManagementPage({
   title,
   description,
   scope,
+  attentionItems,
   summaryItems,
   search,
   filterContent,
   children,
-  primaryAction,
+  actions,
+  primaryAction: primaryActionProp,
   actionBarTitle,
   isEmpty,
   emptyTitle,
@@ -151,6 +178,22 @@ export function RegistryManagementPage({
   density = "default",
 }: RegistryManagementPageProps) {
   const compact = density === "compact";
+
+  // ── Derive display elements from models ──────────────────
+  const { blockers: blockerItems, visible: visibleAttention, collapsed: collapsedAttention, advanced: diagnosticAttention } = groupAttentionItems(attentionItems);
+
+  const modelPrimaryAction = actions?.find(
+    (a) => (a.kind ?? defaultKindForIntent(a.intent ?? "navigate")) === "primary",
+  );
+  const hasDiagnosticAction = actions?.some((a) => a.intent === "diagnose");
+
+  // Validate action rules (dev-mode warning only)
+  if (import.meta.env.DEV && actions) {
+    const validation = validateActions(actions, isEmpty ? "detail" : "summary");
+    if (!validation.valid) {
+      console.warn("[RegistryManagementPage] Action rule violations:", validation.violations);
+    }
+  }
 
   return (
     <section className="fg-page">
@@ -170,6 +213,32 @@ export function RegistryManagementPage({
               Change
             </Button>
           ) : null}
+        </div>
+      ) : null}
+
+      {/* ── Blockers (always visible) ── */}
+      {blockerItems.map((item) => (
+        <div key={item.key} className="mb-3">
+          <PrimaryBlockerCallout
+            title={item.title}
+            description={item.description}
+            tone={item.tone ?? toneForLevel(item.level)}
+          />
+        </div>
+      ))}
+
+      {/* ── Visible attention items ── */}
+      {visibleAttention.length > 0 ? (
+        <div className="flex flex-wrap gap-2 mb-3">
+          {visibleAttention.map((item) => (
+            <span
+              key={item.key}
+              className={`ff-status-badge`}
+              data-tone={item.tone ?? toneForLevel(item.level)}
+            >
+              {item.title}
+            </span>
+          ))}
         </div>
       ) : null}
 
@@ -202,13 +271,45 @@ export function RegistryManagementPage({
       ) : (
         <ActionBar
           title={actionBarTitle ?? title}
-          actions={primaryAction}
+          actions={
+            modelPrimaryAction
+              ? (
+                <Button
+                  variant={modelPrimaryAction.kind ?? "primary"}
+                  isDisabled={modelPrimaryAction.disabled}
+                  onPress={modelPrimaryAction.onClick}
+                >
+                  {modelPrimaryAction.label}
+                </Button>
+              )
+              : primaryActionProp
+          }
         >
           <div className={compact ? "ff-dense" : undefined}>
             {children}
           </div>
         </ActionBar>
       )}
+
+      {/* ── Collapsed attention (informational / healthy) ── */}
+      {collapsedAttention.length > 0 ? (
+        <details className="ff-collapsed-details mt-3">
+          <summary className="text-meta text-muted cursor-pointer font-medium">
+            Status details ({collapsedAttention.length})
+          </summary>
+          <div className="flex flex-wrap gap-2 mt-2">
+            {collapsedAttention.map((item) => (
+              <span
+                key={item.key}
+                className={`ff-status-badge`}
+                data-tone={item.tone ?? toneForLevel(item.level)}
+              >
+                {item.title}
+              </span>
+            ))}
+          </div>
+        </details>
+      ) : null}
 
       {/* ── Detail panel ── */}
       {hasSelection && selectedItemContent ? (
@@ -225,8 +326,20 @@ export function RegistryManagementPage({
       ) : null}
 
       {/* ── Diagnostics ── */}
-      {diagnostics ? (
+      {(diagnostics || diagnosticAttention.length > 0) ? (
         <AdvancedDiagnostics title={diagnosticsTitle}>
+          {diagnosticAttention.length > 0 ? (
+            <div className="flex flex-col gap-2 mb-3">
+              {diagnosticAttention.map((item) => (
+                <div key={item.key} className="flex items-center gap-2">
+                  <span className="font-mono text-meta text-muted">{item.title}</span>
+                  {item.description ? (
+                    <span className="text-meta text-muted">{item.description}</span>
+                  ) : null}
+                </div>
+              ))}
+            </div>
+          ) : null}
           {diagnostics}
         </AdvancedDiagnostics>
       ) : null}

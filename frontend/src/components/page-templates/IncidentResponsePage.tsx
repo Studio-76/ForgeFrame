@@ -9,6 +9,11 @@ import { EmptyState } from "../ui/EmptyState";
 import { PrimaryBlockerCallout } from "../ui/PrimaryBlockerCallout";
 import { NextRecommendedAction } from "../ui/NextRecommendedAction";
 import type { Density } from "../ui/types";
+import type { Action } from "../ui/models/action";
+import { validateActions, actionToButtonProps } from "../ui/models/action";
+import type { AttentionPayload } from "../ui/models/attention";
+import { groupAttentionItems, toneForLevel } from "../ui/models/attention";
+import { Button } from "../ui/Button";
 
 /**
  * A blocker configuration for when there is an active blocker.
@@ -53,7 +58,15 @@ export type IncidentResponsePageProps = {
   /** Page description. */
   description?: string;
 
-  // ── Blocker callout ──────────────────────────────────────
+  // ── Attention items ──────────────────────────────────────
+  /**
+   * Attention-tagged items.
+   * primary_blocker → blocker callout, needs_action/warning → visible,
+   * informational/healthy → collapsed, diagnostic → AdvancedDiagnostics.
+   */
+  attentionItems?: AttentionPayload[];
+
+  // ── Blocker callout (legacy, use attentionItems instead) ──
   /** Prominent blocker at the top of the content area. */
   blocker?: BlockerViewConfig;
 
@@ -68,6 +81,10 @@ export type IncidentResponsePageProps = {
   // ── Content area ─────────────────────────────────────────
   /** The incident list, DataTable, or triage content. */
   children?: ReactNode;
+
+  // ── Page-level actions ───────────────────────────────────
+  /** Actions rendered in the page content area. */
+  actions?: Action[];
 
   // ── Detail panel ─────────────────────────────────────────
   /** Content for the selected incident detail. */
@@ -97,8 +114,8 @@ export type IncidentResponsePageProps = {
  * active incidents, blockers, and degraded states.
  *
  * Renders a header, optional blocker callout, optional degraded-action recommendation,
- * a summary strip, the incident list/triage content, optional detail panel, and a
- * collapsed diagnostics section at the bottom.
+ * attention items, a summary strip, the incident list/triage content, optional actions,
+ * optional detail panel, and a collapsed diagnostics section at the bottom.
  *
  * @example
  * ```tsx
@@ -106,12 +123,13 @@ export type IncidentResponsePageProps = {
  *   eyebrow="Runtime"
  *   title="Health Status"
  *   description="System health and active incidents"
- *   blocker={incidents.certExpired ? { title: "Certificate expired", description: "API calls will fail", action: <Button variant="primary">Renew certificate</Button> } : undefined}
+ *   attentionItems={[
+ *     { key: "cert", level: "primary_blocker", title: "Certificate expired", description: "API calls will fail" },
+ *     { key: "degraded", level: "warning", title: "High latency on 2 targets" },
+ *   ]}
  *   summaryItems={[
  *     { key: "active", label: "Active incidents", value: 3, tone: "danger" },
- *     { key: "blocked", label: "Blocked executions", value: 2, tone: "warning" },
  *   ]}
- *   noIncidents={incidents.activeCount === 0}
  * >
  *   <DataTable ... />
  * </IncidentResponsePage>
@@ -121,10 +139,12 @@ export function IncidentResponsePage({
   eyebrow,
   title,
   description,
+  attentionItems,
   blocker,
   degradedAction,
   summaryItems,
   children,
+  actions,
   selectedItemContent,
   hasSelection,
   noIncidents,
@@ -135,6 +155,17 @@ export function IncidentResponsePage({
 }: IncidentResponsePageProps) {
   const compact = density === "compact";
 
+  // ── Derive display elements from attention model ────────
+  const { blockers: blockerItems, visible: visibleAttention, collapsed: collapsedAttention, advanced: diagnosticAttention } = groupAttentionItems(attentionItems);
+
+  // Validate action rules (dev-mode warning only)
+  if (import.meta.env.DEV && actions) {
+    const validation = validateActions(actions, "detail");
+    if (!validation.valid) {
+      console.warn("[IncidentResponsePage] Action rule violations:", validation.violations);
+    }
+  }
+
   return (
     <section className="fg-page">
       <PageHeader
@@ -143,25 +174,79 @@ export function IncidentResponsePage({
         description={description}
       />
 
-      {/* ── Blocker callout (most prominent) ── */}
-      {blocker ? (
-        <PrimaryBlockerCallout
-          title={blocker.title}
-          description={blocker.description}
-          action={blocker.action}
-        />
-      ) : null}
+      {/* ── Blocker callout (from attention or legacy prop) ── */}
+      {blockerItems.length > 0
+        ? blockerItems.map((item) => (
+            <div key={item.key} className="mb-3">
+              <PrimaryBlockerCallout
+                title={item.title}
+                description={item.description}
+                tone={item.tone ?? toneForLevel(item.level)}
+                action={
+                  item.action ? (
+                    <Button
+                      variant={item.action.kind ?? "primary"}
+                      isDisabled={item.action.disabled}
+                      onPress={item.action.onClick}
+                    >
+                      {item.action.label}
+                    </Button>
+                  ) : undefined
+                }
+              />
+            </div>
+          ))
+        : blocker
+          ? (
+            <PrimaryBlockerCallout
+              title={blocker.title}
+              description={blocker.description}
+              action={blocker.action}
+            />
+          )
+          : null}
 
-      {/* ── Degraded recommendation (below blocker or at top if no blocker) ── */}
+      {/* ── Degraded recommendation ── */}
       {degradedAction ? (
         <NextRecommendedAction action={degradedAction.action}>
           {degradedAction.message}
         </NextRecommendedAction>
       ) : null}
 
+      {/* ── Visible attention items ── */}
+      {visibleAttention.length > 0 ? (
+        <div className="flex flex-wrap gap-2 mb-3">
+          {visibleAttention.map((item) => (
+            <span
+              key={item.key}
+              className="ff-status-badge"
+              data-tone={item.tone ?? toneForLevel(item.level)}
+            >
+              {item.title}
+            </span>
+          ))}
+        </div>
+      ) : null}
+
       {/* ── Summary strip ── */}
       {summaryItems && summaryItems.length > 0 ? (
         <SummaryStrip items={summaryItems} />
+      ) : null}
+
+      {/* ── Actions area ── */}
+      {actions && actions.length > 0 ? (
+        <div className="flex flex-wrap items-center gap-2 mb-3">
+          {actions.map((action) => (
+            <Button
+              key={action.label}
+              variant={action.kind ?? "secondary"}
+              isDisabled={action.disabled}
+              onPress={action.onClick}
+            >
+              {action.label}
+            </Button>
+          ))}
+        </div>
       ) : null}
 
       {/* ── Main content: incident list or no-incidents state ── */}
@@ -183,9 +268,41 @@ export function IncidentResponsePage({
         </div>
       ) : null}
 
+      {/* ── Collapsed attention (informational / healthy) ── */}
+      {collapsedAttention.length > 0 ? (
+        <details className="mt-3">
+          <summary className="text-meta text-muted cursor-pointer font-medium">
+            Status details ({collapsedAttention.length})
+          </summary>
+          <div className="flex flex-wrap gap-2 mt-2">
+            {collapsedAttention.map((item) => (
+              <span
+                key={item.key}
+                className="ff-status-badge"
+                data-tone={item.tone ?? toneForLevel(item.level)}
+              >
+                {item.title}
+              </span>
+            ))}
+          </div>
+        </details>
+      ) : null}
+
       {/* ── Diagnostics ── */}
-      {diagnostics ? (
+      {(diagnostics || diagnosticAttention.length > 0) ? (
         <AdvancedDiagnostics title={diagnosticsTitle}>
+          {diagnosticAttention.length > 0 ? (
+            <div className="flex flex-col gap-2 mb-3">
+              {diagnosticAttention.map((item) => (
+                <div key={item.key} className="flex items-center gap-2">
+                  <span className="font-mono text-meta text-muted">{item.title}</span>
+                  {item.description ? (
+                    <span className="text-meta text-muted">{item.description}</span>
+                  ) : null}
+                </div>
+              ))}
+            </div>
+          ) : null}
           {diagnostics}
         </AdvancedDiagnostics>
       ) : null}

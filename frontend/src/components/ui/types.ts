@@ -22,6 +22,9 @@ export type Priority = "critical" | "high" | "medium" | "low";
 /** Standard async load state. */
 export type LoadState = "idle" | "loading" | "success" | "error";
 
+// SystemStatus and AttentionLevel are defined in models/status.ts and
+// models/attention.ts respectively. Import from "./models" or the ui barrel.
+
 /**
  * Maps a StatusTone to the appropriate Tailwind utility classes.
  * @param tone - The status tone.

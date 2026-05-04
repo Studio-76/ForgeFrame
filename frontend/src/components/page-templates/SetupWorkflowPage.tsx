@@ -6,7 +6,12 @@ import { Section } from "../ui/Section";
 import { AdvancedDiagnostics } from "../ui/AdvancedDiagnostics";
 import { EmptyState } from "../ui/EmptyState";
 import { ActionBar } from "../ui/ActionBar";
+import { Button } from "../ui/Button";
 import type { Density } from "../ui/types";
+import type { Action } from "../ui/models/action";
+import { validateActions } from "../ui/models/action";
+import type { AttentionPayload } from "../ui/models/attention";
+import { heroItems, advancedItems, toneForLevel } from "../ui/models/attention";
 
 /**
  * A blocker configuration for when the workflow is blocked.
@@ -52,7 +57,14 @@ export type SetupWorkflowPageProps = {
   /** Human-readable label for the current step (shown as "Step N: label"). */
   stepLabel?: string;
 
-  // ── Blocker ───────────────────────────────────────────
+  // ── Attention ─────────────────────────────────────────
+  /**
+   * Attention-tagged items.
+   * primary_blocker → blocker callout, diagnostic → AdvancedDiagnostics.
+   */
+  attentionItems?: AttentionPayload[];
+
+  // ── Blocker (legacy, use attentionItems instead) ──────
   /** When set, renders a PrimaryBlockerCallout above the step content. */
   blocker?: BlockerConfig;
 
@@ -61,7 +73,9 @@ export type SetupWorkflowPageProps = {
   emptyState?: EmptyStateConfig;
 
   // ── Actions ────────────────────────────────────────────
-  /** Single primary action for the current step. */
+  /** Actions for the current step (preferred). */
+  actions?: Action[];
+  /** Legacy single primary action. Use `actions` for new code. */
   primaryAction?: ReactNode;
 
   // ── Content ────────────────────────────────────────────
@@ -82,8 +96,8 @@ export type SetupWorkflowPageProps = {
 /**
  * SetupWorkflowPage — a page template for guided setup flows.
  *
- * Renders a header with eyebrow, a progress bar, the current step's
- * content, an optional blocker callout, and a collapsed diagnostics
+ * Renders a header with eyebrow, a progress bar, attention items (blockers),
+ * the current step's content with actions, and a collapsed diagnostics
  * section at the bottom.
  *
  * @example
@@ -94,7 +108,9 @@ export type SetupWorkflowPageProps = {
  *   currentStep={2}
  *   totalSteps={5}
  *   stepLabel="Configure Provider"
- *   primaryAction={<Button variant="primary">Continue</Button>}
+ *   actions={[
+ *     { label: "Continue", kind: "primary", intent: "configure", onClick: handleContinue },
+ *   ]}
  * >
  *   <ProviderConfigForm />
  * </SetupWorkflowPage>
@@ -107,9 +123,11 @@ export function SetupWorkflowPage({
   currentStep,
   totalSteps,
   stepLabel,
+  attentionItems,
   blocker,
   emptyState,
-  primaryAction,
+  actions,
+  primaryAction: primaryActionProp,
   children,
   diagnostics,
   diagnosticsTitle = "Setup diagnostics",
@@ -117,6 +135,18 @@ export function SetupWorkflowPage({
 }: SetupWorkflowPageProps) {
   const compact = density === "compact";
   const progressPercent = totalSteps > 0 ? Math.round((currentStep / totalSteps) * 100) : 0;
+
+  // ── Derive display elements from attention model ──────
+  const blockerItems = attentionItems ? heroItems(attentionItems) : [];
+  const diagnosticAttention = attentionItems ? advancedItems(attentionItems) : [];
+
+  // Validate action rules (dev-mode warning only)
+  if (import.meta.env.DEV && actions) {
+    const validation = validateActions(actions, "detail");
+    if (!validation.valid) {
+      console.warn("[SetupWorkflowPage] Action rule violations:", validation.violations);
+    }
+  }
 
   return (
     <section className="fg-page">
@@ -147,14 +177,26 @@ export function SetupWorkflowPage({
         </div>
       </Section>
 
-      {/* ── Blocker ── */}
-      {blocker ? (
-        <PrimaryBlockerCallout
-          title={blocker.title}
-          description={blocker.description}
-          action={blocker.action}
-        />
-      ) : null}
+      {/* ── Blockers ── */}
+      {blockerItems.length > 0
+        ? blockerItems.map((item) => (
+            <div key={item.key} className="mb-3">
+              <PrimaryBlockerCallout
+                title={item.title}
+                description={item.description}
+                tone={item.tone ?? toneForLevel(item.level)}
+              />
+            </div>
+          ))
+        : blocker
+          ? (
+            <PrimaryBlockerCallout
+              title={blocker.title}
+              description={blocker.description}
+              action={blocker.action}
+            />
+          )
+          : null}
 
       {/* ── Step content or empty state ── */}
       {emptyState ? (
@@ -166,15 +208,43 @@ export function SetupWorkflowPage({
       ) : (
         <Section className={compact ? "ff-dense" : undefined}>
           {children ? <div className="flex flex-col gap-4">{children}</div> : null}
-          {primaryAction ? (
-            <div className="flex justify-end mt-4">{primaryAction}</div>
+          {actions && actions.length > 0 ? (
+            <div className="flex items-center gap-2 justify-end mt-4">
+              {actions.map((action) => {
+                const kind = action.kind ?? "secondary";
+                return (
+                  <Button
+                    key={action.label}
+                    variant={kind}
+                    isDisabled={action.disabled}
+                    onPress={action.onClick}
+                  >
+                    {action.label}
+                  </Button>
+                );
+              })}
+            </div>
+          ) : primaryActionProp ? (
+            <div className="flex justify-end mt-4">{primaryActionProp}</div>
           ) : null}
         </Section>
       )}
 
       {/* ── Diagnostics ── */}
-      {diagnostics ? (
+      {(diagnostics || diagnosticAttention.length > 0) ? (
         <AdvancedDiagnostics title={diagnosticsTitle}>
+          {diagnosticAttention.length > 0 ? (
+            <div className="flex flex-col gap-2 mb-3">
+              {diagnosticAttention.map((item) => (
+                <div key={item.key} className="flex items-center gap-2">
+                  <span className="font-mono text-meta text-muted">{item.title}</span>
+                  {item.description ? (
+                    <span className="text-meta text-muted">{item.description}</span>
+                  ) : null}
+                </div>
+              ))}
+            </div>
+          ) : null}
           {diagnostics}
         </AdvancedDiagnostics>
       ) : null}

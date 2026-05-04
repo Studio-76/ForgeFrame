@@ -34,6 +34,38 @@ export type {
 } from "./types";
 export { toneToTailwind } from "./types";
 
+// ── Shared models (Action, Status, Attention) ─────────
+export type {
+  Action,
+  ActionKind,
+  ActionIntent,
+  ActionGroup,
+  ActionValidation,
+  ActionViolation,
+  AttentionPayload,
+  AttentionVisibility,
+  AttentionValidation,
+  AttentionViolation,
+} from "./models";
+export {
+  validateActions,
+  defaultKindForIntent,
+  labelHintForIntent,
+  actionToButtonProps,
+  SYSTEM_STATUS_TONE,
+  statusLabel,
+  statusDescription,
+  normalizeSystemStatus,
+  visibilityForLevel,
+  toneForLevel,
+  attentionLabel,
+  validateAttention,
+  heroItems,
+  visibleItems,
+  collapsedItems,
+  advancedItems,
+} from "./models";
+
 // ── Layout primitives ─────────────────────────────────
 export { AppShell } from "../layout/AppShell";
 export { PageHeader } from "./PageHeader";
@@ -47,6 +79,33 @@ export { DetailPanel } from "./DetailPanel";
 export { DetailDrawer } from "./DetailDrawer";
 export { EmptyState } from "./EmptyState";
 export { AdvancedDiagnostics } from "./AdvancedDiagnostics";
+export type { AdvancedDiagnosticsProps } from "./AdvancedDiagnostics";
+export {
+  DiagnosticSection,
+  RawJson,
+  PayloadViewer,
+  EvidenceBlob,
+  EnvVarsList,
+  FilePath,
+  InternalId,
+  Timestamp,
+  RouteKey,
+  BlockerCode,
+  RawLog,
+} from "./AdvancedDiagnostics";
+export type {
+  DiagnosticSectionProps,
+  RawJsonProps,
+  PayloadViewerProps,
+  EvidenceBlobProps,
+  EnvVarsListProps,
+  FilePathProps,
+  InternalIdProps,
+  TimestampProps,
+  RouteKeyProps,
+  BlockerCodeProps,
+  RawLogProps,
+} from "./AdvancedDiagnostics";
 export { ActionBar } from "./ActionBar";
 export { SummaryStrip } from "./SummaryStrip";
 export type { SummaryStripItem } from "./SummaryStrip";

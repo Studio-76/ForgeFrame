@@ -6,7 +6,13 @@ import { SummaryStrip } from "../ui/SummaryStrip";
 import type { SummaryStripItem } from "../ui/SummaryStrip";
 import { AdvancedDiagnostics } from "../ui/AdvancedDiagnostics";
 import { EmptyState } from "../ui/EmptyState";
+import { Button } from "../ui/Button";
 import type { Density } from "../ui/types";
+import type { Action } from "../ui/models/action";
+import { validateActions } from "../ui/models/action";
+import type { AttentionPayload } from "../ui/models/attention";
+import { groupAttentionItems, toneForLevel } from "../ui/models/attention";
+import { PrimaryBlockerCallout } from "../ui/PrimaryBlockerCallout";
 
 /**
  * Props for the ReviewQueuePage template.
@@ -19,6 +25,14 @@ export type ReviewQueuePageProps = {
   /** Page description. */
   description?: string;
 
+  // ── Attention items ──────────────────────────────────────
+  /**
+   * Attention-tagged items.
+   * primary_blocker → blocker callout, needs_action/warning → visible,
+   * informational/healthy → collapsed, diagnostic → AdvancedDiagnostics.
+   */
+  attentionItems?: AttentionPayload[];
+
   // ── Queue summary ────────────────────────────────────────
   /** Summary strip items. Pending count should be most prominent. */
   summaryItems?: SummaryStripItem[];
@@ -26,7 +40,9 @@ export type ReviewQueuePageProps = {
   // ── Queue table ──────────────────────────────────────────
   /** The review queue table or list content. */
   children?: ReactNode;
-  /** Single primary action (e.g. "Review all"). */
+  /** Actions for this page (review, approve, reject, etc.). */
+  actions?: Action[];
+  /** Legacy single primary action. Use `actions` for new code. */
   primaryAction?: ReactNode;
 
   // ── Empty state ──────────────────────────────────────────
@@ -68,9 +84,9 @@ export type ReviewQueuePageProps = {
  * ReviewQueuePage — a page template for reviewing, approving, rejecting,
  * or triaging items in a queue.
  *
- * Renders a header, queue status summary, a review table (or empty state),
- * a detail section for the selected item, and a collapsed diagnostics
- * section at the bottom.
+ * Renders a header, attention items, queue status summary, action buttons,
+ * a review table (or empty state), a detail section for the selected item,
+ * and a collapsed diagnostics section at the bottom.
  *
  * @example
  * ```tsx
@@ -78,10 +94,13 @@ export type ReviewQueuePageProps = {
  *   eyebrow="Work"
  *   title="Learning Review"
  *   description="Review learning events for promotion"
+ *   actions={[
+ *     { label: "Review pending", kind: "primary", intent: "review", onClick: handleReviewAll },
+ *     { label: "Run diagnostics", kind: "secondary", intent: "diagnose", onClick: handleDiagnostics },
+ *   ]}
  *   summaryItems={[
  *     { key: "pending", label: "Pending", value: 12, tone: "warning" },
  *     { key: "overdue", label: "Overdue", value: 3, tone: "danger" },
- *     { key: "total", label: "Total", value: 45 },
  *   ]}
  *   selectedItemContent={<ReviewDetailDrawer />}
  *   hasSelection={selectedId != null}
@@ -95,9 +114,11 @@ export function ReviewQueuePage({
   eyebrow,
   title,
   description,
+  attentionItems,
   summaryItems,
   children,
-  primaryAction,
+  actions,
+  primaryAction: primaryActionProp,
   isEmpty,
   emptyTitle,
   emptyDescription,
@@ -111,6 +132,17 @@ export function ReviewQueuePage({
 }: ReviewQueuePageProps) {
   const compact = density === "compact";
 
+  // ── Derive display elements from attention model ────────
+  const { blockers: blockerItems, visible: visibleAttention, collapsed: collapsedAttention, advanced: diagnosticAttention } = groupAttentionItems(attentionItems);
+
+  // Validate action rules (dev-mode warning only)
+  if (import.meta.env.DEV && actions) {
+    const validation = validateActions(actions, isEmpty ? "detail" : "summary");
+    if (!validation.valid) {
+      console.warn("[ReviewQueuePage] Action rule violations:", validation.violations);
+    }
+  }
+
   return (
     <section className="fg-page">
       <PageHeader
@@ -119,15 +151,58 @@ export function ReviewQueuePage({
         description={description}
       />
 
+      {/* ── Blockers (always visible) ── */}
+      {blockerItems.map((item) => (
+        <div key={item.key} className="mb-3">
+          <PrimaryBlockerCallout
+            title={item.title}
+            description={item.description}
+            tone={item.tone ?? toneForLevel(item.level)}
+          />
+        </div>
+      ))}
+
+      {/* ── Visible attention items ── */}
+      {visibleAttention.length > 0 ? (
+        <div className="flex flex-wrap gap-2 mb-3">
+          {visibleAttention.map((item) => (
+            <span
+              key={item.key}
+              className="ff-status-badge"
+              data-tone={item.tone ?? toneForLevel(item.level)}
+            >
+              {item.title}
+            </span>
+          ))}
+        </div>
+      ) : null}
+
       {/* ── Queue summary ── */}
       {summaryItems && summaryItems.length > 0 ? (
         <SummaryStrip items={summaryItems} />
       ) : null}
 
-      {/* ── Primary action ── */}
-      {primaryAction ? (
+      {/* ── Actions ── */}
+      {actions && actions.length > 0 ? (
+        <div className={`flex flex-wrap items-center gap-2 ${compact ? "mb-2" : "mb-3"}`}>
+          {actions.map((action) => {
+            const kind = action.kind ?? "secondary";
+            return (
+              <Button
+                key={action.label}
+                variant={kind}
+                isDisabled={action.disabled}
+                onPress={action.onClick}
+                title={action.description}
+              >
+                {action.label}
+              </Button>
+            );
+          })}
+        </div>
+      ) : primaryActionProp ? (
         <div className={`flex justify-end ${compact ? "mb-2" : "mb-3"}`}>
-          {primaryAction}
+          {primaryActionProp}
         </div>
       ) : null}
 
@@ -158,9 +233,41 @@ export function ReviewQueuePage({
         </div>
       ) : null}
 
+      {/* ── Collapsed attention (informational / healthy) ── */}
+      {collapsedAttention.length > 0 ? (
+        <details className="mt-3">
+          <summary className="text-meta text-muted cursor-pointer font-medium">
+            Status details ({collapsedAttention.length})
+          </summary>
+          <div className="flex flex-wrap gap-2 mt-2">
+            {collapsedAttention.map((item) => (
+              <span
+                key={item.key}
+                className="ff-status-badge"
+                data-tone={item.tone ?? toneForLevel(item.level)}
+              >
+                {item.title}
+              </span>
+            ))}
+          </div>
+        </details>
+      ) : null}
+
       {/* ── Diagnostics ── */}
-      {diagnostics ? (
+      {(diagnostics || diagnosticAttention.length > 0) ? (
         <AdvancedDiagnostics title={diagnosticsTitle}>
+          {diagnosticAttention.length > 0 ? (
+            <div className="flex flex-col gap-2 mb-3">
+              {diagnosticAttention.map((item) => (
+                <div key={item.key} className="flex items-center gap-2">
+                  <span className="font-mono text-meta text-muted">{item.title}</span>
+                  {item.description ? (
+                    <span className="text-meta text-muted">{item.description}</span>
+                  ) : null}
+                </div>
+              ))}
+            </div>
+          ) : null}
           {diagnostics}
         </AdvancedDiagnostics>
       ) : null}
