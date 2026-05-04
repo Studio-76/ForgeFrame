@@ -374,7 +374,7 @@ describe("Recovery page", () => {
     });
     await flushEffects();
     expect(container.textContent).toContain("Create policy");
-    expect(container.textContent).toContain("Edit selected policy");
+    expect(container.textContent).toContain("Edit policy");
 
     await act(async () => {
       getButtonByText(container, "Backup Evidence").dispatchEvent(new MouseEvent("click", { bubbles: true }));
@@ -447,7 +447,7 @@ describe("Recovery page", () => {
     }));
 
     await act(async () => {
-      getButtonByText(container, "Edit selected policy").dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      getButtonByText(container, "Edit policy").dispatchEvent(new MouseEvent("click", { bubbles: true }));
     });
     await flushEffects();
 

@@ -4,80 +4,80 @@ import { CONTROL_PLANE_ROUTES } from "../app/navigation";
 import { useAppSession } from "../app/session";
 import { getInstanceIdFromSearchParams, withInstanceScope } from "../app/tenantScope";
 import { useInstanceCatalog } from "../app/useInstanceCatalog";
-import { InstanceScopeCard } from "../components/InstanceScopeCard";
-import { PageIntro } from "../components/PageIntro";
-import { ActionBar } from "../components/ui/ActionBar";
-import { BlockedState } from "../components/ui/StateBlocks";
+import { RegistryManagementPage } from "../components/page-templates";
+import type { AttentionPayload } from "../components/ui/models/attention";
+import { Button } from "../components/ui/Button";
 import {
   ProvidersInventoryTableSection,
 } from "../features/providers/ProvidersSections";
-import type { ProvidersPageActions, ProvidersPageData } from "../features/providers/providersShared";
-import { ActionFeedbackNotice } from "../features/providers/providersSectionUtils";
+import { formatMetric } from "../features/providers/providersShared";
 import { getProvidersAccess } from "../features/providers/providersShared";
 import { useProvidersControlPlane } from "../features/providers/useProvidersControlPlane";
+import type { ProviderControlItem } from "../api/domain";
 
 /**
- * Quick-setup form shown when no providers exist yet.
- * Walks the user through adding the first provider record.
+ * Counts providers requiring operator attention.
  */
-function FirstProviderSetupCard({
-  data,
-  actions,
-}: {
-  data: ProvidersPageData;
-  actions: ProvidersPageActions;
-}) {
-  const isCreatingProvider = data.pendingAction === "create-provider";
+function attentionProviderCount(providers: ProviderControlItem[]): number {
+  return providers.filter((p) => p.enabled && !p.ready).length;
+}
 
-  return (
-    <div className="fg-card">
-      <div className="fg-panel-heading">
-        <div>
-          <h3>Set up your first provider</h3>
-          <p className="fg-muted">
-            A provider tells ForgeFrame which AI backend to talk to — an OpenAI-compatible API, a local Ollama instance,
-            or an account-connected provider. Add one to get started.
-          </p>
-        </div>
-      </div>
-      <div className="fg-inline-form">
-        <label>
-          Provider key
-          <input
-            value={data.newProvider.provider}
-            onChange={(event) => actions.setNewProvider((current) => ({ ...current, provider: event.target.value }))}
-            placeholder="e.g. my_openai"
-          />
-        </label>
-        <label>
-          Label
-          <input
-            value={data.newProvider.label}
-            onChange={(event) => actions.setNewProvider((current) => ({ ...current, label: event.target.value }))}
-            placeholder="e.g. My OpenAI Gateway"
-          />
-        </label>
-        <label>
-          Endpoint URL
-          <input
-            value={data.newProvider.endpointBaseUrl}
-            onChange={(event) => actions.setNewProvider((current) => ({ ...current, endpointBaseUrl: event.target.value }))}
-            placeholder="https://api.openai.com/v1"
-          />
-        </label>
-      </div>
-      <div className="fg-actions fg-mt-sm">
-        <button type="button" disabled={isCreatingProvider} onClick={() => void actions.createProvider()}>
-          {isCreatingProvider ? "Adding provider…" : "Add provider"}
-        </button>
-      </div>
-      <p className="fg-note fg-mt-sm">
-        Use a stable key like <span className="fg-code">local_ollama</span>. After this, enable it and sync models from the Providers card.
-      </p>
-      <ActionFeedbackNotice feedback={data.actionFeedback} />
-      {data.error && !data.actionFeedback ? <p className="fg-danger fg-mt-sm" role="alert">{data.error}</p> : null}
-    </div>
-  );
+/**
+ * Builds attention items from provider readiness state.
+ */
+function buildProviderAttentionItems(
+  providers: ProviderControlItem[],
+): AttentionPayload[] {
+  const items: AttentionPayload[] = [];
+  const attention = providers.filter((p) => p.enabled && !p.ready);
+
+  for (const provider of attention.slice(0, 3)) {
+    const reason = provider.readiness_reason
+      ?? (provider.oauth_connect_required
+        ? `${provider.label} needs an OAuth connection.`
+        : null)
+      ?? `${provider.label} is not ready for routing.`;
+    items.push({
+      key: `provider:${provider.provider}`,
+      level: attention.length === 1 ? "primary_blocker" : "warning",
+      title: reason,
+      description: `${provider.next_action} — ${provider.label}`,
+    });
+  }
+
+  if (attention.length > 3) {
+    items.push({
+      key: "more-attention",
+      level: "warning",
+      title: `${attention.length - 3} more provider(s) need attention.`,
+    });
+  }
+
+  if (attention.length === 0 && providers.length > 0) {
+    items.push({
+      key: "all-ready",
+      level: "healthy",
+      title: "All providers are operational.",
+    });
+  }
+
+  return items;
+}
+
+/**
+ * Builds the scope-change handler.
+ */
+function buildScopeOnChange(
+  instanceId: string | null,
+  searchParams: URLSearchParams,
+  setSearchParams: (params: URLSearchParams) => void,
+): (() => void) | undefined {
+  if (!instanceId) return undefined;
+  return () => {
+    const next = new URLSearchParams(searchParams);
+    next.delete("instanceId");
+    setSearchParams(next);
+  };
 }
 
 export function ProvidersPage() {
@@ -95,22 +95,9 @@ export function ProvidersPage() {
     includeClientView: false,
   });
   const hasProviders = data.providers.length > 0;
-
-  const note = !access.canRead
-    ? access.summaryDetail
-    : access.canMutate
-    ? hasProviders
-      ? "This page is only for provider records: add, edit, enable, sync, or run the provider's next repair action. Targets, OAuth accounts, and harness proof stay on their own pages."
-      : "Start by adding a provider record — this tells the instance which AI backend to use."
-    : `${access.summaryDetail} Provider truth and health stay visible here without surfacing mutations that the backend will block.`;
-
-  const description = hasProviders
-    ? `${data.providers.length} provider${data.providers.length === 1 ? "" : "s"} registered for this instance.`
-    : "Provider records tell ForgeFrame which AI backends are available. Add one to start routing requests through this instance.";
-
-  const question = hasProviders
-    ? undefined
-    : undefined;
+  const readyCount = data.providers.filter((p) => p.ready).length;
+  const enabledCount = data.providers.filter((p) => p.enabled).length;
+  const attentionCount = attentionProviderCount(data.providers);
 
   const onInstanceChange = (nextInstanceId: string | null) => {
     const nextSearchParams = new URLSearchParams(searchParams);
@@ -122,52 +109,106 @@ export function ProvidersPage() {
     setSearchParams(nextSearchParams);
   };
 
-  return (
-    <section className="fg-page">
-      <PageIntro
+  // ── Access gate ───────────────────────────────────────
+  if (!access.canRead) {
+    return (
+      <RegistryManagementPage
         eyebrow="Setup"
         title="Providers"
-        description={description}
-        question={question}
-        badges={[
-          { label: access.badgeLabel, tone: access.badgeTone },
-          ...(selectedInstance ? [{ label: `Instance scope: ${selectedInstance.display_name}`, tone: "success" as const }] : []),
-        ]}
-        note={note}
+        description="Provider records tell ForgeFrame which AI backends are available."
+        isEmpty
+        emptyTitle={access.summaryTitle}
+        emptyDescription={access.summaryDetail}
+        emptyAction={
+          selectedInstance && instancesError
+            ? undefined
+            : (
+              <Button variant="navigation" onPress={() => onInstanceChange(null)}>
+                Change instance scope
+              </Button>
+            )
+        }
       />
-      <InstanceScopeCard
-        instanceId={instanceId}
-        selectedInstance={selectedInstance}
-        instances={instances}
-        loadState={loadState}
-        error={instancesError}
-        surfaceLabel="provider control-plane truth"
-        onInstanceChange={onInstanceChange}
-      />
-      {!access.canRead ? (
-        <BlockedState
-          title={access.summaryTitle}
-          description={access.summaryDetail}
-          badgeLabel={access.badgeLabel}
-          status="blocked"
-        />
-      ) : !hasProviders && data.state === "success" ? (
-        <>
-          <FirstProviderSetupCard data={data} actions={actions} />
-          <ActionBar title="Related surfaces" description="Explore once you have providers set up.">
-            <div className="fg-actions">
-              <Link className="fg-nav-link" to={withInstanceScope(CONTROL_PLANE_ROUTES.dashboard, instanceId)}>Setup progress</Link>
-              <Link className="fg-nav-link" to={withInstanceScope(CONTROL_PLANE_ROUTES.harness, instanceId)}>Harness</Link>
-              <Link className="fg-nav-link" to={withInstanceScope(CONTROL_PLANE_ROUTES.providerTargets, instanceId)}>Provider Targets</Link>
-              <Link className="fg-nav-link" to={withInstanceScope(CONTROL_PLANE_ROUTES.oauthTargets, instanceId)}>OAuth Targets</Link>
-            </div>
-          </ActionBar>
-        </>
-      ) : (
+    );
+  }
+
+  // ── Normal page ───────────────────────────────────────
+  const description = hasProviders
+    ? `${data.providers.length} provider${data.providers.length === 1 ? "" : "s"} registered for this instance.`
+    : "Provider records tell ForgeFrame which AI backends are available. Add one to start routing requests through this instance.";
+
+  const scopeLabel = selectedInstance
+    ? selectedInstance.display_name
+    : instanceId
+      ? instanceId
+      : undefined;
+
+  const attentionItems = buildProviderAttentionItems(data.providers);
+
+  const summaryItems = hasProviders
+    ? [
+        {
+          key: "total",
+          label: "Total",
+          value: formatMetric(data.providers.length),
+          tone: "neutral" as const,
+          status: "info" as const,
+        },
+        {
+          key: "enabled",
+          label: "Enabled",
+          value: formatMetric(enabledCount),
+          tone: enabledCount > 0 ? "success" as const : "neutral" as const,
+          status: enabledCount > 0 ? "ready" as const : "info" as const,
+        },
+        {
+          key: "ready",
+          label: "Runtime-ready",
+          value: formatMetric(readyCount),
+          tone: readyCount === enabledCount && enabledCount > 0 ? "success" as const : "warning" as const,
+          status: readyCount === enabledCount && enabledCount > 0 ? "ready" as const : "partial" as const,
+        },
+        ...(attentionCount > 0
+          ? [{
+              key: "attention" as const,
+              label: "Needs attention" as const,
+              value: formatMetric(attentionCount) as string,
+              tone: "danger" as const,
+              status: "blocked" as const,
+            }]
+          : []),
+      ]
+    : undefined;
+
+  return (
+    <RegistryManagementPage
+      eyebrow="Setup"
+      title="Providers"
+      description={description}
+      scope={scopeLabel ? { label: scopeLabel, onChange: buildScopeOnChange(instanceId, searchParams, setSearchParams) } : undefined}
+      attentionItems={attentionItems}
+      summaryItems={summaryItems}
+      isEmpty={false}
+      emptyDetailHint={
+        data.access.canMutate
+          ? "Start by adding a provider record — this tells the instance which AI backend to use."
+          : `${access.summaryDetail} Provider truth and health stay visible here.`
+      }
+      diagnostics={
         <div className="fg-stack">
-          <ProvidersInventoryTableSection data={data} actions={actions} instanceId={instanceId} />
+          <p className="text-muted">Access: {access.badgeLabel}</p>
+          {data.error ? <p className="fg-danger">{data.error}</p> : null}
+          <div className="fg-nav-links">
+            <Link className="fg-nav-link" to={withInstanceScope(CONTROL_PLANE_ROUTES.dashboard, instanceId)}>Setup progress</Link>
+            <Link className="fg-nav-link" to={withInstanceScope(CONTROL_PLANE_ROUTES.harness, instanceId)}>Harness</Link>
+            <Link className="fg-nav-link" to={withInstanceScope(CONTROL_PLANE_ROUTES.providerTargets, instanceId)}>Provider Targets</Link>
+            <Link className="fg-nav-link" to={withInstanceScope(CONTROL_PLANE_ROUTES.oauthTargets, instanceId)}>OAuth Targets</Link>
+          </div>
         </div>
-      )}
-    </section>
+      }
+      diagnosticsTitle="Provider diagnostics"
+    >
+      <ProvidersInventoryTableSection data={data} actions={actions} instanceId={instanceId} />
+    </RegistryManagementPage>
   );
 }

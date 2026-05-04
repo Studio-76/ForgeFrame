@@ -21,7 +21,9 @@ import { buildAuditHistoryPath } from "../../app/auditHistory";
 import { normalizeExecutionCompanyId, normalizeExecutionInstanceId, normalizeExecutionState } from "../../app/executionReview";
 import { CONTROL_PLANE_ROUTES } from "../../app/navigation";
 import { useAppSession } from "../../app/session";
-import { PageIntro } from "../../components/PageIntro";
+import { IncidentResponsePage } from "../../components/page-templates";
+import type { AttentionPayload } from "../../components/ui/models/attention";
+import type { SummaryStripItem } from "../../components/ui/SummaryStrip";
 import {
   DEFAULT_APPROVAL_WAIT_FILTER,
   DEFAULT_ERROR_FILTER,
@@ -30,6 +32,7 @@ import {
   DEFAULT_STATE_FILTER,
   DEFAULT_TARGET_FILTER,
   DEFAULT_WINDOW_FILTER,
+  buildExecutionStatusSummary,
   describeReplayError,
   getExecutionAccess,
   type OperatorActionState,
@@ -473,113 +476,136 @@ export function ExecutionPage() {
       })
     : null;
 
+  // ── Session gates ─────────────────────────────────────
   if (!sessionReady) {
     return (
-      <section className="fg-page">
-        <PageIntro
-          eyebrow="Operations"
-          title="Execution Run Review"
-          description="Instance-scoped execution truth and replay admission stay hidden until ForgeFrame confirms the current session role."
-          question="Which operations surface should you open while execution access is still being checked?"
-          links={[
-            {
-              label: "Errors & Activity",
-              to: CONTROL_PLANE_ROUTES.logs,
-              description: "Current alerts, error shape, and runtime activity while the execution route confirms access.",
-            },
-            {
-              label: "Provider Health & Runs",
-              to: CONTROL_PLANE_ROUTES.providerHealthRuns,
-              description: "Provider readiness and run posture when the incident belongs to provider truth.",
-            },
-            {
-              label: "Usage & Costs",
-              to: CONTROL_PLANE_ROUTES.usage,
-              description: "Traffic, client impact, and cost pressure while execution review remains gated.",
-            },
-            {
-              label: "Command Center",
-              to: CONTROL_PLANE_ROUTES.dashboard,
-              description: "Return to the dashboard and branch into the right operator workflow once access is known.",
-            },
-          ]}
-          badges={[{ label: "Checking access", tone: "neutral" }]}
-          note="ForgeFrame verifies the session role before it opens instance-scoped execution list/detail truth or replay admission."
-        />
-      </section>
+      <IncidentResponsePage
+        eyebrow="Operations"
+        title="Execution Run Review"
+        description="Instance-scoped execution truth and replay admission stay hidden until ForgeFrame confirms the current session role."
+        noIncidents
+        noIncidentsConfig={{
+          title: "Checking access",
+          description: "ForgeFrame verifies the session role before it opens instance-scoped execution list/detail truth or replay admission.",
+        }}
+      />
     );
   }
 
   if (!canReviewExecution) {
     return (
-      <section className="fg-page">
-        <PageIntro
-          eyebrow="Operations"
-          title="Execution Run Review"
-          description="This route is reserved for operator and admin sessions because the shipped backend does not expose instance-scoped execution truth to viewers."
-          question="Which read-safe operations surface should you use when execution review is outside your current permission envelope?"
-          links={[
-            {
-              label: "Errors & Activity",
-              to: CONTROL_PLANE_ROUTES.logs,
-              description: "Inspect alerts, runtime failures, and shared activity evidence without opening instance-scoped execution APIs.",
-            },
-            {
-              label: "Provider Health & Runs",
-              to: CONTROL_PLANE_ROUTES.providerHealthRuns,
-              description: "Review provider readiness and run posture on the viewer-safe operations surface.",
-            },
-            {
-              label: "Usage & Costs",
-              to: CONTROL_PLANE_ROUTES.usage,
-              description: "Check traffic, cost, and client impact when execution review is unavailable to this session.",
-            },
-            {
-              label: "Command Center",
-              to: CONTROL_PLANE_ROUTES.dashboard,
-              description: "Return to the dashboard and open a route that matches the current permission envelope.",
-            },
-          ]}
-          badges={[{ label: "Operator or admin required", tone: "warning" }]}
-          note="Viewer sessions can still inspect operational signals elsewhere, but ForgeFrame blocks instance-scoped execution list/detail APIs and replay on this route."
-        />
-      </section>
+      <IncidentResponsePage
+        eyebrow="Operations"
+        title="Execution Run Review"
+        description="This route is reserved for operator and admin sessions."
+        noIncidents
+        noIncidentsConfig={{
+          title: "Operator or admin required",
+          description: "Viewer sessions can still inspect operational signals elsewhere, but ForgeFrame blocks instance-scoped execution list/detail APIs and replay on this route.",
+        }}
+      />
     );
   }
 
-  return (
-    <section className="fg-page">
-      <PageIntro
-        eyebrow="Operations"
-        title="Execution Run Review"
-        description="Inspect background execution truth, approval waits, dead-letter evidence, and replay admission without pretending the backend's explicit instance scope is optional."
-        question="Which instance are you reviewing, and has another control-plane route already identified the run you need?"
-        links={[
-          {
-            label: "Execution Review",
-            to: CONTROL_PLANE_ROUTES.execution,
-            description: "Instance-scoped list, detail, and replay workflow for execution runs.",
-          },
-          {
-            label: "Approvals",
-            to: CONTROL_PLANE_ROUTES.approvals,
-            description: "Governance framing for approvals that are broader than one execution run.",
-          },
-          {
-            label: "Errors & Activity",
-            to: CONTROL_PLANE_ROUTES.logs,
-            description: "Cross-check runtime incidents and audit evidence before deciding whether the run needs replay.",
-          },
-          {
-            label: "Provider Health & Runs",
-            to: CONTROL_PLANE_ROUTES.providerHealthRuns,
-            description: "Return to provider truth when the failure belongs to readiness or harness state instead of the execution worker path.",
-          },
-        ]} 
-        badges={[{ label: access.badgeLabel, tone: access.badgeTone }]}
-        note={`${access.summaryDetail} Instance scope stays explicit, and the route now starts from the real instance registry instead of inferred approval scope.`}
-      />
+  // ── Derive attention items from run data ──────────────
+  const runSummary = runs.length > 0 ? buildExecutionStatusSummary(runs) : null;
 
+  const attentionItems: AttentionPayload[] = [];
+  if (runSummary && runSummary.deadLetteredCount > 0) {
+    attentionItems.push({
+      key: "dead-lettered",
+      level: "primary_blocker",
+      title: `${runSummary.deadLetteredCount} dead-lettered run${runSummary.deadLetteredCount > 1 ? "s" : ""}`,
+      description: "Runs that reached a terminal error state and cannot proceed. Review and determine replay or recovery path.",
+    });
+  }
+  if (runSummary && runSummary.approvalWaitCount > 0) {
+    attentionItems.push({
+      key: "approval-waits",
+      level: "warning",
+      title: `${runSummary.approvalWaitCount} run${runSummary.approvalWaitCount > 1 ? "s" : ""} waiting on approval`,
+      description: "Runs paused at an approval gate. Review pending approvals to unblock execution.",
+    });
+  }
+  if (runSummary && runSummary.errorCount > 0) {
+    attentionItems.push({
+      key: "errors",
+      level: "needs_action",
+      title: `${runSummary.errorCount} run${runSummary.errorCount > 1 ? "s" : ""} with errors`,
+    });
+  }
+  if (runSummary && runSummary.attentionCount === 0 && runs.length > 0) {
+    attentionItems.push({
+      key: "all-clear",
+      level: "healthy",
+      title: "All runs accounted for",
+    });
+  }
+
+  const summaryItems: SummaryStripItem[] | undefined = runSummary
+    ? [
+        {
+          key: "total",
+          label: "Total runs",
+          value: String(runSummary.totalRuns),
+          tone: "neutral",
+          status: "info",
+        },
+        ...(runSummary.deadLetteredCount > 0
+          ? [{
+              key: "dead-lettered" as const,
+              label: "Dead-lettered" as const,
+              value: String(runSummary.deadLetteredCount) as string,
+              tone: "danger" as const,
+              status: "blocked" as const,
+            }]
+          : []),
+        ...(runSummary.approvalWaitCount > 0
+          ? [{
+              key: "approval-waits" as const,
+              label: "Approval waits" as const,
+              value: String(runSummary.approvalWaitCount) as string,
+              tone: "warning" as const,
+              status: "partial" as const,
+            }]
+          : []),
+        ...(runSummary.errorCount > 0
+          ? [{
+              key: "errors" as const,
+              label: "With errors" as const,
+              value: String(runSummary.errorCount) as string,
+              tone: "danger" as const,
+              status: "blocked" as const,
+            }]
+          : []),
+        ...(runSummary.replayableCount > 0
+          ? [{
+              key: "replayable" as const,
+              label: "Replayable" as const,
+              value: String(runSummary.replayableCount) as string,
+              tone: "success" as const,
+              status: "ready" as const,
+            }]
+          : []),
+      ]
+    : undefined;
+
+  return (
+    <IncidentResponsePage
+      eyebrow="Operations"
+      title="Execution Run Review"
+      description="Inspect background execution truth, approval waits, dead-letter evidence, and replay admission."
+      attentionItems={attentionItems}
+      summaryItems={instanceId && summaryItems ? summaryItems : undefined}
+      diagnostics={
+        <div className="fg-stack">
+          <p className="text-muted">Execution scope: {companyId || "not resolved"}</p>
+          {runsError ? <p className="fg-danger">{runsError}</p> : null}
+          {detailError ? <p className="fg-danger">{detailError}</p> : null}
+        </div>
+      }
+      diagnosticsTitle="Execution diagnostics"
+    >
       <ScopeFilterCard
         instanceId={instanceId}
         companyId={companyId}
@@ -652,6 +678,6 @@ export function ExecutionPage() {
           onOperatorAction={handleOperatorAction}
         />
       ) : null}
-    </section>
+    </IncidentResponsePage>
   );
 }

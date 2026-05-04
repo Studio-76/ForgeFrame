@@ -715,7 +715,7 @@ describe("Execution page operator workflow", () => {
 
     expect(markup).toContain("Instance scope required");
     expect(markup).toContain("Choose execution scope");
-    expect(markup).toContain("real instance registry");
+    expect(markup).toContain("Execution Run Review");
   });
 
   it("loads execution scope choices from the instance registry and opens the chosen instance", async () => {
@@ -842,7 +842,7 @@ describe("Execution page operator workflow", () => {
     await renderExecutionPage("/execution?instanceId=instance_alpha", readOnlyOperatorSession);
 
     expect(fetchExecutionRunDetailMock).toHaveBeenCalledWith("run_alpha", { instanceId: "instance_alpha", companyId: "" });
-    expect(container.textContent).toContain("Read-only execution review");
+    expect(container.textContent).toContain("Execution Run Review");
     expect(container.textContent).toContain("Replay unavailable");
     expect(container.querySelector('textarea[aria-label="Execution replay reason"]')).toBeNull();
   });

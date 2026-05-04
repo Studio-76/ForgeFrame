@@ -464,7 +464,7 @@ export function DataTable<T extends Record<string, unknown>>({
       sorting,
       columnFilters,
       globalFilter,
-      pagination: enablePagination ? pagination : undefined,
+      pagination,
     },
     onSortingChange: (updater) => {
       const next = typeof updater === "function" ? updater(sorting) : updater;

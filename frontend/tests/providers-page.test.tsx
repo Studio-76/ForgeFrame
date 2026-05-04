@@ -433,7 +433,7 @@ describe("Providers page hierarchy", () => {
     expect(markup).toContain("provider inventory and health here");
     expect(markup).toContain("OAuth/account targets live on the dedicated OAuth Targets route");
     expect(markup).toContain("dedicated harness state, runs, plus redacted harness exports stay on the Harness route");
-    expect(markup).toContain("Provider truth and health stay visible here without surfacing mutations that the backend will block.");
+    expect(markup).toContain("Provider truth and health stay visible here");
     expect(markup).not.toContain("Sync all providers");
     expect(markup).not.toContain(">Activate<");
     expect(markup).not.toContain(">Sync models<");

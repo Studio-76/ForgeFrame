@@ -21,15 +21,17 @@ import {
 } from "../api/domain/recovery";
 import { CONTROL_PLANE_ROUTES } from "../app/navigation";
 import { useAppSession } from "../app/session";
-import { PageIntro } from "../components/PageIntro";
+import { IncidentResponsePage } from "../components/page-templates";
+import type { AttentionPayload } from "../components/ui/models/attention";
 import { ActionBar } from "../components/ui/ActionBar";
 import { AdvancedDiagnostics } from "../components/ui/AdvancedDiagnostics";
+import { Button } from "../components/ui/Button";
+import { DataTable } from "../components/ui/DataTable";
+import type { DataTableColumn } from "../components/ui/DataTable";
 import { DetailDrawer } from "../components/ui/DetailDrawer";
 import { DetailPanel } from "../components/ui/DetailPanel";
-import { EntityTable, type EntityTableColumn } from "../components/ui/EntityTable";
 import { ErrorState, LoadingState } from "../components/ui/StateBlocks";
 import { StatusBadge, type StatusTone } from "../components/ui/StatusBadge";
-import { SummaryStrip, type SummaryStripItem } from "../components/ui/SummaryStrip";
 
 type LoadState = "idle" | "loading" | "success" | "error";
 type SectionKey = "overview" | "policies" | "backup" | "restore" | "upgrade";
@@ -79,7 +81,7 @@ type ImportResultState = {
   raw: Record<string, unknown>;
 };
 type CoverageRow = {
-  key: RecoveryProtectedDataClass;
+  key: string;
   dataClass: RecoveryProtectedDataClass;
   protectedLabel: string;
   protectedStatusKey: StatusKey;
@@ -139,7 +141,7 @@ const DEFAULT_CREATE_FORM: PolicyFormState = {
   status: "active",
   target_class: "local_secondary_disk",
   target_label: "",
-  target_config_json: "{\n  \"path\": \"/var/backups/forgeframe\"\n}",
+  target_config_json: '{\n  "path": "/var/backups/forgeframe"\n}',
   protected_data_classes: ["database"],
   source_database: "",
   cluster_system_identifier: "",
@@ -153,11 +155,44 @@ const DEFAULT_CREATE_FORM: PolicyFormState = {
 const DEFAULT_IMPORT_FORM: ImportFormState = {
   policy_id: "",
   protected_data_classes: ["database"],
-  payload_json: "{\n  \"status\": \"ok\"\n}",
+  payload_json: '{\n  "status": "ok"\n}',
   notes: "",
 };
 const DEFAULT_UPGRADE_IMPORT_FORM: UpgradeImportFormState = {
-  payload_json: "{\n  \"release_id\": \"release-2026-04-23\",\n  \"target_version\": \"0.6.0\",\n  \"upgrade_result\": \"succeeded\",\n  \"rollback_classification\": \"not_needed\",\n  \"failure_classification\": \"none\",\n  \"bootstrap_recovery_state\": \"recovered\",\n  \"queue_drain_ok\": true,\n  \"no_loss_ok\": true,\n  \"before\": {\n    \"captured_at\": \"2026-04-23T08:00:00Z\",\n    \"source_identity\": {\n      \"source_database\": \"forgeframe\",\n      \"cluster_system_identifier\": \"cluster-123\",\n      \"deployment_slug\": \"forgeframe-prod\",\n      \"public_fqdn\": \"forgeframe.example.com\"\n    },\n    \"migration\": { \"latest_version\": 28, \"applied_versions\": [1, 2, 28] },\n    \"critical_object_counts\": { \"runs\": 12, \"run_approval_links\": 3, \"memory_entries\": 8, \"skills\": 2 },\n    \"queue_state_counts\": { \"queued\": 0, \"executing\": 0 }\n  },\n  \"after\": {\n    \"captured_at\": \"2026-04-23T08:10:00Z\",\n    \"source_identity\": {\n      \"source_database\": \"forgeframe\",\n      \"cluster_system_identifier\": \"cluster-123\",\n      \"deployment_slug\": \"forgeframe-prod\",\n      \"public_fqdn\": \"forgeframe.example.com\"\n    },\n    \"migration\": { \"latest_version\": 29, \"applied_versions\": [1, 2, 29] },\n    \"critical_object_counts\": { \"runs\": 12, \"run_approval_links\": 3, \"memory_entries\": 8, \"skills\": 2 },\n    \"queue_state_counts\": { \"queued\": 0, \"executing\": 0 }\n  }\n}",
+  payload_json: JSON.stringify({
+    release_id: "release-2026-04-23",
+    target_version: "0.6.0",
+    upgrade_result: "succeeded",
+    rollback_classification: "not_needed",
+    failure_classification: "none",
+    bootstrap_recovery_state: "recovered",
+    queue_drain_ok: true,
+    no_loss_ok: true,
+    before: {
+      captured_at: "2026-04-23T08:00:00Z",
+      source_identity: {
+        source_database: "forgeframe",
+        cluster_system_identifier: "cluster-123",
+        deployment_slug: "forgeframe-prod",
+        public_fqdn: "forgeframe.example.com",
+      },
+      migration: { latest_version: 28, applied_versions: [1, 2, 28] },
+      critical_object_counts: { runs: 12, run_approval_links: 3, memory_entries: 8, skills: 2 },
+      queue_state_counts: { queued: 0, executing: 0 },
+    },
+    after: {
+      captured_at: "2026-04-23T08:10:00Z",
+      source_identity: {
+        source_database: "forgeframe",
+        cluster_system_identifier: "cluster-123",
+        deployment_slug: "forgeframe-prod",
+        public_fqdn: "forgeframe.example.com",
+      },
+      migration: { latest_version: 29, applied_versions: [1, 2, 29] },
+      critical_object_counts: { runs: 12, run_approval_links: 3, memory_entries: 8, skills: 2 },
+      queue_state_counts: { queued: 0, executing: 0 },
+    },
+  }, null, 2),
   notes: "",
 };
 
@@ -659,9 +694,6 @@ function buildUpgradeRow(report: RecoveryUpgradeReportRecord): UpgradeRow {
 
 function validatePolicyForm(form: PolicyFormState, configValidation: JsonValidationState, mode: PolicyDrawerMode): PolicyFormValidationState {
   const errors: string[] = [];
-  if (mode === "create" && form.policy_id.trim() === "") {
-    // Optional server-side, but if left blank the generated ID is opaque; keep create flow explicit.
-  }
   if (form.label.trim() === "") {
     errors.push("Label is required.");
   }
@@ -805,7 +837,7 @@ export function RecoveryPage() {
 
   useEffect(() => {
     if (!coverageRows.some((row) => row.key === selectedCoverageKey) && coverageRows[0]) {
-      setSelectedCoverageKey(coverageRows[0].key);
+      setSelectedCoverageKey(coverageRows[0].dataClass);
     }
   }, [coverageRows, selectedCoverageKey]);
 
@@ -997,46 +1029,98 @@ export function RecoveryPage() {
     }
   };
 
+  // ── Derived data ──────────────────────────────────────────
+
   const blockedCoverageRows = coverageRows
     .filter((row) => row.severity > 0)
     .sort((left, right) => right.severity - left.severity || left.dataClass.localeCompare(right.dataClass));
+
   const protectedClasses = coverageRows.filter((row) => row.protectedStatusKey === "ready").length;
   const restoreTestedClasses = coverageRows.filter((row) => row.lastRestoreAt !== null).length;
   const neverTestedPolicies = restoreRows.filter((row) => row.statusKey === "blocked" && row.evidenceAt === null).length;
-  const summaryItems: SummaryStripItem[] = [
-    {
-      key: "classes",
-      label: "Protected data classes",
-      value: `${protectedClasses}/${DATA_CLASSES.length}`,
-      meta: coverageRows.filter((row) => row.statusKey === "blocked" && row.policyLabels === "none").map((row) => row.dataClass).join(", ") || "Every data class has at least one policy.",
-      tone: protectedClasses === DATA_CLASSES.length ? "success" : "danger",
-      status: protectedClasses === DATA_CLASSES.length ? "ready" : "blocked",
-    },
-    {
-      key: "restore",
-      label: "Restore-tested classes",
-      value: `${restoreTestedClasses}/${DATA_CLASSES.length}`,
-      meta: neverTestedPolicies > 0 ? `${neverTestedPolicies} policy path(s) still have no restore proof. Backup alone is not green.` : "Every protected class has restore evidence.",
-      tone: restoreTestedClasses === DATA_CLASSES.length ? "success" : "danger",
-      status: restoreTestedClasses === DATA_CLASSES.length ? "ready" : "blocked",
-    },
-    {
-      key: "policies",
-      label: "Policy posture",
-      value: overview ? `${overview.summary.healthy_policies} healthy / ${overview.summary.blocked_policies} blocked` : "n/a",
-      meta: overview ? `fresh backup=${overview.summary.fresh_backup_policies}, fresh restore=${overview.summary.fresh_restore_policies}, source identity verified=${overview.summary.source_identity_verified_policies}` : "Recovery overview not loaded.",
-      tone: overview?.summary.runtime_status === "ok" ? "success" : overview?.summary.runtime_status === "blocked" ? "danger" : "warning",
-      status: overview ? statusKeyForRuntimeStatus(overview.summary.runtime_status) : "blocked",
-    },
-    {
-      key: "upgrade",
-      label: "Upgrade / rollback",
-      value: overview?.upgrade_posture.latest_release_id ?? "missing",
-      meta: overview?.upgrade_posture.blockers.join(", ") || "Latest no-loss and queue-drain proof are recorded.",
-      tone: toneForRuntimeStatus(overview?.upgrade_posture.runtime_status ?? "blocked"),
-      status: overview ? statusKeyForRuntimeStatus(overview.upgrade_posture.runtime_status) : "blocked",
-    },
-  ];
+
+  // ── Build attention items from recovery posture ──────────
+  const attentionItems: AttentionPayload[] = [];
+
+  if (overview) {
+    const runtimeStatus = overview.summary.runtime_status;
+    const upgradeStatus = overview.upgrade_posture.runtime_status;
+
+    if (runtimeStatus === "blocked") {
+      const blockedClasses = coverageRows.filter((r) => r.statusKey === "blocked");
+      attentionItems.push({
+        key: "recovery-blocked",
+        level: "primary_blocker",
+        title: blockedClasses.length > 0
+          ? `${blockedClasses[0].blocker}`
+          : "Recovery posture is blocked — review policies and evidence.",
+        description: `${blockedClasses.length} data class(es) need attention.`,
+      });
+    } else if (runtimeStatus === "warning") {
+      attentionItems.push({
+        key: "recovery-degraded",
+        level: "needs_action",
+        title: "Recovery posture is degraded — review stale or partial evidence.",
+        description: `${neverTestedPolicies} policy path(s) still have no restore proof.`,
+      });
+    }
+
+    if (upgradeStatus === "blocked") {
+      attentionItems.push({
+        key: "upgrade-blocked",
+        level: "warning",
+        title: "Upgrade integrity is missing or degraded.",
+        description: overview.upgrade_posture.blockers.join(", ") || "Import upgrade proof to validate.",
+      });
+    } else if (upgradeStatus === "ok") {
+      attentionItems.push({
+        key: "upgrade-ok",
+        level: "healthy",
+        title: "Upgrade integrity is proven.",
+      });
+    }
+
+    if (runtimeStatus === "ok") {
+      attentionItems.push({
+        key: "recovery-healthy",
+        level: "healthy",
+        title: "Recovery posture is healthy.",
+      });
+    }
+  }
+
+  const summaryItems = overview
+    ? [
+        {
+          key: "classes",
+          label: "Protected classes" as const,
+          value: `${protectedClasses}/${DATA_CLASSES.length}` as string,
+          tone: (protectedClasses === DATA_CLASSES.length ? "success" : "danger") as "success" | "danger",
+          status: (protectedClasses === DATA_CLASSES.length ? "ready" : "blocked") as "ready" | "blocked",
+        },
+        {
+          key: "restore",
+          label: "Restore-tested" as const,
+          value: `${restoreTestedClasses}/${DATA_CLASSES.length}` as string,
+          tone: (restoreTestedClasses === DATA_CLASSES.length ? "success" : "danger") as "success" | "danger",
+          status: (restoreTestedClasses === DATA_CLASSES.length ? "ready" : "blocked") as "ready" | "blocked",
+        },
+        {
+          key: "policies",
+          label: "Policy posture" as const,
+          value: `${overview.summary.healthy_policies} healthy / ${overview.summary.blocked_policies} blocked` as string,
+          tone: toneForRuntimeStatus(overview.summary.runtime_status) as "success" | "warning" | "danger",
+          status: statusKeyForRuntimeStatus(overview.summary.runtime_status) as "ready" | "partial" | "blocked",
+        },
+        {
+          key: "upgrade",
+          label: "Upgrade / rollback" as const,
+          value: overview.upgrade_posture.latest_release_id ?? "missing" as string,
+          tone: toneForRuntimeStatus(overview.upgrade_posture.runtime_status) as "success" | "warning" | "danger",
+          status: statusKeyForRuntimeStatus(overview.upgrade_posture.runtime_status) as "ready" | "partial" | "blocked",
+        },
+      ]
+    : undefined;
 
   const sectionLabels: Record<SectionKey, string> = {
     overview: "Overview",
@@ -1045,211 +1129,210 @@ export function RecoveryPage() {
     restore: "Restore Evidence",
     upgrade: "Upgrade / Rollback",
   };
-  const sectionDescriptions: Record<SectionKey, string> = {
-    overview: "Coverage per data class, last backup, last restore test, and the current risk posture.",
-    policies: "Policy inventory, target contract validation, source identity, and recovery windows.",
-    backup: "Separated backup evidence imports and the latest manifest truth per policy.",
-    restore: "Separated restore-test evidence with hard visibility when restore has never been exercised.",
-    upgrade: "Upgrade, rollback, queue-drain, and no-loss proofs with durable results.",
-  };
 
-  const coverageColumns: EntityTableColumn<CoverageRow>[] = [
+  // ── DataTable column definitions ──────────────────────────
+
+  const coverageColumns: DataTableColumn<CoverageRow>[] = [
     {
-      key: "dataClass",
+      id: "dataClass",
       header: "Data class",
-      render: (row) => (
-        <button type="button" className="fg-data-row" onClick={() => setSelectedCoverageKey(row.key)}>
-          <div>
+      accessorFn: (row) => (
+        <Button variant="tertiary" density="compact" onPress={() => setSelectedCoverageKey(row.dataClass)}>
+          <div className="text-left">
             <strong>{row.dataClass}</strong>
-            <div className="fg-muted">{row.policyLabels}</div>
+            <div className="fg-muted text-xs">{row.policyLabels}</div>
           </div>
-        </button>
+        </Button>
       ),
     },
     {
-      key: "protected",
+      id: "protected",
       header: "Protected",
-      render: (row) => (
+      accessorFn: (row) => (
         <StatusBadge tone={toneForStatus(row.protectedStatusKey)} status={row.protectedStatusKey}>
           {row.protectedLabel}
         </StatusBadge>
       ),
     },
     {
-      key: "backupTargets",
+      id: "backupTargets",
       header: "Backup target",
-      render: (row) => row.backupTargets,
+      accessorFn: (row) => row.backupTargets,
     },
     {
-      key: "lastBackup",
+      id: "lastBackup",
       header: "Last backup",
-      render: (row) => formatTimestamp(row.lastBackupAt),
+      accessorFn: (row) => formatTimestamp(row.lastBackupAt),
     },
     {
-      key: "lastRestore",
+      id: "lastRestore",
       header: "Last restore test",
-      render: (row) => formatTimestamp(row.lastRestoreAt),
+      accessorFn: (row) => formatTimestamp(row.lastRestoreAt),
     },
     {
-      key: "risk",
+      id: "risk",
       header: "Risk",
-      render: (row) => (
+      accessorFn: (row) => (
         <StatusBadge tone={row.riskTone} status={row.statusKey}>
           {row.riskLabel}
         </StatusBadge>
       ),
     },
   ];
-  const policyColumns: EntityTableColumn<RecoveryPolicySummary>[] = [
+
+  const policyColumns: DataTableColumn<RecoveryPolicySummary>[] = [
     {
-      key: "policy",
+      id: "policy",
       header: "Policy",
-      render: (row) => (
-        <button type="button" className="fg-data-row" onClick={() => selectPolicy(row.policy.policy_id)}>
-          <div>
+      accessorFn: (row) => (
+        <Button variant="tertiary" density="compact" onPress={() => selectPolicy(row.policy.policy_id)}>
+          <div className="text-left">
             <strong>{row.policy.label}</strong>
-            <div className="fg-muted">{row.policy.policy_id}</div>
+            <div className="fg-muted text-xs">{row.policy.policy_id}</div>
           </div>
-        </button>
+        </Button>
       ),
     },
     {
-      key: "status",
+      id: "status",
       header: "Posture",
-      render: (row) => (
+      accessorFn: (row) => (
         <StatusBadge tone={toneForStatus(statusKeyForPolicy(row))} status={statusKeyForPolicy(row)}>
           {policyStatusLabel(row)}
         </StatusBadge>
       ),
     },
     {
-      key: "coverage",
+      id: "coverage",
       header: "Protected classes",
-      render: (row) => row.policy.protected_data_classes.join(", "),
+      accessorFn: (row) => row.policy.protected_data_classes.join(", "),
     },
     {
-      key: "backup",
+      id: "backup",
       header: "Backup",
-      render: (row) => formatTimestamp(row.latest_backup?.created_at),
+      accessorFn: (row) => formatTimestamp(row.latest_backup?.created_at),
     },
     {
-      key: "restore",
+      id: "restore",
       header: "Restore",
-      render: (row) => formatTimestamp(row.latest_restore?.created_at),
+      accessorFn: (row) => formatTimestamp(row.latest_restore?.created_at),
     },
   ];
-  const backupColumns: EntityTableColumn<PolicyEvidenceRow>[] = [
+
+  const backupColumns: DataTableColumn<PolicyEvidenceRow>[] = [
     {
-      key: "policy",
+      id: "policy",
       header: "Policy",
-      render: (row) => (
-        <button type="button" className="fg-data-row" onClick={() => selectPolicy(row.policy.policy.policy_id)}>
-          <div>
+      accessorFn: (row) => (
+        <Button variant="tertiary" density="compact" onPress={() => selectPolicy(row.policy.policy.policy_id)}>
+          <div className="text-left">
             <strong>{row.policy.policy.label}</strong>
-            <div className="fg-muted">{row.policy.validation.target_locator || row.policy.policy.target_label || row.policy.policy.target_class}</div>
+            <div className="fg-muted text-xs">{row.policy.validation.target_locator || row.policy.policy.target_label || row.policy.policy.target_class}</div>
           </div>
-        </button>
+        </Button>
       ),
     },
     {
-      key: "status",
+      id: "status",
       header: "Backup evidence",
-      render: (row) => (
+      accessorFn: (row) => (
         <StatusBadge tone={row.tone} status={row.statusKey}>
           {row.statusLabel}
         </StatusBadge>
       ),
     },
     {
-      key: "evidence",
+      id: "evidence",
       header: "Last import",
-      render: (row) => formatTimestamp(row.evidenceAt),
+      accessorFn: (row) => formatTimestamp(row.evidenceAt),
     },
     {
-      key: "coverage",
+      id: "coverage",
       header: "Protected classes",
-      render: (row) => row.policy.policy.protected_data_classes.join(", "),
+      accessorFn: (row) => row.policy.policy.protected_data_classes.join(", "),
     },
     {
-      key: "blocker",
+      id: "blocker",
       header: "Result",
-      render: (row) => row.blocker,
+      accessorFn: (row) => row.blocker,
     },
   ];
-  const restoreColumns: EntityTableColumn<PolicyEvidenceRow>[] = [
+
+  const restoreColumns: DataTableColumn<PolicyEvidenceRow>[] = [
     {
-      key: "policy",
+      id: "policy",
       header: "Policy",
-      render: (row) => (
-        <button type="button" className="fg-data-row" onClick={() => selectPolicy(row.policy.policy.policy_id)}>
-          <div>
+      accessorFn: (row) => (
+        <Button variant="tertiary" density="compact" onPress={() => selectPolicy(row.policy.policy.policy_id)}>
+          <div className="text-left">
             <strong>{row.policy.policy.label}</strong>
-            <div className="fg-muted">{row.policy.policy.target_class}</div>
+            <div className="fg-muted text-xs">{row.policy.policy.target_class}</div>
           </div>
-        </button>
+        </Button>
       ),
     },
     {
-      key: "status",
+      id: "status",
       header: "Restore evidence",
-      render: (row) => (
+      accessorFn: (row) => (
         <StatusBadge tone={row.tone} status={row.statusKey}>
           {row.statusLabel}
         </StatusBadge>
       ),
     },
     {
-      key: "evidence",
+      id: "evidence",
       header: "Last restore test",
-      render: (row) => formatTimestamp(row.evidenceAt),
+      accessorFn: (row) => formatTimestamp(row.evidenceAt),
     },
     {
-      key: "tables",
+      id: "tables",
       header: "Tables compared",
-      render: (row) => row.policy.latest_restore?.tables_compared ?? 0,
+      accessorFn: (row) => row.policy.latest_restore?.tables_compared ?? 0,
     },
     {
-      key: "blocker",
+      id: "blocker",
       header: "Result",
-      render: (row) => row.blocker,
+      accessorFn: (row) => row.blocker,
     },
   ];
-  const upgradeColumns: EntityTableColumn<UpgradeRow>[] = [
+
+  const upgradeColumns: DataTableColumn<UpgradeRow>[] = [
     {
-      key: "release",
+      id: "release",
       header: "Release",
-      render: (row) => (
-        <button type="button" className="fg-data-row" onClick={() => setSelectedUpgradeId(row.report.report_id)}>
-          <div>
+      accessorFn: (row) => (
+        <Button variant="tertiary" density="compact" onPress={() => setSelectedUpgradeId(row.report.report_id)}>
+          <div className="text-left">
             <strong>{row.report.release_id}</strong>
-            <div className="fg-muted">{row.report.target_version}</div>
+            <div className="fg-muted text-xs">{row.report.target_version}</div>
           </div>
-        </button>
+        </Button>
       ),
     },
     {
-      key: "status",
+      id: "status",
       header: "Upgrade posture",
-      render: (row) => (
+      accessorFn: (row) => (
         <StatusBadge tone={row.tone} status={row.statusKey}>
           {row.statusLabel}
         </StatusBadge>
       ),
     },
     {
-      key: "evidence",
+      id: "evidence",
       header: "Imported at",
-      render: (row) => formatTimestamp(row.report.imported_at),
+      accessorFn: (row) => formatTimestamp(row.report.imported_at),
     },
     {
-      key: "rollback",
+      id: "rollback",
       header: "Rollback class",
-      render: (row) => row.report.rollback_classification,
+      accessorFn: (row) => row.report.rollback_classification,
     },
     {
-      key: "blocker",
+      id: "blocker",
       header: "Result",
-      render: (row) => row.blocker,
+      accessorFn: (row) => row.blocker,
     },
   ];
 
@@ -1259,118 +1342,174 @@ export function RecoveryPage() {
   const drawerFormValidation = validatePolicyForm(drawerForm, drawerValidation, policyDrawerMode);
   const drawerFormId = policyDrawerMode === "create" ? "recovery-policy-create-form" : "recovery-policy-edit-form";
 
-  return (
-    <section className="fg-page">
-      <PageIntro
+  // ── Loading / error states ────────────────────────────────
+  if (loadState === "loading" && !overview) {
+    return (
+      <IncidentResponsePage
         eyebrow="Operations"
         title="Recovery / Backup / Restore"
-        description="Recovery is an operator surface for backup coverage, restore proof, upgrade integrity, and source identity, not a passive dump of host-side scripts."
-        question="Which data class is still unprotected or untested, and can the current deployment prove backup, restore, upgrade, and rollback truth with timestamps?"
-        links={[
-          { label: "Recovery / Backup / Restore", to: CONTROL_PLANE_ROUTES.recovery, description: "Stay on the resilience evidence surface." },
-          { label: "Release / Validation", to: CONTROL_PLANE_ROUTES.releaseValidation, description: "Cross-check release posture against recovery truth." },
-          { label: "Health", to: CONTROL_PLANE_ROUTES.health, description: "Inspect runtime readiness after recovery posture changes." },
-        ]}
-        badges={[
-          { label: overview ? `${overview.summary.total_policies} policy${overview.summary.total_policies === 1 ? "" : "ies"}` : "No policy data yet", tone: "neutral" },
-          { label: overview?.summary.runtime_status === "ok" ? "Recovery posture healthy" : overview?.summary.runtime_status === "blocked" ? "Recovery posture blocked" : "Recovery posture degraded", tone: toneForRuntimeStatus(overview?.summary.runtime_status ?? "blocked") },
-          { label: overview?.upgrade_posture.runtime_status === "ok" ? "Upgrade integrity proven" : "Upgrade integrity missing or degraded", tone: toneForRuntimeStatus(overview?.upgrade_posture.runtime_status ?? "blocked") },
-          { label: canMutate ? "Policy mutation enabled" : "Read only", tone: canMutate ? "success" : "neutral" },
-        ]}
-        note="Backup evidence without restore proof stays blocked. Import validation happens before submit, and every accepted report leaves a visible result on the page."
+        description="Recovery posture for backup coverage, restore proof, upgrade integrity, and source identity."
+        noIncidents
+        noIncidentsConfig={{
+          title: "Loading recovery posture",
+          description: "Loading coverage, backup evidence, restore evidence, and upgrade posture.",
+        }}
       />
+    );
+  }
 
+  if (loadState === "error" && !overview) {
+    return (
+      <IncidentResponsePage
+        eyebrow="Operations"
+        title="Recovery / Backup / Restore"
+        description="Recovery posture loading failed."
+        attentionItems={[
+          { key: "load-error", level: "primary_blocker", title: error || "Recovery surface loading failed.", description: "Retry to reload recovery posture data." },
+        ]}
+        noIncidents
+        noIncidentsConfig={{
+          title: "Recovery surface failed",
+          description: error || "An unexpected error occurred.",
+        }}
+        actions={[
+          { label: "Retry", kind: "primary", intent: "run", onClick: handleRefresh },
+        ]}
+      />
+    );
+  }
+
+  const drawerActions = (
+    <div className="flex gap-2">
+      <Button variant="secondary" onPress={() => setPolicyDrawerMode("closed")}>
+        Cancel
+      </Button>
+      <Button
+        variant="primary"
+        isDisabled={!canMutate || !drawerFormValidation.valid || (policyDrawerMode === "edit" && !selectedPolicy)}
+        onPress={() => {
+          const form = document.getElementById(drawerFormId) as HTMLFormElement | null;
+          form?.requestSubmit();
+        }}
+      >
+        {policyDrawerMode === "create" ? "Create recovery policy" : "Save selected policy"}
+      </Button>
+    </div>
+  );
+
+  const diagnosticsContent = (
+    <div className="fg-stack">
+      {overview ? (
+        <>
+          <p>Total policies: {overview.summary.total_policies}</p>
+          <p>Fresh backup: {overview.summary.fresh_backup_policies}, fresh restore: {overview.summary.fresh_restore_policies}</p>
+          <p>Source identity verified: {overview.summary.source_identity_verified_policies}</p>
+          <p>Upgrade blocker: {overview.upgrade_posture.blockers.join(", ") || "none"}</p>
+        </>
+      ) : null}
+      {error ? <p className="fg-danger">{error}</p> : null}
+    </div>
+  );
+
+  return (
+    <IncidentResponsePage
+      eyebrow="Operations"
+      title="Recovery / Backup / Restore"
+      description="Recovery is an operator surface for backup coverage, restore proof, upgrade integrity, and source identity."
+      attentionItems={attentionItems}
+      summaryItems={summaryItems}
+      diagnostics={diagnosticsContent}
+      diagnosticsTitle="Recovery diagnostics"
+      actions={[
+        { label: "Refresh", kind: "secondary" as const, intent: "run" as const, onClick: handleRefresh },
+        ...(activeSection === "policies" && canMutate
+          ? [
+              { label: "Create policy", kind: "primary" as const, intent: "configure" as const, onClick: () => setPolicyDrawerMode("create") },
+              { label: "Edit policy", kind: "secondary" as const, intent: "configure" as const, disabled: !selectedPolicy, onClick: () => setPolicyDrawerMode("edit") },
+            ]
+          : []),
+      ]}
+    >
+      {/* Section tab bar */}
       <ActionBar
         title={sectionLabels[activeSection]}
-        description={sectionDescriptions[activeSection]}
         actions={(
-          <div className="fg-actions">
-            <button type="button" onClick={handleRefresh}>Refresh</button>
+          <div className="flex gap-2 flex-wrap">
             {(["overview", "policies", "backup", "restore", "upgrade"] as SectionKey[]).map((section) => (
-              <button
+              <Button
                 key={section}
-                type="button"
-                aria-pressed={activeSection === section}
-                onClick={() => setActiveSection(section)}
+                variant={activeSection === section ? "primary" : "secondary"}
+                density="compact"
+                onPress={() => setActiveSection(section)}
               >
                 {sectionLabels[section]}
-              </button>
+              </Button>
             ))}
-            {activeSection === "policies" ? (
-              <>
-                <button type="button" disabled={!canMutate} onClick={() => setPolicyDrawerMode("create")}>Create policy</button>
-                <button type="button" disabled={!canMutate || !selectedPolicy} onClick={() => setPolicyDrawerMode("edit")}>Edit selected policy</button>
-              </>
-            ) : null}
           </div>
         )}
       />
 
-      <SummaryStrip items={summaryItems} />
+      {message ? <p className="text-muted mb-2">{message}</p> : null}
 
-      {error ? (
-        <ErrorState
-          title="Recovery surface failed"
-          description={error}
-          action={<button type="button" onClick={handleRefresh}>Retry</button>}
-        />
-      ) : null}
-      {message ? <p>{message}</p> : null}
-      {loadState === "loading" && !overview ? (
-        <LoadingState
-          title="Loading recovery posture"
-          description="Restoring coverage, backup evidence, restore evidence, and upgrade posture."
-        />
-      ) : null}
-
+      {/* ── Overview section ── */}
       {overview && activeSection === "overview" ? (
         <div className="ff-operator-layout">
           <div className="ff-operator-main">
-            <EntityTable
+            <DataTable
               title="Coverage summary"
               description="Every protected data class shows backup target, last backup, last restore test, and a hard risk posture."
+              data={coverageRows}
               columns={coverageColumns}
-              rows={coverageRows}
               rowKey={(row) => row.key}
-              tableLabel="Recovery coverage by data class"
-              getRowClassName={(row) => (row.key === selectedCoverage?.key ? "is-selected" : undefined)}
+              selectedRowId={selectedCoverage?.key ?? null}
+              onSelectedRowChange={(key) => {
+                if (key) {
+                  const row = coverageRows.find((r) => r.key === key);
+                  if (row) setSelectedCoverageKey(row.dataClass);
+                }
+              }}
+              enablePagination={false}
+              showSearch={false}
+              showPresets={false}
             />
 
-            <EntityTable
-              title="Current recovery risks"
-              description="The hardest gaps surface here first so unprotected or untested classes are impossible to miss."
-              columns={[
-                {
-                  key: "dataClass",
-                  header: "Data class",
-                  render: (row) => (
-                    <div>
-                      <strong>{row.dataClass}</strong>
-                      <div className="fg-muted">{row.policyLabels}</div>
-                    </div>
-                  ),
-                },
-                {
-                  key: "risk",
-                  header: "Risk",
-                  render: (row) => (
-                    <StatusBadge tone={row.riskTone} status={row.statusKey}>
-                      {row.riskLabel}
-                    </StatusBadge>
-                  ),
-                },
-                {
-                  key: "blocker",
-                  header: "Reason",
-                  render: (row) => row.blocker,
-                },
-              ]}
-              rows={blockedCoverageRows}
-              rowKey={(row) => row.key}
-              tableLabel="Recovery risk rows"
-              emptyTitle="No data-class recovery gaps"
-              emptyDescription="Every protected data class has backup and restore evidence."
-            />
+            {blockedCoverageRows.length > 0 ? (
+              <DataTable
+                title="Current recovery risks"
+                description="The hardest gaps surface here first so unprotected or untested classes are impossible to miss."
+                data={blockedCoverageRows}
+                columns={[
+                  {
+                    id: "dataClass",
+                    header: "Data class",
+                    accessorFn: (row) => (
+                      <div>
+                        <strong>{row.dataClass}</strong>
+                        <div className="fg-muted text-xs">{row.policyLabels}</div>
+                      </div>
+                    ),
+                  },
+                  {
+                    id: "risk",
+                    header: "Risk",
+                    accessorFn: (row) => (
+                      <StatusBadge tone={row.riskTone} status={row.statusKey}>
+                        {row.riskLabel}
+                      </StatusBadge>
+                    ),
+                  },
+                  {
+                    id: "blocker",
+                    header: "Reason",
+                    accessorFn: (row) => row.blocker,
+                  },
+                ]}
+                rowKey={(row) => row.key}
+                enablePagination={false}
+                showSearch={false}
+                showPresets={false}
+              />
+            ) : null}
           </div>
 
           <div className="ff-operator-sidebar">
@@ -1396,11 +1535,17 @@ export function RecoveryPage() {
 
                   <section className="fg-subcard">
                     <h4>Next action</h4>
-                    <p>{selectedCoverage.statusKey === "ready" ? "Keep the latest backup and restore cadence current." : "Open Policies, Backup Evidence, or Restore Evidence and close the missing proof."}</p>
-                    <div className="fg-actions">
-                      <button type="button" onClick={() => setActiveSection("policies")}>Open Policies</button>
-                      <button type="button" onClick={() => setActiveSection("backup")}>Open Backup Evidence</button>
-                      <button type="button" onClick={() => setActiveSection("restore")}>Open Restore Evidence</button>
+                    <p>{selectedCoverage.statusKey === "ready" ? "Keep the latest backup and restore cadence current." : "Open the relevant section below and close the missing proof."}</p>
+                    <div className="flex flex-wrap gap-2 mt-2">
+                      <Button variant="navigation" density="compact" onPress={() => setActiveSection("policies")}>
+                        Review Policies
+                      </Button>
+                      <Button variant="navigation" density="compact" onPress={() => setActiveSection("backup")}>
+                        Review Backup Evidence
+                      </Button>
+                      <Button variant="navigation" density="compact" onPress={() => setActiveSection("restore")}>
+                        Review Restore Evidence
+                      </Button>
                     </div>
                   </section>
 
@@ -1422,23 +1567,23 @@ export function RecoveryPage() {
         </div>
       ) : null}
 
+      {/* ── Policies section ── */}
       {overview && activeSection === "policies" ? (
         <div className="ff-operator-layout">
           <div className="ff-operator-main">
-            <EntityTable
+            <DataTable
               title="Policies"
               description="Policy inventory, freshness, source identity, and restore posture stay distinct from report imports."
+              data={overview.policies}
               columns={policyColumns}
-              rows={overview.policies}
               rowKey={(row) => row.policy.policy_id}
-              tableLabel="Recovery policies"
-              actions={(
-                <>
-                  <button type="button" disabled={!canMutate} onClick={() => setPolicyDrawerMode("create")}>Create policy</button>
-                  <button type="button" disabled={!canMutate || !selectedPolicy} onClick={() => setPolicyDrawerMode("edit")}>Edit selected policy</button>
-                </>
-              )}
-              getRowClassName={(row) => (row.policy.policy_id === selectedPolicy?.policy.policy_id ? "is-selected" : undefined)}
+              selectedRowId={selectedPolicy?.policy.policy_id ?? null}
+              onSelectedRowChange={(id) => {
+                if (id) selectPolicy(id);
+              }}
+              enablePagination={false}
+              showSearch={false}
+              showPresets={false}
             />
           </div>
 
@@ -1493,17 +1638,23 @@ export function RecoveryPage() {
         </div>
       ) : null}
 
+      {/* ── Backup section ── */}
       {overview && activeSection === "backup" ? (
         <div className="ff-operator-layout">
           <div className="ff-operator-main">
-            <EntityTable
+            <DataTable
               title="Backup Evidence"
               description="Backup manifests are imported and tracked separately from restore tests."
+              data={backupRows}
               columns={backupColumns}
-              rows={backupRows}
               rowKey={(row) => row.key}
-              tableLabel="Backup evidence table"
-              getRowClassName={(row) => (row.policy.policy.policy_id === selectedPolicy?.policy.policy_id ? "is-selected" : undefined)}
+              selectedRowId={selectedPolicy?.policy.policy_id ?? null}
+              onSelectedRowChange={(id) => {
+                if (id) selectPolicy(id);
+              }}
+              enablePagination={false}
+              showSearch={false}
+              showPresets={false}
             />
           </div>
 
@@ -1553,7 +1704,9 @@ export function RecoveryPage() {
                       <textarea rows={3} value={backupImport.notes} onChange={(event) => setBackupImport((current) => ({ ...current, notes: event.target.value }))} />
                     </label>
                     <div className="fg-actions">
-                      <button type="submit" disabled={!canMutate || !backupImport.policy_id || !backupValidation.valid}>Import backup manifest</button>
+                      <Button type="submit" variant="primary" isDisabled={!canMutate || !backupImport.policy_id || !backupValidation.valid}>
+                        Import backup manifest
+                      </Button>
                     </div>
                   </form>
                 </section>
@@ -1577,17 +1730,23 @@ export function RecoveryPage() {
         </div>
       ) : null}
 
+      {/* ── Restore section ── */}
       {overview && activeSection === "restore" ? (
         <div className="ff-operator-layout">
           <div className="ff-operator-main">
-            <EntityTable
+            <DataTable
               title="Restore Evidence"
               description="Restore proof is tracked separately so a backup-only posture never reads as green."
+              data={restoreRows}
               columns={restoreColumns}
-              rows={restoreRows}
               rowKey={(row) => row.key}
-              tableLabel="Restore evidence table"
-              getRowClassName={(row) => (row.policy.policy.policy_id === selectedPolicy?.policy.policy_id ? "is-selected" : undefined)}
+              selectedRowId={selectedPolicy?.policy.policy_id ?? null}
+              onSelectedRowChange={(id) => {
+                if (id) selectPolicy(id);
+              }}
+              enablePagination={false}
+              showSearch={false}
+              showPresets={false}
             />
           </div>
 
@@ -1638,7 +1797,9 @@ export function RecoveryPage() {
                       <textarea rows={3} value={restoreImport.notes} onChange={(event) => setRestoreImport((current) => ({ ...current, notes: event.target.value }))} />
                     </label>
                     <div className="fg-actions">
-                      <button type="submit" disabled={!canMutate || !restoreImport.policy_id || !restoreValidation.valid}>Import restore report</button>
+                      <Button type="submit" variant="primary" isDisabled={!canMutate || !restoreImport.policy_id || !restoreValidation.valid}>
+                        Import restore report
+                      </Button>
                     </div>
                   </form>
                 </section>
@@ -1662,19 +1823,19 @@ export function RecoveryPage() {
         </div>
       ) : null}
 
+      {/* ── Upgrade section ── */}
       {overview && activeSection === "upgrade" ? (
         <div className="ff-operator-layout">
           <div className="ff-operator-main">
-            <EntityTable
+            <DataTable
               title="Upgrade / Rollback"
               description="No-loss, queue-drain, rollback class, and source-identity stability stay visible as release evidence."
+              data={upgradeRows}
               columns={upgradeColumns}
-              rows={upgradeRows}
               rowKey={(row) => row.key}
-              tableLabel="Upgrade evidence table"
-              emptyTitle="No upgrade reports"
-              emptyDescription="Import upgrade and rollback proof before calling a release path validated."
-              getRowClassName={(row) => (row.report.report_id === selectedUpgrade?.report_id ? "is-selected" : undefined)}
+              enablePagination={false}
+              showSearch={false}
+              showPresets={false}
             />
           </div>
 
@@ -1696,7 +1857,7 @@ export function RecoveryPage() {
                   <p>Queue drained: {String(overview.upgrade_posture.latest_queue_drain_ok)}</p>
                   <p>Source identity stable: {String(overview.upgrade_posture.latest_source_identity_stable)}</p>
                   <p>Blockers: {overview.upgrade_posture.blockers.join(", ") || "none"}</p>
-                  <p>Cross-check route: <Link className="fg-nav-link" to={CONTROL_PLANE_ROUTES.releaseValidation}>Open Release / Validation</Link></p>
+                  <p>Cross-check route: <Link className="fg-nav-link" to={CONTROL_PLANE_ROUTES.releaseValidation}>View Release / Validation</Link></p>
                 </section>
 
                 <section className="fg-subcard">
@@ -1716,7 +1877,9 @@ export function RecoveryPage() {
                       <textarea rows={3} value={upgradeImport.notes} onChange={(event) => setUpgradeImport((current) => ({ ...current, notes: event.target.value }))} />
                     </label>
                     <div className="fg-actions">
-                      <button type="submit" disabled={!canMutate || !upgradeValidation.valid}>Import upgrade proof</button>
+                      <Button type="submit" variant="primary" isDisabled={!canMutate || !upgradeValidation.valid}>
+                        Import upgrade proof
+                      </Button>
                     </div>
                   </form>
                 </section>
@@ -1757,6 +1920,7 @@ export function RecoveryPage() {
         </div>
       ) : null}
 
+      {/* ── Policy create / edit drawer ── */}
       <DetailDrawer
         open={policyDrawerMode !== "closed"}
         title={policyDrawerMode === "create" ? "Create Recovery Policy" : "Edit Recovery Policy"}
@@ -1764,14 +1928,7 @@ export function RecoveryPage() {
         status={drawerFormValidation.valid ? "form ready" : "form incomplete"}
         statusTone={drawerFormValidation.valid ? "success" : "danger"}
         onClose={() => setPolicyDrawerMode("closed")}
-        actions={(
-          <>
-            <button type="button" onClick={() => setPolicyDrawerMode("closed")}>Cancel</button>
-            <button type="submit" form={drawerFormId} disabled={!canMutate || !drawerFormValidation.valid || (policyDrawerMode === "edit" && !selectedPolicy)}>
-              {policyDrawerMode === "create" ? "Create recovery policy" : "Save selected policy"}
-            </button>
-          </>
-        )}
+        actions={drawerActions}
       >
         <form id={drawerFormId} className="fg-stack" onSubmit={policyDrawerMode === "create" ? handleCreate : handleUpdate}>
           {drawerFormValidation.errors.length > 0 ? (
@@ -1896,6 +2053,6 @@ export function RecoveryPage() {
           </section>
         </form>
       </DetailDrawer>
-    </section>
+    </IncidentResponsePage>
   );
 }
