@@ -36,7 +36,6 @@ export function PluginsPage() {
     selectedPluginId,
     instancesState,
     pluginsState,
-    detailState,
     instances,
     plugins,
     detail,
@@ -76,7 +75,6 @@ export function PluginsPage() {
     bindingForm,
     setBindingForm,
     savingBinding,
-    bindingSchemaJson,
     bindingConfigError,
     bindingConfigEntries,
     bindingUnsupportedConfigKeys,
@@ -126,7 +124,7 @@ export function PluginsPage() {
     : undefined;
 
   // ── Loading / Error states for the main content ──
-  const showLoading = instancesState === "loading" && instances.length === 0 && pluginsState === "loading" && plugins.length === 0;
+  const showLoading = (instancesState === "loading" && instances.length === 0) || (pluginsState === "loading" && plugins.length === 0);
   const showError = instancesState === "error" || pluginsState === "error";
 
   // ── Scope selector dialog ──

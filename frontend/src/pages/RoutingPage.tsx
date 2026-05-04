@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { useSearchParams } from "react-router-dom";
 
 import {
   getScopedAdminInstanceId,
@@ -69,7 +69,6 @@ import type {
  * handling, and collapsed diagnostics.
  */
 export function RoutingPage() {
-  const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const { session, sessionReady } = useAppSession();
   const instanceId = getInstanceIdFromSearchParams(searchParams);

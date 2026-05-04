@@ -41,7 +41,6 @@ import {
   DEFAULT_CREATE_FORM,
   DEFAULT_EDIT_FORM,
   actionMessage,
-  notificationStatusTone,
 } from "../features/notifications";
 
 import type { CreateForm, DrawerMode, EditForm, NotificationAction } from "../features/notifications";
@@ -400,8 +399,6 @@ export function NotificationsPage() {
     { key: "rejected", items: notifications.filter((n) => n.delivery_status === "rejected") },
   ];
 
-  const latestAttempt = detail?.delivery_attempts[detail.delivery_attempts.length - 1] ?? null;
-
   // ── Template props ──────────────────────────────────────────────────
 
   const attentionItems: AttentionPayload[] = [];
@@ -463,17 +460,31 @@ export function NotificationsPage() {
 
   if (!sessionReady) {
     return (
-      <section className="fg-page">
-        <p className="fg-muted">Restoring notification scope.</p>
-      </section>
+      <IncidentResponsePage
+        eyebrow="Work Interaction"
+        title="Notifications"
+        description="Restoring notification scope."
+        noIncidents
+        noIncidentsConfig={{
+          title: "Checking access",
+          description: "ForgeFrame is restoring notification scope before exposing delivery truth.",
+        }}
+      />
     );
   }
 
   if (!canRead) {
     return (
-      <section className="fg-page">
-        <p className="fg-muted">Operator or admin access is required to inspect notification delivery state.</p>
-      </section>
+      <IncidentResponsePage
+        eyebrow="Work Interaction"
+        title="Notifications"
+        description="Operator or admin access is required to inspect notification delivery state."
+        noIncidents
+        noIncidentsConfig={{
+          title: "Operator or admin required",
+          description: "ForgeFrame does not render a cosmetic notification shell when the session cannot inspect delivery truth.",
+        }}
+      />
     );
   }
 

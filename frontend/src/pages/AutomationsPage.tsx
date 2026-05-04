@@ -7,7 +7,6 @@ import {
   fetchAutomations,
   triggerAutomation,
   updateAutomation,
-  type AutomationActionKind,
   type AutomationDetail,
   type AutomationStatus,
   type AutomationSummary,
@@ -308,8 +307,9 @@ export function AutomationsPage() {
 
   // ── Derived state ──
 
-  const currentInstanceLabel = instances.find((i) => i.instance_id === instanceId)
-    ? `${instances.find((i) => i.instance_id === instanceId)!.display_name} (${instanceId})`
+  const matchedInstance = instances.find((i) => i.instance_id === instanceId);
+  const currentInstanceLabel = matchedInstance
+    ? `${matchedInstance.display_name} (${instanceId})`
     : instanceId || "Select instance";
 
   const attentionItems: AttentionPayload[] = [];
@@ -350,12 +350,18 @@ export function AutomationsPage() {
     });
   }
 
+  const openCreateDrawer = () => {
+    setError("");
+    setMessage("");
+  };
+
   const actions: Action[] = [
     {
       label: `Create automation`,
       kind: "primary",
       intent: "configure",
       disabled: !canMutate || !instanceId,
+      onClick: openCreateDrawer,
     },
   ];
 

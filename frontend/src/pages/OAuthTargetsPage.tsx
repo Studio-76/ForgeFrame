@@ -24,7 +24,7 @@ export function OAuthTargetsPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const { session, sessionReady } = useAppSession();
   const instanceId = getInstanceIdFromSearchParams(searchParams);
-  const { instances, loadState, error: instancesError, selectedInstance } = useInstanceCatalog(instanceId);
+  const { error: instancesError, selectedInstance } = useInstanceCatalog(instanceId);
   const access = getProvidersAccess(session, sessionReady, instanceId);
   const { data, actions } = useProvidersControlPlane(access, instanceId, {
     includeUsageSummary: true,

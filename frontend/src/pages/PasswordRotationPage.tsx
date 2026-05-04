@@ -22,7 +22,18 @@ export function PasswordRotationPage() {
   const continueTo = getPostRotationDestination(searchParams.get("next"));
 
   if (!sessionReady || !session) {
-    return null;
+    return (
+      <SetupWorkflowPage
+        eyebrow="Setup"
+        title="Rotate password"
+        description="Checking session state before opening the rotation prompt."
+        currentStep={1}
+        totalSteps={1}
+        stepLabel="Rotate password"
+      >
+        <p className="text-meta text-muted">Verifying session identity...</p>
+      </SetupWorkflowPage>
+    );
   }
 
   const note =

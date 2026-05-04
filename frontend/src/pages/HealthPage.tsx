@@ -403,21 +403,7 @@ export function HealthPage() {
       intent: "run",
       onClick: handleRefresh,
     },
-    {
-      label: "Technical health",
-      kind: "navigation",
-      intent: "navigate",
-      description: `${labelForStatus(technicalHealthStatus)}`,
-      onClick: () => {},
-    },
-    {
-      label: "Readiness",
-      kind: "navigation",
-      intent: "navigate",
-      description: `${labelForStatus(readinessStatus)}`,
-      onClick: () => {},
-    },
-  ], [handleRefresh, technicalHealthStatus, readinessStatus]);
+  ], [handleRefresh]);
 
   // ── Selected item detail ───────────────────────────────────
   const selectedItemContent = selectedGroup ? (

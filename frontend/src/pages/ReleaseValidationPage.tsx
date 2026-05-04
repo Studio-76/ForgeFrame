@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link, useSearchParams } from "react-router-dom";
+import { useSearchParams } from "react-router-dom";
 
 import { fetchBootstrapReadiness } from "../api/domain/bootstrap";
 import {
@@ -28,7 +28,6 @@ import { useInstanceCatalog } from "../app/useInstanceCatalog";
 import { RegistryManagementPage } from "../components/page-templates";
 import type { ScopeConfig } from "../components/page-templates";
 import {
-  AdvancedDiagnostics,
   Button,
   DataTable,
   ErrorState,
@@ -50,16 +49,11 @@ import type {
   GatePriority,
   LoadState,
 } from "../features/release";
+import { latestTimestamp } from "./workInteractionPageSupport";
 
 /** @private */
 function hasEvidenceTimestamp(value: string | null | undefined): value is string {
   return Boolean(value && value.trim());
-}
-
-/** @private */
-function latestTimestamp(values: Array<string | null | undefined>): string | null {
-  const normalized = values.filter(hasEvidenceTimestamp).sort();
-  return normalized.at(-1) ?? null;
 }
 
 /** @private */
@@ -819,7 +813,7 @@ export function ReleaseValidationPage() {
       }
       diagnosticsTitle="Release diagnostics"
     >
-      {state === "loading" && gates.length === 0 ? (
+      {(state === "idle" || state === "loading") && gates.length === 0 ? (
         <LoadingState
           title="Loading release gates"
           description="Restoring bootstrap, runtime, provider, routing, TLS, and recovery evidence."

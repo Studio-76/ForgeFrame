@@ -30,7 +30,6 @@ import { useInstanceCatalog } from "../app/useInstanceCatalog";
 import { RegistryManagementPage } from "../components/page-templates";
 import type { AttentionPayload } from "../components/ui/models/attention";
 import { Button } from "../components/ui/Button";
-import { LoadingState, PermissionState } from "../components/ui/StateBlocks";
 import type { SummaryStripItem } from "../components/ui/SummaryStrip";
 import { RawJson } from "../components/ui/AdvancedDiagnostics";
 
@@ -516,51 +515,6 @@ export function CostsPage() {
     });
   }
 
-  // ── Loading / permission states ──────────────────────────────────
-
-  if (!sessionReady) {
-    return (
-      <LoadingState
-        title="Checking cost-safety access"
-        description="ForgeFrame is confirming whether this session can read usage analytics, routing budget posture, or both."
-      />
-    );
-  }
-
-  if (sessionReady && !canReadUsage && !canReadRouting) {
-    return (
-      <PermissionState
-        title="Cost-safety surface unavailable"
-        description="This session does not hold audit.read or routing.read on the active scope, so ForgeFrame will not pretend the budget or cost truth surfaces are open."
-      />
-    );
-  }
-
-  if (state === "loading" && !usage && !routing) {
-    return (
-      <LoadingState
-        title="Loading cost posture"
-        description="ForgeFrame is restoring persisted usage cost truth, routing budget posture, blocked classes, and target circuit state."
-      />
-    );
-  }
-
-  if (state === "error" && !usage && !routing) {
-    return (
-      <section className="fg-page">
-        <div className="ff-state-block" data-state="error">
-          <strong className="text-body text-primary font-semibold">Costs surface failed to load</strong>
-          <p className="text-meta text-muted mt-1.5 max-w-md">{error ?? "Cost posture could not be loaded."}</p>
-          <div className="mt-4">
-            <Button variant="secondary" onPress={loadForRetry}>
-              Retry
-            </Button>
-          </div>
-        </div>
-      </section>
-    );
-  }
-
   // ── Diagnostics: raw budget config JSON ──────────────────────────
 
   const diagnosticsContent = routing ? (
@@ -570,6 +524,12 @@ export function CostsPage() {
   ) : null;
 
   const hasContent = !!(usage || routing);
+
+  const preloadState = !sessionReady ? "loading"
+    : (sessionReady && !canReadUsage && !canReadRouting) ? "blocked"
+    : (state === "loading" && !usage && !routing) ? "loading"
+    : (state === "error" && !usage && !routing) ? "error"
+    : null;
 
   // ── Render ──────────────────────────────────────────────────────
 
@@ -582,7 +542,6 @@ export function CostsPage() {
         selectedInstance
           ? {
               label: selectedInstance.display_name,
-              onChange: () => {}, // instance switching is handled by InstanceScopeCard
             }
           : undefined
       }
@@ -595,163 +554,194 @@ export function CostsPage() {
       diagnostics={diagnosticsContent}
       diagnosticsTitle="Budget configuration diagnostics"
     >
-      {/* Loading overlay for refresh */}
-      {state === "loading" ? (
+      {/* Pre-loading states rendered inline */}
+      {preloadState === "loading" ? (
+        <div className="ff-state-block" data-state="loading">
+          <div className="ff-skeleton-row" />
+          <strong>Checking cost-safety access</strong>
+          <p>ForgeFrame is confirming whether this session can read usage analytics, routing budget posture, or both.</p>
+        </div>
+      ) : null}
+
+      {preloadState === "blocked" ? (
+        <div className="ff-state-block" data-state="info">
+          <strong>Cost-safety surface unavailable</strong>
+          <p>This session does not hold audit.read or routing.read on the active scope, so ForgeFrame will not pretend the budget or cost truth surfaces are open.</p>
+        </div>
+      ) : null}
+
+      {preloadState === "error" ? (
+        <div className="ff-state-block" data-state="error">
+          <strong>Costs surface failed to load</strong>
+          <p className="text-meta text-muted mt-1.5 max-w-md">{error ?? "Cost posture could not be loaded."}</p>
+          <div className="mt-4">
+            <Button variant="secondary" onPress={loadForRetry}>
+              Retry
+            </Button>
+          </div>
+        </div>
+      ) : null}
+
+      {!preloadState && state === "loading" ? (
         <p className="fg-muted">Refreshing usage cost truth, budget posture, and circuit pressure.</p>
       ) : null}
 
-      {/* Partial visibility messages */}
-      {messages.length > 0 ? (
-        <article className="fg-card">
-          <h3>Partial visibility</h3>
-          <ul className="fg-list">
-            {messages.map((message) => (
-              <li key={message}>{message}</li>
-            ))}
-          </ul>
-        </article>
-      ) : null}
-
-      {/* Action errors */}
-      {actionError ? <p className="fg-danger">{actionError}</p> : null}
-
-      {hasContent ? (
+      {!preloadState ? (
         <>
-          {/* Cost truth ledger */}
-          <section className="fg-card">
-            <div className="fg-panel-heading">
-              <div>
-                <h3>Cost truth ledger</h3>
-                <p className="fg-muted">
-                  Billing truth and operator estimates stay split so this page never implies that
-                  forecasted or modeled numbers are provider invoices.
-                </p>
-              </div>
-            </div>
-            <CostTruthTable
-              canReadUsage={canReadUsage}
-              hasUsage={!!usage}
-              truths={truths}
-              providerCosts={providerCosts}
-              clientCosts={clientCosts}
-              onRetry={loadForRetry}
-            />
-          </section>
+          {/* Partial visibility messages */}
+          {messages.length > 0 ? (
+            <article className="fg-card">
+              <h3>Partial visibility</h3>
+              <ul className="fg-list">
+                {messages.map((message) => (
+                  <li key={message}>{message}</li>
+                ))}
+              </ul>
+            </article>
+          ) : null}
 
-          {/* Budget posture + blocked classes + circuits */}
-          <section className="fg-card">
-            <div className="fg-panel-heading">
-              <div>
-                <h3>Budget posture</h3>
-                <p className="fg-muted">
-                  Hard block stops all routing. Soft-limit scopes warn and can suppress selected
-                  cost classes before fallback or escalation chooses a target.
-                </p>
-              </div>
-            </div>
-            <CostBudgetView
-              canReadRouting={canReadRouting}
-              canMutateRouting={canMutateRouting}
-              hasRouting={!!routing}
-              budgetState={budgetState}
-              hardBlocked={hardBlocked}
-              budgetReason={routing?.budget.reason ?? null}
-              lastEvaluatedAt={routing?.budget.last_evaluated_at ?? null}
-              warningScopeCount={warningScopeCount}
-              hardExceededScopeCount={hardExceededScopeCount}
-              anomalyCount={routing?.budget.anomalies.length ?? 0}
-              anomalies={anomalyData}
-              blockedCostClasses={blockedCostClasses}
-              providerCircuits={providerCircuits}
-              targetCircuits={targetCircuits}
-              openCircuitCount={openCircuitCount}
-              budgetDraft={budgetDraft}
-              budgetSaving={budgetSaving}
-              savingCircuitKey={savingCircuitKey}
-              circuitDrafts={circuitDrafts}
-              routingEditorRoute={routingEditorRoute}
-              onUpdateScopeDraft={updateScopeDraft}
-              onAddBudgetScope={addBudgetScope}
-              onRemoveBudgetScope={removeBudgetScope}
-              onSetHardBlocked={(value) => setBudgetDraft((c) => ({ ...c, hard_blocked: value }))}
-              onSetBlockedCostClasses={(value) => setBudgetDraft((c) => ({ ...c, blocked_cost_classes: value }))}
-              onSetBudgetReason={(value) => setBudgetDraft((c) => ({ ...c, reason: value }))}
-              onSaveBudget={saveBudget}
-              onSaveCircuit={saveCircuit}
-              onSetCircuitDraft={(targetKey, value) =>
-                setCircuitDrafts((current) => ({ ...current, [targetKey]: value }))
-              }
-              onRetry={loadForRetry}
-            />
-          </section>
+          {/* Action errors */}
+          {actionError ? <p className="fg-danger">{actionError}</p> : null}
 
-          {/* Routing cost mix */}
-          <section className="fg-card">
-            <div className="fg-panel-heading">
-              <div>
-                <h3>Routing cost mix</h3>
-                <p className="fg-muted">
-                  Recent selected targets explain whether routing is leaning on premium paths or
-                  staying inside low-cost lanes.
-                </p>
-              </div>
-            </div>
-            <CostMixView
-              canReadRouting={canReadRouting}
-              hasRouting={!!routing}
-              costMixRows={costMixRows}
-              selectedDecisionCount={selectedDecisionCount}
-              premiumEscalationCount={premiumEscalationCount}
-              openCircuitCount={openCircuitCount}
-              pricingSnapshot={pricingSnapshot}
-            />
-          </section>
+          {hasContent ? (
+            <>
+              {/* Cost truth ledger */}
+              <section className="fg-card">
+                <div className="fg-panel-heading">
+                  <div>
+                    <h3>Cost truth ledger</h3>
+                    <p className="fg-muted">
+                      Billing truth and operator estimates stay split so this page never implies that
+                      forecasted or modeled numbers are provider invoices.
+                    </p>
+                  </div>
+                </div>
+                <CostTruthTable
+                  canReadUsage={canReadUsage}
+                  hasUsage={!!usage}
+                  truths={truths}
+                  providerCosts={providerCosts}
+                  clientCosts={clientCosts}
+                  onRetry={loadForRetry}
+                />
+              </section>
 
-          {/* Current cost safety context (formerly the sidebar) */}
-          <section className="fg-card">
-            <div className="fg-panel-heading">
-              <div>
-                <h3>Current cost safety</h3>
-                <p className="fg-muted">
-                  This section compresses the active blockers, warning sources, and handoff routes
-                  for the current scope.
-                </p>
-              </div>
-            </div>
-            <CostDetailPanel
-              budgetState={budgetState}
-              hardBlocked={hardBlocked}
-              routingVisibilityLabel={routingVisibilityLabel}
-              routingVisibilityDetail={routingVisibilityDetail}
-              blockedCostClassNames={
-                blockedCostClasses.length > 0
-                  ? blockedCostClasses.map((row) => row.costClass).join(", ")
-                  : ""
-              }
-              warningScopeCount={warningScopeCount}
-              openCircuitCount={openCircuitCount}
-              anomalyCount={routing?.budget.anomalies.length ?? 0}
-              canMutateRouting={canMutateRouting}
-              canReadRouting={canReadRouting}
-              remainingBudgetLabel={remainingHardBudget?.label ?? null}
-              remainingBudgetValue={remainingHardBudget?.remaining ?? null}
-              routingEditorRoute={routingEditorRoute}
-              routingTargetsRoute={routingTargetsRoute}
-            />
-          </section>
+              {/* Budget posture + blocked classes + circuits */}
+              <section className="fg-card">
+                <div className="fg-panel-heading">
+                  <div>
+                    <h3>Budget posture</h3>
+                    <p className="fg-muted">
+                      Hard block stops all routing. Soft-limit scopes warn and can suppress selected
+                      cost classes before fallback or escalation chooses a target.
+                    </p>
+                  </div>
+                </div>
+                <CostBudgetView
+                  canReadRouting={canReadRouting}
+                  canMutateRouting={canMutateRouting}
+                  hasRouting={!!routing}
+                  budgetState={budgetState}
+                  hardBlocked={hardBlocked}
+                  budgetReason={routing?.budget.reason ?? null}
+                  lastEvaluatedAt={routing?.budget.last_evaluated_at ?? null}
+                  warningScopeCount={warningScopeCount}
+                  hardExceededScopeCount={hardExceededScopeCount}
+                  anomalyCount={routing?.budget.anomalies.length ?? 0}
+                  anomalies={anomalyData}
+                  blockedCostClasses={blockedCostClasses}
+                  providerCircuits={providerCircuits}
+                  targetCircuits={targetCircuits}
+                  openCircuitCount={openCircuitCount}
+                  budgetDraft={budgetDraft}
+                  budgetSaving={budgetSaving}
+                  savingCircuitKey={savingCircuitKey}
+                  circuitDrafts={circuitDrafts}
+                  routingEditorRoute={routingEditorRoute}
+                  onUpdateScopeDraft={updateScopeDraft}
+                  onAddBudgetScope={addBudgetScope}
+                  onRemoveBudgetScope={removeBudgetScope}
+                  onSetHardBlocked={(value) => setBudgetDraft((c) => ({ ...c, hard_blocked: value }))}
+                  onSetBlockedCostClasses={(value) => setBudgetDraft((c) => ({ ...c, blocked_cost_classes: value }))}
+                  onSetBudgetReason={(value) => setBudgetDraft((c) => ({ ...c, reason: value }))}
+                  onSaveBudget={saveBudget}
+                  onSaveCircuit={saveCircuit}
+                  onSetCircuitDraft={(targetKey, value) =>
+                    setCircuitDrafts((current) => ({ ...current, [targetKey]: value }))
+                  }
+                  onRetry={loadForRetry}
+                />
+              </section>
 
-          {/* Page-level navigation links */}
-          <div className="fg-actions" style={{ marginTop: "1rem" }}>
-            <Link className="fg-nav-link" to={routingEditorRoute}>
-              Routing policy
-            </Link>
-            <Link className="fg-nav-link" to={usageRoute}>
-              Usage
-            </Link>
-            <Link className="fg-nav-link" to={errorsRoute}>
-              Errors
-            </Link>
-          </div>
+              {/* Routing cost mix */}
+              <section className="fg-card">
+                <div className="fg-panel-heading">
+                  <div>
+                    <h3>Routing cost mix</h3>
+                    <p className="fg-muted">
+                      Recent selected targets explain whether routing is leaning on premium paths or
+                      staying inside low-cost lanes.
+                    </p>
+                  </div>
+                </div>
+                <CostMixView
+                  canReadRouting={canReadRouting}
+                  hasRouting={!!routing}
+                  costMixRows={costMixRows}
+                  selectedDecisionCount={selectedDecisionCount}
+                  premiumEscalationCount={premiumEscalationCount}
+                  openCircuitCount={openCircuitCount}
+                  pricingSnapshot={pricingSnapshot}
+                />
+              </section>
+
+              {/* Current cost safety context (formerly the sidebar) */}
+              <section className="fg-card">
+                <div className="fg-panel-heading">
+                  <div>
+                    <h3>Current cost safety</h3>
+                    <p className="fg-muted">
+                      This section compresses the active blockers, warning sources, and handoff routes
+                      for the current scope.
+                    </p>
+                  </div>
+                </div>
+                <CostDetailPanel
+                  budgetState={budgetState}
+                  hardBlocked={hardBlocked}
+                  routingVisibilityLabel={routingVisibilityLabel}
+                  routingVisibilityDetail={routingVisibilityDetail}
+                  blockedCostClassNames={
+                    blockedCostClasses.length > 0
+                      ? blockedCostClasses.map((row) => row.costClass).join(", ")
+                      : ""
+                  }
+                  warningScopeCount={warningScopeCount}
+                  openCircuitCount={openCircuitCount}
+                  anomalyCount={routing?.budget.anomalies.length ?? 0}
+                  canMutateRouting={canMutateRouting}
+                  canReadRouting={canReadRouting}
+                  remainingBudgetLabel={remainingHardBudget?.label ?? null}
+                  remainingBudgetValue={remainingHardBudget?.remaining ?? null}
+                  routingEditorRoute={routingEditorRoute}
+                  routingTargetsRoute={routingTargetsRoute}
+                />
+              </section>
+
+              {/* Page-level navigation links */}
+              <div className="fg-actions" style={{ marginTop: "1rem" }}>
+                <Link className="fg-nav-link" to={routingEditorRoute}>
+                  Routing policy
+                </Link>
+                <Link className="fg-nav-link" to={usageRoute}>
+                  Usage
+                </Link>
+                <Link className="fg-nav-link" to={errorsRoute}>
+                  Errors
+                </Link>
+              </div>
+            </>
+          ) : null}
         </>
       ) : null}
     </RegistryManagementPage>

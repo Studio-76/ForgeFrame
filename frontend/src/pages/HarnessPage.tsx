@@ -109,6 +109,17 @@ export function HarnessPage() {
     },
   ];
 
+  // ── Session guard ────────────────────────────────────
+  if (!sessionReady) {
+    return (
+      <RegistryManagementPage
+        eyebrow="Configure"
+        title="Harness"
+        description="Checking session state before opening the harness profile workspace."
+      />
+    );
+  }
+
   // ── Access gate ───────────────────────────────────────
   if (!access.canRead) {
     return (

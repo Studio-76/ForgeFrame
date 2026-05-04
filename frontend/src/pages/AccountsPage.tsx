@@ -387,11 +387,6 @@ export function AccountsPage() {
     }
   };
 
-  // ── Instance select handler (for scope bar) ──────────────
-  const handleScopeChange = () => {
-    onInstanceChange(null);
-  };
-
   return (
     <>
       <RegistryManagementPage

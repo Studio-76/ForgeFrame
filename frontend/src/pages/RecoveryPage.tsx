@@ -30,8 +30,8 @@ import { DataTable } from "../components/ui/DataTable";
 import type { DataTableColumn } from "../components/ui/DataTable";
 import { DetailDrawer } from "../components/ui/DetailDrawer";
 import { DetailPanel } from "../components/ui/DetailPanel";
-import { ErrorState, LoadingState } from "../components/ui/StateBlocks";
 import { StatusBadge, type StatusTone } from "../components/ui/StatusBadge";
+import { latestTimestamp } from "./workInteractionPageSupport";
 
 type LoadState = "idle" | "loading" | "success" | "error";
 type SectionKey = "overview" | "policies" | "backup" | "restore" | "upgrade";
@@ -355,13 +355,6 @@ function formatTimestamp(value: string | null | undefined, fallback = "never"): 
 function uniqueLabels(values: string[]): string {
   const normalized = values.filter((value) => value.trim());
   return normalized.length > 0 ? Array.from(new Set(normalized)).join(", ") : "none";
-}
-
-function latestTimestamp(values: Array<string | null | undefined>): string | null {
-  const normalized = values
-    .filter((value): value is string => Boolean(value && value.trim()))
-    .sort();
-  return normalized.at(-1) ?? null;
 }
 
 function toneForStatus(status: StatusKey): StatusTone {

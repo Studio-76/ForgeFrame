@@ -31,7 +31,6 @@ import { Button, DiagnosticSection, RawJson } from "../components/ui";
 import {
   buildExecutionScopeOptions,
   describeExecutionScopeOption,
-  getExecutionAccess,
 } from "../features/execution/helpers";
 import type { ExecutionScopeOption, LoadState } from "../features/execution/helpers";
 import {
@@ -54,7 +53,6 @@ export function DispatchPage() {
   const companyId = normalizeExecutionCompanyId(searchParams.get("companyId")) ?? "";
   const canReviewDispatch = sessionReady && sessionHasScopedOrAnyInstancePermission(session, instanceId, "execution.read");
   const canMutate = sessionCanMutateScopedOrAnyInstance(session, instanceId, "execution.operate");
-  const access = getExecutionAccess(session, sessionReady, instanceId);
   const [instanceDraft, setInstanceDraft] = useState(instanceId);
   const [scopeState, setScopeState] = useState<LoadState>("idle");
   const [scopeOptions, setScopeOptions] = useState<ExecutionScopeOption[]>([]);

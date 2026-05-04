@@ -383,8 +383,9 @@ export function AgentsPage() {
 
   // ── Derived state ──
 
-  const currentInstanceLabel = instances.find((i) => i.instance_id === instanceId)
-    ? `${instances.find((i) => i.instance_id === instanceId)!.display_name} (${instanceId})`
+  const matchedInstance = instances.find((i) => i.instance_id === instanceId);
+  const currentInstanceLabel = matchedInstance
+    ? `${matchedInstance.display_name} (${instanceId})`
     : instanceId || "Select instance";
 
   const operatorHiddenByFilter = Boolean(

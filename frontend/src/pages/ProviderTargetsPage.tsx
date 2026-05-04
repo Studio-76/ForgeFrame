@@ -73,7 +73,7 @@ export function ProviderTargetsPage() {
 
   const hasTargets = targets.length > 0;
   const hasError = state === "error";
-  const isLoading = state === "loading" && targets.length === 0;
+  const isLoading = (state === "idle" || state === "loading") && targets.length === 0;
   const isSuccessEmpty = state === "success" && !hasTargets;
 
   // ── Scope config ─────────────────────────────────────────

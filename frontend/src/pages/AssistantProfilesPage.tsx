@@ -527,9 +527,7 @@ export function AssistantProfilesPage() {
         scope={scope}
         attentionItems={attentionItems}
         actions={isBrowse ? actions : undefined}
-        search={isBrowse && profiles.length > 0
-          ? { value: "", onChange: () => {}, placeholder: "Filter profiles..." }
-          : undefined}
+        search={undefined}
         filterContent={filterContent}
         isEmpty={isBrowse && profiles.length === 0}
         emptyTitle="No assistant profiles found"

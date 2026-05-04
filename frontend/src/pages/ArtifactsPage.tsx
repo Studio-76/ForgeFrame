@@ -51,10 +51,7 @@ import {
   buildCreateAttachments,
 } from "../features/artifacts";
 import {
-  ARTIFACT_TYPE_OPTIONS,
-  ARTIFACT_STATUS_OPTIONS,
   TARGET_KIND_OPTIONS,
-  WORKSPACE_ROLE_OPTIONS,
 } from "../features/artifacts";
 
 /**
