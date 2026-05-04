@@ -141,4 +141,12 @@
   --color-info-soft: rgba(2, 106, 162, 0.08);
   --color-info-border: rgba(2, 106, 162, 0.18);
   --color-focus-ring: #1570ef;
+
+  /* ── Semantic status aliases ── */
+  --color-ready: var(--color-success);
+  --color-degraded: var(--color-warning);
+  --color-blocked: var(--color-danger);
+
+  /* ── Shadows ── */
+  --shadow-panel: 0 18px 40px rgba(15, 23, 42, 0.08);
 }
