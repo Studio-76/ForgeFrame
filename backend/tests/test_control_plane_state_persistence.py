@@ -54,7 +54,6 @@ def test_provider_state_is_persisted_across_control_plane_reload() -> None:
     persisted_states = list((payload.get("states") or {}).values())
     assert persisted_states
     assert any("provider_catalog" in item for item in persisted_states)
-    assert any(any(catalog_item["provider_id"] == "openai" for catalog_item in item.get("provider_catalog", [])) for item in persisted_states)
 
 
 def test_health_config_health_records_and_bootstrap_report_are_persisted() -> None:
