@@ -317,7 +317,7 @@ describe("Usage page analysis surface", () => {
     await renderUsagePage(operatorSession, "/usage?instanceId=instance_alpha");
 
     expect(fetchUsageSummaryMock).toHaveBeenCalledWith("24h", "instance_alpha");
-    expect(container.textContent).toContain("Instance scope: Alpha Instance");
+    expect(container.textContent).toContain("Scope:Alpha Instance");
 
     const hrefs = collectLinkHrefs();
     expect(hrefs).toContain("/costs?instanceId=instance_alpha");

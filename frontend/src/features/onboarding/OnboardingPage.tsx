@@ -25,8 +25,9 @@ import { CONTROL_PLANE_ROUTES } from "../../app/navigation";
 import { useAppSession } from "../../app/session";
 import { getInstanceIdFromSearchParams } from "../../app/tenantScope";
 import { useInstanceCatalog } from "../../app/useInstanceCatalog";
+import { PageHeader } from "../../components/ui/PageHeader";
 import { InstanceScopeCard } from "../../components/InstanceScopeCard";
-import { PageIntro } from "../../components/PageIntro";
+import { Button } from "../../components/ui/Button";
 import { ActionBar } from "../../components/ui/ActionBar";
 import {
   createOnboardingInterviewState,
@@ -774,28 +775,33 @@ export function OnboardingPage() {
 
   return (
     <section className="fg-page">
-      <PageIntro
+      <PageHeader
         eyebrow="Setup"
         title="Guided setup checklist"
         description="Wizard-driven first go-live flow: operating model, first instance, operator agent, provider target, routing defaults, runtime key issuance, TLS evidence, and first success."
-        question="What blocks first live runtime traffic right now?"
-        badges={[
-          { label: access.badgeLabel, tone: access.badgeTone },
-          { label: `${completedSteps}/${steps.length} wizard steps done`, tone: overallTone },
-          ...(selectedInstance ? [{ label: `Instance scope: ${selectedInstance.display_name}`, tone: "success" as const }] : []),
-        ]}
-        note={access.detail}
       />
 
-      <InstanceScopeCard
-        instanceId={instanceId}
-        selectedInstance={selectedInstance}
-        instances={instances}
-        loadState={loadState}
-        error={instancesError}
-        surfaceLabel="onboarding wizard"
-        onInstanceChange={onInstanceChange}
-      />
+      {/* ── Scope indicator ── */}
+      {selectedInstance ? (
+        <div className="flex items-center gap-2 px-1 py-1.5 mb-2 text-meta text-muted">
+          <span className="font-medium">Scope:</span>
+          <span className="text-primary">{selectedInstance.display_name ?? selectedInstance.instance_id}</span>
+          <Button variant="navigation" density="compact" onPress={() => onInstanceChange(null)}>
+            Change
+          </Button>
+        </div>
+      ) : null}
+      <div hidden={!!selectedInstance}>
+        <InstanceScopeCard
+          instanceId={instanceId}
+          selectedInstance={selectedInstance}
+          instances={instances}
+          loadState={loadState}
+          error={instancesError}
+          surfaceLabel="onboarding wizard"
+          onInstanceChange={onInstanceChange}
+        />
+      </div>
       <ActionBar
         title="Go-live handoffs"
         description="Use adjacent surfaces only when the wizard needs external evidence or a final release check."

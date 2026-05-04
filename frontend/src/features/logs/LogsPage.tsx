@@ -34,8 +34,9 @@ import { useAppSession } from "../../app/session";
 import { withInstanceScope } from "../../app/tenantScope";
 import { getInstanceIdFromSearchParams } from "../../app/tenantScope";
 import { useInstanceCatalog } from "../../app/useInstanceCatalog";
+import { PageHeader } from "../../components/ui/PageHeader";
 import { InstanceScopeCard } from "../../components/InstanceScopeCard";
-import { PageIntro } from "../../components/PageIntro";
+import { Button } from "../../components/ui/Button";
 import { ErrorState, LoadingState } from "../../components/ui/StateBlocks";
 import { AuditExportForm } from "./AuditExportForm";
 import { AuditHistoryPanel } from "./AuditHistoryPanel";
@@ -205,37 +206,46 @@ export function LogsPage() {
 
   return (
     <section className="fg-page">
-      <PageIntro
+      <PageHeader
         eyebrow="Operations"
         title="Incidents and Observability"
         description="Incident response, logs, activity, audit history, and diagnostics separated into clear operator modes."
-        question="What is broken right now, what is only historical evidence, and what is the first action?"
-        badges={[
-          { label: selectedInstance ? `Instance scope: ${selectedInstance.display_name}` : "Default instance path", tone: selectedInstance ? "success" : "neutral" },
-          { label: logs?.operability.ready ? "Logging ready" : "Logging not ready", tone: logs?.operability.ready ? "success" : "warning" },
-          ...(canReadAudit ? [] : [{ label: "Viewer read-only", tone: "warning" as const }]),
-        ]}
-        note="Incidents default first. Historical logs, audit data, and raw payloads stay secondary until investigation needs them."
       />
 
-      <InstanceScopeCard
-        instanceId={instanceId}
-        selectedInstance={selectedInstance}
-        instances={instances}
-        loadState={instancesLoadState}
-        error={instancesError}
-        surfaceLabel="logs and audit evidence"
-        onInstanceChange={onInstanceChange}
-      />
+      {/* ── Scope indicator ── */}
+      {selectedInstance ? (
+        <div className="flex items-center gap-2 px-1 py-1.5 mb-2 text-meta text-muted">
+          <span className="font-medium">Scope:</span>
+          <span className="text-primary">{selectedInstance.display_name ?? selectedInstance.instance_id}</span>
+          <Button variant="navigation" density="compact" onPress={() => onInstanceChange(null)}>
+            Change
+          </Button>
+        </div>
+      ) : null}
+      <div hidden={!!selectedInstance}>
+        <InstanceScopeCard
+          instanceId={instanceId}
+          selectedInstance={selectedInstance}
+          instances={instances}
+          loadState={instancesLoadState}
+          error={instancesError}
+          surfaceLabel="logs and audit evidence"
+          onInstanceChange={onInstanceChange}
+        />
+      </div>
 
       {/* Action links */}
       <div className="fg-actions fg-mb-md">
-        <Link className="fg-nav-link" to={withInstanceScope(CONTROL_PLANE_ROUTES.errors, instanceId)}>
-          Review incidents
-        </Link>
-        <Link className="fg-nav-link" to={withInstanceScope(CONTROL_PLANE_ROUTES.health, instanceId)}>
-          Review runtime health
-        </Link>
+        {!selectedInstance ? null : (
+          <>
+            <Link className="fg-nav-link" to={withInstanceScope(CONTROL_PLANE_ROUTES.errors, instanceId)}>
+              Review incidents
+            </Link>
+            <Link className="fg-nav-link" to={withInstanceScope(CONTROL_PLANE_ROUTES.health, instanceId)}>
+              Review runtime health
+            </Link>
+          </>
+        )}
       </div>
 
       {/* Operational summary hero — always visible */}
@@ -361,7 +371,7 @@ export function LogsPage() {
             className="fg-nav-link"
             to={{ ...location, hash: "#audit-export" }}
           >
-            Open Audit Export
+            Export audit data
           </Link>
         </div>
       ) : null}

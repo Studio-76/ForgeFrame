@@ -470,6 +470,10 @@ export function HealthPage() {
       eyebrow="Runtime"
       title="Health Status"
       description="System health and active incidents for the selected instance"
+      scope={selectedInstance ? {
+        label: selectedInstance.display_name ?? selectedInstance.instance_id,
+        onChange: () => onInstanceChange(null),
+      } : undefined}
       attentionItems={attentionItems}
       summaryItems={summaryItems}
       actions={actions}
@@ -478,16 +482,18 @@ export function HealthPage() {
       diagnostics={diagnosticsContent}
       diagnosticsTitle="Health diagnostics"
     >
-      {/* ── Scope selector ── */}
-      <InstanceScopeCard
-        instanceId={instanceId}
-        selectedInstance={selectedInstance}
-        instances={instances}
-        loadState={loadState}
-        error={instancesError}
-        surfaceLabel="health and readiness"
-        onInstanceChange={onInstanceChange}
-      />
+      {/* ── Scope selector (hidden when scoped via template prop) ── */}
+      <div hidden={!!selectedInstance}>
+        <InstanceScopeCard
+          instanceId={instanceId}
+          selectedInstance={selectedInstance}
+          instances={instances}
+          loadState={loadState}
+          error={instancesError}
+          surfaceLabel="health and readiness"
+          onInstanceChange={onInstanceChange}
+        />
+      </div>
 
       {/* ── Loading state ── */}
       {state === "loading" ? (
@@ -574,7 +580,7 @@ export function HealthPage() {
                     <strong>{provider.label}</strong> · {provider.readiness_reason ?? provider.next_action} ·
                     {" "}
                     <Button variant="navigation" onPress={() => navigate(route)}>
-                      {providerNeedsOauthHandoff(provider) ? "Open OAuth Targets" : "Open Provider Health & Runs"}
+                      {providerNeedsOauthHandoff(provider) ? "Review OAuth Targets" : "Review provider health"}
                     </Button>
                   </li>
                 );

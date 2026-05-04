@@ -14,6 +14,7 @@ import { validateActions, actionToButtonProps } from "../ui/models/action";
 import type { AttentionPayload } from "../ui/models/attention";
 import { groupAttentionItems, toneForLevel } from "../ui/models/attention";
 import { Button } from "../ui/Button";
+import type { ScopeConfig } from "./RegistryManagementPage";
 
 /**
  * A blocker configuration for when there is an active blocker.
@@ -57,6 +58,10 @@ export type IncidentResponsePageProps = {
   title: string;
   /** Page description. */
   description?: string;
+
+  // ── Scope ────────────────────────────────────────────────
+  /** When set, shows a compact scope indicator. */
+  scope?: ScopeConfig;
 
   // ── Attention items ──────────────────────────────────────
   /**
@@ -139,6 +144,7 @@ export function IncidentResponsePage({
   eyebrow,
   title,
   description,
+  scope,
   attentionItems,
   blocker,
   degradedAction,
@@ -173,6 +179,19 @@ export function IncidentResponsePage({
         title={title}
         description={description}
       />
+
+      {/* ── Scope compact bar ── */}
+      {scope ? (
+        <div className="flex items-center gap-2 px-1 py-1.5 mb-2 text-meta text-muted">
+          <span className="font-medium">Scope:</span>
+          <span className="text-primary">{scope.label}</span>
+          {scope.onChange ? (
+            <Button variant="navigation" density="compact" onPress={scope.onChange}>
+              Change
+            </Button>
+          ) : null}
+        </div>
+      ) : null}
 
       {/* ── Blocker callout (from attention or legacy prop) ── */}
       {blockerItems.length > 0

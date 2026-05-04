@@ -282,6 +282,10 @@ export function ErrorsPage() {
       eyebrow="Runtime"
       title="Errors & Incidents"
       description="Errors is the incident-triage surface for ForgeFrame: grouped failure axes, blocked routing failures, current effect, next action, and evidence handoff into Logs, Health, Routing, Provider Targets, and Execution."
+      scope={selectedInstance ? {
+        label: selectedInstance.display_name ?? selectedInstance.instance_id,
+        onChange: () => onInstanceChange(null),
+      } : undefined}
       attentionItems={state === "success" && overview ? attentionItems : undefined}
       summaryItems={state === "success" && overview ? summaryItems : undefined}
       actions={state === "success" && overview ? pageActions : undefined}
@@ -321,15 +325,18 @@ export function ErrorsPage() {
 
       {overview && incidentReview ? (
         <>
-          <InstanceScopeCard
-            instanceId={instanceId}
-            selectedInstance={selectedInstance}
-            instances={instances}
-            loadState={loadState}
-            error={instancesError}
-            surfaceLabel="errors and incident review"
-            onInstanceChange={onInstanceChange}
-          />
+          {/* ── Scope selector (hidden when scoped via template prop) ── */}
+          <div hidden={!!selectedInstance}>
+            <InstanceScopeCard
+              instanceId={instanceId}
+              selectedInstance={selectedInstance}
+              instances={instances}
+              loadState={loadState}
+              error={instancesError}
+              surfaceLabel="errors and incident review"
+              onInstanceChange={onInstanceChange}
+            />
+          </div>
 
           <div className="ff-operator-layout">
             <div className="ff-operator-main">

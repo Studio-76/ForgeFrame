@@ -434,15 +434,18 @@ export function ApiKeysPage() {
     <>
       {/* ── Extra page-level elements outside the template ── */}
 
-      <InstanceScopeCard
-        instanceId={instanceId}
-        selectedInstance={selectedInstance}
-        instances={instances}
-        loadState={instanceCatalogState}
-        error={instancesError}
-        surfaceLabel="runtime key governance"
-        onInstanceChange={onInstanceChange}
-      />
+      {/* ── Scope selector (hidden when scoped via template prop) ── */}
+      <div hidden={!!selectedInstance}>
+        <InstanceScopeCard
+          instanceId={instanceId}
+          selectedInstance={selectedInstance}
+          instances={instances}
+          loadState={instanceCatalogState}
+          error={instancesError}
+          surfaceLabel="runtime key governance"
+          onInstanceChange={onInstanceChange}
+        />
+      </div>
 
       {focusedAccountId ? (
         <div className="fg-card mb-4">
@@ -502,6 +505,7 @@ export function ApiKeysPage() {
         description="Secure runtime-key issuance, rotation, status control, and request-path policy truth without reconstructing stored secrets."
         scope={selectedInstance ? {
           label: instanceScopeLabel,
+          onChange: () => onInstanceChange(null),
         } : undefined}
         summaryItems={summaryItems}
         search={{
