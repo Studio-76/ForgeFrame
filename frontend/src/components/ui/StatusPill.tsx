@@ -1,3 +1,5 @@
+import type { ReactNode } from "react";
+
 import type { StatusTone } from "./types";
 import { toneToTailwind } from "./types";
 
@@ -18,7 +20,7 @@ export function StatusPill({
   tone = "neutral",
   dot = false,
 }: {
-  children: React.ReactNode;
+  children: ReactNode;
   tone?: StatusTone;
   /** Show a small colored dot before the label. */
   dot?: boolean;

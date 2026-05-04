@@ -3,10 +3,14 @@ import { useButton, useFocusRing, mergeProps } from "react-aria";
 import type { AriaButtonProps } from "react-aria";
 
 /**
- * A round icon-only action button with accessible label.
+ * A compact icon-only action button with accessible label.
  *
- * Always requires an `aria-label` for screen readers.
+ * Always requires an `aria-label` for screen readers since there is
+ * no visible text label. Renders as a 32x32 square button with
+ * hover and focus states.
  *
+ * @param props - React Aria button props (onPress, isDisabled, aria-label, etc.).
+ * @param props.className - Additional CSS classes appended to the base styles.
  * @example
  * ```tsx
  * <IconButton aria-label="Delete item" onPress={handleDelete}>

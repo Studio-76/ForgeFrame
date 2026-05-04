@@ -1,5 +1,5 @@
-import { useRef, type Key, type ReactNode } from "react";
-import { useSelect, useOption, useFocusRing, useButton, useListBox } from "react-aria";
+import { useRef } from "react";
+import { useSelect, useOption, useFocusRing, useButton } from "react-aria";
 import { useSelectState, Item } from "react-stately";
 
 /**
@@ -118,7 +118,7 @@ export function Select({
         {state.isOpen ? (
           <div className="absolute top-full left-0 right-0 mt-1 z-50 bg-surface border border-border rounded-lg shadow-panel overflow-hidden">
             <ul
-              role="listbox"
+              {...menuProps as React.HTMLAttributes<HTMLUListElement>}
               ref={listBoxRef}
               className="m-0 p-1 list-none max-h-[240px] overflow-auto"
               style={{ outline: "none" }}

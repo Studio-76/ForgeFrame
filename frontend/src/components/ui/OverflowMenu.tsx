@@ -80,6 +80,7 @@ export function OverflowMenu({
       </button>
       {state.isOpen ? (
         <MenuPopup
+          label={label}
           state={state}
           items={items}
         />
@@ -89,12 +90,13 @@ export function OverflowMenu({
 }
 
 type MenuPopupProps = {
+  label: string;
   state: ReturnType<typeof useMenuTriggerState>;
   items: OverflowAction[];
 };
 
 /** Internal popup list for the overflow menu. */
-function MenuPopup({ state, items }: MenuPopupProps) {
+function MenuPopup({ label, state, items }: MenuPopupProps) {
   // Collect disabled keys for the tree state
   const disabledKeys = items.filter((i) => i.isDisabled).map((i) => i.id);
 
@@ -107,7 +109,7 @@ function MenuPopup({ state, items }: MenuPopupProps) {
   });
 
   const menuRef = useRef<HTMLUListElement>(null);
-  const { menuProps } = useMenu({}, treeState, menuRef);
+  const { menuProps } = useMenu({ "aria-label": label }, treeState, menuRef);
 
   return (
     <div className="absolute right-0 top-full mt-1 z-50 min-w-[160px] bg-surface border border-border rounded-lg shadow-panel py-1">
