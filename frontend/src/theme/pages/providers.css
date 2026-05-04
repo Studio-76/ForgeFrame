@@ -358,7 +358,7 @@
 
 .ff-policy-editor-close:hover {
   border-color: var(--fg-color-status-danger-border);
-  color: var(--fg-color-status-danger-text);
+  color: var(--fg-color-status-danger);
 }
 
 .ff-policy-warning {

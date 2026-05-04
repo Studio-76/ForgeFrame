@@ -19,7 +19,6 @@
   width: auto;
 }
 
-button,
 input,
 select,
 textarea {
@@ -30,22 +29,109 @@ textarea {
     box-shadow var(--fg-motion-fast) var(--fg-ease-standard);
 }
 
+/* ── Default button (neutral) ────────────────────
+ * Neutral / flat button. Use .ff-btn-primary,
+ * .ff-btn-secondary, .ff-btn-destructive etc. for
+ * explicit action hierarchy.
+ */
 button {
-  border: 1px solid var(--fg-color-action-primary);
+  font: inherit;
+  border: 1px solid var(--fg-color-border-default);
   border-radius: var(--fg-radius-md);
-  padding: 0.65rem 1rem;
-  background: var(--fg-color-action-primary);
-  color: #fff;
+  padding: 0.4rem 0.75rem;
+  background: transparent;
+  color: var(--fg-color-text-secondary);
   cursor: pointer;
+  font-weight: 500;
+  transition:
+    border-color var(--fg-motion-fast) var(--fg-ease-standard),
+    background-color var(--fg-motion-fast) var(--fg-ease-standard),
+    box-shadow var(--fg-motion-fast) var(--fg-ease-standard);
 }
 
 button:hover {
-  background: color-mix(in srgb, var(--fg-color-action-primary) 88%, #000);
+  border-color: var(--fg-color-action-primary);
+  color: var(--fg-color-text-primary);
 }
 
 button:disabled {
   opacity: 0.55;
   cursor: default;
+}
+
+/* ── Primary action ─────────────────────────────*/
+.ff-btn-primary {
+  border-color: var(--fg-color-action-primary);
+  background: var(--fg-color-action-primary);
+  color: #fff;
+  font-weight: 600;
+}
+
+.ff-btn-primary:hover {
+  background: color-mix(in srgb, var(--fg-color-action-primary) 88%, #000);
+  border-color: transparent;
+  color: #fff;
+}
+
+/* ── Secondary (outline) ────────────────────────*/
+.ff-btn-secondary {
+  border-color: var(--fg-color-border-default);
+  color: var(--fg-color-text-secondary);
+  font-weight: 500;
+}
+
+.ff-btn-secondary:hover {
+  border-color: var(--fg-color-action-primary);
+  color: var(--fg-color-action-primary);
+}
+
+/* ── Tertiary (ghost) ───────────────────────────*/
+.ff-btn-tertiary {
+  border-color: transparent;
+  color: var(--fg-color-text-secondary);
+}
+
+.ff-btn-tertiary:hover {
+  background: rgba(148, 163, 184, 0.08);
+  color: var(--fg-color-text-primary);
+  border-color: transparent;
+}
+
+/* ── Destructive ────────────────────────────────*/
+.ff-btn-destructive {
+  border-color: var(--fg-color-status-danger-border);
+  color: var(--fg-color-status-danger);
+  font-weight: 600;
+}
+
+.ff-btn-destructive:hover {
+  background: var(--fg-color-status-danger-soft);
+  border-color: var(--fg-color-status-danger);
+  color: var(--fg-color-status-danger);
+}
+
+/* ── Navigation (link-style) ────────────────────*/
+.ff-btn-nav {
+  border-color: transparent;
+  color: var(--fg-color-text-secondary);
+  text-decoration: none;
+  font-weight: 500;
+}
+
+.ff-btn-nav:hover {
+  color: var(--fg-color-action-primary);
+  border-color: transparent;
+}
+
+/* ── Size modifiers ─────────────────────────────*/
+.ff-btn-sm {
+  padding: 0.3rem 0.55rem;
+  font-size: var(--fg-type-size-meta);
+}
+
+.ff-btn-lg {
+  padding: 0.55rem 1rem;
+  font-size: var(--fg-type-size-body);
 }
 
 input,
@@ -123,11 +209,11 @@ textarea:focus-visible,
 
 /* Checklist pass/fail indicators */
 .ff-check-ok {
-  color: var(--fg-color-status-success-text);
+  color: var(--fg-color-status-success);
 }
 
 .ff-check-fail {
-  color: var(--fg-color-status-danger-text);
+  color: var(--fg-color-status-danger);
 }
 
 /* Urgent summary card variant */
