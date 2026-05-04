@@ -13,6 +13,7 @@ from app.execution.service import ExecutionTransitionService, StateMachineValida
 from app.execution.state_machine import (
     MISMATCH_CATEGORY_RUN_STATE_MISMATCH,
     ExecutionStateDecision,
+    ExecutionStateSnapshot,
     ExecutionTransitionContext,
     ExecutionValidationResult,
 )
@@ -94,17 +95,25 @@ class _ReconcileValidationSpy:
     def validate_creation(
         self,
         operation: str,
-        before_snapshot: object,
-        after_snapshot: object,
+        before_snapshot: ExecutionStateSnapshot,
+        after_snapshot: ExecutionStateSnapshot,
     ) -> ExecutionValidationResult:
         return ExecutionValidationResult(valid=True, validated=True)
 
     def validate_non_state_operation(
         self,
-        before_snapshot: object,
-        after_snapshot: object,
+        before_snapshot: ExecutionStateSnapshot,
+        after_snapshot: ExecutionStateSnapshot,
     ) -> ExecutionValidationResult:
         return ExecutionValidationResult(valid=True, validated=True)
+
+    def check_transition_allowed(
+        self,
+        trigger: str,
+        context: ExecutionTransitionContext,
+    ) -> tuple[bool, str | None]:
+        # Allow all transitions — this spy validates post-hoc mismatch detection.
+        return True, None
 
 
 def _instance(company_id: str = "company_alpha") -> InstanceRecord:

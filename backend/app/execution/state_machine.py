@@ -862,7 +862,16 @@ class _ExecutionStateMachineModel:
         :returns: ``True`` when the lease has expired
         """
         ctx: ExecutionTransitionContext | None = event.kwargs.get("context")
-        result = ctx is not None and ctx.lease_status == "leased" and ctx.lease_expires_at is not None and ctx.now is not None and ctx.lease_expires_at < ctx.now
+        if ctx is None or ctx.lease_status != "leased" or ctx.lease_expires_at is None or ctx.now is None:
+            return self._record_guard("has_expired_lease", False)
+        # Normalise timezone-naive vs timezone-aware comparison
+        # (one side may be offset-aware while the other is naive).
+        expires: datetime = ctx.lease_expires_at
+        now: datetime = ctx.now
+        if (expires.tzinfo is None) != (now.tzinfo is None):
+            expires = expires.replace(tzinfo=None)
+            now = now.replace(tzinfo=None)
+        result = expires < now
         return self._record_guard("has_expired_lease", result)
 
     def is_operator_pausable(self, event: Any) -> bool:

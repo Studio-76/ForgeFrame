@@ -2779,11 +2779,8 @@ class ExecutionTransitionService:
                 raise RunNotFoundError(f"Run '{run_id}' not found for company '{company_id}'.")
             if attempt is None or attempt.company_id != company_id or attempt.run_id != run_id:
                 raise RunTransitionConflictError(f"Attempt '{attempt_id}' does not belong to run '{run_id}'.")
-            if run.state != "executing" or attempt.attempt_state != "executing":
-                raise RunTransitionConflictError("Approvals can only open from the executing state.")
-
-            before_snapshot = (
-                self._state_machine_snapshot(
+            if self._state_machine_validation_enabled:
+                before_snapshot = self._state_machine_snapshot(
                     run=run,
                     attempt=attempt,
                     extra={
@@ -2797,9 +2794,15 @@ class ExecutionTransitionService:
                         "approval_opened_at": current_time,
                     },
                 )
-                if self._state_machine_validation_enabled
-                else None
-            )
+                ctx = self._state_machine_context(
+                    before=before_snapshot,
+                    now=current_time,
+                )
+                self._check_transition_allowed_or_raise("open_approval", ctx)
+            else:
+                before_snapshot = None
+                if run.state != "executing" or attempt.attempt_state != "executing":
+                    raise RunTransitionConflictError("Approvals can only open from the executing state.")
 
             approval_link = RunApprovalLinkORM(
                 id=self._new_id("approval"),
@@ -2976,6 +2979,13 @@ class ExecutionTransitionService:
                 if self._state_machine_validation_enabled
                 else None
             )
+
+            if before_snapshot is not None:
+                ctx = self._state_machine_context(
+                    before=before_snapshot,
+                    now=current_time,
+                )
+                self._check_transition_allowed_or_raise(approval_trigger, ctx)
 
             command = RunCommandORM(
                 id=self._new_id("cmd"),
@@ -3586,13 +3596,11 @@ class ExecutionTransitionService:
             run = session.get(RunORM, run_id)
             if run is None or run.company_id != company_id:
                 raise RunNotFoundError(f"Run '{run_id}' not found for company '{company_id}'.")
-            if run.operator_state in _TERMINAL_OPERATOR_STATES:
-                raise RunTransitionConflictError(f"Run '{run_id}' cannot be interrupted from operator state '{run.operator_state}'.")
 
-            attempt = self._current_attempt(session, run)
-            approval_link = self._current_approval_link(session, run) if self._state_machine_validation_enabled else None
-            before_snapshot = (
-                self._state_machine_snapshot(
+            if self._state_machine_validation_enabled:
+                attempt = self._current_attempt(session, run)
+                approval_link = self._current_approval_link(session, run)
+                before_snapshot = self._state_machine_snapshot(
                     run=run,
                     attempt=attempt,
                     approval_link=approval_link,
@@ -3604,9 +3612,17 @@ class ExecutionTransitionService:
                         "next_wakeup_at": run.next_wakeup_at,
                     },
                 )
-                if self._state_machine_validation_enabled
-                else None
-            )
+                ctx = self._state_machine_context(
+                    before=before_snapshot,
+                    now=current_time,
+                )
+                self._check_transition_allowed_or_raise("interrupt", ctx)
+            else:
+                if run.operator_state in _TERMINAL_OPERATOR_STATES:
+                    raise RunTransitionConflictError(f"Run '{run_id}' cannot be interrupted from operator state '{run.operator_state}'.")
+                attempt = self._current_attempt(session, run)
+                approval_link = None
+                before_snapshot = None
             command = RunCommandORM(
                 id=self._new_id("cmd"),
                 company_id=company_id,
@@ -3745,13 +3761,11 @@ class ExecutionTransitionService:
             run = session.get(RunORM, run_id)
             if run is None or run.company_id != company_id:
                 raise RunNotFoundError(f"Run '{run_id}' not found for company '{company_id}'.")
-            if run.operator_state == "quarantined":
-                raise RunTransitionConflictError(f"Run '{run_id}' is already quarantined.")
 
-            attempt = self._current_attempt(session, run)
-            approval_link = self._current_approval_link(session, run) if self._state_machine_validation_enabled else None
-            before_snapshot = (
-                self._state_machine_snapshot(
+            if self._state_machine_validation_enabled:
+                attempt = self._current_attempt(session, run)
+                approval_link = self._current_approval_link(session, run)
+                before_snapshot = self._state_machine_snapshot(
                     run=run,
                     attempt=attempt,
                     approval_link=approval_link,
@@ -3763,9 +3777,17 @@ class ExecutionTransitionService:
                         "next_wakeup_at": run.next_wakeup_at,
                     },
                 )
-                if self._state_machine_validation_enabled
-                else None
-            )
+                ctx = self._state_machine_context(
+                    before=before_snapshot,
+                    now=current_time,
+                )
+                self._check_transition_allowed_or_raise("quarantine", ctx)
+            else:
+                if run.operator_state == "quarantined":
+                    raise RunTransitionConflictError(f"Run '{run_id}' is already quarantined.")
+                attempt = self._current_attempt(session, run)
+                approval_link = None
+                before_snapshot = None
             command = RunCommandORM(
                 id=self._new_id("cmd"),
                 company_id=company_id,
@@ -4156,8 +4178,8 @@ class ExecutionTransitionService:
                 if run.operator_state in _TERMINAL_OPERATOR_STATES:
                     continue
 
-                before_snapshot = (
-                    self._state_machine_snapshot(
+                if self._state_machine_validation_enabled:
+                    before_snapshot = self._state_machine_snapshot(
                         run=run,
                         attempt=attempt,
                         extra={
@@ -4168,9 +4190,13 @@ class ExecutionTransitionService:
                             "next_wakeup_at": run.next_wakeup_at,
                         },
                     )
-                    if self._state_machine_validation_enabled
-                    else None
-                )
+                    ctx = self._state_machine_context(
+                        before=before_snapshot,
+                        now=current_time,
+                    )
+                    self._check_transition_allowed_or_raise("expire_lease", ctx)
+                else:
+                    before_snapshot = None
 
                 session.add(
                     RunOutboxORM(

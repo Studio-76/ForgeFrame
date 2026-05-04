@@ -21,7 +21,6 @@ from app.execution.service import (
 )
 from app.execution.state_machine import (
     MISMATCH_CATEGORY_APPROVAL_LINK_MISMATCH,
-    MISMATCH_CATEGORY_INVALID_TRIGGER,
     MISMATCH_CATEGORY_RUN_STATE_MISMATCH,
     MISMATCH_CATEGORY_VALIDATOR_EXCEPTION,
     ExecutionStateDecision,
@@ -2200,23 +2199,18 @@ def test_spec5_finding3_stale_approval_decision_flagged_by_validator(
     tmp_path: Path,
     caplog,
 ) -> None:
-    """SPEC §5 finding #3: decide_approval accepts stale run/attempt state.
+    """SPEC §5 finding #3: decide_approval pre-check blocks stale run state.
 
     The existing service only checks ``approval_link.gate_status == "open"``
     and does NOT require the run or attempt to still be in
-    ``waiting_on_approval`` state.  The validator detects this divergence
-    because ``resume_after_approval`` is only valid from source state
-    ``waiting_on_approval``.
-
-    This test confirms the compatibility behaviour is preserved (service
-    outcome is unaffected) and the validator flags the mismatch, making the
-    finding explicit before any Phase 1c authority transfer.
+    ``waiting_on_approval`` state.  The Phase 1c authoritative pre-check
+    now blocks ``resume_after_approval`` from any state other than
+    ``waiting_on_approval``, making the finding authoritative.
     """
     service, session_factory = _service(
         tmp_path,
         state_machine_validation_enabled=True,
     )
-    caplog.set_level(logging.WARNING, logger="app.execution.service")
 
     # Set up a run waiting on approval.
     created = service.admit_create(
@@ -2246,41 +2240,31 @@ def test_spec5_finding3_stale_approval_decision_flagged_by_validator(
         approval_id="approval_s5_f3",
         gate_key="approval_gate",
     )
-    caplog.clear()
 
     # Manipulate the run into a stale state via direct DB access.  The
-    # approval link remains open so the service accepts the decision.
+    # approval link remains open but the state machine blocks the
+    # transition because ``resume_after_approval`` requires the run to
+    # be in ``waiting_on_approval`` state.
     with session_factory() as session:
         run = session.get(RunORM, created.run_id)
         assert run is not None
         run.state = "queued"
         session.commit()
 
-    # Service accepts decide_approval with approved=True because the
-    # approval link is still open — it does NOT check run/attempt state.
-    result = service.decide_approval(
-        company_id="cmp_s5_f3",
-        approval_id="approval_s5_f3",
-        actor_type="user",
-        actor_id="approver_s5_f3",
-        idempotency_key="idem_s5_f3_decide",
-        request_fingerprint_hash="fp_s5_f3_decide",
-        approved=True,
-    )
-    assert result.run_state == "queued"
-
-    # Validator detected the mismatch: resume_after_approval cannot fire
-    # from "queued" (source must be "waiting_on_approval").
-    records = _validation_records(caplog)
-    assert len(records) >= 1, "Expected at least one validation mismatch record"
-    payload = _validation_payload(records[0])
-    assert payload["trigger"] == "resume_after_approval"
-    assert payload["mismatch_category"] in (
-        MISMATCH_CATEGORY_RUN_STATE_MISMATCH,
-        MISMATCH_CATEGORY_INVALID_TRIGGER,
-    ), f"Unexpected mismatch category: {payload['mismatch_category']}"
-    assert payload["before"]["run_state"] == "queued"
-    assert payload["after"]["run_state"] == "queued"
+    # The authoritative pre-check now blocks stale approval decisions.
+    with pytest.raises(
+        RunTransitionConflictError,
+        match="not allowed",
+    ):
+        service.decide_approval(
+            company_id="cmp_s5_f3",
+            approval_id="approval_s5_f3",
+            actor_type="user",
+            actor_id="approver_s5_f3",
+            idempotency_key="idem_s5_f3_decide",
+            request_fingerprint_hash="fp_s5_f3_decide",
+            approved=True,
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -2644,3 +2628,502 @@ def test_state_machine_pre_check_happy_path_worker_flow(
     )
     assert not failure2.retry_scheduled
     assert failure2.run_state == "dead_lettered"
+
+
+# ---------------------------------------------------------------------------
+# Phase 1c-02: authoritative pre-check for approval/interrupt/quarantine/reconcile
+# ---------------------------------------------------------------------------
+
+
+def test_open_approval_happy_path_with_real_validator(
+    tmp_path: Path,
+) -> None:
+    """State machine allows open_approval from executing state."""
+    service, _session_factory = _service(
+        tmp_path,
+        state_machine_validation_enabled=True,
+    )
+    _created = service.admit_create(
+        company_id="cmp_f1c2_oa",
+        actor_type="agent",
+        actor_id="agent_backend",
+        idempotency_key="idem_f1c2_oahappy",
+        request_fingerprint_hash="fp_f1c2_oahappy",
+        run_kind="provider_dispatch",
+    )
+    claim = service.claim_next_attempt(
+        company_id="cmp_f1c2_oa",
+        worker_key="worker_alpha",
+    )
+    assert claim is not None
+    service.mark_attempt_executing(
+        company_id="cmp_f1c2_oa",
+        run_id=claim.run_id,
+        attempt_id=claim.attempt_id,
+        lease_token=claim.lease_token,
+        step_key="test_step",
+    )
+    result = service.open_approval(
+        company_id="cmp_f1c2_oa",
+        run_id=claim.run_id,
+        attempt_id=claim.attempt_id,
+        approval_id="approval_oa_happy",
+        gate_key="gate_1",
+    )
+    assert result.approval_link_id is not None
+    assert result.run_id == claim.run_id
+
+
+def test_open_approval_blocked_from_wrong_state(
+    tmp_path: Path,
+) -> None:
+    """Authoritative pre-check blocks open_approval when not executing."""
+    service, session_factory = _service(
+        tmp_path,
+        state_machine_validation_enabled=True,
+    )
+    created = service.admit_create(
+        company_id="cmp_f1c2_oab",
+        actor_type="agent",
+        actor_id="agent_backend",
+        idempotency_key="idem_f1c2_oablock",
+        request_fingerprint_hash="fp_f1c2_oablock",
+        run_kind="provider_dispatch",
+    )
+    # Try to open approval from a queued run (not executing).
+    with session_factory() as session:
+        attempt = session.execute(select(RunAttemptORM).where(RunAttemptORM.run_id == created.run_id)).scalars().first()
+        assert attempt is not None
+        attempt_id = attempt.id
+    with pytest.raises(
+        RunTransitionConflictError,
+        match="not allowed",
+    ):
+        service.open_approval(
+            company_id="cmp_f1c2_oab",
+            run_id=created.run_id,
+            attempt_id=attempt_id,
+            approval_id="approval_oab_lock",
+            gate_key="gate_1",
+        )
+
+
+def test_decide_approval_happy_path_with_real_validator(
+    tmp_path: Path,
+) -> None:
+    """State machine allows approve from waiting_on_approval state."""
+    service, _session_factory = _service(
+        tmp_path,
+        state_machine_validation_enabled=True,
+    )
+    _created = service.admit_create(
+        company_id="cmp_f1c2_da",
+        actor_type="agent",
+        actor_id="agent_backend",
+        idempotency_key="idem_f1c2_dahappy",
+        request_fingerprint_hash="fp_f1c2_dahappy",
+        run_kind="provider_dispatch",
+    )
+    claim = service.claim_next_attempt(
+        company_id="cmp_f1c2_da",
+        worker_key="worker_alpha",
+    )
+    assert claim is not None
+    service.mark_attempt_executing(
+        company_id="cmp_f1c2_da",
+        run_id=claim.run_id,
+        attempt_id=claim.attempt_id,
+        lease_token=claim.lease_token,
+        step_key="test_step",
+    )
+    __approval = service.open_approval(
+        company_id="cmp_f1c2_da",
+        run_id=claim.run_id,
+        attempt_id=claim.attempt_id,
+        approval_id="approval_da_happy",
+        gate_key="gate_1",
+    )
+    result = service.decide_approval(
+        company_id="cmp_f1c2_da",
+        approval_id="approval_da_happy",
+        actor_type="user",
+        actor_id="approver",
+        idempotency_key="idem_f1c2_dadecide",
+        request_fingerprint_hash="fp_f1c2_dadecide",
+        approved=True,
+    )
+    assert result.run_state == "queued"
+
+
+def test_decide_approval_reject_cancel_with_real_validator(
+    tmp_path: Path,
+) -> None:
+    """State machine allows reject_approval_cancel from waiting_on_approval."""
+    service, _session_factory = _service(
+        tmp_path,
+        state_machine_validation_enabled=True,
+    )
+    _created = service.admit_create(
+        company_id="cmp_f1c2_darc",
+        actor_type="agent",
+        actor_id="agent_backend",
+        idempotency_key="idem_f1c2_darchappy",
+        request_fingerprint_hash="fp_f1c2_darchappy",
+        run_kind="provider_dispatch",
+    )
+    claim = service.claim_next_attempt(
+        company_id="cmp_f1c2_darc",
+        worker_key="worker_alpha",
+    )
+    assert claim is not None
+    service.mark_attempt_executing(
+        company_id="cmp_f1c2_darc",
+        run_id=claim.run_id,
+        attempt_id=claim.attempt_id,
+        lease_token=claim.lease_token,
+        step_key="test_step",
+    )
+    service.open_approval(
+        company_id="cmp_f1c2_darc",
+        run_id=claim.run_id,
+        attempt_id=claim.attempt_id,
+        approval_id="approval_darc_reject",
+        gate_key="gate_1",
+        resume_disposition="cancel",
+    )
+    result = service.decide_approval(
+        company_id="cmp_f1c2_darc",
+        approval_id="approval_darc_reject",
+        actor_type="user",
+        actor_id="approver",
+        idempotency_key="idem_f1c2_darcdecide",
+        request_fingerprint_hash="fp_f1c2_darcdecide",
+        approved=False,
+    )
+    assert result.run_state == "cancel_requested"
+
+
+def test_decide_approval_blocked_by_state_machine_wrong_state(
+    tmp_path: Path,
+    caplog,
+) -> None:
+    """Advisory validation detects decide_approval from non-waiting state."""
+    service, session_factory = _service(
+        tmp_path,
+        state_machine_validation_enabled=True,
+    )
+    _created = service.admit_create(
+        company_id="cmp_f1c2_dab",
+        actor_type="agent",
+        actor_id="agent_backend",
+        idempotency_key="idem_f1c2_dabblock",
+        request_fingerprint_hash="fp_f1c2_dabblock",
+        run_kind="provider_dispatch",
+    )
+    claim = service.claim_next_attempt(
+        company_id="cmp_f1c2_dab",
+        worker_key="worker_alpha",
+    )
+    assert claim is not None
+    service.mark_attempt_executing(
+        company_id="cmp_f1c2_dab",
+        run_id=claim.run_id,
+        attempt_id=claim.attempt_id,
+        lease_token=claim.lease_token,
+        step_key="test_step",
+    )
+    _approval = service.open_approval(
+        company_id="cmp_f1c2_dab",
+        run_id=claim.run_id,
+        attempt_id=claim.attempt_id,
+        approval_id="approval_dab_block",
+        gate_key="gate_1",
+    )
+    # Manually move the run out of waiting_on_approval to trigger a state
+    # machine mismatch on approve.
+    with session_factory() as session:
+        run = session.get(RunORM, claim.run_id)
+        assert run is not None
+        run.state = "queued"
+        run.operator_state = "admitted"
+        session.commit()
+
+    # Even though the approval link is open, the pre-check should block
+    # because the run is not in waiting_on_approval state.
+    with pytest.raises(
+        RunTransitionConflictError,
+        match="not allowed",
+    ):
+        service.decide_approval(
+            company_id="cmp_f1c2_dab",
+            approval_id="approval_dab_block",
+            actor_type="user",
+            actor_id="approver",
+            idempotency_key="idem_f1c2_dabdecide",
+            request_fingerprint_hash="fp_f1c2_dabdecide",
+            approved=True,
+        )
+
+
+def test_interrupt_run_happy_path_with_real_validator(
+    tmp_path: Path,
+) -> None:
+    """State machine allows interrupt from executing."""
+    service, _session_factory = _service(
+        tmp_path,
+        state_machine_validation_enabled=True,
+    )
+    _created = service.admit_create(
+        company_id="cmp_f1c2_ir",
+        actor_type="agent",
+        actor_id="agent_backend",
+        idempotency_key="idem_f1c2_irhappy",
+        request_fingerprint_hash="fp_f1c2_irhappy",
+        run_kind="provider_dispatch",
+    )
+    claim = service.claim_next_attempt(
+        company_id="cmp_f1c2_ir",
+        worker_key="worker_alpha",
+    )
+    assert claim is not None
+    service.mark_attempt_executing(
+        company_id="cmp_f1c2_ir",
+        run_id=claim.run_id,
+        attempt_id=claim.attempt_id,
+        lease_token=claim.lease_token,
+        step_key="test_step",
+    )
+    result = service.interrupt_run(
+        company_id="cmp_f1c2_ir",
+        run_id=claim.run_id,
+        actor_type="system",
+        actor_id="admin",
+        idempotency_key="idem_f1c2_irinterrupt",
+        request_fingerprint_hash="fp_f1c2_irinterrupt",
+        reason="operator request",
+    )
+    assert result.run_state == "cancel_requested"
+
+
+def test_interrupt_run_blocked_from_terminal_operator_state(
+    tmp_path: Path,
+) -> None:
+    """Authoritative pre-check blocks interrupt from terminal operator state."""
+    service, _session_factory = _service(
+        tmp_path,
+        state_machine_validation_enabled=True,
+    )
+    _created = service.admit_create(
+        company_id="cmp_f1c2_irb",
+        actor_type="agent",
+        actor_id="agent_backend",
+        idempotency_key="idem_f1c2_irblock",
+        request_fingerprint_hash="fp_f1c2_irblock",
+        run_kind="provider_dispatch",
+    )
+    claim = service.claim_next_attempt(
+        company_id="cmp_f1c2_irb",
+        worker_key="worker_alpha",
+    )
+    assert claim is not None
+    service.mark_attempt_executing(
+        company_id="cmp_f1c2_irb",
+        run_id=claim.run_id,
+        attempt_id=claim.attempt_id,
+        lease_token=claim.lease_token,
+        step_key="test_step",
+    )
+    service.quarantine_run(
+        company_id="cmp_f1c2_irb",
+        run_id=claim.run_id,
+        actor_type="system",
+        actor_id="admin",
+        idempotency_key="idem_f1c2_irbquarantine",
+        request_fingerprint_hash="fp_f1c2_irbquarantine",
+        reason="quarantine",
+    )
+    # Run is now dead_lettered/quarantined (operator_state is terminal).
+    with pytest.raises(
+        RunTransitionConflictError,
+        match="not allowed",
+    ):
+        service.interrupt_run(
+            company_id="cmp_f1c2_irb",
+            run_id=claim.run_id,
+            actor_type="system",
+            actor_id="admin",
+            idempotency_key="idem_f1c2_irbinterrupt",
+            request_fingerprint_hash="fp_f1c2_irbinterrupt",
+            reason="should be blocked",
+        )
+
+
+def test_quarantine_run_happy_path_with_real_validator(
+    tmp_path: Path,
+) -> None:
+    """State machine allows quarantine from executing."""
+    service, _session_factory = _service(
+        tmp_path,
+        state_machine_validation_enabled=True,
+    )
+    _created = service.admit_create(
+        company_id="cmp_f1c2_qr",
+        actor_type="agent",
+        actor_id="agent_backend",
+        idempotency_key="idem_f1c2_qrhappy",
+        request_fingerprint_hash="fp_f1c2_qrhappy",
+        run_kind="provider_dispatch",
+    )
+    claim = service.claim_next_attempt(
+        company_id="cmp_f1c2_qr",
+        worker_key="worker_alpha",
+    )
+    assert claim is not None
+    service.mark_attempt_executing(
+        company_id="cmp_f1c2_qr",
+        run_id=claim.run_id,
+        attempt_id=claim.attempt_id,
+        lease_token=claim.lease_token,
+        step_key="test_step",
+    )
+    result = service.quarantine_run(
+        company_id="cmp_f1c2_qr",
+        run_id=claim.run_id,
+        actor_type="system",
+        actor_id="admin",
+        idempotency_key="idem_f1c2_qrquarantine",
+        request_fingerprint_hash="fp_f1c2_qrquarantine",
+        reason="operator quarantine",
+    )
+    assert result.run_state == "dead_lettered"
+
+
+def test_quarantine_run_blocked_when_already_quarantined(
+    tmp_path: Path,
+) -> None:
+    """Authoritative pre-check blocks quarantine on already-quarantined run."""
+    service, _session_factory = _service(
+        tmp_path,
+        state_machine_validation_enabled=True,
+    )
+    _created = service.admit_create(
+        company_id="cmp_f1c2_qrb",
+        actor_type="agent",
+        actor_id="agent_backend",
+        idempotency_key="idem_f1c2_qrbhappy",
+        request_fingerprint_hash="fp_f1c2_qrbhappy",
+        run_kind="provider_dispatch",
+    )
+    claim = service.claim_next_attempt(
+        company_id="cmp_f1c2_qrb",
+        worker_key="worker_alpha",
+    )
+    assert claim is not None
+    service.mark_attempt_executing(
+        company_id="cmp_f1c2_qrb",
+        run_id=claim.run_id,
+        attempt_id=claim.attempt_id,
+        lease_token=claim.lease_token,
+        step_key="test_step",
+    )
+    result = service.quarantine_run(
+        company_id="cmp_f1c2_qrb",
+        run_id=claim.run_id,
+        actor_type="system",
+        actor_id="admin",
+        idempotency_key="idem_f1c2_qrbquarantine1",
+        request_fingerprint_hash="fp_f1c2_qrbquarantine1",
+        reason="first quarantine",
+    )
+    assert result.run_state == "dead_lettered"
+
+    # Second quarantine on the same run should be blocked.
+    with pytest.raises(
+        RunTransitionConflictError,
+        match="not allowed",
+    ):
+        service.quarantine_run(
+            company_id="cmp_f1c2_qrb",
+            run_id=claim.run_id,
+            actor_type="system",
+            actor_id="admin",
+            idempotency_key="idem_f1c2_qrbquarantine2",
+            request_fingerprint_hash="fp_f1c2_qrbquarantine2",
+            reason="second quarantine",
+        )
+
+
+def test_reconcile_expired_leases_happy_path_with_real_validator(
+    tmp_path: Path,
+) -> None:
+    """State machine allows expire_lease for expired in-flight attempt."""
+    service, session_factory = _service(
+        tmp_path,
+        state_machine_validation_enabled=True,
+    )
+    _created = service.admit_create(
+        company_id="cmp_f1c2_rel",
+        actor_type="agent",
+        actor_id="agent_backend",
+        idempotency_key="idem_f1c2_relhappy",
+        request_fingerprint_hash="fp_f1c2_relhappy",
+        run_kind="provider_dispatch",
+    )
+    claim = service.claim_next_attempt(
+        company_id="cmp_f1c2_rel",
+        worker_key="worker_alpha",
+    )
+    assert claim is not None
+    service.mark_attempt_executing(
+        company_id="cmp_f1c2_rel",
+        run_id=claim.run_id,
+        attempt_id=claim.attempt_id,
+        lease_token=claim.lease_token,
+        step_key="test_step",
+    )
+    # Artificially expire the lease.
+    with session_factory() as session:
+        session.execute(update(RunAttemptORM).where(RunAttemptORM.id == claim.attempt_id).values(lease_expires_at=datetime.now(tz=UTC) - timedelta(minutes=5)))
+        session.commit()
+
+    results = service.reconcile_expired_leases(
+        company_id="cmp_f1c2_rel",
+    )
+    assert len(results) == 1
+    assert results[0].attempt_id == claim.attempt_id
+    assert results[0].reconciled_to_state == "quarantined"
+
+
+def test_reconcile_expired_leases_skips_non_expired(
+    tmp_path: Path,
+) -> None:
+    """Non-expired in-flight attempts are skipped by reconcile loop."""
+    service, _session_factory = _service(
+        tmp_path,
+        state_machine_validation_enabled=True,
+    )
+    _created = service.admit_create(
+        company_id="cmp_f1c2_res",
+        actor_type="agent",
+        actor_id="agent_backend",
+        idempotency_key="idem_f1c2_resskip",
+        request_fingerprint_hash="fp_f1c2_resskip",
+        run_kind="provider_dispatch",
+    )
+    claim = service.claim_next_attempt(
+        company_id="cmp_f1c2_res",
+        worker_key="worker_alpha",
+    )
+    assert claim is not None
+    service.mark_attempt_executing(
+        company_id="cmp_f1c2_res",
+        run_id=claim.run_id,
+        attempt_id=claim.attempt_id,
+        lease_token=claim.lease_token,
+        step_key="test_step",
+    )
+    # Lease is still current - should be skipped by the query.
+    results = service.reconcile_expired_leases(
+        company_id="cmp_f1c2_res",
+    )
+    assert len(results) == 0
