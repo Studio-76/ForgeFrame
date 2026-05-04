@@ -20,6 +20,8 @@ The migration followed the planned incremental approach: define → validate →
 
 **Recommendation: Expand selectively.** The execution module migration is production-ready and the approach has proven its value. The `tasks/` notifications module (`NotificationDeliveryStatus`, 11 states) is a natural expansion candidate. All remaining domain modules (3--7 states each) do **not** justify formal state machines under the current complexity criteria.
 
+**Governance gaps:** No production validation window was captured during Phase 1 -- validator was exercised solely through unit/integration tests (242 tests) and benchmark data. SPEC §5 findings #4 and #5 decisions are now complete (both accepted as intended behavior). Neither gap affects the recommendation -- the test coverage and <1 ms p95 overhead provide sufficient confidence for the current authoritative deployment.
+
 ---
 
 ## 2. Phase Completion Summary
@@ -52,9 +54,9 @@ The migration followed the planned incremental approach: define → validate →
 | Standalone validator tests | -- | 170 | +170 |
 | Service integration tests | -- | 63 | +63 (extended) |
 | Operator/reconciliation tests | -- | 9 | +9 (extended) |
-| **Total execution tests** | ~varies | **242** | +242 collected |
+| **Total execution tests** | ~varies | **242** | 242 total (~80 net new) |
 | **Total backend tests** | ~varies | **828** | Stable, existing tests preserved |
-| Reference documentation | 4 files | 8 files | +4 (SPEC, PLAN, Phase 1 Evidence, Phase 2 Eval) |
+| Reference documentation | 4 files | 10 files | +6 (SPEC, PLAN, Phase 1 Evidence, Phase 2 Eval, Finding #4 Decision, Finding #5 Decision) |
 | Mermaid diagram artifact | -- | 1 | `DIAGRAM_Execution-State-Machine.md` |
 
 ---
@@ -106,15 +108,15 @@ All 13 SPEC §9.4 mismatch categories are covered by tests:
 | 1 | `claim_attempt` is attempt-authoritative; run update lacks a run-state predicate | **Accepted** -- validator models stricter run sources and logs divergences | Pre-mutation guard enforced by state machine; legacy service path still uses attempt-authority as fallback |
 | 2 | `complete_attempt_success` does not check `run.state` or `run.current_attempt_id` | **Accepted** -- targeted test proves validator flags mismatch | Pre-mutation guard enforces stricter invariant; service preserves fallback behavior |
 | 3 | `decide_approval` does not require run/attempt to still be `waiting_on_approval` | **Accepted** -- targeted test proves validator flags stale-state approval | Pre-mutation guard enforces invariant; legacy path still accepts stale decisions |
-| 4 | `decide_approval` does not clear `run.current_approval_link_id` | **Pending decision** -- retained link or clearing fix | Task 1c-05 not yet completed; `approval_link_mismatch` continues to log warning |
-| 5 | `request_cancel` can cancel a `waiting_on_approval` run without closing approval link | **Pending decision** -- retained open links or close-before-cancel fix | Task 1c-06 not yet completed; `approval_link_mismatch` continues to log warning |
+| 4 | `decide_approval` does not clear `run.current_approval_link_id` | **Accepted as intended behavior** -- DECISION_SPEC5-Finding4.md: retained link is audit trail, not control signal; no code change required | `approval_link_mismatch` warning remains active for regression detection |
+| 5 | `request_cancel` can cancel a `waiting_on_approval` run without closing approval link | **Accepted as intended behavior** -- DECISION_SPEC5-Finding5.md: retained open link correctly signals never-formally-decided approval; no code change required | `approval_link_mismatch` warning remains active for regression detection |
 | 6 | Retryable failure mutates source attempt and creates replacement | **Accepted** -- attempt effects distinguish source vs replacement | Modeled as `AttemptEffect` with distinct source/replacement fields |
 | 7 | Terminal failure leaves source attempt `dead_lettered`/`quarantined` | **Accepted** -- current behavior explicitly modeled | Match existing service behavior |
 | 8 | Lease reconciliation result reports operator destination | **Accepted** -- semantics documented and tested | `test_spec5_finding8_reconciled_to_state_semantics_are_explicit` proves documentation |
 | 9 | `quarantine_run` accepts all operator states except already `quarantined` | **Accepted** -- guard is `is_not_quarantined` | Modeled as compatibility behavior |
 | 10 | `cancelled` and `compensated` are declared but unreached | **Accepted** -- registered without invented production paths | No invented paths during Phase 1 |
 
-**8 of 10** findings are resolved and accepted. **2 of 10** (findings #4, #5) lack a written decision document and remain as pending tasks.
+**10 of 10** findings are resolved and accepted. The prior pending findings #4 and #5 received written decisions (DECISION_SPEC5-Finding4.md, DECISION_SPEC5-Finding5.md), both accepting current behavior as intended.
 
 ---
 
@@ -124,7 +126,7 @@ The state-machine migration surfaced or clarified the following issues that were
 
 | Issue | Previous State | Current State |
 |---|---|---|
-| Approval-link lifecycle stale references | Implicit service quirk | Explicit `approval_link_mismatch` log category; pending decisions for #4 and #5 |
+| Approval-link lifecycle stale references | Implicit service quirk | Explicit `approval_link_mismatch` log category; decisions for #4 and #5 completed (accepted as intended behavior) |
 | Retry source-attempt vs replacement-attempt ambiguity | Implicit -- test assertions overlapped both attempts | Explicit `AttemptEffect` dataclass with `source_attempt_state`, `source_attempt_operator_state`, `target_attempt_state`, `replacement_attempt_*` fields |
 | Batch lease reconciliation state leaking across iterations | Implicit -- no per-attempt validation | Each reconciliation iteration uses independent adapter; per-attempt mismatch logging |
 | Operator-only `pause`/`resume` run-state preservation | Implicit -- service handled it, but no guard | Explicit `_validate_operator_transition` asserts `run.state` unchanged |
@@ -216,7 +218,7 @@ With authoritative validation enabled by default, every transition now passes th
 - **Validator construction dominates overhead.** At 522 µs mean (0.750 ms p95), it's still well within budget, but it's ~50× the disabled construction cost. If the execution service becomes a hot-path bottleneck, a validator pool or cached machine factory would be the optimization target.
 - **Decision builder has trigger-specific branches.** `_build_decision` has special handling for `start_execution`, `pause`, `resume`, and `claim_attempt`. This is manageable at current scope but should become table-driven if new context-dependent triggers are added.
 - **`_IN_FLIGHT_ATTEMPT_STATES` still defined in service.py** as a local constant. It is used for query filtering, snapshot building, and legacy inline checks. While this is architecturally acceptable (it serves a different purpose than the state-machine guard constants), it creates two sources of truth.
-- **SPEC §5 findings #4 and #5** lack written decisions. These are the only unresolved compatibility findings and should be closed before considering Phase 1 expansion.
+- **SPEC §5 findings #4 and #5 decisions are now complete** (DECISION_SPEC5-Finding4.md, DECISION_SPEC5-Finding5.md). Both accepted current behavior as intended. The `approval_link_mismatch` warning category remains active for regression detection.
 - **Deprecated guard constants still imported in service.py.** The `TERMINAL_RUN_STATES`, `CLAIMABLE_OPERATOR_STATES`, `RETRYABLE_RUN_STATES`, and `TERMINAL_OPERATOR_STATES` constants are now defined in `state_machine.py` and imported by `service.py` for legacy path checks. These could be cleaned up if the legacy fallback paths are removed.
 
 ### 8.3 Library Assessment
@@ -236,18 +238,25 @@ The original EVA recommendation (`transitions` over `python-statemachine`) is va
 
 ---
 
-## 9. Open Items and Risk
+## 9. Governance Gaps, Open Items, and Risk
 
-### 9.1 Unresolved Items
+### 9.1 Governance Gaps
+
+| Gap | Impact | Mitigation |
+|---|---|---|
+| **No production validation window** | Validation evidence is limited to unit/integration tests and benchmark data (242 tests, <1ms p95 overhead); no production traffic was validated with the advisory layer enabled | Comprehensive test coverage exercises every mismatch category; benchmark data confirms SPEC §9.6 budget with margin; production rollout should monitor `approval_link_mismatch` and `guard_failed` logs for unexpected mismatches |
+| **SPEC §5 findings #4 and #5 decisions** (now resolved) | Pending status blocked final sign-off on Phase 1 recommendation; now removed as a blocker | Full rationale documented in DECISION_SPEC5-Finding4.md and DECISION_SPEC5-Finding5.md; both accepted current behavior as intended with no code changes required |
+
+**Impact on recommendation:** Neither governance gap affects the expand/stop/refine recommendation. The missing production validation window is mitigated by test coverage and benchmark evidence. The completed SPEC §5 decisions remove the remaining blocker for Phase 1 expansion.
+
+### 9.2 Remaining Items
 
 | Item | Type | Impact | Action Required |
 |---|---|---|---|
-| SPEC §5 Finding #4 decision | Decision | Low -- approval link warning logged | Task 1c-05: accept retained link or create bug-fix |
-| SPEC §5 Finding #5 decision | Decision | Low -- approval link warning logged | Task 1c-06: accept open link or create bug-fix |
 | `_IN_FLIGHT_ATTEMPT_STATES` in service.py | Tech debt | Low -- dual source of truth | Consider moving to state_machine.py if service paths consolidate |
 | Legacy guard imports in service.py | Tech debt | Low -- imports are harmless | Can be cleaned up when legacy fallback paths are removed |
 
-### 9.2 Risks
+### 9.3 Risks
 
 | Risk | Likelihood | Impact | Mitigation |
 |---|---|---|---|
@@ -282,14 +291,16 @@ The `tasks/` module's `NotificationDeliveryStatus` (11 states) and `ReminderStat
 
 ### Refine existing execution module
 
-Two improvements would strengthen the Phase 1 work without changing behavior:
+One improvement would strengthen the Phase 1 work without changing behavior:
 
-1. **Close SPEC §5 findings #4 and #5** -- complete the decision documents (tasks 1c-05, 1c-06).
-2. **Guard constant consolidation** -- move `_IN_FLIGHT_ATTEMPT_STATES` from `service.py` to `state_machine.py` if the legacy fallback paths are removed.
+1. **Guard constant consolidation** -- move `_IN_FLIGHT_ATTEMPT_STATES` from `service.py` to `state_machine.py` if the legacy fallback paths are removed.
+
+(SPEC §5 findings #4 and #5 decisions are now complete -- see DECISION_SPEC5-Finding4.md and DECISION_SPEC5-Finding5.md.)
 
 ### Final recommendation
 
-> **Expand to `tasks/` notifications after SPEC §5 decisions are closed.**
+> **Expand to `tasks/` notifications.**
+> SPEC §5 decisions are all closed -- no behavioral blockers remain.
 > Do not touch other modules.
 > The execution module migration is complete and production-ready.
 
@@ -298,7 +309,7 @@ Two improvements would strengthen the Phase 1 work without changing behavior:
 ## Appendix A: Reference Documents
 
 | Document | Path |
-|---|---|
+|---|---|---|
 | Original evaluation | `reference/state-machine/EVA_STATE_MACHINE.md` |
 | Implementation plan | `reference/state-machine/PLAN_State-Machine.md` |
 | Implementation spec | `reference/state-machine/SPEC_State-Machine.md` |
@@ -306,6 +317,8 @@ Two improvements would strengthen the Phase 1 work without changing behavior:
 | Phase 2 evaluation | `reference/state-machine/PHASE2_Evaluation.md` (this document) |
 | Mermaid diagram | `reference/state-machine/DIAGRAM_Execution-State-Machine.md` |
 | Task template | `reference/state-machine/TASK-TEMPLATE_State-Machine.md` |
+| Finding #4 decision (retained approval link) | `reference/state-machine/DECISION_SPEC5-Finding4.md` |
+| Finding #5 decision (open approval after cancel) | `reference/state-machine/DECISION_SPEC5-Finding5.md` |
 
 ## Appendix B: Key Commands
 
