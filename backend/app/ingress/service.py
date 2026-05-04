@@ -68,11 +68,27 @@ class IngressTlsStatus(BaseModel):
     checked_at: str
 
 
+def _read_last_error(settings: Settings) -> str | None:
+    """Read the latest TLS issuance error from the configured state directory.
+
+    :param settings: Runtime settings for ingress and TLS.
+    :type settings: Settings
+    :return: Last recorded error message when available.
+    :rtype: str | None
+    """
+    state_root = Path(settings.public_tls_state_path).resolve(strict=False)
+    last_error_path = Path(settings.public_tls_last_error_path).resolve(strict=False)
+    if state_root not in last_error_path.parents:
+        return "tls_last_error_path_outside_state_root"
+    if not last_error_path.exists() or not last_error_path.is_file():
+        return None
+    return last_error_path.read_text(encoding="utf-8").strip() or None
+
+
 def _load_certificate_status(settings: Settings) -> TlsCertificateStatus:
     cert_path = Path(settings.public_tls_cert_path)
     key_path = Path(settings.public_tls_key_path)
-    last_error_path = Path(settings.public_tls_last_error_path)
-    last_error = last_error_path.read_text(encoding="utf-8").strip() if last_error_path.exists() else None
+    last_error = _read_last_error(settings)
     if not cert_path.exists() or not key_path.exists():
         return TlsCertificateStatus(
             present=False,

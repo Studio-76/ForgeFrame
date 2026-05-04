@@ -1,19 +1,35 @@
 from __future__ import annotations
 
+import logging
 import threading
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from typing import Any, cast
 
-from sqlalchemy import create_engine, func, select
+import pytest
+from sqlalchemy import create_engine, func, select, update
 from sqlalchemy.orm import Session, sessionmaker
 
+from app.execution import dependencies as execution_dependencies
 from app.execution.admin_service import ExecutionAdminService
 from app.execution.service import (
     ExecutionTransitionService,
     RunCommandIdempotencyConflictError,
+    RunTransitionConflictError,
     StaleWorkerClaimError,
+    StateMachineValidatorFactory,
+)
+from app.execution.state_machine import (
+    MISMATCH_CATEGORY_APPROVAL_LINK_MISMATCH,
+    MISMATCH_CATEGORY_RUN_STATE_MISMATCH,
+    MISMATCH_CATEGORY_VALIDATOR_EXCEPTION,
+    ExecutionStateDecision,
+    ExecutionStateSnapshot,
+    ExecutionTransitionContext,
+    ExecutionValidationResult,
 )
 from app.instances.models import InstanceRecord
+from app.settings.config import Settings
 from app.storage.execution_repository import (
     RunApprovalLinkORM,
     RunAttemptORM,
@@ -26,15 +42,651 @@ from app.storage.models import Base
 
 def _service(
     tmp_path: Path,
+    *,
+    state_machine_validation_enabled: bool = False,
+    state_machine_validator_factory: StateMachineValidatorFactory | None = None,
 ) -> tuple[ExecutionTransitionService, sessionmaker[Session]]:
     engine = create_engine(f"sqlite+pysqlite:///{tmp_path / 'execution.sqlite'}")
     Base.metadata.create_all(engine)
     session_factory = sessionmaker(engine, autoflush=False, expire_on_commit=False)
-    return ExecutionTransitionService(session_factory), session_factory
+    return (
+        ExecutionTransitionService(
+            session_factory,
+            state_machine_validation_enabled=state_machine_validation_enabled,
+            state_machine_validator_factory=state_machine_validator_factory,
+        ),
+        session_factory,
+    )
+
+
+class _ValidationSpy:
+    """Test double that records advisory validation calls."""
+
+    def __init__(
+        self,
+        calls: list[tuple[str, ExecutionTransitionContext]],
+        *,
+        result: ExecutionValidationResult | None = None,
+        exception: Exception | None = None,
+    ) -> None:
+        self._calls = calls
+        self._result = result or ExecutionValidationResult(valid=True, validated=True)
+        self._exception = exception
+
+    def validate_run_transition(
+        self,
+        trigger: str,
+        context: ExecutionTransitionContext,
+    ) -> ExecutionValidationResult:
+        self._calls.append((trigger, context))
+        if self._exception is not None:
+            raise self._exception
+        return self._result
+
+    def validate_operator_transition(
+        self,
+        trigger: str,
+        context: ExecutionTransitionContext,
+    ) -> ExecutionValidationResult:
+        return self.validate_run_transition(trigger, context)
+
+    def validate_creation(
+        self,
+        operation: str,
+        before_snapshot: ExecutionStateSnapshot,
+        after_snapshot: ExecutionStateSnapshot,
+    ) -> ExecutionValidationResult:
+        return ExecutionValidationResult(valid=True, validated=True)
+
+    def validate_non_state_operation(
+        self,
+        before_snapshot: ExecutionStateSnapshot,
+        after_snapshot: ExecutionStateSnapshot,
+    ) -> ExecutionValidationResult:
+        return ExecutionValidationResult(valid=True, validated=True)
+
+    def check_transition_allowed(
+        self,
+        trigger: str,
+        context: ExecutionTransitionContext,
+    ) -> tuple[bool, str | None]:
+        return True, None
+
+
+class _TriggerValidationSpy:
+    """Test double that returns a special result for one trigger."""
+
+    def __init__(
+        self,
+        calls: list[tuple[str, ExecutionTransitionContext]],
+        *,
+        target_trigger: str,
+        result: ExecutionValidationResult,
+    ) -> None:
+        self._calls = calls
+        self._target_trigger = target_trigger
+        self._result = result
+
+    def validate_run_transition(
+        self,
+        trigger: str,
+        context: ExecutionTransitionContext,
+    ) -> ExecutionValidationResult:
+        self._calls.append((trigger, context))
+        if trigger == self._target_trigger:
+            return self._result
+        return ExecutionValidationResult(valid=True, validated=True)
+
+    def validate_operator_transition(
+        self,
+        trigger: str,
+        context: ExecutionTransitionContext,
+    ) -> ExecutionValidationResult:
+        return self.validate_run_transition(trigger, context)
+
+    def validate_creation(
+        self,
+        operation: str,
+        before_snapshot: ExecutionStateSnapshot,
+        after_snapshot: ExecutionStateSnapshot,
+    ) -> ExecutionValidationResult:
+        return ExecutionValidationResult(valid=True, validated=True)
+
+    def validate_non_state_operation(
+        self,
+        before_snapshot: ExecutionStateSnapshot,
+        after_snapshot: ExecutionStateSnapshot,
+    ) -> ExecutionValidationResult:
+        return ExecutionValidationResult(valid=True, validated=True)
+
+    def check_transition_allowed(
+        self,
+        trigger: str,
+        context: ExecutionTransitionContext,
+    ) -> tuple[bool, str | None]:
+        if trigger == self._target_trigger and not self._result.valid:
+            return False, self._result.error_message or "simulated block"
+        return True, None
+
+
+def _validation_records(caplog) -> list[logging.LogRecord]:
+    """Return structured state-machine validation log records."""
+
+    return [record for record in caplog.records if hasattr(record, "state_machine_validation")]
+
+
+def _validation_payload(record: logging.LogRecord) -> dict[str, Any]:
+    """Return the structured state-machine payload from a log record."""
+
+    return cast("dict[str, Any]", getattr(record, "state_machine_validation"))
 
 
 def _count(session: Session, orm_type: type[object]) -> int:
     return int(session.scalar(select(func.count()).select_from(orm_type)) or 0)
+
+
+def test_state_machine_validation_disabled_does_not_construct_validator(
+    tmp_path: Path,
+    caplog,
+) -> None:
+    service, _session_factory = _service(
+        tmp_path,
+        state_machine_validation_enabled=True,
+    )
+    caplog.set_level(logging.WARNING, logger="app.execution.service")
+    service.admit_create(
+        company_id="cmp_123",
+        actor_type="agent",
+        actor_id="agent_backend",
+        idempotency_key="idem_disabled_create",
+        request_fingerprint_hash="fp_disabled_create",
+        run_kind="provider_dispatch",
+    )
+    claim = service.claim_next_attempt(
+        company_id="cmp_123",
+        worker_key="worker_alpha",
+    )
+
+    assert claim is not None
+
+
+def test_state_machine_validation_logs_mismatch_without_changing_claim(
+    tmp_path: Path,
+    caplog,
+) -> None:
+    calls: list[tuple[str, ExecutionTransitionContext]] = []
+    mismatch = ExecutionValidationResult(
+        valid=True,
+        validated=True,
+        decision=ExecutionStateDecision(target_run_state="succeeded"),
+    )
+
+    service, _session_factory = _service(
+        tmp_path,
+        state_machine_validation_enabled=False,
+        state_machine_validator_factory=lambda: _ValidationSpy(calls, result=mismatch),
+    )
+    caplog.set_level(logging.WARNING, logger="app.execution.service")
+    created = service.admit_create(
+        company_id="cmp_123",
+        actor_type="agent",
+        actor_id="agent_backend",
+        idempotency_key="idem_mismatch_create",
+        request_fingerprint_hash="fp_mismatch_create",
+        run_kind="provider_dispatch",
+    )
+    claim = service.claim_next_attempt(
+        company_id="cmp_123",
+        worker_key="worker_alpha",
+    )
+
+    assert claim is not None
+    assert claim.run_id == created.run_id
+    assert calls[0][0] == "claim_attempt"
+    records = _validation_records(caplog)
+    assert len(records) == 1
+    payload = _validation_payload(records[0])
+    assert payload["trigger"] == "claim_attempt"
+    assert payload["mismatch_category"] == MISMATCH_CATEGORY_RUN_STATE_MISMATCH
+    assert payload["after"]["run_state"] == "dispatching"
+
+
+def test_state_machine_validator_exception_is_non_fatal(
+    tmp_path: Path,
+    caplog,
+) -> None:
+    calls: list[tuple[str, ExecutionTransitionContext]] = []
+
+    service, _session_factory = _service(
+        tmp_path,
+        state_machine_validation_enabled=False,
+        state_machine_validator_factory=lambda: _ValidationSpy(
+            calls,
+            exception=RuntimeError("validator exploded"),
+        ),
+    )
+    caplog.set_level(logging.ERROR, logger="app.execution.service")
+    service.admit_create(
+        company_id="cmp_123",
+        actor_type="agent",
+        actor_id="agent_backend",
+        idempotency_key="idem_exception_create",
+        request_fingerprint_hash="fp_exception_create",
+        run_kind="provider_dispatch",
+    )
+    claim = service.claim_next_attempt(
+        company_id="cmp_123",
+        worker_key="worker_alpha",
+    )
+
+    assert claim is not None
+    assert calls[0][0] == "claim_attempt"
+    records = _validation_records(caplog)
+    assert len(records) == 1
+    payload = _validation_payload(records[0])
+    assert payload["mismatch_category"] == MISMATCH_CATEGORY_VALIDATOR_EXCEPTION
+    assert payload["exception_class"] == "RuntimeError"
+
+
+def test_state_machine_validation_preserves_successful_worker_hot_path(
+    tmp_path: Path,
+    caplog,
+) -> None:
+    service, session_factory = _service(
+        tmp_path,
+        state_machine_validation_enabled=True,
+    )
+    caplog.set_level(logging.WARNING, logger="app.execution.service")
+    created = service.admit_create(
+        company_id="cmp_123",
+        actor_type="agent",
+        actor_id="agent_backend",
+        idempotency_key="idem_success_create",
+        request_fingerprint_hash="fp_success_create",
+        run_kind="provider_dispatch",
+    )
+    claim = service.claim_next_attempt(
+        company_id="cmp_123",
+        worker_key="worker_alpha",
+    )
+    assert claim is not None
+    service.mark_attempt_executing(
+        company_id="cmp_123",
+        run_id=claim.run_id,
+        attempt_id=claim.attempt_id,
+        lease_token=claim.lease_token,
+        step_key="provider_call",
+    )
+    service.complete_attempt_success(
+        company_id="cmp_123",
+        run_id=claim.run_id,
+        attempt_id=claim.attempt_id,
+        lease_token=claim.lease_token,
+        result_summary={"worker": "ok"},
+    )
+
+    with session_factory() as session:
+        run = session.get(RunORM, created.run_id)
+        attempt = session.get(RunAttemptORM, created.attempt_id)
+
+    assert run is not None
+    assert attempt is not None
+    assert run.state == "succeeded"
+    assert run.operator_state == "completed"
+    assert attempt.attempt_state == "succeeded"
+    assert attempt.operator_state == "completed"
+    assert _validation_records(caplog) == []
+
+
+def test_state_machine_validation_preserves_failure_hot_paths(
+    tmp_path: Path,
+    caplog,
+) -> None:
+    service, _session_factory = _service(
+        tmp_path,
+        state_machine_validation_enabled=True,
+    )
+    caplog.set_level(logging.WARNING, logger="app.execution.service")
+
+    retryable_run = service.admit_create(
+        company_id="cmp_retry",
+        actor_type="agent",
+        actor_id="agent_backend",
+        idempotency_key="idem_retryable_validation_create",
+        request_fingerprint_hash="fp_retryable_validation_create",
+        run_kind="provider_dispatch",
+    )
+    retryable_claim = service.claim_next_attempt(
+        company_id="cmp_retry",
+        worker_key="worker_retry",
+    )
+    assert retryable_claim is not None
+    service.mark_attempt_executing(
+        company_id="cmp_retry",
+        run_id=retryable_claim.run_id,
+        attempt_id=retryable_claim.attempt_id,
+        lease_token=retryable_claim.lease_token,
+        step_key="provider_call",
+    )
+    retryable_failure = service.record_attempt_failure(
+        company_id="cmp_retry",
+        run_id=retryable_claim.run_id,
+        attempt_id=retryable_claim.attempt_id,
+        lease_token=retryable_claim.lease_token,
+        failure_class="provider_transient",
+        error_code="provider_timeout",
+        error_detail="upstream timed out",
+        retryable=True,
+        max_attempts=3,
+        backoff_base_seconds=30,
+        backoff_max_seconds=30,
+        backoff_jitter_ratio=0.0,
+    )
+
+    terminal_run = service.admit_create(
+        company_id="cmp_terminal",
+        actor_type="agent",
+        actor_id="agent_backend",
+        idempotency_key="idem_terminal_validation_create",
+        request_fingerprint_hash="fp_terminal_validation_create",
+        run_kind="provider_dispatch",
+    )
+    terminal_claim = service.claim_next_attempt(
+        company_id="cmp_terminal",
+        worker_key="worker_terminal",
+    )
+    assert terminal_claim is not None
+    service.mark_attempt_executing(
+        company_id="cmp_terminal",
+        run_id=terminal_claim.run_id,
+        attempt_id=terminal_claim.attempt_id,
+        lease_token=terminal_claim.lease_token,
+        step_key="provider_call",
+    )
+    terminal_failure = service.record_attempt_failure(
+        company_id="cmp_terminal",
+        run_id=terminal_claim.run_id,
+        attempt_id=terminal_claim.attempt_id,
+        lease_token=terminal_claim.lease_token,
+        failure_class="provider_terminal",
+        error_code="provider_authentication_error",
+        error_detail="credentials rejected",
+        retryable=False,
+        max_attempts=3,
+    )
+
+    assert retryable_run.run_state == "queued"
+    assert retryable_failure.retry_scheduled is True
+    assert retryable_failure.run_state == "retry_backoff"
+    assert retryable_failure.next_attempt_id is not None
+    assert terminal_run.run_state == "queued"
+    assert terminal_failure.retry_scheduled is False
+    assert terminal_failure.run_state == "dead_lettered"
+    assert _validation_records(caplog) == []
+
+
+def test_state_machine_validation_skips_idempotent_cancel_replay(
+    tmp_path: Path,
+) -> None:
+    calls: list[tuple[str, ExecutionTransitionContext]] = []
+    service, _session_factory = _service(
+        tmp_path,
+        state_machine_validation_enabled=False,
+        state_machine_validator_factory=lambda: _ValidationSpy(calls),
+    )
+    created = service.admit_create(
+        company_id="cmp_123",
+        actor_type="agent",
+        actor_id="agent_backend",
+        idempotency_key="idem_replay_create",
+        request_fingerprint_hash="fp_replay_create",
+        run_kind="provider_dispatch",
+    )
+
+    first = service.request_cancel(
+        company_id="cmp_123",
+        run_id=created.run_id,
+        actor_type="agent",
+        actor_id="agent_backend",
+        idempotency_key="idem_cancel_replay",
+        request_fingerprint_hash="fp_cancel_replay",
+    )
+    second = service.request_cancel(
+        company_id="cmp_123",
+        run_id=created.run_id,
+        actor_type="agent",
+        actor_id="agent_backend",
+        idempotency_key="idem_cancel_replay",
+        request_fingerprint_hash="fp_cancel_replay",
+    )
+
+    assert first.deduplicated is False
+    assert second.deduplicated is True
+    assert second.command_id == first.command_id
+    assert [call[0] for call in calls] == ["request_cancel"]
+
+
+def test_state_machine_validation_logs_approval_mismatch_without_changing_open(
+    tmp_path: Path,
+    caplog,
+) -> None:
+    """Approval validation mismatches must be non-fatal."""
+    calls: list[tuple[str, ExecutionTransitionContext]] = []
+    mismatch = ExecutionValidationResult(
+        valid=True,
+        validated=True,
+        decision=ExecutionStateDecision(target_run_state="failed"),
+    )
+    service, session_factory = _service(
+        tmp_path,
+        state_machine_validation_enabled=False,
+        state_machine_validator_factory=lambda: _TriggerValidationSpy(
+            calls,
+            target_trigger="open_approval",
+            result=mismatch,
+        ),
+    )
+    caplog.set_level(logging.WARNING, logger="app.execution.service")
+
+    created = service.admit_create(
+        company_id="cmp_approval_mismatch",
+        actor_type="agent",
+        actor_id="agent_backend",
+        idempotency_key="idem_approval_mismatch_create",
+        request_fingerprint_hash="fp_approval_mismatch_create",
+        run_kind="provider_dispatch",
+    )
+    claim = service.claim_next_attempt(
+        company_id="cmp_approval_mismatch",
+        worker_key="worker_approval_mismatch",
+    )
+    assert claim is not None
+    service.mark_attempt_executing(
+        company_id="cmp_approval_mismatch",
+        run_id=claim.run_id,
+        attempt_id=claim.attempt_id,
+        lease_token=claim.lease_token,
+        step_key="approval_gate",
+    )
+    approval = service.open_approval(
+        company_id="cmp_approval_mismatch",
+        run_id=claim.run_id,
+        attempt_id=claim.attempt_id,
+        approval_id="approval_mismatch_1",
+        gate_key="approval_gate",
+    )
+
+    assert approval.run_id == created.run_id
+    assert [call[0] for call in calls][-1] == "open_approval"
+    records = _validation_records(caplog)
+    assert len(records) == 1
+    payload = _validation_payload(records[0])
+    assert payload["trigger"] == "open_approval"
+    assert payload["mismatch_category"] == MISMATCH_CATEGORY_RUN_STATE_MISMATCH
+    assert payload["after"]["run_state"] == "waiting_on_approval"
+    with session_factory() as session:
+        run = session.get(RunORM, created.run_id)
+        assert run is not None
+        assert run.state == "waiting_on_approval"
+        assert run.current_approval_link_id == approval.approval_link_id
+
+
+def test_state_machine_validation_logs_stale_current_approval_warning(
+    tmp_path: Path,
+    caplog,
+) -> None:
+    """Approval decisions should warn without clearing retained links."""
+    service, session_factory = _service(
+        tmp_path,
+        state_machine_validation_enabled=False,
+    )
+    caplog.set_level(logging.WARNING, logger="app.execution.service")
+
+    created = service.admit_create(
+        company_id="cmp_approval_stale",
+        actor_type="agent",
+        actor_id="agent_backend",
+        idempotency_key="idem_approval_stale_create",
+        request_fingerprint_hash="fp_approval_stale_create",
+        run_kind="provider_dispatch",
+    )
+    claim = service.claim_next_attempt(
+        company_id="cmp_approval_stale",
+        worker_key="worker_approval_stale",
+    )
+    assert claim is not None
+    service.mark_attempt_executing(
+        company_id="cmp_approval_stale",
+        run_id=claim.run_id,
+        attempt_id=claim.attempt_id,
+        lease_token=claim.lease_token,
+        step_key="approval_gate",
+    )
+    approval = service.open_approval(
+        company_id="cmp_approval_stale",
+        run_id=claim.run_id,
+        attempt_id=claim.attempt_id,
+        approval_id="approval_stale_1",
+        gate_key="approval_gate",
+    )
+    assert _validation_records(caplog) == []
+
+    result = service.decide_approval(
+        company_id="cmp_approval_stale",
+        approval_id="approval_stale_1",
+        actor_type="user",
+        actor_id="approver_stale",
+        idempotency_key="idem_approval_stale_decide",
+        request_fingerprint_hash="fp_approval_stale_decide",
+        approved=True,
+    )
+
+    assert result.run_state == "queued"
+    records = _validation_records(caplog)
+    assert len(records) == 1
+    payload = _validation_payload(records[0])
+    assert payload["trigger"] == "resume_after_approval"
+    assert payload["mismatch_category"] == MISMATCH_CATEGORY_APPROVAL_LINK_MISMATCH
+    assert payload["before"]["approval_gate_status"] == "open"
+    assert payload["after"]["approval_gate_status"] == "approved"
+    assert payload["after"]["current_approval_link_id"] == approval.approval_link_id
+    assert payload["command_id"] == result.command_id
+    with session_factory() as session:
+        run = session.get(RunORM, created.run_id)
+        link = session.get(RunApprovalLinkORM, approval.approval_link_id)
+        assert run is not None
+        assert link is not None
+        assert run.current_approval_link_id == approval.approval_link_id
+        assert link.gate_status == "approved"
+
+
+def test_state_machine_validation_logs_open_approval_cancel_warning(
+    tmp_path: Path,
+    caplog,
+) -> None:
+    """Cancelling from an open approval should warn without closing it."""
+    service, session_factory = _service(
+        tmp_path,
+        state_machine_validation_enabled=False,
+    )
+    caplog.set_level(logging.WARNING, logger="app.execution.service")
+
+    created = service.admit_create(
+        company_id="cmp_approval_cancel",
+        actor_type="agent",
+        actor_id="agent_backend",
+        idempotency_key="idem_approval_cancel_create",
+        request_fingerprint_hash="fp_approval_cancel_create",
+        run_kind="provider_dispatch",
+    )
+    claim = service.claim_next_attempt(
+        company_id="cmp_approval_cancel",
+        worker_key="worker_approval_cancel",
+    )
+    assert claim is not None
+    service.mark_attempt_executing(
+        company_id="cmp_approval_cancel",
+        run_id=claim.run_id,
+        attempt_id=claim.attempt_id,
+        lease_token=claim.lease_token,
+        step_key="approval_gate",
+    )
+    approval = service.open_approval(
+        company_id="cmp_approval_cancel",
+        run_id=claim.run_id,
+        attempt_id=claim.attempt_id,
+        approval_id="approval_cancel_1",
+        gate_key="approval_gate",
+    )
+    assert _validation_records(caplog) == []
+
+    result = service.request_cancel(
+        company_id="cmp_approval_cancel",
+        run_id=created.run_id,
+        actor_type="user",
+        actor_id="operator_cancel",
+        idempotency_key="idem_approval_cancel_request",
+        request_fingerprint_hash="fp_approval_cancel_request",
+    )
+
+    assert result.run_state == "cancel_requested"
+    records = _validation_records(caplog)
+    assert len(records) == 1
+    payload = _validation_payload(records[0])
+    assert payload["trigger"] == "request_cancel"
+    assert payload["mismatch_category"] == MISMATCH_CATEGORY_APPROVAL_LINK_MISMATCH
+    assert payload["before"]["approval_gate_status"] == "open"
+    assert payload["after"]["approval_gate_status"] == "open"
+    with session_factory() as session:
+        run = session.get(RunORM, created.run_id)
+        link = session.get(RunApprovalLinkORM, approval.approval_link_id)
+        assert run is not None
+        assert link is not None
+        assert run.current_approval_link_id == approval.approval_link_id
+        assert link.gate_status == "open"
+
+
+def test_dependency_wires_state_machine_validation_flag(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    settings = Settings(
+        admin_auth_enabled=False,
+        harness_storage_backend="file",
+        control_plane_storage_backend="file",
+        observability_storage_backend="file",
+        governance_storage_backend="file",
+        instances_storage_backend="file",
+        execution_sqlite_path=str(tmp_path / "dependency-execution.sqlite"),
+        execution_state_machine_validation_enabled=True,
+    )
+    monkeypatch.setattr(execution_dependencies, "get_settings", lambda: settings)
+    execution_dependencies.clear_execution_dependency_caches()
+    try:
+        service = execution_dependencies.get_execution_transition_service()
+        assert service._state_machine_validation_enabled is True
+    finally:
+        execution_dependencies.clear_execution_dependency_caches()
 
 
 def test_duplicate_create_command_returns_original_admission_snapshot(
@@ -235,6 +887,7 @@ def test_admin_replay_without_idempotency_key_recovers_from_concurrent_insert_ra
         )
 
         assert [command.command_type for command in commands] == ["retry", "create"]
+        assert commands[0].response_snapshot is not None
         assert commands[0].response_snapshot["replay_reason"] == reason
         assert [attempt.attempt_no for attempt in attempts] == [1, 2]
 
@@ -933,3 +1586,2015 @@ def test_resume_does_not_force_spurious_wakeup_before_retry_window(
         assert run.result_summary["wake_gate"]["spurious_wake_blocked"] is True
         assert run.result_summary["wake_gate"]["next_wakeup_at"] == wakeup_at.isoformat()
         assert run.result_summary["dispatch"]["stage"] == "resume_blocked_until_wakeup"
+
+
+# ---------------------------------------------------------------------------
+# Wave 3 — operator-only, creation/retry/restart, and non-state validation
+# ---------------------------------------------------------------------------
+
+
+def test_wave3_validation_disabled_does_not_construct_for_operator_ops(
+    tmp_path: Path,
+) -> None:
+    """Disabled validation must not construct validators for pause/resume."""
+
+    def validator_factory() -> object:
+        raise AssertionError("disabled validation must not construct validators")
+
+    service, _session_factory = _service(
+        tmp_path,
+        state_machine_validation_enabled=False,
+        state_machine_validator_factory=validator_factory,
+    )
+    created = service.admit_create(
+        company_id="cmp_w3_off",
+        actor_type="agent",
+        actor_id="agent_backend",
+        idempotency_key="idem_w3_off_create",
+        request_fingerprint_hash="fp_w3_off_create",
+        run_kind="provider_dispatch",
+    )
+
+    # Pause (operator-only) with disabled validation.
+    pause = service.pause_run(
+        company_id="cmp_w3_off",
+        run_id=created.run_id,
+        actor_type="user",
+        actor_id="operator_1",
+        idempotency_key="idem_pause_off",
+        request_fingerprint_hash="fp_pause_off",
+        reason="hold",
+    )
+    assert pause.operator_state == "paused"
+
+    # Resume (operator-only) with disabled validation.
+    resume = service.resume_run(
+        company_id="cmp_w3_off",
+        run_id=created.run_id,
+        actor_type="user",
+        actor_id="operator_1",
+        idempotency_key="idem_resume_off",
+        request_fingerprint_hash="fp_resume_off",
+        reason="release",
+    )
+    assert resume.operator_state == "admitted"
+
+
+def test_wave3_pause_resume_validation_preserves_behavior(
+    tmp_path: Path,
+    caplog,
+) -> None:
+    """Pause/resume with validation enabled must be clean and preserve state."""
+    service, session_factory = _service(
+        tmp_path,
+        state_machine_validation_enabled=True,
+    )
+    caplog.set_level(logging.WARNING, logger="app.execution.service")
+
+    created = service.admit_create(
+        company_id="cmp_w3_pr",
+        actor_type="agent",
+        actor_id="agent_backend",
+        idempotency_key="idem_w3_pr_create",
+        request_fingerprint_hash="fp_w3_pr_create",
+        run_kind="provider_dispatch",
+    )
+
+    # Pause with validation.
+    pause = service.pause_run(
+        company_id="cmp_w3_pr",
+        run_id=created.run_id,
+        actor_type="user",
+        actor_id="operator_1",
+        idempotency_key="idem_pause_w3",
+        request_fingerprint_hash="fp_pause_w3",
+        reason="operator hold",
+    )
+    assert pause.operator_state == "paused"
+
+    # Resume with validation.
+    resume = service.resume_run(
+        company_id="cmp_w3_pr",
+        run_id=created.run_id,
+        actor_type="user",
+        actor_id="operator_1",
+        idempotency_key="idem_resume_w3",
+        request_fingerprint_hash="fp_resume_w3",
+        reason="release",
+    )
+    assert resume.operator_state == "admitted"
+
+    with session_factory() as session:
+        run = session.get(RunORM, created.run_id)
+        assert run is not None
+        assert run.state == "queued"  # run.state preserved
+        assert run.operator_state == "admitted"
+
+    # No validation mismatches logged.
+    records = _validation_records(caplog)
+    assert records == [], f"Expected no validation records, got {len(records)}"
+
+
+def test_wave3_pause_resume_idempotent_skip_validation(
+    tmp_path: Path,
+    caplog,
+) -> None:
+    """Idempotent pause/resume must skip fresh validation."""
+    calls: list[tuple[str, ExecutionTransitionContext]] = []
+    mismatch = ExecutionValidationResult(
+        valid=True,
+        validated=True,
+        decision=ExecutionStateDecision(target_operator_state="quarantined"),
+    )
+
+    service, session_factory = _service(
+        tmp_path,
+        state_machine_validation_enabled=False,
+        state_machine_validator_factory=lambda: _ValidationSpy(calls, result=mismatch),
+    )
+    caplog.set_level(logging.WARNING, logger="app.execution.service")
+
+    created = service.admit_create(
+        company_id="cmp_w3_idem",
+        actor_type="agent",
+        actor_id="agent_backend",
+        idempotency_key="idem_w3_idem_create",
+        request_fingerprint_hash="fp_w3_idem_create",
+        run_kind="provider_dispatch",
+    )
+
+    # First pause — goes through validation.
+    pause1 = service.pause_run(
+        company_id="cmp_w3_idem",
+        run_id=created.run_id,
+        actor_type="user",
+        actor_id="operator_1",
+        idempotency_key="idem_pause_once",
+        request_fingerprint_hash="fp_pause_once",
+        reason="hold",
+    )
+    assert pause1.operator_state == "paused"
+
+    # Idempotent pause — must skip validation (no new calls).
+    pause2 = service.pause_run(
+        company_id="cmp_w3_idem",
+        run_id=created.run_id,
+        actor_type="user",
+        actor_id="operator_1",
+        idempotency_key="idem_pause_once",
+        request_fingerprint_hash="fp_pause_once",
+        reason="hold",
+    )
+    assert pause2.deduplicated is True
+
+    # Pause was validated once (first call) but idempotent replay did
+    # not add a second validation call.
+    pause_calls = [(t, c) for t, c in calls if t == "pause"]
+    assert len(pause_calls) == 1, f"Expected 1 pause validation call, got {len(pause_calls)}"
+
+
+def test_wave3_admit_retry_validation_preserves_behavior(
+    tmp_path: Path,
+    caplog,
+) -> None:
+    """Admit_retry with validation enabled must be clean."""
+    service, session_factory = _service(
+        tmp_path,
+        state_machine_validation_enabled=True,
+    )
+    caplog.set_level(logging.WARNING, logger="app.execution.service")
+
+    claimed_at = datetime(2026, 5, 3, 12, 0, tzinfo=UTC)
+    created = service.admit_create(
+        company_id="cmp_w3_retry",
+        actor_type="agent",
+        actor_id="agent_backend",
+        idempotency_key="idem_w3_retry_create",
+        request_fingerprint_hash="fp_w3_retry_create",
+        run_kind="provider_dispatch",
+        now=claimed_at,
+    )
+    claim = service.claim_next_attempt(
+        company_id="cmp_w3_retry",
+        worker_key="worker_alpha",
+        now=claimed_at,
+    )
+    assert claim is not None
+    service.mark_attempt_executing(
+        company_id="cmp_w3_retry",
+        run_id=claim.run_id,
+        attempt_id=claim.attempt_id,
+        lease_token=claim.lease_token,
+        step_key="provider_dispatch",
+        now=claimed_at + timedelta(seconds=1),
+    )
+
+    # Terminal failure so we can admit_retry.
+    failure = service.record_attempt_failure(
+        company_id="cmp_w3_retry",
+        run_id=claim.run_id,
+        attempt_id=claim.attempt_id,
+        lease_token=claim.lease_token,
+        failure_class="provider_terminal",
+        error_code="fatal",
+        error_detail="cannot proceed",
+        retryable=False,
+        max_attempts=3,
+        now=claimed_at + timedelta(seconds=2),
+    )
+    assert failure.run_state == "dead_lettered"
+
+    # Admit_retry with validation.
+    retry = service.admit_retry(
+        company_id="cmp_w3_retry",
+        run_id=created.run_id,
+        actor_type="agent",
+        actor_id="agent_retry",
+        idempotency_key="idem_retry_w3",
+        request_fingerprint_hash="fp_retry_w3",
+        now=claimed_at + timedelta(seconds=5),
+    )
+    assert retry.run_state == "queued"
+    assert retry.outbox_event == "run_dispatch"
+
+    with session_factory() as session:
+        run = session.get(RunORM, created.run_id)
+        assert run is not None
+        assert run.state == "queued"
+        assert run.operator_state == "admitted"
+
+    # No validation mismatches.
+    records = _validation_records(caplog)
+    assert records == [], f"Expected no validation records, got {len(records)}"
+
+
+def test_wave3_admit_retry_idempotent_skip_validation(
+    tmp_path: Path,
+    caplog,
+) -> None:
+    """Idempotent admit_retry must skip fresh validation."""
+    calls: list[tuple[str, ExecutionTransitionContext]] = []
+    service, session_factory = _service(
+        tmp_path,
+        state_machine_validation_enabled=False,
+        state_machine_validator_factory=lambda: _TriggerValidationSpy(
+            calls,
+            target_trigger="admit_retry",
+            result=ExecutionValidationResult(valid=True, validated=True),
+        ),
+    )
+    caplog.set_level(logging.WARNING, logger="app.execution.service")
+
+    claimed_at = datetime(2026, 5, 3, 12, 0, tzinfo=UTC)
+    created = service.admit_create(
+        company_id="cmp_w3_rskip",
+        actor_type="agent",
+        actor_id="agent_backend",
+        idempotency_key="idem_w3_rskip_create",
+        request_fingerprint_hash="fp_w3_rskip_create",
+        run_kind="provider_dispatch",
+        now=claimed_at,
+    )
+    claim = service.claim_next_attempt(
+        company_id="cmp_w3_rskip",
+        worker_key="worker_alpha",
+        now=claimed_at,
+    )
+    assert claim is not None
+    service.mark_attempt_executing(
+        company_id="cmp_w3_rskip",
+        run_id=claim.run_id,
+        attempt_id=claim.attempt_id,
+        lease_token=claim.lease_token,
+        step_key="provider_dispatch",
+        now=claimed_at + timedelta(seconds=1),
+    )
+    service.record_attempt_failure(
+        company_id="cmp_w3_rskip",
+        run_id=claim.run_id,
+        attempt_id=claim.attempt_id,
+        lease_token=claim.lease_token,
+        failure_class="provider_terminal",
+        error_code="fatal",
+        error_detail="cannot proceed",
+        retryable=False,
+        max_attempts=3,
+        now=claimed_at + timedelta(seconds=2),
+    )
+
+    # First admit_retry — goes through validation.
+    retry1 = service.admit_retry(
+        company_id="cmp_w3_rskip",
+        run_id=created.run_id,
+        actor_type="agent",
+        actor_id="agent_retry",
+        idempotency_key="idem_retry_skip",
+        request_fingerprint_hash="fp_retry_skip",
+        now=claimed_at + timedelta(seconds=5),
+    )
+    assert retry1.run_state == "queued"
+
+    # Idempotent admit_retry — must skip validation.
+    retry2 = service.admit_retry(
+        company_id="cmp_w3_rskip",
+        run_id=created.run_id,
+        actor_type="agent",
+        actor_id="agent_retry",
+        idempotency_key="idem_retry_skip",
+        request_fingerprint_hash="fp_retry_skip",
+        now=claimed_at + timedelta(seconds=5),
+    )
+    assert retry2.deduplicated is True
+
+    admit_retry_calls = [(t, c) for t, c in calls if t == "admit_retry"]
+    assert len(admit_retry_calls) == 1, f"Expected 1 admit_retry call, got {len(admit_retry_calls)}"
+
+
+def test_wave3_creation_validation_admit_create(
+    tmp_path: Path,
+    caplog,
+) -> None:
+    """admit_create with validation enabled validates initial state."""
+    service, session_factory = _service(
+        tmp_path,
+        state_machine_validation_enabled=True,
+    )
+    caplog.set_level(logging.WARNING, logger="app.execution.service")
+
+    created = service.admit_create(
+        company_id="cmp_w3_create",
+        actor_type="agent",
+        actor_id="agent_backend",
+        idempotency_key="idem_w3_create_val",
+        request_fingerprint_hash="fp_w3_create_val",
+        run_kind="provider_dispatch",
+    )
+    assert created.run_state == "queued"
+
+    # No creation mismatches.
+    records = _validation_records(caplog)
+    assert records == []
+
+    with session_factory() as session:
+        run = session.get(RunORM, created.run_id)
+        attempt = session.get(RunAttemptORM, created.attempt_id)
+        assert run is not None
+        assert attempt is not None
+        assert run.state == "queued"
+        assert run.operator_state == "admitted"
+        assert attempt.attempt_state == "queued"
+        assert attempt.operator_state == "admitted"
+        assert attempt.lease_status == "not_leased"
+
+
+def test_wave3_restart_from_scratch_validation(
+    tmp_path: Path,
+    caplog,
+) -> None:
+    """restart_run_from_scratch with validation enabled validates source invariants."""
+    service, session_factory = _service(
+        tmp_path,
+        state_machine_validation_enabled=True,
+    )
+    from app.execution.admin_service import ExecutionAdminService
+
+    admin = ExecutionAdminService(session_factory)
+    admin._transitions = service
+
+    caplog.set_level(logging.WARNING, logger="app.execution.service")
+
+    created = service.admit_create(
+        company_id="cmp_w3_restart",
+        actor_type="agent",
+        actor_id="agent_backend",
+        idempotency_key="idem_w3_restart_create",
+        request_fingerprint_hash="fp_w3_restart_create",
+        run_kind="provider_dispatch",
+    )
+
+    # Restart from scratch via admin service.
+    from app.instances.models import InstanceRecord
+
+    instance = InstanceRecord(
+        instance_id="instance_w3",
+        slug="instance-w3",
+        display_name="W3 Instance",
+        description="Test",
+        status="active",
+        tenant_id="tenant_w3",
+        company_id="cmp_w3_restart",
+        deployment_mode="restricted_eval",
+        exposure_mode="local_only",
+        is_default=True,
+        metadata={},
+        created_at=datetime(2026, 5, 3, 12, 0, tzinfo=UTC).isoformat(),
+        updated_at=datetime(2026, 5, 3, 12, 0, tzinfo=UTC).isoformat(),
+    )
+    restarted = admin.perform_operator_action(
+        instance=instance,
+        run_id=created.run_id,
+        actor_id="operator_1",
+        action="restart",
+        reason="full restart",
+    )
+    assert restarted.related_run_id == created.run_id
+    assert restarted.run_state == "queued"
+
+    # No validation mismatches (new run correctly initialized, source unchanged).
+    records = _validation_records(caplog)
+    assert records == [], f"Expected no validation records, got {len(records)}"
+
+
+def test_wave3_renew_lease_non_state_validation(
+    tmp_path: Path,
+    caplog,
+) -> None:
+    """renew_attempt_lease with validation must not log mismatches."""
+    service, session_factory = _service(
+        tmp_path,
+        state_machine_validation_enabled=True,
+    )
+    caplog.set_level(logging.WARNING, logger="app.execution.service")
+
+    claimed_at = datetime(2026, 5, 3, 12, 0, tzinfo=UTC)
+    created = service.admit_create(
+        company_id="cmp_w3_lease",
+        actor_type="agent",
+        actor_id="agent_backend",
+        idempotency_key="idem_w3_lease_create",
+        request_fingerprint_hash="fp_w3_lease_create",
+        run_kind="provider_dispatch",
+        now=claimed_at,
+    )
+    claim = service.claim_next_attempt(
+        company_id="cmp_w3_lease",
+        worker_key="worker_alpha",
+        now=claimed_at,
+    )
+    assert claim is not None
+    service.mark_attempt_executing(
+        company_id="cmp_w3_lease",
+        run_id=claim.run_id,
+        attempt_id=claim.attempt_id,
+        lease_token=claim.lease_token,
+        step_key="provider_dispatch",
+        now=claimed_at + timedelta(seconds=1),
+    )
+
+    # Renew lease — non-state operation, must not change state.
+    heartbeat = service.renew_attempt_lease(
+        company_id="cmp_w3_lease",
+        run_id=claim.run_id,
+        attempt_id=claim.attempt_id,
+        lease_token=claim.lease_token,
+        lease_ttl_seconds=45,
+        now=claimed_at + timedelta(seconds=10),
+    )
+    assert heartbeat.lease_expires_at > heartbeat.last_heartbeat_at
+
+    with session_factory() as session:
+        run = session.get(RunORM, created.run_id)
+        attempt = session.get(RunAttemptORM, created.attempt_id)
+        assert run is not None
+        assert attempt is not None
+        assert run.state == "executing"  # unchanged
+        assert attempt.attempt_state == "executing"  # unchanged
+
+    # No mismatches logged.
+    records = _validation_records(caplog)
+    assert records == [], f"Expected no validation records, got {len(records)}"
+
+
+def test_wave3_escalate_non_state_validation(
+    tmp_path: Path,
+    caplog,
+) -> None:
+    """escalate_run with validation must not log mismatches."""
+    from app.execution.admin_service import ExecutionAdminService
+
+    service, session_factory = _service(
+        tmp_path,
+        state_machine_validation_enabled=True,
+    )
+    admin = ExecutionAdminService(session_factory)
+    admin._transitions = service
+
+    caplog.set_level(logging.WARNING, logger="app.execution.service")
+
+    from app.instances.models import InstanceRecord
+
+    instance = InstanceRecord(
+        instance_id="instance_esc",
+        slug="instance-esc",
+        display_name="Esc Instance",
+        description="Test",
+        status="active",
+        tenant_id="tenant_esc",
+        company_id="cmp_w3_esc",
+        deployment_mode="restricted_eval",
+        exposure_mode="local_only",
+        is_default=True,
+        metadata={},
+        created_at=datetime(2026, 5, 3, 12, 0, tzinfo=UTC).isoformat(),
+        updated_at=datetime(2026, 5, 3, 12, 0, tzinfo=UTC).isoformat(),
+    )
+
+    created = service.admit_create(
+        company_id="cmp_w3_esc",
+        actor_type="agent",
+        actor_id="agent_backend",
+        idempotency_key="idem_w3_esc_create",
+        request_fingerprint_hash="fp_w3_esc_create",
+        run_kind="provider_dispatch",
+    )
+
+    # Escalate — non-state operation.
+    escalated = admin.perform_operator_action(
+        instance=instance,
+        run_id=created.run_id,
+        actor_id="operator_1",
+        action="escalate",
+        reason="needs heavier lane",
+        execution_lane="interactive_heavy",
+    )
+    assert escalated.execution_lane == "interactive_heavy"
+    assert escalated.run_state == "queued"  # state unchanged
+
+    # No mismatches.
+    records = _validation_records(caplog)
+    assert records == [], f"Expected no validation records, got {len(records)}"
+
+
+# ---------------------------------------------------------------------------
+# SPEC §5 compatibility tests — resolve "Decision required" findings
+# before Phase 1c authority transfer
+# ---------------------------------------------------------------------------
+def test_spec5_finding2_stale_run_complete_success_now_blocked(
+    tmp_path: Path,
+) -> None:
+    """SPEC §5 finding #2: complete_attempt_success now blocked by pre-check.
+
+    The state machine pre-check (Phase 1c) rejects ``complete_success`` from a
+    ``dead_lettered`` run.  The ad-hoc service checks are bypassed when
+    validation is enabled and the authoritative guard takes over.
+    """
+    service, session_factory = _service(
+        tmp_path,
+        state_machine_validation_enabled=True,
+    )
+
+    # Set up a run with an in-flight executing attempt.
+    created = service.admit_create(
+        company_id="cmp_s5_f2",
+        actor_type="agent",
+        actor_id="agent_backend",
+        idempotency_key="idem_s5_f2_create",
+        request_fingerprint_hash="fp_s5_f2_create",
+        run_kind="provider_dispatch",
+    )
+    claim = service.claim_next_attempt(
+        company_id="cmp_s5_f2",
+        worker_key="worker_s5_f2",
+    )
+    assert claim is not None
+    service.mark_attempt_executing(
+        company_id="cmp_s5_f2",
+        run_id=claim.run_id,
+        attempt_id=claim.attempt_id,
+        lease_token=claim.lease_token,
+        step_key="provider_call",
+    )
+
+    # Manipulate the run into a stale state via direct DB access.
+    with session_factory() as session:
+        run = session.get(RunORM, created.run_id)
+        assert run is not None
+        run.state = "dead_lettered"
+        session.commit()
+
+    # The state machine pre-check now blocks complete_success from
+    # dead_lettered — service raises RunTransitionConflictError.
+    with pytest.raises(
+        RunTransitionConflictError,
+        match="not allowed",
+    ):
+        service.complete_attempt_success(
+            company_id="cmp_s5_f2",
+            run_id=claim.run_id,
+            attempt_id=claim.attempt_id,
+            lease_token=claim.lease_token,
+            result_summary={"note": "stale run completion"},
+        )
+
+
+def test_spec5_finding3_stale_approval_decision_flagged_by_validator(
+    tmp_path: Path,
+    caplog,
+) -> None:
+    """SPEC §5 finding #3: decide_approval pre-check blocks stale run state.
+
+    The existing service only checks ``approval_link.gate_status == "open"``
+    and does NOT require the run or attempt to still be in
+    ``waiting_on_approval`` state.  The Phase 1c authoritative pre-check
+    now blocks ``resume_after_approval`` from any state other than
+    ``waiting_on_approval``, making the finding authoritative.
+    """
+    service, session_factory = _service(
+        tmp_path,
+        state_machine_validation_enabled=True,
+    )
+
+    # Set up a run waiting on approval.
+    created = service.admit_create(
+        company_id="cmp_s5_f3",
+        actor_type="agent",
+        actor_id="agent_backend",
+        idempotency_key="idem_s5_f3_create",
+        request_fingerprint_hash="fp_s5_f3_create",
+        run_kind="provider_dispatch",
+    )
+    claim = service.claim_next_attempt(
+        company_id="cmp_s5_f3",
+        worker_key="worker_s5_f3",
+    )
+    assert claim is not None
+    service.mark_attempt_executing(
+        company_id="cmp_s5_f3",
+        run_id=claim.run_id,
+        attempt_id=claim.attempt_id,
+        lease_token=claim.lease_token,
+        step_key="approval_gate",
+    )
+    service.open_approval(
+        company_id="cmp_s5_f3",
+        run_id=claim.run_id,
+        attempt_id=claim.attempt_id,
+        approval_id="approval_s5_f3",
+        gate_key="approval_gate",
+    )
+
+    # Manipulate the run into a stale state via direct DB access.  The
+    # approval link remains open but the state machine blocks the
+    # transition because ``resume_after_approval`` requires the run to
+    # be in ``waiting_on_approval`` state.
+    with session_factory() as session:
+        run = session.get(RunORM, created.run_id)
+        assert run is not None
+        run.state = "queued"
+        session.commit()
+
+    # The authoritative pre-check now blocks stale approval decisions.
+    with pytest.raises(
+        RunTransitionConflictError,
+        match="not allowed",
+    ):
+        service.decide_approval(
+            company_id="cmp_s5_f3",
+            approval_id="approval_s5_f3",
+            actor_type="user",
+            actor_id="approver_s5_f3",
+            idempotency_key="idem_s5_f3_decide",
+            request_fingerprint_hash="fp_s5_f3_decide",
+            approved=True,
+        )
+
+
+# ---------------------------------------------------------------------------
+# Phase 1c: authoritative pre-check tests
+# ---------------------------------------------------------------------------
+
+
+def test_claim_attempt_happy_path_with_real_validator(
+    tmp_path: Path,
+) -> None:
+    """State machine allows claim_attempt from queued."""
+    service, _session_factory = _service(
+        tmp_path,
+        state_machine_validation_enabled=True,
+    )
+    created = service.admit_create(
+        company_id="cmp_f1c_c",
+        actor_type="agent",
+        actor_id="agent_backend",
+        idempotency_key="idem_f1c_cclaim",
+        request_fingerprint_hash="fp_f1c_cclaim",
+        run_kind="provider_dispatch",
+    )
+    claim = service.claim_next_attempt(
+        company_id="cmp_f1c_c",
+        worker_key="worker_alpha",
+    )
+    assert claim is not None
+    assert claim.run_id == created.run_id
+
+
+def test_claim_attempt_blocked_by_state_machine(
+    tmp_path: Path,
+) -> None:
+    """Authoritative pre-check blocks claim_attempt with non-claimable context."""
+    service, _session_factory = _service(
+        tmp_path,
+        state_machine_validation_enabled=True,
+    )
+    # Build a context showing the run is already in a terminal state.
+    ctx = ExecutionTransitionContext(
+        run_id="test_run",
+        attempt_id="test_attempt",
+        run_state="succeeded",
+        operator_state="completed",
+        attempt_state="succeeded",
+        attempt_operator_state="completed",
+        active_attempt_no=1,
+    )
+    with pytest.raises(RunTransitionConflictError, match="not allowed"):
+        service._check_transition_allowed_or_raise("claim_attempt", ctx)
+
+
+def test_start_execution_blocked_from_wrong_state(
+    tmp_path: Path,
+) -> None:
+    """Authoritative pre-check blocks start_execution when not dispatching."""
+    service, _session_factory = _service(
+        tmp_path,
+        state_machine_validation_enabled=True,
+    )
+    created = service.admit_create(
+        company_id="cmp_f1c_se",
+        actor_type="agent",
+        actor_id="agent_backend",
+        idempotency_key="idem_f1c_sestart",
+        request_fingerprint_hash="fp_f1c_sestart",
+        run_kind="provider_dispatch",
+    )
+    # Use a snapshot that shows a non-dispatching state to trigger block.
+    with _session_factory() as session:
+        run = session.get(RunORM, created.run_id)
+        attempt = session.execute(select(RunAttemptORM).where(RunAttemptORM.run_id == created.run_id)).scalars().first()
+        assert run is not None and attempt is not None
+        # Fabricate a snapshot showing 'executing' as current state
+        # so start_execution is not valid (source must be dispatching).
+        before_snapshot = ExecutionStateSnapshot(
+            run_id=run.id,
+            attempt_id=attempt.id,
+            run_state="executing",
+            operator_state="executing",
+            attempt_state="executing",
+            attempt_operator_state="executing",
+            lease_token=attempt.lease_token,
+            extra={
+                "attempt_no": attempt.attempt_no,
+                "active_attempt_no": run.active_attempt_no,
+                "scheduled_at": attempt.scheduled_at,
+                "lease_expires_at": attempt.lease_expires_at,
+                "next_wakeup_at": run.next_wakeup_at,
+            },
+        )
+        ctx = service._state_machine_context(
+            before=before_snapshot,
+            now=datetime.now(tz=UTC),
+            provided_lease_token="fake_token",
+            service_chosen_operator_state="executing",
+        )
+        with pytest.raises(
+            RunTransitionConflictError,
+            match="not allowed",
+        ):
+            service._check_transition_allowed_or_raise("start_execution", ctx)
+
+
+def test_start_execution_blocked_by_wrong_lease_token(
+    tmp_path: Path,
+) -> None:
+    """Authoritative pre-check blocks start_execution with mismatched token."""
+    service, _session_factory = _service(
+        tmp_path,
+        state_machine_validation_enabled=True,
+    )
+    _ = service.admit_create(
+        company_id="cmp_f1c_sel",
+        actor_type="agent",
+        actor_id="agent_backend",
+        idempotency_key="idem_f1c_seltoken",
+        request_fingerprint_hash="fp_f1c_seltoken",
+        run_kind="provider_dispatch",
+    )
+    claim = service.claim_next_attempt(
+        company_id="cmp_f1c_sel",
+        worker_key="worker_alpha",
+    )
+    assert claim is not None
+    # Call mark_attempt_executing with a WRONG lease token.
+    # The pre-check should catch this via has_valid_lease_token guard.
+    with pytest.raises(
+        RunTransitionConflictError,
+        match="not allowed",
+    ):
+        service.mark_attempt_executing(
+            company_id="cmp_f1c_sel",
+            run_id=claim.run_id,
+            attempt_id=claim.attempt_id,
+            lease_token="wrong_token",
+            step_key="test_step",
+        )
+
+
+def test_complete_success_blocked_by_wrong_lease_token(
+    tmp_path: Path,
+) -> None:
+    """Authoritative pre-check blocks complete_success with mismatched token."""
+    service, _session_factory = _service(
+        tmp_path,
+        state_machine_validation_enabled=True,
+    )
+    _ = service.admit_create(
+        company_id="cmp_f1c_cs",
+        actor_type="agent",
+        actor_id="agent_backend",
+        idempotency_key="idem_f1c_cscomplete",
+        request_fingerprint_hash="fp_f1c_cscomplete",
+        run_kind="provider_dispatch",
+    )
+    claim = service.claim_next_attempt(
+        company_id="cmp_f1c_cs",
+        worker_key="worker_alpha",
+    )
+    assert claim is not None
+    service.mark_attempt_executing(
+        company_id="cmp_f1c_cs",
+        run_id=claim.run_id,
+        attempt_id=claim.attempt_id,
+        lease_token=claim.lease_token,
+        step_key="test_step",
+    )
+    # Call complete_attempt_success with a WRONG lease token.
+    # The pre-check should catch this via has_valid_lease_token guard.
+    with pytest.raises(
+        RunTransitionConflictError,
+        match="not allowed",
+    ):
+        service.complete_attempt_success(
+            company_id="cmp_f1c_cs",
+            run_id=claim.run_id,
+            attempt_id=claim.attempt_id,
+            lease_token="wrong_token",
+        )
+
+
+def test_record_attempt_failure_blocked_by_wrong_lease_token(
+    tmp_path: Path,
+) -> None:
+    """Authoritative pre-check blocks record_attempt_failure with wrong token."""
+    service, _session_factory = _service(
+        tmp_path,
+        state_machine_validation_enabled=True,
+    )
+    _ = service.admit_create(
+        company_id="cmp_f1c_rf",
+        actor_type="agent",
+        actor_id="agent_backend",
+        idempotency_key="idem_f1c_rffailure",
+        request_fingerprint_hash="fp_f1c_rffailure",
+        run_kind="provider_dispatch",
+    )
+    claim = service.claim_next_attempt(
+        company_id="cmp_f1c_rf",
+        worker_key="worker_alpha",
+    )
+    assert claim is not None
+    service.mark_attempt_executing(
+        company_id="cmp_f1c_rf",
+        run_id=claim.run_id,
+        attempt_id=claim.attempt_id,
+        lease_token=claim.lease_token,
+        step_key="test_step",
+    )
+    # Call record_attempt_failure with a WRONG lease token.
+    # The pre-check should block via has_valid_lease_token guard.
+    with pytest.raises(
+        RunTransitionConflictError,
+        match="not allowed",
+    ):
+        service.record_attempt_failure(
+            company_id="cmp_f1c_rf",
+            run_id=claim.run_id,
+            attempt_id=claim.attempt_id,
+            lease_token="wrong_token",
+            failure_class="test",
+            error_code="ERR_TEST",
+            error_detail="test blocking",
+            retryable=False,
+            max_attempts=3,
+        )
+
+
+def test_request_cancel_blocked_by_state_machine_on_terminal_run(
+    tmp_path: Path,
+) -> None:
+    """Authoritative pre-check blocks request_cancel on terminal run."""
+    service, _session_factory = _service(
+        tmp_path,
+        state_machine_validation_enabled=True,
+    )
+    _ = service.admit_create(
+        company_id="cmp_f1c_rc",
+        actor_type="agent",
+        actor_id="agent_backend",
+        idempotency_key="idem_f1c_rccancel",
+        request_fingerprint_hash="fp_f1c_rccancel",
+        run_kind="provider_dispatch",
+    )
+    claim = service.claim_next_attempt(
+        company_id="cmp_f1c_rc",
+        worker_key="worker_alpha",
+    )
+    assert claim is not None
+    service.mark_attempt_executing(
+        company_id="cmp_f1c_rc",
+        run_id=claim.run_id,
+        attempt_id=claim.attempt_id,
+        lease_token=claim.lease_token,
+        step_key="test_step",
+    )
+    service.complete_attempt_success(
+        company_id="cmp_f1c_rc",
+        run_id=claim.run_id,
+        attempt_id=claim.attempt_id,
+        lease_token=claim.lease_token,
+    )
+    # Now the run is terminal (succeeded). request_cancel should be blocked
+    # by the pre-check (is_cancellable guard).
+    with pytest.raises(
+        RunTransitionConflictError,
+        match="not allowed",
+    ):
+        service.request_cancel(
+            company_id="cmp_f1c_rc",
+            run_id=claim.run_id,
+            actor_type="agent",
+            actor_id="test",
+            idempotency_key="cancel_terminal_f1c_rc",
+            request_fingerprint_hash="fp_cancel_terminal_f1c_rc",
+        )
+
+
+def test_state_machine_pre_check_happy_path_worker_flow(
+    tmp_path: Path,
+) -> None:
+    """Full worker hot path runs without pre-check errors using real validator."""
+    service, session_factory = _service(
+        tmp_path,
+        state_machine_validation_enabled=True,
+    )
+    created = service.admit_create(
+        company_id="cmp_f1c_hp",
+        actor_type="agent",
+        actor_id="agent_backend",
+        idempotency_key="idem_f1c_hpworker",
+        request_fingerprint_hash="fp_f1c_hpworker",
+        run_kind="provider_dispatch",
+    )
+
+    # Claim attempt
+    claim = service.claim_next_attempt(
+        company_id="cmp_f1c_hp",
+        worker_key="worker_alpha",
+    )
+    assert claim is not None
+    assert claim.run_id == created.run_id
+
+    # Start executing
+    service.mark_attempt_executing(
+        company_id="cmp_f1c_hp",
+        run_id=claim.run_id,
+        attempt_id=claim.attempt_id,
+        lease_token=claim.lease_token,
+        step_key="test_step",
+    )
+
+    # Record a retryable failure with delay
+    failure = service.record_attempt_failure(
+        company_id="cmp_f1c_hp",
+        run_id=claim.run_id,
+        attempt_id=claim.attempt_id,
+        lease_token=claim.lease_token,
+        failure_class="provider_transient",
+        error_code="ERR_TEMP",
+        error_detail="temporary issue",
+        retryable=True,
+        max_attempts=3,
+        backoff_base_seconds=10,
+    )
+    assert failure.retry_scheduled
+    assert failure.next_attempt_id is not None
+
+    # Reclaim after retry backoff (manually set scheduled_at in the past)
+    with session_factory() as session:
+        session.execute(update(RunAttemptORM).where(RunAttemptORM.id == failure.next_attempt_id).values(scheduled_at=datetime.now(tz=UTC) - timedelta(minutes=5)))
+        session.commit()
+
+    claim2 = service.claim_next_attempt(
+        company_id="cmp_f1c_hp",
+        worker_key="worker_alpha",
+    )
+    assert claim2 is not None
+    assert claim2.attempt_id == failure.next_attempt_id
+
+    # Second attempt: failure with no retry budget → dead_letter
+    service.mark_attempt_executing(
+        company_id="cmp_f1c_hp",
+        run_id=claim2.run_id,
+        attempt_id=claim2.attempt_id,
+        lease_token=claim2.lease_token,
+        step_key="test_step2",
+    )
+    failure2 = service.record_attempt_failure(
+        company_id="cmp_f1c_hp",
+        run_id=claim2.run_id,
+        attempt_id=claim2.attempt_id,
+        lease_token=claim2.lease_token,
+        failure_class="provider_terminal",
+        error_code="ERR_PERM",
+        error_detail="non-retryable error",
+        retryable=False,
+        max_attempts=3,
+    )
+    assert not failure2.retry_scheduled
+    assert failure2.run_state == "dead_lettered"
+
+
+# ---------------------------------------------------------------------------
+# Phase 1c-02: authoritative pre-check for approval/interrupt/quarantine/reconcile
+# ---------------------------------------------------------------------------
+
+
+def test_open_approval_happy_path_with_real_validator(
+    tmp_path: Path,
+) -> None:
+    """State machine allows open_approval from executing state."""
+    service, _session_factory = _service(
+        tmp_path,
+        state_machine_validation_enabled=True,
+    )
+    _created = service.admit_create(
+        company_id="cmp_f1c2_oa",
+        actor_type="agent",
+        actor_id="agent_backend",
+        idempotency_key="idem_f1c2_oahappy",
+        request_fingerprint_hash="fp_f1c2_oahappy",
+        run_kind="provider_dispatch",
+    )
+    claim = service.claim_next_attempt(
+        company_id="cmp_f1c2_oa",
+        worker_key="worker_alpha",
+    )
+    assert claim is not None
+    service.mark_attempt_executing(
+        company_id="cmp_f1c2_oa",
+        run_id=claim.run_id,
+        attempt_id=claim.attempt_id,
+        lease_token=claim.lease_token,
+        step_key="test_step",
+    )
+    result = service.open_approval(
+        company_id="cmp_f1c2_oa",
+        run_id=claim.run_id,
+        attempt_id=claim.attempt_id,
+        approval_id="approval_oa_happy",
+        gate_key="gate_1",
+    )
+    assert result.approval_link_id is not None
+    assert result.run_id == claim.run_id
+
+
+def test_open_approval_blocked_from_wrong_state(
+    tmp_path: Path,
+) -> None:
+    """Authoritative pre-check blocks open_approval when not executing."""
+    service, session_factory = _service(
+        tmp_path,
+        state_machine_validation_enabled=True,
+    )
+    created = service.admit_create(
+        company_id="cmp_f1c2_oab",
+        actor_type="agent",
+        actor_id="agent_backend",
+        idempotency_key="idem_f1c2_oablock",
+        request_fingerprint_hash="fp_f1c2_oablock",
+        run_kind="provider_dispatch",
+    )
+    # Try to open approval from a queued run (not executing).
+    with session_factory() as session:
+        attempt = session.execute(select(RunAttemptORM).where(RunAttemptORM.run_id == created.run_id)).scalars().first()
+        assert attempt is not None
+        attempt_id = attempt.id
+    with pytest.raises(
+        RunTransitionConflictError,
+        match="not allowed",
+    ):
+        service.open_approval(
+            company_id="cmp_f1c2_oab",
+            run_id=created.run_id,
+            attempt_id=attempt_id,
+            approval_id="approval_oab_lock",
+            gate_key="gate_1",
+        )
+
+
+def test_decide_approval_happy_path_with_real_validator(
+    tmp_path: Path,
+) -> None:
+    """State machine allows approve from waiting_on_approval state."""
+    service, _session_factory = _service(
+        tmp_path,
+        state_machine_validation_enabled=True,
+    )
+    _created = service.admit_create(
+        company_id="cmp_f1c2_da",
+        actor_type="agent",
+        actor_id="agent_backend",
+        idempotency_key="idem_f1c2_dahappy",
+        request_fingerprint_hash="fp_f1c2_dahappy",
+        run_kind="provider_dispatch",
+    )
+    claim = service.claim_next_attempt(
+        company_id="cmp_f1c2_da",
+        worker_key="worker_alpha",
+    )
+    assert claim is not None
+    service.mark_attempt_executing(
+        company_id="cmp_f1c2_da",
+        run_id=claim.run_id,
+        attempt_id=claim.attempt_id,
+        lease_token=claim.lease_token,
+        step_key="test_step",
+    )
+    __approval = service.open_approval(
+        company_id="cmp_f1c2_da",
+        run_id=claim.run_id,
+        attempt_id=claim.attempt_id,
+        approval_id="approval_da_happy",
+        gate_key="gate_1",
+    )
+    result = service.decide_approval(
+        company_id="cmp_f1c2_da",
+        approval_id="approval_da_happy",
+        actor_type="user",
+        actor_id="approver",
+        idempotency_key="idem_f1c2_dadecide",
+        request_fingerprint_hash="fp_f1c2_dadecide",
+        approved=True,
+    )
+    assert result.run_state == "queued"
+
+
+def test_decide_approval_reject_cancel_with_real_validator(
+    tmp_path: Path,
+) -> None:
+    """State machine allows reject_approval_cancel from waiting_on_approval."""
+    service, _session_factory = _service(
+        tmp_path,
+        state_machine_validation_enabled=True,
+    )
+    _created = service.admit_create(
+        company_id="cmp_f1c2_darc",
+        actor_type="agent",
+        actor_id="agent_backend",
+        idempotency_key="idem_f1c2_darchappy",
+        request_fingerprint_hash="fp_f1c2_darchappy",
+        run_kind="provider_dispatch",
+    )
+    claim = service.claim_next_attempt(
+        company_id="cmp_f1c2_darc",
+        worker_key="worker_alpha",
+    )
+    assert claim is not None
+    service.mark_attempt_executing(
+        company_id="cmp_f1c2_darc",
+        run_id=claim.run_id,
+        attempt_id=claim.attempt_id,
+        lease_token=claim.lease_token,
+        step_key="test_step",
+    )
+    service.open_approval(
+        company_id="cmp_f1c2_darc",
+        run_id=claim.run_id,
+        attempt_id=claim.attempt_id,
+        approval_id="approval_darc_reject",
+        gate_key="gate_1",
+        resume_disposition="cancel",
+    )
+    result = service.decide_approval(
+        company_id="cmp_f1c2_darc",
+        approval_id="approval_darc_reject",
+        actor_type="user",
+        actor_id="approver",
+        idempotency_key="idem_f1c2_darcdecide",
+        request_fingerprint_hash="fp_f1c2_darcdecide",
+        approved=False,
+    )
+    assert result.run_state == "cancel_requested"
+
+
+def test_decide_approval_blocked_by_state_machine_wrong_state(
+    tmp_path: Path,
+    caplog,
+) -> None:
+    """Advisory validation detects decide_approval from non-waiting state."""
+    service, session_factory = _service(
+        tmp_path,
+        state_machine_validation_enabled=True,
+    )
+    _created = service.admit_create(
+        company_id="cmp_f1c2_dab",
+        actor_type="agent",
+        actor_id="agent_backend",
+        idempotency_key="idem_f1c2_dabblock",
+        request_fingerprint_hash="fp_f1c2_dabblock",
+        run_kind="provider_dispatch",
+    )
+    claim = service.claim_next_attempt(
+        company_id="cmp_f1c2_dab",
+        worker_key="worker_alpha",
+    )
+    assert claim is not None
+    service.mark_attempt_executing(
+        company_id="cmp_f1c2_dab",
+        run_id=claim.run_id,
+        attempt_id=claim.attempt_id,
+        lease_token=claim.lease_token,
+        step_key="test_step",
+    )
+    _approval = service.open_approval(
+        company_id="cmp_f1c2_dab",
+        run_id=claim.run_id,
+        attempt_id=claim.attempt_id,
+        approval_id="approval_dab_block",
+        gate_key="gate_1",
+    )
+    # Manually move the run out of waiting_on_approval to trigger a state
+    # machine mismatch on approve.
+    with session_factory() as session:
+        run = session.get(RunORM, claim.run_id)
+        assert run is not None
+        run.state = "queued"
+        run.operator_state = "admitted"
+        session.commit()
+
+    # Even though the approval link is open, the pre-check should block
+    # because the run is not in waiting_on_approval state.
+    with pytest.raises(
+        RunTransitionConflictError,
+        match="not allowed",
+    ):
+        service.decide_approval(
+            company_id="cmp_f1c2_dab",
+            approval_id="approval_dab_block",
+            actor_type="user",
+            actor_id="approver",
+            idempotency_key="idem_f1c2_dabdecide",
+            request_fingerprint_hash="fp_f1c2_dabdecide",
+            approved=True,
+        )
+
+
+def test_interrupt_run_happy_path_with_real_validator(
+    tmp_path: Path,
+) -> None:
+    """State machine allows interrupt from executing."""
+    service, _session_factory = _service(
+        tmp_path,
+        state_machine_validation_enabled=True,
+    )
+    _created = service.admit_create(
+        company_id="cmp_f1c2_ir",
+        actor_type="agent",
+        actor_id="agent_backend",
+        idempotency_key="idem_f1c2_irhappy",
+        request_fingerprint_hash="fp_f1c2_irhappy",
+        run_kind="provider_dispatch",
+    )
+    claim = service.claim_next_attempt(
+        company_id="cmp_f1c2_ir",
+        worker_key="worker_alpha",
+    )
+    assert claim is not None
+    service.mark_attempt_executing(
+        company_id="cmp_f1c2_ir",
+        run_id=claim.run_id,
+        attempt_id=claim.attempt_id,
+        lease_token=claim.lease_token,
+        step_key="test_step",
+    )
+    result = service.interrupt_run(
+        company_id="cmp_f1c2_ir",
+        run_id=claim.run_id,
+        actor_type="system",
+        actor_id="admin",
+        idempotency_key="idem_f1c2_irinterrupt",
+        request_fingerprint_hash="fp_f1c2_irinterrupt",
+        reason="operator request",
+    )
+    assert result.run_state == "cancel_requested"
+
+
+def test_interrupt_run_blocked_from_terminal_operator_state(
+    tmp_path: Path,
+) -> None:
+    """Authoritative pre-check blocks interrupt from terminal operator state."""
+    service, _session_factory = _service(
+        tmp_path,
+        state_machine_validation_enabled=True,
+    )
+    _created = service.admit_create(
+        company_id="cmp_f1c2_irb",
+        actor_type="agent",
+        actor_id="agent_backend",
+        idempotency_key="idem_f1c2_irblock",
+        request_fingerprint_hash="fp_f1c2_irblock",
+        run_kind="provider_dispatch",
+    )
+    claim = service.claim_next_attempt(
+        company_id="cmp_f1c2_irb",
+        worker_key="worker_alpha",
+    )
+    assert claim is not None
+    service.mark_attempt_executing(
+        company_id="cmp_f1c2_irb",
+        run_id=claim.run_id,
+        attempt_id=claim.attempt_id,
+        lease_token=claim.lease_token,
+        step_key="test_step",
+    )
+    service.quarantine_run(
+        company_id="cmp_f1c2_irb",
+        run_id=claim.run_id,
+        actor_type="system",
+        actor_id="admin",
+        idempotency_key="idem_f1c2_irbquarantine",
+        request_fingerprint_hash="fp_f1c2_irbquarantine",
+        reason="quarantine",
+    )
+    # Run is now dead_lettered/quarantined (operator_state is terminal).
+    with pytest.raises(
+        RunTransitionConflictError,
+        match="not allowed",
+    ):
+        service.interrupt_run(
+            company_id="cmp_f1c2_irb",
+            run_id=claim.run_id,
+            actor_type="system",
+            actor_id="admin",
+            idempotency_key="idem_f1c2_irbinterrupt",
+            request_fingerprint_hash="fp_f1c2_irbinterrupt",
+            reason="should be blocked",
+        )
+
+
+def test_quarantine_run_happy_path_with_real_validator(
+    tmp_path: Path,
+) -> None:
+    """State machine allows quarantine from executing."""
+    service, _session_factory = _service(
+        tmp_path,
+        state_machine_validation_enabled=True,
+    )
+    _created = service.admit_create(
+        company_id="cmp_f1c2_qr",
+        actor_type="agent",
+        actor_id="agent_backend",
+        idempotency_key="idem_f1c2_qrhappy",
+        request_fingerprint_hash="fp_f1c2_qrhappy",
+        run_kind="provider_dispatch",
+    )
+    claim = service.claim_next_attempt(
+        company_id="cmp_f1c2_qr",
+        worker_key="worker_alpha",
+    )
+    assert claim is not None
+    service.mark_attempt_executing(
+        company_id="cmp_f1c2_qr",
+        run_id=claim.run_id,
+        attempt_id=claim.attempt_id,
+        lease_token=claim.lease_token,
+        step_key="test_step",
+    )
+    result = service.quarantine_run(
+        company_id="cmp_f1c2_qr",
+        run_id=claim.run_id,
+        actor_type="system",
+        actor_id="admin",
+        idempotency_key="idem_f1c2_qrquarantine",
+        request_fingerprint_hash="fp_f1c2_qrquarantine",
+        reason="operator quarantine",
+    )
+    assert result.run_state == "dead_lettered"
+
+
+def test_quarantine_run_blocked_when_already_quarantined(
+    tmp_path: Path,
+) -> None:
+    """Authoritative pre-check blocks quarantine on already-quarantined run."""
+    service, _session_factory = _service(
+        tmp_path,
+        state_machine_validation_enabled=True,
+    )
+    _created = service.admit_create(
+        company_id="cmp_f1c2_qrb",
+        actor_type="agent",
+        actor_id="agent_backend",
+        idempotency_key="idem_f1c2_qrbhappy",
+        request_fingerprint_hash="fp_f1c2_qrbhappy",
+        run_kind="provider_dispatch",
+    )
+    claim = service.claim_next_attempt(
+        company_id="cmp_f1c2_qrb",
+        worker_key="worker_alpha",
+    )
+    assert claim is not None
+    service.mark_attempt_executing(
+        company_id="cmp_f1c2_qrb",
+        run_id=claim.run_id,
+        attempt_id=claim.attempt_id,
+        lease_token=claim.lease_token,
+        step_key="test_step",
+    )
+    result = service.quarantine_run(
+        company_id="cmp_f1c2_qrb",
+        run_id=claim.run_id,
+        actor_type="system",
+        actor_id="admin",
+        idempotency_key="idem_f1c2_qrbquarantine1",
+        request_fingerprint_hash="fp_f1c2_qrbquarantine1",
+        reason="first quarantine",
+    )
+    assert result.run_state == "dead_lettered"
+
+    # Second quarantine on the same run should be blocked.
+    with pytest.raises(
+        RunTransitionConflictError,
+        match="not allowed",
+    ):
+        service.quarantine_run(
+            company_id="cmp_f1c2_qrb",
+            run_id=claim.run_id,
+            actor_type="system",
+            actor_id="admin",
+            idempotency_key="idem_f1c2_qrbquarantine2",
+            request_fingerprint_hash="fp_f1c2_qrbquarantine2",
+            reason="second quarantine",
+        )
+
+
+def test_reconcile_expired_leases_happy_path_with_real_validator(
+    tmp_path: Path,
+) -> None:
+    """State machine allows expire_lease for expired in-flight attempt."""
+    service, session_factory = _service(
+        tmp_path,
+        state_machine_validation_enabled=True,
+    )
+    _created = service.admit_create(
+        company_id="cmp_f1c2_rel",
+        actor_type="agent",
+        actor_id="agent_backend",
+        idempotency_key="idem_f1c2_relhappy",
+        request_fingerprint_hash="fp_f1c2_relhappy",
+        run_kind="provider_dispatch",
+    )
+    claim = service.claim_next_attempt(
+        company_id="cmp_f1c2_rel",
+        worker_key="worker_alpha",
+    )
+    assert claim is not None
+    service.mark_attempt_executing(
+        company_id="cmp_f1c2_rel",
+        run_id=claim.run_id,
+        attempt_id=claim.attempt_id,
+        lease_token=claim.lease_token,
+        step_key="test_step",
+    )
+    # Artificially expire the lease.
+    with session_factory() as session:
+        session.execute(update(RunAttemptORM).where(RunAttemptORM.id == claim.attempt_id).values(lease_expires_at=datetime.now(tz=UTC) - timedelta(minutes=5)))
+        session.commit()
+
+    results = service.reconcile_expired_leases(
+        company_id="cmp_f1c2_rel",
+    )
+    assert len(results) == 1
+    assert results[0].attempt_id == claim.attempt_id
+    assert results[0].reconciled_to_state == "quarantined"
+
+
+def test_reconcile_expired_leases_skips_non_expired(
+    tmp_path: Path,
+) -> None:
+    """Non-expired in-flight attempts are skipped by reconcile loop."""
+    service, _session_factory = _service(
+        tmp_path,
+        state_machine_validation_enabled=True,
+    )
+    _created = service.admit_create(
+        company_id="cmp_f1c2_res",
+        actor_type="agent",
+        actor_id="agent_backend",
+        idempotency_key="idem_f1c2_resskip",
+        request_fingerprint_hash="fp_f1c2_resskip",
+        run_kind="provider_dispatch",
+    )
+    claim = service.claim_next_attempt(
+        company_id="cmp_f1c2_res",
+        worker_key="worker_alpha",
+    )
+    assert claim is not None
+    service.mark_attempt_executing(
+        company_id="cmp_f1c2_res",
+        run_id=claim.run_id,
+        attempt_id=claim.attempt_id,
+        lease_token=claim.lease_token,
+        step_key="test_step",
+    )
+    # Lease is still current - should be skipped by the query.
+    results = service.reconcile_expired_leases(
+        company_id="cmp_f1c2_res",
+    )
+    assert len(results) == 0
+
+
+# ---------------------------------------------------------------------------
+# Phase 1c-03 — Authoritative pre-checks for operator, create, retry, and
+# non-state operations.
+# ---------------------------------------------------------------------------
+
+
+def test_pause_run_blocked_from_terminal_operator_state(
+    tmp_path: Path,
+) -> None:
+    """Authoritative pre-check blocks pause from quarantined (terminal) state."""
+    service, _session_factory = _service(
+        tmp_path,
+        state_machine_validation_enabled=True,
+    )
+    service.admit_create(
+        company_id="cmp_f1c3_pb",
+        actor_type="agent",
+        actor_id="agent_backend",
+        idempotency_key="idem_f1c3_pb_create",
+        request_fingerprint_hash="fp_f1c3_pb_create",
+        run_kind="provider_dispatch",
+    )
+    claim = service.claim_next_attempt(
+        company_id="cmp_f1c3_pb",
+        worker_key="worker_alpha",
+    )
+    assert claim is not None
+    service.mark_attempt_executing(
+        company_id="cmp_f1c3_pb",
+        run_id=claim.run_id,
+        attempt_id=claim.attempt_id,
+        lease_token=claim.lease_token,
+        step_key="test_step",
+    )
+    # Quarantine the run → terminal operator state.
+    service.quarantine_run(
+        company_id="cmp_f1c3_pb",
+        run_id=claim.run_id,
+        actor_type="system",
+        actor_id="admin",
+        idempotency_key="idem_f1c3_pb_quar",
+        request_fingerprint_hash="fp_f1c3_pb_quar",
+        reason="test quarantine",
+    )
+    with pytest.raises(
+        RunTransitionConflictError,
+        match="not allowed",
+    ):
+        service.pause_run(
+            company_id="cmp_f1c3_pb",
+            run_id=claim.run_id,
+            actor_type="user",
+            actor_id="operator",
+            idempotency_key="idem_f1c3_pb_pause",
+            request_fingerprint_hash="fp_f1c3_pb_pause",
+            reason="should be blocked",
+        )
+
+
+def test_pause_run_blocked_by_state_machine_spy(
+    tmp_path: Path,
+) -> None:
+    """Spy-simulated guard failure blocks pause_run authoritatively."""
+    calls: list[tuple[str, ExecutionTransitionContext]] = []
+    service, _session_factory = _service(
+        tmp_path,
+        state_machine_validation_enabled=True,
+        state_machine_validator_factory=lambda: _TriggerValidationSpy(
+            calls,
+            target_trigger="pause",
+            result=ExecutionValidationResult(
+                valid=False,
+                validated=True,
+                error_message="Guard blocked: is_operator_pausable",
+            ),
+        ),
+    )
+    created = service.admit_create(
+        company_id="cmp_f1c3_pbs",
+        actor_type="agent",
+        actor_id="agent_backend",
+        idempotency_key="idem_f1c3_pbs_create",
+        request_fingerprint_hash="fp_f1c3_pbs_create",
+        run_kind="provider_dispatch",
+    )
+    # Try to pause; the spy blocks it.
+    with pytest.raises(
+        RunTransitionConflictError,
+        match="not allowed",
+    ):
+        service.pause_run(
+            company_id="cmp_f1c3_pbs",
+            run_id=created.run_id,
+            actor_type="user",
+            actor_id="operator",
+            idempotency_key="idem_f1c3_pbs_pause",
+            request_fingerprint_hash="fp_f1c3_pbs_pause",
+            reason="spy blocked",
+        )
+
+
+def test_resume_run_blocked_by_state_machine_from_non_paused(
+    tmp_path: Path,
+) -> None:
+    """Authoritative pre-check blocks resume when not paused."""
+    service, _session_factory = _service(
+        tmp_path,
+        state_machine_validation_enabled=True,
+    )
+    created = service.admit_create(
+        company_id="cmp_f1c3_rb",
+        actor_type="agent",
+        actor_id="agent_backend",
+        idempotency_key="idem_f1c3_rb_create",
+        request_fingerprint_hash="fp_f1c3_rb_create",
+        run_kind="provider_dispatch",
+    )
+    # Run is queued/admitted — cannot resume from non-paused state.
+    with pytest.raises(
+        RunTransitionConflictError,
+        match="not allowed",
+    ):
+        service.resume_run(
+            company_id="cmp_f1c3_rb",
+            run_id=created.run_id,
+            actor_type="user",
+            actor_id="operator",
+            idempotency_key="idem_f1c3_rb_resume",
+            request_fingerprint_hash="fp_f1c3_rb_resume",
+            reason="should be blocked",
+        )
+
+
+def test_resume_run_blocked_by_state_machine_spy(
+    tmp_path: Path,
+) -> None:
+    """Spy-simulated guard failure blocks resume_run authoritatively."""
+    calls: list[tuple[str, ExecutionTransitionContext]] = []
+    service, _session_factory = _service(
+        tmp_path,
+        state_machine_validation_enabled=True,
+        state_machine_validator_factory=lambda: _TriggerValidationSpy(
+            calls,
+            target_trigger="resume",
+            result=ExecutionValidationResult(
+                valid=False,
+                validated=True,
+                error_message="Guard blocked: is_operator_resumable",
+            ),
+        ),
+    )
+    created = service.admit_create(
+        company_id="cmp_f1c3_rbs",
+        actor_type="agent",
+        actor_id="agent_backend",
+        idempotency_key="idem_f1c3_rbs_create",
+        request_fingerprint_hash="fp_f1c3_rbs_create",
+        run_kind="provider_dispatch",
+    )
+    with pytest.raises(
+        RunTransitionConflictError,
+        match="not allowed",
+    ):
+        service.resume_run(
+            company_id="cmp_f1c3_rbs",
+            run_id=created.run_id,
+            actor_type="user",
+            actor_id="operator",
+            idempotency_key="idem_f1c3_rbs_resume",
+            request_fingerprint_hash="fp_f1c3_rbs_resume",
+            reason="spy blocked",
+        )
+
+
+def test_admit_retry_blocked_by_state_machine_from_non_retryable(
+    tmp_path: Path,
+) -> None:
+    """Authoritative pre-check blocks admit_retry from non-retryable state."""
+    service, _session_factory = _service(
+        tmp_path,
+        state_machine_validation_enabled=True,
+    )
+    created = service.admit_create(
+        company_id="cmp_f1c3_arb",
+        actor_type="agent",
+        actor_id="agent_backend",
+        idempotency_key="idem_f1c3_arb_create",
+        request_fingerprint_hash="fp_f1c3_arb_create",
+        run_kind="provider_dispatch",
+    )
+    # Run is queued — not a retryable state.
+    with pytest.raises(
+        RunTransitionConflictError,
+        match="not allowed",
+    ):
+        service.admit_retry(
+            company_id="cmp_f1c3_arb",
+            run_id=created.run_id,
+            actor_type="agent",
+            actor_id="agent_retry",
+            idempotency_key="idem_f1c3_arb_retry",
+            request_fingerprint_hash="fp_f1c3_arb_retry",
+        )
+
+
+def test_admit_retry_blocked_by_state_machine_spy(
+    tmp_path: Path,
+) -> None:
+    """Spy-simulated guard failure blocks admit_retry authoritatively."""
+    calls: list[tuple[str, ExecutionTransitionContext]] = []
+    service, _session_factory = _service(
+        tmp_path,
+        state_machine_validation_enabled=True,
+        state_machine_validator_factory=lambda: _TriggerValidationSpy(
+            calls,
+            target_trigger="admit_retry",
+            result=ExecutionValidationResult(
+                valid=False,
+                validated=True,
+                error_message="Guard blocked: is_retryable_run",
+            ),
+        ),
+    )
+    created = service.admit_create(
+        company_id="cmp_f1c3_arbs",
+        actor_type="agent",
+        actor_id="agent_backend",
+        idempotency_key="idem_f1c3_arbs_create",
+        request_fingerprint_hash="fp_f1c3_arbs_create",
+        run_kind="provider_dispatch",
+    )
+    with pytest.raises(
+        RunTransitionConflictError,
+        match="not allowed",
+    ):
+        service.admit_retry(
+            company_id="cmp_f1c3_arbs",
+            run_id=created.run_id,
+            actor_type="agent",
+            actor_id="agent_retry",
+            idempotency_key="idem_f1c3_arbs_retry",
+            request_fingerprint_hash="fp_f1c3_arbs_retry",
+        )
+
+
+def test_admit_create_authoritative_validation_happy_path(
+    tmp_path: Path,
+    caplog,
+) -> None:
+    """Authoritative creation validation for admit_create allows normal creation."""
+    service, session_factory = _service(
+        tmp_path,
+        state_machine_validation_enabled=True,
+    )
+    caplog.set_level(logging.WARNING, logger="app.execution.service")
+
+    result = service.admit_create(
+        company_id="cmp_f1c3_ac",
+        actor_type="agent",
+        actor_id="agent_backend",
+        idempotency_key="idem_f1c3_ac_create",
+        request_fingerprint_hash="fp_f1c3_ac_create",
+        run_kind="provider_dispatch",
+    )
+    assert result.run_state == "queued"
+
+    with session_factory() as session:
+        run = session.get(RunORM, result.run_id)
+        assert run is not None
+        assert run.state == "queued"
+        assert run.operator_state == "admitted"
+
+    records = _validation_records(caplog)
+    assert records == [], f"Expected no validation records, got {len(records)}"
+
+
+def test_restart_run_from_scratch_authoritative_validation_happy_path(
+    tmp_path: Path,
+    caplog,
+) -> None:
+    """Authoritative creation validation for restart_run_from_scratch passes."""
+    service, session_factory = _service(
+        tmp_path,
+        state_machine_validation_enabled=True,
+    )
+    caplog.set_level(logging.WARNING, logger="app.execution.service")
+
+    created = service.admit_create(
+        company_id="cmp_f1c3_rs",
+        actor_type="agent",
+        actor_id="agent_backend",
+        idempotency_key="idem_f1c3_rs_create",
+        request_fingerprint_hash="fp_f1c3_rs_create",
+        run_kind="provider_dispatch",
+    )
+    # Restart from scratch.
+    restarted = service.restart_run_from_scratch(
+        company_id="cmp_f1c3_rs",
+        run_id=created.run_id,
+        actor_type="agent",
+        actor_id="agent_backend",
+        idempotency_key="idem_f1c3_rs_restart",
+        request_fingerprint_hash="fp_f1c3_rs_restart",
+        reason="testing restart",
+    )
+    assert restarted.run_state == "queued"
+
+    records = _validation_records(caplog)
+    assert records == [], f"Expected no validation records, got {len(records)}"
+
+
+def test_renew_attempt_lease_authoritative_validation_happy_path(
+    tmp_path: Path,
+    caplog,
+) -> None:
+    """Authoritative non-state validation for renew_attempt_lease passes."""
+    service, session_factory = _service(
+        tmp_path,
+        state_machine_validation_enabled=True,
+    )
+    caplog.set_level(logging.WARNING, logger="app.execution.service")
+
+    service.admit_create(
+        company_id="cmp_f1c3_rn",
+        actor_type="agent",
+        actor_id="agent_backend",
+        idempotency_key="idem_f1c3_rn_create",
+        request_fingerprint_hash="fp_f1c3_rn_create",
+        run_kind="provider_dispatch",
+    )
+    claim = service.claim_next_attempt(
+        company_id="cmp_f1c3_rn",
+        worker_key="worker_alpha",
+    )
+    assert claim is not None
+    service.mark_attempt_executing(
+        company_id="cmp_f1c3_rn",
+        run_id=claim.run_id,
+        attempt_id=claim.attempt_id,
+        lease_token=claim.lease_token,
+        step_key="test_step",
+    )
+    # Renew lease while executing.
+    result = service.renew_attempt_lease(
+        company_id="cmp_f1c3_rn",
+        run_id=claim.run_id,
+        attempt_id=claim.attempt_id,
+        lease_token=claim.lease_token,
+    )
+    assert result.attempt_id == claim.attempt_id
+    assert result.lease_token == claim.lease_token
+
+    records = _validation_records(caplog)
+    assert records == [], f"Expected no validation records, got {len(records)}"
+
+
+def test_escalate_run_authoritative_validation_happy_path(
+    tmp_path: Path,
+    caplog,
+) -> None:
+    """Authoritative non-state validation for escalate_run passes."""
+    service, session_factory = _service(
+        tmp_path,
+        state_machine_validation_enabled=True,
+    )
+    caplog.set_level(logging.WARNING, logger="app.execution.service")
+
+    created = service.admit_create(
+        company_id="cmp_f1c3_es",
+        actor_type="agent",
+        actor_id="agent_backend",
+        idempotency_key="idem_f1c3_es_create",
+        request_fingerprint_hash="fp_f1c3_es_create",
+        run_kind="provider_dispatch",
+        execution_lane="background_agentic",
+    )
+    # Escalate to a different valid lane.
+    result = service.escalate_run(
+        company_id="cmp_f1c3_es",
+        run_id=created.run_id,
+        actor_type="user",
+        actor_id="operator",
+        idempotency_key="idem_f1c3_es_esc",
+        request_fingerprint_hash="fp_f1c3_es_esc",
+        target_execution_lane="interactive_low_latency",
+        reason="urgent escalation",
+    )
+    assert result.run_state == "queued"
+
+    with session_factory() as session:
+        run = session.get(RunORM, created.run_id)
+        assert run is not None
+        assert run.execution_lane == "interactive_low_latency"
+
+    records = _validation_records(caplog)
+    assert records == [], f"Expected no validation records, got {len(records)}"
+
+
+def test_validation_disabled_pause_resume_admit_retry_fall_back_to_ad_hoc(
+    tmp_path: Path,
+) -> None:
+    """With validation disabled, ad-hoc guards still protect pause/resume/retry."""
+    service, _session_factory = _service(
+        tmp_path,
+        state_machine_validation_enabled=False,
+    )
+    created = service.admit_create(
+        company_id="cmp_f1c3_adhoc",
+        actor_type="agent",
+        actor_id="agent_backend",
+        idempotency_key="idem_f1c3_adhoc_create",
+        request_fingerprint_hash="fp_f1c3_adhoc_create",
+        run_kind="provider_dispatch",
+    )
+    # Try to resume without pausing — ad-hoc guard should block.
+    with pytest.raises(RunTransitionConflictError):
+        service.resume_run(
+            company_id="cmp_f1c3_adhoc",
+            run_id=created.run_id,
+            actor_type="user",
+            actor_id="operator",
+            idempotency_key="idem_f1c3_adhoc_resume",
+            request_fingerprint_hash="fp_f1c3_adhoc_resume",
+            reason="should be blocked",
+        )
+
+    # Try admit_retry from queued — ad-hoc guard should block.
+    with pytest.raises(RunTransitionConflictError):
+        service.admit_retry(
+            company_id="cmp_f1c3_adhoc",
+            run_id=created.run_id,
+            actor_type="agent",
+            actor_id="agent_retry",
+            idempotency_key="idem_f1c3_adhoc_retry",
+            request_fingerprint_hash="fp_f1c3_adhoc_retry",
+        )
+
+
+def test_operator_machine_check_transition_allowed_pause_resume(
+    tmp_path: Path,
+) -> None:
+    """check_transition_allowed correctly delegates operator-only triggers."""
+    service, session_factory = _service(
+        tmp_path,
+        state_machine_validation_enabled=True,
+    )
+    created = service.admit_create(
+        company_id="cmp_f1c3_om",
+        actor_type="agent",
+        actor_id="agent_backend",
+        idempotency_key="idem_f1c3_om_create",
+        request_fingerprint_hash="fp_f1c3_om_create",
+        run_kind="provider_dispatch",
+    )
+    # Pause the run first to get a known operator state.
+    pause = service.pause_run(
+        company_id="cmp_f1c3_om",
+        run_id=created.run_id,
+        actor_type="user",
+        actor_id="operator",
+        idempotency_key="idem_f1c3_om_pause",
+        request_fingerprint_hash="fp_f1c3_om_pause",
+        reason="hold",
+    )
+    assert pause.operator_state == "paused"
+
+    # Resume should now work (was paused).
+    resume = service.resume_run(
+        company_id="cmp_f1c3_om",
+        run_id=created.run_id,
+        actor_type="user",
+        actor_id="operator",
+        idempotency_key="idem_f1c3_om_resume",
+        request_fingerprint_hash="fp_f1c3_om_resume",
+        reason="release",
+    )
+    assert resume.operator_state is not None

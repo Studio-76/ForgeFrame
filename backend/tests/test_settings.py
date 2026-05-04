@@ -160,3 +160,20 @@ def test_settings_reports_all_operational_contract_violations_in_one_error() -> 
     assert "FORGEFRAME_OBSERVABILITY_POSTGRES_URL" in message
     assert "FORGEFRAME_GOVERNANCE_POSTGRES_URL" in message
     assert "FORGEFRAME_INSTANCES_POSTGRES_URL" in message
+
+
+def test_execution_state_machine_validation_enabled_by_default(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    settings = _build_default_settings(monkeypatch)
+    assert settings.execution_state_machine_validation_enabled is True
+
+
+def test_execution_state_machine_validation_can_be_disabled(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    settings = _build_default_settings(
+        monkeypatch,
+        execution_state_machine_validation_enabled=False,
+    )
+    assert settings.execution_state_machine_validation_enabled is False

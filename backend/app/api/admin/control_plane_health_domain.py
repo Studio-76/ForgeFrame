@@ -28,16 +28,16 @@ class ControlPlaneHealthDomainMixin:
         return self._health_config
 
     def update_health_config(self, payload: HealthConfigUpdateRequest) -> HealthConfig:
-        for field in [
-            "provider_health_enabled",
-            "model_health_enabled",
-            "interval_seconds",
-            "probe_mode",
-            "selected_models",
-        ]:
-            value = getattr(payload, field)
-            if value is not None:
-                setattr(self._health_config, field, value)
+        if payload.provider_health_enabled is not None:
+            self._health_config.provider_health_enabled = payload.provider_health_enabled
+        if payload.model_health_enabled is not None:
+            self._health_config.model_health_enabled = payload.model_health_enabled
+        if payload.interval_seconds is not None:
+            self._health_config.interval_seconds = payload.interval_seconds
+        if payload.probe_mode is not None:
+            self._health_config.probe_mode = payload.probe_mode
+        if payload.selected_models is not None:
+            self._health_config.selected_models = payload.selected_models
         self._persist_state()
         return self._health_config
 

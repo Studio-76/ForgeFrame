@@ -24,13 +24,31 @@ from app.settings.config import Settings, get_settings
 from app.storage.models import Base
 
 
+def _resolve_safe_sqlite_path(raw_path: str) -> Path:
+    """Normalize and validate the execution SQLite path.
+
+    :param raw_path: Configured sqlite path from settings.
+    :type raw_path: str
+    :return: Normalized absolute path.
+    :rtype: Path
+    :raises ValueError: If the path is empty or contains traversal segments.
+    """
+    normalized = raw_path.strip()
+    if not normalized:
+        raise ValueError("execution_sqlite_path_empty")
+    candidate = Path(normalized)
+    if any(part == ".." for part in candidate.parts):
+        raise ValueError("execution_sqlite_path_traversal")
+    return candidate.resolve(strict=False)
+
+
 def _resolve_execution_database_url(settings: Settings) -> str:
     explicit_postgres = settings.execution_postgres_url.strip()
     if explicit_postgres:
         return explicit_postgres
     if settings.harness_storage_backend == "postgresql":
         return settings.harness_postgres_url
-    sqlite_path = Path(settings.execution_sqlite_path)
+    sqlite_path = _resolve_safe_sqlite_path(settings.execution_sqlite_path)
     sqlite_path.parent.mkdir(parents=True, exist_ok=True)
     return f"sqlite+pysqlite:///{sqlite_path}"
 
@@ -46,7 +64,17 @@ def get_execution_session_factory():
 
 @lru_cache(maxsize=1)
 def get_execution_transition_service() -> ExecutionTransitionService:
-    return ExecutionTransitionService(get_execution_session_factory())
+    """Build the cached execution transition service from runtime settings.
+
+    :return: Transition service with advisory state-machine validation wired
+        from ``Settings.execution_state_machine_validation_enabled``.
+    :rtype: ExecutionTransitionService
+    """
+    settings = get_settings()
+    return ExecutionTransitionService(
+        get_execution_session_factory(),
+        state_machine_validation_enabled=(settings.execution_state_machine_validation_enabled),
+    )
 
 
 @lru_cache(maxsize=1)

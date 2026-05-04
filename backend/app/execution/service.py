@@ -3,16 +3,40 @@
 from __future__ import annotations
 
 import hashlib
+import logging
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from time import monotonic, sleep
-from typing import Any, Callable, cast
+from typing import Any, Callable, Protocol, cast
 from uuid import uuid4
 
 from sqlalchemy import Select, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app.execution.state_machine import (
+    CLAIMABLE_OPERATOR_STATES,
+    CLAIMABLE_RUN_STATES,
+    MISMATCH_CATEGORY_APPROVAL_LINK_MISMATCH,
+    MISMATCH_CATEGORY_ATTEMPT_STATE_MISMATCH,
+    MISMATCH_CATEGORY_CURRENT_ATTEMPT_MISMATCH,
+    MISMATCH_CATEGORY_LEASE_STATUS_MISMATCH,
+    MISMATCH_CATEGORY_OPERATOR_STATE_MISMATCH,
+    MISMATCH_CATEGORY_REPLACEMENT_ATTEMPT_MISMATCH,
+    MISMATCH_CATEGORY_RUN_STATE_MISMATCH,
+    MISMATCH_CATEGORY_VALIDATOR_EXCEPTION,
+    RETRYABLE_RUN_STATES,
+    TERMINAL_OPERATOR_STATES,
+    TERMINAL_RUN_STATES,
+    ExecutionCreationOperation,
+    ExecutionStateDecision,
+    ExecutionStateMachineValidator,
+    ExecutionStateSnapshot,
+    ExecutionTransitionContext,
+    ExecutionTrigger,
+    ExecutionValidationResult,
+    SourceRunInvariants,
+)
 from app.storage.execution_repository import (
     RunApprovalLinkORM,
     RunAttemptORM,
@@ -22,19 +46,94 @@ from app.storage.execution_repository import (
 )
 
 SessionFactory = Callable[[], Session]
+_LOGGER = logging.getLogger(__name__)
 
-_TERMINAL_RUN_STATES = {
-    "succeeded",
-    "failed",
-    "cancelled",
-    "timed_out",
-    "compensated",
-    "dead_lettered",
-}
-_CLAIMABLE_ATTEMPT_STATES = {"queued", "retry_backoff"}
-_RETRYABLE_RUN_STATES = {"failed", "timed_out", "compensated", "dead_lettered"}
-_TERMINAL_OPERATOR_STATES = {"completed", "quarantined", "failed"}
-_CLAIMABLE_OPERATOR_STATES = {"admitted", "retry_scheduled"}
+
+class _StateMachineValidator(Protocol):
+    """Protocol for advisory execution state-machine validators."""
+
+    def validate_run_transition(
+        self,
+        trigger: ExecutionTrigger,
+        context: ExecutionTransitionContext,
+    ) -> ExecutionValidationResult:
+        """Validate a run-state transition.
+
+        :param trigger: State-machine trigger name.
+        :type trigger: ExecutionTrigger
+        :param context: Pre-transition validation context.
+        :type context: ExecutionTransitionContext
+        :return: Validation result.
+        :rtype: ExecutionValidationResult
+        """
+
+    def validate_operator_transition(
+        self,
+        trigger: ExecutionTrigger,
+        context: ExecutionTransitionContext,
+    ) -> ExecutionValidationResult:
+        """Validate an operator-state-only transition.
+
+        :param trigger: Operator-state trigger (``pause`` or ``resume``).
+        :type trigger: ExecutionTrigger
+        :param context: Pre-transition validation context.
+        :type context: ExecutionTransitionContext
+        :return: Validation result.
+        :rtype: ExecutionValidationResult
+        """
+
+    def validate_creation(
+        self,
+        operation: ExecutionCreationOperation,
+        before_snapshot: ExecutionStateSnapshot,
+        after_snapshot: ExecutionStateSnapshot,
+    ) -> ExecutionValidationResult:
+        """Validate a creation operation's initial state.
+
+        :param operation: Creation operation name.
+        :type operation: ExecutionCreationOperation
+        :param before_snapshot: Snapshot captured before creation (source
+            state for ``restart_run_from_scratch``).
+        :type before_snapshot: ExecutionStateSnapshot
+        :param after_snapshot: Snapshot captured after creation.
+        :type after_snapshot: ExecutionStateSnapshot
+        :return: Validation result.
+        :rtype: ExecutionValidationResult
+        """
+
+    def validate_non_state_operation(
+        self,
+        before_snapshot: ExecutionStateSnapshot,
+        after_snapshot: ExecutionStateSnapshot,
+    ) -> ExecutionValidationResult:
+        """Validate that a non-state operation did not mutate state dimensions.
+
+        :param before_snapshot: Pre-operation state snapshot.
+        :type before_snapshot: ExecutionStateSnapshot
+        :param after_snapshot: Post-operation state snapshot.
+        :type after_snapshot: ExecutionStateSnapshot
+        :return: Validation result.
+        :rtype: ExecutionValidationResult
+        """
+
+    def check_transition_allowed(
+        self,
+        trigger: ExecutionTrigger,
+        context: ExecutionTransitionContext,
+    ) -> tuple[bool, str | None]:
+        """Check whether a transition is allowed from the current state.
+
+        :param trigger: State-machine trigger name.
+        :type trigger: ExecutionTrigger
+        :param context: Pre-transition validation context.
+        :type context: ExecutionTransitionContext
+        :return: ``(allowed, reason)``.
+        :rtype: tuple[bool, str | None]
+        """
+
+
+StateMachineValidatorFactory = Callable[[], _StateMachineValidator]
+
 _IN_FLIGHT_ATTEMPT_STATES = {
     "dispatching",
     "executing",
@@ -111,11 +210,24 @@ class ApprovalOpenResult:
 
 @dataclass(frozen=True)
 class ClaimCandidate:
+    """Claimable attempt metadata selected before worker claim mutation."""
+
     run_id: str
     attempt_id: str
     attempt_no: int
     run_version: int
     attempt_version: int
+    run_state: str = "queued"
+    operator_state: str = "admitted"
+    current_attempt_id: str | None = None
+    active_attempt_no: int = 1
+    attempt_state: str | None = None
+    attempt_operator_state: str | None = None
+    lease_status: str | None = None
+    lease_token: str | None = None
+    scheduled_at: datetime | None = None
+    lease_expires_at: datetime | None = None
+    next_wakeup_at: datetime | None = None
 
 
 @dataclass(frozen=True)
@@ -161,8 +273,48 @@ class AttemptFailureResult:
 class ExecutionTransitionService:
     """Owns transactional run admission and worker-side state transitions."""
 
-    def __init__(self, session_factory: SessionFactory):
+    def __init__(
+        self,
+        session_factory: SessionFactory,
+        *,
+        state_machine_validation_enabled: bool = False,
+        state_machine_validator_factory: StateMachineValidatorFactory | None = None,
+        validation_logger: logging.Logger | None = None,
+    ) -> None:
+        """Initialise transactional execution transition coordination.
+
+        The state-machine validator is authoritative when enabled: it performs
+        pre-mutation validation and raises on disallowed transitions. When
+        disabled, legacy inline guards are used and post-mutation advisory
+        validation runs in monitoring mode for migration safety.
+
+        :param session_factory: Factory that opens SQLAlchemy sessions.
+        :type session_factory: SessionFactory
+        :param state_machine_validation_enabled: Whether the state machine is
+            authoritative (True) or legacy with monitoring (False).
+        :type state_machine_validation_enabled: bool
+        :param state_machine_validator_factory: Optional factory used by tests
+            or dependency wiring to build a fresh validator.
+        :type state_machine_validator_factory: StateMachineValidatorFactory | None
+        :param validation_logger: Optional logger for structured non-fatal
+            validation mismatch records.
+        :type validation_logger: logging.Logger | None
+        """
         self._session_factory = session_factory
+        self._state_machine_validation_enabled = state_machine_validation_enabled
+        self._state_machine_validator_factory = state_machine_validator_factory or self._build_state_machine_validator
+        self._state_machine_validation_logger = validation_logger or _LOGGER
+
+    @staticmethod
+    def _build_state_machine_validator() -> _StateMachineValidator:
+        """Build a fresh enabled state-machine validator.
+
+        Used by both authoritative pre-checks and advisory monitoring paths.
+
+        :return: Enabled validator instance for one service validation call.
+        :rtype: _StateMachineValidator
+        """
+        return ExecutionStateMachineValidator(enabled=True)
 
     @staticmethod
     def _now(now: datetime | None = None) -> datetime:
@@ -223,6 +375,33 @@ class ExecutionTransitionService:
         }.get(raw_state, "admitted")
 
     @staticmethod
+    def _approval_decision_trigger(
+        *,
+        approved: bool,
+        resume_disposition: str,
+    ) -> ExecutionTrigger:
+        """Resolve an approval decision to its state-machine trigger.
+
+        :param approved: Whether the approval was accepted.
+        :type approved: bool
+        :param resume_disposition: Rejection disposition from the approval link.
+        :type resume_disposition: str
+        :return: State-machine trigger representing the decision outcome.
+        :rtype: ExecutionTrigger
+        """
+        if approved:
+            return "resume_after_approval"
+        trigger_by_disposition: dict[str, ExecutionTrigger] = {
+            "cancel": "reject_approval_cancel",
+            "compensate": "reject_approval_compensate",
+            "fail": "reject_approval_fail",
+        }
+        return trigger_by_disposition.get(
+            resume_disposition,
+            "reject_approval_fail",
+        )
+
+    @staticmethod
     def _current_attempt(session: Session, run: RunORM) -> RunAttemptORM:
         if run.current_attempt_id:
             attempt = session.get(RunAttemptORM, run.current_attempt_id)
@@ -244,6 +423,27 @@ class ExecutionTransitionService:
         if attempt is None:
             raise RunTransitionConflictError(f"Run '{run.id}' has no attempts to transition.")
         return attempt
+
+    @staticmethod
+    def _current_approval_link(
+        session: Session,
+        run: RunORM,
+    ) -> RunApprovalLinkORM | None:
+        """Return the run's current approval link when it exists.
+
+        :param session: Active transaction session.
+        :type session: Session
+        :param run: Run whose current approval link should be loaded.
+        :type run: RunORM
+        :return: Current approval link scoped to the run company, if present.
+        :rtype: RunApprovalLinkORM | None
+        """
+        if run.current_approval_link_id is None:
+            return None
+        approval_link = session.get(RunApprovalLinkORM, run.current_approval_link_id)
+        if approval_link is None or approval_link.company_id != run.company_id:
+            return None
+        return approval_link
 
     @staticmethod
     def _find_command(
@@ -270,8 +470,8 @@ class ExecutionTransitionService:
             .first()
         )
 
-    @staticmethod
     def _find_command_or_raise_conflict(
+        self,
         session: Session,
         *,
         company_id: str,
@@ -281,7 +481,28 @@ class ExecutionTransitionService:
         idempotency_key: str,
         request_fingerprint_hash: str,
     ) -> RunCommandORM | None:
-        existing = ExecutionTransitionService._find_command(
+        """Find an idempotent command or reject fingerprint drift.
+
+        :param session: Active database session.
+        :type session: Session
+        :param company_id: Company scope for the command.
+        :type company_id: str
+        :param command_type: Command type to locate.
+        :type command_type: str
+        :param actor_type: Actor type attached to the command.
+        :type actor_type: str
+        :param actor_id: Actor identifier attached to the command.
+        :type actor_id: str
+        :param idempotency_key: Idempotency key to match.
+        :type idempotency_key: str
+        :param request_fingerprint_hash: Expected request fingerprint hash.
+        :type request_fingerprint_hash: str
+        :return: Existing compatible command, or ``None``.
+        :rtype: RunCommandORM | None
+        :raises RunCommandIdempotencyConflictError: If the key is reused with
+            a different request fingerprint.
+        """
+        existing = self._find_command(
             session,
             company_id=company_id,
             command_type=command_type,
@@ -291,7 +512,7 @@ class ExecutionTransitionService:
         )
         if existing is None:
             return None
-        return ExecutionTransitionService._validate_existing_command_or_raise_conflict(
+        return self._validate_existing_command_or_raise_conflict(
             existing=existing,
             request_fingerprint_hash=request_fingerprint_hash,
             idempotency_key=idempotency_key,
@@ -404,8 +625,8 @@ class ExecutionTransitionService:
             )
             .where(
                 RunAttemptORM.company_id == company_id,
-                RunAttemptORM.attempt_state.in_(_CLAIMABLE_ATTEMPT_STATES),
-                RunAttemptORM.operator_state.in_(_CLAIMABLE_OPERATOR_STATES),
+                RunAttemptORM.attempt_state.in_(CLAIMABLE_RUN_STATES),
+                RunAttemptORM.operator_state.in_(CLAIMABLE_OPERATOR_STATES),
                 RunAttemptORM.scheduled_at <= now,
             )
             .order_by(
@@ -512,6 +733,842 @@ class ExecutionTransitionService:
                 merged[key] = normalized
         return merged
 
+    @staticmethod
+    def _state_machine_snapshot(
+        *,
+        run: RunORM | None,
+        attempt: RunAttemptORM | None,
+        approval_link: RunApprovalLinkORM | None = None,
+        command_id: str | None = None,
+        replacement_attempt_id: str | None = None,
+        extra: dict[str, Any] | None = None,
+    ) -> ExecutionStateSnapshot:
+        """Capture persisted execution state dimensions for validation.
+
+        The snapshot intentionally copies only lifecycle metadata needed by the
+        advisory validator. It does not copy request payloads, provider data,
+        secrets, or raw result bodies.
+
+        :param run: Run row to snapshot, when available.
+        :type run: RunORM | None
+        :param attempt: Attempt row to snapshot, when available.
+        :type attempt: RunAttemptORM | None
+        :param approval_link: Approval-link row to snapshot, when available.
+        :type approval_link: RunApprovalLinkORM | None
+        :param command_id: Command ID associated with the transition.
+        :type command_id: str | None
+        :param replacement_attempt_id: Replacement attempt ID for retry paths.
+        :type replacement_attempt_id: str | None
+        :param extra: Additional non-sensitive lifecycle metadata.
+        :type extra: dict[str, Any] | None
+        :return: Immutable validation snapshot.
+        :rtype: ExecutionStateSnapshot
+        """
+        snapshot_extra = dict(extra or {})
+        if approval_link is not None:
+            snapshot_extra.update({
+                "approval_link_id": approval_link.id,
+                "approval_id": approval_link.approval_id,
+                "approval_resume_disposition": approval_link.resume_disposition,
+                "approval_opened_at": approval_link.opened_at,
+                "approval_decided_at": approval_link.decided_at,
+                "approval_resume_enqueued_at": approval_link.resume_enqueued_at,
+            })
+        return ExecutionStateSnapshot(
+            run_id=run.id if run is not None else None,
+            attempt_id=attempt.id if attempt is not None else None,
+            current_attempt_id=run.current_attempt_id if run is not None else None,
+            run_state=run.state if run is not None else "queued",
+            operator_state=run.operator_state if run is not None else "admitted",
+            attempt_state=attempt.attempt_state if attempt is not None else None,
+            attempt_operator_state=attempt.operator_state if attempt is not None else None,
+            lease_status=attempt.lease_status if attempt is not None else None,
+            lease_token=attempt.lease_token if attempt is not None else None,
+            current_approval_link_id=(run.current_approval_link_id if run is not None else None),
+            approval_gate_status=(approval_link.gate_status if approval_link is not None else None),
+            command_id=command_id,
+            replacement_attempt_id=replacement_attempt_id,
+            extra=snapshot_extra,
+        )
+
+    @staticmethod
+    def _state_machine_snapshot_from_candidate(
+        candidate: ClaimCandidate,
+    ) -> ExecutionStateSnapshot:
+        """Build a validation snapshot from selected claim metadata.
+
+        :param candidate: Claim candidate returned by the existing claim query.
+        :type candidate: ClaimCandidate
+        :return: Pre-claim validation snapshot without extra database reads.
+        :rtype: ExecutionStateSnapshot
+        """
+        return ExecutionStateSnapshot(
+            run_id=candidate.run_id,
+            attempt_id=candidate.attempt_id,
+            current_attempt_id=candidate.current_attempt_id,
+            run_state=candidate.run_state,
+            operator_state=candidate.operator_state,
+            attempt_state=candidate.attempt_state,
+            attempt_operator_state=candidate.attempt_operator_state,
+            lease_status=candidate.lease_status,
+            lease_token=candidate.lease_token,
+            extra={
+                "attempt_no": candidate.attempt_no,
+                "active_attempt_no": candidate.active_attempt_no,
+                "scheduled_at": candidate.scheduled_at,
+                "lease_expires_at": candidate.lease_expires_at,
+                "next_wakeup_at": candidate.next_wakeup_at,
+            },
+        )
+
+    @staticmethod
+    def _snapshot_extra_int(
+        snapshot: ExecutionStateSnapshot,
+        key: str,
+    ) -> int | None:
+        """Read an integer value from a validation snapshot's extra fields.
+
+        :param snapshot: Snapshot containing extra metadata.
+        :type snapshot: ExecutionStateSnapshot
+        :param key: Extra-field key.
+        :type key: str
+        :return: Integer value when present and typed, otherwise ``None``.
+        :rtype: int | None
+        """
+        value = snapshot.extra.get(key)
+        return value if isinstance(value, int) else None
+
+    @staticmethod
+    def _snapshot_extra_datetime(
+        snapshot: ExecutionStateSnapshot,
+        key: str,
+    ) -> datetime | None:
+        """Read a datetime value from a validation snapshot's extra fields.
+
+        :param snapshot: Snapshot containing extra metadata.
+        :type snapshot: ExecutionStateSnapshot
+        :param key: Extra-field key.
+        :type key: str
+        :return: Datetime value when present and typed, otherwise ``None``.
+        :rtype: datetime | None
+        """
+        value = snapshot.extra.get(key)
+        return value if isinstance(value, datetime) else None
+
+    @staticmethod
+    def _snapshot_extra_str(
+        snapshot: ExecutionStateSnapshot,
+        key: str,
+    ) -> str | None:
+        """Read a string value from a validation snapshot's extra fields.
+
+        :param snapshot: Snapshot containing extra metadata.
+        :type snapshot: ExecutionStateSnapshot
+        :param key: Extra-field key.
+        :type key: str
+        :return: String value when present and typed, otherwise ``None``.
+        :rtype: str | None
+        """
+        value = snapshot.extra.get(key)
+        return value if isinstance(value, str) else None
+
+    @classmethod
+    def _state_machine_context(
+        cls,
+        *,
+        before: ExecutionStateSnapshot,
+        now: datetime,
+        provided_lease_token: str | None = None,
+        retryable: bool | None = None,
+        max_attempts: int | None = None,
+        retry_delay_seconds: int | None = None,
+        service_chosen_operator_state: str | None = None,
+    ) -> ExecutionTransitionContext:
+        """Build validator guard context from a pre-transition snapshot.
+
+        :param before: Snapshot captured before the service mutation.
+        :type before: ExecutionStateSnapshot
+        :param now: Service clock value used for the transition.
+        :type now: datetime
+        :param provided_lease_token: Lease token supplied by the caller.
+        :type provided_lease_token: str | None
+        :param retryable: Whether the failure path is retryable.
+        :type retryable: bool | None
+        :param max_attempts: Retry budget for failure transitions.
+        :type max_attempts: int | None
+        :param retry_delay_seconds: Retry delay chosen by the service.
+        :type retry_delay_seconds: int | None
+        :param service_chosen_operator_state: Operator state chosen by service
+            logic for context-dependent transitions.
+        :type service_chosen_operator_state: str | None
+        :return: Guard context for the state-machine validator.
+        :rtype: ExecutionTransitionContext
+        """
+        active_attempt_no = cls._snapshot_extra_int(before, "active_attempt_no")
+        configured_max_attempts = max_attempts
+        if configured_max_attempts is None:
+            configured_max_attempts = cls._snapshot_extra_int(before, "max_attempts")
+        return ExecutionTransitionContext(
+            run_id=before.run_id,
+            attempt_id=before.attempt_id,
+            current_attempt_id=before.current_attempt_id,
+            run_state=before.run_state,
+            operator_state=before.operator_state,
+            attempt_state=before.attempt_state,
+            attempt_operator_state=before.attempt_operator_state,
+            attempt_lease_token=before.lease_token,
+            provided_lease_token=provided_lease_token,
+            attempt_no=cls._snapshot_extra_int(before, "attempt_no"),
+            active_attempt_no=active_attempt_no if active_attempt_no is not None else 1,
+            max_attempts=configured_max_attempts,
+            retry_count=cls._snapshot_extra_int(before, "retry_count"),
+            retryable=retryable,
+            retry_delay_seconds=retry_delay_seconds,
+            lease_status=before.lease_status,
+            scheduled_at=cls._snapshot_extra_datetime(before, "scheduled_at"),
+            lease_expires_at=cls._snapshot_extra_datetime(before, "lease_expires_at"),
+            next_wakeup_at=cls._snapshot_extra_datetime(before, "next_wakeup_at"),
+            now=now,
+            current_approval_link_id=before.current_approval_link_id,
+            approval_gate_status=before.approval_gate_status,
+            approval_resume_disposition=cls._snapshot_extra_str(
+                before,
+                "approval_resume_disposition",
+            ),
+            has_open_approval=before.approval_gate_status == "open",
+            has_in_flight_attempt=before.attempt_state in _IN_FLIGHT_ATTEMPT_STATES,
+            service_chosen_operator_state=service_chosen_operator_state,
+        )
+
+    @staticmethod
+    def _state_machine_approval_link_mismatch(
+        *,
+        before: ExecutionStateSnapshot,
+        after: ExecutionStateSnapshot,
+    ) -> bool:
+        """Detect approval-link lifecycle consistency warnings.
+
+        :param before: Snapshot captured before service mutation.
+        :type before: ExecutionStateSnapshot
+        :param after: Snapshot captured after service mutation.
+        :type after: ExecutionStateSnapshot
+        :return: ``True`` when approval-link lifecycle metadata is stale.
+        :rtype: bool
+        """
+        if after.run_state == "waiting_on_approval":
+            return after.current_approval_link_id is None or after.approval_gate_status != "open"
+        if before.current_approval_link_id is None or before.approval_gate_status != "open":
+            return False
+        if after.current_approval_link_id != before.current_approval_link_id:
+            return False
+        if after.run_state == "cancel_requested" and after.approval_gate_status == "open":
+            return True
+        return after.approval_gate_status not in {None, "open"}
+
+    @staticmethod
+    def _state_machine_mismatch_category(
+        *,
+        result: ExecutionValidationResult,
+        before: ExecutionStateSnapshot,
+        after: ExecutionStateSnapshot,
+    ) -> str | None:
+        """Classify validator or service-outcome mismatches.
+
+        :param result: Validator result to compare.
+        :type result: ExecutionValidationResult
+        :param before: Snapshot captured before service mutation.
+        :type before: ExecutionStateSnapshot
+        :param after: Snapshot captured after service mutation.
+        :type after: ExecutionStateSnapshot
+        :return: Structured mismatch category, or ``None`` when clean.
+        :rtype: str | None
+        """
+        if not result.valid:
+            return result.mismatch_category or MISMATCH_CATEGORY_VALIDATOR_EXCEPTION
+        decision = result.decision
+        if decision is None:
+            return None
+        if decision.target_run_state is not None and after.run_state != decision.target_run_state:
+            return MISMATCH_CATEGORY_RUN_STATE_MISMATCH
+        if decision.target_operator_state is not None and after.operator_state != decision.target_operator_state:
+            return MISMATCH_CATEGORY_OPERATOR_STATE_MISMATCH
+        if decision.target_attempt_state is not None and after.attempt_state != decision.target_attempt_state:
+            return MISMATCH_CATEGORY_ATTEMPT_STATE_MISMATCH
+        if decision.target_attempt_operator_state is not None and after.attempt_operator_state != decision.target_attempt_operator_state:
+            return MISMATCH_CATEGORY_ATTEMPT_STATE_MISMATCH
+        if decision.source_attempt_state is not None and after.attempt_state != decision.source_attempt_state:
+            return MISMATCH_CATEGORY_ATTEMPT_STATE_MISMATCH
+        if decision.source_attempt_operator_state is not None and after.attempt_operator_state != decision.source_attempt_operator_state:
+            return MISMATCH_CATEGORY_ATTEMPT_STATE_MISMATCH
+        if decision.target_lease_status is not None and after.lease_status != decision.target_lease_status:
+            return MISMATCH_CATEGORY_LEASE_STATUS_MISMATCH
+
+        replacement_state = after.extra.get("replacement_attempt_state")
+        if decision.replacement_attempt_state is not None and replacement_state != decision.replacement_attempt_state:
+            return MISMATCH_CATEGORY_REPLACEMENT_ATTEMPT_MISMATCH
+        replacement_operator_state = after.extra.get("replacement_attempt_operator_state")
+        if decision.replacement_attempt_operator_state is not None and replacement_operator_state != decision.replacement_attempt_operator_state:
+            return MISMATCH_CATEGORY_REPLACEMENT_ATTEMPT_MISMATCH
+        if decision.replacement_attempt_state is not None and after.replacement_attempt_id is not None and after.current_attempt_id != after.replacement_attempt_id:
+            return MISMATCH_CATEGORY_CURRENT_ATTEMPT_MISMATCH
+        if ExecutionTransitionService._state_machine_approval_link_mismatch(
+            before=before,
+            after=after,
+        ):
+            return MISMATCH_CATEGORY_APPROVAL_LINK_MISMATCH
+        return None
+
+    @classmethod
+    def _state_machine_snapshot_log_fields(
+        cls,
+        snapshot: ExecutionStateSnapshot,
+    ) -> dict[str, Any]:
+        """Build sanitized log fields for a validation snapshot.
+
+        :param snapshot: Validation snapshot.
+        :type snapshot: ExecutionStateSnapshot
+        :return: Non-sensitive lifecycle fields safe for structured logging.
+        :rtype: dict[str, Any]
+        """
+        fields: dict[str, Any] = {
+            "run_state": snapshot.run_state,
+            "operator_state": snapshot.operator_state,
+            "attempt_state": snapshot.attempt_state,
+            "attempt_operator_state": snapshot.attempt_operator_state,
+            "lease_status": snapshot.lease_status,
+            "current_attempt_id": snapshot.current_attempt_id,
+            "current_approval_link_id": snapshot.current_approval_link_id,
+            "approval_gate_status": snapshot.approval_gate_status,
+            "replacement_attempt_id": snapshot.replacement_attempt_id,
+        }
+        if snapshot.source_run_invariants is not None:
+            fields["source_run_invariants"] = {
+                "run_state": snapshot.source_run_invariants.run_state,
+                "operator_state": snapshot.source_run_invariants.operator_state,
+                "current_attempt_id": snapshot.source_run_invariants.current_attempt_id,
+            }
+        for key in (
+            "attempt_no",
+            "active_attempt_no",
+            "scheduled_at",
+            "lease_expires_at",
+            "next_wakeup_at",
+            "replacement_attempt_state",
+            "replacement_attempt_operator_state",
+            "replacement_lease_status",
+            "approval_link_id",
+            "approval_id",
+            "approval_resume_disposition",
+            "approval_opened_at",
+            "approval_decided_at",
+            "approval_resume_enqueued_at",
+            "command_type",
+        ):
+            if key in snapshot.extra:
+                fields[key] = cls._json_value(snapshot.extra[key])
+        return {key: value for key, value in fields.items() if value is not None}
+
+    @staticmethod
+    def _state_machine_decision_log_fields(
+        decision: ExecutionStateDecision | None,
+    ) -> dict[str, Any] | None:
+        """Build structured log fields for a validator decision.
+
+        :param decision: Validator decision to serialize.
+        :type decision: ExecutionStateDecision | None
+        :return: Non-empty decision fields, or ``None``.
+        :rtype: dict[str, Any] | None
+        """
+        if decision is None:
+            return None
+        fields = {
+            "target_run_state": decision.target_run_state,
+            "target_operator_state": decision.target_operator_state,
+            "target_attempt_state": decision.target_attempt_state,
+            "target_attempt_operator_state": decision.target_attempt_operator_state,
+            "target_lease_status": decision.target_lease_status,
+            "target_current_attempt_id": decision.target_current_attempt_id,
+            "source_attempt_state": decision.source_attempt_state,
+            "source_attempt_operator_state": decision.source_attempt_operator_state,
+            "replacement_attempt_state": decision.replacement_attempt_state,
+            "replacement_attempt_operator_state": decision.replacement_attempt_operator_state,
+        }
+        return {key: value for key, value in fields.items() if value is not None}
+
+    @classmethod
+    def _state_machine_validation_log_payload(
+        cls,
+        *,
+        trigger: str,
+        mismatch_category: str,
+        before: ExecutionStateSnapshot,
+        after: ExecutionStateSnapshot,
+        result: ExecutionValidationResult | None = None,
+        exception: Exception | None = None,
+    ) -> dict[str, Any]:
+        """Build structured payload for advisory validation logs.
+
+        :param trigger: State-machine trigger or operation label.
+        :type trigger: str
+        :param mismatch_category: Structured mismatch category.
+        :type mismatch_category: str
+        :param before: Pre-transition snapshot.
+        :type before: ExecutionStateSnapshot
+        :param after: Post-transition snapshot.
+        :type after: ExecutionStateSnapshot
+        :param result: Optional validator result.
+        :type result: ExecutionValidationResult | None
+        :param exception: Optional exception raised by validation/logging.
+        :type exception: Exception | None
+        :return: Structured, non-sensitive logging payload.
+        :rtype: dict[str, Any]
+        """
+        payload: dict[str, Any] = {
+            "event": "execution_state_machine_validation",
+            "trigger": trigger,
+            "mismatch_category": mismatch_category,
+            "run_id": before.run_id or after.run_id,
+            "attempt_id": before.attempt_id or after.attempt_id,
+            "replacement_attempt_id": after.replacement_attempt_id,
+            "command_id": before.command_id or after.command_id,
+            "before": cls._state_machine_snapshot_log_fields(before),
+            "after": cls._state_machine_snapshot_log_fields(after),
+        }
+        if result is not None:
+            payload["validation_valid"] = result.valid
+            payload["validation_error"] = result.error_message
+            payload["guard_results"] = result.guard_results
+            decision = cls._state_machine_decision_log_fields(result.decision)
+            if decision is not None:
+                payload["decision"] = decision
+        if exception is not None:
+            payload["exception_class"] = exception.__class__.__name__
+            payload["exception_message"] = str(exception)
+        return {key: value for key, value in payload.items() if value is not None}
+
+    def _log_state_machine_validation_mismatch(
+        self,
+        *,
+        trigger: str,
+        mismatch_category: str,
+        before: ExecutionStateSnapshot,
+        after: ExecutionStateSnapshot,
+        result: ExecutionValidationResult,
+    ) -> None:
+        """Log a non-fatal advisory state-machine mismatch.
+
+        :param trigger: Trigger or operation label being validated.
+        :type trigger: str
+        :param mismatch_category: Structured mismatch category.
+        :type mismatch_category: str
+        :param before: Pre-transition snapshot.
+        :type before: ExecutionStateSnapshot
+        :param after: Post-transition snapshot.
+        :type after: ExecutionStateSnapshot
+        :param result: Validator result.
+        :type result: ExecutionValidationResult
+        """
+        try:
+            self._state_machine_validation_logger.warning(
+                "execution_state_machine_validation_mismatch",
+                extra={
+                    "state_machine_validation": self._state_machine_validation_log_payload(
+                        trigger=trigger,
+                        mismatch_category=mismatch_category,
+                        before=before,
+                        after=after,
+                        result=result,
+                    ),
+                },
+            )
+        except Exception:
+            return
+
+    def _log_state_machine_validator_exception(
+        self,
+        *,
+        trigger: str,
+        before: ExecutionStateSnapshot,
+        after: ExecutionStateSnapshot,
+        exception: Exception,
+    ) -> None:
+        """Log and contain an advisory validator exception.
+
+        :param trigger: Trigger or operation label being validated.
+        :type trigger: str
+        :param before: Pre-transition snapshot.
+        :type before: ExecutionStateSnapshot
+        :param after: Post-transition snapshot.
+        :type after: ExecutionStateSnapshot
+        :param exception: Exception raised by validator construction or calls.
+        :type exception: Exception
+        """
+        try:
+            self._state_machine_validation_logger.exception(
+                "execution_state_machine_validation_exception",
+                extra={
+                    "state_machine_validation": self._state_machine_validation_log_payload(
+                        trigger=trigger,
+                        mismatch_category=MISMATCH_CATEGORY_VALIDATOR_EXCEPTION,
+                        before=before,
+                        after=after,
+                        exception=exception,
+                    ),
+                },
+            )
+        except Exception:
+            return
+
+    def _check_transition_allowed_or_raise(
+        self,
+        trigger: ExecutionTrigger,
+        context: ExecutionTransitionContext,
+    ) -> None:
+        """Pre-check *trigger* against the state machine and raise if blocked.
+
+        Called *before* mutation when the feature flag is enabled.  When the
+        state machine rejects the transition, a
+        :class:`RunTransitionConflictError` is raised with a human-readable
+        reason.
+
+        :param trigger: State-machine trigger to validate.
+        :type trigger: ExecutionTrigger
+        :param context: Pre-transition guard context.
+        :type context: ExecutionTransitionContext
+        :raises RunTransitionConflictError: If the transition is not allowed.
+        """
+        validator = self._state_machine_validator_factory()
+        allowed, reason = validator.check_transition_allowed(trigger, context)
+        if not allowed:
+            message = f"Transition {trigger!r} not allowed: {reason}" if reason else f"Transition {trigger!r} not allowed from current state."
+            raise RunTransitionConflictError(message)
+
+    def _validate_state_machine_transition(
+        self,
+        *,
+        trigger: ExecutionTrigger,
+        before: ExecutionStateSnapshot,
+        after: ExecutionStateSnapshot,
+        now: datetime,
+        provided_lease_token: str | None = None,
+        retryable: bool | None = None,
+        max_attempts: int | None = None,
+        retry_delay_seconds: int | None = None,
+        service_chosen_operator_state: str | None = None,
+    ) -> None:
+        """Run advisory validation without affecting service outcomes.
+
+        This helper owns Phase 1b exception safety: disabled validation is a
+        no-op, validator construction is request-scoped, mismatches are logged
+        as structured warnings, and validator/logging failures are contained.
+
+        :param trigger: State-machine trigger to validate.
+        :type trigger: ExecutionTrigger
+        :param before: Snapshot captured before service mutation.
+        :type before: ExecutionStateSnapshot
+        :param after: Snapshot captured after service mutation.
+        :type after: ExecutionStateSnapshot
+        :param now: Service clock value used for validation guards.
+        :type now: datetime
+        :param provided_lease_token: Caller-provided lease token, if any.
+        :type provided_lease_token: str | None
+        :param retryable: Failure retryability flag, if applicable.
+        :type retryable: bool | None
+        :param max_attempts: Failure retry budget, if applicable.
+        :type max_attempts: int | None
+        :param retry_delay_seconds: Chosen retry delay, if applicable.
+        :type retry_delay_seconds: int | None
+        :param service_chosen_operator_state: Operator target chosen by service
+            logic for context-dependent transitions.
+        :type service_chosen_operator_state: str | None
+        """
+        if self._state_machine_validation_enabled:
+            return
+        try:
+            validator = self._state_machine_validator_factory()
+            context = self._state_machine_context(
+                before=before,
+                now=now,
+                provided_lease_token=provided_lease_token,
+                retryable=retryable,
+                max_attempts=max_attempts,
+                retry_delay_seconds=retry_delay_seconds,
+                service_chosen_operator_state=service_chosen_operator_state,
+            )
+            result = validator.validate_run_transition(trigger, context)
+            if not result.validated:
+                return
+            mismatch_category = self._state_machine_mismatch_category(
+                result=result,
+                before=before,
+                after=after,
+            )
+            if mismatch_category is not None:
+                self._log_state_machine_validation_mismatch(
+                    trigger=trigger,
+                    mismatch_category=mismatch_category,
+                    before=before,
+                    after=after,
+                    result=result,
+                )
+        except Exception as exc:
+            self._log_state_machine_validator_exception(
+                trigger=trigger,
+                before=before,
+                after=after,
+                exception=exc,
+            )
+
+    def _validate_operator_transition(
+        self,
+        *,
+        trigger: ExecutionTrigger,
+        before: ExecutionStateSnapshot,
+        after: ExecutionStateSnapshot,
+        now: datetime,
+        service_chosen_operator_state: str | None = None,
+    ) -> None:
+        """Run advisory operator-state-only validation without affecting service outcomes.
+
+        Uses the operator-state machine (``pause``, ``resume``) and confirms
+        run.state dimensions remain unchanged.
+
+        :param trigger: Operator-state machine trigger to validate.
+        :type trigger: ExecutionTrigger
+        :param before: Snapshot captured before service mutation.
+        :type before: ExecutionStateSnapshot
+        :param after: Snapshot captured after service mutation.
+        :type after: ExecutionStateSnapshot
+        :param now: Service clock value used for validation guards.
+        :type now: datetime
+        :param service_chosen_operator_state: Operator target chosen by
+            service logic for context-dependent transitions.
+        :type service_chosen_operator_state: str | None
+        """
+        if self._state_machine_validation_enabled:
+            return
+        try:
+            validator = self._state_machine_validator_factory()
+            context = self._state_machine_context(
+                before=before,
+                now=now,
+                service_chosen_operator_state=service_chosen_operator_state,
+            )
+            result = validator.validate_operator_transition(trigger, context)
+            if not result.validated:
+                return
+            mismatch_category = self._state_machine_mismatch_category(
+                result=result,
+                before=before,
+                after=after,
+            )
+            if mismatch_category is not None:
+                self._log_state_machine_validation_mismatch(
+                    trigger=trigger,
+                    mismatch_category=mismatch_category,
+                    before=before,
+                    after=after,
+                    result=result,
+                )
+        except Exception as exc:
+            self._log_state_machine_validator_exception(
+                trigger=trigger,
+                before=before,
+                after=after,
+                exception=exc,
+            )
+
+    def _validate_creation(
+        self,
+        *,
+        operation: ExecutionCreationOperation,
+        before_snapshot: ExecutionStateSnapshot,
+        after_snapshot: ExecutionStateSnapshot,
+    ) -> None:
+        """Run advisory creation validation without affecting service outcomes.
+
+        :param operation: Creation operation to validate.
+        :type operation: ExecutionCreationOperation
+        :param before_snapshot: Source state snapshot (pre-creation).
+        :type before_snapshot: ExecutionStateSnapshot
+        :param after_snapshot: Post-creation state snapshot.
+        :type after_snapshot: ExecutionStateSnapshot
+        """
+        if self._state_machine_validation_enabled:
+            return
+        try:
+            validator = self._state_machine_validator_factory()
+            result = validator.validate_creation(
+                operation=operation,
+                before_snapshot=before_snapshot,
+                after_snapshot=after_snapshot,
+            )
+            if not result.validated:
+                return
+            mismatch_category = self._state_machine_mismatch_category(
+                result=result,
+                before=before_snapshot,
+                after=after_snapshot,
+            )
+            if mismatch_category is not None:
+                self._log_state_machine_validation_mismatch(
+                    trigger="admit_create" if operation == "admit_create" else "restart_run_from_scratch",
+                    mismatch_category=mismatch_category,
+                    before=before_snapshot,
+                    after=after_snapshot,
+                    result=result,
+                )
+        except Exception as exc:
+            self._log_state_machine_validator_exception(
+                trigger="admit_create" if operation == "admit_create" else "restart_run_from_scratch",
+                before=before_snapshot,
+                after=after_snapshot,
+                exception=exc,
+            )
+
+    def _validate_non_state_operation(
+        self,
+        *,
+        before: ExecutionStateSnapshot,
+        after: ExecutionStateSnapshot,
+        trigger: str = "renew_attempt_lease",
+    ) -> None:
+        """Run advisory non-state-operation validation.
+
+        Confirms no run/attempt/operator state dimensions changed.
+
+        :param before: Pre-operation state snapshot.
+        :type before: ExecutionStateSnapshot
+        :param after: Post-operation state snapshot.
+        :type after: ExecutionStateSnapshot
+        :param trigger: Trigger label for logging (defaults to
+            ``renew_attempt_lease``).
+        :type trigger: str
+        """
+        if self._state_machine_validation_enabled:
+            return
+        try:
+            validator = self._state_machine_validator_factory()
+            result = validator.validate_non_state_operation(
+                before_snapshot=before,
+                after_snapshot=after,
+            )
+            if not result.validated:
+                return
+            mismatch_category = self._state_machine_mismatch_category(
+                result=result,
+                before=before,
+                after=after,
+            )
+            if mismatch_category is not None:
+                self._log_state_machine_validation_mismatch(
+                    trigger=trigger,
+                    mismatch_category=mismatch_category,
+                    before=before,
+                    after=after,
+                    result=result,
+                )
+        except Exception as exc:
+            self._log_state_machine_validator_exception(
+                trigger=trigger,
+                before=before,
+                after=after,
+                exception=exc,
+            )
+
+    # -- Authoritative Phase 1c-03 helpers --------------------------------
+
+    def _validate_creation_or_raise(
+        self,
+        *,
+        operation: ExecutionCreationOperation,
+        before_snapshot: ExecutionStateSnapshot,
+        after_snapshot: ExecutionStateSnapshot,
+    ) -> None:
+        """
+        Authoritative pre-mutation creation validation.
+
+        Calls the state-machine validator and raises
+        :class:`RunTransitionConflictError` when validation fails.
+
+        :param operation: Creation operation to validate.
+        :type operation: ExecutionCreationOperation
+        :param before_snapshot: Pre-creation state snapshot.
+        :type before_snapshot: ExecutionStateSnapshot
+        :param after_snapshot: Planned post-creation state snapshot.
+        :type after_snapshot: ExecutionStateSnapshot
+        :raises RunTransitionConflictError: If creation validation fails.
+        """
+        if not self._state_machine_validation_enabled:
+            return
+        try:
+            validator = self._state_machine_validator_factory()
+            result = validator.validate_creation(
+                operation=operation,
+                before_snapshot=before_snapshot,
+                after_snapshot=after_snapshot,
+            )
+            if not result.validated:
+                return
+            mismatch_category = self._state_machine_mismatch_category(
+                result=result,
+                before=before_snapshot,
+                after=after_snapshot,
+            )
+            if mismatch_category is not None:
+                raise RunTransitionConflictError(
+                    f"Creation validation failed for {operation!r}: {mismatch_category} (run_state={after_snapshot.run_state!r}, operator_state={after_snapshot.operator_state!r})"
+                )
+        except RunTransitionConflictError:
+            raise
+        except Exception as exc:
+            raise RunTransitionConflictError(f"Creation validator exception for {operation!r}: {exc}") from exc
+
+    def _validate_non_state_operation_or_raise(
+        self,
+        *,
+        before: ExecutionStateSnapshot,
+        after: ExecutionStateSnapshot,
+        trigger: str = "renew_attempt_lease",
+    ) -> None:
+        """
+        Authoritative pre-mutation non-state operation validation.
+
+        Calls the state-machine validator and raises
+        :class:`RunTransitionConflictError` when a state dimension has
+        changed (indicating the operation is not purely non-state).
+
+        :param before: Pre-operation state snapshot.
+        :type before: ExecutionStateSnapshot
+        :param after: Planned post-operation state snapshot.
+        :type after: ExecutionStateSnapshot
+        :param trigger: Trigger label for error messages (defaults to
+            ``renew_attempt_lease``).
+        :type trigger: str
+        :raises RunTransitionConflictError: If state dimensions changed.
+        """
+        if not self._state_machine_validation_enabled:
+            return
+        try:
+            validator = self._state_machine_validator_factory()
+            result = validator.validate_non_state_operation(
+                before_snapshot=before,
+                after_snapshot=after,
+            )
+            if not result.validated:
+                return
+            mismatch_category = self._state_machine_mismatch_category(
+                result=result,
+                before=before,
+                after=after,
+            )
+            if mismatch_category is not None:
+                raise RunTransitionConflictError(f"Non-state operation {trigger!r} changed state dimensions: {mismatch_category}")
+        except RunTransitionConflictError:
+            raise
+        except Exception as exc:
+            raise RunTransitionConflictError(f"Non-state validator exception for {trigger!r}: {exc}") from exc
+
     def _select_claim_candidate(
         self,
         session: Session,
@@ -535,6 +1592,17 @@ class ExecutionTransitionService:
             attempt_no=attempt.attempt_no,
             run_version=run.version,
             attempt_version=attempt.version,
+            run_state=run.state,
+            operator_state=run.operator_state,
+            current_attempt_id=run.current_attempt_id,
+            active_attempt_no=run.active_attempt_no,
+            attempt_state=attempt.attempt_state,
+            attempt_operator_state=attempt.operator_state,
+            lease_status=attempt.lease_status,
+            lease_token=attempt.lease_token,
+            scheduled_at=attempt.scheduled_at,
+            lease_expires_at=attempt.lease_expires_at,
+            next_wakeup_at=run.next_wakeup_at,
         )
 
     def peek_claimable_attempt(
@@ -637,8 +1705,6 @@ class ExecutionTransitionService:
                     created_at=current_time,
                     updated_at=current_time,
                 )
-                session.add(run)
-                session.flush()
 
                 attempt = RunAttemptORM(
                     id=attempt_id,
@@ -653,8 +1719,6 @@ class ExecutionTransitionService:
                     created_at=current_time,
                     updated_at=current_time,
                 )
-                session.add(attempt)
-                session.flush()
 
                 outbox = RunOutboxORM(
                     id=outbox_id,
@@ -673,6 +1737,29 @@ class ExecutionTransitionService:
                     created_at=current_time,
                     updated_at=current_time,
                 )
+
+                # Authoritative creation validation before persisting.
+                if self._state_machine_validation_enabled:
+                    self._validate_creation_or_raise(
+                        operation="admit_create",
+                        before_snapshot=ExecutionStateSnapshot(),
+                        after_snapshot=self._state_machine_snapshot(
+                            run=run,
+                            attempt=attempt,
+                            extra={
+                                "attempt_no": attempt.attempt_no,
+                                "active_attempt_no": run.active_attempt_no,
+                                "scheduled_at": attempt.scheduled_at,
+                                "lease_expires_at": attempt.lease_expires_at,
+                                "next_wakeup_at": run.next_wakeup_at,
+                            },
+                        ),
+                    )
+
+                session.add(run)
+                session.flush()
+                session.add(attempt)
+                session.flush()
                 session.add(outbox)
 
                 command.run_id = run_id
@@ -715,6 +1802,7 @@ class ExecutionTransitionService:
             )
             if candidate is None:
                 return None
+            before_snapshot = self._state_machine_snapshot_from_candidate(candidate)
             return self._claim_attempt(
                 session,
                 company_id=company_id,
@@ -725,6 +1813,7 @@ class ExecutionTransitionService:
                 worker_key=worker_key,
                 lease_ttl_seconds=lease_ttl_seconds,
                 now=current_time,
+                before_snapshot=before_snapshot,
             )
 
     def claim_attempt(
@@ -741,6 +1830,19 @@ class ExecutionTransitionService:
     ) -> ClaimResult:
         current_time = self._now(now)
         with self._session_factory() as session, session.begin():
+            before_run = session.get(RunORM, run_id)
+            before_attempt = session.get(RunAttemptORM, attempt_id)
+            before_snapshot = self._state_machine_snapshot(
+                run=before_run,
+                attempt=before_attempt,
+                extra={
+                    "attempt_no": before_attempt.attempt_no if before_attempt else None,
+                    "active_attempt_no": before_run.active_attempt_no if before_run else None,
+                    "scheduled_at": before_attempt.scheduled_at if before_attempt else None,
+                    "lease_expires_at": (before_attempt.lease_expires_at if before_attempt else None),
+                    "next_wakeup_at": before_run.next_wakeup_at if before_run else None,
+                },
+            )
             return self._claim_attempt(
                 session,
                 company_id=company_id,
@@ -751,6 +1853,7 @@ class ExecutionTransitionService:
                 worker_key=worker_key,
                 lease_ttl_seconds=lease_ttl_seconds,
                 now=current_time,
+                before_snapshot=before_snapshot,
             )
 
     def _claim_attempt(
@@ -765,9 +1868,45 @@ class ExecutionTransitionService:
         worker_key: str,
         lease_ttl_seconds: int,
         now: datetime,
+        before_snapshot: ExecutionStateSnapshot | None,
     ) -> ClaimResult:
+        """Claim an attempt with existing compare-and-set semantics.
+
+        :param session: Active transaction session.
+        :type session: Session
+        :param company_id: Company scope for the run and attempt.
+        :type company_id: str
+        :param run_id: Run identifier.
+        :type run_id: str
+        :param attempt_id: Attempt identifier.
+        :type attempt_id: str
+        :param expected_run_version: Run version expected by the caller.
+        :type expected_run_version: int
+        :param expected_attempt_version: Attempt version expected by caller.
+        :type expected_attempt_version: int
+        :param worker_key: Worker claiming the attempt.
+        :type worker_key: str
+        :param lease_ttl_seconds: Lease duration in seconds.
+        :type lease_ttl_seconds: int
+        :param now: Transition timestamp.
+        :type now: datetime
+        :param before_snapshot: Optional pre-claim validation snapshot.
+        :type before_snapshot: ExecutionStateSnapshot | None
+        :return: Claim result when the compare-and-set succeeds.
+        :rtype: ClaimResult
+        :raises StaleWorkerClaimError: If the run or attempt changed first.
+        """
         lease_token = str(uuid4())
         lease_expires_at = now + timedelta(seconds=max(1, lease_ttl_seconds))
+
+        # Authoritative pre-check: verify the state machine allows the claim
+        # before attempting the SQL CAS.
+        if self._state_machine_validation_enabled and before_snapshot is not None:
+            ctx = self._state_machine_context(
+                before=before_snapshot,
+                now=now,
+            )
+            self._check_transition_allowed_or_raise("claim_attempt", ctx)
 
         attempt_update = session.execute(
             update(RunAttemptORM)
@@ -776,7 +1915,7 @@ class ExecutionTransitionService:
                 RunAttemptORM.id == attempt_id,
                 RunAttemptORM.run_id == run_id,
                 RunAttemptORM.version == expected_attempt_version,
-                RunAttemptORM.attempt_state.in_(_CLAIMABLE_ATTEMPT_STATES),
+                RunAttemptORM.attempt_state.in_(CLAIMABLE_RUN_STATES),
             )
             .values(
                 attempt_state="dispatching",
@@ -833,6 +1972,25 @@ class ExecutionTransitionService:
                     worker_key=worker_key,
                 ),
             )
+        # Advisory post-check (monitoring path only).
+        if not self._state_machine_validation_enabled and before_snapshot is not None:
+            after_snapshot = self._state_machine_snapshot(
+                run=refreshed_run,
+                attempt=refreshed_attempt,
+                extra={
+                    "attempt_no": refreshed_attempt.attempt_no if refreshed_attempt else None,
+                    "active_attempt_no": refreshed_run.active_attempt_no if refreshed_run else None,
+                    "scheduled_at": refreshed_attempt.scheduled_at if refreshed_attempt else None,
+                    "lease_expires_at": refreshed_attempt.lease_expires_at if refreshed_attempt else None,
+                    "next_wakeup_at": refreshed_run.next_wakeup_at if refreshed_run else None,
+                },
+            )
+            self._validate_state_machine_transition(
+                trigger="claim_attempt",
+                before=before_snapshot,
+                after=after_snapshot,
+                now=now,
+            )
         return ClaimResult(
             run_id=run_id,
             attempt_id=attempt_id,
@@ -853,6 +2011,23 @@ class ExecutionTransitionService:
         step_key: str,
         now: datetime | None = None,
     ) -> None:
+        """Move a dispatched attempt into executing state.
+
+        :param company_id: Company scope for the run.
+        :type company_id: str
+        :param run_id: Run identifier.
+        :type run_id: str
+        :param attempt_id: Attempt identifier.
+        :type attempt_id: str
+        :param lease_token: Worker lease token.
+        :type lease_token: str
+        :param step_key: Execution step entering work.
+        :type step_key: str
+        :param now: Optional transition timestamp.
+        :type now: datetime | None
+        :raises RunNotFoundError: If the run is missing.
+        :raises RunTransitionConflictError: If the attempt cannot execute.
+        """
         current_time = self._now(now)
         with self._session_factory() as session, session.begin():
             run = session.get(RunORM, run_id)
@@ -861,14 +2036,40 @@ class ExecutionTransitionService:
                 raise RunNotFoundError(f"Run '{run_id}' not found for company '{company_id}'.")
             if attempt is None or attempt.company_id != company_id or attempt.run_id != run_id:
                 raise RunTransitionConflictError(f"Attempt '{attempt_id}' does not belong to run '{run_id}'.")
-            if run.state != "dispatching" or attempt.attempt_state != "dispatching":
+            # The attempt-state check is unconditional: the state machine
+            # tracks run_state (enforced by the source constraint) but does
+            # not have a separate attempt_state guard for start_execution.
+            if attempt.attempt_state != "dispatching":
                 raise RunTransitionConflictError("Only dispatched attempts can move to executing.")
-            if attempt.lease_token != lease_token:
-                raise RunTransitionConflictError("Lease token does not match the active worker claim.")
-            if run.operator_state == "paused" or attempt.operator_state == "paused":
-                raise RunTransitionConflictError("Paused runs cannot move into executing work.")
 
             operator_state = self._operator_state_for_execution_step(step_key)
+
+            before_snapshot = self._state_machine_snapshot(
+                run=run,
+                attempt=attempt,
+                extra={
+                    "attempt_no": attempt.attempt_no,
+                    "active_attempt_no": run.active_attempt_no,
+                    "scheduled_at": attempt.scheduled_at,
+                    "lease_expires_at": attempt.lease_expires_at,
+                    "next_wakeup_at": run.next_wakeup_at,
+                },
+            )
+            if self._state_machine_validation_enabled:
+                ctx = self._state_machine_context(
+                    before=before_snapshot,
+                    now=current_time,
+                    provided_lease_token=lease_token,
+                    service_chosen_operator_state=operator_state,
+                )
+                self._check_transition_allowed_or_raise("start_execution", ctx)
+            else:
+                if run.state != "dispatching":
+                    raise RunTransitionConflictError("Only dispatched attempts can move to executing.")
+                if attempt.lease_token != lease_token:
+                    raise RunTransitionConflictError("Lease token does not match the active worker claim.")
+                if run.operator_state == "paused" or attempt.operator_state == "paused":
+                    raise RunTransitionConflictError("Paused runs cannot move into executing work.")
 
             attempt.version += 1
             attempt.attempt_state = "executing"
@@ -900,6 +2101,25 @@ class ExecutionTransitionService:
                 ),
             )
             run.updated_at = current_time
+            if not self._state_machine_validation_enabled and before_snapshot is not None:
+                self._validate_state_machine_transition(
+                    trigger="start_execution",
+                    before=before_snapshot,
+                    after=self._state_machine_snapshot(
+                        run=run,
+                        attempt=attempt,
+                        extra={
+                            "attempt_no": attempt.attempt_no,
+                            "active_attempt_no": run.active_attempt_no,
+                            "scheduled_at": attempt.scheduled_at,
+                            "lease_expires_at": attempt.lease_expires_at,
+                            "next_wakeup_at": run.next_wakeup_at,
+                        },
+                    ),
+                    now=current_time,
+                    provided_lease_token=lease_token,
+                    service_chosen_operator_state=operator_state,
+                )
 
     def record_attempt_failure(
         self,
@@ -919,6 +2139,41 @@ class ExecutionTransitionService:
         retry_after_seconds: int | None = None,
         now: datetime | None = None,
     ) -> AttemptFailureResult:
+        """Record an in-flight attempt failure and retry/dead-letter outcome.
+
+        :param company_id: Company scope for the run.
+        :type company_id: str
+        :param run_id: Run identifier.
+        :type run_id: str
+        :param attempt_id: Attempt identifier.
+        :type attempt_id: str
+        :param lease_token: Worker lease token.
+        :type lease_token: str
+        :param failure_class: Failure classification.
+        :type failure_class: str
+        :param error_code: Stable error code.
+        :type error_code: str
+        :param error_detail: Diagnostic detail for operators.
+        :type error_detail: str
+        :param retryable: Whether the failure may be retried.
+        :type retryable: bool
+        :param max_attempts: Maximum allowed attempts.
+        :type max_attempts: int
+        :param backoff_base_seconds: Base retry backoff in seconds.
+        :type backoff_base_seconds: int
+        :param backoff_max_seconds: Maximum retry backoff in seconds.
+        :type backoff_max_seconds: int
+        :param backoff_jitter_ratio: Retry jitter ratio.
+        :type backoff_jitter_ratio: float
+        :param retry_after_seconds: Provider-supplied retry delay.
+        :type retry_after_seconds: int | None
+        :param now: Optional transition timestamp.
+        :type now: datetime | None
+        :return: Failure transition result.
+        :rtype: AttemptFailureResult
+        :raises RunNotFoundError: If the run is missing.
+        :raises RunTransitionConflictError: If failure cannot be recorded.
+        """
         current_time = self._now(now)
         if max_attempts < 1:
             raise ValueError("max_attempts must be at least 1")
@@ -929,18 +2184,62 @@ class ExecutionTransitionService:
                 raise RunNotFoundError(f"Run '{run_id}' not found for company '{company_id}'.")
             if attempt is None or attempt.company_id != company_id or attempt.run_id != run_id:
                 raise RunTransitionConflictError(f"Attempt '{attempt_id}' does not belong to run '{run_id}'.")
-            if run.current_attempt_id != attempt_id:
-                raise RunTransitionConflictError(f"Attempt '{attempt_id}' is not the active attempt for run '{run_id}'.")
-            if run.state not in {
-                "dispatching",
-                "executing",
-            } or attempt.attempt_state not in {
-                "dispatching",
-                "executing",
-            }:
-                raise RunTransitionConflictError("Only in-flight attempts can record a failure outcome.")
-            if attempt.lease_token != lease_token:
-                raise RunTransitionConflictError("Lease token does not match the active worker claim.")
+            before_snapshot = self._state_machine_snapshot(
+                run=run,
+                attempt=attempt,
+                extra={
+                    "attempt_no": attempt.attempt_no,
+                    "active_attempt_no": run.active_attempt_no,
+                    "retry_count": attempt.retry_count,
+                    "max_attempts": max_attempts,
+                    "scheduled_at": attempt.scheduled_at,
+                    "lease_expires_at": attempt.lease_expires_at,
+                    "next_wakeup_at": run.next_wakeup_at,
+                },
+            )
+            if self._state_machine_validation_enabled:
+                # Determine the failure trigger using the same logic the
+                # service will use below, so the state machine pre-check
+                # validates the correct guard set.
+                next_attempt_no = run.active_attempt_no + 1
+                should_retry = retryable and next_attempt_no <= max_attempts
+                if should_retry:
+                    retry_count = attempt.retry_count + 1
+                    precheck_retry_delay = self._retry_backoff_seconds(
+                        attempt_id=attempt.id,
+                        retry_count=retry_count,
+                        base_seconds=max(1, backoff_base_seconds),
+                        max_seconds=max(1, backoff_max_seconds),
+                        retry_after_seconds=retry_after_seconds,
+                        jitter_ratio=max(0.0, backoff_jitter_ratio),
+                    )
+                    failure_trigger: str = "record_retryable_failure_delayed" if precheck_retry_delay > 0 else "record_retryable_failure_immediate"
+                else:
+                    failure_trigger = "record_terminal_failure"
+                ctx = self._state_machine_context(
+                    before=before_snapshot,
+                    now=current_time,
+                    provided_lease_token=lease_token,
+                    retryable=retryable,
+                    max_attempts=max_attempts,
+                )
+                self._check_transition_allowed_or_raise(
+                    failure_trigger,
+                    ctx,
+                )
+            else:
+                if run.current_attempt_id != attempt_id:
+                    raise RunTransitionConflictError(f"Attempt '{attempt_id}' is not the active attempt for run '{run_id}'.")
+                if run.state not in {
+                    "dispatching",
+                    "executing",
+                } or attempt.attempt_state not in {
+                    "dispatching",
+                    "executing",
+                }:
+                    raise RunTransitionConflictError("Only in-flight attempts can record a failure outcome.")
+                if attempt.lease_token != lease_token:
+                    raise RunTransitionConflictError("Lease token does not match the active worker claim.")
 
             attempt.version += 1
             attempt.attempt_state = "failed"
@@ -973,23 +2272,22 @@ class ExecutionTransitionService:
                 next_state = "retry_backoff" if retry_delay_seconds > 0 else "queued"
                 next_operator_state = self._operator_state_for_retry_delay(retry_delay_seconds)
 
-                session.add(
-                    RunAttemptORM(
-                        id=next_attempt_id,
-                        company_id=company_id,
-                        run_id=run_id,
-                        attempt_no=next_attempt_no,
-                        attempt_state=next_state,
-                        operator_state=next_operator_state,
-                        lease_status="not_leased",
-                        scheduled_at=scheduled_at,
-                        retry_count=retry_count,
-                        backoff_until=scheduled_at if retry_delay_seconds > 0 else None,
-                        version=0,
-                        created_at=current_time,
-                        updated_at=current_time,
-                    )
+                next_attempt = RunAttemptORM(
+                    id=next_attempt_id,
+                    company_id=company_id,
+                    run_id=run_id,
+                    attempt_no=next_attempt_no,
+                    attempt_state=next_state,
+                    operator_state=next_operator_state,
+                    lease_status="not_leased",
+                    scheduled_at=scheduled_at,
+                    retry_count=retry_count,
+                    backoff_until=scheduled_at if retry_delay_seconds > 0 else None,
+                    version=0,
+                    created_at=current_time,
+                    updated_at=current_time,
                 )
+                session.add(next_attempt)
                 session.add(
                     RunOutboxORM(
                         id=self._new_id("outbox"),
@@ -1055,6 +2353,33 @@ class ExecutionTransitionService:
                 run.next_wakeup_at = scheduled_at
                 run.terminal_at = None
                 run.updated_at = current_time
+                if not self._state_machine_validation_enabled and before_snapshot is not None:
+                    self._validate_state_machine_transition(
+                        trigger=("record_retryable_failure_delayed" if retry_delay_seconds > 0 else "record_retryable_failure_immediate"),
+                        before=before_snapshot,
+                        after=self._state_machine_snapshot(
+                            run=run,
+                            attempt=attempt,
+                            replacement_attempt_id=next_attempt_id,
+                            extra={
+                                "attempt_no": attempt.attempt_no,
+                                "active_attempt_no": run.active_attempt_no,
+                                "retry_count": attempt.retry_count,
+                                "max_attempts": max_attempts,
+                                "scheduled_at": attempt.scheduled_at,
+                                "lease_expires_at": attempt.lease_expires_at,
+                                "next_wakeup_at": run.next_wakeup_at,
+                                "replacement_attempt_state": next_attempt.attempt_state,
+                                "replacement_attempt_operator_state": next_attempt.operator_state,
+                                "replacement_lease_status": next_attempt.lease_status,
+                            },
+                        ),
+                        now=current_time,
+                        provided_lease_token=lease_token,
+                        retryable=retryable,
+                        max_attempts=max_attempts,
+                        retry_delay_seconds=retry_delay_seconds,
+                    )
 
                 return AttemptFailureResult(
                     run_id=run_id,
@@ -1135,6 +2460,28 @@ class ExecutionTransitionService:
             run.next_wakeup_at = None
             run.terminal_at = current_time
             run.updated_at = current_time
+            if not self._state_machine_validation_enabled and before_snapshot is not None:
+                self._validate_state_machine_transition(
+                    trigger="record_terminal_failure",
+                    before=before_snapshot,
+                    after=self._state_machine_snapshot(
+                        run=run,
+                        attempt=attempt,
+                        extra={
+                            "attempt_no": attempt.attempt_no,
+                            "active_attempt_no": run.active_attempt_no,
+                            "retry_count": attempt.retry_count,
+                            "max_attempts": max_attempts,
+                            "scheduled_at": attempt.scheduled_at,
+                            "lease_expires_at": attempt.lease_expires_at,
+                            "next_wakeup_at": run.next_wakeup_at,
+                        },
+                    ),
+                    now=current_time,
+                    provided_lease_token=lease_token,
+                    retryable=retryable,
+                    max_attempts=max_attempts,
+                )
 
             return AttemptFailureResult(
                 run_id=run_id,
@@ -1158,6 +2505,27 @@ class ExecutionTransitionService:
         request_fingerprint_hash: str,
         now: datetime | None = None,
     ) -> CommandTransitionResult:
+        """Request cancellation for a non-terminal run.
+
+        :param company_id: Company scope for the run.
+        :type company_id: str
+        :param run_id: Run identifier.
+        :type run_id: str
+        :param actor_type: Actor type issuing the command.
+        :type actor_type: str
+        :param actor_id: Actor identifier issuing the command.
+        :type actor_id: str
+        :param idempotency_key: Idempotency key for the cancel command.
+        :type idempotency_key: str
+        :param request_fingerprint_hash: Request fingerprint hash.
+        :type request_fingerprint_hash: str
+        :param now: Optional transition timestamp.
+        :type now: datetime | None
+        :return: Completed cancel command result.
+        :rtype: CommandTransitionResult
+        :raises RunNotFoundError: If the run is missing.
+        :raises RunTransitionConflictError: If the run cannot be cancelled.
+        """
         current_time = self._now(now)
         with self._session_factory() as session, session.begin():
             existing = self._find_command_or_raise_conflict(
@@ -1175,10 +2543,30 @@ class ExecutionTransitionService:
             run = session.get(RunORM, run_id)
             if run is None or run.company_id != company_id:
                 raise RunNotFoundError(f"Run '{run_id}' not found for company '{company_id}'.")
-            if run.state in _TERMINAL_RUN_STATES or run.state == "cancel_requested":
-                raise RunTransitionConflictError(f"Run '{run_id}' cannot be cancelled from state '{run.state}'.")
 
             attempt = self._current_attempt(session, run)
+            approval_link = self._current_approval_link(session, run)
+            before_snapshot = self._state_machine_snapshot(
+                run=run,
+                attempt=attempt,
+                approval_link=approval_link,
+                extra={
+                    "attempt_no": attempt.attempt_no,
+                    "active_attempt_no": run.active_attempt_no,
+                    "scheduled_at": attempt.scheduled_at,
+                    "lease_expires_at": attempt.lease_expires_at,
+                    "next_wakeup_at": run.next_wakeup_at,
+                },
+            )
+            if self._state_machine_validation_enabled:
+                ctx = self._state_machine_context(
+                    before=before_snapshot,
+                    now=current_time,
+                )
+                self._check_transition_allowed_or_raise("request_cancel", ctx)
+            else:
+                if run.state in TERMINAL_RUN_STATES or run.state == "cancel_requested":
+                    raise RunTransitionConflictError(f"Run '{run_id}' cannot be cancelled from state '{run.state}'.")
             command = RunCommandORM(
                 id=self._new_id("cmd"),
                 company_id=company_id,
@@ -1238,6 +2626,25 @@ class ExecutionTransitionService:
             }
             command.accepted_transition = "cancel_requested"
             command.response_snapshot = snapshot
+            if not self._state_machine_validation_enabled and before_snapshot is not None:
+                self._validate_state_machine_transition(
+                    trigger="request_cancel",
+                    before=before_snapshot,
+                    after=self._state_machine_snapshot(
+                        run=run,
+                        attempt=attempt,
+                        approval_link=approval_link,
+                        command_id=command.id,
+                        extra={
+                            "attempt_no": attempt.attempt_no,
+                            "active_attempt_no": run.active_attempt_no,
+                            "scheduled_at": attempt.scheduled_at,
+                            "lease_expires_at": attempt.lease_expires_at,
+                            "next_wakeup_at": run.next_wakeup_at,
+                        },
+                    ),
+                    now=current_time,
+                )
 
             return self._command_result(command)
 
@@ -1271,8 +2678,28 @@ class ExecutionTransitionService:
                 run = session.get(RunORM, run_id)
                 if run is None or run.company_id != company_id:
                     raise RunNotFoundError(f"Run '{run_id}' not found for company '{company_id}'.")
-                if run.state not in _RETRYABLE_RUN_STATES:
-                    raise RunTransitionConflictError(f"Run '{run_id}' cannot retry from state '{run.state}'.")
+
+                attempt = self._current_attempt(session, run)
+                before_snapshot: ExecutionStateSnapshot | None = self._state_machine_snapshot(
+                    run=run,
+                    attempt=attempt,
+                    extra={
+                        "attempt_no": attempt.attempt_no,
+                        "active_attempt_no": run.active_attempt_no,
+                        "scheduled_at": attempt.scheduled_at,
+                        "lease_expires_at": attempt.lease_expires_at,
+                        "next_wakeup_at": run.next_wakeup_at,
+                    },
+                )
+                if self._state_machine_validation_enabled:
+                    ctx = self._state_machine_context(
+                        before=before_snapshot,
+                        now=current_time,
+                    )
+                    self._check_transition_allowed_or_raise("admit_retry", ctx)
+                else:
+                    if run.state not in RETRYABLE_RUN_STATES:
+                        raise RunTransitionConflictError(f"Run '{run_id}' cannot retry from state '{run.state}'.")
 
                 command = RunCommandORM(
                     id=self._new_id("cmd"),
@@ -1353,6 +2780,28 @@ class ExecutionTransitionService:
                 run.terminal_at = None
                 run.updated_at = current_time
 
+                if not self._state_machine_validation_enabled and before_snapshot is not None:
+                    self._validate_state_machine_transition(
+                        trigger="admit_retry",
+                        before=before_snapshot,
+                        after=self._state_machine_snapshot(
+                            run=run,
+                            attempt=attempt,
+                            replacement_attempt_id=attempt_id,
+                            extra={
+                                "attempt_no": attempt.attempt_no,
+                                "active_attempt_no": run.active_attempt_no,
+                                "scheduled_at": attempt.scheduled_at,
+                                "lease_expires_at": attempt.lease_expires_at,
+                                "next_wakeup_at": run.next_wakeup_at,
+                                "replacement_attempt_state": attempt.attempt_state,
+                                "replacement_attempt_operator_state": attempt.operator_state,
+                                "replacement_lease_status": attempt.lease_status,
+                            },
+                        ),
+                        now=current_time,
+                    )
+
                 snapshot = {
                     "run_id": run_id,
                     "attempt_id": attempt_id,
@@ -1388,6 +2837,27 @@ class ExecutionTransitionService:
         resume_disposition: str = "resume",
         now: datetime | None = None,
     ) -> ApprovalOpenResult:
+        """Open an approval gate for an executing attempt.
+
+        :param company_id: Company scope for the run.
+        :type company_id: str
+        :param run_id: Run identifier.
+        :type run_id: str
+        :param attempt_id: Attempt identifier.
+        :type attempt_id: str
+        :param approval_id: External/shared approval identifier.
+        :type approval_id: str
+        :param gate_key: Execution step or gate key requesting approval.
+        :type gate_key: str
+        :param resume_disposition: Rejection handling disposition.
+        :type resume_disposition: str
+        :param now: Optional transition timestamp.
+        :type now: datetime | None
+        :return: Approval-link creation result.
+        :rtype: ApprovalOpenResult
+        :raises RunNotFoundError: If the run is missing.
+        :raises RunTransitionConflictError: If the attempt cannot open approval.
+        """
         current_time = self._now(now)
         with self._session_factory() as session, session.begin():
             run = session.get(RunORM, run_id)
@@ -1396,8 +2866,29 @@ class ExecutionTransitionService:
                 raise RunNotFoundError(f"Run '{run_id}' not found for company '{company_id}'.")
             if attempt is None or attempt.company_id != company_id or attempt.run_id != run_id:
                 raise RunTransitionConflictError(f"Attempt '{attempt_id}' does not belong to run '{run_id}'.")
-            if run.state != "executing" or attempt.attempt_state != "executing":
-                raise RunTransitionConflictError("Approvals can only open from the executing state.")
+            before_snapshot = self._state_machine_snapshot(
+                run=run,
+                attempt=attempt,
+                extra={
+                    "attempt_no": attempt.attempt_no,
+                    "active_attempt_no": run.active_attempt_no,
+                    "scheduled_at": attempt.scheduled_at,
+                    "lease_expires_at": attempt.lease_expires_at,
+                    "next_wakeup_at": run.next_wakeup_at,
+                    "approval_id": approval_id,
+                    "approval_resume_disposition": resume_disposition,
+                    "approval_opened_at": current_time,
+                },
+            )
+            if self._state_machine_validation_enabled:
+                ctx = self._state_machine_context(
+                    before=before_snapshot,
+                    now=current_time,
+                )
+                self._check_transition_allowed_or_raise("open_approval", ctx)
+            else:
+                if run.state != "executing" or attempt.attempt_state != "executing":
+                    raise RunTransitionConflictError("Approvals can only open from the executing state.")
 
             approval_link = RunApprovalLinkORM(
                 id=self._new_id("approval"),
@@ -1453,6 +2944,25 @@ class ExecutionTransitionService:
             run.current_approval_link_id = approval_link.id
             run.current_step_key = gate_key
             run.updated_at = current_time
+            if not self._state_machine_validation_enabled and before_snapshot is not None:
+                self._validate_state_machine_transition(
+                    trigger="open_approval",
+                    before=before_snapshot,
+                    after=self._state_machine_snapshot(
+                        run=run,
+                        attempt=attempt,
+                        approval_link=approval_link,
+                        extra={
+                            "attempt_no": attempt.attempt_no,
+                            "active_attempt_no": run.active_attempt_no,
+                            "scheduled_at": attempt.scheduled_at,
+                            "lease_expires_at": attempt.lease_expires_at,
+                            "next_wakeup_at": run.next_wakeup_at,
+                            "approval_opened_at": current_time,
+                        },
+                    ),
+                    now=current_time,
+                )
 
             return ApprovalOpenResult(
                 approval_link_id=approval_link.id,
@@ -1473,6 +2983,29 @@ class ExecutionTransitionService:
         approved: bool,
         now: datetime | None = None,
     ) -> CommandTransitionResult:
+        """Apply an approval decision and resume, cancel, compensate, or fail.
+
+        :param company_id: Company scope for the approval link.
+        :type company_id: str
+        :param approval_id: External/shared approval identifier.
+        :type approval_id: str
+        :param actor_type: Actor type issuing the decision.
+        :type actor_type: str
+        :param actor_id: Actor identifier issuing the decision.
+        :type actor_id: str
+        :param idempotency_key: Idempotency key for the decision command.
+        :type idempotency_key: str
+        :param request_fingerprint_hash: Request fingerprint hash.
+        :type request_fingerprint_hash: str
+        :param approved: Whether the approval was accepted.
+        :type approved: bool
+        :param now: Optional transition timestamp.
+        :type now: datetime | None
+        :return: Completed approval decision command result.
+        :rtype: CommandTransitionResult
+        :raises RunNotFoundError: If the linked run is missing.
+        :raises RunTransitionConflictError: If the approval cannot be decided.
+        """
         current_time = self._now(now)
         command_type = "approval_resume" if approved else "approval_reject"
         with self._session_factory() as session, session.begin():
@@ -1510,6 +3043,31 @@ class ExecutionTransitionService:
                 raise RunNotFoundError(f"Run '{approval_link.run_id}' not found for company '{company_id}'.")
             if attempt is None or attempt.company_id != company_id:
                 raise RunTransitionConflictError(f"Attempt '{approval_link.attempt_id}' is missing for approval '{approval_id}'.")
+
+            approval_trigger = self._approval_decision_trigger(
+                approved=approved,
+                resume_disposition=approval_link.resume_disposition,
+            )
+            before_snapshot = self._state_machine_snapshot(
+                run=run,
+                attempt=attempt,
+                approval_link=approval_link,
+                extra={
+                    "attempt_no": attempt.attempt_no,
+                    "active_attempt_no": run.active_attempt_no,
+                    "scheduled_at": attempt.scheduled_at,
+                    "lease_expires_at": attempt.lease_expires_at,
+                    "next_wakeup_at": run.next_wakeup_at,
+                    "command_type": command_type,
+                },
+            )
+
+            if self._state_machine_validation_enabled:
+                ctx = self._state_machine_context(
+                    before=before_snapshot,
+                    now=current_time,
+                )
+                self._check_transition_allowed_or_raise(approval_trigger, ctx)
 
             command = RunCommandORM(
                 id=self._new_id("cmd"),
@@ -1619,6 +3177,26 @@ class ExecutionTransitionService:
             }
             command.accepted_transition = run_state
             command.response_snapshot = snapshot
+            if not self._state_machine_validation_enabled and before_snapshot is not None:
+                self._validate_state_machine_transition(
+                    trigger=approval_trigger,
+                    before=before_snapshot,
+                    after=self._state_machine_snapshot(
+                        run=run,
+                        attempt=attempt,
+                        approval_link=approval_link,
+                        command_id=command.id,
+                        extra={
+                            "attempt_no": attempt.attempt_no,
+                            "active_attempt_no": run.active_attempt_no,
+                            "scheduled_at": attempt.scheduled_at,
+                            "lease_expires_at": attempt.lease_expires_at,
+                            "next_wakeup_at": run.next_wakeup_at,
+                            "command_type": command_type,
+                        },
+                    ),
+                    now=current_time,
+                )
 
             return self._command_result(command)
 
@@ -1645,9 +3223,50 @@ class ExecutionTransitionService:
             if attempt.attempt_state not in _IN_FLIGHT_ATTEMPT_STATES:
                 raise RunTransitionConflictError("Only in-flight attempts can renew worker leases.")
 
+            before_snapshot: ExecutionStateSnapshot | None = self._state_machine_snapshot(
+                run=run,
+                attempt=attempt,
+                extra={
+                    "attempt_no": attempt.attempt_no,
+                    "active_attempt_no": run.active_attempt_no,
+                    "scheduled_at": attempt.scheduled_at,
+                    "lease_expires_at": attempt.lease_expires_at,
+                    "next_wakeup_at": run.next_wakeup_at,
+                },
+            )
+            if self._state_machine_validation_enabled:
+                # Authoritative pre-check: state dimensions must not change.
+                # Using the same snapshot for before and after is correct
+                # because no mutation has occurred yet — the validator
+                # confirms before/after state fields match.
+                self._validate_non_state_operation_or_raise(
+                    before=before_snapshot,
+                    after=before_snapshot,
+                    trigger="renew_attempt_lease",
+                )
+
             attempt.last_heartbeat_at = current_time
             attempt.lease_expires_at = current_time + timedelta(seconds=max(1, lease_ttl_seconds))
             attempt.updated_at = current_time
+
+            # Post-mutation advisory validation (Phase 1b safety net).
+            if not self._state_machine_validation_enabled and before_snapshot is not None:
+                self._validate_non_state_operation(
+                    before=before_snapshot,
+                    after=self._state_machine_snapshot(
+                        run=run,
+                        attempt=attempt,
+                        extra={
+                            "attempt_no": attempt.attempt_no,
+                            "active_attempt_no": run.active_attempt_no,
+                            "scheduled_at": attempt.scheduled_at,
+                            "lease_expires_at": attempt.lease_expires_at,
+                            "next_wakeup_at": run.next_wakeup_at,
+                        },
+                    ),
+                    trigger="renew_attempt_lease",
+                )
+
             return LeaseHeartbeatResult(
                 run_id=run_id,
                 attempt_id=attempt_id,
@@ -1666,6 +3285,23 @@ class ExecutionTransitionService:
         result_summary: dict[str, Any] | None = None,
         now: datetime | None = None,
     ) -> None:
+        """Complete an in-flight attempt successfully.
+
+        :param company_id: Company scope for the run.
+        :type company_id: str
+        :param run_id: Run identifier.
+        :type run_id: str
+        :param attempt_id: Attempt identifier.
+        :type attempt_id: str
+        :param lease_token: Worker lease token.
+        :type lease_token: str
+        :param result_summary: Optional summary to merge onto the run.
+        :type result_summary: dict[str, Any] | None
+        :param now: Optional transition timestamp.
+        :type now: datetime | None
+        :raises RunNotFoundError: If the run is missing.
+        :raises RunTransitionConflictError: If the attempt cannot complete.
+        """
         current_time = self._now(now)
         with self._session_factory() as session, session.begin():
             run = session.get(RunORM, run_id)
@@ -1674,10 +3310,29 @@ class ExecutionTransitionService:
                 raise RunNotFoundError(f"Run '{run_id}' not found for company '{company_id}'.")
             if attempt is None or attempt.company_id != company_id or attempt.run_id != run_id:
                 raise RunTransitionConflictError(f"Attempt '{attempt_id}' does not belong to run '{run_id}'.")
-            if attempt.lease_token != lease_token:
-                raise RunTransitionConflictError("Lease token does not match the active worker claim.")
-            if attempt.attempt_state not in _IN_FLIGHT_ATTEMPT_STATES:
-                raise RunTransitionConflictError("Only in-flight attempts can complete successfully.")
+            before_snapshot = self._state_machine_snapshot(
+                run=run,
+                attempt=attempt,
+                extra={
+                    "attempt_no": attempt.attempt_no,
+                    "active_attempt_no": run.active_attempt_no,
+                    "scheduled_at": attempt.scheduled_at,
+                    "lease_expires_at": attempt.lease_expires_at,
+                    "next_wakeup_at": run.next_wakeup_at,
+                },
+            )
+            if self._state_machine_validation_enabled:
+                ctx = self._state_machine_context(
+                    before=before_snapshot,
+                    now=current_time,
+                    provided_lease_token=lease_token,
+                )
+                self._check_transition_allowed_or_raise("complete_success", ctx)
+            else:
+                if attempt.lease_token != lease_token:
+                    raise RunTransitionConflictError("Lease token does not match the active worker claim.")
+                if attempt.attempt_state not in _IN_FLIGHT_ATTEMPT_STATES:
+                    raise RunTransitionConflictError("Only in-flight attempts can complete successfully.")
 
             attempt.version += 1
             attempt.attempt_state = "succeeded"
@@ -1695,6 +3350,24 @@ class ExecutionTransitionService:
             run.terminal_at = current_time
             run.current_step_key = None
             run.updated_at = current_time
+            if not self._state_machine_validation_enabled and before_snapshot is not None:
+                self._validate_state_machine_transition(
+                    trigger="complete_success",
+                    before=before_snapshot,
+                    after=self._state_machine_snapshot(
+                        run=run,
+                        attempt=attempt,
+                        extra={
+                            "attempt_no": attempt.attempt_no,
+                            "active_attempt_no": run.active_attempt_no,
+                            "scheduled_at": attempt.scheduled_at,
+                            "lease_expires_at": attempt.lease_expires_at,
+                            "next_wakeup_at": run.next_wakeup_at,
+                        },
+                    ),
+                    now=current_time,
+                    provided_lease_token=lease_token,
+                )
 
     def pause_run(
         self,
@@ -1726,12 +3399,30 @@ class ExecutionTransitionService:
             run = session.get(RunORM, run_id)
             if run is None or run.company_id != company_id:
                 raise RunNotFoundError(f"Run '{run_id}' not found for company '{company_id}'.")
-            if run.operator_state in _TERMINAL_OPERATOR_STATES or run.operator_state == "paused":
-                raise RunTransitionConflictError(f"Run '{run_id}' cannot pause from operator state '{run.operator_state}'.")
 
             attempt = self._current_attempt(session, run)
-            if attempt.attempt_state in _IN_FLIGHT_ATTEMPT_STATES:
-                raise RunTransitionConflictError("In-flight attempts must be interrupted instead of paused.")
+            before_snapshot: ExecutionStateSnapshot | None = self._state_machine_snapshot(
+                run=run,
+                attempt=attempt,
+                extra={
+                    "attempt_no": attempt.attempt_no,
+                    "active_attempt_no": run.active_attempt_no,
+                    "scheduled_at": attempt.scheduled_at,
+                    "lease_expires_at": attempt.lease_expires_at,
+                    "next_wakeup_at": run.next_wakeup_at,
+                },
+            )
+            if self._state_machine_validation_enabled:
+                ctx = self._state_machine_context(
+                    before=before_snapshot,
+                    now=current_time,
+                )
+                self._check_transition_allowed_or_raise("pause", ctx)
+            else:
+                if run.operator_state in TERMINAL_OPERATOR_STATES or run.operator_state == "paused":
+                    raise RunTransitionConflictError(f"Run '{run_id}' cannot pause from operator state '{run.operator_state}'.")
+                if attempt.attempt_state in _IN_FLIGHT_ATTEMPT_STATES:
+                    raise RunTransitionConflictError("In-flight attempts must be interrupted instead of paused.")
 
             command = RunCommandORM(
                 id=self._new_id("cmd"),
@@ -1779,6 +3470,25 @@ class ExecutionTransitionService:
             attempt.operator_state = "paused"
             attempt.updated_at = current_time
 
+            if not self._state_machine_validation_enabled and before_snapshot is not None:
+                self._validate_operator_transition(
+                    trigger="pause",
+                    before=before_snapshot,
+                    after=self._state_machine_snapshot(
+                        run=run,
+                        attempt=attempt,
+                        extra={
+                            "attempt_no": attempt.attempt_no,
+                            "active_attempt_no": run.active_attempt_no,
+                            "scheduled_at": attempt.scheduled_at,
+                            "lease_expires_at": attempt.lease_expires_at,
+                            "next_wakeup_at": run.next_wakeup_at,
+                        },
+                    ),
+                    now=current_time,
+                    service_chosen_operator_state="paused",
+                )
+
             command.accepted_transition = run.state
             command.response_snapshot = {
                 "run_id": run.id,
@@ -1820,15 +3530,36 @@ class ExecutionTransitionService:
             run = session.get(RunORM, run_id)
             if run is None or run.company_id != company_id:
                 raise RunNotFoundError(f"Run '{run_id}' not found for company '{company_id}'.")
-            if run.operator_state != "paused":
-                raise RunTransitionConflictError(f"Run '{run_id}' cannot resume from operator state '{run.operator_state}'.")
-            if run.current_approval_link_id:
-                raise RunTransitionConflictError("Runs waiting on approval cannot be resumed outside the approval flow.")
 
             attempt = self._current_attempt(session, run)
-            next_wakeup_at = self._coerce_utc(run.next_wakeup_at)
-            spurious_wake_blocked = bool(run.state == "retry_backoff" and next_wakeup_at is not None and next_wakeup_at > current_time)
-            operator_state = "retry_scheduled" if spurious_wake_blocked else self._operator_state_for_resume(run.state)
+            before_snapshot: ExecutionStateSnapshot | None = self._state_machine_snapshot(
+                run=run,
+                attempt=attempt,
+                extra={
+                    "attempt_no": attempt.attempt_no,
+                    "active_attempt_no": run.active_attempt_no,
+                    "scheduled_at": attempt.scheduled_at,
+                    "lease_expires_at": attempt.lease_expires_at,
+                    "next_wakeup_at": run.next_wakeup_at,
+                },
+            )
+            if self._state_machine_validation_enabled:
+                ctx = self._state_machine_context(
+                    before=before_snapshot,
+                    now=current_time,
+                )
+                self._check_transition_allowed_or_raise("resume", ctx)
+                next_wakeup_at = self._coerce_utc(run.next_wakeup_at)
+                spurious_wake_blocked = bool(run.state == "retry_backoff" and next_wakeup_at is not None and next_wakeup_at > current_time)
+                operator_state = "retry_scheduled" if spurious_wake_blocked else self._operator_state_for_resume(run.state)
+            else:
+                if run.operator_state != "paused":
+                    raise RunTransitionConflictError(f"Run '{run_id}' cannot resume from operator state '{run.operator_state}'.")
+                if run.current_approval_link_id:
+                    raise RunTransitionConflictError("Runs waiting on approval cannot be resumed outside the approval flow.")
+                next_wakeup_at = self._coerce_utc(run.next_wakeup_at)
+                spurious_wake_blocked = bool(run.state == "retry_backoff" and next_wakeup_at is not None and next_wakeup_at > current_time)
+                operator_state = "retry_scheduled" if spurious_wake_blocked else self._operator_state_for_resume(run.state)
 
             command = RunCommandORM(
                 id=self._new_id("cmd"),
@@ -1875,6 +3606,25 @@ class ExecutionTransitionService:
             attempt.operator_state = operator_state
             attempt.updated_at = current_time
 
+            if not self._state_machine_validation_enabled and before_snapshot is not None:
+                self._validate_operator_transition(
+                    trigger="resume",
+                    before=before_snapshot,
+                    after=self._state_machine_snapshot(
+                        run=run,
+                        attempt=attempt,
+                        extra={
+                            "attempt_no": attempt.attempt_no,
+                            "active_attempt_no": run.active_attempt_no,
+                            "scheduled_at": attempt.scheduled_at,
+                            "lease_expires_at": attempt.lease_expires_at,
+                            "next_wakeup_at": run.next_wakeup_at,
+                        },
+                    ),
+                    now=current_time,
+                    service_chosen_operator_state=operator_state,
+                )
+
             command.accepted_transition = run.state
             command.response_snapshot = {
                 "run_id": run.id,
@@ -1900,6 +3650,29 @@ class ExecutionTransitionService:
         reason: str,
         now: datetime | None = None,
     ) -> CommandTransitionResult:
+        """Interrupt a non-terminal operator run and request cancellation.
+
+        :param company_id: Company scope for the run.
+        :type company_id: str
+        :param run_id: Run identifier.
+        :type run_id: str
+        :param actor_type: Actor type issuing the interrupt.
+        :type actor_type: str
+        :param actor_id: Actor identifier issuing the interrupt.
+        :type actor_id: str
+        :param idempotency_key: Idempotency key for the interrupt command.
+        :type idempotency_key: str
+        :param request_fingerprint_hash: Request fingerprint hash.
+        :type request_fingerprint_hash: str
+        :param reason: Operator-visible interrupt reason.
+        :type reason: str
+        :param now: Optional transition timestamp.
+        :type now: datetime | None
+        :return: Completed interrupt command result.
+        :rtype: CommandTransitionResult
+        :raises RunNotFoundError: If the run is missing.
+        :raises RunTransitionConflictError: If the run cannot be interrupted.
+        """
         current_time = self._now(now)
         interrupt_reason = reason.strip()
         with self._session_factory() as session, session.begin():
@@ -1918,10 +3691,30 @@ class ExecutionTransitionService:
             run = session.get(RunORM, run_id)
             if run is None or run.company_id != company_id:
                 raise RunNotFoundError(f"Run '{run_id}' not found for company '{company_id}'.")
-            if run.operator_state in _TERMINAL_OPERATOR_STATES:
-                raise RunTransitionConflictError(f"Run '{run_id}' cannot be interrupted from operator state '{run.operator_state}'.")
 
             attempt = self._current_attempt(session, run)
+            approval_link = self._current_approval_link(session, run)
+            before_snapshot = self._state_machine_snapshot(
+                run=run,
+                attempt=attempt,
+                approval_link=approval_link,
+                extra={
+                    "attempt_no": attempt.attempt_no,
+                    "active_attempt_no": run.active_attempt_no,
+                    "scheduled_at": attempt.scheduled_at,
+                    "lease_expires_at": attempt.lease_expires_at,
+                    "next_wakeup_at": run.next_wakeup_at,
+                },
+            )
+            if self._state_machine_validation_enabled:
+                ctx = self._state_machine_context(
+                    before=before_snapshot,
+                    now=current_time,
+                )
+                self._check_transition_allowed_or_raise("interrupt", ctx)
+            else:
+                if run.operator_state in TERMINAL_OPERATOR_STATES:
+                    raise RunTransitionConflictError(f"Run '{run_id}' cannot be interrupted from operator state '{run.operator_state}'.")
             command = RunCommandORM(
                 id=self._new_id("cmd"),
                 company_id=company_id,
@@ -1985,6 +3778,26 @@ class ExecutionTransitionService:
                 "outbox_event": "run_cancel",
                 "reason": interrupt_reason,
             }
+            if not self._state_machine_validation_enabled and before_snapshot is not None:
+                self._validate_state_machine_transition(
+                    trigger="interrupt",
+                    before=before_snapshot,
+                    after=self._state_machine_snapshot(
+                        run=run,
+                        attempt=attempt,
+                        approval_link=approval_link,
+                        command_id=command.id,
+                        extra={
+                            "attempt_no": attempt.attempt_no,
+                            "active_attempt_no": run.active_attempt_no,
+                            "scheduled_at": attempt.scheduled_at,
+                            "lease_expires_at": attempt.lease_expires_at,
+                            "next_wakeup_at": run.next_wakeup_at,
+                            "command_type": "interrupt",
+                        },
+                    ),
+                    now=current_time,
+                )
             return self._command_result(command)
 
     def quarantine_run(
@@ -1999,6 +3812,29 @@ class ExecutionTransitionService:
         reason: str,
         now: datetime | None = None,
     ) -> CommandTransitionResult:
+        """Quarantine a run using current operator-state authority.
+
+        :param company_id: Company scope for the run.
+        :type company_id: str
+        :param run_id: Run identifier.
+        :type run_id: str
+        :param actor_type: Actor type issuing the quarantine.
+        :type actor_type: str
+        :param actor_id: Actor identifier issuing the quarantine.
+        :type actor_id: str
+        :param idempotency_key: Idempotency key for the quarantine command.
+        :type idempotency_key: str
+        :param request_fingerprint_hash: Request fingerprint hash.
+        :type request_fingerprint_hash: str
+        :param reason: Operator-visible quarantine reason.
+        :type reason: str
+        :param now: Optional transition timestamp.
+        :type now: datetime | None
+        :return: Completed quarantine command result.
+        :rtype: CommandTransitionResult
+        :raises RunNotFoundError: If the run is missing.
+        :raises RunTransitionConflictError: If the run is already quarantined.
+        """
         current_time = self._now(now)
         quarantine_reason = reason.strip() or "operator_quarantine"
         with self._session_factory() as session, session.begin():
@@ -2017,10 +3853,30 @@ class ExecutionTransitionService:
             run = session.get(RunORM, run_id)
             if run is None or run.company_id != company_id:
                 raise RunNotFoundError(f"Run '{run_id}' not found for company '{company_id}'.")
-            if run.operator_state == "quarantined":
-                raise RunTransitionConflictError(f"Run '{run_id}' is already quarantined.")
 
             attempt = self._current_attempt(session, run)
+            approval_link = self._current_approval_link(session, run)
+            before_snapshot = self._state_machine_snapshot(
+                run=run,
+                attempt=attempt,
+                approval_link=approval_link,
+                extra={
+                    "attempt_no": attempt.attempt_no,
+                    "active_attempt_no": run.active_attempt_no,
+                    "scheduled_at": attempt.scheduled_at,
+                    "lease_expires_at": attempt.lease_expires_at,
+                    "next_wakeup_at": run.next_wakeup_at,
+                },
+            )
+            if self._state_machine_validation_enabled:
+                ctx = self._state_machine_context(
+                    before=before_snapshot,
+                    now=current_time,
+                )
+                self._check_transition_allowed_or_raise("quarantine", ctx)
+            else:
+                if run.operator_state == "quarantined":
+                    raise RunTransitionConflictError(f"Run '{run_id}' is already quarantined.")
             command = RunCommandORM(
                 id=self._new_id("cmd"),
                 company_id=company_id,
@@ -2094,6 +3950,26 @@ class ExecutionTransitionService:
                 "outbox_event": "dead_letter",
                 "reason": quarantine_reason,
             }
+            if not self._state_machine_validation_enabled and before_snapshot is not None:
+                self._validate_state_machine_transition(
+                    trigger="quarantine",
+                    before=before_snapshot,
+                    after=self._state_machine_snapshot(
+                        run=run,
+                        attempt=attempt,
+                        approval_link=approval_link,
+                        command_id=command.id,
+                        extra={
+                            "attempt_no": attempt.attempt_no,
+                            "active_attempt_no": run.active_attempt_no,
+                            "scheduled_at": attempt.scheduled_at,
+                            "lease_expires_at": attempt.lease_expires_at,
+                            "next_wakeup_at": run.next_wakeup_at,
+                            "command_type": "quarantine",
+                        },
+                    ),
+                    now=current_time,
+                )
             return self._command_result(command)
 
     def escalate_run(
@@ -2130,6 +4006,25 @@ class ExecutionTransitionService:
             if run.execution_lane == target_execution_lane:
                 raise RunTransitionConflictError(f"Run '{run_id}' is already on execution lane '{target_execution_lane}'.")
 
+            before_snapshot: ExecutionStateSnapshot | None = self._state_machine_snapshot(
+                run=run,
+                attempt=None,
+                extra={
+                    "active_attempt_no": run.active_attempt_no,
+                    "next_wakeup_at": run.next_wakeup_at,
+                },
+            )
+            if self._state_machine_validation_enabled:
+                # Authoritative pre-check: state dimensions must not change.
+                # Using the same snapshot for before and after is correct
+                # because no mutation has occurred yet — the validator
+                # confirms before/after state fields match.
+                self._validate_non_state_operation_or_raise(
+                    before=before_snapshot,
+                    after=before_snapshot,
+                    trigger="escalate_run",
+                )
+
             command = RunCommandORM(
                 id=self._new_id("cmd"),
                 company_id=company_id,
@@ -2153,6 +4048,21 @@ class ExecutionTransitionService:
             run.status_reason = escalation_reason or run.status_reason
             run.latest_command_id = command.id
             run.updated_at = current_time
+
+            # Post-mutation advisory validation (Phase 1b safety net).
+            if not self._state_machine_validation_enabled and before_snapshot is not None:
+                self._validate_non_state_operation(
+                    before=before_snapshot,
+                    after=self._state_machine_snapshot(
+                        run=run,
+                        attempt=None,
+                        extra={
+                            "active_attempt_no": run.active_attempt_no,
+                            "next_wakeup_at": run.next_wakeup_at,
+                        },
+                    ),
+                    trigger="escalate_run",
+                )
 
             command.accepted_transition = run.state
             command.response_snapshot = {
@@ -2196,6 +4106,34 @@ class ExecutionTransitionService:
             source_run = session.get(RunORM, run_id)
             if source_run is None or source_run.company_id != company_id:
                 raise RunNotFoundError(f"Run '{run_id}' not found for company '{company_id}'.")
+
+            source_run_state_before = source_run.state
+            source_operator_state_before = source_run.operator_state
+            source_current_attempt_id_before = source_run.current_attempt_id
+
+            # Authoritative creation validation before mutation.
+            if self._state_machine_validation_enabled:
+                self._validate_creation_or_raise(
+                    operation="restart_run_from_scratch",
+                    before_snapshot=ExecutionStateSnapshot(
+                        run_id=source_run.id,
+                        run_state=source_run.state,
+                        operator_state=source_run.operator_state,
+                        current_attempt_id=source_run.current_attempt_id,
+                        source_run_invariants=SourceRunInvariants(
+                            run_state=source_run_state_before,
+                            operator_state=source_operator_state_before,
+                            current_attempt_id=source_current_attempt_id_before,
+                        ),
+                    ),
+                    after_snapshot=ExecutionStateSnapshot(
+                        run_state="queued",
+                        operator_state="admitted",
+                        attempt_state="queued",
+                        attempt_operator_state="admitted",
+                        lease_status="not_leased",
+                    ),
+                )
 
             lane = execution_lane or source_run.execution_lane
             command = RunCommandORM(
@@ -2278,6 +4216,10 @@ class ExecutionTransitionService:
             source_run.latest_command_id = command.id
             source_run.updated_at = current_time
 
+            # Post-mutation advisory validation is intentionally omitted here.
+            # The authoritative pre-check (_validate_creation_or_raise) already
+            # validated the creation before the mutation.
+
             command.accepted_transition = "queued"
             command.response_snapshot = {
                 "run_id": new_run_id,
@@ -2297,6 +4239,15 @@ class ExecutionTransitionService:
         company_id: str,
         now: datetime | None = None,
     ) -> list[LeaseReconcileResult]:
+        """Reconcile expired in-flight attempt leases for one company.
+
+        :param company_id: Company scope for reconciliation.
+        :type company_id: str
+        :param now: Optional reconciliation timestamp.
+        :type now: datetime | None
+        :return: Reconciliation results for each eligible expired lease.
+        :rtype: list[LeaseReconcileResult]
+        """
         current_time = self._now(now)
         results: list[LeaseReconcileResult] = []
         with self._session_factory() as session, session.begin():
@@ -2324,8 +4275,26 @@ class ExecutionTransitionService:
                 run = session.get(RunORM, attempt.run_id)
                 if run is None or run.company_id != company_id:
                     continue
-                if run.operator_state in _TERMINAL_OPERATOR_STATES:
+                if run.operator_state in TERMINAL_OPERATOR_STATES:
                     continue
+
+                before_snapshot = self._state_machine_snapshot(
+                    run=run,
+                    attempt=attempt,
+                    extra={
+                        "attempt_no": attempt.attempt_no,
+                        "active_attempt_no": run.active_attempt_no,
+                        "scheduled_at": attempt.scheduled_at,
+                        "lease_expires_at": attempt.lease_expires_at,
+                        "next_wakeup_at": run.next_wakeup_at,
+                    },
+                )
+                if self._state_machine_validation_enabled:
+                    ctx = self._state_machine_context(
+                        before=before_snapshot,
+                        now=current_time,
+                    )
+                    self._check_transition_allowed_or_raise("expire_lease", ctx)
 
                 session.add(
                     RunOutboxORM(
@@ -2388,6 +4357,23 @@ class ExecutionTransitionService:
                 run.terminal_at = current_time
                 run.current_step_key = None
                 run.updated_at = current_time
+                if not self._state_machine_validation_enabled and before_snapshot is not None:
+                    self._validate_state_machine_transition(
+                        trigger="expire_lease",
+                        before=before_snapshot,
+                        after=self._state_machine_snapshot(
+                            run=run,
+                            attempt=attempt,
+                            extra={
+                                "attempt_no": attempt.attempt_no,
+                                "active_attempt_no": run.active_attempt_no,
+                                "scheduled_at": attempt.scheduled_at,
+                                "lease_expires_at": attempt.lease_expires_at,
+                                "next_wakeup_at": run.next_wakeup_at,
+                            },
+                        ),
+                        now=current_time,
+                    )
 
                 results.append(
                     LeaseReconcileResult(

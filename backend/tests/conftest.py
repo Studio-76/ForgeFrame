@@ -142,6 +142,7 @@ def _reset_runtime_storage_paths(tmp_path, monkeypatch: pytest.MonkeyPatch) -> N
     set_brand_env("INSTANCES_STATE_PATH", str(tmp_path / "instances_state.json"))
     set_brand_env("GOVERNANCE_STORAGE_BACKEND", "file")
     set_brand_env("GOVERNANCE_STATE_PATH", str(tmp_path / "governance_state.json"))
+    set_brand_env("EXECUTION_POSTGRES_URL", "")
     set_brand_env("EXECUTION_SQLITE_PATH", str(tmp_path / "execution.sqlite"))
     set_brand_env("BOOTSTRAP_ADMIN_PASSWORD", TEST_BOOTSTRAP_ADMIN_PASSWORD)
     set_brand_env("RUNTIME_AUTH_REQUIRED", "false")
