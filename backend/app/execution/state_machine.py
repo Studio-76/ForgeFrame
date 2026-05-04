@@ -1370,8 +1370,11 @@ class ExecutionStateMachineValidator:
         """
         Check whether *trigger* is allowed from the current state.
 
-        When validation is disabled this returns ``(True, None)``.  When a guard
-        blocks the transition, returns ``(False, reason)`` where *reason* is a
+        Run-state triggers (``claim_attempt``, ``start_execution``, etc.) fire
+        on the run-state machine.  Operator-only triggers (``pause``,
+        ``resume``) fire on the operator-state machine.  When validation is
+        disabled this returns ``(True, None)``.  When a guard blocks the
+        transition, returns ``(False, reason)`` where *reason* is a
         human-readable message identifying the blocking guard.
 
         :param trigger: The trigger to check
@@ -1382,12 +1385,23 @@ class ExecutionStateMachineValidator:
         if not self._enabled or self._run_machine is None:
             return True, None
 
+        # Operator-only triggers (pause, resume) fire on the operator
+        # machine instead of the run-state machine.
+        if trigger in self._operator_machine_triggers and trigger not in self._run_machine_triggers:
+            machine = self._operator_machine
+            machine_triggers = self._operator_machine_triggers
+            is_run_machine = False
+        else:
+            machine = self._run_machine
+            machine_triggers = self._run_machine_triggers
+            is_run_machine = True
+
         result = self._fire_and_build_result(
             trigger=trigger,
             context=context,
-            machine=self._run_machine,
-            machine_triggers=self._run_machine_triggers,
-            is_run_machine=True,
+            machine=machine,
+            machine_triggers=machine_triggers,
+            is_run_machine=is_run_machine,
         )
 
         if not result.valid:

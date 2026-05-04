@@ -3127,3 +3127,482 @@ def test_reconcile_expired_leases_skips_non_expired(
         company_id="cmp_f1c2_res",
     )
     assert len(results) == 0
+
+
+# ---------------------------------------------------------------------------
+# Phase 1c-03 — Authoritative pre-checks for operator, create, retry, and
+# non-state operations.
+# ---------------------------------------------------------------------------
+
+
+def test_pause_run_blocked_from_terminal_operator_state(
+    tmp_path: Path,
+) -> None:
+    """Authoritative pre-check blocks pause from quarantined (terminal) state."""
+    service, _session_factory = _service(
+        tmp_path,
+        state_machine_validation_enabled=True,
+    )
+    service.admit_create(
+        company_id="cmp_f1c3_pb",
+        actor_type="agent",
+        actor_id="agent_backend",
+        idempotency_key="idem_f1c3_pb_create",
+        request_fingerprint_hash="fp_f1c3_pb_create",
+        run_kind="provider_dispatch",
+    )
+    claim = service.claim_next_attempt(
+        company_id="cmp_f1c3_pb",
+        worker_key="worker_alpha",
+    )
+    assert claim is not None
+    service.mark_attempt_executing(
+        company_id="cmp_f1c3_pb",
+        run_id=claim.run_id,
+        attempt_id=claim.attempt_id,
+        lease_token=claim.lease_token,
+        step_key="test_step",
+    )
+    # Quarantine the run → terminal operator state.
+    service.quarantine_run(
+        company_id="cmp_f1c3_pb",
+        run_id=claim.run_id,
+        actor_type="system",
+        actor_id="admin",
+        idempotency_key="idem_f1c3_pb_quar",
+        request_fingerprint_hash="fp_f1c3_pb_quar",
+        reason="test quarantine",
+    )
+    with pytest.raises(
+        RunTransitionConflictError,
+        match="not allowed",
+    ):
+        service.pause_run(
+            company_id="cmp_f1c3_pb",
+            run_id=claim.run_id,
+            actor_type="user",
+            actor_id="operator",
+            idempotency_key="idem_f1c3_pb_pause",
+            request_fingerprint_hash="fp_f1c3_pb_pause",
+            reason="should be blocked",
+        )
+
+
+def test_pause_run_blocked_by_state_machine_spy(
+    tmp_path: Path,
+) -> None:
+    """Spy-simulated guard failure blocks pause_run authoritatively."""
+    calls: list[tuple[str, ExecutionTransitionContext]] = []
+    service, _session_factory = _service(
+        tmp_path,
+        state_machine_validation_enabled=True,
+        state_machine_validator_factory=lambda: _TriggerValidationSpy(
+            calls,
+            target_trigger="pause",
+            result=ExecutionValidationResult(
+                valid=False,
+                validated=True,
+                error_message="Guard blocked: is_operator_pausable",
+            ),
+        ),
+    )
+    created = service.admit_create(
+        company_id="cmp_f1c3_pbs",
+        actor_type="agent",
+        actor_id="agent_backend",
+        idempotency_key="idem_f1c3_pbs_create",
+        request_fingerprint_hash="fp_f1c3_pbs_create",
+        run_kind="provider_dispatch",
+    )
+    # Try to pause; the spy blocks it.
+    with pytest.raises(
+        RunTransitionConflictError,
+        match="not allowed",
+    ):
+        service.pause_run(
+            company_id="cmp_f1c3_pbs",
+            run_id=created.run_id,
+            actor_type="user",
+            actor_id="operator",
+            idempotency_key="idem_f1c3_pbs_pause",
+            request_fingerprint_hash="fp_f1c3_pbs_pause",
+            reason="spy blocked",
+        )
+
+
+def test_resume_run_blocked_by_state_machine_from_non_paused(
+    tmp_path: Path,
+) -> None:
+    """Authoritative pre-check blocks resume when not paused."""
+    service, _session_factory = _service(
+        tmp_path,
+        state_machine_validation_enabled=True,
+    )
+    created = service.admit_create(
+        company_id="cmp_f1c3_rb",
+        actor_type="agent",
+        actor_id="agent_backend",
+        idempotency_key="idem_f1c3_rb_create",
+        request_fingerprint_hash="fp_f1c3_rb_create",
+        run_kind="provider_dispatch",
+    )
+    # Run is queued/admitted — cannot resume from non-paused state.
+    with pytest.raises(
+        RunTransitionConflictError,
+        match="not allowed",
+    ):
+        service.resume_run(
+            company_id="cmp_f1c3_rb",
+            run_id=created.run_id,
+            actor_type="user",
+            actor_id="operator",
+            idempotency_key="idem_f1c3_rb_resume",
+            request_fingerprint_hash="fp_f1c3_rb_resume",
+            reason="should be blocked",
+        )
+
+
+def test_resume_run_blocked_by_state_machine_spy(
+    tmp_path: Path,
+) -> None:
+    """Spy-simulated guard failure blocks resume_run authoritatively."""
+    calls: list[tuple[str, ExecutionTransitionContext]] = []
+    service, _session_factory = _service(
+        tmp_path,
+        state_machine_validation_enabled=True,
+        state_machine_validator_factory=lambda: _TriggerValidationSpy(
+            calls,
+            target_trigger="resume",
+            result=ExecutionValidationResult(
+                valid=False,
+                validated=True,
+                error_message="Guard blocked: is_operator_resumable",
+            ),
+        ),
+    )
+    created = service.admit_create(
+        company_id="cmp_f1c3_rbs",
+        actor_type="agent",
+        actor_id="agent_backend",
+        idempotency_key="idem_f1c3_rbs_create",
+        request_fingerprint_hash="fp_f1c3_rbs_create",
+        run_kind="provider_dispatch",
+    )
+    with pytest.raises(
+        RunTransitionConflictError,
+        match="not allowed",
+    ):
+        service.resume_run(
+            company_id="cmp_f1c3_rbs",
+            run_id=created.run_id,
+            actor_type="user",
+            actor_id="operator",
+            idempotency_key="idem_f1c3_rbs_resume",
+            request_fingerprint_hash="fp_f1c3_rbs_resume",
+            reason="spy blocked",
+        )
+
+
+def test_admit_retry_blocked_by_state_machine_from_non_retryable(
+    tmp_path: Path,
+) -> None:
+    """Authoritative pre-check blocks admit_retry from non-retryable state."""
+    service, _session_factory = _service(
+        tmp_path,
+        state_machine_validation_enabled=True,
+    )
+    created = service.admit_create(
+        company_id="cmp_f1c3_arb",
+        actor_type="agent",
+        actor_id="agent_backend",
+        idempotency_key="idem_f1c3_arb_create",
+        request_fingerprint_hash="fp_f1c3_arb_create",
+        run_kind="provider_dispatch",
+    )
+    # Run is queued — not a retryable state.
+    with pytest.raises(
+        RunTransitionConflictError,
+        match="not allowed",
+    ):
+        service.admit_retry(
+            company_id="cmp_f1c3_arb",
+            run_id=created.run_id,
+            actor_type="agent",
+            actor_id="agent_retry",
+            idempotency_key="idem_f1c3_arb_retry",
+            request_fingerprint_hash="fp_f1c3_arb_retry",
+        )
+
+
+def test_admit_retry_blocked_by_state_machine_spy(
+    tmp_path: Path,
+) -> None:
+    """Spy-simulated guard failure blocks admit_retry authoritatively."""
+    calls: list[tuple[str, ExecutionTransitionContext]] = []
+    service, _session_factory = _service(
+        tmp_path,
+        state_machine_validation_enabled=True,
+        state_machine_validator_factory=lambda: _TriggerValidationSpy(
+            calls,
+            target_trigger="admit_retry",
+            result=ExecutionValidationResult(
+                valid=False,
+                validated=True,
+                error_message="Guard blocked: is_retryable_run",
+            ),
+        ),
+    )
+    created = service.admit_create(
+        company_id="cmp_f1c3_arbs",
+        actor_type="agent",
+        actor_id="agent_backend",
+        idempotency_key="idem_f1c3_arbs_create",
+        request_fingerprint_hash="fp_f1c3_arbs_create",
+        run_kind="provider_dispatch",
+    )
+    with pytest.raises(
+        RunTransitionConflictError,
+        match="not allowed",
+    ):
+        service.admit_retry(
+            company_id="cmp_f1c3_arbs",
+            run_id=created.run_id,
+            actor_type="agent",
+            actor_id="agent_retry",
+            idempotency_key="idem_f1c3_arbs_retry",
+            request_fingerprint_hash="fp_f1c3_arbs_retry",
+        )
+
+
+def test_admit_create_authoritative_validation_happy_path(
+    tmp_path: Path,
+    caplog,
+) -> None:
+    """Authoritative creation validation for admit_create allows normal creation."""
+    service, session_factory = _service(
+        tmp_path,
+        state_machine_validation_enabled=True,
+    )
+    caplog.set_level(logging.WARNING, logger="app.execution.service")
+
+    result = service.admit_create(
+        company_id="cmp_f1c3_ac",
+        actor_type="agent",
+        actor_id="agent_backend",
+        idempotency_key="idem_f1c3_ac_create",
+        request_fingerprint_hash="fp_f1c3_ac_create",
+        run_kind="provider_dispatch",
+    )
+    assert result.run_state == "queued"
+
+    with session_factory() as session:
+        run = session.get(RunORM, result.run_id)
+        assert run is not None
+        assert run.state == "queued"
+        assert run.operator_state == "admitted"
+
+    records = _validation_records(caplog)
+    assert records == [], f"Expected no validation records, got {len(records)}"
+
+
+def test_restart_run_from_scratch_authoritative_validation_happy_path(
+    tmp_path: Path,
+    caplog,
+) -> None:
+    """Authoritative creation validation for restart_run_from_scratch passes."""
+    service, session_factory = _service(
+        tmp_path,
+        state_machine_validation_enabled=True,
+    )
+    caplog.set_level(logging.WARNING, logger="app.execution.service")
+
+    created = service.admit_create(
+        company_id="cmp_f1c3_rs",
+        actor_type="agent",
+        actor_id="agent_backend",
+        idempotency_key="idem_f1c3_rs_create",
+        request_fingerprint_hash="fp_f1c3_rs_create",
+        run_kind="provider_dispatch",
+    )
+    # Restart from scratch.
+    restarted = service.restart_run_from_scratch(
+        company_id="cmp_f1c3_rs",
+        run_id=created.run_id,
+        actor_type="agent",
+        actor_id="agent_backend",
+        idempotency_key="idem_f1c3_rs_restart",
+        request_fingerprint_hash="fp_f1c3_rs_restart",
+        reason="testing restart",
+    )
+    assert restarted.run_state == "queued"
+
+    records = _validation_records(caplog)
+    assert records == [], f"Expected no validation records, got {len(records)}"
+
+
+def test_renew_attempt_lease_authoritative_validation_happy_path(
+    tmp_path: Path,
+    caplog,
+) -> None:
+    """Authoritative non-state validation for renew_attempt_lease passes."""
+    service, session_factory = _service(
+        tmp_path,
+        state_machine_validation_enabled=True,
+    )
+    caplog.set_level(logging.WARNING, logger="app.execution.service")
+
+    service.admit_create(
+        company_id="cmp_f1c3_rn",
+        actor_type="agent",
+        actor_id="agent_backend",
+        idempotency_key="idem_f1c3_rn_create",
+        request_fingerprint_hash="fp_f1c3_rn_create",
+        run_kind="provider_dispatch",
+    )
+    claim = service.claim_next_attempt(
+        company_id="cmp_f1c3_rn",
+        worker_key="worker_alpha",
+    )
+    assert claim is not None
+    service.mark_attempt_executing(
+        company_id="cmp_f1c3_rn",
+        run_id=claim.run_id,
+        attempt_id=claim.attempt_id,
+        lease_token=claim.lease_token,
+        step_key="test_step",
+    )
+    # Renew lease while executing.
+    result = service.renew_attempt_lease(
+        company_id="cmp_f1c3_rn",
+        run_id=claim.run_id,
+        attempt_id=claim.attempt_id,
+        lease_token=claim.lease_token,
+    )
+    assert result.attempt_id == claim.attempt_id
+    assert result.lease_token == claim.lease_token
+
+    records = _validation_records(caplog)
+    assert records == [], f"Expected no validation records, got {len(records)}"
+
+
+def test_escalate_run_authoritative_validation_happy_path(
+    tmp_path: Path,
+    caplog,
+) -> None:
+    """Authoritative non-state validation for escalate_run passes."""
+    service, session_factory = _service(
+        tmp_path,
+        state_machine_validation_enabled=True,
+    )
+    caplog.set_level(logging.WARNING, logger="app.execution.service")
+
+    created = service.admit_create(
+        company_id="cmp_f1c3_es",
+        actor_type="agent",
+        actor_id="agent_backend",
+        idempotency_key="idem_f1c3_es_create",
+        request_fingerprint_hash="fp_f1c3_es_create",
+        run_kind="provider_dispatch",
+        execution_lane="background_agentic",
+    )
+    # Escalate to a different valid lane.
+    result = service.escalate_run(
+        company_id="cmp_f1c3_es",
+        run_id=created.run_id,
+        actor_type="user",
+        actor_id="operator",
+        idempotency_key="idem_f1c3_es_esc",
+        request_fingerprint_hash="fp_f1c3_es_esc",
+        target_execution_lane="interactive_low_latency",
+        reason="urgent escalation",
+    )
+    assert result.run_state == "queued"
+
+    with session_factory() as session:
+        run = session.get(RunORM, created.run_id)
+        assert run is not None
+        assert run.execution_lane == "interactive_low_latency"
+
+    records = _validation_records(caplog)
+    assert records == [], f"Expected no validation records, got {len(records)}"
+
+
+def test_validation_disabled_pause_resume_admit_retry_fall_back_to_ad_hoc(
+    tmp_path: Path,
+) -> None:
+    """With validation disabled, ad-hoc guards still protect pause/resume/retry."""
+    service, _session_factory = _service(
+        tmp_path,
+        state_machine_validation_enabled=False,
+    )
+    created = service.admit_create(
+        company_id="cmp_f1c3_adhoc",
+        actor_type="agent",
+        actor_id="agent_backend",
+        idempotency_key="idem_f1c3_adhoc_create",
+        request_fingerprint_hash="fp_f1c3_adhoc_create",
+        run_kind="provider_dispatch",
+    )
+    # Try to resume without pausing — ad-hoc guard should block.
+    with pytest.raises(RunTransitionConflictError):
+        service.resume_run(
+            company_id="cmp_f1c3_adhoc",
+            run_id=created.run_id,
+            actor_type="user",
+            actor_id="operator",
+            idempotency_key="idem_f1c3_adhoc_resume",
+            request_fingerprint_hash="fp_f1c3_adhoc_resume",
+            reason="should be blocked",
+        )
+
+    # Try admit_retry from queued — ad-hoc guard should block.
+    with pytest.raises(RunTransitionConflictError):
+        service.admit_retry(
+            company_id="cmp_f1c3_adhoc",
+            run_id=created.run_id,
+            actor_type="agent",
+            actor_id="agent_retry",
+            idempotency_key="idem_f1c3_adhoc_retry",
+            request_fingerprint_hash="fp_f1c3_adhoc_retry",
+        )
+
+
+def test_operator_machine_check_transition_allowed_pause_resume(
+    tmp_path: Path,
+) -> None:
+    """check_transition_allowed correctly delegates operator-only triggers."""
+    service, session_factory = _service(
+        tmp_path,
+        state_machine_validation_enabled=True,
+    )
+    created = service.admit_create(
+        company_id="cmp_f1c3_om",
+        actor_type="agent",
+        actor_id="agent_backend",
+        idempotency_key="idem_f1c3_om_create",
+        request_fingerprint_hash="fp_f1c3_om_create",
+        run_kind="provider_dispatch",
+    )
+    # Pause the run first to get a known operator state.
+    pause = service.pause_run(
+        company_id="cmp_f1c3_om",
+        run_id=created.run_id,
+        actor_type="user",
+        actor_id="operator",
+        idempotency_key="idem_f1c3_om_pause",
+        request_fingerprint_hash="fp_f1c3_om_pause",
+        reason="hold",
+    )
+    assert pause.operator_state == "paused"
+
+    # Resume should now work (was paused).
+    resume = service.resume_run(
+        company_id="cmp_f1c3_om",
+        run_id=created.run_id,
+        actor_type="user",
+        actor_id="operator",
+        idempotency_key="idem_f1c3_om_resume",
+        request_fingerprint_hash="fp_f1c3_om_resume",
+        reason="release",
+    )
+    assert resume.operator_state is not None
