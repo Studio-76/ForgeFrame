@@ -95,10 +95,33 @@ export { Toggle } from "./Toggle";
 export { ConfirmationDialog } from "./ConfirmationDialog";
 
 // ── Data display ──────────────────────────────────────
-export { DataTable } from "./DataTable";
-export type { DataTableColumn } from "./DataTable";
 export { EntityTable } from "./EntityTable";
 export type { EntityTableColumn } from "./EntityTable";
+export { DataTable as DataTableLegacy } from "./DataTableLegacy";
+export type { DataTableColumn as DataTableColumnLegacy } from "./DataTableLegacy";
+
+// ── TanStack DataTable ─────────────────────────────────
+export { DataTable } from "./DataTable";
+export type { DataTableProps } from "./DataTable";
+export type {
+  DataTableColumn,
+  DataTableRowAction,
+  TableFilterPreset,
+  TableSortState,
+  DetailDrawerConfig,
+} from "./DataTable";
+export {
+  STANDARD_FILTER_PRESETS,
+  TABLE_PRESETS,
+  instanceTableColumns,
+  modelTableColumns,
+  auditTableColumns,
+} from "./DataTable";
+export type {
+  InstanceTableRow,
+  ModelTableRow,
+  AuditTableRow,
+} from "./DataTable";
 
 // ── Overlays ──────────────────────────────────────────
 export { DialogOverlay } from "./Dialog";
