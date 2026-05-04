@@ -2535,3 +2535,205 @@ def test_performance_smoke_quick_validations() -> None:
         pytest.skip(msg)
     else:
         assert avg_ms <= 5.0, msg
+
+
+# ---------------------------------------------------------------------------
+# Guard regression tests — each guard group verified via validate_run_transition
+# ---------------------------------------------------------------------------
+
+
+def test_claim_attempt_guards_block_invalid_attempt_state() -> None:
+    """
+    ``claim_attempt`` guards must block when the attempt state is
+    not claimable, producing ``MISMATCH_CATEGORY_GUARD_FAILED``.
+    """
+    validator = ExecutionStateMachineValidator(enabled=True)
+    r = _run_transition(
+        validator,
+        "claim_attempt",
+        "queued",
+        "admitted",
+        attempt_state="executing",
+    )
+    assert not r.valid
+    assert r.mismatch_category == MISMATCH_CATEGORY_GUARD_FAILED
+    assert r.guard_results is not None
+    assert r.guard_results.get("is_claimable_attempt") is False
+
+
+def test_start_execution_guard_blocks_paused_operator() -> None:
+    """
+    ``start_execution`` guards must block when the operator is paused,
+    producing ``MISMATCH_CATEGORY_GUARD_FAILED``.
+    """
+    validator = ExecutionStateMachineValidator(enabled=True)
+    r = _run_transition(
+        validator,
+        "start_execution",
+        "dispatching",
+        "paused",
+    )
+    assert not r.valid
+    assert r.mismatch_category == MISMATCH_CATEGORY_GUARD_FAILED
+    assert r.guard_results is not None
+    assert r.guard_results.get("is_not_paused") is False
+
+
+def test_open_approval_guard_blocks_non_executing_attempt() -> None:
+    """
+    ``open_approval`` guards must block when the attempt is not
+    executing, producing ``MISMATCH_CATEGORY_GUARD_FAILED``.
+    """
+    validator = ExecutionStateMachineValidator(enabled=True)
+    r = _run_transition(
+        validator,
+        "open_approval",
+        "executing",
+        "executing",
+        attempt_state="dispatching",
+    )
+    assert not r.valid
+    assert r.mismatch_category == MISMATCH_CATEGORY_GUARD_FAILED
+    assert r.guard_results is not None
+    assert r.guard_results.get("is_executing") is False
+
+
+def test_resume_after_approval_guard_blocks_closed_gate() -> None:
+    """
+    ``resume_after_approval`` guards must block when the approval gate
+    is closed, producing ``MISMATCH_CATEGORY_GUARD_FAILED``.
+    """
+    validator = ExecutionStateMachineValidator(enabled=True)
+    r = _run_transition(
+        validator,
+        "resume_after_approval",
+        "waiting_on_approval",
+        "waiting_on_approval",
+        attempt_state="waiting_on_approval",
+        approval_gate_status="closed",
+    )
+    assert not r.valid
+    assert r.mismatch_category == MISMATCH_CATEGORY_GUARD_FAILED
+    assert r.guard_results is not None
+    assert r.guard_results.get("has_open_approval_gate") is False
+
+
+def test_reject_approval_guard_blocks_closed_gate() -> None:
+    """
+    ``reject_approval_*`` guards must block when the approval gate
+    is closed, producing ``MISMATCH_CATEGORY_GUARD_FAILED``.
+    """
+    validator = ExecutionStateMachineValidator(enabled=True)
+    r = _run_transition(
+        validator,
+        "reject_approval_fail",
+        "waiting_on_approval",
+        "waiting_on_approval",
+        attempt_state="waiting_on_approval",
+        approval_gate_status="closed",
+    )
+    assert not r.valid
+    assert r.mismatch_category == MISMATCH_CATEGORY_GUARD_FAILED
+    assert r.guard_results is not None
+    assert r.guard_results.get("has_open_approval_gate") is False
+
+
+def test_complete_success_guard_blocks_wrong_lease_token() -> None:
+    """
+    ``complete_success`` guards must block when the lease token does
+    not match, producing ``MISMATCH_CATEGORY_GUARD_FAILED``.
+    """
+    validator = ExecutionStateMachineValidator(enabled=True)
+    r = _run_transition(
+        validator,
+        "complete_success",
+        "executing",
+        "executing",
+        attempt_lease_token="tok_1",
+        provided_lease_token="tok_2",
+    )
+    assert not r.valid
+    assert r.mismatch_category == MISMATCH_CATEGORY_GUARD_FAILED
+    assert r.guard_results is not None
+    assert r.guard_results.get("has_valid_lease_token") is False
+
+
+def test_record_retryable_failure_guard_blocks_exhausted_budget() -> None:
+    """
+    ``record_retryable_*`` guards must block when the retry budget is
+    exhausted, producing ``MISMATCH_CATEGORY_GUARD_FAILED`` on
+    ``is_retryable_and_has_budget``.
+    """
+    validator = ExecutionStateMachineValidator(enabled=True)
+    r = _run_transition(
+        validator,
+        "record_retryable_failure_immediate",
+        "dispatching",
+        "leased",
+        attempt_state="dispatching",
+        attempt_operator_state="leased",
+        retryable=True,
+        active_attempt_no=3,
+        max_attempts=3,
+    )
+    assert not r.valid
+    assert r.mismatch_category == MISMATCH_CATEGORY_GUARD_FAILED
+    assert r.guard_results is not None
+    assert r.guard_results.get("is_retryable_and_has_budget") is False
+
+
+def test_record_terminal_failure_guard_blocks_retryable_with_budget() -> None:
+    """
+    ``record_terminal_failure`` guards must block when the failure is
+    retryable with budget remaining, producing ``MISMATCH_CATEGORY_GUARD_FAILED``
+    on ``is_terminal_failure_destination``.
+    """
+    validator = ExecutionStateMachineValidator(enabled=True)
+    r = _run_transition(
+        validator,
+        "record_terminal_failure",
+        "dispatching",
+        "leased",
+        attempt_state="dispatching",
+        attempt_operator_state="leased",
+        retryable=True,
+        active_attempt_no=1,
+        max_attempts=3,
+    )
+    assert not r.valid
+    assert r.mismatch_category == MISMATCH_CATEGORY_GUARD_FAILED
+    assert r.guard_results is not None
+    assert r.guard_results.get("is_terminal_failure_destination") is False
+
+
+def test_admit_retry_guard_passes_for_retryable_run() -> None:
+    """
+    ``admit_retry`` guards must pass when the run is in a retryable
+    terminal state.
+    """
+    validator = ExecutionStateMachineValidator(enabled=True)
+    r = _run_transition(validator, "admit_retry", "failed", "failed")
+    assert r.valid, f"admit_retry from failed should be valid: {r.error_message}"
+    assert r.decision is not None
+    assert r.decision.target_run_state == "queued"
+
+
+def test_admit_retry_blocks_non_retryable_run() -> None:
+    """
+    ``admit_retry`` must be blocked from non-retryable terminal states.
+
+    The guard condition matches the same states as the explicit source
+    list (``RETRYABLE_RUN_STATES``), so a non-matching source produces
+    ``MISMATCH_CATEGORY_INVALID_TRIGGER``.
+    """
+    validator = ExecutionStateMachineValidator(enabled=True)
+    r = _run_transition(
+        validator,
+        "admit_retry",
+        "succeeded",
+        "completed",
+    )
+    assert not r.valid
+    # Source "succeeded" is not in the explicit source list, so
+    # the transition is invalid rather than guard-failed.
+    assert r.mismatch_category == MISMATCH_CATEGORY_INVALID_TRIGGER
