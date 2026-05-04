@@ -15,7 +15,7 @@ import type { ReactNode } from "react";
  *   title="No provider targets"
  *   description="Add a provider target to start routing executions."
  *   primaryAction={<Button variant="primary">Add target</Button>}
- *   secondaryAction={<NavigationAction>Learn more</NavigationAction>}
+ *   secondaryAction={<Button variant="navigation">Learn more</Button>}
  * />
  * ```
  */

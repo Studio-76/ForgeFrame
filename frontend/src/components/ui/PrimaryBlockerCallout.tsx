@@ -16,7 +16,7 @@ import type { StatusTone } from "./types";
  * <PrimaryBlockerCallout
  *   title="API key expired"
  *   tone="danger"
- *   action={<NavigationAction>Manage keys</NavigationAction>}
+ *   action={<Button variant="navigation">Manage keys</Button>}
  * >
  *   The provider API key for OpenAI expired 3 days ago. New executions
  *   will fail until the key is rotated. Go to Provider Settings to update.

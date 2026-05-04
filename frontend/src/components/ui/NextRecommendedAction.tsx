@@ -8,7 +8,7 @@ import type { ReactNode } from "react";
  *
  * @example
  * ```tsx
- * <NextRecommendedAction action={<NavigationAction>Create provider</NavigationAction>}>
+ * <NextRecommendedAction action={<Button variant="navigation">Create provider</Button>}>
  *   Add at least one provider target to enable execution.
  * </NextRecommendedAction>
  * ```
