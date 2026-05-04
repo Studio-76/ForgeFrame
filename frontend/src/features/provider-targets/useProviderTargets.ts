@@ -172,10 +172,15 @@ export function useProviderTargets(
 
   const updateDraft = useCallback((targetKey: string, updater: (current: TargetDraft) => TargetDraft) => {
     setDrafts((current) => {
-      const base = current[targetKey] ?? targetDraftFromRecord(
-        targets.find((t) => t.target_key === targetKey)!,
-      );
-      return { ...current, [targetKey]: updater(base) };
+      const existing = current[targetKey];
+      if (existing) {
+        return { ...current, [targetKey]: updater(existing) };
+      }
+      const record = targets.find((t) => t.target_key === targetKey);
+      if (record) {
+        return { ...current, [targetKey]: updater(targetDraftFromRecord(record)) };
+      }
+      return current;
     });
   }, [targets]);
 
