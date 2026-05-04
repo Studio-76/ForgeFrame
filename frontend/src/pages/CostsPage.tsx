@@ -588,11 +588,9 @@ export function CostsPage() {
       }
       attentionItems={attentionItems}
       summaryItems={summaryItems}
-      primaryAction={
-        <Button variant="secondary" onPress={loadForRetry} isDisabled={state === "loading" || (!canReadUsage && !canReadRouting)}>
-          Refresh
-        </Button>
-      }
+      actions={[
+        { label: "Refresh", kind: "secondary", intent: "diagnose", onClick: loadForRetry, disabled: state === "loading" || (!canReadUsage && !canReadRouting) },
+      ]}
       actionBarTitle="Cost-safety operator actions"
       diagnostics={diagnosticsContent}
       diagnosticsTitle="Budget configuration diagnostics"

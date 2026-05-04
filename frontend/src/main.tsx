@@ -1,4 +1,4 @@
-import React, { Suspense, lazy } from "react";
+import { Component, Suspense, lazy, type ErrorInfo, type ReactNode } from "react";
 import ReactDOM from "react-dom/client";
 import { Navigate, RouterProvider, createBrowserRouter } from "react-router-dom";
 
@@ -59,6 +59,57 @@ const DemoRegistryManagementPage = lazy(async () => import("./pages/demos/DemoRe
 const DemoIncidentResponsePage = lazy(async () => import("./pages/demos/DemoIncidentResponsePage").then((module) => ({ default: module.DemoIncidentResponsePage })));
 const DemoSettingsManagementPage = lazy(async () => import("./pages/demos/DemoSettingsManagementPage").then((module) => ({ default: module.DemoSettingsManagementPage })));
 const DemoReviewQueuePage = lazy(async () => import("./pages/demos/DemoReviewQueuePage").then((module) => ({ default: module.DemoReviewQueuePage })));
+
+/**
+ * Root-level error boundary guarding the entire application.
+ * Catches crashes in ThemeProvider, QueryProvider, or RouterProvider setup
+ * and displays a recovery UI instead of a white screen.
+ */
+class AppErrorBoundary extends Component<
+  { readonly children: ReactNode },
+  { readonly error: Error | null }
+> {
+  state: { error: Error | null } = { error: null };
+
+  static getDerivedStateFromError(error: Error): { error: Error | null } {
+    return { error };
+  }
+
+  componentDidCatch(error: Error, errorInfo: ErrorInfo): void {
+    console.error("[AppErrorBoundary] Fatal application error:", {
+      message: error.message,
+      stack: error.stack,
+      componentStack: errorInfo.componentStack,
+    });
+  }
+
+  handleRetry = (): void => {
+    this.setState({ error: null });
+  };
+
+  render(): ReactNode {
+    if (this.state.error) {
+      return (
+        <section className="fg-page" style={{ padding: "2rem", maxWidth: "640px", margin: "0 auto" }}>
+          <article className="fg-card fg-stack">
+            <h2>Application Error</h2>
+            <p className="fg-muted">
+              ForgeFrame encountered a fatal error during startup. The error has been logged.
+              Reload the page or try again.
+            </p>
+            <div className="fg-inline-form">
+              <button className="fg-button" onClick={this.handleRetry} type="button">
+                Retry
+              </button>
+            </div>
+          </article>
+        </section>
+      );
+    }
+
+    return this.props.children;
+  }
+}
 
 /**
  * HydrateFallback for data-router hydration (client-only SPA, never rendered).
@@ -166,11 +217,11 @@ const router = createBrowserRouter([
 ]);
 
 ReactDOM.createRoot(document.getElementById("root")!).render(
-  <React.StrictMode>
+  <AppErrorBoundary>
     <ThemeProvider>
       <QueryProvider>
         <RouterProvider router={router} />
       </QueryProvider>
     </ThemeProvider>
-  </React.StrictMode>,
+  </AppErrorBoundary>,
 );

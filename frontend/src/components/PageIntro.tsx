@@ -9,7 +9,7 @@ type IntroBadge = {
   tone?: "success" | "warning" | "danger" | "neutral" | "info";
 };
 
-export type PageIntroLink = {
+type PageIntroLink = {
   label: string;
   to: string;
   description: string;

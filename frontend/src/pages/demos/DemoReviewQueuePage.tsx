@@ -18,7 +18,9 @@ export function DemoReviewQueuePage() {
         { key: "overdue", label: "Overdue", value: 3, tone: "danger" },
         { key: "total", label: "Total events", value: 45 },
       ]}
-      primaryAction={<Button variant="primary">Review all pending</Button>}
+      actions={[
+        { label: "Review all pending", kind: "primary", intent: "review", onClick: () => {} },
+      ]}
       emptyDetailHint="Select an item from the queue to review its details and take action."
       diagnostics={
         <pre className="text-meta text-muted font-mono text-xs">

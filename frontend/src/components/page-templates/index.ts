@@ -20,13 +20,13 @@
  * ```
  */
 export { SetupWorkflowPage } from "./SetupWorkflowPage";
-export type { SetupWorkflowPageProps, BlockerConfig, EmptyStateConfig } from "./SetupWorkflowPage";
+export type { SetupWorkflowPageProps, EmptyStateConfig } from "./SetupWorkflowPage";
 
 export { RegistryManagementPage } from "./RegistryManagementPage";
 export type { RegistryManagementPageProps, RegistrySearchConfig, ScopeConfig } from "./RegistryManagementPage";
 
 export { IncidentResponsePage } from "./IncidentResponsePage";
-export type { IncidentResponsePageProps, BlockerViewConfig, DegradedActionConfig, NoIncidentsConfig } from "./IncidentResponsePage";
+export type { IncidentResponsePageProps, DegradedActionConfig, NoIncidentsConfig } from "./IncidentResponsePage";
 
 export { SettingsManagementPage } from "./SettingsManagementPage";
 export type { SettingsManagementPageProps } from "./SettingsManagementPage";

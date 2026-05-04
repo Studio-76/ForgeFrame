@@ -1,12 +1,12 @@
 export const INSTANCE_ID_QUERY_PARAM = "instanceId";
-export const TENANT_ID_QUERY_PARAM = "tenantId";
+const TENANT_ID_QUERY_PARAM = "tenantId";
 
 export function normalizeInstanceId(value: string | null | undefined): string | null {
   const normalized = (value ?? "").trim();
   return normalized.length > 0 ? normalized : null;
 }
 
-export function normalizeTenantId(value: string | null | undefined): string | null {
+function normalizeTenantId(value: string | null | undefined): string | null {
   const normalized = (value ?? "").trim();
   return normalized.length > 0 ? normalized : null;
 }
@@ -15,7 +15,7 @@ export function getInstanceIdFromSearchParams(searchParams: URLSearchParams): st
   return normalizeInstanceId(searchParams.get(INSTANCE_ID_QUERY_PARAM));
 }
 
-export function getTenantIdFromSearchParams(searchParams: URLSearchParams): string | null {
+function getTenantIdFromSearchParams(searchParams: URLSearchParams): string | null {
   return normalizeTenantId(searchParams.get(TENANT_ID_QUERY_PARAM));
 }
 
@@ -38,7 +38,7 @@ export function withQueryParams(
   return `${url.pathname}${search ? `?${search}` : ""}${url.hash}`;
 }
 
-export function withTenantScope(to: string, tenantId: string | null | undefined): string {
+function withTenantScope(to: string, tenantId: string | null | undefined): string {
   return withQueryParams(to, { [TENANT_ID_QUERY_PARAM]: tenantId });
 }
 

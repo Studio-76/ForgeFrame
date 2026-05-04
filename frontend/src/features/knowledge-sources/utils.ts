@@ -7,6 +7,11 @@
 import type { KnowledgeSourceDetail, KnowledgeSourceKind } from "../../api/domain";
 import { CONTROL_PLANE_ROUTES } from "../../app/navigation";
 import {
+  buildContactPath as buildContactPathCanonical,
+  buildMemoryPath as buildMemoryPathCanonical,
+  buildConversationPath as buildConversationPathCanonical,
+} from "../../app/workInteractionRoutes";
+import {
   normalizeOptional,
   parseJsonObject,
 } from "../../pages/workInteractionPageSupport";
@@ -64,50 +69,32 @@ export function buildSkillPath(instanceId: string, skillId: string): string {
 
 /**
  * Build a contacts path for a specific contact within an instance.
+ * Delegates to the canonical version in workInteractionRoutes.
  * @param params - Object with instanceId and contactId.
  * @returns Full contact detail URL.
  */
 export function buildContactPath(params: { instanceId: string; contactId: string }): string {
-  const search = new URLSearchParams();
-  if (params.instanceId.trim()) {
-    search.set("instanceId", params.instanceId.trim());
-  }
-  if (params.contactId.trim()) {
-    search.set("contactId", params.contactId.trim());
-  }
-  return `${CONTROL_PLANE_ROUTES.contacts}?${search.toString()}`;
+  return buildContactPathCanonical({ instanceId: params.instanceId, contactId: params.contactId });
 }
 
 /**
  * Build a memory path for a specific memory entry within an instance.
+ * Delegates to the canonical version in workInteractionRoutes.
  * @param params - Object with instanceId and memoryId.
  * @returns Full memory detail URL.
  */
 export function buildMemoryPath(params: { instanceId: string; memoryId: string }): string {
-  const search = new URLSearchParams();
-  if (params.instanceId.trim()) {
-    search.set("instanceId", params.instanceId.trim());
-  }
-  if (params.memoryId.trim()) {
-    search.set("memoryId", params.memoryId.trim());
-  }
-  return `${CONTROL_PLANE_ROUTES.memory}?${search.toString()}`;
+  return buildMemoryPathCanonical({ instanceId: params.instanceId, memoryId: params.memoryId });
 }
 
 /**
  * Build a conversation path for a specific conversation within an instance.
+ * Delegates to the canonical version in workInteractionRoutes.
  * @param params - Object with instanceId and conversationId.
  * @returns Full conversation detail URL.
  */
 export function buildConversationPath(params: { instanceId: string; conversationId: string }): string {
-  const search = new URLSearchParams();
-  if (params.instanceId.trim()) {
-    search.set("instanceId", params.instanceId.trim());
-  }
-  if (params.conversationId.trim()) {
-    search.set("conversationId", params.conversationId.trim());
-  }
-  return `${CONTROL_PLANE_ROUTES.conversations}?${search.toString()}`;
+  return buildConversationPathCanonical({ instanceId: params.instanceId, conversationId: params.conversationId });
 }
 
 // ─── Tone / color helpers ─────────────────────────────────────────────────────

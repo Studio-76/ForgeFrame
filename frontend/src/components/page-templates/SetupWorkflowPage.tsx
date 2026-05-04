@@ -14,19 +14,6 @@ import type { AttentionPayload } from "../ui/models/attention";
 import { heroItems, advancedItems, toneForLevel } from "../ui/models/attention";
 
 /**
- * A blocker configuration for when the workflow is blocked.
- * Shows what's wrong, why it matters, and what to do about it.
- */
-export type BlockerConfig = {
-  /** What is wrong. */
-  title: string;
-  /** Why it matters. */
-  description?: string;
-  /** Action to resolve the blocker. */
-  action?: ReactNode;
-};
-
-/**
  * An empty state configuration for step-zero of the workflow.
  */
 export type EmptyStateConfig = {
@@ -64,19 +51,13 @@ export type SetupWorkflowPageProps = {
    */
   attentionItems?: AttentionPayload[];
 
-  // ── Blocker (legacy, use attentionItems instead) ──────
-  /** When set, renders a PrimaryBlockerCallout above the step content. */
-  blocker?: BlockerConfig;
-
   // ── Empty state ────────────────────────────────────────
   /** When set, renders an EmptyState instead of the step content. */
   emptyState?: EmptyStateConfig;
 
   // ── Actions ────────────────────────────────────────────
-  /** Actions for the current step (preferred). */
+  /** Actions for the current step. */
   actions?: Action[];
-  /** Legacy single primary action. Use `actions` for new code. */
-  primaryAction?: ReactNode;
 
   // ── Content ────────────────────────────────────────────
   /** Current step form or configuration content. */
@@ -124,10 +105,8 @@ export function SetupWorkflowPage({
   totalSteps,
   stepLabel,
   attentionItems,
-  blocker,
   emptyState,
   actions,
-  primaryAction: primaryActionProp,
   children,
   diagnostics,
   diagnosticsTitle = "Setup diagnostics",
@@ -188,15 +167,7 @@ export function SetupWorkflowPage({
               />
             </div>
           ))
-        : blocker
-          ? (
-            <PrimaryBlockerCallout
-              title={blocker.title}
-              description={blocker.description}
-              action={blocker.action}
-            />
-          )
-          : null}
+        : null}
 
       {/* ── Step content or empty state ── */}
       {emptyState ? (
@@ -224,8 +195,6 @@ export function SetupWorkflowPage({
                 );
               })}
             </div>
-          ) : primaryActionProp ? (
-            <div className="flex justify-end mt-4">{primaryActionProp}</div>
           ) : null}
         </Section>
       )}

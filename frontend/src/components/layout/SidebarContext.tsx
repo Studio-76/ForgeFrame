@@ -9,6 +9,12 @@ const SIDEBAR_SECTION_STATE_STORAGE_KEY = "forgeframe.sidebar.sections";
 export type ViewportTier = "mobile" | "tablet" | "desktop";
 
 /**
+ * Maximum expected length for the sidebar expanded storage value.
+ * Reject values longer than this to guard against corruption or extension interference.
+ */
+const MAX_STORAGE_VALUE_LENGTH = 8;
+
+/**
  * Read sidebar expanded preference from localStorage.
  * Defaults to expanded (true) so the sidebar is functional on first visit.
  * @returns Whether the sidebar should start in expanded mode.
@@ -20,6 +26,9 @@ function readStoredSidebarExpanded(): boolean {
 
   const storedValue = window.localStorage.getItem(SIDEBAR_EXPANDED_STORAGE_KEY);
   if (storedValue === null) {
+    return true;
+  }
+  if (storedValue.length > MAX_STORAGE_VALUE_LENGTH) {
     return true;
   }
   return storedValue === "true";

@@ -1,6 +1,5 @@
 import { useState } from "react";
 
-import { Button } from "../../components/ui/Button";
 import { SetupWorkflowPage } from "../../components/page-templates/SetupWorkflowPage";
 
 /**
@@ -20,11 +19,9 @@ export function DemoSetupWorkflowPage() {
       currentStep={step}
       totalSteps={5}
       stepLabel="Configure Provider"
-      primaryAction={
-        <Button variant="primary" onPress={() => setStep(Math.min(step + 1, 5))}>
-          Continue
-        </Button>
-      }
+      actions={[
+        { label: "Continue", kind: "primary", intent: "configure", onClick: () => setStep(Math.min(step + 1, 5)) },
+      ]}
       diagnostics={
         <pre className="text-meta text-muted font-mono text-xs">
           {JSON.stringify(

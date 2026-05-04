@@ -1,6 +1,5 @@
 import { useState } from "react";
 
-import { Button } from "../../components/ui/Button";
 import { RegistryManagementPage } from "../../components/page-templates/RegistryManagementPage";
 
 /**
@@ -25,7 +24,9 @@ export function DemoRegistryManagementPage() {
         { key: "offline", label: "Offline", value: 0 },
       ]}
       search={{ value: search, onChange: setSearch, placeholder: "Search targets..." }}
-      primaryAction={<Button variant="primary">Add target</Button>}
+      actions={[
+        { label: "Add target", kind: "primary", intent: "configure", onClick: () => {} },
+      ]}
       emptyDetailHint="Select a target from the table to inspect its configuration."
       diagnostics={
         <pre className="text-meta text-muted font-mono text-xs">
