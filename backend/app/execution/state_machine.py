@@ -159,6 +159,14 @@ CLAIMABLE_RUN_STATES: frozenset[str] = frozenset({"queued", "retry_backoff"})
 Run states from which ``claim_attempt`` is valid.
 """
 
+CLAIMABLE_OPERATOR_STATES: frozenset[str] = frozenset({"admitted", "retry_scheduled"})
+"""
+Operator states from which ``claim_attempt`` is valid.
+
+These correspond to operator-level claimable states used in SQL query
+filters alongside :data:`CLAIMABLE_RUN_STATES`.
+"""
+
 RETRYABLE_RUN_STATES: frozenset[str] = frozenset({
     "failed",
     "timed_out",

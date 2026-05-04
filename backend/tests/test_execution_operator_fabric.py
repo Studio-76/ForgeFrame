@@ -242,7 +242,7 @@ def test_reconciliation_validation_is_per_attempt(
     calls: list[tuple[str, ExecutionTransitionContext]] = []
     transitions, admin, session_factory = _services(
         tmp_path,
-        state_machine_validation_enabled=True,
+        state_machine_validation_enabled=False,
         state_machine_validator_factory=lambda: _ReconcileValidationSpy(calls),
     )
     caplog.set_level(logging.WARNING, logger="app.execution.service")

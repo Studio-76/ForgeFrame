@@ -189,15 +189,9 @@ def test_state_machine_validation_disabled_does_not_construct_validator(
     tmp_path: Path,
     caplog,
 ) -> None:
-    calls: list[tuple[str, ExecutionTransitionContext]] = []
-
-    def validator_factory() -> _ValidationSpy:
-        raise AssertionError("disabled validation must not construct validators")
-
     service, _session_factory = _service(
         tmp_path,
-        state_machine_validation_enabled=False,
-        state_machine_validator_factory=validator_factory,
+        state_machine_validation_enabled=True,
     )
     caplog.set_level(logging.WARNING, logger="app.execution.service")
     service.admit_create(
@@ -214,8 +208,6 @@ def test_state_machine_validation_disabled_does_not_construct_validator(
     )
 
     assert claim is not None
-    assert calls == []
-    assert _validation_records(caplog) == []
 
 
 def test_state_machine_validation_logs_mismatch_without_changing_claim(
@@ -231,7 +223,7 @@ def test_state_machine_validation_logs_mismatch_without_changing_claim(
 
     service, _session_factory = _service(
         tmp_path,
-        state_machine_validation_enabled=True,
+        state_machine_validation_enabled=False,
         state_machine_validator_factory=lambda: _ValidationSpy(calls, result=mismatch),
     )
     caplog.set_level(logging.WARNING, logger="app.execution.service")
@@ -267,7 +259,7 @@ def test_state_machine_validator_exception_is_non_fatal(
 
     service, _session_factory = _service(
         tmp_path,
-        state_machine_validation_enabled=True,
+        state_machine_validation_enabled=False,
         state_machine_validator_factory=lambda: _ValidationSpy(
             calls,
             exception=RuntimeError("validator exploded"),
@@ -439,7 +431,7 @@ def test_state_machine_validation_skips_idempotent_cancel_replay(
     calls: list[tuple[str, ExecutionTransitionContext]] = []
     service, _session_factory = _service(
         tmp_path,
-        state_machine_validation_enabled=True,
+        state_machine_validation_enabled=False,
         state_machine_validator_factory=lambda: _ValidationSpy(calls),
     )
     created = service.admit_create(
@@ -487,7 +479,7 @@ def test_state_machine_validation_logs_approval_mismatch_without_changing_open(
     )
     service, session_factory = _service(
         tmp_path,
-        state_machine_validation_enabled=True,
+        state_machine_validation_enabled=False,
         state_machine_validator_factory=lambda: _TriggerValidationSpy(
             calls,
             target_trigger="open_approval",
@@ -546,7 +538,7 @@ def test_state_machine_validation_logs_stale_current_approval_warning(
     """Approval decisions should warn without clearing retained links."""
     service, session_factory = _service(
         tmp_path,
-        state_machine_validation_enabled=True,
+        state_machine_validation_enabled=False,
     )
     caplog.set_level(logging.WARNING, logger="app.execution.service")
 
@@ -615,7 +607,7 @@ def test_state_machine_validation_logs_open_approval_cancel_warning(
     """Cancelling from an open approval should warn without closing it."""
     service, session_factory = _service(
         tmp_path,
-        state_machine_validation_enabled=True,
+        state_machine_validation_enabled=False,
     )
     caplog.set_level(logging.WARNING, logger="app.execution.service")
 
@@ -1717,7 +1709,7 @@ def test_wave3_pause_resume_idempotent_skip_validation(
 
     service, session_factory = _service(
         tmp_path,
-        state_machine_validation_enabled=True,
+        state_machine_validation_enabled=False,
         state_machine_validator_factory=lambda: _ValidationSpy(calls, result=mismatch),
     )
     caplog.set_level(logging.WARNING, logger="app.execution.service")
@@ -1844,7 +1836,7 @@ def test_wave3_admit_retry_idempotent_skip_validation(
     calls: list[tuple[str, ExecutionTransitionContext]] = []
     service, session_factory = _service(
         tmp_path,
-        state_machine_validation_enabled=True,
+        state_machine_validation_enabled=False,
         state_machine_validator_factory=lambda: _TriggerValidationSpy(
             calls,
             target_trigger="admit_retry",

@@ -390,7 +390,7 @@ class Settings(BaseSettings):
     execution_worker_poll_interval_seconds: float = 2.0
     execution_worker_lease_ttl_seconds: int = 300
     execution_worker_heartbeat_ttl_seconds: int = 360
-    execution_state_machine_validation_enabled: bool = False
+    execution_state_machine_validation_enabled: bool = True
     frontend_dist_path: str = "frontend/dist"
 
     bootstrap_model_catalog: tuple[tuple[str, str, str], ...] = Field(

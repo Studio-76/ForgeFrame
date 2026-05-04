@@ -15,6 +15,8 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.execution.state_machine import (
+    CLAIMABLE_OPERATOR_STATES,
+    CLAIMABLE_RUN_STATES,
     MISMATCH_CATEGORY_APPROVAL_LINK_MISMATCH,
     MISMATCH_CATEGORY_ATTEMPT_STATE_MISMATCH,
     MISMATCH_CATEGORY_CURRENT_ATTEMPT_MISMATCH,
@@ -23,6 +25,9 @@ from app.execution.state_machine import (
     MISMATCH_CATEGORY_REPLACEMENT_ATTEMPT_MISMATCH,
     MISMATCH_CATEGORY_RUN_STATE_MISMATCH,
     MISMATCH_CATEGORY_VALIDATOR_EXCEPTION,
+    RETRYABLE_RUN_STATES,
+    TERMINAL_OPERATOR_STATES,
+    TERMINAL_RUN_STATES,
     ExecutionCreationOperation,
     ExecutionStateDecision,
     ExecutionStateMachineValidator,
@@ -129,18 +134,6 @@ class _StateMachineValidator(Protocol):
 
 StateMachineValidatorFactory = Callable[[], _StateMachineValidator]
 
-_TERMINAL_RUN_STATES = {
-    "succeeded",
-    "failed",
-    "cancelled",
-    "timed_out",
-    "compensated",
-    "dead_lettered",
-}
-_CLAIMABLE_ATTEMPT_STATES = {"queued", "retry_backoff"}
-_RETRYABLE_RUN_STATES = {"failed", "timed_out", "compensated", "dead_lettered"}
-_TERMINAL_OPERATOR_STATES = {"completed", "quarantined", "failed"}
-_CLAIMABLE_OPERATOR_STATES = {"admitted", "retry_scheduled"}
 _IN_FLIGHT_ATTEMPT_STATES = {
     "dispatching",
     "executing",
@@ -290,15 +283,15 @@ class ExecutionTransitionService:
     ) -> None:
         """Initialise transactional execution transition coordination.
 
-        The state-machine validator is advisory in Phase 1b. Direct service
-        construction keeps it disabled by default; dependency wiring can enable
-        it from runtime settings. A fresh validator is built per validation call
-        to avoid sharing mutable adapter state across worker requests.
+        The state-machine validator is authoritative when enabled: it performs
+        pre-mutation validation and raises on disallowed transitions. When
+        disabled, legacy inline guards are used and post-mutation advisory
+        validation runs in monitoring mode for migration safety.
 
         :param session_factory: Factory that opens SQLAlchemy sessions.
         :type session_factory: SessionFactory
-        :param state_machine_validation_enabled: Whether advisory validation is
-            enabled for this service instance.
+        :param state_machine_validation_enabled: Whether the state machine is
+            authoritative (True) or legacy with monitoring (False).
         :type state_machine_validation_enabled: bool
         :param state_machine_validator_factory: Optional factory used by tests
             or dependency wiring to build a fresh validator.
@@ -314,7 +307,9 @@ class ExecutionTransitionService:
 
     @staticmethod
     def _build_state_machine_validator() -> _StateMachineValidator:
-        """Build a fresh enabled advisory state-machine validator.
+        """Build a fresh enabled state-machine validator.
+
+        Used by both authoritative pre-checks and advisory monitoring paths.
 
         :return: Enabled validator instance for one service validation call.
         :rtype: _StateMachineValidator
@@ -630,8 +625,8 @@ class ExecutionTransitionService:
             )
             .where(
                 RunAttemptORM.company_id == company_id,
-                RunAttemptORM.attempt_state.in_(_CLAIMABLE_ATTEMPT_STATES),
-                RunAttemptORM.operator_state.in_(_CLAIMABLE_OPERATOR_STATES),
+                RunAttemptORM.attempt_state.in_(CLAIMABLE_RUN_STATES),
+                RunAttemptORM.operator_state.in_(CLAIMABLE_OPERATOR_STATES),
                 RunAttemptORM.scheduled_at <= now,
             )
             .order_by(
@@ -1287,7 +1282,7 @@ class ExecutionTransitionService:
             logic for context-dependent transitions.
         :type service_chosen_operator_state: str | None
         """
-        if not self._state_machine_validation_enabled:
+        if self._state_machine_validation_enabled:
             return
         try:
             validator = self._state_machine_validator_factory()
@@ -1350,7 +1345,7 @@ class ExecutionTransitionService:
             service logic for context-dependent transitions.
         :type service_chosen_operator_state: str | None
         """
-        if not self._state_machine_validation_enabled:
+        if self._state_machine_validation_enabled:
             return
         try:
             validator = self._state_machine_validator_factory()
@@ -1399,7 +1394,7 @@ class ExecutionTransitionService:
         :param after_snapshot: Post-creation state snapshot.
         :type after_snapshot: ExecutionStateSnapshot
         """
-        if not self._state_machine_validation_enabled:
+        if self._state_machine_validation_enabled:
             return
         try:
             validator = self._state_machine_validator_factory()
@@ -1450,7 +1445,7 @@ class ExecutionTransitionService:
             ``renew_attempt_lease``).
         :type trigger: str
         """
-        if not self._state_machine_validation_enabled:
+        if self._state_machine_validation_enabled:
             return
         try:
             validator = self._state_machine_validator_factory()
@@ -1807,7 +1802,7 @@ class ExecutionTransitionService:
             )
             if candidate is None:
                 return None
-            before_snapshot = self._state_machine_snapshot_from_candidate(candidate) if self._state_machine_validation_enabled else None
+            before_snapshot = self._state_machine_snapshot_from_candidate(candidate)
             return self._claim_attempt(
                 session,
                 company_id=company_id,
@@ -1835,21 +1830,19 @@ class ExecutionTransitionService:
     ) -> ClaimResult:
         current_time = self._now(now)
         with self._session_factory() as session, session.begin():
-            before_snapshot: ExecutionStateSnapshot | None = None
-            if self._state_machine_validation_enabled:
-                before_run = session.get(RunORM, run_id)
-                before_attempt = session.get(RunAttemptORM, attempt_id)
-                before_snapshot = self._state_machine_snapshot(
-                    run=before_run,
-                    attempt=before_attempt,
-                    extra={
-                        "attempt_no": before_attempt.attempt_no if before_attempt else None,
-                        "active_attempt_no": before_run.active_attempt_no if before_run else None,
-                        "scheduled_at": before_attempt.scheduled_at if before_attempt else None,
-                        "lease_expires_at": (before_attempt.lease_expires_at if before_attempt else None),
-                        "next_wakeup_at": before_run.next_wakeup_at if before_run else None,
-                    },
-                )
+            before_run = session.get(RunORM, run_id)
+            before_attempt = session.get(RunAttemptORM, attempt_id)
+            before_snapshot = self._state_machine_snapshot(
+                run=before_run,
+                attempt=before_attempt,
+                extra={
+                    "attempt_no": before_attempt.attempt_no if before_attempt else None,
+                    "active_attempt_no": before_run.active_attempt_no if before_run else None,
+                    "scheduled_at": before_attempt.scheduled_at if before_attempt else None,
+                    "lease_expires_at": (before_attempt.lease_expires_at if before_attempt else None),
+                    "next_wakeup_at": before_run.next_wakeup_at if before_run else None,
+                },
+            )
             return self._claim_attempt(
                 session,
                 company_id=company_id,
@@ -1906,9 +1899,9 @@ class ExecutionTransitionService:
         lease_token = str(uuid4())
         lease_expires_at = now + timedelta(seconds=max(1, lease_ttl_seconds))
 
-        # Authoritative pre-check: if validation is enabled, verify the state
-        # machine allows the claim before attempting the SQL CAS.
-        if before_snapshot is not None:
+        # Authoritative pre-check: verify the state machine allows the claim
+        # before attempting the SQL CAS.
+        if self._state_machine_validation_enabled and before_snapshot is not None:
             ctx = self._state_machine_context(
                 before=before_snapshot,
                 now=now,
@@ -1922,7 +1915,7 @@ class ExecutionTransitionService:
                 RunAttemptORM.id == attempt_id,
                 RunAttemptORM.run_id == run_id,
                 RunAttemptORM.version == expected_attempt_version,
-                RunAttemptORM.attempt_state.in_(_CLAIMABLE_ATTEMPT_STATES),
+                RunAttemptORM.attempt_state.in_(CLAIMABLE_RUN_STATES),
             )
             .values(
                 attempt_state="dispatching",
@@ -1979,7 +1972,8 @@ class ExecutionTransitionService:
                     worker_key=worker_key,
                 ),
             )
-        if before_snapshot is not None:
+        # Advisory post-check (monitoring path only).
+        if not self._state_machine_validation_enabled and before_snapshot is not None:
             after_snapshot = self._state_machine_snapshot(
                 run=refreshed_run,
                 attempt=refreshed_attempt,
@@ -2050,18 +2044,18 @@ class ExecutionTransitionService:
 
             operator_state = self._operator_state_for_execution_step(step_key)
 
+            before_snapshot = self._state_machine_snapshot(
+                run=run,
+                attempt=attempt,
+                extra={
+                    "attempt_no": attempt.attempt_no,
+                    "active_attempt_no": run.active_attempt_no,
+                    "scheduled_at": attempt.scheduled_at,
+                    "lease_expires_at": attempt.lease_expires_at,
+                    "next_wakeup_at": run.next_wakeup_at,
+                },
+            )
             if self._state_machine_validation_enabled:
-                before_snapshot = self._state_machine_snapshot(
-                    run=run,
-                    attempt=attempt,
-                    extra={
-                        "attempt_no": attempt.attempt_no,
-                        "active_attempt_no": run.active_attempt_no,
-                        "scheduled_at": attempt.scheduled_at,
-                        "lease_expires_at": attempt.lease_expires_at,
-                        "next_wakeup_at": run.next_wakeup_at,
-                    },
-                )
                 ctx = self._state_machine_context(
                     before=before_snapshot,
                     now=current_time,
@@ -2070,7 +2064,6 @@ class ExecutionTransitionService:
                 )
                 self._check_transition_allowed_or_raise("start_execution", ctx)
             else:
-                before_snapshot = None
                 if run.state != "dispatching":
                     raise RunTransitionConflictError("Only dispatched attempts can move to executing.")
                 if attempt.lease_token != lease_token:
@@ -2108,7 +2101,7 @@ class ExecutionTransitionService:
                 ),
             )
             run.updated_at = current_time
-            if before_snapshot is not None:
+            if not self._state_machine_validation_enabled and before_snapshot is not None:
                 self._validate_state_machine_transition(
                     trigger="start_execution",
                     before=before_snapshot,
@@ -2191,20 +2184,20 @@ class ExecutionTransitionService:
                 raise RunNotFoundError(f"Run '{run_id}' not found for company '{company_id}'.")
             if attempt is None or attempt.company_id != company_id or attempt.run_id != run_id:
                 raise RunTransitionConflictError(f"Attempt '{attempt_id}' does not belong to run '{run_id}'.")
+            before_snapshot = self._state_machine_snapshot(
+                run=run,
+                attempt=attempt,
+                extra={
+                    "attempt_no": attempt.attempt_no,
+                    "active_attempt_no": run.active_attempt_no,
+                    "retry_count": attempt.retry_count,
+                    "max_attempts": max_attempts,
+                    "scheduled_at": attempt.scheduled_at,
+                    "lease_expires_at": attempt.lease_expires_at,
+                    "next_wakeup_at": run.next_wakeup_at,
+                },
+            )
             if self._state_machine_validation_enabled:
-                before_snapshot = self._state_machine_snapshot(
-                    run=run,
-                    attempt=attempt,
-                    extra={
-                        "attempt_no": attempt.attempt_no,
-                        "active_attempt_no": run.active_attempt_no,
-                        "retry_count": attempt.retry_count,
-                        "max_attempts": max_attempts,
-                        "scheduled_at": attempt.scheduled_at,
-                        "lease_expires_at": attempt.lease_expires_at,
-                        "next_wakeup_at": run.next_wakeup_at,
-                    },
-                )
                 # Determine the failure trigger using the same logic the
                 # service will use below, so the state machine pre-check
                 # validates the correct guard set.
@@ -2235,7 +2228,6 @@ class ExecutionTransitionService:
                     ctx,
                 )
             else:
-                before_snapshot = None
                 if run.current_attempt_id != attempt_id:
                     raise RunTransitionConflictError(f"Attempt '{attempt_id}' is not the active attempt for run '{run_id}'.")
                 if run.state not in {
@@ -2361,7 +2353,7 @@ class ExecutionTransitionService:
                 run.next_wakeup_at = scheduled_at
                 run.terminal_at = None
                 run.updated_at = current_time
-                if before_snapshot is not None:
+                if not self._state_machine_validation_enabled and before_snapshot is not None:
                     self._validate_state_machine_transition(
                         trigger=("record_retryable_failure_delayed" if retry_delay_seconds > 0 else "record_retryable_failure_immediate"),
                         before=before_snapshot,
@@ -2468,7 +2460,7 @@ class ExecutionTransitionService:
             run.next_wakeup_at = None
             run.terminal_at = current_time
             run.updated_at = current_time
-            if before_snapshot is not None:
+            if not self._state_machine_validation_enabled and before_snapshot is not None:
                 self._validate_state_machine_transition(
                     trigger="record_terminal_failure",
                     before=before_snapshot,
@@ -2552,32 +2544,29 @@ class ExecutionTransitionService:
             if run is None or run.company_id != company_id:
                 raise RunNotFoundError(f"Run '{run_id}' not found for company '{company_id}'.")
 
+            attempt = self._current_attempt(session, run)
+            approval_link = self._current_approval_link(session, run)
+            before_snapshot = self._state_machine_snapshot(
+                run=run,
+                attempt=attempt,
+                approval_link=approval_link,
+                extra={
+                    "attempt_no": attempt.attempt_no,
+                    "active_attempt_no": run.active_attempt_no,
+                    "scheduled_at": attempt.scheduled_at,
+                    "lease_expires_at": attempt.lease_expires_at,
+                    "next_wakeup_at": run.next_wakeup_at,
+                },
+            )
             if self._state_machine_validation_enabled:
-                attempt = self._current_attempt(session, run)
-                approval_link = self._current_approval_link(session, run)
-                before_snapshot = self._state_machine_snapshot(
-                    run=run,
-                    attempt=attempt,
-                    approval_link=approval_link,
-                    extra={
-                        "attempt_no": attempt.attempt_no,
-                        "active_attempt_no": run.active_attempt_no,
-                        "scheduled_at": attempt.scheduled_at,
-                        "lease_expires_at": attempt.lease_expires_at,
-                        "next_wakeup_at": run.next_wakeup_at,
-                    },
-                )
                 ctx = self._state_machine_context(
                     before=before_snapshot,
                     now=current_time,
                 )
                 self._check_transition_allowed_or_raise("request_cancel", ctx)
             else:
-                if run.state in _TERMINAL_RUN_STATES or run.state == "cancel_requested":
+                if run.state in TERMINAL_RUN_STATES or run.state == "cancel_requested":
                     raise RunTransitionConflictError(f"Run '{run_id}' cannot be cancelled from state '{run.state}'.")
-                attempt = self._current_attempt(session, run)
-                approval_link = None
-                before_snapshot = None
             command = RunCommandORM(
                 id=self._new_id("cmd"),
                 company_id=company_id,
@@ -2637,7 +2626,7 @@ class ExecutionTransitionService:
             }
             command.accepted_transition = "cancel_requested"
             command.response_snapshot = snapshot
-            if before_snapshot is not None:
+            if not self._state_machine_validation_enabled and before_snapshot is not None:
                 self._validate_state_machine_transition(
                     trigger="request_cancel",
                     before=before_snapshot,
@@ -2690,30 +2679,27 @@ class ExecutionTransitionService:
                 if run is None or run.company_id != company_id:
                     raise RunNotFoundError(f"Run '{run_id}' not found for company '{company_id}'.")
 
-                before_snapshot: ExecutionStateSnapshot | None
+                attempt = self._current_attempt(session, run)
+                before_snapshot: ExecutionStateSnapshot | None = self._state_machine_snapshot(
+                    run=run,
+                    attempt=attempt,
+                    extra={
+                        "attempt_no": attempt.attempt_no,
+                        "active_attempt_no": run.active_attempt_no,
+                        "scheduled_at": attempt.scheduled_at,
+                        "lease_expires_at": attempt.lease_expires_at,
+                        "next_wakeup_at": run.next_wakeup_at,
+                    },
+                )
                 if self._state_machine_validation_enabled:
-                    attempt = self._current_attempt(session, run)
-                    before_snapshot = self._state_machine_snapshot(
-                        run=run,
-                        attempt=attempt,
-                        extra={
-                            "attempt_no": attempt.attempt_no,
-                            "active_attempt_no": run.active_attempt_no,
-                            "scheduled_at": attempt.scheduled_at,
-                            "lease_expires_at": attempt.lease_expires_at,
-                            "next_wakeup_at": run.next_wakeup_at,
-                        },
-                    )
                     ctx = self._state_machine_context(
                         before=before_snapshot,
                         now=current_time,
                     )
                     self._check_transition_allowed_or_raise("admit_retry", ctx)
                 else:
-                    if run.state not in _RETRYABLE_RUN_STATES:
+                    if run.state not in RETRYABLE_RUN_STATES:
                         raise RunTransitionConflictError(f"Run '{run_id}' cannot retry from state '{run.state}'.")
-                    attempt = self._current_attempt(session, run)
-                    before_snapshot = None
 
                 command = RunCommandORM(
                     id=self._new_id("cmd"),
@@ -2794,7 +2780,7 @@ class ExecutionTransitionService:
                 run.terminal_at = None
                 run.updated_at = current_time
 
-                if before_snapshot is not None:
+                if not self._state_machine_validation_enabled and before_snapshot is not None:
                     self._validate_state_machine_transition(
                         trigger="admit_retry",
                         before=before_snapshot,
@@ -2880,28 +2866,27 @@ class ExecutionTransitionService:
                 raise RunNotFoundError(f"Run '{run_id}' not found for company '{company_id}'.")
             if attempt is None or attempt.company_id != company_id or attempt.run_id != run_id:
                 raise RunTransitionConflictError(f"Attempt '{attempt_id}' does not belong to run '{run_id}'.")
+            before_snapshot = self._state_machine_snapshot(
+                run=run,
+                attempt=attempt,
+                extra={
+                    "attempt_no": attempt.attempt_no,
+                    "active_attempt_no": run.active_attempt_no,
+                    "scheduled_at": attempt.scheduled_at,
+                    "lease_expires_at": attempt.lease_expires_at,
+                    "next_wakeup_at": run.next_wakeup_at,
+                    "approval_id": approval_id,
+                    "approval_resume_disposition": resume_disposition,
+                    "approval_opened_at": current_time,
+                },
+            )
             if self._state_machine_validation_enabled:
-                before_snapshot = self._state_machine_snapshot(
-                    run=run,
-                    attempt=attempt,
-                    extra={
-                        "attempt_no": attempt.attempt_no,
-                        "active_attempt_no": run.active_attempt_no,
-                        "scheduled_at": attempt.scheduled_at,
-                        "lease_expires_at": attempt.lease_expires_at,
-                        "next_wakeup_at": run.next_wakeup_at,
-                        "approval_id": approval_id,
-                        "approval_resume_disposition": resume_disposition,
-                        "approval_opened_at": current_time,
-                    },
-                )
                 ctx = self._state_machine_context(
                     before=before_snapshot,
                     now=current_time,
                 )
                 self._check_transition_allowed_or_raise("open_approval", ctx)
             else:
-                before_snapshot = None
                 if run.state != "executing" or attempt.attempt_state != "executing":
                     raise RunTransitionConflictError("Approvals can only open from the executing state.")
 
@@ -2959,7 +2944,7 @@ class ExecutionTransitionService:
             run.current_approval_link_id = approval_link.id
             run.current_step_key = gate_key
             run.updated_at = current_time
-            if before_snapshot is not None:
+            if not self._state_machine_validation_enabled and before_snapshot is not None:
                 self._validate_state_machine_transition(
                     trigger="open_approval",
                     before=before_snapshot,
@@ -3063,25 +3048,21 @@ class ExecutionTransitionService:
                 approved=approved,
                 resume_disposition=approval_link.resume_disposition,
             )
-            before_snapshot = (
-                self._state_machine_snapshot(
-                    run=run,
-                    attempt=attempt,
-                    approval_link=approval_link,
-                    extra={
-                        "attempt_no": attempt.attempt_no,
-                        "active_attempt_no": run.active_attempt_no,
-                        "scheduled_at": attempt.scheduled_at,
-                        "lease_expires_at": attempt.lease_expires_at,
-                        "next_wakeup_at": run.next_wakeup_at,
-                        "command_type": command_type,
-                    },
-                )
-                if self._state_machine_validation_enabled
-                else None
+            before_snapshot = self._state_machine_snapshot(
+                run=run,
+                attempt=attempt,
+                approval_link=approval_link,
+                extra={
+                    "attempt_no": attempt.attempt_no,
+                    "active_attempt_no": run.active_attempt_no,
+                    "scheduled_at": attempt.scheduled_at,
+                    "lease_expires_at": attempt.lease_expires_at,
+                    "next_wakeup_at": run.next_wakeup_at,
+                    "command_type": command_type,
+                },
             )
 
-            if before_snapshot is not None:
+            if self._state_machine_validation_enabled:
                 ctx = self._state_machine_context(
                     before=before_snapshot,
                     now=current_time,
@@ -3196,7 +3177,7 @@ class ExecutionTransitionService:
             }
             command.accepted_transition = run_state
             command.response_snapshot = snapshot
-            if before_snapshot is not None:
+            if not self._state_machine_validation_enabled and before_snapshot is not None:
                 self._validate_state_machine_transition(
                     trigger=approval_trigger,
                     before=before_snapshot,
@@ -3242,19 +3223,18 @@ class ExecutionTransitionService:
             if attempt.attempt_state not in _IN_FLIGHT_ATTEMPT_STATES:
                 raise RunTransitionConflictError("Only in-flight attempts can renew worker leases.")
 
-            before_snapshot: ExecutionStateSnapshot | None
+            before_snapshot: ExecutionStateSnapshot | None = self._state_machine_snapshot(
+                run=run,
+                attempt=attempt,
+                extra={
+                    "attempt_no": attempt.attempt_no,
+                    "active_attempt_no": run.active_attempt_no,
+                    "scheduled_at": attempt.scheduled_at,
+                    "lease_expires_at": attempt.lease_expires_at,
+                    "next_wakeup_at": run.next_wakeup_at,
+                },
+            )
             if self._state_machine_validation_enabled:
-                before_snapshot = self._state_machine_snapshot(
-                    run=run,
-                    attempt=attempt,
-                    extra={
-                        "attempt_no": attempt.attempt_no,
-                        "active_attempt_no": run.active_attempt_no,
-                        "scheduled_at": attempt.scheduled_at,
-                        "lease_expires_at": attempt.lease_expires_at,
-                        "next_wakeup_at": run.next_wakeup_at,
-                    },
-                )
                 # Authoritative pre-check: state dimensions must not change.
                 # Using the same snapshot for before and after is correct
                 # because no mutation has occurred yet — the validator
@@ -3264,15 +3244,13 @@ class ExecutionTransitionService:
                     after=before_snapshot,
                     trigger="renew_attempt_lease",
                 )
-            else:
-                before_snapshot = None
 
             attempt.last_heartbeat_at = current_time
             attempt.lease_expires_at = current_time + timedelta(seconds=max(1, lease_ttl_seconds))
             attempt.updated_at = current_time
 
             # Post-mutation advisory validation (Phase 1b safety net).
-            if before_snapshot is not None:
+            if not self._state_machine_validation_enabled and before_snapshot is not None:
                 self._validate_non_state_operation(
                     before=before_snapshot,
                     after=self._state_machine_snapshot(
@@ -3332,18 +3310,18 @@ class ExecutionTransitionService:
                 raise RunNotFoundError(f"Run '{run_id}' not found for company '{company_id}'.")
             if attempt is None or attempt.company_id != company_id or attempt.run_id != run_id:
                 raise RunTransitionConflictError(f"Attempt '{attempt_id}' does not belong to run '{run_id}'.")
+            before_snapshot = self._state_machine_snapshot(
+                run=run,
+                attempt=attempt,
+                extra={
+                    "attempt_no": attempt.attempt_no,
+                    "active_attempt_no": run.active_attempt_no,
+                    "scheduled_at": attempt.scheduled_at,
+                    "lease_expires_at": attempt.lease_expires_at,
+                    "next_wakeup_at": run.next_wakeup_at,
+                },
+            )
             if self._state_machine_validation_enabled:
-                before_snapshot = self._state_machine_snapshot(
-                    run=run,
-                    attempt=attempt,
-                    extra={
-                        "attempt_no": attempt.attempt_no,
-                        "active_attempt_no": run.active_attempt_no,
-                        "scheduled_at": attempt.scheduled_at,
-                        "lease_expires_at": attempt.lease_expires_at,
-                        "next_wakeup_at": run.next_wakeup_at,
-                    },
-                )
                 ctx = self._state_machine_context(
                     before=before_snapshot,
                     now=current_time,
@@ -3351,7 +3329,6 @@ class ExecutionTransitionService:
                 )
                 self._check_transition_allowed_or_raise("complete_success", ctx)
             else:
-                before_snapshot = None
                 if attempt.lease_token != lease_token:
                     raise RunTransitionConflictError("Lease token does not match the active worker claim.")
                 if attempt.attempt_state not in _IN_FLIGHT_ATTEMPT_STATES:
@@ -3373,7 +3350,7 @@ class ExecutionTransitionService:
             run.terminal_at = current_time
             run.current_step_key = None
             run.updated_at = current_time
-            if before_snapshot is not None:
+            if not self._state_machine_validation_enabled and before_snapshot is not None:
                 self._validate_state_machine_transition(
                     trigger="complete_success",
                     before=before_snapshot,
@@ -3423,32 +3400,29 @@ class ExecutionTransitionService:
             if run is None or run.company_id != company_id:
                 raise RunNotFoundError(f"Run '{run_id}' not found for company '{company_id}'.")
 
-            before_snapshot: ExecutionStateSnapshot | None
+            attempt = self._current_attempt(session, run)
+            before_snapshot: ExecutionStateSnapshot | None = self._state_machine_snapshot(
+                run=run,
+                attempt=attempt,
+                extra={
+                    "attempt_no": attempt.attempt_no,
+                    "active_attempt_no": run.active_attempt_no,
+                    "scheduled_at": attempt.scheduled_at,
+                    "lease_expires_at": attempt.lease_expires_at,
+                    "next_wakeup_at": run.next_wakeup_at,
+                },
+            )
             if self._state_machine_validation_enabled:
-                attempt = self._current_attempt(session, run)
-                before_snapshot = self._state_machine_snapshot(
-                    run=run,
-                    attempt=attempt,
-                    extra={
-                        "attempt_no": attempt.attempt_no,
-                        "active_attempt_no": run.active_attempt_no,
-                        "scheduled_at": attempt.scheduled_at,
-                        "lease_expires_at": attempt.lease_expires_at,
-                        "next_wakeup_at": run.next_wakeup_at,
-                    },
-                )
                 ctx = self._state_machine_context(
                     before=before_snapshot,
                     now=current_time,
                 )
                 self._check_transition_allowed_or_raise("pause", ctx)
             else:
-                if run.operator_state in _TERMINAL_OPERATOR_STATES or run.operator_state == "paused":
+                if run.operator_state in TERMINAL_OPERATOR_STATES or run.operator_state == "paused":
                     raise RunTransitionConflictError(f"Run '{run_id}' cannot pause from operator state '{run.operator_state}'.")
-                attempt = self._current_attempt(session, run)
                 if attempt.attempt_state in _IN_FLIGHT_ATTEMPT_STATES:
                     raise RunTransitionConflictError("In-flight attempts must be interrupted instead of paused.")
-                before_snapshot = None
 
             command = RunCommandORM(
                 id=self._new_id("cmd"),
@@ -3496,7 +3470,7 @@ class ExecutionTransitionService:
             attempt.operator_state = "paused"
             attempt.updated_at = current_time
 
-            if before_snapshot is not None:
+            if not self._state_machine_validation_enabled and before_snapshot is not None:
                 self._validate_operator_transition(
                     trigger="pause",
                     before=before_snapshot,
@@ -3557,20 +3531,19 @@ class ExecutionTransitionService:
             if run is None or run.company_id != company_id:
                 raise RunNotFoundError(f"Run '{run_id}' not found for company '{company_id}'.")
 
-            before_snapshot: ExecutionStateSnapshot | None
+            attempt = self._current_attempt(session, run)
+            before_snapshot: ExecutionStateSnapshot | None = self._state_machine_snapshot(
+                run=run,
+                attempt=attempt,
+                extra={
+                    "attempt_no": attempt.attempt_no,
+                    "active_attempt_no": run.active_attempt_no,
+                    "scheduled_at": attempt.scheduled_at,
+                    "lease_expires_at": attempt.lease_expires_at,
+                    "next_wakeup_at": run.next_wakeup_at,
+                },
+            )
             if self._state_machine_validation_enabled:
-                attempt = self._current_attempt(session, run)
-                before_snapshot = self._state_machine_snapshot(
-                    run=run,
-                    attempt=attempt,
-                    extra={
-                        "attempt_no": attempt.attempt_no,
-                        "active_attempt_no": run.active_attempt_no,
-                        "scheduled_at": attempt.scheduled_at,
-                        "lease_expires_at": attempt.lease_expires_at,
-                        "next_wakeup_at": run.next_wakeup_at,
-                    },
-                )
                 ctx = self._state_machine_context(
                     before=before_snapshot,
                     now=current_time,
@@ -3584,11 +3557,9 @@ class ExecutionTransitionService:
                     raise RunTransitionConflictError(f"Run '{run_id}' cannot resume from operator state '{run.operator_state}'.")
                 if run.current_approval_link_id:
                     raise RunTransitionConflictError("Runs waiting on approval cannot be resumed outside the approval flow.")
-                attempt = self._current_attempt(session, run)
                 next_wakeup_at = self._coerce_utc(run.next_wakeup_at)
                 spurious_wake_blocked = bool(run.state == "retry_backoff" and next_wakeup_at is not None and next_wakeup_at > current_time)
                 operator_state = "retry_scheduled" if spurious_wake_blocked else self._operator_state_for_resume(run.state)
-                before_snapshot = None
 
             command = RunCommandORM(
                 id=self._new_id("cmd"),
@@ -3635,7 +3606,7 @@ class ExecutionTransitionService:
             attempt.operator_state = operator_state
             attempt.updated_at = current_time
 
-            if before_snapshot is not None:
+            if not self._state_machine_validation_enabled and before_snapshot is not None:
                 self._validate_operator_transition(
                     trigger="resume",
                     before=before_snapshot,
@@ -3721,32 +3692,29 @@ class ExecutionTransitionService:
             if run is None or run.company_id != company_id:
                 raise RunNotFoundError(f"Run '{run_id}' not found for company '{company_id}'.")
 
+            attempt = self._current_attempt(session, run)
+            approval_link = self._current_approval_link(session, run)
+            before_snapshot = self._state_machine_snapshot(
+                run=run,
+                attempt=attempt,
+                approval_link=approval_link,
+                extra={
+                    "attempt_no": attempt.attempt_no,
+                    "active_attempt_no": run.active_attempt_no,
+                    "scheduled_at": attempt.scheduled_at,
+                    "lease_expires_at": attempt.lease_expires_at,
+                    "next_wakeup_at": run.next_wakeup_at,
+                },
+            )
             if self._state_machine_validation_enabled:
-                attempt = self._current_attempt(session, run)
-                approval_link = self._current_approval_link(session, run)
-                before_snapshot = self._state_machine_snapshot(
-                    run=run,
-                    attempt=attempt,
-                    approval_link=approval_link,
-                    extra={
-                        "attempt_no": attempt.attempt_no,
-                        "active_attempt_no": run.active_attempt_no,
-                        "scheduled_at": attempt.scheduled_at,
-                        "lease_expires_at": attempt.lease_expires_at,
-                        "next_wakeup_at": run.next_wakeup_at,
-                    },
-                )
                 ctx = self._state_machine_context(
                     before=before_snapshot,
                     now=current_time,
                 )
                 self._check_transition_allowed_or_raise("interrupt", ctx)
             else:
-                if run.operator_state in _TERMINAL_OPERATOR_STATES:
+                if run.operator_state in TERMINAL_OPERATOR_STATES:
                     raise RunTransitionConflictError(f"Run '{run_id}' cannot be interrupted from operator state '{run.operator_state}'.")
-                attempt = self._current_attempt(session, run)
-                approval_link = None
-                before_snapshot = None
             command = RunCommandORM(
                 id=self._new_id("cmd"),
                 company_id=company_id,
@@ -3810,7 +3778,7 @@ class ExecutionTransitionService:
                 "outbox_event": "run_cancel",
                 "reason": interrupt_reason,
             }
-            if before_snapshot is not None:
+            if not self._state_machine_validation_enabled and before_snapshot is not None:
                 self._validate_state_machine_transition(
                     trigger="interrupt",
                     before=before_snapshot,
@@ -3886,21 +3854,21 @@ class ExecutionTransitionService:
             if run is None or run.company_id != company_id:
                 raise RunNotFoundError(f"Run '{run_id}' not found for company '{company_id}'.")
 
+            attempt = self._current_attempt(session, run)
+            approval_link = self._current_approval_link(session, run)
+            before_snapshot = self._state_machine_snapshot(
+                run=run,
+                attempt=attempt,
+                approval_link=approval_link,
+                extra={
+                    "attempt_no": attempt.attempt_no,
+                    "active_attempt_no": run.active_attempt_no,
+                    "scheduled_at": attempt.scheduled_at,
+                    "lease_expires_at": attempt.lease_expires_at,
+                    "next_wakeup_at": run.next_wakeup_at,
+                },
+            )
             if self._state_machine_validation_enabled:
-                attempt = self._current_attempt(session, run)
-                approval_link = self._current_approval_link(session, run)
-                before_snapshot = self._state_machine_snapshot(
-                    run=run,
-                    attempt=attempt,
-                    approval_link=approval_link,
-                    extra={
-                        "attempt_no": attempt.attempt_no,
-                        "active_attempt_no": run.active_attempt_no,
-                        "scheduled_at": attempt.scheduled_at,
-                        "lease_expires_at": attempt.lease_expires_at,
-                        "next_wakeup_at": run.next_wakeup_at,
-                    },
-                )
                 ctx = self._state_machine_context(
                     before=before_snapshot,
                     now=current_time,
@@ -3909,9 +3877,6 @@ class ExecutionTransitionService:
             else:
                 if run.operator_state == "quarantined":
                     raise RunTransitionConflictError(f"Run '{run_id}' is already quarantined.")
-                attempt = self._current_attempt(session, run)
-                approval_link = None
-                before_snapshot = None
             command = RunCommandORM(
                 id=self._new_id("cmd"),
                 company_id=company_id,
@@ -3985,7 +3950,7 @@ class ExecutionTransitionService:
                 "outbox_event": "dead_letter",
                 "reason": quarantine_reason,
             }
-            if before_snapshot is not None:
+            if not self._state_machine_validation_enabled and before_snapshot is not None:
                 self._validate_state_machine_transition(
                     trigger="quarantine",
                     before=before_snapshot,
@@ -4041,16 +4006,15 @@ class ExecutionTransitionService:
             if run.execution_lane == target_execution_lane:
                 raise RunTransitionConflictError(f"Run '{run_id}' is already on execution lane '{target_execution_lane}'.")
 
-            before_snapshot: ExecutionStateSnapshot | None
+            before_snapshot: ExecutionStateSnapshot | None = self._state_machine_snapshot(
+                run=run,
+                attempt=None,
+                extra={
+                    "active_attempt_no": run.active_attempt_no,
+                    "next_wakeup_at": run.next_wakeup_at,
+                },
+            )
             if self._state_machine_validation_enabled:
-                before_snapshot = self._state_machine_snapshot(
-                    run=run,
-                    attempt=None,
-                    extra={
-                        "active_attempt_no": run.active_attempt_no,
-                        "next_wakeup_at": run.next_wakeup_at,
-                    },
-                )
                 # Authoritative pre-check: state dimensions must not change.
                 # Using the same snapshot for before and after is correct
                 # because no mutation has occurred yet — the validator
@@ -4060,8 +4024,6 @@ class ExecutionTransitionService:
                     after=before_snapshot,
                     trigger="escalate_run",
                 )
-            else:
-                before_snapshot = None
 
             command = RunCommandORM(
                 id=self._new_id("cmd"),
@@ -4088,7 +4050,7 @@ class ExecutionTransitionService:
             run.updated_at = current_time
 
             # Post-mutation advisory validation (Phase 1b safety net).
-            if before_snapshot is not None:
+            if not self._state_machine_validation_enabled and before_snapshot is not None:
                 self._validate_non_state_operation(
                     before=before_snapshot,
                     after=self._state_machine_snapshot(
@@ -4254,30 +4216,9 @@ class ExecutionTransitionService:
             source_run.latest_command_id = command.id
             source_run.updated_at = current_time
 
-            # Post-mutation advisory validation (Phase 1b safety net).
-            if self._state_machine_validation_enabled:
-                self._validate_creation(
-                    operation="restart_run_from_scratch",
-                    before_snapshot=ExecutionStateSnapshot(
-                        run_id=source_run.id,
-                        run_state=source_run.state,
-                        operator_state=source_run.operator_state,
-                        current_attempt_id=source_run.current_attempt_id,
-                        command_id=command.id,
-                        source_run_invariants=SourceRunInvariants(
-                            run_state=source_run_state_before,
-                            operator_state=source_operator_state_before,
-                            current_attempt_id=source_current_attempt_id_before,
-                        ),
-                    ),
-                    after_snapshot=ExecutionStateSnapshot(
-                        run_state="queued",
-                        operator_state="admitted",
-                        attempt_state="queued",
-                        attempt_operator_state="admitted",
-                        lease_status="not_leased",
-                    ),
-                )
+            # Post-mutation advisory validation is intentionally omitted here.
+            # The authoritative pre-check (_validate_creation_or_raise) already
+            # validated the creation before the mutation.
 
             command.accepted_transition = "queued"
             command.response_snapshot = {
@@ -4334,28 +4275,26 @@ class ExecutionTransitionService:
                 run = session.get(RunORM, attempt.run_id)
                 if run is None or run.company_id != company_id:
                     continue
-                if run.operator_state in _TERMINAL_OPERATOR_STATES:
+                if run.operator_state in TERMINAL_OPERATOR_STATES:
                     continue
 
+                before_snapshot = self._state_machine_snapshot(
+                    run=run,
+                    attempt=attempt,
+                    extra={
+                        "attempt_no": attempt.attempt_no,
+                        "active_attempt_no": run.active_attempt_no,
+                        "scheduled_at": attempt.scheduled_at,
+                        "lease_expires_at": attempt.lease_expires_at,
+                        "next_wakeup_at": run.next_wakeup_at,
+                    },
+                )
                 if self._state_machine_validation_enabled:
-                    before_snapshot = self._state_machine_snapshot(
-                        run=run,
-                        attempt=attempt,
-                        extra={
-                            "attempt_no": attempt.attempt_no,
-                            "active_attempt_no": run.active_attempt_no,
-                            "scheduled_at": attempt.scheduled_at,
-                            "lease_expires_at": attempt.lease_expires_at,
-                            "next_wakeup_at": run.next_wakeup_at,
-                        },
-                    )
                     ctx = self._state_machine_context(
                         before=before_snapshot,
                         now=current_time,
                     )
                     self._check_transition_allowed_or_raise("expire_lease", ctx)
-                else:
-                    before_snapshot = None
 
                 session.add(
                     RunOutboxORM(
@@ -4418,7 +4357,7 @@ class ExecutionTransitionService:
                 run.terminal_at = current_time
                 run.current_step_key = None
                 run.updated_at = current_time
-                if before_snapshot is not None:
+                if not self._state_machine_validation_enabled and before_snapshot is not None:
                     self._validate_state_machine_transition(
                         trigger="expire_lease",
                         before=before_snapshot,
