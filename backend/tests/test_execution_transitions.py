@@ -6,7 +6,8 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any, cast
 
-from sqlalchemy import create_engine, func, select
+import pytest
+from sqlalchemy import create_engine, func, select, update
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.execution import dependencies as execution_dependencies
@@ -14,6 +15,7 @@ from app.execution.admin_service import ExecutionAdminService
 from app.execution.service import (
     ExecutionTransitionService,
     RunCommandIdempotencyConflictError,
+    RunTransitionConflictError,
     StaleWorkerClaimError,
     StateMachineValidatorFactory,
 )
@@ -104,6 +106,13 @@ class _ValidationSpy:
     ) -> ExecutionValidationResult:
         return ExecutionValidationResult(valid=True, validated=True)
 
+    def check_transition_allowed(
+        self,
+        trigger: str,
+        context: ExecutionTransitionContext,
+    ) -> tuple[bool, str | None]:
+        return True, None
+
 
 class _TriggerValidationSpy:
     """Test double that returns a special result for one trigger."""
@@ -150,6 +159,15 @@ class _TriggerValidationSpy:
         after_snapshot: ExecutionStateSnapshot,
     ) -> ExecutionValidationResult:
         return ExecutionValidationResult(valid=True, validated=True)
+
+    def check_transition_allowed(
+        self,
+        trigger: str,
+        context: ExecutionTransitionContext,
+    ) -> tuple[bool, str | None]:
+        if trigger == self._target_trigger and not self._result.valid:
+            return False, self._result.error_message or "simulated block"
+        return True, None
 
 
 def _validation_records(caplog) -> list[logging.LogRecord]:
@@ -2120,28 +2138,19 @@ def test_wave3_escalate_non_state_validation(
 # SPEC §5 compatibility tests — resolve "Decision required" findings
 # before Phase 1c authority transfer
 # ---------------------------------------------------------------------------
-
-
-def test_spec5_finding2_stale_run_complete_success_flagged_by_validator(
+def test_spec5_finding2_stale_run_complete_success_now_blocked(
     tmp_path: Path,
-    caplog,
 ) -> None:
-    """SPEC §5 finding #2: complete_attempt_success accepts stale run state.
+    """SPEC §5 finding #2: complete_attempt_success now blocked by pre-check.
 
-    The existing service checks attempt state (in-flight) and lease token but
-    does NOT check ``run.state`` or ``run.current_attempt_id`` before setting
-    the run to ``succeeded``.  The validator detects this divergence because
-    ``complete_success`` is only valid from specific source states.
-
-    This test confirms the compatibility behaviour is preserved (service
-    outcome is unaffected) and the validator flags the mismatch, making the
-    finding explicit before any Phase 1c authority transfer.
+    The state machine pre-check (Phase 1c) rejects ``complete_success`` from a
+    ``dead_lettered`` run.  The ad-hoc service checks are bypassed when
+    validation is enabled and the authoritative guard takes over.
     """
     service, session_factory = _service(
         tmp_path,
         state_machine_validation_enabled=True,
     )
-    caplog.set_level(logging.WARNING, logger="app.execution.service")
 
     # Set up a run with an in-flight executing attempt.
     created = service.admit_create(
@@ -2164,45 +2173,27 @@ def test_spec5_finding2_stale_run_complete_success_flagged_by_validator(
         lease_token=claim.lease_token,
         step_key="provider_call",
     )
-    # Clear any pre-existing validation records from admit/claim/execute.
-    caplog.clear()
 
-    # Manipulate the run into a stale state via direct DB access.  The
-    # attempt remains in-flight ("executing") so the service accepts the
-    # completion — the service does NOT check run.state.
+    # Manipulate the run into a stale state via direct DB access.
     with session_factory() as session:
         run = session.get(RunORM, created.run_id)
         assert run is not None
         run.state = "dead_lettered"
         session.commit()
 
-    # Service accepts complete_attempt_success because the attempt is
-    # still in-flight and the lease token matches.
-    service.complete_attempt_success(
-        company_id="cmp_s5_f2",
-        run_id=claim.run_id,
-        attempt_id=claim.attempt_id,
-        lease_token=claim.lease_token,
-        result_summary={"note": "stale run completion"},
-    )
-
-    # Service outcome: run is set to "succeeded" regardless of the stale
-    # "dead_lettered" state — compatibility behaviour preserved.
-    with session_factory() as session:
-        run = session.get(RunORM, created.run_id)
-        assert run is not None
-        assert run.state == "succeeded"
-
-    # Validator detected the mismatch: complete_success cannot fire from
-    # "dead_lettered" (source must be dispatching/executing/…).
-    records = _validation_records(caplog)
-    assert len(records) >= 1, "Expected at least one validation mismatch record"
-    payload = _validation_payload(records[0])
-    assert payload["trigger"] == "complete_success"
-    assert payload["mismatch_category"] in (
-        MISMATCH_CATEGORY_RUN_STATE_MISMATCH,
-        MISMATCH_CATEGORY_INVALID_TRIGGER,
-    ), f"Unexpected mismatch category: {payload['mismatch_category']}"
+    # The state machine pre-check now blocks complete_success from
+    # dead_lettered — service raises RunTransitionConflictError.
+    with pytest.raises(
+        RunTransitionConflictError,
+        match="not allowed",
+    ):
+        service.complete_attempt_success(
+            company_id="cmp_s5_f2",
+            run_id=claim.run_id,
+            attempt_id=claim.attempt_id,
+            lease_token=claim.lease_token,
+            result_summary={"note": "stale run completion"},
+        )
 
 
 def test_spec5_finding3_stale_approval_decision_flagged_by_validator(
@@ -2290,3 +2281,334 @@ def test_spec5_finding3_stale_approval_decision_flagged_by_validator(
     ), f"Unexpected mismatch category: {payload['mismatch_category']}"
     assert payload["before"]["run_state"] == "queued"
     assert payload["after"]["run_state"] == "queued"
+
+
+# ---------------------------------------------------------------------------
+# Phase 1c: authoritative pre-check tests
+# ---------------------------------------------------------------------------
+
+
+def test_claim_attempt_happy_path_with_real_validator(
+    tmp_path: Path,
+) -> None:
+    """State machine allows claim_attempt from queued."""
+    service, _session_factory = _service(
+        tmp_path,
+        state_machine_validation_enabled=True,
+    )
+    created = service.admit_create(
+        company_id="cmp_f1c_c",
+        actor_type="agent",
+        actor_id="agent_backend",
+        idempotency_key="idem_f1c_cclaim",
+        request_fingerprint_hash="fp_f1c_cclaim",
+        run_kind="provider_dispatch",
+    )
+    claim = service.claim_next_attempt(
+        company_id="cmp_f1c_c",
+        worker_key="worker_alpha",
+    )
+    assert claim is not None
+    assert claim.run_id == created.run_id
+
+
+def test_claim_attempt_blocked_by_state_machine(
+    tmp_path: Path,
+) -> None:
+    """Authoritative pre-check blocks claim_attempt with non-claimable context."""
+    service, _session_factory = _service(
+        tmp_path,
+        state_machine_validation_enabled=True,
+    )
+    # Build a context showing the run is already in a terminal state.
+    ctx = ExecutionTransitionContext(
+        run_id="test_run",
+        attempt_id="test_attempt",
+        run_state="succeeded",
+        operator_state="completed",
+        attempt_state="succeeded",
+        attempt_operator_state="completed",
+        active_attempt_no=1,
+    )
+    with pytest.raises(RunTransitionConflictError, match="not allowed"):
+        service._check_transition_allowed_or_raise("claim_attempt", ctx)
+
+
+def test_start_execution_blocked_from_wrong_state(
+    tmp_path: Path,
+) -> None:
+    """Authoritative pre-check blocks start_execution when not dispatching."""
+    service, _session_factory = _service(
+        tmp_path,
+        state_machine_validation_enabled=True,
+    )
+    created = service.admit_create(
+        company_id="cmp_f1c_se",
+        actor_type="agent",
+        actor_id="agent_backend",
+        idempotency_key="idem_f1c_sestart",
+        request_fingerprint_hash="fp_f1c_sestart",
+        run_kind="provider_dispatch",
+    )
+    # Use a snapshot that shows a non-dispatching state to trigger block.
+    with _session_factory() as session:
+        run = session.get(RunORM, created.run_id)
+        attempt = session.execute(select(RunAttemptORM).where(RunAttemptORM.run_id == created.run_id)).scalars().first()
+        assert run is not None and attempt is not None
+        # Fabricate a snapshot showing 'executing' as current state
+        # so start_execution is not valid (source must be dispatching).
+        before_snapshot = ExecutionStateSnapshot(
+            run_id=run.id,
+            attempt_id=attempt.id,
+            run_state="executing",
+            operator_state="executing",
+            attempt_state="executing",
+            attempt_operator_state="executing",
+            lease_token=attempt.lease_token,
+            extra={
+                "attempt_no": attempt.attempt_no,
+                "active_attempt_no": run.active_attempt_no,
+                "scheduled_at": attempt.scheduled_at,
+                "lease_expires_at": attempt.lease_expires_at,
+                "next_wakeup_at": run.next_wakeup_at,
+            },
+        )
+        ctx = service._state_machine_context(
+            before=before_snapshot,
+            now=datetime.now(tz=UTC),
+            provided_lease_token="fake_token",
+            service_chosen_operator_state="executing",
+        )
+        with pytest.raises(
+            RunTransitionConflictError,
+            match="not allowed",
+        ):
+            service._check_transition_allowed_or_raise("start_execution", ctx)
+
+
+def test_start_execution_blocked_by_wrong_lease_token(
+    tmp_path: Path,
+) -> None:
+    """Authoritative pre-check blocks start_execution with mismatched token."""
+    service, _session_factory = _service(
+        tmp_path,
+        state_machine_validation_enabled=True,
+    )
+    claim = service.claim_next_attempt(
+        company_id="cmp_f1c_sel",
+        worker_key="worker_alpha",
+    )
+    assert claim is not None
+    # Call mark_attempt_executing with a WRONG lease token.
+    # The pre-check should catch this via has_valid_lease_token guard.
+    with pytest.raises(
+        RunTransitionConflictError,
+        match="not allowed",
+    ):
+        service.mark_attempt_executing(
+            company_id="cmp_f1c_sel",
+            run_id=claim.run_id,
+            attempt_id=claim.attempt_id,
+            lease_token="wrong_token",
+            step_key="test_step",
+        )
+
+
+def test_complete_success_blocked_by_wrong_lease_token(
+    tmp_path: Path,
+) -> None:
+    """Authoritative pre-check blocks complete_success with mismatched token."""
+    service, _session_factory = _service(
+        tmp_path,
+        state_machine_validation_enabled=True,
+    )
+    claim = service.claim_next_attempt(
+        company_id="cmp_f1c_cs",
+        worker_key="worker_alpha",
+    )
+    assert claim is not None
+    service.mark_attempt_executing(
+        company_id="cmp_f1c_cs",
+        run_id=claim.run_id,
+        attempt_id=claim.attempt_id,
+        lease_token=claim.lease_token,
+        step_key="test_step",
+    )
+    # Call complete_attempt_success with a WRONG lease token.
+    # The pre-check should catch this via has_valid_lease_token guard.
+    with pytest.raises(
+        RunTransitionConflictError,
+        match="not allowed",
+    ):
+        service.complete_attempt_success(
+            company_id="cmp_f1c_cs",
+            run_id=claim.run_id,
+            attempt_id=claim.attempt_id,
+            lease_token="wrong_token",
+        )
+
+
+def test_record_attempt_failure_blocked_by_wrong_lease_token(
+    tmp_path: Path,
+) -> None:
+    """Authoritative pre-check blocks record_attempt_failure with wrong token."""
+    service, _session_factory = _service(
+        tmp_path,
+        state_machine_validation_enabled=True,
+    )
+    claim = service.claim_next_attempt(
+        company_id="cmp_f1c_rf",
+        worker_key="worker_alpha",
+    )
+    assert claim is not None
+    service.mark_attempt_executing(
+        company_id="cmp_f1c_rf",
+        run_id=claim.run_id,
+        attempt_id=claim.attempt_id,
+        lease_token=claim.lease_token,
+        step_key="test_step",
+    )
+    # Call record_attempt_failure with a WRONG lease token.
+    # The pre-check should block via has_valid_lease_token guard.
+    with pytest.raises(
+        RunTransitionConflictError,
+        match="not allowed",
+    ):
+        service.record_attempt_failure(
+            company_id="cmp_f1c_rf",
+            run_id=claim.run_id,
+            attempt_id=claim.attempt_id,
+            lease_token="wrong_token",
+            failure_class="test",
+            error_code="ERR_TEST",
+            error_detail="test blocking",
+            retryable=False,
+            max_attempts=3,
+        )
+
+
+def test_request_cancel_blocked_by_state_machine_on_terminal_run(
+    tmp_path: Path,
+) -> None:
+    """Authoritative pre-check blocks request_cancel on terminal run."""
+    service, _session_factory = _service(
+        tmp_path,
+        state_machine_validation_enabled=True,
+    )
+    claim = service.claim_next_attempt(
+        company_id="cmp_f1c_rc",
+        worker_key="worker_alpha",
+    )
+    assert claim is not None
+    service.mark_attempt_executing(
+        company_id="cmp_f1c_rc",
+        run_id=claim.run_id,
+        attempt_id=claim.attempt_id,
+        lease_token=claim.lease_token,
+        step_key="test_step",
+    )
+    service.complete_attempt_success(
+        company_id="cmp_f1c_rc",
+        run_id=claim.run_id,
+        attempt_id=claim.attempt_id,
+        lease_token=claim.lease_token,
+    )
+    # Now the run is terminal (succeeded). request_cancel should be blocked
+    # by the pre-check (is_cancellable guard).
+    with pytest.raises(
+        RunTransitionConflictError,
+        match="not allowed",
+    ):
+        service.request_cancel(
+            company_id="cmp_f1c_rc",
+            run_id=claim.run_id,
+            actor_type="agent",
+            actor_id="test",
+            idempotency_key="cancel_terminal_f1c_rc",
+            request_fingerprint_hash="fp_cancel_terminal_f1c_rc",
+        )
+
+
+def test_state_machine_pre_check_happy_path_worker_flow(
+    tmp_path: Path,
+) -> None:
+    """Full worker hot path runs without pre-check errors using real validator."""
+    service, session_factory = _service(
+        tmp_path,
+        state_machine_validation_enabled=True,
+    )
+    created = service.admit_create(
+        company_id="cmp_f1c_hp",
+        actor_type="agent",
+        actor_id="agent_backend",
+        idempotency_key="idem_f1c_hpworker",
+        request_fingerprint_hash="fp_f1c_hpworker",
+        run_kind="provider_dispatch",
+    )
+
+    # Claim attempt
+    claim = service.claim_next_attempt(
+        company_id="cmp_f1c_hp",
+        worker_key="worker_alpha",
+    )
+    assert claim is not None
+    assert claim.run_id == created.run_id
+
+    # Start executing
+    service.mark_attempt_executing(
+        company_id="cmp_f1c_hp",
+        run_id=claim.run_id,
+        attempt_id=claim.attempt_id,
+        lease_token=claim.lease_token,
+        step_key="test_step",
+    )
+
+    # Record a retryable failure with delay
+    failure = service.record_attempt_failure(
+        company_id="cmp_f1c_hp",
+        run_id=claim.run_id,
+        attempt_id=claim.attempt_id,
+        lease_token=claim.lease_token,
+        failure_class="provider_transient",
+        error_code="ERR_TEMP",
+        error_detail="temporary issue",
+        retryable=True,
+        max_attempts=3,
+        backoff_base_seconds=10,
+    )
+    assert failure.retry_scheduled
+    assert failure.next_attempt_id is not None
+
+    # Reclaim after retry backoff (manually set scheduled_at in the past)
+    with session_factory() as session:
+        session.execute(update(RunAttemptORM).where(RunAttemptORM.id == failure.next_attempt_id).values(scheduled_at=datetime.now(tz=UTC) - timedelta(minutes=5)))
+        session.commit()
+
+    claim2 = service.claim_next_attempt(
+        company_id="cmp_f1c_hp",
+        worker_key="worker_alpha",
+    )
+    assert claim2 is not None
+    assert claim2.attempt_id == failure.next_attempt_id
+
+    # Second attempt: failure with no retry budget → dead_letter
+    service.mark_attempt_executing(
+        company_id="cmp_f1c_hp",
+        run_id=claim2.run_id,
+        attempt_id=claim2.attempt_id,
+        lease_token=claim2.lease_token,
+        step_key="test_step2",
+    )
+    failure2 = service.record_attempt_failure(
+        company_id="cmp_f1c_hp",
+        run_id=claim2.run_id,
+        attempt_id=claim2.attempt_id,
+        lease_token=claim2.lease_token,
+        failure_class="provider_terminal",
+        error_code="ERR_PERM",
+        error_detail="non-retryable error",
+        retryable=False,
+        max_attempts=3,
+    )
+    assert not failure2.retry_scheduled
+    assert failure2.run_state == "dead_lettered"

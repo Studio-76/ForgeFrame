@@ -111,6 +111,21 @@ class _StateMachineValidator(Protocol):
         :rtype: ExecutionValidationResult
         """
 
+    def check_transition_allowed(
+        self,
+        trigger: ExecutionTrigger,
+        context: ExecutionTransitionContext,
+    ) -> tuple[bool, str | None]:
+        """Check whether a transition is allowed from the current state.
+
+        :param trigger: State-machine trigger name.
+        :type trigger: ExecutionTrigger
+        :param context: Pre-transition validation context.
+        :type context: ExecutionTransitionContext
+        :return: ``(allowed, reason)``.
+        :rtype: tuple[bool, str | None]
+        """
+
 
 StateMachineValidatorFactory = Callable[[], _StateMachineValidator]
 
@@ -1209,6 +1224,30 @@ class ExecutionTransitionService:
         except Exception:
             return
 
+    def _check_transition_allowed_or_raise(
+        self,
+        trigger: ExecutionTrigger,
+        context: ExecutionTransitionContext,
+    ) -> None:
+        """Pre-check *trigger* against the state machine and raise if blocked.
+
+        Called *before* mutation when the feature flag is enabled.  When the
+        state machine rejects the transition, a
+        :class:`RunTransitionConflictError` is raised with a human-readable
+        reason.
+
+        :param trigger: State-machine trigger to validate.
+        :type trigger: ExecutionTrigger
+        :param context: Pre-transition guard context.
+        :type context: ExecutionTransitionContext
+        :raises RunTransitionConflictError: If the transition is not allowed.
+        """
+        validator = self._state_machine_validator_factory()
+        allowed, reason = validator.check_transition_allowed(trigger, context)
+        if not allowed:
+            message = f"Transition {trigger!r} not allowed: {reason}" if reason else f"Transition {trigger!r} not allowed from current state."
+            raise RunTransitionConflictError(message)
+
     def _validate_state_machine_transition(
         self,
         *,
@@ -1772,6 +1811,15 @@ class ExecutionTransitionService:
         lease_token = str(uuid4())
         lease_expires_at = now + timedelta(seconds=max(1, lease_ttl_seconds))
 
+        # Authoritative pre-check: if validation is enabled, verify the state
+        # machine allows the claim before attempting the SQL CAS.
+        if before_snapshot is not None:
+            ctx = self._state_machine_context(
+                before=before_snapshot,
+                now=now,
+            )
+            self._check_transition_allowed_or_raise("claim_attempt", ctx)
+
         attempt_update = session.execute(
             update(RunAttemptORM)
             .where(
@@ -1899,15 +1947,16 @@ class ExecutionTransitionService:
                 raise RunNotFoundError(f"Run '{run_id}' not found for company '{company_id}'.")
             if attempt is None or attempt.company_id != company_id or attempt.run_id != run_id:
                 raise RunTransitionConflictError(f"Attempt '{attempt_id}' does not belong to run '{run_id}'.")
-            if run.state != "dispatching" or attempt.attempt_state != "dispatching":
+            # The attempt-state check is unconditional: the state machine
+            # tracks run_state (enforced by the source constraint) but does
+            # not have a separate attempt_state guard for start_execution.
+            if attempt.attempt_state != "dispatching":
                 raise RunTransitionConflictError("Only dispatched attempts can move to executing.")
-            if attempt.lease_token != lease_token:
-                raise RunTransitionConflictError("Lease token does not match the active worker claim.")
-            if run.operator_state == "paused" or attempt.operator_state == "paused":
-                raise RunTransitionConflictError("Paused runs cannot move into executing work.")
 
-            before_snapshot = (
-                self._state_machine_snapshot(
+            operator_state = self._operator_state_for_execution_step(step_key)
+
+            if self._state_machine_validation_enabled:
+                before_snapshot = self._state_machine_snapshot(
                     run=run,
                     attempt=attempt,
                     extra={
@@ -1918,10 +1967,21 @@ class ExecutionTransitionService:
                         "next_wakeup_at": run.next_wakeup_at,
                     },
                 )
-                if self._state_machine_validation_enabled
-                else None
-            )
-            operator_state = self._operator_state_for_execution_step(step_key)
+                ctx = self._state_machine_context(
+                    before=before_snapshot,
+                    now=current_time,
+                    provided_lease_token=lease_token,
+                    service_chosen_operator_state=operator_state,
+                )
+                self._check_transition_allowed_or_raise("start_execution", ctx)
+            else:
+                before_snapshot = None
+                if run.state != "dispatching":
+                    raise RunTransitionConflictError("Only dispatched attempts can move to executing.")
+                if attempt.lease_token != lease_token:
+                    raise RunTransitionConflictError("Lease token does not match the active worker claim.")
+                if run.operator_state == "paused" or attempt.operator_state == "paused":
+                    raise RunTransitionConflictError("Paused runs cannot move into executing work.")
 
             attempt.version += 1
             attempt.attempt_state = "executing"
@@ -2036,21 +2096,8 @@ class ExecutionTransitionService:
                 raise RunNotFoundError(f"Run '{run_id}' not found for company '{company_id}'.")
             if attempt is None or attempt.company_id != company_id or attempt.run_id != run_id:
                 raise RunTransitionConflictError(f"Attempt '{attempt_id}' does not belong to run '{run_id}'.")
-            if run.current_attempt_id != attempt_id:
-                raise RunTransitionConflictError(f"Attempt '{attempt_id}' is not the active attempt for run '{run_id}'.")
-            if run.state not in {
-                "dispatching",
-                "executing",
-            } or attempt.attempt_state not in {
-                "dispatching",
-                "executing",
-            }:
-                raise RunTransitionConflictError("Only in-flight attempts can record a failure outcome.")
-            if attempt.lease_token != lease_token:
-                raise RunTransitionConflictError("Lease token does not match the active worker claim.")
-
-            before_snapshot = (
-                self._state_machine_snapshot(
+            if self._state_machine_validation_enabled:
+                before_snapshot = self._state_machine_snapshot(
                     run=run,
                     attempt=attempt,
                     extra={
@@ -2063,9 +2110,49 @@ class ExecutionTransitionService:
                         "next_wakeup_at": run.next_wakeup_at,
                     },
                 )
-                if self._state_machine_validation_enabled
-                else None
-            )
+                # Determine the failure trigger using the same logic the
+                # service will use below, so the state machine pre-check
+                # validates the correct guard set.
+                next_attempt_no = run.active_attempt_no + 1
+                should_retry = retryable and next_attempt_no <= max_attempts
+                if should_retry:
+                    retry_count = attempt.retry_count + 1
+                    precheck_retry_delay = self._retry_backoff_seconds(
+                        attempt_id=attempt.id,
+                        retry_count=retry_count,
+                        base_seconds=max(1, backoff_base_seconds),
+                        max_seconds=max(1, backoff_max_seconds),
+                        retry_after_seconds=retry_after_seconds,
+                        jitter_ratio=max(0.0, backoff_jitter_ratio),
+                    )
+                    failure_trigger: str = "record_retryable_failure_delayed" if precheck_retry_delay > 0 else "record_retryable_failure_immediate"
+                else:
+                    failure_trigger = "record_terminal_failure"
+                ctx = self._state_machine_context(
+                    before=before_snapshot,
+                    now=current_time,
+                    provided_lease_token=lease_token,
+                    retryable=retryable,
+                    max_attempts=max_attempts,
+                )
+                self._check_transition_allowed_or_raise(
+                    failure_trigger,
+                    ctx,
+                )
+            else:
+                before_snapshot = None
+                if run.current_attempt_id != attempt_id:
+                    raise RunTransitionConflictError(f"Attempt '{attempt_id}' is not the active attempt for run '{run_id}'.")
+                if run.state not in {
+                    "dispatching",
+                    "executing",
+                } or attempt.attempt_state not in {
+                    "dispatching",
+                    "executing",
+                }:
+                    raise RunTransitionConflictError("Only in-flight attempts can record a failure outcome.")
+                if attempt.lease_token != lease_token:
+                    raise RunTransitionConflictError("Lease token does not match the active worker claim.")
 
             attempt.version += 1
             attempt.attempt_state = "failed"
@@ -2369,13 +2456,11 @@ class ExecutionTransitionService:
             run = session.get(RunORM, run_id)
             if run is None or run.company_id != company_id:
                 raise RunNotFoundError(f"Run '{run_id}' not found for company '{company_id}'.")
-            if run.state in _TERMINAL_RUN_STATES or run.state == "cancel_requested":
-                raise RunTransitionConflictError(f"Run '{run_id}' cannot be cancelled from state '{run.state}'.")
 
-            attempt = self._current_attempt(session, run)
-            approval_link = self._current_approval_link(session, run) if self._state_machine_validation_enabled else None
-            before_snapshot = (
-                self._state_machine_snapshot(
+            if self._state_machine_validation_enabled:
+                attempt = self._current_attempt(session, run)
+                approval_link = self._current_approval_link(session, run)
+                before_snapshot = self._state_machine_snapshot(
                     run=run,
                     attempt=attempt,
                     approval_link=approval_link,
@@ -2387,9 +2472,17 @@ class ExecutionTransitionService:
                         "next_wakeup_at": run.next_wakeup_at,
                     },
                 )
-                if self._state_machine_validation_enabled
-                else None
-            )
+                ctx = self._state_machine_context(
+                    before=before_snapshot,
+                    now=current_time,
+                )
+                self._check_transition_allowed_or_raise("request_cancel", ctx)
+            else:
+                if run.state in _TERMINAL_RUN_STATES or run.state == "cancel_requested":
+                    raise RunTransitionConflictError(f"Run '{run_id}' cannot be cancelled from state '{run.state}'.")
+                attempt = self._current_attempt(session, run)
+                approval_link = None
+                before_snapshot = None
             command = RunCommandORM(
                 id=self._new_id("cmd"),
                 company_id=company_id,
@@ -3118,13 +3211,8 @@ class ExecutionTransitionService:
                 raise RunNotFoundError(f"Run '{run_id}' not found for company '{company_id}'.")
             if attempt is None or attempt.company_id != company_id or attempt.run_id != run_id:
                 raise RunTransitionConflictError(f"Attempt '{attempt_id}' does not belong to run '{run_id}'.")
-            if attempt.lease_token != lease_token:
-                raise RunTransitionConflictError("Lease token does not match the active worker claim.")
-            if attempt.attempt_state not in _IN_FLIGHT_ATTEMPT_STATES:
-                raise RunTransitionConflictError("Only in-flight attempts can complete successfully.")
-
-            before_snapshot = (
-                self._state_machine_snapshot(
+            if self._state_machine_validation_enabled:
+                before_snapshot = self._state_machine_snapshot(
                     run=run,
                     attempt=attempt,
                     extra={
@@ -3135,9 +3223,18 @@ class ExecutionTransitionService:
                         "next_wakeup_at": run.next_wakeup_at,
                     },
                 )
-                if self._state_machine_validation_enabled
-                else None
-            )
+                ctx = self._state_machine_context(
+                    before=before_snapshot,
+                    now=current_time,
+                    provided_lease_token=lease_token,
+                )
+                self._check_transition_allowed_or_raise("complete_success", ctx)
+            else:
+                before_snapshot = None
+                if attempt.lease_token != lease_token:
+                    raise RunTransitionConflictError("Lease token does not match the active worker claim.")
+                if attempt.attempt_state not in _IN_FLIGHT_ATTEMPT_STATES:
+                    raise RunTransitionConflictError("Only in-flight attempts can complete successfully.")
 
             attempt.version += 1
             attempt.attempt_state = "succeeded"

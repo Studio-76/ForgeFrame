@@ -178,7 +178,7 @@ RUN_STATE_TRANSITIONS: tuple[dict[str, Any], ...] = (
     {"trigger": "claim_attempt", "source": "queued", "dest": "dispatching", "conditions": ["is_claimable_run", "is_claimable_attempt", "is_claimable_wakeup_due"]},
     {"trigger": "claim_attempt", "source": "retry_backoff", "dest": "dispatching", "conditions": ["is_claimable_run", "is_claimable_attempt", "is_claimable_wakeup_due"]},
     # -- start_execution: dispatching -> executing --
-    {"trigger": "start_execution", "source": "dispatching", "dest": "executing", "conditions": ["is_not_paused"]},
+    {"trigger": "start_execution", "source": "dispatching", "dest": "executing", "conditions": ["is_not_paused", "has_valid_lease_token"]},
     # -- open_approval: executing -> waiting_on_approval --
     {"trigger": "open_approval", "source": "executing", "dest": "waiting_on_approval", "conditions": ["is_executing"]},
     # -- resume_after_approval: waiting_on_approval -> queued --
@@ -504,6 +504,34 @@ MISMATCH_CATEGORY_RESUME_OPERATOR_FALLBACK: str = "resume_operator_fallback"
 
 MISMATCH_CATEGORY_VALIDATOR_EXCEPTION: str = "validator_exception"
 """An unexpected exception was raised during validation."""
+
+# ---------------------------------------------------------------------------
+# Guard failure messages — human-readable reasons for `check_transition_allowed`
+# ---------------------------------------------------------------------------
+
+_GUARD_FAILURE_MESSAGES: dict[str, str] = {
+    "is_cancellable": "Run is in a terminal state or already cancel_requested.",
+    "is_claimable_run": "Run is not in a claimable state (must be queued or retry_backoff).",
+    "is_claimable_attempt": "Attempt is not in a claimable state.",
+    "is_claimable_wakeup_due": "Attempt wake-up time has not yet arrived.",
+    "is_not_paused": "Run or attempt is paused.",
+    "is_executing": "Run is not in executing state.",
+    "has_open_approval_gate": "Approval gate is not open.",
+    "is_waiting_on_approval": "Run is not waiting on approval.",
+    "is_current_attempt": "Attempt is not the current active attempt.",
+    "is_in_flight_attempt": "Attempt is not in an in-flight state.",
+    "is_recordable_failure": "Run or attempt is not in a recordable failure state.",
+    "is_retryable_run": "Run is not in a retryable state.",
+    "is_retryable_and_has_budget": "Failure is not retryable or no retry budget remains.",
+    "is_terminal_failure_destination": "Failure is retryable with remaining budget (terminal destination not valid).",
+    "has_valid_lease_token": "Lease token does not match the active worker claim.",
+    "has_expired_lease": "Lease has not expired.",
+    "is_not_quarantined": "Run is already quarantined.",
+    "is_operator_pausable": "Operator state is terminal or already paused.",
+    "is_operator_resumable": "Operator is not paused or has an open approval.",
+    "is_interruptible": "Operator state is terminal.",
+    "is_valid_service_chosen_operator_state": "Chosen operator state is not valid for this trigger.",
+}
 
 _ALL_MISMATCH_CATEGORIES: tuple[str, ...] = (
     MISMATCH_CATEGORY_INVALID_TRIGGER,
@@ -1322,6 +1350,51 @@ class ExecutionStateMachineValidator:
             replacement_attempt_operator_state=base_replacement_op_state,
             target_lease_status=target_lease,
         )
+
+    # -- Authoritative pre-check (§7.1 / Phase 1c) -----------------------
+
+    def check_transition_allowed(
+        self,
+        trigger: ExecutionTrigger,
+        context: ExecutionTransitionContext,
+    ) -> tuple[bool, str | None]:
+        """
+        Check whether *trigger* is allowed from the current state.
+
+        When validation is disabled this returns ``(True, None)``.  When a guard
+        blocks the transition, returns ``(False, reason)`` where *reason* is a
+        human-readable message identifying the blocking guard.
+
+        :param trigger: The trigger to check
+        :param context: Current state and guard context
+        :returns: ``(allowed, reason)``
+        :rtype: tuple[bool, str | None]
+        """
+        if not self._enabled or self._run_machine is None:
+            return True, None
+
+        result = self._fire_and_build_result(
+            trigger=trigger,
+            context=context,
+            machine=self._run_machine,
+            machine_triggers=self._run_machine_triggers,
+            is_run_machine=True,
+        )
+
+        if not result.valid:
+            if result.mismatch_category == MISMATCH_CATEGORY_GUARD_FAILED and result.guard_results:
+                failed = [k for k, v in result.guard_results.items() if not v]
+                if failed:
+                    reason = _GUARD_FAILURE_MESSAGES.get(
+                        failed[0],
+                        f"Guard blocked: {failed[0]}",
+                    )
+                    return False, reason
+            return (
+                False,
+                result.error_message or f"Transition {trigger!r} not allowed from current state.",
+            )
+        return True, None
 
     # -- Run-state transition validation (§7.1) ---------------------------
 
