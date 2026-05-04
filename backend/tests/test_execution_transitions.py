@@ -2394,6 +2394,14 @@ def test_start_execution_blocked_by_wrong_lease_token(
         tmp_path,
         state_machine_validation_enabled=True,
     )
+    _ = service.admit_create(
+        company_id="cmp_f1c_sel",
+        actor_type="agent",
+        actor_id="agent_backend",
+        idempotency_key="idem_f1c_seltoken",
+        request_fingerprint_hash="fp_f1c_seltoken",
+        run_kind="provider_dispatch",
+    )
     claim = service.claim_next_attempt(
         company_id="cmp_f1c_sel",
         worker_key="worker_alpha",
@@ -2421,6 +2429,14 @@ def test_complete_success_blocked_by_wrong_lease_token(
     service, _session_factory = _service(
         tmp_path,
         state_machine_validation_enabled=True,
+    )
+    _ = service.admit_create(
+        company_id="cmp_f1c_cs",
+        actor_type="agent",
+        actor_id="agent_backend",
+        idempotency_key="idem_f1c_cscomplete",
+        request_fingerprint_hash="fp_f1c_cscomplete",
+        run_kind="provider_dispatch",
     )
     claim = service.claim_next_attempt(
         company_id="cmp_f1c_cs",
@@ -2455,6 +2471,14 @@ def test_record_attempt_failure_blocked_by_wrong_lease_token(
     service, _session_factory = _service(
         tmp_path,
         state_machine_validation_enabled=True,
+    )
+    _ = service.admit_create(
+        company_id="cmp_f1c_rf",
+        actor_type="agent",
+        actor_id="agent_backend",
+        idempotency_key="idem_f1c_rffailure",
+        request_fingerprint_hash="fp_f1c_rffailure",
+        run_kind="provider_dispatch",
     )
     claim = service.claim_next_attempt(
         company_id="cmp_f1c_rf",
@@ -2494,6 +2518,14 @@ def test_request_cancel_blocked_by_state_machine_on_terminal_run(
     service, _session_factory = _service(
         tmp_path,
         state_machine_validation_enabled=True,
+    )
+    _ = service.admit_create(
+        company_id="cmp_f1c_rc",
+        actor_type="agent",
+        actor_id="agent_backend",
+        idempotency_key="idem_f1c_rccancel",
+        request_fingerprint_hash="fp_f1c_rccancel",
+        run_kind="provider_dispatch",
     )
     claim = service.claim_next_attempt(
         company_id="cmp_f1c_rc",
