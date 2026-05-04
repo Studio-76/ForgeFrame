@@ -28,7 +28,7 @@ Downstream infrastructure:
 
 | Consumer | Behavior with retained closed link | Impact |
 |---|---|---|
-| `_load_run_approval_link()` (service.py:441) | Loads the link; caller must check `gate_status` independently | None — no caller relies on link presence alone as an open indicator |
+| `_current_approval_link()` (service.py:441) | Loads the link; caller must check `gate_status` independently | None — no caller relies on link presence alone as an open indicator |
 | `_current_approval_id()` (admin_service.py:397) | Returns `approval_id` from the link | Works correctly; historical reference is useful for UI display |
 | `resume_run()` non-validated path (service.py:3558) | Blocks resume if `current_approval_link_id` is truthy, **but only after operator_state == "paused"** | No impact — after `decide_approval`, operator destination is `"admitted"`, `"cancel_requested"`, `"compensating"`, or `"failed"`, never `"paused"` |
 | `resume_run()` validated path guard `is_operator_resumable` (state_machine.py:905) | Checks `current_approval_link_id is None` | Guard correctly blocks; after decision, the run has left `paused`/`waiting_on_approval`, so `resume_run` path is never reached |
