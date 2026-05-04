@@ -24,7 +24,7 @@ function validateSessionResponse(data: unknown): { status: string; user: AdminSe
   const user = response.user;
   if (!user || typeof user !== "object") return null;
   const userRecord = user as Record<string, unknown>;
-  if (typeof userRecord.id !== "string" || typeof userRecord.role !== "string") return null;
+  if (typeof userRecord.user_id !== "string" || typeof userRecord.role !== "string") return null;
   return data as { status: string; user: AdminSessionUser };
 }
 
