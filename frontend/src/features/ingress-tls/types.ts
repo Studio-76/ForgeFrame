@@ -38,6 +38,36 @@ export type RemediationItem = {
 };
 
 /**
+ * Explicit posture states for the TLS surface.
+ *
+ * - local_only: Instance is intentionally local-only
+ * - public_not_configured: Public HTTPS is intended but not yet set up
+ * - public_blocked: Public HTTPS is intended but blockers exist
+ * - public_degraded: Public HTTPS is active but degraded (e.g. cert expires soon)
+ * - public_ready: Public HTTPS is fully operational
+ * - unknown: Posture cannot be determined
+ */
+export type TlsPosture =
+  | "local_only"
+  | "public_not_configured"
+  | "public_blocked"
+  | "public_degraded"
+  | "public_ready"
+  | "unknown";
+
+/**
+ * Summary of public HTTPS readiness.
+ */
+export type PublicReadiness = {
+  /** Short label (e.g. "Not configured", "Not ready", "Blocked", "Ready") */
+  label: string;
+  /** Detailed explanation */
+  detail: string;
+  /** Visual tone */
+  tone: StatusTone;
+};
+
+/**
  * Summary derived from ingress/TLS status for the hero panel.
  */
 export type TlsSummary = {
@@ -49,6 +79,10 @@ export type TlsSummary = {
   tone: StatusTone;
   /** Status key for badge resolution */
   statusKey: string;
+  /** Explicit posture classification */
+  posture: TlsPosture;
+  /** Public HTTPS readiness summary */
+  publicReadiness: PublicReadiness;
   /** Exposure mode summary */
   exposureMode: string;
   /** Public FQDN status summary */

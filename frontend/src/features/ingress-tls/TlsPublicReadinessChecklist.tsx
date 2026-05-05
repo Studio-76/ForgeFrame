@@ -4,65 +4,41 @@ import { StatusBadge } from "../../components/ui/StatusBadge";
 import type { RemediationItem } from "./types";
 
 /**
- * Prioritized remediation checklist for the TLS setup workflow.
- * Each item shows status, why it matters, and one clear action.
- * Items are sorted by priority: blocking items first, then warnings, then ready items.
+ * Public HTTPS readiness checklist for local-only instances.
  *
- * Optional title/subtitle props allow custom framing for different contexts
- * (e.g. "Public HTTPS readiness" for local-only posture).
+ * Shows configuration requirements framed as preparatory steps
+ * rather than active blockers. Items are informational/neutral
+ * and describe what would be needed to promote to public HTTPS.
  */
-export function TlsRemediationChecklist({
-  items,
-  title = "Remediation checklist",
-  subtitle = "Prioritized steps to resolve TLS blockers. Start with the first item.",
-}: {
-  items: RemediationItem[];
-  title?: string;
-  subtitle?: string;
-}) {
+export function TlsPublicReadinessChecklist({ items }: { items: RemediationItem[] }) {
   if (items.length === 0) {
     return null;
   }
 
   return (
-    <section className="ff-table-card" aria-label={title}>
+    <section className="ff-table-card" aria-label="Public HTTPS readiness checklist">
       <div className="ff-table-card-header">
         <div>
-          <h3>{title}</h3>
-          <p>{subtitle}</p>
+          <h3>Public HTTPS readiness</h3>
+          <p>Required only if this instance should accept public HTTPS traffic.</p>
         </div>
       </div>
       <div className="ff-table-scroll">
-        <table className="ff-data-table" aria-label="TLS remediation steps">
+        <table className="ff-data-table" aria-label="Public readiness requirements">
           <thead>
             <tr>
               <th>Status</th>
-              <th>Check</th>
+              <th>Requirement</th>
               <th>Why it matters</th>
               <th>Action</th>
             </tr>
           </thead>
           <tbody>
             {items.map((item) => (
-              <tr
-                key={item.key}
-                className={
-                  item.priority === "blocking"
-                    ? "ff-itt-row-blocking"
-                    : item.priority === "warning"
-                      ? "ff-itt-row-warning"
-                      : undefined
-                }
-              >
+              <tr key={item.key}>
                 <td className="ff-itt-status-cell">
                   <StatusBadge tone={item.tone} status={item.status}>
-                    {item.status === "completed"
-                      ? "Ready"
-                      : item.status === "blocked"
-                        ? "Blocked"
-                        : item.status === "pending"
-                          ? "Pending"
-                          : "N/A"}
+                    {item.status === "completed" ? "Ready" : "Required"}
                   </StatusBadge>
                 </td>
                 <td>
