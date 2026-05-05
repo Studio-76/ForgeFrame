@@ -26,9 +26,9 @@ The project is under active development.
 
 | Component | Technology |
 |---|---|
-| Backend | Python 3.11+, FastAPI, SQLAlchemy, Psycopg |
-| Frontend | React 19, TypeScript 5, Vite 7, TanStack Query |
-| Database | PostgreSQL 14+ |
+| Backend | Python 3.11+, FastAPI, Uvicorn, Pydantic 2, SQLAlchemy, Psycopg 3, httpx, transitions |
+| Frontend | React 19, TypeScript 5.9, Vite 7, React Router 7, TanStack Query 5, TanStack Table 8, React Aria 3, Zustand 5, Tailwind CSS 4 |
+| Database | PostgreSQL 14+ (primary), SQLite (limited/dev) |
 | Platform | Linux |
 
 ## Requirements
