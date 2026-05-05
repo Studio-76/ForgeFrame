@@ -22,7 +22,7 @@ const STATUS_META: Record<
   },
 };
 
-type ReleaseStatusHeroProps = {
+export type ReleaseStatusHeroProps = {
   summary: ReleaseSummary;
 };
 

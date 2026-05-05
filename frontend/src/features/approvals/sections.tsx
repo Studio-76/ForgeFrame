@@ -81,7 +81,7 @@ function renderAuditEntries(entries: Array<Record<string, unknown>>) {
   );
 }
 
-type ApprovalFiltersCardProps = {
+export type ApprovalFiltersCardProps = {
   statusFilter: ApprovalStatus | "all";
   typeFilter: ApprovalTypeFilter;
   riskFilter: ApprovalRiskFilter;
@@ -211,7 +211,7 @@ export function ApprovalFiltersCard({
   );
 }
 
-type ApprovalQueueCardProps = {
+export type ApprovalQueueCardProps = {
   listLoading: boolean;
   orderedVisibleApprovals: ApprovalSummary[];
   selectedApprovalId: string | null;
@@ -316,7 +316,7 @@ export function ApprovalQueueCard({
   );
 }
 
-type DecisionOutcomeNotice = {
+export type DecisionOutcomeNotice = {
   approvalId: string;
   tone: "success" | "danger";
   title: string;
@@ -324,7 +324,7 @@ type DecisionOutcomeNotice = {
   comment: string;
 };
 
-type ApprovalDetailSectionProps = {
+export type ApprovalDetailSectionProps = {
   detailLoading: boolean;
   detail: ApprovalDetail | null;
   banner: ApprovalBanner | null;

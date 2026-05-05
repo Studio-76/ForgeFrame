@@ -3,7 +3,7 @@ import type { RoutingControlPlaneResponse } from "../../api/domain/routing";
 /**
  * Props for the summary grid.
  */
-type RoutingSummaryGridProps = {
+export type RoutingSummaryGridProps = {
   snapshot: RoutingControlPlaneResponse | null;
   simulationSummary: string;
 };

@@ -10,7 +10,7 @@ import { Button } from "../ui/Button";
 import { useSidebar } from "./SidebarContext";
 import { ChevronDownIcon, NavIcon } from "./icons";
 
-type AppSidebarProps = {
+export type AppSidebarProps = {
   navigationSections: NavigationSection[];
   instanceId: string | null;
 };

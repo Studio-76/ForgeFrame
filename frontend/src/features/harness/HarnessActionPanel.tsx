@@ -13,7 +13,7 @@ import { TonePill } from "../providers/providersSectionUtils";
 import type { ProvidersPageData } from "../providers/providersShared";
 import type { ProvidersPageActions } from "../providers/providersShared";
 
-type HarnessActionPanelProps = {
+export type HarnessActionPanelProps = {
   profile: ProvidersPageData["profiles"][number] | null;
   actions: ProvidersPageActions;
   canOperate: boolean;

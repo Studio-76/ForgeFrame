@@ -11,7 +11,7 @@ export type SummaryStripItem = {
   status?: string | null;
 };
 
-type SummaryStripProps = {
+export type SummaryStripProps = {
   items: SummaryStripItem[];
 };
 

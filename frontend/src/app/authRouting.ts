@@ -3,9 +3,9 @@ import { redirect, type LoaderFunctionArgs } from "react-router-dom";
 import { clearAdminToken, fetchAdminSession, getAdminToken, type AdminSessionUser } from "../api/domain/auth";
 import { CONTROL_PLANE_ROUTES } from "./navigation";
 
-type SessionShellMode = "signed_out" | "password_rotation" | "control_plane";
+export type SessionShellMode = "signed_out" | "password_rotation" | "control_plane";
 
-type SessionRouteStateArgs = {
+export type SessionRouteStateArgs = {
   pathname: string;
   requestedPath: string;
   hasToken: boolean;
@@ -13,7 +13,7 @@ type SessionRouteStateArgs = {
   sessionReady: boolean;
 };
 
-type SessionRouteState = {
+export type SessionRouteState = {
   shellMode: SessionShellMode;
   redirectTo: string | null;
   loading: boolean;

@@ -10,7 +10,7 @@ import {
   toneForTargetStatus,
 } from "./utils";
 
-type TargetListViewProps = {
+export type TargetListViewProps = {
   targets: ProviderTargetRecord[];
   filteredTargets: ProviderTargetRecord[];
   totalCount: number;

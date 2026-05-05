@@ -30,13 +30,13 @@ export function EmptyState({
   );
 }
 
-type StateBlockProps = {
+export type StateBlockProps = {
   title: string;
   description?: string;
   action?: React.ReactNode;
 };
 
-type BlockedStateProps = StateBlockProps & {
+export type BlockedStateProps = StateBlockProps & {
   status?: string | null;
   badgeLabel?: string;
 };

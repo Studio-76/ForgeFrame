@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 
 import { StatusBadge, type StatusTone } from "./StatusBadge";
 
-type DetailPanelProps = {
+export type DetailPanelProps = {
   title: ReactNode;
   description?: ReactNode;
   status?: ReactNode;

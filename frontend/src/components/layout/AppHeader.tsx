@@ -10,7 +10,7 @@ import { Button } from "../ui/Button";
 import { useSidebar } from "./SidebarContext";
 import { BellIcon, ChevronDownIcon, MenuIcon, MoonIcon, SearchIcon, SunIcon } from "./icons";
 
-type AppHeaderProps = {
+export type AppHeaderProps = {
   navigationSections: NavigationSection[];
   instanceId: string | null;
   session: AdminSessionUser | null;

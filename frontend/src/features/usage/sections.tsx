@@ -10,16 +10,16 @@ import { BlockedState, EmptyState, ErrorState, LoadingState, PermissionState } f
 import { SummaryStrip } from "../../components/ui/SummaryStrip";
 import { toNumberValue } from "./helpers";
 
-type LoadState = "idle" | "loading" | "success" | "error";
-type UsageWindow = "1h" | "24h" | "7d" | "all";
-type BadgeTone = "success" | "warning" | "neutral";
+export type LoadState = "idle" | "loading" | "success" | "error";
+export type UsageWindow = "1h" | "24h" | "7d" | "all";
+export type BadgeTone = "success" | "warning" | "neutral";
 
-type UsageAccessState = {
+export type UsageAccessState = {
   noticeTitle: string | null;
   noticeDetail: string | null;
 };
 
-type FreshnessState = {
+export type FreshnessState = {
   label: string;
   tone: BadgeTone;
   detail: string;
@@ -54,7 +54,7 @@ type AuthRow = {
   tokens: number;
 };
 
-type UsageContentProps = {
+export type UsageContentProps = {
   access: UsageAccessState;
   state: LoadState;
   error: string | null;

@@ -31,7 +31,7 @@ export function buildAdminPasswordResetPayload(draft: AdminPasswordResetDraft): 
   };
 }
 
-type AdminPasswordResetFormProps = {
+export type AdminPasswordResetFormProps = {
   user: AdminUser;
   draft: AdminPasswordResetDraft;
   busy: boolean;

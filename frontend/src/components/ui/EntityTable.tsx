@@ -9,7 +9,7 @@ export type EntityTableColumn<T> = {
   className?: string;
 };
 
-type EntityTableProps<T> = {
+export type EntityTableProps<T> = {
   title?: ReactNode;
   description?: ReactNode;
   columns: EntityTableColumn<T>[];

@@ -4,7 +4,7 @@ import { StatusBadge, type StatusTone } from "../../components/ui/StatusBadge";
 /**
  * Props for the enhanced collapse section.
  */
-type RoutingCollapseSectionProps = {
+export type RoutingCollapseSectionProps = {
   /** Unique element ID for scroll-targeting. */
   id: string;
   /** Section heading. */

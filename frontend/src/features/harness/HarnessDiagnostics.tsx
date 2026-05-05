@@ -14,7 +14,7 @@ import {
   stringifyJson,
 } from "../providers/providersSectionUtils";
 
-type HarnessDiagnosticsProps = {
+export type HarnessDiagnosticsProps = {
   importPayload: ProvidersPageData["importPayload"];
   operationResult: ProvidersPageData["operationResult"];
   lastHarnessAction: ProvidersPageData["lastHarnessAction"];

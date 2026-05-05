@@ -17,12 +17,12 @@ import {
   toneFromHealthStatus,
 } from "./providersSectionUtils";
 
-type SectionProps = {
+export type SectionProps = {
   data: ProvidersPageData;
   actions: ProvidersPageActions;
 };
 
-type ProviderHealthSectionProps = SectionProps & {
+export type ProviderHealthSectionProps = SectionProps & {
   instanceId?: string | null;
 };
 

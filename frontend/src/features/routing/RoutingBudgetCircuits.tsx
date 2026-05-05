@@ -5,7 +5,7 @@ import { toneForStatus, titleCase, routingBlockers } from "./utils";
 /**
  * Props for the budget and circuit guardrails section.
  */
-type RoutingBudgetCircuitsProps = {
+export type RoutingBudgetCircuitsProps = {
   snapshot: RoutingControlPlaneResponse | null;
   budgetDraft: BudgetDraftState;
   circuitDrafts: Record<string, string>;

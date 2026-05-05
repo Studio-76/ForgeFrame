@@ -10,7 +10,7 @@ import { selectedCandidate, rejectedCandidates, formatJson, listValue } from "./
 /**
  * Props for the recent decisions list section.
  */
-type RoutingDecisionsListProps = {
+export type RoutingDecisionsListProps = {
   snapshot: RoutingControlPlaneResponse | null;
 };
 

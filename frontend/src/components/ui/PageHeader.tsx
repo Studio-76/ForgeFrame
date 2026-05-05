@@ -11,7 +11,7 @@ export type PageHeaderBadge = {
   status?: string | null;
 };
 
-type PageHeaderProps = {
+export type PageHeaderProps = {
   eyebrow?: ReactNode;
   title: ReactNode;
   description?: ReactNode;

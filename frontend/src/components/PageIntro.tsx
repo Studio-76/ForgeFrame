@@ -4,12 +4,12 @@ import { isHrefCurrent } from "../app/navigation";
 import { getInstanceIdFromSearchParams, withQueryParams } from "../app/tenantScope";
 import { PageHeader } from "./ui/PageHeader";
 
-type IntroBadge = {
+export type IntroBadge = {
   label: string;
   tone?: "success" | "warning" | "danger" | "neutral" | "info";
 };
 
-type PageIntroLink = {
+export type PageIntroLink = {
   label: string;
   to: string;
   description: string;
@@ -17,7 +17,7 @@ type PageIntroLink = {
   disabled?: boolean;
 };
 
-type PageIntroProps = {
+export type PageIntroProps = {
   eyebrow: string;
   title: string;
   description: string;

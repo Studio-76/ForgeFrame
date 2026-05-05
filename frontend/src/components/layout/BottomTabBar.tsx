@@ -24,7 +24,7 @@ const BOTTOM_TABS: TabItem[] = [
   { label: "Settings", icon: "system", to: CONTROL_PLANE_ROUTES.settings },
 ];
 
-type BottomTabBarProps = {
+export type BottomTabBarProps = {
   /** Current instance ID for scoping navigation links. */
   instanceId: string | null;
 };

@@ -12,7 +12,7 @@ import {
   profileProofState,
 } from "../providers/providersSectionUtils";
 
-type HarnessProfileListProps = {
+export type HarnessProfileListProps = {
   profiles: ProvidersPageData["profiles"];
   runs: ProvidersPageData["runs"];
   runOps: ProvidersPageData["runOps"];

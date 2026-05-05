@@ -3,7 +3,7 @@ import type { RoutingControlPlaneResponse } from "../../api/domain/routing";
 /**
  * Props for the target reference panel.
  */
-type RoutingTargetReferenceProps = {
+export type RoutingTargetReferenceProps = {
   snapshot: RoutingControlPlaneResponse | null;
 };
 

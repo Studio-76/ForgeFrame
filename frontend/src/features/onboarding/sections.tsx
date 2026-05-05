@@ -13,7 +13,7 @@ import type {
 } from "./helpers";
 import { OPERATING_MODEL_DESCRIPTORS, type OnboardingOperatingModel } from "./helpers";
 
-type WizardStep = {
+export type WizardStep = {
   id: string;
   title: string;
   status: WizardStepStatus;
@@ -23,7 +23,7 @@ type WizardStep = {
   links: ChecklistLink[];
 };
 
-type ProviderConnectionRow = {
+export type ProviderConnectionRow = {
   provider: string;
   label: string;
   connectionStatus: "local" | "api-key" | "bridge-only" | "unsupported" | "onboarding-only";
@@ -31,7 +31,7 @@ type ProviderConnectionRow = {
   tone: ChecklistTone;
 };
 
-type OnboardingContentProps = {
+export type OnboardingContentProps = {
   error: string;
   loading: boolean;
   instanceId: string | null;

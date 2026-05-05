@@ -1,7 +1,7 @@
 import type { ProviderTargetRecord, ReadinessSummary } from "./types";
 import { contractStatusForTarget } from "./utils";
 
-type TargetReadinessSummaryProps = {
+export type TargetReadinessSummaryProps = {
   summary: ReadinessSummary;
   targets: ProviderTargetRecord[];
 };

@@ -3,7 +3,7 @@ import { useState } from "react";
 import type { CapabilityFilter, TargetStatusFilter } from "./types";
 import { titleCase } from "./utils";
 
-type TargetActionBarProps = {
+export type TargetActionBarProps = {
   canReadTargets: boolean;
   onRefresh: () => void;
 

@@ -3,7 +3,7 @@ import type { ExecutionQueueLaneSummary } from "../../api/domain/execution";
 /**
  * Queue lane status strip props.
  */
-type QueueLaneStatusProps = {
+export type QueueLaneStatusProps = {
   /** Lane summaries from the API. */
   laneSummaries: ExecutionQueueLaneSummary[];
 };

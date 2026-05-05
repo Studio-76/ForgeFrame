@@ -30,7 +30,7 @@ export function buildOwnPasswordRotationPayload(draft: OwnPasswordRotationDraft)
   };
 }
 
-type OwnPasswordRotationFormProps = {
+export type OwnPasswordRotationFormProps = {
   title: string;
   description: string;
   note: string;

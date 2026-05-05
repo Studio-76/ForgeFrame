@@ -1,7 +1,7 @@
 import type { ProvidersPageActions, ProvidersPageData } from "./providersShared";
 import { SectionCard } from "./providersSectionUtils";
 
-type SectionProps = {
+export type SectionProps = {
   data: ProvidersPageData;
   actions: ProvidersPageActions;
 };

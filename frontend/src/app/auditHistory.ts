@@ -7,7 +7,7 @@ import {
 } from "../api/domain";
 import { sessionHasAnyInstancePermission } from "./adminAccess";
 
-type AuditHistoryPathOptions = {
+export type AuditHistoryPathOptions = {
   instanceId?: string | null;
   tenantId?: string | null;
   companyId?: string | null;
@@ -20,7 +20,7 @@ type AuditHistoryPathOptions = {
   eventId?: string | null;
 };
 
-type AuditHistoryPathCandidate = {
+export type AuditHistoryPathCandidate = {
   query: AuditHistoryQuery;
 };
 

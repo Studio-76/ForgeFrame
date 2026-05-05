@@ -5,7 +5,7 @@ import { withInstanceScope } from "../../app/tenantScope";
 /**
  * Props for the routing action bar.
  */
-type RoutingActionBarProps = {
+export type RoutingActionBarProps = {
   instanceId: string | null;
   canMutate: boolean;
   canRead: boolean;

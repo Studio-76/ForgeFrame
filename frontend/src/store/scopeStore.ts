@@ -3,7 +3,7 @@
  *
  * Stores the currently selected instance ID and a human-readable scope
  * label. The initial value is typically read from URL search params by
- * the caller and seeded via {@link setScope}.
+ * the caller and seeded via `setScope`.
  *
  * **Ownership rules:**
  * - The scope store owns the "which instance am I looking at" question.

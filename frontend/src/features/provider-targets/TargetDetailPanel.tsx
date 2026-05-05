@@ -21,7 +21,7 @@ import {
   toneForTargetStatus,
 } from "./utils";
 
-type TargetDetailPanelProps = {
+export type TargetDetailPanelProps = {
   target: ProviderTargetRecord | null;
   draft: TargetDraft | null;
   canMutate: boolean;

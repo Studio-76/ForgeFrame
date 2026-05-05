@@ -8,7 +8,7 @@ import { getStateTone } from "../execution/helpers";
 /**
  * Queue backlog props.
  */
-type QueueBacklogProps = {
+export type QueueBacklogProps = {
   /** Backlog runs to display. */
   runs: ExecutionQueueRunView[];
   /** Instance ID for link building. */

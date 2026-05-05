@@ -6,7 +6,7 @@ import type { RoutingHealth } from "./types";
 /**
  * Props for the routing status hero.
  */
-type RoutingStatusHeroProps = {
+export type RoutingStatusHeroProps = {
   snapshot: RoutingControlPlaneResponse | null;
   onEditPolicy: () => void;
   onRunSimulation: () => void;

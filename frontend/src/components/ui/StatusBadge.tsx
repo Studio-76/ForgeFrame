@@ -17,7 +17,7 @@ const STATUS_TONE_BY_STATE = {
   circuit_open: "danger",
 } as const satisfies Record<string, StatusTone>;
 
-type StatusBadgeProps = {
+export type StatusBadgeProps = {
   children: React.ReactNode;
   tone?: StatusTone;
   status?: string | null;

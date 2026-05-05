@@ -10,7 +10,7 @@ export type SelectItem = {
   label: string;
 };
 
-type SelectProps = {
+export type SelectProps = {
   label: string;
   items: SelectItem[];
   placeholder?: string;

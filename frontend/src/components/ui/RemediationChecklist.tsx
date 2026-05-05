@@ -22,7 +22,7 @@ export type ChecklistStep = {
   action?: ReactNode;
 };
 
-type ChecklistProps = {
+export type ChecklistProps = {
   title?: ReactNode;
   steps: ChecklistStep[];
   /** Visual mode. */

@@ -33,7 +33,7 @@ const QUEUE_AGE_OPTIONS: readonly ExecutionFilterOption[] = [
 /**
  * Queue filters props.
  */
-type QueueFiltersProps = {
+export type QueueFiltersProps = {
   /** Current lane filter value. */
   laneDraft: string;
   /** Current state filter value. */

@@ -66,7 +66,7 @@ export function formatRotationError(error: unknown): string {
   return "Password rotation could not be completed. Verify the temporary password and try again.";
 }
 
-type PasswordRotationGateProps = {
+export type PasswordRotationGateProps = {
   session: AdminSessionUser;
   onRotationComplete: (session: AdminSessionUser) => void;
 };

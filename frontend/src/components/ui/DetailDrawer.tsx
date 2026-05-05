@@ -6,12 +6,12 @@ import { Button } from "./Button";
 import { StatusBadge } from "./StatusBadge";
 import { CloseIcon } from "../layout/icons";
 
-type DetailDrawerProperty = {
+export type DetailDrawerProperty = {
   label: string;
   value: ReactNode;
 };
 
-type DetailDrawerProps = {
+export type DetailDrawerProps = {
   open: boolean;
   title: string;
   description?: string;

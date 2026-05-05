@@ -8,7 +8,7 @@
  */
 import type { HarnessStatusSummary } from "./types";
 
-type HarnessStatusHeroProps = {
+export type HarnessStatusHeroProps = {
   summary: HarnessStatusSummary;
 };
 

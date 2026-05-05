@@ -66,7 +66,7 @@ function renderOptionalLink(item: RecordLink | null | undefined, buildPath: (rec
 // Evaluation result sub-component
 // ---------------------------------------------------------------------------
 
-/** Props for {@link EvaluationResult}. */
+/** Props for `EvaluationResult`. */
 export type EvaluationResultProps = {
   evaluation: AssistantActionEvaluation;
   instanceId: string;

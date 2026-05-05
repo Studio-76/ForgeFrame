@@ -19,7 +19,7 @@ export type OverflowAction = {
   isDestructive?: boolean;
 };
 
-type OverflowMenuProps = {
+export type OverflowMenuProps = {
   /** Label for the trigger button (visible to screen readers). */
   label?: string;
   /** Menu items. */

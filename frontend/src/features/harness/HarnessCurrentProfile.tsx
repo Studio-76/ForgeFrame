@@ -23,7 +23,7 @@ import {
 } from "../providers/providersSectionUtils";
 import type { HarnessEditMode } from "./types";
 
-type HarnessCurrentProfileProps = {
+export type HarnessCurrentProfileProps = {
   profile: ProvidersPageData["profiles"][number] | null;
   lastRun: ProvidersPageData["runs"][number] | null;
   proof: { status: "none" | "partial" | "proven"; note: string } | null;
