@@ -86,13 +86,13 @@ export const usePreferencesStore = create<PreferencesStore>()(
       toggleCompact: () =>
         set((s: PreferencesStore) => ({
           compact: !s.compact,
-          density: (s.compact ? "default" : "compact") as "default" | "compact",
+          density: s.compact ? "default" : "compact",
         })),
 
       setCompact: (compact: boolean) =>
         set((s: PreferencesStore) => ({
           compact,
-          density: compact ? "compact" : "default" as const,
+          density: compact ? "compact" : "default",
         })),
 
       setDensity: (density: "default" | "compact") =>
@@ -121,10 +121,11 @@ export const usePreferencesStore = create<PreferencesStore>()(
         dismissedHints: s.dismissedHints,
       }),
       merge: (persisted: unknown, current: PreferencesStore) => {
-        const stored = persisted as Partial<PreferencesStore>;
+        const stored = persisted as Record<string, unknown>;
         return {
           ...current,
-          ...stored,
+          compact: typeof stored.compact === "boolean" ? stored.compact : current.compact,
+          density: stored.density === "compact" ? "compact" : "default",
           dismissedHints: Array.isArray(stored.dismissedHints)
             ? stored.dismissedHints
             : current.dismissedHints,

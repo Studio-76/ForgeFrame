@@ -107,7 +107,7 @@ export function App() {
 
   /* Sync URL instanceId → scope store so pages read from Zustand instead of parsing URL params. */
   useEffect(() => {
-    useScopeStore.getState().setScope(instanceId, instanceId ?? undefined);
+    useScopeStore.getState().setScope(instanceId);
   }, [instanceId]);
 
   const shellNavigation = routeState.shellMode === "password_rotation" ? passwordRotationNavigation : navigationSections;

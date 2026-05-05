@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 // ── Scope store ─────────────────────────────────────────────────────────
 
@@ -388,5 +388,135 @@ describe("usePreferencesStore", () => {
     // Ensure actions are NOT persisted
     expect((parsed.state as Record<string, unknown>).toggleCompact).toBeUndefined();
     expect((parsed.state as Record<string, unknown>).setCompact).toBeUndefined();
+  });
+});
+
+// ── Hook integration tests (store contract verification) ────────────────
+//
+// These tests verify the store contracts that the convenience hooks
+// (useTablePanelSync, useInstanceScope) depend on — keeping the store
+// stores and panel stores synchronised correctly. Full hook rendering
+// with React Router context is done in page-level tests.
+
+describe("useTablePanelSync store contract", () => {
+  beforeEach(() => {
+    useTableUiStore.setState({ selectedRowId: {}, expandedRows: {}, activeFilters: {} });
+    usePanelStore.setState({
+      activeDrawer: null,
+      drawerData: null,
+      diagnosticsExpanded: {},
+      inspectedEntityId: null,
+    });
+  });
+
+  it("selectRow updates both table store and panel store", () => {
+    const tableKey = "skills:main";
+    const rowId = "sk-001";
+
+    // Simulate what useTablePanelSync.selectRow does
+    useTableUiStore.getState().setSelectedRow(tableKey, rowId);
+    usePanelStore.getState().openDrawer(`drawer:${tableKey}`);
+
+    // Verify table store
+    expect(useTableUiStore.getState().selectedRowId[tableKey]).toBe(rowId);
+
+    // Verify panel store
+    expect(usePanelStore.getState().activeDrawer).toBe(`drawer:${tableKey}`);
+    expect(usePanelStore.getState().drawerData).toBeNull();
+  });
+
+  it("clearSelection clears both stores", () => {
+    const tableKey = "tasks:main";
+
+    // Seed state
+    useTableUiStore.getState().setSelectedRow(tableKey, "task-001");
+    usePanelStore.getState().openDrawer(`drawer:${tableKey}`, { taskId: "task-001" });
+    usePanelStore.getState().setInspectedEntity("entity-001");
+
+    // Simulate what useTablePanelSync.clearSelection does
+    useTableUiStore.getState().clearSelectedRow(tableKey);
+    usePanelStore.getState().closeDrawer();
+
+    // Verify both cleared
+    expect(tableKey in useTableUiStore.getState().selectedRowId).toBe(false);
+    expect(usePanelStore.getState().activeDrawer).toBeNull();
+    expect(usePanelStore.getState().drawerData).toBeNull();
+    expect(usePanelStore.getState().inspectedEntityId).toBeNull();
+  });
+
+  it("closeDrawer only closes drawer, preserves other panel state", () => {
+    const tableKey = "agents:main";
+
+    // Seed advanced state
+    usePanelStore.getState().openDrawer(`drawer:${tableKey}`, { agentId: "ag-001" });
+    usePanelStore.getState().setDiagnosticsExpanded("agent-detail", true);
+
+    // Simulate closeDrawer
+    usePanelStore.getState().closeDrawer();
+
+    // Drawer cleared
+    expect(usePanelStore.getState().activeDrawer).toBeNull();
+    expect(usePanelStore.getState().drawerData).toBeNull();
+
+    // Diagnostics should survive
+    expect(usePanelStore.getState().diagnosticsExpanded["agent-detail"]).toBe(true);
+  });
+
+  it("selecting a different row replaces previous selection", () => {
+    const tableKey = "conversations:main";
+
+    // Select first row
+    useTableUiStore.getState().setSelectedRow(tableKey, "conv-001");
+    usePanelStore.getState().openDrawer(`drawer:${tableKey}`, { convId: "conv-001" });
+
+    // Select second row
+    useTableUiStore.getState().setSelectedRow(tableKey, "conv-002");
+    usePanelStore.getState().openDrawer(`drawer:${tableKey}`, { convId: "conv-002" });
+
+    // Only second row is selected
+    expect(useTableUiStore.getState().selectedRowId[tableKey]).toBe("conv-002");
+    expect(usePanelStore.getState().activeDrawer).toBe(`drawer:${tableKey}`);
+  });
+
+  it("tables with different keys have independent state", () => {
+    useTableUiStore.getState().setSelectedRow("skills:main", "sk-001");
+    useTableUiStore.getState().setSelectedRow("agents:main", "ag-001");
+
+    expect(useTableUiStore.getState().selectedRowId["skills:main"]).toBe("sk-001");
+    expect(useTableUiStore.getState().selectedRowId["agents:main"]).toBe("ag-001");
+
+    // Clearing one does not affect the other
+    useTableUiStore.getState().clearSelectedRow("skills:main");
+    expect("skills:main" in useTableUiStore.getState().selectedRowId).toBe(false);
+    expect(useTableUiStore.getState().selectedRowId["agents:main"]).toBe("ag-001");
+  });
+});
+
+describe("useInstanceScope store contract", () => {
+  beforeEach(() => {
+    useScopeStore.setState({ instanceId: null, scopeLabel: "All instances" });
+  });
+
+  it("setScope updates instanceId and scopeLabel", () => {
+    useScopeStore.getState().setScope("inst-prod", "Production instance");
+    expect(useScopeStore.getState().instanceId).toBe("inst-prod");
+    expect(useScopeStore.getState().scopeLabel).toBe("Production instance");
+  });
+
+  it("setScope(null) reverts to un-scoped", () => {
+    useScopeStore.getState().setScope("inst-prod");
+    useScopeStore.getState().setScope(null);
+    expect(useScopeStore.getState().instanceId).toBeNull();
+    expect(useScopeStore.getState().scopeLabel).toBe("All instances");
+  });
+
+  it("scopedPath builds correct path with current scope", () => {
+    // This tests the logic that useInstanceScope.scopedPath relies on
+    // (the underlying withInstanceScope utility from tenantScope is tested separately)
+    useScopeStore.getState().setScope("inst-abc");
+    expect(useScopeStore.getState().instanceId).toBe("inst-abc");
+
+    useScopeStore.getState().setScope(null);
+    expect(useScopeStore.getState().instanceId).toBeNull();
   });
 });

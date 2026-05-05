@@ -86,19 +86,6 @@ const defaultTableUiState: TableUiState = {
   activeFilters: {},
 };
 
-// ── Helpers ─────────────────────────────────────────────────────────────
-
-/** Clone expanded rows record immutably for a specific table key. */
-function cloneExpanded(
-  expanded: Record<string, Set<string>>,
-  tableKey: string,
-): Record<string, Set<string>> {
-  return {
-    ...expanded,
-    [tableKey]: new Set(expanded[tableKey]),
-  };
-}
-
 // ── Store ───────────────────────────────────────────────────────────────
 
 /**

@@ -83,7 +83,6 @@ export function useTablePanelSync(tableKey: string): TablePanelSyncResult {
 
   const openDrawer = usePanelStore((s) => s.openDrawer);
   const closeDrawerStore = usePanelStore((s) => s.closeDrawer);
-  const resetTable = useTableUiStore((s) => s.resetTable);
 
   const drawerKey = `drawer:${tableKey}`;
   const isDrawerOpen = activeDrawer === drawerKey;
