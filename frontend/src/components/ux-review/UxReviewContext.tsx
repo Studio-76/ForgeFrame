@@ -1,11 +1,12 @@
 /**
- * Context and provider for the UX Review Mode overlay system.
- *
  * UX Review Mode is a dev-only inspection and annotation tool for
- * reviewers. It is gated behind a triple-gate activation:
+ * reviewers. It is gated behind a dual-gate activation:
  *   1. `import.meta.env.DEV` — compile-time dev build
  *   2. `import.meta.env.VITE_ENABLE_UX_REVIEW === "true"` — explicit opt-in
- *   3. `?uxReview=1` query parameter or Ctrl+Shift+U keyboard shortcut
+ *
+ * When both are satisfied, UX Review Mode activates automatically on page
+ * load. The `?uxReview=1` query parameter and `Ctrl+Shift+U` keyboard
+ * shortcut remain available as toggles after activation.
  *
  * In production builds, `UX_REVIEW_AVAILABLE` is `false` and the overlay
  * and panel are never rendered. The provider passes children through
@@ -101,13 +102,23 @@ export const UxReviewContext = createContext<UxReviewContextValue | null>(null);
 // ── Activation logic ────────────────────────────────────
 
 /**
- * Checks whether the user has activated UX Review Mode.
- * Called once on mount and again when the keyboard shortcut fires.
+ * Checks whether UX Review Mode should be active on mount.
+ *
+ * Auto-activates when `import.meta.env.DEV` and
+ * `VITE_ENABLE_UX_REVIEW === "true"` are both satisfied.
+ * The `?uxReview=1` query parameter can override this for testing
+ * purposes (present = enable even if `UX_REVIEW_AVAILABLE` is
+ * somehow false, absent = use auto-activation).
+ *
  * @returns true if review mode is active.
  */
 function isUxReviewActive(): boolean {
-  if (!UX_REVIEW_AVAILABLE) return false;
-  return new URLSearchParams(window.location.search).has("uxReview");
+  if (!UX_REVIEW_AVAILABLE) {
+    // Still allow explicit URL param to force-enable in non-standard setups
+    return new URLSearchParams(window.location.search).has("uxReview");
+  }
+  // Auto-activate when DEV + env flag are both set
+  return true;
 }
 
 /**

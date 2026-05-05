@@ -100,8 +100,9 @@ in the exported JSON file (or the resolved report). The file remains in
 
 ## How Reviewers Export Annotations
 
-Reviewers use the UX Review Mode panel (activated via `?uxReview=1` query
-parameter in dev mode). The Export dropdown in the panel footer offers:
+Reviewers use the UX Review Mode panel (auto-activates in dev mode when
+`VITE_ENABLE_UX_REVIEW=true` is set). The Export dropdown in the panel
+footer offers:
 
 | Option | Format | Scope |
 |--------|--------|-------|

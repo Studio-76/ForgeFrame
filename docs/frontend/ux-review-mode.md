@@ -20,13 +20,16 @@ A dev-only inspection and annotation tool for reviewing UI element presentation.
 
 ## Activation
 
-UX Review Mode requires **all three** conditions to be true:
+UX Review Mode activates automatically when **both** conditions are true:
 
 | Gate | Check | How to set |
 |------|-------|------------|
 | 1. Dev build | `import.meta.env.DEV` | Run `npm run dev` (not production build) |
 | 2. Feature flag | `VITE_ENABLE_UX_REVIEW === "true"` | Set in `frontend/.env` |
-| 3. URL parameter | `?uxReview=1` | Append to the URL in your browser |
+
+No URL parameter or keyboard shortcut is required — it activates on page load.
+The keyboard shortcut (`Ctrl+Shift+U`) and `?uxReview=1` query param remain
+available as secondary toggles.
 
 ### Configuration
 
@@ -41,9 +44,12 @@ This file is committed to the repo. It is safe because production builds compile
 ### Activation
 
 1. Start the dev server: `npm run dev`
-2. Navigate to any page (e.g., `http://localhost:5173/skills?uxReview=1`)
+2. Navigate to any page (e.g., `http://localhost:5173/skills`)
 3. The browser console logs: `[UX Review] Mode activated.`
 4. A side panel opens when you click any element with `data-ux-*` attributes.
+
+To toggle the panel on/off after activation, press **Ctrl+Shift+U**
+(or append `?uxReview=1` to the URL).
 
 ### Keyboard Shortcut
 
@@ -367,7 +373,7 @@ UX Review Mode is **unavailable in production builds** by design:
 
 2. **No-op provider**: In production, the provider renders children through without mounting any review tooling. The `NULL_CONTEXT` object has no-op stubs for all functions.
 
-3. **Runtime guard**: Even in development, the provider checks for `?uxReview=1` in the URL. Without it, the overlay and panel are not rendered.
+3. **No runtime gate**: In development, the provider auto-activates when `VITE_ENABLE_UX_REVIEW=true` is set. The `?uxReview=1` URL parameter is still respected as an override for testing purposes.
 
 4. **No routes registration**: No review-only routes (`/__design`, `/dev/design`) are registered. The pattern is development-only and URL-param activated.
 
@@ -379,8 +385,8 @@ UX Review Mode is **unavailable in production builds** by design:
 
 | Symptom | Likely cause | Fix |
 |---------|-------------|-----|
-| `?uxReview=1` does nothing | Production build | Run `npm run dev` |
 | Console shows no `[UX Review]` banner | `VITE_ENABLE_UX_REVIEW` not set | Add `VITE_ENABLE_UX_REVIEW=true` to `.env` |
+| UX Review does not appear | Production build | Run `npm run dev` |
 | Overlay appears but no highlights | No elements with `data-ux-id` | Add UX metadata to the component |
 | Panel opens but no metadata shown | Selected element lacks `data-ux-*` attributes | Add `uxId` and other fields |
 | Annotations lost after browser close | Corrupted localStorage | Clear `forgeframe-ux-review-annotations` from localStorage dev tools |
