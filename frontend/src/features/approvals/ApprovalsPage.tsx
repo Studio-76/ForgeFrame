@@ -419,10 +419,9 @@ export function ApprovalsPage() {
         <PageHeader
           eyebrow="Governance"
           title="Approvals"
-          description="Shared queue for execution-run and elevated-access decisions, separated from downstream issuance."
+          description="Shared queue for execution-run and elevated-access decisions."
           badges={[{ label: "Checking access", tone: "neutral" }]}
         >
-          <p className="ff-page-header-support">Which request needs a decision, and what system state changes if you approve or reject it?</p>
           <ContextNavStrip
             compact
             items={[
@@ -432,7 +431,6 @@ export function ApprovalsPage() {
               { label: "Provider Health & Runs", to: CONTROL_PLANE_ROUTES.providerHealthRuns },
             ]}
           />
-          <p className="ff-page-header-note">ForgeFrame keeps approval outcome separate from downstream session issuance. Elevated access does not become live until the requester starts it from Security & Policies.</p>
         </PageHeader>
       </section>
     );
@@ -444,10 +442,9 @@ export function ApprovalsPage() {
         <PageHeader
           eyebrow="Governance"
           title="Approvals"
-          description="This route is reserved for operators and admins who can inspect shared approval evidence and decision posture."
-          badges={[{ label: "Operator or admin required", tone: "warning" }]}
+          description="Approval review is reserved for operator and admin sessions."
+          badges={[{ label: "Operator required", tone: "warning" }]}
         >
-          <p className="ff-page-header-support">Which governance surface should you use when approval review is outside your current permission envelope?</p>
           <ContextNavStrip
             compact
             items={[
@@ -457,7 +454,6 @@ export function ApprovalsPage() {
               { label: "Security & Policies", to: CONTROL_PLANE_ROUTES.security, badge: "Operator or admin", disabled: true },
             ]}
           />
-          <p className="ff-page-header-note">Viewers stay on audit and runtime-access surfaces. Approval review exposes request evidence and decision posture that this session cannot open.</p>
         </PageHeader>
       </section>
     );
@@ -468,7 +464,7 @@ export function ApprovalsPage() {
       <PageHeader
         eyebrow="Governance"
         title="Approvals"
-        description="Shared queue for execution-run and elevated-access decisions, with approval outcome kept separate from downstream issuance."
+        description="Execution-run and elevated-access decisions, with approval outcome kept separate from downstream issuance."
         badges={[
           {
             label: canDecide ? "Decision mode" : "Review only",
@@ -476,7 +472,6 @@ export function ApprovalsPage() {
           },
         ]}
       >
-        <p className="ff-page-header-support">Which request needs a decision now, and what changes in runtime or governance state if you act on it?</p>
         <ContextNavStrip
           compact
           items={[
@@ -489,28 +484,27 @@ export function ApprovalsPage() {
             { label: "Command Center", to: CONTROL_PLANE_ROUTES.dashboard },
           ]}
         />
-        <p className="ff-page-header-note">Approval state and session state stay separate here. Elevated-access approval never implies a live session until the original requester issues it from Security & Policies.</p>
       </PageHeader>
       {error ? <p className="fg-danger">{error}</p> : null}
       {message ? <p>{message}</p> : null}
 
-      <div className="fg-card-grid">
-        <article className="fg-kpi">
-          <span className="fg-muted">Open approvals</span>
-          <strong className="fg-kpi-value">{openCount}</strong>
-        </article>
-        <article className="fg-kpi">
-          <span className="fg-muted">Execution items</span>
-          <strong className="fg-kpi-value">{executionCount}</strong>
-        </article>
-        <article className="fg-kpi">
-          <span className="fg-muted">Elevated-access items</span>
-          <strong className="fg-kpi-value">{elevatedCount}</strong>
-        </article>
-        <article className="fg-kpi">
-          <span className="fg-muted">High-risk or irreversible</span>
-          <strong className="fg-kpi-value">{highRiskCount}</strong>
-        </article>
+      <div className="flex flex-wrap gap-4 px-1 py-2 mb-2">
+        <div className="flex items-baseline gap-1.5">
+          <span className="text-meta text-muted font-medium uppercase tracking-wider text-xs">Open</span>
+          <strong className="text-kpi tabular-nums">{openCount}</strong>
+        </div>
+        <div className="flex items-baseline gap-1.5">
+          <span className="text-meta text-muted font-medium uppercase tracking-wider text-xs">Execution</span>
+          <strong className="text-kpi tabular-nums">{executionCount}</strong>
+        </div>
+        <div className="flex items-baseline gap-1.5">
+          <span className="text-meta text-muted font-medium uppercase tracking-wider text-xs">Elevated</span>
+          <strong className="text-kpi tabular-nums">{elevatedCount}</strong>
+        </div>
+        <div className="flex items-baseline gap-1.5">
+          <span className="text-meta text-muted font-medium uppercase tracking-wider text-xs">High-risk</span>
+          <strong className="text-kpi tabular-nums">{highRiskCount}</strong>
+        </div>
       </div>
 
       <ApprovalFiltersCard

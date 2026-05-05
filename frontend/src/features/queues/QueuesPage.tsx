@@ -252,10 +252,9 @@ export function QueuesPage() {
         <PageHeader
           eyebrow="Operations"
           title="Queues"
-          description="ForgeFrame is still checking the current session before it opens lane-backed queue truth."
+          description="Checking session before opening lane-backed queue truth."
           badges={[{ label: "Checking access", tone: "neutral" }]}
         >
-          <p className="ff-page-header-support">Which execution surface should you keep open while queue access is being resolved?</p>
           <ContextNavStrip
             compact
             items={[
@@ -264,7 +263,6 @@ export function QueuesPage() {
               { label: "Errors & Activity", to: CONTROL_PLANE_ROUTES.logs },
             ]}
           />
-          <p className="ff-page-header-note">Queue truth stays instance-scoped and operator-facing.</p>
         </PageHeader>
       </section>
     );
@@ -277,10 +275,9 @@ export function QueuesPage() {
         <PageHeader
           eyebrow="Operations"
           title="Queues"
-          description="Queue truth is reserved for operator and admin sessions because the backend does not expose execution orchestration to viewers."
-          badges={[{ label: "Operator or admin required", tone: "warning" }]}
+          description="Queue inspection requires operator access — execution orchestration is not exposed to viewers."
+          badges={[{ label: "Operator required", tone: "warning" }]}
         >
-          <p className="ff-page-header-support">Which read-safe surface should you use instead?</p>
           <ContextNavStrip
             compact
             items={[
@@ -289,7 +286,6 @@ export function QueuesPage() {
               { label: "Command Center", to: CONTROL_PLANE_ROUTES.dashboard },
             ]}
           />
-          <p className="ff-page-header-note">Viewer sessions cannot open queue lane truth.</p>
         </PageHeader>
       </section>
     );
@@ -301,10 +297,9 @@ export function QueuesPage() {
       <PageHeader
         eyebrow="Operations"
         title="Queues"
-        description="Monitor queue health, lane pressure, and backlog across instances. Queue inspection is separate from run mutation — replay lives on Execution Review."
+        description="Monitor queue health, lane pressure, and backlog across instances."
         badges={[{ label: access.badgeLabel, tone: access.badgeTone }]}
       >
-        <p className="ff-page-header-support">Which instance and lane own the backlog you are trying to explain?</p>
         <ContextNavStrip
           compact
           items={[
@@ -314,7 +309,6 @@ export function QueuesPage() {
             { label: "Errors & Activity", to: CONTROL_PLANE_ROUTES.logs },
           ]}
         />
-        <p className="ff-page-header-note">Queue health monitors lane and backlog truth. Full run mutation lives on Execution Review.</p>
       </PageHeader>
 
       {/* ── Instance scope selector ── */}

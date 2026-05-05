@@ -4,8 +4,8 @@
 
 .ff-harness-layout {
   display: grid;
-  gap: var(--fg-space-4);
-  grid-template-columns: minmax(220px, 1.2fr) minmax(280px, 1.6fr) minmax(220px, 1.2fr);
+  gap: var(--fg-space-3);
+  grid-template-columns: minmax(200px, 1.2fr) minmax(260px, 1.6fr) minmax(200px, 1.2fr);
   align-items: start;
 }
 

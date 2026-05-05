@@ -51,7 +51,7 @@ export function EmptyState({
 
   return (
     <div
-      className="ff-state-block flex flex-col items-center justify-center py-12 px-6 text-center"
+      className="ff-state-block flex flex-col items-center justify-center py-8 px-6 text-center"
       data-state="empty"
     >
       {icon ? <div className="mb-4 text-muted opacity-60">{icon}</div> : null}

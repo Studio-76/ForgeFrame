@@ -83,9 +83,9 @@ export function PageHeader({
         ) : null}
       </div>
       {actions ? (
-        <div className="ff-page-header-actions flex items-center gap-2 mt-3">{actions}</div>
+        <div className="ff-page-header-actions flex items-center gap-2 mt-2">{actions}</div>
       ) : null}
-      {children ? <div className="ff-page-header-body mt-3">{children}</div> : null}
+      {children ? <div className="ff-page-header-body mt-2">{children}</div> : null}
     </header>
   );
 }

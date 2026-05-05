@@ -121,14 +121,13 @@ export function ApprovalFiltersCard({
   onSearchChange,
 }: ApprovalFiltersCardProps) {
   return (
-    <article className="fg-card">
+    <article className="fg-card ff-card-compact">
       <div className="fg-panel-heading">
         <div>
-          <h3>Decision filters</h3>
-          <p className="fg-muted">Slice the queue by approval type, class, risk, instance scope, and decision window before selecting the item to review.</p>
+          <h3>Filters</h3>
         </div>
       </div>
-      <div className="fg-inline-form">
+      <div className="fg-inline-form fg-inline-form-compact">
         <label>
           Status
           <select value={statusFilter} onChange={(event) => onStatusFilterChange(event.target.value as ApprovalStatus | "all")}>
@@ -199,7 +198,7 @@ export function ApprovalFiltersCard({
         </label>
       </div>
       <p className="fg-muted">
-        Reviewing {orderedVisibleCount} matching item{orderedVisibleCount === 1 ? "" : "s"} in the current decision slice.
+        {orderedVisibleCount} item{orderedVisibleCount === 1 ? "" : "s"} in current filter
       </p>
       <div className="fg-actions">
         {activeQueueFilters.map((filter) => (
@@ -235,8 +234,7 @@ export function ApprovalQueueCard({
     <article className="fg-card">
       <div className="fg-panel-heading">
         <div>
-          <h3>Approval queue</h3>
-          <p className="fg-muted">The queue is sorted for decision work: open items first, then higher risk, then tighter due windows.</p>
+          <h3>Queue</h3>
         </div>
       </div>
 
@@ -439,12 +437,12 @@ export function ApprovalDetailSection({
           <div className="fg-panel-heading">
             <div>
               <h3>{detail.title}</h3>
-              <p className="fg-muted">Request opened {formatTimestamp(detail.opened_at)} · Requester {formatApprovalActor(detail.requester)} · Target {formatApprovalTarget(detail)}</p>
+              <p className="fg-muted">Opened {formatTimestamp(detail.opened_at)} · {formatApprovalActor(detail.requester)} · {formatApprovalTarget(detail)}</p>
             </div>
             <div className="fg-actions">
               <span className="fg-pill" data-tone={approvalStatusTone(detail.status)}>{formatApprovalStatus(detail.status)}</span>
               <span className="fg-pill" data-tone={approvalRiskTone(detail.risk_level)}>{formatApprovalRiskLevel(detail.risk_level)}</span>
-              {detail.irreversible ? <span className="fg-pill" data-tone="danger">Irreversible path</span> : null}
+              {detail.irreversible ? <span className="fg-pill" data-tone="danger">Irreversible</span> : null}
             </div>
           </div>
 
@@ -470,20 +468,17 @@ export function ApprovalDetailSection({
 
       <article className="fg-card">
         <h3>Decision overview</h3>
-        <p className="fg-muted">Review the scope and risk first. Approval outcome lives here; downstream run control or session issuance stays on the linked surface.</p>
         {renderMetadataGrid(overviewEntries)}
       </article>
 
       <article className="fg-card">
         <h3>Action preview</h3>
-        <p className="fg-muted">This preview is the decision boundary for the current approval item, not a substitute for run controls or session issuance.</p>
-        {actionPreviewEntries.length > 0 ? renderMetadataGrid(actionPreviewEntries) : <p className="fg-muted">No action preview is recorded for this approval.</p>}
+        {actionPreviewEntries.length > 0 ? renderMetadataGrid(actionPreviewEntries) : <p className="fg-muted">No action preview recorded.</p>}
       </article>
 
       <article className="fg-card">
         <h3>Evidence</h3>
-        <p className="fg-muted">Use recorded evidence before falling back to raw system fields.</p>
-        {evidenceEntries.length > 0 ? renderMetadataGrid(evidenceEntries) : <p className="fg-muted">No additional evidence fields were recorded.</p>}
+        {evidenceEntries.length > 0 ? renderMetadataGrid(evidenceEntries) : <p className="fg-muted">No evidence fields recorded.</p>}
       </article>
 
       <article className="fg-card">
@@ -500,9 +495,10 @@ export function ApprovalDetailSection({
               <span className="fg-section-label">Scope</span>
               {renderMetadataGrid(scopeEntries)}
             </div>
-          ) : (
-            <p className="fg-muted">No explicit scope metadata was attached.</p>
-          )}
+          ) : null}
+          {identityEntries.length === 0 && scopeEntries.length === 0 ? (
+            <p className="fg-muted">No identity or scope metadata attached.</p>
+          ) : null}
         </div>
       </article>
 
@@ -512,12 +508,10 @@ export function ApprovalDetailSection({
           {consequenceEntries.length > 0 ? renderMetadataGrid(consequenceEntries) : null}
           {auditHistoryEntries.length > 0 ? (
             <div className="fg-stack">
-              <span className="fg-section-label">Audit history entries</span>
+              <span className="fg-section-label">Audit entries</span>
               {renderAuditEntries(auditHistoryEntries)}
             </div>
-          ) : (
-            <p className="fg-muted">No retained audit entries were attached to this approval detail.</p>
-          )}
+          ) : null}
           {auditEntries.length > 0 ? renderMetadataGrid(auditEntries) : null}
           <div className="fg-actions">
             <Link className="fg-nav-link" to={detailAuditHistoryRoute}>Open Audit History</Link>
@@ -527,7 +521,7 @@ export function ApprovalDetailSection({
 
       {detail.artifacts.length > 0 ? (
         <article className="fg-card">
-          <h3>Attached artifacts</h3>
+          <h3>Artifacts</h3>
           <div className="fg-card-grid">
             {detail.artifacts.map((artifact) => (
               <article key={artifact.artifact_id} className="fg-subcard">
@@ -557,13 +551,12 @@ export function ApprovalDetailSection({
               <label className="fg-stack">
                 Decision comment (optional)
                 <textarea
-                  rows={4}
+                  rows={3}
                   value={decisionComment}
                   onChange={(event) => onDecisionCommentChange(event.target.value)}
-                  placeholder="Add operator rationale when the evidence needs extra context."
+                  placeholder="Optional rationale when evidence needs extra context."
                 />
               </label>
-              <p className="fg-muted">Comment is optional. The approval outcome is still explicit, and the audit link below remains the authoritative record.</p>
               <div className="fg-actions">
                 <button type="button" disabled={decisionPending || !canApprove} onClick={() => onStartDecisionConfirmation("approve")}>
                   {approveDecisionFlow?.reviewLabel ?? "Review approval"}
@@ -580,7 +573,7 @@ export function ApprovalDetailSection({
                     <p>Comment: {decisionComment.trim() || "No comment supplied."}</p>
                   </div>
                   <div className="fg-actions">
-                    <button type="button" disabled={decisionPending} onClick={onCancelDecisionConfirmation}>Back to edit</button>
+                    <button type="button" disabled={decisionPending} onClick={onCancelDecisionConfirmation}>Back</button>
                     <button
                       type="button"
                       disabled={decisionPending || pendingDecisionIntent === null}
@@ -590,9 +583,7 @@ export function ApprovalDetailSection({
                     </button>
                   </div>
                 </div>
-              ) : (
-                <p className="fg-muted">Review the action preview first, then choose approve or reject to confirm the outcome.</p>
-              )}
+              ) : null}
               {approveBlockedReason ? <p className="fg-muted">{approveBlockedReason}</p> : null}
               {rejectBlockedReason ? <p className="fg-muted">{rejectBlockedReason}</p> : null}
             </div>
@@ -608,7 +599,7 @@ export function ApprovalDetailSection({
         <h3>System record</h3>
         <div className="fg-stack">
           {renderMetadataGrid(decisionEntries)}
-          {systemEntries.length > 0 ? renderMetadataGrid(systemEntries) : <p className="fg-muted">No additional system metadata was recorded.</p>}
+          {systemEntries.length > 0 ? renderMetadataGrid(systemEntries) : null}
         </div>
       </article>
     </section>

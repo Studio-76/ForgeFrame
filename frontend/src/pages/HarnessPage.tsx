@@ -68,10 +68,10 @@ export function HarnessPage() {
     });
   } else {
     const note = access.canMutate
-      ? "Harness is the guided workspace for integration profiles: select a preset, inspect the config, run verification actions, and manage lifecycle \u2014 all from one place."
+      ? "Select a preset, inspect config, run verification actions, and manage lifecycle."
       : access.canOperate
-        ? "This route stays readable and operational for preview, verify, dry-run, and probe work even when write actions remain hidden."
-        : `${access.summaryDetail} Preview and diagnostics stay visible here, while verify, dry-run, probe, and profile mutations remain hidden when the backend would reject them.`;
+        ? "Readable and operational for preview, verify, dry-run, and probe work."
+        : `${access.summaryDetail} Preview and diagnostics visible; verify, dry-run, probe, and mutations hidden when backend would reject them.`;
 
     attentionItems.push({
       key: "access-note",
@@ -126,7 +126,7 @@ export function HarnessPage() {
       <RegistryManagementPage
         eyebrow="Configure"
         title="Harness"
-        description="Guided workspace for integration profiles: choose a preset or template, inspect the configuration, run verification actions, and manage lifecycle."
+        description="Guided workspace for integration profiles: preset selection, config inspection, verification, and lifecycle management."
         isEmpty
         emptyTitle={access.summaryTitle}
         emptyDescription={access.summaryDetail}
@@ -147,7 +147,7 @@ export function HarnessPage() {
     <RegistryManagementPage
       eyebrow="Configure"
       title="Harness"
-      description="Guided workspace for integration profiles: choose a preset or template, inspect the configuration, run verification actions, and manage lifecycle."
+      description="Guided workspace for integration profiles: preset selection, config inspection, verification, and lifecycle management."
       scope={scopeConfig}
       attentionItems={attentionItems}
       summaryItems={summaryItems}

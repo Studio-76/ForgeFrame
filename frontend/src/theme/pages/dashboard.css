@@ -73,11 +73,11 @@
 
 .ff-summary-card {
   display: grid;
-  gap: var(--fg-space-2);
+  gap: var(--fg-space-1);
   min-width: 0;
   border: 1px solid var(--fg-color-border-default);
   border-radius: var(--fg-radius-md);
-  padding: 0.95rem;
+  padding: 0.75rem;
   background: var(--fg-color-surface-strong);
 }
 

@@ -194,11 +194,11 @@ export function RegistryManagementPage({
 
       {/* ── Scope compact bar ── */}
       {scope ? (
-        <div className="flex items-center gap-2 px-1 py-1.5 mb-2 text-meta text-muted">
+        <div className="flex items-center gap-2 px-1 py-1 mb-2 text-meta text-muted">
           <span className="font-medium">Scope:</span>
           <span className="text-primary">{scope.label}</span>
           {scope.onChange ? (
-            <Button variant="navigation" density="compact" onPress={scope.onChange}>
+            <Button variant="navigation" density="compact" onPress={scope.onChange} size="sm">
               Change
             </Button>
           ) : null}
@@ -218,7 +218,7 @@ export function RegistryManagementPage({
 
       {/* ── Search / filter ── */}
       {search || filterContent ? (
-        <div className={`flex flex-wrap items-center gap-2 ${compact ? "mb-2" : "mb-3"}`}>
+        <div className={`flex flex-wrap items-center gap-2 ${compact ? "mb-1.5" : "mb-2"}`}>
           {search ? (
             <SearchInput
               value={search.value}
@@ -265,14 +265,14 @@ export function RegistryManagementPage({
 
       {/* ── Detail panel ── */}
       {hasSelection && selectedItemContent ? (
-        <div className={`${compact ? "mt-3" : "mt-4"}`}>
+        <div className={`${compact ? "mt-2" : "mt-3"}`}>
           {selectedItemContent}
         </div>
       ) : null}
 
       {/* ── Empty detail hint ── */}
       {!hasSelection && emptyDetailHint ? (
-        <div className={`${compact ? "mt-3" : "mt-4"} text-meta text-muted text-center py-4 border border-dashed border-border rounded-lg`}>
+        <div className={`${compact ? "mt-2" : "mt-3"} text-meta text-muted text-center py-3 border border-dashed border-border rounded-lg`}>
           {emptyDetailHint}
         </div>
       ) : null}

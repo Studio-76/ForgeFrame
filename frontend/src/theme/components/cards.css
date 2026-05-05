@@ -6,7 +6,7 @@
 
 .fg-page {
   display: grid;
-  gap: var(--fg-space-4);
+  gap: var(--fg-space-3);
   min-width: 0;
 }
 
@@ -26,6 +26,10 @@
   box-shadow: var(--fg-shadow-panel);
   border-radius: var(--fg-radius-lg);
   padding: var(--fg-space-4);
+}
+
+.fg-card.ff-card-compact {
+  padding: var(--fg-space-3);
 }
 
 .fg-card.is-anchor-target {
@@ -75,10 +79,10 @@
 .fg-panel-heading {
   display: flex;
   justify-content: space-between;
-  gap: var(--fg-space-4);
+  gap: var(--fg-space-3);
   align-items: flex-start;
   flex-wrap: wrap;
-  margin-bottom: var(--fg-space-3);
+  margin-bottom: var(--fg-space-2);
 }
 
 .fg-panel-heading h3,
@@ -107,7 +111,7 @@
 .fg-subcard {
   border: 1px solid var(--fg-color-border-default);
   border-radius: var(--fg-radius-md);
-  padding: 0.75rem;
+  padding: 0.6rem 0.75rem;
   background: var(--fg-color-surface-subtle);
 }
 

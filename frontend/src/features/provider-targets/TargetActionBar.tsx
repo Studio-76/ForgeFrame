@@ -65,7 +65,6 @@ export function TargetActionBar({
       <div className="ff-action-bar-header">
         <div className="ff-action-bar-copy">
           <h2>Target controls</h2>
-          <p>Refresh live truth, run diagnostics, or filter targets.</p>
         </div>
         <div className="fg-actions">
           <button type="button" onClick={onRefresh} disabled={!canReadTargets}>
