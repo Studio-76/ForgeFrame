@@ -122,12 +122,13 @@ export function IngressTlsPage() {
     }
   };
 
-  const summary = deriveTlsSummary(selectedInstance, status);
-  const posture = derivePosture(selectedInstance, status);
+  const dataReady = state === "success" && status && selectedInstance;
+  const summary = dataReady ? deriveTlsSummary(selectedInstance, status) : null;
+  const posture = dataReady ? derivePosture(selectedInstance, status) : null;
   const isLocalOnly = posture === "local_only";
   const hasLiveCert = status?.certificate?.present === true;
-  const remediationItems = buildRemediationChecklist(status, instanceId, checks);
-  const readinessItems = buildPublicReadinessChecklist(status, instanceId);
+  const remediationItems = dataReady && !isLocalOnly ? buildRemediationChecklist(status, instanceId, checks) : [];
+  const readinessItems = dataReady && isLocalOnly ? buildPublicReadinessChecklist(status, instanceId) : [];
 
   // ── Scope config ─────────────────────────────────────────
   const scopeLabel = selectedInstance
@@ -145,11 +146,16 @@ export function IngressTlsPage() {
       }
     : undefined;
 
-  // ── Summary items (only when loaded) ──────────────────────
+  // ── Summary items (only when fully ready) ─────────────────
   const certDays = status?.certificate?.days_remaining;
-  const summaryItems = state !== "success" ? [] : [
-    { key: "posture", label: "Posture", value: summary.label, tone: summary.tone },
-    { key: "readiness", label: "Public HTTPS", value: summary.publicReadiness.label, tone: summary.publicReadiness.tone },
+  const summaryItems = !dataReady ? [] : [
+    { key: "posture", label: "Posture", value: summary!.label, tone: summary!.tone },
+    {
+      key: "readiness",
+      label: "Public HTTPS",
+      value: summary!.publicReadiness.label,
+      tone: summary!.publicReadiness.tone,
+    },
     {
       key: "cert",
       label: "Certificate",
@@ -168,27 +174,25 @@ export function IngressTlsPage() {
       : []),
   ];
 
-  // ── Attention items (only when loaded) ────────────────────
-  const attentionItems: AttentionPayload[] = state !== "success" ? [] : [
-    ...(status?.renewal_allowed
+  // ── Attention items (only when fully ready) ───────────────
+  const attentionItems: AttentionPayload[] = !dataReady ? [] : [
+    ...(status!.renewal_allowed
       ? [{ key: "renewal", level: "healthy" as const, title: "Renewal available", tone: "success" as const }]
-      : status
-        ? [
-            {
-              key: "renewal",
-              level: "warning" as const,
-              title: "Renewal gated",
-              description: status.renewal_blocked_reason ?? "Certificate renewal is not currently available.",
-            },
-          ]
-        : []),
-    ...(summary.primaryBlocker
+      : [
+          {
+            key: "renewal",
+            level: "warning" as const,
+            title: "Renewal gated",
+            description: status!.renewal_blocked_reason ?? "Certificate renewal is not currently available.",
+          },
+        ]),
+    ...(summary!.primaryBlocker
       ? [
           {
             key: "blocker",
             level: "primary_blocker" as const,
-            title: summary.detail,
-            description: summary.nextAction ?? undefined,
+            title: summary!.detail,
+            description: summary!.nextAction ?? undefined,
           },
         ]
       : []),
@@ -206,9 +210,10 @@ export function IngressTlsPage() {
       : []),
   ];
 
-  // ── Actions (only on success, avoid stale actions during loading) ──
-  const actions: Action[] = state === "success"
-    ? [
+  // ── Actions (only when fully ready) ───────────────────────
+  const actions: Action[] = !dataReady
+    ? []
+    : [
         ...(isLocalOnly
           ? [
               {
@@ -228,7 +233,7 @@ export function IngressTlsPage() {
           onClick: () => {
             void triggerRenewal();
           },
-          disabled: renewing || !status?.renewal_allowed || isLocalOnly,
+          disabled: renewing || !status!.renewal_allowed || isLocalOnly,
         },
         {
           label: "Refresh",
@@ -238,10 +243,7 @@ export function IngressTlsPage() {
             setRefreshNonce((c) => c + 1);
           },
         },
-      ]
-    : [];
-
-  const isResolving = !status;
+      ];
 
   return (
     <RegistryManagementPage
@@ -264,8 +266,10 @@ export function IngressTlsPage() {
           <strong>Ingress / TLS surface failed to load</strong>
           <p>{error ?? "Ingress or certificate posture could not be restored."}</p>
         </div>
-      ) : isResolving ? (
-        /* Resolving state — shown until TLS posture data arrives */
+      ) : null}
+
+      {/* Neutral resolving skeleton — shown until ALL data sources are ready */}
+      {!dataReady && state !== "error" ? (
         <div className="ff-state-block" data-state="loading">
           <div className="ff-skeleton-row" />
           <strong>Resolving TLS posture…</strong>
@@ -273,16 +277,16 @@ export function IngressTlsPage() {
         </div>
       ) : null}
 
-      {/* Success content — always useful regardless of posture */}
-      {state === "success" && status ? (
+      {/* Success content — only when instance catalog + TLS status are both resolved */}
+      {dataReady ? (
         <div className="ff-operator-layout">
           <div className="ff-operator-main">
-            <TlsStatusHero summary={summary} />
+            <TlsStatusHero summary={summary!} />
 
             <TlsActionBar
               instanceId={instanceId}
-              summary={summary}
-              renewalAllowed={status.renewal_allowed}
+              summary={summary!}
+              renewalAllowed={status!.renewal_allowed}
               renewing={renewing}
               onRenew={() => void triggerRenewal()}
               onRefresh={() => setRefreshNonce((current) => current + 1)}
@@ -301,8 +305,8 @@ export function IngressTlsPage() {
 
           <div className="ff-operator-sidebar">
             <TlsDetailPanel
-              summary={summary}
-              status={status}
+              summary={summary!}
+              status={status!}
               renewalResult={renewalResult}
               hasLiveCert={hasLiveCert}
             />
