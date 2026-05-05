@@ -1,0 +1,33 @@
+/* ── UX Review Mode Overlay Styles ──
+ *
+ * These styles support the dev-only UX Review Mode overlay system.
+ * In production builds the overlay components are tree-shaken and
+ * never render, so these styles only apply when the review mode
+ * is explicitly activated via ?uxReview=1.
+ *
+ * All classes use the `ux-review-` prefix to avoid collisions with
+ * application styles. The overlay uses fixed positioning and sits
+ * at z-index 99998-99999 above all application content.
+ */
+
+/* ── Highlight Ring ── */
+/* Applied to the frame around the hovered element */
+
+/* ── Tooltip ── */
+/* Floating metadata panel that follows the cursor */
+
+/* ── Panel ── */
+/* Side annotation panel — styles handled via inline styles in the component */
+
+/* ── Global cursor when review mode is active ── */
+body:has(.ux-review-highlight) {
+  cursor: crosshair;
+}
+
+/* ── Reduced motion ── */
+@media (prefers-reduced-motion: reduce) {
+  .ux-review-highlight,
+  .ux-review-tooltip {
+    transition: none !important;
+  }
+}

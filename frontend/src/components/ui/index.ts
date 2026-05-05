@@ -38,6 +38,9 @@ export { toneToTailwind } from "./types";
 export type { UxMetadata } from "./types";
 export { uxAttributes } from "./types";
 
+// ── UX Review Mode (dev-only) ─────────────────────────
+export { UxReviewProvider, UxReviewOverlay, UxReviewPanel, useUxReview } from "../ux-review";
+
 // ── Shared models (Action, Status, Attention) ─────────
 export type {
   Action,
