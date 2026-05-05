@@ -140,9 +140,11 @@ export function IngressTlsPage() {
   const scope = scopeLabel
     ? {
         label: scopeLabel,
-        onChange: () => {
-          onInstanceChange(null);
-        },
+        onChange: instanceId
+          ? () => {
+              onInstanceChange(null);
+            }
+          : undefined,
       }
     : undefined;
 
