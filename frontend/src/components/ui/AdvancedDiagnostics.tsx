@@ -18,10 +18,11 @@
  * @module
  */
 
-import type { ReactNode } from "react";
+import { useCallback, type ReactNode } from "react";
 
 import type { StatusTone } from "./types";
 import { StatusBadge } from "./StatusBadge";
+import { usePanelStore } from "../../store";
 
 // ── Main AdvancedDiagnostics ───────────────────────────────────────────
 
@@ -42,6 +43,13 @@ export type AdvancedDiagnosticsProps = {
   statusKey?: string | null;
   /** Compact mode reduces padding. */
   compact?: boolean;
+  /**
+   * Optional panel store key for cross-component expansion state.
+   * When provided, expansion is synced to the shared panel store using
+   * `panelId` as the key. Use this when diagnostics expansion should
+   * survive re-renders from a different part of the UI.
+   */
+  panelId?: string;
 };
 
 /**
@@ -51,10 +59,17 @@ export type AdvancedDiagnosticsProps = {
  * component so that non-operator users never see internal details
  * by default.
  *
+ * When `panelId` is provided, expansion state is synchronised with the
+ * shared panel store so that it survives component boundaries.
+ *
  * @example
  * ```tsx
  * <AdvancedDiagnostics title="Execution payload">
  *   <RawJson data={execution} />
+ * </AdvancedDiagnostics>
+ *
+ * <AdvancedDiagnostics title="Request" panelId="exec-request">
+ *   <RawJson data={request} />
  * </AdvancedDiagnostics>
  * ```
  */
@@ -67,11 +82,30 @@ export function AdvancedDiagnostics({
   statusTone,
   statusKey,
   compact = false,
+  panelId,
 }: AdvancedDiagnosticsProps) {
+  // When panelId is provided, sync expansion with the shared panel store.
+  const diagnosticsExpanded = usePanelStore(
+    useCallback((s) => (panelId ? (s.diagnosticsExpanded[panelId] ?? defaultOpen) : undefined), [panelId, defaultOpen]),
+  );
+  const setDiagnosticsExpanded = usePanelStore((s) => s.setDiagnosticsExpanded);
+
+  const isOpen = panelId !== undefined ? diagnosticsExpanded : defaultOpen;
+
+  const handleToggle = useCallback(
+    (e: React.SyntheticEvent<HTMLDetailsElement>) => {
+      if (panelId) {
+        setDiagnosticsExpanded(panelId, (e.target as HTMLDetailsElement).open);
+      }
+    },
+    [panelId, setDiagnosticsExpanded],
+  );
+
   return (
     <details
       className={`ff-advanced-diagnostics${compact ? " ff-advanced-diagnostics--compact" : ""}`}
-      open={defaultOpen}
+      open={isOpen}
+      onToggle={handleToggle}
     >
       <summary>
         <span className="ff-advanced-diagnostics-copy">

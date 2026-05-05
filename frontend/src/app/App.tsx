@@ -9,6 +9,7 @@ import { getSessionRouteState } from "./authRouting";
 import { CONTROL_PLANE_ROUTES, getControlPlaneNavigation, type NavigationSection } from "./navigation";
 import { queryClient } from "./queryClient";
 import { getInstanceIdFromSearchParams } from "./tenantScope";
+import { useScopeStore } from "../store";
 import { useQuery } from "@tanstack/react-query";
 
 /**
@@ -103,6 +104,11 @@ export function App() {
       description: "Replace the temporary admin password before opening the full control plane.",
     }],
   }], []);
+
+  /* Sync URL instanceId → scope store so pages read from Zustand instead of parsing URL params. */
+  useEffect(() => {
+    useScopeStore.getState().setScope(instanceId, instanceId ?? undefined);
+  }, [instanceId]);
 
   const shellNavigation = routeState.shellMode === "password_rotation" ? passwordRotationNavigation : navigationSections;
 
