@@ -1,64 +1,53 @@
 # ForgeFrame
 
-Linux-first control plane and runtime platform for autonomous AI instances.
+<p align="center">
+  <img src="docs/assets/forgeframe-logo.png" alt="ForgeFrame logo" width="360">
+</p>
 
-![Status](https://img.shields.io/badge/status-active-success)
-![Platform](https://img.shields.io/badge/platform-linux-informational)
-![Backend](https://img.shields.io/badge/backend-FastAPI-009688)
-![Frontend](https://img.shields.io/badge/frontend-React%2019-61DAFB)
-![License](https://img.shields.io/badge/license-private-lightgrey)
+Linux-first runtime and control plane for operating autonomous AI instances.
 
----
+## Overview
 
-## Table of Contents
+ForgeFrame provides the infrastructure layer for running AI instances under operator control. It integrates API gateway behaviour, execution routing, queueing, work interaction flows, and operational visibility into a single platform.
 
-- [What is ForgeFrame?](#what-is-forgeframe)
-- [Tech Stack](#tech-stack)
-- [Requirements](#requirements)
-- [Installation](#installation)
-- [Quick Start](#quick-start)
-- [Production Mode](#production-mode)
-- [Project Structure](#project-structure)
-- [Development Commands](#development-commands)
-- [Documentation](#documentation)
+The project is under active development.
 
----
+## Capabilities
 
-## What is ForgeFrame?
-
-ForgeFrame is a unified runtime and control plane for operating AI instances safely and predictably.
-It combines API gateway behavior, execution routing, governance, queueing, work interaction flows, and observability in one platform.
-
----
+- Runtime control plane for autonomous AI instances
+- API gateway and execution routing
+- Queue-based workload distribution
+- PostgreSQL-backed state persistence
+- React-based operator interface
+- Linux-first deployment model
+- Observability foundation and operational controls
 
 ## Tech Stack
 
-- **Backend:** Python 3.11+, FastAPI, SQLAlchemy, Psycopg (PostgreSQL)
-- **Frontend:** React 19, TypeScript 5, Vite 7, TanStack Query
-- **Infrastructure:** Linux-first deployment model, PostgreSQL persistence
-
----
+| Component | Technology |
+|---|---|
+| Backend | Python 3.11+, FastAPI, SQLAlchemy, Psycopg |
+| Frontend | React 19, TypeScript 5, Vite 7, TanStack Query |
+| Database | PostgreSQL 14+ |
+| Platform | Linux |
 
 ## Requirements
 
-- **OS:** Linux (primary target)
-- **Python:** 3.11+
-- **Node.js:** 20+
-- **npm:** 10+
-- **Database:** PostgreSQL 14+
-
----
+- Linux (primary target)
+- Python 3.11+
+- Node.js 20+
+- PostgreSQL 14+
 
 ## Installation
 
-### 1) Clone the repository
+### Clone
 
 ```bash
 git clone <your-repo-url>
 cd ForgeFrame
 ```
 
-### 2) Backend setup
+### Backend
 
 ```bash
 cd backend
@@ -67,29 +56,27 @@ source .venv/bin/activate
 pip install -e ".[dev]"
 ```
 
-### 3) Frontend setup
+### Frontend
 
 ```bash
 cd ../frontend
 npm install
 ```
 
-### 4) Environment
+### Environment
 
 ```bash
 cd ..
 cp .env.example .env
 ```
 
-Update `.env` values for your local PostgreSQL and runtime configuration.
-
----
+Edit `.env` with your PostgreSQL connection and runtime configuration.
 
 ## Quick Start
 
-Start backend and frontend in separate terminals.
+Run the backend and frontend in separate terminals.
 
-### Terminal A — Backend
+**Backend:**
 
 ```bash
 cd backend
@@ -97,75 +84,56 @@ source .venv/bin/activate
 uvicorn app.main:app --reload
 ```
 
-### Terminal B — Frontend
+**Frontend:**
 
 ```bash
 cd frontend
 npm run dev
 ```
 
-Then open the Vite URL printed in your terminal (typically `http://localhost:5173`).
+Open the URL shown by Vite (typically `http://localhost:5173`).
 
----
+## Production
 
-## Production Mode
-
-Your production path is:
-
-1. Build the frontend bundle:
+Build the frontend bundle, then serve both the API and static assets:
 
 ```bash
-cd frontend
-npm run build
-```
-
-2. Start ForgeFrame with the backend startup script (serves API + built frontend):
-
-```bash
+cd frontend && npm run build
 cd ..
 ./scripts/start-forgeframe.sh
 ```
 
-By default this starts on `127.0.0.1:8080` (configurable via `FORGEFRAME_HOST` and `FORGEFRAME_PORT`).
-
----
+Listens on `127.0.0.1:8080` by default. Override with `FORGEFRAME_HOST` and `FORGEFRAME_PORT`.
 
 ## Project Structure
 
 ```text
-ForgeFrame/
-├── backend/      # FastAPI services and domain logic
-├── frontend/     # React 19 control plane UI
-├── docs/         # Documentation
-├── deploy/       # Deployment config templates
-├── docker/       # Container-related assets
-└── scripts/      # Utility scripts
+backend/     FastAPI services and domain logic
+frontend/    React 19 SPA — operator interface
+docs/        Technical and operations documentation
+deploy/      Deployment configuration templates
+docker/      Container-related assets
+scripts/     Utility scripts
+reference/   Architecture and design references
 ```
 
----
-
-## Development Commands
-
-### Frontend (`frontend/`)
+## Development
 
 ```bash
-npm run dev
-npm run typecheck
-npm test
-npm run build
+# Frontend
+npm run dev         # Start Vite dev server
+npm run typecheck   # TypeScript check
+npm test            # Run frontend test suite
+npm run build       # Production bundle
+
+# Backend
+pytest              # Run backend test suite
 ```
 
-### Backend (`backend/`)
-
-```bash
-pytest
-```
-
----
+Run frontend commands from `frontend/` and backend commands from `backend/`.
 
 ## Documentation
 
-- Archived previous README: [`reference/README_OLD.md`](reference/README_OLD.md)
-- Additional docs live under [`docs/`](docs/)
+Additional technical and operator documentation is maintained in `docs/`.
 
-More specific technical and operator documentation will be added incrementally.
+An earlier project overview is kept at [`reference/README_OLD.md`](reference/README_OLD.md).
