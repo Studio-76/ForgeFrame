@@ -246,6 +246,43 @@ path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 PY
 }
 
+forgeframe_ensure_gum() {
+  if command -v gum &>/dev/null; then
+    return 0
+  fi
+
+  if [[ "${FORGEFRAME_NON_INTERACTIVE:-0}" == "1" ]]; then
+    printf '[forgeframe-env][WARN] Gum is not installed and --non-interactive forbids automatic installation. Some interactive features will be unavailable.\n' >&2
+    return 1
+  fi
+
+  if [[ ! -t 0 ]]; then
+    printf '[forgeframe-env][WARN] Not a TTY — cannot install gum interactively. Set FORGEFRAME_NON_INTERACTIVE=1 to suppress this warning.\n' >&2
+    return 1
+  fi
+
+  printf '[forgeframe-env] Gum is needed for the interactive installer. Installing from Charm apt repo...\n' >&2
+
+  # Download GPG key to temp file first to validate
+  local keyring="/etc/apt/keyrings/charm.gpg"
+  if ! curl -fsSL https://repo.charm.sh/apt/gpg.key -o /tmp/charm-gpg.key 2>/dev/null; then
+    printf '[forgeframe-env][ERROR] Failed to download Charm GPG key. Check network connectivity.\n' >&2
+    return 1
+  fi
+  sudo mkdir -p /etc/apt/keyrings
+  sudo gpg --batch --dearmor -o "$keyring" /tmp/charm-gpg.key || {
+    printf '[forgeframe-env][ERROR] Failed to install Charm GPG key.\n' >&2
+    rm -f /tmp/charm-gpg.key
+    return 1
+  }
+  rm -f /tmp/charm-gpg.key
+
+  echo "deb [signed-by=$keyring] https://repo.charm.sh/apt/ * *" | \
+    sudo tee /etc/apt/sources.list.d/charm.list >/dev/null
+  DEBIAN_FRONTEND=noninteractive sudo apt update -qq && DEBIAN_FRONTEND=noninteractive sudo apt install -y -qq gum
+  command -v gum &>/dev/null
+}
+
 forgeframe_login_and_rotate_bootstrap_admin_if_required() {
   local base_url="$1"
   local env_file="$2"

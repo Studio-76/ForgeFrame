@@ -40,14 +40,54 @@ The project is under active development.
 
 ## Installation
 
-### Clone
+### Unified Installer (Recommended)
+
+The interactive installer walks through deployment options and dependencies:
+
+```bash
+git clone <your-repo-url>
+cd ForgeFrame
+./scripts/forgeframe-setup.sh
+```
+
+Select your deployment mode:
+
+- **Docker Compose** — production-like container deployment
+- **Host-native (systemd)** — production deployment with system services
+- **Dev environment** — local development with venv and npm
+- **Limited exception (file/SQLite)** — minimal storage for evaluation
+
+The installer uses [charmbracelet/gum](https://github.com/charmbracelet/gum) for the interactive terminal UI. Gum is installed automatically on Ubuntu/Debian when running interactively. Use `--non-interactive` for CI/CD.
+
+#### Non-interactive / CI/CD
+
+```bash
+./scripts/forgeframe-setup.sh --compose --non-interactive \
+  --fqdn forgeframe.example.com \
+  --acme-email admin@example.com \
+  --pg-password "$(openssl rand -base64 24)"
+```
+
+#### Quick mode flags
+
+```bash
+# Skip the mode selection menu
+./scripts/forgeframe-setup.sh --compose
+./scripts/forgeframe-setup.sh --host-native
+./scripts/forgeframe-setup.sh --dev
+./scripts/forgeframe-setup.sh --limited
+```
+
+### Manual Setup
+
+#### Clone
 
 ```bash
 git clone <your-repo-url>
 cd ForgeFrame
 ```
 
-### Backend
+#### Backend
 
 ```bash
 cd backend
@@ -56,14 +96,14 @@ source .venv/bin/activate
 pip install -e ".[dev]"
 ```
 
-### Frontend
+#### Frontend
 
 ```bash
 cd ../frontend
 npm install
 ```
 
-### Environment
+#### Environment
 
 ```bash
 cd ..
@@ -72,7 +112,7 @@ cp .env.example .env
 
 Edit `.env` with your PostgreSQL connection and runtime configuration.
 
-## Quick Start
+### Quick Start (Dev)
 
 Run the backend and frontend in separate terminals.
 
@@ -93,7 +133,7 @@ npm run dev
 
 Open the URL shown by Vite (typically `http://localhost:5173`).
 
-## Production
+### Production
 
 Build the frontend bundle, then serve both the API and static assets:
 
