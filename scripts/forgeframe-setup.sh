@@ -9,7 +9,7 @@
 #   forgeframe setup --limited        # Skip mode picker, go straight to limited exception
 #   forgeframe setup --non-interactive --compose --fqdn ...  # CI/CD mode
 #
-# Dependencies: gum (auto-installed on Ubuntu/Debian via Charm apt repo),
+# Dependencies: gum (auto-downloaded as prebuilt binary from GitHub releases),
 #               existing ForgeFrame scripts under scripts/.
 
 set -euo pipefail

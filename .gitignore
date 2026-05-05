@@ -157,6 +157,7 @@ AGENTS.md
 # -------------------------
 .install/log/
 .install/lib/
+.install/bin/
 .install/etc/forgeframe.env
 
 # -------------------------

@@ -251,6 +251,14 @@ forgeframe_ensure_gum() {
     return 0
   fi
 
+  local gum_dir="${FORGEFRAME_GUM_DIR:-$ROOT_DIR/.install/bin}"
+  local gum_bin="$gum_dir/gum"
+  if [[ -x "$gum_bin" ]]; then
+    PATH="$gum_dir:$PATH"
+    export PATH
+    return 0
+  fi
+
   if [[ "${FORGEFRAME_NON_INTERACTIVE:-0}" == "1" ]]; then
     printf '[forgeframe-env][WARN] Gum is not installed and --non-interactive forbids automatic installation. Some interactive features will be unavailable.\n' >&2
     return 1
@@ -261,26 +269,74 @@ forgeframe_ensure_gum() {
     return 1
   fi
 
-  printf '[forgeframe-env] Gum is needed for the interactive installer. Installing from Charm apt repo...\n' >&2
+  local gum_version="0.17.0"
+  local os arch ext="tar.gz"
 
-  # Download GPG key to temp file first to validate
-  local keyring="/etc/apt/keyrings/charm.gpg"
-  if ! curl -fsSL https://repo.charm.sh/apt/gpg.key -o /tmp/charm-gpg.key 2>/dev/null; then
-    printf '[forgeframe-env][ERROR] Failed to download Charm GPG key. Check network connectivity.\n' >&2
+  case "$(uname -s)" in
+    Linux)  os="Linux" ;;
+    Darwin) os="Darwin" ;;
+    *)
+      printf '[forgeframe-env][ERROR] Unsupported OS: %s\n' "$(uname -s)" >&2
+      return 1
+      ;;
+  esac
+
+  case "$(uname -m)" in
+    x86_64|amd64) arch="x86_64" ;;
+    aarch64|arm64) arch="arm64" ;;
+    *)
+      printf '[forgeframe-env][ERROR] Unsupported architecture: %s\n' "$(uname -m)" >&2
+      return 1
+      ;;
+  esac
+
+  local download_url="https://github.com/charmbracelet/gum/releases/download/v${gum_version}/gum_${gum_version}_${os}_${arch}.tar.gz"
+  local tmp_dir
+  tmp_dir="$(mktemp -d "${TMPDIR:-/tmp}/forgeframe-gum.XXXXXX")" || return 1
+
+  printf '[forgeframe-env] Downloading gum v%s (%s/%s) to %s...\n' "$gum_version" "$os" "$arch" "$gum_dir" >&2
+
+  if command -v curl &>/dev/null; then
+    curl -fsSL "$download_url" -o "$tmp_dir/gum.tar.gz" || {
+      printf '[forgeframe-env][ERROR] Failed to download gum from %s\n' "$download_url" >&2
+      rm -rf "$tmp_dir"
+      return 1
+    }
+  elif command -v wget &>/dev/null; then
+    wget -q "$download_url" -O "$tmp_dir/gum.tar.gz" || {
+      printf '[forgeframe-env][ERROR] Failed to download gum from %s\n' "$download_url" >&2
+      rm -rf "$tmp_dir"
+      return 1
+    }
+  else
+    printf '[forgeframe-env][ERROR] Neither curl nor wget is available. Cannot download gum.\n' >&2
+    rm -rf "$tmp_dir"
     return 1
   fi
-  sudo mkdir -p /etc/apt/keyrings
-  sudo gpg --batch --dearmor -o "$keyring" /tmp/charm-gpg.key || {
-    printf '[forgeframe-env][ERROR] Failed to install Charm GPG key.\n' >&2
-    rm -f /tmp/charm-gpg.key
+
+  mkdir -p "$gum_dir"
+  tar -xzf "$tmp_dir/gum.tar.gz" -C "$tmp_dir" || {
+    printf '[forgeframe-env][ERROR] Failed to extract gum archive.\n' >&2
+    rm -rf "$tmp_dir"
     return 1
   }
-  rm -f /tmp/charm-gpg.key
 
-  echo "deb [signed-by=$keyring] https://repo.charm.sh/apt/ * *" | \
-    sudo tee /etc/apt/sources.list.d/charm.list >/dev/null
-  DEBIAN_FRONTEND=noninteractive sudo apt update -qq && DEBIAN_FRONTEND=noninteractive sudo apt install -y -qq gum
-  command -v gum &>/dev/null
+  mv "$tmp_dir/gum" "$gum_bin" || {
+    printf '[forgeframe-env][ERROR] Failed to move gum binary to %s.\n' "$gum_bin" >&2
+    rm -rf "$tmp_dir"
+    return 1
+  }
+  chmod +x "$gum_bin"
+  rm -rf "$tmp_dir"
+
+  if [[ ! -x "$gum_bin" ]]; then
+    printf '[forgeframe-env][ERROR] Gum binary at %s is not executable.\n' "$gum_bin" >&2
+    return 1
+  fi
+
+  PATH="$gum_dir:$PATH"
+  export PATH
+  printf '[forgeframe-env] Gum v%s installed to %s\n' "$gum_version" "$gum_bin" >&2
 }
 
 forgeframe_login_and_rotate_bootstrap_admin_if_required() {
