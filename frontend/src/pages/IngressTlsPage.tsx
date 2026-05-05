@@ -115,7 +115,7 @@ export function IngressTlsPage() {
 
   const summary = deriveTlsSummary(selectedInstance, status);
   const isLocalOnly = selectedInstance?.exposure_mode === "local_only";
-  const hasLiveCert = status?.certificate.present === true;
+  const hasLiveCert = status?.certificate?.present === true;
   const remediationItems = buildRemediationChecklist(status, instanceId, checks);
 
   // ── Scope config ─────────────────────────────────────────
@@ -134,8 +134,9 @@ export function IngressTlsPage() {
       }
     : undefined;
 
-  // ── Summary items ────────────────────────────────────────
-  const summaryItems = [
+  // ── Summary items (only when loaded) ──────────────────────
+  const certDays = status?.certificate?.days_remaining;
+  const summaryItems = state !== "success" ? [] : [
     { key: "status", label: "Status", value: summary.label, tone: summary.tone },
     {
       key: "cert",
@@ -143,20 +144,20 @@ export function IngressTlsPage() {
       value: hasLiveCert ? "Present" : "Missing",
       tone: hasLiveCert ? ("success" as const) : ("danger" as const),
     },
-    ...(status?.certificate.days_remaining != null
+    ...(certDays != null
       ? [
           {
             key: "expiry",
             label: "Expiry (days)",
-            value: status.certificate.days_remaining,
-            tone: status.certificate.days_remaining > 30 ? ("success" as const) : ("warning" as const),
+            value: certDays,
+            tone: certDays > 30 ? ("success" as const) : ("warning" as const),
           },
         ]
       : []),
   ];
 
-  // ── Attention items ──────────────────────────────────────
-  const attentionItems: AttentionPayload[] = [
+  // ── Attention items (only when loaded) ────────────────────
+  const attentionItems: AttentionPayload[] = state !== "success" ? [] : [
     ...(status?.renewal_allowed
       ? [{ key: "renewal", level: "healthy" as const, title: "Renewal available", tone: "success" as const }]
       : status
