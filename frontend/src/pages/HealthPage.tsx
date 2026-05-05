@@ -566,7 +566,7 @@ export function HealthPage() {
                     <strong>{provider.label}</strong> · {provider.readiness_reason ?? provider.next_action} ·
                     {" "}
                     <Button variant="navigation" onPress={() => navigate(route)}>
-                      {providerNeedsOauthHandoff(provider) ? "Review OAuth Targets" : "Review provider health"}
+                      {providerNeedsOauthHandoff(provider) ? "Review OAuth targets" : "Review provider health"}
                     </Button>
                   </li>
                 );
