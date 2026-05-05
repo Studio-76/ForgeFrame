@@ -1,6 +1,7 @@
 import { CONTROL_PLANE_ROUTES } from "../app/navigation";
 import { PageIntro } from "../components/PageIntro";
 import {
+  buildInventoryPath,
   CreateSkillPanel,
   DEFAULT_CREATE_FORM,
   EmptyState,
@@ -10,7 +11,6 @@ import {
   SkillTable,
   useSkills,
 } from "../features/skills";
-import { buildInventoryPath } from "../features/skills/utils";
 
 /**
  * Skills page — redesigned skill lifecycle management surface.

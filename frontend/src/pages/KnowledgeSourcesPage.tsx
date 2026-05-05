@@ -2,7 +2,6 @@ import { RegistryManagementPage } from "../components/page-templates";
 import type { AttentionPayload } from "../components/ui/models/attention";
 import type { SummaryStripItem } from "../components/ui/SummaryStrip";
 import { AdvancedDiagnostics } from "../components/ui/AdvancedDiagnostics";
-import type { KnowledgeSourceSummaryCounts } from "../features/knowledge-sources/types";
 import {
   CreateKnowledgeSourcePanel,
   DEFAULT_CREATE_FORM,
@@ -12,6 +11,7 @@ import {
   KnowledgeSourcesSummaryHero,
   KnowledgeSourceTable,
   useKnowledgeSources,
+  type KnowledgeSourceSummaryCounts,
 } from "../features/knowledge-sources";
 
 /**
