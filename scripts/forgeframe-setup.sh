@@ -111,9 +111,13 @@ gum_spin() {
 }
 
 # ---- welcome header ----
+FF_CYAN=37
+FF_GREEN=42
+FF_AMBER=214
+
 if [[ "$NON_INTERACTIVE" != "1" ]]; then
   gum_style \
-    --foreground 212 --border-foreground 212 --border double \
+    --foreground "$FF_CYAN" --border-foreground "$FF_CYAN" --border double \
     --align center --width 60 --padding "1 2" \
     "ForgeFrame Setup" "v${FF_VERSION}"
 fi
@@ -144,7 +148,7 @@ log "Selected mode: $MODE"
 #  MODE: Docker Compose
 # ================================================================
 setup_compose() {
-  gum_style --foreground 212 "Docker Compose Setup"
+  gum_style --foreground "$FF_CYAN" "Docker Compose Setup"
 
   FORGEFRAME_PUBLIC_FQDN="${FQDN:-$(gum_input --placeholder "forgeframe.example.com" --value "${FORGEFRAME_PUBLIC_FQDN:-}")}"
   FORGEFRAME_PUBLIC_TLS_ACME_EMAIL="${ACME_EMAIL:-$(gum_input --placeholder "admin@example.com" --value "${FORGEFRAME_PUBLIC_TLS_ACME_EMAIL:-}")}"
@@ -185,7 +189,7 @@ setup_compose() {
 #  MODE: Host-native (systemd)
 # ================================================================
 setup_host_native() {
-  gum_style --foreground 212 "Host-Native (systemd) Setup"
+  gum_style --foreground "$FF_CYAN" "Host-Native (systemd) Setup"
 
   FORGEFRAME_PUBLIC_FQDN="${FQDN:-$(gum_input --placeholder "forgeframe.example.com" --value "${FORGEFRAME_PUBLIC_FQDN:-}")}"
   FORGEFRAME_PUBLIC_TLS_ACME_EMAIL="${ACME_EMAIL:-$(gum_input --placeholder "admin@example.com" --value "${FORGEFRAME_PUBLIC_TLS_ACME_EMAIL:-}")}"
@@ -227,7 +231,7 @@ setup_host_native() {
 #  MODE: Dev environment
 # ================================================================
 setup_dev() {
-  gum_style --foreground 212 "Dev Environment Setup"
+  gum_style --foreground "$FF_CYAN" "Dev Environment Setup"
 
   local python_bin="${FORGEFRAME_PYTHON_BIN:-$(command -v python3)}"
   local backend_port="${FORGEFRAME_DEV_BACKEND_PORT:-8000}"
@@ -268,8 +272,8 @@ setup_dev() {
     log "UX Review Mode enabled in frontend/.env"
   fi
 
-  gum_style --foreground 42 "Dev environment ready!"
-  gum_style --foreground 212 "Run:"
+  gum_style --foreground "$FF_GREEN" "Dev environment ready!"
+  gum_style --foreground "$FF_AMBER" "Run:"
   gum_style "  ./scripts/dev-backend.sh   (API on :${backend_port})"
   gum_style "  ./scripts/dev-frontend.sh  (Vite on :${frontend_port})"
 }
@@ -278,7 +282,7 @@ setup_dev() {
 #  MODE: Limited exception (file/SQLite)
 # ================================================================
 setup_limited() {
-  gum_style --foreground 212 "Limited Exception (file/SQLite) Setup"
+  gum_style --foreground "$FF_CYAN" "Limited Exception (file/SQLite) Setup"
 
   if [[ "$NON_INTERACTIVE" != "1" ]]; then
     gum_confirm "Limited exception mode uses file/SQLite storage. Not for production. Continue?" || exit 1
@@ -303,7 +307,7 @@ esac
 if [[ "$MODE" != "dev" && "$NON_INTERACTIVE" != "1" ]]; then
   printf '\n'
   gum_style \
-    --foreground 212 --border-foreground 212 --border rounded \
+    --foreground "$FF_CYAN" --border-foreground "$FF_CYAN" --border rounded \
     --align center --width 60 --padding "1 2" \
     "ForgeFrame Setup Complete" "v${FF_VERSION}"
 
