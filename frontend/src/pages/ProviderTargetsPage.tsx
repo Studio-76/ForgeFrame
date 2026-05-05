@@ -1,6 +1,7 @@
-import { useSearchParams } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 
-import { getInstanceIdFromSearchParams } from "../app/tenantScope";
+import { CONTROL_PLANE_ROUTES } from "../app/navigation";
+import { getInstanceIdFromSearchParams, withInstanceScope } from "../app/tenantScope";
 import { RegistryManagementPage } from "../components/page-templates";
 import type { AttentionPayload } from "../components/ui/models/attention";
 import { AdvancedDiagnostics, RawJson } from "../components/ui/AdvancedDiagnostics";
@@ -183,6 +184,13 @@ export function ProviderTargetsPage() {
       emptyDetailHint="Select a target from the table to inspect its configuration."
       diagnostics={
         <AdvancedDiagnostics title="Provider-target diagnostics">
+          <div className="fg-nav-links" style={{ marginBottom: "0.5rem" }}>
+            <Link className="fg-nav-link" to={withInstanceScope(CONTROL_PLANE_ROUTES.providerHealthRuns, instanceId)}>Provider Health</Link>
+            <Link className="fg-nav-link" to={withInstanceScope(`${CONTROL_PLANE_ROUTES.routing}#routing-dry-run`, instanceId)}>Routing Dry Run</Link>
+            <Link className="fg-nav-link" to={withInstanceScope(CONTROL_PLANE_ROUTES.dashboard, instanceId)}>Setup progress</Link>
+            <Link className="fg-nav-link" to={withInstanceScope(CONTROL_PLANE_ROUTES.models, instanceId)}>Models</Link>
+            <Link className="fg-nav-link" to={withInstanceScope(CONTROL_PLANE_ROUTES.routing, instanceId)}>Routing</Link>
+          </div>
           <RawJson
             data={{
               filters: {
@@ -243,7 +251,6 @@ export function ProviderTargetsPage() {
       {hasTargets ? (
         <>
           <TargetActionBar
-            instanceId={instanceId}
             canReadTargets={canReadTargets}
             onRefresh={() => void load()}
             providerFilter={providerFilter}

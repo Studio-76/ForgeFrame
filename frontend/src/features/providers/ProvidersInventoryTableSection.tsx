@@ -65,51 +65,6 @@ function visibleModels(provider: ProvidersManagementSectionProps["data"]["provid
   return models.join(", ");
 }
 
-function nextActionExplanation(
-  provider: ProvidersManagementSectionProps["data"]["providers"][number],
-): string {
-  switch (provider.next_action_kind) {
-    case "sync_models":
-      return "Sync provider inventory to refresh model list and targets.";
-    case "run_health":
-      return "Run health checks to update provider status badges.";
-    case "activate_provider":
-      return "Enable this provider to allow routing through it.";
-    case "review_sync":
-      return "Routing is blocked — provider targets need a ready target.";
-    case "connect_oauth":
-      return "Connect the account on OAuth Targets before routing.";
-    case "edit_provider":
-      return "Review and save the provider configuration first.";
-    default:
-      return provider.next_action;
-  }
-}
-
-function primaryBlockerText(providers: ProvidersManagementSectionProps["data"]["providers"]): string | null {
-  const attentionProviders = providers.filter((p) => p.enabled && !p.ready);
-  if (attentionProviders.length === 0) {
-    return null;
-  }
-  const first = attentionProviders[0];
-  if (first.readiness_reason) {
-    return first.readiness_reason;
-  }
-  if (first.oauth_connect_required) {
-    return `${first.label} needs an OAuth connection.`;
-  }
-  return `${first.label} is not ready for routing.`;
-}
-
-function recommendedAction(providers: ProvidersManagementSectionProps["data"]["providers"]): string | null {
-  const attentionProviders = providers.filter((p) => p.enabled && !p.ready);
-  if (attentionProviders.length === 0) {
-    return null;
-  }
-  const first = attentionProviders[0];
-  return `${first.label}: ${first.next_action}`;
-}
-
 function formatLastProbe(provider: ProvidersManagementSectionProps["data"]["providers"][number]): string {
   if (provider.last_probe_at) {
     return formatTimestamp(provider.last_probe_at);
@@ -118,82 +73,6 @@ function formatLastProbe(provider: ProvidersManagementSectionProps["data"]["prov
     return "Not probed";
   }
   return "Never";
-}
-
-// ---------------------------------------------------------------------------
-// Provider Readiness Hero
-// ---------------------------------------------------------------------------
-
-function ProviderReadinessHero({
-  providers,
-}: {
-  providers: ProvidersManagementSectionProps["data"]["providers"];
-}) {
-  const total = providers.length;
-  const enabledCount = providers.filter((p) => p.enabled).length;
-  const readyCount = providers.filter((p) => p.ready).length;
-  const attentionCount = providers.filter((p) => p.enabled && !p.ready).length;
-  const blocker = primaryBlockerText(providers);
-  const nextAction = recommendedAction(providers);
-
-  return (
-    <div className="ff-status-hero">
-      <div className="ff-status-hero-top">
-        <p className="ff-status-hero-label">Provider Readiness</p>
-        <div className="ff-status-hero-stats">
-          <span>{formatMetric(total)} total</span>
-          <span>{formatMetric(enabledCount)} enabled</span>
-          <span>{formatMetric(readyCount)} runtime-ready</span>
-          {attentionCount > 0 ? <span>{formatMetric(attentionCount)} needs attention</span> : null}
-        </div>
-      </div>
-      {blocker ? (
-        <p className="ff-status-hero-line">
-          Blocked: {blocker}
-        </p>
-      ) : null}
-      {nextAction ? (
-        <div className="ff-next-step" data-tone="warning">
-          <span className="ff-next-step-label">Next:</span> {nextAction}
-        </div>
-      ) : (
-        <div className="ff-status-hero-actions">
-          <span className="ff-status-hero-actions-hint">All providers are ready.</span>
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Info boxes for the detail panel view mode
-// ---------------------------------------------------------------------------
-
-function DetailInfoBox({
-  label,
-  value,
-  tone,
-}: {
-  label: string;
-  value: string;
-  tone?: "warning" | "danger" | "success";
-}) {
-  return (
-    <div className={`ff-next-step${tone ? `" data-tone="${tone}` : ""}`} style={{ padding: "0.5rem 0.85rem", fontSize: "var(--fg-type-size-meta)" }}>
-      <span className="ff-next-step-label">{label}:</span> {value}
-    </div>
-  );
-}
-
-function providerEndpointSummary(
-  draft: ProvidersManagementSectionProps["data"]["providerDrafts"][string],
-): string {
-  if (draft.providerClass === "oauth_account") {
-    return "OAuth account bridge — connect the account on OAuth Targets before probing.";
-  }
-  return draft.endpointBaseUrl.trim()
-    ? `Endpoint: ${draft.endpointBaseUrl.trim()}`
-    : "No endpoint URL set.";
 }
 
 // ---------------------------------------------------------------------------
@@ -209,10 +88,10 @@ function confirmDestructive(action: string, label: string): boolean {
 // ---------------------------------------------------------------------------
 
 /**
- * Provider registry section with a readiness hero, compact provider grid,
- * expandable detail panel, view/edit modes, and grouped actions.
- * Designed as a provider setup and readiness workflow rather than a
- * provider database editor.
+ * Provider registry section with compact action row, provider grid,
+ * expandable detail panel, and view/edit modes.
+ * Designed as a provider setup and readiness workflow.
+ * Summary metrics and attention items are rendered by the page template.
  */
 export function ProvidersInventoryTableSection({ data, actions, instanceId }: ProvidersManagementSectionProps) {
   const location = useLocation();
@@ -284,40 +163,24 @@ export function ProvidersInventoryTableSection({ data, actions, instanceId }: Pr
       tabIndex={-1}
       className={location.hash === "#provider-health-runs" ? "is-anchor-target" : ""}
     >
-      {/* Status hero */}
+      {/* Status hero — merged into page-level summaryItems */}
       <div className="fg-stack">
-        <ProviderReadinessHero providers={data.providers} />
 
-        {/* Action groups */}
+        {/* Compact action row */}
         <div className="ff-action-controls">
-          <span style={{ fontSize: "var(--fg-type-size-meta)", color: "var(--fg-color-text-secondary)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.02em" }}>
-            Page
-          </span>
           <button type="button" className="ff-action-chip" disabled={isLoading} onClick={() => void actions.load()}>
             {isLoading ? "Refreshing…" : "Refresh"}
           </button>
-        </div>
-
-        <div className="ff-action-controls">
-          <span style={{ fontSize: "var(--fg-type-size-meta)", color: "var(--fg-color-text-secondary)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.02em" }}>
-            Provider
-          </span>
           {data.access.canMutate ? (
             <button type="button" className="ff-action-chip" onClick={() => { setShowAddProvider((current) => !current); setEditMode(false); }}>
-              {showAddProvider ? "Hide add form" : "Add provider"}
+              {showAddProvider ? "Cancel" : "Add provider"}
             </button>
           ) : null}
           {selectedProvider && data.access.canMutate ? (
             <button type="button" className="ff-action-chip" disabled={!selectedProvider} onClick={() => setEditMode((current) => !current)}>
-              {editMode ? "View provider" : "Edit provider"}
+              {editMode ? "View" : "Edit"}
             </button>
           ) : null}
-        </div>
-
-        <div className="ff-action-controls">
-          <span style={{ fontSize: "var(--fg-type-size-meta)", color: "var(--fg-color-text-secondary)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.02em" }}>
-            Sync
-          </span>
           {selectedProvider && data.access.canMutate ? (
             <button
               type="button"
@@ -325,37 +188,14 @@ export function ProvidersInventoryTableSection({ data, actions, instanceId }: Pr
               disabled={isPending(`sync-provider:${selectedProvider.provider}`)}
               onClick={() => void actions.syncProviderModels(selectedProvider.provider)}
             >
-              {isPending(`sync-provider:${selectedProvider.provider}`) ? "Syncing…" : "Sync inventory"}
+              {isPending(`sync-provider:${selectedProvider.provider}`) ? "Syncing…" : "Sync"}
             </button>
           ) : null}
           {data.access.canMutate ? (
             <button type="button" className="ff-action-chip" disabled={isPending("sync-all-providers")} onClick={() => void actions.syncAllProviders()}>
-              {isPending("sync-all-providers") ? "Syncing all…" : "Sync all providers"}
+              {isPending("sync-all-providers") ? "Syncing all…" : "Sync all"}
             </button>
           ) : null}
-        </div>
-
-        <div className="ff-action-controls">
-          <span style={{ fontSize: "var(--fg-type-size-meta)", color: "var(--fg-color-text-secondary)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.02em" }}>
-            Diagnostics
-          </span>
-          {selectedProvider ? (
-            <Link className="ff-action-chip" style={{ textDecoration: "none" }} to={withInstanceScope(CONTROL_PLANE_ROUTES.harness, instanceId)}>
-              Run provider probe
-            </Link>
-          ) : null}
-          {selectedProvider?.next_action_kind === "review_sync" ? (
-            <Link className="ff-action-chip" style={{ textDecoration: "none" }} to={withInstanceScope(CONTROL_PLANE_ROUTES.providerTargets, instanceId)}>
-              Review sync issues
-            </Link>
-          ) : null}
-        </div>
-
-        <div className="ff-nav-links">
-          <Link className="fg-nav-link" to={withInstanceScope(CONTROL_PLANE_ROUTES.dashboard, instanceId)}>Setup progress</Link>
-          <Link className="fg-nav-link" to={withInstanceScope(CONTROL_PLANE_ROUTES.providerTargets, instanceId)}>Provider Targets</Link>
-          <Link className="fg-nav-link" to={withInstanceScope(CONTROL_PLANE_ROUTES.harness, instanceId)}>Harness</Link>
-          <Link className="fg-nav-link" to={withInstanceScope(CONTROL_PLANE_ROUTES.oauthTargets, instanceId)}>OAuth Targets</Link>
         </div>
 
         <ActionFeedbackNotice feedback={data.actionFeedback} />
@@ -496,22 +336,6 @@ export function ProvidersInventoryTableSection({ data, actions, instanceId }: Pr
                           </p>
                         </div>
 
-                        {/* Why it matters */}
-                        <div className="fg-provider-detail-section">
-                          <span className="fg-provider-detail-label">Why it matters</span>
-                          <p className="fg-provider-detail-meta">
-                            {selectedProvider.ready
-                              ? "This provider can serve runtime requests through enabled targets."
-                              : !selectedProvider.enabled
-                                ? "Disabled providers cannot serve requests. Enable the provider to start routing."
-                                : selectedProvider.oauth_connect_required
-                                  ? "An OAuth connection is required before this provider can route requests."
-                                  : selectedProvider.ready_target_count === 0
-                                    ? "No targets are ready. Sync the provider inventory and check Provider Targets for readiness."
-                                    : "This provider has partial readiness — check the blocking conditions below."}
-                          </p>
-                        </div>
-
                         {/* Blocking checks */}
                         {!selectedProvider.ready ? (
                           <div className="fg-provider-detail-section">
@@ -533,17 +357,6 @@ export function ProvidersInventoryTableSection({ data, actions, instanceId }: Pr
                                 <li>{selectedProvider.readiness_reason}</li>
                               ) : null}
                             </ul>
-                          </div>
-                        ) : null}
-
-                        {/* Recommended next action */}
-                        {!selectedProvider.ready ? (
-                          <div className="fg-provider-detail-section">
-                            <span className="fg-provider-detail-label">Recommended next action</span>
-                            <div className="ff-next-step" data-tone={selectedProvider.next_action_kind === "sync_models" ? "warning" : "danger"}>
-                              <span className="ff-next-step-label">{selectedProvider.next_action}</span>
-                              <span style={{ fontWeight: 400 }}> — {nextActionExplanation(selectedProvider)}</span>
-                            </div>
                           </div>
                         ) : null}
 
@@ -658,24 +471,6 @@ export function ProvidersInventoryTableSection({ data, actions, instanceId }: Pr
                             </button>
                           </div>
                         ) : null}
-
-                        {/* Endpoint summary */}
-                        <p className="fg-provider-detail-meta" style={{ marginTop: "var(--fg-space-2)" }}>
-                          {providerEndpointSummary(selectedDraft)}
-                        </p>
-
-                        {/* Navigation links */}
-                        <div className="fg-provider-detail-nav">
-                          <Link className="fg-nav-link" to={withInstanceScope(CONTROL_PLANE_ROUTES.harness, instanceId)}>
-                            Run provider probe
-                          </Link>
-                          <Link className="fg-nav-link" to={withInstanceScope(CONTROL_PLANE_ROUTES.providerTargets, instanceId)}>
-                            Provider Targets
-                          </Link>
-                          <Link className="fg-nav-link" to={withInstanceScope(CONTROL_PLANE_ROUTES.oauthTargets, instanceId)}>
-                            OAuth Targets
-                          </Link>
-                        </div>
 
                         <ActionFeedbackNotice feedback={data.actionFeedback} />
                       </div>

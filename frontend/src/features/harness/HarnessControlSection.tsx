@@ -116,12 +116,9 @@ export function HarnessControlSection({
 
   return (
     <>
-      {/* ─── Status Hero ─── */}
+      {/* ─── Status Bar (stats in page template summaryItems) ─── */}
       <HarnessStatusHero
         summary={harnessStatus}
-        profileCount={data.profiles.length}
-        runCount={data.runSummary.total}
-        templateCount={data.templates.length}
       />
 
       {/* ─── 3-Column Workspace ─── */}
@@ -223,29 +220,6 @@ export function HarnessControlSection({
             />
           </div>
         </div>
-      </div>
-
-      {/* ─── Adjacent surfaces ─── */}
-      <div className="ff-nav-links fg-mt-sm">
-        <span className="fg-detail-label">Related pages:</span>
-        <a
-          className="fg-nav-link"
-          href={withInstanceScope(CONTROL_PLANE_ROUTES.dashboard, instanceId)}
-        >
-          Setup progress
-        </a>
-        <a
-          className="fg-nav-link"
-          href={withInstanceScope(CONTROL_PLANE_ROUTES.providers, instanceId)}
-        >
-          Providers
-        </a>
-        <a
-          className="fg-nav-link"
-          href={logSurfaceLink}
-        >
-          Logs
-        </a>
       </div>
 
       {/* ─── Run History ─── */}

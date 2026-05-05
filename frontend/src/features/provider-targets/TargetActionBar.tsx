@@ -1,13 +1,9 @@
 import { useState } from "react";
-import { Link } from "react-router-dom";
 
-import { CONTROL_PLANE_ROUTES } from "../../app/navigation";
-import { withInstanceScope } from "../../app/tenantScope";
 import type { CapabilityFilter, TargetStatusFilter } from "./types";
 import { titleCase } from "./utils";
 
 type TargetActionBarProps = {
-  instanceId: string | null;
   canReadTargets: boolean;
   onRefresh: () => void;
 
@@ -37,7 +33,6 @@ type TargetActionBarProps = {
  * Filters are collapsed by default unless one is active.
  */
 export function TargetActionBar({
-  instanceId,
   canReadTargets,
   onRefresh,
   providerFilter,
@@ -76,45 +71,6 @@ export function TargetActionBar({
           <button type="button" onClick={onRefresh} disabled={!canReadTargets}>
             Refresh
           </button>
-        </div>
-      </div>
-
-      <div className="ff-operator-actions-row">
-        <div className="ff-operator-actions-group">
-          <strong className="ff-operator-actions-label">Diagnostics</strong>
-          <Link
-            className="fg-nav-link"
-            to={withInstanceScope(CONTROL_PLANE_ROUTES.providerHealthRuns, instanceId)}
-          >
-            Provider Health
-          </Link>
-          <Link
-            className="fg-nav-link"
-            to={withInstanceScope(`${CONTROL_PLANE_ROUTES.routing}#routing-dry-run`, instanceId)}
-          >
-            Routing Dry Run
-          </Link>
-        </div>
-        <div className="ff-operator-actions-group ff-operator-actions-group-secondary">
-          <strong className="ff-operator-actions-label">Related pages</strong>
-          <Link
-            className="fg-nav-link"
-            to={withInstanceScope(CONTROL_PLANE_ROUTES.dashboard, instanceId)}
-          >
-            Setup progress
-          </Link>
-          <Link
-            className="fg-nav-link"
-            to={withInstanceScope(CONTROL_PLANE_ROUTES.models, instanceId)}
-          >
-            Models
-          </Link>
-          <Link
-            className="fg-nav-link"
-            to={withInstanceScope(CONTROL_PLANE_ROUTES.routing, instanceId)}
-          >
-            Routing
-          </Link>
         </div>
       </div>
 

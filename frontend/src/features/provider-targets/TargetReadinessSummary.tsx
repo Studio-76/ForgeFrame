@@ -1,4 +1,3 @@
-import { StatusBadge } from "../../components/ui/StatusBadge";
 import type { ProviderTargetRecord, ReadinessSummary } from "./types";
 import { contractStatusForTarget } from "./utils";
 
@@ -8,8 +7,10 @@ type TargetReadinessSummaryProps = {
 };
 
 /**
- * Compact readiness summary with a dominant remediation callout
- * when no targets are runtime-ready.
+ * Compact remediation callout when targets are not runtime-ready.
+ * Summary metrics (total, runtime-ready, enabled) are rendered by
+ * the RegistryManagementPage template — this section adds only
+ * the contextual callout and recommended next action.
  */
 export function TargetReadinessSummary({ summary, targets }: TargetReadinessSummaryProps) {
   const hasRuntimeReady = summary.runtimeReadyCount > 0;
@@ -20,10 +21,14 @@ export function TargetReadinessSummary({ summary, targets }: TargetReadinessSumm
     (t) => contractStatusForTarget(t) === "needs-health-check" && t.enabled,
   );
 
+  if (!anyBlockers && !hasRuntimeReady) {
+    return null;
+  }
+
   return (
-    <section className="fg-stack" aria-label="Target readiness summary">
+    <section aria-label="Target readiness summary">
       {/* Dominant remediation callout — shown when no target is runtime-ready */}
-      {anyBlockers && targets.length > 0 ? (
+      {anyBlockers ? (
         <div className="ff-remediation-callout">
           <div className="ff-remediation-callout-header">
             <span className="ff-remediation-callout-icon" aria-hidden="true">⚠</span>
@@ -47,7 +52,7 @@ export function TargetReadinessSummary({ summary, targets }: TargetReadinessSumm
             </div>
           ) : null}
         </div>
-      ) : hasRuntimeReady ? (
+      ) : (
         <div className="ff-remediation-callout ff-remediation-callout-ok">
           <div className="ff-remediation-callout-header">
             <span className="ff-remediation-callout-icon" aria-hidden="true">✓</span>
@@ -57,57 +62,7 @@ export function TargetReadinessSummary({ summary, targets }: TargetReadinessSumm
             </div>
           </div>
         </div>
-      ) : null}
-
-      <div className="ff-summary-strip">
-        <article className="ff-summary-card">
-          <div className="ff-summary-card-header">
-            <span className="ff-summary-label">Total targets</span>
-          </div>
-          <strong className="ff-summary-value">{summary.totalTargets}</strong>
-          <p className="ff-summary-meta">
-            {summary.enabledCount} enabled
-          </p>
-        </article>
-
-        <article className="ff-summary-card">
-          <div className="ff-summary-card-header">
-            <span className="ff-summary-label">Runtime ready</span>
-            <StatusBadge tone={hasRuntimeReady ? "success" : "warning"} status={hasRuntimeReady ? "ready" : "blocked"}>
-              {hasRuntimeReady ? "Ready" : "Not ready"}
-            </StatusBadge>
-          </div>
-          <strong className="ff-summary-value">
-            {summary.runtimeReadyCount}
-            <span className="ff-summary-value-muted">/{summary.totalTargets}</span>
-          </strong>
-          <p className="ff-summary-meta">
-            {hasRuntimeReady
-              ? "Targets can receive runtime traffic"
-              : summary.totalTargets > 0
-                ? "No targets are dispatchable"
-                : "No targets configured"}
-          </p>
-        </article>
-
-        {anyBlockers ? (
-          <article className="ff-summary-card ff-summary-card-urgent">
-            <div className="ff-summary-card-header">
-              <span className="ff-summary-label">Primary blocker</span>
-            </div>
-            <strong className="ff-summary-value">{summary.primaryBlocker}</strong>
-          </article>
-        ) : null}
-
-        {summary.nextAction ? (
-          <article className="ff-summary-card">
-            <div className="ff-summary-card-header">
-              <span className="ff-summary-label">Next action</span>
-            </div>
-            <strong className="ff-summary-value">{summary.nextAction}</strong>
-          </article>
-        ) : null}
-      </div>
+      )}
     </section>
   );
 }
