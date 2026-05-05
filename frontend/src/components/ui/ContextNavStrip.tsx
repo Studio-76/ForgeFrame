@@ -1,5 +1,8 @@
 import { Link } from "react-router-dom";
 
+import type { UxMetadata } from "./types";
+import { uxAttributes } from "./types";
+
 /**
  * A single navigation item in a ContextNavStrip.
  */
@@ -28,6 +31,8 @@ export type ContextNavStripProps = {
   compact?: boolean;
   /** Additional CSS class names. */
   className?: string;
+  /** Optional UX metadata for review tooling. */
+  ux?: UxMetadata;
 };
 
 /**
@@ -55,13 +60,14 @@ export function ContextNavStrip({
   label = "Related pages",
   compact = false,
   className = "",
+  ux,
 }: ContextNavStripProps) {
   if (items.length === 0) {
     return null;
   }
 
   return (
-    <nav className={`ff-context-nav${className ? ` ${className}` : ""}`} aria-label={label}>
+    <nav className={`ff-context-nav${className ? ` ${className}` : ""}`} aria-label={label} {...(ux ? uxAttributes(ux) : {})}>
       {!compact && label ? (
         <span className="ff-context-nav-label">{label}</span>
       ) : null}

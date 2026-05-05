@@ -1,5 +1,8 @@
 import type { ReactNode } from "react";
 
+import type { UxMetadata } from "./types";
+import { uxAttributes } from "./types";
+
 /**
  * A generic content section with optional title, description, and actions.
  *
@@ -19,6 +22,7 @@ export function Section({
   actions,
   children,
   className = "",
+  ux,
 }: {
   title?: ReactNode;
   description?: ReactNode;
@@ -26,9 +30,11 @@ export function Section({
   actions?: ReactNode;
   children?: ReactNode;
   className?: string;
+  /** Optional UX metadata for review tooling. */
+  ux?: UxMetadata;
 }) {
   return (
-    <section className={`fg-card ff-table-card ${className}`}>
+    <section className={`fg-card ff-table-card ${className}`} {...(ux ? uxAttributes(ux) : {})}>
       {title || description || actions ? (
         <div className="ff-table-card-header">
           <div className="flex flex-col gap-0.5">

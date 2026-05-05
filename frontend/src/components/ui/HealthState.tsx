@@ -1,5 +1,5 @@
-import type { StatusTone } from "./types";
-import { toneToTailwind } from "./types";
+import type { StatusTone, UxMetadata } from "./types";
+import { toneToTailwind, uxAttributes } from "./types";
 
 /**
  * A compact health indicator showing a name + status dot + value.
@@ -18,16 +18,19 @@ export function HealthState({
   tone = "neutral",
   value,
   meta,
+  ux,
 }: {
   label: string;
   tone?: StatusTone;
   value?: string;
   meta?: string;
+  /** Optional UX metadata for review tooling. */
+  ux?: UxMetadata;
 }) {
   const classes = toneToTailwind(tone);
 
   return (
-    <div className="ff-summary-card inline-flex flex-col gap-0.5">
+    <div className="ff-summary-card inline-flex flex-col gap-0.5" {...(ux ? uxAttributes(ux) : {})}>
       <span className="ff-summary-header flex items-center gap-1.5 text-meta text-muted font-medium uppercase tracking-wider">
         <span
           aria-hidden="true"

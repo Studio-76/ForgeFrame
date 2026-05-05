@@ -34,6 +34,10 @@ export type {
 } from "./types";
 export { toneToTailwind } from "./types";
 
+// ── UX Metadata ──────────────────────────────────────
+export type { UxMetadata } from "./types";
+export { uxAttributes } from "./types";
+
 // ── Shared models (Action, Status, Attention) ─────────
 export type {
   Action,

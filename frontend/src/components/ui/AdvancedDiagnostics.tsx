@@ -20,7 +20,8 @@
 
 import { useCallback, type ReactNode } from "react";
 
-import type { StatusTone } from "./types";
+import type { StatusTone, UxMetadata } from "./types";
+import { uxAttributes } from "./types";
 import { StatusBadge } from "./StatusBadge";
 import { usePanelStore } from "../../store";
 
@@ -50,6 +51,8 @@ export type AdvancedDiagnosticsProps = {
    * survive re-renders from a different part of the UI.
    */
   panelId?: string;
+  /** Optional UX metadata for review tooling. */
+  ux?: UxMetadata;
 };
 
 /**
@@ -83,6 +86,7 @@ export function AdvancedDiagnostics({
   statusKey,
   compact = false,
   panelId,
+  ux,
 }: AdvancedDiagnosticsProps) {
   // When panelId is provided, sync expansion with the shared panel store.
   const diagnosticsExpanded = usePanelStore(
@@ -106,6 +110,7 @@ export function AdvancedDiagnostics({
       className={`ff-advanced-diagnostics${compact ? " ff-advanced-diagnostics--compact" : ""}`}
       open={isOpen}
       onToggle={handleToggle}
+      {...(ux ? uxAttributes(ux) : {})}
     >
       <summary>
         <span className="ff-advanced-diagnostics-copy">

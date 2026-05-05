@@ -1,5 +1,8 @@
 import type { ReactNode } from "react";
 
+import type { UxMetadata } from "./types";
+import { uxAttributes } from "./types";
+
 /**
  * A structured empty state with clear messaging and recommended actions.
  *
@@ -26,6 +29,7 @@ export function EmptyState({
   secondaryAction,
   icon,
   compact = false,
+  ux,
 }: {
   title: string;
   description?: string;
@@ -37,10 +41,12 @@ export function EmptyState({
   icon?: ReactNode;
   /** Compact variant for use inside tables and cards. */
   compact?: boolean;
+  /** Optional UX metadata for review tooling. */
+  ux?: UxMetadata;
 }) {
   if (compact) {
     return (
-      <div className="flex flex-col items-center justify-center py-8 px-4 text-center">
+      <div className="flex flex-col items-center justify-center py-8 px-4 text-center" {...(ux ? uxAttributes(ux) : {})}>
         {icon ? <div className="mb-3 text-muted">{icon}</div> : null}
         <p className="text-body text-muted font-medium">{title}</p>
         {description ? <p className="text-meta text-muted mt-1">{description}</p> : null}
@@ -53,6 +59,7 @@ export function EmptyState({
     <div
       className="ff-state-block flex flex-col items-center justify-center py-8 px-6 text-center"
       data-state="empty"
+      {...(ux ? uxAttributes(ux) : {})}
     >
       {icon ? <div className="mb-4 text-muted opacity-60">{icon}</div> : null}
       <strong className="text-body text-primary font-semibold">{title}</strong>

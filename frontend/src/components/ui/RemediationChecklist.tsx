@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 
-import type { StatusTone } from "./types";
+import type { StatusTone, UxMetadata } from "./types";
+import { uxAttributes } from "./types";
 
 /**
  * A single step in a remediation or readiness checklist.
@@ -27,6 +28,8 @@ export type ChecklistProps = {
   steps: ChecklistStep[];
   /** Visual mode. */
   variant?: "remediation" | "readiness" | "gate";
+  /** Optional UX metadata for review tooling. */
+  ux?: UxMetadata;
 };
 
 /**
@@ -50,13 +53,14 @@ export function RemediationChecklist({
   title,
   steps,
   variant = "remediation",
+  ux,
 }: ChecklistProps) {
   if (steps.length === 0) {
     return null;
   }
 
   return (
-    <div className="flex flex-col gap-2">
+    <div className="flex flex-col gap-2" {...(ux ? uxAttributes(ux) : {})}>
       {title ? (
         typeof title === "string" ? (
           <strong className="text-body text-primary font-semibold">{title}</strong>

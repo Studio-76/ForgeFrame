@@ -1,5 +1,8 @@
 import type { ReactNode } from "react";
 
+import type { UxMetadata } from "./types";
+import { uxAttributes } from "./types";
+
 /**
  * An action bar with grouped controls, typically rendered at the top
  * of a section or detail panel.
@@ -19,14 +22,17 @@ export function ActionBar({
   description,
   actions,
   children,
+  ux,
 }: {
   title?: ReactNode;
   description?: ReactNode;
   actions?: ReactNode;
   children?: ReactNode;
+  /** Optional UX metadata for review tooling. */
+  ux?: UxMetadata;
 }) {
   return (
-    <section className="ff-action-bar">
+    <section className="ff-action-bar" {...(ux ? uxAttributes(ux) : {})}>
       {title || description || actions ? (
         <div className="ff-action-bar-header">
           <div className="ff-action-bar-copy">

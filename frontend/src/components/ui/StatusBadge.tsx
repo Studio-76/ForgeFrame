@@ -1,4 +1,5 @@
-import type { StatusTone } from "./types";
+import type { StatusTone, UxMetadata } from "./types";
+import { uxAttributes } from "./types";
 
 /** Re-exported for backward compatibility. Prefer importing from `"./types"` or the UI barrel. */
 export type { StatusTone };
@@ -21,6 +22,8 @@ export type StatusBadgeProps = {
   children: React.ReactNode;
   tone?: StatusTone;
   status?: string | null;
+  /** Optional UX metadata for review tooling. */
+  ux?: UxMetadata;
 };
 
 function normalizeStatus(status: string | null | undefined): string | null {
@@ -38,7 +41,7 @@ export function resolveStatusTone(status: string | null | undefined, fallback: S
   return STATUS_TONE_BY_STATE[normalized as keyof typeof STATUS_TONE_BY_STATE] ?? fallback;
 }
 
-export function StatusBadge({ children, tone, status }: StatusBadgeProps) {
+export function StatusBadge({ children, tone, status, ux }: StatusBadgeProps) {
   const normalizedStatus = normalizeStatus(status);
   const resolvedTone = tone ?? resolveStatusTone(normalizedStatus);
 
@@ -47,6 +50,7 @@ export function StatusBadge({ children, tone, status }: StatusBadgeProps) {
       className="ff-status-badge"
       data-tone={resolvedTone}
       {...(normalizedStatus ? { "data-state": normalizedStatus.replace(/_/g, "-") } : {})}
+      {...(ux ? uxAttributes(ux) : {})}
     >
       {children}
     </span>
