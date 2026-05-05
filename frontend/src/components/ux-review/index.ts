@@ -55,3 +55,22 @@ export {
   copyToClipboard,
   downloadAsFile,
 } from "./export-utils";
+
+// ── Automated UX Rule Warnings ──────────────────────────
+
+export type {
+  UxRuleId,
+  UxRuleWarning,
+  UxRuleWarningSeverity,
+  UxRuleConfig,
+  UxRulesConfig,
+  UxRuleDefinition,
+} from "./ux-rules";
+
+export {
+  UX_RULE_LABELS,
+  RULE_DEFINITIONS,
+  getDefaultRulesConfig,
+  mergeRulesConfig,
+  scanPageForUxWarnings,
+} from "./ux-rules";

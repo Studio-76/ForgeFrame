@@ -264,6 +264,27 @@ export interface UxReviewContextValue {
   exportJson: (route?: string) => string;
   /** Export annotations as Markdown (optionally filtered to route). */
   exportMarkdown: (route?: string) => string;
+
+  // ── Automated UX Rule Warnings ──────────────────────────
+
+  /** All rule warnings detected on the current page (excluding dismissed). */
+  pageRuleWarnings: import("./ux-rules").UxRuleWarning[];
+  /** Count of rule warnings on the current page. */
+  pageRuleWarningCount: number;
+  /** Current rules configuration. */
+  rulesConfig: import("./ux-rules").UxRulesConfig;
+  /** Dismiss a specific rule warning by ID. */
+  dismissWarning: (warningId: string) => void;
+  /** Restore a previously dismissed warning. */
+  restoreWarning: (warningId: string) => void;
+  /** Convert an automated warning into a saved annotation (with optional reason). */
+  convertWarningToAnnotation: (
+    warning: import("./ux-rules").UxRuleWarning,
+  ) => void;
+  /** Update the rules configuration (partial merge). */
+  updateRulesConfig: (config: Partial<import("./ux-rules").UxRulesConfig>) => void;
+  /** Re-run the rule scanner for the current page. */
+  reRunRules: () => void;
 }
 
 // ── Export Instructions ─────────────────────────────────

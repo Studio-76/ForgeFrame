@@ -23,6 +23,8 @@ import type {
   UxReviewContextValue,
 } from "./types";
 import { UX_ISSUE_LABELS, UX_SEVERITY_LABELS } from "./types";
+import type { UxRuleId, UxRuleWarning } from "./ux-rules";
+import { RULE_DEFINITIONS, UX_RULE_LABELS } from "./ux-rules";
 import { copyToClipboard, downloadAsFile } from "./export-utils";
 
 /** Width of the side panel in pixels. */
@@ -79,9 +81,17 @@ export function UxReviewPanel({ context }: UxReviewPanelProps) {
     clearSelection,
     clearAnnotations,
     exportJson,
+    pageRuleWarnings,
+    pageRuleWarningCount,
+    rulesConfig,
+    dismissWarning,
+    restoreWarning,
+    convertWarningToAnnotation,
+    updateRulesConfig,
+    reRunRules,
   } = context;
   const [form, setForm] = useState<AnnotationForm>(INITIAL_FORM);
-  const [panelTab, setPanelTab] = useState<"form" | "list">("form");
+  const [panelTab, setPanelTab] = useState<"annotate" | "history" | "warnings" | "rules-settings">("annotate");
   const [copied, setCopied] = useState(false);
   const [exportMenuOpen, setExportMenuOpen] = useState(false);
   const [clearMenuOpen, setClearMenuOpen] = useState(false);
@@ -284,19 +294,42 @@ export function UxReviewPanel({ context }: UxReviewPanelProps) {
             flexShrink: 0,
           }}
         >
-          <TabButton active={panelTab === "form"} onClick={() => { setPanelTab("form"); setEditingId(null); }}>
+          <TabButton active={panelTab === "annotate"} onClick={() => { setPanelTab("annotate"); setEditingId(null); }}>
             Annotate
           </TabButton>
-          <TabButton active={panelTab === "list"} onClick={() => setPanelTab("list")}>
+          <TabButton active={panelTab === "history"} onClick={() => setPanelTab("history")}>
             History ({pageAnnotationCount})
+          </TabButton>
+          <TabButton
+            active={panelTab === "warnings" || panelTab === "rules-settings"}
+            onClick={() => setPanelTab("warnings")}
+            style={{ position: "relative" }}
+          >
+            Warnings
+            {pageRuleWarningCount > 0 && (
+              <span
+                style={{
+                  marginLeft: "4px",
+                  background: "#f59e0b",
+                  color: "#0b101b",
+                  fontSize: "10px",
+                  fontWeight: 700,
+                  borderRadius: "8px",
+                  padding: "1px 6px",
+                  lineHeight: "14px",
+                }}
+              >
+                {pageRuleWarningCount}
+              </span>
+            )}
           </TabButton>
         </div>
 
         {/* ── Tab Content ── */}
         <div style={{ flex: 1, overflowY: "auto", padding: "12px 16px" }}>
-          {panelTab === "form" ? (
+          {panelTab === "annotate" ? (
             <AnnotationFormSection form={form} onChange={setForm} onAdd={handleAdd} formId={formId} />
-          ) : (
+          ) : panelTab === "history" ? (
             <AnnotationListSection
               annotations={pageAnnotations}
               onRemove={removeAnnotation}
@@ -304,7 +337,23 @@ export function UxReviewPanel({ context }: UxReviewPanelProps) {
               editingId={editingId}
               setEditingId={setEditingId}
             />
-          )}
+          ) : panelTab === "warnings" ? (
+            <WarningsSection
+              warnings={pageRuleWarnings}
+              rulesConfig={rulesConfig}
+              onDismiss={dismissWarning}
+              onRestore={restoreWarning}
+              onConvertToAnnotation={convertWarningToAnnotation}
+              onRescan={reRunRules}
+              onOpenSettings={() => setPanelTab("rules-settings")}
+            />
+          ) : panelTab === "rules-settings" ? (
+            <RulesSettingsSection
+              rulesConfig={rulesConfig}
+              onUpdateConfig={updateRulesConfig}
+              onBack={() => setPanelTab("warnings")}
+            />
+          ) : null}
         </div>
 
         {/* ── Footer Actions ── */}
@@ -525,8 +574,8 @@ function renderRow(label: string, value: string, mono?: boolean): React.ReactNod
   );
 }
 
-/** Tab button for switching between form and history views. */
-function TabButton({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
+/** Tab button for switching between panel views. */
+function TabButton({ active, onClick, style, children }: { active: boolean; onClick: () => void; style?: React.CSSProperties; children: React.ReactNode }) {
   return (
     <button
       onClick={onClick}
@@ -542,6 +591,7 @@ function TabButton({ active, onClick, children }: { active: boolean; onClick: ()
         fontWeight: active ? 600 : 400,
         fontFamily: "'Inter', system-ui, sans-serif",
         transition: "all 0.15s ease",
+        ...style,
       }}
     >
       {children}
@@ -1023,5 +1073,509 @@ function SeverityBadge({ severity }: { severity: UxAnnotationSeverity }) {
         flexShrink: 0,
       }}
     />
+  );
+}
+
+// ── Warnings Section ──────────────────────────────────
+
+/**
+ * Props for WarningsSection component.
+ */
+interface WarningsSectionProps {
+  warnings: UxRuleWarning[];
+  rulesConfig: import("./ux-rules").UxRulesConfig;
+  onDismiss: (warningId: string) => void;
+  onRestore: (warningId: string) => void;
+  onConvertToAnnotation: (warning: UxRuleWarning) => void;
+  onRescan: () => void;
+  onOpenSettings: () => void;
+}
+
+/**
+ * Displays automated UX rule warnings with dismiss and convert-to-annotation actions.
+ */
+function WarningsSection({
+  warnings,
+  onDismiss,
+  onRestore,
+  onConvertToAnnotation,
+  onRescan,
+  onOpenSettings,
+}: WarningsSectionProps) {
+  const [showDismissed, setShowDismissed] = useState(false);
+
+  // ── Toolbar ──
+  const toolbar = (
+    <div
+      style={{
+        display: "flex",
+        gap: "6px",
+        marginBottom: "10px",
+        flexWrap: "wrap",
+      }}
+    >
+      <MiniButton onClick={onRescan} title="Re-scan the page for UX rule violations">
+        Rescan
+      </MiniButton>
+      <MiniButton onClick={onOpenSettings} title="Configure which rules are active">
+        Settings
+      </MiniButton>
+      <MiniButton
+        onClick={() => setShowDismissed((s) => !s)}
+        variant={showDismissed ? "primary" : "default"}
+        title={showDismissed ? "Hide dismissed warnings" : "Show dismissed warnings"}
+      >
+        {showDismissed ? "Hide dismissed" : "Show dismissed"}
+      </MiniButton>
+    </div>
+  );
+
+  // ── Empty state ──
+  if (warnings.length === 0 && !showDismissed) {
+    return (
+      <div>
+        {toolbar}
+        <div
+          style={{
+            textAlign: "center",
+            padding: "24px 0",
+            color: "#64748b",
+            fontSize: "13px",
+          }}
+        >
+          No UX rule violations detected.
+        </div>
+      </div>
+    );
+  }
+
+  // ── Warning cards ──
+  const displayWarnings = showDismissed
+    ? warnings
+    : warnings.filter((w) => !w.isDismissed);
+
+  if (displayWarnings.length === 0) {
+    return (
+      <div>
+        {toolbar}
+        <div
+          style={{
+            textAlign: "center",
+            padding: "24px 0",
+            color: "#64748b",
+            fontSize: "13px",
+          }}
+        >
+          All warnings dismissed. Click "Show dismissed" to review or restore them.
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      {toolbar}
+      <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+        {displayWarnings.map((w) => (
+          <WarningCard
+            key={w.id}
+            warning={w}
+            onDismiss={onDismiss}
+            onRestore={onRestore}
+            onConvertToAnnotation={onConvertToAnnotation}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Single warning card showing rule name, severity, message, fix, and action buttons.
+ */
+function WarningCard({
+  warning: w,
+  onDismiss,
+  onRestore,
+  onConvertToAnnotation,
+}: {
+  warning: UxRuleWarning;
+  onDismiss: (id: string) => void;
+  onRestore: (id: string) => void;
+  onConvertToAnnotation: (w: UxRuleWarning) => void;
+}) {
+  const severityColorMap: Record<string, string> = {
+    critical: "#ef4444",
+    major: "#f59e0b",
+    minor: "#06b6d4",
+    suggestion: "#22c55e",
+  };
+  const color = severityColorMap[w.severity] ?? "#64748b";
+  const isDismissed = w.isDismissed;
+
+  return (
+    <div
+      style={{
+        background: isDismissed ? "rgba(71, 85, 105, 0.1)" : "#0b101b",
+        border: `1px solid ${isDismissed ? "#334155" : `${color}33`}`,
+        borderLeft: `3px solid ${isDismissed ? "#475569" : color}`,
+        borderRadius: "6px",
+        padding: "10px 12px",
+        fontSize: "12px",
+        opacity: isDismissed ? 0.6 : 1,
+      }}
+    >
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "flex-start",
+          marginBottom: 4,
+        }}
+      >
+        <div style={{ display: "flex", gap: "6px", alignItems: "center", flex: 1 }}>
+          <SeverityBadge severity={w.severity} />
+          <span style={{ color: "#06b6d4", fontWeight: 600, fontSize: "11px", textTransform: "uppercase", letterSpacing: "0.03em" }}>
+            {UX_RULE_LABELS[w.ruleId] ?? w.ruleId}
+          </span>
+          {w.count !== undefined && w.count > 1 && (
+            <span style={{ color: "#64748b", fontSize: "10px" }}>
+              ({w.count} el.)
+            </span>
+          )}
+          {isDismissed && (
+            <span style={{ color: "#64748b", fontSize: "10px", fontStyle: "italic" }}>
+              Dismissed
+            </span>
+          )}
+        </div>
+      </div>
+
+      <p style={{ margin: "0 0 6px", color: isDismissed ? "#64748b" : "#e2e8f0", lineHeight: 1.4, fontSize: "12px" }}>
+        {w.message}
+      </p>
+      <p style={{ margin: "0 0 6px", color: "#94a3b8", fontStyle: "italic", fontSize: "11px", lineHeight: 1.4 }}>
+        Fix: {w.suggestedFix}
+      </p>
+      {w.affectedElement.uxId && (
+        <div style={{ color: "#64748b", fontSize: "10px", marginBottom: 6 }}>
+          Element: {w.affectedElement.uxId}
+          {w.affectedElement.uxComponent ? ` (${w.affectedElement.uxComponent})` : ""}
+          {w.affectedElement.uxRole ? ` [${w.affectedElement.uxRole}]` : ""}
+        </div>
+      )}
+      <div style={{ display: "flex", gap: "6px", justifyContent: "flex-end", borderTop: "1px solid #1e293b", paddingTop: "6px" }}>
+        {isDismissed ? (
+          <MiniButton
+            onClick={() => onRestore(w.id)}
+            title="Restore this warning"
+            variant="primary"
+          >
+            Restore
+          </MiniButton>
+        ) : (
+          <>
+            <MiniButton
+              onClick={() => onConvertToAnnotation(w)}
+              title="Save this warning as an annotation"
+              variant="primary"
+            >
+              + Annotation
+            </MiniButton>
+            <MiniButton
+              onClick={() => onDismiss(w.id)}
+              title="Dismiss this warning"
+              variant="danger"
+            >
+              Dismiss
+            </MiniButton>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Small compact button for the warnings section toolbar.
+ */
+function MiniButton({
+  onClick,
+  variant,
+  title,
+  children,
+}: {
+  onClick: () => void;
+  variant?: "default" | "primary" | "danger";
+  title?: string;
+  children: React.ReactNode;
+}) {
+  const colors: Record<string, { bg: string; color: string; hoverBg: string }> = {
+    default: { bg: "#1e293b", color: "#94a3b8", hoverBg: "#334155" },
+    primary: { bg: "rgba(6, 182, 212, 0.15)", color: "#06b6d4", hoverBg: "rgba(6, 182, 212, 0.25)" },
+    danger: { bg: "rgba(239, 68, 68, 0.15)", color: "#ef4444", hoverBg: "rgba(239, 68, 68, 0.25)" },
+  };
+  const c = colors[variant ?? "default"];
+
+  return (
+    <button
+      onClick={onClick}
+      title={title}
+      style={{
+        padding: "4px 10px",
+        background: c.bg,
+        border: "none",
+        borderRadius: "4px",
+        color: c.color,
+        cursor: "pointer",
+        fontSize: "11px",
+        fontWeight: 500,
+        fontFamily: "'Inter', system-ui, sans-serif",
+        transition: "background 0.15s ease",
+        whiteSpace: "nowrap",
+      }}
+      onMouseEnter={(e) => { e.currentTarget.style.background = c.hoverBg; }}
+      onMouseLeave={(e) => { e.currentTarget.style.background = c.bg; }}
+    >
+      {children}
+    </button>
+  );
+}
+
+// ── Rules Settings Section ──────────────────────────────
+
+/**
+ * Props for RulesSettingsSection component.
+ */
+interface RulesSettingsSectionProps {
+  rulesConfig: import("./ux-rules").UxRulesConfig;
+  onUpdateConfig: (config: Partial<import("./ux-rules").UxRulesConfig>) => void;
+  onBack: () => void;
+}
+
+/**
+ * Sub-panel for configuring rule enable/disable, thresholds, and ignore lists.
+ */
+function RulesSettingsSection({
+  rulesConfig,
+  onUpdateConfig,
+  onBack,
+}: RulesSettingsSectionProps) {
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+      {/* Header */}
+      <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "4px" }}>
+        <button
+          onClick={onBack}
+          aria-label="Back to warnings"
+          style={{
+            background: "none",
+            border: "none",
+            color: "#06b6d4",
+            cursor: "pointer",
+            fontSize: "16px",
+            padding: "2px 6px",
+            lineHeight: 1,
+          }}
+        >
+          &larr;
+        </button>
+        <h3 style={{ margin: 0, fontSize: "13px", fontWeight: 600, color: "#e2e8f0" }}>
+          Rules Settings
+        </h3>
+      </div>
+
+      <p style={{ margin: 0, fontSize: "11px", color: "#64748b", lineHeight: 1.4 }}>
+        Enable or disable individual rules, adjust thresholds, and suppress specific elements.
+      </p>
+
+      {/* Rule list */}
+      <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+        {RULE_DEFINITIONS.map((def) => {
+          const cfg = rulesConfig[def.id];
+          if (!cfg) return null;
+          return (
+            <RuleSettingsCard
+              key={def.id}
+              ruleId={def.id}
+              definition={def}
+              config={cfg}
+              onUpdate={(partial) =>
+                onUpdateConfig({ [def.id]: { ...cfg, ...partial } })
+              }
+            />
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Single rule configuration card inside the settings panel.
+ */
+function RuleSettingsCard({
+  ruleId,
+  definition: def,
+  config,
+  onUpdate,
+}: {
+  ruleId: UxRuleId;
+  definition: import("./ux-rules").UxRuleDefinition;
+  config: import("./ux-rules").UxRuleConfig;
+  onUpdate: (partial: Partial<import("./ux-rules").UxRuleConfig>) => void;
+}) {
+  const [ignoreInput, setIgnoreInput] = useState<string>(
+    (config.ignoreUxIds ?? []).join(", "),
+  );
+
+  const handleIgnoreBlur = useCallback(() => {
+    const ids = ignoreInput
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean);
+    onUpdate({ ignoreUxIds: ids });
+  }, [ignoreInput, onUpdate]);
+
+  return (
+    <div
+      style={{
+        background: "#0b101b",
+        border: "1px solid #1e293b",
+        borderRadius: "6px",
+        padding: "10px 12px",
+        fontSize: "12px",
+      }}
+    >
+      {/* Header row: toggle + name */}
+      <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "6px" }}>
+        {/* Toggle */}
+        <label
+          style={{
+            position: "relative",
+            display: "inline-block",
+            width: "32px",
+            height: "18px",
+            flexShrink: 0,
+            cursor: "pointer",
+          }}
+        >
+          <input
+            type="checkbox"
+            checked={config.enabled}
+            onChange={(e) => onUpdate({ enabled: e.target.checked })}
+            style={{ opacity: 0, width: 0, height: 0, position: "absolute" }}
+          />
+          <span
+            style={{
+              position: "absolute",
+              inset: 0,
+              background: config.enabled ? "#06b6d4" : "#334155",
+              borderRadius: "18px",
+              transition: "background 0.2s",
+            }}
+          >
+            <span
+              style={{
+                position: "absolute",
+                top: "2px",
+                left: config.enabled ? "16px" : "2px",
+                width: "14px",
+                height: "14px",
+                background: "#e2e8f0",
+                borderRadius: "50%",
+                transition: "left 0.2s",
+              }}
+            />
+          </span>
+        </label>
+
+        <div style={{ flex: 1 }}>
+          <div style={{ color: "#06b6d4", fontWeight: 600, fontSize: "11px", textTransform: "uppercase", letterSpacing: "0.03em" }}>
+            {def.name}
+          </div>
+          <div style={{ color: "#64748b", fontSize: "10px", marginTop: "1px" }}>
+            {def.description}
+          </div>
+        </div>
+      </div>
+
+      {/* Threshold */}
+      {def.defaultThreshold > 0 && (
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: "8px",
+            marginBottom: "6px",
+          }}
+        >
+          <label
+            style={{
+              fontSize: "10px",
+              color: "#94a3b8",
+              textTransform: "uppercase",
+              letterSpacing: "0.04em",
+              flexShrink: 0,
+              width: "72px",
+            }}
+          >
+            Threshold
+          </label>
+          <input
+            type="number"
+            min={0}
+            max={100}
+            value={config.threshold ?? def.defaultThreshold}
+            onChange={(e) =>
+              onUpdate({ threshold: Math.max(0, parseInt(e.target.value, 10) || 0) })
+            }
+            style={{
+              width: "60px",
+              padding: "3px 6px",
+              background: "#1e293b",
+              border: "1px solid #334155",
+              borderRadius: "4px",
+              color: "#e2e8f0",
+              fontSize: "11px",
+              fontFamily: "'Inter', system-ui, sans-serif",
+            }}
+          />
+        </div>
+      )}
+
+      {/* Ignore UX IDs */}
+      <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+        <label
+          style={{
+            fontSize: "10px",
+            color: "#94a3b8",
+            textTransform: "uppercase",
+            letterSpacing: "0.04em",
+            flexShrink: 0,
+            width: "72px",
+          }}
+        >
+          Ignore IDs
+        </label>
+        <input
+          type="text"
+          value={ignoreInput}
+          onChange={(e) => setIgnoreInput(e.target.value)}
+          onBlur={handleIgnoreBlur}
+          placeholder="ux-id-1, ux-id-2"
+          style={{
+            flex: 1,
+            padding: "3px 6px",
+            background: "#1e293b",
+            border: "1px solid #334155",
+            borderRadius: "4px",
+            color: "#e2e8f0",
+            fontSize: "11px",
+            fontFamily: "'Inter', system-ui, sans-serif",
+          }}
+        />
+      </div>
+    </div>
   );
 }

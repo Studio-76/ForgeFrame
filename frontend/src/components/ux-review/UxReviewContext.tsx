@@ -40,8 +40,14 @@ import type {
   UxIssueType,
   UxReviewContextValue,
 } from "./types";
+import type { UxRuleId, UxRuleWarning, UxRulesConfig } from "./ux-rules";
+import {
+  getDefaultRulesConfig,
+  scanPageForUxWarnings,
+} from "./ux-rules";
 import { UxReviewOverlay } from "./UxReviewOverlay";
 import { UxReviewPanel } from "./UxReviewPanel";
+import { captureElement } from "./types";
 import { formatAnnotationsJson, formatAnnotationsMarkdown } from "./export-utils";
 
 /**
@@ -76,6 +82,14 @@ const NULL_CONTEXT: UxReviewContextValue = {
   exportAnnotations: () => "[]",
   exportJson: () => "[]",
   exportMarkdown: () => "",
+  pageRuleWarnings: [],
+  pageRuleWarningCount: 0,
+  rulesConfig: getDefaultRulesConfig(),
+  dismissWarning: () => { /* noop */ },
+  restoreWarning: () => { /* noop */ },
+  convertWarningToAnnotation: () => { /* noop */ },
+  updateRulesConfig: () => { /* noop */ },
+  reRunRules: () => { /* noop */ },
 };
 
 /**
@@ -161,6 +175,49 @@ function persistAnnotations(annotations: UxAnnotation[]): void {
   }
 }
 
+// ── Rules Config persistence ────────────────────────────
+
+/**
+ * localStorage key for the UX rules configuration.
+ */
+const RULES_CONFIG_KEY = "forgeframe-ux-review-rules-config";
+
+/**
+ * Loads the persisted rules configuration from localStorage.
+ * Falls back to defaults on any error. Merges persisted over defaults
+ * so that any new rules added in code are still present.
+ */
+function loadRulesConfig(): UxRulesConfig {
+  try {
+    const raw = localStorage.getItem(RULES_CONFIG_KEY);
+    if (!raw) return getDefaultRulesConfig();
+    const parsed = JSON.parse(raw) as Partial<UxRulesConfig>;
+    const defaults = getDefaultRulesConfig();
+    // Merge persisted values over defaults, keeping defaults for
+    // any rules not present in the persisted config
+    for (const [key, value] of Object.entries(parsed)) {
+      if (value !== undefined) {
+        const ruleId = key as UxRuleId;
+        defaults[ruleId] = { ...defaults[ruleId], ...value };
+      }
+    }
+    return defaults;
+  } catch {
+    return getDefaultRulesConfig();
+  }
+}
+
+/**
+ * Persists the rules configuration to localStorage.
+ */
+function persistRulesConfig(config: UxRulesConfig): void {
+  try {
+    localStorage.setItem(RULES_CONFIG_KEY, JSON.stringify(config));
+  } catch {
+    // silently ignore
+  }
+}
+
 /**
  * Helper to generate a unique annotation ID.
  */
@@ -196,6 +253,16 @@ export function UxReviewProvider({ children }: { readonly children: ReactNode })
     return [];
   });
 
+  // ── Automated UX Rule Warnings state ─────────────────
+  const [rulesConfig, setRulesConfig] = useState<UxRulesConfig>(() => {
+    if (UX_REVIEW_AVAILABLE) {
+      return loadRulesConfig();
+    }
+    return getDefaultRulesConfig();
+  });
+  const [ruleWarnings, setRuleWarnings] = useState<UxRuleWarning[]>([]);
+  const [dismissedWarningIds, setDismissedWarningIds] = useState<Set<string>>(new Set());
+
   /** Ref used to track if annotations have been initialised for this session. */
   const hasShownBanner = useRef(false);
 
@@ -223,6 +290,59 @@ export function UxReviewProvider({ children }: { readonly children: ReactNode })
     }
   }, [enabled]);
 
+  /* Scan trigger — increments to force re-scan */
+  const [scanTrigger, setScanTrigger] = useState(0);
+
+  /* Re-scan when URL changes (SPA navigation) */
+  useEffect(() => {
+    if (!UX_REVIEW_AVAILABLE || !enabled) return;
+
+    // Handle back/forward navigation
+    const handlePopState = () => {
+      setRuleWarnings([]);
+      setScanTrigger((prev) => prev + 1);
+    };
+
+    // Handle programmatic pushState/replaceState (common in SPAs)
+    const originalPushState = history.pushState.bind(history);
+    const originalReplaceState = history.replaceState.bind(history);
+
+    history.pushState = function pushState(...args) {
+      originalPushState(...args);
+      setRuleWarnings([]);
+      setScanTrigger((prev) => prev + 1);
+    };
+
+    history.replaceState = function replaceState(...args) {
+      originalReplaceState(...args);
+      setRuleWarnings([]);
+      setScanTrigger((prev) => prev + 1);
+    };
+
+    window.addEventListener("popstate", handlePopState);
+
+    return () => {
+      window.removeEventListener("popstate", handlePopState);
+      history.pushState = originalPushState;
+      history.replaceState = originalReplaceState;
+    };
+  }, [enabled]);
+
+  /* Scan for UX rule warnings when trigger, config, or dismissed IDs change */
+  useEffect(() => {
+    if (!UX_REVIEW_AVAILABLE || !enabled) return;
+
+    const timer = setTimeout(() => {
+      const warnings = scanPageForUxWarnings({
+        config: rulesConfig,
+        dismissedIds: dismissedWarningIds,
+      });
+      setRuleWarnings(warnings);
+    }, 300);
+
+    return () => clearTimeout(timer);
+  }, [enabled, rulesConfig, dismissedWarningIds, scanTrigger]);
+
   /* Persist annotations to localStorage whenever they change (in review mode) */
   useEffect(() => {
     if (UX_REVIEW_AVAILABLE) {
@@ -236,6 +356,9 @@ export function UxReviewProvider({ children }: { readonly children: ReactNode })
     () => annotations.filter((a) => a.route === window.location.pathname),
     [annotations],
   );
+
+  /** Rule warnings are already per-page (scanner uses current document). */
+  const pageRuleWarnings = ruleWarnings;
 
   // ── Actions ────────────────────────────────────────────────────
 
@@ -296,6 +419,76 @@ export function UxReviewProvider({ children }: { readonly children: ReactNode })
     }
   }, []);
 
+  // ── Automated UX Rule Warning Actions ─────────────────────────
+
+  const dismissWarning = useCallback((warningId: string) => {
+    setDismissedWarningIds((prev) => new Set(prev).add(warningId));
+  }, []);
+
+  const restoreWarning = useCallback((warningId: string) => {
+    setDismissedWarningIds((prev) => {
+      const next = new Set(prev);
+      next.delete(warningId);
+      return next;
+    });
+  }, []);
+
+  const convertWarningToAnnotation = useCallback(
+    (warning: UxRuleWarning) => {
+      // Try to find the warning's affected element in the DOM
+      let capturedTarget = selectedElement;
+      if (warning.affectedElement.selector) {
+        const targetEl = document.querySelector(warning.affectedElement.selector);
+        if (targetEl) {
+          const captured = captureElement(targetEl);
+          if (captured) capturedTarget = captured;
+        }
+      }
+
+      if (!capturedTarget) return;
+
+      const annotation: UxAnnotation = {
+        id: generateAnnotationId(),
+        element: capturedTarget,
+        issueType: "other",
+        severity: warning.severity,
+        comment: `[Auto-detected] ${warning.message}\n\nSuggested fix: ${warning.suggestedFix}`,
+        expectedChange: warning.suggestedFix,
+        createdAt: new Date().toISOString(),
+        viewportSize: { width: window.innerWidth, height: window.innerHeight },
+        route: window.location.pathname,
+        pageTitle: document.title,
+      };
+      setAnnotations((prev) => [...prev, annotation]);
+      // Auto-dismiss the warning after conversion
+      setDismissedWarningIds((prev) => new Set(prev).add(warning.id));
+    },
+    [selectedElement],
+  );
+
+  const updateRulesConfig = useCallback(
+    (partial: Partial<UxRulesConfig>) => {
+      setRulesConfig((prev) => {
+        const next = { ...prev };
+        for (const [key, value] of Object.entries(partial)) {
+          if (value !== undefined) {
+            const ruleId = key as UxRuleId;
+            next[ruleId] = { ...next[ruleId], ...value };
+          }
+        }
+        if (UX_REVIEW_AVAILABLE) {
+          persistRulesConfig(next);
+        }
+        return next;
+      });
+    },
+    [],
+  );
+
+  const reRunRules = useCallback(() => {
+    setScanTrigger((prev) => prev + 1);
+  }, []);
+
   // ── Export functions ──────────────────────────────────────────
   //
   // These are plain function declarations (not useCallback'd) that read
@@ -342,6 +535,14 @@ export function UxReviewProvider({ children }: { readonly children: ReactNode })
       exportAnnotations: exportAnnotationsFn,
       exportJson: exportJsonFn,
       exportMarkdown: exportMarkdownFn,
+      pageRuleWarnings,
+      pageRuleWarningCount: pageRuleWarnings.length,
+      rulesConfig,
+      dismissWarning,
+      restoreWarning,
+      convertWarningToAnnotation,
+      updateRulesConfig,
+      reRunRules,
     }),
     [
       enabled,
@@ -349,6 +550,8 @@ export function UxReviewProvider({ children }: { readonly children: ReactNode })
       hoveredElement,
       annotations,
       pageAnnotations,
+      pageRuleWarnings,
+      rulesConfig,
       selectElement,
       setHovered,
       addAnnotation,
@@ -356,6 +559,11 @@ export function UxReviewProvider({ children }: { readonly children: ReactNode })
       updateAnnotation,
       clearSelection,
       clearAnnotations,
+      dismissWarning,
+      restoreWarning,
+      convertWarningToAnnotation,
+      updateRulesConfig,
+      reRunRules,
     ],
   );
 
