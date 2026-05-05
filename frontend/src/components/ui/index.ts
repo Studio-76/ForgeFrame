@@ -34,6 +34,13 @@ export type {
 } from "./types";
 export { toneToTailwind } from "./types";
 
+// ── UX Metadata ──────────────────────────────────────
+export type { UxMetadata } from "./types";
+export { uxAttributes } from "./types";
+
+// ── UX Review Mode (dev-only) ─────────────────────────
+export { UxReviewProvider, UxReviewOverlay, UxReviewPanel, useUxReview } from "../ux-review";
+
 // ── Shared models (Action, Status, Attention) ─────────
 export type {
   Action,
@@ -77,6 +84,8 @@ export type { PageHeaderBadge } from "./PageHeader";
 export { Section } from "./Section";
 export { DetailPanel } from "./DetailPanel";
 export { DetailDrawer } from "./DetailDrawer";
+export { TwoPaneOperationalLayout } from "./TwoPaneLayout";
+export type { TwoPaneOperationalLayoutProps } from "./TwoPaneLayout";
 export { EmptyState } from "./EmptyState";
 export { AdvancedDiagnostics } from "./AdvancedDiagnostics";
 export type { AdvancedDiagnosticsProps } from "./AdvancedDiagnostics";

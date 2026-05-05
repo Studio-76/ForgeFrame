@@ -1,6 +1,8 @@
 import type { ReactNode } from "react";
 
 import { StatusBadge, type StatusTone } from "./StatusBadge";
+import type { UxMetadata } from "./types";
+import { uxAttributes } from "./types";
 
 export type SummaryStripItem = {
   key: string;
@@ -13,11 +15,13 @@ export type SummaryStripItem = {
 
 export type SummaryStripProps = {
   items: SummaryStripItem[];
+  /** Optional UX metadata for review tooling. */
+  ux?: UxMetadata;
 };
 
-export function SummaryStrip({ items }: SummaryStripProps) {
+export function SummaryStrip({ items, ux }: SummaryStripProps) {
   return (
-    <section className="ff-summary-strip mb-2" aria-label="Summary metrics">
+    <section className="ff-summary-strip mb-2" aria-label="Summary metrics" {...(ux ? uxAttributes(ux) : {})}>
       {items.map((item) => (
         <article key={item.key} className="ff-summary-card">
           <div className="ff-summary-card-header">

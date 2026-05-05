@@ -2,7 +2,8 @@ import { useRef } from "react";
 import { useButton, useFocusRing, mergeProps } from "react-aria";
 import type { AriaButtonProps } from "react-aria";
 
-import type { Density, Size } from "./types";
+import type { Density, Size, UxMetadata } from "./types";
+import { uxAttributes } from "./types";
 
 /**
  * Variant of the ForgeFrame button.
@@ -31,6 +32,8 @@ export type ButtonProps = AriaButtonProps & {
   role?: string;
   /** Data attribute for tooltip system. */
   "data-tooltip"?: string;
+  /** Optional UX metadata for review tooling. */
+  ux?: UxMetadata;
 };
 
 /**
@@ -82,6 +85,7 @@ export function Button({
   title,
   role,
   "data-tooltip": dataTooltip,
+  ux,
   ...props
 }: ButtonProps) {
   const ref = useRef<HTMLButtonElement>(null);
@@ -96,6 +100,7 @@ export function Button({
       role={role}
       data-tooltip={dataTooltip}
       className={`${variantClasses(variant, size, density)} ${className}${isFocusVisible ? " ff-focus-visible" : ""}`}
+      {...(ux ? uxAttributes(ux) : {})}
     >
       {props.children}
     </button>

@@ -246,6 +246,111 @@ path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 PY
 }
 
+forgeframe_ensure_gum() {
+  if command -v gum &>/dev/null; then
+    return 0
+  fi
+
+  local gum_dir="${FORGEFRAME_GUM_DIR:-$ROOT_DIR/.install/bin}"
+  local gum_bin="$gum_dir/gum"
+  if [[ -x "$gum_bin" ]]; then
+    PATH="$gum_dir:$PATH"
+    export PATH
+    return 0
+  fi
+
+  if [[ "${FORGEFRAME_NON_INTERACTIVE:-0}" == "1" ]]; then
+    printf '[forgeframe-env][WARN] Gum is not installed and --non-interactive forbids automatic installation. Some interactive features will be unavailable.\n' >&2
+    return 1
+  fi
+
+  if [[ ! -t 0 ]]; then
+    printf '[forgeframe-env][WARN] Not a TTY — cannot install gum interactively. Set FORGEFRAME_NON_INTERACTIVE=1 to suppress this warning.\n' >&2
+    return 1
+  fi
+
+  local gum_version="0.17.0"
+  local os arch ext="tar.gz"
+
+  case "$(uname -s)" in
+    Linux)  os="Linux" ;;
+    Darwin) os="Darwin" ;;
+    *)
+      printf '[forgeframe-env][ERROR] Unsupported OS: %s\n' "$(uname -s)" >&2
+      return 1
+      ;;
+  esac
+
+  case "$(uname -m)" in
+    x86_64|amd64) arch="x86_64" ;;
+    aarch64|arm64) arch="arm64" ;;
+    *)
+      printf '[forgeframe-env][ERROR] Unsupported architecture: %s\n' "$(uname -m)" >&2
+      return 1
+      ;;
+  esac
+
+  local download_url="https://github.com/charmbracelet/gum/releases/download/v${gum_version}/gum_${gum_version}_${os}_${arch}.tar.gz"
+  local tmp_dir install_tmp
+  install_tmp="${ROOT_DIR:-.}/.install/.tmp"
+  mkdir -p "$install_tmp"
+  tmp_dir="$(mktemp -d "$install_tmp/forgeframe-gum.XXXXXX")" || return 1
+
+  printf '[forgeframe-env] Downloading gum v%s (%s/%s) to %s...\n' "$gum_version" "$os" "$arch" "$gum_dir" >&2
+
+  if command -v curl &>/dev/null; then
+    curl -fsSL "$download_url" -o "$tmp_dir/gum.tar.gz" || {
+      printf '[forgeframe-env][ERROR] Failed to download gum from %s\n' "$download_url" >&2
+      rm -rf "$tmp_dir"
+      return 1
+    }
+  elif command -v wget &>/dev/null; then
+    wget -q "$download_url" -O "$tmp_dir/gum.tar.gz" || {
+      printf '[forgeframe-env][ERROR] Failed to download gum from %s\n' "$download_url" >&2
+      rm -rf "$tmp_dir"
+      return 1
+    }
+  else
+    printf '[forgeframe-env][ERROR] Neither curl nor wget is available. Cannot download gum.\n' >&2
+    rm -rf "$tmp_dir"
+    return 1
+  fi
+
+  mkdir -p "$gum_dir"
+  tar -xzf "$tmp_dir/gum.tar.gz" -C "$tmp_dir" || {
+    printf '[forgeframe-env][ERROR] Failed to extract gum archive.\n' >&2
+    rm -rf "$tmp_dir"
+    return 1
+  }
+
+  # Find the gum binary — may be at root of tarball or inside a versioned directory
+  local found_gum
+  found_gum="$(find "$tmp_dir" -maxdepth 2 -type f -name 'gum' ! -name '*.md' ! -name '*.txt' 2>/dev/null | head -1)"
+  if [[ -z "$found_gum" || ! -f "$found_gum" ]]; then
+    printf '[forgeframe-env][ERROR] Gum binary not found in extracted archive.\n' >&2
+    ls -la "$tmp_dir/" >&2
+    rm -rf "$tmp_dir"
+    return 1
+  fi
+
+  mv "$found_gum" "$gum_bin" || {
+    printf '[forgeframe-env][ERROR] Failed to move gum binary to %s.\n' "$gum_bin" >&2
+    rm -rf "$tmp_dir"
+    return 1
+  }
+  chmod +x "$gum_bin"
+  rm -rf "$tmp_dir"
+
+  if [[ ! -x "$gum_bin" ]]; then
+    printf '[forgeframe-env][ERROR] Gum binary at %s is not executable.\n' "$gum_bin" >&2
+    return 1
+  fi
+
+  PATH="$gum_dir:$PATH"
+  export PATH
+  printf '[forgeframe-env] Gum v%s installed to %s\n' "$gum_version" "$gum_bin" >&2
+}
+
 forgeframe_login_and_rotate_bootstrap_admin_if_required() {
   local base_url="$1"
   local env_file="$2"

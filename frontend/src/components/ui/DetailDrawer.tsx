@@ -5,6 +5,8 @@ import type { AriaDialogProps } from "react-aria";
 import { Button } from "./Button";
 import { StatusBadge } from "./StatusBadge";
 import { CloseIcon } from "../layout/icons";
+import type { UxMetadata } from "./types";
+import { uxAttributes } from "./types";
 
 export type DetailDrawerProperty = {
   label: string;
@@ -21,6 +23,8 @@ export type DetailDrawerProps = {
   actions?: ReactNode;
   children?: ReactNode;
   onClose: () => void;
+  /** Optional UX metadata for review tooling. */
+  ux?: UxMetadata;
 };
 
 /**
@@ -38,6 +42,7 @@ export function DetailDrawer({
   actions,
   children,
   onClose,
+  ux,
 }: DetailDrawerProps) {
   if (!open) {
     return null;
@@ -52,6 +57,7 @@ export function DetailDrawer({
       properties={properties}
       actions={actions}
       onClose={onClose}
+      ux={ux}
     >
       {children}
     </DrawerContent>
@@ -67,6 +73,7 @@ type DrawerContentProps = {
   actions?: ReactNode;
   children?: ReactNode;
   onClose: () => void;
+  ux?: UxMetadata;
 };
 
 /**
@@ -82,6 +89,7 @@ function DrawerContent({
   actions,
   children,
   onClose,
+  ux,
 }: DrawerContentProps) {
   const ref = useRef<HTMLDivElement>(null);
   const dialogProps: AriaDialogProps = { "aria-label": title };
@@ -103,6 +111,7 @@ function DrawerContent({
           ref={ref}
           className="ff-detail-drawer"
           aria-label={title}
+          {...(ux ? uxAttributes(ux) : {})}
         >
           <div className="ff-drawer-header">
             <div>

@@ -11,6 +11,7 @@ import { getInstanceIdFromSearchParams, withInstanceScope } from "../app/tenantS
 import { useInstanceCatalog } from "../app/useInstanceCatalog";
 import { InstanceScopeCard } from "../components/InstanceScopeCard";
 import { Button } from "../components/ui/Button";
+import { DetailPanel } from "../components/ui/DetailPanel";
 import { IncidentResponsePage } from "../components/page-templates";
 import type { Action } from "../components/ui/models/action";
 import type { AttentionPayload } from "../components/ui/models/attention";
@@ -405,18 +406,25 @@ export function HealthPage() {
     },
   ], [handleRefresh]);
 
-  // ── Selected item detail ───────────────────────────────────
+  // ── Selected item detail (not sticky — two-pane layout provides sidebar position) ──
   const selectedItemContent = selectedGroup ? (
-    <article className="fg-card">
-      <div className="fg-panel-heading">
-        <div>
-          <h3>{selectedGroup.title} — Details</h3>
-          <p className="fg-muted">{selectedGroup.summary}</p>
+    <DetailPanel
+      title={`${selectedGroup.title} — Details`}
+      description={selectedGroup.summary}
+      status={labelForStatus(selectedGroup.status)}
+      statusTone={toneForStatus(selectedGroup.status)}
+      statusKey={selectedGroup.status}
+      actions={
+        <div className="flex gap-2">
+          <Button variant="navigation" onPress={() => navigate(selectedGroup.nextRoute.to)}>
+            {selectedGroup.nextRoute.label}
+          </Button>
+          <Button variant="tertiary" onPress={() => setSelectedGroup(null)}>
+            Close
+          </Button>
         </div>
-        <span className="fg-pill" data-tone={toneForStatus(selectedGroup.status)}>
-          {labelForStatus(selectedGroup.status)}
-        </span>
-      </div>
+      }
+    >
       <div className="fg-detail-grid">
         <p>Last checked: {selectedGroup.lastChecked}</p>
         <p>Error: {selectedGroup.error}</p>
@@ -427,15 +435,7 @@ export function HealthPage() {
           <li key={line}>{line}</li>
         ))}
       </ul>
-      <div className="flex gap-2 mt-3">
-        <Button variant="navigation" onPress={() => navigate(selectedGroup.nextRoute.to)}>
-          {selectedGroup.nextRoute.label}
-        </Button>
-        <Button variant="tertiary" onPress={() => setSelectedGroup(null)}>
-          Close
-        </Button>
-      </div>
-    </article>
+    </DetailPanel>
   ) : null;
 
   // ── Diagnostics content ────────────────────────────────────
@@ -465,6 +465,8 @@ export function HealthPage() {
       actions={actions}
       selectedItemContent={selectedItemContent}
       hasSelection={selectedGroup !== null}
+      useTwoPaneLayout
+      detailPanelTitle="Health group detail"
       diagnostics={diagnosticsContent}
       diagnosticsTitle="Health diagnostics"
     >

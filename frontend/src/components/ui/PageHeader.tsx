@@ -1,6 +1,8 @@
 import type { ReactNode } from "react";
 
 import { StatusBadge, type StatusTone } from "./StatusBadge";
+import type { UxMetadata } from "./types";
+import { uxAttributes } from "./types";
 
 /**
  * A status badge descriptor for the page header.
@@ -18,6 +20,8 @@ export type PageHeaderProps = {
   badges?: PageHeaderBadge[];
   actions?: ReactNode;
   children?: ReactNode;
+  /** Optional UX metadata for review tooling. */
+  ux?: UxMetadata;
 };
 
 /**
@@ -43,9 +47,10 @@ export function PageHeader({
   badges = [],
   actions,
   children,
+  ux,
 }: PageHeaderProps) {
   return (
-    <header className="ff-page-header-panel">
+    <header className="ff-page-header-panel" {...(ux ? uxAttributes(ux) : {})}>
       <div className="ff-page-header-main">
         <div className="ff-page-header-copy">
           {eyebrow ? (

@@ -6,6 +6,8 @@
 
 import { EmptyState as NewEmptyState } from "./EmptyState";
 import { StatusBadge } from "./StatusBadge";
+import type { UxMetadata } from "./types";
+import { uxAttributes } from "./types";
 
 /**
  * Enhanced empty state with primary + secondary actions.
@@ -15,10 +17,13 @@ export function EmptyState({
   title,
   description,
   action,
+  ux,
 }: {
   title: string;
   description?: string;
   action?: React.ReactNode;
+  /** Optional UX metadata for review tooling. */
+  ux?: UxMetadata;
 }) {
   return (
     <NewEmptyState
@@ -26,6 +31,7 @@ export function EmptyState({
       description={description}
       primaryAction={action}
       compact
+      ux={ux}
     />
   );
 }
@@ -34,6 +40,8 @@ export type StateBlockProps = {
   title: string;
   description?: string;
   action?: React.ReactNode;
+  /** Optional UX metadata for review tooling. */
+  ux?: UxMetadata;
 };
 
 export type BlockedStateProps = StateBlockProps & {
@@ -47,9 +55,10 @@ function StateFrame({
   description,
   action,
   badge,
+  ux,
 }: StateBlockProps & { state: string; badge?: React.ReactNode }) {
   return (
-    <div className="ff-state-block" data-state={state}>
+    <div className="ff-state-block" data-state={state} {...(ux ? uxAttributes(ux) : {})}>
       {badge ? <div className="ff-state-badge">{badge}</div> : null}
       <strong>{title}</strong>
       {description ? <p>{description}</p> : null}
@@ -62,16 +71,16 @@ function StateFrame({
  * @deprecated Use EmptyState from ./EmptyState for new code.
  * Kept for backward compatibility with existing pages.
  */
-export function ErrorState({ title, description, action }: StateBlockProps) {
-  return <StateFrame state="error" title={title} description={description} action={action} />;
+export function ErrorState({ title, description, action, ux }: StateBlockProps) {
+  return <StateFrame state="error" title={title} description={description} action={action} ux={ux} />;
 }
 
 /**
  * Loading state skeleton block.
  */
-export function LoadingState({ title = "Loading", description }: Partial<StateBlockProps>) {
+export function LoadingState({ title = "Loading", description, ux }: Partial<StateBlockProps>) {
   return (
-    <div className="ff-state-block" data-state="loading">
+    <div className="ff-state-block" data-state="loading" {...(ux ? uxAttributes(ux) : {})}>
       <div className="ff-skeleton-row" />
       <strong>{title}</strong>
       {description ? <p>{description}</p> : null}
@@ -95,13 +104,14 @@ export function Skeleton({ rows = 3 }: { rows?: number }) {
 /**
  * Permission-limited state block.
  */
-export function PermissionState({ title, description, action }: StateBlockProps) {
+export function PermissionState({ title, description, action, ux }: StateBlockProps) {
   return (
     <StateFrame
       state="permission"
       title={title}
       description={description}
       action={action}
+      ux={ux}
       badge={<StatusBadge status="waiting_approval">Permission limited</StatusBadge>}
     />
   );
@@ -110,7 +120,7 @@ export function PermissionState({ title, description, action }: StateBlockProps)
 /**
  * Blocked state block with status badge.
  */
-export function BlockedState({ title, description, action, status = "blocked", badgeLabel }: BlockedStateProps) {
+export function BlockedState({ title, description, action, status = "blocked", badgeLabel, ux }: BlockedStateProps) {
   const normalizedStatus = status ?? "blocked";
 
   return (
@@ -119,6 +129,7 @@ export function BlockedState({ title, description, action, status = "blocked", b
       title={title}
       description={description}
       action={action}
+      ux={ux}
       badge={<StatusBadge status={normalizedStatus}>{badgeLabel ?? normalizedStatus.replace(/_/g, " ")}</StatusBadge>}
     />
   );

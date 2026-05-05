@@ -47,6 +47,12 @@ export type IncidentDetailContentProps = {
   detailNextStep: string;
   /** Scoped route links. */
   detailLinks: ResolvedRouteLink[];
+  /**
+   * Whether the inner DetailPanel should be sticky.
+   * Set to false when already inside a sticky sidebar (e.g., useTwoPaneLayout).
+   * Default: true
+   */
+  sticky?: boolean;
 };
 
 /**
@@ -65,6 +71,7 @@ export function IncidentDetailContent({
   detailEffect,
   detailNextStep,
   detailLinks,
+  sticky = true,
 }: IncidentDetailContentProps) {
   return (
     <DetailPanel
@@ -73,7 +80,7 @@ export function IncidentDetailContent({
       status={detailStatus}
       statusTone={detailTone}
       statusKey={detailStatusKey}
-      sticky
+      sticky={sticky}
       actions={
         <div className="fg-actions">
           {detailLinks.map((link) => (

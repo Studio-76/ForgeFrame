@@ -9,6 +9,7 @@ import { QueryProvider } from "./app/QueryProvider";
 import { RouteErrorBoundaryView } from "./app/RouteErrorBoundary";
 import "./theme/index.css";
 import { ThemeProvider } from "./theme/ThemeProvider";
+import { UxReviewProvider } from "./components/ux-review/UxReviewContext";
 import { LoginPage } from "./pages/LoginPage";
 
 const PasswordRotationPage = lazy(async () => import("./pages/PasswordRotationPage").then((module) => ({ default: module.PasswordRotationPage })));
@@ -218,10 +219,12 @@ const router = createBrowserRouter([
 
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <AppErrorBoundary>
-    <ThemeProvider>
-      <QueryProvider>
-        <RouterProvider router={router} />
-      </QueryProvider>
-    </ThemeProvider>
+    <UxReviewProvider>
+      <ThemeProvider>
+        <QueryProvider>
+          <RouterProvider router={router} />
+        </QueryProvider>
+      </ThemeProvider>
+    </UxReviewProvider>
   </AppErrorBoundary>,
 );

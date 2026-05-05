@@ -1,6 +1,8 @@
 import type { ReactNode } from "react";
 
 import { StatusBadge, type StatusTone } from "./StatusBadge";
+import type { UxMetadata } from "./types";
+import { uxAttributes } from "./types";
 
 export type DetailPanelProps = {
   title: ReactNode;
@@ -11,6 +13,8 @@ export type DetailPanelProps = {
   actions?: ReactNode;
   children?: ReactNode;
   sticky?: boolean;
+  /** Optional UX metadata for review tooling. */
+  ux?: UxMetadata;
 };
 
 export function DetailPanel({
@@ -22,9 +26,10 @@ export function DetailPanel({
   actions,
   children,
   sticky = false,
+  ux,
 }: DetailPanelProps) {
   return (
-    <aside className={`ff-detail-panel${sticky ? " is-sticky" : ""}`}>
+    <aside className={`ff-detail-panel${sticky ? " is-sticky" : ""}`} {...(ux ? uxAttributes(ux) : {})}>
       <div className="ff-detail-panel-header">
         <div className="ff-detail-panel-copy">
           <div className="ff-detail-panel-title-row">

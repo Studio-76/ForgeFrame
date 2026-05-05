@@ -1,0 +1,213 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://forgeframe.dev/schemas/ux-annotation-export.schema.json",
+  "title": "UX Annotation Export",
+  "description": "Schema for exported UX Review annotations consumed by coding agents.",
+  "type": "object",
+  "required": [
+    "schemaVersion",
+    "generatedAt",
+    "route",
+    "pageTitle",
+    "viewport",
+    "annotations",
+    "_instructions"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "type": "string",
+      "enum": ["1.0"],
+      "description": "Schema version for forwards-compatibility."
+    },
+    "generatedAt": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO-8601 timestamp of when the export was generated."
+    },
+    "route": {
+      "type": "string",
+      "description": "The page route these annotations belong to (or empty for all-session)."
+    },
+    "pageTitle": {
+      "type": "string",
+      "description": "Page title at time of export."
+    },
+    "viewport": {
+      "type": "object",
+      "required": ["width", "height"],
+      "properties": {
+        "width": {
+          "type": "number",
+          "minimum": 320,
+          "maximum": 7680
+        },
+        "height": {
+          "type": "number",
+          "minimum": 200,
+          "maximum": 4320
+        }
+      },
+      "additionalProperties": false,
+      "description": "Viewport dimensions at time of export."
+    },
+    "annotations": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/AnnotationRecord"
+      },
+      "description": "Flat annotation records."
+    },
+    "_instructions": {
+      "type": "string",
+      "minLength": 10,
+      "description": "Fixed instructions embedded in every export to guide downstream agents."
+    }
+  },
+  "additionalProperties": false,
+  "definitions": {
+    "AnnotationRecord": {
+      "type": "object",
+      "required": [
+        "id",
+        "route",
+        "pageTitle",
+        "uxId",
+        "issueType",
+        "severity",
+        "comment",
+        "selectorFallback",
+        "textSnapshot",
+        "boundingBox",
+        "createdAt"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^ux-ann-",
+          "description": "Unique identifier for this annotation."
+        },
+        "route": {
+          "type": "string",
+          "description": "Page route where the annotation was created."
+        },
+        "pageTitle": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Page title at annotation time."
+        },
+        "uxId": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Stable element identifier from data-ux-id."
+        },
+        "uxComponent": {
+          "type": "string",
+          "description": "Component type label."
+        },
+        "uxRole": {
+          "type": "string",
+          "description": "Semantic role within the page layout."
+        },
+        "uxActionKind": {
+          "type": "string",
+          "description": "Action category for this element."
+        },
+        "uxAttention": {
+          "type": "string",
+          "description": "Attention level for review prioritisation."
+        },
+        "issueType": {
+          "type": "string",
+          "enum": [
+            "too-large",
+            "too-prominent",
+            "wrong-action-hierarchy",
+            "navigation-looks-like-mutation",
+            "empty-looking-section",
+            "duplicate-information",
+            "raw-data-too-visible",
+            "diagnostics-too-prominent",
+            "needs-compact-representation",
+            "label-unclear",
+            "other"
+          ],
+          "description": "Category of the UX issue."
+        },
+        "severity": {
+          "type": "string",
+          "enum": ["critical", "major", "minor", "suggestion"],
+          "description": "Severity of the issue."
+        },
+        "comment": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Free-text reviewer comment."
+        },
+        "expectedChange": {
+          "type": "string",
+          "description": "Description of the expected change."
+        },
+        "selectorFallback": {
+          "type": "string",
+          "minLength": 1,
+          "description": "CSS selector to locate the element."
+        },
+        "textSnapshot": {
+          "type": "string",
+          "description": "Text content snapshot at annotation time."
+        },
+        "boundingBox": {
+          "type": ["object", "null"],
+          "required": ["x", "y", "width", "height"],
+          "properties": {
+            "x": { "type": "number" },
+            "y": { "type": "number" },
+            "width": { "type": "number", "minimum": 0 },
+            "height": { "type": "number", "minimum": 0 }
+          },
+          "additionalProperties": false,
+          "description": "Bounding box of the element at annotation time."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "ISO-8601 timestamp when the annotation was created."
+        },
+        "isResolved": {
+          "type": "boolean",
+          "description": "Whether this annotation has been resolved."
+        },
+        "resolvedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "ISO-8601 timestamp when the annotation was resolved."
+        },
+        "status": {
+          "type": "string",
+          "enum": ["open", "in_progress", "fixed", "wont_fix", "needs_design_decision"],
+          "description": "Lifecycle status of the annotation. Agents update this as they work."
+        },
+        "fixSummary": {
+          "type": "string",
+          "description": "Human-readable summary of what was changed (set when status is 'fixed')."
+        },
+        "filesChanged": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "List of files modified to fix this annotation."
+        },
+        "remainingNotes": {
+          "type": "string",
+          "description": "Any remaining notes or caveats about the fix."
+        },
+        "verificationStatus": {
+          "type": "string",
+          "description": "How the fix was verified (e.g., 'manual: dev server at 1440×900')."
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}

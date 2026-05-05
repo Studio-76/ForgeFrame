@@ -7,6 +7,7 @@ import type { SummaryStripItem } from "../ui/SummaryStrip";
 import { EmptyState } from "../ui/EmptyState";
 import { NextRecommendedAction } from "../ui/NextRecommendedAction";
 import { Button } from "../ui/Button";
+import { TwoPaneOperationalLayout } from "../ui/TwoPaneLayout";
 import type { Density } from "../ui/types";
 import type { Action } from "../ui/models/action";
 import { validateActions } from "../ui/models/action";
@@ -78,6 +79,18 @@ export type IncidentResponsePageProps = {
   selectedItemContent?: ReactNode;
   /** Whether an incident is selected. When true, renders selectedItemContent. */
   hasSelection?: boolean;
+  /**
+   * When true, renders the children and selectedItemContent in a side-by-side
+   * two-pane layout (children left, detail right) instead of detail below content.
+   * On screens narrower than 1024px the layout collapses to a single column.
+   * Default: false
+   */
+  useTwoPaneLayout?: boolean;
+  /**
+   * Title for the two-pane detail panel.
+   * Only used when useTwoPaneLayout is true.
+   */
+  detailPanelTitle?: string;
 
   // ── No-incidents empty state ─────────────────────────────
   /** When true, renders an empty "all clear" state. */
@@ -134,6 +147,8 @@ export function IncidentResponsePage({
   actions,
   selectedItemContent,
   hasSelection,
+  useTwoPaneLayout = false,
+  detailPanelTitle,
   noIncidents,
   noIncidentsConfig,
   diagnostics,
@@ -213,14 +228,24 @@ export function IncidentResponsePage({
           title={noIncidentsConfig?.title ?? "All systems operational"}
           description={noIncidentsConfig?.description ?? "No active incidents."}
         />
+      ) : useTwoPaneLayout && hasSelection && selectedItemContent ? (
+        <TwoPaneOperationalLayout
+          main={(
+            <Section className={compact ? "ff-dense" : undefined}>
+              {children}
+            </Section>
+          )}
+          sidebar={selectedItemContent}
+          stickySidebar
+        />
       ) : (
         <Section className={compact ? "ff-dense" : undefined}>
           {children}
         </Section>
       )}
 
-      {/* ── Detail panel ── */}
-      {hasSelection && selectedItemContent ? (
+      {/* ── Detail panel (below content, non-two-pane mode) ── */}
+      {!useTwoPaneLayout && hasSelection && selectedItemContent ? (
         <div className={`${compact ? "mt-3" : "mt-4"}`}>
           {selectedItemContent}
         </div>

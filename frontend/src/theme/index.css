@@ -29,6 +29,7 @@
 @import "./components/forms.css";
 @import "./components/tables.css";
 @import "./components/overlay.css";
+@import "./components/ux-review.css";
 
 /* Pages — feature-specific styles (order: general → specific) */
 @import "./pages/login.css";

@@ -150,3 +150,18 @@ AGENTS.md
 
 # Agent research output
 .spaeher/
+
+# -------------------------
+# .install/ — deployment state directory (systemd units, rendered configs)
+# Only ignore runtime data and files with generated credentials.
+# -------------------------
+.install/log/
+.install/lib/
+.install/bin/
+.install/.tmp/
+.install/etc/forgeframe.env
+
+# -------------------------
+# Backend local runtime state
+# -------------------------
+backend/.forgeframe/

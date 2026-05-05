@@ -94,6 +94,20 @@
   border-bottom: none;
 }
 
+/* Prevent narrow action stacks inside table cells */
+.fg-table td .fg-actions,
+.ff-data-table td .fg-actions {
+  flex-wrap: nowrap;
+}
+
+/* Keep "Review" action buttons compact inside tables */
+.fg-table td button,
+.ff-data-table td button {
+  white-space: nowrap;
+  font-size: var(--fg-type-size-meta);
+  padding: 0.35rem 0.65rem;
+}
+
 .fg-table-trigger {
   padding: 0.45rem 0.7rem;
 }

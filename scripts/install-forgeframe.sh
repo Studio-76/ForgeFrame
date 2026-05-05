@@ -31,6 +31,7 @@ PORT_INCREMENT="${FORGEFRAME_INSTALL_PORT_INCREMENT:-10}"
 APT_UPDATED=0
 SELECTED_PYTHON_BIN="${FORGEFRAME_PYTHON_BIN:-}"
 APT_GET=(apt-get -o APT::Sandbox::User=root)
+NON_INTERACTIVE="${FORGEFRAME_NON_INTERACTIVE:-0}"
 
 INSTALLER_PUBLIC_FQDN=""
 INSTALLER_ACME_EMAIL=""
@@ -1279,6 +1280,11 @@ guided_collect_inputs() {
 }
 
 collect_default_install_inputs() {
+  local default_fqdn="$(normalize_installer_value "${FORGEFRAME_PUBLIC_FQDN:-}")"
+  local default_acme_email="$(normalize_installer_value "${FORGEFRAME_PUBLIC_TLS_ACME_EMAIL:-}")"
+  local default_admin_username="$(normalize_installer_value "${FORGEFRAME_BOOTSTRAP_ADMIN_USERNAME:-admin}")"
+  local default_admin_password="$(normalize_installer_value "${FORGEFRAME_BOOTSTRAP_ADMIN_PASSWORD:-}")"
+  local default_ollama_url="$(normalize_installer_value "${FORGEFRAME_OLLAMA_BASE_URL:-}")"
   local default_api_port="$(normalize_installer_value "${FORGEFRAME_PORT:-8080}")"
   local default_pg_mode="$(normalize_installer_value "${FORGEFRAME_INSTALL_PG_MODE:-${FORGEFRAME_PG_MODE:-native}}")"
   local default_pg_host="$(normalize_installer_value "${FORGEFRAME_INSTALL_PG_HOST:-${FORGEFRAME_PG_HOST:-127.0.0.1}}")"
@@ -1308,6 +1314,11 @@ collect_default_install_inputs() {
       ;;
   esac
 
+  INSTALLER_PUBLIC_FQDN="$default_fqdn"
+  INSTALLER_ACME_EMAIL="$default_acme_email"
+  INSTALLER_ADMIN_USERNAME="$default_admin_username"
+  INSTALLER_ADMIN_PASSWORD="$default_admin_password"
+  INSTALLER_OLLAMA_BASE_URL="$default_ollama_url"
   INSTALLER_API_PORT="$(resolve_shifted_port "$default_api_port" "ForgeFrame internal API")"
   INSTALLER_PG_MODE="$default_pg_mode"
   INSTALLER_PG_HOST="$default_pg_host"
@@ -1326,6 +1337,7 @@ collect_default_install_inputs() {
       INSTALLER_PG_PORT="$(resolve_shifted_port "$default_pg_port" "Managed PostgreSQL")"
       ;;
     existing)
+      require_valid_port "$default_pg_port" "Existing PostgreSQL TCP port"
       INSTALLER_PG_PORT="$default_pg_port"
       ;;
     file)
@@ -1524,7 +1536,7 @@ if [[ ! -f "$ENV_FILE" ]]; then
 fi
 
 forgeframe_load_env_file "$ENV_FILE" >"$FORGEFRAME_NULL_DEVICE" 2>&1 || true
-if [[ "$GUIDED" == "1" ]]; then
+if [[ "$GUIDED" == "1" && "$NON_INTERACTIVE" != "1" ]]; then
   guided_collect_inputs
 else
   collect_default_install_inputs

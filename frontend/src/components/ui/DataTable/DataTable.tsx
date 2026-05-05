@@ -42,6 +42,8 @@ import type {
   TableFilterPreset,
 } from "./types";
 import { STANDARD_FILTER_PRESETS } from "./types";
+import type { UxMetadata } from "../types";
+import { uxAttributes } from "../types";
 
 // ── Props ───────────────────────────────────────────────
 
@@ -128,6 +130,8 @@ export type DataTableProps<T> = {
   showSearch?: boolean;
   /** Minimum search input width. */
   searchMinWidth?: string;
+  /** Optional UX metadata for review tooling. */
+  ux?: UxMetadata;
 };
 
 // ── Sort indicator icons ────────────────────────────────
@@ -400,6 +404,7 @@ export function DataTable<T extends Record<string, unknown>>({
   enableColumnVisibility = true,
   showSearch = true,
   searchMinWidth,
+  ux,
 }: DataTableProps<T>) {
   // ── Hidden columns state ──
   const [hiddenColumns, setHiddenColumns] = useState<Set<string>>(() => {
@@ -680,7 +685,7 @@ export function DataTable<T extends Record<string, unknown>>({
   // ── Main render ──
 
   return (
-    <section className="ff-table-card">
+    <section className="ff-table-card" {...(ux ? uxAttributes(ux) : {})}>
       {/* Title / header */}
       {title || description ? (
         <div className="ff-table-card-header">

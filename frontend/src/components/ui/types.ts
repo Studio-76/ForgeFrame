@@ -22,6 +22,70 @@ export type Priority = "critical" | "high" | "medium" | "low";
 /** Standard async load state. */
 export type LoadState = "idle" | "loading" | "success" | "error";
 
+// ── UX Metadata ─────────────────────────────────────────
+
+/**
+ * Dev-only UX metadata payload for review tooling.
+ *
+ * Each field maps to a `data-ux-*` attribute on the component's root
+ * element so that UX reviewers can identify elements on real pages
+ * and map annotations back to components or source areas.
+ *
+ * **Naming rules:**
+ * - `uxId` must be stable, human-readable, and include page/feature context.
+ * - Avoid generated random IDs.
+ * - Example: `"providers-related-pages"`, `"queues-primary-summary"`,
+ *   `"ingress-tls-diagnostics"`.
+ *
+ * **Safety constraint:**
+ * - Never expose secrets, tokens, raw payloads, customer data, logs,
+ *   evidence blobs, or sensitive backend values in UX metadata.
+ * - Metadata must remain safe for dev and review environments.
+ */
+export interface UxMetadata {
+  /** Stable, human-readable identifier. Must include page/feature context. */
+  uxId?: string;
+  /** Component type label (e.g. "PageHeader", "DataTable", "Button"). */
+  uxComponent?: string;
+  /** Semantic role within the page layout. */
+  uxRole?: string;
+  /** Page or feature identifier (e.g. "providers", "skills", "ingress-tls"). */
+  uxPage?: string;
+  /** Attention level for review prioritisation. */
+  uxAttention?: string;
+  /** Action category for this element. */
+  uxActionKind?: string;
+  /** Display density hint. */
+  uxDensity?: string;
+  /** Source file or area reference for traceability. */
+  uxSource?: string;
+}
+
+/**
+ * Converts a UxMetadata payload into a flat record of `data-ux-*`
+ * attributes suitable for spreading onto a DOM element.
+ *
+ * Only non-undefined fields are included — no empty attributes are emitted.
+ *
+ * @param ux - The metadata payload.
+ * @returns Record of `data-ux-*` attributes (keys only present when value
+ *          is defined).
+ */
+export function uxAttributes(
+  ux: UxMetadata,
+): Record<string, string> {
+  const attrs: Record<string, string> = {};
+  if (ux.uxId !== undefined) attrs["data-ux-id"] = ux.uxId;
+  if (ux.uxComponent !== undefined) attrs["data-ux-component"] = ux.uxComponent;
+  if (ux.uxRole !== undefined) attrs["data-ux-role"] = ux.uxRole;
+  if (ux.uxPage !== undefined) attrs["data-ux-page"] = ux.uxPage;
+  if (ux.uxAttention !== undefined) attrs["data-ux-attention"] = ux.uxAttention;
+  if (ux.uxActionKind !== undefined) attrs["data-ux-action-kind"] = ux.uxActionKind;
+  if (ux.uxDensity !== undefined) attrs["data-ux-density"] = ux.uxDensity;
+  if (ux.uxSource !== undefined) attrs["data-ux-source"] = ux.uxSource;
+  return attrs;
+}
+
 // SystemStatus and AttentionLevel are defined in models/status.ts and
 // models/attention.ts respectively. Import from "./models" or the ui barrel.
 

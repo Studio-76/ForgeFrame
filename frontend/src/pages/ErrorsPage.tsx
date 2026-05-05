@@ -301,9 +301,12 @@ export function ErrorsPage() {
           detailEffect={detailEffect}
           detailNextStep={detailNextStep}
           detailLinks={detailLinks}
+          sticky={false}
         />
       ) : undefined}
       hasSelection={state === "success" && selection !== null}
+      useTwoPaneLayout
+      detailPanelTitle="Incident detail"
       diagnostics={state === "success" && selection ? (
         <pre>{JSON.stringify(detailRawEvidence, null, 2)}</pre>
       ) : undefined}
@@ -338,18 +341,16 @@ export function ErrorsPage() {
             />
           </div>
 
-          <div className="ff-operator-layout">
-            <div className="ff-operator-main">
-              <article className="fg-card">
-                <div className="fg-panel-heading">
-                  <div>
-                    <h3>Incident triage by axis</h3>
-                    <p className="fg-muted">Each axis carries severity, incident count, first/last seen, current effect, next step, and direct route handoff. Unsupported axes stay explicit instead of pretending to be green.</p>
-                  </div>
-                </div>
+          <article className="fg-card">
+            <div className="fg-panel-heading">
+              <div>
+                <h3>Incident triage by axis</h3>
+                <p className="fg-muted">Each axis carries severity, incident count, first/last seen, current effect, next step, and direct route handoff. Unsupported axes stay explicit instead of pretending to be green.</p>
+              </div>
+            </div>
 
-                <div className="fg-table-wrap">
-                  <table className="fg-table" aria-label="Incident triage by axis">
+            <div className="fg-table-wrap">
+              <table className="fg-table" aria-label="Incident triage by axis">
                     <thead>
                       <tr>
                         <th>Axis</th>
@@ -513,8 +514,6 @@ export function ErrorsPage() {
                   </Link>
                 </div>
               </article>
-            </div>
-          </div>
         </>
       ) : null}
     </IncidentResponsePage>
