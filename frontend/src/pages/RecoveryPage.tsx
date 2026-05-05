@@ -1450,7 +1450,7 @@ export function RecoveryPage() {
           <div className="ff-operator-main">
             <DataTable
               title="Coverage summary"
-              description="Every protected data class shows backup target, last backup, last restore test, and a hard risk posture."
+              description="Protected data classes with backup targets and risk posture."
               data={coverageRows}
               columns={coverageColumns}
               rowKey={(row) => row.key}
@@ -1469,7 +1469,7 @@ export function RecoveryPage() {
             {blockedCoverageRows.length > 0 ? (
               <DataTable
                 title="Current recovery risks"
-                description="The hardest gaps surface here first so unprotected or untested classes are impossible to miss."
+                description="Hardest gaps surfaced first."
                 data={blockedCoverageRows}
                 columns={[
                   {
@@ -1508,7 +1508,7 @@ export function RecoveryPage() {
           <div className="ff-operator-sidebar">
             <DetailPanel
               title={selectedCoverage?.dataClass ?? "Coverage details"}
-              description={selectedCoverage ? "Selected data-class posture and the evidence behind it." : "Pick a data class to inspect coverage."}
+              description={selectedCoverage ? "Data-class posture and evidence." : "Select a data class to inspect."}
               status={selectedCoverage?.riskLabel}
               statusTone={selectedCoverage?.riskTone}
               statusKey={selectedCoverage?.statusKey}
@@ -1566,7 +1566,7 @@ export function RecoveryPage() {
           <div className="ff-operator-main">
             <DataTable
               title="Policies"
-              description="Policy inventory, freshness, source identity, and restore posture stay distinct from report imports."
+              description="Policy inventory with freshness, identity, and restore posture."
               data={overview.policies}
               columns={policyColumns}
               rowKey={(row) => row.policy.policy_id}
@@ -1637,7 +1637,7 @@ export function RecoveryPage() {
           <div className="ff-operator-main">
             <DataTable
               title="Backup Evidence"
-              description="Backup manifests are imported and tracked separately from restore tests."
+              description="Imported backup manifests per policy."
               data={backupRows}
               columns={backupColumns}
               rowKey={(row) => row.key}
@@ -1729,7 +1729,7 @@ export function RecoveryPage() {
           <div className="ff-operator-main">
             <DataTable
               title="Restore Evidence"
-              description="Restore proof is tracked separately so a backup-only posture never reads as green."
+              description="Imported restore reports per policy."
               data={restoreRows}
               columns={restoreColumns}
               rowKey={(row) => row.key}
@@ -1822,7 +1822,7 @@ export function RecoveryPage() {
           <div className="ff-operator-main">
             <DataTable
               title="Upgrade / Rollback"
-              description="No-loss, queue-drain, rollback class, and source-identity stability stay visible as release evidence."
+              description="Upgrade proof with rollback and no-loss evidence."
               data={upgradeRows}
               columns={upgradeColumns}
               rowKey={(row) => row.key}

@@ -1,6 +1,6 @@
 import type { RoutingControlPlaneResponse } from "../../api/domain/routing";
 import { StatusBadge } from "../../components/ui/StatusBadge";
-import { liveStatus, nextStepLabel, nextStepTone, routingBlockers, titleCase, toneForStatus } from "./utils";
+import { liveStatus, routingBlockers, titleCase, toneForStatus } from "./utils";
 import type { RoutingHealth } from "./types";
 
 /**
@@ -13,21 +13,14 @@ export type RoutingStatusHeroProps = {
 };
 
 /**
- * Status hero that shows routing health, next action, and quick-access buttons.
- * When routing is healthy it displays a clear no-action-needed message with
- * suggested optional actions so the page feels intentional and complete.
+ * Compact routing status — overall health badge, single-line blocker message,
+ * and optional action chips. Metric counts are owned by the SummaryStrip
+ * and RoutingSummaryGrid to avoid duplication.
  */
 export function RoutingStatusHero({ snapshot, onEditPolicy, onRunSimulation }: RoutingStatusHeroProps) {
   const statusKey = liveStatus(snapshot);
   const blockers = routingBlockers(snapshot);
   const isHealthy = blockers.length === 0;
-  const policies = snapshot?.policies ?? [];
-  const circuits = snapshot?.circuits ?? [];
-  const budget = snapshot?.budget;
-  const targets = snapshot?.targets ?? [];
-  const recentDecisions = snapshot?.recent_decisions ?? [];
-  const openCircuits = circuits.filter((circuit) => circuit.state === "open");
-  const blockedDecisions = recentDecisions.filter((decision) => Boolean(decision.error_type));
 
   return (
     <section className="ff-status-hero" aria-label="Routing health status">
@@ -38,7 +31,7 @@ export function RoutingStatusHero({ snapshot, onEditPolicy, onRunSimulation }: R
           </h3>
           <p className="ff-status-hero-line">
             {isHealthy
-              ? "No blockers are currently active. Both policy classes are persisted and all guardrails are passing."
+              ? "No blockers are currently active."
               : blockers[0]}
           </p>
         </div>
@@ -46,27 +39,6 @@ export function RoutingStatusHero({ snapshot, onEditPolicy, onRunSimulation }: R
           {titleCase(statusKey)}
         </StatusBadge>
       </div>
-
-      <div className="ff-status-hero-stats">
-        <span>{policies.length} / 2 policies</span>
-        <span>{openCircuits.length} circuits open</span>
-        <span>{budget?.hard_blocked ? "Budget blocked" : "Budget open"}</span>
-        <span>{recentDecisions.length} decisions</span>
-        <span>{blockedDecisions.length} blocked</span>
-        <span>{targets.length} targets</span>
-      </div>
-
-      {isHealthy ? (
-        <div className="ff-next-step" data-tone="success">
-          <span className="ff-next-step-label">Routing is healthy</span>
-          <span>No active budget, circuit, or readiness blockers. Both policy classes are persisted.</span>
-        </div>
-      ) : (
-        <div className="ff-next-step" data-tone={nextStepTone(statusKey)}>
-          <span className="ff-next-step-label">{nextStepLabel(statusKey)}</span>
-          <span>{blockers[0]}</span>
-        </div>
-      )}
 
       {isHealthy ? (
         <div className="ff-status-hero-actions">
@@ -76,7 +48,7 @@ export function RoutingStatusHero({ snapshot, onEditPolicy, onRunSimulation }: R
           <button type="button" className="ff-action-chip" onClick={onRunSimulation}>
             Run simulation
           </button>
-          <span className="ff-status-hero-actions-hint">No action required — these are optional.</span>
+          <span className="ff-status-hero-actions-hint">Optional.</span>
         </div>
       ) : null}
     </section>

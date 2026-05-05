@@ -63,9 +63,6 @@ export function TargetActionBar({
   return (
     <section className="ff-action-bar">
       <div className="ff-action-bar-header">
-        <div className="ff-action-bar-copy">
-          <h2>Target controls</h2>
-        </div>
         <div className="fg-actions">
           <button type="button" onClick={onRefresh} disabled={!canReadTargets}>
             Refresh

@@ -156,10 +156,6 @@ export function DispatchPage() {
     () => Object.entries(snapshot?.outbox_counts ?? {}).filter(([, count]) => count > 0).sort((left, right) => right[1] - left[1]),
     [snapshot],
   );
-  const eventMix = useMemo(
-    () => Object.entries(snapshot?.event_counts ?? {}).sort((left, right) => right[1] - left[1]).slice(0, 3),
-    [snapshot],
-  );
   const reconcileSummary = summarizeReconcileResults(reconcileResults);
 
   // ── Template props ──────────────────────────────────────────────────
@@ -204,15 +200,11 @@ export function DispatchPage() {
         <div className="fg-panel-heading">
           <div>
             <h3>Dispatch Scope</h3>
-            <p className="fg-muted">Worker leases and outbox truth are scoped to the same instance boundary as execution review.</p>
           </div>
-          <span className="fg-pill" data-tone={instanceId ? "success" : "warning"}>
-            {instanceId ? `Instance: ${instanceId}` : "Instance scope required"}
-          </span>
         </div>
         {!instanceId ? (
           <div className="fg-stack">
-            {scopeState === "loading" ? <p className="fg-muted">Loading active instances from the registry.</p> : null}
+            {scopeState === "loading" ? <p className="fg-muted">Loading instances.</p> : null}
             {scopeState === "error" ? <p className="fg-danger">{scopeError}</p> : null}
             {scopeOptions.map((option) => (
               <button key={option.instanceId} type="button" className="fg-data-row" onClick={() => updateSearchParams(option.instanceId)}>
@@ -248,18 +240,12 @@ export function DispatchPage() {
 
       {/* ── Loading state ── */}
       {dispatchState === "loading" ? (
-        <article className="fg-card">
-          <h3>Loading dispatch truth</h3>
-          <p className="fg-muted">ForgeFrame is loading worker leases, stalled attempts, outbox pressure, and reconciliation evidence.</p>
-        </article>
+        <p className="fg-muted">Loading dispatch truth.</p>
       ) : null}
 
       {/* ── Error state ── */}
       {dispatchState === "error" ? (
-        <article className="fg-card">
-          <h3>Dispatch load failed</h3>
-          <p className="fg-danger">{dispatchError}</p>
-        </article>
+        <p className="fg-danger">{dispatchError}</p>
       ) : null}
 
       {/* ── Main content when snapshot available ── */}
@@ -297,20 +283,8 @@ export function DispatchPage() {
                           <strong>{state}</strong>
                           <span className="fg-pill" data-tone={cause.tone}>{count}</span>
                         </div>
+                        <span className="fg-muted fg-type-xs">{cause.detail}</span>
                       </div>
-                      <p className="fg-muted">{cause.detail}</p>
-                      <p className="fg-muted">
-                        {eventMix.length > 0 ? `Current event mix: ${eventMix.map(([eventType, value]) => `${eventType} ${value}`).join(" · ")}` : "No event mix is available."}
-                      </p>
-                      <p>
-                        <Button variant="navigation" onPress={() => navigate(buildScopedRoute(CONTROL_PLANE_ROUTES.notifications, { instanceId, companyId }))}>
-                          View notifications
-                        </Button>
-                        {" · "}
-                        <Button variant="navigation" onPress={() => navigate(buildExecutionReviewPath({ instanceId, companyId, state: cause.executionState ?? null }))}>
-                          View execution review
-                        </Button>
-                      </p>
                     </article>
                   );
                 })}

@@ -35,7 +35,6 @@ import {
   RoutingDecisionsList,
   RoutingTargetReference,
   toneForStatus,
-  routingBlockers,
   liveStatus,
   toPolicyDraft,
   formatJson,
@@ -61,8 +60,7 @@ import type {
 
 /**
  * ForgeFrame Smart Execution Routing page.
- * Request classification, target selection stages, budget and circuit guardrails,
- * and explainable decision history — in one focused surface.
+ * Policy, budget, and circuit guardrails with explainable decision history.
  *
  * Conforms to the Registry Management pattern. Wraps routing feature modules
  * in RegistryManagementPage with scope indicator, summary strip, attention
@@ -151,7 +149,6 @@ export function RoutingPage() {
   const recentDecisions = snapshot?.recent_decisions ?? [];
   const budget = snapshot?.budget;
   const statusKey = liveStatus(snapshot);
-  const blockers = routingBlockers(snapshot);
   const simSummaryStr = simulationSummary(simulationResult ?? undefined);
 
   const providerOptions = useMemo(
@@ -421,7 +418,6 @@ export function RoutingPage() {
 
           {/* ── Action Bar ── */}
           <RoutingActionBar
-            instanceId={instanceId}
             canMutate={canMutate}
             canRead={canReadRouting}
             onRefresh={() => void load()}

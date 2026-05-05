@@ -141,11 +141,11 @@ export function ProviderTargetsPage() {
       <RegistryManagementPage
         eyebrow="Routing"
         title="Provider Targets"
-        description="Target readiness workflow for the selected instance: see which targets are dispatchable, why others are not, and what to fix next."
+        description="Target readiness for the selected instance."
         scope={scope}
         isEmpty
         emptyTitle="Provider target review unavailable"
-        emptyDescription="This session does not hold provider_targets.read on the active instance scope, so ForgeFrame keeps the operational target register closed here."
+        emptyDescription="This session does not hold provider_targets.read on the active instance scope."
       />
     );
   }
@@ -154,7 +154,7 @@ export function ProviderTargetsPage() {
     <RegistryManagementPage
       eyebrow="Routing"
       title="Provider Targets"
-      description="Target readiness workflow for the selected instance: see which targets are dispatchable, why others are not, and what to fix next."
+      description="Target readiness for the selected instance."
       scope={scope}
       summaryItems={summaryItems}
       attentionItems={attentionItems}
@@ -184,16 +184,6 @@ export function ProviderTargetsPage() {
       emptyDetailHint="Select a target from the table to inspect its configuration."
       diagnostics={
         <AdvancedDiagnostics title="Provider-target diagnostics">
-          <ContextNavStrip
-            compact
-            items={[
-              { label: "Provider Health", to: withInstanceScope(CONTROL_PLANE_ROUTES.providerHealthRuns, instanceId) },
-              { label: "Routing Dry Run", to: withInstanceScope(`${CONTROL_PLANE_ROUTES.routing}#routing-dry-run`, instanceId) },
-              { label: "Setup progress", to: withInstanceScope(CONTROL_PLANE_ROUTES.dashboard, instanceId) },
-              { label: "Models", to: withInstanceScope(CONTROL_PLANE_ROUTES.models, instanceId) },
-              { label: "Routing", to: withInstanceScope(CONTROL_PLANE_ROUTES.routing, instanceId) },
-            ]}
-          />
           <RawJson
             data={{
               filters: {
@@ -248,6 +238,22 @@ export function ProviderTargetsPage() {
       {/* Readiness summary (shown when not error and not empty) */}
       {state !== "error" && !isSuccessEmpty ? (
         <TargetReadinessSummary summary={readinessSummary} targets={targets} />
+      ) : null}
+
+      {/* Related pages — compact inline strip */}
+      {hasTargets ? (
+        <div className="mb-2">
+          <ContextNavStrip
+            compact
+            items={[
+              { label: "Provider Health", to: withInstanceScope(CONTROL_PLANE_ROUTES.providerHealthRuns, instanceId) },
+              { label: "Routing Dry Run", to: withInstanceScope(`${CONTROL_PLANE_ROUTES.routing}#routing-dry-run`, instanceId) },
+              { label: "Setup progress", to: withInstanceScope(CONTROL_PLANE_ROUTES.dashboard, instanceId) },
+              { label: "Models", to: withInstanceScope(CONTROL_PLANE_ROUTES.models, instanceId) },
+              { label: "Routing", to: withInstanceScope(CONTROL_PLANE_ROUTES.routing, instanceId) },
+            ]}
+          />
+        </div>
       ) : null}
 
       {/* Action bar + target list (when targets exist) */}

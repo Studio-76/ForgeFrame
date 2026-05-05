@@ -195,10 +195,6 @@ describe("Dispatch page", () => {
     expect(container.textContent).toContain("openai_api::gpt-4.1-mini");
     expect(container.textContent).toContain("Expired lease");
     expect(container.textContent).toContain("Outbox events have dead-lettered");
-    // "View notifications" is now rendered as <Button variant="navigation">
-    const notificationsButton = Array.from(container.querySelectorAll("button")).find((btn) => btn.textContent?.includes("View notifications"));
-    expect(notificationsButton).toBeTruthy();
-    expect(notificationsButton?.textContent).toContain("View notifications");
 
     const reconcileButton = Array.from(container.querySelectorAll("button")).find((button) => button.textContent === "Reconcile expired leases");
     expect(reconcileButton).not.toBeNull();

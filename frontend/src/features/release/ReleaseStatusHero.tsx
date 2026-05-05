@@ -27,8 +27,8 @@ export type ReleaseStatusHeroProps = {
 };
 
 /**
- * Top-level release status summary showing overall readiness,
- * blocker count, primary blocker, and next recommended action.
+ * Compact release status badge with primary blocker and next action.
+ * Gate counts are owned by the SummaryStrip to avoid duplication.
  */
 export function ReleaseStatusHero({ summary }: ReleaseStatusHeroProps) {
   const meta = STATUS_META[summary.status];
@@ -48,35 +48,19 @@ export function ReleaseStatusHero({ summary }: ReleaseStatusHeroProps) {
         </span>
       </div>
 
-      <div className="ff-release-hero-stats">
-        <span>
-          <strong>{summary.totalGates}</strong> gates
-        </span>
-        {summary.blockingCount > 0 ? (
-          <span>
-            <strong>{summary.blockingCount}</strong> blocking
-          </span>
-        ) : null}
-        {summary.manualEvidenceCount > 0 ? (
-          <span>
-            <strong>{summary.manualEvidenceCount}</strong> need evidence
-          </span>
-        ) : null}
-      </div>
-
       {summary.primaryBlocker ? (
         <div
           className="ff-release-hero-blocker"
           data-tone={summary.status === "blocked" ? "danger" : "warning"}
         >
-          <span className="ff-release-hero-blocker-label">Primary blocker:</span>
+          <span className="ff-release-hero-blocker-label">Blocker:</span>
           <span className="ff-release-hero-blocker-text">{summary.primaryBlocker}</span>
         </div>
       ) : null}
 
       {summary.nextAction ? (
         <div className="ff-release-hero-next">
-          <span className="ff-release-hero-next-label">Next action:</span>
+          <span className="ff-release-hero-next-label">Next:</span>
           <span className="ff-release-hero-next-text">{summary.nextAction}</span>
         </div>
       ) : null}
