@@ -95,12 +95,6 @@ export function SkillsPage() {
             description: "Inspect knowledge sources referenced by skill provenance.",
           },
         ]}
-        badges={[
-          {
-            label: skills.canMutate ? "Admin mutation enabled" : "Read only",
-            tone: skills.canMutate ? "success" : "neutral",
-          },
-        ]}
         note="Skills are registry records, not plugins or provider targets."
       />
 

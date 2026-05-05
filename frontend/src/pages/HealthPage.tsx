@@ -154,7 +154,7 @@ export function HealthPage() {
     checkedAt: providers?.bootstrap_readiness?.checked_at ?? null,
     fallbackSummary: "Database wiring or migration proof is incomplete.",
     successSummary: "Storage backends and migration tooling look deployment-ready.",
-    nextRoute: { label: "Open Recovery / Backup / Restore", to: recoveryRoute },
+    nextRoute: { label: "Review recovery posture", to: recoveryRoute },
   });
 
   const apiGroup = buildGroup({
@@ -169,7 +169,7 @@ export function HealthPage() {
     checkedAt: runtimeHealth?.readiness.checked_at ?? null,
     fallbackSummary: `API reachability is not fully proven for api_base ${runtimeHealth?.api_base ?? "unknown"}.`,
     successSummary: `Runtime API base ${runtimeHealth?.api_base ?? "/"} is reachable and aligned with the control-plane origin contract.`,
-    nextRoute: { label: "Open Errors & Incident Review", to: errorsRoute },
+    nextRoute: { label: "Review errors and incidents", to: errorsRoute },
   });
 
   const frontendGroup = buildGroup({
@@ -183,7 +183,7 @@ export function HealthPage() {
     checkedAt: runtimeHealth?.readiness.checked_at ?? providers?.bootstrap_readiness?.checked_at ?? null,
     fallbackSummary: "The shipped operator UI is not fully delivered from the expected same-origin path.",
     successSummary: "Frontend delivery is aligned with the root SPA contract.",
-    nextRoute: { label: "Open setup progress", to: onboardingRoute },
+    nextRoute: { label: "Check setup progress", to: onboardingRoute },
   });
 
   const providersGroup: HealthGroup = {
@@ -200,7 +200,7 @@ export function HealthPage() {
       ? "No provider blockers recorded."
       : providersNeedingReview.map((provider) => provider.label).join(", "),
     nextRoute: {
-      label: providersNeedingReview.some((provider) => providerNeedsOauthHandoff(provider)) ? "Open OAuth Targets" : "Open Provider Health & Runs",
+      label: providersNeedingReview.some((provider) => providerNeedsOauthHandoff(provider)) ? "Review OAuth targets" : "Review provider health and runs",
       to: providersNeedingReview.some((provider) => providerNeedsOauthHandoff(provider)) ? oauthTargetsRoute : providerHealthRoute,
     },
   };
@@ -220,7 +220,7 @@ export function HealthPage() {
     lastChecked: "n/a",
     evidence: ["Dashboard did not emit a routing_queue section."],
     error: "Queue and worker evidence is missing.",
-    nextRoute: { label: "Open Dispatch", to: dispatchRoute },
+    nextRoute: { label: "Review dispatch queue", to: dispatchRoute },
   };
 
   const tlsChecks = [
@@ -240,7 +240,7 @@ export function HealthPage() {
     checkedAt: runtimeHealth?.readiness.checked_at ?? providers?.bootstrap_readiness?.checked_at ?? null,
     fallbackSummary: "Public origin, certificate, or DNS proof is missing, so readiness cannot be green for a public-facing deployment.",
     successSummary: "Public origin, TLS, and DNS evidence line up with the expected deployment posture.",
-    nextRoute: { label: "Open Ingress / TLS", to: ingressRoute },
+    nextRoute: { label: "Review ingress/TLS", to: ingressRoute },
   });
 
   const signalRows: SignalPathRow[] = [
@@ -248,25 +248,25 @@ export function HealthPage() {
       label: "Logs",
       status: logs?.operability.ready ? "healthy" : "failed",
       evidence: logs?.operability.checks.map((check) => `${String(check.id)}=${String(check.ok)}`).join(" · ") || "No operability checks returned.",
-      route: { label: "Open Logs", to: logsRoute },
+      route: { label: "View logs", to: logsRoute },
     },
     {
       label: "Usage",
       status: (usage?.metrics.recorded_request_count ?? 0) > 0 || (usage?.metrics.recorded_health_event_count ?? 0) > 0 ? "healthy" : "warning",
       evidence: `requests=${String(usage?.metrics.recorded_request_count ?? 0)} · health_events=${String(usage?.metrics.recorded_health_event_count ?? 0)}`,
-      route: { label: "Open Usage", to: usageRoute },
+      route: { label: "View usage metrics", to: usageRoute },
     },
     {
       label: "Costs",
       status: Object.keys(usage?.pricing_snapshot ?? {}).length > 0 ? "healthy" : "warning",
       evidence: `pricing_keys=${String(Object.keys(usage?.pricing_snapshot ?? {}).length)} · runtime_cost=${String(usage?.traffic_split.runtime.actual_cost ?? 0)}`,
-      route: { label: "Open Costs", to: costsRoute },
+      route: { label: "View cost metrics", to: costsRoute },
     },
     {
       label: "Audit",
       status: logs && (logs.audit_preview.length > 0 || Boolean(logs.audit_retention.latestEventAt)) ? "healthy" : "warning",
       evidence: `preview=${String(logs?.audit_preview.length ?? 0)} · latest=${formatTimestamp(logs?.audit_retention.latestEventAt)}`,
-      route: { label: "Open Audit History", to: auditHistoryRoute },
+      route: { label: "View audit history", to: auditHistoryRoute },
     },
   ];
 
@@ -277,7 +277,7 @@ export function HealthPage() {
     lastChecked: formatTimestamp(logs?.audit_retention.latestEventAt ?? runtimeHealth?.readiness.checked_at),
     evidence: signalRows.map((row) => `${row.label}: ${row.evidence}`),
     error: signalRows.filter((row) => row.status !== "healthy").map((row) => row.label).join(", ") || "All signal paths are reporting evidence.",
-    nextRoute: { label: "Open Logs", to: logsRoute },
+    nextRoute: { label: "View logs", to: logsRoute },
   };
 
   const checkGroups: HealthGroup[] = useMemo(() => [

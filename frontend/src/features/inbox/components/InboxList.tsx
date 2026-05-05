@@ -119,7 +119,7 @@ export function InboxList({
             >
               {instances.map((inst) => (
                 <option key={inst.instance_id} value={inst.instance_id}>
-                  {inst.display_name} ({inst.instance_id})
+                  {inst.display_name}
                 </option>
               ))}
             </select>

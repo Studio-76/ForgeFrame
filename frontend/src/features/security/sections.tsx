@@ -893,7 +893,7 @@ export function SecurityAdminUsersSection({
                   <select value={scopeDraft.instance_id} onChange={(event) => onScopeDraftChange("instance_id", event.target.value)}>
                     {instances.map((instance) => (
                       <option key={instance.instance_id} value={instance.instance_id}>
-                        {instance.display_name} ({instance.instance_id})
+                        {instance.display_name}
                       </option>
                     ))}
                   </select>

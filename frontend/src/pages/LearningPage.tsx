@@ -63,33 +63,13 @@ export function LearningPage() {
     });
   }
 
-  // ── Summary items ──────────────────────────────────────────
+  // ── Summary items (non-zero only) ──────────────────────────
   const summaryItems = hasEvents
     ? [
-        {
-          key: "suggested",
-          label: "Suggested",
-          value: suggestedCount,
-          tone: suggestedCount > 0 ? "warning" as const : undefined,
-        },
-        {
-          key: "review",
-          label: "Review required",
-          value: reviewRequiredCount,
-          tone: reviewRequiredCount > 0 ? "warning" as const : undefined,
-        },
-        {
-          key: "promoted",
-          label: "Promoted",
-          value: promotedCount,
-          tone: promotedCount > 0 ? "success" as const : undefined,
-        },
-        {
-          key: "rejected",
-          label: "Rejected",
-          value: rejectedCount,
-          tone: rejectedCount > 0 ? "neutral" as const : undefined,
-        },
+        ...(suggestedCount > 0 ? [{ key: "suggested" as const, label: "Suggested" as const, value: suggestedCount, tone: "warning" as const }] : []),
+        ...(reviewRequiredCount > 0 ? [{ key: "review" as const, label: "Review required" as const, value: reviewRequiredCount, tone: "warning" as const }] : []),
+        ...(promotedCount > 0 ? [{ key: "promoted" as const, label: "Promoted" as const, value: promotedCount, tone: "success" as const }] : []),
+        ...(rejectedCount > 0 ? [{ key: "rejected" as const, label: "Rejected" as const, value: rejectedCount, tone: "neutral" as const }] : []),
       ]
     : undefined;
 
@@ -173,7 +153,7 @@ export function LearningPage() {
               >
                 {page.instances.map((instance) => (
                   <option key={instance.instance_id} value={instance.instance_id}>
-                    {instance.display_name} ({instance.instance_id})
+                    {instance.display_name}
                   </option>
                 ))}
               </select>

@@ -509,7 +509,7 @@ export function ErrorsPage() {
 
                 <div className="fg-actions">
                   <Link className="fg-nav-link" to={withInstanceScope(CONTROL_PLANE_ROUTES.logs, instanceId)}>
-                    Open Raw Logs Evidence
+                    View raw logs evidence
                   </Link>
                 </div>
               </article>

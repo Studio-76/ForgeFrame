@@ -74,7 +74,7 @@ export function ConversationFilterBar({
           >
             {instances.map((instance) => (
               <option key={instance.instance_id} value={instance.instance_id}>
-                {instance.display_name} ({instance.instance_id})
+                {instance.display_name}
               </option>
             ))}
           </select>

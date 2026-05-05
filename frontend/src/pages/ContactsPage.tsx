@@ -41,11 +41,11 @@ export function ContactsPage() {
   // ── Summary items ──────────────────────────────────────────
   const summaryItems: SummaryStripItem[] = [
     { key: "total", label: "Total", value: summaryCounts.total, tone: summaryCounts.total > 0 ? "success" as const : undefined },
-    { key: "active", label: "Active", value: summaryCounts.active, tone: "success" as const },
-    { key: "reachable", label: "Reachable", value: summaryCounts.reachable },
-    { key: "with-routes", label: "With routes", value: summaryCounts.withRoutes },
-    { key: "attention", label: "Attention", value: summaryCounts.attention, tone: summaryCounts.attention > 0 ? "warning" as const : undefined },
-    { key: "missing-consent", label: "Missing consent", value: summaryCounts.missingConsent, tone: summaryCounts.missingConsent > 0 ? "warning" as const : undefined },
+    ...(summaryCounts.active > 0 ? [{ key: "active" as const, label: "Active" as const, value: summaryCounts.active, tone: "success" as const }] : []),
+    ...(summaryCounts.reachable > 0 ? [{ key: "reachable" as const, label: "Reachable" as const, value: summaryCounts.reachable }] : []),
+    ...(summaryCounts.withRoutes > 0 ? [{ key: "with-routes" as const, label: "With routes" as const, value: summaryCounts.withRoutes }] : []),
+    ...(summaryCounts.attention > 0 ? [{ key: "attention" as const, label: "Attention" as const, value: summaryCounts.attention, tone: "warning" as const }] : []),
+    ...(summaryCounts.missingConsent > 0 ? [{ key: "missing-consent" as const, label: "Missing consent" as const, value: summaryCounts.missingConsent, tone: "warning" as const }] : []),
   ];
 
   // ── Attention items ────────────────────────────────────────

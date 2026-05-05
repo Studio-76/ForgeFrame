@@ -381,7 +381,7 @@ export function AssistantProfilesPage() {
   const scope = instanceId
     ? {
         label: currentInstance
-          ? `${currentInstance.display_name} (${currentInstance.instance_id})`
+          ? currentInstance.display_name
           : instanceId,
       }
     : undefined;
@@ -455,7 +455,7 @@ export function AssistantProfilesPage() {
         >
           {instances.map((instance) => (
             <option key={instance.instance_id} value={instance.instance_id}>
-              {instance.display_name} ({instance.instance_id})
+              {instance.display_name}
             </option>
           ))}
         </select>

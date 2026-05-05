@@ -91,10 +91,10 @@ export function MemoryPage() {
   // ── Summary items ──────────────────────────────────────────
   const summaryItems: SummaryStripItem[] = [
     { key: "total", label: "Total", value: page.memoryEntries.length, tone: page.memoryEntries.length > 0 ? "success" as const : undefined },
-    { key: "durable", label: "Durable", value: page.durableCount ?? 0 },
-    { key: "boot", label: "Boot", value: page.bootCount ?? 0 },
-    { key: "working", label: "Working", value: page.workingCount ?? 0 },
-    { key: "revoked", label: "Revoked", value: page.revokedCount ?? 0, tone: page.revokedCount > 0 ? "warning" as const : undefined },
+    ...((page.durableCount ?? 0) > 0 ? [{ key: "durable" as const, label: "Durable" as const, value: page.durableCount ?? 0 }] : []),
+    ...((page.bootCount ?? 0) > 0 ? [{ key: "boot" as const, label: "Boot" as const, value: page.bootCount ?? 0 }] : []),
+    ...((page.workingCount ?? 0) > 0 ? [{ key: "working" as const, label: "Working" as const, value: page.workingCount ?? 0 }] : []),
+    ...((page.revokedCount ?? 0) > 0 ? [{ key: "revoked" as const, label: "Revoked" as const, value: page.revokedCount ?? 0, tone: "warning" as const }] : []),
   ];
 
   // ── Attention items ────────────────────────────────────────

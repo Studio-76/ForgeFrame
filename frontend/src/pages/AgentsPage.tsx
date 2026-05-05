@@ -515,7 +515,7 @@ export function AgentsPage() {
               >
                 {instances.map((instance) => (
                   <option key={instance.instance_id} value={instance.instance_id}>
-                    {instance.display_name} ({instance.instance_id})
+                    {instance.display_name}
                   </option>
                 ))}
               </select>
@@ -614,7 +614,7 @@ export function AgentsPage() {
               <p className="fg-muted">The current status filter hides the active Operator. Switch back to `all` or `active` to inspect it in the registry table.</p>
               <div className="fg-actions">
                 <Link className="fg-nav-link" to={`/conversations?instanceId=${instanceId}&agentId=${operatorAgent.agent_id}`}>
-                  Open Operator conversations
+                  View Operator conversations
                 </Link>
                 <button
                   type="button"
@@ -630,9 +630,9 @@ export function AgentsPage() {
             </>
           ) : (
             <div className="fg-actions">
-              <Link className="fg-nav-link" to={`/conversations?instanceId=${instanceId}&agentId=${operatorAgent.agent_id}`}>
-                Open Operator conversations
-              </Link>
+                <Link className="fg-nav-link" to={`/conversations?instanceId=${instanceId}&agentId=${operatorAgent.agent_id}`}>
+                  View Operator conversations
+                </Link>
             </div>
           )}
         </section>
@@ -648,17 +648,17 @@ export function AgentsPage() {
             <span className="fg-pill" data-tone="danger">missing required operator</span>
           </div>
           <div className="fg-actions">
-            <Link className="fg-nav-link" to={`/conversations?instanceId=${instanceId}`}>
-              Open conversations
-            </Link>
-            <button
-              type="button"
-              className="ff-btn-primary ff-btn-sm"
-              disabled={!canMutate || repairingOperator || !instanceId}
-              onClick={() => void handleRestoreOperator()}
-            >
-              {repairingOperator ? "Restoring Operator" : "Restore required Operator"}
-            </button>
+              <Link className="fg-nav-link" to={`/conversations?instanceId=${instanceId}`}>
+                View conversations
+              </Link>
+              <button
+                type="button"
+                className="ff-btn-secondary ff-btn-sm"
+                disabled={!canMutate || repairingOperator || !instanceId}
+                onClick={() => void handleRestoreOperator()}
+              >
+                {repairingOperator ? "Restoring Operator" : "Restore required Operator"}
+              </button>
           </div>
           <p className="fg-muted">The backend supports an explicit repair path. ForgeFrame does not silently create the Operator just because someone opened the registry.</p>
         </section>

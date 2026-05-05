@@ -152,7 +152,7 @@ export function PluginsPage() {
           >
             {instances.map((inst) => (
               <option key={inst.instance_id} value={inst.instance_id}>
-                {inst.display_name} ({inst.instance_id})
+                {inst.display_name}
               </option>
             ))}
           </select>
@@ -170,7 +170,7 @@ export function PluginsPage() {
       {PANEL_OPTIONS.map((panel) => (
         <Button
           key={panel.key}
-          variant={activePanel === panel.key ? "primary" : "secondary"}
+          variant={"secondary"}
           onPress={() => setActivePanel(panel.key)}
         >
           {panel.label}

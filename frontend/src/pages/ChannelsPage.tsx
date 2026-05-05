@@ -374,7 +374,7 @@ export function ChannelsPage() {
       description="Persistent delivery-channel inventory with fallback posture, credential hygiene, filtered status/type views, and recent notification linkage."
       scope={{
         label: currentInstance
-          ? `${currentInstance.display_name} (${currentInstance.instance_id})`
+          ? currentInstance.display_name
           : instanceId || "Select an instance",
         onChange: undefined, // instance selection is handled via the filter dropdown
       }}
@@ -394,7 +394,7 @@ export function ChannelsPage() {
             >
               {instances.map((instance) => (
                 <option key={instance.instance_id} value={instance.instance_id}>
-                  {instance.display_name} ({instance.instance_id})
+                  {instance.display_name}
                 </option>
               ))}
             </select>

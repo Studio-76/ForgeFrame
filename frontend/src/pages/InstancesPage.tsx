@@ -390,28 +390,17 @@ export function InstancesPage() {
             description: "Check readiness gates before go-live.",
           },
         ]}
-        badges={[
-          {
-            label: `${instances.length} instance${instances.length === 1 ? "" : "s"}`,
-            tone: instances.length > 0 ? "success" : "warning",
-          },
-          {
-            label: `${readyInstances} ready`,
-            tone: readyInstances > 0 ? "success" : "warning",
-          },
-          {
-            label:
-              defectiveInstances > 0
-                ? `${defectiveInstances} operator defect${defectiveInstances === 1 ? "" : "s"}`
-                : "Operators intact",
-            tone: defectiveInstances > 0 ? "danger" : "success",
-          },
-          {
-            label: canCreateInstance ? "Admin mutation enabled" : "Read only",
-            tone: canCreateInstance ? "success" : "neutral",
-          },
-        ]}
       />
+
+      {/* ── Inline status summary ── */}
+      <p className="fg-muted" style={{ marginBottom: "0.75rem" }}>
+        {instances.length} instance{instances.length === 1 ? "" : "s"}
+        {" · "}{readyInstances} ready
+        {defectiveInstances > 0
+          ? ` · ${defectiveInstances} operator defect${defectiveInstances === 1 ? "" : "s"}`
+          : " · Operators intact"}
+        {canCreateInstance ? " · Admin mutation enabled" : " · Read only"}
+      </p>
 
       {error ? <p className="fg-danger">{error}</p> : null}
       {message ? <p>{message}</p> : null}

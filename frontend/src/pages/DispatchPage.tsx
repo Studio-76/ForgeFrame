@@ -304,11 +304,11 @@ export function DispatchPage() {
                       </p>
                       <p>
                         <Button variant="navigation" onPress={() => navigate(buildScopedRoute(CONTROL_PLANE_ROUTES.notifications, { instanceId, companyId }))}>
-                          Open notifications
+                          View notifications
                         </Button>
                         {" · "}
                         <Button variant="navigation" onPress={() => navigate(buildExecutionReviewPath({ instanceId, companyId, state: cause.executionState ?? null }))}>
-                          Open execution review
+                          View execution review
                         </Button>
                       </p>
                     </article>
@@ -352,7 +352,7 @@ export function DispatchPage() {
             </div>
             <div className="fg-actions">
               <Button
-                variant="primary"
+                variant="secondary"
                 isDisabled={!canMutate || reconcileState === "submitting"}
                 onPress={() => {
                   setReconcileState("submitting");

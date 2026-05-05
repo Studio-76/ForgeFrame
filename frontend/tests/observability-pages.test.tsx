@@ -572,7 +572,7 @@ describe("observability pages", () => {
     expect(container.textContent).toContain("Current Risks");
     expect(container.textContent).toContain("public_fqdn_tls_evidence");
     expect(container.textContent).toContain("Readiness stays non-green");
-    const oauthButtons = Array.from(container.querySelectorAll("button")).filter((btn) => btn.textContent?.trim() === "Open OAuth Targets");
+    const oauthButtons = Array.from(container.querySelectorAll("button")).filter((btn) => btn.textContent?.trim() === "Review OAuth targets");
     expect(oauthButtons.length).toBeGreaterThan(0);
   });
 });

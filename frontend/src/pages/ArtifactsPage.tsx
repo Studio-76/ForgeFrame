@@ -118,18 +118,18 @@ export function ArtifactsPage() {
       value: artifacts.length,
       tone: artifacts.length > 0 ? "success" : undefined,
     },
-    {
-      key: "active",
-      label: "Active",
+    ...(activeCount > 0 ? [{
+      key: "active" as const,
+      label: "Active" as const,
       value: activeCount,
-      tone: activeCount > 0 ? "success" : undefined,
-    },
-    {
-      key: "archived",
-      label: "Superseded / archived",
+      tone: "success" as const,
+    }] : []),
+    ...(archivedCount > 0 ? [{
+      key: "archived" as const,
+      label: "Superseded / archived" as const,
       value: archivedCount,
-      tone: archivedCount > 0 ? "warning" : undefined,
-    },
+      tone: "warning" as const,
+    }] : []),
   ];
 
   // ── Attention items ───────────────────────────────────
@@ -404,7 +404,7 @@ export function ArtifactsPage() {
 
   // ── Scope config ──────────────────────────────────────
   const scopeConfig = selectedInstance
-    ? { label: `${selectedInstance.display_name} (${selectedInstance.instance_id})` }
+    ? { label: selectedInstance.display_name }
     : instanceId
       ? { label: instanceId }
       : undefined;
@@ -424,7 +424,7 @@ export function ArtifactsPage() {
         >
           {instances.map((inst) => (
             <option key={inst.instance_id} value={inst.instance_id}>
-              {inst.display_name} ({inst.instance_id})
+              {inst.display_name}
             </option>
           ))}
         </select>

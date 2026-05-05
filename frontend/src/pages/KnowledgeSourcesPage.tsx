@@ -40,11 +40,11 @@ export function KnowledgeSourcesPage() {
   // ── Summary items ──────────────────────────────────────────
   const summaryItems: SummaryStripItem[] = [
     { key: "total", label: "Total", value: summaryCounts.total, tone: summaryCounts.total > 0 ? "success" as const : undefined },
-    { key: "active", label: "Active", value: summaryCounts.active, tone: "success" as const },
-    { key: "paused", label: "Paused", value: summaryCounts.paused },
-    { key: "error", label: "Error", value: summaryCounts.error, tone: summaryCounts.error > 0 ? "warning" as const : undefined },
-    { key: "indexed-objects", label: "Indexed objects", value: summaryCounts.indexedObjects },
-    { key: "attention", label: "Attention", value: summaryCounts.attention, tone: summaryCounts.attention > 0 ? "warning" as const : undefined },
+    ...(summaryCounts.active > 0 ? [{ key: "active" as const, label: "Active" as const, value: summaryCounts.active, tone: "success" as const }] : []),
+    ...(summaryCounts.paused > 0 ? [{ key: "paused" as const, label: "Paused" as const, value: summaryCounts.paused }] : []),
+    ...(summaryCounts.error > 0 ? [{ key: "error" as const, label: "Error" as const, value: summaryCounts.error, tone: "warning" as const }] : []),
+    ...(summaryCounts.indexedObjects > 0 ? [{ key: "indexed-objects" as const, label: "Indexed objects" as const, value: summaryCounts.indexedObjects }] : []),
+    ...(summaryCounts.attention > 0 ? [{ key: "attention" as const, label: "Attention" as const, value: summaryCounts.attention, tone: "warning" as const }] : []),
   ];
 
   // ── Attention items ────────────────────────────────────────
