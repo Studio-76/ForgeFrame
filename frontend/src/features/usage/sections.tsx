@@ -196,8 +196,8 @@ export function UsageContent({
   const authRows = summary ? buildAuthRows(summary) : [];
   const topProvider = providerRows[0]?.provider ?? "No provider traffic";
   const topClient = clientRows[0]?.clientId ?? "No client traffic";
-  const runtimeRequests = toNumberValue(summary?.traffic_split.runtime.requests);
-  const totalTokens = toNumberValue(summary?.traffic_split.runtime.tokens) + toNumberValue(summary?.traffic_split.health_check.tokens);
+  const runtimeRequests = toNumberValue(summary?.traffic_split?.runtime?.requests);
+  const totalTokens = toNumberValue(summary?.traffic_split?.runtime?.tokens) + toNumberValue(summary?.traffic_split?.health_check?.tokens);
   const recordedErrors = toNumberValue(summary?.metrics.recorded_error_count);
   const streamRequests = toNumberValue(summary?.stream_mode_counts?.stream);
   const runtimeRequestCount = toNumberValue(summary?.stream_mode_counts?.runtime_request_count);

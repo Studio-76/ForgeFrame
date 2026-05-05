@@ -116,12 +116,13 @@ export function truthTone(truth: CostTruthRecord): StatusTone {
 
 /** Build cost-truth records from a usage summary (fallback when API cost_truths is absent). */
 export function buildFallbackCostTruths(summary: UsageSummaryResponse): Record<CostTruthKey, CostTruthRecord> {
-  const runtimeActual = toNumber(summary.traffic_split.runtime.actual_cost);
-  const runtimeEstimated = toNumber(summary.traffic_split.runtime.hypothetical_cost);
-  const runtimeAvoided = toNumber(summary.traffic_split.runtime.avoided_cost);
-  const healthActual = toNumber(summary.traffic_split.health_check.actual_cost);
-  const healthEstimated = toNumber(summary.traffic_split.health_check.hypothetical_cost);
-  const healthAvoided = toNumber(summary.traffic_split.health_check.avoided_cost);
+  const trafficSplit = summary.traffic_split;
+  const runtimeActual = toNumber(trafficSplit?.runtime?.actual_cost);
+  const runtimeEstimated = toNumber(trafficSplit?.runtime?.hypothetical_cost);
+  const runtimeAvoided = toNumber(trafficSplit?.runtime?.avoided_cost);
+  const healthActual = toNumber(trafficSplit?.health_check?.actual_cost);
+  const healthEstimated = toNumber(trafficSplit?.health_check?.hypothetical_cost);
+  const healthAvoided = toNumber(trafficSplit?.health_check?.avoided_cost);
   const modeledRuntime = Math.max(runtimeEstimated - runtimeActual, 0);
   const modeledHealth = Math.max(healthEstimated - healthActual, 0);
 

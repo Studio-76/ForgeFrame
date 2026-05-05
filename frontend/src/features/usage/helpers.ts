@@ -149,7 +149,7 @@ export function getLatestEvidenceTimestamp(summary: UsageSummaryResponse | null)
 
   const timestamps: number[] = [];
 
-  summary.latest_health.forEach((item) => {
+  ;(summary.latest_health ?? []).forEach((item) => {
     const checkedAt = typeof item.checked_at === "string" ? Date.parse(item.checked_at) : Number.NaN;
     if (Number.isFinite(checkedAt)) {
       timestamps.push(checkedAt);
@@ -178,9 +178,9 @@ export function isUsageEmpty(summary: UsageSummaryResponse | null, clientOps: Ar
   }
 
   return (
-    toNumberValue(summary.metrics.recorded_request_count) === 0 &&
-    toNumberValue(summary.metrics.recorded_error_count) === 0 &&
-    toNumberValue(summary.metrics.recorded_health_event_count) === 0 &&
+    toNumberValue(summary.metrics?.recorded_request_count) === 0 &&
+    toNumberValue(summary.metrics?.recorded_error_count) === 0 &&
+    toNumberValue(summary.metrics?.recorded_health_event_count) === 0 &&
     summary.alerts.length === 0 &&
     clientOps.length === 0
   );
@@ -198,8 +198,8 @@ function hasProviderAttention(summary: UsageSummaryResponse): boolean {
   const healthAlertTypes = new Set(["health_failures", "provider_hotspot"]);
 
   return (
-    summary.alerts.some((item) => healthAlertTypes.has(toStringValue(item.type))) ||
-    summary.latest_health.some((item) => {
+    (summary.alerts ?? []).some((item) => healthAlertTypes.has(toStringValue(item.type))) ||
+    (summary.latest_health ?? []).some((item) => {
       const status = toStringValue(item.status).toLowerCase();
       return status && !["ok", "healthy", "success", "passed"].includes(status);
     })
