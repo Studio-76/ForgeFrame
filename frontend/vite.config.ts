@@ -5,6 +5,18 @@ import react from "@vitejs/plugin-react";
 
 export default defineConfig({
   plugins: [tailwindcss(), react()],
+  server: {
+    proxy: {
+      "/admin": {
+        target: "http://localhost:8000",
+        changeOrigin: true,
+      },
+      "/auth": {
+        target: "http://localhost:8000",
+        changeOrigin: true,
+      },
+    },
+  },
   test: {
     environment: "jsdom",
     setupFiles: ["./tests/setup.ts"],

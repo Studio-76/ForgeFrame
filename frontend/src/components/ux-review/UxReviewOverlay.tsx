@@ -33,18 +33,34 @@ export interface UxReviewOverlayProps {
 }
 
 /**
- * Checks whether an element or any of its ancestors carries a data-ux-id attribute.
+ * Returns the nearest meaningful element for UX inspection.
+ *
+ * First tries to find an ancestor with a `data-ux-id` attribute (for
+ * explicit instrumentation). If none exists, returns the deepest child
+ * element that triggered the event, filtering out body/html and elements
+ * that are too small to be meaningful.
+ *
  * @param el - The element to check.
- * @returns The nearest ancestor with data-ux-id, or null.
+ * @returns An inspectable element, or null.
  */
 function findUxElement(el: EventTarget | null): Element | null {
   if (!(el instanceof Element)) return null;
+
+  // Prefer a data-ux-id ancestor for structured metadata
   let current: Element | null = el;
   while (current) {
     if (current.hasAttribute("data-ux-id")) return current;
     current = current.parentElement;
   }
-  return null;
+
+  // No data-ux-id found — return the deepest element if it's meaningful
+  const rect = el.getBoundingClientRect();
+  const isTooSmall = rect.width < 4 || rect.height < 4;
+  if (isTooSmall) return null;
+  const isRoot = el === document.body || el === document.documentElement;
+  if (isRoot) return null;
+
+  return el;
 }
 
 /**
@@ -78,19 +94,17 @@ export function UxReviewOverlay({
     const uxEl = findUxElement(event.target);
     if (uxEl) {
       const captured = captureElement(uxEl);
-      if (captured) {
-        setHoveredElement(captured);
-        // Throttle mouse position updates to animation frame
-        if (!rafId.current) {
-          rafId.current = requestAnimationFrame(() => {
-            if (!rafCleanup.current) {
-              setMousePos({ x: event.clientX, y: event.clientY });
-            }
-            rafId.current = 0;
-          });
-        }
-        return;
+      setHoveredElement(captured);
+      // Throttle mouse position updates to animation frame
+      if (!rafId.current) {
+        rafId.current = requestAnimationFrame(() => {
+          if (!rafCleanup.current) {
+            setMousePos({ x: event.clientX, y: event.clientY });
+          }
+          rafId.current = 0;
+        });
       }
+      return;
     }
     // Only clear if something was hovered (avoids unnecessary renders)
     if (hoveredRef.current) {
@@ -118,7 +132,6 @@ export function UxReviewOverlay({
     event.preventDefault();
     event.stopPropagation();
     const captured = captureElement(uxEl);
-    if (!captured) return;
 
     // Toggle selection: clicking the same element deselects it
     if (

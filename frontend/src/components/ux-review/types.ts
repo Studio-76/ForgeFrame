@@ -2,8 +2,10 @@
  * Types for the UX Review Mode overlay system.
  *
  * UX Review Mode is a dev-only tool that lets reviewers inspect live pages,
- * select UI elements that have `data-ux-*` attributes, and annotate them
- * with issues, severity, and expected changes.
+ * select any UI element, and annotate it with issues, severity, and expected
+ * changes. Elements with explicit `data-ux-*` attributes show richer metadata
+ * in the tooltip, but the mode works on **any** element out of the box —
+ * synthetic IDs are generated from tag name, classes, and text content.
  *
  * **Production safety:** All review tooling is gated behind
  * `import.meta.env.DEV && import.meta.env.VITE_ENABLE_UX_REVIEW === "true"`.
@@ -337,13 +339,44 @@ export function annotationToRecord(ann: UxAnnotation): AnnotationRecord {
 // ── DOM Helpers ─────────────────────────────────────────
 
 /**
- * Extracts UX metadata from a DOM element with data-ux-* attributes.
- * @param el - The DOM element to inspect.
- * @returns UxElementData if a data-ux-id attribute is present, otherwise null.
+ * Generates a stable-ish fallback uxId from element characteristics
+ * when no explicit `data-ux-id` attribute is present.
+ * Format: `auto-{tagName}-{classAnchor?}-{textAnchor?}-{nthIndex}`
  */
-export function extractUxElementData(el: Element): UxElementData | null {
-  const uxId = el.getAttribute("data-ux-id");
-  if (!uxId) return null;
+function generateFallbackUxId(el: Element): string {
+  const tag = el.tagName.toLowerCase();
+  const cls = el.className
+    .split(/\s+/)
+    .filter((c) => !c.startsWith("ff-") && !c.startsWith("fg-") && !c.startsWith("data-"))
+    .slice(0, 2)
+    .join("-")
+    .replace(/[^a-zA-Z0-9_-]/g, "");
+  const text = (el.textContent ?? "").trim().slice(0, 30).replace(/\s+/g, "-").replace(/[^a-zA-Z0-9_-]/g, "").toLowerCase();
+  // nth-of-type-like index among same-tag siblings
+  const parent = el.parentElement;
+  let index = 1;
+  if (parent) {
+    const siblings = Array.from(parent.children).filter((c) => c.tagName === el.tagName);
+    index = siblings.indexOf(el) + 1;
+  }
+  const parts = ["auto", tag];
+  if (cls) parts.push(cls);
+  if (text && text.length >= 3) parts.push(text.slice(0, 24));
+  parts.push(String(index));
+  return parts.join("-");
+}
+
+/**
+ * Extracts UX metadata from a DOM element with data-ux-* attributes.
+ * When no `data-ux-id` is present, generates a synthetic fallback ID
+ * from tag name, class names, and text content so the element is still
+ * selectable in UX Review Mode.
+ *
+ * @param el - The DOM element to inspect.
+ * @returns UxElementData (never null — always generates a fallback).
+ */
+export function extractUxElementData(el: Element): UxElementData {
+  const uxId = el.getAttribute("data-ux-id") ?? generateFallbackUxId(el);
   return {
     uxId,
     uxComponent: el.getAttribute("data-ux-component") ?? undefined,
@@ -380,12 +413,14 @@ export function buildDomSelector(el: Element): string {
 
 /**
  * Creates a CapturedElement from a live DOM element.
+ * Always succeeds — if no `data-ux-id` is present it auto-generates a
+ * synthetic ID from tag name, classes, and text.
+ *
  * @param el - The source DOM element.
- * @returns CapturedElement snapshot.
+ * @returns CapturedElement snapshot (never null).
  */
-export function captureElement(el: Element): CapturedElement | null {
+export function captureElement(el: Element): CapturedElement {
   const elementData = extractUxElementData(el);
-  if (!elementData) return null;
   const rect = el.getBoundingClientRect();
   return {
     elementData,
