@@ -152,9 +152,12 @@ AGENTS.md
 .spaeher/
 
 # -------------------------
-# Local runtime state (post-install expansion of deploy/ templates)
+# .install/ — deployment state directory (systemd units, rendered configs)
+# Only ignore runtime data and files with generated credentials.
 # -------------------------
-.install/
+.install/log/
+.install/lib/
+.install/etc/forgeframe.env
 
 # -------------------------
 # Backend local runtime state
