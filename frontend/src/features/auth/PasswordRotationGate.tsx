@@ -8,6 +8,10 @@ export type PasswordRotationDraft = {
   confirm_password: string;
 };
 
+/**
+ * Create an empty password rotation draft.
+ * @returns Empty draft with all fields set to empty string.
+ */
 export function createEmptyPasswordRotationDraft(): PasswordRotationDraft {
   return {
     current_password: "",
@@ -16,6 +20,13 @@ export function createEmptyPasswordRotationDraft(): PasswordRotationDraft {
   };
 }
 
+/**
+ * Validate and build a password rotation request from a draft.
+ * @param draft - Password rotation draft with current, new, and confirm fields.
+ * @returns Validated payload for the password rotation API.
+ * @throws If current password is missing, new password is too short,
+ * new password matches current, or confirmation does not match.
+ */
 export function buildPasswordRotationRequest(draft: PasswordRotationDraft) {
   if (!draft.current_password) {
     throw new Error("Current temporary password is required.");
@@ -35,7 +46,12 @@ export function buildPasswordRotationRequest(draft: PasswordRotationDraft) {
   };
 }
 
-function formatRotationError(error: unknown): string {
+/**
+ * Format a password rotation error into a user-facing message.
+ * @param error - The caught exception.
+ * @returns Human-readable error string.
+ */
+export function formatRotationError(error: unknown): string {
   if (error instanceof Error) {
     if (error.message.includes("Current temporary password was rejected")) {
       return "Current temporary password was rejected. Re-enter it and try again.";

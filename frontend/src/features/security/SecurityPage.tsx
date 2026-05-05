@@ -68,7 +68,6 @@ import {
   BlockersRemediationChecklist,
   RelatedPagesStrip,
   SecurityAdminUsersSection,
-  SecurityBlockerStrip,
   SecurityCredentialPolicySection,
   SecurityElevatedAccessSection,
   SecurityPostureSection,

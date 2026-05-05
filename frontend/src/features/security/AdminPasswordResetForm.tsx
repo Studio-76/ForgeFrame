@@ -12,6 +12,12 @@ export function createEmptyAdminPasswordResetDraft(): AdminPasswordResetDraft {
   };
 }
 
+/**
+ * Validate and build the payload for an admin password reset.
+ * @param draft - Password reset draft with new and confirm fields.
+ * @returns Validated admin password rotation payload.
+ * @throws If password is too short or confirmation does not match.
+ */
 export function buildAdminPasswordResetPayload(draft: AdminPasswordResetDraft): AdminPasswordRotationPayload {
   if (draft.new_password.length < 8) {
     throw new Error("Temporary password must be at least 8 characters.");

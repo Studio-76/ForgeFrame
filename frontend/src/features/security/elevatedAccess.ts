@@ -9,6 +9,11 @@ export type ElevatedAccessRequestDraft = {
   target_user_id: string;
 };
 
+/**
+ * Create an empty elevated-access request draft with optional overrides.
+ * @param overrides - Partial draft fields to override defaults.
+ * @returns Empty draft with break-glass type and 15-minute default duration.
+ */
 export function createEmptyElevatedAccessRequestDraft(
   overrides: Partial<ElevatedAccessRequestDraft> = {},
 ): ElevatedAccessRequestDraft {
@@ -62,6 +67,13 @@ function buildCommonPayload(draft: ElevatedAccessRequestDraft, maxDurationMinute
   };
 }
 
+/**
+ * Build a break-glass request payload from a draft, validating all fields.
+ * @param draft - The elevated-access request draft.
+ * @param maxDurationMinutes - Maximum allowed duration per credential policy.
+ * @returns Validated payload for break-glass API call.
+ * @throws If validation fails.
+ */
 export function buildBreakGlassRequestPayload(
   draft: ElevatedAccessRequestDraft,
   maxDurationMinutes: number,
@@ -69,6 +81,13 @@ export function buildBreakGlassRequestPayload(
   return buildCommonPayload(draft, maxDurationMinutes);
 }
 
+/**
+ * Build an impersonation request payload from a draft, validating all fields.
+ * @param draft - The elevated-access request draft.
+ * @param maxDurationMinutes - Maximum allowed duration per credential policy.
+ * @returns Validated payload for impersonation API call.
+ * @throws If validation fails or target user is missing.
+ */
 export function buildImpersonationRequestPayload(
   draft: ElevatedAccessRequestDraft,
   maxDurationMinutes: number,

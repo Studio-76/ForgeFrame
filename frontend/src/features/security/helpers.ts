@@ -18,6 +18,11 @@ export type RequestBanner = {
   body: string;
 };
 
+/**
+ * Build a route path to the approvals page filtered by approval ID.
+ * @param approvalId - Target approval identifier.
+ * @returns Route path with query parameters.
+ */
 export function buildApprovalDetailPath(approvalId: string): string {
   const searchParams = new URLSearchParams({
     status: "all",
@@ -26,6 +31,11 @@ export function buildApprovalDetailPath(approvalId: string): string {
   return `${CONTROL_PLANE_ROUTES.approvals}?${searchParams.toString()}`;
 }
 
+/**
+ * Build a route path to the audit history page for an elevated-access request.
+ * @param requestId - Target request identifier.
+ * @returns Route path with query parameters.
+ */
 export function buildRequestAuditHistoryPath(requestId: string): string {
   return buildAuditHistoryPath({
     window: "all",
@@ -34,6 +44,11 @@ export function buildRequestAuditHistoryPath(requestId: string): string {
   });
 }
 
+/**
+ * Map an elevated-access request gate status to a visual tone.
+ * @param status - Gate status from the request record.
+ * @returns Matching visual tone for badge display.
+ */
 export function approvalTone(status: ElevatedAccessRequest["gate_status"]): Tone {
   switch (status) {
     case "approved":
@@ -50,6 +65,13 @@ export function approvalTone(status: ElevatedAccessRequest["gate_status"]): Tone
   }
 }
 
+/**
+ * Format a display name and username pair into a readable label.
+ * @param displayName - User display name (optional).
+ * @param username - User login name (optional).
+ * @param fallbackId - Fallback user ID (optional).
+ * @returns Formatted actor label.
+ */
 export function formatRequestActor(
   displayName?: string | null,
   username?: string | null,
@@ -61,6 +83,11 @@ export function formatRequestActor(
   return displayName ?? username ?? fallbackId ?? "Not recorded";
 }
 
+/**
+ * Format the target of an elevated-access request.
+ * @param request - Elevated-access request record.
+ * @returns Human-readable target label.
+ */
 export function formatRequestTarget(request: ElevatedAccessRequest): string {
   if (request.request_type === "break_glass") {
     return "Self";
@@ -72,6 +99,12 @@ export function formatRequestTarget(request: ElevatedAccessRequest): string {
   );
 }
 
+/**
+ * Describe the status banner for an elevated-access request.
+ * @param request - Elevated-access request record.
+ * @param linkedSession - Optional linked admin session.
+ * @returns Banner with tone, title, and body.
+ */
 export function describeRequestBanner(
   request: ElevatedAccessRequest,
   linkedSession: AdminSecuritySession | null,
@@ -150,6 +183,11 @@ export function describeRequestBanner(
   }
 }
 
+/**
+ * Determine the current lifecycle stage label for an elevated-access request.
+ * @param request - Elevated-access request record.
+ * @returns Stage label and matching tone.
+ */
 export function requestStage(request: ElevatedAccessRequest): { label: string; tone: Tone } {
   if (request.session_status === "active") {
     return { label: "Active", tone: "danger" };
@@ -178,6 +216,11 @@ export function requestStage(request: ElevatedAccessRequest): { label: string; t
   return { label: "Recorded", tone: "neutral" };
 }
 
+/**
+ * Map a secret posture state to a visual tone.
+ * @param state - Secret or harness posture state.
+ * @returns Matching tone for status display.
+ */
 export function secretStateTone(state: SecuritySecretPosture["state"] | HarnessSecretPosture["state"]): Tone {
   switch (state) {
     case "missing":
@@ -191,6 +234,11 @@ export function secretStateTone(state: SecuritySecretPosture["state"] | HarnessS
   }
 }
 
+/**
+ * Determine the status label and tone for an admin session.
+ * @param session - Admin security session record.
+ * @returns Status label and matching tone.
+ */
 export function adminSessionStatus(session: AdminSecuritySession): { label: string; tone: Tone } {
   if (session.revoked_at) {
     return { label: "Revoked", tone: "neutral" };
@@ -204,6 +252,13 @@ export function adminSessionStatus(session: AdminSecuritySession): { label: stri
   return { label: "Ended", tone: "neutral" };
 }
 
+/**
+ * Extract elevated-access approver posture from an API error if present.
+ * This handles the case where the backend returns approver posture
+ * embedded in an error response when elevated access is blocked.
+ * @param error - Caught exception, typically an AdminApiError.
+ * @returns Parsed approver posture or null.
+ */
 export function extractApproverPosture(error: unknown): ElevatedAccessApproverPosture | null {
   if (!(error instanceof AdminApiError) || !error.details || typeof error.details !== "object") {
     return null;
