@@ -1,11 +1,11 @@
-import { Link, useSearchParams } from "react-router-dom";
+import { useSearchParams } from "react-router-dom";
 
 import { CONTROL_PLANE_ROUTES } from "../app/navigation";
 import { getInstanceIdFromSearchParams, withInstanceScope } from "../app/tenantScope";
 import { RegistryManagementPage } from "../components/page-templates";
 import type { AttentionPayload } from "../components/ui/models/attention";
 import { AdvancedDiagnostics, RawJson } from "../components/ui/AdvancedDiagnostics";
-import { Button } from "../components/ui/Button";
+import { Button, ContextNavStrip } from "../components/ui";
 import {
   TargetActionBar,
   TargetDetailPanel,
@@ -184,13 +184,16 @@ export function ProviderTargetsPage() {
       emptyDetailHint="Select a target from the table to inspect its configuration."
       diagnostics={
         <AdvancedDiagnostics title="Provider-target diagnostics">
-          <div className="fg-nav-links" style={{ marginBottom: "0.5rem" }}>
-            <Link className="fg-nav-link" to={withInstanceScope(CONTROL_PLANE_ROUTES.providerHealthRuns, instanceId)}>Provider Health</Link>
-            <Link className="fg-nav-link" to={withInstanceScope(`${CONTROL_PLANE_ROUTES.routing}#routing-dry-run`, instanceId)}>Routing Dry Run</Link>
-            <Link className="fg-nav-link" to={withInstanceScope(CONTROL_PLANE_ROUTES.dashboard, instanceId)}>Setup progress</Link>
-            <Link className="fg-nav-link" to={withInstanceScope(CONTROL_PLANE_ROUTES.models, instanceId)}>Models</Link>
-            <Link className="fg-nav-link" to={withInstanceScope(CONTROL_PLANE_ROUTES.routing, instanceId)}>Routing</Link>
-          </div>
+          <ContextNavStrip
+            compact
+            items={[
+              { label: "Provider Health", to: withInstanceScope(CONTROL_PLANE_ROUTES.providerHealthRuns, instanceId) },
+              { label: "Routing Dry Run", to: withInstanceScope(`${CONTROL_PLANE_ROUTES.routing}#routing-dry-run`, instanceId) },
+              { label: "Setup progress", to: withInstanceScope(CONTROL_PLANE_ROUTES.dashboard, instanceId) },
+              { label: "Models", to: withInstanceScope(CONTROL_PLANE_ROUTES.models, instanceId) },
+              { label: "Routing", to: withInstanceScope(CONTROL_PLANE_ROUTES.routing, instanceId) },
+            ]}
+          />
           <RawJson
             data={{
               filters: {

@@ -116,6 +116,10 @@ export type { ButtonProps, ButtonVariant } from "./Button";
 export { OverflowMenu } from "./OverflowMenu";
 export type { OverflowAction } from "./OverflowMenu";
 
+// ── Navigation primitives ─────────────────────────────
+export { ContextNavStrip } from "./ContextNavStrip";
+export type { ContextNavItem, ContextNavStripProps } from "./ContextNavStrip";
+
 // ── Status primitives ─────────────────────────────────
 export { StatusBadge } from "./StatusBadge";
 export type { StatusTone as StatusBadgeTone } from "./types";

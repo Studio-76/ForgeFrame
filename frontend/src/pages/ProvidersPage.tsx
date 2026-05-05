@@ -1,4 +1,4 @@
-import { Link, useSearchParams } from "react-router-dom";
+import { useSearchParams } from "react-router-dom";
 
 import { CONTROL_PLANE_ROUTES } from "../app/navigation";
 import { useAppSession } from "../app/session";
@@ -6,7 +6,7 @@ import { getInstanceIdFromSearchParams, withInstanceScope } from "../app/tenantS
 import { useInstanceCatalog } from "../app/useInstanceCatalog";
 import { RegistryManagementPage } from "../components/page-templates";
 import type { AttentionPayload } from "../components/ui/models/attention";
-import { Button } from "../components/ui/Button";
+import { Button, ContextNavStrip } from "../components/ui";
 import {
   ProvidersInventoryTableSection,
 } from "../features/providers/ProvidersSections";
@@ -198,12 +198,16 @@ export function ProvidersPage() {
         <div className="fg-stack">
           <p className="text-muted">Access: {access.badgeLabel}</p>
           {data.error ? <p className="fg-danger">{data.error}</p> : null}
-          <div className="fg-nav-links">
-            <Link className="fg-nav-link" to={withInstanceScope(CONTROL_PLANE_ROUTES.dashboard, instanceId)}>Setup progress</Link>
-            <Link className="fg-nav-link" to={withInstanceScope(CONTROL_PLANE_ROUTES.harness, instanceId)}>Harness</Link>
-            <Link className="fg-nav-link" to={withInstanceScope(CONTROL_PLANE_ROUTES.providerTargets, instanceId)}>Provider Targets</Link>
-            <Link className="fg-nav-link" to={withInstanceScope(CONTROL_PLANE_ROUTES.oauthTargets, instanceId)}>OAuth Targets</Link>
-          </div>
+          <ContextNavStrip
+            compact
+            label="Related pages"
+            items={[
+              { label: "Setup progress", to: withInstanceScope(CONTROL_PLANE_ROUTES.dashboard, instanceId) },
+              { label: "Harness", to: withInstanceScope(CONTROL_PLANE_ROUTES.harness, instanceId) },
+              { label: "Provider Targets", to: withInstanceScope(CONTROL_PLANE_ROUTES.providerTargets, instanceId) },
+              { label: "OAuth Targets", to: withInstanceScope(CONTROL_PLANE_ROUTES.oauthTargets, instanceId) },
+            ]}
+          />
         </div>
       }
       diagnosticsTitle="Provider diagnostics"

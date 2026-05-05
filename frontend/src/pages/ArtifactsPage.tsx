@@ -25,12 +25,13 @@ import { fetchInstances } from "../api/domain/instances";
 import { roleAllows, sessionHasAnyInstancePermission } from "../app/adminAccess";
 import { CONTROL_PLANE_ROUTES } from "../app/navigation";
 import { useAppSession } from "../app/session";
+import { withInstanceScope } from "../app/tenantScope";
 import { buildWorkspacePath } from "../app/workInteractionRoutes";
 import { RegistryManagementPage } from "../components/page-templates";
 import type { AttentionPayload } from "../components/ui/models/attention";
 import type { SummaryStripItem } from "../components/ui/SummaryStrip";
 import { AdvancedDiagnostics, RawJson } from "../components/ui/AdvancedDiagnostics";
-import { Button } from "../components/ui/Button";
+import { Button, ContextNavStrip } from "../components/ui";
 
 import {
   ArtifactList,
@@ -490,27 +491,25 @@ export function ArtifactsPage() {
 
   if (!canRead) {
     return (
-      <RegistryManagementPage
-        eyebrow="Work Interaction"
-        title="Artifacts"
-        description="This route is reserved for operators and admins who can inspect attached runtime evidence."
-        isEmpty
-        emptyTitle="Operator or admin required"
-        emptyDescription="Viewers do not get a cosmetic artifact shell. This route stays closed unless the session can inspect real attached evidence."
-        emptyAction={
-          <Button variant="navigation" onPress={() => {
-            window.location.href = CONTROL_PLANE_ROUTES.execution;
-          }}>
-            Execution Review
-          </Button>
-        }
-      >
-        <div className="fg-nav-links mt-3">
-          <a className="ff-link" href={CONTROL_PLANE_ROUTES.execution}>Execution Review</a>
-          <a className="ff-link" href={CONTROL_PLANE_ROUTES.approvals}>Approvals</a>
-          <a className="ff-link" href={CONTROL_PLANE_ROUTES.dashboard}>Command Center</a>
-        </div>
-      </RegistryManagementPage>
+      <>
+        <RegistryManagementPage
+          eyebrow="Work Interaction"
+          title="Artifacts"
+          description="This route is reserved for operators and admins who can inspect attached runtime evidence."
+          isEmpty
+          emptyTitle="Operator or admin required"
+          emptyDescription="Viewers do not get a cosmetic artifact shell. This route stays closed unless the session can inspect real attached evidence."
+        />
+        <ContextNavStrip
+          compact
+          className="mt-3"
+          items={[
+            { label: "Execution Review", to: CONTROL_PLANE_ROUTES.execution },
+            { label: "Approvals", to: CONTROL_PLANE_ROUTES.approvals },
+            { label: "Command Center", to: CONTROL_PLANE_ROUTES.dashboard },
+          ]}
+        />
+      </>
     );
   }
 
@@ -564,11 +563,14 @@ export function ArtifactsPage() {
                 />
               )
               : null}
-            <div className="fg-nav-links">
-              <a className="ff-link" href={buildWorkspacePath({ instanceId: instanceId || undefined })}>Workspaces</a>
-              <a className="ff-link" href={`${CONTROL_PLANE_ROUTES.execution}?${new URLSearchParams({ instanceId }).toString()}`}>Execution Review</a>
-              <a className="ff-link" href={`${CONTROL_PLANE_ROUTES.approvals}?${new URLSearchParams({ instanceId }).toString()}`}>Approvals</a>
-            </div>
+            <ContextNavStrip
+              compact
+              items={[
+                { label: "Workspaces", to: buildWorkspacePath({ instanceId: instanceId || undefined }) },
+                { label: "Execution Review", to: withInstanceScope(CONTROL_PLANE_ROUTES.execution, instanceId) },
+                { label: "Approvals", to: withInstanceScope(CONTROL_PLANE_ROUTES.approvals, instanceId) },
+              ]}
+            />
           </div>
         </AdvancedDiagnostics>
       }

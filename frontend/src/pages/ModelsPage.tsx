@@ -1,12 +1,11 @@
 import { useMemo } from "react";
-import { Link } from "react-router-dom";
 
 import { CONTROL_PLANE_ROUTES } from "../app/navigation";
 import { withQueryParams, withInstanceScope } from "../app/tenantScope";
 import { useInstanceCatalog } from "../app/useInstanceCatalog";
 import { RegistryManagementPage } from "../components/page-templates";
 import type { Action } from "../components/ui/models/action";
-import { AdvancedDiagnostics } from "../components/ui/AdvancedDiagnostics";
+import { AdvancedDiagnostics, ContextNavStrip } from "../components/ui";
 import { DiagnosticSection } from "../components/ui/AdvancedDiagnostics";
 import { RawJson } from "../components/ui/AdvancedDiagnostics";
 import {
@@ -189,26 +188,14 @@ export function ModelsPage() {
             />
           </DiagnosticSection>
           <DiagnosticSection label="Related Pages">
-            <div className="fg-nav-links">
-              <Link
-                className="fg-nav-link"
-                to={withInstanceScope(CONTROL_PLANE_ROUTES.providers, instanceId)}
-              >
-                Providers
-              </Link>
-              <Link
-                className="fg-nav-link"
-                to={withInstanceScope(CONTROL_PLANE_ROUTES.providerTargets, instanceId)}
-              >
-                Provider Targets
-              </Link>
-              <Link
-                className="fg-nav-link"
-                to={withInstanceScope(CONTROL_PLANE_ROUTES.routing, instanceId)}
-              >
-                Routing
-              </Link>
-            </div>
+            <ContextNavStrip
+              compact
+              items={[
+                { label: "Providers", to: withInstanceScope(CONTROL_PLANE_ROUTES.providers, instanceId) },
+                { label: "Provider Targets", to: withInstanceScope(CONTROL_PLANE_ROUTES.providerTargets, instanceId) },
+                { label: "Routing", to: withInstanceScope(CONTROL_PLANE_ROUTES.routing, instanceId) },
+              ]}
+            />
           </DiagnosticSection>
         </AdvancedDiagnostics>
       }

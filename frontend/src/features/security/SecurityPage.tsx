@@ -43,7 +43,7 @@ import {
   type SecurityRotationEvent,
   type SecuritySecretPosture,
 } from "../../api/domain";
-import { PageIntro } from "../../components/PageIntro";
+import { ContextNavStrip, PageHeader } from "../../components/ui";
 import {
   buildAdminPasswordResetPayload,
   createEmptyAdminPasswordResetDraft,
@@ -866,33 +866,23 @@ export function SecurityPage() {
   if (!sessionReady) {
     return (
       <section className="fg-page">
-        <PageIntro
+        <PageHeader
           eyebrow="Governance"
           title="Security"
           description="Privilege posture, exception workflow, session controls, provider secret governance, and credential policy."
-          question="Do you need elevated access controls or broader privileged security posture once the current session is known?"
-          links={[
-            {
-              label: "Security",
-              to: CONTROL_PLANE_ROUTES.security,
-              description: "Security blockers, privileged identities, sessions, exception flow, and provider secret posture.",
-              disabled: true,
-            },
-            {
-              label: "Approvals",
-              to: CONTROL_PLANE_ROUTES.approvals,
-              description: "Cross-check the shared approval queue while Security access is still being resolved.",
-              disabled: true,
-            },
-            {
-              label: "Audit History",
-              to: CONTROL_PLANE_ROUTES.auditHistory,
-              description: "Review governance evidence without opening mutable controls.",
-            },
-          ]}
           badges={[{ label: "Checking access", tone: "neutral" }]}
-          note="ForgeFrame verifies the current session role before exposing privileged identity, session, and secret controls."
-        />
+        >
+          <p className="ff-page-header-support">Do you need elevated access controls or broader privileged security posture once the current session is known?</p>
+          <ContextNavStrip
+            compact
+            items={[
+              { label: "Security", to: CONTROL_PLANE_ROUTES.security, disabled: true },
+              { label: "Approvals", to: CONTROL_PLANE_ROUTES.approvals, disabled: true },
+              { label: "Audit History", to: CONTROL_PLANE_ROUTES.auditHistory },
+            ]}
+          />
+          <p className="ff-page-header-note">ForgeFrame verifies the current session role before exposing privileged identity, session, and secret controls.</p>
+        </PageHeader>
       </section>
     );
   }
@@ -900,31 +890,23 @@ export function SecurityPage() {
   if (!canViewSecurity) {
     return (
       <section className="fg-page">
-        <PageIntro
+        <PageHeader
           eyebrow="Governance"
           title="Security"
           description="This route is reserved for operators and admins who can inspect security posture or request elevated access."
-          question="Which lower-privilege governance route should you use instead?"
-          links={[
-            {
-              label: "Accounts",
-              to: CONTROL_PLANE_ROUTES.accounts,
-              description: "Inspect runtime identity posture without entering privileged control surfaces.",
-            },
-            {
-              label: "API Keys",
-              to: CONTROL_PLANE_ROUTES.apiKeys,
-              description: "Inspect runtime key posture and key lifecycle state.",
-            },
-            {
-              label: "Audit History",
-              to: CONTROL_PLANE_ROUTES.auditHistory,
-              description: "Read cross-system governance evidence without privileged mutations.",
-            },
-          ]}
           badges={[{ label: "Operator or admin required", tone: "warning" }]}
-          note="Security keeps privileged identity, session, exception, and provider secret controls outside the viewer envelope."
-        />
+        >
+          <p className="ff-page-header-support">Which lower-privilege governance route should you use instead?</p>
+          <ContextNavStrip
+            compact
+            items={[
+              { label: "Accounts", to: CONTROL_PLANE_ROUTES.accounts },
+              { label: "API Keys", to: CONTROL_PLANE_ROUTES.apiKeys },
+              { label: "Audit History", to: CONTROL_PLANE_ROUTES.auditHistory },
+            ]}
+          />
+          <p className="ff-page-header-note">Security keeps privileged identity, session, exception, and provider secret controls outside the viewer envelope.</p>
+        </PageHeader>
       </section>
     );
   }
@@ -935,42 +917,32 @@ export function SecurityPage() {
 
   return (
     <section className="fg-page">
-      <PageIntro
+      <PageHeader
         eyebrow="Governance"
         title="Security"
         description={securityDescription}
-        question={securityQuestion}
-        links={[
-          {
-            label: "Security",
-            to: CONTROL_PLANE_ROUTES.security,
-            description: "Use the dedicated security center for posture, sessions, exceptions, and provider credential controls.",
-            badge: activeTab.replace("_", " "),
-          },
-          {
-            label: "Approvals",
-            to: CONTROL_PLANE_ROUTES.approvals,
-            description: "Open the cross-domain approval queue when you need execution and elevated-access decisions together.",
-            badge: canDecideElevatedAccess ? "Decision queue" : "Review queue",
-            disabled: !canReviewApprovals,
-          },
-          {
-            label: "Audit History",
-            to: CONTROL_PLANE_ROUTES.auditHistory,
-            description: "Verify privileged changes against immutable audit evidence.",
-          },
-          {
-            label: "Accounts",
-            to: CONTROL_PLANE_ROUTES.accounts,
-            description: "Review runtime identities separately from privileged admin accounts.",
-          },
-        ]}
         badges={[
           { label: accessBadge, tone: accessTone },
           { label: approverPosture?.label ?? "Policy loading", tone: policyTone },
         ]}
-        note={securityNote}
-      />
+      >
+        <p className="ff-page-header-support">{securityQuestion}</p>
+        <ContextNavStrip
+          compact
+          items={[
+            { label: "Security", to: CONTROL_PLANE_ROUTES.security, badge: activeTab.replace("_", " ") },
+            {
+              label: "Approvals",
+              to: CONTROL_PLANE_ROUTES.approvals,
+              badge: canDecideElevatedAccess ? "Decision queue" : "Review queue",
+              disabled: !canReviewApprovals,
+            },
+            { label: "Audit History", to: CONTROL_PLANE_ROUTES.auditHistory },
+            { label: "Accounts", to: CONTROL_PLANE_ROUTES.accounts },
+          ]}
+        />
+        <p className="ff-page-header-note">{securityNote}</p>
+      </PageHeader>
 
       {error ? <p className="fg-danger">{error}</p> : null}
       {message ? <p>{message}</p> : null}

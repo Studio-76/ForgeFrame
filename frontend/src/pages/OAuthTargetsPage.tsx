@@ -1,4 +1,4 @@
-import { Link, useSearchParams } from "react-router-dom";
+import { useSearchParams } from "react-router-dom";
 
 import { CONTROL_PLANE_ROUTES } from "../app/navigation";
 import { useAppSession } from "../app/session";
@@ -6,7 +6,7 @@ import { getInstanceIdFromSearchParams, withInstanceScope } from "../app/tenantS
 import { useInstanceCatalog } from "../app/useInstanceCatalog";
 import { RegistryManagementPage } from "../components/page-templates";
 import type { AttentionPayload } from "../components/ui/models/attention";
-import { Button } from "../components/ui/Button";
+import { Button, ContextNavStrip } from "../components/ui";
 import type { SummaryStripItem } from "../components/ui/SummaryStrip";
 import { OAuthTargetsSection, OperationResultSection } from "../features/providers/ProvidersSections";
 import { getProvidersAccess } from "../features/providers/providersShared";
@@ -137,12 +137,15 @@ export function OAuthTargetsPage() {
       diagnostics={
         <div className="fg-stack">
           <p className="text-muted">Access: {access.badgeLabel}</p>
-          <div className="fg-nav-links">
-            <Link className="fg-nav-link" to={withInstanceScope(CONTROL_PLANE_ROUTES.dashboard, instanceId)}>Setup progress</Link>
-            <Link className="fg-nav-link" to={withInstanceScope(CONTROL_PLANE_ROUTES.providers, instanceId)}>Providers</Link>
-            <Link className="fg-nav-link" to={withInstanceScope(CONTROL_PLANE_ROUTES.harness, instanceId)}>Harness</Link>
-            <Link className="fg-nav-link" to={withInstanceScope(CONTROL_PLANE_ROUTES.usage, instanceId)}>Usage &amp; Costs</Link>
-          </div>
+          <ContextNavStrip
+            compact
+            items={[
+              { label: "Setup progress", to: withInstanceScope(CONTROL_PLANE_ROUTES.dashboard, instanceId) },
+              { label: "Providers", to: withInstanceScope(CONTROL_PLANE_ROUTES.providers, instanceId) },
+              { label: "Harness", to: withInstanceScope(CONTROL_PLANE_ROUTES.harness, instanceId) },
+              { label: "Usage & Costs", to: withInstanceScope(CONTROL_PLANE_ROUTES.usage, instanceId) },
+            ]}
+          />
         </div>
       }
       diagnosticsTitle="OAuth diagnostics"
