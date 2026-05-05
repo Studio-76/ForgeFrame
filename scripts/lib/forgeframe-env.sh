@@ -291,8 +291,10 @@ forgeframe_ensure_gum() {
   esac
 
   local download_url="https://github.com/charmbracelet/gum/releases/download/v${gum_version}/gum_${gum_version}_${os}_${arch}.tar.gz"
-  local tmp_dir
-  tmp_dir="$(mktemp -d "${TMPDIR:-/tmp}/forgeframe-gum.XXXXXX")" || return 1
+  local tmp_dir install_tmp
+  install_tmp="${ROOT_DIR:-.}/.install/.tmp"
+  mkdir -p "$install_tmp"
+  tmp_dir="$(mktemp -d "$install_tmp/forgeframe-gum.XXXXXX")" || return 1
 
   printf '[forgeframe-env] Downloading gum v%s (%s/%s) to %s...\n' "$gum_version" "$os" "$arch" "$gum_dir" >&2
 
@@ -321,7 +323,17 @@ forgeframe_ensure_gum() {
     return 1
   }
 
-  mv "$tmp_dir/gum" "$gum_bin" || {
+  # Find the gum binary — may be at root of tarball or inside a versioned directory
+  local found_gum
+  found_gum="$(find "$tmp_dir" -maxdepth 2 -type f -name 'gum' ! -name '*.md' ! -name '*.txt' 2>/dev/null | head -1)"
+  if [[ -z "$found_gum" || ! -f "$found_gum" ]]; then
+    printf '[forgeframe-env][ERROR] Gum binary not found in extracted archive.\n' >&2
+    ls -la "$tmp_dir/" >&2
+    rm -rf "$tmp_dir"
+    return 1
+  fi
+
+  mv "$found_gum" "$gum_bin" || {
     printf '[forgeframe-env][ERROR] Failed to move gum binary to %s.\n' "$gum_bin" >&2
     rm -rf "$tmp_dir"
     return 1
