@@ -87,17 +87,29 @@ gum_style() {
 
 gum_choose() {
   [[ "$NON_INTERACTIVE" == "1" ]] && return 0
-  gum choose "$@"
+  gum choose \
+    --cursor.foreground "$FF_CYAN" \
+    --selected.foreground "$FF_CYAN" \
+    --item.foreground 251 \
+    --header.foreground "$FF_AMBER" \
+    "$@"
 }
 
 gum_confirm() {
   [[ "$NON_INTERACTIVE" == "1" ]] && return 0
-  gum confirm "$@"
+  gum confirm \
+    --prompt.foreground "$FF_CYAN" \
+    --selected.foreground "$FF_GREEN" \
+    --unselected.foreground 243 \
+    "$@"
 }
 
 gum_input() {
   [[ "$NON_INTERACTIVE" == "1" ]] && return 0
-  gum input "$@"
+  gum input \
+    --prompt.foreground "$FF_CYAN" \
+    --cursor.foreground "$FF_CYAN" \
+    "$@"
 }
 
 gum_spin() {
