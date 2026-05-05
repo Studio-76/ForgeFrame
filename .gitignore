@@ -150,3 +150,13 @@ AGENTS.md
 
 # Agent research output
 .spaeher/
+
+# -------------------------
+# Local runtime state (post-install expansion of deploy/ templates)
+# -------------------------
+.install/
+
+# -------------------------
+# Backend local runtime state
+# -------------------------
+backend/.forgeframe/

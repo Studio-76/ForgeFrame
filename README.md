@@ -141,5 +141,3 @@ Additional documentation is maintained in `docs/`:
 - [Compactness Rules](docs/frontend/compactness-rules.md) — Layout density and visual-weight budget for operational pages
 - [Residual UX Anti-Pattern Catalog](docs/frontend/residual-ux-anti-pattern-catalog.md) — Common UI issues across pages
 - Generated TypeDoc: `cd frontend && npm run docs` → `docs/index.html`
-
-An earlier project overview is kept at [`reference/README_OLD.md`](reference/README_OLD.md).
