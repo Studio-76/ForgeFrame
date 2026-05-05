@@ -134,6 +134,12 @@ Run frontend commands from `frontend/` and backend commands from `backend/`.
 
 ## Documentation
 
-Additional technical and operator documentation is maintained in `docs/`.
+Additional documentation is maintained in `docs/`:
+
+- [Design Tokens & UI Guide](docs/frontend/UI-TOKENS.md) — colors, spacing, typography, dark/light theme
+- [UX Review Mode](docs/frontend/ux-review-mode.md) — Dev-only UI inspection, annotation, and export tool for reviewers
+- [Compactness Rules](docs/frontend/compactness-rules.md) — Layout density and visual-weight budget for operational pages
+- [Residual UX Anti-Pattern Catalog](docs/frontend/residual-ux-anti-pattern-catalog.md) — Common UI issues across pages
+- Generated TypeDoc: `cd frontend && npm run docs` → `docs/index.html`
 
 An earlier project overview is kept at [`reference/README_OLD.md`](reference/README_OLD.md).
