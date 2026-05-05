@@ -119,7 +119,11 @@ export interface UxAnnotation {
   /** Optional note about screenshot or visual reference. */
   screenshotNote?: string;
   /** ISO-8601 timestamp when the annotation was created. */
-  timestamp: string;
+  createdAt: string;
+  /** Whether this annotation has been resolved. */
+  isResolved?: boolean;
+  /** ISO-8601 timestamp when the annotation was resolved. */
+  resolvedAt?: string;
   /** Viewport dimensions at annotation time. */
   viewportSize: { width: number; height: number };
   /** Current page route at annotation time. */
@@ -131,6 +135,72 @@ export interface UxAnnotation {
    */
   pageTitle: string;
 }
+
+// ── Export Format ───────────────────────────────────────
+
+/**
+ * Schema version for the annotation export format.
+ * Increment when the export structure changes.
+ */
+export const ANNOTATION_EXPORT_SCHEMA_VERSION = "1.0";
+
+/**
+ * Flat annotation record used in exports.
+ * Fields are flattened from the nested UxAnnotation for agent-friendly consumption.
+ */
+export interface AnnotationRecord {
+  id: string;
+  route: string;
+  pageTitle: string;
+  uxId: string;
+  uxComponent?: string;
+  uxRole?: string;
+  uxActionKind?: string;
+  uxAttention?: string;
+  issueType: UxIssueType;
+  severity: UxAnnotationSeverity;
+  comment: string;
+  expectedChange?: string;
+  selectorFallback: string;
+  textSnapshot: string;
+  boundingBox: { x: number; y: number; width: number; height: number } | null;
+  createdAt: string;
+  isResolved?: boolean;
+  resolvedAt?: string;
+}
+
+/**
+ * Full JSON export envelope for UX annotations.
+ * Designed to be consumed by coding agents to locate and fix UI issues.
+ */
+export interface AnnotationExport {
+  /** Schema version for forwards-compatibility. */
+  schemaVersion: string;
+  /** ISO-8601 timestamp of when the export was generated. */
+  generatedAt: string;
+  /** The page route these annotations belong to (or empty for all-session). */
+  route: string;
+  /** Page title at time of export. */
+  pageTitle: string;
+  /** Viewport dimensions at time of export. */
+  viewport: { width: number; height: number };
+  /** Flat annotation records. */
+  annotations: AnnotationRecord[];
+  /**
+   * Instructions for the agent consuming this export.
+   * These are fixed guidelines that accompany every export.
+   */
+  _instructions: string;
+}
+
+// ── Partial update type ─────────────────────────────────
+
+/**
+ * Fields on an annotation that can be updated after creation.
+ */
+export type AnnotationUpdate = Partial<Pick<UxAnnotation,
+  "issueType" | "severity" | "comment" | "expectedChange" | "screenshotNote" | "isResolved" | "resolvedAt"
+>>;
 
 // ── Context ─────────────────────────────────────────────
 
@@ -146,6 +216,12 @@ export interface UxReviewContextValue {
   hoveredElement: CapturedElement | null;
   /** All annotations created in this session. */
   annotations: UxAnnotation[];
+  /** Annotations filtered to the current page route. */
+  pageAnnotations: UxAnnotation[];
+  /** Total count of annotations across all pages. */
+  annotationCount: number;
+  /** Count of annotations on the current page route. */
+  pageAnnotationCount: number;
   /** Select an element for annotation. */
   selectElement: (element: CapturedElement | null) => void;
   /** Set the hovered element for tooltip display. */
@@ -160,12 +236,57 @@ export interface UxReviewContextValue {
   ) => void;
   /** Remove an annotation by ID. */
   removeAnnotation: (id: string) => void;
+  /** Partially update an existing annotation by ID. */
+  updateAnnotation: (id: string, updates: AnnotationUpdate) => void;
   /** Clear the current selection. */
   clearSelection: () => void;
-  /** Export all annotations as a JSON blob. */
+  /** Clear all annotations (optionally filtered to a route). */
+  clearAnnotations: (route?: string) => void;
+  /** Export all annotations as a legacy JSON blob (simple stringify). */
   exportAnnotations: () => string;
-  /** Total count of annotations. */
-  annotationCount: number;
+  /** Export annotations as structured JSON (optionally filtered to route). */
+  exportJson: (route?: string) => string;
+  /** Export annotations as Markdown (optionally filtered to route). */
+  exportMarkdown: (route?: string) => string;
+}
+
+// ── Export Instructions ─────────────────────────────────
+
+/**
+ * Fixed instructions embedded in every export to guide downstream agents.
+ * These are intentionally written as a directive — not as metadata.
+ */
+export const EXPORT_INSTRUCTIONS =
+  "Only change presentation, hierarchy, grouping, labeling, density, or default visibility. " +
+  "Do not remove data or settings. " +
+  "Keep full detail accessible through details, expansion, audit history, or AdvancedDiagnostics.";
+
+// ── Conversion helpers ──────────────────────────────────
+
+/**
+ * Converts an internal UxAnnotation to a flat AnnotationRecord for export.
+ */
+export function annotationToRecord(ann: UxAnnotation): AnnotationRecord {
+  return {
+    id: ann.id,
+    route: ann.route,
+    pageTitle: ann.pageTitle,
+    uxId: ann.element.elementData.uxId,
+    uxComponent: ann.element.elementData.uxComponent,
+    uxRole: ann.element.elementData.uxRole,
+    uxActionKind: ann.element.elementData.uxActionKind,
+    uxAttention: ann.element.elementData.uxAttention,
+    issueType: ann.issueType,
+    severity: ann.severity,
+    comment: ann.comment,
+    expectedChange: ann.expectedChange,
+    selectorFallback: ann.element.domSelector,
+    textSnapshot: ann.element.textContent,
+    boundingBox: ann.element.boundingBox,
+    createdAt: ann.createdAt,
+    isResolved: ann.isResolved,
+    resolvedAt: ann.resolvedAt,
+  };
 }
 
 // ── DOM Helpers ─────────────────────────────────────────

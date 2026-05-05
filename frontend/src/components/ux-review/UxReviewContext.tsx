@@ -11,6 +11,10 @@
  * and panel are never rendered. The provider passes children through
  * with no runtime overhead.
  *
+ * Annotations are persisted to localStorage under the key
+ * `forgeframe-ux-review-annotations` so that unfinished review sessions
+ * survive page navigation and tab closure.
+ *
  * **Production bundle note:** The overlay and panel modules are statically
  * imported, but their `createElement` calls are guarded by the compile-time
  * constant `UX_REVIEW_AVAILABLE`. Vite's minifier eliminates these branches
@@ -29,6 +33,7 @@ import {
   type ReactNode,
 } from "react";
 import type {
+  AnnotationUpdate,
   CapturedElement,
   UxAnnotation,
   UxAnnotationSeverity,
@@ -37,6 +42,12 @@ import type {
 } from "./types";
 import { UxReviewOverlay } from "./UxReviewOverlay";
 import { UxReviewPanel } from "./UxReviewPanel";
+import { formatAnnotationsJson, formatAnnotationsMarkdown } from "./export-utils";
+
+/**
+ * localStorage key used to persist annotations across sessions.
+ */
+const LOCAL_STORAGE_KEY = "forgeframe-ux-review-annotations";
 
 /**
  * Whether UX Review Mode is available in this build environment.
@@ -52,19 +63,19 @@ const NULL_CONTEXT: UxReviewContextValue = {
   selectedElement: null,
   hoveredElement: null,
   annotations: [],
+  pageAnnotations: [],
+  annotationCount: 0,
+  pageAnnotationCount: 0,
   selectElement: () => { /* noop */ },
   setHoveredElement: () => { /* noop */ },
-  addAnnotation: (
-    _issueType: UxIssueType,
-    _severity: UxAnnotationSeverity,
-    _comment: string,
-    _expectedChange?: string,
-    _screenshotNote?: string,
-  ) => { /* noop */ },
+  addAnnotation: () => { /* noop */ },
   removeAnnotation: () => { /* noop */ },
+  updateAnnotation: () => { /* noop */ },
   clearSelection: () => { /* noop */ },
+  clearAnnotations: () => { /* noop */ },
   exportAnnotations: () => "[]",
-  annotationCount: 0,
+  exportJson: () => "[]",
+  exportMarkdown: () => "",
 };
 
 /**
@@ -98,6 +109,65 @@ function isToggleShortcut(event: KeyboardEvent): boolean {
   );
 }
 
+// ── localStorage helpers ────────────────────────────────
+
+/**
+ * Reads persisted annotations from localStorage.
+ * @returns The deserialized annotation array, or empty array on failure.
+ */
+/**
+ * Minimal runtime shape validator for persisted annotations.
+ * Ensures each item has the required fields before returning.
+ */
+function isValidAnnotation(item: unknown): item is UxAnnotation {
+  if (!item || typeof item !== "object") return false;
+  const a = item as Record<string, unknown>;
+  return (
+    typeof a.id === "string" &&
+    typeof a.createdAt === "string" &&
+    a.element !== null &&
+    typeof a.element === "object" &&
+    typeof (a.element as Record<string, unknown>).elementData === "object" &&
+    typeof (a.element as Record<string, unknown>).domSelector === "string"
+  );
+}
+
+function loadPersistedAnnotations(): UxAnnotation[] {
+  try {
+    const raw = localStorage.getItem(LOCAL_STORAGE_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    const valid = parsed.filter(isValidAnnotation);
+    if (valid.length !== parsed.length) {
+      console.warn("[UX Review] Discarded", parsed.length - valid.length, "invalid annotation(s) from localStorage");
+    }
+    return valid;
+  } catch {
+    // Corrupted data — silently discard
+    return [];
+  }
+}
+
+/**
+ * Writes annotations to localStorage.
+ * @param annotations - The annotation array to persist.
+ */
+function persistAnnotations(annotations: UxAnnotation[]): void {
+  try {
+    localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(annotations));
+  } catch {
+    // localStorage full or unavailable — silently ignore
+  }
+}
+
+/**
+ * Helper to generate a unique annotation ID.
+ */
+function generateAnnotationId(): string {
+  return `ux-ann-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
 // ── Provider ────────────────────────────────────────────
 
 /**
@@ -108,15 +178,24 @@ function isToggleShortcut(event: KeyboardEvent): boolean {
  *
  * When activated, it:
  * - Tracks the currently hovered and selected DOM elements (with data-ux-* attributes)
- * - Stores session annotations in local state
- * - Provides export and clear controls
+ * - Stores session annotations in local state with localStorage persistence
+ * - Provides annotation CRUD (create, read, update, delete)
+ * - Supports resolve / clear-session workflows
+ * - Provides export functions (JSON and Markdown, per-page or all)
  * - Supports Ctrl+Shift+U keyboard shortcut
  */
 export function UxReviewProvider({ children }: { readonly children: ReactNode }) {
   const [enabled, setEnabled] = useState<boolean>(() => isUxReviewActive());
   const [selectedElement, setSelectedElement] = useState<CapturedElement | null>(null);
   const [hoveredElement, setHoveredElement] = useState<CapturedElement | null>(null);
-  const [annotations, setAnnotations] = useState<UxAnnotation[]>([]);
+  const [annotations, setAnnotations] = useState<UxAnnotation[]>(() => {
+    // Restore persisted annotations on first mount
+    if (UX_REVIEW_AVAILABLE) {
+      return loadPersistedAnnotations();
+    }
+    return [];
+  });
+
   /** Ref used to track if annotations have been initialised for this session. */
   const hasShownBanner = useRef(false);
 
@@ -144,6 +223,22 @@ export function UxReviewProvider({ children }: { readonly children: ReactNode })
     }
   }, [enabled]);
 
+  /* Persist annotations to localStorage whenever they change (in review mode) */
+  useEffect(() => {
+    if (UX_REVIEW_AVAILABLE) {
+      persistAnnotations(annotations);
+    }
+  }, [annotations]);
+
+  // ── Derived data ──────────────────────────────────────────────
+
+  const pageAnnotations = useMemo<UxAnnotation[]>(
+    () => annotations.filter((a) => a.route === window.location.pathname),
+    [annotations],
+  );
+
+  // ── Actions ────────────────────────────────────────────────────
+
   const selectElement = useCallback((element: CapturedElement | null) => {
     setSelectedElement(element);
   }, []);
@@ -162,14 +257,14 @@ export function UxReviewProvider({ children }: { readonly children: ReactNode })
     ) => {
       if (!selectedElement) return;
       const annotation: UxAnnotation = {
-        id: `ux-ann-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        id: generateAnnotationId(),
         element: selectedElement,
         issueType,
         severity,
         comment,
         expectedChange,
         screenshotNote,
-        timestamp: new Date().toISOString(),
+        createdAt: new Date().toISOString(),
         viewportSize: { width: window.innerWidth, height: window.innerHeight },
         route: window.location.pathname,
         pageTitle: document.title,
@@ -183,13 +278,50 @@ export function UxReviewProvider({ children }: { readonly children: ReactNode })
     setAnnotations((prev) => prev.filter((a) => a.id !== id));
   }, []);
 
+  const updateAnnotation = useCallback((id: string, updates: AnnotationUpdate) => {
+    setAnnotations((prev) =>
+      prev.map((a) => (a.id === id ? { ...a, ...updates } : a)),
+    );
+  }, []);
+
   const clearSelection = useCallback(() => {
     setSelectedElement(null);
   }, []);
 
-  const exportAnnotations = useCallback((): string => {
-    return JSON.stringify(annotations, null, 2);
-  }, [annotations]);
+  const clearAnnotations = useCallback((route?: string) => {
+    if (route) {
+      setAnnotations((prev) => prev.filter((a) => a.route !== route));
+    } else {
+      setAnnotations([]);
+    }
+  }, []);
+
+  // ── Export functions ──────────────────────────────────────────
+  //
+  // These are plain function declarations (not useCallback'd) that read
+  // window.location.pathname / document.title at call time to avoid stale
+  // closures. They capture `annotations` from the render closure, which is
+  // always current when called via the context value.
+
+  function exportAnnotationsFn(): string {
+    return formatAnnotationsJson(annotations, "(all pages)", document.title);
+  }
+
+  function exportJsonFn(route?: string): string {
+    const source = route
+      ? annotations.filter((a) => a.route === route)
+      : annotations;
+    return formatAnnotationsJson(source, route ?? "", document.title);
+  }
+
+  function exportMarkdownFn(route?: string): string {
+    const source = route
+      ? annotations.filter((a) => a.route === route)
+      : annotations;
+    return formatAnnotationsMarkdown(source, route ?? "", document.title);
+  }
+
+  // ── Context value ─────────────────────────────────────────────
 
   const contextValue = useMemo<UxReviewContextValue>(
     () => ({
@@ -197,25 +329,33 @@ export function UxReviewProvider({ children }: { readonly children: ReactNode })
       selectedElement,
       hoveredElement,
       annotations,
+      pageAnnotations,
       annotationCount: annotations.length,
+      pageAnnotationCount: pageAnnotations.length,
       selectElement,
       setHoveredElement: setHovered,
       addAnnotation,
       removeAnnotation,
+      updateAnnotation,
       clearSelection,
-      exportAnnotations,
+      clearAnnotations,
+      exportAnnotations: exportAnnotationsFn,
+      exportJson: exportJsonFn,
+      exportMarkdown: exportMarkdownFn,
     }),
     [
       enabled,
       selectedElement,
       hoveredElement,
       annotations,
+      pageAnnotations,
       selectElement,
       setHovered,
       addAnnotation,
       removeAnnotation,
+      updateAnnotation,
       clearSelection,
-      exportAnnotations,
+      clearAnnotations,
     ],
   );
 

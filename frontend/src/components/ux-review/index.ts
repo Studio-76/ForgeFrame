@@ -32,13 +32,26 @@ export type {
   UxElementData,
   CapturedElement,
   UxAnnotation,
+  AnnotationRecord,
+  AnnotationExport,
+  AnnotationUpdate,
   UxIssueType,
   UxAnnotationSeverity,
 } from "./types";
 export {
   UX_ISSUE_LABELS,
   UX_SEVERITY_LABELS,
+  ANNOTATION_EXPORT_SCHEMA_VERSION,
+  EXPORT_INSTRUCTIONS,
+  annotationToRecord,
   extractUxElementData,
   buildDomSelector,
   captureElement,
 } from "./types";
+export {
+  buildAnnotationExport,
+  formatAnnotationsJson,
+  formatAnnotationsMarkdown,
+  copyToClipboard,
+  downloadAsFile,
+} from "./export-utils";

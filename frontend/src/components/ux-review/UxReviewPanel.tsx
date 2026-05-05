@@ -5,17 +5,25 @@
  * from the right side of the viewport showing:
  * - Captured element metadata (uxId, component, role, action, attention, density)
  * - A form to add an annotation (issue type, severity, comment, expected change)
- * - A list of all session annotations with delete capability
- * - Export and clear-all controls
+ * - A list of all session annotations with edit, resolve, and delete capabilities
+ * - Export controls (JSON per-page, JSON all, Markdown per-page, clipboard, download)
+ * - Clear controls (current page or all pages)
  *
  * The panel is positioned fixed to avoid interfering with page layout.
  * Panel elements do NOT carry data-ux-* attributes to avoid circular
  * metadata on the review tooling itself.
  */
 
-import { useCallback, useId, useState } from "react";
-import type { UxAnnotationSeverity, UxIssueType, UxReviewContextValue } from "./types";
+import { useCallback, useId, useRef, useState } from "react";
+import type {
+  AnnotationUpdate,
+  UxAnnotation,
+  UxAnnotationSeverity,
+  UxIssueType,
+  UxReviewContextValue,
+} from "./types";
 import { UX_ISSUE_LABELS, UX_SEVERITY_LABELS } from "./types";
+import { copyToClipboard, downloadAsFile } from "./export-utils";
 
 /** Width of the side panel in pixels. */
 const PANEL_WIDTH = 380;
@@ -60,43 +68,104 @@ const INITIAL_FORM: AnnotationForm = {
  */
 export function UxReviewPanel({ context }: UxReviewPanelProps) {
   const {
+    isEnabled,
     selectedElement,
-    annotations,
+    pageAnnotations,
     annotationCount,
+    pageAnnotationCount,
     addAnnotation,
     removeAnnotation,
+    updateAnnotation,
     clearSelection,
-    exportAnnotations,
+    clearAnnotations,
+    exportJson,
   } = context;
   const [form, setForm] = useState<AnnotationForm>(INITIAL_FORM);
   const [panelTab, setPanelTab] = useState<"form" | "list">("form");
   const [copied, setCopied] = useState(false);
+  const [exportMenuOpen, setExportMenuOpen] = useState(false);
+  const [clearMenuOpen, setClearMenuOpen] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
   const formId = useId();
+  const exportMenuRef = useRef<HTMLDivElement>(null);
+  const clearMenuRef = useRef<HTMLDivElement>(null);
 
   const handleAdd = useCallback(() => {
     if (!form.comment.trim()) return;
-    addAnnotation(form.issueType, form.severity, form.comment.trim(), form.expectedChange.trim() || undefined, form.screenshotNote.trim() || undefined);
+    addAnnotation(
+      form.issueType,
+      form.severity,
+      form.comment.trim(),
+      form.expectedChange.trim() || undefined,
+      form.screenshotNote.trim() || undefined,
+    );
     setForm(INITIAL_FORM);
   }, [form, addAnnotation]);
 
-  const handleExport = useCallback(() => {
-    const json = exportAnnotations();
-    navigator.clipboard.writeText(json).then(() => {
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    }).catch(() => {
-      // Fallback: create a blob and trigger download
-      const blob = new Blob([json], { type: "application/json" });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `ux-review-annotations-${Date.now()}.json`;
-      a.click();
-      URL.revokeObjectURL(url);
-    });
-  }, [exportAnnotations]);
+  // ── Export handlers ─────────────────────────────────────
 
-  if (!selectedElement || !context.isEnabled) return null;
+  const handleCopyJsonPage = useCallback(async () => {
+    const json = exportJson(window.location.pathname);
+    await copyToClipboard(json);
+    setCopied(true);
+    setExportMenuOpen(false);
+    setTimeout(() => setCopied(false), 2000);
+  }, [exportJson]);
+
+  const handleCopyJsonAll = useCallback(async () => {
+    const json = exportJson();
+    await copyToClipboard(json);
+    setCopied(true);
+    setExportMenuOpen(false);
+    setTimeout(() => setCopied(false), 2000);
+  }, [exportJson]);
+
+  const handleCopyMarkdownPage = useCallback(async () => {
+    const { exportMarkdown } = context;
+    const md = exportMarkdown(window.location.pathname);
+    await copyToClipboard(md);
+    setCopied(true);
+    setExportMenuOpen(false);
+    setTimeout(() => setCopied(false), 2000);
+  }, [context]);
+
+  const handleDownloadJsonPage = useCallback(() => {
+    const json = exportJson(window.location.pathname);
+    downloadAsFile(json, `ux-review-${window.location.pathname.replace(/\//g, "-") || "root"}.json`);
+    setExportMenuOpen(false);
+  }, [exportJson]);
+
+  const handleDownloadJsonAll = useCallback(() => {
+    const json = exportJson();
+    downloadAsFile(json, `ux-review-all-${Date.now()}.json`);
+    setExportMenuOpen(false);
+  }, [exportJson]);
+
+  // ── Clear handlers ────────────────────────────────────
+
+  const handleClearPage = useCallback(() => {
+    clearAnnotations(window.location.pathname);
+    setClearMenuOpen(false);
+  }, [clearAnnotations]);
+
+  const handleClearAll = useCallback(() => {
+    if (window.confirm("Clear all annotations across all pages? This cannot be undone.")) {
+      clearAnnotations();
+    }
+    setClearMenuOpen(false);
+  }, [clearAnnotations]);
+
+  // ── Close menus on outside click (mounted once) ───────
+
+  const handleBackdropClick = useCallback(() => {
+    setExportMenuOpen(false);
+    setClearMenuOpen(false);
+    if (!editingId) {
+      clearSelection();
+    }
+  }, [clearSelection, editingId]);
+
+  if (!selectedElement || !isEnabled) return null;
 
   const { elementData, textContent, domSelector } = selectedElement;
 
@@ -104,7 +173,7 @@ export function UxReviewPanel({ context }: UxReviewPanelProps) {
     <>
       {/* Backdrop */}
       <div
-        onClick={clearSelection}
+        onClick={handleBackdropClick}
         role="presentation"
         style={{
           position: "fixed",
@@ -162,11 +231,11 @@ export function UxReviewPanel({ context }: UxReviewPanelProps) {
               UX Review
             </h2>
             <p style={{ margin: "2px 0 0", fontSize: "11px", color: "#64748b" }}>
-              {annotationCount} annotation{annotationCount !== 1 ? "s" : ""}
+              {pageAnnotationCount} on this page &middot; {annotationCount} total
             </p>
           </div>
           <button
-            onClick={clearSelection}
+            onClick={() => { clearSelection(); setEditingId(null); }}
             aria-label="Close panel"
             style={{
               background: "none",
@@ -215,11 +284,11 @@ export function UxReviewPanel({ context }: UxReviewPanelProps) {
             flexShrink: 0,
           }}
         >
-          <TabButton active={panelTab === "form"} onClick={() => setPanelTab("form")}>
+          <TabButton active={panelTab === "form"} onClick={() => { setPanelTab("form"); setEditingId(null); }}>
             Annotate
           </TabButton>
           <TabButton active={panelTab === "list"} onClick={() => setPanelTab("list")}>
-            History ({annotationCount})
+            History ({pageAnnotationCount})
           </TabButton>
         </div>
 
@@ -229,8 +298,11 @@ export function UxReviewPanel({ context }: UxReviewPanelProps) {
             <AnnotationFormSection form={form} onChange={setForm} onAdd={handleAdd} formId={formId} />
           ) : (
             <AnnotationListSection
-              annotations={annotations}
+              annotations={pageAnnotations}
               onRemove={removeAnnotation}
+              onUpdate={updateAnnotation}
+              editingId={editingId}
+              setEditingId={setEditingId}
             />
           )}
         </div>
@@ -244,19 +316,196 @@ export function UxReviewPanel({ context }: UxReviewPanelProps) {
             gap: "8px",
             flexShrink: 0,
             background: "#0b101b",
+            position: "relative",
           }}
         >
-          <ActionButton onClick={handleExport} variant="primary">
-            {copied ? "Copied!" : "Export JSON"}
-          </ActionButton>
-          {annotationCount > 0 ? (
-            <ActionButton onClick={() => { if (window.confirm("Clear all annotations for this session?")) annotations.forEach((a) => removeAnnotation(a.id)); }} variant="danger">
-              Clear All
+          {/* Export button + dropdown */}
+          <div ref={exportMenuRef} style={{ flex: 1, position: "relative" }}>
+            <ActionButton
+              onClick={() => { setExportMenuOpen((o) => !o); setClearMenuOpen(false); }}
+              variant="primary"
+            >
+              {copied ? "Copied!" : `Export \u25BE`}
             </ActionButton>
-          ) : null}
+            {exportMenuOpen && (
+              <ExportDropdown
+                onCopyJsonPage={handleCopyJsonPage}
+                onCopyJsonAll={handleCopyJsonAll}
+                onCopyMarkdownPage={handleCopyMarkdownPage}
+                onDownloadJsonPage={handleDownloadJsonPage}
+                onDownloadJsonAll={handleDownloadJsonAll}
+              />
+            )}
+          </div>
+
+          {/* Clear button + dropdown */}
+          <div ref={clearMenuRef} style={{ flex: 1, position: "relative" }}>
+            <ActionButton
+              onClick={() => { setClearMenuOpen((o) => !o); setExportMenuOpen(false); }}
+              variant="danger"
+              disabled={annotationCount === 0}
+            >
+              Clear \u25BE
+            </ActionButton>
+            {clearMenuOpen && (
+              <ClearDropdown
+                pageAnnotationCount={pageAnnotationCount}
+                onClearPage={handleClearPage}
+                onClearAll={handleClearAll}
+              />
+            )}
+          </div>
         </div>
       </aside>
     </>
+  );
+}
+
+// ── Export Dropdown ─────────────────────────────────────
+
+type ExportDropdownItem =
+  | { kind: "action"; label: string; action: () => void }
+  | { kind: "divider" };
+
+function ExportDropdown({
+  onCopyJsonPage,
+  onCopyJsonAll,
+  onCopyMarkdownPage,
+  onDownloadJsonPage,
+  onDownloadJsonAll,
+}: {
+  onCopyJsonPage: () => void;
+  onCopyJsonAll: () => void;
+  onCopyMarkdownPage: () => void;
+  onDownloadJsonPage: () => void;
+  onDownloadJsonAll: () => void;
+}) {
+  const items: ExportDropdownItem[] = [
+    { kind: "action", label: "Copy JSON (current page)", action: onCopyJsonPage },
+    { kind: "action", label: "Copy JSON (all pages)", action: onCopyJsonAll },
+    { kind: "action", label: "Copy Markdown (current page)", action: onCopyMarkdownPage },
+    { kind: "divider" },
+    { kind: "action", label: "Download JSON (current page)", action: onDownloadJsonPage },
+    { kind: "action", label: "Download JSON (all pages)", action: onDownloadJsonAll },
+  ];
+
+  return (
+    <div
+      style={{
+        position: "absolute",
+        bottom: "100%",
+        left: 0,
+        right: 0,
+        marginBottom: 4,
+        background: "#0b101b",
+        border: "1px solid #1e293b",
+        borderRadius: "6px",
+        overflow: "hidden",
+        zIndex: 10,
+      }}
+    >
+      {items.map((item, i) =>
+        item.kind === "divider" ? (
+          <div
+            key={`div-${i}`}
+            style={{ height: "1px", background: "#1e293b", margin: "4px 0" }}
+          />
+        ) : (
+          <button
+            key={item.label}
+            onClick={item.action}
+            style={{
+              display: "block",
+              width: "100%",
+              padding: "8px 12px",
+              background: "none",
+              border: "none",
+              color: "#e2e8f0",
+              cursor: "pointer",
+              fontSize: "12px",
+              textAlign: "left",
+              fontFamily: "'Inter', system-ui, sans-serif",
+            }}
+            onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(6, 182, 212, 0.1)"; }}
+            onMouseLeave={(e) => { e.currentTarget.style.background = "none"; }}
+          >
+            {item.label}
+          </button>
+        ),
+      )}
+    </div>
+  );
+}
+
+// ── Clear Dropdown ──────────────────────────────────────
+
+function ClearDropdown({
+  pageAnnotationCount,
+  onClearPage,
+  onClearAll,
+}: {
+  pageAnnotationCount: number;
+  onClearPage: () => void;
+  onClearAll: () => void;
+}) {
+  return (
+    <div
+      style={{
+        position: "absolute",
+        bottom: "100%",
+        left: 0,
+        right: 0,
+        marginBottom: 4,
+        background: "#0b101b",
+        border: "1px solid #1e293b",
+        borderRadius: "6px",
+        overflow: "hidden",
+        zIndex: 10,
+      }}
+    >
+      <button
+        onClick={onClearPage}
+        disabled={pageAnnotationCount === 0}
+        style={{
+          display: "block",
+          width: "100%",
+          padding: "8px 12px",
+          background: "none",
+          border: "none",
+          color: pageAnnotationCount === 0 ? "#475569" : "#e2e8f0",
+          cursor: pageAnnotationCount === 0 ? "default" : "pointer",
+          fontSize: "12px",
+          textAlign: "left",
+          fontFamily: "'Inter', system-ui, sans-serif",
+        }}
+        onMouseEnter={(e) => {
+          if (pageAnnotationCount > 0) e.currentTarget.style.background = "rgba(239, 68, 68, 0.1)";
+        }}
+        onMouseLeave={(e) => { e.currentTarget.style.background = "none"; }}
+      >
+        Clear this page ({pageAnnotationCount})
+      </button>
+      <div style={{ height: "1px", background: "#1e293b" }} />
+      <button
+        onClick={onClearAll}
+        style={{
+          display: "block",
+          width: "100%",
+          padding: "8px 12px",
+          background: "none",
+          border: "none",
+          color: "#ef4444",
+          cursor: "pointer",
+          fontSize: "12px",
+          textAlign: "left",
+          fontFamily: "'Inter', system-ui, sans-serif",
+        }}
+        onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(239, 68, 68, 0.15)"; }}
+        onMouseLeave={(e) => { e.currentTarget.style.background = "none"; }}
+      >
+        Clear all pages
+      </button>
+    </div>
   );
 }
 
@@ -291,6 +540,7 @@ function TabButton({ active, onClick, children }: { active: boolean; onClick: ()
         cursor: "pointer",
         fontSize: "12px",
         fontWeight: active ? 600 : 400,
+        fontFamily: "'Inter', system-ui, sans-serif",
         transition: "all 0.15s ease",
       }}
     >
@@ -300,28 +550,33 @@ function TabButton({ active, onClick, children }: { active: boolean; onClick: ()
 }
 
 /** Styled action button for the panel footer. */
-function ActionButton({ onClick, variant, children }: { onClick: () => void; variant: "primary" | "danger"; children: React.ReactNode }) {
+function ActionButton({ onClick, variant, disabled, children }: { onClick: () => void; variant: "primary" | "danger"; disabled?: boolean; children: React.ReactNode }) {
   const bg = variant === "danger" ? "rgba(239, 68, 68, 0.15)" : "rgba(6, 182, 212, 0.15)";
   const color = variant === "danger" ? "#ef4444" : "#06b6d4";
   const hoverBg = variant === "danger" ? "rgba(239, 68, 68, 0.25)" : "rgba(6, 182, 212, 0.25)";
   return (
     <button
       onClick={onClick}
+      disabled={disabled}
       style={{
-        flex: 1,
+        width: "100%",
         padding: "8px 12px",
-        background: bg,
-        border: `1px solid ${color}33`,
+        background: disabled ? "#1e293b" : bg,
+        border: `1px solid ${disabled ? "#1e293b" : `${color}33`}`,
         borderRadius: "6px",
-        color,
-        cursor: "pointer",
+        color: disabled ? "#475569" : color,
+        cursor: disabled ? "default" : "pointer",
         fontSize: "12px",
         fontWeight: 500,
         fontFamily: "'Inter', system-ui, sans-serif",
         transition: "background 0.15s ease",
       }}
-      onMouseEnter={(e) => { e.currentTarget.style.background = hoverBg; }}
-      onMouseLeave={(e) => { e.currentTarget.style.background = bg; }}
+      onMouseEnter={(e) => {
+        if (!disabled) e.currentTarget.style.background = hoverBg;
+      }}
+      onMouseLeave={(e) => {
+        if (!disabled) e.currentTarget.style.background = bg;
+      }}
     >
       {children}
     </button>
@@ -462,13 +717,19 @@ const inputStyle: React.CSSProperties = {
   boxSizing: "border-box",
 };
 
-/** Annotation list with delete support. */
+/** Annotation list with edit, resolve, and delete support. */
 function AnnotationListSection({
   annotations,
   onRemove,
+  onUpdate,
+  editingId,
+  setEditingId,
 }: {
-  annotations: UxReviewContextValue["annotations"];
+  annotations: UxReviewContextValue["pageAnnotations"];
   onRemove: (id: string) => void;
+  onUpdate: (id: string, updates: AnnotationUpdate) => void;
+  editingId: string | null;
+  setEditingId: (id: string | null) => void;
 }) {
   if (annotations.length === 0) {
     return (
@@ -480,52 +741,265 @@ function AnnotationListSection({
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
-      {annotations.map((ann) => (
-        <div
-          key={ann.id}
-          style={{
-            background: "#0b101b",
-            border: "1px solid #1e293b",
-            borderRadius: "6px",
-            padding: "10px 12px",
-            fontSize: "12px",
-          }}
-        >
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 4 }}>
-            <div style={{ display: "flex", gap: "6px", alignItems: "center" }}>
-              <SeverityBadge severity={ann.severity} />
-              <span style={{ color: "#06b6d4", fontWeight: 500, fontSize: "11px" }}>
-                {UX_ISSUE_LABELS[ann.issueType]}
-              </span>
-            </div>
-            <button
-              onClick={() => onRemove(ann.id)}
-              aria-label="Delete annotation"
-              style={{
-                background: "none",
-                border: "none",
-                color: "#475569",
-                cursor: "pointer",
-                fontSize: "14px",
-                padding: "0 2px",
-                lineHeight: 1,
-              }}
-            >
-              ✕
-            </button>
-          </div>
-          <p style={{ margin: "0 0 4px", color: "#e2e8f0", lineHeight: 1.4 }}>{ann.comment}</p>
-          {ann.expectedChange ? (
-            <p style={{ margin: "0 0 4px", color: "#94a3b8", fontStyle: "italic" }}>
-              Expected: {ann.expectedChange}
-            </p>
+      {annotations.map((ann) =>
+        editingId === ann.id ? (
+          <EditAnnotationCard
+            key={ann.id}
+            annotation={ann}
+            onSave={(updates) => {
+              onUpdate(ann.id, updates);
+              setEditingId(null);
+            }}
+            onCancel={() => setEditingId(null)}
+          />
+        ) : (
+          <AnnotationCard
+            key={ann.id}
+            annotation={ann}
+            onRemove={onRemove}
+            onEdit={() => setEditingId(ann.id)}
+            onToggleResolve={() => {
+              onUpdate(ann.id, {
+                isResolved: !ann.isResolved,
+                resolvedAt: ann.isResolved ? undefined : new Date().toISOString(),
+              });
+            }}
+          />
+        ),
+      )}
+    </div>
+  );
+}
+
+/** Single annotation display card. */
+function AnnotationCard({
+  annotation: ann,
+  onRemove,
+  onEdit,
+  onToggleResolve,
+}: {
+  annotation: UxAnnotation;
+  onRemove: (id: string) => void;
+  onEdit: () => void;
+  onToggleResolve: () => void;
+}) {
+  return (
+    <div
+      style={{
+        background: ann.isResolved ? "rgba(34, 197, 94, 0.05)" : "#0b101b",
+        border: `1px solid ${ann.isResolved ? "rgba(34, 197, 94, 0.2)" : "#1e293b"}`,
+        borderRadius: "6px",
+        padding: "10px 12px",
+        fontSize: "12px",
+        opacity: ann.isResolved ? 0.7 : 1,
+      }}
+    >
+      {/* Header row: severity badge, issue type, actions */}
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 4 }}>
+        <div style={{ display: "flex", gap: "6px", alignItems: "center" }}>
+          <SeverityBadge severity={ann.severity} />
+          <span style={{ color: "#06b6d4", fontWeight: 500, fontSize: "11px" }}>
+            {UX_ISSUE_LABELS[ann.issueType]}
+          </span>
+          {ann.isResolved ? (
+            <span style={{ color: "#22c55e", fontSize: "10px", fontWeight: 500 }}>
+              Resolved
+            </span>
           ) : null}
-          <div style={{ color: "#475569", fontSize: "10px", display: "flex", gap: "12px" }}>
-            <span>{ann.element.elementData.uxId}</span>
-            <span>{new Date(ann.timestamp).toLocaleTimeString()}</span>
+        </div>
+        <div style={{ display: "flex", gap: "4px", alignItems: "center" }}>
+          {/* Resolve toggle */}
+          <button
+            onClick={onToggleResolve}
+            aria-label={ann.isResolved ? "Mark unresolved" : "Mark resolved"}
+            title={ann.isResolved ? "Mark unresolved" : "Mark resolved"}
+            style={{
+              background: "none",
+              border: `1px solid ${ann.isResolved ? "#22c55e" : "#475569"}`,
+              borderRadius: "3px",
+              color: ann.isResolved ? "#22c55e" : "#475569",
+              cursor: "pointer",
+              fontSize: "10px",
+              padding: "1px 4px",
+              lineHeight: 1.2,
+            }}
+          >
+            {ann.isResolved ? "\u2713" : "\u25CB"}
+          </button>
+          {/* Edit button */}
+          <button
+            onClick={onEdit}
+            aria-label="Edit annotation"
+            title="Edit"
+            style={{
+              background: "none",
+              border: "1px solid #475569",
+              borderRadius: "3px",
+              color: "#94a3b8",
+              cursor: "pointer",
+              fontSize: "10px",
+              padding: "1px 4px",
+              lineHeight: 1.2,
+            }}
+          >
+            Edit
+          </button>
+          {/* Delete button */}
+          <button
+            onClick={() => onRemove(ann.id)}
+            aria-label="Delete annotation"
+            style={{
+              background: "none",
+              border: "none",
+              color: "#475569",
+              cursor: "pointer",
+              fontSize: "14px",
+              padding: "0 2px",
+              lineHeight: 1,
+            }}
+          >
+            ✕
+          </button>
+        </div>
+      </div>
+      <p style={{ margin: "0 0 4px", color: "#e2e8f0", lineHeight: 1.4 }}>{ann.comment}</p>
+      {ann.expectedChange ? (
+        <p style={{ margin: "0 0 4px", color: "#94a3b8", fontStyle: "italic" }}>
+          Expected: {ann.expectedChange}
+        </p>
+      ) : null}
+      <div style={{ color: "#475569", fontSize: "10px", display: "flex", gap: "12px" }}>
+        <span>{ann.element.elementData.uxId}</span>
+        <span>{new Date(ann.createdAt).toLocaleTimeString()}</span>
+      </div>
+    </div>
+  );
+}
+
+/** Inline edit form for an existing annotation. */
+function EditAnnotationCard({
+  annotation: ann,
+  onSave,
+  onCancel,
+}: {
+  annotation: UxAnnotation;
+  onSave: (updates: AnnotationUpdate) => void;
+  onCancel: () => void;
+}) {
+  const formId = useId();
+  const [issueType, setIssueType] = useState<UxIssueType>(ann.issueType);
+  const [severity, setSeverity] = useState<UxAnnotationSeverity>(ann.severity);
+  const [comment, setComment] = useState(ann.comment);
+  const [expectedChange, setExpectedChange] = useState(ann.expectedChange ?? "");
+
+  const handleSave = useCallback(() => {
+    if (!comment.trim()) return;
+    onSave({
+      issueType,
+      severity,
+      comment: comment.trim(),
+      expectedChange: expectedChange.trim() || undefined,
+    });
+  }, [issueType, severity, comment, expectedChange, onSave]);
+
+  return (
+    <div
+      style={{
+        background: "rgba(6, 182, 212, 0.05)",
+        border: "1px solid rgba(6, 182, 212, 0.3)",
+        borderRadius: "6px",
+        padding: "10px 12px",
+        fontSize: "12px",
+      }}
+    >
+      <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+        <div style={{ display: "flex", gap: "8px" }}>
+          <div style={{ flex: 1 }}>
+            <label style={{ fontSize: "10px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+              Issue
+            </label>
+            <select
+              value={issueType}
+              onChange={(e) => setIssueType(e.target.value as UxIssueType)}
+              style={{ ...inputStyle, fontSize: "11px", padding: "4px 6px" }}
+            >
+              {(Object.keys(UX_ISSUE_LABELS) as UxIssueType[]).map((t) => (
+                <option key={t} value={t}>{UX_ISSUE_LABELS[t]}</option>
+              ))}
+            </select>
+          </div>
+          <div style={{ flex: 1 }}>
+            <label style={{ fontSize: "10px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+              Severity
+            </label>
+            <select
+              value={severity}
+              onChange={(e) => setSeverity(e.target.value as UxAnnotationSeverity)}
+              style={{ ...inputStyle, fontSize: "11px", padding: "4px 6px" }}
+            >
+              {(Object.keys(UX_SEVERITY_LABELS) as UxAnnotationSeverity[]).map((s) => (
+                <option key={s} value={s}>{UX_SEVERITY_LABELS[s]}</option>
+              ))}
+            </select>
           </div>
         </div>
-      ))}
+        <div>
+          <label style={{ fontSize: "10px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+            Comment
+          </label>
+          <textarea
+            value={comment}
+            onChange={(e) => setComment(e.target.value)}
+            rows={2}
+            style={{ ...inputStyle, fontSize: "11px", padding: "4px 6px", resize: "vertical", minHeight: "40px" }}
+          />
+        </div>
+        <div>
+          <label style={{ fontSize: "10px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+            Expected change
+          </label>
+          <textarea
+            value={expectedChange}
+            onChange={(e) => setExpectedChange(e.target.value)}
+            rows={1}
+            style={{ ...inputStyle, fontSize: "11px", padding: "4px 6px", resize: "vertical", minHeight: "24px" }}
+          />
+        </div>
+        <div style={{ display: "flex", gap: "6px", justifyContent: "flex-end" }}>
+          <button
+            onClick={onCancel}
+            style={{
+              padding: "4px 10px",
+              background: "transparent",
+              border: "1px solid #475569",
+              borderRadius: "4px",
+              color: "#94a3b8",
+              cursor: "pointer",
+              fontSize: "11px",
+              fontFamily: "'Inter', system-ui, sans-serif",
+            }}
+          >
+            Cancel
+          </button>
+          <button
+            onClick={handleSave}
+            disabled={!comment.trim()}
+            style={{
+              padding: "4px 10px",
+              background: comment.trim() ? "#06b6d4" : "#1e293b",
+              border: "none",
+              borderRadius: "4px",
+              color: comment.trim() ? "#0b101b" : "#475569",
+              cursor: comment.trim() ? "pointer" : "default",
+              fontSize: "11px",
+              fontWeight: 600,
+              fontFamily: "'Inter', system-ui, sans-serif",
+            }}
+          >
+            Save
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
