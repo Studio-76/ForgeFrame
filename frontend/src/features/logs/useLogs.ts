@@ -84,7 +84,7 @@ function normalizedParam(searchParams: URLSearchParams, key: string): string | n
  */
 function getAuditWindow(searchParams: URLSearchParams): AuditHistoryWindow {
   const value = searchParams.get("auditWindow");
-  return value === "24h" || value === "30d" || value === "all" ? value : "7d";
+  return value === "24h" || value === "7d" || value === "30d" || value === "all" ? value : "7d";
 }
 
 /**

@@ -15,12 +15,7 @@ export type { DispatchWorkerTableProps } from "./components/DispatchWorkerTable"
 export { DispatchAttemptTable } from "./components/DispatchAttemptTable";
 export type { DispatchAttemptTableProps } from "./components/DispatchAttemptTable";
 
-export type { DispatchRisk, DispatchRiskTone } from "./types";
-
 export {
-  parseUtcTimestamp,
-  formatTimestamp,
-  formatAgeSeconds,
   formatLeaseWindow,
   describeDispatchTarget,
   describeAttemptLeaseRisk,

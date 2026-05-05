@@ -1,14 +1,16 @@
 import { CONTROL_PLANE_ROUTES } from "../app/navigation";
 import { buildInboxPath } from "../app/workInteractionRoutes";
 import { PageIntro } from "../components/PageIntro";
-import { AppendMessageForm } from "../features/conversations/AppendMessageForm";
-import { ConversationContextPanel } from "../features/conversations/ConversationContextPanel";
-import { ConversationFilterBar } from "../features/conversations/ConversationFilterBar";
-import { ConversationList } from "../features/conversations/ConversationList";
-import { ConversationTimeline } from "../features/conversations/ConversationTimeline";
-import { CreateConversationFormComponent } from "../features/conversations/CreateConversationForm";
-import { EditConversationFormComponent } from "../features/conversations/EditConversationForm";
-import { useConversations } from "../features/conversations/useConversations";
+import {
+  AppendMessageForm,
+  ConversationContextPanel,
+  ConversationFilterBar,
+  ConversationList,
+  ConversationTimeline,
+  CreateConversationFormComponent,
+  EditConversationFormComponent,
+  useConversations,
+} from "../features/conversations";
 
 /**
  * Conversations page — thin wrapper that delegates all state,

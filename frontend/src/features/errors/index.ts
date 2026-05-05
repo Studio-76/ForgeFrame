@@ -22,9 +22,6 @@ export { AXIS_ORDER } from "./types";
 // ── Helpers ─────────────────────────────────────────────────────────────
 
 export {
-  asRecord,
-  asRecordArray,
-  numberValue,
   stringifyValue,
   formatMetric,
   formatTimestamp,

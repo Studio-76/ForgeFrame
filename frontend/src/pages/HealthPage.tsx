@@ -280,7 +280,7 @@ export function HealthPage() {
     nextRoute: { label: "Open Logs", to: logsRoute },
   };
 
-  const checkGroups: HealthGroup[] = [
+  const checkGroups: HealthGroup[] = useMemo(() => [
     dbMigrationGroup,
     apiGroup,
     frontendGroup,
@@ -288,7 +288,7 @@ export function HealthPage() {
     queueWorkerGroup,
     tlsGroup,
     observabilityGroup,
-  ];
+  ], [dbMigrationGroup, apiGroup, frontendGroup, providersGroup, queueWorkerGroup, tlsGroup, observabilityGroup]);
 
   const technicalHealthStatus = summarizeSignals([
     { label: "api", status: runtimeHealth?.readiness.accepting_traffic ? "healthy" : "failed", evidence: "", route: { label: "", to: logsRoute } },

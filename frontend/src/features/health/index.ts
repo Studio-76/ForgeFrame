@@ -17,8 +17,6 @@ export type {
   SignalPathRow,
 } from "./types";
 
-export { TONE_MAP } from "./types";
-
 export {
   buildGroup,
   dashboardStatusToHealth,

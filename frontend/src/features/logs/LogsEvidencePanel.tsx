@@ -43,10 +43,16 @@ function getErrorBreakdown(logs: LogsResponse | null): ErrorBreakdown | null {
   return {
     errors24h: String(errSummary.errors_24h ?? "n/a"),
     byProvider: Array.isArray(errSummary.errors_by_provider)
-      ? (errSummary.errors_by_provider as Array<{ provider: string; errors: number }>)
+      ? (errSummary.errors_by_provider as Array<Record<string, unknown>>).map((entry) => ({
+          provider: String(entry?.provider ?? "unknown"),
+          errors: typeof entry?.errors === "number" ? entry.errors : Number(entry?.errors ?? 0),
+        }))
       : [],
     byType: Array.isArray(errSummary.errors_by_type)
-      ? (errSummary.errors_by_type as Array<{ error_key: string; errors: number }>)
+      ? (errSummary.errors_by_type as Array<Record<string, unknown>>).map((entry) => ({
+          error_key: String(entry?.error_key ?? "unknown"),
+          errors: typeof entry?.errors === "number" ? entry.errors : Number(entry?.errors ?? 0),
+        }))
       : [],
   };
 }

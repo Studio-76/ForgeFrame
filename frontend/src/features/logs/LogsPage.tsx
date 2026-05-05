@@ -114,7 +114,7 @@ export function LogsPage() {
     historyError,
     history,
     detailLoadState,
-    detailError: _detailError,
+    detailError,
     detail,
     summaryCounts,
     auditWindow,
@@ -185,7 +185,9 @@ export function LogsPage() {
   }, [searchParams, location.pathname, navigate]);
 
   const onLoadMore = useCallback(() => {
-    // Future: cursor-based pagination
+    // Future: cursor-based pagination (currently no-op: hasMore reports
+    // whether more pages exist, but the fetch-on-scroll wiring is not yet
+    // implemented — the button remains visible for UX consistency).
   }, []);
 
   const onInstanceChange = useCallback((nextInstanceId: string | null) => {
@@ -273,48 +275,64 @@ export function LogsPage() {
 
       {/* Active tab content */}
       <div role="tabpanel" className="fg-mt-md">
-        {logsLoadState === "loading" && activeTab !== "audit" ? (
+        {activeTab !== "audit" && logsLoadState === "loading" ? (
           <LoadingState title="Loading logs data." description="ForgeFrame is restoring operational signals." />
         ) : null}
 
-        {logsError && activeTab !== "audit" ? (
+        {activeTab !== "audit" && logsError && logsLoadState !== "loading" ? (
           <ErrorState title="Logs loading failed" description={logsError} />
         ) : null}
 
-        {activeTab === "incidents" ? (
-          <ErrorReviewPanel
-            logs={logs}
-            loading={logsLoadState === "loading"}
-            error={logsError}
-            instanceId={instanceId}
-            companyId={companyId}
-            canReadAudit={canReadAudit}
-          />
-        ) : null}
+        {activeTab !== "audit" && logsLoadState === "success" && logs ? (
+          <>
+            {activeTab === "incidents" ? (
+              <ErrorReviewPanel
+                logs={logs}
+                loading={false}
+                error={null}
+                instanceId={instanceId}
+                companyId={companyId}
+                canReadAudit={canReadAudit}
+              />
+            ) : null}
 
-        {activeTab === "logs" ? (
-          <LogsEvidencePanel
-            logs={logs}
-            loading={logsLoadState === "loading"}
-            error={logsError}
-            instanceId={instanceId}
-            companyId={companyId}
-            canReadAudit={canReadAudit}
-          />
-        ) : null}
+            {activeTab === "logs" ? (
+              <LogsEvidencePanel
+                logs={logs}
+                loading={false}
+                error={null}
+                instanceId={instanceId}
+                companyId={companyId}
+                canReadAudit={canReadAudit}
+              />
+            ) : null}
 
-        {activeTab === "activity" ? (
-          <ActivityPanel
-            logs={logs}
-            loading={logsLoadState === "loading"}
-            error={logsError}
-            detail={detail}
-            detailLoading={detailLoadState === "loading"}
-            onSelectEvent={onSelectEvent}
-            instanceId={instanceId}
-            companyId={companyId}
-            canReadAudit={canReadAudit}
-          />
+            {activeTab === "activity" ? (
+              <ActivityPanel
+                logs={logs}
+                loading={false}
+                error={null}
+                detail={detail}
+                detailLoading={detailLoadState === "loading"}
+                detailError={detailError}
+                onSelectEvent={onSelectEvent}
+                instanceId={instanceId}
+                companyId={companyId}
+                canReadAudit={canReadAudit}
+              />
+            ) : null}
+
+            {activeTab === "diagnostics" ? (
+              <DiagnosticsPanel
+                logs={logs}
+                loading={false}
+                error={null}
+                instanceId={instanceId}
+                companyId={companyId}
+                canReadAudit={canReadAudit}
+              />
+            ) : null}
+          </>
         ) : null}
 
         {activeTab === "audit" ? (
@@ -338,6 +356,7 @@ export function LogsPage() {
                 error={historyError}
                 detail={detail}
                 detailLoading={detailLoadState === "loading"}
+                detailError={detailError}
                 activePreset={activePreset}
                 onPresetChange={onPresetChange}
                 onSelectEvent={onSelectEvent}
@@ -350,17 +369,6 @@ export function LogsPage() {
               />
             )}
           </>
-        ) : null}
-
-        {activeTab === "diagnostics" ? (
-          <DiagnosticsPanel
-            logs={logs}
-            loading={logsLoadState === "loading"}
-            error={logsError}
-            instanceId={instanceId}
-            companyId={companyId}
-            canReadAudit={canReadAudit}
-          />
         ) : null}
       </div>
 

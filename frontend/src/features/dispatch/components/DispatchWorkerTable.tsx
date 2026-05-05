@@ -21,8 +21,6 @@ export type DispatchWorkerTableProps = {
   snapshot: ExecutionDispatchSnapshot;
   /** Current instance ID for route building. */
   instanceId: string;
-  /** Current company ID for route building. */
-  companyId: string;
   /** Callback to navigate to the execution review for a given run. */
   onNavigateExecutionReview: (runId: string) => void;
 };

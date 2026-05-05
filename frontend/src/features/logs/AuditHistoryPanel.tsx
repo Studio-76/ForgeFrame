@@ -48,6 +48,8 @@ export interface AuditHistoryPanelProps extends TabPanelProps {
   detail: AuditHistoryDetailResponse | null;
   /** Detail loading state. */
   detailLoading: boolean;
+  /** Detail error message. */
+  detailError?: string | null;
   /** Active filter preset. */
   activePreset: FilterPreset | null;
   /** Called when user selects a preset. */
@@ -86,6 +88,7 @@ export function AuditHistoryPanel({
   error,
   detail,
   detailLoading,
+  detailError,
   activePreset,
   onPresetChange,
   onSelectEvent,
@@ -242,6 +245,10 @@ export function AuditHistoryPanel({
       {/* Event detail panel (when an event is selected) */}
       {detailLoading ? (
         <p className="fg-muted">Loading event detail.</p>
+      ) : null}
+
+      {detailError && !detailLoading ? (
+        <p className="fg-danger">{detailError}</p>
       ) : null}
 
       {detail ? (

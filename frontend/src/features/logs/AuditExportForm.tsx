@@ -254,7 +254,7 @@ export function AuditExportForm({
           Action
           <select value={exportAction} onChange={(event) => setExportAction(event.target.value)}>
             <option value="">Any action</option>
-            {(history?.filters.available.actions ?? []).map((option) => (
+            {(history?.filters?.available?.actions ?? []).map((option) => (
               <option key={option.value} value={option.value}>{option.label}</option>
             ))}
           </select>
@@ -264,7 +264,7 @@ export function AuditExportForm({
           <select value={exportStatus} onChange={(event) => setExportStatus(event.target.value as AuditHistoryStatus | "")}>
             <option value="">Any outcome</option>
             {STATUS_OPTIONS.map((status) => (
-              <option key={status} value={status}>{optionLabel(status, history?.filters.available.statuses ?? [])}</option>
+              <option key={status} value={status}>{optionLabel(status, history?.filters?.available?.statuses ?? [])}</option>
             ))}
           </select>
         </label>

@@ -268,14 +268,11 @@ export function DispatchPage() {
           <DispatchWorkerTable
             snapshot={snapshot}
             instanceId={instanceId}
-            companyId={companyId}
             onNavigateExecutionReview={openExecutionReview}
           />
 
           <DispatchAttemptTable
             snapshot={snapshot}
-            instanceId={instanceId}
-            companyId={companyId}
             onNavigateExecutionReview={openExecutionReview}
           />
 

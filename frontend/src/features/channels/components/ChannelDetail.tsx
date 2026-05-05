@@ -246,7 +246,7 @@ export function ChannelDetail({
             </section>
 
             <div className="fg-actions">
-              <Button variant="primary" type="submit" isDisabled={!canMutate || savingUpdate}>
+              <Button variant="primary" type="submit" isDisabled={!canMutate || savingUpdate || !editForm.label.trim()}>
                 {savingUpdate ? "Saving channel" : "Save channel"}
               </Button>
             </div>
