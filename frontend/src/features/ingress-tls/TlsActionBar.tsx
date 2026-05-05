@@ -72,7 +72,6 @@ export function TlsActionBar({
       <div className="ff-action-bar-header">
         <div className="ff-action-bar-copy">
           <h3>Actions</h3>
-          <p>Execute the primary remediation or navigate to related surfaces.</p>
         </div>
         <div className="ff-action-controls">
           <button type="button" onClick={onRefresh}>
@@ -97,18 +96,6 @@ export function TlsActionBar({
             </Link>
           </div>
         ) : null}
-
-        <div className="ff-nav-links">
-          <Link className="fg-nav-link" to={settingsLink}>
-            Configure TLS mode
-          </Link>
-          <Link className="fg-nav-link" to={healthLink}>
-            Verify certificate
-          </Link>
-          <Link className="fg-nav-link" to={onboardingLink}>
-            Review setup step
-          </Link>
-        </div>
       </div>
     </section>
   );

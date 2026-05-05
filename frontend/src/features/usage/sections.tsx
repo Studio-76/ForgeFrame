@@ -1,8 +1,4 @@
-import { Link } from "react-router-dom";
-
 import type { UsageSummaryResponse } from "../../api/domain";
-import { CONTROL_PLANE_ROUTES } from "../../app/navigation";
-import { withInstanceScope, withQueryParams } from "../../app/tenantScope";
 import { ActionBar } from "../../components/ui/ActionBar";
 import { DetailPanel } from "../../components/ui/DetailPanel";
 import { EntityTable } from "../../components/ui/EntityTable";
@@ -216,20 +212,7 @@ export function UsageContent({
   const clientProviders = asRecordArray(clientDrilldown?.providers);
   const clientRecentErrors = asRecordArray(clientDrilldown?.recent_errors);
   const clientRecentUsage = asRecordArray(clientDrilldown?.recent_usage);
-  const providerDetailLink = (provider: string) => withQueryParams(`${CONTROL_PLANE_ROUTES.usage}#provider-detail`, {
-    instanceId,
-    usageWindow: window,
-    provider,
-    client: null,
-    model: modelFilter || null,
-  });
-  const clientDetailLink = (clientId: string) => withQueryParams(`${CONTROL_PLANE_ROUTES.usage}#client-detail`, {
-    instanceId,
-    usageWindow: window,
-    provider: null,
-    client: clientId,
-    model: modelFilter || null,
-  });
+
 
   return (
     <>
@@ -237,26 +220,10 @@ export function UsageContent({
         <PermissionState title={access.noticeTitle} description={access.noticeDetail} />
       ) : null}
 
-      <ActionBar
-        title="Usage filters"
-        description="Filter the analysis by selected window, provider, client, and model. Costs and Errors stay separate operational routes."
-        actions={(
-          <div className="fg-actions">
-            <Link className="fg-nav-link" to={withInstanceScope(CONTROL_PLANE_ROUTES.costs, instanceId)}>
-              Open Costs
-            </Link>
-            <Link className="fg-nav-link" to={withInstanceScope(CONTROL_PLANE_ROUTES.errors, instanceId)}>
-              Open Errors
-            </Link>
-            <Link className="fg-nav-link" to={withInstanceScope(CONTROL_PLANE_ROUTES.providerHealthRuns, instanceId)}>
-              Provider Health &amp; Runs
-            </Link>
-          </div>
-        )}
-      >
+      <ActionBar title="Filters">
         <div className="fg-inline-form">
           <label>
-            Time window
+            Window
             <select aria-label="Usage window" value={window} onChange={(event) => onWindowChange(event.target.value as UsageWindow)}>
               {windowOptions.map((option) => (
                 <option key={option} value={option}>
@@ -268,7 +235,7 @@ export function UsageContent({
           <label>
             Provider
             <select aria-label="Usage provider filter" value={providerFilter} onChange={(event) => onProviderFilterChange(event.target.value)}>
-              <option value="">All providers</option>
+              <option value="">All</option>
               {providerOptions.map((option) => (
                 <option key={option} value={option}>
                   {option}
@@ -279,7 +246,7 @@ export function UsageContent({
           <label>
             Client
             <select aria-label="Usage client filter" value={clientFilter} onChange={(event) => onClientFilterChange(event.target.value)}>
-              <option value="">All clients</option>
+              <option value="">All</option>
               {clientOptions.map((option) => (
                 <option key={option} value={option}>
                   {option}
@@ -290,7 +257,7 @@ export function UsageContent({
           <label>
             Model
             <select aria-label="Usage model filter" value={modelFilter} onChange={(event) => onModelFilterChange(event.target.value)}>
-              <option value="">All models</option>
+              <option value="">All</option>
               {modelOptions.map((option) => (
                 <option key={option} value={option}>
                   {option}
@@ -298,23 +265,14 @@ export function UsageContent({
               ))}
             </select>
           </label>
-          <label>
-            API key
-            <select aria-label="Usage API key filter" disabled value="">
-              <option value="">Unsupported</option>
-            </select>
-          </label>
           {filtersActive ? (
             <button type="button" className="fg-button" onClick={onResetFilters}>
-              Reset filters
+              Reset
             </button>
           ) : null}
         </div>
         <p className="fg-muted">
-          API-key filtering is currently blocked. Runtime error events do not yet persist auth attribution, so ForgeFrame keeps that axis honest and routes spend review to Costs instead of faking a partial filter.
-        </p>
-        <p className="fg-muted">
-          Latest evidence: {formatTimestamp(latestEvidenceAt ? new Date(latestEvidenceAt).toISOString() : null, "No recent evidence")} · {freshness.detail}
+          Latest: {formatTimestamp(latestEvidenceAt ? new Date(latestEvidenceAt).toISOString() : null, "No recent evidence")} · {freshness.detail}
         </p>
       </ActionBar>
 
@@ -355,12 +313,6 @@ export function UsageContent({
               value: formatMetric(totalTokens),
             },
             {
-              key: "streaming-share",
-              label: "Streaming share",
-              value: runtimeRequestCount > 0 ? formatPercent(streamRequests / runtimeRequestCount) : "0.0%",
-              meta: `${formatMetric(streamRequests)} of ${formatMetric(runtimeRequestCount)} runtime requests streamed.`,
-            },
-            {
               key: "error-rate",
               label: "Error rate",
               value: formatPercent(rate(recordedErrors, runtimeRequests)),
@@ -373,14 +325,10 @@ export function UsageContent({
               meta: summary.runtime_duration_ms?.sample_count ? `${formatMetric(summary.runtime_duration_ms.sample_count)} runtime samples` : "No runtime latency samples",
             },
             {
-              key: "top-provider",
-              label: "Top provider",
-              value: topProvider,
-            },
-            {
-              key: "top-client",
-              label: "Top client",
-              value: topClient,
+              key: "streaming-share",
+              label: "Streaming",
+              value: runtimeRequestCount > 0 ? formatPercent(streamRequests / runtimeRequestCount) : "0.0%",
+              meta: `${formatMetric(streamRequests)} of ${formatMetric(runtimeRequestCount)} runtime requests`,
             },
           ]}
         />
@@ -405,18 +353,6 @@ export function UsageContent({
               { key: "tokens", header: "Tokens", render: (row: ProviderRow) => formatMetric(row.tokens) },
               { key: "errors", header: "Errors", render: (row: ProviderRow) => formatMetric(row.errors) },
               { key: "errorRate", header: "Error rate", render: (row: ProviderRow) => formatPercent(rate(row.errors, row.requests)) },
-              {
-                key: "nextRoute",
-                header: "Next route",
-                render: (row: ProviderRow) => (
-                  <div className="fg-actions">
-                    <Link className="fg-nav-link" to={providerDetailLink(row.provider)}>Usage detail</Link>
-                    <Link className="fg-nav-link" to={withInstanceScope(CONTROL_PLANE_ROUTES.providerHealthRuns, instanceId)}>Provider Health</Link>
-                    {row.errors > 0 ? <Link className="fg-nav-link" to={withInstanceScope(CONTROL_PLANE_ROUTES.errors, instanceId)}>Errors</Link> : null}
-                    {row.actualCost > 0 ? <Link className="fg-nav-link" to={withInstanceScope(CONTROL_PLANE_ROUTES.costs, instanceId)}>Costs</Link> : null}
-                  </div>
-                ),
-              },
             ]}
             rows={providerRows}
             rowKey={(row) => row.provider}
@@ -434,17 +370,6 @@ export function UsageContent({
               { key: "tokens", header: "Tokens", render: (row: ClientRow) => formatMetric(row.tokens) },
               { key: "errors", header: "Errors", render: (row: ClientRow) => formatMetric(row.errors) },
               { key: "errorRate", header: "Error rate", render: (row: ClientRow) => formatPercent(rate(row.errors, row.requests)) },
-              {
-                key: "nextRoute",
-                header: "Next route",
-                render: (row: ClientRow) => (
-                  <div className="fg-actions">
-                    <Link className="fg-nav-link" to={clientDetailLink(row.clientId)}>Usage detail</Link>
-                    <Link className="fg-nav-link" to={withInstanceScope(CONTROL_PLANE_ROUTES.errors, instanceId)}>Errors</Link>
-                    {row.actualCost > 0 ? <Link className="fg-nav-link" to={withInstanceScope(CONTROL_PLANE_ROUTES.costs, instanceId)}>Costs</Link> : null}
-                  </div>
-                ),
-              },
             ]}
             rows={clientRows}
             rowKey={(row) => row.clientId}
@@ -461,16 +386,6 @@ export function UsageContent({
               { key: "requests", header: "Requests", render: (row: ModelRow) => formatMetric(row.requests) },
               { key: "tokens", header: "Tokens", render: (row: ModelRow) => formatMetric(row.tokens) },
               { key: "errors", header: "Errors", render: (row: ModelRow) => formatMetric(row.errors) },
-              {
-                key: "nextRoute",
-                header: "Next route",
-                render: (row: ModelRow) => (
-                  <div className="fg-actions">
-                    {row.errors > 0 ? <Link className="fg-nav-link" to={withInstanceScope(CONTROL_PLANE_ROUTES.errors, instanceId)}>Errors</Link> : null}
-                    <Link className="fg-nav-link" to={withInstanceScope(CONTROL_PLANE_ROUTES.providerHealthRuns, instanceId)}>Provider Health</Link>
-                  </div>
-                ),
-              },
             ]}
             rows={modelRows}
             rowKey={(row) => row.model}
@@ -486,15 +401,6 @@ export function UsageContent({
               { key: "authKey", header: "Auth source", render: (row: AuthRow) => row.authKey },
               { key: "requests", header: "Requests", render: (row: AuthRow) => formatMetric(row.requests) },
               { key: "tokens", header: "Tokens", render: (row: AuthRow) => formatMetric(row.tokens) },
-              {
-                key: "nextRoute",
-                header: "Next route",
-                render: () => (
-                  <Link className="fg-nav-link" to={withInstanceScope(CONTROL_PLANE_ROUTES.costs, instanceId)}>
-                    Costs
-                  </Link>
-                ),
-              },
             ]}
             rows={authRows}
             rowKey={(row) => row.authKey}
@@ -506,16 +412,8 @@ export function UsageContent({
             <div id="provider-detail">
               <DetailPanel
                 title="Provider detail"
-                description="This drilldown is row-specific and backed by the provider usage endpoint instead of generic routing links."
                 status={providerFilter}
                 statusKey="ready"
-                actions={(
-                  <div className="fg-actions">
-                    <Link className="fg-nav-link" to={withInstanceScope(CONTROL_PLANE_ROUTES.providerHealthRuns, instanceId)}>Provider Health</Link>
-                    <Link className="fg-nav-link" to={withInstanceScope(CONTROL_PLANE_ROUTES.errors, instanceId)}>Errors</Link>
-                    <Link className="fg-nav-link" to={withInstanceScope(CONTROL_PLANE_ROUTES.costs, instanceId)}>Costs</Link>
-                  </div>
-                )}
               >
                 {providerDrilldownError ? <ErrorState title="Provider drilldown unavailable" description={providerDrilldownError} /> : null}
                 {providerDrilldownState === "loading" ? (
@@ -574,15 +472,8 @@ export function UsageContent({
             <div id="client-detail">
               <DetailPanel
                 title="Client detail"
-                description="This drilldown is row-specific and backed by the client usage endpoint instead of a generic incident link."
                 status={clientFilter}
                 statusKey="ready"
-                actions={(
-                  <div className="fg-actions">
-                    <Link className="fg-nav-link" to={withInstanceScope(CONTROL_PLANE_ROUTES.errors, instanceId)}>Errors</Link>
-                    <Link className="fg-nav-link" to={withInstanceScope(CONTROL_PLANE_ROUTES.costs, instanceId)}>Costs</Link>
-                  </div>
-                )}
               >
                 {clientDrilldownError ? <ErrorState title="Client drilldown unavailable" description={clientDrilldownError} /> : null}
                 {clientDrilldownState === "loading" ? (

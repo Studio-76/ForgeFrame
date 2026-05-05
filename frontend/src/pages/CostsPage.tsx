@@ -8,7 +8,7 @@
  */
 
 import { useEffect, useState } from "react";
-import { Link, useSearchParams } from "react-router-dom";
+import { useSearchParams } from "react-router-dom";
 
 import {
   fetchRoutingControlPlane,
@@ -37,7 +37,6 @@ import {
   CostTruthTable,
   CostBudgetView,
   CostMixView,
-  CostDetailPanel,
 } from "../features/costs";
 import type { BudgetDraft, BudgetScopeDraft, LoadState } from "../features/costs";
 import {
@@ -333,9 +332,7 @@ export function CostsPage() {
     `${CONTROL_PLANE_ROUTES.routing}#routing-policy-editor`,
     instanceId,
   );
-  const routingTargetsRoute = withInstanceScope(CONTROL_PLANE_ROUTES.providerTargets, instanceId);
-  const usageRoute = withInstanceScope(CONTROL_PLANE_ROUTES.usage, instanceId);
-  const errorsRoute = withInstanceScope(CONTROL_PLANE_ROUTES.errors, instanceId);
+
 
   const anomalyData = (routing?.budget?.anomalies ?? []).map((a) => ({
     severity: a.severity,
@@ -588,14 +585,14 @@ export function CostsPage() {
         <>
           {/* Partial visibility messages */}
           {messages.length > 0 ? (
-            <article className="fg-card">
-              <h3>Partial visibility</h3>
+            <div className="ff-state-block" data-state="info">
+              <strong>Partial visibility</strong>
               <ul className="fg-list">
                 {messages.map((message) => (
                   <li key={message}>{message}</li>
                 ))}
               </ul>
-            </article>
+            </div>
           ) : null}
 
           {/* Action errors */}
@@ -693,51 +690,7 @@ export function CostsPage() {
                 />
               </section>
 
-              {/* Current cost safety context (formerly the sidebar) */}
-              <section className="fg-card">
-                <div className="fg-panel-heading">
-                  <div>
-                    <h3>Current cost safety</h3>
-                    <p className="fg-muted">
-                      This section compresses the active blockers, warning sources, and handoff routes
-                      for the current scope.
-                    </p>
-                  </div>
-                </div>
-                <CostDetailPanel
-                  budgetState={budgetState}
-                  hardBlocked={hardBlocked}
-                  routingVisibilityLabel={routingVisibilityLabel}
-                  routingVisibilityDetail={routingVisibilityDetail}
-                  blockedCostClassNames={
-                    blockedCostClasses.length > 0
-                      ? blockedCostClasses.map((row) => row.costClass).join(", ")
-                      : ""
-                  }
-                  warningScopeCount={warningScopeCount}
-                  openCircuitCount={openCircuitCount}
-                  anomalyCount={(routing?.budget?.anomalies ?? []).length}
-                  canMutateRouting={canMutateRouting}
-                  canReadRouting={canReadRouting}
-                  remainingBudgetLabel={remainingHardBudget?.label ?? null}
-                  remainingBudgetValue={remainingHardBudget?.remaining ?? null}
-                  routingEditorRoute={routingEditorRoute}
-                  routingTargetsRoute={routingTargetsRoute}
-                />
-              </section>
 
-              {/* Page-level navigation links */}
-              <div className="fg-actions" style={{ marginTop: "1rem" }}>
-                <Link className="fg-nav-link" to={routingEditorRoute}>
-                  Routing policy
-                </Link>
-                <Link className="fg-nav-link" to={usageRoute}>
-                  Usage
-                </Link>
-                <Link className="fg-nav-link" to={errorsRoute}>
-                  Errors
-                </Link>
-              </div>
             </>
           ) : null}
         </>

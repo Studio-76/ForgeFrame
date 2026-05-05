@@ -483,9 +483,11 @@ export function HealthPage() {
 
       {/* ── Loading state ── */}
       {state === "loading" ? (
-        <article className="fg-card">
-          <p className="fg-muted">Loading health, readiness, and signal-path evidence.</p>
-        </article>
+        <div className="ff-state-block" data-state="loading">
+          <div className="ff-skeleton-row" />
+          <strong>Loading health surface</strong>
+          <p>Restoring runtime health, provider readiness, signal paths, and risk evidence.</p>
+        </div>
       ) : null}
 
       {/* ── Error state ── */}
@@ -494,50 +496,6 @@ export function HealthPage() {
       {/* ── Data-loaded content ── */}
       {dataLoaded ? (
         <>
-          {/* ── Summary cards: Technical Health + Readiness ── */}
-          <div className="fg-grid fg-grid-compact">
-            <article className="fg-card">
-              <div className="fg-panel-heading">
-                <div>
-                  <h3>Technical Health</h3>
-                  <p className="fg-muted">Can the runtime answer traffic and keep core operational evidence alive right now?</p>
-                </div>
-                <span className="fg-pill" data-tone={toneForStatus(technicalHealthStatus)}>
-                  {labelForStatus(technicalHealthStatus)}
-                </span>
-              </div>
-              <div className="fg-detail-grid">
-                <p>Runtime traffic: {runtimeHealth.readiness.accepting_traffic ? "accepting traffic" : "blocked"}</p>
-                <p>Provider review count: {String(providersNeedingReview.length)}</p>
-                <p>Queue / worker posture: {queueWorkerGroup.summary}</p>
-                <p>Signal path: {observabilityGroup.error}</p>
-              </div>
-            </article>
-
-            <article className="fg-card">
-              <div className="fg-panel-heading">
-                <div>
-                  <h3>Readiness</h3>
-                  <p className="fg-muted">Can this instance be considered deployment-ready instead of merely alive?</p>
-                </div>
-                <span className="fg-pill" data-tone={toneForStatus(readinessStatus)}>
-                  {labelForStatus(readinessStatus)}
-                </span>
-              </div>
-              <div className="fg-detail-grid">
-                <p>Bootstrap readiness: {providers.bootstrap_readiness?.ready ? "ready" : "not ready"}</p>
-                <p>Runtime readiness state: {runtimeHealth.readiness.state}</p>
-                <p>TLS / FQDN: {tlsGroup.error}</p>
-                <p>Frontend delivery: {frontendGroup.error}</p>
-              </div>
-              {!providers.bootstrap_readiness?.ready ? (
-                <p className="fg-danger">
-                  Readiness stays non-green until bootstrap checks pass. Missing TLS/FQDN evidence is treated as a real blocker, not as a cosmetic warning.
-                </p>
-              ) : null}
-            </article>
-          </div>
-
           {/* ── Health group cards ── */}
           <div className="fg-grid">
             {checkGroups.map((group) => (
@@ -598,27 +556,7 @@ export function HealthPage() {
             </div>
           </article>
 
-          {/* ── Current risks ── */}
-          <article className="fg-card">
-            <div className="fg-panel-heading">
-              <div>
-                <h3>Current Risks</h3>
-                <p className="fg-muted">Live attention items come from the dashboard risk model instead of ad-hoc frontend guesses.</p>
-              </div>
-            </div>
-            <ul className="fg-list">
-              {dashboard.attention.length === 0 ? <li>No current risks were emitted for this scope.</li> : null}
-              {dashboard.attention.map((item) => (
-                <li key={item.id}>
-                  <strong>{item.title}</strong> · {item.cause} ·
-                  {" "}
-                  <Button variant="navigation" onPress={() => navigate(withInstanceScope(item.to, instanceId))}>
-                    {item.action_label}
-                  </Button>
-                </li>
-              ))}
-            </ul>
-          </article>
+
         </>
       ) : null}
     </IncidentResponsePage>

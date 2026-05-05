@@ -565,13 +565,10 @@ describe("observability pages", () => {
     await flushEffects();
 
     expect(container.textContent).toContain("Health Status");
-    expect(container.textContent).toContain("Technical Health");
-    expect(container.textContent).toContain("Readiness");
     expect(container.textContent).toContain("TLS / FQDN");
     expect(container.textContent).toContain("Signal Path");
-    expect(container.textContent).toContain("Current Risks");
+    expect(container.textContent).toContain("Provider Needing Review");
     expect(container.textContent).toContain("public_fqdn_tls_evidence");
-    expect(container.textContent).toContain("Readiness stays non-green");
     const oauthButtons = Array.from(container.querySelectorAll("button")).filter((btn) => btn.textContent?.trim() === "Review OAuth targets");
     expect(oauthButtons.length).toBeGreaterThan(0);
   });

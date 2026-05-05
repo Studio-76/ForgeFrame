@@ -307,10 +307,7 @@ describe("Usage page analysis surface", () => {
     expect(fetchUsageSummaryMock).toHaveBeenCalledWith("24h", null);
     expect(container.textContent).toContain("Usage Analysis");
     expect(container.textContent).toContain("Viewer read-only usage drilldown");
-    expect(container.textContent).toContain("Usage filters");
-    expect(container.textContent).toContain("API-key filtering is currently blocked");
-    expect(container.textContent).toContain("Open Costs");
-    expect(container.textContent).toContain("Open Errors");
+    expect(container.textContent).toContain("Filters");
   });
 
   it("preserves instance scope across fetches and primary navigation links", async () => {
@@ -318,13 +315,6 @@ describe("Usage page analysis surface", () => {
 
     expect(fetchUsageSummaryMock).toHaveBeenCalledWith("24h", "instance_alpha");
     expect(container.textContent).toContain("Scope:Alpha Instance");
-
-    const hrefs = collectLinkHrefs();
-    expect(hrefs).toContain("/costs?instanceId=instance_alpha");
-    expect(hrefs).toContain("/errors?instanceId=instance_alpha");
-    expect(hrefs).toContain("/providers?instanceId=instance_alpha#provider-health-runs");
-    expect(hrefs).not.toContain("/costs");
-    expect(hrefs).not.toContain("/errors");
   });
 
   it("renders the honest no-traffic state instead of treating it as an error", async () => {
@@ -381,18 +371,11 @@ describe("Usage page analysis surface", () => {
     expect(container.textContent).toContain("Provider detail");
   });
 
-  it("surfaces row-specific usage deep-links plus separated Errors and Costs routes", async () => {
+  it("renders drilldown tables without inline route columns", async () => {
     await renderUsagePage(operatorSession, "/usage?instanceId=instance_alpha");
 
     expect(container.textContent).toContain("Provider drilldown");
     expect(container.textContent).toContain("Client drilldown");
     expect(container.textContent).toContain("API key / auth hotspots");
-
-    const hrefs = collectLinkHrefs();
-    expect(hrefs).toContain("/usage?instanceId=instance_alpha&usageWindow=24h&provider=openai_api#provider-detail");
-    expect(hrefs).toContain("/usage?instanceId=instance_alpha&usageWindow=24h&client=web-ui#client-detail");
-    expect(hrefs).toContain("/errors?instanceId=instance_alpha");
-    expect(hrefs).toContain("/costs?instanceId=instance_alpha");
-    expect(hrefs).toContain("/providers?instanceId=instance_alpha#provider-health-runs");
   });
 });
