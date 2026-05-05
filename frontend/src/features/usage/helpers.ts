@@ -156,7 +156,7 @@ export function getLatestEvidenceTimestamp(summary: UsageSummaryResponse | null)
     }
   });
 
-  summary.timeline_24h.forEach((item) => {
+  ;(summary.timeline_24h ?? []).forEach((item) => {
     const hasSignal = toNumberValue(item.requests) > 0 || toNumberValue(item.errors) > 0 || toNumberValue(item.actual_cost) > 0;
     const bucketStart = typeof item.bucket_start === "string" ? Date.parse(item.bucket_start) : Number.NaN;
 
@@ -181,7 +181,7 @@ export function isUsageEmpty(summary: UsageSummaryResponse | null, clientOps: Ar
     toNumberValue(summary.metrics?.recorded_request_count) === 0 &&
     toNumberValue(summary.metrics?.recorded_error_count) === 0 &&
     toNumberValue(summary.metrics?.recorded_health_event_count) === 0 &&
-    summary.alerts.length === 0 &&
+    (summary.alerts ?? []).length === 0 &&
     clientOps.length === 0
   );
 }
@@ -220,7 +220,7 @@ export function getRecommendedRoute(summary: UsageSummaryResponse, clientOps: Ar
     };
   }
 
-  if (toNumberValue(summary.metrics.recorded_error_count) > 0 || clientOps.some((item) => toBooleanValue(item.needs_attention))) {
+  if (toNumberValue(summary.metrics?.recorded_error_count) > 0 || clientOps.some((item) => toBooleanValue(item.needs_attention))) {
     return {
       title: "Incident and activity follow-up",
       description: "Errors or client hotspots are present. The next route should focus on incident shape and recent activity rather than adding more cost detail.",

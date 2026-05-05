@@ -125,7 +125,7 @@ export function HealthPage() {
     return provider.models.some((model) => model.health_status !== "healthy" || model.availability_status === "degraded");
   }), [providers]);
 
-  const runtimeChecks = (runtimeHealth?.readiness.checks ?? []).map((check) => ({
+  const runtimeChecks = (runtimeHealth?.readiness?.checks ?? []).map((check) => ({
     id: check.id,
     ok: check.ok,
     severity: check.severity,
@@ -166,7 +166,7 @@ export function HealthPage() {
       bootstrapChecksById.get("same_origin_runtime_api"),
     ].filter(isDefined),
     mode: "runtime",
-    checkedAt: runtimeHealth?.readiness.checked_at ?? null,
+    checkedAt: runtimeHealth?.readiness?.checked_at ?? null,
     fallbackSummary: `API reachability is not fully proven for api_base ${runtimeHealth?.api_base ?? "unknown"}.`,
     successSummary: `Runtime API base ${runtimeHealth?.api_base ?? "/"} is reachable and aligned with the control-plane origin contract.`,
     nextRoute: { label: "Review errors and incidents", to: errorsRoute },
@@ -180,7 +180,7 @@ export function HealthPage() {
       bootstrapChecksById.get("root_ui_on_slash"),
     ].filter(isDefined),
     mode: "runtime",
-    checkedAt: runtimeHealth?.readiness.checked_at ?? providers?.bootstrap_readiness?.checked_at ?? null,
+    checkedAt: runtimeHealth?.readiness?.checked_at ?? providers?.bootstrap_readiness?.checked_at ?? null,
     fallbackSummary: "The shipped operator UI is not fully delivered from the expected same-origin path.",
     successSummary: "Frontend delivery is aligned with the root SPA contract.",
     nextRoute: { label: "Check setup progress", to: onboardingRoute },
@@ -192,7 +192,7 @@ export function HealthPage() {
     summary: providersNeedingReview.length === 0
       ? "Provider runtime health is currently green."
       : `${providersNeedingReview.length} provider integration${providersNeedingReview.length === 1 ? "" : "s"} need review before runtime posture is trustworthy.`,
-    lastChecked: formatTimestamp(providers?.health_config ? providersNeedingReview[0]?.last_health_check_at ?? providers?.bootstrap_readiness?.checked_at ?? runtimeHealth?.readiness.checked_at : runtimeHealth?.readiness.checked_at),
+    lastChecked: formatTimestamp(providers?.health_config ? providersNeedingReview[0]?.last_health_check_at ?? providers?.bootstrap_readiness?.checked_at ?? runtimeHealth?.readiness?.checked_at : runtimeHealth?.readiness?.checked_at),
     evidence: providersNeedingReview.length === 0
       ? ["No degraded provider or model health signals were recorded."]
       : providersNeedingReview.map((provider) => `${provider.label}: ${provider.readiness_reason ?? provider.next_action}`),
@@ -237,7 +237,7 @@ export function HealthPage() {
     title: "TLS / FQDN",
     checks: tlsChecks,
     mode: "runtime",
-    checkedAt: runtimeHealth?.readiness.checked_at ?? providers?.bootstrap_readiness?.checked_at ?? null,
+    checkedAt: runtimeHealth?.readiness?.checked_at ?? providers?.bootstrap_readiness?.checked_at ?? null,
     fallbackSummary: "Public origin, certificate, or DNS proof is missing, so readiness cannot be green for a public-facing deployment.",
     successSummary: "Public origin, TLS, and DNS evidence line up with the expected deployment posture.",
     nextRoute: { label: "Review ingress/TLS", to: ingressRoute },
@@ -246,26 +246,26 @@ export function HealthPage() {
   const signalRows: SignalPathRow[] = [
     {
       label: "Logs",
-      status: logs?.operability.ready ? "healthy" : "failed",
-      evidence: logs?.operability.checks.map((check) => `${String(check.id)}=${String(check.ok)}`).join(" · ") || "No operability checks returned.",
+      status: logs?.operability?.ready ? "healthy" : "failed",
+      evidence: (logs?.operability?.checks ?? []).map((check) => `${String(check.id)}=${String(check.ok)}`).join(" · ") || "No operability checks returned.",
       route: { label: "View logs", to: logsRoute },
     },
     {
       label: "Usage",
-      status: (usage?.metrics.recorded_request_count ?? 0) > 0 || (usage?.metrics.recorded_health_event_count ?? 0) > 0 ? "healthy" : "warning",
-      evidence: `requests=${String(usage?.metrics.recorded_request_count ?? 0)} · health_events=${String(usage?.metrics.recorded_health_event_count ?? 0)}`,
+      status: (usage?.metrics?.recorded_request_count ?? 0) > 0 || (usage?.metrics?.recorded_health_event_count ?? 0) > 0 ? "healthy" : "warning",
+      evidence: `requests=${String(usage?.metrics?.recorded_request_count ?? 0)} · health_events=${String(usage?.metrics?.recorded_health_event_count ?? 0)}`,
       route: { label: "View usage metrics", to: usageRoute },
     },
     {
       label: "Costs",
       status: Object.keys(usage?.pricing_snapshot ?? {}).length > 0 ? "healthy" : "warning",
-      evidence: `pricing_keys=${String(Object.keys(usage?.pricing_snapshot ?? {}).length)} · runtime_cost=${String(usage?.traffic_split.runtime.actual_cost ?? 0)}`,
+      evidence: `pricing_keys=${String(Object.keys(usage?.pricing_snapshot ?? {}).length)} · runtime_cost=${String(usage?.traffic_split?.runtime?.actual_cost ?? 0)}`,
       route: { label: "View cost metrics", to: costsRoute },
     },
     {
       label: "Audit",
-      status: logs && (logs.audit_preview.length > 0 || Boolean(logs.audit_retention.latestEventAt)) ? "healthy" : "warning",
-      evidence: `preview=${String(logs?.audit_preview.length ?? 0)} · latest=${formatTimestamp(logs?.audit_retention.latestEventAt)}`,
+      status: logs && ((logs.audit_preview ?? []).length > 0 || Boolean(logs.audit_retention?.latestEventAt)) ? "healthy" : "warning",
+      evidence: `preview=${String((logs?.audit_preview ?? []).length)} · latest=${formatTimestamp(logs?.audit_retention?.latestEventAt)}`,
       route: { label: "View audit history", to: auditHistoryRoute },
     },
   ];
@@ -274,7 +274,7 @@ export function HealthPage() {
     title: "Observability",
     status: summarizeSignals(signalRows),
     summary: "Logs, usage, costs, and audit need to be fed by real signal paths, not by assumed telemetry.",
-    lastChecked: formatTimestamp(logs?.audit_retention.latestEventAt ?? runtimeHealth?.readiness.checked_at),
+    lastChecked: formatTimestamp(logs?.audit_retention?.latestEventAt ?? runtimeHealth?.readiness?.checked_at),
     evidence: signalRows.map((row) => `${row.label}: ${row.evidence}`),
     error: signalRows.filter((row) => row.status !== "healthy").map((row) => row.label).join(", ") || "All signal paths are reporting evidence.",
     nextRoute: { label: "View logs", to: logsRoute },
@@ -291,7 +291,7 @@ export function HealthPage() {
   ], [dbMigrationGroup, apiGroup, frontendGroup, providersGroup, queueWorkerGroup, tlsGroup, observabilityGroup]);
 
   const technicalHealthStatus = summarizeSignals([
-    { label: "api", status: runtimeHealth?.readiness.accepting_traffic ? "healthy" : "failed", evidence: "", route: { label: "", to: logsRoute } },
+    { label: "api",       status: runtimeHealth?.readiness?.accepting_traffic ? "healthy" : "failed", evidence: "", route: { label: "", to: logsRoute } },
     { label: "providers", status: providersGroup.status, evidence: "", route: { label: "", to: providerHealthRoute } },
     { label: "queue_worker", status: queueWorkerGroup.status, evidence: "", route: { label: "", to: dispatchRoute } },
     { label: "observability", status: observabilityGroup.status, evidence: "", route: { label: "", to: logsRoute } },
@@ -301,7 +301,7 @@ export function HealthPage() {
     { label: "api", status: apiGroup.status, evidence: "", route: { label: "", to: logsRoute } },
     { label: "frontend", status: frontendGroup.status, evidence: "", route: { label: "", to: onboardingRoute } },
     { label: "tls", status: tlsGroup.status, evidence: "", route: { label: "", to: ingressRoute } },
-    { label: "traffic", status: runtimeHealth?.readiness.accepting_traffic ? "healthy" : "failed", evidence: "", route: { label: "", to: logsRoute } },
+    { label: "traffic",       status: runtimeHealth?.readiness?.accepting_traffic ? "healthy" : "failed", evidence: "", route: { label: "", to: logsRoute } },
     { label: "bootstrap", status: providers?.bootstrap_readiness?.ready ? "healthy" : "failed", evidence: "", route: { label: "", to: onboardingRoute } },
   ]);
 
@@ -442,8 +442,8 @@ export function HealthPage() {
   const diagnosticsContent = (
     <div className="fg-stack">
       <p className="text-muted">Runtime health API base: {runtimeHealth?.api_base ?? "unknown"}</p>
-      <p className="text-muted">Readiness state: {runtimeHealth?.readiness.state ?? "unknown"}</p>
-      <p className="text-muted">Accepting traffic: {String(runtimeHealth?.readiness.accepting_traffic ?? false)}</p>
+      <p className="text-muted">Readiness state: {runtimeHealth?.readiness?.state ?? "unknown"}</p>
+      <p className="text-muted">Accepting traffic: {String(runtimeHealth?.readiness?.accepting_traffic ?? false)}</p>
       <p className="text-muted">Bootstrap ready: {String(providers?.bootstrap_readiness?.ready ?? false)}</p>
       <p className="text-muted">Technical health: {labelForStatus(technicalHealthStatus)}</p>
       <p className="text-muted">Readiness posture: {labelForStatus(readinessStatus)}</p>

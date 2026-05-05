@@ -300,13 +300,11 @@ export function CostsPage() {
   const routingVisibilityDetail = !canReadRouting
     ? "routing.read is required before this page can claim any budget, blocked-class, or circuit truth."
     : "Routing truth did not load, so budget, blocked-class, and circuit posture remain unavailable.";
-  const remainingHardBudget = routing ? remainingBudgetMeta(routing.budget.scopes) : null;
+  const remainingHardBudget = routing ? remainingBudgetMeta(routing.budget?.scopes ?? []) : null;
   const warningScopeCount =
-    routing?.budget.scopes.filter((scope) => scope.enabled && scope.soft_limit_exceeded).length ??
-    0;
+    (routing?.budget?.scopes ?? []).filter((scope) => scope.enabled && scope.soft_limit_exceeded).length;
   const hardExceededScopeCount =
-    routing?.budget.scopes.filter((scope) => scope.enabled && scope.hard_limit_exceeded).length ??
-    0;
+    (routing?.budget?.scopes ?? []).filter((scope) => scope.enabled && scope.hard_limit_exceeded).length;
   const selectedDecisionCount = costMixRows.reduce((total, row) => total + row.selectedCount, 0);
   const premiumEscalationCount = (
     routing?.recent_decisions ?? []
@@ -317,13 +315,13 @@ export function CostsPage() {
       (decision.policy_stage === "fallback" || decision.policy_stage === "escalation")
     );
   }).length;
-  const providerCosts = (usage?.aggregations.by_provider ?? []).map((item) => ({
+  const providerCosts = (usage?.aggregations?.by_provider ?? []).map((item) => ({
     id: String(item.provider),
     actualCost: toNumber(item.actual_cost),
     estimatedCost: toNumber(item.hypothetical_cost),
     avoidedCost: toNumber(item.avoided_cost),
   }));
-  const clientCosts = (usage?.aggregations.by_client ?? []).map((item) => ({
+  const clientCosts = (usage?.aggregations?.by_client ?? []).map((item) => ({
     id: String(item.client_id),
     actualCost: toNumber(item.actual_cost),
     estimatedCost: toNumber(item.hypothetical_cost),
@@ -339,7 +337,7 @@ export function CostsPage() {
   const usageRoute = withInstanceScope(CONTROL_PLANE_ROUTES.usage, instanceId);
   const errorsRoute = withInstanceScope(CONTROL_PLANE_ROUTES.errors, instanceId);
 
-  const anomalyData = (routing?.budget.anomalies ?? []).map((a) => ({
+  const anomalyData = (routing?.budget?.anomalies ?? []).map((a) => ({
     severity: a.severity,
     anomalyType: a.anomaly_type,
     scopeType: a.scope_type,
@@ -477,7 +475,7 @@ export function CostsPage() {
       key: "hard-blocked",
       level: "primary_blocker",
       title: "Hard budget block active",
-      description: routing?.budget.reason ?? "Budget guardrails are hard-blocking all routing.",
+      description: routing?.budget?.reason ?? "Budget guardrails are hard-blocking all routing.",
     });
   }
 
@@ -643,11 +641,11 @@ export function CostsPage() {
                   hasRouting={!!routing}
                   budgetState={budgetState}
                   hardBlocked={hardBlocked}
-                  budgetReason={routing?.budget.reason ?? null}
-                  lastEvaluatedAt={routing?.budget.last_evaluated_at ?? null}
+                  budgetReason={routing?.budget?.reason ?? null}
+                  lastEvaluatedAt={routing?.budget?.last_evaluated_at ?? null}
                   warningScopeCount={warningScopeCount}
                   hardExceededScopeCount={hardExceededScopeCount}
-                  anomalyCount={routing?.budget.anomalies.length ?? 0}
+                  anomalyCount={(routing?.budget?.anomalies ?? []).length}
                   anomalies={anomalyData}
                   blockedCostClasses={blockedCostClasses}
                   providerCircuits={providerCircuits}
@@ -718,7 +716,7 @@ export function CostsPage() {
                   }
                   warningScopeCount={warningScopeCount}
                   openCircuitCount={openCircuitCount}
-                  anomalyCount={routing?.budget.anomalies.length ?? 0}
+                  anomalyCount={(routing?.budget?.anomalies ?? []).length}
                   canMutateRouting={canMutateRouting}
                   canReadRouting={canReadRouting}
                   remainingBudgetLabel={remainingHardBudget?.label ?? null}

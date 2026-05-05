@@ -38,9 +38,9 @@ function isUsageEmpty(summary: UsageSummaryResponse | null): boolean {
     return false;
   }
   return (
-    (summary.metrics.recorded_request_count ?? 0) === 0 &&
-    (summary.metrics.recorded_error_count ?? 0) === 0 &&
-    (summary.metrics.recorded_health_event_count ?? 0) === 0
+    (summary.metrics?.recorded_request_count ?? 0) === 0 &&
+    (summary.metrics?.recorded_error_count ?? 0) === 0 &&
+    (summary.metrics?.recorded_health_event_count ?? 0) === 0
   );
 }
 
@@ -183,13 +183,13 @@ export function UsagePage() {
     };
   }, [filters, filtersActive, instanceId, window]);
 
-  const providerOptions = (catalog?.aggregations.by_provider ?? [])
+  const providerOptions = (catalog?.aggregations?.by_provider ?? [])
     .map((item) => toStringValue(item.provider, ""))
     .filter((value) => value.length > 0);
-  const clientOptions = (catalog?.aggregations.by_client ?? [])
+  const clientOptions = (catalog?.aggregations?.by_client ?? [])
     .map((item) => toStringValue(item.client_id, ""))
     .filter((value) => value.length > 0);
-  const modelOptions = (catalog?.aggregations.by_model ?? [])
+  const modelOptions = (catalog?.aggregations?.by_model ?? [])
     .map((item) => toStringValue(item.model, ""))
     .filter((value) => value.length > 0);
 

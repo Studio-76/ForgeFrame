@@ -100,8 +100,10 @@ function buildErrorLookup(items: Array<Record<string, string | number>>, keyFiel
 }
 
 function buildProviderRows(summary: UsageSummaryResponse): ProviderRow[] {
-  const errorLookup = buildErrorLookup(summary.aggregations.errors_by_provider, "provider");
-  return summary.aggregations.by_provider.map((item) => {
+  const aggs = summary.aggregations;
+  if (!aggs) return [];
+  const errorLookup = buildErrorLookup(aggs.errors_by_provider ?? [], "provider");
+  return (aggs.by_provider ?? []).map((item) => {
     const provider = String(item.provider ?? "");
     return {
       provider,
@@ -114,8 +116,10 @@ function buildProviderRows(summary: UsageSummaryResponse): ProviderRow[] {
 }
 
 function buildClientRows(summary: UsageSummaryResponse): ClientRow[] {
-  const errorLookup = buildErrorLookup(summary.aggregations.errors_by_client, "client_id");
-  return summary.aggregations.by_client.map((item) => {
+  const aggs = summary.aggregations;
+  if (!aggs) return [];
+  const errorLookup = buildErrorLookup(aggs.errors_by_client ?? [], "client_id");
+  return (aggs.by_client ?? []).map((item) => {
     const clientId = String(item.client_id ?? "");
     return {
       clientId,
@@ -128,8 +132,10 @@ function buildClientRows(summary: UsageSummaryResponse): ClientRow[] {
 }
 
 function buildModelRows(summary: UsageSummaryResponse): ModelRow[] {
-  const errorLookup = buildErrorLookup(summary.aggregations.errors_by_model, "model");
-  return summary.aggregations.by_model.map((item) => {
+  const aggs = summary.aggregations;
+  if (!aggs) return [];
+  const errorLookup = buildErrorLookup(aggs.errors_by_model ?? [], "model");
+  return (aggs.by_model ?? []).map((item) => {
     const model = String(item.model ?? "");
     return {
       model,
@@ -141,7 +147,9 @@ function buildModelRows(summary: UsageSummaryResponse): ModelRow[] {
 }
 
 function buildAuthRows(summary: UsageSummaryResponse): AuthRow[] {
-  return summary.aggregations.by_auth.map((item) => ({
+  const aggs = summary.aggregations;
+  if (!aggs) return [];
+  return (aggs.by_auth ?? []).map((item) => ({
     authKey: String(item.auth_key ?? ""),
     requests: toNumberValue(item.requests),
     tokens: toNumberValue(item.tokens),
@@ -198,7 +206,7 @@ export function UsageContent({
   const topClient = clientRows[0]?.clientId ?? "No client traffic";
   const runtimeRequests = toNumberValue(summary?.traffic_split?.runtime?.requests);
   const totalTokens = toNumberValue(summary?.traffic_split?.runtime?.tokens) + toNumberValue(summary?.traffic_split?.health_check?.tokens);
-  const recordedErrors = toNumberValue(summary?.metrics.recorded_error_count);
+  const recordedErrors = toNumberValue(summary?.metrics?.recorded_error_count);
   const streamRequests = toNumberValue(summary?.stream_mode_counts?.stream);
   const runtimeRequestCount = toNumberValue(summary?.stream_mode_counts?.runtime_request_count);
   const filtersActive = Boolean(providerFilter || clientFilter || modelFilter);
@@ -339,7 +347,7 @@ export function UsageContent({
             {
               key: "requests",
               label: "Requests",
-              value: formatMetric(summary.metrics.recorded_request_count),
+              value: formatMetric(summary.metrics?.recorded_request_count),
             },
             {
               key: "tokens",
