@@ -394,4 +394,22 @@ UX Review Mode is **unavailable in production builds** by design:
 - `frontend/src/components/ux-review/` — source code
 - `frontend/src/components/ui/types.ts` — `UxMetadata` type and `uxAttributes()` helper
 - `frontend/reference/residual-ux-anti-pattern-catalog.md` — common UI anti-patterns to annotate
+- `docs/ux-review/agent-workflow.md` — agent workflow for fixing exported annotations
+- `docs/ux-review/annotation-schema.json` — JSON Schema for annotation export validation
+- `scripts/validate-ux-annotation.mjs` — validation script for exported annotation files
 - Generated TypeDoc: `npm run docs` then open `docs/index.html`
+
+## Agent Workflow Integration
+
+Exported annotations are designed to be consumed by coding agents. A complete
+agent workflow is defined in `docs/ux-review/agent-workflow.md`. It covers:
+
+- **File naming convention** for exported annotation files
+- **Annotation status lifecycle** (`open` → `in_progress` → `fixed` | `wont_fix` | `needs_design_decision`)
+- **How agents locate elements** by `data-ux-id`, component name, or route
+- **Mandatory fixing rules** (presentation only, preserve data/routes, prefer shared primitives)
+- **Resolved annotation report format** for audit trail
+- **Validation script** for checking annotation file correctness
+
+Reviewers should export annotations using the prescribed naming convention
+and place them in `docs/ux-review/` for agent consumption.

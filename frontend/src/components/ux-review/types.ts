@@ -147,6 +147,12 @@ export const ANNOTATION_EXPORT_SCHEMA_VERSION = "1.0";
 /**
  * Flat annotation record used in exports.
  * Fields are flattened from the nested UxAnnotation for agent-friendly consumption.
+ *
+ * The `status` field encodes the annotation lifecycle. It maps as follows:
+ * - `isResolved: false` and no `resolvedAt` → "open"
+ * - `isResolved: false` with agent-acknowledged → "in_progress"
+ * - `isResolved: true` with `resolvedAt` set → "fixed" or "wont_fix" (see fixNote)
+ * - `isResolved: false` awaiting human input → "needs_design_decision"
  */
 export interface AnnotationRecord {
   id: string;
@@ -167,6 +173,16 @@ export interface AnnotationRecord {
   createdAt: string;
   isResolved?: boolean;
   resolvedAt?: string;
+  /** Lifecycle status — agents update this as they work through annotations. */
+  status?: "open" | "in_progress" | "fixed" | "wont_fix" | "needs_design_decision";
+  /** Human-readable summary of what was changed (set when status is "fixed"). */
+  fixSummary?: string;
+  /** List of files modified to fix this annotation. */
+  filesChanged?: string[];
+  /** Any remaining notes or caveats about the fix. */
+  remainingNotes?: string;
+  /** How the fix was verified (e.g., "manual: dev server at 1440×900"). */
+  verificationStatus?: string;
 }
 
 /**
@@ -265,8 +281,15 @@ export const EXPORT_INSTRUCTIONS =
 
 /**
  * Converts an internal UxAnnotation to a flat AnnotationRecord for export.
+ * Derives the `status` field from `isResolved` and `resolvedAt`.
  */
 export function annotationToRecord(ann: UxAnnotation): AnnotationRecord {
+  const status: AnnotationRecord["status"] = ann.isResolved
+    ? "fixed"
+    : ann.resolvedAt
+      ? "needs_design_decision"
+      : "open";
+
   return {
     id: ann.id,
     route: ann.route,
@@ -286,6 +309,7 @@ export function annotationToRecord(ann: UxAnnotation): AnnotationRecord {
     createdAt: ann.createdAt,
     isResolved: ann.isResolved,
     resolvedAt: ann.resolvedAt,
+    status,
   };
 }
 
