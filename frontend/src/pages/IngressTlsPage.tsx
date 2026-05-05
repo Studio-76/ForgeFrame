@@ -45,7 +45,7 @@ export function IngressTlsPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const instanceId = getInstanceIdFromSearchParams(searchParams);
   const { instances, loadState, selectedInstance } = useInstanceCatalog(instanceId);
-  const [state, setState] = useState<LoadState>("idle");
+  const [state, setState] = useState<LoadState>("loading");
   const [error, setError] = useState<string | null>(null);
   const [checks, setChecks] = useState<BootstrapCheck[]>([]);
   const [status, setStatus] = useState<IngressTlsStatusResponse | null>(null);
@@ -241,7 +241,7 @@ export function IngressTlsPage() {
       ]
     : [];
 
-  const isResolving = state === "loading" && !status;
+  const isResolving = !status;
 
   return (
     <RegistryManagementPage
@@ -258,20 +258,18 @@ export function IngressTlsPage() {
         </AdvancedDiagnostics>
       }
     >
-      {/* Resolving state — shown until instance + TLS posture are known */}
-      {isResolving ? (
-        <div className="ff-state-block" data-state="loading">
-          <div className="ff-skeleton-row" />
-          <strong>Resolving TLS posture…</strong>
-          <p>Determining instance exposure mode, FQDN, DNS, listener, certificate, and renewal gate status.</p>
-        </div>
-      ) : null}
-
-      {/* Error state */}
+      {/* Error state — takes priority */}
       {state === "error" ? (
         <div className="ff-state-block" data-state="error">
           <strong>Ingress / TLS surface failed to load</strong>
           <p>{error ?? "Ingress or certificate posture could not be restored."}</p>
+        </div>
+      ) : isResolving ? (
+        /* Resolving state — shown until TLS posture data arrives */
+        <div className="ff-state-block" data-state="loading">
+          <div className="ff-skeleton-row" />
+          <strong>Resolving TLS posture…</strong>
+          <p>Determining instance exposure mode, FQDN, DNS, listener, certificate, and renewal gate status.</p>
         </div>
       ) : null}
 
