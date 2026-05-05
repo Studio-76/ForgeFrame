@@ -8,10 +8,11 @@
     "dev": "vite",
     "typecheck": "tsc --noEmit",
     "lint": "npm run typecheck",
-    "build": "vite build",
+    "build": "vite build && node scripts/docs-if-changed.mjs",
     "preview": "vite preview",
     "test": "vitest run",
     "docs": "typedoc",
+    "docs:if-changed": "node scripts/docs-if-changed.mjs",
     "docs:watch": "typedoc --watch"
   },
   "dependencies": {
