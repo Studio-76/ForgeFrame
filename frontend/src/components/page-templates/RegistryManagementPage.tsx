@@ -8,6 +8,7 @@ import { EmptyState } from "../ui/EmptyState";
 import { SearchInput } from "../ui/SearchInput";
 import { Button } from "../ui/Button";
 import { ActionBar } from "../ui/ActionBar";
+import { TwoPaneOperationalLayout } from "../ui/TwoPaneLayout";
 import type { AttentionPayload } from "../ui/models/attention";
 import type { Density } from "../ui/types";
 import type { Action } from "../ui/models/action";
@@ -100,6 +101,18 @@ export type RegistryManagementPageProps = {
    */
   hasSelection?: boolean;
   /**
+   * When true, renders children and selectedItemContent side-by-side
+   * in a two-pane layout instead of detail below content.
+   * On screens narrower than 1024px the layout collapses to a single column.
+   * Default: false
+   */
+  useTwoPaneLayout?: boolean;
+  /**
+   * Title for the two-pane detail panel.
+   * Only used when useTwoPaneLayout is true.
+   */
+  detailPanelTitle?: string;
+  /**
    * Hint shown when no item is selected (e.g. "Select an item from the table").
    * Only rendered when hasSelection is false.
    */
@@ -164,6 +177,8 @@ export function RegistryManagementPage({
   emptyAction,
   selectedItemContent,
   hasSelection,
+  useTwoPaneLayout = false,
+  detailPanelTitle,
   emptyDetailHint,
   diagnostics,
   diagnosticsTitle = "Registry diagnostics",
@@ -237,6 +252,33 @@ export function RegistryManagementPage({
           description={emptyDescription}
           primaryAction={emptyAction}
         />
+      ) : useTwoPaneLayout && hasSelection && selectedItemContent ? (
+        <TwoPaneOperationalLayout
+          main={(
+            <ActionBar
+              title={actionBarTitle ?? title}
+              actions={
+                modelPrimaryAction
+                  ? (
+                    <Button
+                      variant={modelPrimaryAction.kind ?? "primary"}
+                      isDisabled={modelPrimaryAction.disabled}
+                      onPress={modelPrimaryAction.onClick}
+                    >
+                      {modelPrimaryAction.label}
+                    </Button>
+                  )
+                  : undefined
+              }
+            >
+              <div className={compact ? "ff-dense" : undefined}>
+                {children}
+              </div>
+            </ActionBar>
+          )}
+          sidebar={selectedItemContent}
+          stickySidebar
+        />
       ) : (
         <ActionBar
           title={actionBarTitle ?? title}
@@ -263,15 +305,15 @@ export function RegistryManagementPage({
       {/* ── Collapsed attention (informational / healthy) ── */}
       {renderCollapsedAttention(attentionItems)}
 
-      {/* ── Detail panel ── */}
-      {hasSelection && selectedItemContent ? (
+      {/* ── Detail panel (below content, non-two-pane mode) ── */}
+      {!useTwoPaneLayout && hasSelection && selectedItemContent ? (
         <div className={`${compact ? "mt-2" : "mt-3"}`}>
           {selectedItemContent}
         </div>
       ) : null}
 
       {/* ── Empty detail hint ── */}
-      {!hasSelection && emptyDetailHint ? (
+      {!useTwoPaneLayout && !hasSelection && emptyDetailHint ? (
         <div className={`${compact ? "mt-2" : "mt-3"} text-meta text-muted text-center py-3 border border-dashed border-border rounded-lg`}>
           {emptyDetailHint}
         </div>

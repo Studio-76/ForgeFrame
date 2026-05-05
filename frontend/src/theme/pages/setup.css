@@ -297,7 +297,6 @@
   }
 
   .ff-dashboard-layout,
-  .ff-operator-layout,
   .ff-release-layout {
     grid-template-columns: 1fr;
   }

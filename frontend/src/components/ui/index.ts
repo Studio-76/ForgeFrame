@@ -84,6 +84,8 @@ export type { PageHeaderBadge } from "./PageHeader";
 export { Section } from "./Section";
 export { DetailPanel } from "./DetailPanel";
 export { DetailDrawer } from "./DetailDrawer";
+export { TwoPaneOperationalLayout } from "./TwoPaneLayout";
+export type { TwoPaneOperationalLayoutProps } from "./TwoPaneLayout";
 export { EmptyState } from "./EmptyState";
 export { AdvancedDiagnostics } from "./AdvancedDiagnostics";
 export type { AdvancedDiagnosticsProps } from "./AdvancedDiagnostics";

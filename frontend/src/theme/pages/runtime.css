@@ -424,9 +424,21 @@ details summary {
   min-width: 0;
 }
 
+@media (max-width: 1023px) {
+  .ff-operator-layout {
+    grid-template-columns: 1fr;
+  }
+}
+
 .ff-detail-panel.is-sticky {
   position: sticky;
   top: calc(72px + var(--fg-space-4));
+}
+
+.ff-operator-sidebar-sticky {
+  position: sticky;
+  top: calc(72px + var(--fg-space-4));
+  align-self: start;
 }
 
 .ff-detail-panel-body dl,
