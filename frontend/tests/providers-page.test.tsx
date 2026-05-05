@@ -291,13 +291,12 @@ describe("Providers page hierarchy", () => {
     expect(markup).toContain("<section class=\"fg-page\">");
     expect(markup).toContain("1 provider registered for this instance.");
     expect(markup).toContain("id=\"provider-health-runs\"");
-    // Readiness hero with provider stats
-    expect(markup).toContain("Provider Readiness");
-    expect(markup).toContain("1 total");
-    expect(markup).toContain("0 enabled");
-    expect(markup).toContain("0 runtime-ready");
-    // Action groups
-    expect(markup).toContain("Sync all providers");
+    // Summary strip with provider stats (from page template)
+    expect(markup).toContain("Total");
+    expect(markup).toContain("Enabled");
+    expect(markup).toContain("Runtime-ready");
+    // Consolidated action row
+    expect(markup).toContain("Sync all");
     expect(markup).toContain("Add provider");
     // Provider grid
     expect(markup).toContain("Local Runtime");
@@ -345,17 +344,17 @@ describe("Providers page hierarchy", () => {
       }),
     );
 
-    // Status hero now shows 1 enabled provider needing attention
-    expect(markup).toContain("1 enabled");
-    expect(markup).toContain("1 needs attention");
+    // Summary strip shows 1 enabled, 0 runtime-ready, 1 needs attention
+    expect(markup).toContain("<strong class=\"ff-summary-value\">1</strong>");
+    expect(markup).toContain("Needs attention");
     // Provider is now "Needs attention" not "Disabled"
     expect(markup).not.toContain("Disabled");
     expect(markup).toContain("Needs attention");
-    // Sync action
+    // Sync action (label shortened in consolidated action row)
     expect(markup).toContain("Sync inventory");
-    expect(markup).toContain("Sync all providers");
-    // Diagnostic actions
-    expect(markup).toContain("Run provider probe");
+    expect(markup).toContain("Sync all");
+    // Page diagnostics section shows nav links
+    expect(markup).toContain("Provider diagnostics");
   });
 
   it("shows an honest blocked state when the session lacks scoped providers.read", () => {
@@ -414,9 +413,9 @@ describe("Providers page hierarchy", () => {
     );
 
     expect(alphaMarkup).toContain("Operator mutations enabled");
-    expect(alphaMarkup).toContain("Sync all providers");
+    expect(alphaMarkup).toContain("Sync all");
     expect(betaMarkup).not.toContain("Operator mutations enabled");
-    expect(betaMarkup).not.toContain("Sync all providers");
+    expect(betaMarkup).not.toContain("Sync all");
     expect(betaMarkup).toContain("Operate only");
   });
 
@@ -433,7 +432,7 @@ describe("Providers page hierarchy", () => {
     expect(markup).toContain("provider inventory and health here");
     expect(markup).toContain("OAuth/account targets live on the dedicated OAuth Targets route");
     expect(markup).toContain("dedicated harness state, runs, plus redacted harness exports stay on the Harness route");
-    expect(markup).toContain("Provider truth and health stay visible here without surfacing mutations that the backend will block.");
+    expect(markup).toContain("Provider truth and health stay visible here");
     expect(markup).not.toContain("Sync all providers");
     expect(markup).not.toContain(">Activate<");
     expect(markup).not.toContain(">Sync models<");

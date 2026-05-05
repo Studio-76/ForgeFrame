@@ -6,7 +6,7 @@ import { withInstanceScope } from "../app/tenantScope";
 import type { InstanceCatalogLoadState } from "../app/useInstanceCatalog";
 import { Button } from "./ui/Button";
 
-type InstanceScopeCardProps = {
+export type InstanceScopeCardProps = {
   instanceId: string | null;
   selectedInstance: InstanceRecord | null;
   instances: InstanceRecord[];

@@ -157,7 +157,7 @@ describe("Queues page", () => {
       }),
     );
     expect(markup).toContain("Instance scope required");
-    expect(markup).toContain("queue truth");
+    expect(markup).toContain("Monitor queue health, lane pressure, and backlog across instances.");
   });
 
   it("loads queue truth for the chosen instance", async () => {

@@ -473,16 +473,28 @@ def _parse_markdown_matrix(path: Path, *, source_kind: str, contract_column: str
 
 @lru_cache(maxsize=1)
 def load_provider_catalog_seed() -> tuple[ProviderCatalogSeedRow, ...]:
-    api_rows = _parse_markdown_matrix(
-        _matrices_root() / "API_PROVIDER_MATRIX.md",
-        source_kind="api_matrix",
-        contract_column="Primary contract",
-    )
-    oauth_rows = _parse_markdown_matrix(
-        _matrices_root() / "OAUTH_PROVIDER_MATRIX.md",
-        source_kind="oauth_matrix",
-        contract_column="Integration truth",
-    )
+    matrices_root = _matrices_root()
+    if not matrices_root.is_dir():
+        return ()
+
+    api_matrix = matrices_root / "API_PROVIDER_MATRIX.md"
+    oauth_matrix = matrices_root / "OAUTH_PROVIDER_MATRIX.md"
+
+    api_rows: list[ProviderCatalogSeedRow] = []
+    if api_matrix.is_file():
+        api_rows = _parse_markdown_matrix(
+            api_matrix,
+            source_kind="api_matrix",
+            contract_column="Primary contract",
+        )
+
+    oauth_rows: list[ProviderCatalogSeedRow] = []
+    if oauth_matrix.is_file():
+        oauth_rows = _parse_markdown_matrix(
+            oauth_matrix,
+            source_kind="oauth_matrix",
+            contract_column="Integration truth",
+        )
 
     combined = {row.provider_id: row for row in (*api_rows, *oauth_rows)}
     return tuple(sorted(combined.values(), key=lambda item: item.provider_id))

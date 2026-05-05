@@ -4,7 +4,7 @@ import type { GateRecord } from "./types";
 import { StatusBadge } from "../../components/ui/StatusBadge";
 import { ManualEvidenceFlow } from "./ManualEvidenceFlow";
 
-type GateDetailSidebarProps = {
+export type GateDetailSidebarProps = {
   gate: GateRecord | null;
 };
 

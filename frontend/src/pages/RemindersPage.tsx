@@ -1,5 +1,15 @@
+/**
+ * RemindersPage — reminder lifecycle management surface.
+ *
+ * Migrated to use the ReviewQueuePage template with summary items,
+ * attention items, grouped reminder table, detail panel, and
+ * collapsible diagnostics.
+ *
+ * @packageDocumentation
+ */
+
 import { startTransition, useEffect, useState, type FormEvent } from "react";
-import { Link, useSearchParams } from "react-router-dom";
+import { useSearchParams } from "react-router-dom";
 
 import {
   createReminder,
@@ -12,99 +22,29 @@ import {
 } from "../api/domain/reminders";
 import { fetchInstances } from "../api/domain/instances";
 import { CONTROL_PLANE_ROUTES } from "../app/navigation";
-import {
-  buildAutomationPath,
-  buildConversationPath,
-  buildNotificationPath,
-  buildReminderPath,
-  buildTaskPath,
-} from "../app/workInteractionRoutes";
 import { useAppSession } from "../app/session";
 import { PageIntro } from "../components/PageIntro";
 import { DetailDrawer } from "../components/ui/DetailDrawer";
+import { Button } from "../components/ui/Button";
+import { DiagnosticSection, RawJson } from "../components/ui/AdvancedDiagnostics";
+import { ReviewQueuePage } from "../components/page-templates";
+import type { Action } from "../components/ui/models/action";
+import type { AttentionPayload } from "../components/ui/models/attention";
 import { getWorkInteractionAccess, normalizeOptional, parseJsonObject, type LoadState } from "./workInteractionPageSupport";
+import {
+  ReminderTable,
+  ReminderDetailPanel,
+  type DrawerMode,
+  type CreateReminderForm,
+  type EditReminderForm,
+  DEFAULT_CREATE_FORM,
+  DEFAULT_EDIT_FORM,
+  DRAWER_FORM_ID,
+} from "../features/reminders";
 
-type DrawerMode = "closed" | "create" | "edit";
-type ReminderGroupKey = "overdue" | "due_now" | "upcoming" | "completed_cancelled";
-
-const STATUS_OPTIONS: Array<ReminderStatus | "all"> = ["all", "scheduled", "due", "triggered", "dismissed", "cancelled"];
-const DRAWER_FORM_ID = "reminder-drawer-form";
-
-const DEFAULT_CREATE_FORM = {
-  reminderId: "",
-  taskId: "",
-  automationId: "",
-  title: "",
-  summary: "",
-  dueAt: "",
-  metadataJson: "{}",
-};
-
-const DEFAULT_EDIT_FORM = {
-  taskId: "",
-  title: "",
-  summary: "",
-  status: "scheduled" as ReminderStatus,
-  dueAt: "",
-  triggeredAt: "",
-  notificationId: "",
-  metadataJson: "{}",
-};
-
-function reminderStatusTone(status: ReminderStatus): "success" | "danger" | "warning" | "neutral" {
-  if (status === "triggered" || status === "dismissed") {
-    return "success";
-  }
-  if (status === "cancelled") {
-    return "neutral";
-  }
-  if (status === "due") {
-    return "danger";
-  }
-  return "warning";
-}
-
-function reminderGroupKey(reminder: Pick<ReminderSummary, "status" | "due_at">, nowMs: number): ReminderGroupKey {
-  if (reminder.status === "triggered" || reminder.status === "dismissed" || reminder.status === "cancelled") {
-    return "completed_cancelled";
-  }
-
-  const dueMs = Date.parse(reminder.due_at);
-  if (Number.isNaN(dueMs)) {
-    return "upcoming";
-  }
-  if (dueMs < nowMs) {
-    return "overdue";
-  }
-  if (reminder.status === "due" || dueMs <= nowMs + (60 * 60 * 1000)) {
-    return "due_now";
-  }
-  return "upcoming";
-}
-
-function reminderGroupHeading(group: ReminderGroupKey): string {
-  switch (group) {
-    case "overdue":
-      return "Overdue";
-    case "due_now":
-      return "Due now";
-    case "upcoming":
-      return "Upcoming";
-    case "completed_cancelled":
-      return "Completed / cancelled";
-    default:
-      return group;
-  }
-}
-
-function reminderDueBucket(detail: Pick<ReminderSummary, "status" | "due_at">, nowMs: number): string {
-  return reminderGroupHeading(reminderGroupKey(detail, nowMs));
-}
-
-function reminderIsClosed(status: ReminderStatus): boolean {
-  return status === "triggered" || status === "dismissed" || status === "cancelled";
-}
-
+/**
+ * Reminders page component.
+ */
 export function RemindersPage() {
   const { session, sessionReady } = useAppSession();
   const { canRead, canMutate } = getWorkInteractionAccess(session, sessionReady);
@@ -120,8 +60,8 @@ export function RemindersPage() {
   const [detailState, setDetailState] = useState<LoadState>("idle");
   const [reminders, setReminders] = useState<ReminderSummary[]>([]);
   const [detail, setDetail] = useState<ReminderDetail | null>(null);
-  const [createForm, setCreateForm] = useState(DEFAULT_CREATE_FORM);
-  const [editForm, setEditForm] = useState(DEFAULT_EDIT_FORM);
+  const [createForm, setCreateForm] = useState<CreateReminderForm>(DEFAULT_CREATE_FORM);
+  const [editForm, setEditForm] = useState<EditReminderForm>(DEFAULT_EDIT_FORM);
   const [drawerMode, setDrawerMode] = useState<DrawerMode>("closed");
   const [savingCreate, setSavingCreate] = useState(false);
   const [savingUpdate, setSavingUpdate] = useState(false);
@@ -136,17 +76,6 @@ export function RemindersPage() {
 
   const nowMs = Date.now();
   const viewerTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
-  const originConversationId = detail?.task?.conversation_id ?? detail?.notification?.conversation_id ?? null;
-  const groupedReminders: Record<ReminderGroupKey, ReminderSummary[]> = {
-    overdue: [],
-    due_now: [],
-    upcoming: [],
-    completed_cancelled: [],
-  };
-
-  reminders.forEach((reminder) => {
-    groupedReminders[reminderGroupKey(reminder, nowMs)].push(reminder);
-  });
 
   const updateRoute = (mutate: (next: URLSearchParams) => void, replace = false) => {
     const next = new URLSearchParams(searchParams);
@@ -155,6 +84,8 @@ export function RemindersPage() {
       setSearchParams(next, { replace });
     });
   };
+
+  // ── Instance scope ────────────────────────────────────────────────
 
   useEffect(() => {
     if (!canRead) {
@@ -191,6 +122,8 @@ export function RemindersPage() {
       cancelled = true;
     };
   }, [canRead, instanceId]);
+
+  // ── Reminder list ─────────────────────────────────────────────────
 
   useEffect(() => {
     if (!canRead || !instanceId) {
@@ -240,6 +173,8 @@ export function RemindersPage() {
     };
   }, [canRead, instanceId, refreshNonce, selectedReminderId, statusFilter]);
 
+  // ── Reminder detail ───────────────────────────────────────────────
+
   useEffect(() => {
     if (!canRead || !instanceId || !selectedReminderId) {
       setDetailState("idle");
@@ -273,6 +208,8 @@ export function RemindersPage() {
     };
   }, [canRead, instanceId, refreshNonce, selectedReminderId]);
 
+  // ── Edit form sync ────────────────────────────────────────────────
+
   useEffect(() => {
     if (!detail) {
       setEditForm(DEFAULT_EDIT_FORM);
@@ -290,6 +227,8 @@ export function RemindersPage() {
       metadataJson: JSON.stringify(detail.metadata, null, 2),
     });
   }, [detail]);
+
+  // ── Handlers ──────────────────────────────────────────────────────
 
   const closeDrawer = () => {
     setDrawerMode("closed");
@@ -410,6 +349,79 @@ export function RemindersPage() {
     }
   };
 
+  // ── Template props ────────────────────────────────────────────────
+
+  const overdueCount = reminders.filter((r) => {
+    const dueMs = Date.parse(r.due_at);
+    return !Number.isNaN(dueMs) && dueMs < nowMs && r.status !== "triggered" && r.status !== "dismissed" && r.status !== "cancelled";
+  }).length;
+
+  const dueNowCount = reminders.filter((r) => r.status === "due").length;
+
+  const summaryItems = [
+    { key: "overdue", label: "Overdue", value: overdueCount, tone: overdueCount > 0 ? "danger" as const : "success" as const },
+    { key: "due-now", label: "Due now", value: dueNowCount, tone: dueNowCount > 0 ? "warning" as const : "neutral" as const },
+    { key: "total", label: "Total reminders", value: reminders.length, tone: reminders.length > 0 ? "info" as const : "neutral" as const },
+    { key: "access", label: "Access", value: canMutate ? "Writable" : "Read only", tone: canMutate ? "success" as const : "warning" as const },
+  ];
+
+  const actions: Action[] = [
+    {
+      label: "New reminder",
+      kind: "primary",
+      intent: "configure",
+      onClick: openCreateDrawer,
+      disabled: !canMutate,
+    },
+  ];
+
+  const attentionItems: AttentionPayload[] = [];
+  if (overdueCount > 0) {
+    attentionItems.push({
+      key: "overdue-reminders",
+      level: "warning",
+      title: `${overdueCount} overdue reminder${overdueCount === 1 ? "" : "s"}`,
+      description: "Overdue reminders may require immediate attention.",
+    });
+  }
+  if (dueNowCount > 0) {
+    attentionItems.push({
+      key: "due-now-reminders",
+      level: "informational",
+      title: `${dueNowCount} reminder${dueNowCount === 1 ? "" : "s"} due now`,
+      description: "Reminders in the due-now window.",
+    });
+  }
+  if (detailState === "error") {
+    attentionItems.push({
+      key: "detail-error",
+      level: "diagnostic",
+      title: "Reminder detail load failed",
+      description: error || "An error occurred loading reminder detail.",
+    });
+  }
+
+  const diagnosticsContent = (
+    <>
+      <DiagnosticSection label="Reminders list payload">
+        <RawJson data={reminders} />
+      </DiagnosticSection>
+      <DiagnosticSection label="Reminder detail payload">
+        <RawJson data={detail} />
+      </DiagnosticSection>
+      {error ? (
+        <DiagnosticSection label="Error state">
+          <p className="fg-danger">{error}</p>
+        </DiagnosticSection>
+      ) : null}
+      {message ? (
+        <DiagnosticSection label="Status message">
+          <p>{message}</p>
+        </DiagnosticSection>
+      ) : null}
+    </>
+  );
+
   const drawerModeLabel = drawerMode === "create" ? "Create Reminder" : "Edit Reminder";
   const drawerStatus = drawerMode === "create"
     ? (createForm.title.trim() && createForm.dueAt.trim() ? "form ready" : "title and due date required")
@@ -417,8 +429,10 @@ export function RemindersPage() {
   const drawerStatusTone = drawerMode === "create"
     ? (createForm.title.trim() && createForm.dueAt.trim() ? "success" : "danger")
     : detail
-      ? reminderStatusTone(detail.status)
+      ? (detail.status === "triggered" || detail.status === "dismissed" ? "success" as const : detail.status === "cancelled" ? "neutral" as const : detail.status === "due" ? "danger" as const : "warning" as const)
       : "warning";
+
+  // ── Session guard returns ─────────────────────────────────────────
 
   if (!sessionReady) {
     return (
@@ -458,246 +472,58 @@ export function RemindersPage() {
     );
   }
 
-  return (
-    <section className="fg-page">
-      <PageIntro
-        eyebrow="Work Interaction"
-        title="Reminders"
-        description="Reminder control plane grouped by due pressure, with direct snooze, complete, cancel, and linkage back to tasking, notification, conversation, and automation truth."
-        question="Are overdue follow-ups visible and steerable, or is operator work still hidden behind generic reminder CRUD?"
-        links={[
-          { label: "Reminders", to: CONTROL_PLANE_ROUTES.reminders, description: "Stay on the reminder inventory and detail surface." },
-          { label: "Tasks", to: CONTROL_PLANE_ROUTES.tasks, description: "Open the task layer linked to these reminders." },
-          { label: "Notifications", to: CONTROL_PLANE_ROUTES.notifications, description: "Open delivery truth linked to reminder actions." },
-          { label: "Automations", to: CONTROL_PLANE_ROUTES.automations, description: "Review recurring rules that generate reminders." },
-        ]}
-        badges={[
-          { label: `${reminders.length} reminder${reminders.length === 1 ? "" : "s"}`, tone: reminders.length > 0 ? "success" : "warning" },
-          { label: canMutate ? "Admin mutation enabled" : "Read only", tone: canMutate ? "success" : "neutral" },
-        ]}
-        note="Reminders are not optional UI hints. They are persisted due-state objects with real linkage to tasking and delivery truth."
-      />
+  // ── Main content ──────────────────────────────────────────────────
 
+  return (
+    <ReviewQueuePage
+      eyebrow="Work Interaction"
+      title="Reminders"
+      description="Reminder control plane grouped by due pressure, with direct snooze, complete, cancel, and linkage back to tasking, notification, conversation, and automation truth."
+      summaryItems={summaryItems}
+      actions={actions}
+      attentionItems={attentionItems}
+      isEmpty={listState === "success" && reminders.length === 0}
+      emptyTitle="No reminders found"
+      emptyDescription="No reminders matched the selected filters. Adjust the status filter or create a new reminder."
+      selectedItemContent={
+        <ReminderDetailPanel
+          detail={detail}
+          detailState={detailState}
+          instanceId={instanceId}
+          canMutate={canMutate}
+          actionState={actionState}
+          viewerTimeZone={viewerTimeZone}
+          nowMs={nowMs}
+          onOpenEdit={openEditDrawer}
+          onAction={(action) => void handleAction(action)}
+        />
+      }
+      hasSelection={Boolean(detail)}
+      emptyDetailHint="Select a reminder from the queue to inspect due-state truth."
+      diagnostics={diagnosticsContent}
+      diagnosticsTitle="Reminder diagnostics"
+    >
+      {/* Error and message banners */}
       {error ? <p className="fg-danger">{error}</p> : null}
       {message ? <p>{message}</p> : null}
 
-      <article className="fg-card">
-        <div className="fg-panel-heading">
-          <div>
-            <h3>Scope and filter</h3>
-            <p className="fg-muted">Choose the instance boundary, then filter by backend reminder status. ForgeFrame additionally groups the visible results into overdue, due now, upcoming, and completed / cancelled.</p>
-          </div>
-          <span className="fg-pill" data-tone={instancesState === "success" ? "success" : instancesState === "error" ? "danger" : "neutral"}>{instancesState}</span>
-        </div>
-        <div className="fg-inline-form">
-          <label>
-            Instance
-            <select
-              aria-label="Reminder instance"
-              value={instanceId}
-              onChange={(event) => updateRoute((next) => {
-                next.set("instanceId", event.target.value);
-                next.delete("reminderId");
-              })}
-            >
-              {instances.map((instance) => (
-                <option key={instance.instance_id} value={instance.instance_id}>
-                  {instance.display_name} ({instance.instance_id})
-                </option>
-              ))}
-            </select>
-          </label>
-          <label>
-            Status
-            <select
-              aria-label="Reminder status filter"
-              value={statusFilter}
-              onChange={(event) => updateRoute((next) => {
-                const nextValue = event.target.value;
-                if (nextValue === "all") {
-                  next.delete("status");
-                } else {
-                  next.set("status", nextValue);
-                }
-                next.delete("reminderId");
-              })}
-            >
-              {STATUS_OPTIONS.map((option) => <option key={option} value={option}>{option}</option>)}
-            </select>
-          </label>
-        </div>
-      </article>
+      {/* Reminder table with filters */}
+      <ReminderTable
+        listState={listState}
+        reminders={reminders}
+        selectedReminderId={selectedReminderId}
+        instanceId={instanceId}
+        statusFilter={statusFilter}
+        instances={instances}
+        instancesState={instancesState}
+        canMutate={canMutate}
+        nowMs={nowMs}
+        updateRoute={updateRoute}
+        onOpenCreate={openCreateDrawer}
+        onSelectReminder={(reminderId) => updateRoute((next) => { next.set("reminderId", reminderId); })}
+      />
 
-      <div className="fg-grid">
-        <article className="fg-card">
-          <div className="fg-panel-heading">
-            <div>
-              <h3>Reminder inventory</h3>
-              <p className="fg-muted">Visible reminders are grouped by urgency so overdue follow-ups surface before background upkeep.</p>
-            </div>
-            <div className="fg-actions">
-              <span className="fg-pill" data-tone={listState === "success" ? "success" : listState === "error" ? "danger" : "neutral"}>{listState}</span>
-              <button type="button" disabled={!canMutate} onClick={openCreateDrawer}>New reminder</button>
-            </div>
-          </div>
-
-          {listState === "loading" ? <p className="fg-muted">Loading reminder inventory.</p> : null}
-          {listState === "success" && reminders.length === 0 ? <p className="fg-muted">No reminders matched the selected filters.</p> : null}
-
-          {reminders.length > 0 ? (
-            <div className="fg-stack">
-              {(["overdue", "due_now", "upcoming", "completed_cancelled"] as ReminderGroupKey[]).map((group) => (
-                groupedReminders[group].length > 0 ? (
-                  <article key={group} className="fg-subcard">
-                    <div className="fg-panel-heading">
-                      <div>
-                        <h4>{reminderGroupHeading(group)}</h4>
-                        <p className="fg-muted">{groupedReminders[group].length} reminder{groupedReminders[group].length === 1 ? "" : "s"} in this bucket.</p>
-                      </div>
-                    </div>
-                    <div className="fg-stack">
-                      {groupedReminders[group].map((reminder) => (
-                        <button
-                          key={reminder.reminder_id}
-                          type="button"
-                          className={`fg-data-row${reminder.reminder_id === selectedReminderId ? " is-current" : ""}`}
-                          onClick={() => updateRoute((next) => {
-                            next.set("reminderId", reminder.reminder_id);
-                          })}
-                        >
-                          <div className="fg-panel-heading fg-data-row-heading">
-                            <div className="fg-page-header">
-                              <span className="fg-code">{reminder.reminder_id}</span>
-                              <strong>{reminder.title}</strong>
-                            </div>
-                            <div className="fg-actions">
-                              <span className="fg-pill" data-tone={reminderStatusTone(reminder.status)}>{reminder.status}</span>
-                            </div>
-                          </div>
-                          <div className="fg-detail-grid">
-                            <span className="fg-muted">task {reminder.task_id ?? "none"} · automation {reminder.automation_id ?? "none"} · notification {reminder.notification_id ?? "none"}</span>
-                            <span className="fg-muted">due {reminder.due_at} · timezone UTC</span>
-                          </div>
-                        </button>
-                      ))}
-                    </div>
-                  </article>
-                ) : null
-              ))}
-            </div>
-          ) : null}
-        </article>
-
-        <article className="fg-card">
-          <div className="fg-panel-heading">
-            <div>
-              <h3>Reminder detail</h3>
-              <p className="fg-muted">Origin, exact due timing, steering actions, and delivery linkage converge here.</p>
-            </div>
-            <div className="fg-actions">
-              {detail ? <span className="fg-pill">{detail.reminder_id}</span> : null}
-              <button type="button" disabled={!canMutate || !detail} onClick={openEditDrawer}>Edit selected reminder</button>
-            </div>
-          </div>
-
-          {detailState === "idle" ? <p className="fg-muted">Select a reminder to inspect due-state truth.</p> : null}
-          {detailState === "loading" ? <p className="fg-muted">Loading reminder detail.</p> : null}
-
-          {detail ? (
-            <div className="fg-stack">
-              <div className="fg-actions">
-                <span className="fg-pill" data-tone={reminderStatusTone(detail.status)}>{detail.status}</span>
-                <span className="fg-pill">{reminderDueBucket(detail, nowMs)}</span>
-                <span className="fg-pill">timezone {viewerTimeZone}</span>
-              </div>
-
-              <article className="fg-subcard">
-                <h4>Timing</h4>
-                <ul className="fg-list">
-                  <li>Exact due at: {detail.due_at}</li>
-                  <li>Viewer time zone: {viewerTimeZone}</li>
-                  <li>Due bucket: {reminderDueBucket(detail, nowMs)}</li>
-                  <li>Triggered at: {detail.triggered_at ?? "Not triggered"}</li>
-                </ul>
-                <p className="fg-muted">ForgeFrame shows the raw ISO deadline from the backend and labels the effective urgency bucket separately so overdue reminders are immediately visible.</p>
-              </article>
-
-              <article className="fg-subcard">
-                <h4>Origin</h4>
-                <ul className="fg-list">
-                  <li>Task: {detail.task_id ?? "Not linked"}</li>
-                  <li>Conversation: {originConversationId ?? "Bridge-only through task or notification"}</li>
-                  <li>Automation: {detail.automation_id ?? "Not linked"}</li>
-                  <li>Notification: {detail.notification_id ?? "Not linked"}</li>
-                </ul>
-                <div className="fg-actions">
-                  {detail.task ? <Link className="fg-nav-link" to={buildTaskPath({ instanceId, taskId: detail.task.task_id })}>Open task</Link> : null}
-                  {originConversationId ? <Link className="fg-nav-link" to={buildConversationPath({ instanceId, conversationId: originConversationId })}>Open conversation</Link> : null}
-                  {detail.automation_id ? <Link className="fg-nav-link" to={buildAutomationPath({ instanceId, automationId: detail.automation_id })}>Open automation</Link> : null}
-                  {detail.notification ? <Link className="fg-nav-link" to={buildNotificationPath({ instanceId, notificationId: detail.notification.notification_id })}>Open notification</Link> : null}
-                </div>
-              </article>
-
-              <article className="fg-subcard">
-                <h4>Reminder actions</h4>
-                <p className="fg-muted">Snooze, complete, and cancel use the real reminder update API. Closed reminders stay visible but are no longer presented as actively steerable.</p>
-                <div className="fg-actions">
-                  <button type="button" disabled={!canMutate || reminderIsClosed(detail.status) || actionState.snooze} onClick={() => void handleAction("snooze")}>
-                    {actionState.snooze ? "Snoozing" : "Snooze 1 day"}
-                  </button>
-                  <button type="button" disabled={!canMutate || reminderIsClosed(detail.status) || actionState.complete} onClick={() => void handleAction("complete")}>
-                    {actionState.complete ? "Completing" : "Complete reminder"}
-                  </button>
-                  <button type="button" disabled={!canMutate || reminderIsClosed(detail.status) || actionState.cancel} onClick={() => void handleAction("cancel")}>
-                    {actionState.cancel ? "Cancelling" : "Cancel reminder"}
-                  </button>
-                </div>
-                {reminderIsClosed(detail.status) ? (
-                  <p className="fg-muted">This reminder is already completed or cancelled. Use the drawer only for corrective metadata edits, not as a fake active control surface.</p>
-                ) : null}
-              </article>
-
-              <article className="fg-subcard">
-                <h4>Summary text</h4>
-                <p>{detail.summary || "No reminder summary was recorded."}</p>
-              </article>
-
-              <div className="fg-card-grid">
-                <article className="fg-subcard">
-                  <h4>Task linkage</h4>
-                  {detail.task ? (
-                    <div className="fg-stack">
-                      <p>
-                        <strong>{detail.task.title}</strong>
-                        {" · "}{detail.task.status}
-                      </p>
-                      <div className="fg-actions">
-                        <Link className="fg-nav-link" to={buildTaskPath({ instanceId, taskId: detail.task.task_id })}>Open task</Link>
-                      </div>
-                    </div>
-                  ) : <p className="fg-muted">No task is linked to this reminder.</p>}
-                </article>
-
-                <article className="fg-subcard">
-                  <h4>Notification linkage</h4>
-                  {detail.notification ? (
-                    <div className="fg-stack">
-                      <p>
-                        <strong>{detail.notification.title}</strong>
-                        {" · "}{detail.notification.delivery_status}
-                      </p>
-                      <div className="fg-actions">
-                        <Link className="fg-nav-link" to={buildNotificationPath({ instanceId, notificationId: detail.notification.notification_id })}>Open notification</Link>
-                      </div>
-                    </div>
-                  ) : <p className="fg-muted">No notification is linked to this reminder.</p>}
-                </article>
-              </div>
-            </div>
-          ) : null}
-        </article>
-      </div>
-
+      {/* Create / Edit drawer */}
       <DetailDrawer
         open={drawerMode !== "closed"}
         title={drawerModeLabel}
@@ -711,18 +537,23 @@ export function RemindersPage() {
           { label: "Direct controls", value: "snooze / complete / cancel via reminder PATCH" },
           { label: "Time display", value: `Raw due_at plus viewer timezone (${viewerTimeZone})` },
         ]}
-        actions={(
+        actions={
           <>
-            <button type="button" onClick={closeDrawer}>Cancel</button>
-            <button
+            <Button variant="tertiary" onPress={closeDrawer}>Cancel</Button>
+            <Button
+              variant="primary"
               type="submit"
               form={DRAWER_FORM_ID}
-              disabled={!canMutate || (drawerMode === "create" ? savingCreate || !createForm.title.trim() || !createForm.dueAt.trim() : savingUpdate || !detail)}
+              isDisabled={!canMutate || (drawerMode === "create" ? savingCreate || !createForm.title.trim() || !createForm.dueAt.trim() : savingUpdate || !detail)}
+              onPress={() => {
+                const form = document.getElementById(DRAWER_FORM_ID) as HTMLFormElement | null;
+                form?.requestSubmit();
+              }}
             >
               {drawerMode === "create" ? (savingCreate ? "Creating reminder" : "Create reminder") : (savingUpdate ? "Saving reminder" : "Save reminder changes")}
-            </button>
+            </Button>
           </>
-        )}
+        }
         onClose={closeDrawer}
       >
         <form id={DRAWER_FORM_ID} className="fg-stack" onSubmit={drawerMode === "create" ? handleCreate : handleUpdate}>
@@ -800,7 +631,11 @@ export function RemindersPage() {
                 <label>
                   Status
                   <select value={editForm.status} onChange={(event) => setEditForm((current) => ({ ...current, status: event.target.value as ReminderStatus }))}>
-                    {STATUS_OPTIONS.filter((option) => option !== "all").map((option) => <option key={option} value={option}>{option}</option>)}
+                    <option value="scheduled">scheduled</option>
+                    <option value="due">due</option>
+                    <option value="triggered">triggered</option>
+                    <option value="dismissed">dismissed</option>
+                    <option value="cancelled">cancelled</option>
                   </select>
                 </label>
               ) : null}
@@ -848,6 +683,6 @@ export function RemindersPage() {
           </section>
         </form>
       </DetailDrawer>
-    </section>
+    </ReviewQueuePage>
   );
 }

@@ -1,18 +1,21 @@
 /**
  * Memory page — governed memory records with clear lifecycle semantics.
  *
- * Delegates to decomposed feature components in features/memory/.
+ * Delegates to decomposed feature components in features/memory/,
+ * rendered inside RegistryManagementPage template.
  *
  * @packageDocumentation
  */
 
 import { useState } from "react";
 
-import { CONTROL_PLANE_ROUTES } from "../app/navigation";
 import { useAppSession } from "../app/session";
-import { buildMemoryPath } from "../app/workInteractionRoutes";
-import { PageIntro } from "../components/PageIntro";
 import { getWorkInteractionAccess } from "./workInteractionPageSupport";
+import { RegistryManagementPage } from "../components/page-templates";
+import type { AttentionPayload } from "../components/ui/models/attention";
+import { AdvancedDiagnostics } from "../components/ui/AdvancedDiagnostics";
+
+import type { SummaryStripItem } from "../components/ui/SummaryStrip";
 
 import {
   useMemoryPage,
@@ -74,132 +77,98 @@ export function MemoryPage() {
     setActiveCategory(category);
   };
 
-  // Not ready
+  // ── Scope config ───────────────────────────────────────────
+  const scopeLabel = activeInstance?.display_name ?? (page.instanceId || undefined);
+  const scope = scopeLabel
+    ? {
+        label: scopeLabel,
+        onChange: () => {
+          page.deleteParam("memoryId");
+        },
+      }
+    : undefined;
+
+  // ── Summary items ──────────────────────────────────────────
+  const summaryItems: SummaryStripItem[] = [
+    { key: "total", label: "Total", value: page.memoryEntries.length, tone: page.memoryEntries.length > 0 ? "success" as const : undefined },
+    ...((page.durableCount ?? 0) > 0 ? [{ key: "durable" as const, label: "Durable" as const, value: page.durableCount ?? 0 }] : []),
+    ...((page.bootCount ?? 0) > 0 ? [{ key: "boot" as const, label: "Boot" as const, value: page.bootCount ?? 0 }] : []),
+    ...((page.workingCount ?? 0) > 0 ? [{ key: "working" as const, label: "Working" as const, value: page.workingCount ?? 0 }] : []),
+    ...((page.revokedCount ?? 0) > 0 ? [{ key: "revoked" as const, label: "Revoked" as const, value: page.revokedCount ?? 0, tone: "warning" as const }] : []),
+  ];
+
+  // ── Attention items ────────────────────────────────────────
+  const attentionItems: AttentionPayload[] = [];
+  if (page.error) {
+    attentionItems.push({ key: "memory-error", level: "primary_blocker", title: page.error });
+  }
+  if (page.message) {
+    attentionItems.push({ key: "memory-message", level: "informational", title: page.message });
+  }
+  if (!canMutate) {
+    attentionItems.push({ key: "read-only", level: "informational", title: "Read only — mutation not available" });
+  }
+
+  // ── Access gate (early return) ─────────────────────────────
   if (!sessionReady) {
     return (
-      <section className="fg-page">
-        <PageIntro
-          eyebrow="Work Interaction"
-          title="Memory"
-          description="ForgeFrame is restoring governed memory truth."
-          question="Which context surface should open once scope resolves?"
-          links={[
-            {
-              label: "Command Center",
-              to: CONTROL_PLANE_ROUTES.dashboard,
-              description: "Return to the dashboard while scope resolves.",
-            },
-          ]}
-          badges={[{ label: "Checking access", tone: "neutral" }]}
-          note="Memory must distinguish durable truth, boot candidates, working context, and retired records."
-        />
-      </section>
+      <RegistryManagementPage
+        eyebrow="Work Interaction"
+        title="Memory"
+        description="ForgeFrame is restoring governed memory truth."
+      />
     );
   }
 
-  // No read access
   if (!canRead) {
     return (
-      <section className="fg-page">
-        <PageIntro
-          eyebrow="Work Interaction"
-          title="Memory"
-          description="This route is reserved for operators and admins who can inspect real memory governance."
-          question="Which adjacent surface should remain open while memory access is outside the current permission envelope?"
-          links={[
-            {
-              label: "Contacts",
-              to: CONTROL_PLANE_ROUTES.contacts,
-              description: "Inspect contact posture without opening memory records.",
-            },
-            {
-              label: "Approvals",
-              to: CONTROL_PLANE_ROUTES.approvals,
-              description: "Review approvals while memory truth remains closed.",
-            },
-          ]}
-          badges={[{ label: "Operator or admin required", tone: "warning" }]}
-          note="ForgeFrame does not render a cosmetic memory shell when the session cannot inspect real context state."
-        />
-      </section>
+      <RegistryManagementPage
+        eyebrow="Work Interaction"
+        title="Memory"
+        description="This route is reserved for operators and admins who can inspect real memory governance."
+        isEmpty
+        emptyTitle="Memory access unavailable"
+        emptyDescription="This session does not hold the required permissions to inspect memory governance records."
+      />
     );
   }
 
   return (
-    <section className="fg-page">
-      <PageIntro
-        eyebrow="Work Interaction"
-        title="Memory"
-        description="Governed long-term truth with explicit scope, trust, review posture, and strict separation between durable memory, boot candidates, working context, and retired records."
-        question="Which memory layer needs attention?"
-        links={[
-          {
-            label: "Memory",
-            to: buildMemoryPath({ instanceId: page.instanceId }),
-            description: "Stay on the memory governance surface.",
-          },
-          {
-            label: "Learning",
-            to: `${CONTROL_PLANE_ROUTES.learning}?instanceId=${encodeURIComponent(page.instanceId)}`,
-            description: "Review learning events feeding boot memory candidates.",
-          },
-          {
-            label: "Skills",
-            to: `${CONTROL_PLANE_ROUTES.skills}?instanceId=${encodeURIComponent(page.instanceId)}`,
-            description: "Inspect skill usage linked to memory records.",
-          },
-        ]}
-        badges={[
-          {
-            label: `${page.memoryEntries.length} memory record${page.memoryEntries.length === 1 ? "" : "s"}`,
-            tone: page.memoryEntries.length > 0 ? "success" : "warning",
-          },
-          {
-            label: canMutate ? "Admin mutation enabled" : "Read only",
-            tone: canMutate ? "success" : "neutral",
-          },
-        ]}
-        note="Working context references stay separate from durable truth. Governance actions require confirmation."
-      />
-
-      {/* Messages */}
-      {page.error ? <p className="fg-danger">{page.error}</p> : null}
-      {page.message ? (
-        <p className="ff-memory-inline-message">{page.message}</p>
-      ) : null}
-
-      {/* Scope bar */}
-      <article className="fg-card ff-memory-scope-bar" aria-label="Memory scope">
-        {showInstanceSelector ? (
-          <label>
-            Instance
-            <select
-              value={page.instanceId}
-              onChange={(event) => handleInstanceChange(event.target.value)}
-            >
-              {page.instances.map((instance) => (
-                <option key={instance.instance_id} value={instance.instance_id}>
-                  {instance.display_name} ({instance.instance_id})
-                </option>
-              ))}
-            </select>
-          </label>
-        ) : (
-          <span>
-            Scope: {(activeInstance?.display_name ?? page.instanceId) || "Resolving"}
-          </span>
-        )}
-        <span>{canMutate ? "Admin mutations available" : "Read only"}</span>
-        <button
-          type="button"
-          className="ff-memory-create-trigger"
-          disabled={!canMutate || !page.instanceId}
-          onClick={handleOpenCreateForm}
-        >
-          Create memory
-        </button>
-      </article>
-
+    <RegistryManagementPage
+      eyebrow="Work Interaction"
+      title="Memory"
+      description="Governed long-term truth with explicit scope, trust, review posture, and strict separation between durable memory, boot candidates, working context, and retired records."
+      scope={scope}
+      attentionItems={attentionItems}
+      summaryItems={summaryItems}
+      actions={canMutate && page.instanceId
+        ? [
+            {
+              label: "Create memory",
+              kind: "primary",
+              intent: "configure",
+              onClick: handleOpenCreateForm,
+              disabled: !canMutate || !page.instanceId,
+            },
+          ]
+        : undefined}
+      selectedItemContent={
+        page.selectedMemoryId ? (
+          <MemoryDetailPanel
+            detail={page.detail}
+            detailState={page.detailState}
+            instanceId={page.instanceId}
+          />
+        ) : null
+      }
+      hasSelection={!!page.selectedMemoryId}
+      emptyDetailHint="Select a memory entry from the table to inspect its governance details."
+      diagnostics={
+        <AdvancedDiagnostics title="Memory diagnostics">
+          <span className="text-meta text-muted italic">No diagnostic data available.</span>
+        </AdvancedDiagnostics>
+      }
+    >
       {/* Summary hero */}
       <MemorySummaryHero
         totalCount={page.memoryEntries.length}
@@ -244,15 +213,6 @@ export function MemoryPage() {
                 hasInstance={!!page.instanceId}
                 onSelectMemory={page.selectMemory}
               />
-
-              {/* Detail panel — only when memory selected */}
-              {page.selectedMemoryId ? (
-                <MemoryDetailPanel
-                  detail={page.detail}
-                  detailState={page.detailState}
-                  instanceId={page.instanceId}
-                />
-              ) : null}
             </div>
 
             {/* Governance actions — only when detail loaded */}
@@ -297,6 +257,6 @@ export function MemoryPage() {
 
       {/* Memory lifecycle explanation */}
       <MemoryLifecycle />
-    </section>
+    </RegistryManagementPage>
   );
 }

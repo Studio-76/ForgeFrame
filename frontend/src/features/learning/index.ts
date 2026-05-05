@@ -18,9 +18,6 @@ export type { EventListProps } from "./EventList";
 export { EventDetail } from "./EventDetail";
 export type { EventDetailProps } from "./EventDetail";
 
-export { DecisionForm } from "./DecisionForm";
-export type { DecisionFormProps } from "./DecisionForm";
-
 export { CreateManualForm } from "./CreateManualForm";
 export type { CreateManualFormProps } from "./CreateManualForm";
 

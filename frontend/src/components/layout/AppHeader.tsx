@@ -10,7 +10,7 @@ import { Button } from "../ui/Button";
 import { useSidebar } from "./SidebarContext";
 import { BellIcon, ChevronDownIcon, MenuIcon, MoonIcon, SearchIcon, SunIcon } from "./icons";
 
-type AppHeaderProps = {
+export type AppHeaderProps = {
   navigationSections: NavigationSection[];
   instanceId: string | null;
   session: AdminSessionUser | null;
@@ -263,16 +263,12 @@ export function AppHeader({ navigationSections, instanceId, session, sessionErro
           </Button>
           {userOpen ? (
             <div className="ff-dropdown ff-user-dropdown">
-              <div className="ff-dropdown-heading">
-                <strong>{session?.display_name ?? session?.username ?? "Admin"}</strong>
-                <span>{session?.read_only ? "Read-only session" : session?.role ?? "No active session"}</span>
-              </div>
               {sessionError ? <p className="ff-dropdown-error">{sessionError}</p> : null}
               <Link to={CONTROL_PLANE_ROUTES.settings}>System Settings</Link>
               <Link to={CONTROL_PLANE_ROUTES.security}>Security & Policies</Link>
-              <Button onPress={onLogout}>
+              <button type="button" onClick={onLogout}>
                 Logout
-              </Button>
+              </button>
             </div>
           ) : null}
         </div>

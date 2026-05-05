@@ -103,6 +103,19 @@
   --fg-color-status-info-border: var(--fg-ref-color-status-info-border);
   --fg-color-focus-ring: var(--fg-ref-color-focus-ring);
   --fg-shadow-panel: var(--fg-ref-shadow-panel);
+  --fg-color-accent: var(--fg-color-action-primary);
+  --fg-color-border-subtle: rgba(148, 163, 184, 0.10);
+  --fg-color-border-strong: rgba(148, 163, 184, 0.30);
+  --fg-color-text-tertiary: #64748b;
+  --fg-color-text-muted: var(--fg-color-text-secondary);
+  --fg-color-action-primary-hover: #3a50e0;
+  --fg-color-text-on-action: #ffffff;
+  --fg-type-size-xl: 1.25rem;
+  --fg-type-size-lg: 1.125rem;
+  --fg-type-size-base: 0.9375rem;
+  --fg-type-size-micro: 0.65rem;
+  --fg-type-size-subtitle: 1rem;
+  --fg-type-font-mono: var(--fg-font-mono);
   --fg-color-status-ready: var(--fg-color-status-success);
   --fg-color-status-runtime-ready: var(--fg-color-status-success);
   --fg-color-status-partial: var(--fg-color-status-warning);
@@ -159,6 +172,14 @@
   --fg-ref-color-status-info-border: rgba(2, 106, 162, 0.18);
   --fg-ref-color-focus-ring: #1570ef;
   --fg-ref-shadow-panel: 0 18px 40px rgba(15, 23, 42, 0.08);
+
+  --fg-color-accent: var(--fg-color-action-primary);
+  --fg-color-border-subtle: rgba(15, 23, 42, 0.07);
+  --fg-color-border-strong: rgba(15, 23, 42, 0.25);
+  --fg-color-text-tertiary: #98a2b3;
+  --fg-color-text-muted: var(--fg-color-text-secondary);
+  --fg-color-action-primary-hover: #3a50e0;
+  --fg-color-text-on-action: #ffffff;
 
   color-scheme: light;
 }

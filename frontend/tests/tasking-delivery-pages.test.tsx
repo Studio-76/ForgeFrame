@@ -740,8 +740,10 @@ describe("tasking and delivery pages", () => {
     expect(container.textContent).toContain("Reminder path");
     expect(container.textContent).toContain("bridge-only");
 
-    const reminderLink = Array.from(container.querySelectorAll("a")).find((link) => link.textContent === "Price reminder");
-    expect(reminderLink?.getAttribute("href")).toBe("/reminders?instanceId=instance_alpha&reminderId=reminder_alpha");
+    // "Price reminder" is now <Button variant="navigation"> inside the detail panel
+    const reminderBtn = Array.from(container.querySelectorAll("button")).find((btn) => btn.textContent?.includes("Price reminder"));
+    expect(reminderBtn).toBeTruthy();
+    expect(reminderBtn?.textContent).toContain("Price reminder");
   });
 
   it("runs direct task status and reminder actions from the task detail surface", async () => {
@@ -866,10 +868,13 @@ describe("tasking and delivery pages", () => {
     expect(container.textContent).toContain("Origin");
     expect(container.textContent).toContain("Reminder actions");
 
-    const taskLink = Array.from(container.querySelectorAll("a")).find((link) => link.textContent === "Open task");
-    expect(taskLink?.getAttribute("href")).toBe("/tasks?instanceId=instance_alpha&taskId=task_alpha");
-    const automationLink = Array.from(container.querySelectorAll("a")).find((link) => link.textContent === "Open automation");
-    expect(automationLink?.getAttribute("href")).toBe("/automations?instanceId=instance_alpha&automationId=automation_alpha");
+    // "Open task" and "Open automation" are <Button variant="navigation"> in the detail panel
+    const taskBtn = Array.from(container.querySelectorAll("button")).find((btn) => btn.textContent?.includes("Open task"));
+    expect(taskBtn).toBeTruthy();
+    expect(taskBtn?.textContent).toContain("Open task");
+    const automationBtn = Array.from(container.querySelectorAll("button")).find((btn) => btn.textContent?.includes("Open automation"));
+    expect(automationBtn).toBeTruthy();
+    expect(automationBtn?.textContent).toContain("Open automation");
   });
 
   it("groups reminders by urgency and runs direct reminder actions from the detail surface", async () => {
@@ -1047,9 +1052,10 @@ describe("tasking and delivery pages", () => {
     expect(container.textContent).toContain("Test send");
     expect(container.textContent).toContain("not_ready");
 
-    const fallbackLink = Array.from(container.querySelectorAll("a")).find((link) => link.textContent === "Open fallback channel");
-    expect(fallbackLink).toBeUndefined();
-    expect(Array.from(container.querySelectorAll("a")).some((link) => link.getAttribute("href") === "/channels?instanceId=instance_alpha&channelId=channel_fallback")).toBe(true);
+    // Fallback channel link is now <Button variant="navigation"> (no href)
+    const fallbackBtn = Array.from(container.querySelectorAll("button")).find((btn) => btn.textContent?.includes("channel_fallback"));
+    expect(fallbackBtn).toBeTruthy();
+    expect(fallbackBtn?.textContent).toContain("channel_fallback");
   });
 
   it("creates and updates channels against the selected instance scope", async () => {
@@ -1058,6 +1064,13 @@ describe("tasking and delivery pages", () => {
       element: <ChannelsPage />,
       session: adminSession,
     }));
+    await flushEffects();
+
+    // The "Create channel" form is hidden by default; click the action bar button first.
+    const createActionBtn = getButtonByText(container, "Create channel");
+    await act(async () => {
+      createActionBtn!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
     await flushEffects();
 
     const createForm = getFormByText("Create channel");
@@ -1302,7 +1315,7 @@ describe("tasking and delivery pages", () => {
     }));
 
     await act(async () => {
-      getButtonByText(container, "Edit selected notification")!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      getButtonByText(container, "Edit")!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     });
     await flushEffects();
 

@@ -12,19 +12,20 @@
  *
  *   src/theme/
  *   ├── index.css              ← canonical import entry point
+ *   ├── tailwind.css           ← Tailwind CSS v4 + ForgeFrame @theme tokens
  *   ├── tokens.css             ← design tokens (CSS custom properties)
  *   ├── reset.css              ← global reset and base typography
  *   ├── layout.css             ← app shell layout (.ff-app, .ff-main)
- *   ├── utilities.css          ← spacing, spinner, animations
+ *   ├── utilities.css          ← spacing, spinner, animations, button variants
  *   ├── components/
- *   │   ├── navigation.css     ← sidebar, topbar, commands, dropdowns
- *   │   ├── cards.css          ← fg-card, fg-shell, fg-grid, fg-pill
- *   │   ├── forms.css          ← form layouts, detail grids
+ *   │   ├── navigation.css     ← sidebar, topbar, commands, dropdowns, bottom tab
+ *   │   ├── cards.css          ← fg-card, fg-shell, fg-grid, fg-pill, fg-kpi
+ *   │   ├── forms.css          ← form layouts, detail grids, template-grid
  *   │   ├── tables.css         ← fg-table, ff-table-card, ff-data-table
  *   │   └── overlay.css        ← drawers, dialogs, combobox
  *   └── pages/
  *       ├── login.css          ← public shell, auth, login card
- *       ├── dashboard.css      ← dashboard layout
+ *       ├── dashboard.css      ← dashboard layout, attention, scope bar
  *       ├── oauth.css          ← OAuth compact management grid
  *       ├── queues.css         ← queue health monitor
  *       ├── providers.css      ← provider grid, remediation, policy editor
@@ -36,10 +37,21 @@
  *       ├── release.css        ← release workflow
  *       ├── governance.css     ← ITT / ingress TLS
  *       ├── harness.css        ← harness layout and presets
- *       └── settings.css       ← settings inventory and detail panel
+ *       ├── settings.css       ← settings inventory and detail panel
+ *       ├── security.css       ← security posture, remediation checklist
+ *       ├── learning.css       ← learning review queue, promotion flow
+ *       ├── memory.css         ← memory governance, lifecycle
+ *       ├── skills.css         ← skills lifecycle management
+ *       ├── knowledge-sources.css ← knowledge sources lifecycle
+ *       ├── contacts.css       ← contact management
+ *       └── logs.css           ← incidents, logs, activity, audit, diagnostics
  *
  * ═══════════════════════════════════════════════════════════════════════════ */
 
+/* Tailwind CSS v4 — must be first so its theme layer is available downstream */
+@import "../theme/tailwind.css";
+
+/* Tokens — must be second so all files can use CSS custom properties */
 @import "../theme/tokens.css";
 @import "../theme/reset.css";
 @import "../theme/layout.css";
@@ -63,3 +75,10 @@
 @import "../theme/pages/governance.css";
 @import "../theme/pages/harness.css";
 @import "../theme/pages/settings.css";
+@import "../theme/pages/security.css";
+@import "../theme/pages/learning.css";
+@import "../theme/pages/memory.css";
+@import "../theme/pages/skills.css";
+@import "../theme/pages/knowledge-sources.css";
+@import "../theme/pages/contacts.css";
+@import "../theme/pages/logs.css";

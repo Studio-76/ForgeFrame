@@ -426,7 +426,7 @@ export function updateAdminUser(
   userId: string,
   payload: { display_name?: string; role?: string; status?: string; must_rotate_password?: true },
 ) {
-  return fetchJson<{ status: string; user: AdminUser }>(`/admin/security/users/${userId}`, {
+  return fetchJson<{ status: string; user: AdminUser }>(`/admin/security/users/${encodeURIComponent(userId)}`, {
     method: "PATCH",
     body: JSON.stringify(payload),
   });

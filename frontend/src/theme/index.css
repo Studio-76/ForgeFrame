@@ -1,5 +1,6 @@
 /* ── ForgeFrame Design System ──
  * Import order is intentional:
+ *   0. Tailwind CSS (v4) — base reset, theme variables, utilities
  *   1. Design tokens (CSS custom properties)
  *   2. Global reset and base typography
  *   3. App shell layout
@@ -11,7 +12,10 @@
  * Preserve the relative import order — later files can override earlier ones.
  */
 
-/* Tokens — must be first so all files can use CSS custom properties */
+/* Tailwind CSS v4 — must be first so its theme layer is available downstream */
+@import "./tailwind.css";
+
+/* Tokens — must be second so all files can use CSS custom properties */
 @import "./tokens.css";
 
 /* Core — global base, resets, and layout */

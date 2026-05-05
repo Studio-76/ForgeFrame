@@ -1228,21 +1228,6 @@ export function fetchHarnessRuns(
 // ---------------------------------------------------------------------------
 
 /**
- * Fetch the client operational view.
- * @param window - Time window (default "24h").
- * @param instanceId - Optional instance ID for scoping.
- * @returns Response with client operational data.
- */
-export function fetchClientOperationalView(
-  window: "1h" | "24h" | "7d" | "all" = "24h",
-  instanceId?: string | null,
-) {
-  return fetchJson<{ status: string; window: string; clients: Array<Record<string, string | number | boolean>> }>(
-    appendTenantScope(`/admin/usage/clients?window=${window}`, undefined, instanceId),
-  );
-}
-
-/**
  * Fetch drilldown data for a specific client.
  * @param clientId - The client ID.
  * @param window - Time window (default "24h").

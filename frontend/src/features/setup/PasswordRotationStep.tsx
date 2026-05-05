@@ -5,6 +5,7 @@ import {
   type PasswordRotationDraft,
   createEmptyPasswordRotationDraft,
   buildPasswordRotationRequest,
+  formatRotationError,
 } from "../auth/PasswordRotationGate";
 
 /**
@@ -16,24 +17,6 @@ export type PasswordRotationStepProps = {
   /** Called when the password rotation completes successfully. */
   onRotationComplete: (session: AdminSessionUser) => void;
 };
-
-/**
- * Format a rotation error into a user-facing message.
- */
-function formatRotationError(error: unknown): string {
-  if (error instanceof Error) {
-    if (error.message.includes("Current temporary password was rejected")) {
-      return "Current temporary password was rejected. Re-enter it and try again.";
-    }
-    if (error.message.includes("must differ")) {
-      return "New password must differ from the current temporary password.";
-    }
-    if (error.message.includes("at least 8")) {
-      return "New password must be at least 8 characters.";
-    }
-  }
-  return "Password rotation could not be completed. Verify the temporary password and try again.";
-}
 
 /**
  * Password rotation form rendered inline inside the setup flow.

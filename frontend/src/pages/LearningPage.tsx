@@ -1,17 +1,17 @@
 /**
  * Learning page — review learning events and decide promotion outcomes.
  *
- * Delegates to decomposed feature components in features/learning/.
+ * Conforms to the Review Queue pattern using the ReviewQueuePage template.
  *
  * @packageDocumentation
  */
 
 import { useState } from "react";
 
-import { CONTROL_PLANE_ROUTES } from "../app/navigation";
 import { useAppSession } from "../app/session";
-import { buildMemoryPath } from "../app/workInteractionRoutes";
-import { PageIntro } from "../components/PageIntro";
+import { ReviewQueuePage } from "../components/page-templates";
+import type { Action } from "../components/ui/models/action";
+import type { AttentionPayload } from "../components/ui/models/attention";
 import { getWorkInteractionAccess } from "./workInteractionPageSupport";
 
 import {
@@ -46,139 +46,153 @@ export function LearningPage() {
     (instance) => instance.instance_id === page.instanceId,
   );
 
+  // ── Attention items ────────────────────────────────────────
+  const attentionItems: AttentionPayload[] = [];
+  if (page.error) {
+    attentionItems.push({
+      key: "learning-error",
+      level: "primary_blocker",
+      title: page.error,
+    });
+  }
+  if (page.message) {
+    attentionItems.push({
+      key: "learning-message",
+      level: "informational",
+      title: page.message,
+    });
+  }
+
+  // ── Summary items (non-zero only) ──────────────────────────
+  const summaryItems = hasEvents
+    ? [
+        ...(suggestedCount > 0 ? [{ key: "suggested" as const, label: "Suggested" as const, value: suggestedCount, tone: "warning" as const }] : []),
+        ...(reviewRequiredCount > 0 ? [{ key: "review" as const, label: "Review required" as const, value: reviewRequiredCount, tone: "warning" as const }] : []),
+        ...(promotedCount > 0 ? [{ key: "promoted" as const, label: "Promoted" as const, value: promotedCount, tone: "success" as const }] : []),
+        ...(rejectedCount > 0 ? [{ key: "rejected" as const, label: "Rejected" as const, value: rejectedCount, tone: "neutral" as const }] : []),
+      ]
+    : undefined;
+
+  // ── Actions ────────────────────────────────────────────────
+  const actions: Action[] = [];
+  if (canMutate && page.instanceId) {
+    actions.push({
+      label: "Scan patterns",
+      kind: "primary",
+      intent: "run" as const,
+      onClick: () => void page.handlePatternScan(),
+    });
+  }
+
   // Not ready
   if (!sessionReady) {
     return (
-      <section className="fg-page">
-        <PageIntro
-          eyebrow="Work Interaction"
-          title="Learning"
-          description="ForgeFrame is restoring learning-review state."
-          question="Which learning surface should open once scope resolves?"
-          links={[
-            {
-              label: "Command Center",
-              to: CONTROL_PLANE_ROUTES.dashboard,
-              description: "Return to the dashboard while session scope resolves.",
-            },
-          ]}
-          badges={[{ label: "Checking access", tone: "neutral" }]}
-          note="Learning events persist review truth, promotion decisions, and explainability."
-        />
-      </section>
+      <ReviewQueuePage
+        eyebrow="Work Interaction"
+        title="Learning"
+        description="ForgeFrame is restoring learning-review state."
+        isEmpty
+        emptyTitle="Checking access"
+        emptyDescription="ForgeFrame waits for session state before opening the learning review surface."
+      />
     );
   }
 
   // No read access
   if (!canRead) {
     return (
-      <section className="fg-page">
-        <PageIntro
-          eyebrow="Work Interaction"
-          title="Learning"
-          description="This route is reserved for operators and admins who can inspect real learning and memory-promotion truth."
-          question="Which adjacent surface should remain open while learning access is outside the current permission envelope?"
-          links={[
-            {
-              label: "Memory",
-              to: CONTROL_PLANE_ROUTES.memory,
-              description: "Inspect existing memory truth while learning review remains closed.",
-            },
-          ]}
-          badges={[{ label: "Operator or admin required", tone: "warning" }]}
-          note="ForgeFrame does not render cosmetic learning suggestions without scoped access."
-        />
-      </section>
+      <ReviewQueuePage
+        eyebrow="Work Interaction"
+        title="Learning"
+        description="This route is reserved for operators and admins who can inspect real learning and memory-promotion truth."
+        isEmpty
+        emptyTitle="Operator or admin required"
+        emptyDescription="ForgeFrame does not render cosmetic learning suggestions without scoped access."
+      />
     );
   }
 
   return (
-    <section className="fg-page">
-      <PageIntro
+    <>
+      <ReviewQueuePage
         eyebrow="Work Interaction"
         title="Learning"
         description="Review learning suggestions before they become memory, draft skills, or historical records."
-        question="Scan for candidates when the queue is empty; decide outcomes only from a selected event."
-        links={[
-          {
-            label: "View memory",
-            to: buildMemoryPath({ instanceId: page.instanceId }),
-            description: "Inspect durable or boot memory created from learning decisions.",
-          },
-          {
-            label: "View draft skills",
-            to: `${CONTROL_PLANE_ROUTES.skills}?instanceId=${encodeURIComponent(page.instanceId)}`,
-            description: "Inspect draft skills created from approved learning events.",
-          },
-        ]}
-        badges={[]}
-        note="Memory and Skills are destinations, not filters. Promotion still requires an explicit review decision."
-      />
+        attentionItems={attentionItems}
+        summaryItems={summaryItems}
+        actions={actions}
+        hasSelection={page.selectedEventId != null}
+        selectedItemContent={
+          page.detail ? (
+            <EventDetail
+              detail={page.detail}
+              instanceId={page.instanceId}
+              detailState={page.detailState}
+              decideForm={page.decideForm}
+              setDecideFormField={page.setDecideFormField}
+              handleDecide={page.handleDecide}
+              savingDecide={page.savingDecide}
+              canMutate={canMutate}
+            />
+          ) : undefined
+        }
+        emptyDetailHint="Select an event from the queue to inspect promotion options."
+        density="compact"
+      >
+        {/* Instance scope selector */}
+        <article className="ff-learning-scope-status" aria-label="Learning scope status">
+          {showInstanceSelector ? (
+            <label>
+              Instance
+              <select
+                value={page.instanceId}
+                onChange={(event) => {
+                  page.setParam("instanceId", event.target.value);
+                  page.deleteParam("eventId");
+                }}
+              >
+                {page.instances.map((instance) => (
+                  <option key={instance.instance_id} value={instance.instance_id}>
+                    {instance.display_name}
+                  </option>
+                ))}
+              </select>
+            </label>
+          ) : (
+            <span>
+              Scope: {(activeInstance?.display_name ?? page.instanceId) || "Resolving"}
+            </span>
+          )}
+          <span>{canMutate ? "Admin mutations available" : "Read only"}</span>
+        </article>
 
-      {/* Messages */}
-      {page.error ? <p className="fg-danger">{page.error}</p> : null}
-      {page.message ? (
-        <p className="ff-learning-inline-message">{page.message}</p>
-      ) : null}
-
-      {/* Instance selector */}
-      <article className="ff-learning-scope-status" aria-label="Learning scope status">
-        {showInstanceSelector ? (
-          <label>
-            Instance
-            <select
-              value={page.instanceId}
-              onChange={(event) => {
-                page.setParam("instanceId", event.target.value);
-                page.deleteParam("eventId");
-              }}
-            >
-              {page.instances.map((instance) => (
-                <option key={instance.instance_id} value={instance.instance_id}>
-                  {instance.display_name} ({instance.instance_id})
-                </option>
-              ))}
-            </select>
-          </label>
-        ) : (
-          <span>
-            Scope: {(activeInstance?.display_name ?? page.instanceId) || "Resolving"}
-          </span>
-        )}
-        <span>{canMutate ? "Admin mutations available" : "Read only"}</span>
-        <span>
-          Load: {page.instancesState}/{page.listState}/{page.detailState}
-        </span>
-      </article>
-
-      {/* Summary hero */}
-      <LearningSummaryHero
-        totalEvents={page.events.length}
-        suggestedCount={suggestedCount}
-        reviewRequiredCount={reviewRequiredCount}
-        promotedCount={promotedCount}
-        rejectedCount={rejectedCount}
-        canMutate={canMutate}
-        hasInstance={!!page.instanceId}
-        scanningPatterns={page.scanningPatterns}
-        scanResult={page.scanResult}
-        lastScanCompletedAt={page.lastScanCompletedAt}
-        listState={page.listState}
-        showScanInfo={showScanInfo}
-        onToggleScanInfo={() => setShowScanInfo((prev) => !prev)}
-      />
-
-      {/* Main content: empty state or event list + detail */}
-      {!hasEvents && page.listState === "success" ? (
-        <EmptyState
+        {/* Summary hero */}
+        <LearningSummaryHero
+          totalEvents={page.events.length}
+          suggestedCount={suggestedCount}
+          reviewRequiredCount={reviewRequiredCount}
+          promotedCount={promotedCount}
+          rejectedCount={rejectedCount}
           canMutate={canMutate}
           hasInstance={!!page.instanceId}
           scanningPatterns={page.scanningPatterns}
-          onScan={() => void page.handlePatternScan()}
-          onCreateManual={() => setShowManualForm(true)}
+          scanResult={page.scanResult}
+          lastScanCompletedAt={page.lastScanCompletedAt}
+          listState={page.listState}
+          showScanInfo={showScanInfo}
+          onToggleScanInfo={() => setShowScanInfo((prev) => !prev)}
         />
-      ) : (
-        <div className="fg-grid ff-learning-main-grid">
+
+        {/* Main content: empty state or event list */}
+        {!hasEvents && page.listState === "success" ? (
+          <EmptyState
+            canMutate={canMutate}
+            hasInstance={!!page.instanceId}
+            scanningPatterns={page.scanningPatterns}
+            onScan={() => void page.handlePatternScan()}
+            onCreateManual={() => setShowManualForm(true)}
+          />
+        ) : (
           <div className="fg-stack">
             <EventList
               events={page.events}
@@ -190,19 +204,8 @@ export function LearningPage() {
               hasInstance={!!page.instanceId}
             />
           </div>
-
-          <EventDetail
-            detail={page.detail}
-            instanceId={page.instanceId}
-            detailState={page.detailState}
-            decideForm={page.decideForm}
-            setDecideFormField={page.setDecideFormField}
-            handleDecide={page.handleDecide}
-            savingDecide={page.savingDecide}
-            canMutate={canMutate}
-          />
-        </div>
-      )}
+        )}
+      </ReviewQueuePage>
 
       {/* Learning lifecycle explanation */}
       <LearningLifecycle />
@@ -218,6 +221,6 @@ export function LearningPage() {
         canMutate={canMutate}
         hasInstance={!!page.instanceId}
       />
-    </section>
+    </>
   );
 }

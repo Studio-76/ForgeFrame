@@ -7,7 +7,7 @@ import { SidebarProvider, useSidebar } from "./SidebarContext";
 import { AppHeader } from "./AppHeader";
 import { AppSidebar } from "./AppSidebar";
 
-type AppShellProps = {
+export type AppShellProps = {
   navigationSections: NavigationSection[];
   instanceId: string | null;
   session: AdminSessionUser | null;

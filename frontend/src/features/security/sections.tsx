@@ -346,45 +346,6 @@ export function RelatedPagesStrip({
   );
 }
 
-export function SecurityBlockerStrip({
-  blockers,
-}: {
-  blockers: SecurityBlocker[];
-}) {
-  return (
-    <article className="fg-card">
-      <div className="fg-panel-heading">
-        <div>
-          <h3>Critical security blockers</h3>
-          <p className="fg-muted">
-            Default password, rotation evidence, open sessions, missing credentials, and live break-glass exceptions stay visible at the top.
-          </p>
-        </div>
-        <span className="fg-pill" data-tone={blockers.some((item) => item.active) ? "danger" : "success"}>
-          {blockers.filter((item) => item.active).length} active
-        </span>
-      </div>
-      <div className="fg-card-grid">
-        {blockers.map((blocker) => (
-          <article key={blocker.blocker_id} className="fg-subcard">
-            <div className="fg-panel-heading">
-              <div>
-                <h4>{blocker.label}</h4>
-                <p className="fg-muted">{blocker.summary}</p>
-              </div>
-              <div className="fg-actions">
-                <span className="fg-pill" data-tone={blocker.tone}>{blocker.active ? "Active" : "Clear"}</span>
-                {typeof blocker.count === "number" ? <span className="fg-pill">{blocker.count}</span> : null}
-              </div>
-            </div>
-            <p>{blocker.detail}</p>
-          </article>
-        ))}
-      </div>
-    </article>
-  );
-}
-
 export function SecurityTabBar({
   activeTab,
   canViewAdminTabs,
@@ -932,7 +893,7 @@ export function SecurityAdminUsersSection({
                   <select value={scopeDraft.instance_id} onChange={(event) => onScopeDraftChange("instance_id", event.target.value)}>
                     {instances.map((instance) => (
                       <option key={instance.instance_id} value={instance.instance_id}>
-                        {instance.display_name} ({instance.instance_id})
+                        {instance.display_name}
                       </option>
                     ))}
                   </select>

@@ -13,6 +13,8 @@ export interface ConfirmHighRiskDialogProps {
   item: MutableSettingEntry | null;
   /** The action being confirmed ("save" or "reset"). */
   action: "save" | "reset" | null;
+  /** The draft value being saved (for save actions). */
+  draftValue: string | null;
   /** Callback when the user confirms the action. */
   onConfirm: () => void;
   /** Callback when the user cancels. */
@@ -30,6 +32,7 @@ export function ConfirmHighRiskDialog({
   visible,
   item,
   action,
+  draftValue,
   onConfirm,
   onCancel,
 }: ConfirmHighRiskDialogProps) {
@@ -54,8 +57,10 @@ export function ConfirmHighRiskDialog({
     : formatSettingValue(item.default_value);
 
   /** Draft value (for save actions). */
-  const draftValueReadable = item.value_type === "bool"
-    ? formatBooleanLabel(item.effective_value)
+  const draftValueReadable = draftValue !== null
+    ? (item.value_type === "bool"
+        ? formatBooleanLabel(draftValue)
+        : formatSettingValue(draftValue))
     : "";
 
   return (

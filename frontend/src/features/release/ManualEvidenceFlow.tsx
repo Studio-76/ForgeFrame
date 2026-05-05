@@ -1,6 +1,6 @@
 import { useState } from "react";
 
-type ManualEvidenceFlowProps = {
+export type ManualEvidenceFlowProps = {
   gateKey: string;
   gateCategory: string;
   evidenceGuidance?: string;

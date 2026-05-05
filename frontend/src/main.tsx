@@ -1,4 +1,4 @@
-import React, { Suspense, lazy } from "react";
+import { Component, Suspense, lazy, type ErrorInfo, type ReactNode } from "react";
 import ReactDOM from "react-dom/client";
 import { Navigate, RouterProvider, createBrowserRouter } from "react-router-dom";
 
@@ -53,6 +53,63 @@ const UsagePage = lazy(async () => import("./pages/UsagePage").then((module) => 
 const CostsPage = lazy(async () => import("./pages/CostsPage").then((module) => ({ default: module.CostsPage })));
 const ErrorsPage = lazy(async () => import("./pages/ErrorsPage").then((module) => ({ default: module.ErrorsPage })));
 const LogsPage = lazy(async () => import("./pages/LogsPage").then((module) => ({ default: module.LogsPage })));
+const DesignSystemSandboxPage = lazy(async () => import("./pages/DesignSystemSandboxPage").then((module) => ({ default: module.DesignSystemSandboxPage })));
+const DemoSetupWorkflowPage = lazy(async () => import("./pages/demos/DemoSetupWorkflowPage").then((module) => ({ default: module.DemoSetupWorkflowPage })));
+const DemoRegistryManagementPage = lazy(async () => import("./pages/demos/DemoRegistryManagementPage").then((module) => ({ default: module.DemoRegistryManagementPage })));
+const DemoIncidentResponsePage = lazy(async () => import("./pages/demos/DemoIncidentResponsePage").then((module) => ({ default: module.DemoIncidentResponsePage })));
+const DemoSettingsManagementPage = lazy(async () => import("./pages/demos/DemoSettingsManagementPage").then((module) => ({ default: module.DemoSettingsManagementPage })));
+const DemoReviewQueuePage = lazy(async () => import("./pages/demos/DemoReviewQueuePage").then((module) => ({ default: module.DemoReviewQueuePage })));
+
+/**
+ * Root-level error boundary guarding the entire application.
+ * Catches crashes in ThemeProvider, QueryProvider, or RouterProvider setup
+ * and displays a recovery UI instead of a white screen.
+ */
+class AppErrorBoundary extends Component<
+  { readonly children: ReactNode },
+  { readonly error: Error | null }
+> {
+  state: { error: Error | null } = { error: null };
+
+  static getDerivedStateFromError(error: Error): { error: Error | null } {
+    return { error };
+  }
+
+  componentDidCatch(error: Error, errorInfo: ErrorInfo): void {
+    console.error("[AppErrorBoundary] Fatal application error:", {
+      message: error.message,
+      stack: error.stack,
+      componentStack: errorInfo.componentStack,
+    });
+  }
+
+  handleRetry = (): void => {
+    this.setState({ error: null });
+  };
+
+  render(): ReactNode {
+    if (this.state.error) {
+      return (
+        <section className="fg-page" style={{ padding: "2rem", maxWidth: "640px", margin: "0 auto" }}>
+          <article className="fg-card fg-stack">
+            <h2>Application Error</h2>
+            <p className="fg-muted">
+              ForgeFrame encountered a fatal error during startup. The error has been logged.
+              Reload the page or try again.
+            </p>
+            <div className="fg-inline-form">
+              <button className="fg-button" onClick={this.handleRetry} type="button">
+                Retry
+              </button>
+            </div>
+          </article>
+        </section>
+      );
+    }
+
+    return this.props.children;
+  }
+}
 
 /**
  * HydrateFallback for data-router hydration (client-only SPA, never rendered).
@@ -149,16 +206,22 @@ const router = createBrowserRouter([
       { path: "errors", element: lazyRoute(<ErrorsPage />) },
       { path: "logs", element: lazyRoute(<LogsPage />) },
       { path: "settings", element: lazyRoute(<SettingsPage />) },
+      { path: "design-system", element: lazyRoute(<DesignSystemSandboxPage />) },
+      { path: "demo/setup-workflow", element: lazyRoute(<DemoSetupWorkflowPage />) },
+      { path: "demo/registry-management", element: lazyRoute(<DemoRegistryManagementPage />) },
+      { path: "demo/incident-response", element: lazyRoute(<DemoIncidentResponsePage />) },
+      { path: "demo/settings-management", element: lazyRoute(<DemoSettingsManagementPage />) },
+      { path: "demo/review-queue", element: lazyRoute(<DemoReviewQueuePage />) },
     ],
   },
 ]);
 
 ReactDOM.createRoot(document.getElementById("root")!).render(
-  <React.StrictMode>
+  <AppErrorBoundary>
     <ThemeProvider>
       <QueryProvider>
         <RouterProvider router={router} />
       </QueryProvider>
     </ThemeProvider>
-  </React.StrictMode>,
+  </AppErrorBoundary>,
 );

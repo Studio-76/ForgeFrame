@@ -1,5 +1,14 @@
+/**
+ * TasksPage — task lifecycle management surface.
+ *
+ * Migrated to use the ReviewQueuePage template with summary items,
+ * attention items, task table, detail panel, and collapsible diagnostics.
+ *
+ * @packageDocumentation
+ */
+
 import { startTransition, useEffect, useState, type FormEvent } from "react";
-import { Link, useSearchParams } from "react-router-dom";
+import { useSearchParams } from "react-router-dom";
 
 import {
   createTask,
@@ -15,101 +24,29 @@ import {
 import { createReminder } from "../api/domain/reminders";
 import { fetchInstances } from "../api/domain/instances";
 import { CONTROL_PLANE_ROUTES } from "../app/navigation";
-import {
-  buildArtifactsPath,
-  buildConversationPath,
-  buildInboxPath,
-  buildNotificationPath,
-  buildReminderPath,
-  buildWorkspacePath,
-} from "../app/workInteractionRoutes";
 import { useAppSession } from "../app/session";
 import { PageIntro } from "../components/PageIntro";
 import { DetailDrawer } from "../components/ui/DetailDrawer";
+import { Button } from "../components/ui/Button";
+import { DiagnosticSection, RawJson } from "../components/ui/AdvancedDiagnostics";
+import { ReviewQueuePage } from "../components/page-templates";
+import type { Action } from "../components/ui/models/action";
+import type { AttentionPayload } from "../components/ui/models/attention";
 import { getWorkInteractionAccess, normalizeOptional, parseJsonObject, type LoadState } from "./workInteractionPageSupport";
+import {
+  TaskTable,
+  TaskDetailPanel,
+  type DrawerMode,
+  type CreateTaskForm,
+  type EditTaskForm,
+  DEFAULT_CREATE_FORM,
+  DEFAULT_EDIT_FORM,
+  DRAWER_FORM_ID,
+} from "../features/tasks";
 
-type DrawerMode = "closed" | "create" | "edit";
-
-const STATUS_OPTIONS: Array<TaskStatus | "all"> = ["all", "open", "in_progress", "blocked", "done", "cancelled"];
-const PRIORITY_OPTIONS: WorkItemPriority[] = ["low", "normal", "high", "critical"];
-const TASK_KIND_OPTIONS: TaskKind[] = ["task", "follow_up"];
-const DRAWER_FORM_ID = "task-drawer-form";
-
-const DEFAULT_CREATE_FORM = {
-  taskId: "",
-  taskKind: "task" as TaskKind,
-  title: "",
-  summary: "",
-  status: "open" as TaskStatus,
-  priority: "normal" as WorkItemPriority,
-  ownerId: "",
-  conversationId: "",
-  inboxId: "",
-  workspaceId: "",
-  dueAt: "",
-  metadataJson: "{}",
-};
-
-const DEFAULT_EDIT_FORM = {
-  title: "",
-  summary: "",
-  status: "open" as TaskStatus,
-  priority: "normal" as WorkItemPriority,
-  ownerId: "",
-  conversationId: "",
-  inboxId: "",
-  workspaceId: "",
-  dueAt: "",
-  completedAt: "",
-  metadataJson: "{}",
-};
-
-function taskStatusTone(status: TaskStatus): "success" | "danger" | "warning" | "neutral" {
-  if (status === "done") {
-    return "success";
-  }
-  if (status === "blocked") {
-    return "danger";
-  }
-  if (status === "cancelled") {
-    return "neutral";
-  }
-  if (status === "in_progress") {
-    return "warning";
-  }
-  return "neutral";
-}
-
-function taskQueuePosture(status: TaskStatus): string {
-  switch (status) {
-    case "open":
-      return "backlog";
-    case "in_progress":
-      return "active";
-    case "blocked":
-      return "blocked or waiting";
-    case "done":
-      return "done";
-    case "cancelled":
-      return "cancelled";
-    default:
-      return status;
-  }
-}
-
-function ownerLabel(ownerId?: string | null): string {
-  return ownerId?.trim() ? ownerId : "unassigned";
-}
-
-function linkedContextLabel(task: Pick<TaskSummary, "conversation_id" | "inbox_id" | "workspace_id">): string {
-  const parts = [
-    task.conversation_id ? `conversation ${task.conversation_id}` : null,
-    task.inbox_id ? `inbox ${task.inbox_id}` : null,
-    task.workspace_id ? `workspace ${task.workspace_id}` : null,
-  ].filter(Boolean);
-  return parts.join(" · ") || "bridge-only";
-}
-
+/**
+ * Tasks page component.
+ */
 export function TasksPage() {
   const { session, sessionReady } = useAppSession();
   const { canRead, canMutate } = getWorkInteractionAccess(session, sessionReady);
@@ -125,8 +62,8 @@ export function TasksPage() {
   const [detailState, setDetailState] = useState<LoadState>("idle");
   const [tasks, setTasks] = useState<TaskSummary[]>([]);
   const [detail, setDetail] = useState<TaskDetail | null>(null);
-  const [createForm, setCreateForm] = useState(DEFAULT_CREATE_FORM);
-  const [editForm, setEditForm] = useState(DEFAULT_EDIT_FORM);
+  const [createForm, setCreateForm] = useState<CreateTaskForm>(DEFAULT_CREATE_FORM);
+  const [editForm, setEditForm] = useState<EditTaskForm>(DEFAULT_EDIT_FORM);
   const [drawerMode, setDrawerMode] = useState<DrawerMode>("closed");
   const [savingCreate, setSavingCreate] = useState(false);
   const [savingUpdate, setSavingUpdate] = useState(false);
@@ -142,9 +79,6 @@ export function TasksPage() {
   const [message, setMessage] = useState("");
   const [refreshNonce, setRefreshNonce] = useState(0);
 
-  const selectedReminder = detail?.reminders[0] ?? null;
-  const selectedNotification = detail?.notifications[0] ?? null;
-
   const updateRoute = (mutate: (next: URLSearchParams) => void, replace = false) => {
     const next = new URLSearchParams(searchParams);
     mutate(next);
@@ -152,6 +86,8 @@ export function TasksPage() {
       setSearchParams(next, { replace });
     });
   };
+
+  // ── Instance scope ────────────────────────────────────────────────
 
   useEffect(() => {
     if (!canRead) {
@@ -188,6 +124,8 @@ export function TasksPage() {
       cancelled = true;
     };
   }, [canRead, instanceId]);
+
+  // ── Task list ─────────────────────────────────────────────────────
 
   useEffect(() => {
     if (!canRead || !instanceId) {
@@ -237,6 +175,8 @@ export function TasksPage() {
     };
   }, [canRead, instanceId, refreshNonce, selectedTaskId, statusFilter]);
 
+  // ── Task detail ───────────────────────────────────────────────────
+
   useEffect(() => {
     if (!canRead || !instanceId || !selectedTaskId) {
       setDetailState("idle");
@@ -270,6 +210,8 @@ export function TasksPage() {
     };
   }, [canRead, instanceId, refreshNonce, selectedTaskId]);
 
+  // ── Edit form sync ────────────────────────────────────────────────
+
   useEffect(() => {
     if (!detail) {
       setEditForm(DEFAULT_EDIT_FORM);
@@ -290,6 +232,8 @@ export function TasksPage() {
       metadataJson: JSON.stringify(detail.metadata, null, 2),
     });
   }, [detail]);
+
+  // ── Handlers ──────────────────────────────────────────────────────
 
   const closeDrawer = () => {
     setDrawerMode("closed");
@@ -435,6 +379,67 @@ export function TasksPage() {
     }
   };
 
+  // ── Template props ────────────────────────────────────────────────
+
+  const overdueCount = tasks.filter((t) => t.status === "blocked").length;
+  const pendingCount = tasks.filter((t) => t.status === "open" || t.status === "in_progress").length;
+
+  const summaryItems = [
+    { key: "pending", label: "Pending", value: pendingCount, tone: pendingCount > 0 ? "warning" as const : "success" as const },
+    { key: "overdue", label: "Blocked", value: overdueCount, tone: overdueCount > 0 ? "danger" as const : "neutral" as const },
+    { key: "total", label: "Total tasks", value: tasks.length, tone: tasks.length > 0 ? "info" as const : "neutral" as const },
+    { key: "access", label: "Access", value: canMutate ? "Writable" : "Read only", tone: canMutate ? "success" as const : "warning" as const },
+  ];
+
+  const actions: Action[] = [
+    {
+      label: "New task",
+      kind: "primary",
+      intent: "configure",
+      onClick: openCreateDrawer,
+      disabled: !canMutate,
+    },
+  ];
+
+  const attentionItems: AttentionPayload[] = [];
+  if (overdueCount > 0) {
+    attentionItems.push({
+      key: "blocked-tasks",
+      level: "warning",
+      title: `${overdueCount} blocked task${overdueCount === 1 ? "" : "s"}`,
+      description: "Blocked tasks may need intervention to unblock.",
+    });
+  }
+  if (detailState === "error") {
+    attentionItems.push({
+      key: "detail-error",
+      level: "diagnostic",
+      title: "Task detail load failed",
+      description: error || "An error occurred loading task detail.",
+    });
+  }
+
+  const diagnosticsContent = (
+    <>
+      <DiagnosticSection label="Tasks list payload">
+        <RawJson data={tasks} />
+      </DiagnosticSection>
+      <DiagnosticSection label="Task detail payload">
+        <RawJson data={detail} />
+      </DiagnosticSection>
+      {error ? (
+        <DiagnosticSection label="Error state">
+          <p className="fg-danger">{error}</p>
+        </DiagnosticSection>
+      ) : null}
+      {message ? (
+        <DiagnosticSection label="Status message">
+          <p>{message}</p>
+        </DiagnosticSection>
+      ) : null}
+    </>
+  );
+
   const drawerModeLabel = drawerMode === "create" ? "Create Task" : "Edit Task";
   const drawerStatus = drawerMode === "create"
     ? (createForm.title.trim() ? "form ready" : "title required")
@@ -442,8 +447,10 @@ export function TasksPage() {
   const drawerStatusTone = drawerMode === "create"
     ? (createForm.title.trim() ? "success" : "danger")
     : detail
-      ? taskStatusTone(detail.status)
+      ? (detail.status === "done" ? "success" as const : detail.status === "blocked" ? "danger" as const : detail.status === "cancelled" ? "neutral" as const : detail.status === "in_progress" ? "warning" as const : "neutral" as const)
       : "warning";
+
+  // ── Session guard returns ─────────────────────────────────────────
 
   if (!sessionReady) {
     return (
@@ -483,288 +490,57 @@ export function TasksPage() {
     );
   }
 
-  return (
-    <section className="fg-page">
-      <PageIntro
-        eyebrow="Work Interaction"
-        title="Tasks"
-        description="Track real tasks with owner, due date, status, and linked reminders and notifications."
-        question="Select a task, then act from its current state."
-        links={[
-          { label: "Tasks", to: CONTROL_PLANE_ROUTES.tasks, description: "Stay on the task inventory and detail surface." },
-          { label: "Reminders", to: CONTROL_PLANE_ROUTES.reminders, description: "Inspect reminder truth linked from the selected task." },
-          { label: "Notifications", to: CONTROL_PLANE_ROUTES.notifications, description: "Inspect outbox truth linked from the selected task." },
-          { label: "Inbox", to: CONTROL_PLANE_ROUTES.inbox, description: "Return to the triage queue that feeds task follow-up work." },
-        ]}
-        badges={[
-          { label: `${tasks.length} task${tasks.length === 1 ? "" : "s"}`, tone: tasks.length > 0 ? "success" : "warning" },
-          { label: canMutate ? "Admin mutation enabled" : "Read only", tone: canMutate ? "success" : "neutral" },
-        ]}
-        note="Status values map directly to backend state: `open`, `in_progress`, `blocked`, `done`, `cancelled`."
-      />
+  // ── Main content ──────────────────────────────────────────────────
 
+  return (
+    <ReviewQueuePage
+      eyebrow="Work Interaction"
+      title="Tasks"
+      description="Track real tasks with owner, due date, status, and linked reminders and notifications."
+      summaryItems={summaryItems}
+      actions={actions}
+      attentionItems={attentionItems}
+      isEmpty={listState === "success" && tasks.length === 0}
+      emptyTitle="No tasks found"
+      emptyDescription="No tasks matched the selected filters. Adjust the status filter or create a new task."
+      selectedItemContent={
+        <TaskDetailPanel
+          detail={detail}
+          detailState={detailState}
+          instanceId={instanceId}
+          canMutate={canMutate}
+          statusActionState={statusActionState}
+          creatingReminder={creatingReminder}
+          onOpenEdit={openEditDrawer}
+          onStatusAction={(nextStatus) => void handleStatusAction(nextStatus as TaskStatus)}
+          onCreateReminder={() => void handleCreateReminder()}
+        />
+      }
+      hasSelection={Boolean(detail)}
+      emptyDetailHint="Select a task from the queue to inspect task truth, checkpoint state, and linked product objects."
+      diagnostics={diagnosticsContent}
+      diagnosticsTitle="Task diagnostics"
+    >
+      {/* Error and message banners */}
       {error ? <p className="fg-danger">{error}</p> : null}
       {message ? <p>{message}</p> : null}
 
-      <article className="fg-card">
-        <div className="fg-panel-heading">
-          <div>
-            <h3>Scope and filter</h3>
-              <p className="fg-muted">Pick an instance, then filter by backend task status. `blocked` includes waiting cases.</p>
-          </div>
-          <span className="fg-pill" data-tone={instancesState === "success" ? "success" : instancesState === "error" ? "danger" : "neutral"}>
-            {instancesState}
-          </span>
-        </div>
-        <div className="fg-inline-form">
-          <label>
-            Instance
-            <select
-              aria-label="Task instance"
-              value={instanceId}
-              onChange={(event) => updateRoute((next) => {
-                next.set("instanceId", event.target.value);
-                next.delete("taskId");
-              })}
-            >
-              {instances.map((instance) => (
-                <option key={instance.instance_id} value={instance.instance_id}>
-                  {instance.display_name} ({instance.instance_id})
-                </option>
-              ))}
-            </select>
-          </label>
-          <label>
-            Status
-            <select
-              aria-label="Task status filter"
-              value={statusFilter}
-              onChange={(event) => updateRoute((next) => {
-                const nextValue = event.target.value;
-                if (nextValue === "all") {
-                  next.delete("status");
-                } else {
-                  next.set("status", nextValue);
-                }
-                next.delete("taskId");
-              })}
-            >
-              {STATUS_OPTIONS.map((option) => <option key={option} value={option}>{option}</option>)}
-            </select>
-          </label>
-        </div>
-      </article>
+      {/* Task table with filters */}
+      <TaskTable
+        listState={listState}
+        tasks={tasks}
+        selectedTaskId={selectedTaskId}
+        instanceId={instanceId}
+        statusFilter={statusFilter}
+        instances={instances}
+        instancesState={instancesState}
+        canMutate={canMutate}
+        updateRoute={updateRoute}
+        onOpenCreate={openCreateDrawer}
+        onSelectTask={(taskId) => updateRoute((next) => { next.set("taskId", taskId); })}
+      />
 
-      <div className="fg-grid">
-        <article className="fg-card">
-          <div className="fg-panel-heading">
-            <div>
-              <h3>Task inventory</h3>
-              <p className="fg-muted">State, owner, due date, priority, and linked context.</p>
-            </div>
-            <div className="fg-actions">
-              <span className="fg-pill" data-tone={listState === "success" ? "success" : listState === "error" ? "danger" : "neutral"}>{listState}</span>
-              <button type="button" disabled={!canMutate} onClick={openCreateDrawer}>New task</button>
-            </div>
-          </div>
-
-          {listState === "loading" ? <p className="fg-muted">Loading task inventory.</p> : null}
-          {listState === "success" && tasks.length === 0 ? <p className="fg-muted">No tasks match this filter.</p> : null}
-
-          {tasks.length > 0 ? (
-            <div className="fg-table-wrap">
-              <table className="fg-table" aria-label="Task inventory">
-                <thead>
-                  <tr>
-                    <th>Task</th>
-                    <th>Status</th>
-                    <th>Owner</th>
-                    <th>Due</th>
-                    <th>Priority</th>
-                    <th>Linked context</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {tasks.map((task) => (
-                    <tr key={task.task_id} className={task.task_id === selectedTaskId ? "is-selected" : undefined}>
-                      <td>
-                        <button
-                          className="fg-table-trigger"
-                          type="button"
-                          onClick={() => updateRoute((next) => {
-                            next.set("taskId", task.task_id);
-                          })}
-                        >
-                          {task.title}
-                        </button>
-                        <div className="fg-muted">{task.task_id} · {task.task_kind}</div>
-                      </td>
-                      <td>
-                        <span className="fg-pill" data-tone={taskStatusTone(task.status)}>{task.status}</span>
-                        <div className="fg-muted">{taskQueuePosture(task.status)}</div>
-                      </td>
-                      <td>{ownerLabel(task.owner_id)}</td>
-                      <td>{task.due_at ?? "Unscheduled"}</td>
-                      <td>{task.priority}</td>
-                      <td>{linkedContextLabel(task)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          ) : null}
-        </article>
-
-        <article className="fg-card">
-          <div className="fg-panel-heading">
-            <div>
-              <h3>Task detail</h3>
-              <p className="fg-muted">Owner, checkpoints, linked product objects, status actions, and reminder follow-up converge here.</p>
-            </div>
-            <div className="fg-actions">
-              {detail ? <span className="fg-pill">{detail.task_id}</span> : null}
-              <button type="button" disabled={!canMutate || !detail} onClick={openEditDrawer}>Edit selected task</button>
-            </div>
-          </div>
-
-          {detailState === "idle" ? <p className="fg-muted">Select a task to inspect task truth, checkpoint state, and linked product objects.</p> : null}
-          {detailState === "loading" ? <p className="fg-muted">Loading task detail.</p> : null}
-
-          {detail ? (
-            <div className="fg-stack">
-              <div className="fg-actions">
-                <span className="fg-pill" data-tone={taskStatusTone(detail.status)}>Backend state {detail.status}</span>
-                <span className="fg-pill">Queue posture {taskQueuePosture(detail.status)}</span>
-                <span className="fg-pill">{detail.priority} priority</span>
-                <span className="fg-pill">owner {ownerLabel(detail.owner_id)}</span>
-              </div>
-
-              <div className="fg-card-grid">
-                <article className="fg-subcard">
-                  <h4>Summary</h4>
-                  <ul className="fg-list">
-                    <li>Task kind: {detail.task_kind}</li>
-                    <li>Status: {detail.status}</li>
-                    <li>Queue posture: {taskQueuePosture(detail.status)}</li>
-                    <li>Priority: {detail.priority}</li>
-                    <li>Owner: {ownerLabel(detail.owner_id)}</li>
-                    <li>Due at: {detail.due_at ?? "Not scheduled"}</li>
-                    <li>Completed at: {detail.completed_at ?? "Not completed"}</li>
-                  </ul>
-                </article>
-
-                <article className="fg-subcard">
-                  <h4>Checkpoints</h4>
-                  <ul className="fg-list">
-                    <li>Reminders: {detail.reminders.length}</li>
-                    <li>Notifications: {detail.notifications.length}</li>
-                    <li>First reminder: {selectedReminder ? `${selectedReminder.title} (${selectedReminder.status})` : "No reminder linked"}</li>
-                    <li>First notification: {selectedNotification ? `${selectedNotification.title} (${selectedNotification.delivery_status})` : "No notification linked"}</li>
-                  </ul>
-                </article>
-              </div>
-
-              <article className="fg-subcard">
-                <h4>Linked objects</h4>
-                <ul className="fg-list">
-                  <li>Conversation: {detail.conversation_id ?? "Not linked"}</li>
-                  <li>Inbox item: {detail.inbox_id ?? "Not linked"}</li>
-                  <li>Workspace: {detail.workspace_id ?? "Not linked"}</li>
-                  <li>Run / approval / artifact: bridge-only via the linked conversation, inbox item, or workspace</li>
-                </ul>
-                <div className="fg-actions">
-                  {detail.conversation_id ? <Link className="fg-nav-link" to={buildConversationPath({ instanceId, conversationId: detail.conversation_id })}>Open conversation</Link> : null}
-                  {detail.inbox_id ? <Link className="fg-nav-link" to={buildInboxPath({ instanceId, inboxId: detail.inbox_id })}>Open inbox item</Link> : null}
-                  {detail.workspace_id ? <Link className="fg-nav-link" to={buildWorkspacePath({ instanceId, workspaceId: detail.workspace_id })}>Open workspace</Link> : null}
-                  {detail.workspace_id ? <Link className="fg-nav-link" to={buildArtifactsPath({ instanceId, workspaceId: detail.workspace_id })}>Open artifacts</Link> : null}
-                </div>
-                <p className="fg-muted">The current task backend model does not persist run or approval IDs directly on tasks. Artifact context is reachable through the linked workspace when present; otherwise the missing task-level linkage remains `bridge-only` instead of being faked.</p>
-              </article>
-
-              <article className="fg-subcard">
-                <h4>Status actions</h4>
-                <p className="fg-muted">Apply real lifecycle changes from the detail panel instead of opening the edit drawer for every state transition.</p>
-                <div className="fg-actions">
-                  <button type="button" disabled={!canMutate || statusActionState.open} onClick={() => void handleStatusAction("open")}>
-                    {statusActionState.open ? "Reopening" : "Reopen"}
-                  </button>
-                  <button type="button" disabled={!canMutate || statusActionState.in_progress} onClick={() => void handleStatusAction("in_progress")}>
-                    {statusActionState.in_progress ? "Starting" : "Start work"}
-                  </button>
-                  <button type="button" disabled={!canMutate || statusActionState.blocked} onClick={() => void handleStatusAction("blocked")}>
-                    {statusActionState.blocked ? "Blocking" : "Block task"}
-                  </button>
-                  <button type="button" disabled={!canMutate || statusActionState.done} onClick={() => void handleStatusAction("done")}>
-                    {statusActionState.done ? "Completing" : "Complete task"}
-                  </button>
-                  <button type="button" disabled={!canMutate || statusActionState.cancelled} onClick={() => void handleStatusAction("cancelled")}>
-                    {statusActionState.cancelled ? "Cancelling" : "Cancel task"}
-                  </button>
-                </div>
-              </article>
-
-              <article className="fg-subcard">
-                <h4>Reminder path</h4>
-                <p className="fg-muted">Tasks can create or link reminders directly when a due date exists.</p>
-                <div className="fg-actions">
-                  <Link className="fg-nav-link" to={buildReminderPath({ instanceId })}>Open reminders</Link>
-                  {selectedReminder ? <Link className="fg-nav-link" to={buildReminderPath({ instanceId, reminderId: selectedReminder.reminder_id })}>Open first reminder</Link> : null}
-                  {!selectedReminder && detail.due_at ? (
-                    <button type="button" disabled={!canMutate || creatingReminder} onClick={() => void handleCreateReminder()}>
-                      {creatingReminder ? "Creating reminder" : "Create reminder from task"}
-                    </button>
-                  ) : null}
-                </div>
-                {!selectedReminder && !detail.due_at ? (
-                  <p className="fg-muted">Direct reminder creation is `not-ready` until the task has a due date. Set `due_at` in the drawer before creating the reminder.</p>
-                ) : null}
-              </article>
-
-              <article className="fg-subcard">
-                <h4>Summary text</h4>
-                <p>{detail.summary || "No task summary was recorded."}</p>
-              </article>
-
-              <div className="fg-card-grid">
-                <article className="fg-subcard">
-                  <h4>Reminders</h4>
-                  {detail.reminders.length === 0 ? <p className="fg-muted">No reminders are linked to this task.</p> : (
-                    <ul className="fg-list">
-                      {detail.reminders.map((reminder) => (
-                        <li key={reminder.reminder_id}>
-                          <Link className="fg-nav-link" to={buildReminderPath({ instanceId, reminderId: reminder.reminder_id })}>{reminder.title}</Link>
-                          {" · "}{reminder.status}
-                          {" · due "}{reminder.due_at}
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                </article>
-
-                <article className="fg-subcard">
-                  <h4>Notifications</h4>
-                  <div className="fg-actions">
-                    <Link className="fg-nav-link" to={buildNotificationPath({ instanceId })}>Open notifications</Link>
-                    {selectedNotification ? <Link className="fg-nav-link" to={buildNotificationPath({ instanceId, notificationId: selectedNotification.notification_id })}>Open first notification</Link> : null}
-                  </div>
-                  {detail.notifications.length === 0 ? <p className="fg-muted">No notifications are linked to this task.</p> : (
-                    <ul className="fg-list">
-                      {detail.notifications.map((notification) => (
-                        <li key={notification.notification_id}>
-                          <Link className="fg-nav-link" to={buildNotificationPath({ instanceId, notificationId: notification.notification_id })}>{notification.title}</Link>
-                          {" · "}{notification.delivery_status}
-                          {" · "}{notification.priority}
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                </article>
-              </div>
-            </div>
-          ) : null}
-        </article>
-      </div>
-
+      {/* Create / Edit drawer */}
       <DetailDrawer
         open={drawerMode !== "closed"}
         title={drawerModeLabel}
@@ -778,18 +554,24 @@ export function TasksPage() {
           { label: "Backend state map", value: "open / in_progress / blocked / done / cancelled" },
           { label: "Reminder creation", value: "Direct create is available when due_at is set" },
         ]}
-        actions={(
+        actions={
           <>
-            <button type="button" onClick={closeDrawer}>Cancel</button>
-            <button
+            <Button variant="tertiary" onPress={closeDrawer}>Cancel</Button>
+            <Button
+              variant="primary"
               type="submit"
               form={DRAWER_FORM_ID}
-              disabled={!canMutate || (drawerMode === "create" ? savingCreate || !createForm.title.trim() : savingUpdate || !detail)}
+              isDisabled={!canMutate || (drawerMode === "create" ? savingCreate || !createForm.title.trim() : savingUpdate || !detail)}
+              onPress={() => {
+                // Form submission is handled by the form's onSubmit
+                const form = document.getElementById(DRAWER_FORM_ID) as HTMLFormElement | null;
+                form?.requestSubmit();
+              }}
             >
               {drawerMode === "create" ? (savingCreate ? "Creating task" : "Create task") : (savingUpdate ? "Saving task" : "Save task changes")}
-            </button>
+            </Button>
           </>
-        )}
+        }
         onClose={closeDrawer}
       >
         <form id={DRAWER_FORM_ID} className="fg-stack" onSubmit={drawerMode === "create" ? handleCreate : handleUpdate}>
@@ -806,7 +588,8 @@ export function TasksPage() {
                 <label>
                   Task kind
                   <select value={createForm.taskKind} onChange={(event) => setCreateForm((current) => ({ ...current, taskKind: event.target.value as TaskKind }))}>
-                    {TASK_KIND_OPTIONS.map((option) => <option key={option} value={option}>{option}</option>)}
+                    <option value="task">task</option>
+                    <option value="follow_up">follow_up</option>
                   </select>
                 </label>
               ) : (
@@ -864,7 +647,11 @@ export function TasksPage() {
                     setEditForm((current) => ({ ...current, status: nextValue }));
                   }}
                 >
-                  {STATUS_OPTIONS.filter((option) => option !== "all").map((option) => <option key={option} value={option}>{option}</option>)}
+                  <option value="open">open</option>
+                  <option value="in_progress">in_progress</option>
+                  <option value="blocked">blocked</option>
+                  <option value="done">done</option>
+                  <option value="cancelled">cancelled</option>
                 </select>
               </label>
               <label>
@@ -880,7 +667,10 @@ export function TasksPage() {
                     setEditForm((current) => ({ ...current, priority: nextValue }));
                   }}
                 >
-                  {PRIORITY_OPTIONS.map((option) => <option key={option} value={option}>{option}</option>)}
+                  <option value="low">low</option>
+                  <option value="normal">normal</option>
+                  <option value="high">high</option>
+                  <option value="critical">critical</option>
                 </select>
               </label>
               <label>
@@ -993,6 +783,6 @@ export function TasksPage() {
           </section>
         </form>
       </DetailDrawer>
-    </section>
+    </ReviewQueuePage>
   );
 }

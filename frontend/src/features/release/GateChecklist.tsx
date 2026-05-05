@@ -2,7 +2,7 @@ import type { GateRecord } from "./types";
 import { GATE_PRIORITY_LABELS, sortGatesByPriority } from "./utils";
 import { StatusBadge } from "../../components/ui/StatusBadge";
 
-type GateChecklistProps = {
+export type GateChecklistProps = {
   gates: GateRecord[];
   selectedGateKey: string;
   onSelectGate: (key: string) => void;

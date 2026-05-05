@@ -22,7 +22,7 @@ import {
 } from "../providers/providersSectionUtils";
 import { groupRunsByMode } from "./utils";
 
-type HarnessRunHistoryProps = {
+export type HarnessRunHistoryProps = {
   runs: ProvidersPageData["runs"];
   runFilters: ProvidersPageData["runFilters"];
   runOps: ProvidersPageData["runOps"];

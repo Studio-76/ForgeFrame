@@ -21,6 +21,10 @@
   white-space: nowrap;
 }
 
+.ff-itt-primary-action-label--setup {
+  color: var(--fg-color-action-primary);
+}
+
 .ff-itt-primary-action-link {
   display: inline-flex;
   align-items: center;

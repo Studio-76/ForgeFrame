@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 
-type ReleaseActionBarProps = {
+export type ReleaseActionBarProps = {
   /** Primary release actions (e.g. refresh, record attestation) */
   primaryActions: ReactNode;
   /** Secondary navigation links visually separated from primary actions */

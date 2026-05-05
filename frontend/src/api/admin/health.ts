@@ -42,11 +42,21 @@ export type RuntimeHealthResponse = {
  * @throws {AdminApiError} If the health endpoint returns an error.
  */
 export async function fetchRuntimeHealth(): Promise<RuntimeHealthResponse> {
-  const response = await fetch("/health", {
-    headers: {
-      "Content-Type": "application/json",
-    },
-  });
+  let response: Response;
+  try {
+    response = await fetch("/health", {
+      headers: {
+        "Content-Type": "application/json",
+      },
+    });
+  } catch (error) {
+    throw new AdminApiError(
+      "Network request to /health failed.",
+      0,
+      "NETWORK_ERROR",
+      error instanceof Error ? error.message : String(error),
+    );
+  }
 
   let payload: RuntimeHealthResponse | null = null;
   try {

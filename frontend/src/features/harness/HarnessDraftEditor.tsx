@@ -12,7 +12,7 @@ import {
   buildDraftFromTemplate,
 } from "../providers/providersSectionUtils";
 
-type HarnessDraftEditorProps = {
+export type HarnessDraftEditorProps = {
   data: ProvidersPageData;
   actions: ProvidersPageActions;
   onSave: () => void;

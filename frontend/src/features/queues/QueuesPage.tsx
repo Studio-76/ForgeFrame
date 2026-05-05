@@ -7,7 +7,7 @@ import { normalizeExecutionCompanyId, normalizeExecutionInstanceId } from "../..
 import { CONTROL_PLANE_ROUTES } from "../../app/navigation";
 import { useAppSession } from "../../app/session";
 import { sessionHasScopedOrAnyInstancePermission } from "../../app/adminAccess";
-import { PageIntro } from "../../components/PageIntro";
+import { ContextNavStrip, PageHeader } from "../../components/ui";
 import {
   buildExecutionScopeOptions,
   describeExecutionScopeOption,
@@ -249,19 +249,21 @@ export function QueuesPage() {
   if (!sessionReady) {
     return (
       <section className="fg-page">
-        <PageIntro
+        <PageHeader
           eyebrow="Operations"
           title="Queues"
-          description="ForgeFrame is still checking the current session before it opens lane-backed queue truth."
-          question="Which execution surface should you keep open while queue access is being resolved?"
-          links={[
-            { label: "Execution Review", to: CONTROL_PLANE_ROUTES.execution, description: "Run detail and operator actions on the scoped execution surface." },
-            { label: "Dispatch", to: CONTROL_PLANE_ROUTES.dispatch, description: "Worker leases and outbox pressure once access is confirmed." },
-            { label: "Errors & Activity", to: CONTROL_PLANE_ROUTES.logs, description: "Operational evidence while queue access stays gated." },
-          ]}
+          description="Checking session before opening lane-backed queue truth."
           badges={[{ label: "Checking access", tone: "neutral" }]}
-          note="Queue truth stays instance-scoped and operator-facing."
-        />
+        >
+          <ContextNavStrip
+            compact
+            items={[
+              { label: "Execution Review", to: CONTROL_PLANE_ROUTES.execution },
+              { label: "Dispatch", to: CONTROL_PLANE_ROUTES.dispatch },
+              { label: "Errors & Activity", to: CONTROL_PLANE_ROUTES.logs },
+            ]}
+          />
+        </PageHeader>
       </section>
     );
   }
@@ -270,19 +272,21 @@ export function QueuesPage() {
   if (!canReviewQueues) {
     return (
       <section className="fg-page">
-        <PageIntro
+        <PageHeader
           eyebrow="Operations"
           title="Queues"
-          description="Queue truth is reserved for operator and admin sessions because the backend does not expose execution orchestration to viewers."
-          question="Which read-safe surface should you use instead?"
-          links={[
-            { label: "Errors & Activity", to: CONTROL_PLANE_ROUTES.logs, description: "Shared operational evidence without queue mutation or queue truth." },
-            { label: "Usage & Costs", to: CONTROL_PLANE_ROUTES.usage, description: "Traffic and cost pressure while queue review stays blocked." },
-            { label: "Command Center", to: CONTROL_PLANE_ROUTES.dashboard, description: "Return to the dashboard and choose a viewer-safe route." },
-          ]}
-          badges={[{ label: "Operator or admin required", tone: "warning" }]}
-          note="Viewer sessions cannot open queue lane truth."
-        />
+          description="Queue inspection requires operator access — execution orchestration is not exposed to viewers."
+          badges={[{ label: "Operator required", tone: "warning" }]}
+        >
+          <ContextNavStrip
+            compact
+            items={[
+              { label: "Errors & Activity", to: CONTROL_PLANE_ROUTES.logs },
+              { label: "Usage & Costs", to: CONTROL_PLANE_ROUTES.usage },
+              { label: "Command Center", to: CONTROL_PLANE_ROUTES.dashboard },
+            ]}
+          />
+        </PageHeader>
       </section>
     );
   }
@@ -290,20 +294,22 @@ export function QueuesPage() {
   // ── Main page content ──
   return (
     <section className="fg-page">
-      <PageIntro
+      <PageHeader
         eyebrow="Operations"
         title="Queues"
-        description="Monitor queue health, lane pressure, and backlog across instances. Queue inspection is separate from run mutation — replay lives on Execution Review."
-        question="Which instance and lane own the backlog you are trying to explain?"
-        links={[
-          { label: "Execution Review", to: CONTROL_PLANE_ROUTES.execution, description: "Run detail and operator controls for a selected execution run." },
-          { label: "Dispatch", to: CONTROL_PLANE_ROUTES.dispatch, description: "Worker lease and outbox posture for the same execution fabric." },
-          { label: "Approvals", to: CONTROL_PLANE_ROUTES.approvals, description: "Approval backlog when runs are waiting on governance instead of queue capacity." },
-          { label: "Errors & Activity", to: CONTROL_PLANE_ROUTES.logs, description: "Operational evidence next to queue truth." },
-        ]}
+        description="Monitor queue health, lane pressure, and backlog across instances."
         badges={[{ label: access.badgeLabel, tone: access.badgeTone }]}
-        note="Queue health monitors lane and backlog truth. Full run mutation lives on Execution Review."
-      />
+      >
+        <ContextNavStrip
+          compact
+          items={[
+            { label: "Execution Review", to: CONTROL_PLANE_ROUTES.execution },
+            { label: "Dispatch", to: CONTROL_PLANE_ROUTES.dispatch },
+            { label: "Approvals", to: CONTROL_PLANE_ROUTES.approvals },
+            { label: "Errors & Activity", to: CONTROL_PLANE_ROUTES.logs },
+          ]}
+        />
+      </PageHeader>
 
       {/* ── Instance scope selector ── */}
       {!instanceId ? (

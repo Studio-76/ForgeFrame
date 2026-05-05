@@ -11,8 +11,9 @@ import {
 import { useAppSession } from "../../app/session";
 import { getInstanceIdFromSearchParams } from "../../app/tenantScope";
 import { useInstanceCatalog } from "../../app/useInstanceCatalog";
+import { PageHeader } from "../../components/ui/PageHeader";
 import { InstanceScopeCard } from "../../components/InstanceScopeCard";
-import { PageIntro } from "../../components/PageIntro";
+import { Button } from "../../components/ui/Button";
 import {
   describeFreshness,
   formatMetric,
@@ -37,9 +38,9 @@ function isUsageEmpty(summary: UsageSummaryResponse | null): boolean {
     return false;
   }
   return (
-    (summary.metrics.recorded_request_count ?? 0) === 0 &&
-    (summary.metrics.recorded_error_count ?? 0) === 0 &&
-    (summary.metrics.recorded_health_event_count ?? 0) === 0
+    (summary.metrics?.recorded_request_count ?? 0) === 0 &&
+    (summary.metrics?.recorded_error_count ?? 0) === 0 &&
+    (summary.metrics?.recorded_health_event_count ?? 0) === 0
   );
 }
 
@@ -182,13 +183,13 @@ export function UsagePage() {
     };
   }, [filters, filtersActive, instanceId, window]);
 
-  const providerOptions = (catalog?.aggregations.by_provider ?? [])
+  const providerOptions = (catalog?.aggregations?.by_provider ?? [])
     .map((item) => toStringValue(item.provider, ""))
     .filter((value) => value.length > 0);
-  const clientOptions = (catalog?.aggregations.by_client ?? [])
+  const clientOptions = (catalog?.aggregations?.by_client ?? [])
     .map((item) => toStringValue(item.client_id, ""))
     .filter((value) => value.length > 0);
-  const modelOptions = (catalog?.aggregations.by_model ?? [])
+  const modelOptions = (catalog?.aggregations?.by_model ?? [])
     .map((item) => toStringValue(item.model, ""))
     .filter((value) => value.length > 0);
 
@@ -284,28 +285,33 @@ export function UsagePage() {
 
   return (
     <section className="fg-page">
-      <PageIntro
+      <PageHeader
         eyebrow="Operations"
         title="Usage Analysis"
-        description="Inspect traffic volume, runtime pressure, provider hotspots, and client concentration without turning this route into the budget-control or incident-review surface."
-        question="Which traffic pattern is growing, failing, or concentrating enough to justify a jump to Costs or Errors?"
-        badges={[
-          { label: access.badgeLabel, tone: access.badgeTone },
-          { label: freshness.label, tone: freshness.tone },
-          ...(selectedInstance ? [{ label: `Instance scope: ${selectedInstance.display_name}`, tone: "success" as const }] : []),
-        ]}
-        note={`${access.summaryDetail} Costs stays the place for budget control, and Errors stays the place for incident review.`}
+        description="Inspect traffic volume, runtime pressure, provider hotspots, and client concentration. Costs stays the place for budget control, and Errors stays the place for incident review."
       />
 
-      <InstanceScopeCard
-        instanceId={instanceId}
-        selectedInstance={selectedInstance}
-        instances={instances}
-        loadState={loadState}
-        error={instancesError}
-        surfaceLabel="usage analysis"
-        onInstanceChange={onInstanceChange}
-      />
+      {/* ── Scope indicator ── */}
+      {selectedInstance ? (
+        <div className="flex items-center gap-2 px-1 py-1.5 mb-2 text-meta text-muted">
+          <span className="font-medium">Scope:</span>
+          <span className="text-primary">{selectedInstance.display_name ?? selectedInstance.instance_id}</span>
+          <Button variant="navigation" density="compact" onPress={() => onInstanceChange(null)}>
+            Change
+          </Button>
+        </div>
+      ) : null}
+      <div hidden={!!selectedInstance}>
+        <InstanceScopeCard
+          instanceId={instanceId}
+          selectedInstance={selectedInstance}
+          instances={instances}
+          loadState={loadState}
+          error={instancesError}
+          surfaceLabel="usage analysis"
+          onInstanceChange={onInstanceChange}
+        />
+      </div>
 
       <UsageContent
         access={access}

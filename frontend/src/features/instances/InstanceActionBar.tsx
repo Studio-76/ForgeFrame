@@ -5,11 +5,11 @@
  * @packageDocumentation
  */
 
-import { Link } from "react-router-dom";
 import type { InstanceRecord } from "../../api/domain/instances";
 import { buildAgentsPath } from "../../app/workInteractionRoutes";
 import { CONTROL_PLANE_ROUTES } from "../../app/navigation";
 import { withInstanceScope } from "../../app/tenantScope";
+import { ContextNavStrip } from "../../components/ui";
 import { getInstanceRelatedLinks } from "./utils";
 
 /**
@@ -88,47 +88,27 @@ export function InstanceActionBar({
 
       {/* Primary remediation actions */}
       {primaryLinks.length > 0 ? (
-        <div className="ff-nav-links ff-nav-links-primary">
-          <span className="ff-nav-group-label">Remediation</span>
-          {primaryLinks.map((link) => (
-            <Link key={link.path} className="fg-nav-link ff-primary-action-link" to={link.path}>
-              {link.label}
-            </Link>
-          ))}
-        </div>
+        <ContextNavStrip
+          label="Remediation"
+          items={primaryLinks.map((link) => ({ label: link.label, to: link.path }))}
+        />
       ) : null}
 
       {/* Related pages */}
       {relatedLinks.length > 0 ? (
-        <div className="ff-nav-links">
-          <span className="ff-nav-group-label">Related pages</span>
-          {relatedLinks.map((link) => (
-            <Link key={link.path} className="fg-nav-link" to={link.path}>
-              {link.label}
-            </Link>
-          ))}
-        </div>
+        <ContextNavStrip
+          label="Related pages"
+          items={relatedLinks.map((link) => ({ label: link.label, to: link.path }))}
+        />
       ) : null}
 
       {/* Always-available links */}
-      <div className="ff-nav-links">
-        <span className="ff-nav-group-label">System</span>
-        <Link
-          className="fg-nav-link"
-          to={buildAgentsPath({ instanceId: instance.instance_id })}
-        >
-          Agents
-        </Link>
-        <Link
-          className="fg-nav-link"
-          to={withInstanceScope(
-            CONTROL_PLANE_ROUTES.releaseValidation,
-            instance.instance_id,
-          )}
-        >
-          Release / Validation
-        </Link>
-      </div>
+      <ContextNavStrip
+        label="System"
+        items={[
+          { label: "Agents", to: buildAgentsPath({ instanceId: instance.instance_id }) },
+        ]}
+      />
     </section>
   );
 }

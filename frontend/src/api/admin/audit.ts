@@ -275,19 +275,29 @@ export async function generateAuditExport(
     headers.set("Authorization", `Bearer ${token}`);
   }
 
-  const response = await fetch(path, {
-    method: "POST",
-    headers,
-    body: JSON.stringify({
-      ...payload,
-      action: payload.action?.trim() ? payload.action.trim() : null,
-      actor: payload.actor?.trim() ? payload.actor.trim() : null,
-      status: payload.status ?? null,
-      subject: payload.subject?.trim() ? payload.subject.trim() : null,
-      include_raw_details: payload.includeRawDetails ?? true,
-      limit: payload.limit ?? 250,
-    }),
-  });
+  let response: Response;
+  try {
+    response = await fetch(path, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        ...payload,
+        action: payload.action?.trim() ? payload.action.trim() : null,
+        actor: payload.actor?.trim() ? payload.actor.trim() : null,
+        status: payload.status ?? null,
+        subject: payload.subject?.trim() ? payload.subject.trim() : null,
+        include_raw_details: payload.includeRawDetails ?? true,
+        limit: payload.limit ?? 250,
+      }),
+    });
+  } catch (error) {
+    throw new AdminApiError(
+      "Network request to generate audit export failed.",
+      0,
+      "NETWORK_ERROR",
+      error instanceof Error ? error.message : String(error),
+    );
+  }
 
   if (!response.ok) {
     let message = `Failed to generate audit export (${response.status}).`;
@@ -311,7 +321,17 @@ export async function generateAuditExport(
     throw new AdminApiError(message, response.status, code);
   }
 
-  const blob = await response.blob();
+  let blob: Blob;
+  try {
+    blob = await response.blob();
+  } catch (error) {
+    throw new AdminApiError(
+      "Failed to read audit export response body.",
+      response.status,
+      "BLOB_ERROR",
+      error instanceof Error ? error.message : String(error),
+    );
+  }
   return {
     exportId: getResponseHeader(response.headers, "X-ForgeFrame-Audit-Export-Id", "X-ForgeGate-Audit-Export-Id") ?? "",
     filename: parseContentDispositionFilename(response.headers.get("Content-Disposition"))

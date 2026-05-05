@@ -1,8 +1,8 @@
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 
-type ThemeMode = "dark" | "light";
+export type ThemeMode = "dark" | "light";
 
-type ThemeContextValue = {
+export type ThemeContextValue = {
   mode: ThemeMode;
   setMode: (mode: ThemeMode) => void;
   toggleMode: () => void;

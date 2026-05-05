@@ -1,11 +1,7 @@
-export { HarnessControlSection } from "./HarnessControlSection";
-export { OAuthTargetsSection, ExpansionTargetsSection } from "./OAuthTargetsSection";
-export { OpenAICompatibilitySection } from "./OpenAICompatibilitySection";
-export { OperationResultSection } from "./OperationResultSection";
-export { ProviderCatalogSection } from "./ProviderCatalogSection";
-export { ProviderHealthSection } from "./ProviderHealthSection";
-export { ProviderInventorySection } from "./ProviderInventorySection";
-export { ProvidersAdvancedDiagnosticsSection } from "./ProvidersAdvancedDiagnosticsSection";
-export { ProvidersInventoryTableSection } from "./ProvidersInventoryTableSection";
-export { ProvidersManagementOverviewSection } from "./ProvidersManagementOverviewSection";
-export { ProvidersOverviewSection } from "./ProvidersOverviewSection";
+/**
+ * Barrel re-export for provider section components.
+ *
+ * Delegates to ProvidersSections (the canonical re-export file) to
+ * eliminate a duplicate barrel that held the same exports inline.
+ */
+export * from "./ProvidersSections";

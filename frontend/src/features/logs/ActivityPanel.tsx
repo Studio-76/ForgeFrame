@@ -38,6 +38,8 @@ export interface ActivityPanelProps extends TabPanelProps {
   detail: AuditHistoryDetailResponse | null;
   /** Detail loading state. */
   detailLoading: boolean;
+  /** Detail error message. */
+  detailError?: string | null;
   /** Called when user selects an event. */
   onSelectEvent: (eventId: string) => void;
 }
@@ -118,6 +120,7 @@ export function ActivityPanel({
   error,
   detail,
   detailLoading,
+  detailError,
   onSelectEvent,
   instanceId,
   canReadAudit,
@@ -278,6 +281,8 @@ export function ActivityPanel({
       </article>
 
       {detailLoading ? <p className="fg-muted">Loading event detail.</p> : null}
+
+      {detailError && !detailLoading ? <p className="fg-danger">{detailError}</p> : null}
 
       {detail ? (
         <article className="fg-card">

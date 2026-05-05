@@ -11,13 +11,13 @@ export type SummaryStripItem = {
   status?: string | null;
 };
 
-type SummaryStripProps = {
+export type SummaryStripProps = {
   items: SummaryStripItem[];
 };
 
 export function SummaryStrip({ items }: SummaryStripProps) {
   return (
-    <section className="ff-summary-strip" aria-label="Summary metrics">
+    <section className="ff-summary-strip mb-2" aria-label="Summary metrics">
       {items.map((item) => (
         <article key={item.key} className="ff-summary-card">
           <div className="ff-summary-card-header">

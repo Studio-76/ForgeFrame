@@ -95,10 +95,24 @@ export async function fetchJson<T>(path: string, init?: RequestInit): Promise<T>
   if (token && !headers.has("Authorization")) {
     headers.set("Authorization", `Bearer ${token}`);
   }
-  const response = await fetch(path, {
-    headers,
-    ...init,
-  });
+
+  // Strip init.headers to prevent override of the constructed Headers object.
+  const { headers: _ignored, ...initWithoutHeaders } = init ?? {};
+
+  let response: Response;
+  try {
+    response = await fetch(path, {
+      ...initWithoutHeaders,
+      headers,
+    });
+  } catch (error) {
+    throw new AdminApiError(
+      `Network request to ${path} failed.`,
+      0,
+      "NETWORK_ERROR",
+      error instanceof Error ? error.message : String(error),
+    );
+  }
 
   if (!response.ok) {
     let message = `Failed to load ${path} (${response.status}).`;
@@ -125,7 +139,18 @@ export async function fetchJson<T>(path: string, init?: RequestInit): Promise<T>
     throw new AdminApiError(message, response.status, code, details);
   }
 
-  return (await response.json()) as T;
+  let data: T;
+  try {
+    data = (await response.json()) as T;
+  } catch (error) {
+    throw new AdminApiError(
+      `Failed to parse response from ${path}.`,
+      response.status,
+      "PARSE_ERROR",
+      error instanceof Error ? error.message : String(error),
+    );
+  }
+  return data;
 }
 
 // ---------------------------------------------------------------------------

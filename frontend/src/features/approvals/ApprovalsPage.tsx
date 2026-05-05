@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Link, useLocation } from "react-router-dom";
+import { useLocation } from "react-router-dom";
 
 import {
   approveApproval,
@@ -20,7 +20,7 @@ import { CONTROL_PLANE_ROUTES } from "../../app/navigation";
 import { useAppSession } from "../../app/session";
 import { getInstanceIdFromSearchParams } from "../../app/tenantScope";
 import { buildArtifactsPath, buildWorkspacePath } from "../../app/workInteractionRoutes";
-import { PageIntro } from "../../components/PageIntro";
+import { ContextNavStrip, PageHeader } from "../../components/ui";
 import {
   approvalAuditCandidates,
   buildApprovalAuditHistoryFallback,
@@ -416,38 +416,22 @@ export function ApprovalsPage() {
   if (!sessionReady) {
     return (
       <section className="fg-page">
-        <PageIntro
+        <PageHeader
           eyebrow="Governance"
           title="Approvals"
-          description="Shared queue for execution-run and elevated-access decisions, separated from downstream issuance."
-          question="Which request needs a decision, and what system state changes if you approve or reject it?"
-          links={[
-            {
-              label: "Approvals",
-              to: CONTROL_PLANE_ROUTES.approvals,
-              description: "The shared governance queue for pending, approved, rejected, expired, and cancelled approval items.",
-            },
-            {
-              label: "Security & Policies",
-              to: CONTROL_PLANE_ROUTES.security,
-              description: "Open the elevated-access request/start surface once the current session role is known.",
-              badge: "Operator or admin",
-              disabled: true,
-            },
-            {
-              label: "Audit History",
-              to: auditHistoryRoute,
-              description: "Cross-check approval outcomes against audit evidence.",
-            },
-            {
-              label: "Provider Health & Runs",
-              to: CONTROL_PLANE_ROUTES.providerHealthRuns,
-              description: "Review downstream provider and run posture when execution approvals are waiting.",
-            },
-          ]}
+          description="Shared queue for execution-run and elevated-access decisions."
           badges={[{ label: "Checking access", tone: "neutral" }]}
-          note="ForgeFrame keeps approval outcome separate from downstream session issuance. Elevated access does not become live until the requester starts it from Security & Policies."
-        />
+        >
+          <ContextNavStrip
+            compact
+            items={[
+              { label: "Approvals", to: CONTROL_PLANE_ROUTES.approvals },
+              { label: "Security & Policies", to: CONTROL_PLANE_ROUTES.security, badge: "Operator or admin", disabled: true },
+              { label: "Audit History", to: auditHistoryRoute },
+              { label: "Provider Health & Runs", to: CONTROL_PLANE_ROUTES.providerHealthRuns },
+            ]}
+          />
+        </PageHeader>
       </section>
     );
   }
@@ -455,116 +439,72 @@ export function ApprovalsPage() {
   if (!canReview) {
     return (
       <section className="fg-page">
-        <PageIntro
+        <PageHeader
           eyebrow="Governance"
           title="Approvals"
-          description="This route is reserved for operators and admins who can inspect shared approval evidence and decision posture."
-          question="Which governance surface should you use when approval review is outside your current permission envelope?"
-          links={[
-            {
-              label: "Runtime Access Review",
-              to: CONTROL_PLANE_ROUTES.accounts,
-              description: "Inspect runtime account posture without entering the shared approvals queue.",
-            },
-            {
-              label: "Audit History",
-              to: auditHistoryRoute,
-              description: "Review recent governance evidence without approval decision controls.",
-            },
-            {
-              label: "Command Center",
-              to: CONTROL_PLANE_ROUTES.dashboard,
-              description: "Return to the dashboard and branch into the right operator-safe workflow.",
-            },
-            {
-              label: "Security & Policies",
-              to: CONTROL_PLANE_ROUTES.security,
-              description: "Operator/admin governance posture and elevated-session controls.",
-              badge: "Operator or admin",
-              disabled: true,
-            },
-          ]}
-          badges={[{ label: "Operator or admin required", tone: "warning" }]}
-          note="Viewers stay on audit and runtime-access surfaces. Approval review exposes request evidence and decision posture that this session cannot open."
-        />
+          description="Approval review is reserved for operator and admin sessions."
+          badges={[{ label: "Operator required", tone: "warning" }]}
+        >
+          <ContextNavStrip
+            compact
+            items={[
+              { label: "Runtime Access Review", to: CONTROL_PLANE_ROUTES.accounts },
+              { label: "Audit History", to: auditHistoryRoute },
+              { label: "Command Center", to: CONTROL_PLANE_ROUTES.dashboard },
+              { label: "Security & Policies", to: CONTROL_PLANE_ROUTES.security, badge: "Operator or admin", disabled: true },
+            ]}
+          />
+        </PageHeader>
       </section>
     );
   }
 
   return (
     <section className="fg-page">
-      <PageIntro
+      <PageHeader
         eyebrow="Governance"
         title="Approvals"
-        description="Shared queue for execution-run and elevated-access decisions, with approval outcome kept separate from downstream issuance."
-        question="Which request needs a decision now, and what changes in runtime or governance state if you act on it?"
-        links={[
-          {
-            label: "Approvals",
-            to: CONTROL_PLANE_ROUTES.approvals,
-            description: "Shared queue for pending and recently resolved approval items.",
-          },
-          canOpenSecurity
-            ? {
-                label: "Security & Policies",
-                to: CONTROL_PLANE_ROUTES.security,
-                description: canManageSecurity
-                  ? "Open live session posture, requester issuance state, and admin-only security modules."
-                  : "Open the elevated-access request/start surface and your requester issuance state.",
-                badge: canManageSecurity ? "Admin posture" : "Request flow",
-              }
-            : {
-                label: "Security & Policies",
-                to: CONTROL_PLANE_ROUTES.security,
-                description: "Reserved for operators and admins who can request elevated access or inspect security posture.",
-                badge: "Operator or admin",
-                disabled: true,
-              },
-          {
-            label: "Provider Health & Runs",
-            to: CONTROL_PLANE_ROUTES.providerHealthRuns,
-            description: "Check downstream execution truth when a run is waiting on approval.",
-          },
-          {
-            label: "Audit History",
-            to: auditHistoryRoute,
-            description: "Cross-check approval decisions against audit evidence.",
-          },
-          {
-            label: "Command Center",
-            to: CONTROL_PLANE_ROUTES.dashboard,
-            description: "Return to the dashboard when the issue spans multiple operator domains.",
-          },
-        ]}
+        description="Execution-run and elevated-access decisions, with approval outcome kept separate from downstream issuance."
         badges={[
           {
             label: canDecide ? "Decision mode" : "Review only",
             tone: canDecide ? "success" : "neutral",
           },
         ]}
-        note="Approval state and session state stay separate here. Elevated-access approval never implies a live session until the original requester issues it from Security & Policies."
-      />
-
+      >
+        <ContextNavStrip
+          compact
+          items={[
+            { label: "Approvals", to: CONTROL_PLANE_ROUTES.approvals },
+            canOpenSecurity
+              ? { label: "Security & Policies", to: CONTROL_PLANE_ROUTES.security, badge: canManageSecurity ? "Admin posture" : "Request flow" }
+              : { label: "Security & Policies", to: CONTROL_PLANE_ROUTES.security, badge: "Operator or admin", disabled: true },
+            { label: "Provider Health & Runs", to: CONTROL_PLANE_ROUTES.providerHealthRuns },
+            { label: "Audit History", to: auditHistoryRoute },
+            { label: "Command Center", to: CONTROL_PLANE_ROUTES.dashboard },
+          ]}
+        />
+      </PageHeader>
       {error ? <p className="fg-danger">{error}</p> : null}
       {message ? <p>{message}</p> : null}
 
-      <div className="fg-card-grid">
-        <article className="fg-kpi">
-          <span className="fg-muted">Open approvals</span>
-          <strong className="fg-kpi-value">{openCount}</strong>
-        </article>
-        <article className="fg-kpi">
-          <span className="fg-muted">Execution items</span>
-          <strong className="fg-kpi-value">{executionCount}</strong>
-        </article>
-        <article className="fg-kpi">
-          <span className="fg-muted">Elevated-access items</span>
-          <strong className="fg-kpi-value">{elevatedCount}</strong>
-        </article>
-        <article className="fg-kpi">
-          <span className="fg-muted">High-risk or irreversible</span>
-          <strong className="fg-kpi-value">{highRiskCount}</strong>
-        </article>
+      <div className="flex flex-wrap gap-4 px-1 py-2 mb-2">
+        <div className="flex items-baseline gap-1.5">
+          <span className="text-meta text-muted font-medium uppercase tracking-wider text-xs">Open</span>
+          <strong className="text-kpi tabular-nums">{openCount}</strong>
+        </div>
+        <div className="flex items-baseline gap-1.5">
+          <span className="text-meta text-muted font-medium uppercase tracking-wider text-xs">Execution</span>
+          <strong className="text-kpi tabular-nums">{executionCount}</strong>
+        </div>
+        <div className="flex items-baseline gap-1.5">
+          <span className="text-meta text-muted font-medium uppercase tracking-wider text-xs">Elevated</span>
+          <strong className="text-kpi tabular-nums">{elevatedCount}</strong>
+        </div>
+        <div className="flex items-baseline gap-1.5">
+          <span className="text-meta text-muted font-medium uppercase tracking-wider text-xs">High-risk</span>
+          <strong className="text-kpi tabular-nums">{highRiskCount}</strong>
+        </div>
       </div>
 
       <ApprovalFiltersCard

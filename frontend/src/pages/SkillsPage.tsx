@@ -1,6 +1,7 @@
 import { CONTROL_PLANE_ROUTES } from "../app/navigation";
 import { PageIntro } from "../components/PageIntro";
 import {
+  buildInventoryPath,
   CreateSkillPanel,
   DEFAULT_CREATE_FORM,
   EmptyState,
@@ -10,7 +11,6 @@ import {
   SkillTable,
   useSkills,
 } from "../features/skills";
-import { buildInventoryPath } from "../features/skills/utils";
 
 /**
  * Skills page — redesigned skill lifecycle management surface.
@@ -93,12 +93,6 @@ export function SkillsPage() {
             label: "Knowledge Sources",
             to: buildInventoryPath(CONTROL_PLANE_ROUTES.knowledgeSources, skills.instanceId),
             description: "Inspect knowledge sources referenced by skill provenance.",
-          },
-        ]}
-        badges={[
-          {
-            label: skills.canMutate ? "Admin mutation enabled" : "Read only",
-            tone: skills.canMutate ? "success" : "neutral",
           },
         ]}
         note="Skills are registry records, not plugins or provider targets."

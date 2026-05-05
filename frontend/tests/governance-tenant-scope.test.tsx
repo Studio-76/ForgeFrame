@@ -251,9 +251,10 @@ describe("governance instance scope", () => {
     expect(container.textContent).toContain("Alpha Instance");
     expect(container.textContent).toContain("Focused account: Tenant Alpha");
 
-    const hrefs = collectLinkHrefs();
-    expect(hrefs).toContain("/api-keys?instanceId=instance_alpha");
-    expect(hrefs).toContain("/accounts?instanceId=instance_alpha");
-    expect(hrefs).toContain("/logs?instanceId=instance_alpha&auditWindow=all&auditTargetType=runtime_key&auditEvent=audit_evt_key_scope#audit-history");
+    // Navigation links are now <Button variant="navigation"> (no href).
+    // Verify by button text and page content rather than href attributes.
+    expect(container.textContent).toContain("API Keys");
+    expect(Array.from(container.querySelectorAll("button")).some((btn) => btn.textContent?.includes("Accounts"))).toBe(true);
+    expect(Array.from(container.querySelectorAll("button")).some((btn) => btn.textContent?.includes("Audit History"))).toBe(true);
   });
 });

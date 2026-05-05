@@ -29,6 +29,8 @@ export interface ConfirmDialogState {
   item: MutableSettingEntry | null;
   /** The action type being confirmed. */
   action: "save" | "reset" | null;
+  /** The draft value being saved (for save actions). */
+  draftValue: string | null;
 }
 
 /** Default closed confirmation dialog state. */
@@ -36,6 +38,7 @@ export const DEFAULT_CONFIRM_DIALOG: ConfirmDialogState = {
   visible: false,
   item: null,
   action: null,
+  draftValue: null,
 };
 
 /**

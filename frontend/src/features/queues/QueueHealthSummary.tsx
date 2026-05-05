@@ -3,7 +3,7 @@ import type { ExecutionQueueLaneSummary } from "../../api/domain/execution";
 /**
  * Queue health summary props.
  */
-type QueueHealthSummaryProps = {
+export type QueueHealthSummaryProps = {
   /** Lane summaries from the API. */
   laneSummaries: ExecutionQueueLaneSummary[];
   /** Total backlog run count. */

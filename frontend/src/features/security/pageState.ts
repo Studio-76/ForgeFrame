@@ -6,6 +6,10 @@ import type {
   RotationTargetOption,
 } from "./sections";
 
+/**
+ * Create an empty admin user edit draft with default values.
+ * @returns Empty edit draft with operator role and active status.
+ */
 export function buildEmptyUserEditDraft(): AdminUserEditDraft {
   return {
     display_name: "",
@@ -14,6 +18,10 @@ export function buildEmptyUserEditDraft(): AdminUserEditDraft {
   };
 }
 
+/**
+ * Create an empty secret rotation draft with defaults.
+ * @returns Empty rotation draft targeting a provider.
+ */
 export function buildEmptyRotationDraft(): RotationDraft {
   return {
     target_type: "provider",
@@ -24,6 +32,10 @@ export function buildEmptyRotationDraft(): RotationDraft {
   };
 }
 
+/**
+ * Create an empty admin user scope draft with defaults.
+ * @returns Empty scope draft with operator role and active status.
+ */
 export function buildEmptyScopeDraft(): AdminUserScopeDraft {
   return {
     instance_id: "",
@@ -32,6 +44,12 @@ export function buildEmptyScopeDraft(): AdminUserScopeDraft {
   };
 }
 
+/**
+ * Build the list of rotation target options from secret and harness posture.
+ * @param secretPosture - Provider secret posture items.
+ * @param harnessProfiles - Harness secret posture items.
+ * @returns Sorted rotation target options.
+ */
 export function buildRotationTargetOptions(
   secretPosture: SecuritySecretPosture[],
   harnessProfiles: HarnessSecretPosture[],
@@ -53,6 +71,13 @@ export function buildRotationTargetOptions(
   return [...providerTargets, ...harnessTargets];
 }
 
+/**
+ * Look up the recommended rotation kind for a given target.
+ * @param targets - Available rotation target options.
+ * @param targetType - Target type (provider or harness_profile).
+ * @param targetId - Target identifier.
+ * @returns Recommended rotation kind or null.
+ */
 export function rotationKindForTarget(
   targets: RotationTargetOption[],
   targetType: RotationDraft["target_type"],

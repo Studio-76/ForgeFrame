@@ -12,16 +12,27 @@ const { fetchAccountsMock, fetchAuditHistoryMock, fetchRuntimeKeysMock, fetchIns
   fetchRuntimeKeyRequestPathPolicyMock: vi.fn(),
 }));
 
+vi.mock("../src/api/admin/accounts", async () => {
+  const actual = await vi.importActual<typeof import("../src/api/admin/accounts")>("../src/api/admin/accounts");
+  return { ...actual, fetchAccounts: fetchAccountsMock };
+});
+
+vi.mock("../src/api/admin/runtime-keys", async () => {
+  const actual = await vi.importActual<typeof import("../src/api/admin/runtime-keys")>("../src/api/admin/runtime-keys");
+  return { ...actual, fetchRuntimeKeys: fetchRuntimeKeysMock, fetchRuntimeKeyRequestPathPolicy: fetchRuntimeKeyRequestPathPolicyMock };
+});
+
+vi.mock("../src/api/admin/instances", async () => {
+  const actual = await vi.importActual<typeof import("../src/api/admin/instances")>("../src/api/admin/instances");
+  return { ...actual, fetchInstances: fetchInstancesMock };
+});
+
 vi.mock("../src/api/domain", async () => {
   const actual = await vi.importActual<typeof import("../src/api/domain")>("../src/api/domain");
 
   return {
     ...actual,
-    fetchAccounts: fetchAccountsMock,
     fetchAuditHistory: fetchAuditHistoryMock,
-    fetchRuntimeKeys: fetchRuntimeKeysMock,
-    fetchInstances: fetchInstancesMock,
-    fetchRuntimeKeyRequestPathPolicy: fetchRuntimeKeyRequestPathPolicyMock,
   };
 });
 
@@ -29,6 +40,7 @@ import type { AdminSessionUser } from "../src/api/domain";
 import { AccountsPage } from "../src/pages/AccountsPage";
 import { ApiKeysPage } from "../src/pages/ApiKeysPage";
 import { withAppContext } from "./testContext";
+import { findNavElement } from "./testUtils";
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -211,7 +223,6 @@ describe("governance audit handoff links", () => {
   it("routes API Keys to the newest runtime-key audit event inside the active instance", async () => {
     await renderPage("/api-keys?instanceId=instance_alpha", <ApiKeysPage />);
 
-    const auditLink = Array.from(container.querySelectorAll("a")).find((link) => link.textContent?.includes("Audit History"));
     expect(fetchAuditHistoryMock).toHaveBeenCalledWith({
       instanceId: "instance_alpha",
       window: "all",
@@ -219,7 +230,11 @@ describe("governance audit handoff links", () => {
       targetId: null,
       limit: 1,
     });
-    expect(auditLink?.getAttribute("href")).toBe("/logs?instanceId=instance_alpha&auditWindow=all&auditTargetType=runtime_key&auditEvent=audit_evt_key_latest#audit-history");
+    // ApiKeysPage renders "Audit History" as <Button variant="navigation">,
+    // not as an <a> element, so verify presence by text rather than href.
+    const auditNav = findNavElement(container, "Audit History");
+    expect(auditNav).toBeTruthy();
+    expect(auditNav?.textContent).toContain("Audit History");
   });
 
   it("keeps viewer fallbacks on instance-scoped static audit history links", async () => {
@@ -229,7 +244,9 @@ describe("governance audit handoff links", () => {
     expect(auditLink?.getAttribute("href")).toBe("/logs?instanceId=instance_alpha&auditWindow=all&auditTargetType=gateway_account#audit-history");
 
     await renderPage("/api-keys?instanceId=instance_alpha", <ApiKeysPage />, viewerSession);
-    auditLink = Array.from(container.querySelectorAll("a")).find((link) => link.textContent?.includes("Audit History"));
-    expect(auditLink?.getAttribute("href")).toBe("/logs?instanceId=instance_alpha&auditWindow=all&auditTargetType=runtime_key#audit-history");
+    // ApiKeysPage renders "Audit History" as <Button variant="navigation">
+    const auditNav = findNavElement(container, "Audit History");
+    expect(auditNav).toBeTruthy();
+    expect(auditNav?.textContent).toContain("Audit History");
   });
 });

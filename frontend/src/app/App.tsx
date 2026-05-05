@@ -9,12 +9,31 @@ import { getSessionRouteState } from "./authRouting";
 import { CONTROL_PLANE_ROUTES, getControlPlaneNavigation, type NavigationSection } from "./navigation";
 import { queryClient } from "./queryClient";
 import { getInstanceIdFromSearchParams } from "./tenantScope";
+import { useScopeStore } from "../store";
 import { useQuery } from "@tanstack/react-query";
+
+/**
+ * Minimal runtime validation for the admin session API response.
+ * Guards against backend contract violations producing silent null/undefined cascades.
+ * @param data - Raw response from fetchAdminSession.
+ * @returns Validated session data or null.
+ */
+function validateSessionResponse(data: unknown): { status: string; user: AdminSessionUser } | null {
+  if (!data || typeof data !== "object") return null;
+  const response = data as Record<string, unknown>;
+  if (response.status !== "ok" && response.status !== "error") return null;
+  const user = response.user;
+  if (!user || typeof user !== "object") return null;
+  const userRecord = user as Record<string, unknown>;
+  if (typeof userRecord.user_id !== "string" || typeof userRecord.role !== "string") return null;
+  return data as { status: string; user: AdminSessionUser };
+}
 
 export function App() {
   const location = useLocation();
   const navigate = useNavigate();
-  const hasToken = Boolean(getAdminToken());
+  const rawToken = getAdminToken();
+  const hasToken = Boolean(rawToken) && rawToken.length > 0;
 
   const sessionQuery = useQuery({
     queryKey: adminKeys.session,
@@ -24,7 +43,9 @@ export function App() {
     retry: false,
   });
 
-  const session: AdminSessionUser | null = sessionQuery.data?.user ?? null;
+  const session: AdminSessionUser | null = sessionQuery.data
+    ? (validateSessionResponse(sessionQuery.data)?.user ?? null)
+    : null;
   const sessionError: string = sessionQuery.error instanceof Error ? sessionQuery.error.message : "";
   const sessionReady = !hasToken || sessionQuery.isFetched;
 
@@ -83,6 +104,11 @@ export function App() {
       description: "Replace the temporary admin password before opening the full control plane.",
     }],
   }], []);
+
+  /* Sync URL instanceId → scope store so pages read from Zustand instead of parsing URL params. */
+  useEffect(() => {
+    useScopeStore.getState().setScope(instanceId);
+  }, [instanceId]);
 
   const shellNavigation = routeState.shellMode === "password_rotation" ? passwordRotationNavigation : navigationSections;
 

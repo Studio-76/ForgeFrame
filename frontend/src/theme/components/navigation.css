@@ -912,3 +912,98 @@
     display: flex;
   }
 }
+
+/* ──────────────────────────────────────────────
+ * ContextNavStrip — compact cross-page navigation
+ * ────────────────────────────────────────────── */
+
+.ff-context-nav {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--fg-space-2);
+  padding-top: var(--fg-space-2);
+  min-width: 0;
+}
+
+.ff-context-nav-label {
+  flex: 0 0 auto;
+  font-size: var(--fg-type-size-meta);
+  font-weight: 600;
+  color: var(--fg-color-text-secondary);
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  padding: 0.25rem 0;
+  white-space: nowrap;
+}
+
+.ff-context-nav-items {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--fg-space-1);
+  min-width: 0;
+}
+
+.ff-context-nav-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.25rem 0.55rem;
+  border: 1px solid var(--fg-color-border-default);
+  border-radius: var(--fg-radius-md);
+  background: transparent;
+  color: var(--fg-color-text-secondary);
+  font-size: var(--fg-type-size-meta);
+  font-weight: 500;
+  text-decoration: none;
+  line-height: 1.4;
+  transition:
+    border-color var(--fg-motion-fast) var(--fg-ease-standard),
+    background var(--fg-motion-fast) var(--fg-ease-standard),
+    color var(--fg-motion-fast) var(--fg-ease-standard);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.ff-context-nav-item:hover {
+  border-color: var(--fg-color-action-primary);
+  background: var(--fg-color-surface-subtle);
+  color: var(--fg-color-text-primary);
+}
+
+.ff-context-nav-item:focus-visible {
+  outline: 2px solid var(--fg-color-focus-ring);
+  outline-offset: 2px;
+}
+
+.ff-context-nav-item.is-current {
+  border-color: var(--fg-color-action-primary);
+  background: var(--fg-color-action-primary-soft);
+  color: var(--fg-color-text-primary);
+}
+
+.ff-context-nav-item.is-disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+.ff-context-nav-item-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ff-context-nav-item-badge {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  padding: 0.02rem 0.32rem;
+  border-radius: var(--fg-radius-pill);
+  background: var(--fg-color-action-primary-soft);
+  color: var(--fg-color-action-primary);
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  line-height: 1.4;
+}

@@ -16,7 +16,7 @@ import {
   toneFromReadinessAxis,
 } from "./providersSectionUtils";
 
-type SectionProps = {
+export type SectionProps = {
   data: ProvidersPageData;
   actions: ProvidersPageActions;
 };

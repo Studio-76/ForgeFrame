@@ -10,34 +10,42 @@ import {
 import { fetchBootstrapReadiness } from "../api/domain/bootstrap";
 import { getInstanceIdFromSearchParams } from "../app/tenantScope";
 import { useInstanceCatalog } from "../app/useInstanceCatalog";
-import { InstanceScopeCard } from "../components/InstanceScopeCard";
-import { PageIntro } from "../components/PageIntro";
-import { ErrorState, LoadingState } from "../components/ui/StateBlocks";
+import { RegistryManagementPage } from "../components/page-templates";
+import type { Action } from "../components/ui/models/action";
+import type { AttentionPayload } from "../components/ui/models/attention";
+import { AdvancedDiagnostics, RawJson } from "../components/ui/AdvancedDiagnostics";
 import {
   TlsStatusHero,
   TlsRemediationChecklist,
+  TlsPublicReadinessChecklist,
   TlsActionBar,
   TlsDetailPanel,
   deriveTlsSummary,
+  derivePosture,
   buildRemediationChecklist,
+  buildPublicReadinessChecklist,
   asBootstrapCheck,
   RELEVANT_CHECK_IDS,
 } from "../features/ingress-tls";
 import type { LoadState, BootstrapCheck } from "../features/ingress-tls";
 
 /**
- * Ingress / TLS / Certificates page — a guided TLS remediation workflow.
+ * Ingress / TLS / Certificates page — a guided TLS control surface.
  *
- * The page surfaces TLS readiness at a glance, shows the top blocker and
- * next action first, converts blockers into a prioritized remediation
- * checklist, hides raw diagnostics behind expandable sections, and uses
- * task-specific action labels instead of generic navigation buttons.
+ * The page surfaces TLS posture at a glance, shows the next recommended action,
+ * converts blockers into a prioritized remediation checklist (or public-readiness
+ * requirements for local-only instances), hides raw diagnostics behind expandable
+ * sections, and uses task-specific action labels instead of generic navigation.
+ *
+ * Local-only instances get a "Public HTTPS readiness" checklist framed as
+ * preparatory requirements rather than active blockers, with clear setup
+ * actions available.
  */
 export function IngressTlsPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const instanceId = getInstanceIdFromSearchParams(searchParams);
-  const { instances, loadState, error: instancesError, selectedInstance } = useInstanceCatalog(instanceId);
-  const [state, setState] = useState<LoadState>("idle");
+  const { instances, loadState, selectedInstance } = useInstanceCatalog(instanceId);
+  const [state, setState] = useState<LoadState>("loading");
   const [error, setError] = useState<string | null>(null);
   const [checks, setChecks] = useState<BootstrapCheck[]>([]);
   const [status, setStatus] = useState<IngressTlsStatusResponse | null>(null);
@@ -59,8 +67,11 @@ export function IngressTlsPage() {
     let mounted = true;
 
     const load = async () => {
-      setState("loading");
-      setError(null);
+      // Show loading state immediately
+      if (mounted) {
+        setState("loading");
+        setError(null);
+      }
       try {
         const [payload, ingressStatus] = await Promise.all([
           fetchBootstrapReadiness(),
@@ -111,87 +122,199 @@ export function IngressTlsPage() {
     }
   };
 
-  const summary = deriveTlsSummary(selectedInstance, status);
-  const isLocalOnly = selectedInstance?.exposure_mode === "local_only";
-  const hasLiveCert = status?.certificate.present === true;
-  const remediationItems = buildRemediationChecklist(status, instanceId, checks);
+  const dataReady = state === "success" && status && selectedInstance;
+  const summary = dataReady ? deriveTlsSummary(selectedInstance, status) : null;
+  const posture = dataReady ? derivePosture(selectedInstance, status) : null;
+  const isLocalOnly = posture === "local_only";
+  const hasLiveCert = status?.certificate?.present === true;
+  const remediationItems = dataReady && !isLocalOnly ? buildRemediationChecklist(status, instanceId, checks) : [];
+  const readinessItems = dataReady && isLocalOnly ? buildPublicReadinessChecklist(status, instanceId) : [];
+
+  // ── Scope config ─────────────────────────────────────────
+  const scopeLabel = selectedInstance
+    ? selectedInstance.display_name
+    : instanceId
+      ? instanceId
+      : undefined;
+
+  const scope = scopeLabel
+    ? {
+        label: scopeLabel,
+        onChange: instanceId
+          ? () => {
+              onInstanceChange(null);
+            }
+          : undefined,
+      }
+    : undefined;
+
+  // ── Summary items (only when fully ready) ─────────────────
+  const certDays = status?.certificate?.days_remaining;
+  const summaryItems = !dataReady ? [] : [
+    { key: "posture", label: "Posture", value: summary!.label, tone: summary!.tone },
+    {
+      key: "readiness",
+      label: "Public HTTPS",
+      value: summary!.publicReadiness.label,
+      tone: summary!.publicReadiness.tone,
+    },
+    {
+      key: "cert",
+      label: "Certificate",
+      value: hasLiveCert ? "Present" : "Missing",
+      tone: hasLiveCert ? ("success" as const) : ("danger" as const),
+    },
+    ...(certDays != null && certDays >= 0
+      ? [
+          {
+            key: "expiry",
+            label: "Expiry (days)",
+            value: certDays,
+            tone: certDays > 30 ? ("success" as const) : ("warning" as const),
+          },
+        ]
+      : []),
+  ];
+
+  // ── Attention items (only when fully ready) ───────────────
+  const attentionItems: AttentionPayload[] = !dataReady ? [] : [
+    ...(status!.renewal_allowed
+      ? [{ key: "renewal", level: "healthy" as const, title: "Renewal available", tone: "success" as const }]
+      : [
+          {
+            key: "renewal",
+            level: "warning" as const,
+            title: "Renewal gated",
+            description: status!.renewal_blocked_reason ?? "Certificate renewal is not currently available.",
+          },
+        ]),
+    ...(summary!.primaryBlocker
+      ? [
+          {
+            key: "blocker",
+            level: "primary_blocker" as const,
+            title: summary!.detail,
+            description: summary!.nextAction ?? undefined,
+          },
+        ]
+      : []),
+    ...(isLocalOnly
+      ? [
+          {
+            key: "local-only",
+            level: "informational" as const,
+            title: "Local-only exposure mode",
+            description:
+              "Public HTTPS is not active. The readiness checklist below shows what would be required "
+              + "to promote this instance to public HTTPS.",
+          },
+        ]
+      : []),
+  ];
+
+  // ── Actions (only when fully ready) ───────────────────────
+  const actions: Action[] = !dataReady
+    ? []
+    : [
+        ...(isLocalOnly
+          ? [
+              {
+                label: "Configure public HTTPS" as const,
+                intent: "navigate" as const,
+                kind: "navigation" as const,
+                onClick: () => {
+                  window.location.href = "/settings";
+                },
+              },
+            ]
+          : []),
+        {
+          label: "Renew TLS",
+          intent: "run",
+          kind: isLocalOnly ? "secondary" : "primary",
+          onClick: () => {
+            void triggerRenewal();
+          },
+          disabled: renewing || !status!.renewal_allowed || isLocalOnly,
+        },
+        {
+          label: "Refresh",
+          intent: "run",
+          kind: "secondary",
+          onClick: () => {
+            setRefreshNonce((c) => c + 1);
+          },
+        },
+      ];
 
   return (
-    <section className="fg-page">
-      <PageIntro
-        eyebrow="Setup"
-        title="Ingress / TLS / Certificates"
-        description="TLS readiness, remediation checklist, and diagnostics — one guided operator surface."
-        badges={[
-          { label: summary.label, tone: summary.tone },
-          { label: status?.renewal_allowed ? "Renew available" : "Renew gated", tone: status?.renewal_allowed ? "success" : "warning" },
-        ]}
-        note="Self-signed material, manual TLS, no public FQDN, or local-only exposure stay explicit exception states."
-      />
-
-      <InstanceScopeCard
-        instanceId={instanceId}
-        selectedInstance={selectedInstance}
-        instances={instances}
-        loadState={loadState}
-        error={instancesError}
-        surfaceLabel="ingress, TLS, and certificate posture"
-        onInstanceChange={onInstanceChange}
-      />
-
-      {state === "loading" && !status ? (
-        <LoadingState
-          title="Loading ingress and TLS posture"
-          description="Restoring FQDN, DNS, listener, certificate, and renewal gate evidence."
-        />
-      ) : null}
-
+    <RegistryManagementPage
+      eyebrow="Setup"
+      title="Ingress / TLS / Certificates"
+      description="TLS posture, public-HTTPS readiness, remediation checklist, and diagnostics — one guided operator surface."
+      scope={scope}
+      summaryItems={summaryItems}
+      attentionItems={attentionItems}
+      actions={actions}
+      diagnostics={
+        <AdvancedDiagnostics title="TLS diagnostics">
+          <RawJson data={{ posture, status, checks, renewalResult }} label="State snapshot" />
+        </AdvancedDiagnostics>
+      }
+    >
+      {/* Error state — takes priority */}
       {state === "error" ? (
-        <ErrorState
-          title="Ingress / TLS surface failed to load"
-          description={error ?? "Ingress or certificate posture could not be restored."}
-          action={<button type="button" onClick={() => setRefreshNonce((current) => current + 1)}>Retry</button>}
-        />
-      ) : null}
-
-      {state === "success" && status ? (
-        <>
-          <TlsStatusHero summary={summary} />
-
-          <TlsActionBar
-            instanceId={instanceId}
-            summary={summary}
-            renewalAllowed={status.renewal_allowed}
-            renewing={renewing}
-            onRenew={() => void triggerRenewal()}
-            onRefresh={() => setRefreshNonce((current) => current + 1)}
-          />
-
-          {isLocalOnly ? null : (
-            <div className="ff-operator-layout">
-              <div className="ff-operator-main">
-                <TlsRemediationChecklist items={remediationItems} />
-              </div>
-
-              <div className="ff-operator-sidebar">
-                <TlsDetailPanel
-                  summary={summary}
-                  status={status}
-                  renewalResult={renewalResult}
-                  hasLiveCert={hasLiveCert}
-                />
-              </div>
-            </div>
-          )}
-        </>
-      ) : null}
-
-      {state === "success" && isLocalOnly ? (
-        <div className="ff-state-block" data-state="blocked">
-          <strong>Local-only exposure mode</strong>
-          <p>Public HTTPS readiness is not the active deployment goal for this instance. Missing FQDN or certificate evidence reflects the declared local-only posture — not a hidden production gap.</p>
+        <div className="ff-state-block" data-state="error">
+          <strong>Ingress / TLS surface failed to load</strong>
+          <p>{error ?? "Ingress or certificate posture could not be restored."}</p>
         </div>
       ) : null}
-    </section>
+
+      {/* Neutral resolving skeleton — shown until ALL data sources are ready */}
+      {!dataReady && state !== "error" ? (
+        <div className="ff-state-block" data-state="loading">
+          <div className="ff-skeleton-row" />
+          <strong>Resolving TLS posture…</strong>
+          <p>Determining instance exposure mode, FQDN, DNS, listener, certificate, and renewal gate status.</p>
+        </div>
+      ) : null}
+
+      {/* Success content — only when instance catalog + TLS status are both resolved */}
+      {dataReady ? (
+        <div className="ff-operator-layout">
+          <div className="ff-operator-main">
+            <TlsStatusHero summary={summary!} />
+
+            <TlsActionBar
+              instanceId={instanceId}
+              summary={summary!}
+              renewalAllowed={status!.renewal_allowed}
+              renewing={renewing}
+              onRenew={() => void triggerRenewal()}
+              onRefresh={() => setRefreshNonce((current) => current + 1)}
+            />
+
+            {isLocalOnly ? (
+              <TlsPublicReadinessChecklist items={readinessItems} />
+            ) : (
+              <TlsRemediationChecklist
+                items={remediationItems}
+                title="Remediation checklist"
+                subtitle="Prioritized steps to resolve TLS blockers. Start with the first item."
+              />
+            )}
+          </div>
+
+          <div className="ff-operator-sidebar">
+            <TlsDetailPanel
+              summary={summary!}
+              status={status!}
+              renewalResult={renewalResult}
+              hasLiveCert={hasLiveCert}
+            />
+          </div>
+        </div>
+      ) : null}
+    </RegistryManagementPage>
   );
 }

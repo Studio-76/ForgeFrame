@@ -1,7 +1,7 @@
 .fg-approval-layout {
   display: grid;
-  gap: var(--fg-space-4);
-  grid-template-columns: minmax(300px, var(--fg-layout-detail-width)) minmax(
+  gap: var(--fg-space-3);
+  grid-template-columns: minmax(280px, var(--fg-layout-detail-width)) minmax(
       0,
       1fr
     );

@@ -3,10 +3,10 @@
 /* Scope selector */
 .ff-queue-scope-selector {
   display: grid;
-  gap: var(--fg-space-3);
+  gap: var(--fg-space-2);
   border: 1px solid var(--fg-color-border-default);
-  border-radius: var(--fg-radius-lg);
-  padding: var(--fg-space-4);
+  border-radius: var(--fg-radius-md);
+  padding: var(--fg-space-3);
   background: var(--fg-color-surface-default);
 }
 
@@ -24,17 +24,17 @@
 /* Filter bar */
 .ff-queue-filters {
   display: grid;
-  gap: var(--fg-space-3);
+  gap: var(--fg-space-2);
   border: 1px solid var(--fg-color-border-default);
-  border-radius: var(--fg-radius-lg);
-  padding: var(--fg-space-4);
+  border-radius: var(--fg-radius-md);
+  padding: var(--fg-space-3);
   background: var(--fg-color-surface-default);
 }
 
 .ff-queue-filters-basic {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--fg-space-3);
+  gap: var(--fg-space-2);
   align-items: end;
 }
 
@@ -65,7 +65,6 @@
   display: flex;
   gap: var(--fg-space-2);
   align-items: end;
-  padding-bottom: 1px;
 }
 
 .ff-queue-filter-btn {
@@ -123,10 +122,10 @@
 .ff-queue-filters-advanced {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--fg-space-3);
-  padding: var(--fg-space-3);
+  gap: var(--fg-space-2);
+  padding: var(--fg-space-2);
   border: 1px solid var(--fg-color-border-default);
-  border-radius: var(--fg-radius-md);
+  border-radius: var(--fg-radius-sm);
   background: var(--fg-color-surface-subtle);
 }
 
@@ -138,26 +137,26 @@
 .ff-queue-loading,
 .ff-queue-error {
   border: 1px solid var(--fg-color-border-default);
-  border-radius: var(--fg-radius-lg);
-  padding: var(--fg-space-4);
+  border-radius: var(--fg-radius-md);
+  padding: var(--fg-space-3);
   background: var(--fg-color-surface-default);
 }
 
 /* Health summary grid */
 .ff-queue-health {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
   gap: 1px;
   border: 1px solid var(--fg-color-border-default);
-  border-radius: var(--fg-radius-lg);
+  border-radius: var(--fg-radius-md);
   overflow: hidden;
   background: var(--fg-color-border-default);
 }
 
 .ff-queue-health-stat {
   display: grid;
-  gap: 0.2rem;
-  padding: 0.85rem 1rem;
+  gap: 0.1rem;
+  padding: 0.6rem 0.85rem;
   background: var(--fg-color-surface-default);
 }
 
@@ -184,10 +183,10 @@
 /* Clear / healthy empty state */
 .ff-queue-clear {
   display: grid;
-  gap: 0.35rem;
+  gap: 0.2rem;
   border: 1px solid var(--fg-color-border-default);
-  border-radius: var(--fg-radius-lg);
-  padding: var(--fg-space-4);
+  border-radius: var(--fg-radius-md);
+  padding: var(--fg-space-3);
   background: var(--fg-color-surface-default);
 }
 
@@ -210,9 +209,9 @@
 .ff-queue-lane-row {
   display: grid;
   grid-template-columns: 1.5fr 0.6fr 0.6fr 0.6fr 0.9fr auto;
-  gap: var(--fg-space-3);
+  gap: var(--fg-space-2);
   align-items: center;
-  padding: 0.65rem 1rem;
+  padding: 0.5rem 0.85rem;
   border-top: 1px solid var(--fg-color-border-default);
   background: var(--fg-color-surface-default);
 }

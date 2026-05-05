@@ -262,7 +262,7 @@ describe("Settings page role-aware controls", () => {
     await renderSettingsPage(adminSession);
 
     expect(fetchMutableSettingsMock).toHaveBeenCalledTimes(1);
-    expect(container.textContent).toContain("Admin mutations enabled");
+    expect(container.textContent).toContain("Admin mutation enabled");
     expect(container.textContent).toContain("General");
     expect(container.textContent).toContain("Routing defaults");
     expect(container.textContent).toContain("TLS / Public access");
@@ -365,7 +365,7 @@ describe("Settings page role-aware controls", () => {
     expect(fetchMutableSettingsMock).toHaveBeenCalledTimes(1);
     expect(container.textContent).toContain("Read-Only Review");
     expect(container.textContent).toContain("This admin session is read-only");
-    expect(container.textContent).toContain("Read-only review");
+    expect(container.textContent).toContain("Read only");
     expect(getButtonByText(container, "Save override")).toBeUndefined();
     expect(getButtonByText(container, "Reset to default")).toBeUndefined();
     expect(getButtonByText(container, "Edit setting")).toBeUndefined();

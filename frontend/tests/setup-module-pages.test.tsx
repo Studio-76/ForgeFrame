@@ -335,7 +335,7 @@ describe("setup module pages", () => {
     expect(fetchProviderControlPlaneMock).toHaveBeenCalledWith("instance_alpha");
     expect(fetchRoutingControlPlaneMock).toHaveBeenCalledWith("instance_alpha");
     expect(fetchIngressTlsStatusMock).toHaveBeenCalled();
-    expect(container.textContent).toContain("Release / Validation");
+    expect(container.textContent).toContain("Release Validation");
     expect(container.textContent).toContain("Build / Test");
     expect(container.textContent).toContain("manual evidence required");
     expect(container.textContent).toContain("upgrade_evidence_missing");

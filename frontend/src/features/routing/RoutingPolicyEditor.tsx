@@ -7,7 +7,7 @@ import { titleCase, toPolicyDraft, toneForStatus, parseTargetKeyList } from "./u
 /**
  * Props for the policy editor section.
  */
-type RoutingPolicyEditorProps = {
+export type RoutingPolicyEditorProps = {
   snapshot: RoutingControlPlaneResponse | null;
   policyDrafts: Record<string, PolicyDraft>;
   canMutate: boolean;

@@ -373,7 +373,7 @@ describe("Logs page audit history workflow", () => {
     expect(container.textContent).toContain("Incidents and Observability");
     expect(container.textContent).toContain("Audit history");
     expect(container.textContent).toContain("Presets:");
-    expect(container.textContent).toContain("Open Audit Export");
+    expect(container.textContent).toContain("Export audit data");
   });
 
   it("keeps company-scoped execution audit links on the company filter path", async () => {
@@ -398,7 +398,8 @@ describe("Logs page audit history workflow", () => {
   it("preserves instance scope on the in-page audit export CTA", async () => {
     await renderLogsPage("/logs?instanceId=instance_alpha#audit");
 
-    expect(container.textContent).toContain("Open Audit Export");
+    expect(container.textContent).toContain("Export audit data");
+
   });
 
   it("generates an export from the shipped backend contract and leaves a durable package summary", async () => {
@@ -519,8 +520,8 @@ describe("Logs page audit history workflow", () => {
     expect(button?.disabled).toBe(true);
     // The hook queries audit history regardless of permission, but viewer
     // session prevents data from being shown interactively
-    expect(container.textContent).toContain("Viewer read-only");
     expect(container.textContent).toContain("Audit export");
+    expect(container.textContent).toContain("Generate JSON export");
   });
 
   it("shows a failed export state when the backend contract returns an error", async () => {

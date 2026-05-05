@@ -1,0 +1,30 @@
+{
+  "$schema": "https://typedoc.org/schema.json",
+  "name": "ForgeFrame Frontend",
+  "entryPoints": ["./src"],
+  "entryPointStrategy": "Expand",
+  "out": "docs",
+  "exclude": [
+    "**/*.test.ts",
+    "**/*.test.tsx",
+    "**/*.spec.ts",
+    "**/tests/**"
+  ],
+  "excludePrivate": false,
+  "excludeProtected": false,
+  "excludeInternal": true,
+  "excludeNotDocumented": false,
+  "readme": "README.md",
+  "includeVersion": true,
+  "sort": ["source-order"],
+  "searchInComments": true,
+  "searchInDocuments": true,
+  "cleanOutputDir": true,
+  "visibilityFilters": {
+    "protected": true,
+    "private": false,
+    "inherited": true,
+    "external": true
+  },
+  "customCss": "./typedoc-theme.css"
+}

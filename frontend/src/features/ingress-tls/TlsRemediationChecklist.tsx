@@ -7,18 +7,29 @@ import type { RemediationItem } from "./types";
  * Prioritized remediation checklist for the TLS setup workflow.
  * Each item shows status, why it matters, and one clear action.
  * Items are sorted by priority: blocking items first, then warnings, then ready items.
+ *
+ * Optional title/subtitle props allow custom framing for different contexts
+ * (e.g. "Public HTTPS readiness" for local-only posture).
  */
-export function TlsRemediationChecklist({ items }: { items: RemediationItem[] }) {
+export function TlsRemediationChecklist({
+  items,
+  title = "Remediation checklist",
+  subtitle = "Prioritized steps to resolve TLS blockers. Start with the first item.",
+}: {
+  items: RemediationItem[];
+  title?: string;
+  subtitle?: string;
+}) {
   if (items.length === 0) {
     return null;
   }
 
   return (
-    <section className="ff-table-card" aria-label="TLS remediation checklist">
+    <section className="ff-table-card" aria-label={title}>
       <div className="ff-table-card-header">
         <div>
-          <h3>Remediation checklist</h3>
-          <p>Prioritized steps to resolve TLS blockers. Start with the first item.</p>
+          <h3>{title}</h3>
+          <p>{subtitle}</p>
         </div>
       </div>
       <div className="ff-table-scroll">

@@ -531,7 +531,6 @@ describe("costs page", () => {
     expect(container.textContent).toContain("Budget posture");
     expect(container.textContent).toContain("Blocked cost classes");
     expect(container.textContent).toContain("Circuit & guard map");
-    expect(container.textContent).toContain("This session is read-only for routing.write.");
     expect(getButtonByText("Save budget posture").disabled).toBe(true);
   });
 

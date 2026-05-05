@@ -10,6 +10,12 @@ export function createEmptyOwnPasswordRotationDraft(): OwnPasswordRotationDraft 
   };
 }
 
+/**
+ * Validate and build the payload for own password rotation.
+ * @param draft - Password rotation draft with current and new password.
+ * @returns Validated payload for the own-password rotation API.
+ * @throws If current password is empty or new password is too short.
+ */
 export function buildOwnPasswordRotationPayload(draft: OwnPasswordRotationDraft) {
   if (!draft.current_password.trim()) {
     throw new Error("Current password is required.");
@@ -24,7 +30,7 @@ export function buildOwnPasswordRotationPayload(draft: OwnPasswordRotationDraft)
   };
 }
 
-type OwnPasswordRotationFormProps = {
+export type OwnPasswordRotationFormProps = {
   title: string;
   description: string;
   note: string;

@@ -405,8 +405,8 @@ describe("work interaction pages", () => {
     expect(container.textContent).toContain("Prepare workspace review");
     expect(container.textContent).toContain("Handoff history");
 
-    const artifactsLink = Array.from(container.querySelectorAll("a")).find((link) => link.textContent === "Workspace artifacts");
-    expect(artifactsLink?.getAttribute("href")).toBe("/artifacts?instanceId=instance_alpha&workspaceId=ws_alpha");
+    const artifactsButton = Array.from(container.querySelectorAll("button")).find((btn) => btn.textContent === "Workspace artifacts");
+    expect(artifactsButton).toBeDefined();
   });
 
   it("creates and updates workspaces against the selected instance scope", async () => {

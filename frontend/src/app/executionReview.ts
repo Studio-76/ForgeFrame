@@ -40,7 +40,7 @@ export function normalizeExecutionInstanceId(value: string | null | undefined): 
   return normalizeExecutionParam(value);
 }
 
-export function normalizeExecutionRunId(value: string | null | undefined): string | null {
+function normalizeExecutionRunId(value: string | null | undefined): string | null {
   return normalizeExecutionParam(value);
 }
 

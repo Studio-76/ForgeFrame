@@ -10,7 +10,7 @@ import {
   buildDraftFromTemplate,
 } from "../providers/providersSectionUtils";
 
-type HarnessTemplatesListProps = {
+export type HarnessTemplatesListProps = {
   templates: ProvidersPageData["templates"];
   canMutate: boolean;
   newHarness: ProvidersPageData["newHarness"];

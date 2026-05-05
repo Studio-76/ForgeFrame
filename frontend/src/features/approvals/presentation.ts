@@ -12,7 +12,7 @@ import type {
   ApprovalType,
 } from "../../api/domain";
 
-type BannerTone = "success" | "warning" | "danger" | "neutral";
+export type BannerTone = "success" | "warning" | "danger" | "neutral";
 type ExecutionResumeDisposition = "resume" | "fail" | "compensate" | "cancel";
 
 export type ApprovalBanner = {

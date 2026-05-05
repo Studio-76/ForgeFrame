@@ -1,14 +1,16 @@
 import { CONTROL_PLANE_ROUTES } from "../app/navigation";
 import { buildInboxPath } from "../app/workInteractionRoutes";
 import { PageIntro } from "../components/PageIntro";
-import { AppendMessageForm } from "../features/conversations/AppendMessageForm";
-import { ConversationContextPanel } from "../features/conversations/ConversationContextPanel";
-import { ConversationFilterBar } from "../features/conversations/ConversationFilterBar";
-import { ConversationList } from "../features/conversations/ConversationList";
-import { ConversationTimeline } from "../features/conversations/ConversationTimeline";
-import { CreateConversationFormComponent } from "../features/conversations/CreateConversationForm";
-import { EditConversationFormComponent } from "../features/conversations/EditConversationForm";
-import { useConversations } from "../features/conversations/useConversations";
+import {
+  AppendMessageForm,
+  ConversationContextPanel,
+  ConversationFilterBar,
+  ConversationList,
+  ConversationTimeline,
+  CreateConversationFormComponent,
+  EditConversationFormComponent,
+  useConversations,
+} from "../features/conversations";
 
 /**
  * Conversations page — thin wrapper that delegates all state,
@@ -123,12 +125,14 @@ export function ConversationsPage() {
           { label: "Workspaces", to: CONTROL_PLANE_ROUTES.workspaces, description: "Open workspace truth linked from the selected conversation." },
           { label: "Execution Review", to: CONTROL_PLANE_ROUTES.execution, description: "Inspect runtime truth linked from the selected conversation." },
         ]}
-        badges={[
-          { label: `${conversations.length} conversation${conversations.length === 1 ? "" : "s"}`, tone: conversations.length > 0 ? "success" : "warning" },
-          { label: canMutate ? "Admin mutation enabled" : "Read only", tone: canMutate ? "success" : "neutral" },
-        ]}
         note="Conversations are first-class objects. Threads, sessions, messages, triage, and inbox linkage must reconcile here."
       />
+
+      {/* ── Inline status summary ── */}
+      <p className="fg-muted" style={{ marginBottom: "0.75rem" }}>
+        {conversations.length} conversation{conversations.length === 1 ? "" : "s"}
+        {canMutate ? " · Admin mutation enabled" : " · Read only"}
+      </p>
 
       {error ? <p className="fg-danger">{error}</p> : null}
       {message ? <p>{message}</p> : null}

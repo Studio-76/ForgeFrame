@@ -1,4 +1,7 @@
-export type StatusTone = "success" | "warning" | "danger" | "info" | "neutral";
+import type { StatusTone } from "./types";
+
+/** Re-exported for backward compatibility. Prefer importing from `"./types"` or the UI barrel. */
+export type { StatusTone };
 
 const STATUS_TONE_BY_STATE = {
   ready: "success",
@@ -14,7 +17,7 @@ const STATUS_TONE_BY_STATE = {
   circuit_open: "danger",
 } as const satisfies Record<string, StatusTone>;
 
-type StatusBadgeProps = {
+export type StatusBadgeProps = {
   children: React.ReactNode;
   tone?: StatusTone;
   status?: string | null;

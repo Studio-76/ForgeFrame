@@ -54,7 +54,7 @@ import type {
   ProvidersPageData,
 } from "./providersShared";
 
-type ProvidersControlPlaneOptions = {
+export type ProvidersControlPlaneOptions = {
   includeUsageSummary?: boolean;
   includeHarness?: boolean;
   includeOauthTargets?: boolean;

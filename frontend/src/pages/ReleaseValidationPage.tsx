@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link, useSearchParams } from "react-router-dom";
+import { useSearchParams } from "react-router-dom";
 
 import { fetchBootstrapReadiness } from "../api/domain/bootstrap";
 import {
@@ -25,15 +25,22 @@ import {
 import { CONTROL_PLANE_ROUTES } from "../app/navigation";
 import { getInstanceIdFromSearchParams, withInstanceScope } from "../app/tenantScope";
 import { useInstanceCatalog } from "../app/useInstanceCatalog";
-import { InstanceScopeCard } from "../components/InstanceScopeCard";
-import { PageIntro } from "../components/PageIntro";
-import { AdvancedDiagnostics } from "../components/ui/AdvancedDiagnostics";
-import { ErrorState, LoadingState } from "../components/ui/StateBlocks";
+import { RegistryManagementPage } from "../components/page-templates";
+import type { ScopeConfig } from "../components/page-templates";
+import {
+  Button,
+  DataTable,
+  ErrorState,
+  LoadingState,
+} from "../components/ui";
+import type { DataTableColumn } from "../components/ui";
+import type { Action } from "../components/ui/models/action";
+import type { AttentionPayload } from "../components/ui/models/attention";
+import type { SummaryStripItem } from "../components/ui/SummaryStrip";
 import {
   GateChecklist,
   GateDetailSidebar,
   deriveReleaseSummary,
-  ReleaseActionBar,
   ReleaseStatusHero,
 } from "../features/release";
 import type {
@@ -42,16 +49,11 @@ import type {
   GatePriority,
   LoadState,
 } from "../features/release";
+import { latestTimestamp } from "./workInteractionPageSupport";
 
 /** @private */
 function hasEvidenceTimestamp(value: string | null | undefined): value is string {
   return Boolean(value && value.trim());
-}
-
-/** @private */
-function latestTimestamp(values: Array<string | null | undefined>): string | null {
-  const normalized = values.filter(hasEvidenceTimestamp).sort();
-  return normalized.at(-1) ?? null;
 }
 
 /** @private */
@@ -115,6 +117,15 @@ function remediationAction(
   if (!gateReady) return blockerLabel;
   return `Review ${baseLabel}`;
 }
+
+/** @private */
+type AuditRow = {
+  key: string;
+  category: string;
+  evidenceAt: string;
+  evidenceProvider: string;
+  evidenceSource: string;
+};
 
 /**
  * Release / Validation page — redesigned as an actionable release readiness workflow.
@@ -687,46 +698,122 @@ export function ReleaseValidationPage() {
 
   const selectedGate = gates.find((gate) => gate.key === selectedGateKey) ?? gates[0] ?? null;
 
+  // ── Template props ───────────────────────────────────────
+
+  const scopeLabel = selectedInstance?.display_name
+    ?? selectedInstance?.instance_id
+    ?? "Default instance path";
+
+  /** Scope config: show current scope with a clear action. */
+  const scope: ScopeConfig | undefined = instanceId
+    ? { label: scopeLabel, onChange: () => onInstanceChange(null) }
+    : undefined;
+
+  /** Attention items: promote errors to blockers. */
+  const attentionItems: AttentionPayload[] = [];
+  if (state === "error") {
+    attentionItems.push({
+      key: "fetch-error",
+      level: "primary_blocker",
+      title: "Release gateboard failed to load",
+      description: error ?? "Release evidence could not be restored.",
+    });
+  }
+
+  /** Summary strip: gate counts. */
+  const summaryItems: SummaryStripItem[] | undefined =
+    state === "success" && gates.length > 0
+      ? [
+          {
+            key: "total",
+            label: "Total gates",
+            value: summary.totalGates,
+          },
+          {
+            key: "blocked",
+            label: "Blocked",
+            value: summary.blockingCount,
+            tone: summary.blockingCount > 0 ? "danger" : "success",
+          },
+          {
+            key: "manual-evidence",
+            label: "Need evidence",
+            value: summary.manualEvidenceCount,
+            tone: summary.manualEvidenceCount > 0 ? "warning" : "success",
+          },
+        ]
+      : undefined;
+
+  /** Actions: refresh button. */
+  const actions: Action[] = [
+    {
+      label: "Refresh gates",
+      kind: "primary",
+      intent: "run",
+      onClick: () => setRefreshNonce((n) => n + 1),
+    },
+  ];
+
+  /** Audit evidence table data. */
+  const auditData: AuditRow[] = gates.map((gate) => ({
+    key: gate.key,
+    category: gate.category,
+    evidenceAt: gate.evidenceAt ?? "—",
+    evidenceProvider: gate.evidenceProvider ?? "—",
+    evidenceSource: gate.evidenceSource,
+  }));
+
+  const auditColumns: DataTableColumn<AuditRow>[] = [
+    {
+      id: "category",
+      header: "Gate",
+      accessorFn: (row) => row.category,
+      sortingKey: (row) => row.category,
+      alwaysVisible: true,
+    },
+    {
+      id: "evidenceAt",
+      header: "Evidence at",
+      accessorFn: (row) => row.evidenceAt,
+      sortingKey: (row) => row.evidenceAt,
+    },
+    {
+      id: "evidenceProvider",
+      header: "Provided by",
+      accessorFn: (row) => row.evidenceProvider,
+    },
+    {
+      id: "evidenceSource",
+      header: "Source",
+      accessorFn: (row) => row.evidenceSource,
+    },
+  ];
+
   return (
-    <section className="fg-page">
-      <PageIntro
-        eyebrow="Setup"
-        title="Release / Validation"
-        description="Release claims stay blocked until bootstrap, runtime, provider, OAuth, routing, queue, security, TLS, and recovery gates all have real evidence."
-        badges={[
-          {
-            label: summary.status === "ready" ? "release-ready" : "release blocked",
-            tone: summary.status === "ready" ? "success" : "danger",
-          },
-          {
-            label: `${summary.blockingCount} blocked gate(s)`,
-            tone: summary.blockingCount > 0 ? "warning" : "success",
-          },
-        ]}
-        note="This page never invents a release claim. Missing automation becomes manual evidence required, and release-ready appears only when every hard gate is actually covered."
-      />
-
-      <ReleaseActionBar
-        primaryActions={
-          <button type="button" onClick={() => setRefreshNonce((n) => n + 1)}>
-            Refresh
-          </button>
-        }
-      />
-
-      <ReleaseStatusHero summary={summary} />
-
-      <InstanceScopeCard
-        instanceId={instanceId}
-        selectedInstance={selectedInstance}
-        instances={instances}
-        loadState={loadState}
-        error={instancesError}
-        surfaceLabel="release and validation gates"
-        onInstanceChange={onInstanceChange}
-      />
-
-      {state === "loading" && gates.length === 0 ? (
+    <RegistryManagementPage
+      eyebrow="Release"
+      title="Release Validation"
+      description="Consolidated release readiness across bootstrap, runtime, providers, routing, TLS, and recovery."
+      scope={scope}
+      attentionItems={attentionItems}
+      summaryItems={summaryItems}
+      actions={actions}
+      selectedItemContent={
+        selectedGate ? <GateDetailSidebar gate={selectedGate} /> : null
+      }
+      hasSelection={selectedGate != null && state === "success"}
+      diagnostics={
+        <pre>
+          {JSON.stringify(
+            { bootstrap, runtimeHealth, providers, routing, ingress, recovery },
+            null,
+            2,
+          )}
+        </pre>
+      }
+      diagnosticsTitle="Release diagnostics"
+    >
+      {(state === "idle" || state === "loading") && gates.length === 0 ? (
         <LoadingState
           title="Loading release gates"
           description="Restoring bootstrap, runtime, provider, routing, TLS, and recovery evidence."
@@ -738,77 +825,53 @@ export function ReleaseValidationPage() {
           title="Release gateboard failed to load"
           description={error ?? "Release evidence could not be restored."}
           action={
-            <button type="button" onClick={() => setRefreshNonce((n) => n + 1)}>
+            <Button variant="secondary" onPress={() => setRefreshNonce((n) => n + 1)}>
               Retry
-            </button>
+            </Button>
           }
         />
       ) : null}
 
       {state === "success" && gates.length > 0 ? (
-        <div className="ff-release-layout">
-          <div className="ff-release-main">
-            <GateChecklist
-              gates={gates}
-              selectedGateKey={selectedGateKey}
-              onSelectGate={setSelectedGateKey}
-            />
-          </div>
-          <div className="ff-release-sidebar-wrapper">
-            <GateDetailSidebar gate={selectedGate} />
-          </div>
-        </div>
-      ) : null}
+        <>
+          <ReleaseStatusHero summary={summary} />
 
-      {state === "success" && gates.length > 0 ? (
-        <details className="ff-collapse-section ff-release-audit">
-          <summary>
-            <span className="ff-collapse-summary-text">
-              <h3>Audit history</h3>
-              <p>Evidence timestamps and audit metadata for all release gates.</p>
-            </span>
-          </summary>
-          <div className="ff-collapse-section-body">
-            <table className="ff-data-table" aria-label="Gate evidence timestamps">
-              <thead>
-                <tr>
-                  <th>Gate</th>
-                  <th>Evidence at</th>
-                  <th>Provided by</th>
-                  <th>Source</th>
-                </tr>
-              </thead>
-              <tbody>
-                {gates.map((gate) => (
-                  <tr key={gate.key}>
-                    <td>{gate.category}</td>
-                    <td>{gate.evidenceAt ?? "—"}</td>
-                    <td>{gate.evidenceProvider ?? "—"}</td>
-                    <td>{gate.evidenceSource}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          <div className="ff-release-layout">
+            <div className="ff-release-main">
+              <GateChecklist
+                gates={gates}
+                selectedGateKey={selectedGateKey}
+                onSelectGate={setSelectedGateKey}
+              />
+            </div>
           </div>
-        </details>
-      ) : null}
 
-      {state === "success" && gates.length > 0 ? (
-        <AdvancedDiagnostics
-          title="Advanced diagnostics"
-          description="Raw stitched evidence from all control plane sources."
-          status="advanced"
-          statusTone="neutral"
-        >
-          <pre>
-            {JSON.stringify(
-              { bootstrap, runtimeHealth, providers, routing, ingress, recovery },
-              null,
-              2,
-            )}
-          </pre>
-        </AdvancedDiagnostics>
+          {/* Audit evidence table */}
+          <details
+            className="ff-collapse-section ff-release-audit"
+            style={{ marginTop: "1rem" }}
+          >
+            <summary>
+              <span className="ff-collapse-summary-text">
+                <h3>Audit history</h3>
+                <p>Evidence timestamps and audit metadata for all release gates.</p>
+              </span>
+            </summary>
+            <div className="ff-collapse-section-body">
+              <DataTable
+                data={auditData}
+                columns={auditColumns}
+                rowKey={(row) => row.key}
+                enablePagination={false}
+                showSearch={false}
+                showPresets={false}
+                enableColumnVisibility={false}
+                density="compact"
+              />
+            </div>
+          </details>
+        </>
       ) : null}
-    </section>
+    </RegistryManagementPage>
   );
 }

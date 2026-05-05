@@ -121,12 +121,14 @@ export function SettingsPage() {
                 disabled: true,
               },
         ]}
-        badges={[
-          { label: accessLabel, tone: accessTone },
-          { label: `${settings.length} mutable settings`, tone: settings.length > 0 ? "success" : "warning" },
-        ]}
         note="Settings stay organized by operational area. Each setting shows its current value, override status, and risk level at a glance. Audit history and technical metadata are available but collapsed by default."
       />
+
+      {/* ── Inline status summary ── */}
+      <p className="fg-muted" style={{ marginBottom: "0.75rem" }}>
+        {settings.length} mutable setting{settings.length === 1 ? "" : "s"}
+        {canMutate ? " · Admin mutation enabled" : " · Read only"}
+      </p>
 
       {error ? <p className="fg-danger">{error}</p> : null}
       {operationMessage ? <p className="fg-muted">{operationMessage}</p> : null}
@@ -174,6 +176,7 @@ export function SettingsPage() {
         visible={confirmDialog.visible}
         item={confirmDialog.item}
         action={confirmDialog.action}
+        draftValue={confirmDialog.draftValue}
         onConfirm={executeConfirmed}
         onCancel={cancelConfirm}
       />

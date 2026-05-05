@@ -13,7 +13,7 @@ export type ComboBoxItem = {
   label: string;
 };
 
-type ComboBoxBaseProps<T extends ComboBoxItem> = {
+export type ComboBoxBaseProps<T extends ComboBoxItem> = {
   label: string;
   /** Items to display in the list. */
   items: Iterable<T>;

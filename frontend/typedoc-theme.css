@@ -1,0 +1,334 @@
+/*
+ * ForgeFrame Frontend — TypeDoc Custom Theme
+ *
+ * A subtle infrastructure-console energy layered onto TypeDoc's default theme.
+ * Cyan/teal identity accent, thin borders, controlled density — keeps the
+ * documentation professional while hinting at a command-center pedigree.
+ *
+ * GridCN design language influences:
+ *   - Cyan/teal as the primary accent (replaces default blue/purple)
+ *   - Thin border discipline on panels and navigation
+ *   - Compact uppercase micro-labels for metadata roles
+ *   - Restrained glow only for active links and search highlights
+ *   - Monospaced accent for code blocks
+ *
+ * NOTE: Dark variables are declared on :root so they're picked up by BOTH
+ * the @media (prefers-color-scheme: dark) path AND the [data-theme="dark"]
+ * selector in TypeDoc's default style.css. See review-issue #1.
+ */
+
+/* ============================================================
+   Border color tokens — referenced by layout rules below
+   ============================================================ */
+:root {
+  --light-border-color: #cdd1dc;
+  --dark-border-color: #1e2030;
+}
+
+/* ============================================================
+   Design Tokens — Light Theme
+   ============================================================ */
+:root,
+[data-theme="light"] {
+  /* Backgrounds — darker base, cooler tone */
+  --light-color-background: #e8eaf0;
+  --light-color-background-secondary: #dcdfe8;
+  --light-color-background-active: #cdd1dc;
+  --light-color-background-warning: #fff3cd;
+
+  /* Text */
+  --light-color-text: #1a1d23;
+  --light-color-contrast-text: #000000;
+  --light-color-text-aside: #5a6072;
+  --light-color-warning-text: #664d03;
+
+  /* Accent — teal-cyan */
+  --light-color-accent: #0891b2;
+  --light-color-active-menu-item: #dce0e8;
+
+  /* Links */
+  --light-color-link: #0e7490;
+  --light-color-focus-outline: #06b6d4;
+
+  /* Icons */
+  --light-color-icon-background: var(--light-color-background);
+  --light-color-icon-text: var(--light-color-text);
+
+  /* Comment tags */
+  --light-color-comment-tag-text: var(--light-color-text);
+  --light-color-comment-tag: var(--light-color-background);
+
+  /* Type-specific colors — teal-tinted semantic palette */
+  --light-color-ts-keyword: #0e7490;
+  --light-color-ts-project: #0891b2;
+  --light-color-ts-module: var(--light-color-ts-project);
+  --light-color-ts-namespace: var(--light-color-ts-project);
+  --light-color-ts-enum: #7c3aed;
+  --light-color-ts-enum-member: var(--light-color-ts-enum);
+  --light-color-ts-variable: #2563eb;
+  --light-color-ts-function: #0891b2;
+  --light-color-ts-class: #0f766e;
+  --light-color-ts-interface: #059669;
+  --light-color-ts-constructor: var(--light-color-ts-class);
+  --light-color-ts-property: #b45309;
+  --light-color-ts-method: #be185d;
+  --light-color-ts-reference: #be185d;
+  --light-color-ts-call-signature: var(--light-color-ts-method);
+  --light-color-ts-index-signature: var(--light-color-ts-property);
+  --light-color-ts-constructor-signature: var(--light-color-ts-constructor);
+  --light-color-ts-parameter: var(--light-color-ts-variable);
+  --light-color-ts-type-parameter: #a16207;
+  --light-color-ts-accessor: #be123c;
+  --light-color-ts-get-signature: var(--light-color-ts-accessor);
+  --light-color-ts-set-signature: var(--light-color-ts-accessor);
+  --light-color-ts-type-alias: #be185d;
+  --light-color-document: #1a1d23;
+
+  /* Alerts */
+  --light-color-alert-note: #0e7490;
+  --light-color-alert-tip: #059669;
+  --light-color-alert-important: #7c3aed;
+  --light-color-alert-warning: #b45309;
+  --light-color-alert-caution: #be123c;
+}
+
+/* ============================================================
+   Design Tokens — Dark Theme
+   Declared on :root so the @media (prefers-color-scheme: dark)
+   path in TypeDoc's style.css picks them up (not just
+   [data-theme="dark"] selectors).
+   ============================================================ */
+:root,
+[data-theme="dark"] {
+  /* Backgrounds — near-black, GridCN-inspired */
+  --dark-color-background: #0a0b10;
+  --dark-color-background-secondary: #0f1119;
+  --dark-color-background-active: #161824;
+  --dark-color-background-warning: #3d3200;
+
+  /* Text */
+  --dark-color-text: #e2e4eb;
+  --dark-color-contrast-text: #ffffff;
+  --dark-color-text-aside: #9499ad;
+  --dark-color-warning-text: #ffd54f;
+
+  /* Accent — teal-cyan */
+  --dark-color-accent: #22d3ee;
+  --dark-color-active-menu-item: #1e2030;
+
+  /* Links */
+  --dark-color-link: #22d3ee;
+  --dark-color-focus-outline: #06b6d4;
+
+  /* Icons */
+  --dark-color-icon-background: var(--dark-color-background-secondary);
+  --dark-color-icon-text: var(--dark-color-text);
+
+  /* Comment tags */
+  --dark-color-comment-tag-text: var(--dark-color-text);
+  --dark-color-comment-tag: var(--dark-color-background);
+
+  /* Type-specific colors — cyan-tinted semantic palette */
+  --dark-color-ts-keyword: #67e8f9;
+  --dark-color-ts-project: #22d3ee;
+  --dark-color-ts-module: var(--dark-color-ts-project);
+  --dark-color-ts-namespace: var(--dark-color-ts-project);
+  --dark-color-ts-enum: #a78bfa;
+  --dark-color-ts-enum-member: var(--dark-color-ts-enum);
+  --dark-color-ts-variable: #60a5fa;
+  --dark-color-ts-function: #22d3ee;
+  --dark-color-ts-class: #2dd4bf;
+  --dark-color-ts-interface: #34d399;
+  --dark-color-ts-constructor: var(--dark-color-ts-class);
+  --dark-color-ts-property: #fbbf24;
+  --dark-color-ts-method: #f472b6;
+  --dark-color-ts-reference: #f472b6;
+  --dark-color-ts-call-signature: var(--dark-color-ts-method);
+  --dark-color-ts-index-signature: var(--dark-color-ts-property);
+  --dark-color-ts-constructor-signature: var(--dark-color-ts-constructor);
+  --dark-color-ts-parameter: var(--dark-color-ts-variable);
+  --dark-color-ts-type-parameter: #f59e0b;
+  --dark-color-ts-accessor: #fb7185;
+  --dark-color-ts-get-signature: var(--dark-color-ts-accessor);
+  --dark-color-ts-set-signature: var(--dark-color-ts-accessor);
+  --dark-color-ts-type-alias: #f472b6;
+  --dark-color-document: #e2e4eb;
+
+  /* Alerts */
+  --dark-color-alert-note: #22d3ee;
+  --dark-color-alert-tip: #34d399;
+  --dark-color-alert-important: #a78bfa;
+  --dark-color-alert-warning: #fbbf24;
+  --dark-color-alert-caution: #fb7185;
+}
+
+/* ============================================================
+   @media (prefers-color-scheme: dark) — ensures OS-level
+   dark mode users get custom colors even without having
+   explicitly toggled the theme.
+   ============================================================ */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --color-background: var(--dark-color-background);
+    --color-background-secondary: var(--dark-color-background-secondary);
+    --color-background-active: var(--dark-color-background-active);
+    --color-background-warning: var(--dark-color-background-warning);
+    --color-text: var(--dark-color-text);
+    --color-text-aside: var(--dark-color-text-aside);
+    --color-link: var(--dark-color-link);
+    --color-accent: var(--dark-color-accent);
+    --color-icon-background: var(--dark-color-icon-background);
+    --color-icon-text: var(--dark-color-icon-text);
+  }
+}
+
+/* ============================================================
+   Toolbar — thin border, no shadow
+   ============================================================ */
+.tsd-page-toolbar {
+  border-bottom: 1px solid var(--light-border-color, currentColor);
+  box-shadow: none;
+}
+
+/* ============================================================
+   Navigation — compact, link-style indicators
+   ============================================================ */
+.tsd-navigation {
+  border-right: 1px solid var(--light-border-color, transparent);
+}
+
+.tsd-navigation a {
+  border-left: 2px solid transparent;
+  transition: border-color 0.15s ease, color 0.15s ease;
+  padding-left: 0.75rem;
+}
+
+.tsd-navigation a:hover {
+  border-left-color: var(--light-color-accent, #0891b2);
+  text-decoration: none;
+}
+
+.tsd-navigation .current {
+  border-left-color: var(--light-color-accent, #0891b2);
+  font-weight: 600;
+}
+
+#tsd-sidebar-links a {
+  font-size: 0.8125rem;
+  letter-spacing: 0.02em;
+}
+
+/* ============================================================
+   Typography — subtle technical precision
+   ============================================================ */
+.tsd-page-title h1 {
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.tsd-breadcrumb {
+  font-size: 0.8125rem;
+  letter-spacing: 0.02em;
+}
+
+/* ============================================================
+   Code blocks — terminal accent, no rounded corners
+   ============================================================ */
+pre {
+  border-radius: 0;
+  font-size: 0.8125rem;
+}
+
+code {
+  font-size: 0.8125rem;
+}
+
+.tsd-code-tabs button {
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  font-size: 0.6875rem;
+}
+
+/* ============================================================
+   Signatures and parameters — bordered panels
+   ============================================================ */
+.tsd-signature {
+  border-radius: 0;
+  padding: 1rem;
+}
+
+.tsd-parameter-list,
+.tsd-type-parameters {
+  border-radius: 0;
+}
+
+/* ============================================================
+   Tables — compact data-grid styling
+   ============================================================ */
+.tsd-table {
+  border-radius: 0;
+}
+
+.tsd-table th {
+  text-transform: uppercase;
+  font-size: 0.6875rem;
+  letter-spacing: 0.06em;
+  font-weight: 600;
+}
+
+.tsd-table td {
+  font-size: 0.8125rem;
+}
+
+/* ============================================================
+   Details / accordions — clean, no decoration
+   ============================================================ */
+.tsd-accordion-summary {
+  border-radius: 0;
+}
+
+/* ============================================================
+   Search — clean input, accent focus
+   ============================================================ */
+.tsd-search-query {
+  border-radius: 0;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.875rem;
+}
+
+.tsd-search-results mark {
+  padding: 0 0.15em;
+}
+
+/* ============================================================
+   Dark theme overrides
+   ============================================================ */
+[data-theme="dark"] .tsd-page-toolbar {
+  border-bottom-color: var(--dark-border-color);
+}
+
+[data-theme="dark"] .tsd-navigation {
+  border-right-color: var(--dark-border-color);
+}
+
+[data-theme="dark"] .tsd-navigation a:hover {
+  border-left-color: var(--dark-color-accent, #22d3ee);
+}
+
+[data-theme="dark"] .tsd-navigation .current {
+  border-left-color: var(--dark-color-accent, #22d3ee);
+}
+
+/* ============================================================
+   Mobile — preserve readability
+   ============================================================ */
+@media (max-width: 768px) {
+  .tsd-navigation {
+    border-right: none;
+    border-bottom: 1px solid transparent;
+  }
+
+  .tsd-page-title h1 {
+    font-size: 1.25rem;
+  }
+}

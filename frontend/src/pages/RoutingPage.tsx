@@ -19,10 +19,10 @@ import {
   type RoutingPolicyRecord,
   type RoutingCircuitRecord,
 } from "../api/domain/routing";
-import { InstanceScopeCard } from "../components/InstanceScopeCard";
-import { PageIntro } from "../components/PageIntro";
-import { AdvancedDiagnostics } from "../components/ui/AdvancedDiagnostics";
-import { ErrorState, LoadingState, PermissionState } from "../components/ui/StateBlocks";
+import { RegistryManagementPage } from "../components/page-templates";
+import type { AttentionPayload } from "../components/ui/models/attention";
+import { Button } from "../components/ui/Button";
+import type { SummaryStripItem } from "../components/ui/SummaryStrip";
 
 import {
   RoutingStatusHero,
@@ -35,7 +35,6 @@ import {
   RoutingDecisionsList,
   RoutingTargetReference,
   toneForStatus,
-  routingBlockers,
   liveStatus,
   toPolicyDraft,
   formatJson,
@@ -61,8 +60,11 @@ import type {
 
 /**
  * ForgeFrame Smart Execution Routing page.
- * Request classification, target selection stages, budget and circuit guardrails,
- * and explainable decision history — in one focused surface.
+ * Policy, budget, and circuit guardrails with explainable decision history.
+ *
+ * Conforms to the Registry Management pattern. Wraps routing feature modules
+ * in RegistryManagementPage with scope indicator, summary strip, attention
+ * handling, and collapsed diagnostics.
  */
 export function RoutingPage() {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -147,7 +149,6 @@ export function RoutingPage() {
   const recentDecisions = snapshot?.recent_decisions ?? [];
   const budget = snapshot?.budget;
   const statusKey = liveStatus(snapshot);
-  const blockers = routingBlockers(snapshot);
   const simSummaryStr = simulationSummary(simulationResult ?? undefined);
 
   const providerOptions = useMemo(
@@ -299,59 +300,112 @@ export function RoutingPage() {
     await runSimulation(nextForm);
   };
 
-  return (
-    <section className="fg-page">
-      <PageIntro
+  // ── Scope config ───────────────────────────────────────
+  const scopeConfig = selectedInstance
+    ? {
+        label: selectedInstance.display_name,
+        onChange: instanceId
+          ? () => onInstanceChange(null)
+          : undefined,
+      }
+    : undefined;
+
+  // ── Attention items ────────────────────────────────────
+  const attentionItems: AttentionPayload[] = [];
+
+  if (!canReadRouting) {
+    attentionItems.push({
+      key: "access-blocked",
+      level: "primary_blocker",
+      title: "Routing review unavailable",
+      description: "This session does not hold routing.read on the active instance scope.",
+    });
+  } else if (state === "error") {
+    attentionItems.push({
+      key: "load-error",
+      level: "primary_blocker",
+      title: "Routing control plane failed to load",
+      description: loadError || "Routing state could not be loaded.",
+    });
+  } else if (state === "loading" && !snapshot) {
+    attentionItems.push({
+      key: "loading",
+      level: "informational",
+      title: "Loading routing control plane \u2014 restoring policy truth, budget posture, circuit state, target inventory, and recent decision explainability.",
+    });
+  }
+
+  // ── Summary items ──────────────────────────────────────
+  const summaryItems: SummaryStripItem[] | undefined = snapshot
+    ? [
+        {
+          key: "policies",
+          label: "Policies",
+          value: policies.length,
+          tone: policies.length >= 2 ? "success" : "warning",
+          status: policies.length >= 2 ? "ready" : "partial",
+        },
+        {
+          key: "open-circuits",
+          label: "Open circuits",
+          value: circuits.filter((c) => c.state === "open").length,
+          tone: circuits.filter((c) => c.state === "open").length === 0 ? "success" : "warning",
+          status: circuits.filter((c) => c.state === "open").length === 0 ? "ready" : "open",
+        },
+        {
+          key: "budget",
+          label: "Budget",
+          value: budget?.hard_blocked ? "Hard blocked" : "Open",
+          tone: budget?.hard_blocked ? "danger" : "success",
+          status: budget?.hard_blocked ? "blocked" : "ready",
+        },
+      ]
+    : undefined;
+
+  // ── Access gate ───────────────────────────────────────
+  if (!canReadRouting) {
+    return (
+      <RegistryManagementPage
         eyebrow="Routing"
         title="Smart Execution Routing"
-        description="Request classification, target selection stages, budget and circuit guardrails, and explainable decision history — in one focused surface."
-        question="Which routing class applies, which targets are allowed to compete, and what will block or redirect traffic before runtime touches a provider?"
-        badges={[
-          { label: `${policies.length} policies`, tone: policies.length >= 2 ? "success" : "warning" },
-          { label: `${circuits.filter((c) => c.state === "open").length} open circuits`, tone: circuits.filter((c) => c.state === "open").length === 0 ? "success" : "warning" },
-          { label: budget?.hard_blocked ? "Budget hard blocked" : "Budget open", tone: budget?.hard_blocked ? "danger" : "success" },
-          ...(selectedInstance ? [{ label: `${selectedInstance.display_name}`, tone: "success" as const }] : []),
-        ]}
-        note="Simulation and recent-decision explainability are backed by persisted routing policy, budget state, target truth, and the routing ledger."
+        description="Request classification, target selection stages, budget and circuit guardrails, and explainable decision history \u2014 in one focused surface."
+        isEmpty
+        emptyTitle="Routing review unavailable"
+        emptyDescription="This session does not hold routing.read on the active instance scope."
       />
+    );
+  }
 
-      <InstanceScopeCard
-        instanceId={instanceId}
-        selectedInstance={selectedInstance}
-        instances={instances}
-        loadState={loadState}
-        error={instancesError}
-        surfaceLabel="routing control plane"
-        onInstanceChange={onInstanceChange}
-      />
+  return (
+    <RegistryManagementPage
+      eyebrow="Routing"
+      title="Smart Execution Routing"
+      description="Request classification, target selection stages, budget and circuit guardrails, and explainable decision history \u2014 in one focused surface."
+      scope={scopeConfig}
+      attentionItems={attentionItems}
+      summaryItems={summaryItems}
+      diagnostics={
+        <pre>{formatJson({ snapshot, policyDrafts, budgetDraft, circuitDrafts, simulationForm, simulationHistory })}</pre>
+      }
+      diagnosticsTitle="Routing raw truth"
+    >
+      {/* Inline loading message when snapshot exists but refreshing */}
+      {state === "loading" ? <p className="fg-muted">Refreshing routing state.</p> : null}
 
-      {!canReadRouting ? (
-        <PermissionState
-          title="Routing review unavailable"
-          description="This session does not hold routing.read on the active instance scope."
-        />
-      ) : null}
-
-      {state === "loading" && !snapshot ? (
-        <LoadingState
-          title="Loading routing control plane"
-          description="Restoring policy truth, budget posture, circuit state, target inventory, and recent decision explainability."
-        />
-      ) : null}
-
+      {/* Inline error with retry action */}
       {state === "error" ? (
-        <ErrorState
-          title="Routing control plane failed to load"
-          description={loadError || "Routing state could not be loaded."}
-          action={<button type="button" onClick={() => void load()}>Retry</button>}
-        />
+        <div className="fg-danger mb-2">
+          <p>{loadError || "Routing state could not be loaded."}</p>
+          <Button variant="secondary" onPress={() => void load()}>Retry</Button>
+        </div>
       ) : null}
 
-      {snapshot && canReadRouting ? (
-        <>
-          {state === "loading" ? <p className="fg-muted">Refreshing routing state.</p> : null}
-          {actionError ? <p className="fg-danger">{actionError}</p> : null}
+      {/* Action-level error */}
+      {actionError ? <p className="fg-danger">{actionError}</p> : null}
 
+      {/* Main content when snapshot is loaded */}
+      {snapshot ? (
+        <>
           {/* ── Status Hero ── */}
           <RoutingStatusHero
             snapshot={snapshot}
@@ -364,7 +418,6 @@ export function RoutingPage() {
 
           {/* ── Action Bar ── */}
           <RoutingActionBar
-            instanceId={instanceId}
             canMutate={canMutate}
             canRead={canReadRouting}
             onRefresh={() => void load()}
@@ -479,21 +532,8 @@ export function RoutingPage() {
 
           {/* Target Reference — moved from sidebar to expandable diagnostics panel */}
           <RoutingTargetReference snapshot={snapshot} />
-
-          {/**
-           * Bottom raw-truth diagnostics.
-           * Moved to the very bottom so the page stays operational first.
-           */}
-          <AdvancedDiagnostics
-            title="Routing raw truth"
-            description="This stays collapsed so the page remains operational first. Open it when you need the exact snapshot or local draft state."
-            status={state}
-            statusTone="neutral"
-          >
-            <pre>{formatJson({ snapshot, policyDrafts, budgetDraft, circuitDrafts, simulationForm, simulationHistory })}</pre>
-          </AdvancedDiagnostics>
         </>
       ) : null}
-    </section>
+    </RegistryManagementPage>
   );
 }

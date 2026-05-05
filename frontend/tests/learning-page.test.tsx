@@ -393,8 +393,8 @@ describe("learning page", () => {
     expect(fetchLearningEventsMock).toHaveBeenCalledWith("instance_alpha", { status: "all", triggerKind: "all", limit: 100 });
     expect(fetchLearningEventDetailMock).toHaveBeenCalledWith("learning_suggested", "instance_alpha");
 
-    expect(container.textContent).toContain("View memory");
-    expect(container.textContent).toContain("View draft skills");
+    // Page description matches the Review Queue template
+    expect(container.textContent).toContain("Review learning suggestions");
 
     // Summary hero stats
     expect(container.textContent).toContain("Total events");

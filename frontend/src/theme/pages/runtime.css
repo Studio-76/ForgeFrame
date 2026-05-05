@@ -253,10 +253,10 @@ details summary {
 
 .ff-page-header-panel {
   display: grid;
-  gap: var(--fg-space-3);
+  gap: var(--fg-space-2);
   border: 1px solid var(--fg-color-border-default);
   border-radius: var(--fg-radius-lg);
-  padding: var(--fg-space-4);
+  padding: var(--fg-space-3);
   background:
     radial-gradient(
       circle at top right,
@@ -387,8 +387,8 @@ details summary {
 .ff-action-bar,
 .ff-detail-panel {
   display: grid;
-  gap: var(--fg-space-3);
-  padding: var(--fg-space-4);
+  gap: var(--fg-space-2);
+  padding: var(--fg-space-3);
 }
 
 .ff-action-bar-copy h2 {
@@ -404,8 +404,8 @@ details summary {
 
 .ff-summary-strip {
   display: grid;
-  gap: var(--fg-space-3);
-  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: var(--fg-space-2);
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
 }
 .ff-operator-layout {
   display: grid;

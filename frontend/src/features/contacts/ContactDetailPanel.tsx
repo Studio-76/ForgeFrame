@@ -12,10 +12,8 @@ import { type FormEvent, useState } from "react";
 import { Link } from "react-router-dom";
 import type { ContactDetail } from "../../api/domain";
 import { buildConversationPath, buildKnowledgeSourcePath, buildMemoryPath, buildNotificationPath, buildTaskPath } from "../../app/workInteractionRoutes";
-import { CONTROL_PLANE_ROUTES } from "../../app/navigation";
-import { normalizeOptional } from "../../pages/workInteractionPageSupport";
 import { DEFAULT_EDIT_FORM, VISIBILITY_OPTIONS, type EditContactForm } from "./types";
-import { buildInventoryPath, consentTone, formatTimestamp, routeStatusTone, statusTone } from "./utils";
+import { consentTone, formatTimestamp, routeStatusTone, statusTone } from "./utils";
 
 /** Props for ContactDetailPanel. */
 export interface ContactDetailPanelProps {
@@ -374,7 +372,7 @@ export function ContactDetailPanel({
                 Status
                 <select
                   value={editForm.status}
-                  onChange={(event) => setEditForm((current) => ({ ...current, status: event.target.value as import("../../api/domain").ContactStatus }))}
+                  onChange={(event) => setEditForm((current) => ({ ...current, status: event.target.value as EditContactForm["status"] }))}
                 >
                   <option value="active">Active</option>
                   <option value="snoozed">Snoozed</option>
@@ -399,7 +397,7 @@ export function ContactDetailPanel({
                 Visibility scope
                 <select
                   value={editForm.visibilityScope}
-                  onChange={(event) => setEditForm((current) => ({ ...current, visibilityScope: event.target.value as import("../../api/domain").VisibilityScope }))}
+                  onChange={(event) => setEditForm((current) => ({ ...current, visibilityScope: event.target.value as EditContactForm["visibilityScope"] }))}
                 >
                   {VISIBILITY_OPTIONS.map((option) => (
                     <option key={option} value={option}>{option}</option>

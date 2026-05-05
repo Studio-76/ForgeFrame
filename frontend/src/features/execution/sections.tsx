@@ -49,7 +49,7 @@ import {
 // ScopeFilterCard — compact filter bar (replaces the old large ScopeFilterCard)
 // ---------------------------------------------------------------------------
 
-type ScopeFilterCardProps = {
+export type ScopeFilterCardProps = {
   instanceId: string;
   companyId: string;
   scopeOptionsState: LoadState;

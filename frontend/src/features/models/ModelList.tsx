@@ -1,17 +1,28 @@
+/**
+ * Model inventory table — standardized TanStack DataTable.
+ *
+ * Shows: model name, primary usability state, routing coverage,
+ * verification trust state, last-verified timestamp, and next action.
+ *
+ * @packageDocumentation
+ */
+
 import { useMemo } from "react";
 
 import type { AdminModelRegisterRecord } from "../../api/domain";
 import { StatusBadge } from "../../components/ui/StatusBadge";
-import { EmptyState, LoadingState } from "../../components/ui/StateBlocks";
+import {
+  DataTable,
+  type DataTableColumn,
+} from "../../components/ui/DataTable";
 import {
   deriveNextAction,
   deriveUsabilityState,
   formatCoverage,
-  formatTimestamp,
+  formatTimestamp as formatModelTimestamp,
   isPlaceholderModel,
   isStaleModel,
   modelKey,
-  titleCase,
   toneForUsability,
 } from "./utils";
 import { NEXT_ACTION_LABELS, type LoadState } from "./types";
@@ -37,13 +48,11 @@ export interface ModelListProps {
 }
 
 /**
- * A scannable model inventory table.
+ * A scannable model inventory table built with TanStack DataTable.
  *
  * Each row shows: model name, primary usability state, routing coverage,
  * verification trust state, last-verified timestamp, and next action.
- * Placeholder and stale models are visually de-emphasized. The primary
- * status makes it clear whether a model is ready, needs attention, or is
- * inactive.
+ * Sorting, search, pagination, and column visibility are built in.
  */
 export function ModelList({
   models,
@@ -54,257 +63,172 @@ export function ModelList({
   onSelectModel,
   onRetry,
 }: ModelListProps) {
-  const columns = useMemo(
+  // ── Column definitions ──
+  const columns: DataTableColumn<AdminModelRegisterRecord>[] = useMemo(
     () => [
-      { key: "model", label: "Model", width: "22%" },
-      { key: "status", label: "Status", width: "14%" },
-      { key: "routing", label: "Routing", width: "14%" },
-      { key: "verification", label: "Trust", width: "16%" },
-      { key: "lastVerified", label: "Last verified", width: "14%" },
-      { key: "action", label: "Next action", width: "20%" },
+      {
+        id: "model",
+        header: "Model",
+        accessorFn: (model: AdminModelRegisterRecord) => {
+          const isPlaceholder = isPlaceholderModel(model);
+          const isStale = isStaleModel(model);
+          return (
+            <div className={isPlaceholder || isStale ? "opacity-60" : ""}>
+              <div className="font-medium text-primary">{model.display_name}</div>
+              <div className="text-muted text-xs mt-0.5">{model.provider_label}</div>
+            </div>
+          );
+        },
+        sortingKey: (model: AdminModelRegisterRecord) => model.display_name,
+        alwaysVisible: true,
+      },
+      {
+        id: "status",
+        header: "Status",
+        accessorFn: (model: AdminModelRegisterRecord) => {
+          const usability = deriveUsabilityState(model);
+          const isPlaceholder = isPlaceholderModel(model);
+          return (
+            <div>
+              <StatusBadge tone={toneForUsability(usability)} status={usability}>
+                {usability.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())}
+              </StatusBadge>
+              {isPlaceholder ? (
+                <div className="text-muted text-xs mt-0.5">Not production-ready</div>
+              ) : null}
+            </div>
+          );
+        },
+        sortingKey: (model: AdminModelRegisterRecord) => deriveUsabilityState(model),
+      },
+      {
+        id: "routing",
+        header: "Routing",
+        accessorFn: (model: AdminModelRegisterRecord) => (
+          <StatusBadge
+            tone={
+              model.target_count === 0
+                ? "neutral"
+                : model.routing_target_count === model.target_count
+                  ? "success"
+                  : model.routing_target_count > 0
+                    ? "warning"
+                    : "danger"
+            }
+            status={
+              model.target_count === 0
+                ? "unconfigured"
+                : model.routing_target_count === model.target_count
+                  ? "covered"
+                  : "partial"
+            }
+          >
+            {formatCoverage(model)}
+          </StatusBadge>
+        ),
+        sortingKey: (model: AdminModelRegisterRecord) =>
+          `${model.routing_target_count}/${model.target_count}`,
+      },
+      {
+        id: "trust",
+        header: "Trust",
+        accessorFn: (model: AdminModelRegisterRecord) => (
+          <StatusBadge
+            tone={
+              model.trust_status === "tested"
+                ? "success"
+                : model.trust_status === "observed"
+                  ? "info"
+                  : model.trust_status === "verification_failed"
+                    ? "danger"
+                    : "warning"
+            }
+            status={model.trust_status}
+          >
+            {model.trust_status === "tested"
+              ? "Verified"
+              : model.trust_status === "declared_only"
+                ? "Not verified"
+                : model.trust_status?.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()) ?? "Unknown"}
+          </StatusBadge>
+        ),
+        sortingKey: (model: AdminModelRegisterRecord) => model.trust_status ?? "",
+      },
+      {
+        id: "last_verified",
+        header: "Last verified",
+        accessorFn: (model: AdminModelRegisterRecord) => (
+          <span className="text-muted text-xs">
+            {formatModelTimestamp(model.last_probe_at ?? model.last_seen_at)}
+          </span>
+        ),
+        sortingKey: (model: AdminModelRegisterRecord) =>
+          model.last_probe_at ?? model.last_seen_at ?? "",
+        isTechnical: true,
+      },
+      {
+        id: "next_action",
+        header: "Next action",
+        accessorFn: (model: AdminModelRegisterRecord) => {
+          const usability = deriveUsabilityState(model);
+          const action = deriveNextAction(model);
+          const isPlaceholder = isPlaceholderModel(model);
+
+          if (action !== "none") {
+            return (
+              <span className="text-xs font-medium text-warning">
+                {NEXT_ACTION_LABELS[action]}
+              </span>
+            );
+          }
+          if (usability === "ready") {
+            return (
+              <span className="text-xs font-medium text-success">
+                In service
+              </span>
+            );
+          }
+          if (isPlaceholder) {
+            return (
+              <span className="text-xs text-muted">Replace placeholder</span>
+            );
+          }
+          return <span className="text-xs text-muted">{"\u2014"}</span>;
+        },
+        sortingKey: (model: AdminModelRegisterRecord) => deriveNextAction(model),
+      },
     ],
     [],
   );
 
-  if (state === "loading") {
-    return (
-      <LoadingState
-        title="Loading model register"
-        description="Fetching the latest routing, target, and verification data."
-      />
-    );
-  }
-
-  if (state === "error") {
-    return (
-      <div className="ff-state-block" data-state="error">
-        <strong>Failed to load model register</strong>
-        <p>{error || "Model register could not be loaded."}</p>
-        <div className="ff-state-actions">
-          <button type="button" onClick={onRetry}>
-            Retry
-          </button>
-        </div>
-      </div>
-    );
-  }
-
-  if (state === "success" && models.length === 0) {
-    return (
-      <EmptyState
-        title="No models match the current filters"
-        description="Try adjusting the filter or search to find matching models."
-      />
-    );
-  }
+  // ── Handle row click → select model ──
+  const handleRowClick = (model: AdminModelRegisterRecord) => {
+    onSelectModel(modelKey(model));
+  };
 
   return (
-    <section className="ff-table-card">
-      <div className="ff-table-card-header">
-        <div>
-          <h3>Model inventory</h3>
-        </div>
-        <div>
-          <span className="fg-pill" data-tone="neutral">
-            {models.length} of {totalCount}
-          </span>
-        </div>
-      </div>
-
-      {state === "success" && models.length > 0 ? (
-        <div className="ff-table-scroll">
-          <table className="ff-data-table" aria-label="Model register">
-            <thead>
-              <tr>
-                {columns.map((col) => (
-                  <th key={col.key} style={{ width: col.width }}>
-                    {col.label}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {models.map((model) => {
-                const key = modelKey(model);
-                const usability = deriveUsabilityState(model);
-                const isSelected = key === selectedModelKey;
-                const isPlaceholder = isPlaceholderModel(model);
-                const isStale = isStaleModel(model);
-
-                return (
-                  <tr
-                    key={key}
-                    onClick={() => onSelectModel(key)}
-                    className={
-                      [
-                        isSelected ? "is-selected" : "",
-                        isPlaceholder || isStale ? "ff-table-row-muted" : "",
-                      ]
-                        .filter(Boolean)
-                        .join(" ") || undefined
-                    }
-                    style={{ cursor: "pointer" }}
-                    title={
-                      isPlaceholder
-                        ? "Placeholder model \u2014 replace with a real provider model"
-                        : isStale
-                          ? "Stale model \u2014 last sync was some time ago"
-                          : `Select ${model.display_name}`
-                    }
-                  >
-                    {/* Model name + provider */}
-                    <td>
-                      <div>
-                        <button
-                          className="fg-table-trigger"
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            onSelectModel(key);
-                          }}
-                        >
-                          {model.display_name}
-                        </button>
-                        <p className="fg-muted" style={{ fontSize: "0.85em" }}>
-                          {model.provider_label}
-                        </p>
-                      </div>
-                    </td>
-
-                    {/* Primary usability state */}
-                    <td>
-                      <StatusBadge tone={toneForUsability(usability)} status={usability}>
-                        {titleCase(usability)}
-                      </StatusBadge>
-                      {isPlaceholder ? (
-                        <span
-                          className="fg-muted"
-                          style={{
-                            display: "block",
-                            fontSize: "0.75em",
-                            marginTop: "0.15rem",
-                          }}
-                        >
-                          Not production-ready
-                        </span>
-                      ) : null}
-                    </td>
-
-                    {/* Routing coverage */}
-                    <td>
-                      <StatusBadge
-                        tone={
-                          model.target_count === 0
-                            ? "neutral"
-                            : model.routing_target_count === model.target_count
-                              ? "success"
-                              : model.routing_target_count > 0
-                                ? "warning"
-                                : "danger"
-                        }
-                        status={
-                          model.target_count === 0
-                            ? "unconfigured"
-                            : model.routing_target_count === model.target_count
-                              ? "covered"
-                              : "partial"
-                        }
-                      >
-                        {formatCoverage(model)}
-                      </StatusBadge>
-                    </td>
-
-                    {/* Verification trust state */}
-                    <td>
-                      <StatusBadge
-                        tone={
-                          model.trust_status === "tested"
-                            ? "success"
-                            : model.trust_status === "observed"
-                              ? "info"
-                              : model.trust_status === "verification_failed"
-                                ? "danger"
-                                : "warning"
-                        }
-                        status={model.trust_status}
-                      >
-                        {model.trust_status === "tested"
-                          ? "Verified"
-                          : model.trust_status === "declared_only"
-                            ? "Not verified"
-                            : titleCase(model.trust_status)}
-                      </StatusBadge>
-                    </td>
-
-                    {/* Last verified */}
-                    <td>
-                      <span className="fg-muted" style={{ fontSize: "0.85em" }}>
-                        {formatTimestamp(model.last_probe_at ?? model.last_seen_at)}
-                      </span>
-                    </td>
-
-                    {/* Next action */}
-                    <td>
-                      {(() => {
-                        const action = deriveNextAction(model);
-                        if (action !== "none") {
-                          return (
-                            <span
-                              style={{
-                                fontSize: "0.85em",
-                                fontWeight: 500,
-                                color: "var(--fg-color-status-warning)",
-                              }}
-                            >
-                              {NEXT_ACTION_LABELS[action]}
-                            </span>
-                          );
-                        }
-                        if (usability === "ready") {
-                          return (
-                            <span
-                              style={{
-                                fontSize: "0.85em",
-                                color: "var(--fg-color-status-success)",
-                                fontWeight: 500,
-                              }}
-                            >
-                              In service
-                            </span>
-                          );
-                        }
-                        if (isPlaceholder) {
-                          return (
-                            <span
-                              className="fg-muted"
-                              style={{ fontSize: "0.85em" }}
-                            >
-                              Replace placeholder
-                            </span>
-                          );
-                        }
-                        return (
-                          <span className="fg-muted" style={{ fontSize: "0.85em" }}>
-                            {"\u2014"}
-                          </span>
-                        );
-                      })()}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      ) : null}
-
-      {models.length > 0 ? (
-        <div className="ff-table-card-footer">
-          <p className="fg-muted">
-            Click a row to inspect details and remediation options.
-          </p>
-        </div>
-      ) : null}
-    </section>
+    <DataTable<AdminModelRegisterRecord>
+      data={models}
+      columns={columns}
+      rowKey={(model) => modelKey(model)}
+      // Selection
+      selectedRowId={selectedModelKey}
+      onRowClick={handleRowClick}
+      // States
+      loading={state === "loading"}
+      error={state === "error" ? error || "Failed to load model register." : null}
+      onRetry={onRetry}
+      emptyTitle="No models match the current filters"
+      emptyDescription="Try adjusting the filter or search to find matching models."
+      // Pagination
+      enablePagination={true}
+      pageSize={20}
+      // Layout
+      title={`Model inventory (${models.length} of ${totalCount})`}
+      density="default"
+      enableColumnVisibility={true}
+      showSearch={true}
+      searchPlaceholder="Search models..."
+    />
   );
 }

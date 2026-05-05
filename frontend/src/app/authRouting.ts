@@ -5,7 +5,7 @@ import { CONTROL_PLANE_ROUTES } from "./navigation";
 
 export type SessionShellMode = "signed_out" | "password_rotation" | "control_plane";
 
-type SessionRouteStateArgs = {
+export type SessionRouteStateArgs = {
   pathname: string;
   requestedPath: string;
   hasToken: boolean;

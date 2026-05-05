@@ -7,6 +7,7 @@
 
 import type { ContactDetail, ContactRouteStatus, ContactStatus } from "../../api/domain";
 import { CONTROL_PLANE_ROUTES } from "../../app/navigation";
+import { buildContactPath as buildContactPathCanonical } from "../../app/workInteractionRoutes";
 import { normalizeOptional, parseJsonObject } from "../../pages/workInteractionPageSupport";
 import type { ContactSummaryCounts, EditContactForm } from "./types";
 
@@ -44,17 +45,13 @@ export function buildInventoryPath(path: string, instanceId: string): string {
 
 /**
  * Build a contact detail path with instanceId and contactId parameters.
+ * Delegates to the canonical version in workInteractionRoutes.
  * @param instanceId - The instance ID.
  * @param contactId - The contact ID.
  * @returns Full URL path for the contact.
  */
 export function buildContactPath(instanceId: string, contactId: string): string {
-  const search = new URLSearchParams();
-  if (instanceId.trim()) {
-    search.set("instanceId", instanceId.trim());
-  }
-  search.set("contactId", contactId);
-  return `${CONTROL_PLANE_ROUTES.contacts}?${search.toString()}`;
+  return buildContactPathCanonical({ instanceId, contactId });
 }
 
 /**

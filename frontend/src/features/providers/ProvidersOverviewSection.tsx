@@ -2,7 +2,7 @@ import type { ProvidersPageActions, ProvidersPageData } from "./providersShared"
 import { formatMetric, toBooleanValue } from "./providersShared";
 import { MetricTile, SectionCard } from "./providersSectionUtils";
 
-type SectionProps = {
+export type SectionProps = {
   data: ProvidersPageData;
   actions: ProvidersPageActions;
 };

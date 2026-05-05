@@ -74,3 +74,11 @@
   min-width: 0;
   flex: 1 1 220px;
 }
+
+.fg-inline-form-compact {
+  gap: var(--fg-space-2);
+}
+
+.fg-inline-form-compact > * {
+  flex: 1 1 160px;
+}
