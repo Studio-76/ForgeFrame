@@ -9,6 +9,8 @@
     "typecheck": "tsc --noEmit",
     "lint": "npm run typecheck",
     "build": "vite build && node scripts/docs-if-changed.mjs",
+    "analyze": "VISUALIZE=1 npm run build",
+    "size:check": "node scripts/check-bundle-budgets.mjs",
     "preview": "vite preview",
     "test": "vitest run",
     "docs": "typedoc",

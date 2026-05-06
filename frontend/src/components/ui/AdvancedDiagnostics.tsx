@@ -18,7 +18,13 @@
  * @module
  */
 
-import { useCallback, type ReactNode } from "react";
+import {
+  useCallback,
+  useMemo,
+  useState,
+  type ReactNode,
+  type SyntheticEvent,
+} from "react";
 
 import type { StatusTone, UxMetadata } from "./types";
 import { uxAttributes } from "./types";
@@ -88,18 +94,24 @@ export function AdvancedDiagnostics({
   panelId,
   ux,
 }: AdvancedDiagnosticsProps) {
+  const [localOpen, setLocalOpen] = useState(defaultOpen);
   // When panelId is provided, sync expansion with the shared panel store.
   const diagnosticsExpanded = usePanelStore(
-    useCallback((s) => (panelId ? (s.diagnosticsExpanded[panelId] ?? defaultOpen) : undefined), [panelId, defaultOpen]),
+    useCallback((s) => (
+      panelId !== undefined ? (s.diagnosticsExpanded[panelId] ?? defaultOpen) : undefined
+    ), [panelId, defaultOpen]),
   );
   const setDiagnosticsExpanded = usePanelStore((s) => s.setDiagnosticsExpanded);
 
-  const isOpen = panelId !== undefined ? diagnosticsExpanded : defaultOpen;
+  const isOpen = panelId !== undefined ? diagnosticsExpanded : localOpen;
 
   const handleToggle = useCallback(
-    (e: React.SyntheticEvent<HTMLDetailsElement>) => {
-      if (panelId) {
-        setDiagnosticsExpanded(panelId, (e.target as HTMLDetailsElement).open);
+    (e: SyntheticEvent<HTMLDetailsElement>) => {
+      const expanded = e.currentTarget.open;
+      if (panelId !== undefined) {
+        setDiagnosticsExpanded(panelId, expanded);
+      } else {
+        setLocalOpen(expanded);
       }
     },
     [panelId, setDiagnosticsExpanded],
@@ -123,7 +135,7 @@ export function AdvancedDiagnostics({
           </StatusBadge>
         ) : null}
       </summary>
-      <div className="ff-advanced-diagnostics-body">{children}</div>
+      {isOpen ? <div className="ff-advanced-diagnostics-body">{children}</div> : null}
     </details>
   );
 }
@@ -160,10 +172,16 @@ export function DiagnosticSection({
   summary,
   defaultOpen = false,
 }: DiagnosticSectionProps) {
+  const [isOpen, setIsOpen] = useState(defaultOpen);
+  const handleToggle = useCallback((e: SyntheticEvent<HTMLDetailsElement>) => {
+    setIsOpen(e.currentTarget.open);
+  }, []);
+
   return (
     <details
       className="ff-diagnostic-section"
-      open={defaultOpen}
+      open={isOpen}
+      onToggle={handleToggle}
     >
       <summary>
         <span className="font-mono text-meta text-muted font-semibold">{label}</span>
@@ -171,7 +189,7 @@ export function DiagnosticSection({
           <span className="text-meta text-muted ml-2">{summary}</span>
         ) : null}
       </summary>
-      <div className="ff-diagnostic-section-body pt-2">{children}</div>
+      {isOpen ? <div className="ff-diagnostic-section-body pt-2">{children}</div> : null}
     </details>
   );
 }
@@ -198,12 +216,13 @@ export type RawJsonProps = {
  * ```
  */
 export function RawJson({ data, label, maxHeight = 0 }: RawJsonProps) {
-  let formatted: string;
-  try {
-    formatted = JSON.stringify(data, null, 2);
-  } catch {
-    formatted = String(data);
-  }
+  const formatted = useMemo(() => {
+    try {
+      return JSON.stringify(data, null, 2);
+    } catch {
+      return String(data);
+    }
+  }, [data]);
 
   return (
     <div className="ff-diagnostic-block">
@@ -255,11 +274,14 @@ export function PayloadViewer({
   keys,
   redactedKeys = [],
 }: PayloadViewerProps) {
-  const entries = (keys ?? Object.keys(payload)).map((key) => {
-    const raw = payload[key];
-    const isRedacted = redactedKeys.some((k) => k.toLowerCase() === key.toLowerCase());
-    return { key, value: isRedacted ? "••••••••" : formatPayloadValue(raw) };
-  });
+  const entries = useMemo(() => {
+    const redacted = new Set(redactedKeys.map((key) => key.toLowerCase()));
+    return (keys ?? Object.keys(payload)).map((key) => {
+      const raw = payload[key];
+      const isRedacted = redacted.has(key.toLowerCase());
+      return { key, value: isRedacted ? "••••••••" : formatPayloadValue(raw) };
+    });
+  }, [keys, payload, redactedKeys]);
 
   if (entries.length === 0) {
     return null;
@@ -630,8 +652,12 @@ export function RawLog({ entries, label, maxLines = 50 }: RawLogProps) {
     );
   }
 
-  const displayed = maxLines > 0 ? entries.slice(0, maxLines) : entries;
+  const displayed = useMemo(
+    () => (maxLines > 0 ? entries.slice(0, maxLines) : entries),
+    [entries, maxLines],
+  );
   const truncated = entries.length > maxLines;
+  const logText = useMemo(() => displayed.join("\n"), [displayed]);
 
   return (
     <div className="ff-diagnostic-block">
@@ -641,7 +667,7 @@ export function RawLog({ entries, label, maxLines = 50 }: RawLogProps) {
         </span>
       ) : null}
       <pre className="ff-diagnostic-code max-h-[400px] overflow-y-auto">
-        <code>{displayed.join("\n")}</code>
+        <code>{logText}</code>
       </pre>
       {truncated ? (
         <span className="text-meta text-muted italic mt-1 block">

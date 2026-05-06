@@ -304,12 +304,10 @@ describe("Providers page hierarchy", () => {
     expect(markup).toContain("local / ollama");
     expect(markup).toContain("Disabled");
     expect(markup).toContain("Activate");
-    // Access
-    expect(markup).toContain("Admin mutations enabled");
-    // Related pages
-    expect(markup).toContain("Setup progress");
-    expect(markup).toContain("Provider Targets");
-    expect(markup).toContain("Harness");
+    // Diagnostics are present but lazy-rendered until expanded.
+    expect(markup).toContain("Provider diagnostics");
+    expect(markup).not.toContain("Admin mutations enabled");
+    expect(markup).not.toContain("Setup progress");
     // No legacy sections
     expect(markup).not.toContain(">Provider Runtime Inventory</h3>");
     expect(markup).not.toContain(">Provider Health &amp; Runs</h3>");
@@ -412,11 +410,10 @@ describe("Providers page hierarchy", () => {
       }),
     );
 
-    expect(alphaMarkup).toContain("Operator mutations enabled");
     expect(alphaMarkup).toContain("Sync all");
     expect(betaMarkup).not.toContain("Operator mutations enabled");
     expect(betaMarkup).not.toContain("Sync all");
-    expect(betaMarkup).toContain("Operate only");
+    expect(betaMarkup).toContain("This session can inspect provider inventory and health here");
   });
 
   it("shows read-only copy for impersonated sessions before the page surfaces actions", () => {
@@ -428,7 +425,7 @@ describe("Providers page hierarchy", () => {
       }),
     );
 
-    expect(markup).toContain("Read only session");
+    expect(markup).toContain("Read-only sessions");
     expect(markup).toContain("provider inventory and health here");
     expect(markup).toContain("OAuth/account targets live on the dedicated OAuth Targets route");
     expect(markup).toContain("dedicated harness state, runs, plus redacted harness exports stay on the Harness route");

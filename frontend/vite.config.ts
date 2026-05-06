@@ -2,6 +2,7 @@
 import tailwindcss from "@tailwindcss/vite";
 import { defineConfig, type PluginOption } from "vite";
 import react from "@vitejs/plugin-react";
+import { analyzer, type AnalyzerPluginOptions } from "vite-bundle-analyzer";
 
 /**
  * Opt-in bundle analyzer — set VISUALIZE=1 to generate a treemap report.
@@ -12,11 +13,7 @@ function bundleAnalyzerPlugin(): PluginOption {
     return { name: "bundle-analyzer" };
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-require-imports -- dynamic require for opt-in tooling
-  const { analyzer } = require("vite-bundle-analyzer") as {
-    analyzer: (opts: { enabled: boolean; analyzerMode: string; fileName: string; defaultSizes: string; reportTitle: string; openAnalyzer?: boolean; summary?: boolean }) => PluginOption;
-  };
-  return analyzer({
+  const analyzerOptions: AnalyzerPluginOptions = {
     enabled: true,
     analyzerMode: "static",
     fileName: "stats.html",
@@ -24,7 +21,9 @@ function bundleAnalyzerPlugin(): PluginOption {
     reportTitle: "ForgeFrame Frontend Bundle Analysis",
     openAnalyzer: false,
     summary: true,
-  }) as PluginOption;
+  };
+
+  return analyzer(analyzerOptions) as PluginOption;
 }
 
 export default defineConfig({

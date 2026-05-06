@@ -149,16 +149,16 @@ describe("useTableUiStore", () => {
 
   it("toggleRowExpanded toggles state", () => {
     useTableUiStore.getState().toggleRowExpanded("skills:main", "row-1");
-    expect(useTableUiStore.getState().expandedRows["skills:main"]?.has("row-1")).toBe(true);
+    expect(useTableUiStore.getState().expandedRows["skills:main"]?.["row-1"]).toBe(true);
 
     useTableUiStore.getState().toggleRowExpanded("skills:main", "row-1");
-    expect(useTableUiStore.getState().expandedRows["skills:main"]?.has("row-1")).toBe(false);
+    expect(useTableUiStore.getState().expandedRows["skills:main"]?.["row-1"]).toBeUndefined();
   });
 
   it("expandRow is idempotent", () => {
     useTableUiStore.getState().expandRow("skills:main", "row-1");
     useTableUiStore.getState().expandRow("skills:main", "row-1");
-    expect(useTableUiStore.getState().expandedRows["skills:main"]?.size).toBe(1);
+    expect(Object.keys(useTableUiStore.getState().expandedRows["skills:main"] ?? {})).toHaveLength(1);
   });
 
   it("collapseRow only affects the specified row", () => {
@@ -166,8 +166,8 @@ describe("useTableUiStore", () => {
     useTableUiStore.getState().expandRow("skills:main", "row-2");
     useTableUiStore.getState().collapseRow("skills:main", "row-1");
 
-    expect(useTableUiStore.getState().expandedRows["skills:main"]?.has("row-2")).toBe(true);
-    expect(useTableUiStore.getState().expandedRows["skills:main"]?.has("row-1")).toBe(false);
+    expect(useTableUiStore.getState().expandedRows["skills:main"]?.["row-2"]).toBe(true);
+    expect(useTableUiStore.getState().expandedRows["skills:main"]?.["row-1"]).toBeUndefined();
   });
 
   it("collapseAllRows clears all rows for a table", () => {
@@ -175,7 +175,7 @@ describe("useTableUiStore", () => {
     useTableUiStore.getState().expandRow("skills:main", "row-2");
     useTableUiStore.getState().collapseAllRows("skills:main");
 
-    expect(useTableUiStore.getState().expandedRows["skills:main"]?.size).toBe(0);
+    expect(Object.keys(useTableUiStore.getState().expandedRows["skills:main"] ?? {})).toHaveLength(0);
   });
 
   it("clearAllSelections clears all table selections", () => {

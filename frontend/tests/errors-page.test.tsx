@@ -30,7 +30,7 @@ vi.mock("../src/api/admin/instances", async () => {
 
 import type { AdminSessionUser, InstanceRecord, LogsResponse } from "../src/api/domain";
 import { ErrorsPage } from "../src/pages/ErrorsPage";
-import { withAppContext } from "./testContext";
+import { expandDetailsBySummary, withAppContext } from "./testContext";
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -374,6 +374,11 @@ describe("ErrorsPage", () => {
     expect(container.textContent).toContain("Budget posture blocked all eligible premium candidates.");
     expect(container.textContent).toContain("Budget posture is blocking eligible routing candidates.");
     expect(container.textContent).toContain("Open Routing or Costs to remove the blocking budget condition.");
+    await act(async () => {
+      expandDetailsBySummary(container, "Incident diagnostics");
+    });
+    await flushEffects();
+
     expect(container.textContent).toContain("\"decision_id\": \"route-budget\"");
 
     const costLinks = Array.from(container.querySelectorAll('a[href="/costs?instanceId=instance_alpha"]'));

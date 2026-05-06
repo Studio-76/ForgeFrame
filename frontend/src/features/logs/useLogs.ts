@@ -114,9 +114,7 @@ export function useLogs(searchParams: URLSearchParams, canReadAudit = true): Use
   const auditTargetId = normalizedParam(searchParams, "auditTargetId");
   const auditStatus = getAuditStatus(searchParams);
   const auditEventId = normalizedParam(searchParams, "auditEvent");
-
-  const logsQuery = useLogsQuery(instanceId, undefined, companyId);
-  const historyQuery = useAuditHistoryQuery({
+  const auditQuery = useMemo<AuditHistoryQuery>(() => ({
     instanceId,
     companyId,
     window: auditWindow,
@@ -126,12 +124,25 @@ export function useLogs(searchParams: URLSearchParams, canReadAudit = true): Use
     targetId: auditTargetId,
     status: auditStatus,
     limit: 25,
-  } satisfies AuditHistoryQuery);
+  }), [
+    instanceId,
+    companyId,
+    auditWindow,
+    auditAction,
+    auditActor,
+    auditTargetType,
+    auditTargetId,
+    auditStatus,
+  ]);
+
+  const logsQuery = useLogsQuery(instanceId, undefined, companyId);
+  const historyQuery = useAuditHistoryQuery(auditQuery, canReadAudit);
   const detailQuery = useAuditHistoryDetailQuery(
     auditEventId ?? "",
     instanceId,
     undefined,
     companyId,
+    canReadAudit,
   );
 
   const summaryCounts = useMemo<LogsSummaryCounts>(() => {

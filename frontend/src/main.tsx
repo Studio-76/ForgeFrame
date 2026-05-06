@@ -9,9 +9,15 @@ import { QueryProvider } from "./app/QueryProvider";
 import { RouteErrorBoundaryView } from "./app/RouteErrorBoundary";
 import "./theme/index.css";
 import { ThemeProvider } from "./theme/ThemeProvider";
-import { UxReviewProvider } from "./components/ux-review/UxReviewContext";
-import { LoginPage } from "./pages/LoginPage";
 
+const UxReviewProvider = import.meta.env.DEV
+  ? lazy(async () => import("./components/ux-review/UxReviewContext").then((module) => ({
+      default: module.UxReviewProvider,
+    })))
+  : null;
+const LoginPage = lazy(async () => import("./pages/LoginPage").then((module) => ({
+  default: module.LoginPage,
+})));
 const PasswordRotationPage = lazy(async () => import("./pages/PasswordRotationPage").then((module) => ({ default: module.PasswordRotationPage })));
 const DashboardPage = lazy(async () => import("./pages/DashboardPage").then((module) => ({ default: module.DashboardPage })));
 const ProvidersPage = lazy(async () => import("./pages/ProvidersPage").then((module) => ({ default: module.ProvidersPage })));
@@ -217,14 +223,31 @@ const router = createBrowserRouter([
   },
 ]);
 
+/**
+ * Wrap the app in UX Review tooling only for development builds.
+ * @param children - Application tree to render.
+ * @returns Application tree with the optional dev-only UX Review provider.
+ */
+function withOptionalUxReview(children: ReactNode): ReactNode {
+  if (!UxReviewProvider) {
+    return children;
+  }
+
+  return (
+    <Suspense fallback={children}>
+      <UxReviewProvider>{children}</UxReviewProvider>
+    </Suspense>
+  );
+}
+
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <AppErrorBoundary>
-    <UxReviewProvider>
+    {withOptionalUxReview(
       <ThemeProvider>
         <QueryProvider>
           <RouterProvider router={router} />
         </QueryProvider>
-      </ThemeProvider>
-    </UxReviewProvider>
+      </ThemeProvider>,
+    )}
   </AppErrorBoundary>,
 );

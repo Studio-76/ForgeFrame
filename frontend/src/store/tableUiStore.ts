@@ -30,10 +30,10 @@ export type TableUiState = {
 
   /**
    * Expanded row IDs per table key.
-   * Value is a Set of row IDs that are currently expanded.
-   * Note: Set is used for O(1) lookup but must be re-created immutably.
+   * Inner object maps expanded row IDs to `true` so selectors can compare
+   * plain immutable records instead of always-new Set instances.
    */
-  expandedRows: Record<string, Set<string>>;
+  expandedRows: Record<string, Record<string, boolean>>;
 
   /**
    * Active transient filter key per table.
@@ -121,68 +121,61 @@ export const useTableUiStore = create<TableUiStore>((set) => ({
 
   toggleRowExpanded: (tableKey: string, rowId: string) =>
     set((state) => {
-      const currentSet = state.expandedRows[tableKey];
-      if (!currentSet) {
-        return {
-          expandedRows: {
-            ...state.expandedRows,
-            [tableKey]: new Set([rowId]),
-          },
-        };
-      }
-      const next = new Set(currentSet);
-      if (next.has(rowId)) {
-        next.delete(rowId);
+      const currentRows = state.expandedRows[tableKey] ?? {};
+      const nextRows = { ...currentRows };
+      if (nextRows[rowId]) {
+        delete nextRows[rowId];
       } else {
-        next.add(rowId);
+        nextRows[rowId] = true;
       }
       return {
         expandedRows: {
           ...state.expandedRows,
-          [tableKey]: next,
+          [tableKey]: nextRows,
         },
       };
     }),
 
   expandRow: (tableKey: string, rowId: string) =>
     set((state) => {
-      const currentSet = state.expandedRows[tableKey];
-      if (currentSet?.has(rowId)) {
+      const currentRows = state.expandedRows[tableKey] ?? {};
+      if (currentRows[rowId]) {
         return state; // already expanded, no-op
       }
-      const next = new Set(currentSet ?? []);
-      next.add(rowId);
       return {
         expandedRows: {
           ...state.expandedRows,
-          [tableKey]: next,
+          [tableKey]: {
+            ...currentRows,
+            [rowId]: true,
+          },
         },
       };
     }),
 
   collapseRow: (tableKey: string, rowId: string) =>
     set((state) => {
-      const currentSet = state.expandedRows[tableKey];
-      if (!currentSet?.has(rowId)) {
+      const currentRows = state.expandedRows[tableKey] ?? {};
+      if (!currentRows[rowId]) {
         return state; // not expanded, no-op
       }
-      const next = new Set(currentSet);
-      next.delete(rowId);
+      const nextRows = { ...currentRows };
+      delete nextRows[rowId];
       return {
         expandedRows: {
           ...state.expandedRows,
-          [tableKey]: next,
+          [tableKey]: nextRows,
         },
       };
     }),
 
   collapseAllRows: (tableKey: string) =>
     set((state) => {
-      if (!state.expandedRows[tableKey]?.size) {
+      if (Object.keys(state.expandedRows[tableKey] ?? {}).length === 0) {
         return state; // nothing to collapse
       }
       const next = { ...state.expandedRows };
-      next[tableKey] = new Set();
+      next[tableKey] = {};
       return { expandedRows: next };
     }),
 

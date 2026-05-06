@@ -45,6 +45,8 @@ import { STANDARD_FILTER_PRESETS } from "./types";
 import type { UxMetadata } from "../types";
 import { uxAttributes } from "../types";
 
+const DEFAULT_PAGE_SIZE_OPTIONS: readonly number[] = [10, 20, 50, 100];
+
 // ── Props ───────────────────────────────────────────────
 
 export type DataTableProps<T> = {
@@ -91,7 +93,7 @@ export type DataTableProps<T> = {
   /** Page size (default: 20). */
   pageSize?: number;
   /** Available page size options. */
-  pageSizeOptions?: number[];
+  pageSizeOptions?: readonly number[];
 
   // ── Detail drawer / Row click ──
   /** Called when a row is clicked. Receives the row data. */
@@ -272,7 +274,7 @@ function TablePagination({
   pageCount: number;
   onPageChange: (page: number) => void;
   onPageSizeChange: (size: number) => void;
-  pageSizeOptions: number[];
+  pageSizeOptions: readonly number[];
 }) {
   const from = totalRows === 0 ? 0 : pageIndex * pageSize + 1;
   const to = Math.min((pageIndex + 1) * pageSize, totalRows);
@@ -380,7 +382,7 @@ export function DataTable<T extends Record<string, unknown>>({
   // Pagination
   enablePagination = true,
   pageSize = 20,
-  pageSizeOptions = [10, 20, 50, 100],
+  pageSizeOptions = DEFAULT_PAGE_SIZE_OPTIONS,
 
   // Row click
   onRowClick,
@@ -499,8 +501,13 @@ export function DataTable<T extends Record<string, unknown>>({
   const { pageIndex } = table.getState().pagination;
   const currentPageSize = table.getState().pagination.pageSize;
   const pageCount = enablePagination ? table.getPageCount() : 1;
-  const visibleColumnIds = new Set(
-    columns.filter((c) => !hiddenColumns.has(c.id)).map((c) => c.id),
+  const visibleColumnIds = useMemo(
+    () => new Set(columns.filter((c) => !hiddenColumns.has(c.id)).map((c) => c.id)),
+    [columns, hiddenColumns],
+  );
+  const columnClassNameById = useMemo<Record<string, string>>(
+    () => Object.fromEntries(columns.map((column) => [column.id, column.className ?? ""])),
+    [columns],
   );
 
   // ── Handlers ──
@@ -661,14 +668,12 @@ export function DataTable<T extends Record<string, unknown>>({
               data-selected={isSelected ? "true" : undefined}
             >
               {row.getVisibleCells().map((cell) => {
-                const columnId = cell.column.id;
-                const colDef = columns.find((c) => c.id === columnId);
                 return (
                   <td
                     key={cell.id}
                     className={`
                       ${density === "compact" ? "px-3 py-2 text-xs" : "px-4 py-3 text-sm"}
-                      ${colDef?.className ?? ""}
+                      ${columnClassNameById[cell.column.id] ?? ""}
                     `}
                   >
                     {flexRender(cell.column.columnDef.cell, cell.getContext())}

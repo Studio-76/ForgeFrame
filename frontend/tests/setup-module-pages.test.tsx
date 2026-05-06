@@ -70,7 +70,7 @@ vi.mock("../src/api/domain", async () => {
 import type { AdminSessionUser, InstanceRecord } from "../src/api/domain";
 import { IngressTlsPage } from "../src/pages/IngressTlsPage";
 import { ReleaseValidationPage } from "../src/pages/ReleaseValidationPage";
-import { withAppContext } from "./testContext";
+import { expandDetailsBySummary, withAppContext } from "./testContext";
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -338,6 +338,11 @@ describe("setup module pages", () => {
     expect(container.textContent).toContain("Release Validation");
     expect(container.textContent).toContain("Build / Test");
     expect(container.textContent).toContain("manual evidence required");
+    await act(async () => {
+      expandDetailsBySummary(container, "Release diagnostics");
+    });
+    await flushEffects();
+
     expect(container.textContent).toContain("upgrade_evidence_missing");
     expect(container.textContent).toContain("Review TLS configuration");
   });

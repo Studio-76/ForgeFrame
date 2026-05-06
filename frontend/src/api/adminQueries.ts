@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 
+import { adminKeys } from "./adminKeys";
 import {
   fetchAuditHistory,
   fetchAuditHistoryDetail,
@@ -10,24 +11,7 @@ import {
 
 /* ───── Query key factories ───── */
 
-export const adminKeys = {
-  session: ["adminSession"] as const,
-  instances: ["instances"] as const,
-  dashboard: (instanceId?: string | null) => ["dashboard", instanceId] as const,
-  logs: (
-    instanceId?: string | null,
-    tenantId?: string | null,
-    companyId?: string | null,
-  ) => ["logs", instanceId, tenantId, companyId] as const,
-  auditHistory: (query?: Record<string, unknown>) =>
-    ["auditHistory", query] as const,
-  auditHistoryDetail: (
-    eventId: string,
-    instanceId?: string | null,
-    tenantId?: string | null,
-    companyId?: string | null,
-  ) => ["auditHistoryDetail", eventId, instanceId, tenantId, companyId] as const,
-};
+export { adminKeys } from "./adminKeys";
 
 /* ───── Instances ───── */
 
@@ -35,6 +19,7 @@ export const adminKeys = {
  * Fetch the full instance inventory.
  *
  * Instance metadata changes infrequently — keep it fresh for 2 minutes.
+ * @returns Query result containing the instance list.
  */
 export function useInstancesQuery() {
   return useQuery({
@@ -52,6 +37,8 @@ export function useInstancesQuery() {
  *
  * Dashboard shows live status — shorter stale time so the operator
  * always sees current data without manual refresh.
+ * @param instanceId - Optional instance scope.
+ * @returns Query result containing dashboard data.
  */
 export function useDashboardQuery(instanceId?: string | null) {
   return useQuery({
@@ -68,6 +55,10 @@ export function useDashboardQuery(instanceId?: string | null) {
  *
  * Logs are read-heavy and rarely change — 5 minute stale time reduces
  * unnecessary refetches when the operator browses other pages.
+ * @param instanceId - Optional instance scope.
+ * @param tenantId - Optional tenant scope.
+ * @param companyId - Optional company scope.
+ * @returns Query result containing logs and diagnostics data.
  */
 export function useLogsQuery(
   instanceId?: string | null,
@@ -88,11 +79,18 @@ export function useLogsQuery(
  *
  * Static historical data — long stale time makes sense. The user can
  * always manually refetch.
+ * @param query - Audit history filters.
+ * @param enabled - Whether audit history should be fetched.
+ * @returns Query result containing audit history data.
  */
-export function useAuditHistoryQuery(query?: Record<string, unknown>) {
+export function useAuditHistoryQuery(
+  query?: Record<string, unknown>,
+  enabled = true,
+) {
   return useQuery({
     queryKey: adminKeys.auditHistory(query),
     queryFn: () => fetchAuditHistory(query as Parameters<typeof fetchAuditHistory>[0]),
+    enabled,
     staleTime: 10 * 60 * 1000,
   });
 }
@@ -102,17 +100,24 @@ export function useAuditHistoryQuery(query?: Record<string, unknown>) {
  *
  * Only fetches when an eventId is provided (enabled condition).
  * Detail views are infrequently re-visited so a moderate stale time suffices.
+ * @param eventId - Audit event identifier.
+ * @param instanceId - Optional instance scope.
+ * @param tenantId - Optional tenant scope.
+ * @param companyId - Optional company scope.
+ * @param enabled - Whether audit detail should be fetched.
+ * @returns Query result containing audit detail data.
  */
 export function useAuditHistoryDetailQuery(
   eventId: string,
   instanceId?: string | null,
   tenantId?: string | null,
   companyId?: string | null,
+  enabled = true,
 ) {
   return useQuery({
     queryKey: adminKeys.auditHistoryDetail(eventId, instanceId, tenantId, companyId),
     queryFn: () => fetchAuditHistoryDetail(eventId, instanceId, tenantId, companyId),
-    enabled: Boolean(eventId),
+    enabled: enabled && Boolean(eventId),
     staleTime: 5 * 60 * 1000,
   });
 }

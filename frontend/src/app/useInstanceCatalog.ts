@@ -2,7 +2,8 @@ import { useMemo } from "react";
 
 import { useQueryClient } from "@tanstack/react-query";
 
-import { adminKeys, useInstancesQuery } from "../api/adminQueries";
+import { adminKeys } from "../api/adminKeys";
+import { useInstancesQuery } from "../api/adminQueries";
 import { fetchInstances, type InstanceRecord } from "../api/domain/instances";
 
 export type InstanceCatalogLoadState = "idle" | "loading" | "success" | "error";
